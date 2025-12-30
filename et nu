@@ -1,0 +1,282 @@
+[1mdiff --git a/cmake/makeself_built_in.cmake b/cmake/makeself_built_in.cmake[m
+[1mindex ccc71b6..ee5dff0 100644[m
+[1m--- a/cmake/makeself_built_in.cmake[m
+[1m+++ b/cmake/makeself_built_in.cmake[m
+[36m@@ -11,10 +11,10 @@[m
+ # makeself.cmake - 自定义 makeself 打包脚本[m
+ [m
+ # 设置 makeself 路径[m
+[31m-set(MAKESELF_EXE "${CPACK_MAKESELF_PATH}/makeself.sh")[m
+[31m-set(MAKESELF_HEADER_EXE "${CPACK_MAKESELF_PATH}/makeself-header.sh")[m
+[31m-if(NOT EXISTS "${MAKESELF_EXE}" OR NOT EXISTS "${MAKESELF_HEADER_EXE}")[m
+[31m-    message(FATAL_ERROR "makeself not found at ${CPACK_MAKESELF_PATH}; ensure it is downloaded or pass -DCANN_3RD_LIB_PATH=...")[m
+[32m+[m[32mset(MAKESELF_EXE ${CPACK_MAKESELF_PATH}/makeself.sh)[m
+[32m+[m[32mset(MAKESELF_HEADER_EXE ${CPACK_MAKESELF_PATH}/makeself-header.sh)[m
+[32m+[m[32mif(NOT MAKESELF_EXE)[m
+[32m+[m[32m    message(FATAL_ERROR "makeself not found! Install it with: sudo apt install makeself")[m
+ endif()[m
+ [m
+ # 创建临时安装目录[m
+[36m@@ -33,16 +33,8 @@[m [mendif()[m
+ [m
+ # 生成安装配置文件[m
+ set(CSV_OUTPUT ${CPACK_CMAKE_BINARY_DIR}/filelist.csv)[m
+[31m-set(_pto_pkg_cmd python3 ${CPACK_CMAKE_SOURCE_DIR}/scripts/package/package.py --pkg_name pto_isa)[m
+[31m-if(DEFINED CPACK_SOC AND NOT CPACK_SOC STREQUAL "")[m
+[31m-    list(APPEND _pto_pkg_cmd --chip_name ${CPACK_SOC})[m
+[31m-endif()[m
+[31m-list(APPEND _pto_pkg_cmd --os_arch linux-${CPACK_ARCH})[m
+ execute_process([m
+[31m-        COMMAND "${CMAKE_COMMAND}" -E env[m
+[31m-                PTO_PACKAGE_BUILD_DIR=${CPACK_CMAKE_BINARY_DIR}[m
+[31m-                PTO_PACKAGE_DELIVERY_DIR=${STAGING_DIR}[m
+[31m-                ${_pto_pkg_cmd}[m
+[32m+[m[32m        COMMAND python3 ${CPACK_CMAKE_SOURCE_DIR}/scripts/package/package.py --pkg_name pto_isa --chip_name ${CPACK_SOC} --os_arch linux-${CPACK_ARCH}[m
+         WORKING_DIRECTORY ${CPACK_CMAKE_BINARY_DIR}[m
+         OUTPUT_VARIABLE result[m
+         ERROR_VARIABLE error[m
+[36m@@ -51,7 +43,7 @@[m [mexecute_process([m
+ )[m
+ message(STATUS "package.py result: ${code}")[m
+ if (NOT code EQUAL 0)[m
+[31m-    message(FATAL_ERROR "Filelist generation failed.\nstdout:\n${result}\nstderr:\n${error}")[m
+[32m+[m[32m    message(FATAL_ERROR "Filelist generation failed: ${result}")[m
+ else ()[m
+     message(STATUS "Filelist generated successfully: ${result}")[m
+ [m
+[1mdiff --git a/cmake/package.cmake b/cmake/package.cmake[m
+[1mindex 005de07..bb36876 100644[m
+[1m--- a/cmake/package.cmake[m
+[1m+++ b/cmake/package.cmake[m
+[36m@@ -64,7 +64,7 @@[m [mfunction(pack_built_in)[m
+       ${COMMON_FILES}[m
+       ${CMAKE_SOURCE_DIR}/scripts/package/common/sh/multi_version.inc[m
+   )[m
+[31m-  set(LATEST_MANAGER_FILES[m
+[32m+[m[32m  set(LATEST_MANGER_FILES[m
+       ${COMMON_FILES}[m
+       ${CMAKE_SOURCE_DIR}/scripts/package/common/sh/common_func.inc[m
+       ${CMAKE_SOURCE_DIR}/scripts/package/common/sh/version_compatiable.inc[m
+[36m@@ -82,7 +82,7 @@[m [mfunction(pack_built_in)[m
+   install(FILES ${PACKAGE_FILES}[m
+       DESTINATION share/info/pto_isa/script[m
+   )[m
+[31m-  install(FILES ${LATEST_MANAGER_FILES}[m
+[32m+[m[32m  install(FILES ${LATEST_MANGER_FILES}[m
+       DESTINATION latest_manager[m
+   )[m
+   install(DIRECTORY ${CMAKE_SOURCE_DIR}/scripts/package/latest_manager/scripts/[m
+[36m@@ -132,4 +132,4 @@[m [mfunction(pack_built_in)[m
+ [m
+   message(STATUS "CMAKE_INSTALL_PREFIX = ${CMAKE_INSTALL_PREFIX}")[m
+   include(CPack)[m
+[31m-endfunction()[m
+[32m+[m[32mendfunction()[m
+\ No newline at end of file[m
+[1mdiff --git a/cmake/third_party/makeself-fetch.cmake b/cmake/third_party/makeself-fetch.cmake[m
+[1mindex e6b1f25..01f2b7f 100644[m
+[1m--- a/cmake/third_party/makeself-fetch.cmake[m
+[1m+++ b/cmake/third_party/makeself-fetch.cmake[m
+[36m@@ -10,10 +10,7 @@[m
+ # ----------------------------------------------------------------------------[m
+ [m
+ set(MAKESELF_NAME "makeself")[m
+[31m-if(NOT DEFINED CANN_3RD_LIB_PATH OR CANN_3RD_LIB_PATH STREQUAL "")[m
+[31m-    set(CANN_3RD_LIB_PATH "${CMAKE_SOURCE_DIR}/third_party")[m
+[31m-endif()[m
+[31m-set(MAKESELF_PATH "${CANN_3RD_LIB_PATH}/makeself")[m
+[32m+[m[32mset(MAKESELF_PATH ${CANN_3RD_LIB_PATH}/makeself)[m
+ [m
+ if(POLICY CMP0135)[m
+     cmake_policy(SET CMP0135 NEW)[m
+[36m@@ -24,42 +21,21 @@[m [mif (NOT EXISTS "${MAKESELF_PATH}/makeself-header.sh" OR NOT EXISTS "${MAKESELF_P[m
+     set(MAKESELF_URL "https://gitcode.com/cann-src-third-party/makeself/releases/download/release-2.5.0-patch1.0/makeself-release-2.5.0-patch1.tar.gz")[m
+     message(STATUS "Downloading ${MAKESELF_NAME} from ${MAKESELF_URL}")[m
+ [m
+[31m-    set(_makeself_download_args)[m
+[31m-    if(DEFINED CANN_3RD_PKG_PATH AND NOT CANN_3RD_PKG_PATH STREQUAL "")[m
+[31m-        list(APPEND _makeself_download_args DOWNLOAD_DIR "${CANN_3RD_PKG_PATH}")[m
+[31m-    endif()[m
+[31m-[m
+     include(FetchContent)[m
+     FetchContent_Declare([m
+         ${MAKESELF_NAME}[m
+         URL ${MAKESELF_URL}[m
+         URL_HASH SHA256=bfa730a5763cdb267904a130e02b2e48e464986909c0733ff1c96495f620369a[m
+[31m-        ${_makeself_download_args}[m
+[32m+[m[32m        DOWNLOAD_DIR ${CANN_3RD_PKG_PATH}[m
+         SOURCE_DIR "${MAKESELF_PATH}"  # 直接解压到此目录[m
+     )[m
+     FetchContent_MakeAvailable(${MAKESELF_NAME})[m
+[31m-[m
+[31m-    if(UNIX)[m
+[31m-        if(EXISTS "${MAKESELF_PATH}/makeself.sh")[m
+[31m-            execute_process([m
+[31m-                COMMAND chmod 700 "${MAKESELF_PATH}/makeself.sh"[m
+[31m-                RESULT_VARIABLE CHMOD_RESULT[m
+[31m-                ERROR_VARIABLE CHMOD_ERROR[m
+[31m-            )[m
+[31m-            if(NOT CHMOD_RESULT EQUAL 0)[m
+[31m-                message(FATAL_ERROR "chmod failed for ${MAKESELF_PATH}/makeself.sh: ${CHMOD_ERROR}")[m
+[31m-            endif()[m
+[31m-        endif()[m
+[31m-[m
+[31m-        if(EXISTS "${MAKESELF_PATH}/makeself-header.sh")[m
+[31m-            execute_process([m
+[31m-                COMMAND chmod 700 "${MAKESELF_PATH}/makeself-header.sh"[m
+[31m-                RESULT_VARIABLE CHMOD_RESULT[m
+[31m-                ERROR_VARIABLE CHMOD_ERROR[m
+[31m-            )[m
+[31m-            if(NOT CHMOD_RESULT EQUAL 0)[m
+[31m-                message(FATAL_ERROR "chmod failed for ${MAKESELF_PATH}/makeself-header.sh: ${CHMOD_ERROR}")[m
+[31m-            endif()[m
+[31m-        endif()[m
+[31m-    endif()[m
+[31m-endif()[m
+[32m+[m[32m    execute_process([m
+[32m+[m[32m        COMMAND chmod 700 "${CMAKE_BINARY_DIR}/makeself/makeself.sh"[m
+[32m+[m[32m        COMMAND chmod 700 "${CMAKE_BINARY_DIR}/makeself/makeself-header.sh"[m
+[32m+[m[32m        -E env[m
+[32m+[m[32m        CMAKE_TLS_VERIFY=0[m
+[32m+[m[32m        RESULT_VARIABLE CHMOD_RESULT[m
+[32m+[m[32m        ERROR_VARIABLE CHMOD_ERROR[m
+[32m+[m[32m    )[m
+[32m+[m[32mendif()[m
+\ No newline at end of file[m
+[1mdiff --git a/scripts/package/common/py/filelist.py b/scripts/package/common/py/filelist.py[m
+[1mindex 15c4eaa..f763901 100644[m
+[1m--- a/scripts/package/common/py/filelist.py[m
+[1m+++ b/scripts/package/common/py/filelist.py[m
+[36m@@ -21,7 +21,7 @@[m [mfrom itertools import chain, repeat[m
+ from operator import and_, attrgetter, contains, itemgetter, lt, methodcaller, ne, not_[m
+ from typing import Callable, Iterator, List, NamedTuple, Set, Tuple[m
+ [m
+[31m-from .utils.pkg_utils import (BUILD_DIR, TOP_DIR, FilelistError, GenerateFilelistError,[m
+[32m+[m[32mfrom .utils.pkg_utils import (TOP_DIR, FilelistError, GenerateFilelistError,[m
+                               conditional_apply, pairwise, swap_args, config_feature_to_string)[m
+ from .utils.funcbase import (any_, constant, dispatch, identity, invoke, pipe, side_effect, star_apply)[m
+ from .utils.comm_log import CommLog[m
+[36m@@ -494,7 +494,7 @@[m [mdef generate_filelist(filelist: FileList, filename: str):[m
+         )[m
+     )[m
+     content = '\n'.join(content_list)[m
+[31m-    filepath = os.path.join(BUILD_DIR, filename)[m
+[32m+[m[32m    filepath = os.path.join(TOP_DIR, "build", filename)[m
+     try:[m
+         with open(filepath, 'w', encoding='utf-8') as file:[m
+             file.write(content)[m
+[1mdiff --git a/scripts/package/common/py/packer.py b/scripts/package/common/py/packer.py[m
+[1mindex aef7464..24f16cb 100644[m
+[1m--- a/scripts/package/common/py/packer.py[m
+[1m+++ b/scripts/package/common/py/packer.py[m
+[36m@@ -94,7 +94,7 @@[m [mdef get_compress_tool() -> str:[m
+         if path:[m
+             return "--" + tool[m
+     CommLog.cilog_error("The system does not come with a compression tool pre-installed."[m
+[31m-                        "Please ensure at least one of the following compression tools is available: %s", tools)[m
+[32m+[m[32m                        "Please ensure at least one of the folllowing compression tools is available: %s", tools)[m
+     return ""[m
+ [m
+ [m
+[1mdiff --git a/scripts/package/common/py/utils/pkg_utils.py b/scripts/package/common/py/utils/pkg_utils.py[m
+[1mindex dc7b3ff..056ddc2 100644[m
+[1m--- a/scripts/package/common/py/utils/pkg_utils.py[m
+[1m+++ b/scripts/package/common/py/utils/pkg_utils.py[m
+[36m@@ -13,7 +13,7 @@[m
+ [m
+ """基础构件。"""[m
+ [m
+[31m-import os[m
+[32m+[m[32mimport os[m[41m [m
+ from functools import partial[m
+ from itertools import chain, tee[m
+ from operator import methodcaller[m
+[36m@@ -22,17 +22,6 @@[m [mfrom typing import Callable, Dict, Iterator, List, Optional, TypeVar, Set[m
+ [m
+ TOP_DIR = str(Path(__file__).resolve().parents[5])[m
+ TOP_SOURCE_DIR = TOP_DIR + '/scripts/'[m
+[31m-def _resolve_path_from_topdir(path: str) -> str:[m
+[31m-    if os.path.isabs(path):[m
+[31m-        return path[m
+[31m-    return os.path.join(TOP_DIR, path)[m
+[31m-[m
+[31m-[m
+[31m-BUILD_DIR = _resolve_path_from_topdir(os.environ.get("PTO_PACKAGE_BUILD_DIR", "build"))[m
+[31m-DELIVERY_DIR = _resolve_path_from_topdir([m
+[31m-    os.environ.get("PTO_PACKAGE_DELIVERY_DIR", "build/_CPack_Packages/makeself_staging")[m
+[31m-)[m
+[31m-[m
+ DELIVERY_PATH = "build/_CPack_Packages/makeself_staging"[m
+ CONFIG_SCRIPT_PATH = 'package'[m
+ BLOCK_CONFIG_PATH = 'package/module'[m
+[1mdiff --git a/scripts/package/latest_manager/scripts/manager_func.sh b/scripts/package/latest_manager/scripts/manager_func.sh[m
+[1mindex 9a943af..1f634ed 100644[m
+[1m--- a/scripts/package/latest_manager/scripts/manager_func.sh[m
+[1m+++ b/scripts/package/latest_manager/scripts/manager_func.sh[m
+[36m@@ -303,7 +303,7 @@[m [mpackage_uninstalled() {[m
+         # 多版本卸载时检查版本兼容性[m
+         if ! recreate_compatiable_softlink_in_multi_version_uninstall "$install_path" "$LATEST_DIR" "$package" \[m
+             "$USERNAME" "$USERGROUP" "$docker_root"; then[m
+[31m-            comm_log "ERROR" "Recreate ${package} compatible softlink in package uninstalled failed!"[m
+[32m+[m[32m            comm_log "ERROR" "Recreate ${package} compatiable softlink in package uninstalled failed!"[m
+             return 1[m
+         fi[m
+     fi[m
+[1mdiff --git a/scripts/package/package.py b/scripts/package/package.py[m
+[1mindex d2a67d7..50c4296 100644[m
+[1m--- a/scripts/package/package.py[m
+[1m+++ b/scripts/package/package.py[m
+[36m@@ -34,7 +34,7 @@[m [mfrom common.py.pkg_parser import ([m
+     ParseOption, XmlConfig, parse_xml_config, get_cann_version_info[m
+ )[m
+ from common.py.utils.pkg_utils import ([m
+[31m-    BUILD_DIR, CONFIG_SCRIPT_PATH, CompressError, ContainAsteriskError, DELIVERY_DIR, DELIVERY_PATH, FAIL,[m
+[32m+[m[32m    CONFIG_SCRIPT_PATH, CompressError, ContainAsteriskError, DELIVERY_PATH, FAIL,[m
+     FilelistError, GenerateFilelistError, PackageNameEmptyError, SUCCESS, TOP_DIR,[m
+     UnknownOperateTypeError, path_join[m
+ )[m
+[36m@@ -68,7 +68,7 @@[m [mdef get_compress_cmd(pkg_args: Namespace,[m
+         CommLog.cilog_error("the repack type '%s' is not support!", suffix)[m
+         sys.exit(FAIL)[m
+     try:[m
+[31m-        makeself_dir = os.path.join(BUILD_DIR, "makeself.txt")[m
+[32m+[m[32m        makeself_dir = os.path.join(TOP_DIR, "build/makeself.txt")[m
+         with open(makeself_dir, 'w') as f:[m
+             f.write(pack_cmd)[m
+     except Exception as exception:[m
+[36m@@ -140,7 +140,7 @@[m [mdef generate_version_header_content(target_conf) -> Iterator[str]:[m
+ [m
+ [m
+ def generate_customized_file(target_conf, ext_name):[m
+[31m-    filepath = os.path.join(BUILD_DIR, target_conf.get('value'))[m
+[32m+[m[32m    filepath = os.path.join(TOP_DIR, "build", target_conf.get('value'))[m
+ [m
+     generator = target_conf.get('generator', 'info')[m
+     if generator == 'version_header':[m
+[36m@@ -540,7 +540,7 @@[m [mdef generate_config_inc(package_attr: Dict):[m
+     if 'parallel' not in package_attr and 'parallel_limit' not in package_attr and 'use_move' not in package_attr:[m
+         return[m
+     year = datetime.now(timezone.utc).year[m
+[31m-    config_inc = os.path.join(BUILD_DIR, 'config.inc')[m
+[32m+[m[32m    config_inc = os.path.join(TOP_DIR, "build", 'config.inc')[m
+     header = [[m
+         '#!/bin/sh\n',[m
+         '#----------------------------------------------------------------------------\n',[m
+[36m@@ -563,7 +563,7 @@[m [mdef main(pkg_name='', xml_file='', main_args=None):[m
+     参数: pkg_name, os_arch, type[m
+     返回值: SUCCESS/FAIL[m
+     """[m
+[31m-    delivery_dir = DELIVERY_DIR[m
+[32m+[m[32m    delivery_dir = os.path.join(TOP_DIR, DELIVERY_PATH)[m
+     if not os.path.exists(delivery_dir):[m
+         return FAIL[m
+ [m
+[36m@@ -684,7 +684,7 @@[m [mif __name__ == "__main__":[m
+             args.build_type = args.build_type.lower()[m
+         status = main(args.pkg_name, args.xml_file, main_args=args)[m
+     except Exception as e:[m
+[31m-        CommLog.cilog_error("exception occurred (%s)!", e)[m
+[32m+[m[32m        CommLog.cilog_error("exception is occurred (%s)!", e)[m
+         CommLog.cilog_info("%s", traceback.format_exc())[m
+         status = FAIL[m
+     sys.exit(status)[m
