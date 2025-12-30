@@ -1,0 +1,9 @@
+#ifndef PTO_COMM_INSTR_IMPL_HPP
+#define PTO_COMM_INSTR_IMPL_HPP
+
+
+#include "pto/comm/TPut.hpp"
+#include "pto/comm/TGet.hpp"
+#include "pto/comm/TWait.hpp"
+
+#endif // PTO_COMM_INSTR_IMPL_HPP

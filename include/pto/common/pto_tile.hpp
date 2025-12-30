@@ -197,6 +197,7 @@ struct GlobalTensor {
 
     static const Shape defaultShape;
     static const Stride defaultStride;
+    static const int defaultRank = -1;
 
     static constexpr int staticShape[GlobalTensorDim::TOTAL_DIM] = {Shape::staticShape[GlobalTensorDim::DIM_0],
         Shape::staticShape[GlobalTensorDim::DIM_1], Shape::staticShape[GlobalTensorDim::DIM_2],
@@ -205,9 +206,10 @@ struct GlobalTensor {
         Stride::staticStride[GlobalTensorDim::DIM_1], Stride::staticStride[GlobalTensorDim::DIM_2],
         Stride::staticStride[GlobalTensorDim::DIM_3], Stride::staticStride[GlobalTensorDim::DIM_4]};
     PTO_INTERNAL GlobalTensor(
-        DType *data, const Shape &shape = defaultShape, const Stride &stride = defaultStride)
+        DType *data, const Shape &shape = defaultShape, const Stride &stride = defaultStride, int rank = defaultRank)
     {
         data_ = data;
+        rank_ = rank;
 
         if constexpr (staticShape[GlobalTensorDim::DIM_0] == DYNAMIC) {
             shape_.shape[GlobalTensorDim::DIM_0] = shape.shape[GlobalTensorDim::DIM_0];
@@ -330,6 +332,11 @@ struct GlobalTensor {
         return -1;
     }
 
+    AICORE int GetRank(){
+        return rank_;
+    }
+    AICORE void SetRank(int rank) { rank_ = rank;}
+
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &src, AddrType addr);
 
@@ -364,6 +371,8 @@ private:
     DType *data_;
     Shape shape_ = defaultShape;
     Stride stride_ = defaultStride;
+
+    int rank_ = -1;
 };
 
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_>

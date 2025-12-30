@@ -173,9 +173,26 @@ def main():
     parser.add_argument("-d", "--debug-enable", action='store_true', help="开启debug检查")
 
     args = parser.parse_args()
-    default_soc_version = "Ascend910B1"
-    if args.soc_version == "a5":
-        default_soc_version = "Ascend910_9599"
+    
+    # 设置SOC版本（comm模式也需要，但可以设置默认值）
+    if args.run_mode == "comm":
+        # comm模式可以使用默认值或用户指定的值
+        if args.soc_version:
+            if args.soc_version == "a5":
+                default_soc_version = "Ascend910_9599"
+            else:
+                default_soc_version = "Ascend910B1"
+        else:
+            # comm模式默认使用a3的SOC版本
+            default_soc_version = "Ascend910B1"
+    else:
+        # npu/sim模式必须指定soc_version
+        if not args.soc_version:
+            parser.error("-v/--soc-version is required when -r is not comm")
+        default_soc_version = "Ascend910B1"
+        if args.soc_version == "a5":
+            default_soc_version = "Ascend910_9599"
+    
     default_cases = "all"
     if args.gtest_filter != None:
         default_cases = args.gtest_filter
@@ -184,26 +201,35 @@ def main():
     try:
         # 获取当前脚本（run_st.py）的绝对路径
         script_path = os.path.abspath(__file__)
+        base_dir = os.path.dirname(os.path.dirname(script_path))
 
-        if args.soc_version == "a3":
-            target_dir = os.path.dirname(os.path.dirname(script_path))
-            target_dir = target_dir + "/npu/a2a3/src/st"
-        else : # a5
-            target_dir = os.path.dirname(os.path.dirname(script_path))
-            target_dir = target_dir + "/npu/a5/src/st"
+        # 根据运行模式确定目标目录
+        if args.run_mode == "comm":
+            target_dir = base_dir + "/comm/st"
+        elif args.soc_version and args.soc_version == "a3":
+            target_dir = base_dir + "/npu/a2a3/src/st"
+        elif args.soc_version and args.soc_version == "a5":
+            target_dir = base_dir + "/npu/a5/src/st"
+        else:
+            # 默认情况（不应该到达这里，因为前面已经检查了）
+            parser.error("Invalid run-mode and soc-version combination")
 
         print(f"target_dir: {target_dir}")
         os.chdir(target_dir)
 
         # 设置环境变量
-        set_env_variables(args.run_mode, default_soc_version)
+        if args.run_mode == "sim":
+            set_env_variables(args.run_mode, default_soc_version)
 
         # 执行构建
         build_project(args.run_mode, default_soc_version, args.testcase, args.debug_enable)
 
-        # 生成标杆
+        # 生成标杆（仅当gen_data.py存在时）
         golden_path = "testcase/" + args.testcase + "/gen_data.py"
-        run_gen_data(golden_path)
+        if os.path.exists(golden_path):
+            run_gen_data(golden_path)
+        else:
+            print(f"gen_data.py not found at {golden_path}, skipping golden data generation")
 
         # 执行二进制文件
         run_binary(args.testcase, args.run_mode, default_cases)
