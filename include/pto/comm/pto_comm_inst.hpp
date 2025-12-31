@@ -9,18 +9,6 @@
 namespace pto {
 namespace comm {
 
-// template < typename GlobalDstData, typename GlobalSrcData>
-// PTO_INST void TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, int rank_id)
-// {
-//     MAP_INSTR_IMPL(TPUT, dstGlobal, srcGlobal, rank_id);
-// }
-
-// template < typename GlobalDstData, typename GlobalSrcData>
-// PTO_INST void TGET(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, int rank_id)
-// {
-// MAP_INSTR_IMPL(TGET, dstGlobal, srcGlobal, rank_id);
-// }
-
 template < typename GlobalDstData, typename GlobalSrcData>
 PTO_INST void TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
 {
@@ -36,6 +24,12 @@ PTO_INST void TGET(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
 PTO_INST void TWAIT()
 {
     MAP_INSTR_IMPL(TWAIT);
+}
+
+template <typename ParallelGroup>
+PTO_INST void TALLREDUCE(ParallelGroup &parallelGroup)
+{
+    MAP_INSTR_IMPL(TALLREDUCE, parallelGroup);
 }
 
 

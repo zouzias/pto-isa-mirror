@@ -115,13 +115,6 @@ struct ShmemBackend {
         ShmemOps<DType>::Put(dstGlobal.data(), srcGlobal.data(), params, pe);
     }
 
-    // template <typename T>
-    // PTO_INST static void Put(__gm__ T *dst, __gm__ T *src, const pto::comm::Copy2DParams &params, int pe)
-    // {
-    //     ShmemOps<T>::Put(dst, src, params, pe);
-    // }
-
-    // Keep the parameter order consistent with TGET_IMPL (dst first, then src).
     template <typename GlobalDstData, typename GlobalSrcData>
     PTO_INST static void Get(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
     {
@@ -136,11 +129,70 @@ struct ShmemBackend {
         ShmemOps<DType>::Get(dstGlobal.data(), srcGlobal.data(), params, pe);
     }
 
-    // template <typename T>
-    // PTO_INST static void Get(__gm__ T *dst, __gm__ T *src, const pto::comm::Copy2DParams &params, int pe)
-    // {
-    //     ShmemOps<T>::Get(dst, src, params, pe);
-    // }
+    template <typename ParallelGroup>
+    PTO_INST static void AllReduce(ParallelGroup &pg)
+    {
+        // One-shot implementation 
+    }
+
+    template <typename ParallelGroup>
+    PTO_INST static void AllGather(ParallelGroup &pg)
+    {
+        using GlobalData = typename pto::comm::ParallelGroupTraits<ParallelGroup>::GlobalDataType;
+        using DType = typename GlobalData::DType;
+
+        const int my_rank = pg.GetRank();
+        const int nranks = pg.GetSize();
+
+        // Build 2D copy params from local tensor view.
+        auto params = BuildCopyParams(pg[my_rank]);
+        if ((nranks <= 1) || (params.lenElems == 0U) || (params.repeat == 0U)) {
+            // Still behave like a collective call site would expect: no-op when size==1.
+            return;
+        }
+
+        // Effective leading dimensions (in elements) for pointer arithmetic.
+        const uint32_t srcLd = (params.srcStrideElems == 0U) ? params.lenElems : params.srcStrideElems;
+        const uint32_t dstLd = (params.dstStrideElems == 0U) ? params.lenElems : params.dstStrideElems;
+
+        // Split the first dimension (`repeat`) across ranks: [startRow, endRow).
+        const uint32_t startRow =
+            static_cast<uint32_t>((static_cast<uint64_t>(params.repeat) * static_cast<uint64_t>(my_rank)) /
+                                  static_cast<uint64_t>(nranks));
+        const uint32_t endRow =
+            static_cast<uint32_t>((static_cast<uint64_t>(params.repeat) * static_cast<uint64_t>(my_rank + 1)) /
+                                  static_cast<uint64_t>(nranks));
+        const uint32_t myRows = (endRow > startRow) ? (endRow - startRow) : 0U;
+
+        // Collective sync even if this rank contributes zero rows.
+        if (myRows == 0U) {
+            shmem_barrier_all();
+            return;
+        }
+
+        pto::comm::Copy2DParams myParams = params;
+        myParams.repeat = myRows;
+
+        DType *srcPtr = pg[my_rank].data() + startRow * srcLd;
+
+        bool issuedPut = false;
+        for (int teamRank = 0; teamRank < nranks; ++teamRank) {
+            if (teamRank == my_rank) {
+                continue; // local slice already in place
+            }
+            auto &dstGlobal = pg[teamRank];
+            const int pe = dstGlobal.GetRank();
+            DType *dstPtr = dstGlobal.data() + startRow * dstLd;
+            ShmemOps<DType>::Put(dstPtr, srcPtr, myParams, pe);
+            issuedPut = true;
+        }
+
+        if (issuedPut) {
+            shmem_quiet();
+        }
+        shmem_barrier_all();
+    }
+
 
     PTO_INST static void Barrier()
     {

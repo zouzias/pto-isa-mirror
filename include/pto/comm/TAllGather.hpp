@@ -1,5 +1,5 @@
-#ifndef PTO_COMM_TALLREDUCE_HPP
-#define PTO_COMM_TALLREDUCE_HPP
+#ifndef PTO_COMM_TALLGATHER_HPP
+#define PTO_COMM_TALLGATHER_HPP
 
 #include <type_traits>
 
@@ -11,19 +11,17 @@
 namespace pto {
 namespace comm {
 
-
-// 主实现：使用类型萃取，保持简单的调用接口
-// 用户调用时只需传入 ParallelGroup<GlobalData>，编译器会自动推导类型
-template <BackendKind backend = BackendKind::Shmem, typename ParallelGroupType>
-AICORE void TALLREDUCE_IMPL(ParallelGroupType &pg)
+template <BackendKind backend = BackendKind::Shmem, typename ParallelGroupType, typename GlobalDstData>
+AICORE void TALLGATHER_IMPL(ParallelGroupType &srcPG, GlobalDstData &dstGlobal)
 {
-    // 使用类型萃取获取 GlobalData 类型（如果不是 ParallelGroup<...>，这里会触发编译错误）
+    // Use type extraction to get GlobalData type (if not ParallelGroup<...>, this will trigger a compile error)
     using GlobalData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
     
+    static_assert(std::is_same_v<GlobalData, typename GlobalDstData::GlobalDataType>, "GlobalData type mismatch!");
+
     // Check PG size 
     PTO_ASSERT(pg.size() > 1, "ParallelGroup size must be greater than 1!");
-    
-    // Check PG tensors have the same shape (运行时检查)
+    // Check PG tensors have the same shape (runtime check)
     for (int i = 1; i < pg.size(); i++) {
         PTO_ASSERT(pg[i].GetShape(0) == pg[0].GetShape(0) &&
                    pg[i].GetShape(1) == pg[0].GetShape(1) &&
@@ -32,11 +30,11 @@ AICORE void TALLREDUCE_IMPL(ParallelGroupType &pg)
                    pg[i].GetShape(4) == pg[0].GetShape(4),
                    "All tensors in ParallelGroup must have the same shape!");
     }
-    
-    BackendSelector<backend>::type::template AllReduce(pg);
+
+    BackendSelector<backend>::type::template AllGather(pg, dstGlobal);
 }
 
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_COMM_TALLREDUCE_HPP
+#endif // PTO_COMM_TALLGATHER_HPP

@@ -5,5 +5,6 @@
 #include "pto/comm/TPut.hpp"
 #include "pto/comm/TGet.hpp"
 #include "pto/comm/TWait.hpp"
+#include "pto/comm/TAllReduce.hpp"
 
 #endif // PTO_COMM_INSTR_IMPL_HPP
