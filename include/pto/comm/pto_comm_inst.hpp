@@ -32,6 +32,12 @@ PTO_INST void TALLREDUCE(ParallelGroup &parallelGroup)
     MAP_INSTR_IMPL(TALLREDUCE, parallelGroup);
 }
 
+template <typename ParallelGroup, typename GlobalDstData>
+PTO_INST void TALLGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal)
+{
+    MAP_INSTR_IMPL(TALLGATHER, parallelGroup, dstGlobal);
+}
+
 
 } // namespace comm
 } // namespace pto

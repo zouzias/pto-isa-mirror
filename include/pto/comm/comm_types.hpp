@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "pto/common/type.hpp"
+
 namespace pto {
 namespace comm {
 
@@ -39,16 +41,16 @@ struct ParallelGroup {
     int my_rank {-1};
 
     constexpr ParallelGroup() = default;
-    constexpr ParallelGroup(GlobalData **tensorPtrs, int size, int rank_id) : tensors(tensorPtrs), nranks(size), my_rank(rank_id) {}
+    AICORE constexpr ParallelGroup(GlobalData **tensorPtrs, int size, int rank_id) : tensors(tensorPtrs), nranks(size), my_rank(rank_id) {}
 
-    constexpr int size() const { return nranks; }
-    constexpr bool empty() const { return nranks == 0; }
+    AICORE constexpr int size() const { return nranks; }
+    AICORE constexpr bool empty() const { return nranks == 0; }
 
-    constexpr int GetRank() const { return my_rank; }
-    constexpr int GetSize() const { return nranks; }
+    AICORE constexpr int GetRank() const { return my_rank; }
+    AICORE constexpr int GetSize() const { return nranks; }
 
-    constexpr GlobalData &operator[](int teamRank) { return *tensors[teamRank]; }
-    constexpr const GlobalData &operator[](int teamRank) const { return *tensors[teamRank]; }
+    AICORE constexpr GlobalData &operator[](int teamRank) { return *tensors[teamRank]; }
+    AICORE constexpr const GlobalData &operator[](int teamRank) const { return *tensors[teamRank]; }
 };
 
 // 类型萃取：从 ParallelGroup<GlobalData> 中提取 GlobalData 类型

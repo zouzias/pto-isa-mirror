@@ -6,5 +6,6 @@
 #include "pto/comm/TGet.hpp"
 #include "pto/comm/TWait.hpp"
 #include "pto/comm/TAllReduce.hpp"
+#include "pto/comm/TAllGather.hpp"
 
 #endif // PTO_COMM_INSTR_IMPL_HPP

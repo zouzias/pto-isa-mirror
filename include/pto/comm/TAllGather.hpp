@@ -12,12 +12,12 @@ namespace pto {
 namespace comm {
 
 template <BackendKind backend = BackendKind::Shmem, typename ParallelGroupType, typename GlobalDstData>
-AICORE void TALLGATHER_IMPL(ParallelGroupType &srcPG, GlobalDstData &dstGlobal)
+AICORE void TALLGATHER_IMPL(ParallelGroupType &pg, GlobalDstData &dstGlobal)
 {
     // Use type extraction to get GlobalData type (if not ParallelGroup<...>, this will trigger a compile error)
-    using GlobalData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+    using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
     
-    static_assert(std::is_same_v<GlobalData, typename GlobalDstData::GlobalDataType>, "GlobalData type mismatch!");
+    static_assert(std::is_same_v<typename GlobalSrcData::DType, typename GlobalDstData::DType>, "GlobalData type mismatch!");
 
     // Check PG size 
     PTO_ASSERT(pg.size() > 1, "ParallelGroup size must be greater than 1!");

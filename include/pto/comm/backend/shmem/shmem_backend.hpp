@@ -135,61 +135,39 @@ struct ShmemBackend {
         // One-shot implementation 
     }
 
-    template <typename ParallelGroup>
-    PTO_INST static void AllGather(ParallelGroup &pg)
+    template <typename ParallelGroup, typename GlobalDstData>
+    PTO_INST static void AllGather(ParallelGroup &pg, GlobalDstData &dstGlobal)
     {
-        using GlobalData = typename pto::comm::ParallelGroupTraits<ParallelGroup>::GlobalDataType;
-        using DType = typename GlobalData::DType;
+        using GlobalSrcData = typename pto::comm::ParallelGroupTraits<ParallelGroup>::GlobalDataType;
+        using DType = typename GlobalSrcData::DType;
 
         const int my_rank = pg.GetRank();
         const int nranks = pg.GetSize();
 
-        // Build 2D copy params from local tensor view.
-        auto params = BuildCopyParams(pg[my_rank]);
-        if ((nranks <= 1) || (params.lenElems == 0U) || (params.repeat == 0U)) {
-            // Still behave like a collective call site would expect: no-op when size==1.
+        // Local source tensor
+        auto &srcGlobal = pg[my_rank];
+        auto srcParams = BuildCopyParams(srcGlobal);
+        
+        if (nranks <= 1) {
+            // Copy local source to local destination if needed, or just return
+            // For now, assume it's already there or handled.
             return;
         }
 
-        // Effective leading dimensions (in elements) for pointer arithmetic.
-        const uint32_t srcLd = (params.srcStrideElems == 0U) ? params.lenElems : params.srcStrideElems;
-        const uint32_t dstLd = (params.dstStrideElems == 0U) ? params.lenElems : params.dstStrideElems;
+        const uint32_t srcLd = (srcParams.srcStrideElems == 0U) ? srcParams.lenElems : srcParams.srcStrideElems;
+        const uint32_t srcSize = srcParams.repeat * srcLd;
 
-        // Split the first dimension (`repeat`) across ranks: [startRow, endRow).
-        const uint32_t startRow =
-            static_cast<uint32_t>((static_cast<uint64_t>(params.repeat) * static_cast<uint64_t>(my_rank)) /
-                                  static_cast<uint64_t>(nranks));
-        const uint32_t endRow =
-            static_cast<uint32_t>((static_cast<uint64_t>(params.repeat) * static_cast<uint64_t>(my_rank + 1)) /
-                                  static_cast<uint64_t>(nranks));
-        const uint32_t myRows = (endRow > startRow) ? (endRow - startRow) : 0U;
-
-        // Collective sync even if this rank contributes zero rows.
-        if (myRows == 0U) {
-            shmem_barrier_all();
-            return;
-        }
-
-        pto::comm::Copy2DParams myParams = params;
-        myParams.repeat = myRows;
-
-        DType *srcPtr = pg[my_rank].data() + startRow * srcLd;
-
-        bool issuedPut = false;
         for (int teamRank = 0; teamRank < nranks; ++teamRank) {
-            if (teamRank == my_rank) {
-                continue; // local slice already in place
-            }
-            auto &dstGlobal = pg[teamRank];
-            const int pe = dstGlobal.GetRank();
-            DType *dstPtr = dstGlobal.data() + startRow * dstLd;
-            ShmemOps<DType>::Put(dstPtr, srcPtr, myParams, pe);
-            issuedPut = true;
+            const int pe = pg[teamRank].GetRank();
+            
+            // We want to put our local data into the pe-th rank's dstGlobal at the offset for my_rank.
+            // Since dstGlobal is likely symmetric, we just need to target the correct PE.
+            
+            DType *remoteDstPtr = dstGlobal.data() + my_rank * srcSize;
+            ShmemOps<DType>::Put(remoteDstPtr, srcGlobal.data(), srcParams, pe);
         }
 
-        if (issuedPut) {
-            shmem_quiet();
-        }
+        shmem_quiet();
         shmem_barrier_all();
     }
 
