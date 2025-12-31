@@ -38,7 +38,7 @@ usage() {
   echo "    --run_simple run some st on board"
   echo ""
 }
-
+# test push
 print_success() {
   echo
   echo $dotted_line
