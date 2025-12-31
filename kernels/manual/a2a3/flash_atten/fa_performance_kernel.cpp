@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 
 #include "fa_performance_kernel.h"
+#include <pto/npu/a2a3/custom/Pto_prefetch.hpp>
 #include <pto/npu/a2a3/custom/TSyncCVID.hpp>
 #include "pto_macro_matmul.hpp"
 #include "pto_macro_fa_softmax.hpp"
@@ -78,10 +79,6 @@ constexpr bool DAV_VEC = false;
 
 constexpr std::size_t MAX_TILE_L1_BYTES = 512U * 1024U;
 constexpr std::size_t MAX_VEC_UB_BYTES = 192U * 1024U;
-
-AICORE inline uint16_t _getFFTSMsg(uint16_t mode, uint16_t flag_id, uint16_t base_const = 0x1) {
-    return ((base_const & 0xf) + ((mode & 0x3) << 4) + ((flag_id & 0xf) << 8));
-}
 
 // Decide whether to block or signal consumption flags for a given tile index.
 // Reverse dependency: notify one step before the corresponding wait within each sync period.
@@ -319,7 +316,7 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, __gm__ half *q, __gm
         set_flag(PIPE_FIX, PIPE_M, accTileEvtID);
 
         if (sub_tile_id == static_cast<int>(kTileFactor) - 1)
-            ffts_cross_core_sync(PIPE_FIX, _getFFTSMsg(0x2, BUF0_QK_READY)); // notify for QK produce data
+            ffts_cross_core_sync(PIPE_FIX, _getFFTSMsg(CV_CORE_SYNC, BUF0_QK_READY)); // notify for QK produce data
     }
 }
 
@@ -371,7 +368,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
         GlobalXexpTileT xexpLoad(p_tile_fifo + base_elems);
         TLOAD(pMatTile, xexpLoad);
         if (sub_tile_id == static_cast<int>(kTileFactor) - 1 && should_notify_consume)
-            ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(0x2, BUF1_SV_CONSUMED)); // notify SV consume data
+            ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(CV_CORE_SYNC, BUF1_SV_CONSUMED)); // notify SV consume data
 
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
@@ -401,7 +398,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
             TSTORE(pvGlobalTile, pvAccTile);
             set_flag(PIPE_FIX, PIPE_M, accTileEvtID);
 
-            ffts_cross_core_sync(PIPE_FIX, _getFFTSMsg(0x2, UPDATE_READY)); // notify update produce data
+            ffts_cross_core_sync(PIPE_FIX, _getFFTSMsg(CV_CORE_SYNC, UPDATE_READY)); // notify update produce data
         }                                                                   // end loop
     }                                                                       // end if DAV_CUBE
 }
@@ -456,7 +453,7 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         }
 
         if (row_slice == static_cast<int>(kTileFactor) - 1 && should_notify_consume)
-            ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(0x2, BUF0_SM_CONSUMED)); // notify for SM consume data
+            ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(CV_CORE_SYNC, BUF0_SM_CONSUMED)); // notify for SM consume data
 
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -532,7 +529,7 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         }
 
         if (row_slice == static_cast<int>(kTileFactor) - 1)
-            ffts_cross_core_sync(PIPE_MTE3, _getFFTSMsg(0x2, BUF1_SM_READY)); // notify softmax produce data
+            ffts_cross_core_sync(PIPE_MTE3, _getFFTSMsg(CV_CORE_SYNC, BUF1_SM_READY)); // notify softmax produce data
 
         set_flag(PIPE_MTE3, PIPE_V, pTileEventId);
     }
@@ -584,7 +581,7 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
 
         set_flag(PIPE_V, PIPE_MTE2, guEventId);
         if (should_notify_consume)
-            ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(0x2, UPDATE_CONSUMED)); // notify update consume data
+            ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(CV_CORE_SYNC, UPDATE_CONSUMED)); // notify update consume data
 
         if (tile_id == num_tiles - 1) {
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -872,7 +869,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
         for (int i = 0; i < pending_sv_consumed; ++i)
             wait_flag_dev(BUF1_SV_CONSUMED);
-        ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(0x2, CV_BLOCK_END)); // cube can exit CV comm now
+        ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(CV_CORE_SYNC, CV_BLOCK_END)); // cube can exit CV comm now
     }
 
     pipe_barrier(PIPE_ALL);
@@ -892,41 +889,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
 }
 
 // Empty kernel to warm up cores
-__global__ AICORE void warmup_kernel() {}
-
-// Vec-side prefetch kernel to pull q/k/v into L2 cache using TLOAD only
-template <int S0, int HEAD_SIZE, int S1>
-__global__ AICORE void l2prefetch_kernel(__gm__ half *q, __gm__ half *k, __gm__ half *v) {
-    (void)S1; // prefetch only depends on S0 and HEAD_SIZE
-    constexpr int TILE = 128;
-    static_assert(S0 % TILE == 0, "S0 must be divisible by 128 for prefetch");
-    if constexpr (DAV_VEC) {
-        constexpr int ROW_TILES = S0 / TILE;
-
-        using TileS0 = Tile<TileType::Vec, half, TILE, HEAD_SIZE, BLayout::RowMajor, TILE, HEAD_SIZE>;
-        using GlobalS0 = GlobalTensor<half, pto::Shape<1, 1, 1, TILE, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-
-        if (get_subblockid() != 0)
-            return; // only one subblock does prefetch
-
-        TileS0 tile0;
-
-        TASSIGN(tile0, 0u);
-
-        const int block = get_block_idx();
-        const int tensor_sel = block % 3; // 0->q, 1->k, 2->v
-        const int row_tile0 = block / 3;  // one 128xHEAD tile per block per tensor
-
-        if (row_tile0 >= ROW_TILES)
-            return; // safety guard
-
-        __gm__ half *base_ptr = (tensor_sel == 0) ? q : ((tensor_sel == 1) ? k : v);
-
-        const size_t off0 = static_cast<size_t>(row_tile0) * static_cast<size_t>(TILE) * static_cast<size_t>(HEAD_SIZE);
-        GlobalS0 global0(base_ptr + off0);
-        TLOAD(tile0, global0);
-    }
-}
+__global__ AICORE __attribute__((aic)) void warmup_kernel() {}
 
 // Host wrapper
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QK_PRELOAD, int CV_FIFO_SIZE,
@@ -939,9 +902,13 @@ void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclF
 
     // Warm up all cores first, then prefetch q/k/v into L2
     warmup_kernel<<<24, nullptr, stream>>>();
-    constexpr uint32_t prefetch_blocks = 3 * (S0 / 128);
-    l2prefetch_kernel<S0, HEAD_SIZE, S1>
-        <<<prefetch_blocks, nullptr, stream>>>((__gm__ half *)q, (__gm__ half *)k, (__gm__ half *)v);
+
+    const uint64_t tensor_elems = static_cast<uint64_t>(S0) * static_cast<uint64_t>(HEAD_SIZE);
+    constexpr uint32_t prefetch_blocks = 20;
+
+    PTO_PREFETCH<<<prefetch_blocks, nullptr, stream>>>((__gm__ half *)q, tensor_elems);
+    PTO_PREFETCH<<<prefetch_blocks, nullptr, stream>>>((__gm__ half *)k, tensor_elems);
+    PTO_PREFETCH<<<prefetch_blocks, nullptr, stream>>>((__gm__ half *)v, tensor_elems);
 
     runTFA<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CV_FIFO_SIZE, INTERMEDIATE_CHECK,
         CV_FIFO_CONS_SYNC_PERIOD><<<block_rows, nullptr, stream>>>((__gm__ uint64_t *)ffts, (half *)q, (half *)k,

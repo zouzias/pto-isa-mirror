@@ -13,7 +13,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/type.hpp>
 #include <pto/common/utils.hpp>
-#include <pto/npu/a2a3/TSync.hpp>
 
 namespace pto {
 
@@ -28,6 +27,17 @@ enum CVCommFftsEvent : uint16_t {
 // Global CV comm defaults
 constexpr int kCvCommSlotBytes = 512;
 constexpr int kCvMaxCores = 25;
+
+enum CVSyncMode : uint16_t {
+    C_ALL_CORE_SYNC = 0,
+    V_ALL_CORE_SYNC = 0,
+    V_SUBCORES_SYNC = 1,
+    CV_CORE_SYNC = 2
+};
+
+AICORE inline uint16_t _getFFTSMsg(CVSyncMode mode, uint16_t flag_id, uint16_t base_const = 0x1) {
+    return ((base_const & 0xf) + ((mode & 0x3) << 4) + ((flag_id & 0xf) << 8));
+}
 
 // Cross-core CV slot synchronization. Returns the CV comm slot for the current core/block.
 // - block_idx: logical block index.
@@ -45,7 +55,7 @@ AICORE inline int TSYNC_CVID(int block_idx, __gm__ uint8_t *cv_comm_buf) {
     comm_slot_ptr[0] = static_cast<uint32_t>(comm_slot);
     dcci(comm_slot_ptr, SINGLE_CACHE_LINE);
     dsb(DSB_DDR);
-    ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(FFTS_MODE_VAL, CV_COMM_CTRL));
+    ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(CV_CORE_SYNC, CV_COMM_CTRL));
 #elif defined(__DAV_VEC__)
     static_assert(CV_MAX_CORES > 0, "MAX_CORES must be positive");
     PTO_ASSERT(cv_comm_buf != nullptr, "cv_comm_buf must be non-null when CV comm is enabled on vector cores");
