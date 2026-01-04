@@ -38,6 +38,12 @@ PTO_INST void TALLGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal)
     MAP_INSTR_IMPL(TALLGATHER, parallelGroup, dstGlobal);
 }
 
+template <typename ParallelGroup, typename GlobalSrcData>
+PTO_INST void TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal, int root)
+{
+    MAP_INSTR_IMPL(TBROADCAST, parallelGroup, srcGlobal, root);
+}
+
 
 } // namespace comm
 } // namespace pto

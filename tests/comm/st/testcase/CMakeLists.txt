@@ -61,6 +61,7 @@ tget
 tput
 tallgather
 tallreduce
+tbroadcast
 shmem_init
 shmem_malloc
 )

@@ -212,6 +212,32 @@ struct ShmemBackend {
     }
 
 
+    template <typename ParallelGroup, typename GlobalSrcData>
+    PTO_INST static void BroadCast(ParallelGroup &pg, GlobalSrcData &srcGlobal, int root)
+    {
+        using GlobalDstData = typename pto::comm::ParallelGroupTraits<ParallelGroup>::GlobalDataType;
+        using DType = typename GlobalSrcData::DType;
+
+        const int my_rank = pg.GetRank();
+        const int nranks = pg.GetSize();
+
+        if (nranks <= 0) return;
+
+        if (my_rank == root) {
+            auto srcParams = BuildCopyParams(srcGlobal);
+            for (int r = 0; r < nranks; ++r) {
+                const int pe = pg[r].GetRank();
+                
+                // Put root's source data into PE r's destination tensor in ParallelGroup
+                ShmemOps<DType>::Put(pg[r].data(), srcGlobal.data(), srcParams, pe);
+            }
+            shmem_quiet();
+        }
+
+        shmem_barrier_all();
+    }
+
+
     PTO_INST static void Barrier()
     {
         shmem_barrier_all();
