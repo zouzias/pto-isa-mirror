@@ -60,6 +60,7 @@ set(ALL_TESTCASES
 tget
 tput
 tallgather
+tallreduce
 shmem_init
 shmem_malloc
 )

@@ -129,10 +129,50 @@ struct ShmemBackend {
         ShmemOps<DType>::Get(dstGlobal.data(), srcGlobal.data(), params, pe);
     }
 
-    template <typename ParallelGroup>
-    PTO_INST static void AllReduce(ParallelGroup &pg)
+
+    template <typename ParallelGroup, typename GlobalDstData>
+    PTO_INST static void AllReduce(ParallelGroup &pg, GlobalDstData &dstGlobal)
     {
-        // One-shot implementation 
+        using GlobalData = typename pto::comm::ParallelGroupTraits<ParallelGroup>::GlobalDataType;
+        using DType = typename GlobalData::DType;
+
+        const int my_rank = pg.GetRank();
+        const int nranks = pg.GetSize();
+
+        if (nranks <= 0) return;
+
+        // Local source tensor
+        auto &srcGlobal = pg[my_rank];
+        auto srcParams = BuildCopyParams(srcGlobal);
+
+        if (nranks == 1) {
+            // Copy local source to local destination
+            Get(dstGlobal, srcGlobal);
+            return;
+        }
+
+        // Initialize dstGlobal with local source data
+        ShmemOps<DType>::Get(dstGlobal.data(), srcGlobal.data(), srcParams, my_rank);
+        shmem_quiet();
+
+        const uint32_t totalElems = srcParams.repeat * ((srcParams.srcStrideElems == 0) ? srcParams.lenElems : srcParams.srcStrideElems);
+        DType *dstPtr = dstGlobal.data();
+
+        for (int teamRank = 0; teamRank < nranks; ++teamRank) {
+            if (teamRank == my_rank) continue;
+
+            const int pe = pg[teamRank].GetRank();
+            DType *remoteSrcPtr = reinterpret_cast<DType *>(shmem_ptr(pg[teamRank].data(), pe));
+
+            if (remoteSrcPtr != nullptr) {
+                for (uint32_t i = 0; i < totalElems; ++i) {
+                    dstPtr[i] += remoteSrcPtr[i];
+                }
+            }
+        }
+
+        shmem_quiet();
+        shmem_barrier_all();
     }
 
     template <typename ParallelGroup, typename GlobalDstData>

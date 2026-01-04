@@ -14,8 +14,8 @@ namespace comm {
 
 // 主实现：使用类型萃取，保持简单的调用接口
 // 用户调用时只需传入 ParallelGroup<GlobalData>，编译器会自动推导类型
-template <BackendKind backend = BackendKind::Shmem, typename ParallelGroupType>
-AICORE void TALLREDUCE_IMPL(ParallelGroupType &pg)
+template <BackendKind backend = BackendKind::Shmem, typename ParallelGroupType, typename GlobalDstData>
+AICORE void TALLREDUCE_IMPL(ParallelGroupType &pg, GlobalDstData &dstGlobal)
 {
     // 使用类型萃取获取 GlobalData 类型（如果不是 ParallelGroup<...>，这里会触发编译错误）
     using GlobalData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
@@ -33,7 +33,7 @@ AICORE void TALLREDUCE_IMPL(ParallelGroupType &pg)
                    "All tensors in ParallelGroup must have the same shape!");
     }
     
-    BackendSelector<backend>::type::template AllReduce(pg);
+    BackendSelector<backend>::type::template AllReduce(pg, dstGlobal);
 }
 
 } // namespace comm
