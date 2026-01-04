@@ -26,7 +26,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define ENABLE_DEBUG_PRINT 1
 
 template <typename T, size_t count>
-__global__ AICORE void TAllGatherKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
+__global__ AICORE void TAllGatherKernelImpl(__gm__ T *dst, __gm__ T *src, int nranks)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -36,26 +36,23 @@ __global__ AICORE void TAllGatherKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__
 
     ShapeDyn srcShape(1, 1, 1, 1, count);
     StrideDyn srcStride(count, count, count, count, 1);
-    
-    Global srcG(src, srcShape, srcStride);
-    srcG.SetRank(my_rank);
 
     ShapeDyn dstShape(1, 1, 1, 1, count * nranks);
     StrideDyn dstStride(count * nranks, count * nranks, count * nranks, count * nranks, 1);
     Global dstG(dst, dstShape, dstStride);
     dstG.SetRank(my_rank);
 
-    // ParallelGroup requires an array of GlobalTensor pointers.
-    // Since GlobalTensor has no default constructor, we initialize the array with copies of srcG.
+    // Create ParallelGroup: each tensor in the group represents the input buffer on a different rank.
+    // In symmetric memory model, all ranks see the same address for src, so we use the same base pointer
+    // but set different ranks via SetRank(i) to access data on rank i.
+    Global baseSrcG(src, srcShape, srcStride);
+    Global tensors[16];
     Global *tensorPtrs[16];
-    Global tensors[16] = {
-        srcG, srcG, srcG, srcG, srcG, srcG, srcG, srcG,
-        srcG, srcG, srcG, srcG, srcG, srcG, srcG, srcG
-    };
     
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        tensors[i].SetRank(i);
+        tensors[i] = baseSrcG;
+        tensors[i].SetRank(i);  // Each tensor corresponds to rank i's symmetric memory region
         tensorPtrs[i] = &tensors[i];
     }
     
@@ -96,13 +93,17 @@ bool RunAllGatherKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         return false;
     }
 
-    void *input_ptr;
-    aclrtMalloc(&input_ptr, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
-    // output_ptr will be in shmem
+    // Use SymmetricAlloc for both input and output to ensure they are accessible by all ranks
+    size_t input_size = count * sizeof(T);
+    size_t output_size = n_ranks * count * sizeof(T);
+    void* shmem_ptr = pto::comm::ContextManager::SymmetricAlloc(input_size + output_size);
+    
+    void* input_ptr = shmem_ptr;
+    void* output_ptr = (uint8_t*)shmem_ptr + input_size;
 
     T *input_host, *output_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&input_host), count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void**>(&output_host), n_ranks * count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void**>(&input_host), input_size);
+    aclrtMallocHost(reinterpret_cast<void**>(&output_host), output_size);
 
     // Initialize input data: each rank has its unique range
     for (size_t i = 0; i < count; ++i) {
@@ -112,18 +113,12 @@ bool RunAllGatherKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         output_host[i] = static_cast<T>(-1);
     }
 
-    aclrtMemcpy(input_ptr, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(input_ptr, input_size, input_host, input_size, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    // shmem_ptr: used for output_ptr and internal collective ops.
-    // We need at least n_ranks * count * sizeof(T) for the gathered data.
-    size_t output_size = n_ranks * count * sizeof(T);
-    void* shmem_ptr = pto::comm::ContextManager::SymmetricAlloc(output_size + 1024);
-    void* output_ptr = shmem_ptr; // Use the beginning of shmem as output buffer
-
-    TAllGatherKernelImpl<T, count><<<1, nullptr, stream>>>((T*)output_ptr, (T*)input_ptr, (T*)((uint8_t*)shmem_ptr + output_size), n_ranks);
+    TAllGatherKernelImpl<T, count><<<1, nullptr, stream>>>((T*)output_ptr, (T*)input_ptr, n_ranks);
     status = aclrtSynchronizeStream(stream);
 
-    aclrtMemcpy(output_host, n_ranks * count * sizeof(T), output_ptr, n_ranks * count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(output_host, output_size, output_ptr, output_size, ACL_MEMCPY_DEVICE_TO_HOST);
 
     bool is_ok = true;
     for (int r = 0; r < n_ranks; ++r) {
@@ -160,8 +155,7 @@ bool RunAllGatherKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
-    aclrtFree(input_ptr);
-    // aclrtFree(output_ptr); // output_ptr is shmem_ptr, freed below
+    // input_ptr and output_ptr are both part of shmem_ptr, freed below
     pto::comm::ContextManager::SymmetricFree(shmem_ptr);
 
     status |= aclrtDestroyStream(stream);

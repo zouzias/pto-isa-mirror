@@ -205,6 +205,9 @@ struct GlobalTensor {
     static constexpr int staticStride[GlobalTensorDim::TOTAL_DIM] = {Stride::staticStride[GlobalTensorDim::DIM_0],
         Stride::staticStride[GlobalTensorDim::DIM_1], Stride::staticStride[GlobalTensorDim::DIM_2],
         Stride::staticStride[GlobalTensorDim::DIM_3], Stride::staticStride[GlobalTensorDim::DIM_4]};
+    // align with the constructor of GlobalData
+    PTO_INTERNAL GlobalTensor() : data_(nullptr), rank_(-1) {}
+
     PTO_INTERNAL GlobalTensor(
         DType *data, const Shape &shape = defaultShape, const Stride &stride = defaultStride, int rank = defaultRank)
     {
@@ -345,7 +348,7 @@ struct GlobalTensor {
         return data_;
     }
 
-private:
+  private:
     template <int StaticShape>
     PTO_INTERNAL int GetShapeSize(const int dim)
     {
@@ -366,9 +369,10 @@ private:
         }
     }
 
+    AICORE void assignData(DType *addr) { data_ = addr; }
     AICORE void SetAddr(DType *addr) { data_ = addr; }
 
-    DType *data_;
+    DType *data_ = nullptr;
     Shape shape_ = defaultShape;
     Stride stride_ = defaultStride;
 
