@@ -75,16 +75,23 @@ void launchTCVT(D *dst, S *src, void *stream) {
 // FP32 Source
 INSTANTIATE_TCVT(float, float)
 INSTANTIATE_TCVT(aclFloat16, float)
+INSTANTIATE_TCVT(bfloat16_t, float)
 INSTANTIATE_TCVT(int32_t, float)
 INSTANTIATE_TCVT(int16_t, float)
 INSTANTIATE_TCVT(int64_t, float)
 
 // FP16 Source
 INSTANTIATE_TCVT(float, aclFloat16)
+INSTANTIATE_TCVT(aclFloat16, aclFloat16)
 INSTANTIATE_TCVT(int32_t, aclFloat16)
 INSTANTIATE_TCVT(int16_t, aclFloat16)
 INSTANTIATE_TCVT(int8_t, aclFloat16)
 INSTANTIATE_TCVT(uint8_t, aclFloat16)
+
+// BF16 Source
+INSTANTIATE_TCVT(float, bfloat16_t)
+INSTANTIATE_TCVT(int32_t, bfloat16_t)
+INSTANTIATE_TCVT(aclFloat16, bfloat16_t)
 
 // INT32 Source
 INSTANTIATE_TCVT(float, int32_t)
@@ -97,6 +104,7 @@ INSTANTIATE_TCVT(aclFloat16, int16_t)
 INSTANTIATE_TCVT(float, int16_t)
 INSTANTIATE_TCVT(uint32_t, int16_t)
 INSTANTIATE_TCVT(int32_t, int16_t)
+INSTANTIATE_TCVT(uint8_t, int16_t)
 
 // INT8 Source
 INSTANTIATE_TCVT(aclFloat16, int8_t)
