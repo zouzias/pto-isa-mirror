@@ -83,7 +83,6 @@ INSTANTIATE_TCVT(int64_t, float)
 
 // FP16 Source
 INSTANTIATE_TCVT(float, aclFloat16)
-INSTANTIATE_TCVT(aclFloat16, aclFloat16)
 INSTANTIATE_TCVT(int32_t, aclFloat16)
 INSTANTIATE_TCVT(int16_t, aclFloat16)
 INSTANTIATE_TCVT(int8_t, aclFloat16)

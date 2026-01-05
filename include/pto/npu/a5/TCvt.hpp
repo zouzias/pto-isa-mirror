@@ -354,19 +354,6 @@ inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ half *src, int32_t& 
     cast16to32<R, CastMode::ROUND_PART>(dst, src, dstOffset, srcOffset, len);
 }
 
-/** FP16 -> FP16 - Applies rounding mode without type conversion → vtrc(output, input, R(), preg) */
-template <typename R>
-inline AICORE void castData(__ubuf__ half *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    FOR_ELEMENTS(ELE_CNT_B16)
-        vector_f16 v_input_0, v_output;
-        vector_bool preg_f16 = plt_b16(len, POST_UPDATE);
-        
-        vlds(v_input_0, src, srcOffset, NORM);
-        vtrc(v_output, v_input_0, R(), preg_f16);
-        vsts(v_output, dst, dstOffset, NORM_B16, preg_f16);
-    END_FOR_ELEMENTS
-}
-
 /** FP16 -> I16 #rnd #sat → vcvt(output, input, preg, R(), RS_ENABLE) */
 template <typename R>
 inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
