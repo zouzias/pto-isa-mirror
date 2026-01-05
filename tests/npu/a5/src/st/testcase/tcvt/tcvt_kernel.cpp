@@ -56,13 +56,14 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src) {
 
 template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void launchTCVT(D *dst, S *src, void *stream) {
-    if constexpr ( std::is_same_v<D, aclFloat16> ) {
-        runTCVT<half, S, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>((half*) dst, src);
-    } else if constexpr ( std::is_same_v<S, aclFloat16> ) {
-        runTCVT<D, half, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>(dst, (half*)src);
-    } else {
-         runTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>(dst, src);
-    }
+    // Map aclFloat16 to half for kernel execution
+    using DstType = std::conditional_t<std::is_same_v<D, aclFloat16>, half, D>;
+    using SrcType = std::conditional_t<std::is_same_v<S, aclFloat16>, half, S>;
+    
+    runTCVT<DstType, SrcType, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>(
+        reinterpret_cast<DstType*>(dst), 
+        reinterpret_cast<SrcType*>(src)
+    );
 } 
 
 // Macro to generate template instantiations for all shapes for a given type pair
