@@ -116,6 +116,7 @@ if __name__ == "__main__":
     # Type conversion pairs: (name_suffix, source_type, destination_type)
     type_pairs = [
         # FP32 Source
+        ("fp32_fp32", np.float32, np.float32),
         ("fp32_fp16", np.float32, np.float16),
         ("fp32_bf16", np.float32, bfloat16),
         ("fp32_int32", np.float32, np.int32),
