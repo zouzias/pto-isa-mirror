@@ -17,6 +17,68 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "common.hpp"
 #include "utils.hpp"
 
+/* 
+Supported conversions:
+ Float to int 
+ f32 -> s64 #rnd #sat #part 
+ f32 -> s32 #rnd #sat 
+ f32 -> s16 #rnd #sat #part 
+ f16 -> s32 #rnd #part 
+ f16 -> s16 #rnd #sat 
+ f16 -> s8 #rnd #sat #part 
+ f16 -> u8 #rnd #sat #part 
+ bf16 -> s32 #rnd #sat #part 
+ 
+ 
+ Float to float 
+ f32 -> f16 #rnd #sat #part 
+ f32 -> bf16 #rnd #sat #part 
+ f32 -> e4m3 #rnd #sat #pp 
+ f32 -> e5m2 #rnd #sat #pp 
+ f32 -> h8 #rnd #sat #pp 
+ f16 -> f32 #part 
+ f16 -> h8 #rnd #sat #part 
+ bf16 -> f32 #part 
+ h8 -> f32 #pp 
+ h8 -> f16 #part 
+ e4m3 -> f32 #pp 
+ e5m2 -> f32 #pp 
+ bf16 -> f16 #sat #rnd 
+ f16 -> bf16 #rnd 
+ f16 -> e4m3 #rnd #sat #part 
+ f16 -> e5m2 #rnd #sat #part 
+ bf16 -> e4m3 #rnd #sat #part 
+ bf16 -> e5m2 #rnd #sat #part 
+ 
+ 
+ Int to float 
+ u8 -> f16 #part 
+ s8 -> f16 #part 
+ s16 -> f16 #rnd 
+ s16 -> f32 #part 
+ s32 -> f32 #rnd 
+ s64 -> f32 #rnd #part 
+ 
+ 
+ Int to int 
+ u8 -> u16 #part 
+ u8 -> u32 #pp 
+ s8 -> s16 #part 
+ s8 -> s32 #pp 
+ u16 -> u8 #sat #part 
+ u16 -> u32 #part 
+ s16 -> u8 #sat #part 
+ s16 -> u32 #part 
+ s16 -> s32 #part 
+ u32 -> u8 #sat #pp 
+ u32 -> u16 #sat #part 
+ u32 -> s16 #sat #part 
+ s32 -> u8 #sat #pp 
+ s32 -> u16 #sat #part 
+ s32 -> s16 #sat #part 
+ s32 -> s64 #part 
+ s64 -> s32 #sat #part 
+ */
 
 
 namespace pto {
@@ -379,6 +441,17 @@ inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ half *src, int32_t& 
     cast16to8<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, dstOffset, srcOffset, len);
 }
 
+/** FP16 -> FP8_E5M2 #rnd #sat #part */
+template <typename R>
+inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
+}
+
+/** FP16 -> FP8_E4M3 #rnd #sat #part */
+template <typename R>
+inline AICORE void castData(__ubuf__ float8_e4m3fn_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
+}
 //--- Src:: BF16 ----------------------------------------------------------------------
 /** BF16 -> FP32 #part (type expansion) → vcvt(output, input, preg, PART_EVEN) */
 template <typename R>
@@ -402,6 +475,12 @@ inline AICORE void castData(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, int32_
 template <typename R>
 inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
     cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
+}
+
+/** BF16 -> FP8_E4M3 #rnd #sat #part → vcvt(..., R(), RS_ENABLE, PART_*) */
+template <typename R>
+inline AICORE void castData(__ubuf__ float8_e4m3fn_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
 }
 
 //--- Src:: U8,I8 ----------------------------------------------------------------------
