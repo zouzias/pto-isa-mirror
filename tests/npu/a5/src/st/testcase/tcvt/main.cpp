@@ -114,6 +114,7 @@ GENERATE_TCVT_TESTS(uint8_t, aclFloat16, fp16_uint8)
 GENERATE_TCVT_TESTS(float, bfloat16_t, bf16_fp32)
 GENERATE_TCVT_TESTS(int32_t, bfloat16_t, bf16_int32)
 GENERATE_TCVT_TESTS(aclFloat16, bfloat16_t, bf16_fp16)
+GENERATE_TCVT_TESTS(float8_e5m2_t, bfloat16_t, bf16_fp8_e5m2)
 
 // INT32 Source
 GENERATE_TCVT_TESTS(float, int32_t, int32_fp32)

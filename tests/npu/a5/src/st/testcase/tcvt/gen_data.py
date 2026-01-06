@@ -15,6 +15,7 @@ import numpy as np
 import ml_dtypes
 
 bfloat16 = ml_dtypes.bfloat16
+fp8_e5m2 = ml_dtypes.float8_e5m2
 np.random.seed(19)
 
 def gen_golden(case_name, param):
@@ -134,6 +135,7 @@ if __name__ == "__main__":
         ("bf16_fp32", bfloat16, np.float32),
         ("bf16_int32", bfloat16, np.int32),
         ("bf16_fp16", bfloat16, np.float16),
+        ("bf16_fp8_e5m2", bfloat16, fp8_e5m2),
 
         # INT32 Source
         ("int32_fp32", np.int32, np.float32),
