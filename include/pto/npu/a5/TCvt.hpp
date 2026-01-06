@@ -16,64 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <array>
 #include "common.hpp"
 #include "utils.hpp"
-/*
-Float to int
-f32 -> s64 #rnd #sat #part
-f32 -> s32 #rnd #sat
-f32 -> s16 #rnd #sat #part
-f16 -> s32 #rnd #part
-f16 -> s16 #rnd #sat
-f16 -> s8 #rnd #sat #part
-f16 -> u8 #rnd #sat #part
-bf16 -> s32 #rnd #sat #part
 
-Float to float
-f32 -> f16 #rnd #sat #part
-f32 -> bf16 #rnd #sat #part
-f32 -> e4m3 #rnd #sat #pp
-f32 -> e5m2 #rnd #sat #pp
-f32 -> h8 #rnd #sat #pp
-f16 -> f32 #part
-f16 -> h8 #rnd #sat #part
-bf16 -> f32 #part
-h8 -> f32 #pp
-h8 -> f16 #part
-e4m3 -> f32 #pp
-e5m2 -> f32 #pp
-bf16 -> f16 #sat #rnd
-f16 -> bf16 #rnd
-f16 -> e4m3 #rnd #sat #part
-f16 -> e5m2 #rnd #sat #part
-bf16 -> e4m3 #rnd #sat #part
-bf16 -> e5m2 #rnd #sat #part
-
-Int to float
-u8 -> f16 #part
-s8 -> f16 #part
-s16 -> f16 #rnd
-s16 -> f32 #part
-s32 -> f32 #rnd
-s64 -> f32 #rnd #part
-
-Int to int
-u8 -> u16 #part
-u8 -> u32 #pp
-s8 -> s16 #part
-s8 -> s32 #pp
-u16 -> u8 #sat #part
-u16 -> u32 #part
-s16 -> u8 #sat #part
-s16 -> u32 #part
-s16 -> s32 #part
-u32 -> u8 #sat #pp
-u32 -> u16 #sat #part
-u32 -> s16 #sat #part
-s32 -> u8 #sat #pp
-s32 -> u16 #sat #part
-s32 -> s16 #sat #part
-s32 -> s64 #part
-s64 -> s32 #sat #part
-*/
 
 
 namespace pto {
@@ -118,8 +61,8 @@ inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& ds
 
     FOR_ELEMENTS(ELE_CNT_B64)
         DST_VEC v_output;
-        uint32_t len2 = len * 2; // As only the even part is taken
-        vector_bool preg_b32 = plt_b32(len, POST_UPDATE);
+        uint32_t len_even = len * 2; // As only the even part is taken
+        vector_bool preg_b32 = plt_b32(len_even, POST_UPDATE);
         
         vlds(v_input_0, src, srcOffset, NORM);
         if constexpr (std::is_same<R, void>::value) {
@@ -201,15 +144,15 @@ template <typename R, typename SRC>
 inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
     typedef SRC __attribute__((ext_vector_type(ELE_CNT_B32))) SRC_VEC;
 
-    uint32_t reg_32 = ELE_CNT_B32;
-    vector_bool preg_b32 = plt_b32(reg_32, POST_UPDATE);
     const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
+    uint32_t len32 = ELE_CNT_B32;
+    vector_bool preg_b32 = plt_b32(len32, POST_UPDATE);
 
     FOR_ELEMENTS(ELE_CNT_B64)
         SRC_VEC v_input_0;
         vector_s64 v_output;
-        len = len * 2; // As we operate with 64bit blocks using 32bit operations
-        vector_bool preg_b64 = plt_b32(len, POST_UPDATE);
+        uint32_t len64 = len * 2; // As we operate with 64bit blocks using 32bit operations
+        vector_bool preg_b64 = plt_b32(len64, POST_UPDATE);
         
         vlds(v_input_0, src, srcOffset, UNPK_B32);
         if constexpr (std::is_same<R, void>::value) {
@@ -262,8 +205,8 @@ inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dst
     typedef SRC __attribute__((ext_vector_type(ELE_CNT_B16))) SRC_VEC;
     typedef DST __attribute__((ext_vector_type(ELE_CNT_B32))) DST_VEC;
 
-    uint32_t reg_16 = ELE_CNT_B16;
-    vector_bool preg_b16 = plt_b16(reg_16, POST_UPDATE);
+    uint32_t len16 = ELE_CNT_B16;
+    vector_bool preg_b16 = plt_b16(len16, POST_UPDATE);
 
     FOR_ELEMENTS(ELE_CNT_B32)
         SRC_VEC v_input_0;
