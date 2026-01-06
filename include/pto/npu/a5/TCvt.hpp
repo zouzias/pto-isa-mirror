@@ -113,17 +113,19 @@ inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& ds
     vector_s64 v_input_0;
 
     const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
+    uint32_t len64 = len * 2; // As we operate with 64bit blocks using 32bit operations
+    vector_bool preg_b64 = plt_b32(len64, POST_UPDATE);
 
     FOR_ELEMENTS(ELE_CNT_B64)
         DST_VEC v_output;
-        len = len * 2;
+        uint32_t len2 = len * 2; // As only the even part is taken
         vector_bool preg_b32 = plt_b32(len, POST_UPDATE);
         
         vlds(v_input_0, src, srcOffset, NORM);
         if constexpr (std::is_same<R, void>::value) {
-            vcvt(v_output, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);
+            vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
         } else {
-            vcvt(v_output, v_input_0, preg_b32, R(), PART_EVEN);
+            vcvt(v_output, v_input_0, preg_b64, R(), PART_EVEN);
         }
         vsts(v_output, dst, dstOffset, PK_B64, preg_b32);
    END_FOR_ELEMENTS
