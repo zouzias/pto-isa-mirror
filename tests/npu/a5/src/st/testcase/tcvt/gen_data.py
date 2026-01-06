@@ -17,6 +17,7 @@ import ml_dtypes
 bfloat16 = np.float16  # Using float16 to simulate bfloat16 for data generation
 fp8_e5m2 = np.int8  # Using int8 to simulate fp8_e5m2 for data generation
 fp8_e4m3 = np.int8  # Using int8 to simulate fp8_e4m3 for data generation
+hifloat8 = np.int8  # Using int8 to simulate hifloat8 for data generation
 np.random.seed(19)
 
 def gen_golden(case_name, param):
@@ -28,8 +29,8 @@ def gen_golden(case_name, param):
     if srctype == np.float32 or srctype == np.float16 or srctype == bfloat16:
         # Floating point: range [-100, 100]
         x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
-    elif srctype == np.int8 or srctype == fp8_e5m2 or srctype == fp8_e4m3:
-        # int8/fp8: full range [-128, 127]
+    elif srctype == np.int8 or srctype == fp8_e5m2 or srctype == fp8_e4m3 or srctype == hifloat8:
+        # int8/fp8/hifloat8: full range [-128, 127]
         x1_gm = np.random.randint(-128, 128, [m, n]).astype(srctype)
     elif srctype == np.uint8:
         # uint8: full range [0, 255]
@@ -133,6 +134,7 @@ if __name__ == "__main__":
         ("fp16_uint8", np.float16, np.uint8),
         ("fp16_fp8_e5m2", np.float16, fp8_e5m2),
         ("fp16_fp8_e4m3", np.float16, fp8_e4m3),
+        ("fp16_hifloat8", np.float16, hifloat8),
 
         # BF16 Source
         ("bf16_fp32", bfloat16, np.float32),
@@ -140,6 +142,7 @@ if __name__ == "__main__":
         ("bf16_fp16", bfloat16, np.float16),
         ("bf16_fp8_e5m2", bfloat16, fp8_e5m2),
         ("bf16_fp8_e4m3", bfloat16, fp8_e4m3),
+        ("bf16_hifloat8", bfloat16, hifloat8),
 
         # INT32 Source
         ("int32_fp32", np.int32, np.float32),
