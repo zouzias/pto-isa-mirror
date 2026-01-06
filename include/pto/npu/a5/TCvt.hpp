@@ -449,7 +449,7 @@ inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ half *src, int
 
 /** FP16 -> FP8_E4M3 #rnd #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ float8_e4m3fn_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void castData(__ubuf__ float8_e4m3f_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
     cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
 }
 //--- Src:: BF16 ----------------------------------------------------------------------
@@ -479,7 +479,7 @@ inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ bfloat16_t *sr
 
 /** BF16 -> FP8_E4M3 #rnd #sat #part → vcvt(..., R(), RS_ENABLE, PART_*) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float8_e4m3fn_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void castData(__ubuf__ float8_e4m3f_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
     cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
 }
 
