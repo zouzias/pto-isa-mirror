@@ -401,7 +401,7 @@ inline AICORE void castData(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, int32_
 /** BF16 -> FP8_E5M2 #rnd #sat #part → vcvt(..., R(), RS_ENABLE, PART_*) */
 template <typename R>
 inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, dstOffset, srcOffset, len);
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
 }
 
 //--- Src:: U8,I8 ----------------------------------------------------------------------

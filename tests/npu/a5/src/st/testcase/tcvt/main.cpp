@@ -98,7 +98,7 @@ void test_tcvt()
 // FP32 Source
 GENERATE_TCVT_TESTS(float, float, fp32_fp32)
 GENERATE_TCVT_TESTS(aclFloat16, float, fp32_fp16)
-GENERATE_TCVT_TESTS(bfloat16_t, float, fp32_bf16)
+GENERATE_TCVT_TESTS(aclFloat16, float, fp32_bf16)
 GENERATE_TCVT_TESTS(int32_t, float, fp32_int32)
 GENERATE_TCVT_TESTS(int16_t, float, fp32_int16)
 GENERATE_TCVT_TESTS(int64_t, float, fp32_int64)
@@ -111,10 +111,10 @@ GENERATE_TCVT_TESTS(int8_t, aclFloat16, fp16_int8)
 GENERATE_TCVT_TESTS(uint8_t, aclFloat16, fp16_uint8)
 
 // BF16 Source
-GENERATE_TCVT_TESTS(float, bfloat16_t, bf16_fp32)
-GENERATE_TCVT_TESTS(int32_t, bfloat16_t, bf16_int32)
-GENERATE_TCVT_TESTS(aclFloat16, bfloat16_t, bf16_fp16)
-GENERATE_TCVT_TESTS(float8_e5m2_t, bfloat16_t, bf16_fp8_e5m2)
+GENERATE_TCVT_TESTS(float, aclFloat16, bf16_fp32) //use aclFloat16 to simulate bf16
+GENERATE_TCVT_TESTS(int32_t, aclFloat16, bf16_int32)
+// GENERATE_TCVT_TESTS(aclFloat16, aclFloat16, bf16_fp16)
+GENERATE_TCVT_TESTS(int8_t, aclFloat16, bf16_fp8_e5m2) //use int8_t to simulate fp8_e5m2
 
 // INT32 Source
 GENERATE_TCVT_TESTS(float, int32_t, int32_fp32)

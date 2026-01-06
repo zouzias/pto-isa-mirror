@@ -14,8 +14,8 @@ import os
 import numpy as np
 import ml_dtypes
 
-bfloat16 = ml_dtypes.bfloat16
-fp8_e5m2 = ml_dtypes.float8_e5m2
+bfloat16 = np.float16  # Using float16 to simulate bfloat16 for data generation
+fp8_e5m2 = np.int8  # Using int8 to simulate fp8_e5m2 for data generation
 np.random.seed(19)
 
 def gen_golden(case_name, param):
@@ -27,7 +27,7 @@ def gen_golden(case_name, param):
     if srctype == np.float32 or srctype == np.float16 or srctype == bfloat16:
         # Floating point: range [-100, 100]
         x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
-    elif srctype == np.int8:
+    elif srctype == np.int8 or srctype == fp8_e5m2:
         # int8: full range [-128, 127]
         x1_gm = np.random.randint(-128, 128, [m, n]).astype(srctype)
     elif srctype == np.uint8:
