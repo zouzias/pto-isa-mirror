@@ -125,6 +125,9 @@ if __name__ == "__main__":
         ("fp32_int32", np.float32, np.int32),
         ("fp32_int16", np.float32, np.int16),
         ("fp32_int64", np.float32, np.int64),
+        ("fp32_fp8_e4m3", np.float32, fp8_e4m3),
+        ("fp32_fp8_e5m2", np.float32, fp8_e5m2),
+        ("fp32_hifloat8", np.float32, hifloat8),
         
         # FP16 Source
         ("fp16_fp32", np.float16, np.float32),
@@ -142,7 +145,6 @@ if __name__ == "__main__":
         ("bf16_fp16", bfloat16, np.float16),
         ("bf16_fp8_e5m2", bfloat16, fp8_e5m2),
         ("bf16_fp8_e4m3", bfloat16, fp8_e4m3),
-        ("bf16_hifloat8", bfloat16, hifloat8),
 
         # INT32 Source
         ("int32_fp32", np.int32, np.float32),

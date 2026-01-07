@@ -80,6 +80,9 @@ INSTANTIATE_TCVT(bfloat16_t, float)
 INSTANTIATE_TCVT(int32_t, float)
 INSTANTIATE_TCVT(int16_t, float)
 INSTANTIATE_TCVT(int64_t, float)
+INSTANTIATE_TCVT(float8_e4m3_t, float)
+INSTANTIATE_TCVT(float8_e5m2_t, float)
+INSTANTIATE_TCVT(hifloat8_t, float)
 
 // FP16 Source
 INSTANTIATE_TCVT(float, aclFloat16)
@@ -97,7 +100,6 @@ INSTANTIATE_TCVT(int32_t, bfloat16_t)
 // INSTANTIATE_TCVT(aclFloat16, bfloat16_t)
 INSTANTIATE_TCVT(float8_e5m2_t, bfloat16_t)
 INSTANTIATE_TCVT(float8_e4m3_t, bfloat16_t)
-INSTANTIATE_TCVT(hifloat8_t, bfloat16_t)
 
 // INT32 Source
 INSTANTIATE_TCVT(float, int32_t)
