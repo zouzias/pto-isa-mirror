@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/user/bin/python3
 # coding=utf-8
 # --------------------------------------------------------------------------------
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
@@ -15,39 +15,71 @@ import os
 import numpy as np
 np.random.seed(19)
 
-def gen_golden(case_name, param):
-    srctype = param.srctype
+def gen_golden_data(param):
+    dtype = param.dtype
+    dstTileRow, dstTileCol = param.dstTileRow, param.dstTileCol
+    srcTileRow, srcTileCol = param.srcTileRow, param.srcTileCol
+    validRow, validCol = param.validRow, param.validCol
+    src = np.random.randint(1, 10, size=[srcTileRow, srcTileCol]).astype(dtype)
+    output = src.transpose((1, 0)).astype(dtype)
+    golden = np.zeros([dstTileRow, dstTileCol]).astype(dtype)
+    golden[:validCol, :validRow] = output[:validCol, :validRow]
+    src.tofile("input.bin")
+    golden.tofile("golden.bin")
 
-    m, n = param.m, param.n
-
-    x1_gm = np.random.randint(1, 5, [m, n]).astype(srctype)
-    golden = x1_gm.transpose()
-    x1_gm.tofile("./x1_gm.bin")
-    golden.tofile("./golden.bin")
-
-class ttransParams:
-    def __init__(self, srctype, m, n):
-        self.srctype = srctype
-        self.m = m
-        self.n = n
+class TTRANSParams:
+    def __init__(self, dtype, dstTileRow, dstTileCol, srcTileRow, srcTileCol, validRow, validCol):
+        self.dtype = dtype 
+        self.dstTileRow = dstTileRow
+        self.dstTileCol = dstTileCol
+        self.srcTileRow = srcTileRow
+        self.srcTileCol = srcTileCol
+        self.validRow = validRow
+        self.validCol = validCol
+        dtype_str = {
+            np.float32: 'float',
+            np.float16: 'half',
+            np.int32: 'int32',
+            np.int16: 'int16',
+            np.int8: 'int8',
+            np.uint8: 'uint8',
+        }[dtype]
+        self.name = f"TTRANSTest.case_{dtype_str}_{dstTileRow}x{dstTileCol}_{srcTileRow}x{srcTileCol}\
+_{validRow}x{validCol}"
 
 if __name__ == "__main__":
-    case_name_list = [
-        "TTRANSTest.case1",
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    testcases_dir = os.path.join(script_dir, "testcases")
+
+    if not os.path.exists(testcases_dir):
+        os.makedirs(testcases_dir)
+
+    case_list = [
+        TTRANSParams(np.float32, 8, 16, 16, 8, 16, 8),
+        TTRANSParams(np.float16, 16, 16, 16, 16, 16, 16),
+        TTRANSParams(np.float32, 16, 32, 32, 16, 31, 15),
+        TTRANSParams(np.float16, 32, 32, 32, 32, 31, 31),
+        TTRANSParams(np.float32, 512, 8, 2, 512, 2, 512),
+        TTRANSParams(np.float32, 512, 16, 9, 512, 9, 512),
+        TTRANSParams(np.float32, 66, 88, 9, 16, 7, 15),
+        TTRANSParams(np.float32, 16, 32, 32, 16, 23, 15),
+        TTRANSParams(np.float32, 128, 64, 64, 128, 27, 77),
+        TTRANSParams(np.float16, 64, 112, 100, 64, 64, 64),
+        TTRANSParams(np.float16, 64, 128, 128, 64, 64, 64),
+        TTRANSParams(np.float16, 64, 128, 128, 64, 100, 64),
+        TTRANSParams(np.float32, 32, 512, 512, 32, 512, 2),
+        TTRANSParams(np.float32, 64, 64, 64, 64, 64, 64),
+        TTRANSParams(np.float32, 32, 64, 64, 32, 64, 32),
+        TTRANSParams(np.float32, 64, 64, 64, 64, 36, 64),
+        TTRANSParams(np.float32, 16, 8, 2, 16, 2, 16),
+        TTRANSParams(np.uint8, 32, 32, 32, 32, 32, 32),
+        TTRANSParams(np.uint8, 64, 64, 64, 64, 22, 63),
     ]
 
-    case_params_list = [
-        ttransParams(np.float32, 128 , 128),
-    ]
-
-    for i, case_name in enumerate(case_name_list):
-        if not os.path.exists(case_name):
-            os.makedirs(case_name)
+    for case in case_list:
+        if not os.path.exists(case.name):
+            os.makedirs(case.name)
         original_dir = os.getcwd()
-        os.chdir(case_name)
-
-        gen_golden(case_name, case_params_list[i])
-
+        os.chdir(case.name)
+        gen_golden_data(case)
         os.chdir(original_dir)
-
-
