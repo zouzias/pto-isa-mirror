@@ -151,6 +151,12 @@ if __name__ == "__main__":
         ("int32_int16", np.int32, np.int16),
         # ("int32_uint16", np.int32, np.uint16),
         ("int32_int64", np.int32, np.int64),
+        ("int32_uint8", np.int32, np.uint8),
+
+        # UINT32 Source
+        ("uint32_uint8", np.uint32, np.uint8),
+        ("uint32_uint16", np.uint32, np.uint16),
+        ("uint32_int16", np.uint32, np.int16),
 
         # INT16 Source
         ("int16_fp16", np.int16, np.float16),
