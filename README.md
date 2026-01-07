@@ -105,6 +105,64 @@ PTO ISA defines over 90 standard operations. This repository implements a growin
 
 For more details please refer to [Released PTO ISA](include/README.md)
 
+## CMake Integration
+
+Downstream projects can integrate with PTO Tile Lib using modern target-based CMake, without hard-coded include paths.
+
+PTO Tile Lib provides two header-only interface targets:
+
+- `pto-isa::includes`: include directories only (recommended for host / CPU-sim builds)
+- `pto-isa::headers`: includes + required compile definitions (auto-detected: `MEMORY_BASE` / `REGISTER_BASE` / `__CPU_SIM`)
+
+### Option 1: FetchContent / add_subdirectory
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(
+  pto-isa
+  GIT_REPOSITORY <url>
+  GIT_TAG <tag>
+)
+
+# pto-isa auto-detects:
+# - `npu-smi info` contains 910B*/910C* -> MEMORY_BASE
+# - `npu-smi info` contains 950*       -> REGISTER_BASE
+# - no `npu-smi`                       -> __CPU_SIM
+# You can override explicitly (recommended for cross-compiling):
+# set(PTO_ISA_BACKEND cpu CACHE STRING "" FORCE)
+# set(PTO_ISA_BACKEND npu CACHE STRING "" FORCE)
+# set(PTO_ISA_NPU_ADDRESSING memory CACHE STRING "" FORCE)   # 910B/910C
+# set(PTO_ISA_NPU_ADDRESSING register CACHE STRING "" FORCE) # 950
+
+FetchContent_MakeAvailable(pto-isa)
+
+target_link_libraries(my_kernel PRIVATE pto-isa::headers)
+```
+
+### Option 2: find_package (installed)
+
+Install the package config:
+
+```bash
+cmake -S . -B build \
+  -DPTO_ISA_ENABLE_RUN_PACKAGE=OFF \
+  -DPTO_ISA_INSTALL_CMAKE_PACKAGE=ON \
+  -DPTO_ISA_BACKEND=auto \
+  -DCMAKE_INSTALL_PREFIX=/path/to/prefix
+cmake --install build
+```
+
+Use it in a downstream project:
+
+```cmake
+find_package(pto-isa CONFIG REQUIRED)
+target_link_libraries(my_kernel PRIVATE pto-isa::headers)
+```
+
+### Host / CPU simulation builds
+
+If no `npu-smi` is available, `pto-isa::headers` defaults to `__CPU_SIM`. For host-only code you can also link `pto-isa::includes` and define `__CPU_SIM` yourself.
+
 ## Quickstart Guide
 
 For detailed, OS-specific setup (Windows / Linux / macOS), see: [docs/getting-started.md](docs/getting-started.md).
