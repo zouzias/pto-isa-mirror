@@ -1298,9 +1298,9 @@ extern "C" __global__ AICORE void launchTEXTRACT_COMPACT_21(__gm__ uint8_t *out,
     constexpr uint32_t N = 215;
     constexpr uint32_t K = 22;
 
-    constexpr uint16_t indexM = 16;
-    constexpr uint16_t indexN = 16;
-    constexpr uint16_t indexK = 16;
+    constexpr uint16_t indexM = 0;
+    constexpr uint16_t indexN = 0;
+    constexpr uint16_t indexK = 0;
 
     constexpr uint16_t baseM = 128;
     constexpr uint16_t baseN = 256;
