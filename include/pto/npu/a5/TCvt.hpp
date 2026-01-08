@@ -352,16 +352,22 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
     typedef DST __attribute__((ext_vector_type(ELE_CNT_B32))) DST_VEC;
    
     uint32_t len8 = ELE_CNT_B8;
-    vector_bool preg_b8 = plt_b8(len8, POST_UPDATE);    
+    vector_bool preg_b8 = plt_b8(len8, POST_UPDATE);  
+    vector_bool pg = pset_b8(PAT_ALL);
+    SRC_VEC v_zero;
+    vdup(v_zero, 0, pg, MODE_ZEROING);  
 
-    FOR_ELEMENTS(ELE_CNT_B32)
-        SRC_VEC v_input_0;
-        DST_VEC v_output;
+    FOR_ELEMENTS(ELE_CNT_B8)
+        SRC_VEC v_input_0, v_input_1, v_input_2;
+        DST_VEC v_output_0, v_output_1;
         vector_bool preg_b32 = plt_b32(len, POST_UPDATE);
 
         vlds(v_input_0, src, srcOffset, UNPK_B8);
-        vcvt(v_output, v_input_0, preg_b8, PART_P0);
-        vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
+        vintlv(v_input_1, v_input_2, v_input_0, v_zero); // interleave with zero
+        vcvt(v_output_0, v_input_1, preg_b8, PART_P0);
+        vcvt(v_output_1, v_input_2, preg_b8, PART_P0);
+        vsts(v_output_0, dst, dstOffset, NORM_B32, preg_b32);
+        vsts(v_output_1, dst, dstOffset + ELE_CNT_B32, NORM_B32, preg_b32);
     END_FOR_ELEMENTS
 }
 
