@@ -178,6 +178,7 @@ AICORE void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
+    CheckTMovCcToCb<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
     static_assert((DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Acc), "TMov: Invalid TileType.");
     uint16_t m = src.GetValidRow();
     uint16_t n = src.GetValidCol();
