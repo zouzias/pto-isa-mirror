@@ -554,13 +554,13 @@ template <typename R>
 inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
     // FP16->H8 conversion only supports ROUND_A or ROUND_H modes
     // static_assert(std::is_same<R, RoundAType>::value || std::is_same<R, RoundCType>::value,
-    //               "FP16 to HIFLOAT8 conversion only supports ROUND_A (CAST_ROUND) or ROUND_H (CAST_CEIL) rounding modes");
+    //               "Fix: FP16 to HIFLOAT8 conversion only supports ROUND_A (CAST_ROUND) or ROUND_H (CAST_CEIL) rounding modes");
     uint32_t len16 = ELE_CNT_B16;
     vector_bool preg_b16 = plt_b16(len16, POST_UPDATE);
 
     FOR_ELEMENTS(ELE_CNT_B8)
-        SRC_VEC v_input_0, v_input_1;
-        DST_VEC v_output_odd, v_output_even, v_output;
+        vector_f16 v_input_0, v_input_1;
+        vector_hif8 v_output_odd, v_output_even, v_output;
         vector_bool preg_b8 = plt_b8(len, POST_UPDATE);
 
         vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);

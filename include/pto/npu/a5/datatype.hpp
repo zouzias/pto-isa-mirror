@@ -18,10 +18,10 @@ template <> struct TypeGet<bfloat16_t> {
     using T = vector_bf16;
 };
 template <> struct TypeGet<float8_e4m3_t> {
-    using T = vector_f8_e4m3;
+    using T = vector_f8e4m3;
 };
 template <> struct TypeGet<float8_e5m2_t> {
-    using T = vector_f8_e5m2;
+    using T = vector_f8e5m2;
 };
 template <> struct TypeGet<hifloat8_t> {
     using T = vector_hif8;
