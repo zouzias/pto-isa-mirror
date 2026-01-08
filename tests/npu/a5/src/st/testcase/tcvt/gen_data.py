@@ -168,6 +168,7 @@ if __name__ == "__main__":
         # INT8 Source
         ("int8_fp16", np.int8, np.float16),
         ("int8_int16", np.int8, np.int16),
+        ("int8_int32", np.int8, np.int32),
 
         # UINT8 Source
         ("uint8_fp16", np.uint8, np.float16),

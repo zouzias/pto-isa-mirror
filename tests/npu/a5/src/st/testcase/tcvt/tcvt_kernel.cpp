@@ -128,6 +128,7 @@ INSTANTIATE_TCVT(uint8_t, int16_t)
 // INT8 Source
 INSTANTIATE_TCVT(aclFloat16, int8_t)
 INSTANTIATE_TCVT(int16_t, int8_t)
+INSTANTIATE_TCVT(int32_t, int8_t)
 
 // UINT8 Source
 INSTANTIATE_TCVT(aclFloat16, uint8_t)

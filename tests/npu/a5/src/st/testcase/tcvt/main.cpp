@@ -145,6 +145,7 @@ GENERATE_TCVT_TESTS(uint8_t, int16_t, int16_uint8)
 // INT8 Source
 GENERATE_TCVT_TESTS(aclFloat16, int8_t, int8_fp16)
 GENERATE_TCVT_TESTS(int16_t, int8_t, int8_int16)
+GENERATE_TCVT_TESTS(int32_t, int8_t, int8_int32)
 
 // UINT8 Source
 GENERATE_TCVT_TESTS(aclFloat16, uint8_t, uint8_fp16)
