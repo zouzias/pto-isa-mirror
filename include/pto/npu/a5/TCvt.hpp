@@ -360,7 +360,7 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
         vector_bool preg_b32 = plt_b32(len, POST_UPDATE);
 
         vlds(v_input_0, src, srcOffset, UNPK_B8);
-        vcvt(v_output, v_input_0, preg_b8, PART_0);
+        vcvt(v_output, v_input_0, preg_b8, PART_P0);
         vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
     END_FOR_ELEMENTS
 }
@@ -391,18 +391,18 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
     FOR_ELEMENTS(ELE_CNT_B32)
         SRC_VEC v_input_0;
         DST_VEC v_output_0, v_output;
-        uint32 preg_len = (idx == 0) ? preg_len_tail : preg_len_head;
+        uint32_t preg_len = (idx == 0) ? preg_len_tail : preg_len_head;
         vector_bool preg_b8 = plt_b8(preg_len, POST_UPDATE);
 
         vlds(v_input_0, src, srcOffset, NORM);
         if constexpr (MODE == CastMode::ROUND_SAT_PART) {
             // Floating point conversion with rounding
-            vcvt(v_output_0, v_input_0, preg_b32, ROUND_R, RS_ENABLE, PART_0);
-            vsel_r(v_output, v_output_0, v_idx);
+            vcvt(v_output_0, v_input_0, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
+            vselr(v_output, v_output_0, v_idx);
         } else {
             // Integer conversion without rounding (SAT_PART mode)
-            vcvt(v_output_0, v_input_0, preg_b32, RS_ENABLE, PART_0);
-            vsel_r(v_output, v_output_0, v_idx);
+            vcvt(v_output_0, v_input_0, preg_b32, RS_ENABLE, PART_P0);
+            vselr(v_output, v_output_0, v_idx);
         }
         vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
     END_FOR_ELEMENTS
