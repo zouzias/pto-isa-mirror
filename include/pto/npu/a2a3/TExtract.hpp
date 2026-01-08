@@ -255,7 +255,7 @@ PTO_INTERNAL void TExtractToATransposeCompact(__ca__ DstType *dstAddr, __cbuf__ 
 
 template <typename DstTileData, typename SrcTileData, bool Transpose>
 __tf__ AICORE void TExtractToACompact(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
-    uint16_t indexRow, uint16_t indexCol, uint16_t dstValidRow, uint16_t dstValidCol)
+    uint16_t indexRow, uint16_t indexCol, uint16_t dstValidRow, uint16_t dstValidCol, bool isKAligned)
 {
     using SrcType = std::conditional_t<(sizeof(typename SrcTileData::DType) == 2), half, typename SrcTileData::DType>;
     using DstType = std::conditional_t<(sizeof(typename DstTileData::DType) == 2), half, typename DstTileData::DType>;
@@ -272,6 +272,9 @@ __tf__ AICORE void TExtractToACompact(typename DstTileData::TileDType __out__ ds
         PTO_ASSERT((indexCol % c0Size) == 0, "indexCol must be aligned to C0Size");
         uint16_t dstValidRowAlign = (dstValidRow + 15) / 16 * 16;
         uint16_t dstValidColAlign = (dstValidCol + c0Size - 1) / c0Size * c0Size;
+        if (isKAligned && (std::is_same<DstType, float>::value)) {
+            dstValidColAlign = (dstValidCol + 15) / 16 * 16;
+        }
         TExtractToANonTransposeCompact<SrcType, DstType, SrcTileData::Rows, SrcTileData::Cols>(
             dstAddr, srcAddr, indexRow, indexCol, dstValidRowAlign, dstValidColAlign);
     } else {
@@ -396,22 +399,9 @@ PTO_INTERNAL void CheckTExtract()
 }
 
 template <typename DstTileData, typename SrcTileData>
-PTO_INTERNAL void CheckKAlignedMode(DstTileData &dst, SrcTileData &src)
-{
-    if constexpr (DstTileData::Loc == TileType::Left || DstTileData::Loc == TileType::Right) {
-        if constexpr (DstTileData::SFractal != SrcTileData::SFractal) {
-            if constexpr (std::is_same<typename SrcTileData::DType, float>::value) {
-                dst.SetKAligned(true);
-            }
-        }
-    }
-}
-
-template <typename DstTileData, typename SrcTileData>
 AICORE void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     CheckTExtract<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
-    CheckKAlignedMode<DstTileData, SrcTileData>(dst, src);
     PTO_ASSERT(indexRow + DstTileData::Rows <= SrcTileData::Rows,
         "The sum of indexRow and dstRow should be less than srcRow!");
     PTO_ASSERT(indexCol + DstTileData::Cols <= SrcTileData::Cols,
@@ -422,14 +412,14 @@ AICORE void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow 
         if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
             if constexpr (DstTileData::Compact == CompactMode::Normal) {
                 TExtractToACompact<DstTileData, SrcTileData, false>(
-                    dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol());
+                    dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
             } else {
                 TExtractToA<DstTileData, SrcTileData, false>(dst.data(), src.data(), indexRow, indexCol);
             }
         } else {
             if constexpr (DstTileData::Compact == CompactMode::Normal) {
                 TExtractToACompact<DstTileData, SrcTileData, true>(
-                    dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol());
+                    dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
             } else {
                 TExtractToA<DstTileData, SrcTileData, true>(dst.data(), src.data(), indexRow, indexCol);
             }
