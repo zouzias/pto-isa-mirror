@@ -315,7 +315,7 @@ inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
             vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
         }
         vor(v_output, v_output_even, v_output_odd, preg_b8);
-        vsts(v_output, dst, dstOffset, NORM_B16, preg_b8);
+        vsts(v_output, dst, dstOffset, NORM_B8, preg_b8);
     END_FOR_ELEMENTS
 }
 
@@ -553,9 +553,22 @@ inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ half *src, int
 template <typename R>
 inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
     // FP16->H8 conversion only supports ROUND_A or ROUND_H modes
-    static_assert(std::is_same<R, RoundAType>::value || std::is_same<R, RoundCType>::value,
-                  "FP16 to HIFLOAT8 conversion only supports ROUND_A (CAST_ROUND) or ROUND_H (CAST_CEIL) rounding modes");
-    cast16to8<R, CastMode::ROUND_SAT_PART, vector_hif8>(dst, src, dstOffset, srcOffset, len);
+    // static_assert(std::is_same<R, RoundAType>::value || std::is_same<R, RoundCType>::value,
+    //               "FP16 to HIFLOAT8 conversion only supports ROUND_A (CAST_ROUND) or ROUND_H (CAST_CEIL) rounding modes");
+    uint32_t len16 = ELE_CNT_B16;
+    vector_bool preg_b16 = plt_b16(len16, POST_UPDATE);
+
+    FOR_ELEMENTS(ELE_CNT_B8)
+        SRC_VEC v_input_0, v_input_1;
+        DST_VEC v_output_odd, v_output_even, v_output;
+        vector_bool preg_b8 = plt_b8(len, POST_UPDATE);
+
+        vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);
+        vcvt(v_output_odd, v_input_1, preg_b16, ROUND_A, RS_ENABLE, PART_ODD);
+        vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_ENABLE, PART_EVEN);
+        vor((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_even, (RegTensor<uint8_t> &) v_output_odd, preg_b8);
+        vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
+    END_FOR_ELEMENTS
 }
 
 //--- Src:: BF16 ----------------------------------------------------------------------
