@@ -176,6 +176,10 @@ if __name__ == "__main__":
         # INT64 Source
         ("int64_fp32", np.int64, np.float32),
         ("int64_int32", np.int64, np.int32),
+
+        # FP8 Source
+        ("fp8_e4m3_fp32", fp8_e4m3, np.float32),
+        ("fp8_e5m2_fp32", fp8_e5m2, np.float32),
     ]
 
     # Different shape configurations (m, n)

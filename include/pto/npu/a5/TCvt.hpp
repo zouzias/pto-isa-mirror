@@ -343,6 +343,29 @@ inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
 }
 
 /**
+ * Cast 8-bit to 32-bit types (FP8 to FP32 type expansion)
+ * Handles: e4m3/e5m2/h8 -> f32 #pp
+ * Intrinsic: vcvt(output, input, preg, PART_*)
+ */
+template <typename SRC_VEC, typename DST, typename SRC>
+inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+    typedef DST __attribute__((ext_vector_type(ELE_CNT_B32))) DST_VEC;
+   
+    uint32_t len8 = ELE_CNT_B8;
+    vector_bool preg_b8 = plt_b8(len8, POST_UPDATE);    
+
+    FOR_ELEMENTS(ELE_CNT_B32)
+        SRC_VEC v_input_0;
+        DST_VEC v_output;
+        vector_bool preg_b32 = plt_b32(len, POST_UPDATE);
+
+        vlds(v_input_0, src, srcOffset, UNPK_B8);
+        vcvt(v_output, v_input_0, preg_b8, PART_0);
+        vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
+    END_FOR_ELEMENTS
+}
+
+/**
  * Cast 32-bit to 8-bit types (both floating point and integer)
  * Handles: 
  *   - f32 -> e4m3/e5m2/h8 #rnd #sat #pp (ROUND_SAT_PART mode)
@@ -354,27 +377,34 @@ inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
 inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
     typedef SRC __attribute__((ext_vector_type(ELE_CNT_B32))) SRC_VEC;
-   
+
+    constexpr int INPUT_VL_LEN = 64; // Max vector length for 8-bit output
+    uint32_t preg_len_head = INPUT_VL_LEN;
+    uint32_t preg_len_tail = (len % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (len % INPUT_VL_LEN);
     uint32_t len32 = ELE_CNT_B32;
     vector_bool preg_b32 = plt_b32(len32, POST_UPDATE);
+    vector_bool preg_idx = pset_b8(PAT_ALL);
+    DST_VEC v_idx;
+    vci((RegTensor<int8_t> &) v_idx, (int8_t) 0 , INC_ORDER);
+    vmuls((RegTensor<int16_t> &) v_idx, (RegTensor<int16_t> &) v_idx, (int16_t) 4, preg_idx); // multiply by 4 for byte addressing
 
-    FOR_ELEMENTS(ELE_CNT_B8)
-        SRC_VEC v_input_0, v_input_1;
-        DST_VEC v_output_odd, v_output_even, v_output;
-        vector_bool preg_b8 = plt_b8(len, POST_UPDATE);
+    FOR_ELEMENTS(ELE_CNT_B32)
+        SRC_VEC v_input_0;
+        DST_VEC v_output_0, v_output;
+        uint32 preg_len = (idx == 0) ? preg_len_tail : preg_len_head;
+        vector_bool preg_b8 = plt_b8(preg_len, POST_UPDATE);
 
-        vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B32);
+        vlds(v_input_0, src, srcOffset, NORM);
         if constexpr (MODE == CastMode::ROUND_SAT_PART) {
             // Floating point conversion with rounding
-            vcvt(v_output_odd, v_input_1, preg_b32, R(), RS_ENABLE, PART_ODD);
-            vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
+            vcvt(v_output_0, v_input_0, preg_b32, ROUND_R, RS_ENABLE, PART_0);
+            vsel_r(v_output, v_output_0, v_idx);
         } else {
             // Integer conversion without rounding (SAT_PART mode)
-            vcvt(v_output_odd, v_input_1, preg_b32, RS_ENABLE, PART_ODD);
-            vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);
+            vcvt(v_output_0, v_input_0, preg_b32, RS_ENABLE, PART_0);
+            vsel_r(v_output, v_output_0, v_idx);
         }
-        vor(v_output, v_output_even, v_output_odd, preg_b8);
-        vsts(v_output, dst, dstOffset, NORM_B32, preg_b8);
+        vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
     END_FOR_ELEMENTS
 }
 
@@ -522,6 +552,9 @@ inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ half *src, int
 /** FP16 -> H8 #rnd #sat #part */
 template <typename R>
 inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+    // FP16->H8 conversion only supports ROUND_A or ROUND_H modes
+    static_assert(std::is_same<R, RoundAType>::value || std::is_same<R, RoundCType>::value,
+                  "FP16 to HIFLOAT8 conversion only supports ROUND_A (CAST_ROUND) or ROUND_H (CAST_CEIL) rounding modes");
     cast16to8<R, CastMode::ROUND_SAT_PART, vector_hif8>(dst, src, dstOffset, srcOffset, len);
 }
 
@@ -673,6 +706,19 @@ inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int64_t *src, int32_t&
 template <typename R>
 inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
     castS64to32<void>(dst, src, dstOffset, srcOffset, len);
+}
+
+//--- Src:: FP8 ----------------------------------------------------------------------
+/** E4M3 -> FP32 #pp (type expansion) → vcvt(output, input, preg, PART_EVEN/ODD) */
+template <typename R>
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+    cast8to32<vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
+}
+
+/** E5M2 -> FP32 #pp (type expansion) → vcvt(output, input, preg, PART_EVEN/ODD) */
+template <typename R>
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+    cast8to32<vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
 }
 
 /**

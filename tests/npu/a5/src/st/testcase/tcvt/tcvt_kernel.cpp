@@ -44,7 +44,12 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src) {
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    TCVT(dstTile, srcTile, RoundMode::CAST_RINT);
+    // FP16->H8 conversion only supports ROUND_A or ROUND_H, use CAST_ROUND instead of CAST_RINT
+    if constexpr (std::is_same_v<T, hifloat8_t> && std::is_same_v<S, half>) {
+        TCVT(dstTile, srcTile, RoundMode::CAST_ROUND);
+    } else {
+        TCVT(dstTile, srcTile, RoundMode::CAST_RINT);
+    }
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -131,3 +136,7 @@ INSTANTIATE_TCVT(aclFloat16, uint8_t)
 // INT64 Source
 INSTANTIATE_TCVT(float, int64_t)
 INSTANTIATE_TCVT(int32_t, int64_t)
+
+// FP8 Source
+INSTANTIATE_TCVT(float, float8_e4m3_t)
+INSTANTIATE_TCVT(float, float8_e5m2_t)
