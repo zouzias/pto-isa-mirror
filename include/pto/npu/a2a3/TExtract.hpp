@@ -398,9 +398,17 @@ PTO_INTERNAL void CheckTExtract()
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void CheckKAlignedMode(DstTileData &dst, SrcTileData &src)
 {
-    if constexpr (DstTileData::Loc == TileType::Left || DstTileData::Loc == TileType::Right) {
-        if constexpr (DstTileData::SFractal != SrcTileData::SFractal) {
-            if constexpr (std::is_same<typename SrcTileData::DType, float>::value) {
+    if constexpr (DstTileData::Compact == CompactMode::Null) {
+        if constexpr (DstTileData::Loc == TileType::Left || DstTileData::Loc == TileType::Right) {
+            if constexpr (DstTileData::SFractal != SrcTileData::SFractal &&
+                         (std::is_same<typename SrcTileData::DType, float>::value)) {
+                dst.SetKAligned(true);
+            }
+        }
+    } else if constexpr (DstTileData::Compact == CompactMode::Normal) {
+        if constexpr (DstTileData::Loc == TileType::Left) {
+            if constexpr (DstTileData::SFractal != SrcTileData::SFractal &&
+                         (std::is_same<typename SrcTileData::DType, float>::value)) {
                 dst.SetKAligned(true);
             }
         }
