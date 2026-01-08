@@ -397,7 +397,7 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
     FOR_ELEMENTS(ELE_CNT_B32)
         SRC_VEC v_input_0;
         DST_VEC v_output_0, v_output;
-        uint32_t preg_len = (idx == 0) ? preg_len_tail : preg_len_head;
+        uint32_t preg_len = (idx == count - 1) ? preg_len_tail : preg_len_head;
         vector_bool preg_b8 = plt_b8(preg_len, POST_UPDATE);
 
         vlds(v_input_0, src, srcOffset, NORM);
