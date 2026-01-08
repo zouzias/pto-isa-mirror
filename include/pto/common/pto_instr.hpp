@@ -768,7 +768,7 @@ PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, W
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TNEG(TileDataDst &dst, TileDataSrc &src, WaitEvents&... events) {
   TSYNC(events...);
-  MAP_INSTR_IMPL(TEXP, dst, src);
+  MAP_INSTR_IMPL(TNEG, dst, src);
   return {};
 }
 
