@@ -99,7 +99,7 @@ enum class CastMode {
 
 #define FOR_ELEMENTS(elNum) constexpr uint16_t elementsNum = (elNum);\
     uint16_t count = (len + elementsNum-1) / elementsNum;\
-    for(uint16_t idx = count; idx>0; idx--) {
+    for(uint16_t idx = 0; idx < count; idx++) {
 
 
 #define END_FOR_ELEMENTS srcOffset += elementsNum;dstOffset += elementsNum;}
@@ -366,8 +366,8 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
         vintlv(v_input_1, v_input_2, v_input_0, v_zero); // interleave with zero
         vcvt(v_output_0, v_input_1, preg_b8, PART_P0);
         vcvt(v_output_1, v_input_2, preg_b8, PART_P0);
-        vsts(v_output_0, dst, dstOffset, NORM_B32, preg_b32);
-        vsts(v_output_1, dst, dstOffset + ELE_CNT_B32, NORM_B32, preg_b32);
+        vsts(v_output_0, dst, dstOffset + ELE_CNT_B32 * (idx * 2), NORM_B32, preg_b32);
+        vsts(v_output_1, dst, dstOffset + ELE_CNT_B32 * (idx * 2 + 1), NORM_B32, preg_b32);
     END_FOR_ELEMENTS
 }
 
@@ -404,11 +404,11 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
         if constexpr (MODE == CastMode::ROUND_SAT_PART) {
             // Floating point conversion with rounding
             vcvt(v_output_0, v_input_0, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
-            vselr(v_output, v_output_0, v_idx);
+            vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
         } else {
             // Integer conversion without rounding (SAT_PART mode)
             vcvt(v_output_0, v_input_0, preg_b32, RS_ENABLE, PART_P0);
-            vselr(v_output, v_output_0, v_idx);
+            vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
         }
         vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
     END_FOR_ELEMENTS
