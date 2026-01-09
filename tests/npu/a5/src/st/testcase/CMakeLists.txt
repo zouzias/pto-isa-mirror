@@ -183,6 +183,7 @@ set(ALL_TESTCASES
     tcolexpandmul
     tcolexpandsub
     trowexpandbrcb
+    tcolexpand
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
