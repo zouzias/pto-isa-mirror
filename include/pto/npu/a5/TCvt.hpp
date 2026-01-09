@@ -375,7 +375,7 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
         vcvt(v_output_0, v_input_1, preg_b8, PART_P0);
         vcvt(v_output_1, v_input_2, preg_b8, PART_P0);
         vsts(v_output_0, dst, dstOffset + ELE_CNT_B32 * (idx * 2), NORM_B32, preg_b32);
-        vsts(v_output_1, dst, dstOffset + ELE_CNT_B32 * (idx * 2 + 1), NORM_B32, preg_b32);
+        vsts(v_output_1, dst, dstOffset + ELE_CNT_B32 * (idx * 2 + 1), NORM_B32, preg_b32_next);
     END_FOR_ELEMENTS
 }
 
