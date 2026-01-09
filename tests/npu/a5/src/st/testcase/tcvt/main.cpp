@@ -16,9 +16,21 @@ using namespace std;
 using namespace PtoTestCommon;
 
 // Wrapper types for FP8 testing - use int8_t storage but distinguish types
-struct fp8_e4m3_wrapper { int8_t value; };
-struct fp8_e5m2_wrapper { int8_t value; };
-struct hifloat8_wrapper { int8_t value; };
+struct fp8_e4m3_wrapper { 
+    int8_t value; 
+    operator int8_t() const { return value; }
+    operator float() const { return static_cast<float>(value); }
+};
+struct fp8_e5m2_wrapper { 
+    int8_t value; 
+    operator int8_t() const { return value; }
+    operator float() const { return static_cast<float>(value); }
+};
+struct hifloat8_wrapper { 
+    int8_t value; 
+    operator int8_t() const { return value; }
+    operator float() const { return static_cast<float>(value); }
+};
 
 template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void launchTCVT(D *dst, S *src, void *stream);
