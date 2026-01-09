@@ -357,7 +357,7 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
     vector_bool preg_b16 = plt_b16(len16, POST_UPDATE);
     vector_bool pg = pset_b8(PAT_ALL);
     SRC_VEC v_zero;
-    vdup(v_zero, 0, pg, MODE_ZEROING);  
+    vdup((RegTensor<uint8_t> &) v_zero, 0, pg, MODE_ZEROING);  
     uint32_t next_len = (len > 64) ? len - 64 : 0;
 
     FOR_ELEMENTS(ELE_CNT_B16)
@@ -370,8 +370,8 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
         punpack(preg_b32, preg_b16, LOWER);
         punpack(preg_b32_next, preg_b16_next, LOWER);
 
-        vlds(v_input_0, src, srcOffset, UNPK_B8);
-        vintlv(v_input_1, v_input_2, v_input_0, v_zero); // interleave with zero
+        vlds((RegTensor<uint8_t> &) v_input_0, (__ubuf__ uint8_t *) src, srcOffset, UNPK_B8);
+        vintlv((RegTensor<uint8_t> &) v_input_1, (RegTensor<uint8_t> &) v_input_2, (RegTensor<uint8_t> &) v_input_0, (RegTensor<uint8_t> &) v_zero); // interleave with zero
         vcvt(v_output_0, v_input_1, preg_b8, PART_P0);
         vcvt(v_output_1, v_input_2, preg_b8, PART_P0);
         vsts(v_output_0, dst, dstOffset + ELE_CNT_B32 * (idx * 2), NORM_B32, preg_b32);
