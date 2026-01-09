@@ -182,6 +182,8 @@ set(ALL_TESTCASES
     tcolexpanddiv
     tcolexpandmul
     tcolexpandsub
+    tcolexpand
+    tcolexpandbrcb
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
