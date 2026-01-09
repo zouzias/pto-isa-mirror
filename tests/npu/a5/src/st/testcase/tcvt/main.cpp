@@ -158,4 +158,5 @@ GENERATE_TCVT_TESTS(int32_t, int64_t, int64_int32)
 // FP8 Source
 GENERATE_TCVT_TESTS(float, int8_t, fp8_e4m3_fp32) // Use int8_t to simulate fp8_e4m3
 GENERATE_TCVT_TESTS(float, int8_t, fp8_e5m2_fp32) // Use int8_t to simulate fp8_e5m2
+GENERATE_TCVT_TESTS(float, int8_t, h8_fp32) // Use int8_t to simulate h8
  

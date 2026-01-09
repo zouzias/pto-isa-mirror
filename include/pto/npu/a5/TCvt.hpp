@@ -754,6 +754,12 @@ inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, in
     cast8to32<vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
 }
 
+/** H8 -> FP32 #pp (type expansion) → vcvt(output, input, preg, PART_EVEN/ODD) */
+template <typename R>
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+    cast8to32<vector_hif8>(dst, src, dstOffset, srcOffset, len);
+}
+
 /**
  * Main TCVT implementation function
  * Converts tile data from source type to destination type using specified rounding mode

@@ -141,3 +141,4 @@ INSTANTIATE_TCVT(int32_t, int64_t)
 // FP8 Source
 INSTANTIATE_TCVT(float, float8_e4m3_t)
 INSTANTIATE_TCVT(float, float8_e5m2_t)
+INSTANTIATE_TCVT(float, hifloat8_t)
