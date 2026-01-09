@@ -75,6 +75,14 @@ namespace pto{
             return pset_b8(dist);
         }
     }
+    
+    template<typename T>
+    PTO_INTERNAL uint64_t GetScaleAddr(T* dst)
+    {
+        uintptr_t addr = reinterpret_cast<uintptr_t>(dst);
+        return addr / 16;
+    }
+
 } // end pto
 
 #endif
