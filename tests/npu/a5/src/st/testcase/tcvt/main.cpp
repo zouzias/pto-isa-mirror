@@ -15,6 +15,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
+// Wrapper types for FP8 testing - use int8_t storage but distinguish types
+struct fp8_e4m3_wrapper { int8_t value; };
+struct fp8_e5m2_wrapper { int8_t value; };
+struct hifloat8_wrapper { int8_t value; };
+
 template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void launchTCVT(D *dst, S *src, void *stream);
 
@@ -102,9 +107,9 @@ GENERATE_TCVT_TESTS(aclFloat16, float, fp32_bf16)
 GENERATE_TCVT_TESTS(int32_t, float, fp32_int32)
 GENERATE_TCVT_TESTS(int16_t, float, fp32_int16)
 GENERATE_TCVT_TESTS(int64_t, float, fp32_int64)
-GENERATE_TCVT_TESTS(int8_t, float, fp32_fp8_e4m3)
-GENERATE_TCVT_TESTS(int8_t, float, fp32_fp8_e5m2)
-GENERATE_TCVT_TESTS(int8_t, float, fp32_h8)
+GENERATE_TCVT_TESTS(fp8_e4m3_wrapper, float, fp32_fp8_e4m3)
+GENERATE_TCVT_TESTS(fp8_e5m2_wrapper, float, fp32_fp8_e5m2)
+GENERATE_TCVT_TESTS(hifloat8_wrapper, float, fp32_h8)
 
 // FP16 Source
 GENERATE_TCVT_TESTS(float, aclFloat16, fp16_fp32)
@@ -112,16 +117,16 @@ GENERATE_TCVT_TESTS(int32_t, aclFloat16, fp16_int32)
 GENERATE_TCVT_TESTS(int16_t, aclFloat16, fp16_int16)
 GENERATE_TCVT_TESTS(int8_t, aclFloat16, fp16_int8)
 GENERATE_TCVT_TESTS(uint8_t, aclFloat16, fp16_uint8)
-GENERATE_TCVT_TESTS(int8_t, aclFloat16, fp16_fp8_e5m2)
-GENERATE_TCVT_TESTS(int8_t, aclFloat16, fp16_fp8_e4m3)
-GENERATE_TCVT_TESTS(int8_t, aclFloat16, fp16_h8)
+GENERATE_TCVT_TESTS(fp8_e5m2_wrapper, aclFloat16, fp16_fp8_e5m2)
+GENERATE_TCVT_TESTS(fp8_e4m3_wrapper, aclFloat16, fp16_fp8_e4m3)
+GENERATE_TCVT_TESTS(hifloat8_wrapper, aclFloat16, fp16_h8)
 
 // BF16 Source
 GENERATE_TCVT_TESTS(float, aclFloat16, bf16_fp32) //use aclFloat16 to simulate bf16
 GENERATE_TCVT_TESTS(int32_t, aclFloat16, bf16_int32)
 // GENERATE_TCVT_TESTS(aclFloat16, aclFloat16, bf16_fp16)
-GENERATE_TCVT_TESTS(int8_t, aclFloat16, bf16_fp8_e5m2) //use int8_t to simulate fp8_e5m2
-GENERATE_TCVT_TESTS(int8_t, aclFloat16, bf16_fp8_e4m3) //use aclFloat16 to simulate bf16
+GENERATE_TCVT_TESTS(fp8_e5m2_wrapper, aclFloat16, bf16_fp8_e5m2)
+GENERATE_TCVT_TESTS(fp8_e4m3_wrapper, aclFloat16, bf16_fp8_e4m3)
 
 // INT32 Source
 GENERATE_TCVT_TESTS(float, int32_t, int32_fp32)
@@ -156,7 +161,7 @@ GENERATE_TCVT_TESTS(float, int64_t, int64_fp32)
 GENERATE_TCVT_TESTS(int32_t, int64_t, int64_int32)
 
 // FP8 Source
-GENERATE_TCVT_TESTS(float, int8_t, fp8_e4m3_fp32) // Use int8_t to simulate fp8_e4m3
-GENERATE_TCVT_TESTS(float, int8_t, fp8_e5m2_fp32) // Use int8_t to simulate fp8_e5m2
-GENERATE_TCVT_TESTS(float, int8_t, h8_fp32) // Use int8_t to simulate h8
+GENERATE_TCVT_TESTS(float, fp8_e4m3_wrapper, fp8_e4m3_fp32)
+GENERATE_TCVT_TESTS(float, fp8_e5m2_wrapper, fp8_e5m2_fp32)
+GENERATE_TCVT_TESTS(float, hifloat8_wrapper, h8_fp32)
  
