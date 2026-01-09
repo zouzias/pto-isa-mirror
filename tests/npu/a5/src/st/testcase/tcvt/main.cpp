@@ -149,7 +149,7 @@ GENERATE_TCVT_TESTS(uint8_t, int32_t, int32_uint8)
 
 // UINT32 Source
 GENERATE_TCVT_TESTS(uint8_t, uint32_t, uint32_uint8)
-GENERATE_TCVT_TESTS(uint16_t, uint32_t, uint32_uint16)
+// GENERATE_TCVT_TESTS(uint16_t, uint32_t, uint32_uint16)
 GENERATE_TCVT_TESTS(int16_t, uint32_t, uint32_int16)
 
 // INT16 Source

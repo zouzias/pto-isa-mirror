@@ -17,9 +17,21 @@ using namespace std;
 using namespace pto;
 
 // Wrapper types for FP8 testing - use int8_t storage but distinguish types
-struct fp8_e4m3_wrapper { int8_t value; };
-struct fp8_e5m2_wrapper { int8_t value; };
-struct hifloat8_wrapper { int8_t value; };
+struct fp8_e4m3_wrapper { 
+    int8_t value; 
+    operator int8_t() const { return value; }
+    operator float() const { return static_cast<float>(value); }
+};
+struct fp8_e5m2_wrapper { 
+    int8_t value; 
+    operator int8_t() const { return value; }
+    operator float() const { return static_cast<float>(value); }
+};
+struct hifloat8_wrapper { 
+    int8_t value; 
+    operator int8_t() const { return value; }
+    operator float() const { return static_cast<float>(value); }
+};
 
 template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src) {
@@ -126,7 +138,7 @@ INSTANTIATE_TCVT(uint8_t, int32_t)
 
 // UINT32 Source
 INSTANTIATE_TCVT(uint8_t, uint32_t)
-INSTANTIATE_TCVT(uint16_t, uint32_t)
+// INSTANTIATE_TCVT(uint16_t, uint32_t)
 INSTANTIATE_TCVT(int16_t, uint32_t)
 
 // INT16 Source

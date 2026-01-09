@@ -533,7 +533,7 @@ inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, int32
         uint32_t preg_len = (idx == count - 1) ? preg_len_tail : preg_len_head;
         vector_bool preg_b8 = plt_b8(preg_len, POST_UPDATE);
         vlds(v_input_0, src, srcOffset, NORM);
-        vcvt(v_output_0, v_input_0, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
+        vcvt(v_output_0, v_input_0, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
         vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
         vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
     END_FOR_ELEMENTS
