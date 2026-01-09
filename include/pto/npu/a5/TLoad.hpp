@@ -748,6 +748,13 @@ PTO_INTERNAL void StaticCheck() {
                     "Fix: Src GlobalTensor Row Products and Tile ValidRow must be the same!");
             }
         }
+        if constexpr ((GlobalData::layout == pto::Layout::NZ) &&
+                      (!TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) {
+            static_assert(BLOCK_BYTE_SIZE / sizeof(typename GlobalData::DType) ==
+                                  GlobalData::staticShape[pto::GlobalTensorDim::DIM_4] &&
+                              BLOCK_LEN == GlobalData::staticShape[pto::GlobalTensorDim::DIM_3],
+                "Fix: Src GlobalTensor staticShape[3][4] must be satisfied with NZ format require!");
+        }
     }
 }
 
