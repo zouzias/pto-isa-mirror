@@ -353,14 +353,22 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
    
     uint32_t len8 = ELE_CNT_B8;
     vector_bool preg_b8 = plt_b8(len8, POST_UPDATE);  
+    uint32_t len16 = ELE_CNT_B16;
+    vector_bool preg_b16 = plt_b16(len16, POST_UPDATE);
     vector_bool pg = pset_b8(PAT_ALL);
     SRC_VEC v_zero;
     vdup(v_zero, 0, pg, MODE_ZEROING);  
+    uint32_t next_len = (len > 64) ? len - 64 : 0;
 
-    FOR_ELEMENTS(ELE_CNT_B8)
+    FOR_ELEMENTS(ELE_CNT_B16)
         SRC_VEC v_input_0, v_input_1, v_input_2;
         DST_VEC v_output_0, v_output_1;
-        vector_bool preg_b32 = plt_b32(len, POST_UPDATE);
+        vector_bool preg_b16 = plt_b16(len, POST_UPDATE);
+        vector_bool preg_b16_next = plt_b16(next_len, POST_UPDATE);
+        vector_bool preg_b32;
+        vector_bool preg_b32_next;
+        punpack(preg_b32, preg_b16, LOWER);
+        punpack(preg_b32_next, preg_b16_next, LOWER);
 
         vlds(v_input_0, src, srcOffset, UNPK_B8);
         vintlv(v_input_1, v_input_2, v_input_0, v_zero); // interleave with zero
