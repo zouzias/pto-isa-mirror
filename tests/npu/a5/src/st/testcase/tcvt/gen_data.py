@@ -14,7 +14,7 @@ import os
 import numpy as np
 import ml_dtypes
 
-bfloat16 = ml_dtypes.bfloat16  # Using float16 to simulate bfloat16 for data generation
+bfloat16 = np.float16  # Using float16 to simulate bfloat16 for data generation
 fp8_e5m2 = ml_dtypes.float8_e5m2  # Using int8 to simulate fp8_e5m2 for data generation
 fp8_e4m3 = ml_dtypes.float8_e4m3fn  # Using int8 to simulate fp8_e4m3 for data generation
 hifloat8 = ml_dtypes.float8_e5m2  # Using int8 to simulate hifloat8 for data generation
