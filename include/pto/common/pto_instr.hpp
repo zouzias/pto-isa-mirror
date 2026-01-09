@@ -360,6 +360,13 @@ PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src,
   return {};
 }
 
+template <typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TFILLPAD(TileData &dst, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TFILLPAD, dst);
+  return {};
+}
+
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TFILLPAD(DstTileData &dst, SrcTileData &src,
                             WaitEvents&... events) {
