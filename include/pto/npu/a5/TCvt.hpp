@@ -517,7 +517,26 @@ inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, in
  */
 template <typename R>
 inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to8<R, CastMode::ROUND_SAT_PART, vector_hif8>(dst, src, dstOffset, srcOffset, len);
+    constexpr int INPUT_VL_LEN = 64; // Max vector length for 8-bit output
+    uint32_t preg_len_head = INPUT_VL_LEN;
+    uint32_t preg_len_tail = (len % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (len % INPUT_VL_LEN);
+    uint32_t len32 = ELE_CNT_B32;
+    vector_bool preg_b32 = plt_b32(len32, POST_UPDATE);
+    vector_bool preg_idx = pset_b8(PAT_ALL);
+    vector_u8 v_idx;
+    vci((RegTensor<int8_t> &) v_idx, (int8_t) 0 , INC_ORDER);
+    vmuls((RegTensor<int16_t> &) v_idx, (RegTensor<int16_t> &) v_idx, (int16_t) 4, preg_idx); // multiply by 4 for byte addressing
+    
+    FOR_ELEMENTS(ELE_CNT_B32)
+        vector_f32 v_input_0;
+        vector_hif8 v_output_0, v_output;
+        uint32_t preg_len = (idx == count - 1) ? preg_len_tail : preg_len_head;
+        vector_bool preg_b8 = plt_b8(preg_len, POST_UPDATE);
+        vlds(v_input_0, src, srcOffset, NORM);
+        vcvt(v_output_0, v_input_0, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
+        vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
+        vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
+    END_FOR_ELEMENTS
 }
 
 //--- Src:: FP16 ----------------------------------------------------------------------
