@@ -19,9 +19,11 @@ import sys
 import threading
 import time
 import uuid
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Empty, Queue
+from typing import Optional
 
 
 def _run(cmd, cwd=None, env=None, timeout_sec=None, capture=False, check=True):
@@ -97,8 +99,59 @@ def _parse_npu_smi_info(text):
     return devices, processes
 
 
+class _NpuSmiPoller:
+    def __init__(self, env, poll_sec: float):
+        self._env = env
+        self._poll_sec = max(0.5, float(poll_sec))
+        self._lock = threading.Lock()
+        self._devices = {}
+        self._processes = {}
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self):
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        self._thread.join(timeout=2)
+
+    def snapshot(self):
+        with self._lock:
+            return dict(self._devices), dict(self._processes)
+
+    def _run(self):
+        while not self._stop.is_set():
+            try:
+                devices, processes = _npu_smi_info(self._env)
+                with self._lock:
+                    self._devices = devices
+                    self._processes = processes
+            except Exception:
+                pass
+            self._stop.wait(self._poll_sec)
+
+
+def _sanitize_env_for_npu_tools(env):
+    """
+    `npu-smi` (and other Ascend tools) may honor visibility env vars and only
+    report a subset of devices. For runner scheduling we want physical device
+    ids, so strip known visibility filters.
+    """
+    clean = dict(env or os.environ)
+    clean.pop("ASCEND_RT_VISIBLE_DEVICES", None)
+    clean.pop("ASCEND_VISIBLE_DEVICES", None)
+    return clean
+
+
 def _npu_smi_info(env):
-    out = _run(["npu-smi", "info"], env=env, capture=True, timeout_sec=30, check=False)
+    out = _run(
+        ["npu-smi", "info"],
+        env=_sanitize_env_for_npu_tools(env),
+        capture=True,
+        timeout_sec=30,
+        check=False,
+    )
     return _parse_npu_smi_info(out)
 
 
@@ -106,13 +159,24 @@ def _device_procs(processes, npu_id):
     return {pid: (name, mem) for pid, (dev, name, mem) in processes.items() if dev == npu_id}
 
 
-def _wait_device_idle(env, npu_id, timeout_sec, poll_sec=1.0):
+def _filter_ignored_procs(procs, ignore_proc_re):
+    if ignore_proc_re is None:
+        return procs
+    return {pid: v for pid, v in procs.items() if ignore_proc_re.search(v[0]) is None}
+
+
+def _wait_device_idle(env, npu_id, timeout_sec, poll_sec=1.0, ignore_proc_re=None, smi: Optional["_NpuSmiPoller"] = None):
     deadline = time.time() + timeout_sec
     last = None
     while time.time() < deadline:
-        devices, processes = _npu_smi_info(env)
+        if smi is not None:
+            devices, processes = smi.snapshot()
+            if not devices:
+                devices, processes = _npu_smi_info(env)
+        else:
+            devices, processes = _npu_smi_info(env)
         health = devices.get(npu_id, {}).get("health", "UNKNOWN")
-        procs = _device_procs(processes, npu_id)
+        procs = _filter_ignored_procs(_device_procs(processes, npu_id), ignore_proc_re)
         last = (health, procs)
         if health != "OK":
             return False, last
@@ -122,8 +186,13 @@ def _wait_device_idle(env, npu_id, timeout_sec, poll_sec=1.0):
     return False, last
 
 
-def _get_free_devices(env, requested=None):
-    devices, processes = _npu_smi_info(env)
+def _get_free_devices(env, requested=None, ignore_proc_re=None, smi: Optional["_NpuSmiPoller"] = None):
+    if smi is not None:
+        devices, processes = smi.snapshot()
+        if not devices:
+            devices, processes = _npu_smi_info(env)
+    else:
+        devices, processes = _npu_smi_info(env)
 
     ok = []
     for npu_id, info in sorted(devices.items()):
@@ -133,7 +202,11 @@ def _get_free_devices(env, requested=None):
             continue
         ok.append(npu_id)
 
-    busy = {npu_id for (_, (npu_id, _, _)) in processes.items()}
+    busy = set()
+    for _, (npu_id, name, _) in processes.items():
+        if ignore_proc_re is not None and ignore_proc_re.search(name) is not None:
+            continue
+        busy.add(npu_id)
     free = [d for d in ok if d not in busy]
     return free
 
@@ -166,10 +239,15 @@ def _extract_a3_testcases():
 
 
 def _build_all_a3(env, jobs):
-    cmd = [sys.executable, "tests/script/build_st.py", "-r", "npu", "-v", "a3", "-t", "all"]
     build_env = dict(env)
     build_env["PTO_ST_JOBS"] = str(jobs)
-    _run(["bash", "-lc", " ".join(map(str, cmd))], env=build_env, timeout_sec=3600)
+    st_dir = Path("tests/npu/a2a3/src/st").resolve()
+    build_dir = (st_dir / "build").resolve()
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    # Incremental build (much faster than `build_st.py`, which wipes `build/`).
+    _run(["cmake", "-DRUN_MODE=npu", "-DSOC_VERSION=Ascend910B1", ".."], cwd=str(build_dir), env=build_env, timeout_sec=1800)
+    _run(["make", "-j", str(jobs)], cwd=str(build_dir), env=build_env, timeout_sec=3600)
 
 
 def _gen_all_goldens(env, testcases):
@@ -263,7 +341,17 @@ def _prepare_sandbox(env, testcase, gtest_filter, attempt, work_dir):
     return sandbox_root, sandbox_bin
 
 
-def _run_one_binary(env, device_id, testcase, timeout_sec, log_dir, gtest_filter=None, attempt=1, work_dir=None):
+def _run_one_binary(
+    env,
+    device_id,
+    testcase,
+    timeout_sec,
+    gtest_filter=None,
+    attempt=1,
+    work_dir=None,
+    monitor_npu_smi=False,
+    smi: Optional["_NpuSmiPoller"] = None,
+):
     st_dir = Path("tests/npu/a2a3/src/st")
     build_bin_dir = st_dir / "build" / "bin"
 
@@ -289,34 +377,45 @@ def _run_one_binary(env, device_id, testcase, timeout_sec, log_dir, gtest_filter
     run_env.pop("ASCEND_VISIBLE_DEVICES", None)
 
     task_name = testcase if not gtest_filter else f"{testcase}::{gtest_filter}"
-    log_tag = _sanitize_filename(task_name)
-    log_path = Path(log_dir) / f"a3_npu_{log_tag}_dev{device_id}_try{attempt}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     start = time.time()
     npu_seen = False
     max_mem_mb = 0
     npu_health = "UNKNOWN"
 
-    with open(log_path, "w", encoding="utf-8", errors="ignore") as logf:
-        if sandbox_root:
-            logf.write(f"[SANDBOX] {sandbox_root}\n")
-        cmd = [str(exe)]
-        if gtest_filter:
-            cmd.append(f"--gtest_filter={gtest_filter}")
-        proc = subprocess.Popen(
-            cmd,
-            cwd=str(bin_dir),
-            env=run_env,
-            stdout=logf,
-            stderr=subprocess.STDOUT,
-            text=True,
-            preexec_fn=os.setsid,
-        )
-        pid = proc.pid
+    cmd = [str(exe)]
+    if gtest_filter:
+        cmd.append(f"--gtest_filter={gtest_filter}")
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(bin_dir),
+        env=run_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+        preexec_fn=os.setsid,
+    )
+    pid = proc.pid
 
+    output_tail = deque(maxlen=int(os.environ.get("PTO_ST_OUTPUT_TAIL_LINES", "200")))
+
+    def _drain_stdout():
+        try:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                output_tail.append(line.rstrip("\n"))
+        except Exception:
+            # Best-effort; do not let output collection affect test execution.
+            return
+
+    drain_thread = threading.Thread(target=_drain_stdout, daemon=True)
+    drain_thread.start()
+
+    if monitor_npu_smi:
         poll_interval = float(os.environ.get("PTO_ST_SMI_POLL_SEC", "2.0"))
         last_poll = 0.0
+        rc = None
         while True:
             rc = proc.poll()
             if rc is not None:
@@ -325,16 +424,21 @@ def _run_one_binary(env, device_id, testcase, timeout_sec, log_dir, gtest_filter
             now = time.time()
             if now - start > timeout_sec:
                 os.killpg(proc.pid, signal.SIGKILL)
-                logf.write(f"\n[TIMEOUT] killed after {timeout_sec}s\n")
+                output_tail.append(f"[TIMEOUT] killed after {timeout_sec}s")
                 rc = 124
                 break
 
             if now - last_poll >= poll_interval:
-                devices, processes = _npu_smi_info(env)
+                if smi is not None:
+                    devices, processes = smi.snapshot()
+                    if not devices:
+                        devices, processes = _npu_smi_info(env)
+                else:
+                    devices, processes = _npu_smi_info(env)
                 npu_health = devices.get(device_id, {}).get("health", "UNKNOWN")
                 if npu_health != "OK":
                     os.killpg(proc.pid, signal.SIGKILL)
-                    logf.write(f"\n[NPU] health={npu_health}; killed\n")
+                    output_tail.append(f"[NPU] health={npu_health}; killed")
                     rc = 125
                     break
                 if pid in processes:
@@ -342,20 +446,34 @@ def _run_one_binary(env, device_id, testcase, timeout_sec, log_dir, gtest_filter
                     dev_seen, _, mem = processes[pid]
                     if dev_seen != device_id:
                         os.killpg(proc.pid, signal.SIGKILL)
-                        logf.write(f"\n[NPU] pid={pid} mapped to dev={dev_seen} (expected {device_id}); killed\n")
+                        output_tail.append(f"[NPU] pid={pid} mapped to dev={dev_seen} (expected {device_id}); killed")
                         rc = 129
                         break
                     max_mem_mb = max(max_mem_mb, mem)
                 last_poll = now
 
             time.sleep(0.2)
+    else:
+        # Fast path: rely on process exit code + timeout, without calling `npu-smi`
+        # during execution (much lower overhead when running on many NPUs).
+        rc = None
+        try:
+            proc.wait(timeout=timeout_sec)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            output_tail.append(f"[TIMEOUT] killed after {timeout_sec}s")
+            rc = 124
 
-        if proc.poll() is None:
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                os.killpg(proc.pid, signal.SIGKILL)
-        proc.returncode = rc if rc is not None else proc.returncode
+    if proc.poll() is None:
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+    proc.returncode = rc if rc is not None else proc.returncode
+    try:
+        drain_thread.join(timeout=2)
+    except Exception:
+        pass
 
     elapsed = time.time() - start
 
@@ -366,12 +484,12 @@ def _run_one_binary(env, device_id, testcase, timeout_sec, log_dir, gtest_filter
         "device": device_id,
         "rc": proc.returncode,
         "elapsed_sec": elapsed,
-        "log": str(log_path),
         "work_dir": str(sandbox_root) if sandbox_root else "",
         "pid": proc.pid,
         "npu_seen": npu_seen,
         "max_mem_mb": max_mem_mb,
         "npu_health": npu_health,
+        "output_tail": "\n".join(output_tail),
     }
 
 
@@ -389,18 +507,43 @@ def _format_table(rows, headers):
 
 def main():
     ap = argparse.ArgumentParser(description="Build + run A3 NPU ST across free NPUs")
-    ap.add_argument("--jobs", type=int, default=int(os.environ.get("PTO_ST_JOBS", "32")), help="make -j")
+    ap.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        help="parallel test jobs (0 means use all selected NPUs)",
+    )
+    ap.add_argument(
+        "--build-jobs",
+        type=int,
+        default=int(os.environ.get("PTO_ST_BUILD_JOBS", os.environ.get("PTO_ST_JOBS", "32"))),
+        help="`make -j` for building ST binaries",
+    )
     ap.add_argument("--timeout-sec", type=int, default=int(os.environ.get("PTO_ST_TIMEOUT_SEC", "600")),
                     help="per-testcase binary timeout (detect deadlock)")
     ap.add_argument("--split-gtest", action="store_true",
                     help="split each testcase binary into per-gtest tasks (improves load balance across NPUs)")
     ap.add_argument("--golden-workers", type=int, default=int(os.environ.get("PTO_ST_GOLDEN_WORKERS", "0")),
                     help="0 means auto; parallelism for golden generation (gen_data.py)")
-    ap.add_argument("--max-workers", type=int, default=0, help="0 means use all free NPUs")
-    ap.add_argument("--devices", default="", help="comma-separated physical NPU ids to use (default: auto-detect free)")
+    ap.add_argument("--max-workers", type=int, default=None, help="deprecated: use -j/--jobs (0 means use all selected NPUs)")
+    ap.add_argument("--devices", default="", help="comma-separated physical NPU ids to use (default: auto-detect)")
     ap.add_argument("--include-busy-devices", action="store_true",
                     help="use all OK NPUs even if currently busy (wait/retry until idle)")
-    ap.add_argument("--log-dir", default="/tmp/pto-isa-st-logs", help="where to write per-testcase logs")
+    ap.add_argument("--ignore-proc-regex", default=os.environ.get("PTO_ST_IGNORE_PROC_REGEX", r"npu-smi"),
+                    help="treat NPU processes matching this regex as ignorable when detecting busy/idle")
+    ap.add_argument("--testcases", default="", help="comma-separated testcase names to run (default: all A3 ST)")
+    ap.add_argument("--skip-build", action="store_true", help="skip build step (assumes `tests/npu/a2a3/src/st/build` exists)")
+    ap.add_argument("--skip-golden", action="store_true", help="skip golden generation step (assumes goldens exist)")
+    ap.add_argument("--isolate", action="store_true", help="run each testcase in a private sandbox (slower)")
+    ap.add_argument("--monitor-npu-smi", action="store_true",
+                    help="poll `npu-smi` during test execution (slower, but can catch unhealthy devices)")
+    ap.add_argument(
+        "--smi-poll-sec",
+        type=float,
+        default=float(os.environ.get("PTO_ST_SMI_POLL_SEC", "1.0")),
+        help="shared `npu-smi` polling interval for scheduler/monitoring (seconds)",
+    )
     ap.add_argument("--work-dir", default="/tmp/pto-isa-st-work",
                     help="per-task sandbox root (each test runs in its own folder)")
     ap.add_argument("--device-idle-wait-sec", type=int, default=int(os.environ.get("PTO_ST_DEVICE_IDLE_WAIT_SEC", "30")),
@@ -411,255 +554,297 @@ def main():
 
     env = _source_ascend_env()
     run_id = os.environ.get("PTO_ST_RUN_ID") or f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{uuid.uuid4().hex[:8]}"
-    log_dir = (Path(args.log_dir) / run_id).resolve()
-    work_dir = (Path(args.work_dir) / run_id).resolve()
-    log_dir.mkdir(parents=True, exist_ok=True)
-    work_dir.mkdir(parents=True, exist_ok=True)
+    work_dir = None
+    if args.isolate:
+        work_dir = (Path(args.work_dir) / run_id).resolve()
+        work_dir.mkdir(parents=True, exist_ok=True)
     print(f"[INFO] run_id={run_id}")
-    print(f"[INFO] log_dir={log_dir}")
-    print(f"[INFO] work_dir={work_dir}")
+    if work_dir:
+        print(f"[INFO] work_dir={work_dir}")
     sys.stdout.flush()
+
+    ignore_proc_re = None
+    if args.ignore_proc_regex.strip():
+        ignore_proc_re = re.compile(args.ignore_proc_regex)
 
     requested = None
     if args.devices.strip():
         requested = {int(x) for x in args.devices.split(",") if x.strip() != ""}
 
-    if args.include_busy_devices:
-        usable = _get_ok_devices(env, requested=requested)
-        if not usable:
-            raise RuntimeError("No NPUs with Health=OK found (or all requested NPUs are unhealthy).")
-    else:
-        usable = _get_free_devices(env, requested=requested)
-        if not usable:
-            raise RuntimeError("No free NPUs with Health=OK found (or all requested NPUs are busy).")
+    smi = _NpuSmiPoller(env, poll_sec=args.smi_poll_sec)
+    smi.start()
+    try:
+        run_jobs_env_default = int(os.environ.get("PTO_ST_JOBS_RUN", "0"))
+        run_jobs = args.jobs if args.jobs is not None else run_jobs_env_default
+        # Backward-compat: `--max-workers` historically controlled run concurrency.
+        if args.max_workers is not None and args.jobs is None:
+            run_jobs = args.max_workers
 
-    workers = len(usable) if args.max_workers == 0 else min(args.max_workers, len(usable))
-    devices = usable[:workers]
-    print(f"[INFO] using NPUs: {devices} (workers={workers})")
-    sys.stdout.flush()
+        if args.include_busy_devices:
+            usable = _get_ok_devices(env, requested=requested)
+            if not usable:
+                raise RuntimeError("No NPUs with Health=OK found (or all requested NPUs are unhealthy).")
+        else:
+            usable = _get_free_devices(env, requested=requested, ignore_proc_re=ignore_proc_re, smi=smi)
+            if not usable:
+                raise RuntimeError("No free NPUs with Health=OK found (or all requested NPUs are busy).")
 
-    testcases = _extract_a3_testcases()
-    print(f"[INFO] A3 testcases: {len(testcases)}")
-    sys.stdout.flush()
-
-    print("[INFO] building all A3 NPU ST once...")
-    sys.stdout.flush()
-    _build_all_a3(env, jobs=args.jobs)
-
-    golden_workers = args.golden_workers
-    if golden_workers <= 0:
-        golden_workers = min(max(1, os.cpu_count() or 1), 16)
-
-    print(f"[INFO] generating golden data for all testcases (parallel workers={golden_workers})...")
-    sys.stdout.flush()
-    st_dir = Path("tests/npu/a2a3/src/st")
-    build_dir = st_dir / "build"
-    if not build_dir.exists():
-        raise FileNotFoundError(f"build dir not found: {build_dir}")
-
-    def _gen_one(tc):
-        src = (st_dir / "testcase" / tc / "gen_data.py").resolve()
-        if not src.exists():
-            raise FileNotFoundError(f"missing gen_data.py: {src}")
-        # Copy to an isolated filename in build_dir to avoid races on a shared
-        # `build/gen_data.py` when running goldens in parallel.
-        dst = (build_dir / f"gen_data_{tc}.py").resolve()
-        shutil.copyfile(src, dst)
-        _run([sys.executable, str(dst)], cwd=str(build_dir), env=env, timeout_sec=600)
-
-    with ThreadPoolExecutor(max_workers=golden_workers) as pool:
-        futs = [pool.submit(_gen_one, tc) for tc in testcases]
-        for f in futs:
-            f.result()
-
-    tasks = []
-    if args.split_gtest:
-        print("[INFO] splitting binaries into per-gtest tasks...")
-        sys.stdout.flush()
-        for tc in testcases:
-            for g in _list_gtests(env, tc):
-                tasks.append({"testcase": tc, "gtest_filter": g})
-        print(f"[INFO] total tasks after split: {len(tasks)}")
-        sys.stdout.flush()
-    else:
-        tasks = [{"testcase": tc, "gtest_filter": None} for tc in testcases]
-
-    print("[INFO] running testcase binaries in parallel (1 process per NPU)...")
-    sys.stdout.flush()
-
-    results = []
-    failures = []
-
-    work = Queue()
-    for t in tasks:
-        work.put(t)
-
-    results_lock = threading.Lock()
-    attempts = {}
-    attempts_lock = threading.Lock()
-    stop_event = threading.Event()
-
-    device_queue = Queue()
-    for dev in devices:
-        device_queue.put(dev)
-
-    device_lock = threading.Lock()
-    active_devices = set(devices)
-
-    def _acquire_device():
-        while not stop_event.is_set():
-            try:
-                return device_queue.get(timeout=0.5)
-            except Empty:
-                with device_lock:
-                    if not active_devices:
-                        raise RuntimeError("No active NPUs left (all devices unhealthy/busy).")
-        return None
-
-    def _release_device(dev):
-        with device_lock:
-            if dev in active_devices:
-                device_queue.put(dev)
-
-    def _disable_device(dev, health):
-        with device_lock:
-            if dev in active_devices:
-                active_devices.remove(dev)
-        print(f"[WARN] dev={dev} disabled (health={health})")
+        workers = len(usable) if run_jobs == 0 else min(run_jobs, len(usable))
+        devices = usable[:workers]
+        print(f"[INFO] using NPUs: {devices} (workers={workers})")
         sys.stdout.flush()
 
-    def _worker():
-        while not stop_event.is_set():
-            try:
-                task = work.get(timeout=0.5)
-            except Empty:
-                continue
+        testcases = _extract_a3_testcases()
+        if args.testcases.strip():
+            wanted = {x.strip() for x in args.testcases.split(",") if x.strip()}
+            testcases = [t for t in testcases if t in wanted]
+            missing = sorted(wanted - set(testcases))
+            if missing:
+                raise RuntimeError(f"unknown testcase(s): {missing}")
+        print(f"[INFO] A3 testcases: {len(testcases)}")
+        sys.stdout.flush()
 
-            res = None
-            dev = None
-            try:
-                dev = _acquire_device()
-                if dev is None:
-                    # Stop requested; requeue and exit.
-                    work.put(task)
+        if not args.skip_build:
+            print("[INFO] building all A3 NPU ST (incremental)...")
+            sys.stdout.flush()
+            _build_all_a3(env, jobs=args.build_jobs)
+
+        golden_workers = args.golden_workers
+        if golden_workers <= 0:
+            golden_workers = min(max(1, os.cpu_count() or 1), 16)
+
+        if not args.skip_golden:
+            print(f"[INFO] generating golden data (parallel workers={golden_workers})...")
+            sys.stdout.flush()
+            st_dir = Path("tests/npu/a2a3/src/st")
+            build_dir = st_dir / "build"
+            if not build_dir.exists():
+                raise FileNotFoundError(f"build dir not found: {build_dir}")
+
+            def _gen_one(tc):
+                src = (st_dir / "testcase" / tc / "gen_data.py").resolve()
+                if not src.exists():
+                    raise FileNotFoundError(f"missing gen_data.py: {src}")
+                stamp = (build_dir / f".gen_data_{tc}.stamp").resolve()
+                if stamp.exists() and stamp.stat().st_mtime >= src.stat().st_mtime:
                     return
+                # Copy to an isolated filename in build_dir to avoid races on a shared
+                # `build/gen_data.py` when running goldens in parallel.
+                dst = (build_dir / f"gen_data_{tc}.py").resolve()
+                shutil.copyfile(src, dst)
+                _run([sys.executable, str(dst)], cwd=str(build_dir), env=env, timeout_sec=600)
+                stamp.touch()
 
-                idle_ok, last = _wait_device_idle(env, dev, timeout_sec=args.device_idle_wait_sec)
-                if not idle_ok:
-                    health, procs = last or ("UNKNOWN", {})
-                    if health != "OK":
-                        _disable_device(dev, health)
-                    else:
-                        print(f"[WAIT] dev={dev} busy (pids={list(procs.keys())}); work-steal to other dev")
-                        sys.stdout.flush()
-                        time.sleep(max(0.0, args.device_busy_backoff_sec))
-                    work.put(task)
+            with ThreadPoolExecutor(max_workers=golden_workers) as pool:
+                futs = [pool.submit(_gen_one, tc) for tc in testcases]
+                for f in futs:
+                    f.result()
+
+        tasks = []
+        if args.split_gtest:
+            print("[INFO] splitting binaries into per-gtest tasks...")
+            sys.stdout.flush()
+            for tc in testcases:
+                for g in _list_gtests(env, tc):
+                    tasks.append({"testcase": tc, "gtest_filter": g})
+            print(f"[INFO] total tasks after split: {len(tasks)}")
+            sys.stdout.flush()
+        else:
+            tasks = [{"testcase": tc, "gtest_filter": None} for tc in testcases]
+
+        for i, t in enumerate(tasks, start=1):
+            t["idx"] = i
+        total_tasks = len(tasks)
+
+        print("[INFO] running testcase binaries in parallel (1 process per NPU)...")
+        sys.stdout.flush()
+        results = []
+        failures = []
+
+        work = Queue()
+        for t in tasks:
+            work.put(t)
+
+        results_lock = threading.Lock()
+        attempts = {}
+        attempts_lock = threading.Lock()
+        stop_event = threading.Event()
+
+        device_queue = Queue()
+        for dev in devices:
+            device_queue.put(dev)
+
+        device_lock = threading.Lock()
+        active_devices = set(devices)
+
+        def _acquire_device():
+            while not stop_event.is_set():
+                try:
+                    return device_queue.get(timeout=0.5)
+                except Empty:
+                    with device_lock:
+                        if not active_devices:
+                            raise RuntimeError("No active NPUs left (all devices unhealthy/busy).")
+            return None
+
+        def _release_device(dev):
+            with device_lock:
+                if dev in active_devices:
+                    device_queue.put(dev)
+
+        def _disable_device(dev, health):
+            with device_lock:
+                if dev in active_devices:
+                    active_devices.remove(dev)
+            print(f"[WARN] dev={dev} disabled (health={health})")
+            sys.stdout.flush()
+
+        def _worker():
+            while not stop_event.is_set():
+                try:
+                    task = work.get(timeout=0.5)
+                except Empty:
                     continue
 
-                with attempts_lock:
-                    key = (task["testcase"], task.get("gtest_filter") or "")
-                    attempt = attempts.get(key, 0) + 1
-                    attempts[key] = attempt
-                print(f"[RUN ] {task['testcase']} dev={dev} filter={task.get('gtest_filter') or '-'} try={attempt}")
-                sys.stdout.flush()
-                res = _run_one_binary(
-                    env,
-                    dev,
-                    task["testcase"],
-                    args.timeout_sec,
-                    str(log_dir),
-                    gtest_filter=task.get("gtest_filter"),
-                    attempt=attempt,
-                    work_dir=str(work_dir),
-                )
+                res = None
+                dev = None
+                try:
+                    dev = _acquire_device()
+                    if dev is None:
+                        # Stop requested; requeue and exit.
+                        work.put(task)
+                        return
 
-                idle_ok_after, last_after = _wait_device_idle(env, dev, timeout_sec=args.device_idle_wait_sec)
-                if not idle_ok_after:
-                    health, procs = last_after or ("UNKNOWN", {})
-                    if res.get("rc", 0) == 0:
-                        res["rc"] = 127
-                    res["npu_health"] = health
-                    res["error"] = f"device not idle after run; health={health} procs={list(procs.keys())}"
-                    if health != "OK":
-                        _disable_device(dev, health)
-            except Exception as e:
-                res = {
-                    "testcase": task["testcase"],
-                    "task": task["testcase"] if not task.get("gtest_filter") else f"{task['testcase']}::{task['gtest_filter']}",
-                    "gtest_filter": task.get("gtest_filter") or "",
-                    "device": dev if dev is not None else -1,
-                    "rc": 128,
-                    "elapsed_sec": 0.0,
-                    "log": "",
-                    "pid": -1,
-                    "npu_seen": False,
-                    "max_mem_mb": 0,
-                    "npu_health": "UNKNOWN",
-                    "error": f"runner exception: {type(e).__name__}: {e}",
-                }
-            finally:
-                if dev is not None:
-                    _release_device(dev)
-                if res is not None:
-                    with results_lock:
-                        results.append(res)
-                        status = "PASS" if res["rc"] == 0 else "FAIL"
-                        print(
-                            f"[{status}] {res.get('task', res['testcase'])} dev={res['device']} "
-                            f"time={res['elapsed_sec']:.1f}s rc={res['rc']} log={res.get('log','')}"
-                        )
-                        sys.stdout.flush()
-                        if res["rc"] != 0:
-                            failures.append(res)
-                work.task_done()
+                    idle_ok, last = _wait_device_idle(
+                        env,
+                        dev,
+                        timeout_sec=args.device_idle_wait_sec,
+                        ignore_proc_re=ignore_proc_re,
+                        smi=smi,
+                    )
+                    if not idle_ok:
+                        health, procs = last or ("UNKNOWN", {})
+                        if health != "OK":
+                            _disable_device(dev, health)
+                        else:
+                            print(f"[WAIT] dev={dev} busy (pids={list(procs.keys())}); requeue {task.get('testcase')}")
+                            sys.stdout.flush()
+                            time.sleep(max(0.0, args.device_busy_backoff_sec))
+                        work.put(task)
+                        continue
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futs = [pool.submit(_worker) for _ in range(workers)]
-        work.join()
-        stop_event.set()
-        for f in futs:
-            f.result()
+                    with attempts_lock:
+                        key = (task["testcase"], task.get("gtest_filter") or "")
+                        attempt = attempts.get(key, 0) + 1
+                        attempts[key] = attempt
+                    print(
+                        f"[{task['idx']}/{total_tasks}] RUN  dev={dev} "
+                        f"{task['testcase']} filter={task.get('gtest_filter') or '-'} try={attempt}"
+                    )
+                    sys.stdout.flush()
+                    res = _run_one_binary(
+                        env,
+                        dev,
+                        task["testcase"],
+                        args.timeout_sec,
+                        gtest_filter=task.get("gtest_filter"),
+                        attempt=attempt,
+                        work_dir=str(work_dir) if work_dir else None,
+                        monitor_npu_smi=args.monitor_npu_smi,
+                        smi=smi,
+                    )
+                    res["idx"] = task["idx"]
+                except Exception as e:
+                    res = {
+                        "testcase": task["testcase"],
+                        "task": task["testcase"] if not task.get("gtest_filter") else f"{task['testcase']}::{task['gtest_filter']}",
+                        "gtest_filter": task.get("gtest_filter") or "",
+                        "device": dev if dev is not None else -1,
+                        "rc": 128,
+                        "elapsed_sec": 0.0,
+                        "log": "",
+                        "pid": -1,
+                        "npu_seen": False,
+                        "max_mem_mb": 0,
+                        "npu_health": "UNKNOWN",
+                        "error": f"runner exception: {type(e).__name__}: {e}",
+                        "idx": task.get("idx", 0),
+                    }
+                finally:
+                    if dev is not None:
+                        _release_device(dev)
+                    if res is not None:
+                        with results_lock:
+                            results.append(res)
+                            status = "PASS" if res["rc"] == 0 else "FAIL"
+                            print(
+                                f"[{res.get('idx', 0)}/{total_tasks}] {status:4s} dev={res['device']} "
+                                f"{res.get('task', res['testcase'])} sec={res['elapsed_sec']:.1f} rc={res['rc']}"
+                            )
+                            sys.stdout.flush()
+                            if res["rc"] != 0:
+                                failures.append(res)
+                    work.task_done()
 
-    results_sorted = sorted(results, key=lambda r: (r.get("testcase", ""), r.get("gtest_filter", "")))
-    rows = []
-    for r in results_sorted:
-        rows.append([
-            r.get("task", r["testcase"]),
-            str(r["device"]),
-            "PASS" if r["rc"] == 0 else "FAIL",
-            f"{r['elapsed_sec']:.1f}",
-            str(r["rc"]),
-            "Y" if r.get("npu_seen") else "N",
-            str(r.get("max_mem_mb", 0)),
-            os.path.basename(r.get("log", "")) if r.get("log") else "",
-        ])
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = [pool.submit(_worker) for _ in range(workers)]
+            work.join()
+            stop_event.set()
+            for f in futs:
+                f.result()
 
-    print("\n[SUMMARY] results:")
-    print(_format_table(
-        rows,
-        headers=["TASK", "DEV", "STATUS", "SEC", "RC", "NPU", "MAXMEM", "LOG"],
-    ))
+        results_sorted = sorted(results, key=lambda r: (r.get("idx", 0), r.get("testcase", ""), r.get("gtest_filter", "")))
+        rows = []
+        for r in results_sorted:
+            if args.monitor_npu_smi:
+                npu_col = "Y" if r.get("npu_seen") else "N"
+                mem_col = str(r.get("max_mem_mb", 0))
+            else:
+                npu_col = "-"
+                mem_col = "-"
+            rows.append([
+                r.get("task", r["testcase"]),
+                str(r["device"]),
+                "PASS" if r["rc"] == 0 else "FAIL",
+                f"{r['elapsed_sec']:.1f}",
+                str(r["rc"]),
+                npu_col,
+                mem_col,
+            ])
 
-    if failures:
-        print("\n[SUMMARY] failures:")
-        for f in sorted(failures, key=lambda r: (r.get("testcase", ""), r.get("gtest_filter", ""))):
-            extra = f.get("error", "")
-            extra = f" ({extra})" if extra else ""
-            print(f" - {f.get('task', f['testcase'])} dev={f['device']} rc={f['rc']} log={f.get('log','')}{extra}")
-        raise SystemExit(1)
+        print("\n[SUMMARY] results:")
+        print(_format_table(
+            rows,
+            headers=["TASK", "DEV", "STATUS", "SEC", "RC", "NPU", "MAXMEM"],
+        ))
 
-    final_devices, final_processes = _npu_smi_info(env)
-    leftovers = []
-    for dev in devices:
-        procs = _device_procs(final_processes, dev)
-        if procs:
-            leftovers.append((dev, list(procs.keys())))
-    if leftovers:
-        print("\n[WARN] leftover NPU processes detected:")
-        for dev, pids in leftovers:
-            print(f" - dev={dev} pids={pids} health={final_devices.get(dev, {}).get('health', 'UNKNOWN')}")
+        if failures:
+            print("\n[SUMMARY] failures:")
+            for f in sorted(failures, key=lambda r: (r.get("idx", 0), r.get("testcase", ""), r.get("gtest_filter", ""))):
+                extra = f.get("error", "")
+                extra = f" ({extra})" if extra else ""
+                print(f" - {f.get('task', f['testcase'])} dev={f['device']} rc={f['rc']}{extra}")
+                tail = (f.get("output_tail") or "").strip()
+                if tail:
+                    print("   ---- output tail ----")
+                    for line in tail.splitlines()[-40:]:
+                        print(f"   {line}")
+            raise SystemExit(1)
 
-    print("\n[SUMMARY] all A3 NPU ST testcases passed")
+        final_devices, final_processes = _npu_smi_info(env)
+        leftovers = []
+        for dev in devices:
+            procs = _filter_ignored_procs(_device_procs(final_processes, dev), ignore_proc_re)
+            if procs:
+                leftovers.append((dev, list(procs.keys())))
+        if leftovers:
+            print("\n[WARN] leftover NPU processes detected:")
+            for dev, pids in leftovers:
+                print(f" - dev={dev} pids={pids} health={final_devices.get(dev, {}).get('health', 'UNKNOWN')}")
+
+        print("\n[SUMMARY] all A3 NPU ST testcases passed")
+    finally:
+        smi.stop()
 
 
 if __name__ == "__main__":

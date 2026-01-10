@@ -22,7 +22,6 @@ class TPARTADD_Test : public testing::Test {
 
 namespace {
 
-constexpr int kDeviceId = 0;
 constexpr float kEpsilon = 0.0f;
 constexpr int kRows = 64;
 constexpr int kCols = 64;
@@ -40,9 +39,10 @@ static std::string GetGoldenDir()
 TEST_F(TPARTADD_Test, case_float_64x64_src1_32x32)
 {
     const size_t fileSize = static_cast<size_t>(kRows) * static_cast<size_t>(kCols) * sizeof(float);
+    const int deviceId = GetDeviceId();
 
     aclInit(nullptr);
-    aclrtSetDevice(kDeviceId);
+    aclrtSetDevice(deviceId);
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -74,7 +74,7 @@ TEST_F(TPARTADD_Test, case_float_64x64_src1_32x32)
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(kDeviceId);
+    aclrtResetDevice(deviceId);
     aclFinalize();
 
     std::vector<float> golden(static_cast<size_t>(kRows) * static_cast<size_t>(kCols));

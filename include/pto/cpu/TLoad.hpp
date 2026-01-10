@@ -43,11 +43,20 @@ namespace pto {
     __tf__  PTO_INLINE void LoadPlainMatrix(typename GlobalData::DType __out__ *dst, typename TileData::TileDType __in__ src,
         int gShape3, int gShape4, int gStride3, int gStride4, int validRow, int validCol, size_t idx3) {
         size_t offsetDstBase =  idx3*gShape3*TileData::Cols;
-        cpu::parallel_for_1d(0, static_cast<std::size_t>(gShape3), static_cast<std::size_t>(gShape3) * gShape4, [&](std::size_t r) {
+        const std::size_t baseFlatRow = idx3 * static_cast<std::size_t>(gShape3);
+        const std::size_t maxRows = (baseFlatRow < static_cast<std::size_t>(validRow))
+            ? std::min(static_cast<std::size_t>(gShape3), static_cast<std::size_t>(validRow) - baseFlatRow)
+            : 0;
+        const std::size_t maxCols = std::min(static_cast<std::size_t>(gShape4), static_cast<std::size_t>(validCol));
+        if (maxRows == 0 || maxCols == 0) {
+            return;
+        }
+
+        cpu::parallel_for_1d(0, maxRows, maxRows * maxCols, [&](std::size_t r) {
             const std::size_t dstBase = offsetDstBase + r * TileData::Cols;
             const std::size_t srcBase = r * static_cast<std::size_t>(gStride3);
             PTO_CPU_VECTORIZE_LOOP
-            for (std::size_t c = 0; c < static_cast<std::size_t>(gShape4); c++) {
+            for (std::size_t c = 0; c < maxCols; c++) {
                 dst[dstBase + c] = src[srcBase + c * static_cast<std::size_t>(gStride4)];
             }
         });
@@ -56,10 +65,19 @@ namespace pto {
     __tf__  PTO_INLINE void LoadPlainMatrix(typename GlobalData::DType __out__ *dst, typename TileData::TileDType __in__ src,
         int gShape3, int gShape4, int gStride3, int gStride4, int validRow, int validCol, size_t idx3) {
         size_t offsetDstBase =  idx3*gShape4*TileData::Rows;
-        cpu::parallel_for_1d(0, static_cast<std::size_t>(gShape4), static_cast<std::size_t>(gShape3) * gShape4, [&](std::size_t c) {
+        const std::size_t maxRows = std::min(static_cast<std::size_t>(gShape3), static_cast<std::size_t>(validRow));
+        const std::size_t baseFlatCol = idx3 * static_cast<std::size_t>(gShape4);
+        const std::size_t maxCols = (baseFlatCol < static_cast<std::size_t>(validCol))
+            ? std::min(static_cast<std::size_t>(gShape4), static_cast<std::size_t>(validCol) - baseFlatCol)
+            : 0;
+        if (maxRows == 0 || maxCols == 0) {
+            return;
+        }
+
+        cpu::parallel_for_1d(0, maxCols, maxRows * maxCols, [&](std::size_t c) {
             const std::size_t dstBase = offsetDstBase + c * TileData::Rows;
             const std::size_t srcStride4 = static_cast<std::size_t>(gStride4);
-            for (std::size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
+            for (std::size_t r = 0; r < maxRows; r++) {
                 dst[dstBase + r] = src[r * static_cast<std::size_t>(gStride3) + c * srcStride4];
             }
         });
@@ -90,10 +108,16 @@ namespace pto {
     __tf__  PTO_INLINE void LoadSubfractalMatrix(typename GlobalData::DType __out__ *dst, typename TileData::TileDType __in__ src,
         int gShape3, int gShape4, int gStride3, int gStride4, int validRow, int validCol) {
         // Zn layout
-        cpu::parallel_for_1d(0, static_cast<std::size_t>(gShape4), static_cast<std::size_t>(gShape3) * gShape4, [&](std::size_t c) {
+        const std::size_t maxRows = std::min(static_cast<std::size_t>(gShape3), static_cast<std::size_t>(validRow));
+        const std::size_t maxCols = std::min(static_cast<std::size_t>(gShape4), static_cast<std::size_t>(validCol));
+        if (maxRows == 0 || maxCols == 0) {
+            return;
+        }
+
+        cpu::parallel_for_1d(0, maxCols, maxRows * maxCols, [&](std::size_t c) {
             size_t subTileC = c / TileData::InnerCols;
             size_t innerC = c % TileData::InnerCols;
-            for (size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
+            for (size_t r = 0; r < maxRows; r++) {
                 size_t subTileR = r / TileData::InnerRows;
                 size_t innerR = r % TileData::InnerRows;
 
@@ -110,10 +134,16 @@ namespace pto {
     __tf__  PTO_INLINE void LoadSubfractalMatrix(typename GlobalData::DType __out__ *dst, typename TileData::TileDType __in__ src,
         int gShape3, int gShape4, int gStride3, int gStride4, int validRow, int validCol) {
         // Nz layout
-        cpu::parallel_for_1d(0, static_cast<std::size_t>(gShape4), static_cast<std::size_t>(gShape3) * gShape4, [&](std::size_t c) {
+        const std::size_t maxRows = std::min(static_cast<std::size_t>(gShape3), static_cast<std::size_t>(validRow));
+        const std::size_t maxCols = std::min(static_cast<std::size_t>(gShape4), static_cast<std::size_t>(validCol));
+        if (maxRows == 0 || maxCols == 0) {
+            return;
+        }
+
+        cpu::parallel_for_1d(0, maxCols, maxRows * maxCols, [&](std::size_t c) {
             size_t subTileC = c / TileData::InnerCols;
             size_t innerC = c % TileData::InnerCols;
-            for (size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
+            for (size_t r = 0; r < maxRows; r++) {
                 size_t subTileR = r / TileData::InnerRows;
                 size_t innerR = r % TileData::InnerRows;
 
@@ -131,8 +161,15 @@ namespace pto {
         int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
         int gStride3, int gStride4, int validRow, int validCol)
     {
-        assert((gShape0*gShape1*gShape2*gShape3 == validRow && gShape4==validCol && TileData::isRowMajor) ||
-            (gShape0*gShape1*gShape2*gShape4 == validCol && gShape3==validRow && !TileData::isRowMajor));
+        if constexpr (TileData::isRowMajor) {
+            const int gmRows = gShape0 * gShape1 * gShape2 * gShape3;
+            const int gmCols = gShape4;
+            assert(validRow <= gmRows && validCol <= gmCols);
+        } else {
+            const int gmRows = gShape3;
+            const int gmCols = gShape0 * gShape1 * gShape2 * gShape4;
+            assert(validRow <= gmRows && validCol <= gmCols);
+        }
 
         // Filling padding
         std::fill(dst,dst+(TileData::Cols*TileData::Rows),getPadValue<TileData>());

@@ -20,7 +20,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="A script that processes optional arguments.")
     parser.add_argument("-v","--verbose", action="store_true", help="Enable verbose mode")
     parser.add_argument("-b","--build-folder", type=str, default="build_tests", help="Set the build folder path")
-    parser.add_argument("-c", "--compiler", required=False, help="Compiler for CPU-SIM", default="g++-14")
+    parser.add_argument("-c", "--compiler", required=False, help="Compiler for CPU-SIM", default="g++")
     args = parser.parse_args()
     return args
 
@@ -33,13 +33,14 @@ def green(st):
 def main():
     args=parse_arguments()
     cmd_suffix = "" if args.verbose else ">>/dev/null"
+    build_folder = args.build_folder
     try:
-        os.mkdir(args.build_folder)
+        os.mkdir(build_folder)
     except:
         pass
     tests_path = os.path.dirname(os.path.dirname(inspect.getfile(sys.modules[__name__])))+"/cpu/st/"
-    if os.system(f"export CXX=/usr/bin/{args.compiler}; cmake -S {tests_path} -B build_tests {cmd_suffix} && cd build_tests && make -j8 {cmd_suffix}")==0:
-        os.chdir(args.build_folder)
+    if os.system(f"export CXX=/usr/bin/{args.compiler}; cmake -S {tests_path} -B {build_folder} {cmd_suffix} && cd {build_folder} && make -j8 {cmd_suffix}")==0:
+        os.chdir(build_folder)
         py_files = glob.glob(f"{tests_path}/testcase/*/gen_data.py", recursive=False)
         for f in py_files:
             os.system(f"{sys.executable} {f} {cmd_suffix}")

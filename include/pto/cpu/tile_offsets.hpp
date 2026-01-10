@@ -12,27 +12,35 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TILE_OFFSETS_HPP
 
 #include <unistd.h>
+#include <type_traits>
+
+#include <pto/common/pto_tile.hpp>
 namespace pto {
     template <typename TileData>
     using TypeSum = std::conditional_t<std::is_same_v<typename TileData::DType, half>, float, typename TileData::DType>;
 
     template <typename TileData>
     size_t GetTileElementOffsetSubfractals( size_t subTileR, size_t innerR, size_t subTileC, size_t innerC) {
-        if constexpr(!TileData::isRowMajor & (TileData::SFractal == SLayout::RowMajor)) {
-            // Nz
-            return subTileC*TileData::Rows*TileData::InnerCols +
-                subTileR*TileData::InnerNumel + innerR*TileData::InnerCols + innerC;
-        } else if constexpr(TileData::isRowMajor & (TileData::SFractal == SLayout::ColMajor)) {
-            // Zn
-            return subTileR*TileData::Cols*TileData::InnerRows +
-                subTileC*TileData::InnerNumel + innerC*TileData::InnerRows + innerR;
-        } else if constexpr(TileData::isRowMajor & (TileData::SFractal == SLayout::RowMajor)) {
-            // Zz
-            return subTileR*TileData::Cols*TileData::InnerRows +
-                subTileC*TileData::InnerNumel + innerR*TileData::InnerCols + innerC;
+        constexpr size_t subTilesPerCol = TileData::Rows / TileData::InnerRows;
+        constexpr size_t subTilesPerRow = TileData::Cols / TileData::InnerCols;
+
+        size_t subTileIndex = 0;
+        if constexpr (TileData::isRowMajor) {
+            subTileIndex = subTileR * subTilesPerRow + subTileC;
         } else {
-            static_assert(false, "Invalid layout");
+            subTileIndex = subTileC * subTilesPerCol + subTileR;
         }
+
+        size_t innerIndex = 0;
+        if constexpr (TileData::SFractal == SLayout::RowMajor) {
+            innerIndex = innerR * TileData::InnerCols + innerC;
+        } else if constexpr (TileData::SFractal == SLayout::ColMajor) {
+            innerIndex = innerC * TileData::InnerRows + innerR;
+        } else {
+            static_assert(pto::always_false_v<TileData>, "Invalid layout");
+        }
+
+        return subTileIndex * TileData::InnerNumel + innerIndex;
     }
 
     template <typename TileData>

@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef ELEMENT_OP_HPP
 #define ELEMENT_OP_HPP
 
+#include <algorithm>
 #include <cmath>
 
 #include "pto/common/pto_tile.hpp"
@@ -74,7 +75,7 @@ namespace pto {
     template<typename DType, ElementOp op>
     struct ElementOpCal {
         static void apply(DType &dst, DType &src0, DType &src1, size_t) {
-            static_assert(false, "Unsupport element op.");
+            static_assert(pto::always_false_v<DType>, "Unsupport element op.");
         }
     };
 
@@ -413,9 +414,16 @@ namespace pto {
                     dst = (src <= scalar);
                     break;
                 default:
-                    static_assert(false, "Unsupport CMP_MODE.");
+                    PTO_ASSERT(false, "Unsupport CMP_MODE.");
                     break;
             }
+        }
+    };
+
+    template<typename DType>
+    struct ElementOpCal<DType, ElementOp::OP_MINS> {
+        static void apply(DType &dst, DType &src, DType &scalar, size_t) {
+            dst = std::min(src, scalar);
         }
     };
 

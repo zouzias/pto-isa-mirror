@@ -797,7 +797,7 @@ struct Tile {
         return *(ptr + offset);
     }
     // constructor for static shape
-    AICORE Tile() {};
+    AICORE Tile() = default;
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
@@ -866,8 +866,8 @@ struct Tile {
     AICORE TileDType &data() { return data_; }
     AICORE const TileDType &data() const { return data_; }
 
-    int RowMaskInternal;
-    int ColMaskInternal;
+    int RowMaskInternal = (ValidRow == DYNAMIC) ? Rows : ValidRow;
+    int ColMaskInternal = (ValidCol == DYNAMIC) ? Cols : ValidCol;
 
     template <int RowMask = ValidRow>
     AICORE static constexpr std::enable_if_t<(RowMask > 0), int> GetValidRow() {
@@ -901,7 +901,7 @@ struct Tile {
   private:
     AICORE void assignData(TileDType data) { data_ = data; }
     TileDType data_;
-    bool isKAligned_; // K-Alignedment for A3
+    bool isKAligned_ = false; // K-Alignedment for A3
 };
 
 #ifdef MEMORY_BASE

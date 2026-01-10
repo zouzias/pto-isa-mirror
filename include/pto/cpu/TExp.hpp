@@ -31,8 +31,8 @@ namespace pto{
                 PTO_CPU_VECTORIZE_LOOP
                 for (std::size_t c = 0; c < validCol; ++c) {
                     const std::size_t idx = base + c;
-                    if constexpr (std::is_same_v<typename tile_shape::TileDType, aclFloat16>) {
-                        dst[idx] = static_cast<aclFloat16>(std::expf(static_cast<float>(src[idx])));
+                    if constexpr (std::is_same_v<ElemT, aclFloat16>) {
+                        dst[idx] = static_cast<aclFloat16>(std::exp(static_cast<float>(src[idx])));
                     } else {
                         dst[idx] = static_cast<ElemT>(std::exp(static_cast<double>(src[idx])));
                     }
@@ -42,8 +42,8 @@ namespace pto{
             cpu::parallel_for_rows(validRow, validCol, [&](std::size_t r) {
                 for (std::size_t c = 0; c < validCol; ++c) {
                     const std::size_t idx = GetTileElementOffset<tile_shape>(r, c);
-                    if constexpr (std::is_same_v<typename tile_shape::TileDType, aclFloat16>) {
-                        dst[idx] = static_cast<aclFloat16>(std::expf(static_cast<float>(src[idx])));
+                    if constexpr (std::is_same_v<ElemT, aclFloat16>) {
+                        dst[idx] = static_cast<aclFloat16>(std::exp(static_cast<float>(src[idx])));
                     } else {
                         dst[idx] = static_cast<ElemT>(std::exp(static_cast<double>(src[idx])));
                     }

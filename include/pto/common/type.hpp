@@ -114,6 +114,9 @@ namespace pto {
         GT = 4,
         GE = 5,
     };
+
+    template <typename>
+    inline constexpr bool always_false_v = false;
 }
 
 #if defined(__CPU_SIM)
@@ -124,11 +127,18 @@ namespace pto {
         typedef std::float16_t bfloat16_t;
         typedef std::float16_t aclFloat16;
     #else
-        // macOS libc++ (and some other toolchains) may not ship <stdfloat> yet.
-        // For CPU simulation, a best-effort 16-bit float type is sufficient.
-        typedef _Float16 half;
-        typedef _Float16 bfloat16_t;
-        typedef _Float16 aclFloat16;
+        // Some toolchains (e.g. GCC 10) do not provide `std::float16_t`, and
+        // may not enable `_Float16` in C++ mode. On Arm, `__fp16` is widely
+        // available and is sufficient for CPU simulation.
+        #if defined(__aarch64__) || defined(__arm__) || defined(__ARM_FP16_FORMAT_IEEE)
+            typedef __fp16 half;
+            typedef __fp16 bfloat16_t;
+            typedef __fp16 aclFloat16;
+        #else
+            typedef _Float16 half;
+            typedef _Float16 bfloat16_t;
+            typedef _Float16 aclFloat16;
+        #endif
     #endif
 #endif
 

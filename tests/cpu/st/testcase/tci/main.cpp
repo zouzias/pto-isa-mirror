@@ -25,7 +25,6 @@ namespace {
 constexpr int32_t kStartS0 = 0;
 constexpr int32_t kStartS100 = 100;
 constexpr int kCols = 16;
-constexpr int kDeviceId = 0;
 constexpr float kEpsilon = 0.0f;
 
 } // namespace
@@ -40,9 +39,10 @@ template <int descending>
 static void run_case(int32_t start)
 {
     const size_t outSize = static_cast<size_t>(kCols) * sizeof(int32_t);
+    const int deviceId = GetDeviceId();
 
     aclInit(nullptr);
-    aclrtSetDevice(kDeviceId);
+    aclrtSetDevice(deviceId);
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -60,7 +60,7 @@ static void run_case(int32_t start)
     aclrtFree(dstDevice);
     aclrtFreeHost(dstHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(kDeviceId);
+    aclrtResetDevice(deviceId);
     aclFinalize();
 
     std::vector<int32_t> golden(kCols);

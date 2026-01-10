@@ -11,7 +11,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(pto_test_cpu_sim)
 
-set(CMAKE_CXX_STANDARD 23)
+# CPU STs do not rely on C++23-specific features today, and some environments
+# (e.g. GCC 10) cannot build with `-std=c++23`. Use C++20 for broader
+# compatibility.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -43,7 +46,7 @@ endif()
 
 add_compile_options(
     -D_FORTIFY_SOURCE=2
-    -std=c++23
+    -std=c++20
     -Wno-macro-redefined -Wno-ignored-attributes
     -fstack-protector-strong
 )
@@ -55,7 +58,9 @@ if (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
     add_compile_options(-O2)
 endif()
 
-# add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+# Some environments ship prebuilt GTest with the old libstdc++ ABI (no
+# `[abi:cxx11]` symbols). Compile CPU STs with the same ABI to avoid link errors.
+add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 if (UNIX AND NOT APPLE)
     add_link_options(
         -Wl,-z,relro
