@@ -31,6 +31,9 @@ enum class Layout {
     MX_B_ND,
     MX_B_DN,
     MX_B_NN,
+    NC1HWC0,
+    NDC1HWC0,
+    FRACTAL_Z,
     MAX,
 };
 namespace GlobalTensorDim {
@@ -728,6 +731,149 @@ static constexpr int fractalMxSize = 32;
 static constexpr int cElemSize = 4;
 } // namespace TileConfig
 
+
+constexpr int MAX_SUPPORT_DIM = 6;           // 最大支持维度（6维）
+constexpr int MIN_SUPPORT_DIM = 2;           // 最小支持维度（2维）
+constexpr int DEFAULT_DIM_VALUE = 1;       // 默认维度值
+
+namespace ConvTileDetail {
+    // 辅助工具：编译期获取可变参数包的第N个值（核心修复）
+    template<int N, int... Shapes>
+    struct GetNthValue {
+        // 递归终止：N=0时返回第一个值
+        static constexpr int value = []() {
+            int idx = 0;
+            int val = DEFAULT_DIM_VALUE;
+            // 折叠表达式遍历参数包，找到第N个值
+            ((idx == N ? (val = Shapes, idx++) : idx++), ...);
+            return val;
+        }();
+    };
+
+    // 特化：参数包长度不足时返回默认值
+    template<int N>
+    struct GetNthValue<N> {
+        static constexpr int value = DEFAULT_DIM_VALUE;
+    };
+
+    // 编译期补全维度到6维（核心修复：无栈数组，纯编译期参数展开）
+    template<int... Shapes>
+    struct ExpandToMaxDim {
+        static constexpr int origin_count = sizeof...(Shapes);
+        // 静态断言：限制维度范围2~6维
+        static_assert(origin_count >= MIN_SUPPORT_DIM && origin_count <= MAX_SUPPORT_DIM, 
+                      "ConvTile only support 2D~6D Shapes!");
+
+        // 修复点：直接通过编译期参数展开初始化数组，无栈内存操作
+        static constexpr int values[MAX_SUPPORT_DIM] = {
+            GetNthValue<0, Shapes...>::value, // 第0维：取参数包第0个值，无则默认1
+            GetNthValue<1, Shapes...>::value, // 第1维：取参数包第1个值，无则默认1
+            GetNthValue<2, Shapes...>::value, // 第2维：取参数包第2个值，无则默认1
+            GetNthValue<3, Shapes...>::value, // 第3维：取参数包第3个值，无则默认1
+            GetNthValue<4, Shapes...>::value, // 第4维：取参数包第4个值，无则默认1
+            GetNthValue<5, Shapes...>::value  // 第5维：取参数包第5个值，无则默认1
+        };
+    };
+
+    // 编译期判断维度是否为动态
+    template<int DimValue>
+    struct IsDynamicDim {
+        static constexpr bool value = (DimValue == DYNAMIC);
+    };
+
+    // 编译期统计动态维度数量（纯原生实现，无栈数组）
+    template<int... Shapes>
+    struct CountDynamicDim {
+        // 核心修正：移除 expanded 中间数组，直接访问 ExpandToMaxDim 的 values
+        static constexpr int value = []() {
+            int count = 0;
+            // 直接遍历 ExpandToMaxDim<Shapes...>::values，无数组拷贝
+            for (int i = 0; i < MAX_SUPPORT_DIM; ++i) {
+                if (ExpandToMaxDim<Shapes...>::values[i] == DYNAMIC) {
+                    count++;
+                }
+            }
+            return count;
+        }();
+    };
+}
+
+template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, int... Shapes>
+struct ConvTile {
+public:
+    using DType = Element_;
+    static constexpr TileType Loc = Loc_;
+    static constexpr int BufferSize = BufferSize_;
+    static constexpr Layout layout = Layout_;
+    // -------------------------- 编译期常量（静态维度信息） --------------------------
+    static constexpr int ORIGIN_DIM_COUNT = sizeof...(Shapes); // 原始输入维度数（2~6）
+    static constexpr auto STATIC_SHAPE_6D = ConvTileDetail::ExpandToMaxDim<Shapes...>::values; // 补全后的6维静态值
+    static constexpr int DYNAMIC_DIM_COUNT = ConvTileDetail::CountDynamicDim<Shapes...>::value; // 动态维度数量
+
+    // 编译期标记：每个维度是否为动态（6维）
+    static constexpr bool IS_DYNAMIC_DIM[MAX_SUPPORT_DIM] = {ConvTileDetail::IsDynamicDim<STATIC_SHAPE_6D[0]>::value,
+        ConvTileDetail::IsDynamicDim<STATIC_SHAPE_6D[1]>::value,
+        ConvTileDetail::IsDynamicDim<STATIC_SHAPE_6D[2]>::value,
+        ConvTileDetail::IsDynamicDim<STATIC_SHAPE_6D[3]>::value,
+        ConvTileDetail::IsDynamicDim<STATIC_SHAPE_6D[4]>::value,
+        ConvTileDetail::IsDynamicDim<STATIC_SHAPE_6D[5]>::value};
+
+    // -------------------------- 运行期数据（动态维度值） --------------------------
+    int dynamic_shape[MAX_SUPPORT_DIM] = {1}; // 存储动态维度的实际值
+
+    PTO_INTERNAL constexpr int GetShape(int dim) const {
+        // 越界检查：仅允许访问原始维度范围内的索引
+        if (dim < 0 || dim >= ORIGIN_DIM_COUNT)
+            return -1;
+
+        // 静态维度返回编译期值，动态维度返回运行期值
+        return IS_DYNAMIC_DIM[dim] ? dynamic_shape[dim] : STATIC_SHAPE_6D[dim];
+    }
+
+    PTO_INTERNAL ConvTile() = default;
+
+    template <typename... Ints>
+    PTO_INTERNAL void SetDynamicShape(Ints... vals) {
+        static_assert(
+            sizeof...(vals) == DYNAMIC_DIM_COUNT, "Number of dynamic values does not match dynamic dimension count!");
+        static_assert((std::is_same_v<Ints, int> && ...), "Dynamic values must be int type!");
+
+        int idx = 0;
+        const int dynamic_vals[] = {vals...};
+        // 遍历所有维度，仅给动态维度赋值
+        for (int i = 0; i < MAX_SUPPORT_DIM; ++i) {
+            if (IS_DYNAMIC_DIM[i]) {
+                dynamic_shape[i] = dynamic_vals[idx++];
+            }
+        }
+    }
+    // 带动态值的构造：直接传入动态维度值，简化使用
+    template <typename... Ints>
+    PTO_INTERNAL explicit ConvTile(Ints... dynamic_vals) {
+        SetDynamicShape(dynamic_vals...);
+    }
+
+#ifdef __PTO_AUTO__
+    using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(BufferSize);
+#else
+    using TileDType = typename MemoryQualifier<Loc, DType>::type;
+#endif
+
+    AICORE TileDType &data() {
+        return data_;
+    }
+    AICORE const TileDType &data() const {
+        return data_;
+    }
+    template <typename T, typename AddrType>
+    friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
+private:
+    AICORE void assignData(TileDType data) {
+        data_ = data;
+    }
+    TileDType data_;
+};
+
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,
     const BLayout BFractal_ = BLayout::RowMajor, const int RowValid_ = Rows_, const int ColValid_ = Cols_,
     const SLayout SFractal_ = SLayout::NoneBox, const int SFractalSize_ = TileConfig::fractalABSize,
@@ -977,6 +1123,11 @@ template <typename T>
 constexpr bool is_boxed_tile =
     is_tile<T>::value && (is_tile<T>::layout_enum != SLayout::NoneBox);
 
+template<typename T>
+struct is_conv_tile : std::false_type {}; // 主模板
+template<TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, int... Shapes>
+struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shapes...>> : std::true_type {};
+
 template <typename tile_shape> struct is_Nz_layout {
   static constexpr bool value = !tile_shape::isRowMajor &&
                                 tile_shape::isBoxedLayout &&
@@ -995,6 +1146,7 @@ template <typename T> constexpr bool is_tile_data_v = is_tile<T>::value;
 
 template <typename T> constexpr bool is_boxed_data_v = is_boxed_tile<T>;
 
+template <typename T> constexpr bool is_conv_tile_v = is_conv_tile<T>::value;
 } // namespace pto
 
 #endif
