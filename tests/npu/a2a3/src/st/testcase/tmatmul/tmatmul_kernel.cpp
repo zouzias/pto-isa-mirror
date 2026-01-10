@@ -54,6 +54,19 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
     using TileMatBData = Tile<TileType::Mat, S, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
     using TileBiasData = Tile<TileType::Mat, B, 1, alignBiasN, BLayout::RowMajor, 1, alignBiasN>;
 
+    // ND[32,128]->5维 NC1HWC0[1,8,2,16,16]
+    ConvTile<TileType::Mat, U, 4096, Layout::NC1HWC0, 1, DYNAMIC, 2, DYNAMIC, 16> tile5d(8, 16);
+    ConvTile<TileType::Mat, U, 4096, Layout::NZ, M, K> tile2d;
+
+    ConvTile<TileType::Mat, U, 4096, Layout::NC1HWC0, 1, 8, 2, 16, 16> tile5dStatic;
+
+
+    static_assert(tile5d.STATIC_SHAPE_6D[0] == 1);   // 静态维度0
+    static_assert(tile5d.STATIC_SHAPE_6D[1] == -1); // 动态维度1（DYNAMIC=-1）
+    static_assert(tile5d.STATIC_SHAPE_6D[5] == 1);   // 补全的第5维为默认值1
+    static_assert(tile2d.GetShape(0) == M);
+    static_assert(tile2d.GetShape(1) == K);
+
     using LeftTile = TileLeft<U, M, K, validM, validK>;
     using RightTile = TileRight<S, K, N, validK, validN>;
     using AccTile = TileAcc<T, M, N, validM, validN>;
