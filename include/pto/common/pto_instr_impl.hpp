@@ -56,6 +56,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef _DEBUG
 #include "pto/npu/a2a3/TPrint.hpp"
 #endif
+#include "pto/npu/a2a3/TPOP.hpp"
+#include "pto/npu/a2a3/TPUSH.hpp"
 #include "pto/npu/a2a3/TRowExpand.hpp"
 #include "pto/npu/a2a3/TRowExpandAdd.hpp"
 #include "pto/npu/a2a3/TRowExpandDiv.hpp"

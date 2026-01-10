@@ -447,6 +447,24 @@ PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
   return {};
 }
 
+template <typename PipeCons, typename TileData, typename T,
+          typename... WaitEvents>
+PTO_INST RecordEvent TPOP(PipeCons &cons, TileData &dst, T *fifo_base,
+                          WaitEvents &...events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TPOP, cons, dst, fifo_base);
+  return {};
+}
+
+template <typename PipeProd, typename TileData, typename T,
+          typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(PipeProd &prod, TileData &src, T *fifo_base,
+                           WaitEvents &...events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TPUSH, prod, src, fifo_base);
+  return {};
+}
+
 template <typename TileDataD, typename TileDataS, typename... WaitEvents>
 PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEvents&... events) {
   TSYNC(events...);
