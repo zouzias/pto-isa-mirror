@@ -21,7 +21,7 @@ using namespace std;
 
 namespace pto {
 
-enum class BinOpsImpl : uint8_t {
+enum class BinOpsImpl : unsigned {
     BinOpsIMPL_DEFAULT = 0,
     BinOpsIMPL_1D_NO_POST_UPDATE = 1,
     BinOpsIMPL_2D_NO_POST_UPDATE = 2,
