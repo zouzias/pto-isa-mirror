@@ -55,7 +55,7 @@ void test_tload()
     }
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -84,7 +84,7 @@ void test_tload()
     aclrtFreeHost(srcHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<DataType> golden(dstDataSize);

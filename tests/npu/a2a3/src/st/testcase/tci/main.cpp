@@ -53,7 +53,7 @@ std::string GetGoldenDir() {
 template<typename T, uint32_t ROW, uint32_t COL, uint32_t descending, uint32_t start>
 void test_vci_b32() {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -86,7 +86,7 @@ void test_vci_b32() {
     aclrtFree(dstDevice);
     aclrtFreeHost(dstHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<int32_t> golden(FileSize);
@@ -102,7 +102,7 @@ void test_vci_b32() {
 template<typename T, uint32_t ROW, uint32_t COL, uint32_t descending, uint32_t start>
 void test_vci_b16() {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -135,7 +135,7 @@ void test_vci_b16() {
     aclrtFree(dstDevice);
     aclrtFreeHost(dstHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<int16_t> golden(FileSize);

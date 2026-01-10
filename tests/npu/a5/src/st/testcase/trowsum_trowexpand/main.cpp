@@ -44,7 +44,7 @@ void CONCAT(test_, CASENAME)() {
     size_t fileSize = kTRows_ * kTCols_ * sizeof(T);
  
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
  
@@ -78,7 +78,7 @@ void CONCAT(test_, CASENAME)() {
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
  
     std::vector<T> golden(fileSize);

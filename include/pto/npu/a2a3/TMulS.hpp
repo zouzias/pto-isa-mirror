@@ -18,6 +18,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto
 {
+    template <typename TileData>
+    inline constexpr bool kTMulSLayoutSupported =
+        TileData::isRowMajor || ((!TileData::isRowMajor) && (TileData::Cols == 1));
+
     template<typename T>
     struct MulSOp {
         PTO_INTERNAL static void BinSInstr(__ubuf__ T* dst, __ubuf__ T* src0, T src1, uint8_t repeats) {
@@ -52,7 +56,7 @@ namespace pto
                       std::is_same<typename TileData::DType, float>::value ||
                       std::is_same<typename TileData::DType, float32_t>::value,
                       "TMULS: Invalid data type");
-        static_assert(TileData::isRowMajor, "TMULS: not supported Layout type.");
+        static_assert(kTMulSLayoutSupported<TileData>, "TMULS: not supported Layout type.");
         static_assert(TileData::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
         static_assert(TileData::ValidCol <= TileData::Cols, "Number of valid columns must not be greater than number of tile columns.");
         static_assert(TileData::ValidRow <= TileData::Rows, "Number of valid rows must not be greater than number of tile rows.");
@@ -96,6 +100,8 @@ namespace pto
                       std::is_same<T, float16_t>::value || std::is_same<T, float>::value ||
                       std::is_same<T, float32_t>::value, "TMULS: Invalid data type");
 
+        static_assert(kTMulSLayoutSupported<TileDataDst> && kTMulSLayoutSupported<TileDataSrc>,
+            "TMULS: not supported Layout type.");
         static_assert(TileDataSrc::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
 
         PTO_ASSERT(src.GetValidCol() == dst.GetValidCol(), "Number of cols of src and dst must be the same.");

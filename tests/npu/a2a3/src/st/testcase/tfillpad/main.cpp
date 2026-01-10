@@ -57,7 +57,7 @@ void tfillpad_test() {
     uint32_t N = 1024;
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -119,7 +119,7 @@ void tfillpad_test() {
     aclrtFreeHost(goldHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     int elements = actual_out_byteSize / sizeof(T);

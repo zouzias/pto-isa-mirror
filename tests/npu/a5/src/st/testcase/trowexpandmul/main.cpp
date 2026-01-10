@@ -44,7 +44,7 @@ void test_trowexpandmul() {
     size_t outputFileSize = dstRow * dstCol * sizeof(T);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -84,7 +84,7 @@ void test_trowexpandmul() {
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(outputFileSize);

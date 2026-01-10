@@ -46,7 +46,7 @@ void TLOADMXFUNC()
     size_t cFileSize = BASEM * BASEK * sizeof(T);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -82,7 +82,7 @@ void TLOADMXFUNC()
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(cFileSize);

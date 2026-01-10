@@ -145,7 +145,7 @@ if __name__ == '__main__':
         ('TFATest.case_float_H_128_S0_64_S1_512', (S0_BASE, HEAD_SIZE, 512)),
         ('TFATest.case_float_H_128_S0_128_S1_512', (128, HEAD_SIZE, 512)),
         ('TFATest.case_float_H_128_S0_128_S1_2048', (128, HEAD_SIZE, 2048)),
-        # ('TFATest.case_float_H_128_S0_128_S1_8192', (128, HEAD_SIZE, 8192)),
+        ('TFATest.case_float_H_128_S0_128_S1_8192', (128, HEAD_SIZE, 8192)),
     ]
     for name, (s0, head_size, s1) in cases:
         case_dir = os.path.join(script_dir, name)

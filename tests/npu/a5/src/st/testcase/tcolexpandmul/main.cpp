@@ -41,7 +41,7 @@ void test_tcolexpandmul() {
     size_t outputFileSize = dstRow * dstCol * sizeof(T);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -77,7 +77,7 @@ void test_tcolexpandmul() {
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(outputFileSize);

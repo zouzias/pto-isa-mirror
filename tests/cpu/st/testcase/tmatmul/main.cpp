@@ -44,7 +44,7 @@ void tmatmul_test(uint32_t M, uint32_t K, uint32_t N)
     size_t cFileSize = M * N * sizeof(T);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -79,7 +79,7 @@ void tmatmul_test(uint32_t M, uint32_t K, uint32_t N)
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(cFileSize);
@@ -114,7 +114,7 @@ TEST_F(TMATMULTest, case3)
     size_t cFileSize = M * N * sizeof(float);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -149,7 +149,7 @@ TEST_F(TMATMULTest, case3)
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(cFileSize);
@@ -177,7 +177,7 @@ void tmatmul_bias_test(uint32_t M, uint32_t K, uint32_t N)
     size_t biasFileSize = 1 * N * sizeof(B);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -219,7 +219,7 @@ void tmatmul_bias_test(uint32_t M, uint32_t K, uint32_t N)
     aclrtFreeHost(src1Host);
     aclrtFreeHost(src2Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(cFileSize);

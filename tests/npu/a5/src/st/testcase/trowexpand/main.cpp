@@ -41,7 +41,7 @@ void test_trowexpand() {
     size_t outputFileSize = rows * dstCols * sizeof(T);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -71,7 +71,7 @@ void test_trowexpand() {
     aclrtFreeHost(src0Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(outputFileSize);

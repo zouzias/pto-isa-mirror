@@ -42,7 +42,7 @@ void test_tsels() {
     size_t scalarFileSize = sizeof(uint8_t);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -82,7 +82,7 @@ void test_tsels() {
     aclrtFreeHost(src1Host);
     aclrtFreeHost(srcScalarHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(fileSize);

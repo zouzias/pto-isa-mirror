@@ -41,7 +41,7 @@ bool TRowExpandFramework()
     size_t outputFileSize = rows * dstCols * sizeof(T);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -72,7 +72,7 @@ bool TRowExpandFramework()
     aclrtFreeHost(src0Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(outputFileSize);

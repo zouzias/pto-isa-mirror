@@ -44,7 +44,7 @@ bool TCOLMaxTestFramework()
     size_t srcByteSize = src_validRow * cols * sizeof(T);
     
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -75,7 +75,7 @@ bool TCOLMaxTestFramework()
     aclrtFreeHost(srcHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(dstByteSize);

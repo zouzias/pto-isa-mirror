@@ -45,7 +45,7 @@ void tMovL12Bias(uint32_t m, uint32_t n, uint32_t k)
     size_t biasFileSize = n * sizeof(BiasType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -86,7 +86,7 @@ void tMovL12Bias(uint32_t m, uint32_t n, uint32_t k)
     aclrtFreeHost(src1Host);
     aclrtFreeHost(src2Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<CType> golden(cFileSize);
@@ -108,7 +108,7 @@ void tMovL12Fb(uint32_t m, uint32_t n, uint32_t k)
     size_t quantFileSize = n * sizeof(QuantType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -149,7 +149,7 @@ void tMovL12Fb(uint32_t m, uint32_t n, uint32_t k)
     aclrtFreeHost(src1Host);
     aclrtFreeHost(src2Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<CType> golden(cFileSize);

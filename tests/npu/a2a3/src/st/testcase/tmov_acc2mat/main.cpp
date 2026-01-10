@@ -49,7 +49,7 @@ void tmov_acc2mat_nz2nz_test(uint32_t M, uint32_t K, uint32_t N)
     size_t cFileSize = M * N * sizeof(CType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -84,7 +84,7 @@ void tmov_acc2mat_nz2nz_test(uint32_t M, uint32_t K, uint32_t N)
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<CType> golden(cFileSize);
@@ -105,7 +105,7 @@ void tmov_acc2mat_nz2nz_fb_quant_test(uint32_t M, uint32_t K, uint32_t N)
     size_t FBQuantFileSize = N * sizeof(QuantType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -144,7 +144,7 @@ void tmov_acc2mat_nz2nz_fb_quant_test(uint32_t M, uint32_t K, uint32_t N)
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<CType> golden(cFileSize);
@@ -165,7 +165,7 @@ void tmov_acc2mat_nz2nz_sc_quant_test(uint32_t M, uint32_t K, uint32_t N)
     size_t cFileSize = M * N * sizeof(CType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -200,7 +200,7 @@ void tmov_acc2mat_nz2nz_sc_quant_test(uint32_t M, uint32_t K, uint32_t N)
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<CType> golden(cFileSize);

@@ -39,7 +39,7 @@ void test_mgather()
     const size_t outBytes = kTileRows * kTileCols * sizeof(float);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -77,7 +77,7 @@ void test_mgather()
     aclrtFreeHost(outHost);
     aclrtFreeHost(idxHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(outBytes / sizeof(float));

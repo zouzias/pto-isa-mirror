@@ -38,13 +38,13 @@ public:
 protected:
   void SetUp() override {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtCreateStream(&stream);
   }
 
   void TearDown() override {
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
   }
 

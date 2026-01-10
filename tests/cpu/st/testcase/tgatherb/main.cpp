@@ -41,7 +41,7 @@ void test_tgatherb() {
     size_t offsetFileSize = offsetS1 * offsetS0 * 4;
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -76,7 +76,7 @@ void test_tgatherb() {
     aclrtFreeHost(srcHost);
     aclrtFreeHost(offsetHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(dstFileSize);

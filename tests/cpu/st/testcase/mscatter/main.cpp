@@ -39,7 +39,7 @@ void test_mscatter()
     const size_t idxBytes = kTileRows * kTileCols * sizeof(uint32_t);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -80,7 +80,7 @@ void test_mscatter()
     aclrtFreeHost(srcHost);
     aclrtFreeHost(idxHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(dstBytes / sizeof(float));

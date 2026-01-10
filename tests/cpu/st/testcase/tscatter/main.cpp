@@ -37,7 +37,7 @@ void test_tscatter() {
     const size_t idxBytes = kTRows_ * kTCols_ * sizeof(uint16_t);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -76,7 +76,7 @@ void test_tscatter() {
     aclrtFreeHost(srcHost);
     aclrtFreeHost(idxHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(tileBytes / sizeof(float));

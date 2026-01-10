@@ -43,7 +43,7 @@ template <uint32_t caseId, typename T, typename TI, uint32_t SRC0ROW, uint32_t S
 bool TScatterTestFramework()
 {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -85,7 +85,7 @@ bool TScatterTestFramework()
     aclrtFreeHost(indHost);
     
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(dstByteSize);

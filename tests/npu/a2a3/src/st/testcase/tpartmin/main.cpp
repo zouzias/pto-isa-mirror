@@ -47,7 +47,7 @@ template <typename T,
 bool TPartMinTest()
 {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -92,7 +92,7 @@ bool TPartMinTest()
     aclrtFree(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(dstByteSize);

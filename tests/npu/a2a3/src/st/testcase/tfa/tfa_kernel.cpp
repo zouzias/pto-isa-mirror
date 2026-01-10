@@ -222,6 +222,7 @@ PTO_INLINE AICORE void compute_qk(int tile_idx, __gm__ half *q, __gm__ half *k, 
             GlobalDataQK qkGlobalTile(qk_out + base_elems);
             TSTORE(qkGlobalTile, qkAccTile);
         }
+        pipe_barrier(PIPE_ALL);
 
         ffts_cross_core_sync(PIPE_FIX, getFFTSMsg(0x2, BUF0_QK_READY)); // notify for QK produce data
     }
@@ -295,6 +296,7 @@ PTO_INLINE AICORE void compute_pv(int tile_idx, __gm__ half *p_out, __gm__ half 
             GlobalDataPV pvGlobalTile((__gm__ float *)(pv_out  + base_elems));
             TSTORE(pvGlobalTile, pvAccTile);
         }
+        pipe_barrier(PIPE_ALL);
         ffts_cross_core_sync(PIPE_FIX, getFFTSMsg(0x2, UPDATE_READY)); // notify update produce data
     }
 }
@@ -372,6 +374,7 @@ PTO_INLINE AICORE void compute_p(int tile_idx, bool initFlag, __gm__ float *qk_o
             GlobalPTileHalf pTileHalf((__gm__ half *)(p_ptr));
             TSTORE(pTileHalf, x_expT);
         }
+        pipe_barrier(PIPE_ALL);
 
         ffts_cross_core_sync(PIPE_MTE3, getFFTSMsg(0x2, BUF1_SM_READY)); // notify softmax produce data
 
@@ -392,6 +395,7 @@ PTO_INLINE AICORE void compute_p(int tile_idx, bool initFlag, __gm__ float *qk_o
             GlobalExpT gexp((__gm__ float *)(exp_max_out + expOffsetElems + Vec_S0 * get_subblockid()));
             TSTORE(gexp, l1_exp_max);
         }
+        pipe_barrier(PIPE_ALL);
 
         set_flag(PIPE_MTE3, PIPE_V, pTileEventId);
         //pipe_barrier(PIPE_ALL);
@@ -414,12 +418,58 @@ PTO_INLINE AICORE void compute_gu(int tile_idx, int num_tiles_s1, __gm__ float *
         const size_t base_elems =
                 static_cast<size_t>(buf_idx) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(HEAD_SIZE);
 
-        __gm__ float *pv_out_ptr = pv_out + base_elems + Vec_S0 * HEAD_SIZE * get_subblockid();
         if constexpr (INTERMEDIATE_CHECK) {
             size_t partialOffsetElemsVec =
                 static_cast<size_t>(tile_idx) * static_cast<size_t>(S0) * static_cast<size_t>(HEAD_SIZE);
-            pv_out_ptr += partialOffsetElemsVec;
+            __gm__ float *pv_out_ptr = pv_out + partialOffsetElemsVec + Vec_S0 * HEAD_SIZE * get_subblockid();
+            GlobalDataPV_VEC pvGlobalVec(pv_out_ptr);
+
+            wait_flag_dev(UPDATE_READY); // wait for update consume data
+            wait_flag(PIPE_V, PIPE_MTE2, guEventId);
+
+            if (tile_idx == 0) {
+                TLOAD(runningOTile, pvGlobalVec);
+                set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            } else {
+                TLOAD(pvVecTile, pvGlobalVec);
+                set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+                if (tile_idx < num_tiles_s1 - 1) {
+                    pto_macro_fa_gu<ReduceTileF_T, TileOutT>(runningOTile, pvVecTile, l1_exp_max);
+                } else {
+                    pto_macro_fa_gu_last<ReduceTileF_T, TileOutT>(runningOTile, pvVecTile, l1_exp_max, l2_global_sum);
+                }
+            }
+
+            set_flag(PIPE_V, PIPE_MTE2, guEventId);
+            ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(0x2, UPDATE_CONSUMED)); // notify update consume data
+
+            if (tile_idx == num_tiles_s1 - 1) {
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                using GlobalOutT =
+                    GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
+                GlobalOutT outGlobal((__gm__ float *)(o_out + Vec_S0 * HEAD_SIZE * get_subblockid()));
+                TSTORE(outGlobal, runningOTile);
+            }
+
+            if constexpr (INTERMEDIATE_CHECK) {
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                size_t oPartOffsetElems =
+                    static_cast<size_t>(tile_idx) * static_cast<size_t>(S0) * static_cast<size_t>(HEAD_SIZE);
+                using GlobalOutPartT =
+                    GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
+                GlobalOutPartT outPartGM(
+                    (__gm__ float *)(o_parts_out + oPartOffsetElems + Vec_S0 * HEAD_SIZE * get_subblockid()));
+                TSTORE(outPartGM, runningOTile);
+            }
+
+            return;
         }
+        __gm__ float *pv_out_ptr = pv_out + base_elems + Vec_S0 * HEAD_SIZE * get_subblockid();
 
         GlobalDataPV_VEC pvGlobalVec(pv_out_ptr);
 

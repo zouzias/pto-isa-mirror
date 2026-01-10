@@ -43,7 +43,7 @@ template <uint32_t caseId, typename T, int row, int vaildRow, int col, int srcVa
 bool TMulSTestFramework()
 {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -82,7 +82,7 @@ bool TMulSTestFramework()
     aclrtFreeHost(srcHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(dstByteSize);

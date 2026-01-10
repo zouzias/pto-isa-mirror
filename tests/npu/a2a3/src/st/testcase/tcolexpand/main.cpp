@@ -46,7 +46,7 @@ bool TCOLEXPANDTestFramework()
     size_t srcByteSize = src_row * src_col * sizeof(T);
     
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -78,7 +78,7 @@ bool TCOLEXPANDTestFramework()
     aclrtFreeHost(srcHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(dstByteSize);

@@ -41,7 +41,7 @@ template<typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void test_setgetval()
 {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -64,7 +64,7 @@ void test_setgetval()
     aclrtFreeHost(srcHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     bool res = false;

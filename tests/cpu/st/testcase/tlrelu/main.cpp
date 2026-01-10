@@ -45,7 +45,7 @@ void test_tlrelu() {
     size_t scalarSize = sizeof(T);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -78,7 +78,7 @@ void test_tlrelu() {
     aclrtFreeHost(srcHost);
     aclrtFreeHost(scalarHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(fileSize);

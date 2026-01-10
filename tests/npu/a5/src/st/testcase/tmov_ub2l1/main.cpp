@@ -38,7 +38,7 @@ template <int32_t testKey, typename dType>
 void testTMovUb2L1(int32_t srcRows, int32_t srcCols, int32_t dstRows, int32_t dstCols)
 {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -65,7 +65,7 @@ void testTMovUb2L1(int32_t srcRows, int32_t srcCols, int32_t dstRows, int32_t ds
     aclrtFreeHost(dstHost);
     aclrtFreeHost(srcHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<dType> golden(dstByteSize);

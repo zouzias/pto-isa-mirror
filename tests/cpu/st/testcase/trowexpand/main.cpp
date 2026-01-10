@@ -35,14 +35,14 @@ static std::string GetGoldenDir()
 static void setup_stream(aclrtStream &stream)
 {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtCreateStream(&stream);
 }
 
 static void teardown_stream(aclrtStream stream)
 {
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 }
 

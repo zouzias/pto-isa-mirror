@@ -41,7 +41,7 @@ template <typename T, pto::MaskPattern PATTERN, uint32_t ROW, uint32_t COL>
 void test_gather()
 {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -77,7 +77,7 @@ void test_gather()
     aclrtFreeHost(dstHost);
     aclrtFreeHost(src0Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(dstSize);
@@ -208,7 +208,7 @@ TEST_F(TGATHERTest, case_1D_float_32x1024_16x64)
     size_t dstFileSize = 16 * 64 * sizeof(float);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -246,7 +246,7 @@ TEST_F(TGATHERTest, case_1D_float_32x1024_16x64)
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(dstFileSize);
@@ -266,7 +266,7 @@ TEST_F(TGATHERTest, case_1D_int32_32x512_16x256)
     size_t dstFileSize = 16 * 256 * sizeof(int32_t);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -304,7 +304,7 @@ TEST_F(TGATHERTest, case_1D_int32_32x512_16x256)
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<int32_t> golden(dstFileSize);
@@ -324,7 +324,7 @@ TEST_F(TGATHERTest, case_1D_half_16x1024_16x128)
     size_t dstFileSize = 16 * 128 * sizeof(int16_t);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -362,7 +362,7 @@ TEST_F(TGATHERTest, case_1D_half_16x1024_16x128)
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<aclFloat16> golden(dstFileSize);
@@ -382,7 +382,7 @@ TEST_F(TGATHERTest, case_1D_int16_32x256_32x64)
     size_t dstFileSize = 32 * 64 * sizeof(int16_t);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -420,7 +420,7 @@ TEST_F(TGATHERTest, case_1D_int16_32x256_32x64)
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<int16_t> golden(dstFileSize);

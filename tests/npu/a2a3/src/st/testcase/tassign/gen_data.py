@@ -14,7 +14,9 @@ import os
 
 
 def main():
-    return
+    # This testcase doesn't need binary goldens, but the parallel runner expects
+    # the per-gtest directory to exist under the build folder.
+    os.makedirs("TASSIGNTest.case1", exist_ok=True)
 
 
 if __name__ == "__main__":

@@ -43,7 +43,7 @@ template<typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void test_tshl() {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -78,7 +78,7 @@ void test_tshl() {
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(fileSize);

@@ -129,7 +129,7 @@ void TMrgsortMulti()
     std::vector<DataType *> deviceList;
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -147,7 +147,7 @@ void TMrgsortMulti()
 
     aclrtDestroyStream(stream);
 
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<DataType> golden(outputFileSize / sizeof(DataType));
@@ -171,7 +171,7 @@ void TMrgsortSingle()
     size_t outputFileSize = kGRows_ * kGCols_ * sizeof(DataType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -202,7 +202,7 @@ void TMrgsortSingle()
     aclrtFreeHost(src0Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<DataType> golden(outputFileSize / sizeof(DataType));
@@ -222,7 +222,7 @@ void TMrgsortTopk()
     size_t outputFileSize = kGRows_ * kGCols_ * sizeof(DataType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -253,7 +253,7 @@ void TMrgsortTopk()
     aclrtFreeHost(src0Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<DataType> golden(outputFileSize / sizeof(DataType));

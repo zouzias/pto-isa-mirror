@@ -38,7 +38,7 @@ template <int32_t testKey, typename dType>
 void tsort32_test(int32_t rows, int32_t cols, int32_t colsAlign)
 {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -86,7 +86,7 @@ void tsort32_test(int32_t rows, int32_t cols, int32_t colsAlign)
     aclrtFreeHost(tmpHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<dType> golden(dstByteSize);

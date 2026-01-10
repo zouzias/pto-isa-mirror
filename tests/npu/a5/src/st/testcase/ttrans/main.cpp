@@ -43,7 +43,7 @@ TEST_F(TTRANSTest, case1)
     size_t dstFileSize = M * N * sizeof(float);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -79,7 +79,7 @@ TEST_F(TTRANSTest, case1)
     aclrtFreeHost(srcHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(dstFileSize);

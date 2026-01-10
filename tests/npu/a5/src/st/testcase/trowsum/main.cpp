@@ -43,7 +43,7 @@ namespace TRowSumTest {
         size_t outputFileSize = fileSize;
 
         aclInit(nullptr);
-        aclrtSetDevice(0);
+        aclrtSetDevice(GetDeviceId());
 
         aclrtStream stream;
         aclrtCreateStream(&stream);
@@ -76,7 +76,7 @@ namespace TRowSumTest {
         aclrtFreeHost(srcHost);
 
         aclrtDestroyStream(stream);
-        aclrtResetDevice(0);
+        aclrtResetDevice(GetDeviceId());
         aclFinalize();
 
         std::vector<float> golden(outputFileSize);

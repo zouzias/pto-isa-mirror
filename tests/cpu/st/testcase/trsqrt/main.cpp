@@ -33,7 +33,7 @@ TEST_F(TRSQRT_Test, case_float_64x64)
     const size_t size = static_cast<size_t>(kRows) * static_cast<size_t>(kCols) * sizeof(float);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -58,7 +58,7 @@ TEST_F(TRSQRT_Test, case_float_64x64)
     aclrtFreeHost(dstHost);
     aclrtFreeHost(srcHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<float> golden(static_cast<size_t>(kRows) * static_cast<size_t>(kCols));

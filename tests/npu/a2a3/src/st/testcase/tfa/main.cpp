@@ -57,7 +57,7 @@ void run_tfa() {
     size_t kSize = HEAD_SIZE * S1 * sizeof(aclFloat16);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -405,7 +405,7 @@ void run_tfa() {
     aclrtFreeHost(gSumHost);
     aclrtFreeHost(expMaxHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
 }

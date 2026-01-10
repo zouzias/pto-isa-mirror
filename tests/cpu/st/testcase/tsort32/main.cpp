@@ -38,7 +38,7 @@ template <typename T0, typename T1, int kGRows, int kGCols, int kTRows, int kTCo
 bool TSort32Test()
 {
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -84,7 +84,7 @@ bool TSort32Test()
     aclrtFree(idxHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T0> golden(dstByteSize);

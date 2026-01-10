@@ -46,7 +46,7 @@ void test_tcmp() {
     size_t file_size_dst = kTRows_ * kTCols_ / 8;
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -83,7 +83,7 @@ void test_tcmp() {
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<uint8_t> golden(kGRows_ * kGCols_);

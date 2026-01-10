@@ -15,6 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdio>
 #include <string>
 #include <cassert>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cmath>
@@ -55,6 +58,28 @@ typedef enum {
     COMPLEX128 = 17,
     BF16 = 27
 } printDataType;
+
+inline int GetDeviceId()
+{
+    const char *keys[] = {"PTO_ST_DEVICE_ID", "PTO_DEVICE_ID", "ACL_DEVICE_ID", "DEVICE_ID"};
+    for (const char *key : keys) {
+        const char *val = std::getenv(key);
+        if (val == nullptr || val[0] == '\0') {
+            continue;
+        }
+        errno = 0;
+        char *end = nullptr;
+        long id = std::strtol(val, &end, 10);
+        if (errno != 0 || end == nullptr || *end != '\0') {
+            continue;
+        }
+        if (id < 0 || id > INT_MAX) {
+            continue;
+        }
+        return static_cast<int>(id);
+    }
+    return 0;
+}
 
 bool ReadFile(const std::string &filePath, size_t &fileSize, void *buffer, size_t bufferSize)
 {

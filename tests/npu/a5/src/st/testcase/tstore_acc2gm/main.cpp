@@ -56,7 +56,7 @@ void test_tstore_acc2gm_nz2nd()
     size_t cFileSize = validM * validN * sizeof(dstDataType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -93,7 +93,7 @@ void test_tstore_acc2gm_nz2nd()
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<dstDataType> golden(cFileSize);
@@ -113,7 +113,7 @@ void test_tstore_acc2gm_nz2nz()
     size_t cFileSize = validM * validN * sizeof(dstDataType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -149,7 +149,7 @@ void test_tstore_acc2gm_nz2nz()
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<dstDataType> golden(cFileSize);
@@ -169,7 +169,7 @@ void test_tstore_acc2gm_scalar_nz2nd(float scalarQuant)
     size_t cFileSize = validM * validN * sizeof(dstDataType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -205,7 +205,7 @@ void test_tstore_acc2gm_scalar_nz2nd(float scalarQuant)
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<dstDataType> golden(cFileSize);
@@ -225,7 +225,7 @@ void test_tstore_acc2gm_scalar_nz2nz(float scalarQuant)
     size_t cFileSize = validM * validN * sizeof(dstDataType);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -261,7 +261,7 @@ void test_tstore_acc2gm_scalar_nz2nz(float scalarQuant)
     aclrtFreeHost(src1Host);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<dstDataType> golden(cFileSize);
@@ -284,7 +284,7 @@ void test_tstore_acc2gm_vector_nz2nd()
     size_t fbFileSize = alignFbN * sizeof(ScalingT);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -332,7 +332,7 @@ void test_tstore_acc2gm_vector_nz2nd()
     aclrtFreeHost(quantTensorHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<dstDataType> golden(cFileSize);
@@ -355,7 +355,7 @@ void test_tstore_acc2gm_vector_nz2nz()
     size_t fbFileSize = alignFbN * sizeof(ScalingT);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
 
     aclrtStream stream;
     aclrtCreateStream(&stream);
@@ -403,7 +403,7 @@ void test_tstore_acc2gm_vector_nz2nz()
     aclrtFreeHost(quantTensorHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<dstDataType> golden(cFileSize);

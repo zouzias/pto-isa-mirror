@@ -18,6 +18,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Empty, Queue
@@ -137,6 +138,18 @@ def _get_free_devices(env, requested=None):
     return free
 
 
+def _get_ok_devices(env, requested=None):
+    devices, _ = _npu_smi_info(env)
+    ok = []
+    for npu_id, info in sorted(devices.items()):
+        if requested is not None and npu_id not in requested:
+            continue
+        if info.get("health") != "OK":
+            continue
+        ok.append(npu_id)
+    return ok
+
+
 def _extract_a3_testcases():
     cmake_path = Path("tests/npu/a2a3/src/st/testcase/CMakeLists.txt")
     text = cmake_path.read_text(encoding="utf-8", errors="ignore")
@@ -174,21 +187,110 @@ def _gen_all_goldens(env, testcases):
         _run([sys.executable, "gen_data.py"], cwd=str(build_dir), env=env, timeout_sec=600)
 
 
-def _run_one_binary(env, device_id, testcase, timeout_sec, log_dir):
+def _sanitize_filename(s, limit=180):
+    s = re.sub(r"[^A-Za-z0-9._-]+", "_", str(s))
+    if len(s) > limit:
+        return s[:limit]
+    return s
+
+
+def _parse_gtest_list(text):
+    tests = []
+    current_suite = None
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        if not line.startswith(" "):  # suite line like "TMULSTest."
+            current_suite = line.strip()
+            continue
+        if current_suite is None:
+            continue
+        test_name = line.strip().split("#", 1)[0].strip()
+        if not test_name:
+            continue
+        tests.append(f"{current_suite}{test_name}")
+    return tests
+
+
+def _list_gtests(env, testcase):
     st_dir = Path("tests/npu/a2a3/src/st")
     bin_dir = st_dir / "build" / "bin"
     exe = (bin_dir / testcase).resolve()
     if not exe.exists():
         raise FileNotFoundError(f"missing binary: {exe}")
+    out = _run([str(exe), "--gtest_list_tests"], cwd=str(bin_dir), env=env, capture=True, timeout_sec=120)
+    tests = _parse_gtest_list(out)
+    if not tests:
+        raise RuntimeError(f"no gtests found in {exe} (unexpected empty --gtest_list_tests)")
+    return tests
+
+
+def _prepare_sandbox(env, testcase, gtest_filter, attempt, work_dir):
+    """
+    Create an isolated per-task sandbox so tests can freely write temporary output
+    files without polluting the shared build/ golden directories.
+
+    Layout:
+      <work_dir>/<task_tag>_try<attempt>/
+        bin/<testcase>  (symlink to build/bin/<testcase>)
+        <Suite.case>/   (copied golden folder for that gtest case)
+    """
+    st_dir = Path("tests/npu/a2a3/src/st")
+    build_dir = st_dir / "build"
+    bin_dir = build_dir / "bin"
+    exe_src = (bin_dir / testcase).resolve()
+    if not exe_src.exists():
+        raise FileNotFoundError(f"missing binary: {exe_src}")
+
+    task_name = testcase if not gtest_filter else f"{testcase}::{gtest_filter}"
+    task_tag = _sanitize_filename(task_name)
+    sandbox_root = (Path(work_dir) / f"{task_tag}_try{attempt}").resolve()
+    sandbox_bin = sandbox_root / "bin"
+    sandbox_bin.mkdir(parents=True, exist_ok=True)
+
+    exe_dst = sandbox_bin / testcase
+    if not exe_dst.exists():
+        os.symlink(str(exe_src), str(exe_dst))
+
+    case_dirs = [gtest_filter] if gtest_filter else _list_gtests(env, testcase)
+    for case_dir in case_dirs:
+        src_dir = (build_dir / case_dir).resolve()
+        if not src_dir.exists():
+            raise FileNotFoundError(f"missing golden dir: {src_dir}")
+        dst_dir = sandbox_root / case_dir
+        shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
+
+    return sandbox_root, sandbox_bin
+
+
+def _run_one_binary(env, device_id, testcase, timeout_sec, log_dir, gtest_filter=None, attempt=1, work_dir=None):
+    st_dir = Path("tests/npu/a2a3/src/st")
+    build_bin_dir = st_dir / "build" / "bin"
+
+    sandbox_root = None
+    sandbox_bin_dir = None
+    if work_dir:
+        sandbox_root, sandbox_bin_dir = _prepare_sandbox(env, testcase, gtest_filter, attempt, work_dir)
+        bin_dir = sandbox_bin_dir
+    else:
+        bin_dir = build_bin_dir
+
+    exe = (bin_dir / testcase).resolve()
+    if not exe.exists():
+        raise FileNotFoundError(f"missing binary: {exe}")
 
     run_env = dict(env)
-    # Map the chosen physical device to logical device 0 for code paths that call `aclrtSetDevice(0)`.
-    run_env["ASCEND_RT_VISIBLE_DEVICES"] = str(device_id)
-    run_env["ASCEND_VISIBLE_DEVICES"] = str(device_id)
-    run_env["DEVICE_ID"] = "0"
-    run_env["ACL_DEVICE_ID"] = "0"
+    # Select the physical device explicitly (tests should read one of these env vars).
+    run_env["PTO_ST_DEVICE_ID"] = str(device_id)
+    run_env["DEVICE_ID"] = str(device_id)
+    run_env["ACL_DEVICE_ID"] = str(device_id)
+    # Avoid relying on any pre-set visibility mapping that could renumber devices.
+    run_env.pop("ASCEND_RT_VISIBLE_DEVICES", None)
+    run_env.pop("ASCEND_VISIBLE_DEVICES", None)
 
-    log_path = Path(log_dir) / f"a3_npu_{testcase}_dev{device_id}.log"
+    task_name = testcase if not gtest_filter else f"{testcase}::{gtest_filter}"
+    log_tag = _sanitize_filename(task_name)
+    log_path = Path(log_dir) / f"a3_npu_{log_tag}_dev{device_id}_try{attempt}.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     start = time.time()
@@ -197,8 +299,13 @@ def _run_one_binary(env, device_id, testcase, timeout_sec, log_dir):
     npu_health = "UNKNOWN"
 
     with open(log_path, "w", encoding="utf-8", errors="ignore") as logf:
+        if sandbox_root:
+            logf.write(f"[SANDBOX] {sandbox_root}\n")
+        cmd = [str(exe)]
+        if gtest_filter:
+            cmd.append(f"--gtest_filter={gtest_filter}")
         proc = subprocess.Popen(
-            [str(exe)],
+            cmd,
             cwd=str(bin_dir),
             env=run_env,
             stdout=logf,
@@ -254,10 +361,13 @@ def _run_one_binary(env, device_id, testcase, timeout_sec, log_dir):
 
     return {
         "testcase": testcase,
+        "task": task_name,
+        "gtest_filter": gtest_filter or "",
         "device": device_id,
         "rc": proc.returncode,
         "elapsed_sec": elapsed,
         "log": str(log_path),
+        "work_dir": str(sandbox_root) if sandbox_root else "",
         "pid": proc.pid,
         "npu_seen": npu_seen,
         "max_mem_mb": max_mem_mb,
@@ -282,25 +392,49 @@ def main():
     ap.add_argument("--jobs", type=int, default=int(os.environ.get("PTO_ST_JOBS", "32")), help="make -j")
     ap.add_argument("--timeout-sec", type=int, default=int(os.environ.get("PTO_ST_TIMEOUT_SEC", "600")),
                     help="per-testcase binary timeout (detect deadlock)")
+    ap.add_argument("--split-gtest", action="store_true",
+                    help="split each testcase binary into per-gtest tasks (improves load balance across NPUs)")
+    ap.add_argument("--golden-workers", type=int, default=int(os.environ.get("PTO_ST_GOLDEN_WORKERS", "0")),
+                    help="0 means auto; parallelism for golden generation (gen_data.py)")
     ap.add_argument("--max-workers", type=int, default=0, help="0 means use all free NPUs")
     ap.add_argument("--devices", default="", help="comma-separated physical NPU ids to use (default: auto-detect free)")
+    ap.add_argument("--include-busy-devices", action="store_true",
+                    help="use all OK NPUs even if currently busy (wait/retry until idle)")
     ap.add_argument("--log-dir", default="/tmp/pto-isa-st-logs", help="where to write per-testcase logs")
+    ap.add_argument("--work-dir", default="/tmp/pto-isa-st-work",
+                    help="per-task sandbox root (each test runs in its own folder)")
     ap.add_argument("--device-idle-wait-sec", type=int, default=int(os.environ.get("PTO_ST_DEVICE_IDLE_WAIT_SEC", "30")),
                     help="wait for a device to become idle between tests (helps recover after kill)")
+    ap.add_argument("--device-busy-backoff-sec", type=float, default=float(os.environ.get("PTO_ST_DEVICE_BUSY_BACKOFF_SEC", "1.0")),
+                    help="sleep before retrying a busy device (only affects scheduling, not correctness)")
     args = ap.parse_args()
 
     env = _source_ascend_env()
+    run_id = os.environ.get("PTO_ST_RUN_ID") or f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{uuid.uuid4().hex[:8]}"
+    log_dir = (Path(args.log_dir) / run_id).resolve()
+    work_dir = (Path(args.work_dir) / run_id).resolve()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[INFO] run_id={run_id}")
+    print(f"[INFO] log_dir={log_dir}")
+    print(f"[INFO] work_dir={work_dir}")
+    sys.stdout.flush()
 
     requested = None
     if args.devices.strip():
         requested = {int(x) for x in args.devices.split(",") if x.strip() != ""}
 
-    free = _get_free_devices(env, requested=requested)
-    if not free:
-        raise RuntimeError("No free NPUs with Health=OK found (or all requested NPUs are busy).")
+    if args.include_busy_devices:
+        usable = _get_ok_devices(env, requested=requested)
+        if not usable:
+            raise RuntimeError("No NPUs with Health=OK found (or all requested NPUs are unhealthy).")
+    else:
+        usable = _get_free_devices(env, requested=requested)
+        if not usable:
+            raise RuntimeError("No free NPUs with Health=OK found (or all requested NPUs are busy).")
 
-    workers = len(free) if args.max_workers == 0 else min(args.max_workers, len(free))
-    devices = free[:workers]
+    workers = len(usable) if args.max_workers == 0 else min(args.max_workers, len(usable))
+    devices = usable[:workers]
     print(f"[INFO] using NPUs: {devices} (workers={workers})")
     sys.stdout.flush()
 
@@ -312,9 +446,43 @@ def main():
     sys.stdout.flush()
     _build_all_a3(env, jobs=args.jobs)
 
-    print("[INFO] generating golden data for all testcases (sequential)...")
+    golden_workers = args.golden_workers
+    if golden_workers <= 0:
+        golden_workers = min(max(1, os.cpu_count() or 1), 16)
+
+    print(f"[INFO] generating golden data for all testcases (parallel workers={golden_workers})...")
     sys.stdout.flush()
-    _gen_all_goldens(env, testcases)
+    st_dir = Path("tests/npu/a2a3/src/st")
+    build_dir = st_dir / "build"
+    if not build_dir.exists():
+        raise FileNotFoundError(f"build dir not found: {build_dir}")
+
+    def _gen_one(tc):
+        src = (st_dir / "testcase" / tc / "gen_data.py").resolve()
+        if not src.exists():
+            raise FileNotFoundError(f"missing gen_data.py: {src}")
+        # Copy to an isolated filename in build_dir to avoid races on a shared
+        # `build/gen_data.py` when running goldens in parallel.
+        dst = (build_dir / f"gen_data_{tc}.py").resolve()
+        shutil.copyfile(src, dst)
+        _run([sys.executable, str(dst)], cwd=str(build_dir), env=env, timeout_sec=600)
+
+    with ThreadPoolExecutor(max_workers=golden_workers) as pool:
+        futs = [pool.submit(_gen_one, tc) for tc in testcases]
+        for f in futs:
+            f.result()
+
+    tasks = []
+    if args.split_gtest:
+        print("[INFO] splitting binaries into per-gtest tasks...")
+        sys.stdout.flush()
+        for tc in testcases:
+            for g in _list_gtests(env, tc):
+                tasks.append({"testcase": tc, "gtest_filter": g})
+        print(f"[INFO] total tasks after split: {len(tasks)}")
+        sys.stdout.flush()
+    else:
+        tasks = [{"testcase": tc, "gtest_filter": None} for tc in testcases]
 
     print("[INFO] running testcase binaries in parallel (1 process per NPU)...")
     sys.stdout.flush()
@@ -323,50 +491,103 @@ def main():
     failures = []
 
     work = Queue()
-    for tc in testcases:
-        work.put(tc)
+    for t in tasks:
+        work.put(t)
 
     results_lock = threading.Lock()
+    attempts = {}
+    attempts_lock = threading.Lock()
+    stop_event = threading.Event()
 
-    def _worker(device_id):
-        while True:
+    device_queue = Queue()
+    for dev in devices:
+        device_queue.put(dev)
+
+    device_lock = threading.Lock()
+    active_devices = set(devices)
+
+    def _acquire_device():
+        while not stop_event.is_set():
             try:
-                tc = work.get_nowait()
+                return device_queue.get(timeout=0.5)
             except Empty:
-                return
+                with device_lock:
+                    if not active_devices:
+                        raise RuntimeError("No active NPUs left (all devices unhealthy/busy).")
+        return None
 
+    def _release_device(dev):
+        with device_lock:
+            if dev in active_devices:
+                device_queue.put(dev)
+
+    def _disable_device(dev, health):
+        with device_lock:
+            if dev in active_devices:
+                active_devices.remove(dev)
+        print(f"[WARN] dev={dev} disabled (health={health})")
+        sys.stdout.flush()
+
+    def _worker():
+        while not stop_event.is_set():
             try:
-                idle_ok, last = _wait_device_idle(env, device_id, timeout_sec=args.device_idle_wait_sec)
+                task = work.get(timeout=0.5)
+            except Empty:
+                continue
+
+            res = None
+            dev = None
+            try:
+                dev = _acquire_device()
+                if dev is None:
+                    # Stop requested; requeue and exit.
+                    work.put(task)
+                    return
+
+                idle_ok, last = _wait_device_idle(env, dev, timeout_sec=args.device_idle_wait_sec)
                 if not idle_ok:
                     health, procs = last or ("UNKNOWN", {})
-                    res = {
-                        "testcase": tc,
-                        "device": device_id,
-                        "rc": 126,
-                        "elapsed_sec": 0.0,
-                        "log": "",
-                        "pid": -1,
-                        "npu_seen": False,
-                        "max_mem_mb": 0,
-                        "npu_health": health,
-                        "error": f"device not idle before start; health={health} procs={list(procs.keys())}",
-                    }
-                else:
-                    print(f"[RUN ] {tc} dev={device_id}")
-                    sys.stdout.flush()
-                    res = _run_one_binary(env, device_id, tc, args.timeout_sec, args.log_dir)
+                    if health != "OK":
+                        _disable_device(dev, health)
+                    else:
+                        print(f"[WAIT] dev={dev} busy (pids={list(procs.keys())}); work-steal to other dev")
+                        sys.stdout.flush()
+                        time.sleep(max(0.0, args.device_busy_backoff_sec))
+                    work.put(task)
+                    continue
 
-                    idle_ok_after, last_after = _wait_device_idle(env, device_id, timeout_sec=args.device_idle_wait_sec)
-                    if not idle_ok_after:
-                        health, procs = last_after or ("UNKNOWN", {})
-                        if res.get("rc", 0) == 0:
-                            res["rc"] = 127
-                        res["npu_health"] = health
-                        res["error"] = f"device not idle after run; health={health} procs={list(procs.keys())}"
+                with attempts_lock:
+                    key = (task["testcase"], task.get("gtest_filter") or "")
+                    attempt = attempts.get(key, 0) + 1
+                    attempts[key] = attempt
+                print(f"[RUN ] {task['testcase']} dev={dev} filter={task.get('gtest_filter') or '-'} try={attempt}")
+                sys.stdout.flush()
+                res = _run_one_binary(
+                    env,
+                    dev,
+                    task["testcase"],
+                    args.timeout_sec,
+                    str(log_dir),
+                    gtest_filter=task.get("gtest_filter"),
+                    attempt=attempt,
+                    work_dir=str(work_dir),
+                )
+
+                idle_ok_after, last_after = _wait_device_idle(env, dev, timeout_sec=args.device_idle_wait_sec)
+                if not idle_ok_after:
+                    health, procs = last_after or ("UNKNOWN", {})
+                    if res.get("rc", 0) == 0:
+                        res["rc"] = 127
+                    res["npu_health"] = health
+                    res["error"] = f"device not idle after run; health={health} procs={list(procs.keys())}"
+                    if health != "OK":
+                        _disable_device(dev, health)
             except Exception as e:
                 res = {
-                    "testcase": tc,
-                    "device": device_id,
+                    "testcase": task["testcase"],
+                    "task": task["testcase"] if not task.get("gtest_filter") else f"{task['testcase']}::{task['gtest_filter']}",
+                    "gtest_filter": task.get("gtest_filter") or "",
+                    "device": dev if dev is not None else -1,
                     "rc": 128,
                     "elapsed_sec": 0.0,
                     "log": "",
@@ -377,28 +598,33 @@ def main():
                     "error": f"runner exception: {type(e).__name__}: {e}",
                 }
             finally:
-                with results_lock:
-                    results.append(res)
-                    status = "PASS" if res["rc"] == 0 else "FAIL"
-                    print(
-                        f"[{status}] {res['testcase']} dev={res['device']} "
-                        f"time={res['elapsed_sec']:.1f}s rc={res['rc']} log={res.get('log','')}"
-                    )
-                    sys.stdout.flush()
-                    if res["rc"] != 0:
-                        failures.append(res)
+                if dev is not None:
+                    _release_device(dev)
+                if res is not None:
+                    with results_lock:
+                        results.append(res)
+                        status = "PASS" if res["rc"] == 0 else "FAIL"
+                        print(
+                            f"[{status}] {res.get('task', res['testcase'])} dev={res['device']} "
+                            f"time={res['elapsed_sec']:.1f}s rc={res['rc']} log={res.get('log','')}"
+                        )
+                        sys.stdout.flush()
+                        if res["rc"] != 0:
+                            failures.append(res)
                 work.task_done()
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        for dev in devices:
-            pool.submit(_worker, dev)
+        futs = [pool.submit(_worker) for _ in range(workers)]
         work.join()
+        stop_event.set()
+        for f in futs:
+            f.result()
 
-    results_sorted = sorted(results, key=lambda r: r["testcase"])
+    results_sorted = sorted(results, key=lambda r: (r.get("testcase", ""), r.get("gtest_filter", "")))
     rows = []
     for r in results_sorted:
         rows.append([
-            r["testcase"],
+            r.get("task", r["testcase"]),
             str(r["device"]),
             "PASS" if r["rc"] == 0 else "FAIL",
             f"{r['elapsed_sec']:.1f}",
@@ -411,15 +637,15 @@ def main():
     print("\n[SUMMARY] results:")
     print(_format_table(
         rows,
-        headers=["TESTCASE", "DEV", "STATUS", "SEC", "RC", "NPU", "MAXMEM", "LOG"],
+        headers=["TASK", "DEV", "STATUS", "SEC", "RC", "NPU", "MAXMEM", "LOG"],
     ))
 
     if failures:
         print("\n[SUMMARY] failures:")
-        for f in sorted(failures, key=lambda r: r["testcase"]):
+        for f in sorted(failures, key=lambda r: (r.get("testcase", ""), r.get("gtest_filter", ""))):
             extra = f.get("error", "")
             extra = f" ({extra})" if extra else ""
-            print(f" - {f['testcase']} dev={f['device']} rc={f['rc']} log={f.get('log','')}{extra}")
+            print(f" - {f.get('task', f['testcase'])} dev={f['device']} rc={f['rc']} log={f.get('log','')}{extra}")
         raise SystemExit(1)
 
     final_devices, final_processes = _npu_smi_info(env)

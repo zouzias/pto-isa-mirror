@@ -49,7 +49,7 @@ void test_tmov()
     size_t fbFileSize = alignFbN * sizeof(ScalingT);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -103,7 +103,7 @@ void test_tmov()
     aclrtFreeHost(src2Host);
     aclrtFreeHost(src3Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
     std::vector<float> golden(cFileSize);
     std::vector<float> devFinal(cFileSize);

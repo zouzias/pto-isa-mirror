@@ -40,7 +40,7 @@ void test_hashfind()
     const size_t outBytes = queryBytes;
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -81,7 +81,7 @@ void test_hashfind()
     aclrtFreeHost(qHost);
     aclrtFreeHost(outHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<int32_t> golden(outBytes / sizeof(int32_t));

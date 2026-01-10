@@ -45,7 +45,7 @@ TEST_F(TFLASHATTNTest, case1)
     const std::size_t out_bytes = q_bytes;
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -95,7 +95,7 @@ TEST_F(TFLASHATTNTest, case1)
     aclrtFreeHost(vHost);
 
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     const std::size_t out_elems = static_cast<std::size_t>(kSeqLen) * static_cast<std::size_t>(kHeadDim);

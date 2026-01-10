@@ -81,7 +81,7 @@ void textract_test()
     size_t dstFileSize = (validRows-idxRow) * (validCols-idxCol) * sizeof(DT);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -117,7 +117,7 @@ void textract_test()
     aclrtFreeHost(dstHost);
     aclrtFreeHost(srcHost);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     EXPECT_TRUE(ret);

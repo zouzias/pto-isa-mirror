@@ -66,7 +66,7 @@ void tmov_test(uint32_t M, uint32_t N, uint32_t K, uint32_t baseM = 0, uint32_t 
     size_t cFileSize = M * N * sizeof(T);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -101,7 +101,7 @@ void tmov_test(uint32_t M, uint32_t N, uint32_t K, uint32_t baseM = 0, uint32_t 
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(cFileSize);
@@ -203,7 +203,7 @@ void textract_test(uint32_t M, uint32_t N, uint32_t K, uint16_t indexM, uint16_t
     size_t cFileSize = M1 * N1 * sizeof(T);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -238,7 +238,7 @@ void textract_test(uint32_t M, uint32_t N, uint32_t K, uint16_t indexM, uint16_t
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(cFileSize);
@@ -332,7 +332,7 @@ void textract_compact_test(uint32_t M, uint32_t N, uint32_t K, uint16_t indexM, 
     size_t cFileSize = M1 * N1 * sizeof(T);
 
     aclInit(nullptr);
-    aclrtSetDevice(0);
+    aclrtSetDevice(GetDeviceId());
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
@@ -367,7 +367,7 @@ void textract_compact_test(uint32_t M, uint32_t N, uint32_t K, uint16_t indexM, 
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
+    aclrtResetDevice(GetDeviceId());
     aclFinalize();
 
     std::vector<T> golden(cFileSize);
