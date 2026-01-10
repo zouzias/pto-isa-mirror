@@ -33,20 +33,30 @@ struct hifloat8_wrapper {
     operator float() const { return static_cast<float>(value); }
 };
 
-template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_, int kValidCols_ = kTCols_>
 __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src) {
-
-
     using DynShapeDim4 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim4 = pto::Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData_src = GlobalTensor<S, DynShapeDim4, DynStridDim4>;
     using GlobalData_dst = GlobalTensor<T, DynShapeDim4, DynStridDim4>;
 
-    using TileDataSrc = Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor>;
-    using TileDataDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor>;
+    // Use dynamic tiles when valid dimensions differ from tile dimensions
+    constexpr bool useDynamicTile = (kValidRows_ != kTRows_) || (kValidCols_ != kTCols_);
+    
+    using TileDataSrc = std::conditional_t<useDynamicTile,
+        Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>,
+        Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor>>;
+    using TileDataDst = std::conditional_t<useDynamicTile,
+        Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>,
+        Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor>>;
 
     TileDataSrc srcTile;
     TileDataDst dstTile;
+    
+    if constexpr (useDynamicTile) {
+        srcTile = TileDataSrc(kValidRows_, kValidCols_);
+        dstTile = TileDataDst(kValidRows_, kValidCols_);
+    }
 
 
     TASSIGN(srcTile, 0x0 + 0x400 * block_idx);
@@ -76,46 +86,7 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src) {
     out = dstGlobal.data();
 }
 
-template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_, int kValidCols_>
-__global__ AICORE void runTCVT_partial(__gm__ T *out, __gm__ S *src) {
-    using DynShapeDim4 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
-    using DynStridDim4 = pto::Stride<1, 1, 1, kGCols_, 1>;
-    using GlobalData_src = GlobalTensor<S, DynShapeDim4, DynStridDim4>;
-    using GlobalData_dst = GlobalTensor<T, DynShapeDim4, DynStridDim4>;
-
-    using TileDataSrc = Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileDataDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-
-    TileDataSrc srcTile(kValidRows_, kValidCols_);
-    TileDataDst dstTile(kValidRows_, kValidCols_);
-
-    TASSIGN(srcTile, 0x0 + 0x400 * block_idx);
-    TASSIGN(dstTile, 0x20000 + 0x400 * block_idx);
-
-    GlobalData_src srcGlobal(src);
-    GlobalData_dst dstGlobal(out);
-
-    TLOAD(srcTile, srcGlobal);
-
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-
-    // FP16->H8 conversion only supports ROUND_A or ROUND_H, use CAST_ROUND instead of CAST_RINT
-    if constexpr (std::is_same_v<T, hifloat8_t> && std::is_same_v<S, half>) {
-        TCVT(dstTile, srcTile, RoundMode::CAST_ROUND);
-    } else {
-        TCVT(dstTile, srcTile, RoundMode::CAST_RINT);
-    }
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-
-    TSTORE(dstGlobal, dstTile);
-    
-    out = dstGlobal.data();
-}
-
-template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_, int kValidCols_ = kTCols_>
 void launchTCVT(D *dst, S *src, void *stream) {
     // Map aclFloat16 to half for kernel execution
     using DstType = std::conditional_t<std::is_same_v<D, aclFloat16>, half,
@@ -127,25 +98,7 @@ void launchTCVT(D *dst, S *src, void *stream) {
                     std::conditional_t<std::is_same_v<S, fp8_e5m2_wrapper>, float8_e5m2_t,
                     std::conditional_t<std::is_same_v<S, hifloat8_wrapper>, hifloat8_t, S>>>>;
     
-    runTCVT<DstType, SrcType, kGRows_, kGCols_, kTRows_, kTCols_><<<1, nullptr, stream>>>(
-        reinterpret_cast<DstType*>(dst), 
-        reinterpret_cast<SrcType*>(src)
-    );
-}
-
-template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_, int kValidCols_>
-void launchTCVT_partial(D *dst, S *src, void *stream) {
-    // Map aclFloat16 to half for kernel execution
-    using DstType = std::conditional_t<std::is_same_v<D, aclFloat16>, half,
-                    std::conditional_t<std::is_same_v<D, fp8_e4m3_wrapper>, float8_e4m3_t,
-                    std::conditional_t<std::is_same_v<D, fp8_e5m2_wrapper>, float8_e5m2_t,
-                    std::conditional_t<std::is_same_v<D, hifloat8_wrapper>, hifloat8_t, D>>>>;
-    using SrcType = std::conditional_t<std::is_same_v<S, aclFloat16>, half,
-                    std::conditional_t<std::is_same_v<S, fp8_e4m3_wrapper>, float8_e4m3_t,
-                    std::conditional_t<std::is_same_v<S, fp8_e5m2_wrapper>, float8_e5m2_t,
-                    std::conditional_t<std::is_same_v<S, hifloat8_wrapper>, hifloat8_t, S>>>>;
-    
-    runTCVT_partial<DstType, SrcType, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_><<<1, nullptr, stream>>>(
+    runTCVT<DstType, SrcType, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_><<<1, nullptr, stream>>>(
         reinterpret_cast<DstType*>(dst), 
         reinterpret_cast<SrcType*>(src)
     );
@@ -156,7 +109,8 @@ void launchTCVT_partial(D *dst, S *src, void *stream) {
     template void launchTCVT<dst_type, src_type, 2, 128, 2, 128>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 2, 32, 2, 32>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 1, 64, 1, 64>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 4, 64, 4, 64>(dst_type *dst, src_type *src, void *stream);
+    template void launchTCVT<dst_type, src_type, 4, 64, 4, 64>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 1, 256, 1, 256, 1, 129>(dst_type *dst, src_type *src, void *stream);
 
 // FP32 Source
 INSTANTIATE_TCVT(float, float)
@@ -222,7 +176,3 @@ INSTANTIATE_TCVT(int32_t, int64_t)
 INSTANTIATE_TCVT(float, fp8_e4m3_wrapper)
 INSTANTIATE_TCVT(float, fp8_e5m2_wrapper)
 // INSTANTIATE_TCVT(float, hifloat8_wrapper)
-
-// Partial tile instantiations for 1x256 tile with 1x129 valid
-template void launchTCVT_partial<aclFloat16, float, 1, 256, 1, 256, 1, 129>(aclFloat16 *dst, float *src, void *stream);
-template void launchTCVT_partial<float, aclFloat16, 1, 256, 1, 256, 1, 129>(float *dst, aclFloat16 *src, void *stream);

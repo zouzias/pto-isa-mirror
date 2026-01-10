@@ -200,16 +200,28 @@ if __name__ == "__main__":
         (1, 64),
         (4, 64),
     ]
+    
+    # Partial tile configurations (m, n, valid_m, valid_n)
+    partial_shapes = [
+        (1, 256, 1, 129),
+    ]
 
     case_name_list = []
     case_params_list = []
 
     # Generate test cases for each type pair and shape combination
     for type_name, src, dst in type_pairs:
+        # Regular full tile shapes
         for m, n in shapes:
             case_name = f"case_{type_name}_{m}x{n}"
             case_name_list.append(f"TCVTTest.{case_name}")
             case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT"))
+        
+        # Partial tile shapes
+        for m, n, valid_m, valid_n in partial_shapes:
+            case_name = f"case_{type_name}_{m}x{n}_{valid_m}x{valid_n}"
+            case_name_list.append(f"TCVTTest.{case_name}")
+            case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT", valid_m, valid_n))
 
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):
@@ -219,20 +231,4 @@ if __name__ == "__main__":
 
         gen_golden(case_name, case_params_list[i])
 
-        os.chdir(original_dir)
-    
-    # Generate partial tile test cases with tile 1x256 but valid 1x129
-    partial_cases = [
-        ("TCVTTest.case_fp32_fp16_1x256_1x129", tcvtParams(np.float32, np.float16, 1, 256, "RoundMode::CAST_RINT", 1, 129)),
-        ("TCVTTest.case_fp16_fp32_1x256_1x129", tcvtParams(np.float16, np.float32, 1, 256, "RoundMode::CAST_RINT", 1, 129)),
-    ]
-    
-    for case_name, param in partial_cases:
-        if not os.path.exists(case_name):
-            os.makedirs(case_name)
-        original_dir = os.getcwd()
-        os.chdir(case_name)
-        
-        gen_golden(case_name, param)
-        
         os.chdir(original_dir)
