@@ -32,13 +32,34 @@ set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
 find_package(GTest REQUIRED)
 
+# Some testcases depend on low-level runtime headers like `runtime/rt.h`,
+# which may live under `.../pkg_inc/runtime` in some CANN installations.
+set(_ascend_runtime_inc_candidates
+    "${ASCEND_HOME_PATH}/pkg_inc/runtime"
+)
+file(GLOB _ascend_runtime_inc_glob
+    "/usr/local/Ascend/cann-*/aarch64-linux/pkg_inc/runtime"
+    "/usr/local/Ascend/cann-*/x86_64-linux/pkg_inc/runtime"
+)
+list(APPEND _ascend_runtime_inc_candidates ${_ascend_runtime_inc_glob})
+list(REMOVE_DUPLICATES _ascend_runtime_inc_candidates)
+find_path(ASCEND_RUNTIME_INCLUDE_DIR
+    NAMES runtime/rt.h
+    PATHS ${_ascend_runtime_inc_candidates}
+    NO_DEFAULT_PATH
+)
+if(NOT ASCEND_RUNTIME_INCLUDE_DIR)
+    message(FATAL_ERROR "Cannot find runtime/rt.h. Checked: ${_ascend_runtime_inc_candidates}")
+endif()
+get_filename_component(ASCEND_PKG_INC_DIR "${ASCEND_RUNTIME_INCLUDE_DIR}" DIRECTORY)
+
 add_compile_options(
     -D_FORTIFY_SOURCE=2
     -O2 -std=c++17
     -Wno-macro-redefined -Wno-ignored-attributes -Wno-unknown-attributes
     -fstack-protector-strong
 )
-# add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 add_link_options(
     -s
     -Wl,-z,relro
@@ -69,6 +90,9 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 
 include_directories(
     ${ASCEND_HOME_PATH}/include
+    ${ASCEND_PKG_INC_DIR}
+    ${ASCEND_PKG_INC_DIR}/profiling
+    ${ASCEND_RUNTIME_INCLUDE_DIR}
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )
 

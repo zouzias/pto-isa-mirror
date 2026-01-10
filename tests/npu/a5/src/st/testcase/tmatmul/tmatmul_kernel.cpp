@@ -79,31 +79,34 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
         TLOAD(biasDataTile, src2Global);
     }
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-
-    /**********************************TMOV && TEXTRACT**********************************/
-
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
+    /**********************************TMOV**********************************/
     if constexpr (isBias) {
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        TMOV(aTile, aMatTile);
+        TMOV(bTile, bMatTile);
         TMOV(biasTile, biasDataTile);
+    } else {
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        TMOV(aTile, aMatTile);
+        TMOV(bTile, bMatTile);
     }
-
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 
     /**********************************TMATMUL**********************************/
     if constexpr (isBias) {
+        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
     } else {
+        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         TMATMUL(cTile, aTile, bTile);
     }
 
+    /**********************************TSTORE**********************************/
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-
-    /**********************************TSTORE**********************************/
     TSTORE(dstGlobal, cTile);
 
     out = dstGlobal.data();
@@ -160,22 +163,24 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(
         TLOAD(aMatTile, src0Global);
         TLOAD(bMatTile, src1Global);
         if constexpr (isBias) {
-            TLOAD(biasDataTile, src2Global);
+            if (i == 0) {
+                TLOAD(biasDataTile, src2Global);
+            }
         }
 
+        /**********************************TMOV**********************************/
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-
-        /**********************************TMOV && TEXTRACT**********************************/
         TMOV(aTile, aMatTile);
         TMOV(bTile, bMatTile);
         if constexpr (isBias) {
-            TMOV(biasTile, biasDataTile);
+            if (i == 0) {
+                TMOV(biasTile, biasDataTile);
+            }
         }
 
         set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-
         if (i == 0) {
             if constexpr (isBias) {
                 TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
@@ -185,8 +190,7 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(
         } else {
             TMATMUL_ACC(cTile, cTile, aTile, bTile);
         }
-        set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+        pipe_barrier(PIPE_ALL);
     }
 
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
@@ -236,6 +240,9 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
         RunTMATMUL<float, hifloat8_t, hifloat8_t, float, 30, 90, 60, false>
             <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<hifloat8_t *>(src0),
                 reinterpret_cast<hifloat8_t *>(src1), nullptr);
+    } else if constexpr (tilingKey == 11) {
+        RunTMATMUL<float, half, half, float, 16, 16, 16, false><<<1, nullptr, stream>>>(
+            reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
     }
 }
 
@@ -249,6 +256,7 @@ template void LaunchTMATMUL<7>(uint8_t *out, uint8_t *src0, uint8_t *src1, void 
 template void LaunchTMATMUL<8>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<9>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<10>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMATMUL<11>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template <int32_t tilingKey>
 void LaunchTMATMULBIAS(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream)

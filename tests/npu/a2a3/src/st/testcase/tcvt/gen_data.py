@@ -89,13 +89,20 @@ def gen_golden(case_name, param):
         # Integer to any type conversion
         converted_golden = x1_gm
 
-    # Clamp the result to the destination type's representable range
+    # Clamp the result to the destination type's representable range.
+    # Note: `np.clip(int32_array, int64_min, int64_max)` can overflow because the
+    # bounds are cast to the input dtype (int32). Clip in a safe intermediate dtype.
     if np.issubdtype(dsttype, np.integer):
         info = np.iinfo(dsttype)
-        golden = np.clip(converted_golden, info.min, info.max).astype(dsttype)
+        if np.issubdtype(converted_golden.dtype, np.floating):
+            work = converted_golden.astype(np.float64)
+        else:
+            work = converted_golden.astype(np.int64)
+        golden = np.clip(work, info.min, info.max).astype(dsttype)
     elif np.issubdtype(dsttype, np.floating):
         info = np.finfo(dsttype)
-        golden = np.clip(converted_golden, info.min, info.max).astype(dsttype)
+        work = converted_golden.astype(np.float64)
+        golden = np.clip(work, info.min, info.max).astype(dsttype)
     else:
         golden = converted_golden.astype(dsttype)
             

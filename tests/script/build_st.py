@@ -46,9 +46,10 @@ def build_project(run_mode, soc_version, testcase = "all"):
             "cmake",
             f"-DRUN_MODE={run_mode}",
             f"-DSOC_VERSION={soc_version}",
-            f"-DTEST_CASE={testcase}",
             ".."
         ]
+        if testcase != "all":
+            cmake_cmd.insert(-1, f"-DTEST_CASE={testcase}")
 
         subprocess.run(
             cmake_cmd,
@@ -62,7 +63,8 @@ def build_project(run_mode, soc_version, testcase = "all"):
         # make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
         make_cmd = ["make"]
         cpu_count = os.cpu_count() or 4
-        make_cmd.extend(["-j", str(cpu_count)])
+        max_jobs = int(os.environ.get("PTO_ST_JOBS", str(min(cpu_count, 32))))
+        make_cmd.extend(["-j", str(max_jobs)])
 
         result = subprocess.run(
             make_cmd,
@@ -85,7 +87,7 @@ def main():
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
     parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 or a5")
-    parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
+    parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例 (or 'all')")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
 
     args = parser.parse_args()
