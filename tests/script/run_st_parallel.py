@@ -165,10 +165,22 @@ def _filter_ignored_procs(procs, ignore_proc_re):
     return {pid: v for pid, v in procs.items() if ignore_proc_re.search(v[0]) is None}
 
 
-def _wait_device_idle(env, npu_id, timeout_sec, poll_sec=1.0, ignore_proc_re=None, smi: Optional["_NpuSmiPoller"] = None):
+def _wait_device_idle(
+    env,
+    npu_id,
+    timeout_sec,
+    poll_sec=1.0,
+    ignore_proc_re=None,
+    smi: Optional["_NpuSmiPoller"] = None,
+    stop_event: Optional[threading.Event] = None,
+):
     deadline = time.time() + timeout_sec
     last = None
     while time.time() < deadline:
+        if stop_event is not None and stop_event.is_set():
+            return False, last
+        if ignore_proc_re is not None and ignore_proc_re.pattern == "":
+            ignore_proc_re = None
         if smi is not None:
             devices, processes = smi.snapshot()
             if not devices:
@@ -182,7 +194,10 @@ def _wait_device_idle(env, npu_id, timeout_sec, poll_sec=1.0, ignore_proc_re=Non
             return False, last
         if not procs:
             return True, last
-        time.sleep(poll_sec)
+        if stop_event is not None:
+            stop_event.wait(poll_sec)
+        else:
+            time.sleep(poll_sec)
     return False, last
 
 
@@ -211,8 +226,13 @@ def _get_free_devices(env, requested=None, ignore_proc_re=None, smi: Optional["_
     return free
 
 
-def _get_ok_devices(env, requested=None):
-    devices, _ = _npu_smi_info(env)
+def _get_ok_devices(env, requested=None, smi: Optional["_NpuSmiPoller"] = None):
+    if smi is not None:
+        devices, _ = smi.snapshot()
+        if not devices:
+            devices, _ = _npu_smi_info(env)
+    else:
+        devices, _ = _npu_smi_info(env)
     ok = []
     for npu_id, info in sorted(devices.items()):
         if requested is not None and npu_id not in requested:
@@ -341,6 +361,38 @@ def _prepare_sandbox(env, testcase, gtest_filter, attempt, work_dir):
     return sandbox_root, sandbox_bin
 
 
+def _apply_device_env(run_env, physical_device_id: int, device_env_mode: str):
+    """
+    Map a single worker process to a single physical NPU.
+
+    `physical`:
+      - Keep physical numbering; the test must call `aclrtSetDevice(<physical>)`.
+      - Clear visibility envs to avoid remapping.
+
+    `visible`:
+      - Restrict to a single physical NPU via visibility envs.
+      - Set `*_DEVICE_ID=0` so even tests that default to device 0 will run on the
+        mapped physical device (CUDA_VISIBLE_DEVICES-style behavior).
+    """
+    if device_env_mode == "visible":
+        run_env["ASCEND_RT_VISIBLE_DEVICES"] = str(physical_device_id)
+        run_env["ASCEND_VISIBLE_DEVICES"] = str(physical_device_id)
+        run_env["PTO_ST_PHYSICAL_DEVICE_ID"] = str(physical_device_id)
+        for k in ("PTO_ST_DEVICE_ID", "DEVICE_ID", "ACL_DEVICE_ID"):
+            run_env[k] = "0"
+        return
+
+    if device_env_mode == "physical":
+        run_env["PTO_ST_DEVICE_ID"] = str(physical_device_id)
+        run_env["DEVICE_ID"] = str(physical_device_id)
+        run_env["ACL_DEVICE_ID"] = str(physical_device_id)
+        run_env.pop("ASCEND_RT_VISIBLE_DEVICES", None)
+        run_env.pop("ASCEND_VISIBLE_DEVICES", None)
+        return
+
+    raise ValueError(f"unknown device_env_mode: {device_env_mode}")
+
+
 def _run_one_binary(
     env,
     device_id,
@@ -351,6 +403,10 @@ def _run_one_binary(
     work_dir=None,
     monitor_npu_smi=False,
     smi: Optional["_NpuSmiPoller"] = None,
+    device_env_mode: str = "physical",
+    run_id: str = "",
+    ascend_work_root: str = "/tmp/pto-isa-ascend-work",
+    preserve_ascend_work_path: bool = False,
 ):
     st_dir = Path("tests/npu/a2a3/src/st")
     build_bin_dir = st_dir / "build" / "bin"
@@ -368,13 +424,14 @@ def _run_one_binary(
         raise FileNotFoundError(f"missing binary: {exe}")
 
     run_env = dict(env)
-    # Select the physical device explicitly (tests should read one of these env vars).
-    run_env["PTO_ST_DEVICE_ID"] = str(device_id)
-    run_env["DEVICE_ID"] = str(device_id)
-    run_env["ACL_DEVICE_ID"] = str(device_id)
-    # Avoid relying on any pre-set visibility mapping that could renumber devices.
-    run_env.pop("ASCEND_RT_VISIBLE_DEVICES", None)
-    run_env.pop("ASCEND_VISIBLE_DEVICES", None)
+    _apply_device_env(run_env, physical_device_id=int(device_id), device_env_mode=device_env_mode)
+    if not preserve_ascend_work_path:
+        root = Path(ascend_work_root).resolve()
+        dev_dir = (root / (run_id or "no_run_id") / f"dev{int(device_id)}").resolve()
+        dev_dir.mkdir(parents=True, exist_ok=True)
+        run_env["ASCEND_WORK_PATH"] = str(dev_dir)
+        run_env["TMPDIR"] = str(dev_dir / "tmp")
+        Path(run_env["TMPDIR"]).mkdir(parents=True, exist_ok=True)
 
     task_name = testcase if not gtest_filter else f"{testcase}::{gtest_filter}"
 
@@ -530,6 +587,24 @@ def main():
     ap.add_argument("--devices", default="", help="comma-separated physical NPU ids to use (default: auto-detect)")
     ap.add_argument("--include-busy-devices", action="store_true",
                     help="use all OK NPUs even if currently busy (wait/retry until idle)")
+    ap.add_argument("--free-only", action="store_true",
+                    help="only use NPUs that are idle at startup (no waiting for busy devices)")
+    ap.add_argument(
+        "--device-env-mode",
+        choices=["physical", "visible"],
+        default=os.environ.get("PTO_ST_DEVICE_ENV_MODE", "visible"),
+        help="device selection mode per process (`visible` is most robust for full parallelism)",
+    )
+    ap.add_argument(
+        "--ascend-work-root",
+        default=os.environ.get("PTO_ST_ASCEND_WORK_ROOT", "/tmp/pto-isa-ascend-work"),
+        help="root for per-device ASCEND_WORK_PATH + TMPDIR (reduces cross-process contention)",
+    )
+    ap.add_argument(
+        "--preserve-ascend-work-path",
+        action="store_true",
+        help="do not override ASCEND_WORK_PATH/TMPDIR in worker processes",
+    )
     ap.add_argument("--ignore-proc-regex", default=os.environ.get("PTO_ST_IGNORE_PROC_REGEX", r"npu-smi"),
                     help="treat NPU processes matching this regex as ignorable when detecting busy/idle")
     ap.add_argument("--testcases", default="", help="comma-separated testcase names to run (default: all A3 ST)")
@@ -580,18 +655,24 @@ def main():
         if args.max_workers is not None and args.jobs is None:
             run_jobs = args.max_workers
 
-        if args.include_busy_devices:
-            usable = _get_ok_devices(env, requested=requested)
-            if not usable:
-                raise RuntimeError("No NPUs with Health=OK found (or all requested NPUs are unhealthy).")
-        else:
-            usable = _get_free_devices(env, requested=requested, ignore_proc_re=ignore_proc_re, smi=smi)
-            if not usable:
+        ok_devices = _get_ok_devices(env, requested=requested, smi=smi)
+        if not ok_devices:
+            raise RuntimeError("No NPUs with Health=OK found (or all requested NPUs are unhealthy).")
+        if args.free_only:
+            free = _get_free_devices(env, requested=set(ok_devices), ignore_proc_re=ignore_proc_re, smi=smi)
+            if not free:
                 raise RuntimeError("No free NPUs with Health=OK found (or all requested NPUs are busy).")
+            desired_workers = len(free) if run_jobs == 0 else min(run_jobs, len(free))
+            device_pool = free[:desired_workers]
+        else:
+            desired_workers = len(ok_devices) if run_jobs == 0 else min(run_jobs, len(ok_devices))
+            device_pool = ok_devices[:desired_workers]
 
-        workers = len(usable) if run_jobs == 0 else min(run_jobs, len(usable))
-        devices = usable[:workers]
-        print(f"[INFO] using NPUs: {devices} (workers={workers})")
+        # Note: We always start one worker per device in the pool. Workers wait
+        # for their device to become idle before pulling tasks, so busy devices
+        # do not create scheduling bubbles.
+        print(f"[INFO] NPU pool: {device_pool} (workers={desired_workers}, free_only={args.free_only})")
+        devices = list(device_pool)
         sys.stdout.flush()
 
         testcases = _extract_a3_testcases()
@@ -670,69 +751,49 @@ def main():
         attempts_lock = threading.Lock()
         stop_event = threading.Event()
 
-        device_queue = Queue()
-        for dev in devices:
-            device_queue.put(dev)
-
         device_lock = threading.Lock()
-        active_devices = set(devices)
-
-        def _acquire_device():
-            while not stop_event.is_set():
-                try:
-                    return device_queue.get(timeout=0.5)
-                except Empty:
-                    with device_lock:
-                        if not active_devices:
-                            raise RuntimeError("No active NPUs left (all devices unhealthy/busy).")
-            return None
-
-        def _release_device(dev):
-            with device_lock:
-                if dev in active_devices:
-                    device_queue.put(dev)
+        active_devices = set()
+        worker_threads = []
 
         def _disable_device(dev, health):
             with device_lock:
-                if dev in active_devices:
-                    active_devices.remove(dev)
+                active_devices.discard(dev)
             print(f"[WARN] dev={dev} disabled (health={health})")
             sys.stdout.flush()
 
-        def _worker():
+        def _device_worker(dev: int):
             while not stop_event.is_set():
+                # Do not reserve a task before the device is idle (prevents busy
+                # devices from "holding" tasks and creating bubbles).
+                idle_ok, last = _wait_device_idle(
+                    env,
+                    dev,
+                    timeout_sec=max(1, int(args.device_idle_wait_sec)),
+                    poll_sec=0.5,
+                    ignore_proc_re=ignore_proc_re,
+                    smi=smi,
+                    stop_event=stop_event,
+                )
+                if stop_event.is_set():
+                    return
+                if not idle_ok:
+                    health, _procs = last or ("UNKNOWN", {})
+                    if health != "OK":
+                        _disable_device(dev, health)
+                        return
+                    stop_event.wait(max(0.0, float(args.device_busy_backoff_sec)))
+                    continue
+
                 try:
-                    task = work.get(timeout=0.5)
+                    task = work.get(timeout=0.2)
                 except Empty:
+                    with device_lock:
+                        if not active_devices:
+                            return
                     continue
 
                 res = None
-                dev = None
                 try:
-                    dev = _acquire_device()
-                    if dev is None:
-                        # Stop requested; requeue and exit.
-                        work.put(task)
-                        return
-
-                    idle_ok, last = _wait_device_idle(
-                        env,
-                        dev,
-                        timeout_sec=args.device_idle_wait_sec,
-                        ignore_proc_re=ignore_proc_re,
-                        smi=smi,
-                    )
-                    if not idle_ok:
-                        health, procs = last or ("UNKNOWN", {})
-                        if health != "OK":
-                            _disable_device(dev, health)
-                        else:
-                            print(f"[WAIT] dev={dev} busy (pids={list(procs.keys())}); requeue {task.get('testcase')}")
-                            sys.stdout.flush()
-                            time.sleep(max(0.0, args.device_busy_backoff_sec))
-                        work.put(task)
-                        continue
-
                     with attempts_lock:
                         key = (task["testcase"], task.get("gtest_filter") or "")
                         attempt = attempts.get(key, 0) + 1
@@ -752,6 +813,10 @@ def main():
                         work_dir=str(work_dir) if work_dir else None,
                         monitor_npu_smi=args.monitor_npu_smi,
                         smi=smi,
+                        device_env_mode=args.device_env_mode,
+                        run_id=run_id,
+                        ascend_work_root=args.ascend_work_root,
+                        preserve_ascend_work_path=args.preserve_ascend_work_path,
                     )
                     res["idx"] = task["idx"]
                 except Exception as e:
@@ -771,8 +836,6 @@ def main():
                         "idx": task.get("idx", 0),
                     }
                 finally:
-                    if dev is not None:
-                        _release_device(dev)
                     if res is not None:
                         with results_lock:
                             results.append(res)
@@ -786,12 +849,33 @@ def main():
                                 failures.append(res)
                     work.task_done()
 
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futs = [pool.submit(_worker) for _ in range(workers)]
-            work.join()
-            stop_event.set()
-            for f in futs:
-                f.result()
+        def _start_device(dev: int):
+            with device_lock:
+                if dev in active_devices:
+                    return
+                active_devices.add(dev)
+            t = threading.Thread(target=_device_worker, args=(dev,), daemon=True)
+            worker_threads.append(t)
+            t.start()
+
+        for d in device_pool:
+            _start_device(d)
+
+        # Wait for all tasks to complete.
+        while True:
+            with results_lock:
+                done = len(results)
+            if done >= total_tasks:
+                break
+            with device_lock:
+                if not active_devices:
+                    stop_event.set()
+                    raise RuntimeError("No active NPUs left (all devices unhealthy/busy).")
+            time.sleep(0.2)
+
+        stop_event.set()
+        for t in worker_threads:
+            t.join(timeout=1.0)
 
         results_sorted = sorted(results, key=lambda r: (r.get("idx", 0), r.get("testcase", ""), r.get("gtest_filter", "")))
         rows = []
