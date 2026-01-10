@@ -563,75 +563,36 @@ def _format_table(rows, headers):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Build + run A3 NPU ST across free NPUs")
+    ap = argparse.ArgumentParser(
+        description="Build + run A3 NPU ST in parallel (default: 1 process per NPU)"
+    )
     ap.add_argument(
         "-j",
         "--jobs",
         type=int,
-        default=None,
-        help="parallel test jobs (0 means use all selected NPUs)",
+        default=0,
+        help="parallel test jobs (0 means use all OK NPUs)",
     )
-    ap.add_argument(
-        "--build-jobs",
-        type=int,
-        default=int(os.environ.get("PTO_ST_BUILD_JOBS", os.environ.get("PTO_ST_JOBS", "32"))),
-        help="`make -j` for building ST binaries",
-    )
+    ap.add_argument("--build-jobs", type=int, default=int(os.environ.get("PTO_ST_BUILD_JOBS", os.environ.get("PTO_ST_JOBS", "32"))))
     ap.add_argument("--timeout-sec", type=int, default=int(os.environ.get("PTO_ST_TIMEOUT_SEC", "600")),
                     help="per-testcase binary timeout (detect deadlock)")
     ap.add_argument("--split-gtest", action="store_true",
                     help="split each testcase binary into per-gtest tasks (improves load balance across NPUs)")
-    ap.add_argument("--golden-workers", type=int, default=int(os.environ.get("PTO_ST_GOLDEN_WORKERS", "0")),
-                    help="0 means auto; parallelism for golden generation (gen_data.py)")
-    ap.add_argument("--max-workers", type=int, default=None, help="deprecated: use -j/--jobs (0 means use all selected NPUs)")
     ap.add_argument("--devices", default="", help="comma-separated physical NPU ids to use (default: auto-detect)")
-    ap.add_argument("--include-busy-devices", action="store_true",
-                    help="use all OK NPUs even if currently busy (wait/retry until idle)")
-    ap.add_argument("--free-only", action="store_true",
-                    help="only use NPUs that are idle at startup (no waiting for busy devices)")
-    ap.add_argument(
-        "--device-env-mode",
-        choices=["physical", "visible"],
-        default=os.environ.get("PTO_ST_DEVICE_ENV_MODE", "visible"),
-        help="device selection mode per process (`visible` is most robust for full parallelism)",
-    )
-    ap.add_argument(
-        "--ascend-work-root",
-        default=os.environ.get("PTO_ST_ASCEND_WORK_ROOT", "/tmp/pto-isa-ascend-work"),
-        help="root for per-device ASCEND_WORK_PATH + TMPDIR (reduces cross-process contention)",
-    )
-    ap.add_argument(
-        "--preserve-ascend-work-path",
-        action="store_true",
-        help="do not override ASCEND_WORK_PATH/TMPDIR in worker processes",
-    )
-    ap.add_argument("--ignore-proc-regex", default=os.environ.get("PTO_ST_IGNORE_PROC_REGEX", r"npu-smi"),
-                    help="treat NPU processes matching this regex as ignorable when detecting busy/idle")
     ap.add_argument("--testcases", default="", help="comma-separated testcase names to run (default: all A3 ST)")
     ap.add_argument("--skip-build", action="store_true", help="skip build step (assumes `tests/npu/a2a3/src/st/build` exists)")
     ap.add_argument("--skip-golden", action="store_true", help="skip golden generation step (assumes goldens exist)")
     ap.add_argument("--isolate", action="store_true", help="run each testcase in a private sandbox (slower)")
     ap.add_argument("--monitor-npu-smi", action="store_true",
                     help="poll `npu-smi` during test execution (slower, but can catch unhealthy devices)")
-    ap.add_argument(
-        "--smi-poll-sec",
-        type=float,
-        default=float(os.environ.get("PTO_ST_SMI_POLL_SEC", "1.0")),
-        help="shared `npu-smi` polling interval for scheduler/monitoring (seconds)",
-    )
-    ap.add_argument("--work-dir", default="/tmp/pto-isa-st-work",
-                    help="per-task sandbox root (each test runs in its own folder)")
-    ap.add_argument("--device-idle-wait-sec", type=int, default=int(os.environ.get("PTO_ST_DEVICE_IDLE_WAIT_SEC", "30")),
-                    help="wait for a device to become idle between tests (helps recover after kill)")
-    ap.add_argument("--device-busy-backoff-sec", type=float, default=float(os.environ.get("PTO_ST_DEVICE_BUSY_BACKOFF_SEC", "1.0")),
-                    help="sleep before retrying a busy device (only affects scheduling, not correctness)")
     args = ap.parse_args()
 
     env = _source_ascend_env()
     run_id = os.environ.get("PTO_ST_RUN_ID") or f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{uuid.uuid4().hex[:8]}"
     work_dir = None
     if args.isolate:
-        work_dir = (Path(args.work_dir) / run_id).resolve()
+        work_root = os.environ.get("PTO_ST_WORK_DIR", "/tmp/pto-isa-st-work")
+        work_dir = (Path(work_root) / run_id).resolve()
         work_dir.mkdir(parents=True, exist_ok=True)
     print(f"[INFO] run_id={run_id}")
     if work_dir:
@@ -639,39 +600,30 @@ def main():
     sys.stdout.flush()
 
     ignore_proc_re = None
-    if args.ignore_proc_regex.strip():
-        ignore_proc_re = re.compile(args.ignore_proc_regex)
+    ignore_proc_pat = os.environ.get("PTO_ST_IGNORE_PROC_REGEX", r"npu-smi").strip()
+    if ignore_proc_pat:
+        ignore_proc_re = re.compile(ignore_proc_pat)
 
     requested = None
     if args.devices.strip():
         requested = {int(x) for x in args.devices.split(",") if x.strip() != ""}
 
-    smi = _NpuSmiPoller(env, poll_sec=args.smi_poll_sec)
+    smi_poll_sec = float(os.environ.get("PTO_ST_SMI_POLL_SEC", "0.5"))
+    smi = _NpuSmiPoller(env, poll_sec=smi_poll_sec)
     smi.start()
     try:
-        run_jobs_env_default = int(os.environ.get("PTO_ST_JOBS_RUN", "0"))
-        run_jobs = args.jobs if args.jobs is not None else run_jobs_env_default
-        # Backward-compat: `--max-workers` historically controlled run concurrency.
-        if args.max_workers is not None and args.jobs is None:
-            run_jobs = args.max_workers
+        run_jobs = int(args.jobs)
 
         ok_devices = _get_ok_devices(env, requested=requested, smi=smi)
         if not ok_devices:
             raise RuntimeError("No NPUs with Health=OK found (or all requested NPUs are unhealthy).")
-        if args.free_only:
-            free = _get_free_devices(env, requested=set(ok_devices), ignore_proc_re=ignore_proc_re, smi=smi)
-            if not free:
-                raise RuntimeError("No free NPUs with Health=OK found (or all requested NPUs are busy).")
-            desired_workers = len(free) if run_jobs == 0 else min(run_jobs, len(free))
-            device_pool = free[:desired_workers]
-        else:
-            desired_workers = len(ok_devices) if run_jobs == 0 else min(run_jobs, len(ok_devices))
-            device_pool = ok_devices[:desired_workers]
+        desired_workers = len(ok_devices) if run_jobs == 0 else min(run_jobs, len(ok_devices))
+        device_pool = ok_devices[:desired_workers]
 
         # Note: We always start one worker per device in the pool. Workers wait
         # for their device to become idle before pulling tasks, so busy devices
         # do not create scheduling bubbles.
-        print(f"[INFO] NPU pool: {device_pool} (workers={desired_workers}, free_only={args.free_only})")
+        print(f"[INFO] NPU pool: {device_pool} (workers={desired_workers})")
         devices = list(device_pool)
         sys.stdout.flush()
 
@@ -690,7 +642,7 @@ def main():
             sys.stdout.flush()
             _build_all_a3(env, jobs=args.build_jobs)
 
-        golden_workers = args.golden_workers
+        golden_workers = int(os.environ.get("PTO_ST_GOLDEN_WORKERS", "0"))
         if golden_workers <= 0:
             golden_workers = min(max(1, os.cpu_count() or 1), 16)
 
@@ -754,6 +706,7 @@ def main():
         device_lock = threading.Lock()
         active_devices = set()
         worker_threads = []
+        first_launch = {dev: threading.Event() for dev in device_pool}
 
         def _disable_device(dev, health):
             with device_lock:
@@ -762,13 +715,14 @@ def main():
             sys.stdout.flush()
 
         def _device_worker(dev: int):
+            launched_once = False
             while not stop_event.is_set():
                 # Do not reserve a task before the device is idle (prevents busy
                 # devices from "holding" tasks and creating bubbles).
                 idle_ok, last = _wait_device_idle(
                     env,
                     dev,
-                    timeout_sec=max(1, int(args.device_idle_wait_sec)),
+                    timeout_sec=int(os.environ.get("PTO_ST_DEVICE_IDLE_WAIT_SEC", "30")),
                     poll_sec=0.5,
                     ignore_proc_re=ignore_proc_re,
                     smi=smi,
@@ -781,7 +735,7 @@ def main():
                     if health != "OK":
                         _disable_device(dev, health)
                         return
-                    stop_event.wait(max(0.0, float(args.device_busy_backoff_sec)))
+                    stop_event.wait(float(os.environ.get("PTO_ST_DEVICE_BUSY_BACKOFF_SEC", "0.2")))
                     continue
 
                 try:
@@ -798,6 +752,9 @@ def main():
                         key = (task["testcase"], task.get("gtest_filter") or "")
                         attempt = attempts.get(key, 0) + 1
                         attempts[key] = attempt
+                    if not launched_once:
+                        first_launch[dev].set()
+                        launched_once = True
                     print(
                         f"[{task['idx']}/{total_tasks}] RUN  dev={dev} "
                         f"{task['testcase']} filter={task.get('gtest_filter') or '-'} try={attempt}"
@@ -813,10 +770,10 @@ def main():
                         work_dir=str(work_dir) if work_dir else None,
                         monitor_npu_smi=args.monitor_npu_smi,
                         smi=smi,
-                        device_env_mode=args.device_env_mode,
+                        device_env_mode=os.environ.get("PTO_ST_DEVICE_ENV_MODE", "visible"),
                         run_id=run_id,
-                        ascend_work_root=args.ascend_work_root,
-                        preserve_ascend_work_path=args.preserve_ascend_work_path,
+                        ascend_work_root=os.environ.get("PTO_ST_ASCEND_WORK_ROOT", "/tmp/pto-isa-ascend-work"),
+                        preserve_ascend_work_path=os.environ.get("PTO_ST_PRESERVE_ASCEND_WORK_PATH", "0") == "1",
                     )
                     res["idx"] = task["idx"]
                 except Exception as e:
@@ -860,6 +817,19 @@ def main():
 
         for d in device_pool:
             _start_device(d)
+
+        # Best-effort: wait for the first wave to launch so all NPUs start
+        # working immediately when enough tasks exist.
+        if total_tasks >= len(device_pool):
+            deadline = time.time() + float(os.environ.get("PTO_ST_FIRST_WAVE_TIMEOUT_SEC", "15"))
+            while time.time() < deadline:
+                launched = sum(1 for e in first_launch.values() if e.is_set())
+                if launched >= len(device_pool):
+                    break
+                time.sleep(0.05)
+            launched = sum(1 for e in first_launch.values() if e.is_set())
+            print(f"[INFO] initial wave launched: {launched}/{len(device_pool)} workers")
+            sys.stdout.flush()
 
         # Wait for all tasks to complete.
         while True:
