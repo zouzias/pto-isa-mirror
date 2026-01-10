@@ -818,6 +818,12 @@ PTO_INST RecordEvent TCOLEXPANDSUB(TileDataDst &dst, TileDataDst &src0, TileData
   MAP_INSTR_IMPL(TCOLEXPANDSUB, dst, src0, src1);
   return {};
 }
+template <typename TileData, int upperOrLower, int diagonal, typename... WaitEvents>
+PTO_INST RecordEvent TTRIL(TileData &dst, WaitEvents&... events) {
+  TSYNC(events...);
+  TTRIL_IMPL<TileData, upperOrLower, diagonal>(dst);
+  return {};
+}
 
 } // namespace pto
 #endif
