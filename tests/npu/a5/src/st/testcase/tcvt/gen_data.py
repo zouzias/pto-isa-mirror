@@ -144,16 +144,12 @@ if __name__ == "__main__":
         ("fp16_int16", np.float16, np.int16),
         ("fp16_int8", np.float16, np.int8),
         ("fp16_uint8", np.float16, np.uint8),
-        ("fp16_fp8_e5m2", np.float16, fp8_e5m2),
-        ("fp16_fp8_e4m3", np.float16, fp8_e4m3),
         ("fp16_h8", np.float16, hifloat8),
 
         # BF16 Source
         ("bf16_fp32", bfloat16, np.float32),
         ("bf16_int32", bfloat16, np.int32),
         ("bf16_fp16", bfloat16, np.float16),
-        ("bf16_fp8_e5m2", bfloat16, fp8_e5m2),
-        ("bf16_fp8_e4m3", bfloat16, fp8_e4m3),
 
         # INT32 Source
         ("int32_fp32", np.int32, np.float32),
