@@ -35,6 +35,9 @@ struct hifloat8_wrapper {
 template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void launchTCVT(D *dst, S *src, void *stream);
 
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_, int kValidCols_>
+void launchTCVT_partial(D *dst, S *src, void *stream);
+
 class TCVTTest : public testing::Test {
 protected:
     void SetUp() override
@@ -78,6 +81,59 @@ void test_tcvt()
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     launchTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_>(dstDevice, srcDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output_z.bin", dstHost, dstFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<D> golden(dstFileSize);
+    std::vector<D> devFinal(dstFileSize);
+    ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/output_z.bin", dstFileSize, devFinal.data(), dstFileSize);
+
+    bool ret = ResultCmp<D>(golden, devFinal, 0.001f);
+
+    EXPECT_TRUE(ret);
+}
+
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_, int kValidCols_>
+void test_tcvt_partial()
+{
+    uint32_t M = kGRows_;
+    uint32_t N = kGCols_;
+
+    size_t srcFileSize = M * N * sizeof(S);
+    size_t dstFileSize = M * N * sizeof(D);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    D *dstHost, *dstDevice;
+    S *srcHost, *srcDevice;
+
+    aclrtMallocHost((void **)(&dstHost), dstFileSize);
+    aclrtMallocHost((void **)(&srcHost), srcFileSize);
+
+    aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/x1_gm.bin", srcFileSize, srcHost, srcFileSize);
+
+    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    launchTCVT_partial<D, S, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -176,4 +232,8 @@ GENERATE_TCVT_TESTS(int32_t, int64_t, int64_int32)
 GENERATE_TCVT_TESTS(float, fp8_e4m3_wrapper, fp8_e4m3_fp32)
 GENERATE_TCVT_TESTS(float, fp8_e5m2_wrapper, fp8_e5m2_fp32)
 // GENERATE_TCVT_TESTS(float, hifloat8_wrapper, h8_fp32)
+
+// Partial tile tests with tile 1x256 but valid 1x129
+TEST_F(TCVTTest, case_fp32_fp16_1x256_1x129) { test_tcvt_partial<aclFloat16, float, 1, 256, 1, 256, 1, 129>(); }
+TEST_F(TCVTTest, case_fp16_fp32_1x256_1x129) { test_tcvt_partial<float, aclFloat16, 1, 256, 1, 256, 1, 129>(); }
  

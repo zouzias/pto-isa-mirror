@@ -24,6 +24,7 @@ def gen_golden(case_name, param):
     srctype = param.srctype
     dsttype = param.dsttype
     m, n = param.m, param.n
+    valid_m, valid_n = param.valid_m, param.valid_n
 
     # Generate input data with reasonable ranges
     if srctype == np.float32 or srctype == np.float16 or srctype == bfloat16:
@@ -103,17 +104,25 @@ def gen_golden(case_name, param):
         golden = np.clip(converted_golden, info.min, info.max).astype(dsttype)
     else:
         golden = converted_golden.astype(dsttype)
+    
+    # Apply valid region constraints (zero out data outside valid region)
+    if valid_m < m or valid_n < n:
+        output = np.zeros([m, n]).astype(dsttype)
+        output[:valid_m, :valid_n] = golden[:valid_m, :valid_n]
+        golden = output
             
     x1_gm.tofile("./x1_gm.bin")
     golden.tofile("./golden.bin")
                 
 class tcvtParams:
-    def __init__(self, srctype, dsttype, m, n, mode):
+    def __init__(self, srctype, dsttype, m, n, mode, valid_m=None, valid_n=None):
         self.srctype = srctype
         self.dsttype = dsttype
         self.m = m
         self.n = n
         self.mode = mode
+        self.valid_m = valid_m if valid_m is not None else m
+        self.valid_n = valid_n if valid_n is not None else n
 
 if __name__ == "__main__":
     # Type conversion pairs: (name_suffix, source_type, destination_type)
@@ -210,4 +219,20 @@ if __name__ == "__main__":
 
         gen_golden(case_name, case_params_list[i])
 
+        os.chdir(original_dir)
+    
+    # Generate partial tile test cases with tile 1x256 but valid 1x129
+    partial_cases = [
+        ("TCVTTest.case_fp32_fp16_1x256_1x129", tcvtParams(np.float32, np.float16, 1, 256, "RoundMode::CAST_RINT", 1, 129)),
+        ("TCVTTest.case_fp16_fp32_1x256_1x129", tcvtParams(np.float16, np.float32, 1, 256, "RoundMode::CAST_RINT", 1, 129)),
+    ]
+    
+    for case_name, param in partial_cases:
+        if not os.path.exists(case_name):
+            os.makedirs(case_name)
+        original_dir = os.getcwd()
+        os.chdir(case_name)
+        
+        gen_golden(case_name, param)
+        
         os.chdir(original_dir)
