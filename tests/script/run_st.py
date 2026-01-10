@@ -14,19 +14,27 @@ import sys
 import subprocess
 import shutil
 import argparse
+import signal
 
-def run_command(command, cwd=None, check=True):
+def run_command(command, cwd=None, check=True, capture_output=False, timeout_sec=None):
     try:
         print(f"run command: {' '.join(command)}")
-        result = subprocess.run(
+        proc = subprocess.Popen(
             command,
             cwd=cwd,
-            check=check,
-            stdout=None,
-            stderr=None,
-            text=True
+            stdout=subprocess.PIPE if capture_output else None,
+            stderr=subprocess.STDOUT if capture_output else None,
+            text=True,
+            preexec_fn=os.setsid,
         )
-        return ""
+        try:
+            stdout, _ = proc.communicate(timeout=timeout_sec)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            raise TimeoutError(f"command timeout after {timeout_sec}s: {' '.join(command)}")
+        if check and proc.returncode != 0:
+            raise subprocess.CalledProcessError(proc.returncode, command, output=stdout)
+        return stdout if capture_output else ""
     except subprocess.CalledProcessError as e:
         print(f"run command failed with return code {e.returncode}")
         raise
@@ -83,9 +91,10 @@ def build_project(run_mode, soc_version, testcase = "all", debug_enable = False)
             "cmake",
             f"-DRUN_MODE={run_mode}",
             f"-DSOC_VERSION={soc_version}",
-            f"-DTEST_CASE={testcase}",
             ".."
         ]
+        if testcase != "all":
+            cmake_cmd.insert(-1, f"-DTEST_CASE={testcase}")
         if debug_enable :
             cmake_cmd.append("-DDEBUG_MODE=ON")
 
@@ -101,7 +110,8 @@ def build_project(run_mode, soc_version, testcase = "all", debug_enable = False)
         # make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
         make_cmd = ["make"]
         cpu_count = os.cpu_count() or 4
-        make_cmd.extend(["-j", str(cpu_count)])
+        max_jobs = int(os.environ.get("PTO_ST_JOBS", str(min(cpu_count, 32))))
+        make_cmd.extend(["-j", str(max_jobs)])
 
         result = subprocess.run(
             make_cmd,
@@ -137,24 +147,37 @@ def run_gen_data(golden_path):
     finally:
         os.chdir(original_dir)
 
-def run_binary(testcase, run_mode, args="all"):
+def run_binary(testcase, run_mode, args="all", timeout_sec=None):
     original_dir = os.getcwd()
     try:
         build_dir = "build/bin/"
         os.chdir(build_dir)
 
+        # Guard against a stale/incorrect gtest filter silently running 0 tests.
+        def ensure_gtest_has_tests(gtest_filter=None):
+            cmd = ["./" + testcase, "--gtest_list_tests"]
+            if gtest_filter:
+                cmd.append("--gtest_filter=" + gtest_filter)
+            out = run_command(cmd, capture_output=True, timeout_sec=min(timeout_sec or 30, 30))
+            # `--gtest_list_tests` output prints test names indented by two spaces.
+            return any(line.startswith("  ") for line in out.splitlines())
+
         if args != "all":
             if run_mode == "sim":
                 os.environ["CAMODEL_LOG_PATH"] = f"../{args}"
+            if not ensure_gtest_has_tests(args):
+                raise RuntimeError(f"gtest_filter matched no tests: {args}")
             single_case = "--gtest_filter=" + args
             cmd = ["./" + testcase, single_case]
             print(f"run single testcase : {args}")
-            output = run_command(cmd)
+            output = run_command(cmd, timeout_sec=timeout_sec)
             print(output)
         else : # all
+            if not ensure_gtest_has_tests():
+                raise RuntimeError(f"no gtest cases found in binary: {testcase}")
             cmd = ["./" + testcase]
             print(f"run testcase : {testcase}")
-            output = run_command(cmd)
+            output = run_command(cmd, timeout_sec=timeout_sec)
             print(output)
 
     except Exception as e:
@@ -168,9 +191,10 @@ def main():
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
     parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 or a5")
-    parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
+    parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例 (or 'all')")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
     parser.add_argument("-d", "--debug-enable", action='store_true', help="开启debug检查")
+    parser.add_argument("--timeout-sec", type=int, default=None, help="single test run timeout in seconds (detect deadlock)")
 
     args = parser.parse_args()
     default_soc_version = "Ascend910B1"
@@ -201,12 +225,41 @@ def main():
         # 执行构建
         build_project(args.run_mode, default_soc_version, args.testcase, args.debug_enable)
 
-        # 生成标杆
-        golden_path = "testcase/" + args.testcase + "/gen_data.py"
-        run_gen_data(golden_path)
+        if args.timeout_sec is not None:
+            timeout_sec = args.timeout_sec
+        else:
+            timeout_sec = int(os.environ.get("PTO_ST_TIMEOUT_SEC", "120" if args.run_mode == "npu" else "600"))
 
-        # 执行二进制文件
-        run_binary(args.testcase, args.run_mode, default_cases)
+        if args.testcase == "all":
+            if args.gtest_filter is not None:
+                raise ValueError("cannot use -g/--gtest_filter when -t all")
+
+            testcase_cmake = os.path.join("testcase", "CMakeLists.txt")
+            with open(testcase_cmake, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            if "set(ALL_TESTCASES" not in content:
+                raise RuntimeError(f"cannot find ALL_TESTCASES in {testcase_cmake}")
+            block = content.split("set(ALL_TESTCASES", 1)[1].split(")", 1)[0]
+            testcases = []
+            for line in block.splitlines():
+                line = line.split("#", 1)[0].strip()
+                if not line:
+                    continue
+                testcases.append(line)
+
+            for tc in testcases:
+                golden_path = os.path.join("testcase", tc, "gen_data.py")
+                if not os.path.exists(golden_path):
+                    raise FileNotFoundError(f"missing gen_data.py for testcase: {tc} ({golden_path})")
+                run_gen_data(golden_path)
+                run_binary(tc, args.run_mode, "all", timeout_sec=timeout_sec)
+        else:
+            # 生成标杆
+            golden_path = "testcase/" + args.testcase + "/gen_data.py"
+            run_gen_data(golden_path)
+
+            # 执行二进制文件
+            run_binary(args.testcase, args.run_mode, default_cases, timeout_sec=timeout_sec)
 
     except Exception as e:
         print(f"run failed: {str(e)}", file=sys.stderr)

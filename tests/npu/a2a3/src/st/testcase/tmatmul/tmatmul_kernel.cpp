@@ -78,35 +78,38 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
     /******************************TLOAD*****************************/
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
-
     if constexpr (isBias) {
         TLOAD(biasDataTile, src2Global);
     }
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-
-    /**************************TMOV && TEXTRACT**************************/
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-
+    /**************************TMOV**************************/
     if constexpr (isBias) {
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        TMOV(aTile, aMatTile);
+        TMOV(bTile, bMatTile);
         TMOV(biasTile, biasDataTile);
+    } else {
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        TMOV(aTile, aMatTile);
+        TMOV(bTile, bMatTile);
     }
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-
+    /**************************TMATMUL**************************/
     if constexpr (isBias) {
+        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
     } else {
+        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         TMATMUL(cTile, aTile, bTile);
     }
 
+    /********************************TSTORE****************************/
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-
-    /********************************TSTORE****************************/
     TSTORE(dstGlobal, cTile);
     out = dstGlobal.data();
 }
@@ -171,25 +174,25 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
         /******************************TLOAD*****************************/
         TLOAD(aMatTile, src0Global);
         TLOAD(bMatTile, src1Global);
-
         if constexpr (isBias) {
-            TLOAD(biasDataTile, src2Global);
+            if (i == 0) {
+                TLOAD(biasDataTile, src2Global);
+            }
         }
 
+        /**************************TMOV**************************/
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-
-        /**************************TMOV && TEXTRACT**************************/
         TMOV(aTile, aMatTile);
         TMOV(bTile, bMatTile);
-
         if constexpr (isBias) {
-            TMOV(biasTile, biasDataTile);
+            if (i == 0) {
+                TMOV(biasTile, biasDataTile);
+            }
         }
 
         set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-
         if (i == 0) {
             if constexpr (isBias) {
                 TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
@@ -199,13 +202,11 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
         } else {
             TMATMUL_ACC(cTile, cTile, aTile, bTile);
         }
-        set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+        pipe_barrier(PIPE_ALL);
     }
 
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-
     TSTORE(dstGlobal, cTile);
     out = dstGlobal.data();
 }
@@ -222,6 +223,9 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
                 reinterpret_cast<int8_t *>(src1), nullptr);
     } else if constexpr (tilingKey == 3) {
         RunTMATMULSplitK<float, half, half, float, 5, 75, 11, false><<<1, nullptr, stream>>>(
+            reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
+    } else if constexpr (tilingKey == 4) {
+        RunTMATMUL<float, half, half, float, 16, 16, 16, false><<<1, nullptr, stream>>>(
             reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
     }
 }
@@ -260,6 +264,7 @@ void LaunchTMATMULBIAS(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2
 template void LaunchTMATMUL<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<3>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMATMUL<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template void LaunchTMATMULBIAS<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
 template void LaunchTMATMULBIAS<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
