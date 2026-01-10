@@ -33,5 +33,5 @@ PTO_INST RecordEvent MSCATTER(GlobalData& dst, TileSrc& src, TileInd& indexes, W
 ## Constraints
 
 - Index interpretation is target-defined. The CPU simulator treats indices as linear element indices into `dst.data()`.
-- No bounds checks are enforced on `indexes` by the CPU simulator.
-
+- A2/A3 implementation matches the CPU simulator behavior (linear element indices into `dst.data()`).
+- No bounds checks are enforced on `indexes` (CPU simulator and A2/A3).

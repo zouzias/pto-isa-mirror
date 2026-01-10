@@ -76,6 +76,7 @@ if __name__ == "__main__":
         "TMATMULTest.case2",
         "TMATMULTest.case3",
         "TMATMULTest.case_sanity_16_16_16",
+        "TMATMULTest.case_mx_sanity_16_16_16",
         "TMATMULBIASTest.case1",
         "TMATMULBIASTest.case2",
         "TMATMULBIASTest.case3",
@@ -89,6 +90,7 @@ if __name__ == "__main__":
         tmatmulParams(np.float16, np.float16, np.float32, 31, 120, 58, False),
         tmatmulParams(np.int8, np.int8, np.int32, 65, 90, 89, False),
         tmatmulParams(np.float16, np.float16, np.float32, 5, 75, 11, False),
+        tmatmulParams(np.float16, np.float16, np.float32, 16, 16, 16, False),
         tmatmulParams(np.float16, np.float16, np.float32, 16, 16, 16, False),
         # bias test
         tmatmulParams(np.float16, np.float16, np.float32, 26, 100, 94, True, np.float32),

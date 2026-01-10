@@ -161,6 +161,7 @@ tstore_mat2gm
 tscatter
 tfa
 tcolexpand
+tisa_missing
 )
 
 if(DEFINED TEST_CASE)

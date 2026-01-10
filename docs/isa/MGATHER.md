@@ -31,5 +31,5 @@ PTO_INST RecordEvent MGATHER(TileDst& dst, GlobalData& src, TileInd& indexes, Wa
 ## Constraints
 
 - Index interpretation is target-defined. The CPU simulator treats indices as linear element indices into `src.data()`.
-- No bounds checks are enforced on `indexes` by the CPU simulator.
-
+- A2/A3 implementation matches the CPU simulator behavior (linear element indices into `src.data()`).
+- No bounds checks are enforced on `indexes` (CPU simulator and A2/A3).

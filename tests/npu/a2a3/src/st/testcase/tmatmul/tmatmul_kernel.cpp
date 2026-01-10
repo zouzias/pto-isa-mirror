@@ -114,6 +114,68 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
     out = dstGlobal.data();
 }
 
+template <typename T, typename U, typename S, int validM, int validK, int validN>
+__global__ AICORE void RunTMATMUL_MX(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
+{
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(U);
+    constexpr int M = CeilAlign<int>(validM, 16);
+    constexpr int N = CeilAlign<int>(validN, blockAlign);
+    constexpr int K = CeilAlign<int>(validK, blockAlign);
+
+    using GlobalDataSrc0 = GlobalTensor<U, pto::Shape<1, 1, 1, validM, validK>,
+        pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
+    using GlobalDataSrc1 = GlobalTensor<S, pto::Shape<1, 1, 1, validK, validN>,
+        pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, validN, 1>>;
+    using GlobalDataOut = GlobalTensor<T, pto::Shape<1, 1, 1, validM, validN>,
+        pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
+    GlobalDataSrc0 src0Global(src0);
+    GlobalDataSrc1 src1Global(src1);
+    GlobalDataOut dstGlobal(out);
+
+    using TileMatAData = Tile<TileType::Mat, U, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, S, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
+    using LeftTile = TileLeft<U, M, K, validM, validK>;
+    using RightTile = TileRight<S, K, N, validK, validN>;
+    using AccTile = TileAcc<T, M, N, validM, validN>;
+
+    // A2/A3 TMATMUL_MX implementation ignores these scaling tiles (fallback).
+    using DummyScaleTile = Tile<TileType::Vec, float, 1, 8, BLayout::RowMajor, 1, 8>;
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x20000);
+
+    LeftTile aTile;
+    RightTile bTile;
+    AccTile cTile;
+    DummyScaleTile aScale;
+    DummyScaleTile bScale;
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
+    // Keep dummy tiles in a small UB region (A2/A3 ignores them today).
+    TASSIGN(aScale, 0x0);
+    TASSIGN(bScale, 0x20);
+
+    TLOAD(aMatTile, src0Global);
+    TLOAD(bMatTile, src1Global);
+
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    TMOV(aTile, aMatTile);
+    TMOV(bTile, bMatTile);
+
+    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    TMATMUL_MX(cTile, aTile, aScale, bTile, bScale);
+
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    TSTORE(dstGlobal, cTile);
+    out = dstGlobal.data();
+}
+
 template <typename T, typename U, typename S, typename B, int validM, int validK, int validN, bool isBias>
 __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, __gm__ B *src2)
 {
@@ -227,6 +289,9 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
     } else if constexpr (tilingKey == 4) {
         RunTMATMUL<float, half, half, float, 16, 16, 16, false><<<1, nullptr, stream>>>(
             reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
+    } else if constexpr (tilingKey == 5) {
+        RunTMATMUL_MX<float, half, half, 16, 16, 16><<<1, nullptr, stream>>>(
+            reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
     }
 }
 
@@ -265,6 +330,7 @@ template void LaunchTMATMUL<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, void 
 template void LaunchTMATMUL<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<3>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMATMUL<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template void LaunchTMATMULBIAS<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
 template void LaunchTMATMULBIAS<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);

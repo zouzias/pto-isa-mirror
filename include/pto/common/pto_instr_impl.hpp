@@ -68,6 +68,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TColMin.hpp"
 #include "pto/npu/a2a3/TScatter.hpp"
 #include "pto/npu/a2a3/TColExpand.hpp"
+#include "pto/npu/a2a3/TExtraOps.hpp"
+#include "pto/npu/a2a3/MGatherScatter.hpp"
 #endif
 
 #ifdef REGISTER_BASE

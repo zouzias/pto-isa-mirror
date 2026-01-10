@@ -4,7 +4,11 @@
 
 Matrix multiply (GEMM) with additional scaling tiles for mixed-precision / quantized matmul on supported targets.
 
-This instruction is currently implemented on A5 (see `include/pto/npu/a5/TMatmul.hpp`).
+Target support:
+
+- **A5**: uses hardware `mad_mx` (see `include/pto/npu/a5/TMatmul.hpp`).
+- **A2/A3**: implemented as a compatibility fallback that ignores `aScaleMatrix` / `bScaleMatrix` and forwards to the
+  corresponding `TMATMUL` / `TMATMUL_ACC` / `TMATMUL_BIAS` variants (see `include/pto/npu/a2a3/TMatmul.hpp`).
 
 ## Math Interpretation
 
@@ -72,4 +76,3 @@ void example() {
   // Exact tile types depend on the target’s MX matmul ABI; this is a schematic example.
 }
 ```
-
