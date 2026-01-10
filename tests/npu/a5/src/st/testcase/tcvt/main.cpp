@@ -108,9 +108,8 @@ void test_tcvt()
 #define GENERATE_TCVT_TESTS(dst_type, src_type, type_name) \
     TEST_F(TCVTTest, case_##type_name##_2x128) { test_tcvt<dst_type, src_type, 2, 128, 2, 128>(); } \
     TEST_F(TCVTTest, case_##type_name##_2x32) { test_tcvt<dst_type, src_type, 2, 32, 2, 32>(); } \
-    TEST_F(TCVTTest, case_##type_name##_1x64) { test_tcvt<dst_type, src_type, 1, 64, 1, 64>(); } \
-    TEST_F(TCVTTest, case_##type_name##_4x64) { test_tcvt<dst_type, src_type, 4, 64, 4, 64>(); } \
-    TEST_F(TCVTTest, case_##type_name##_1x256_1x129) { test_tcvt<dst_type, src_type, 1, 256, 1, 256, 1, 129>(); }
+    TEST_F(TCVTTest, case_##type_name##_3x64) { test_tcvt<dst_type, src_type, 3, 64, 3, 64>(); } \
+    TEST_F(TCVTTest, case_##type_name##_2x256_2x129) { test_tcvt<dst_type, src_type, 2, 256, 2, 256, 2, 129>(); }
 
 
 // FP32 Source

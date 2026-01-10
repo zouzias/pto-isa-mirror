@@ -197,13 +197,12 @@ if __name__ == "__main__":
     shapes = [
         (2, 128),
         (2, 32),
-        (1, 64),
-        (4, 64),
+        (3, 64),
     ]
     
     # Partial tile configurations (m, n, valid_m, valid_n)
     partial_shapes = [
-        (1, 256, 1, 129),
+        (2, 256, 2, 129),
     ]
 
     case_name_list = []
