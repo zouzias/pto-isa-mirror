@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TCOLSUM_HPP
-#define TCOLSUM_HPP
+#ifndef PTO_NPU_A2A3_TCOLSUM_HPP
+#define PTO_NPU_A2A3_TCOLSUM_HPP
 
 #include <pto/common/utils.hpp>
 #include <pto/common/type.hpp>

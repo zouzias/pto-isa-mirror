@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TCOLMIN_HPP
-#define TCOLMIN_HPP
+#ifndef PTO_NPU_A2A3_TCOLMIN_HPP
+#define PTO_NPU_A2A3_TCOLMIN_HPP
 
 #include "TColReduceOps.hpp"
 

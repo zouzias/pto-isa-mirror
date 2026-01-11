@@ -16,6 +16,32 @@ import shutil
 import argparse
 import signal
 
+def ensure_python_module(module_name: str, pip_spec: str = None, timeout_sec: int = 1800):
+    try:
+        __import__(module_name)
+        return
+    except Exception:
+        pass
+    spec = pip_spec or module_name
+    print(f"python dep missing: {module_name}; installing {spec} ...")
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--user", "wheel"],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=timeout_sec,
+    )
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--user", spec],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=timeout_sec,
+    )
+    __import__(module_name)
+
 def run_command(command, cwd=None, check=True, capture_output=False, timeout_sec=None):
     try:
         print(f"run command: {' '.join(command)}")
@@ -200,6 +226,7 @@ def main():
     default_soc_version = "Ascend910B1"
     if args.soc_version == "a5":
         default_soc_version = "Ascend910_9599"
+        ensure_python_module("en_dtypes", pip_spec="en_dtypes==0.0.4")
     default_cases = "all"
     if args.gtest_filter != None:
         default_cases = args.gtest_filter

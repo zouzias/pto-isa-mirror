@@ -6,6 +6,7 @@ Entry scripts for building and running the repository test suites.
 
 - Build + run: `tests/script/run_st.py`
 - Build only: `tests/script/build_st.py`
+- Parallel (NPU only): `tests/script/run_st_parallel.py`
 
 Common arguments:
 
@@ -20,6 +21,22 @@ Examples:
 ```bash
 python3 tests/script/run_st.py -r npu -v a3 -t tmatmul -g TMATMULTest.case1
 python3 tests/script/run_st.py -r sim -v a5 -t tmatmul -g TMATMULTest.case1
+```
+
+### Parallel NPU ST
+
+`run_st_parallel.py` builds once, generates goldens, then runs test binaries in
+parallel (default: 1 worker process per healthy NPU).
+
+```bash
+python3 tests/script/run_st_parallel.py -v a3 --timeout-sec 120
+python3 tests/script/run_st_parallel.py -v a5 --timeout-sec 120
+```
+
+To use it from `tests/run_st.sh` (only affects `npu all`):
+
+```bash
+PTO_ST_PARALLEL=1 PTO_ST_TIMEOUT_SEC=120 ./tests/run_st.sh a3 npu all
 ```
 
 ## CPU ST

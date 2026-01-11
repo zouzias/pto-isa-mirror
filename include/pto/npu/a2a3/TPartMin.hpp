@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TPARTIALMIN_HPP
-#define TPARTIALMIN_HPP
+#ifndef PTO_NPU_A2A3_TPARTMIN_HPP
+#define PTO_NPU_A2A3_TPARTMIN_HPP
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>

@@ -138,11 +138,14 @@ PTO_INTERNAL void ColExpandBinaryInstr(__ubuf__ typename TileData::DType *dstPtr
                               __ubuf__ typename TileData::DType *src0Ptr, 
                               __ubuf__ typename TileDataSrc::DType *src1Ptr,
                               unsigned kValidRows, unsigned kValidCols) {
-    if constexpr (TileData::ValidCol== TileData::Cols) {
-        TColExpandBinOps_1D_PostUpdate<Op, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(dstPtr, src0Ptr, src1Ptr, kValidRows, kValidCols);
-    } else {
-        TColExpandBinOps_2D_NoPostUpdate<Op, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(dstPtr, src0Ptr, src1Ptr, kValidRows, kValidCols);
-    }
+    // `TCOLEXPAND*` takes a matrix `src0` and a row-vector `src1` (shape `1 x kValidCols`),
+    // and broadcasts `src1` across all `kValidRows`.
+    //
+    // The original 1D path advanced `src1` with the same linear offset as `src0`, which
+    // reads beyond `src1` and can lead to all-zero outputs for multi-row cases.
+    // Always use the 2D loop to keep `src1` indexing within `[0, kValidCols)`.
+    TColExpandBinOps_2D_NoPostUpdate<Op, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(
+        dstPtr, src0Ptr, src1Ptr, kValidRows, kValidCols);
 }
 
 }  // namespace pto

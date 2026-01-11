@@ -8,217 +8,19 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TUNARYOP_HPP
-#define TUNARYOP_HPP
+#ifndef PTO_NPU_A2A3_TUNARYOP_HPP
+#define PTO_NPU_A2A3_TUNARYOP_HPP
+
+#include <cstdint>
+#include <type_traits>
 
 #include <pto/common/constants.hpp>
+#include <pto/common/utils.hpp>
+
+// Consolidated A2/A3 templates (Binary/Unary/Reduce/...).
+#include "pto/npu/a2a3/TAllTemplates.hpp"
 
 namespace pto {
-
-    #define SMALL_RPT (4)
-
-    template <typename Op, typename T>
-    PTO_INTERNAL void Unary1LCountMode(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned validRow, unsigned validCol) {
-        set_mask_count();
-        SetVectorCount(validRow * validCol);
-        Op::UnaryInstr(dstPtr, srcPtr, 0);
-        set_mask_norm();
-        SetFullVecMaskByDType<T>();
-    }
-
-    template <typename Op, typename T, unsigned rowStride>
-    PTO_INTERNAL void Unary2LCountMode(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned validRow, unsigned validCol) {
-        set_mask_count();
-        SetVectorCount(validCol);
-        for (uint32_t i = 0; i < validRow; i++) {
-            uint32_t offset = i * rowStride;
-            Op::UnaryInstr(dstPtr + offset, srcPtr + offset, 0);
-        }
-        set_mask_norm();
-        SetFullVecMaskByDType<T>();
-    }
-
-    template <typename Op, typename T, unsigned elementsPerRepeat>
-    PTO_INTERNAL void Unary1LNormMode(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned validRow, unsigned validCol) {
-        unsigned numElements = validRow * validCol;
-        unsigned headRepeats = numElements / elementsPerRepeat;
-        unsigned tailElements = numElements % elementsPerRepeat;
-
-        Op::UnaryInstr(dstPtr, srcPtr, headRepeats);
-        if (tailElements) {
-            unsigned offset = headRepeats * elementsPerRepeat;
-            SetContMaskByDType<T>(tailElements);
-            Op::UnaryInstr(dstPtr + offset, srcPtr + offset, 1);
-            SetFullVecMaskByDType<T>();
-        }
-    }
-
-     template <typename Op, typename T, unsigned elementsPerRepeat, unsigned rowStride>
-    PTO_INTERNAL void Unary2LNormModeColVLAlign(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned validRow, unsigned validCol) {
-        unsigned headRepeats = validCol / elementsPerRepeat;
-        for (uint32_t i = 0; i < validRow; i++) {
-            uint32_t offset = i * rowStride;
-            Op::UnaryInstr(dstPtr + offset, srcPtr + offset, headRepeats);
-        }
-    }
-
-    template <typename Op, typename T, unsigned rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
-    PTO_INTERNAL void Unary2LNormModeHead(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned validRow, unsigned numRepeatPerLine) {
-        if (numRepeatPerLine) {
-            unsigned numLoop = numRepeatPerLine / REPEAT_MAX;
-            unsigned remainAfterLoop = numRepeatPerLine % REPEAT_MAX;
-            for (unsigned i = 0; i < validRow; i++) {
-                if (numLoop) {
-                    for (unsigned j = 0; j < numLoop; j++) {
-                        unsigned offset = i * rowStride + j * elementsPerRepeat * REPEAT_MAX;
-                        Op::UnaryInstr(dstPtr + offset, srcPtr + offset, REPEAT_MAX);
-                    }
-                }
-                if (remainAfterLoop) {
-                    unsigned offset = i * rowStride + numLoop * elementsPerRepeat * REPEAT_MAX;
-                    Op::UnaryInstr(dstPtr + offset, srcPtr + offset, remainAfterLoop);
-                }
-            }
-        }
-    }
-
-    template <typename Op, typename T, unsigned rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
-    PTO_INTERNAL void Unary2LNormModeTail(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned validRow, unsigned numRemainPerLine) {
-        unsigned numLoop = 0;
-        unsigned remainAfterLoop = validRow;
-        constexpr bool strideOverFlag = (rowStride / blockSizeElem > REPEAT_STRIDE_MAX);
-        SetContMaskByDType<T>(numRemainPerLine);
-        if constexpr (rows > pto::REPEAT_MAX) {
-            numLoop = validRow / REPEAT_MAX;
-            if (numLoop) {
-                for (uint32_t i = 0; i < numLoop; i++) {
-                    if constexpr (strideOverFlag) {
-                        for (uint64_t j = 0; j < REPEAT_MAX; j++) {
-                            unsigned offset = i * REPEAT_MAX * rowStride + j * rowStride;
-                            Op::UnaryInstr(dstPtr + offset, srcPtr + offset, 1, 1, 1);
-                        }
-                    } else {
-                        unsigned offset = i * REPEAT_MAX * rowStride;
-                        uint8_t repeatStride = rowStride / blockSizeElem;
-                        Op::UnaryInstr(dstPtr + offset, srcPtr + offset, REPEAT_MAX, repeatStride, repeatStride);
-                    }
-                }
-            }
-            remainAfterLoop = validRow % REPEAT_MAX;
-        }
-        if (remainAfterLoop) {
-            if constexpr (strideOverFlag) {
-                for (uint32_t j = 0; j < remainAfterLoop; j++) {
-                    unsigned offset = numLoop * REPEAT_MAX * rowStride + j * rowStride;
-                    Op::UnaryInstr(dstPtr + offset, srcPtr + offset, 1, 1, 1);
-                }
-            } else {
-                unsigned offset = numLoop * REPEAT_MAX * rowStride;
-                uint8_t repeatStride = rowStride / blockSizeElem;
-                Op::UnaryInstr(dstPtr + offset, srcPtr + offset, remainAfterLoop, repeatStride, repeatStride);
-            }
-        }
-        SetFullVecMaskByDType<T>();
-    }
-
-    template <typename Op, typename T, unsigned rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
-    PTO_INTERNAL void Unary2LNormModeRowRpt(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, unsigned validRow, unsigned validCol) {
-        constexpr unsigned repeatStride = rowStride / blockSizeElem;
-        constexpr bool condRowRpt = ((rows <= pto::REPEAT_MAX) && (repeatStride <= REPEAT_STRIDE_MAX));
-        if constexpr (condRowRpt) {
-            unsigned numLoop = validCol / elementsPerRepeat;
-            unsigned tailElements = validCol % elementsPerRepeat;
-            for (uint32_t i = 0; i < numLoop; i++) {
-                unsigned offset = i * elementsPerRepeat;
-                Op::UnaryInstr(dstPtr + offset, srcPtr + offset, validRow, repeatStride, repeatStride);
-            }
-
-            if (tailElements) {
-                unsigned offset = numLoop * elementsPerRepeat;
-                SetContMaskByDType<T>(tailElements);
-                Op::UnaryInstr(dstPtr + offset, srcPtr + offset, validRow, repeatStride, repeatStride);
-                SetFullVecMaskByDType<T>();
-            }
-        } else {
-            unsigned numRemainPerLine = validCol;
-            if constexpr (rows > elementsPerRepeat) {
-                unsigned numRepeatPerLine = validCol / elementsPerRepeat;
-                numRemainPerLine = validCol % elementsPerRepeat;
-                Unary2LNormModeHead<Op, T, rows, elementsPerRepeat, blockSizeElem, rowStride>
-                    (dstPtr, srcPtr, validRow, numRepeatPerLine);
-                unsigned offset = numRepeatPerLine * elementsPerRepeat;
-                dstPtr += offset;
-                srcPtr += offset;
-            }
-            if (numRemainPerLine) {
-                Unary2LNormModeTail<Op, T, rows, elementsPerRepeat, blockSizeElem, rowStride>
-                    (dstPtr, srcPtr, validRow, numRemainPerLine);
-            }
-        }
-    }
-
-    template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
-    PTO_INTERNAL void UnaryInstr(__ubuf__ typename TileData::DType *dstPtr,
-                                  __ubuf__ typename TileData::DType *srcPtr,
-                                  unsigned validRow, unsigned validCol) {
-        using T = typename TileData::DType;
-
-        if constexpr ((TileData::Cols == TileData::ValidCol) || (TileData::Rows == 1)) {
-            constexpr unsigned totalRepeats = (TileData::Rows * TileData::Cols + elementsPerRepeat - 1) / elementsPerRepeat;
-            if constexpr (totalRepeats > pto::REPEAT_MAX) {
-                Unary1LCountMode<Op, T>(dstPtr, srcPtr, validRow, validCol);
-            } else {
-                Unary1LNormMode<Op, T, elementsPerRepeat>(dstPtr, srcPtr, validRow, TileData::Cols);
-            }
-        } else {
-            if ((TileData::Cols == validCol) || (validRow == 1)) {
-                unsigned totalRepeats = (validRow * validCol + elementsPerRepeat - 1) / elementsPerRepeat;
-                if (totalRepeats > pto::REPEAT_MAX) {
-                    Unary1LCountMode<Op, T>(dstPtr, srcPtr, validRow, validCol);
-                } else {
-                    Unary1LNormMode<Op, T, elementsPerRepeat>(dstPtr, srcPtr, validRow, validCol);
-                }
-            } else {
-                constexpr unsigned normColRepeat = TileData::Cols / elementsPerRepeat;
-                if constexpr ((normColRepeat > 1) && ((TileData::Rows * normColRepeat) < SMALL_RPT)) {
-                    Unary2LCountMode<Op, T, rowStride>(dstPtr, srcPtr, validRow, validCol);
-                } else if constexpr (TileData::Rows < (normColRepeat + 1)) {
-                    unsigned tailElements = validCol % elementsPerRepeat;
-                    if (tailElements) {
-                        Unary2LCountMode<Op, T, rowStride>(dstPtr, srcPtr, validRow, validCol);
-                    } else {
-                        Unary2LNormModeColVLAlign<Op, T, elementsPerRepeat, rowStride>(dstPtr, srcPtr, validRow, validCol);
-                    }
-                } else {
-                    Unary2LNormModeRowRpt<Op, T, TileData::Rows, elementsPerRepeat, blockSizeElem, rowStride>(
-                        dstPtr, srcPtr, validRow, validCol);
-                }
-            }
-        }
-    }
-
-    template <typename T> using unaryFuncPtr = void (*)(__ubuf__ T*, __ubuf__ T*, uint8_t, uint16_t, uint16_t, uint8_t, uint8_t);
-
-    template <typename T, unaryFuncPtr<T> funcPtr> struct UnaryOperation {
-        PTO_INTERNAL static void UnaryInstr(__ubuf__ T *dst, __ubuf__ T *src, uint8_t repeats) {
-            funcPtr(dst, src, repeats, 1, 1, 8, 8);
-        }
-        PTO_INTERNAL static void UnaryInstr(__ubuf__ T *dst, __ubuf__ T *src, uint8_t repeats,
-                                             uint8_t dstRepeatStride, uint8_t srcRepeatStride) {
-            funcPtr(dst, src, repeats, 1, 1, dstRepeatStride, srcRepeatStride);
-        }
-    };
-
-    template <typename TileData, unaryFuncPtr<typename TileData::DType> funcPtr, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
-    __tf__ AICORE void TUnaryOp(typename TileData::TileDType __out__ dst,
-                                    typename TileData::TileDType __in__ src,
-                                    unsigned validRow,
-                                    unsigned validCol) {
-        __ubuf__ typename TileData::DType *dstPtr = (__ubuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
-        __ubuf__ typename TileData::DType *srcPtr = (__ubuf__ typename TileData::DType *)__cce_get_tile_ptr(src);
-
-        UnaryInstr<UnaryOperation<typename TileData::DType, funcPtr>, TileData, elementsPerRepeat, blockSizeElem, rowStride>(dstPtr, srcPtr, validRow, validCol);
-    }
 
     /* RSQRT */
 
@@ -232,7 +34,11 @@ namespace pto {
 
         unsigned TShape0 = TileData::Rows;
         unsigned TShape1 = TileData::Cols;
+        (void)TShape0;
 
+        // ACCURATE_RSQRT path:
+        // 1) compute `sqrt(x)` into dst
+        // 2) compute `1 / sqrt(x)` into dst (using a constant-one buffer)
         __ubuf__ typename TileData::DType *ones = reinterpret_cast<__ubuf__ typename TileData::DType*>(static_cast<std::uintptr_t>(0x2fc00));
         vector_dup(ones, (typename TileData::DType)(1.0), 1, 1, 1, 8, 8);
 

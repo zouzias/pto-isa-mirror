@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TSTORE_HPP
-#define TSTORE_HPP
+#ifndef PTO_NPU_A2A3_TSTORE_HPP
+#define PTO_NPU_A2A3_TSTORE_HPP
 
 namespace pto {
 template <typename GlobalData, typename TileData>

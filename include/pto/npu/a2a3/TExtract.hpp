@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TEXTRACT_HPP
-#define TEXTRACT_HPP
+#ifndef PTO_NPU_A2A3_TEXTRACT_HPP
+#define PTO_NPU_A2A3_TEXTRACT_HPP
 
 namespace pto {
 

@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef MGATHER_SCATTER_A2A3_HPP
-#define MGATHER_SCATTER_A2A3_HPP
+#ifndef PTO_NPU_A2A3_MGATHER_SCATTER_HPP
+#define PTO_NPU_A2A3_MGATHER_SCATTER_HPP
 
 #include <type_traits>
 #include <pto/common/pto_tile.hpp>

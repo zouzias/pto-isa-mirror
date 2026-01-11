@@ -8,13 +8,30 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TROWEXPANDBIN_HPP
-#define TROWEXPANDBIN_HPP
+#ifndef PTO_NPU_A2A3_TROWEXPAND_BIN_OP_HPP
+#define PTO_NPU_A2A3_TROWEXPAND_BIN_OP_HPP
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 
 namespace pto {
+/**
+ * Row-expand binary templates.
+ *
+ * This is used by TRowExpand* ops where `src1` is broadcast along columns.
+ *
+ * Two data-paths exist:
+ * - `src1` row-major: it is already laid out as per-row vectors in UB, so the
+ *   kernel can read it directly (TRowExpandBinaryInstr2).
+ * - `src1` non-row-major: use `vbrcb` to broadcast a compact representation
+ *   into a temporary UB buffer, then run the elementwise op.
+ *
+ * Execution mode selection:
+ * - Count-mode is used when repeat strides exceed HW limits or would be
+ *   inefficient.
+ * - Normal-mode uses repeat intrinsics with a row repeat-stride, handling tail
+ *   columns via a temporary contiguous mask.
+ */
 template <typename Op, typename T, unsigned blockSizeElem, unsigned rowStride>
 PTO_INTERNAL
 void TRowExpandBinaryCountMode(__ubuf__ T *dstPtr, __ubuf__ T *src0Ptr, __ubuf__ T *src1Ptr,

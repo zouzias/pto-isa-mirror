@@ -8,13 +8,28 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TPARTOP_HPP
-#define TPARTOP_HPP
+#ifndef PTO_NPU_A2A3_TPARTOP_HPP
+#define PTO_NPU_A2A3_TPARTOP_HPP
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
 
 namespace pto {
+/**
+ * Partial binary-op templates.
+ *
+ * These helpers implement "partial" elementwise ops where the valid shape of
+ * `src1` may be smaller than `dst` (but `src1` can only be smaller in either
+ * rows or cols at a time).
+ *
+ * The implementation selects between:
+ * - Count-mode: `set_mask_count()` + `SetVectorCount()` and per-row loops.
+ *   Used when repeat-stride limits are exceeded or when normal-mode would be
+ *   inefficient for small/irregular shapes.
+ * - Normal-mode: repeat-based vector intrinsics with repeat strides.
+ *
+ * For unsupported shape relationships we assert to avoid silent corruption.
+ */
 template <typename T, int dstCols, int srcCols, unsigned dstStride, unsigned srcStride>
 PTO_INTERNAL
 void TPartCopyInstr(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, uint64_t validRow, uint64_t validCol, uint64_t startRow)

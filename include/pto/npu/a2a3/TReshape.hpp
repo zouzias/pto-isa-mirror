@@ -10,8 +10,8 @@ PARTICULAR PURPOSE. See LICENSE in the root of the software repository for the
 full text of the License.
 */
 
-#ifndef __PTO_RESHAPE_A2A3__
-#define __PTO_RESHAPE_A2A3__
+#ifndef PTO_NPU_A2A3_TRESHAPE_HPP
+#define PTO_NPU_A2A3_TRESHAPE_HPP
 
 #include "pto/common/pto_tile.hpp"
 #include <type_traits>

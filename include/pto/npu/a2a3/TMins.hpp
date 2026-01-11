@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TMINS_HPP
-#define TMINS_HPP
+#ifndef PTO_NPU_A2A3_TMINS_HPP
+#define PTO_NPU_A2A3_TMINS_HPP
 
 #include <pto/common/constants.hpp>
 #include "TBinSOp.hpp"
@@ -62,7 +62,7 @@ namespace pto
             constexpr unsigned elementsPerRepeat = pto::REPEAT_BYTE / sizeof(T);
             constexpr unsigned blockSizeElem = pto::BLOCK_BYTE_SIZE / sizeof(T);
             constexpr unsigned stride = TileDataDst::RowStride;
-            TBinSInstr<MinSOp<T>, T, TileDataDst, elementsPerRepeat, blockSizeElem, stride>(dst, src, scalar, validRow, validCol);
+            TBinSInstr<MinSOp<T>, TileDataDst, elementsPerRepeat, blockSizeElem, stride>(dst, src, scalar, validRow, validCol);
         } else {
             TBinSPlusInstr<MinSOp<T>, T, TileDataDst, TileDataSrc>(dst, src, scalar, validRow, validCol);
         }

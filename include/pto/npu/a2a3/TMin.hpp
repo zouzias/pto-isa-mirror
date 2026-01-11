@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TMIN_HPP
-#define TMIN_HPP
+#ifndef PTO_NPU_A2A3_TMIN_HPP
+#define PTO_NPU_A2A3_TMIN_HPP
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
@@ -87,7 +87,7 @@ __tf__ PTO_INTERNAL void TMin(typename TileDataDst::TileDType __out__ dstData,
         constexpr unsigned elementsPerRepeat = pto::REPEAT_BYTE / sizeof(T);
         constexpr unsigned blockSizeElem = pto::BLOCK_BYTE_SIZE / sizeof(T);
         constexpr unsigned rowStride = TileDataDst::RowStride;
-        BinaryInstr<MinOp<T>, T, TileDataDst, elementsPerRepeat, blockSizeElem, rowStride>(dst, src0, src1, validRow, validCol);
+        BinaryInstr<MinOp<T>, TileDataDst, elementsPerRepeat, blockSizeElem, rowStride>(dst, src0, src1, validRow, validCol);
     } else {
         BinaryPlusInstr<MinOp<T>, T, TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1, validRow, validCol);
     }

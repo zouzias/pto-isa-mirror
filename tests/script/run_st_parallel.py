@@ -46,20 +46,61 @@ def _run(cmd, cwd=None, env=None, timeout_sec=None, capture=False, check=True):
     return out or ""
 
 
+def _ensure_python_module(module_name: str, pip_spec: Optional[str] = None, timeout_sec: int = 1800):
+    """
+    Ensure a Python module is importable.
+
+    Some testcase golden generators depend on optional third-party packages.
+    This helper installs the dependency via pip (user site) when missing.
+    """
+    try:
+        __import__(module_name)
+        return
+    except Exception:
+        pass
+
+    spec = pip_spec or module_name
+    print(f"[INFO] python dep missing: {module_name}; installing `{spec}` ...")
+    sys.stdout.flush()
+    # `en_dtypes` is built from source on some platforms; ensure `wheel` exists.
+    _run([sys.executable, "-m", "pip", "install", "--user", "wheel"], timeout_sec=timeout_sec, check=True)
+    _run([sys.executable, "-m", "pip", "install", "--user", spec], timeout_sec=timeout_sec, check=True)
+    __import__(module_name)
+
+
 def _source_ascend_env():
-    # Try to source the standard user install location.
-    candidates = [
-        os.path.expanduser("~/Ascend/ascend-toolkit/set_env.sh"),
-        os.path.expanduser("~/Ascend/ascend-toolkit/latest/bin/setenv.bash"),
-    ]
+    """
+    Best-effort loader for Ascend environment variables.
+
+    Prefer sourcing `ASCEND_HOME_PATH/bin/setenv.bash` when available (matches
+    `tests/script/run_st.py`). Fall back to common user install locations.
+    """
+    candidates = []
+    ascend_home = os.environ.get("ASCEND_HOME_PATH", "").strip()
+    if ascend_home:
+        candidates.extend(
+            [
+                os.path.join(ascend_home, "bin", "setenv.bash"),
+                os.path.join(ascend_home, "set_env.sh"),
+            ]
+        )
+    candidates.extend(
+        [
+            os.path.expanduser("~/Ascend/ascend-toolkit/set_env.sh"),
+            os.path.expanduser("~/Ascend/ascend-toolkit/latest/bin/setenv.bash"),
+        ]
+    )
+
+    script = None
     for p in candidates:
         if Path(p).exists():
             script = p
             break
-    else:
-        raise FileNotFoundError(f"Cannot find Ascend env script under: {candidates}")
 
-    # Use `env -0` to avoid newline issues.
+    if script is None:
+        # In some environments Ascend vars are already set.
+        return dict(os.environ)
+
     out = _run(
         ["bash", "-lc", f"source {script} >/dev/null 2>&1 && env -0"],
         capture=True,
@@ -72,6 +113,22 @@ def _source_ascend_env():
         k, v = item.split("=", 1)
         new_env[k] = v
     return new_env
+
+
+def _soc_config(soc_version: str):
+    if soc_version == "a3":
+        return {
+            "soc_version": "a3",
+            "soc_name": "Ascend910B1",
+            "st_dir": Path("tests/npu/a2a3/src/st").resolve(),
+        }
+    if soc_version == "a5":
+        return {
+            "soc_version": "a5",
+            "soc_name": "Ascend910_9599",
+            "st_dir": Path("tests/npu/a5/src/st").resolve(),
+        }
+    raise ValueError(f"unsupported soc_version: {soc_version}")
 
 
 def _parse_npu_smi_info(text):
@@ -243,8 +300,8 @@ def _get_ok_devices(env, requested=None, smi: Optional["_NpuSmiPoller"] = None):
     return ok
 
 
-def _extract_a3_testcases():
-    cmake_path = Path("tests/npu/a2a3/src/st/testcase/CMakeLists.txt")
+def _extract_testcases(st_dir: Path):
+    cmake_path = (st_dir / "testcase" / "CMakeLists.txt").resolve()
     text = cmake_path.read_text(encoding="utf-8", errors="ignore")
     if "set(ALL_TESTCASES" not in text:
         raise RuntimeError(f"Cannot find ALL_TESTCASES in {cmake_path}")
@@ -258,20 +315,27 @@ def _extract_a3_testcases():
     return testcases
 
 
-def _build_all_a3(env, jobs):
+def _build_all(env, jobs, st_dir: Path, soc_name: str):
     build_env = dict(env)
     build_env["PTO_ST_JOBS"] = str(jobs)
-    st_dir = Path("tests/npu/a2a3/src/st").resolve()
     build_dir = (st_dir / "build").resolve()
     build_dir.mkdir(parents=True, exist_ok=True)
 
     # Incremental build (much faster than `build_st.py`, which wipes `build/`).
-    _run(["cmake", "-DRUN_MODE=npu", "-DSOC_VERSION=Ascend910B1", ".."], cwd=str(build_dir), env=build_env, timeout_sec=1800)
+    #
+    # Important: clear `TEST_CASE` from the cache. Other runners may have
+    # configured the same build directory with `-DTEST_CASE=<single>`, which
+    # would otherwise cause us to only build one testcase binary.
+    _run(
+        ["cmake", "-U", "TEST_CASE", "-DRUN_MODE=npu", f"-DSOC_VERSION={soc_name}", ".."],
+        cwd=str(build_dir),
+        env=build_env,
+        timeout_sec=1800,
+    )
     _run(["make", "-j", str(jobs)], cwd=str(build_dir), env=build_env, timeout_sec=3600)
 
 
-def _gen_all_goldens(env, testcases):
-    st_dir = Path("tests/npu/a2a3/src/st")
+def _gen_all_goldens(env, testcases, st_dir: Path):
     build_dir = st_dir / "build"
     if not build_dir.exists():
         raise FileNotFoundError(f"build dir not found: {build_dir}")
@@ -310,8 +374,7 @@ def _parse_gtest_list(text):
     return tests
 
 
-def _list_gtests(env, testcase):
-    st_dir = Path("tests/npu/a2a3/src/st")
+def _list_gtests(env, testcase, st_dir: Path):
     bin_dir = st_dir / "build" / "bin"
     exe = (bin_dir / testcase).resolve()
     if not exe.exists():
@@ -323,7 +386,7 @@ def _list_gtests(env, testcase):
     return tests
 
 
-def _prepare_sandbox(env, testcase, gtest_filter, attempt, work_dir):
+def _prepare_sandbox(env, testcase, gtest_filter, attempt, work_dir, st_dir: Path):
     """
     Create an isolated per-task sandbox so tests can freely write temporary output
     files without polluting the shared build/ golden directories.
@@ -333,7 +396,6 @@ def _prepare_sandbox(env, testcase, gtest_filter, attempt, work_dir):
         bin/<testcase>  (symlink to build/bin/<testcase>)
         <Suite.case>/   (copied golden folder for that gtest case)
     """
-    st_dir = Path("tests/npu/a2a3/src/st")
     build_dir = st_dir / "build"
     bin_dir = build_dir / "bin"
     exe_src = (bin_dir / testcase).resolve()
@@ -350,7 +412,7 @@ def _prepare_sandbox(env, testcase, gtest_filter, attempt, work_dir):
     if not exe_dst.exists():
         os.symlink(str(exe_src), str(exe_dst))
 
-    case_dirs = [gtest_filter] if gtest_filter else _list_gtests(env, testcase)
+    case_dirs = [gtest_filter] if gtest_filter else _list_gtests(env, testcase, st_dir=st_dir)
     for case_dir in case_dirs:
         src_dir = (build_dir / case_dir).resolve()
         if not src_dir.exists():
@@ -407,14 +469,16 @@ def _run_one_binary(
     run_id: str = "",
     ascend_work_root: str = "/tmp/pto-isa-ascend-work",
     preserve_ascend_work_path: bool = False,
+    st_dir: Optional[Path] = None,
 ):
-    st_dir = Path("tests/npu/a2a3/src/st")
+    if st_dir is None:
+        raise ValueError("st_dir must be provided")
     build_bin_dir = st_dir / "build" / "bin"
 
     sandbox_root = None
     sandbox_bin_dir = None
     if work_dir:
-        sandbox_root, sandbox_bin_dir = _prepare_sandbox(env, testcase, gtest_filter, attempt, work_dir)
+        sandbox_root, sandbox_bin_dir = _prepare_sandbox(env, testcase, gtest_filter, attempt, work_dir, st_dir=st_dir)
         bin_dir = sandbox_bin_dir
     else:
         bin_dir = build_bin_dir
@@ -564,8 +628,9 @@ def _format_table(rows, headers):
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Build + run A3 NPU ST in parallel (default: 1 process per NPU)"
+        description="Build + run NPU ST in parallel (default: 1 process per NPU)"
     )
+    ap.add_argument("-v", "--soc-version", choices=["a3", "a5"], default="a3", help="SOC version: a3 or a5")
     ap.add_argument(
         "-j",
         "--jobs",
@@ -574,19 +639,21 @@ def main():
         help="parallel test jobs (0 means use all OK NPUs)",
     )
     ap.add_argument("--build-jobs", type=int, default=int(os.environ.get("PTO_ST_BUILD_JOBS", os.environ.get("PTO_ST_JOBS", "32"))))
-    ap.add_argument("--timeout-sec", type=int, default=int(os.environ.get("PTO_ST_TIMEOUT_SEC", "600")),
+    ap.add_argument("--timeout-sec", type=int, default=int(os.environ.get("PTO_ST_TIMEOUT_SEC", "120")),
                     help="per-testcase binary timeout (detect deadlock)")
     ap.add_argument("--split-gtest", action="store_true",
                     help="split each testcase binary into per-gtest tasks (improves load balance across NPUs)")
     ap.add_argument("--devices", default="", help="comma-separated physical NPU ids to use (default: auto-detect)")
-    ap.add_argument("--testcases", default="", help="comma-separated testcase names to run (default: all A3 ST)")
-    ap.add_argument("--skip-build", action="store_true", help="skip build step (assumes `tests/npu/a2a3/src/st/build` exists)")
+    ap.add_argument("--testcases", default="", help="comma-separated testcase names to run (default: all)")
+    ap.add_argument("--skip-build", action="store_true", help="skip build step (assumes st `build/` exists)")
     ap.add_argument("--skip-golden", action="store_true", help="skip golden generation step (assumes goldens exist)")
     ap.add_argument("--isolate", action="store_true", help="run each testcase in a private sandbox (slower)")
     ap.add_argument("--monitor-npu-smi", action="store_true",
                     help="poll `npu-smi` during test execution (slower, but can catch unhealthy devices)")
     args = ap.parse_args()
 
+    cfg = _soc_config(args.soc_version)
+    st_dir = cfg["st_dir"]
     env = _source_ascend_env()
     run_id = os.environ.get("PTO_ST_RUN_ID") or f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{uuid.uuid4().hex[:8]}"
     work_dir = None
@@ -595,6 +662,10 @@ def main():
         work_dir = (Path(work_root) / run_id).resolve()
         work_dir.mkdir(parents=True, exist_ok=True)
     print(f"[INFO] run_id={run_id}")
+    print(f"[INFO] soc_version={cfg['soc_version']} soc_name={cfg['soc_name']}")
+    print(f"[INFO] st_dir={st_dir}")
+    if cfg["soc_version"] == "a5":
+        _ensure_python_module("en_dtypes", pip_spec="en_dtypes==0.0.4")
     if work_dir:
         print(f"[INFO] work_dir={work_dir}")
     sys.stdout.flush()
@@ -627,20 +698,20 @@ def main():
         devices = list(device_pool)
         sys.stdout.flush()
 
-        testcases = _extract_a3_testcases()
+        testcases = _extract_testcases(st_dir=st_dir)
         if args.testcases.strip():
             wanted = {x.strip() for x in args.testcases.split(",") if x.strip()}
             testcases = [t for t in testcases if t in wanted]
             missing = sorted(wanted - set(testcases))
             if missing:
                 raise RuntimeError(f"unknown testcase(s): {missing}")
-        print(f"[INFO] A3 testcases: {len(testcases)}")
+        print(f"[INFO] testcases: {len(testcases)}")
         sys.stdout.flush()
 
         if not args.skip_build:
-            print("[INFO] building all A3 NPU ST (incremental)...")
+            print("[INFO] building NPU ST (incremental)...")
             sys.stdout.flush()
-            _build_all_a3(env, jobs=args.build_jobs)
+            _build_all(env, jobs=args.build_jobs, st_dir=st_dir, soc_name=cfg["soc_name"])
 
         golden_workers = int(os.environ.get("PTO_ST_GOLDEN_WORKERS", "0"))
         if golden_workers <= 0:
@@ -649,7 +720,6 @@ def main():
         if not args.skip_golden:
             print(f"[INFO] generating golden data (parallel workers={golden_workers})...")
             sys.stdout.flush()
-            st_dir = Path("tests/npu/a2a3/src/st")
             build_dir = st_dir / "build"
             if not build_dir.exists():
                 raise FileNotFoundError(f"build dir not found: {build_dir}")
@@ -678,7 +748,7 @@ def main():
             print("[INFO] splitting binaries into per-gtest tasks...")
             sys.stdout.flush()
             for tc in testcases:
-                for g in _list_gtests(env, tc):
+                for g in _list_gtests(env, tc, st_dir=st_dir):
                     tasks.append({"testcase": tc, "gtest_filter": g})
             print(f"[INFO] total tasks after split: {len(tasks)}")
             sys.stdout.flush()
@@ -774,6 +844,7 @@ def main():
                         run_id=run_id,
                         ascend_work_root=os.environ.get("PTO_ST_ASCEND_WORK_ROOT", "/tmp/pto-isa-ascend-work"),
                         preserve_ascend_work_path=os.environ.get("PTO_ST_PRESERVE_ASCEND_WORK_PATH", "0") == "1",
+                        st_dir=st_dir,
                     )
                     res["idx"] = task["idx"]
                 except Exception as e:
@@ -896,7 +967,7 @@ def main():
             for dev, pids in leftovers:
                 print(f" - dev={dev} pids={pids} health={final_devices.get(dev, {}).get('health', 'UNKNOWN')}")
 
-        print("\n[SUMMARY] all A3 NPU ST testcases passed")
+        print(f"\n[SUMMARY] all {cfg['soc_version'].upper()} NPU ST testcases passed")
     finally:
         smi.stop()
 

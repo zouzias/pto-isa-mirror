@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef T_EXTRA_OPS_HPP
-#define T_EXTRA_OPS_HPP
+#ifndef PTO_NPU_A2A3_T_EXTRA_OPS_HPP
+#define PTO_NPU_A2A3_T_EXTRA_OPS_HPP
 
 #include <cstdint>
 #include <type_traits>
@@ -17,6 +17,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/pto_tile.hpp>
 
 namespace pto {
+/**
+ * Extra elementwise helpers.
+ *
+ * These ops are implemented as explicit TF loops (rather than vector intrinsics)
+ * to cover cases not directly supported by A2/A3 vector instructions. They are
+ * intended for correctness and portability across supported tile layouts; use
+ * them sparingly in performance-critical paths.
+ */
 
 template <typename TileData>
 PTO_INTERNAL constexpr uint32_t GetTileElementOffset(uint32_t r, uint32_t c)
