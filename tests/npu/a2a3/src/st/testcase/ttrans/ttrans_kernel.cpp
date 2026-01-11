@@ -55,13 +55,11 @@ __global__ AICORE void runTTRANS(__gm__ T __out__ *out, __gm__ T __in__ *src, in
     GlobalDataSrc srcGlobal(src, pto::Shape(1, 1, 1, vRows, vCols), pto::Stride(1, 1, 1, tCols, 1));
     GlobalDataDst dstGlobal(out, pto::Shape(1, 1, 1, vCols, vRows), pto::Stride(1, 1, 1, tRows, 1));
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TTRANS(dstTile, srcTile, tmpTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+    evLoad = TLOAD(srcTile, srcGlobal);
+    evCompute = TTRANS(dstTile, srcTile, tmpTile, evLoad);
+    TSTORE(dstGlobal, dstTile, evCompute);
 }
 
 template <typename T, int tRows, int tCols, int vRows, int vCols>

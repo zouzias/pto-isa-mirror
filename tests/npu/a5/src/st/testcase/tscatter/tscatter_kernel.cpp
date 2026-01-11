@@ -50,14 +50,14 @@ PTO_INTERNAL void runTScatter(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *sr
     GlobalData_src1 src1Global(src1);
     GlobalData_dst dstGlobal(out);
 
-    TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TSCATTER(dstTile, src0Tile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoadSrc;
+    Event<Op::TLOAD, Op::VECTOR> evLoadIdx;
+    evLoadSrc = TLOAD(src0Tile, src0Global);
+    evLoadIdx = TLOAD(src1Tile, src1Global);
+
+    Event<Op::VECTOR, Op::TSTORE_VEC> evScatter;
+    evScatter = TSCATTER(dstTile, src0Tile, src1Tile, evLoadSrc, evLoadIdx);
+    TSTORE(dstGlobal, dstTile, evScatter);
     out = dstGlobal.data();
 }
 

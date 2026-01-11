@@ -32,13 +32,11 @@ __global__ AICORE void runTLog( __gm__ T __out__ *out, __gm__ T __in__ *src) {
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TLOG(dstTile, srcTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+    evLoad = TLOAD(srcTile, srcGlobal);
+    evCompute = TLOG(dstTile, srcTile, evLoad);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

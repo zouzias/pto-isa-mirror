@@ -104,12 +104,11 @@ namespace pto{
             static_assert(LAYOUT == layout, "Layout mismatch: template LAYOUT does not match deduced layout from tile SLayouts. "
                                              "Check SLayout of TileDataA and TileDataB.");
         }
-        
-
-
 
         // Ping-pong is used to overlap TEXTRACT (L1->L0) with TMATMUL on alternating buffers.
         uint64_t pingpong = getPingPong(0);
+        bool matmulRecorded[2] = {false, false};
+        Event<Op::TMATMUL, Op::TEXTRACT_M2LR> evMatmulToExtract[2];
         const uint64_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
         for (uint64_t k = 0 ; k < (uint64_t) (Tile_K / Cube_K); k++){
             using LeftTile = TileLeft<half, Cube_M, Cube_K, Cube_M, Cube_K>;
@@ -122,30 +121,32 @@ namespace pto{
             TASSIGN(bl0Tiles[0], (uint64_t) L0B_BUF0);
             TASSIGN(bl0Tiles[1], (uint64_t) L0B_BUF1);
 
-            // Wait until previous TMATMUL finishes using this L0 buffer before overwriting it via TEXTRACT.
-            wait_flag(PIPE_M, PIPE_MTE1, pingpong);
-
             if (layout == layout_t::NT) {
                 TASSIGN(aMatTile, (uint64_t) aMatTile.data() + k * Cube_K * Cube_M * sizeof(typename TileDataA::DType));
                 TASSIGN(bMatTile, (uint64_t) bMatTile.data() + k * Cube_K * Cube_N * sizeof(typename TileDataB::DType));
             } 
 
             // TEXTRACT slices the current Cube_K panel into L0A/L0B.
-            TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
-            TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
-
-            set_flag(PIPE_MTE1, PIPE_M, pingpong);
-            wait_flag(PIPE_MTE1, PIPE_M, pingpong);
+            if (matmulRecorded[pingpong]) {
+                TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0, evMatmulToExtract[pingpong]);
+            } else {
+                TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
+            }
+            auto recordExtractB = TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
+            Event<Op::TEXTRACT_M2LR, Op::TMATMUL> evExtractToMatmul;
+            evExtractToMatmul = recordExtractB;
 
             // TMATMUL: first K-slice initializes, subsequent slices accumulate.
+            RecordEvent recordMatmul;
             if (k == 0 && !accumulate) {
-                TMATMUL(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
+                recordMatmul = TMATMUL(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], evExtractToMatmul);
                 // TMATMUL_UF(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], UNIT_FLAG_ENABLE(k, (K / Cube_K)));
             } else {
-                TMATMUL_ACC(cAccTile, cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
+                recordMatmul = TMATMUL_ACC(cAccTile, cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], evExtractToMatmul);
                 // TMATMUL_ACC_UF(cAccTile, cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], UNIT_FLAG_ENABLE(k, (K / Cube_K)));
             }
-            set_flag(PIPE_M, PIPE_MTE1, pingpong);
+            evMatmulToExtract[pingpong] = recordMatmul;
+            matmulRecorded[pingpong] = true;
             pingpong = getPingPong(1);
         }
 

@@ -59,16 +59,14 @@ AICORE inline void runTLOAD_MIX_ND2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 #if defined(__DAV_CUBE__)
     uint16_t blockCount = 1;
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_MTE2);
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core0
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core1
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    pipe_barrier(PIPE_MTE1);
     set_intra_block(PIPE_MTE1, syncID);
     set_intra_block(PIPE_MTE1, syncID + 16);
 #endif
@@ -125,16 +123,14 @@ AICORE inline void runTLOAD_MIX_DN2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 #if defined(__DAV_CUBE__)
     uint16_t blockCount = 1;
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_MTE2);
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core0
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core1
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    pipe_barrier(PIPE_MTE1);
     set_intra_block(PIPE_MTE1, syncID);
     set_intra_block(PIPE_MTE1, syncID + 16);
 #endif
@@ -186,16 +182,14 @@ AICORE inline void runTLOAD_MIX_ND2ND(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 #if defined(__DAV_CUBE__)
     uint16_t blockCount = 1;
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_MTE2);
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core0
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core1
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    pipe_barrier(PIPE_MTE1);
     set_intra_block(PIPE_MTE1, syncID);
     set_intra_block(PIPE_MTE1, syncID + 16);
 #endif
@@ -248,16 +242,14 @@ AICORE inline void runTLOAD_MIX_DN2DN(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 #if defined(__DAV_CUBE__)
     uint16_t blockCount = 1;
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_MTE2);
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core0
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core1
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    pipe_barrier(PIPE_MTE1);
     set_intra_block(PIPE_MTE1, syncID);
     set_intra_block(PIPE_MTE1, syncID + 16);
 #endif
@@ -320,16 +312,14 @@ AICORE inline void runTLOAD_MIX_NZ2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 #if defined(__DAV_CUBE__)
     uint16_t blockCount = 1;
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_MTE2);
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core0
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core1
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    pipe_barrier(PIPE_MTE1);
     set_intra_block(PIPE_MTE1, syncID);
     set_intra_block(PIPE_MTE1, syncID + 16);
 #endif

@@ -74,44 +74,34 @@ AICORE void runTAdd(__gm__ T *z, __gm__ T *x, __gm__ T *y, uint32_t totalLength)
     int32_t loopCount = tileNum * BUFFER_NUM;
     // address offset between vector cores
     unsigned offset = block_idx * bTileRows * bTileCols;
-    int8_t pingpong_flag = 0; // ping pong pipeline flag
 
-    // synchronization operations between hardware pipelines
-    set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-    set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-    set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-    set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+    Event<Op::TSTORE_VEC, Op::TLOAD> evStoreToLoad[BUFFER_NUM];
     for (uint32_t i = 0; i < loopCount; i++) {
+        int8_t pingpong_flag = i % BUFFER_NUM;
         unsigned iterOffset = offset + i * tileSRows * tileSCols;
         // update address of GlobalData
         TASSIGN(xGlobal, x + iterOffset);
         TASSIGN(yGlobal, y + iterOffset);
         TASSIGN(zGlobal, z + iterOffset);
 
-        wait_flag(PIPE_V, PIPE_MTE2, (event_t)(pingpong_flag));
         // load data from global memory to UB buffer
-        TLOAD(xTiles[pingpong_flag], xGlobal);
-        TLOAD(yTiles[pingpong_flag], yGlobal);
+        if (i < BUFFER_NUM) {
+            TLOAD(xTiles[pingpong_flag], xGlobal);
+        } else {
+            TLOAD(xTiles[pingpong_flag], xGlobal, evStoreToLoad[pingpong_flag]);
+        }
 
-        set_flag(PIPE_MTE2, PIPE_V, (event_t)(pingpong_flag));
-        wait_flag(PIPE_MTE2, PIPE_V, (event_t)(pingpong_flag));
+        Event<Op::TLOAD, Op::TADD> evLoadToAdd;
+        evLoadToAdd = TLOAD(yTiles[pingpong_flag], yGlobal);
 
-        wait_flag(PIPE_MTE3, PIPE_V, (event_t)(pingpong_flag));
         // perform elementwise addition by vector core
-        TADD(zTiles[pingpong_flag], xTiles[pingpong_flag], yTiles[pingpong_flag]);
-        set_flag(PIPE_V, PIPE_MTE2, (event_t)(pingpong_flag));
+        Event<Op::TADD, Op::TSTORE_VEC> evAddToStore;
+        evAddToStore = TADD(zTiles[pingpong_flag], xTiles[pingpong_flag], yTiles[pingpong_flag], evLoadToAdd);
 
-        set_flag(PIPE_V, PIPE_MTE3, (event_t)(pingpong_flag));
-        wait_flag(PIPE_V, PIPE_MTE3, (event_t)(pingpong_flag));
         // store data from UB buffer to global memory
-        TSTORE(zGlobal, zTiles[pingpong_flag]);
-        set_flag(PIPE_MTE3, PIPE_V, (event_t)(pingpong_flag));
-        pingpong_flag = (pingpong_flag == 0) ? 1 : 0;
+        evStoreToLoad[pingpong_flag] = TSTORE(zGlobal, zTiles[pingpong_flag], evAddToStore);
     }
-    wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-    wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+    pipe_barrier(PIPE_ALL);
     TASSIGN(zGlobal, z);
     z = zGlobal.data();
 }

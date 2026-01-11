@@ -31,13 +31,11 @@ __global__ AICORE void runTROWEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, rows * src_col * sizeof(T)); // UB最大到0x40000
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TROWEXPAND(dstTile, srcTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+    evLoad = TLOAD(srcTile, srcGlobal);
+    evCompute = TROWEXPAND(dstTile, srcTile, evLoad);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 
@@ -59,13 +57,11 @@ __global__ AICORE void runTROWBRCB(__gm__ T __out__ *out, __gm__ T __in__ *src) 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, rows * src_col * sizeof(T));
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TROWEXPAND(dstTile, srcTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+    evLoad = TLOAD(srcTile, srcGlobal);
+    evCompute = TROWEXPAND(dstTile, srcTile, evLoad);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

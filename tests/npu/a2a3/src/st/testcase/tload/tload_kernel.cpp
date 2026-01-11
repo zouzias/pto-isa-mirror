@@ -159,14 +159,15 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
 	volatile uint64_t t0, t1, t2;
 	//TLOAD(vecTile, srcGlobal); //warm up...
 	t0=get_syscnt();
-    TLOAD(vecTile, srcGlobal);
+    RecordEvent evLoaded = TLOAD(vecTile, srcGlobal);
 	t1=get_syscnt();
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, vecTileP);
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0); 
-	t2=get_syscnt(); /*FIXME: compile would insert a dcci at above set/wait t2 timing may not be very correct*/
+    Event<Op::TLOAD, Op::TSTORE_VEC> evLoadToStore;
+    Event<Op::TSTORE_VEC, Op::SCALAR> evStoreDone;
+    evLoadToStore = evLoaded;
+    // Store waits on the load completion; then wait on store completion before profiling end.
+    evStoreDone = TSTORE(dstGlobal, vecTileP, evLoadToStore);
+    TSYNC(evStoreDone);
+	t2=get_syscnt();
 	LOG(t0);
 	LOG(t1-t0);
 	LOG(t2-t1);

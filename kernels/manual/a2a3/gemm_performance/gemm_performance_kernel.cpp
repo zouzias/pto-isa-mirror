@@ -25,24 +25,12 @@ constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024; // L0A/L0B ping-pong split (32
 // comments refer to the high-level PTO instructions to make tuning easier.
 
 template <typename OutTile, typename LeftTile, typename RightTile>
-AICORE inline void MatmulAcc(OutTile cTile, LeftTile aTile, RightTile bTile, uint32_t k)
+AICORE inline RecordEvent MatmulAcc(OutTile cTile, LeftTile aTile, RightTile bTile, uint32_t k)
 {
     if (k == 0) {
-        TMATMUL(cTile, aTile, bTile);
-    } else {
-        TMATMUL_ACC(cTile, cTile, aTile, bTile);
+        return TMATMUL(cTile, aTile, bTile);
     }
-}
-
-template <pipe_t srcPipe, pipe_t dstPipe>
-AICORE inline void SetFlag(uint32_t id)
-{
-    set_flag(srcPipe, dstPipe, static_cast<event_t>(id));
-}
-template <pipe_t srcPipe, pipe_t dstPipe>
-AICORE inline void WaitFlag(uint32_t id)
-{
-    wait_flag(srcPipe, dstPipe, static_cast<event_t>(id));
+    return TMATMUL_ACC(cTile, cTile, aTile, bTile);
 }
 
 template <typename T, typename U, typename S, int m, int k, int n, uint32_t singleCoreM, uint32_t singleCoreK,
@@ -74,7 +62,10 @@ AICORE inline void ProcessKIteration(uint32_t kIter, uint32_t i, uint32_t j, __g
         bMatTile[BUFFER_NUM],
     TileLeft<U, baseM, baseK, baseM, baseK> aTile[BUFFER_NUM],
     TileRight<S, baseK, baseN, baseK, baseN> bTile[BUFFER_NUM], TileAcc<T, baseM, baseN, baseM, baseN> &cTile,
-    uint8_t &mte2DBFlag, uint8_t &mte1DBFlag)
+    uint8_t &mte2DBFlag, uint8_t &mte1DBFlag, Event<Op::TEXTRACT_M2LR, Op::TLOAD> evExtractToLoad[BUFFER_NUM],
+    bool extractToLoadPrimed[BUFFER_NUM], Event<Op::TLOAD, Op::TEXTRACT_M2LR> evLoadA[BUFFER_NUM],
+    Event<Op::TLOAD, Op::TEXTRACT_M2LR> evLoadB[BUFFER_NUM], Event<Op::TMATMUL, Op::TEXTRACT_M2LR> evMatmulToExtract[BUFFER_NUM],
+    bool matmulToExtractPrimed[BUFFER_NUM], Event<Op::TMATMUL, Op::TSTORE_ACC> &evMatmulToStore)
 {
     // A panel staged by each TLOAD (GM->L1) when kModstepKa == 0: [baseM, baseK * stepKa]
     using NDValidShapeA = TileShape2D<U, baseM, baseK * stepKa, Layout::ND>;
@@ -95,60 +86,71 @@ AICORE inline void ProcessKIteration(uint32_t kIter, uint32_t i, uint32_t j, __g
         GlobalDataSrcA gmA(currentSrc0 + i * singleCoreK * baseM + kIter * baseK);
         GlobalDataSrcB gmB(currentSrc1 + j * singleCoreK * baseN + kIter * baseK);
 
-        // Wait until TEXTRACT is done with this L1 buffer before reusing it.
-        WaitFlag<PIPE_MTE1, PIPE_MTE2>(mte2DBFlag);
-        TLOAD(aMatTile[mte2DBFlag], gmA);
-        SetFlag<PIPE_MTE2, PIPE_MTE1>(0);
-        TLOAD(bMatTile[mte2DBFlag], gmB);
-        SetFlag<PIPE_MTE2, PIPE_MTE1>(1);
+        if (extractToLoadPrimed[mte2DBFlag]) {
+            evLoadA[mte2DBFlag] = TLOAD(aMatTile[mte2DBFlag], gmA, evExtractToLoad[mte2DBFlag]);
+        } else {
+            evLoadA[mte2DBFlag] = TLOAD(aMatTile[mte2DBFlag], gmA);
+        }
+        evLoadB[mte2DBFlag] = TLOAD(bMatTile[mte2DBFlag], gmB);
         mte2DBFlag = (mte2DBFlag == 0) ? 1 : 0;
     }
 
     const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0; // mte2DBFlag reversed
-    // Wait until TMATMUL is done with the current L0A/L0B buffer before overwriting it via TEXTRACT.
-    WaitFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
 
     // TEXTRACT stage: slice the loaded L1 panel into the baseK chunk we need this iteration.
-    if (kModstepKa == 0)
-        WaitFlag<PIPE_MTE2, PIPE_MTE1>(0);
-    TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModstepKa * baseK);
+    if (matmulToExtractPrimed[mte1DBFlag]) {
+        if (kModstepKa == 0) {
+            TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModstepKa * baseK, evMatmulToExtract[mte1DBFlag],
+                evLoadA[currMte2Idx]);
+        } else {
+            TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModstepKa * baseK, evMatmulToExtract[mte1DBFlag]);
+        }
+    } else {
+        if (kModstepKa == 0) {
+            TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModstepKa * baseK, evLoadA[currMte2Idx]);
+        } else {
+            TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModstepKa * baseK);
+        }
+    }
 
-    if (kModstepKa == 0)
-        WaitFlag<PIPE_MTE2, PIPE_MTE1>(1);
-    TEXTRACT(bTile[mte1DBFlag], bMatTile[currMte2Idx], (kIter % stepKb) * baseK, 0);
+    RecordEvent recordExtractB;
+    if (kModstepKa == 0) {
+        recordExtractB = TEXTRACT(bTile[mte1DBFlag], bMatTile[currMte2Idx], (kIter % stepKb) * baseK, 0, evLoadB[currMte2Idx]);
+    } else {
+        recordExtractB = TEXTRACT(bTile[mte1DBFlag], bMatTile[currMte2Idx], (kIter % stepKb) * baseK, 0);
+    }
 
     if ((kIter + 1) % stepKa == 0) {
         // Allow the next TLOAD to reuse this L1 slot.
-        SetFlag<PIPE_MTE1, PIPE_MTE2>(currMte2Idx);
+        evExtractToLoad[currMte2Idx] = recordExtractB;
+        extractToLoadPrimed[currMte2Idx] = true;
     }
 
     // TMATMUL stage: compute (or accumulate) into cTile.
-    SetFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
-    WaitFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
-    MatmulAcc(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag], kIter);
-    // Signal that TMATMUL is done, so the next iteration may TEXTRACT into the other ping-pong slot.
-    SetFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
+    Event<Op::TEXTRACT_M2LR, Op::TMATMUL> evExtractToMatmul;
+    evExtractToMatmul = recordExtractB;
+    auto recordMatmul = (kIter == 0) ? TMATMUL(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag], evExtractToMatmul)
+                                     : TMATMUL_ACC(cTile, cTile, aTile[mte1DBFlag], bTile[mte1DBFlag], evExtractToMatmul);
+    evMatmulToExtract[mte1DBFlag] = recordMatmul;
+    matmulToExtractPrimed[mte1DBFlag] = true;
+    evMatmulToStore = recordMatmul;
     mte1DBFlag = (mte1DBFlag == 0) ? 1 : 0;
 }
 
 template <typename T, typename U, typename S, int m, int n, uint32_t baseM, uint32_t baseN, uint32_t singleCoreK>
 AICORE inline void StoreResult(
-    TileAcc<T, baseM, baseN, baseM, baseN> &cTile, __gm__ T *currentDst, uint32_t i, uint32_t j)
+    TileAcc<T, baseM, baseN, baseM, baseN> &cTile, __gm__ T *currentDst, uint32_t i, uint32_t j,
+    Event<Op::TMATMUL, Op::TSTORE_ACC> &evMatmulToStore)
 {
     // TSTORE stage: write the finished C tile [baseM, baseN] back to GM.
-    SetFlag<PIPE_M, PIPE_FIX>(0);
-    WaitFlag<PIPE_M, PIPE_FIX>(0);
-
     // the data size read from L0C after single k loop is [baseM, baseN]
     using NDValidShapeC = TileShape2D<T, baseM, baseN, Layout::ND>;
     using NDWholeShapeC = BaseShape2D<T, m, n, Layout::ND>; // stride use global C m n
     using GlobalDataOut = GlobalTensor<T, NDValidShapeC, NDWholeShapeC, Layout::ND>;
 
     GlobalDataOut dstGlobal(currentDst + i * baseM * n + j * baseN);
-    TSTORE(dstGlobal, cTile);
-
-    SetFlag<PIPE_FIX, PIPE_M>(0);
-    WaitFlag<PIPE_FIX, PIPE_M>(0);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
+    pipe_barrier(PIPE_ALL);
 }
 
 template <typename T, typename U, typename S, typename B, uint32_t blockDim, int m, int k, int n, int validM,
@@ -192,29 +194,26 @@ AICORE inline void RunGemmE2E(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
     constexpr uint32_t mLoop = singleCoreM / baseM;
     constexpr uint32_t nLoop = singleCoreN / baseN;
     constexpr uint32_t kLoop = singleCoreK / baseK;
-    uint8_t mte2DBFlag = 0, mte1DBFlag = 0;
-
-    // supplement first sync instr for reverse sync in ProcessKIteration
-    SetFlag<PIPE_MTE1, PIPE_MTE2>(0); 
-    SetFlag<PIPE_MTE1, PIPE_MTE2>(1);
-    SetFlag<PIPE_M, PIPE_MTE1>(0);
-    SetFlag<PIPE_M, PIPE_MTE1>(1);
-
     for (uint32_t i = 0; i < mLoop; i++) {
         for (uint32_t j = 0; j < nLoop; j++) {
+            uint8_t mte2DBFlag = 0, mte1DBFlag = 0;
+            bool extractToLoadPrimed[BUFFER_NUM] = {false, false};
+            bool matmulToExtractPrimed[BUFFER_NUM] = {false, false};
+            Event<Op::TEXTRACT_M2LR, Op::TLOAD> evExtractToLoad[BUFFER_NUM];
+            Event<Op::TLOAD, Op::TEXTRACT_M2LR> evLoadA[BUFFER_NUM];
+            Event<Op::TLOAD, Op::TEXTRACT_M2LR> evLoadB[BUFFER_NUM];
+            Event<Op::TMATMUL, Op::TEXTRACT_M2LR> evMatmulToExtract[BUFFER_NUM];
+            Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+
             for (uint32_t kIter = 0; kIter < kLoop; kIter++) {
                 ProcessKIteration<T, U, S, m, k, n, baseM, baseK, baseN, stepKa, stepKb, singleCoreK>(kIter, i, j,
-                    currentSrc0, currentSrc1, aMatTile, bMatTile, aTile, bTile, cTile, mte2DBFlag, mte1DBFlag);
+                    currentSrc0, currentSrc1, aMatTile, bMatTile, aTile, bTile, cTile, mte2DBFlag, mte1DBFlag,
+                    evExtractToLoad, extractToLoadPrimed, evLoadA, evLoadB, evMatmulToExtract, matmulToExtractPrimed,
+                    evMatmulToStore);
             }
-            StoreResult<T, U, S, m, n, baseM, baseN, singleCoreK>(cTile, currentDst, i, j);
+            StoreResult<T, U, S, m, n, baseM, baseN, singleCoreK>(cTile, currentDst, i, j, evMatmulToStore);
         }
     }
-
-    // supplement last sync instr for reverse sync in ProcessKIteration
-    WaitFlag<PIPE_M, PIPE_MTE1>(0);
-    WaitFlag<PIPE_M, PIPE_MTE1>(1);
-    WaitFlag<PIPE_MTE1, PIPE_MTE2>(0);
-    WaitFlag<PIPE_MTE1, PIPE_MTE2>(1);
 }
 
 template <typename T, uint32_t blockDim, uint32_t m, uint32_t k, uint32_t n, uint32_t singleCoreM, uint32_t singleCoreK,

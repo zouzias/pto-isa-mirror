@@ -56,23 +56,20 @@ AICORE inline void runMATMUL(__gm__ aType *src0, __gm__ bType *src1)
     TASSIGN(cTile, 0x0);
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    RecordEvent evLoaded = TLOAD(bMatTile, src1Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMov;
+    evLoadToMov = evLoaded;
 
     /**********************************TMOV && TEXTRACT**********************************/
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMov);
+    evMovToMatmul = TMOV(bTile, bMatTile, evLoadToMov);
 
     /**********************************TMATMUL**********************************/
-    TMATMUL(cTile, aTile, bTile);
-
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    Event<Op::TMATMUL, Op::TMOV_A2M> evMatmulDone;
+    evMatmulDone = TMATMUL(cTile, aTile, bTile, evMovToMatmul);
+    TSYNC(evMatmulDone);
 }
 
 template <typename aType, typename bType, typename fbType, int M, int K, int N, int validM, int validK, int validN>
@@ -113,23 +110,24 @@ AICORE inline void runMATMULFB(__gm__ aType *src0, __gm__ bType *src1, __gm__ fb
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
-    TLOAD(fbMatTile, src2Global);
+    RecordEvent evLoaded = TLOAD(fbMatTile, src2Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2S> evLoadToFix;
+    evLoadToMte1 = evLoaded;
+    evLoadToFix = evLoaded;
 
     /**********************************TMOV && TEXTRACT**********************************/
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    evMovToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
 
     /**********************************TMATMUL**********************************/
-    TMATMUL(cTile, aTile, bTile);
+    Event<Op::TMATMUL, Op::TMOV_A2M> evMatmulDone;
+    evMatmulDone = TMATMUL(cTile, aTile, bTile, evMovToMatmul);
 
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    TSYNC(evLoadToFix);
+    TSYNC(evMatmulDone);
 }
 
 template <typename outType, typename aType, typename bType, int M, int K, int N, int validM, int validK, int validN, bool isRelu = false>
@@ -157,16 +155,13 @@ __global__ AICORE void runTMOV_nz2nz(__gm__ outType *out, __gm__ aType *src0, __
     using DstTileData = Tile<TileType::Mat, outType, M, N, BLayout::ColMajor, M, N, SLayout::RowMajor, 512>;
     DstTileData dstTileData;
     TASSIGN(dstTileData, 0x0);
+    Event<Op::TMOV_A2M, Op::TSTORE_MAT> evFixToStore;
     if constexpr (isRelu) {
-        TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile);
+        evFixToStore = TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile);
     } else {
-        TMOV(dstTileData, cTile);
+        evFixToStore = TMOV(dstTileData, cTile);
     }
-
-    set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-
-    TSTORE(dstGlobal, dstTileData);
+    TSTORE(dstGlobal, dstTileData, evFixToStore);
     out = dstGlobal.data();
 }
 
@@ -206,14 +201,13 @@ __global__ AICORE void runVectorQuantTMOV_nz2nz(
     TASSIGN(dstTileData, 0x0);
 
     TMOV(fbTile, fbMatTile);  // L1-> FB1
+    Event<Op::TMOV_A2M, Op::TSTORE_MAT> evFixToStore;
     if constexpr (isRelu) {
-        TMOV_FP<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
+        evFixToStore = TMOV_FP<DstTileData, AccTile, FbTile, ReluPreMode::NormalRelu>(dstTileData, cTile, fbTile);
     } else {
-        TMOV_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
+        evFixToStore = TMOV_FP<DstTileData, AccTile, FbTile>(dstTileData, cTile, fbTile);
     }
-    set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTileData);
+    TSTORE(dstGlobal, dstTileData, evFixToStore);
     out = dstGlobal.data();
 }
 
@@ -256,16 +250,13 @@ __global__ AICORE void runScalarQuantTMOV_nz2nz(
             preQuantScalar = (preQuantScalar & ~(static_cast<uint64_t>(1) << 46)) | (static_cast<uint64_t>(sign) << 46);
         }
     }
+    Event<Op::TMOV_A2M, Op::TSTORE_MAT> evFixToStore;
     if constexpr (isRelu) {
-        TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile, preQuantScalar);
+        evFixToStore = TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile, preQuantScalar);
     } else {
-        TMOV<DstTileData, AccTile>(dstTileData, cTile, preQuantScalar);
+        evFixToStore = TMOV<DstTileData, AccTile>(dstTileData, cTile, preQuantScalar);
     }
-
-    set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
-
-    TSTORE(dstGlobal, dstTileData);
+    TSTORE(dstGlobal, dstTileData, evFixToStore);
     out = dstGlobal.data();
 }
 

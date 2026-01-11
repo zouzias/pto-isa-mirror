@@ -28,13 +28,11 @@ __global__ AICORE void runTMins(__gm__ T __out__ *out, __gm__ T __in__ *src0, __
     GlobalData src0Global(src0);
     GlobalData dstGlobal(out);
 
-    TLOAD(src0Tile, src0Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMINS(dstTile, src0Tile, src1[0]);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+    evLoad = TLOAD(src0Tile, src0Global);
+    evCompute = TMINS(dstTile, src0Tile, src1[0], evLoad);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

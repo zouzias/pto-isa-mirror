@@ -92,7 +92,7 @@ namespace pto{
     }
 
      template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, layout_t LAYOUT = layout_t::NONE, typename TileDataA, typename TileDataB, typename TileDataC>
-    [aicore] inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, TileDataC &cAccTile){
+    [aicore] inline RecordEvent pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, TileDataC &cAccTile){
 
 
         constexpr layout_t layout = deduce_layout<TileDataA, TileDataB>();
@@ -103,9 +103,20 @@ namespace pto{
             static_assert(LAYOUT == layout, "Layout mismatch: template LAYOUT does not match deduced layout from tile SLayouts. "
                                              "Check SLayout of TileDataA and TileDataB.");
         }
-        
 
-
+        // Re-implement the original PIPE_M <-> PIPE_MTE1 ping-pong protocol via Event/TSYNC:
+        // - M -> MTE1: protect L0A/L0B reuse (wait before TEXTRACT, record after TMATMUL)
+        // - MTE1 -> M: ensure TEXTRACT finishes before TMATMUL (record+wait before TMATMUL)
+        //
+        // Use fixed event IDs 0/1 to match the original ping-pong tokens.
+        static bool primed = false;
+        if (!primed) {
+            Event<Op::TMATMUL, Op::TEXTRACT_M2LR, false, EVENT_ID0> ev0;
+            Event<Op::TMATMUL, Op::TEXTRACT_M2LR, false, EVENT_ID1> ev1;
+            ev0.Record();
+            ev1.Record();
+            primed = true;
+        }
 
         uint64_t pingpong = getPingPong(0);
         const uint64_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
@@ -120,7 +131,17 @@ namespace pto{
             TASSIGN(bl0Tiles[0], (uint64_t) L0B_BUF0);
             TASSIGN(bl0Tiles[1], (uint64_t) L0B_BUF1);
 
-            wait_flag(PIPE_M, PIPE_MTE1, pingpong);
+            Event<Op::TMATMUL, Op::TEXTRACT_M2LR, false, EVENT_ID0> evMatmulToExtract0;
+            Event<Op::TMATMUL, Op::TEXTRACT_M2LR, false, EVENT_ID1> evMatmulToExtract1;
+            Event<Op::TEXTRACT_M2LR, Op::TMATMUL, false, EVENT_ID0> evExtractToMatmul0;
+            Event<Op::TEXTRACT_M2LR, Op::TMATMUL, false, EVENT_ID1> evExtractToMatmul1;
+
+            // Wait for previous TMATMUL that used this pingpong L0 buffer.
+            if (pingpong == 0) {
+                evMatmulToExtract0.Wait();
+            } else {
+                evMatmulToExtract1.Wait();
+            }
 
             if (layout == layout_t::NT) {
                 TASSIGN(aMatTile, (uint64_t) aMatTile.data() + k * Cube_K * Cube_M * sizeof(typename TileDataA::DType));
@@ -130,20 +151,31 @@ namespace pto{
             TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
             TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
 
-            set_flag(PIPE_MTE1, PIPE_M, pingpong);
-            wait_flag(PIPE_MTE1, PIPE_M, pingpong);
+            // Ensure TEXTRACT completes on MTE1 before TMATMUL starts on M.
+            if (pingpong == 0) {
+                evExtractToMatmul0.Record();
+                evExtractToMatmul0.Wait();
+            } else {
+                evExtractToMatmul1.Record();
+                evExtractToMatmul1.Wait();
+            }
 
-            if (k == 0){
+            if (k == 0) {
                 TMATMUL(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
-                // TMATMUL_UF(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], UNIT_FLAG_ENABLE(k, (K / Cube_K)));
             } else {
                 TMATMUL_ACC(cAccTile, cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
-                // TMATMUL_ACC_UF(cAccTile, cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], UNIT_FLAG_ENABLE(k, (K / Cube_K)));
             }
-            set_flag(PIPE_M, PIPE_MTE1, pingpong);
+
+            // Signal MTE1 that TMATMUL has finished consuming the pingpong L0 buffers.
+            if (pingpong == 0) {
+                evMatmulToExtract0.Record();
+            } else {
+                evMatmulToExtract1.Record();
+            }
             pingpong = getPingPong(1);
         }
 
+        return {};
     }
 
 }

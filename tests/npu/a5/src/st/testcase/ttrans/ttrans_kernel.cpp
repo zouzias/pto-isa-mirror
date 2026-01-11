@@ -51,17 +51,12 @@ inline AICORE void runTTRANS( __gm__ T __out__ *out, __gm__ T __in__ *src) {
                          pto::Shape(1, 1, 1, kGCols_, kGRows_),
                          pto::Stride(1, 1, 1, kGRows_, 1));
 
-    TLOAD(srcTile, srcGlobal);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    evLoad = TLOAD(srcTile, srcGlobal);
 
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-
-    TTRANS(dstTile, srcTile, tmpTile);
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TTRANS, Op::TSTORE_VEC> evTrans;
+    evTrans = TTRANS(dstTile, srcTile, tmpTile, evLoad);
+    TSTORE(dstGlobal, dstTile, evTrans);
 
     out = dstGlobal.data();
 }

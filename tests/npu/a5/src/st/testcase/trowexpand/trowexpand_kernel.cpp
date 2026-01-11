@@ -37,16 +37,14 @@ __global__ AICORE void runROWEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalData srcGlobal(src + offset);
     DstGlobalData dstGlobal(out + offset);
 
-    TLOAD(dstTile, dstGlobal);
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TROWEXPAND(dstTile, srcTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
-    set_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
+    Event<Op::TLOAD, Op::VECTOR> evLoadDst;
+    Event<Op::TLOAD, Op::VECTOR> evLoadSrc;
+    evLoadDst = TLOAD(dstTile, dstGlobal);
+    evLoadSrc = TLOAD(srcTile, srcGlobal);
+
+    Event<Op::TROWEXPAND, Op::TSTORE_VEC> evCompute;
+    evCompute = TROWEXPAND(dstTile, srcTile, evLoadDst, evLoadSrc);
+    TSTORE(dstGlobal, dstTile, evCompute);
     pipe_barrier(PIPE_ALL);
     out = dstGlobal.data();
 }

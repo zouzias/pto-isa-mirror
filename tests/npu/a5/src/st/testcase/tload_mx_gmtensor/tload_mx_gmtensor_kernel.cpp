@@ -57,14 +57,12 @@ AICORE inline void RunLoadAndStoreDyn(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     // L1 -> UB : AIC
     uint16_t blockCount = 1;
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_MTE2);
     // move to vector    core0
     copy_cbuf_to_ubuf((__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);
     // move to vector    core1
     copy_cbuf_to_ubuf((__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    pipe_barrier(PIPE_MTE1);
     set_intra_block(PIPE_MTE1, syncID);
     set_intra_block(PIPE_MTE1, syncID + 16);
 #endif
@@ -105,14 +103,12 @@ AICORE inline void RunLoadAndStore(__gm__ T *out, __gm__ T *src0, __gm__ T *src1
     // L1 -> UB : AIC
     uint16_t blockCount = 1;
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_MTE2);
     // move to vector    core0
     copy_cbuf_to_ubuf((__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);
     // move to vector    core1
     copy_cbuf_to_ubuf((__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    pipe_barrier(PIPE_MTE1);
     set_intra_block(PIPE_MTE1, syncID);
     set_intra_block(PIPE_MTE1, syncID + 16);
 #endif

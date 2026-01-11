@@ -155,6 +155,7 @@ AICORE void runTFILLPAD(
     TileDataP vecTileP(kTRows_);
     TASSIGN(vecTileP, (uint64_t)ubaddr1);
 
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
     if constexpr (expand) {
         using TileData = Tile<TileType::Vec, T, kTRows_, shape4_aligned, BLayout::RowMajor, -1, -1, SLayout::NoneBox,
             512, LoadPadVal_>;
@@ -164,11 +165,12 @@ AICORE void runTFILLPAD(
         TASSIGN(vecTile, (uint64_t)ubaddr0);
 
         // TLOAD(vecTile, srcGlobal); //warm up...
-        TLOAD(vecTile, srcGlobal);
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        RecordEvent evLoaded = TLOAD(vecTile, srcGlobal);
+        Event<Op::TLOAD, Op::VECTOR> evLoadToVec;
+        evLoadToVec = evLoaded;
+        TSYNC(evLoadToVec);
         t0 = get_syscnt();
-        TFILLPAD_EXPAND(vecTileP, vecTile);
+        evCompute = TFILLPAD_EXPAND(vecTileP, vecTile);
     } else {
         using TileData =
             Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, LoadPadVal_>;
@@ -178,22 +180,22 @@ AICORE void runTFILLPAD(
         TASSIGN(vecTile, (uint64_t)ubaddr0);
 
         // TLOAD(vecTile, srcGlobal); //warm up...
-        TLOAD(vecTile, srcGlobal);
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        RecordEvent evLoaded = TLOAD(vecTile, srcGlobal);
+        Event<Op::TLOAD, Op::VECTOR> evLoadToVec;
+        evLoadToVec = evLoaded;
+        TSYNC(evLoadToVec);
         t0 = get_syscnt();
-        if constexpr (inplace)
-            TFILLPAD_INPLACE(vecTileP, vecTile);
-        else
-            TFILLPAD(vecTileP, vecTile);
+        if constexpr (inplace) {
+            evCompute = TFILLPAD_INPLACE(vecTileP, vecTile);
+        } else {
+            evCompute = TFILLPAD(vecTileP, vecTile);
+        }
     }
     t1 = get_syscnt();
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, vecTileP);
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    t2 = get_syscnt(); /*FIXME: compile would insert a dcci at above set/wait t2 timing may not be very correct*/
+    Event<Op::TSTORE_VEC, Op::SCALAR> evStoreDone;
+    evStoreDone = TSTORE(dstGlobal, vecTileP, evCompute);
+    TSYNC(evStoreDone);
+    t2 = get_syscnt();
     LOG(t0);
     LOG(t1 - t0);
     LOG(t2 - t1);

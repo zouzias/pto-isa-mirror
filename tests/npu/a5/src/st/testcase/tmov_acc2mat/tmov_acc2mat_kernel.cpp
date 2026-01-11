@@ -86,8 +86,10 @@ AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ FbTy
     TASSIGN(cTile, 0x0);
 #if defined(__DAV_CUBE__)
     /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadA;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadB;
+    evLoadA = TLOAD(aMatTile, src0Global);
+    evLoadB = TLOAD(bMatTile, src1Global);
     if (src2 != nullptr) {
         using GlobalDataSrc2 = GlobalTensor<FbType, pto::Shape<1, 1, 1, 1, validN>,
             pto::Stride<1 * validN, 1 * validN, 1 * validN, validN, 1>>;
@@ -97,20 +99,14 @@ AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ FbTy
         TASSIGN(fbMatTile, 0x20000);
         TLOAD(fbMatTile, src2Global);
     }
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     /**********************************TMOV && TEXTRACT**********************************/
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
+    TMOV(aTile, aMatTile, evLoadA, evLoadB);
+    evMovToMatmul = TMOV(bTile, bMatTile);
 
     /**********************************TMATMUL**********************************/
-    TMATMUL(cTile, aTile, bTile);
-
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    TMATMUL(cTile, aTile, bTile, evMovToMatmul);
+    pipe_barrier(PIPE_ALL);
 #endif
 }
 
@@ -142,8 +138,10 @@ AICORE inline void RunMATMUL_NZUNALIGN(__gm__ AType *src0, __gm__ BType *src1, _
     TASSIGN(cTile, 0x0);
 #if defined(__DAV_CUBE__)
     /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadA;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadB;
+    evLoadA = TLOAD(aMatTile, src0Global);
+    evLoadB = TLOAD(bMatTile, src1Global);
     if (src2 != nullptr) {
         using GlobalDataSrc2 = GlobalTensor<FbType, pto::Shape<1, 1, 1, 1, N>,
             pto::Stride<1 * N, 1 * N, 1 * N, N, 1>>;
@@ -153,20 +151,13 @@ AICORE inline void RunMATMUL_NZUNALIGN(__gm__ AType *src0, __gm__ BType *src1, _
         TASSIGN(fbMatTile, 0x20000);
         TLOAD(fbMatTile, src2Global);
     }
-
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-
     /**********************************TMOV && TEXTRACT**********************************/
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
+    TMOV(aTile, aMatTile, evLoadA, evLoadB);
+    evMovToMatmul = TMOV(bTile, bMatTile);
     /**********************************TMATMUL**********************************/
-    TMATMUL(cTile, aTile, bTile);
-
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    TMATMUL(cTile, aTile, bTile, evMovToMatmul);
+    pipe_barrier(PIPE_ALL);
 #endif
 }
 
@@ -289,13 +280,11 @@ __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ B
         TMOV(srcTileData, cTile);
     }
 
-    set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_ALL);
 
     TMOVMat2Vec<OutType, DstTileData, SrcTileData, row, col>(dstTileData, srcTileData);
 
-    set_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
+    pipe_barrier(PIPE_ALL);
     set_intra_block(PIPE_FIX, syncId);
     set_intra_block(PIPE_FIX, syncId + 16);
 #endif
@@ -362,13 +351,11 @@ __global__ AICORE void RunTMOVFBQuant(__gm__ OutType *out, __gm__ AType *src0, _
         TMOV_FP<SrcTileData, AccTile, FbTile>(srcTileData, cTile, fbTile);
     }
 
-    set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_ALL);
 
     TMOVMat2Vec<OutType, DstTileData, SrcTileData, row, col>(dstTileData, srcTileData);
 
-    set_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
+    pipe_barrier(PIPE_ALL);
     set_intra_block(PIPE_FIX, syncId);
     set_intra_block(PIPE_FIX, syncId + 16);
 #endif
@@ -431,13 +418,11 @@ __global__ AICORE void RunTMOVSCQuant(__gm__ OutType *out, __gm__ AType *src0, _
         TMOV(srcTileData, cTile, preScalar);
     }
 
-    set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_ALL);
 
     TMOVMat2Vec<OutType, DstTileData, SrcTileData, row, col>(dstTileData, srcTileData);
 
-    set_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
+    pipe_barrier(PIPE_ALL);
     set_intra_block(PIPE_FIX, syncId);
     set_intra_block(PIPE_FIX, syncId + 16);
 #endif

@@ -39,17 +39,12 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src) {
 
     GlobalData_dst dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
+    Event<Op::TLOAD, Op::VECTOR> evLoadSrc;
+    evLoadSrc = TLOAD(srcTile, srcGlobal);
 
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-
-    TCVT(dstTile, srcTile, RoundMode::CAST_RINT);
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TCVT, Op::TSTORE_VEC> evConvert;
+    evConvert = TCVT(dstTile, srcTile, RoundMode::CAST_RINT, evLoadSrc);
+    TSTORE(dstGlobal, dstTile, evConvert);
     
     out = dstGlobal.data();
 }

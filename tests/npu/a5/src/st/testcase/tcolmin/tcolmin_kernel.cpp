@@ -31,14 +31,12 @@ PTO_INTERNAL void runTColMin(__gm__ T __out__ *out, __gm__ T __in__ *src, bool i
     TASSIGN(dstTile, srcRow * col * sizeof(T));
 
     // 搬运数据
-    TLOAD(srcTile, srcGlobal);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    evLoad = TLOAD(srcTile, srcGlobal);
 
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TCOLMIN(dstTile, srcTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TCOLMIN, Op::TSTORE_VEC> evCompute;
+    evCompute = TCOLMIN(dstTile, srcTile, evLoad);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

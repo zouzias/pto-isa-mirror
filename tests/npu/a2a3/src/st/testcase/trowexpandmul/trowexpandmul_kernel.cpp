@@ -33,20 +33,16 @@ __global__ AICORE void runTRowExpandMul( __gm__ T __out__ *out, __gm__ T __in__ 
     GlobalDataSrc1 src1Global(src1);
     GlobalDataDst dstGlobal(out);
 
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
     TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    evLoad = TLOAD(src1Tile, src1Global);
     if constexpr (src0eqdst) {
-        TROWEXPANDMUL(dstTile, src0Tile, src1Tile);
+        evCompute = TROWEXPANDMUL(dstTile, src0Tile, src1Tile, evLoad);
     } else {
-        TROWEXPANDMUL(dstTile, src1Tile, src0Tile);
+        evCompute = TROWEXPANDMUL(dstTile, src1Tile, src0Tile, evLoad);
     }
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 
@@ -70,20 +66,16 @@ __global__ AICORE void runTRowExpandMul2( __gm__ T __out__ *out, __gm__ T __in__
     GlobalDataDst dstGlobal(out);
     GlobalDataSrc1 src1Global(src1);
 
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
     TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    evLoad = TLOAD(src1Tile, src1Global);
     if constexpr (src0eqdst) {
-        TROWEXPANDMUL(dstTile, src0Tile, src1Tile);
+        evCompute = TROWEXPANDMUL(dstTile, src0Tile, src1Tile, evLoad);
     } else {
-        TROWEXPANDMUL(dstTile, src1Tile, src0Tile);
+        evCompute = TROWEXPANDMUL(dstTile, src1Tile, src0Tile, evLoad);
     }
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

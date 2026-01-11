@@ -36,11 +36,9 @@ inline AICORE void runTCI(__gm__ T __out__ *out, T start)
     GlobalData_dst dstGlobal(out);
 
     
-    TCI<TileData_dst, T, descending>(dstTile, start);
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TCI, Op::TSTORE_VEC> evCiToStore;
+    evCiToStore = TCI<TileData_dst, T, descending>(dstTile, start);
+    TSTORE(dstGlobal, dstTile, evCiToStore);
     out = dstGlobal.data();
 }
 

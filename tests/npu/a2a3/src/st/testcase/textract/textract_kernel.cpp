@@ -53,21 +53,18 @@ AICORE inline void runTMOV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
     TASSIGN(cTile, 0x0);
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    evLoadToMte1 = TLOAD(bMatTile, src1Global);
     pipe_barrier(PIPE_ALL);
     /**********************************TMOV && TEXTRACT**********************************/
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
     pipe_barrier(PIPE_ALL);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
     /****************************************TSTORE*****************************************/
-    TSTORE(dstGlobal, cTile);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
     out = dstGlobal.data();
 }
 
@@ -125,21 +122,16 @@ AICORE inline void runTMOV_UNALIGN(__gm__ T *out, __gm__ U *src0, __gm__ S *src1
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
-
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    evLoadToMte1 = TLOAD(bMatTile, src1Global);
     /**********************************TMOV*******************************************/
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
     /****************************************TSTORE*****************************************/
-    TSTORE(dstGlobal, cTile);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
     out = dstGlobal.data();
 }
 
@@ -188,20 +180,17 @@ AICORE inline void runTEXTRACT(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
     TASSIGN(cTile, 0x0);
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    evLoadToMte1 = TLOAD(bMatTile, src1Global);
     pipe_barrier(PIPE_ALL);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     /**********************************TMOV && TEXTRACT**********************************/
-    TEXTRACT(aTile, aMatTile, indexM, indexK);
-    TEXTRACT(bTile, bMatTile, indexK, indexN);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadToMte1);
+    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadToMte1);
     pipe_barrier(PIPE_ALL);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    TSTORE(dstGlobal, cTile);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
     out = dstGlobal.data();
 }
 
@@ -263,21 +252,16 @@ AICORE inline void runTEXTRACT_UNALIGN(__gm__ T *out, __gm__ U *src0, __gm__ S *
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
-
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    evLoadToMte1 = TLOAD(bMatTile, src1Global);
     /**********************************TEXTRACT*******************************************/
-    TEXTRACT(aTile, aMatTile, indexM, indexK);
-    TEXTRACT(bTile, bMatTile, indexK, indexN);
-
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID1);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID1);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID1);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID1);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadToMte1);
+    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadToMte1);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
     /****************************************TSTORE*****************************************/
-    TSTORE(dstGlobal, cTile);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
     out = dstGlobal.data();
 }
 
@@ -326,21 +310,17 @@ AICORE inline void runTEXTRACT_DYNAMIC(__gm__ T *out, __gm__ U *src0, __gm__ S *
     TASSIGN(cTile, 0x0);
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    evLoadToMte1 = TLOAD(bMatTile, src1Global);
     pipe_barrier(PIPE_ALL);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     /**********************************TMOV && TEXTRACT**********************************/
-    TEXTRACT(aTile, aMatTile, indexM, indexK);
-    TEXTRACT(bTile, bMatTile, indexK, indexN);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadToMte1);
+    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadToMte1);
     pipe_barrier(PIPE_ALL);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-
-    TSTORE(dstGlobal, cTile);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
     out = dstGlobal.data();
 }
 
@@ -402,21 +382,18 @@ AICORE inline void runTEXTRACT_COMPACT(__gm__ T *out, __gm__ U *src0, __gm__ S *
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    evLoadToMte1 = TLOAD(bMatTile, src1Global);
     pipe_barrier(PIPE_ALL);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     /**********************************TEXTRACT*******************************************/
-    TEXTRACT(aTile, aMatTile, indexM, indexK);
-    TEXTRACT(bTile, bMatTile, indexK, indexN);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadToMte1);
+    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadToMte1);
     pipe_barrier(PIPE_ALL);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     /****************************************TSTORE*****************************************/
-    TSTORE(dstGlobal, cTile);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
     out = dstGlobal.data();
 }
 

@@ -34,14 +34,12 @@ PTO_INTERNAL void runTColSum(__gm__ T __out__ *out, __gm__ T __in__ *src, bool i
     TASSIGN(dstTile, (srcRow * 3 / 2 + 1) * col * sizeof(T));
 
     // 搬运数据
-    TLOAD(srcTile, srcGlobal);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    evLoad = TLOAD(srcTile, srcGlobal);
 
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TCOLSUM(dstTile, srcTile, tmpTile, isBinary);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TCOLSUM, Op::TSTORE_VEC> evCompute;
+    evCompute = TCOLSUM(dstTile, srcTile, tmpTile, isBinary, evLoad);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

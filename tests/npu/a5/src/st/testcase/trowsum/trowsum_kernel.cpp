@@ -38,13 +38,12 @@ namespace TRowSumTest {
         GlobalData srcGlobal(src + offset, Shape(1, 1, 1, kGRows_, kGCols_), pto::Stride(1, 1, 1, kGCols_, 1));
         GlobalData dstGlobal(out + offset, Shape(1, 1, 1, kGRows_, kGCols_), pto::Stride(1, 1, 1, kGCols_, 1));
 
-        TLOAD(srcTile, srcGlobal);
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        TROWSUM(dstTile, srcTile, tmpTile);
-        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-        TSTORE(dstGlobal, dstTile);
+        Event<Op::TLOAD, Op::VECTOR> evLoad;
+        evLoad = TLOAD(srcTile, srcGlobal);
+
+        Event<Op::TROWSUM, Op::TSTORE_VEC> evCompute;
+        evCompute = TROWSUM(dstTile, srcTile, tmpTile, evLoad);
+        TSTORE(dstGlobal, dstTile, evCompute);
         out = dstGlobal.data();
     }
 

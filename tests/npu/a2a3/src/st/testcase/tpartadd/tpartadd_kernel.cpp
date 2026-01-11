@@ -36,13 +36,11 @@ __global__ AICORE void runTPartAdd( __gm__ T __out__ *out, __gm__ T __in__ *src0
     GlobalDataDst dstGlobal(out);
 
     TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TPARTADD<TileDataDst, TileDataSrc0, TileDataSrc1>(dstTile, src0Tile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+    evLoad = TLOAD(src1Tile, src1Global);
+    evCompute = TPARTADD<TileDataDst, TileDataSrc0, TileDataSrc1>(dstTile, src0Tile, src1Tile, evLoad);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 
@@ -68,4 +66,3 @@ template void LaunchTPartAdd<aclFloat16, 8, 768, 8, 512, 8, 768>(aclFloat16 *out
     void *stream);
 template void LaunchTPartAdd<int16_t, 8, 48, 8, 48, 8, 16>(int16_t *out, int16_t *src0, int16_t *src1, void *stream);
 template void LaunchTPartAdd<int32_t, 64, 64, 8, 64, 64, 64>(int32_t *out, int32_t *src0, int32_t *src1, void *stream);
-

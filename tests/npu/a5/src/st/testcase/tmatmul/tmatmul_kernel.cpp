@@ -72,42 +72,34 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
     TASSIGN(cTile, 0x0);
     TASSIGN(biasTile, 0x0);
 
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMov;
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    evLoadToMov = TLOAD(bMatTile, src1Global);
     if constexpr (isBias) {
-        TLOAD(biasDataTile, src2Global);
+        evLoadToMov = TLOAD(biasDataTile, src2Global);
     }
 
     /**********************************TMOV**********************************/
+    TMOV(aTile, aMatTile, evLoadToMov);
+    evMovToMatmul = TMOV(bTile, bMatTile);
     if constexpr (isBias) {
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        TMOV(aTile, aMatTile);
-        TMOV(bTile, bMatTile);
-        TMOV(biasTile, biasDataTile);
-    } else {
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        TMOV(aTile, aMatTile);
-        TMOV(bTile, bMatTile);
+        evMovToMatmul = TMOV(biasTile, biasDataTile);
     }
 
     /**********************************TMATMUL**********************************/
     if constexpr (isBias) {
-        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-        TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
+        evMatmulToStore = TMATMUL_BIAS(cTile, aTile, bTile, biasTile, evMovToMatmul);
     } else {
-        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-        TMATMUL(cTile, aTile, bTile);
+        evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMovToMatmul);
     }
 
     /**********************************TSTORE**********************************/
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    TSTORE(dstGlobal, cTile);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
+    pipe_barrier(PIPE_ALL);
 
     out = dstGlobal.data();
 }
@@ -155,47 +147,45 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(
     TASSIGN(biasTile, 0x0);
 
     constexpr int iter = K / BASEK;
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
 
     for (int i = 0; i < iter; i++) { // baseK = 64
         /*************************************TLOAD****************************************/
         GlobalDataSrc0 src0Global(src0 + i * BASEK);
         GlobalDataSrc1 src1Global(src1 + i * BASEK * N);
+        Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMov;
         TLOAD(aMatTile, src0Global);
-        TLOAD(bMatTile, src1Global);
+        evLoadToMov = TLOAD(bMatTile, src1Global);
         if constexpr (isBias) {
             if (i == 0) {
-                TLOAD(biasDataTile, src2Global);
+                evLoadToMov = TLOAD(biasDataTile, src2Global);
             }
         }
 
         /**********************************TMOV**********************************/
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        TMOV(aTile, aMatTile);
-        TMOV(bTile, bMatTile);
+        Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
+        TMOV(aTile, aMatTile, evLoadToMov);
+        evMovToMatmul = TMOV(bTile, bMatTile);
         if constexpr (isBias) {
             if (i == 0) {
-                TMOV(biasTile, biasDataTile);
+                evMovToMatmul = TMOV(biasTile, biasDataTile);
             }
         }
 
-        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         if (i == 0) {
             if constexpr (isBias) {
-                TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
+                evMatmulToStore = TMATMUL_BIAS(cTile, aTile, bTile, biasTile, evMovToMatmul);
             } else {
-                TMATMUL(cTile, aTile, bTile);
+                evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMovToMatmul);
             }
         } else {
-            TMATMUL_ACC(cTile, cTile, aTile, bTile);
+            evMatmulToStore = TMATMUL_ACC(cTile, cTile, aTile, bTile, evMovToMatmul);
         }
         pipe_barrier(PIPE_ALL);
     }
 
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    TSTORE(dstGlobal, cTile);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
+    pipe_barrier(PIPE_ALL);
 
     out = dstGlobal.data();
 }

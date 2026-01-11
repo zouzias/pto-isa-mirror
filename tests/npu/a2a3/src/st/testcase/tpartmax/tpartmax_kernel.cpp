@@ -43,13 +43,11 @@ __global__ AICORE void runTPartMax(__gm__ T __out__ *out, __gm__ T __in__ *src0,
         Shape(1, 1, 1, kGRowsS1_, kGColsS1_), pto::Stride(1, 1, kGRowsS1_, kGColsS1_, 1));
 
     TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TPARTMAX<dstTileData, src0TileData, src1TileData>(dstTile, src0Tile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+    evLoad = TLOAD(src1Tile, src1Global);
+    evCompute = TPARTMAX<dstTileData, src0TileData, src1TileData>(dstTile, src0Tile, src1Tile, evLoad);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

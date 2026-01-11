@@ -53,14 +53,14 @@ __global__ AICORE void runTSELS(__gm__ T __out__ *out, __gm__ T __in__ *src0, __
     GlobalData src1Global(src1 + offset);
     GlobalData dstGlobal(out + offset);
 
-    TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TSELS(dstTile, src0Tile, src1Tile, selectMode);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad0;
+    Event<Op::TLOAD, Op::VECTOR> evLoad1;
+    evLoad0 = TLOAD(src0Tile, src0Global);
+    evLoad1 = TLOAD(src1Tile, src1Global);
+
+    Event<Op::TSELS, Op::TSTORE_VEC> evSelect;
+    evSelect = TSELS(dstTile, src0Tile, src1Tile, selectMode, evLoad0, evLoad1);
+    TSTORE(dstGlobal, dstTile, evSelect);
     out = dstGlobal.data();
 }
 

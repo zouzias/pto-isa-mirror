@@ -41,18 +41,17 @@ __global__ AICORE void runROWEXPANDMIN(__gm__ T __out__ *out, __gm__ T __in__ *s
     GlobalData src1Global(src1 + offset);
     DstGlobalData dstGlobal(out + offset);
 
-    TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    Event<Op::TLOAD, Op::VECTOR> evLoad0;
+    Event<Op::TLOAD, Op::VECTOR> evLoad1;
+    evLoad0 = TLOAD(src0Tile, src0Global);
+    evLoad1 = TLOAD(src1Tile, src1Global);
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
     if constexpr (src0eqdst) {
-        TROWEXPANDMIN(dstTile, src0Tile, src1Tile);
+        evCompute = TROWEXPANDMIN(dstTile, src0Tile, src1Tile, evLoad0, evLoad1);
     } else {
-        TROWEXPANDMIN(dstTile, src1Tile, src0Tile);
+        evCompute = TROWEXPANDMIN(dstTile, src1Tile, src0Tile, evLoad0, evLoad1);
     }
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 
@@ -82,18 +81,17 @@ __global__ AICORE void runROWEXPANDMIN2(__gm__ T __out__ *out, __gm__ T __in__ *
     GlobalData src1Global(src1 + offset);
     DstGlobalData dstGlobal(out + offset);
 
-    TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    Event<Op::TLOAD, Op::VECTOR> evLoad0;
+    Event<Op::TLOAD, Op::VECTOR> evLoad1;
+    evLoad0 = TLOAD(src0Tile, src0Global);
+    evLoad1 = TLOAD(src1Tile, src1Global);
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
     if constexpr (src0eqdst) {
-        TROWEXPANDMIN(dstTile, src0Tile, src1Tile);
+        evCompute = TROWEXPANDMIN(dstTile, src0Tile, src1Tile, evLoad0, evLoad1);
     } else {
-        TROWEXPANDMIN(dstTile, src1Tile, src0Tile);
+        evCompute = TROWEXPANDMIN(dstTile, src1Tile, src0Tile, evLoad0, evLoad1);
     }
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

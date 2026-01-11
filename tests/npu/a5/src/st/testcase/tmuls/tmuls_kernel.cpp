@@ -30,16 +30,14 @@ PTO_INTERNAL void runTMulS(__gm__ T *out, __gm__  T *src, T scalar) {
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x28000);
 
-    TLOAD(dstTile, dstGlobal);
+    Event<Op::TLOAD, Op::VECTOR> evLoadDst;
+    Event<Op::TLOAD, Op::VECTOR> evLoadSrc;
+    evLoadDst = TLOAD(dstTile, dstGlobal);
+    evLoadSrc = TLOAD(srcTile, srcGlobal);
 
-    TLOAD(srcTile, srcGlobal);
-
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMULS(dstTile, srcTile, scalar);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TMULS, Op::TSTORE_VEC> evCompute;
+    evCompute = TMULS(dstTile, srcTile, scalar, evLoadDst, evLoadSrc);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

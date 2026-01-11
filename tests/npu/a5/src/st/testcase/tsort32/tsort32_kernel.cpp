@@ -59,17 +59,17 @@ AICORE void runTSORT32( __gm__ T *out, __gm__ T *src, __gm__ uint32_t *idx, __gm
     OutGlobalData dstGlobal(out);
     TmpGlobalData tmpGlobal(tmp);
 
-    TLOAD(srcTile, srcGlobal);
-    TLOAD(idxTile, idxGlobal);
-    TLOAD(tmpTile, tmpGlobal);
+    Event<Op::TLOAD, Op::VECTOR> evLoadSrc;
+    Event<Op::TLOAD, Op::VECTOR> evLoadIdx;
+    Event<Op::TLOAD, Op::VECTOR> evLoadTmp;
+    evLoadSrc = TLOAD(srcTile, srcGlobal);
+    evLoadIdx = TLOAD(idxTile, idxGlobal);
+    evLoadTmp = TLOAD(tmpTile, tmpGlobal);
 
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TSORT32(dstTile, srcTile, idxTile, tmpTile);
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    TSYNC(evLoadSrc, evLoadIdx, evLoadTmp);
+    Event<Op::TSORT32, Op::TSTORE_VEC> evSort;
+    evSort = TSORT32(dstTile, srcTile, idxTile, tmpTile);
+    TSTORE(dstGlobal, dstTile, evSort);
 
     pipe_barrier(PIPE_ALL);
     out = dstGlobal.data();

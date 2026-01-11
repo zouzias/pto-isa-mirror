@@ -35,14 +35,14 @@ __global__ AICORE void runTPartAdd( __gm__ T __out__ *out, __gm__ T __in__ *src0
     GlobalDataSrc1 src1Global(src1);
     GlobalDataDst dstGlobal(out);
 
-    TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TPARTADD<TileDataDst, TileDataSrc0, TileDataSrc1>(dstTile, src0Tile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad0;
+    Event<Op::TLOAD, Op::VECTOR> evLoad1;
+    evLoad0 = TLOAD(src0Tile, src0Global);
+    evLoad1 = TLOAD(src1Tile, src1Global);
+
+    Event<Op::TPARTADD, Op::TSTORE_VEC> evCompute;
+    evCompute = TPARTADD<TileDataDst, TileDataSrc0, TileDataSrc1>(dstTile, src0Tile, src1Tile, evLoad0, evLoad1);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

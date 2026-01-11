@@ -37,14 +37,14 @@ __global__ AICORE void CONCAT(run, CASENAME)( __gm__ T __out__ *out, __gm__ T __
     GlobalData src1Global(src1);
     GlobalData dstGlobal(out);
  
-    TLOAD(src0Tile, src0Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TROWEXPAND(tmpTile, src0Tile);
-    TROWSUM(dstTile, tmpTile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    evLoad = TLOAD(src0Tile, src0Global);
+
+    TROWEXPAND(tmpTile, src0Tile, evLoad);
+
+    Event<Op::TROWSUM, Op::TSTORE_VEC> evReduce;
+    evReduce = TROWSUM(dstTile, tmpTile, src1Tile);
+    TSTORE(dstGlobal, dstTile, evReduce);
     out = dstGlobal.data();
 }
  

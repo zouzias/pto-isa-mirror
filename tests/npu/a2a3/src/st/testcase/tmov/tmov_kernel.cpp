@@ -129,24 +129,19 @@ __global__ AICORE void TMOV2BiasKernel(
 
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
-    TLOAD(biasMatTile, src2Global);
+    RecordEvent evLoaded = TLOAD(biasMatTile, src2Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMov;
+    evLoadToMov = evLoaded;
 
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-    TMOV(biasTile, biasMatTile);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMov);
+    TMOV(bTile, bMatTile, evLoadToMov);
+    evMovToMatmul = TMOV(biasTile, biasMatTile, evLoadToMov);
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-
-    TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
-
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-
-    TSTORE(dstGlobal, cTile);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL_BIAS(cTile, aTile, bTile, biasTile, evMovToMatmul);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
     out = dstGlobal.data();
 }
 
@@ -214,23 +209,19 @@ __global__ AICORE void TMOV2BiasDyncmicKernel(
 
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
-    TLOAD(biasMatTile, src2Global);
+    RecordEvent evLoaded = TLOAD(biasMatTile, src2Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-    TMOV(biasTile, biasMatTile);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMov;
+    evLoadToMov = evLoaded;
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMov);
+    TMOV(bTile, bMatTile, evLoadToMov);
+    evMovToMatmul = TMOV(biasTile, biasMatTile, evLoadToMov);
 
-    TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
-
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-
-    TSTORE(dstGlobal, cTile);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL_BIAS(cTile, aTile, bTile, biasTile, evMovToMatmul);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
     out = dstGlobal.data();
 }
 
@@ -289,23 +280,22 @@ __global__ AICORE void TMOV2ScalingKernel(
 
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
-    TLOAD(fbMatTile, src2Global);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    RecordEvent evLoaded = TLOAD(fbMatTile, src2Global);
 
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2S> evLoadToFix;
+    evLoadToMte1 = evLoaded;
+    evLoadToFix = evLoaded;
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    evMovToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
 
-    TMATMUL(cTile, aTile, bTile);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToFix;
+    evMatmulToFix = TMATMUL(cTile, aTile, bTile, evMovToMatmul);
 
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    TMOV(fbTile, fbMatTile);
-
-    TSTORE_FP<AccTile, GlobalDataOut, FbTile>(dstGlobal, cTile, fbTile);
+    TMOV(fbTile, fbMatTile, evLoadToFix);
+    TSTORE_FP<AccTile, GlobalDataOut, FbTile>(dstGlobal, cTile, fbTile, evMatmulToFix);
 
     out = dstGlobal.data();
 }
@@ -402,25 +392,23 @@ __global__ AICORE void TMOV2BiasAndScalingDyncmicKernel(__gm__ cType *out, __gm_
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
     TLOAD(biasMatTile, src2Global);
-    TLOAD(scalingMatTile, src3Global);
+    RecordEvent evLoaded = TLOAD(scalingMatTile, src3Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2S> evLoadToFix;
+    evLoadToMte1 = evLoaded;
+    evLoadToFix = evLoaded;
 
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-    TMOV(biasTile, biasMatTile);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    TMOV(bTile, bMatTile, evLoadToMte1);
+    evMovToMatmul = TMOV(biasTile, biasMatTile, evLoadToMte1);
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToFix;
+    evMatmulToFix = TMATMUL_BIAS(cTile, aTile, bTile, biasTile, evMovToMatmul);
 
-    TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
-
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    TMOV(scalingTile, scalingMatTile);
-
-    TSTORE_FP<AccTile, GlobalDataOut, ScalingTile>(dstGlobal, cTile, scalingTile);
+    TMOV(scalingTile, scalingMatTile, evLoadToFix);
+    TSTORE_FP<AccTile, GlobalDataOut, ScalingTile>(dstGlobal, cTile, scalingTile, evMatmulToFix);
   
     out = dstGlobal.data();
 }

@@ -18,36 +18,34 @@ using namespace pto;
 
 template <typename Src0GlobalData, typename Src1GlobalData, typename DstTileData, typename TmpTileData,
     typename TileData, typename T, bool EXHAUSTED>
-PTO_INTERNAL void Sort2Lists(DstTileData &dstTile, Src0GlobalData &src0Global, Src1GlobalData &src1Global,
+PTO_INTERNAL RecordEvent Sort2Lists(DstTileData &dstTile, Src0GlobalData &src0Global, Src1GlobalData &src1Global,
     TileData &src0Tile, TileData &src1Tile, TmpTileData &tmpTile)
 {
     MrgSortExecutedNumList executedNumList;
     TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMRGSORT<DstTileData, TmpTileData, TileData, TileData, EXHAUSTED>(
-        dstTile, executedNumList, tmpTile, src0Tile, src1Tile);
+    Event<Op::TLOAD, Op::TMRGSORT> evLoad;
+    evLoad = TLOAD(src1Tile, src1Global);
+    return TMRGSORT<DstTileData, TmpTileData, TileData, TileData, EXHAUSTED>(
+        dstTile, executedNumList, tmpTile, src0Tile, src1Tile, evLoad);
 }
 
 template <typename Src0GlobalData, typename Src1GlobalData, typename Src2GlobalData, typename DstTileData,
     typename TmpTileData, typename TileData, typename T, bool EXHAUSTED>
-PTO_INTERNAL void Sort3Lists(DstTileData &dstTile, Src0GlobalData &src0Global, Src1GlobalData &src1Global,
+PTO_INTERNAL RecordEvent Sort3Lists(DstTileData &dstTile, Src0GlobalData &src0Global, Src1GlobalData &src1Global,
     Src2GlobalData &src2Global, TileData &src0Tile, TileData &src1Tile, TileData &src2Tile, TmpTileData &tmpTile)
 {
     MrgSortExecutedNumList executedNumList;
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
-    TLOAD(src2Tile, src2Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMRGSORT<DstTileData, TmpTileData, TileData, TileData, TileData, EXHAUSTED>(
-        dstTile, executedNumList, tmpTile, src0Tile, src1Tile, src2Tile);
+    Event<Op::TLOAD, Op::TMRGSORT> evLoad;
+    evLoad = TLOAD(src2Tile, src2Global);
+    return TMRGSORT<DstTileData, TmpTileData, TileData, TileData, TileData, EXHAUSTED>(
+        dstTile, executedNumList, tmpTile, src0Tile, src1Tile, src2Tile, evLoad);
 }
 
 template <typename Src0GlobalData, typename Src1GlobalData, typename Src2GlobalData, typename Src3GlobalData,
     typename DstTileData, typename TmpTileData, typename TileData, typename T, bool EXHAUSTED>
-PTO_INTERNAL void Sort4Lists(DstTileData &dstTile, Src0GlobalData &src0Global, Src1GlobalData &src1Global,
+PTO_INTERNAL RecordEvent Sort4Lists(DstTileData &dstTile, Src0GlobalData &src0Global, Src1GlobalData &src1Global,
     Src2GlobalData &src2Global, Src3GlobalData &src3Global, TileData &src0Tile, TileData &src1Tile, TileData &src2Tile,
     TileData &src3Tile, TmpTileData &tmpTile)
 {
@@ -55,11 +53,10 @@ PTO_INTERNAL void Sort4Lists(DstTileData &dstTile, Src0GlobalData &src0Global, S
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
     TLOAD(src2Tile, src2Global);
-    TLOAD(src3Tile, src3Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMRGSORT<DstTileData, TmpTileData, TileData, TileData, TileData, TileData, EXHAUSTED>(
-        dstTile, executedNumList, tmpTile, src0Tile, src1Tile, src2Tile, src3Tile);
+    Event<Op::TLOAD, Op::TMRGSORT> evLoad;
+    evLoad = TLOAD(src3Tile, src3Global);
+    return TMRGSORT<DstTileData, TmpTileData, TileData, TileData, TileData, TileData, EXHAUSTED>(
+        dstTile, executedNumList, tmpTile, src0Tile, src1Tile, src2Tile, src3Tile, evLoad);
 }
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kTCols_src1, int kTCols_src2,
@@ -96,20 +93,22 @@ __global__ AICORE void RunTMrgsort(__gm__ T *out, __gm__ T *src0, __gm__ T *src1
     Src3GlobalData src3Global(src3);
     DstGlobalData dstGlobal(out);
 
+    Event<Op::TMRGSORT, Op::TSTORE_VEC> evSort;
     if constexpr (LISTNUM == 4) {
-        Sort4Lists<Src0GlobalData, Src1GlobalData, Src2GlobalData, Src3GlobalData, DstTileData, TmpTileData, TileData,
-            T, EXHAUSTED>(
+        evSort = Sort4Lists<Src0GlobalData, Src1GlobalData, Src2GlobalData, Src3GlobalData, DstTileData, TmpTileData,
+            TileData, T, EXHAUSTED>(
             dstTile, src0Global, src1Global, src2Global, src3Global, src0Tile, src1Tile, src2Tile, src3Tile, tmpTile);
     } else if constexpr (LISTNUM == 3) {
-        Sort3Lists<Src0GlobalData, Src1GlobalData, Src2GlobalData, DstTileData, TmpTileData, TileData, T, EXHAUSTED>(
+        evSort = Sort3Lists<Src0GlobalData, Src1GlobalData, Src2GlobalData, DstTileData, TmpTileData, TileData, T,
+            EXHAUSTED>(
             dstTile, src0Global, src1Global, src2Global, src0Tile, src1Tile, src2Tile, tmpTile);
     } else if constexpr (LISTNUM == 2) {
-        Sort2Lists<Src0GlobalData, Src1GlobalData, DstTileData, TmpTileData, TileData, T, EXHAUSTED>(
+        evSort =
+            Sort2Lists<Src0GlobalData, Src1GlobalData, DstTileData, TmpTileData, TileData, T, EXHAUSTED>(
             dstTile, src0Global, src1Global, src0Tile, src1Tile, tmpTile);
     }
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    TSTORE(dstGlobal, dstTile, evSort);
+    pipe_barrier(PIPE_ALL);
 }
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, uint32_t blockLen>
@@ -134,15 +133,12 @@ __global__ AICORE void RunTMrgsortSingle(__gm__ T *out, __gm__ T *src0)
     GlobalData src0Global(src0 + offset);
     DstGlobalData dstGlobal(out + offset);
 
-    TLOAD(src0Tile, src0Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMRGSORT<DstTileData, TileData>(dstTile, src0Tile, blockLen);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
-    set_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
+    Event<Op::TLOAD, Op::TMRGSORT> evLoad;
+    evLoad = TLOAD(src0Tile, src0Global);
+
+    Event<Op::TMRGSORT, Op::TSTORE_VEC> evSort;
+    evSort = TMRGSORT<DstTileData, TileData>(dstTile, src0Tile, blockLen, evLoad);
+    TSTORE(dstGlobal, dstTile, evSort);
     pipe_barrier(PIPE_ALL);
     out = dstGlobal.data();
 }
@@ -194,9 +190,9 @@ PTO_INTERNAL void SortTailBlock(DstGlobalData &dstGlobal, DstTileData &dstTile, 
         TASSIGN(srcMovTile, 0x0);
         TMOV(srcMovTile, dstTile);
     }
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    pipe_barrier(PIPE_V);
     TSTORE(dstGlobal, dstTile);
+    pipe_barrier(PIPE_ALL);
 }
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int topk>
@@ -223,9 +219,9 @@ __global__ AICORE void RunTMrgsortTopk(__gm__ T *out, __gm__ T *src)
     uint32_t blockLen = 64;
 
     // Merge sort data for every 4 blockLen lengths.
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    Event<Op::TLOAD, Op::TMRGSORT> evLoad;
+    evLoad = TLOAD(srcTile, srcGlobal);
+    evLoad.Wait();
     for (; blockLen * 4 <= kTCols_; blockLen *= 4) {
         uint16_t cols = kTCols_ / (blockLen * 4) * (blockLen * 4);
         TileData srcSortedTile(1, cols);
@@ -243,10 +239,10 @@ __global__ AICORE void RunTMrgsortTopk(__gm__ T *out, __gm__ T *src)
     } else {
         TmpTileData tmpMovTile(1, topk);
         TASSIGN(tmpMovTile, 0x0 + tmpAddr);
-        TMOV(dstTile, tmpMovTile);
-        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-        TSTORE(dstGlobal, dstTile);
+        Event<Op::TMOV_V2V, Op::TSTORE_VEC> evMov;
+        evMov = TMOV(dstTile, tmpMovTile);
+        TSTORE(dstGlobal, dstTile, evMov);
+        pipe_barrier(PIPE_ALL);
     }
 }
 

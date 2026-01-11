@@ -43,14 +43,14 @@ __global__ AICORE void runTGATHERB(__gm__ T __out__ *out, __gm__ T __in__ *src, 
     GlobalDataOffset offsetGlobal(offset);
     GlobalDataDst dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    TLOAD(offsetTile, offsetGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TGATHERB<TileDataDst, TileDataSrc, TileDataOffset>(dstTile, srcTile, offsetTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoadSrc;
+    Event<Op::TLOAD, Op::VECTOR> evLoadOffset;
+    evLoadSrc = TLOAD(srcTile, srcGlobal);
+    evLoadOffset = TLOAD(offsetTile, offsetGlobal);
+
+    Event<Op::TGATHERB, Op::TSTORE_VEC> evGather;
+    evGather = TGATHERB<TileDataDst, TileDataSrc, TileDataOffset>(dstTile, srcTile, offsetTile, evLoadSrc, evLoadOffset);
+    TSTORE(dstGlobal, dstTile, evGather);
     out = dstGlobal.data();
 }
 

@@ -40,17 +40,16 @@ __global__ AICORE void runCOLEXPANDSUB(__gm__ T __out__ *out, __gm__ T __in__ *s
     GlobalData src1Global(src1 + offset);
     DstGlobalData dstGlobal(out + offset);
 
-    TLOAD(dstTile, dstGlobal);
-    TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TCOLEXPANDSUB(dstTile, src0Tile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
-    set_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
+    Event<Op::TLOAD, Op::VECTOR> evLoadDst;
+    Event<Op::TLOAD, Op::VECTOR> evLoad0;
+    Event<Op::TLOAD, Op::VECTOR> evLoad1;
+    evLoadDst = TLOAD(dstTile, dstGlobal);
+    evLoad0 = TLOAD(src0Tile, src0Global);
+    evLoad1 = TLOAD(src1Tile, src1Global);
+
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+    evCompute = TCOLEXPANDSUB(dstTile, src0Tile, src1Tile, evLoadDst, evLoad0, evLoad1);
+    TSTORE(dstGlobal, dstTile, evCompute);
     pipe_barrier(PIPE_ALL);
     out = dstGlobal.data();
 }

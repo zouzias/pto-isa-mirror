@@ -54,14 +54,14 @@ inline AICORE void runTGather(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *sr
     GlobalData_src1 src1Global(src1);
     GlobalData_dst dstGlobal(out);
 
-    TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TGATHER(dstTile, src0Tile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad0;
+    Event<Op::TLOAD, Op::VECTOR> evLoad1;
+    evLoad0 = TLOAD(src0Tile, src0Global);
+    evLoad1 = TLOAD(src1Tile, src1Global);
+
+    Event<Op::TGATHER, Op::TSTORE_VEC> evGather;
+    evGather = TGATHER(dstTile, src0Tile, src1Tile, evLoad0, evLoad1);
+    TSTORE(dstGlobal, dstTile, evGather);
     out = dstGlobal.data();
 }
 
@@ -132,13 +132,12 @@ __global__ AICORE void runTGATHER(__gm__ dstT __out__ *out, __gm__ srcT __in__ *
     SrcGlobalData srcGlobal(src);
     DstGlobalData dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TGATHER<DstTileData, TileData, maskPattern>(dstTile, srcTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    evLoad = TLOAD(srcTile, srcGlobal);
+
+    Event<Op::TGATHER, Op::TSTORE_VEC> evGather;
+    evGather = TGATHER<DstTileData, TileData, maskPattern>(dstTile, srcTile, evLoad);
+    TSTORE(dstGlobal, dstTile, evGather);
     out = dstGlobal.data();
 }
 

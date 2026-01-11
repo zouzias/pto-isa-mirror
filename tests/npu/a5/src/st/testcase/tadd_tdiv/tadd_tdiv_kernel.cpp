@@ -40,16 +40,18 @@ __global__ AICORE void CONCAT(run, CASENAME)( __gm__ T __out__ *out, __gm__ T __
     GlobalData src2Global(src2);
     GlobalData dstGlobal(out);
  
-    TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    TLOAD(src2Tile, src2Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TADD(tmpTile, src0Tile, src1Tile);
-    TDIV(dstTile, tmpTile, src2Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad0;
+    Event<Op::TLOAD, Op::VECTOR> evLoad1;
+    Event<Op::TLOAD, Op::VECTOR> evLoad2;
+    evLoad0 = TLOAD(src0Tile, src0Global);
+    evLoad1 = TLOAD(src1Tile, src1Global);
+    evLoad2 = TLOAD(src2Tile, src2Global);
+
+    TADD(tmpTile, src0Tile, src1Tile, evLoad0, evLoad1);
+
+    Event<Op::TDIV, Op::TSTORE_VEC> evDiv;
+    evDiv = TDIV(dstTile, tmpTile, src2Tile, evLoad2);
+    TSTORE(dstGlobal, dstTile, evDiv);
     out = dstGlobal.data();
 }
  

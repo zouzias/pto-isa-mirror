@@ -47,10 +47,9 @@ __global__ AICORE void runTEXPANDS( __gm__ T __out__ *out, float scalar) {
     int offset = (block_idx / 4) * (64 * 16) + (block_idx % 4) * 16;
     GlobalData dstGlobal(out + offset);
 
-    TEXPANDS(dstTile, scalar);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TEXPANDS, Op::TSTORE_VEC> evCompute;
+    evCompute = TEXPANDS(dstTile, scalar);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

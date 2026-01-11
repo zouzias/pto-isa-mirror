@@ -53,17 +53,17 @@ AICORE void runTmovUb2l1( __gm__ T *out, __gm__ T *src)
     __ubuf__ T *dstUbAddr = dstTile.data();
 
 #if defined(__DAV_VEC__)
-    TLOAD(srcTile, srcGlobal); //gm->ub
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TMOV(tmpTile, srcTile);  //ub2Ub
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    Event<Op::TLOAD, Op::VECTOR> evLoad;
+    evLoad = TLOAD(srcTile, srcGlobal); // gm -> UB
+
+    TMOV(tmpTile, srcTile, evLoad);  // UB -> UB
+    pipe_barrier(PIPE_ALL);
     if constexpr (IndexRows != 0 || IndexCols != 0) {
         TEXTRACT(matTile, tmpTile, IndexRows, IndexCols);
     } else {
         TMOV(matTile, tmpTile);  //ub2l1
     }
+    pipe_barrier(PIPE_ALL);
     set_intra_block(PIPE_MTE3, syncId);
 #endif
 
@@ -71,14 +71,11 @@ AICORE void runTmovUb2l1( __gm__ T *out, __gm__ T *src)
     wait_intra_block(PIPE_MTE1, syncId); // MTE1 等待V侧MTE3流水
     wait_intra_block(PIPE_MTE1, syncId + eventIdNum);
 
-    set_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)dstUbAddr, (__cbuf__ void *)srcMatAddr, 0, 1, blockLen, 0, 0);  // move to vector0
     copy_cbuf_to_ubuf(
         (__ubuf__ void *)dstUbAddr, (__cbuf__ void *)srcMatAddr, 1, 1, blockLen, 0, 0);  // move to vector1
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    pipe_barrier(PIPE_ALL);
 
     set_intra_block(PIPE_MTE1, syncId);  //ub2l1 告诉V侧已经搬完,C侧L12UB MTE1流水
     set_intra_block(PIPE_MTE1, syncId + eventIdNum);

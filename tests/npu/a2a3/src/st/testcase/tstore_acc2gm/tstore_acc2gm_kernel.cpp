@@ -60,26 +60,25 @@ __global__ AICORE void TStoreAcc2gmNz2nd(__gm__ dstDataType *out, __gm__ srcData
     TASSIGN(cTile, 0x0);
 
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    evLoadToMte1 = TLOAD(bMatTile, src1Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
+
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    Event<Op::TSTORE_ACC, Op::SCALAR> evStoreDone;
     if constexpr (reluMode == 0) {
-        TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile);
+        evStoreDone = TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile, evMatmulToStore);
     } else if constexpr (reluMode == 1) {
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
-        TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile);
+        evStoreDone = TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, evMatmulToStore);
     }
-    set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    TSYNC(evStoreDone);
     out = dstGlobal.data();
 }
 
@@ -134,28 +133,25 @@ __global__ AICORE void TStoreAcc2gmNz2nz(__gm__ dstDataType *out, __gm__ srcData
     TASSIGN(cTile, 0x0);
 
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    evLoadToMte1 = TLOAD(bMatTile, src1Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
 
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    Event<Op::TSTORE_ACC, Op::SCALAR> evStoreDone;
     if constexpr (reluMode == 0) {
-        TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile);
+        evStoreDone = TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile, evMatmulToStore);
     } else if constexpr (reluMode == 1) {
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
-        TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile);
+        evStoreDone = TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, evMatmulToStore);
     }
-    set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    TSYNC(evStoreDone);
     out = dstGlobal.data();
 }
 
@@ -205,33 +201,30 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nd(
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    evLoadToMte1 = TLOAD(bMatTile, src1Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
 
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
     uint64_t preQuantScalar = static_cast<uint64_t>(*reinterpret_cast<int32_t *>(&scalarQuant));
     if (sizeof(dstDataType) == 1) {
         constexpr bool sign = (std::is_same_v<dstDataType, int8_t>) ? true : false;
         preQuantScalar = (preQuantScalar & ~(static_cast<uint64_t>(1) << 46)) | (static_cast<uint64_t>(sign) << 46);
     }
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    Event<Op::TSTORE_ACC, Op::SCALAR> evStoreDone;
     if constexpr (reluMode == 0) {
-        TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile, preQuantScalar);
+        evStoreDone = TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile, preQuantScalar, evMatmulToStore);
     } else if constexpr (reluMode == 1) {
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
-        TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, preQuantScalar);
+        evStoreDone = TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(
+            dstGlobal, cTile, preQuantScalar, evMatmulToStore);
     }
-    set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    TSYNC(evStoreDone);
     out = dstGlobal.data();
 }
 
@@ -286,33 +279,30 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nz(
     TASSIGN(cTile, 0x0);
 
     TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    evLoadToMte1 = TLOAD(bMatTile, src1Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
 
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
     uint64_t preQuantScalar = static_cast<uint64_t>(*reinterpret_cast<int32_t *>(&scalarQuant));
     if (sizeof(dstDataType) == 1) {
         constexpr bool sign = (std::is_same_v<dstDataType, int8_t>) ? true : false;
         preQuantScalar = (preQuantScalar & ~(static_cast<uint64_t>(1) << 46)) | (static_cast<uint64_t>(sign) << 46);
     }
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    Event<Op::TSTORE_ACC, Op::SCALAR> evStoreDone;
     if constexpr (reluMode == 0) {
-        TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile, preQuantScalar);
+        evStoreDone = TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile, preQuantScalar, evMatmulToStore);
     } else if constexpr (reluMode == 1) {
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
-        TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, preQuantScalar);
+        evStoreDone = TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(
+            dstGlobal, cTile, preQuantScalar, evMatmulToStore);
     }
-    set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    TSYNC(evStoreDone);
     out = dstGlobal.data();
 }
 
@@ -377,28 +367,32 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nd(
 
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
-    TLOAD(scalingMatTile, src2Global);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    RecordEvent evLoaded = TLOAD(scalingMatTile, src2Global);
 
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2S> evLoadToFix;
+    evLoadToMte1 = evLoaded;
+    evLoadToFix = evLoaded;
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    TMOV(scalingTile, scalingMatTile);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
+
+    TMOV(scalingTile, scalingMatTile, evLoadToFix);
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    Event<Op::TSTORE_ACC, Op::SCALAR> evStoreDone;
     if constexpr (reluMode == 0) {
-        TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(dstGlobal, cTile, scalingTile);
+        evStoreDone = TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(
+            dstGlobal, cTile, scalingTile, evMatmulToStore);
     } else if constexpr (reluMode == 1) {
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
-        TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, scalingTile);
+        evStoreDone = TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(
+            dstGlobal, cTile, scalingTile, evMatmulToStore);
     }
-    set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    TSYNC(evStoreDone);
     out = dstGlobal.data();
 }
 
@@ -465,28 +459,32 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nz(
 
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
-    TLOAD(scalingMatTile, src2Global);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    RecordEvent evLoaded = TLOAD(scalingMatTile, src2Global);
 
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2S> evLoadToFix;
+    evLoadToMte1 = evLoaded;
+    evLoadToFix = evLoaded;
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    TMOV(scalingTile, scalingMatTile);
+    Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
+    TMOV(aTile, aMatTile, evLoadToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
+    evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
+
+    TMOV(scalingTile, scalingMatTile, evLoadToFix);
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
+    Event<Op::TSTORE_ACC, Op::SCALAR> evStoreDone;
     if constexpr (reluMode == 0) {
-        TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(dstGlobal, cTile, scalingTile);
+        evStoreDone = TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum>(
+            dstGlobal, cTile, scalingTile, evMatmulToStore);
     } else if constexpr (reluMode == 1) {
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
-        TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, scalingTile);
+        evStoreDone = TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(
+            dstGlobal, cTile, scalingTile, evMatmulToStore);
     }
-    set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    TSYNC(evStoreDone);
     out = dstGlobal.data();
 }
 

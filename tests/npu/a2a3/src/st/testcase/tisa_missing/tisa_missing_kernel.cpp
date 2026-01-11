@@ -36,18 +36,15 @@ __tf__ AICORE void ScalarLoadGmToVecTile(typename TileT::TileDType __out__ dstTi
 }
 
 template <typename T, typename TileT>
-__tf__ AICORE void StoreVecTile(__gm__ T *out, uint32_t outIdx, TileT &tile)
+template <typename... WaitEvents>
+__tf__ AICORE void StoreVecTile(__gm__ T *out, uint32_t outIdx, TileT &tile, WaitEvents &...events)
 {
     using GlobalT = GlobalTensor<T, GlobalShape, GlobalStride>;
     GlobalT outG(out + outIdx * kTileElems);
-    pipe_barrier(PIPE_ALL);
     SetFullVecMaskByDType<T>();
-    set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
-    TSTORE(outG, tile);
-    pipe_barrier(PIPE_ALL);
-    set_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
+    Event<Op::TSTORE_VEC, Op::SCALAR> evStoreDone;
+    evStoreDone = TSTORE(outG, tile, events...);
+    TSYNC(evStoreDone);
 }
 
 __global__ AICORE void run_int_ops(__gm__ int32_t __out__ *out, __gm__ int32_t __in__ *src0, __gm__ int32_t __in__ *src1)
@@ -67,46 +64,46 @@ __global__ AICORE void run_int_ops(__gm__ int32_t __out__ *out, __gm__ int32_t _
     GlobalI32 bG(src1);
 
     TLOAD(a, aG);
-    TLOAD(b, bG);
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    Event<Op::TLOAD, Op::VECTOR> evLoadToVec;
+    evLoadToVec = TLOAD(b, bG);
 
     uint32_t outIdx = 0;
 
-    TAND(dst, a, b);
-    StoreVecTile(out, outIdx++, dst);
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+    evCompute = TAND(dst, a, b, evLoadToVec);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TOR(dst, a, b);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TOR(dst, a, b);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TXOR(dst, a, b);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TXOR(dst, a, b);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TNOT(dst, a);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TNOT(dst, a);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TSHL(dst, a, b);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TSHL(dst, a, b);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TSHR(dst, a, b);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TSHR(dst, a, b);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TREM(dst, a, b);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TREM(dst, a, b);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
     constexpr int32_t kRemScalar = 7;
-    TREMS(dst, a, kRemScalar);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TREMS(dst, a, kRemScalar);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
     constexpr int32_t kLogicScalar = 0x0F0F0F0F;
-    TANDS(dst, a, kLogicScalar);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TANDS(dst, a, kLogicScalar);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TORS(dst, a, kLogicScalar);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TORS(dst, a, kLogicScalar);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TXORS(dst, a, kLogicScalar);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TXORS(dst, a, kLogicScalar);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 }
 
 __global__ AICORE void run_float_ops(
@@ -131,50 +128,50 @@ __global__ AICORE void run_float_ops(
 
     TLOAD(x, xG);
     TLOAD(y, yG);
-    TLOAD(z, zG);
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    Event<Op::TLOAD, Op::VECTOR> evLoadToVec;
+    evLoadToVec = TLOAD(z, zG);
 
     uint32_t outIdx = 0;
 
-    TNEG(dst, x);
-    StoreVecTile(out, outIdx++, dst);
+    Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+    evCompute = TNEG(dst, x, evLoadToVec);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TRELU(dst, x);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TRELU(dst, x);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
     constexpr float kLRelu = 0.1f;
-    TLRELU(dst, x, kLRelu);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TLRELU(dst, x, kLRelu);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TPRELU(dst, x, y);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TPRELU(dst, x, y);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TADDC(dst, x, y, z);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TADDC(dst, x, y, z);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TSUBC(dst, x, y, z);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TSUBC(dst, x, y, z);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
     constexpr float kBias = 1.25f;
-    TADDSC(dst, x, kBias, y);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TADDSC(dst, x, kBias, y);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TSUBSC(dst, x, kBias, y);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TSUBSC(dst, x, kBias, y);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TSUBS(dst, x, kBias);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TSUBS(dst, x, kBias);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TMAXS(dst, x, kBias);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TMAXS(dst, x, kBias);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
-    TREM(dst, x, y);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TREM(dst, x, y);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 
     constexpr float kRemScalar = 1.3f;
-    TREMS(dst, x, kRemScalar);
-    StoreVecTile(out, outIdx++, dst);
+    evCompute = TREMS(dst, x, kRemScalar);
+    StoreVecTile(out, outIdx++, dst, evCompute);
 }
 
 __global__ AICORE void run_mgather_mscatter(__gm__ int32_t __out__ *out, __gm__ int32_t __in__ *memSrc,
@@ -197,18 +194,19 @@ __global__ AICORE void run_mgather_mscatter(__gm__ int32_t __out__ *out, __gm__ 
     GlobalI32 memDstG(memDst);
 
     TLOAD(idxTile, idxG);
-    TLOAD(srcTile, scatterSrcG);
-    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    Event<Op::TLOAD, Op::SCALAR> evLoadToScalar;
+    evLoadToScalar = TLOAD(srcTile, scatterSrcG);
 
-    MGATHER(tmp, memSrcG, idxTile);
-    StoreVecTile(out, 0, tmp);
+    Event<Op::SCALAR, Op::TSTORE_VEC> evGatherToStore;
+    evGatherToStore = MGATHER(tmp, memSrcG, idxTile, evLoadToScalar);
+    StoreVecTile(out, 0, tmp, evGatherToStore);
 
-    MSCATTER(memDstG, srcTile, idxTile);
-    pipe_barrier(PIPE_ALL);
+    MSCATTER(memDstG, srcTile, idxTile, evLoadToScalar);
     ScalarLoadGmToVecTile<int32_t, VecI32>(tmp.data(), memDstG.data());
 
-    StoreVecTile(out, 1, tmp);
+    Event<Op::SCALAR, Op::TSTORE_VEC> evScalarToStore;
+    evScalarToStore = RecordEvent{};
+    StoreVecTile(out, 1, tmp, evScalarToStore);
 }
 
 void LaunchTisaMissingIntOps(int32_t *out, int32_t *src0, int32_t *src1, void *stream)

@@ -79,9 +79,9 @@ AICORE inline void RunTLoadND2ND(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    Event<Op::TLOAD, Op::TSTORE_MAT> evLoadToStore;
+    evLoadToStore = TLOAD(srcTile, srcGlobal);
+    TSYNC(evLoadToStore);
     TSTORE_MAT2GM<GlobalData, TileData>(dstGlobal, srcTile);
     out = dstGlobal.data();
 }
@@ -111,9 +111,9 @@ AICORE inline void RunTLoadDN2DN(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    Event<Op::TLOAD, Op::TSTORE_MAT> evLoadToStore;
+    evLoadToStore = TLOAD(srcTile, srcGlobal);
+    TSYNC(evLoadToStore);
     TSTORE_MAT2GM(dstGlobal, srcTile);
     out = dstGlobal.data();
 }
@@ -141,9 +141,9 @@ AICORE inline void RunTLoadNZ2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    Event<Op::TLOAD, Op::TSTORE_MAT> evLoadToStore;
+    evLoadToStore = TLOAD(srcTile, srcGlobal);
+    TSYNC(evLoadToStore);
     TSTORE_MAT2GM(dstGlobal, srcTile);
     out = dstGlobal.data();
 }
@@ -172,9 +172,9 @@ AICORE inline void RunTLoadND2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    Event<Op::TLOAD, Op::TSTORE_MAT> evLoadToStore;
+    evLoadToStore = TLOAD(srcTile, srcGlobal);
+    TSYNC(evLoadToStore);
     TSTORE_MAT2GM(dstGlobal, srcTile);
     out = dstGlobal.data();
 }
@@ -203,9 +203,9 @@ AICORE inline void RunTLoadDN2ZN(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    Event<Op::TLOAD, Op::TSTORE_MAT> evLoadToStore;
+    evLoadToStore = TLOAD(srcTile, srcGlobal);
+    TSYNC(evLoadToStore);
     TSTORE_MAT2GM(dstGlobal, srcTile);
     out = dstGlobal.data();
 }

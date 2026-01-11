@@ -30,13 +30,12 @@ __global__ AICORE void runTCmps( __gm__ uint8_t __out__ *out, __gm__ T __in__ *s
     GlobalData_src0 src0Global(src0);
     GlobalData_dst dstGlobal(out);
 
-    TLOAD(src0Tile, src0Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TCMPS(dstTile, src0Tile, src1[0], cmpMode);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::VECTOR> evLoad0;
+    evLoad0 = TLOAD(src0Tile, src0Global);
+
+    Event<Op::TCMPS, Op::TSTORE_VEC> evCompute;
+    evCompute = TCMPS(dstTile, src0Tile, src1[0], cmpMode, evLoad0);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 

@@ -91,6 +91,9 @@ This table covers all PTO instructions exposed by `include/pto/common/pto_instr.
 | Tile-Scalar / Tile-Immediate | [`TSUBSC`](isa/TSUBSC.md) | Elementwise fused op: `src0 - scalar + src1`. |
 | Tile-Scalar / Tile-Immediate | [`TXORS`](isa/TXORS.md) | Elementwise bitwise XOR of a tile and a scalar. |
 | Axis Reduce / Expand | [`TCOLEXPAND`](isa/TCOLEXPAND.md) | Broadcast the first element of each source column across the destination column. |
+| Axis Reduce / Expand | [`TCOLEXPANDDIV`](isa/TCOLEXPANDDIV.md) | Column-wise broadcast divide: divide each element of `src0` by a per-column vector `src1` broadcast across rows. |
+| Axis Reduce / Expand | [`TCOLEXPANDMUL`](isa/TCOLEXPANDMUL.md) | Column-wise broadcast multiply: multiply each element of `src0` by a per-column vector `src1` broadcast across rows. |
+| Axis Reduce / Expand | [`TCOLEXPANDSUB`](isa/TCOLEXPANDSUB.md) | Column-wise broadcast subtract: subtract a per-column vector `src1` from each row of `src0` (broadcast across rows). |
 | Axis Reduce / Expand | [`TCOLMAX`](isa/TCOLMAX.md) | Reduce each column by taking the maximum across rows. |
 | Axis Reduce / Expand | [`TCOLMIN`](isa/TCOLMIN.md) | Reduce each column by taking the minimum across rows. |
 | Axis Reduce / Expand | [`TCOLSUM`](isa/TCOLSUM.md) | Reduce each column by summing across rows. |

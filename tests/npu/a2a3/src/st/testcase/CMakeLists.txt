@@ -161,6 +161,9 @@ tstore_mat2gm
 tscatter
 tfa
 tcolexpand
+tcolexpanddiv
+tcolexpandmul
+tcolexpandsub
 tisa_missing
 )
 

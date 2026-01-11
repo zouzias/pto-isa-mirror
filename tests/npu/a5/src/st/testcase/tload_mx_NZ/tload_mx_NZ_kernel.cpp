@@ -50,8 +50,7 @@ AICORE inline void runTLOAD_SCALE(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
     // L1 -> UB : AIC
 #if defined(__DAV_CUBE__)
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    pipe_barrier(PIPE_MTE2);
     uint16_t validRowPreN0 = validRow / N0;
     uint16_t validColPreN0 = validCol / N0;
     uint16_t blockCount = isScaleA ? validRowPreN0 / 16 : validColPreN0 / 16;

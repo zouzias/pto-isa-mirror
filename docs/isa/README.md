@@ -69,6 +69,9 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [`TCOLMAX`](TCOLMAX.md) — Reduce each column by taking the maximum across rows.
 - [`TCOLMIN`](TCOLMIN.md) — Reduce each column by taking the minimum across rows.
 - [`TCOLEXPAND`](TCOLEXPAND.md) — Broadcast the first element of each source column across the destination column.
+- [`TCOLEXPANDDIV`](TCOLEXPANDDIV.md) — Column-wise broadcast divide: divide each element of `src0` by a per-column vector `src1` broadcast across rows.
+- [`TCOLEXPANDMUL`](TCOLEXPANDMUL.md) — Column-wise broadcast multiply: multiply each element of `src0` by a per-column vector `src1` broadcast across rows.
+- [`TCOLEXPANDSUB`](TCOLEXPANDSUB.md) — Column-wise broadcast subtract: subtract a per-column vector `src1` from each row of `src0` (broadcast across rows).
 
 ## Padding
 - [`TFILLPAD`](TFILLPAD.md) — Copy a source tile into a destination tile and fill the remaining (padded) elements with a compile-time pad value selected by `TileDataDst::PadVal` (e.g., `PadValue::Min`/`PadValue::Max`).

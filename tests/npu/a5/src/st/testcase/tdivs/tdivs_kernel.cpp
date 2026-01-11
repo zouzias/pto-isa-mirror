@@ -30,16 +30,14 @@ PTO_INTERNAL void runTDivS(__gm__ T *out, __gm__  T *src, T scalar) {
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x28000);
 
-    TLOAD(dstTile, dstGlobal);
+    Event<Op::TLOAD, Op::VECTOR> evLoadDst;
+    Event<Op::TLOAD, Op::VECTOR> evLoadSrc;
+    evLoadDst = TLOAD(dstTile, dstGlobal);
+    evLoadSrc = TLOAD(srcTile, srcGlobal);
 
-    TLOAD(srcTile, srcGlobal);
-
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TDIVS(dstTile, srcTile, scalar);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TDIVS, Op::TSTORE_VEC> evCompute;
+    evCompute = TDIVS(dstTile, srcTile, scalar, evLoadDst, evLoadSrc);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 
@@ -58,16 +56,14 @@ PTO_INTERNAL void runSTDivS(__gm__ T *out, __gm__  T *src, T scalar) {
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x28000);
 
-    TLOAD(dstTile, dstGlobal);
+    Event<Op::TLOAD, Op::VECTOR> evLoadDst;
+    Event<Op::TLOAD, Op::VECTOR> evLoadSrc;
+    evLoadDst = TLOAD(dstTile, dstGlobal);
+    evLoadSrc = TLOAD(srcTile, srcGlobal);
 
-    TLOAD(srcTile, srcGlobal);
-
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TDIVS(dstTile, scalar, srcTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TDIVS, Op::TSTORE_VEC> evCompute;
+    evCompute = TDIVS(dstTile, scalar, srcTile, evLoadDst, evLoadSrc);
+    TSTORE(dstGlobal, dstTile, evCompute);
     out = dstGlobal.data();
 }
 extern "C" __global__ AICORE void launchTDIVSCase1(__gm__ float *out, __gm__ float *src, float scalar)

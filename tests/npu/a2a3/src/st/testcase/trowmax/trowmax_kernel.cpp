@@ -40,13 +40,11 @@ PTO_INTERNAL void runTRowMax(__gm__ T *out, __gm__ T *src) {
   TASSIGN(dstTile, 2 * row * srcCol * sizeof(T));
 
   // 搬运数据
-  TLOAD(srcTile, srcGlobal);
-  set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-  wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-  TROWMAX(dstTile, srcTile, tmpTile);
-  set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-  wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-  TSTORE(dstGlobal, dstTile);
+  Event<Op::TLOAD, Op::VECTOR> evLoad;
+  Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+  evLoad = TLOAD(srcTile, srcGlobal);
+  evCompute = TROWMAX(dstTile, srcTile, tmpTile, evLoad);
+  TSTORE(dstGlobal, dstTile, evCompute);
 }
 
 template <typename T, int row, int validRow, int srcCol, int srcValidCol,
@@ -74,17 +72,15 @@ PTO_INTERNAL void runTRowMaxDNDst(__gm__ T *out, __gm__ T *src) {
   TASSIGN(dstTile, 2 * row * srcCol * sizeof(T));
 
   // 搬运数据
-  TLOAD(srcTile, srcGlobal);
-  set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-  wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-  TROWMAX(dstTile, srcTile, tmpTile);
-  set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-  wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+  Event<Op::TLOAD, Op::VECTOR> evLoad;
+  Event<Op::VECTOR, Op::TSTORE_VEC> evCompute;
+  evLoad = TLOAD(srcTile, srcGlobal);
+  evCompute = TROWMAX(dstTile, srcTile, tmpTile, evLoad);
   using dstTileDataND =
       Tile<TileType::Vec, T, 1, row, BLayout::RowMajor, 1, row>;
   dstTileDataND dstTileND;
   TRESHAPE(dstTileND, dstTile);
-  TSTORE(dstGlobal, dstTileND);
+  TSTORE(dstGlobal, dstTileND, evCompute);
 }
 
 extern "C" __global__ AICORE void launchTROWMAXCase1(__gm__ float *out,

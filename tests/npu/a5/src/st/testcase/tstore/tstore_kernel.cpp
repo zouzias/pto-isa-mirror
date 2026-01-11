@@ -55,10 +55,9 @@ AICORE inline void RunTStoreRowMajor(__gm__ T __out__ *out, __gm__ T __in__ *src
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, srcTile);
+    Event<Op::TLOAD, Op::TSTORE_VEC> evLoad;
+    evLoad = TLOAD(srcTile, srcGlobal);
+    TSTORE(dstGlobal, srcTile, evLoad);
     out = dstGlobal.data();
 }
 
@@ -92,10 +91,9 @@ AICORE inline void RunTStoreColMajor(__gm__ T __out__ *out, __gm__ T __in__ *src
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, srcTile);
+    Event<Op::TLOAD, Op::TSTORE_VEC> evLoad;
+    evLoad = TLOAD(srcTile, srcGlobal);
+    TSTORE(dstGlobal, srcTile, evLoad);
     out = dstGlobal.data();
 }
 
@@ -126,10 +124,9 @@ AICORE inline void RunTStoreNZ(__gm__ T __out__ *out, __gm__ T __in__ *src) {
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, srcTile);
+    Event<Op::TLOAD, Op::TSTORE_VEC> evLoad;
+    evLoad = TLOAD(srcTile, srcGlobal);
+    TSTORE(dstGlobal, srcTile, evLoad);
     out = dstGlobal.data();
 }
 

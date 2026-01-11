@@ -18,7 +18,8 @@ AICORE inline void ProcessKIteration(uint32_t kIter, __gm__ U *currentSrc0, __gm
     Tile<TileType::Mat, U, baseM, baseK, BLayout::ColMajor, baseM, baseK, SLayout::RowMajor> aMatTile[2], 
     Tile<TileType::Mat, S, baseK, baseN, BLayout::RowMajor, baseK, baseN, SLayout::ColMajor> bMatTile[2], 
     TileLeft<U, baseM, baseK, baseM, baseK> aTile[2], TileRight<S, baseK, baseN, baseK, baseN> bTile[2], 
-    TileAcc<T, baseM, baseN, baseM, baseN> &cTile)
+    TileAcc<T, baseM, baseN, baseM, baseN> &cTile, Event<Op::TMATMUL, Op::TMOV_M2L> evMatmulToMov[2],
+    Event<Op::TMOV_M2R, Op::TLOAD> evMovToLoad[2], Event<Op::TMATMUL, Op::TSTORE_ACC> &evMatmulToStore)
 {
     using NDValidShapeA = TileShape2D<U, baseM, baseK>;
     using NDsingleCoreShapeA = BaseShape2D<U, M, K>;
@@ -32,27 +33,33 @@ AICORE inline void ProcessKIteration(uint32_t kIter, __gm__ U *currentSrc0, __gm
     GlobalDataSrcA gmA(currentSrc0 + kIter * baseK);
     GlobalDataSrcB gmB(currentSrc1 + kIter * baseK);
 
-    wait_flag(PIPE_MTE1, PIPE_MTE2, (event_t)cur);
-    TLOAD(aMatTile[cur], gmA);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    TLOAD(bMatTile[cur], gmB);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
-    
-    wait_flag(PIPE_M, PIPE_MTE1, (event_t)cur);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    TMOV(aTile[cur], aMatTile[cur]);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
-    TMOV(bTile[cur], bMatTile[cur]);
-    set_flag(PIPE_MTE1, PIPE_MTE2, (event_t)cur);
-
-    set_flag(PIPE_MTE1, PIPE_M, (event_t)cur);
-    wait_flag(PIPE_MTE1, PIPE_M, (event_t)cur);
-    if (kIter == 0) {
-        TMATMUL(cTile, aTile[cur], bTile[cur]);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMov;
+    if (kIter < 2) {
+        TLOAD(aMatTile[cur], gmA);
     } else {
-        TMATMUL_ACC(cTile, cTile, aTile[cur], bTile[cur]);
+        TLOAD(aMatTile[cur], gmA, evMovToLoad[cur]);
     }
-    set_flag(PIPE_M, PIPE_MTE1, (event_t)cur);
+    evLoadToMov = TLOAD(bMatTile[cur], gmB);
+
+    if (kIter < 2) {
+        TMOV(aTile[cur], aMatTile[cur], evLoadToMov);
+    } else {
+        TMOV(aTile[cur], aMatTile[cur], evLoadToMov, evMatmulToMov[cur]);
+    }
+
+    auto recordMovB = TMOV(bTile[cur], bMatTile[cur]);
+    Event<Op::TMOV_M2R, Op::TMATMUL> evMovToMatmul;
+    evMovToMatmul = recordMovB;
+    evMovToLoad[cur] = recordMovB;
+
+    auto recordMatmul = RecordEvent{};
+    if (kIter == 0) {
+        recordMatmul = TMATMUL(cTile, aTile[cur], bTile[cur], evMovToMatmul);
+    } else {
+        recordMatmul = TMATMUL_ACC(cTile, cTile, aTile[cur], bTile[cur], evMovToMatmul);
+    }
+    evMatmulToMov[cur] = recordMatmul;
+    evMatmulToStore = recordMatmul;
 }
 
 template <typename T, typename U, typename S, int M, int K, int N, uint32_t singleCoreM, uint32_t singleCoreK, 
@@ -99,23 +106,17 @@ AICORE inline void runGEMMBASIC(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
 
     constexpr uint32_t kLoop = singleCoreK / baseK;
 
-    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+    Event<Op::TMATMUL, Op::TMOV_M2L> evMatmulToMov[2];
+    Event<Op::TMOV_M2R, Op::TLOAD> evMovToLoad[2];
+    Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     for (uint32_t kIter = 0; kIter < kLoop; kIter++) {
         ProcessKIteration<T, U, S, M, K, N, baseM, baseK, baseN>(kIter, currentSrc0, currentSrc1, 
-            aMatTile, bMatTile, aTile, bTile, cTile);
+            aMatTile, bMatTile, aTile, bTile, cTile, evMatmulToMov, evMovToLoad, evMatmulToStore);
     }
-    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
 
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     GlobalDataOut dstGlobal(currentDst);
-    TSTORE(dstGlobal, cTile);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
+    pipe_barrier(PIPE_ALL);
 }
 
 template <typename T, uint32_t M, uint32_t K, uint32_t N, uint32_t singleCoreM, uint32_t singleCoreK,
