@@ -19,7 +19,7 @@ template <int32_t tilingKey>
 void LaunchTMOVAcc2MatNZ2ND(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template <int32_t tilingKey>
-void LaunchTMOVAcc2MatNZ2NZ(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+void LaunchTMOVAcc2MatNZ2NZ(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
 
 template <int32_t tilingKey>
 void LaunchTMOVAcc2MatNZ2DN(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
@@ -57,36 +57,48 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <int32_t funcKey, typename CType, typename AType, typename BType, int32_t key>
+template <int32_t funcKey, typename CType, typename AType, typename BType, int32_t key,
+    uint32_t IdxRow = 0, uint32_t IdxCol = 0, bool isInsert = false, uint32_t DstRow = 0, uint32_t DstCol = 0>
 void tmov_acc2mat_test(uint32_t M, uint32_t K, uint32_t N)
 {
     size_t aFileSize = M * K * sizeof(AType);
     size_t bFileSize = K * N * sizeof(BType);
-    size_t cFileSize = M * N * sizeof(CType);
+    size_t cFileSize = (M - IdxRow) * (N - IdxCol) * sizeof(CType);
+    if (isInsert) {
+        cFileSize = DstRow * DstCol * sizeof(CType);
+    }
 
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    uint8_t *dstHost, *src0Host, *src1Host;
-    uint8_t *dstDevice, *src0Device, *src1Device;
+    uint8_t *dstHost, *src0Host, *src1Host, *src2Host;
+    uint8_t *dstDevice, *src0Device, *src1Device, *src2Device;
 
     aclrtMallocHost((void **)(&dstHost), cFileSize);
     aclrtMallocHost((void **)(&src0Host), aFileSize);
     aclrtMallocHost((void **)(&src1Host), bFileSize);
+    aclrtMallocHost((void **)(&src2Host), cFileSize);
 
     aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src2Device, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);    
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", aFileSize, src0Host, aFileSize);
     ReadFile(GetGoldenDir() + "/x2_gm.bin", bFileSize, src1Host, bFileSize);
+    if (isInsert) {
+        ReadFile(GetGoldenDir() + "/dst.bin", cFileSize, src2Host, cFileSize);
+    }
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    if (isInsert) {
+        aclrtMemcpy(src2Device, cFileSize, src2Host, cFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    }
     if constexpr (funcKey == 1) {
-        LaunchTMOVAcc2MatNZ2NZ<key>(dstDevice, src0Device, src1Device, stream);
+        LaunchTMOVAcc2MatNZ2NZ<key>(dstDevice, src0Device, src1Device, src2Device, stream);
     } else if constexpr (funcKey == 2) {
         LaunchTMOVAcc2MatNZ2ND<key>(dstDevice, src0Device, src1Device, stream);
     } else if constexpr (funcKey == 3) {
@@ -107,10 +119,12 @@ void tmov_acc2mat_test(uint32_t M, uint32_t K, uint32_t N)
     aclrtFree(dstDevice);
     aclrtFree(src0Device);
     aclrtFree(src1Device);
+    aclrtFree(src2Device);
 
     aclrtFreeHost(dstHost);
     aclrtFreeHost(src0Host);
     aclrtFreeHost(src1Host);
+    aclrtFreeHost(src2Host);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
@@ -372,4 +386,14 @@ TEST_F(TMOVTest, case_nz2dn_sc_quant_3)
 TEST_F(TMOVTest, case_nz2dn_sc_quant_4)
 {
     tmov_acc2mat_test<6, int8_t, int8_t, int8_t, 4>(64, 64, 90);
+}
+
+TEST_F(TMOVTest, case_nz2nz_extract_1)
+{
+    tmov_acc2mat_test<1, uint16_t, uint16_t, uint16_t, 5, 16, 16>(64, 64, 64);
+}
+
+TEST_F(TMOVTest, case_nz2nz_insert_1)
+{
+    tmov_acc2mat_test<1, uint16_t, uint16_t, uint16_t, 6, 32, 32, true, 64, 64>(32, 32, 32);
 }
