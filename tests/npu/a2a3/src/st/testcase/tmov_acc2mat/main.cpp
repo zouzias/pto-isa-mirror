@@ -41,12 +41,12 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename CType, typename AType, typename BType, int32_t key>
+template <typename CType, typename AType, typename BType, int32_t key, uint32_t IdxRow = 0, uint32_t IdxCol = 0>
 void tmov_acc2mat_nz2nz_test(uint32_t M, uint32_t K, uint32_t N)
 {
     size_t aFileSize = M * K * sizeof(AType);
     size_t bFileSize = K * N * sizeof(BType);
-    size_t cFileSize = M * N * sizeof(CType);
+    size_t cFileSize = (M - IdxRow) * (N - IdxCol) * sizeof(CType);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -421,4 +421,13 @@ TEST_F(TMOVTest, case_nz2nz_fb_quant_32)
     uint32_t N = 64;
 
     tmov_acc2mat_nz2nz_fb_quant_test<int16_t, int8_t, int8_t, uint64_t, 10>(M, K, N);
+}
+
+TEST_F(TMOVTest, case_nz2nz_extract_33)
+{
+    uint32_t M = 64;
+    uint32_t K = 64;
+    uint32_t N = 64;
+
+    tmov_acc2mat_nz2nz_test<uint16_t, uint16_t, uint16_t, 5, 32, 32>(M, K, N);
 }
