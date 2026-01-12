@@ -497,6 +497,8 @@ inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ float *src, int32_t&
  */
 template <typename R>
 inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+    static_assert(std::is_same<R, __cce_simd::RoundRType>::value,
+                  "FP32 to FP8_E4M3 conversion only supports ROUND_R (CAST_RINT) rounding mode");
     cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
 }
 
@@ -507,6 +509,8 @@ inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, in
  */
 template <typename R>
 inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+    static_assert(std::is_same<R, __cce_simd::RoundRType>::value,
+                  "FP32 to FP8_E5M2 conversion only supports ROUND_R (CAST_RINT) rounding mode");
     cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
 }
 
@@ -517,6 +521,8 @@ inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, in
  */
 template <typename R>
 inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+     static_assert(std::is_same<R, __cce_simd::RoundAType>::value,
+                  "FP16 to HIFLOAT8 conversion only supports ROUND_A (CAST_ROUND) rounding mode");
     constexpr int INPUT_VL_LEN = 64; // Max vector length for 8-bit output
     uint32_t preg_len_head = INPUT_VL_LEN;
     uint32_t preg_len_tail = (len % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (len % INPUT_VL_LEN);
@@ -573,9 +579,9 @@ inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ half *src, int32_t& 
 /** FP16 -> H8 #rnd #sat #part */
 template <typename R>
 inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    // FP16->H8 conversion only supports ROUND_A or ROUND_H modes
-    // static_assert(std::is_same<R, RoundAType>::value || std::is_same<R, RoundCType>::value,
-    //               "Fix: FP16 to HIFLOAT8 conversion only supports ROUND_A (CAST_ROUND) or ROUND_H (CAST_CEIL) rounding modes");
+    // FP16->H8 conversion only supports ROUND_A mode
+    static_assert(std::is_same<R, __cce_simd::RoundAType>::value,
+                  "FP16 to HIFLOAT8 conversion only supports ROUND_A (CAST_ROUND) rounding mode");
     uint32_t len16 = ELE_CNT_B16;
     vector_bool preg_b16 = plt_b16(len16, POST_UPDATE);
 
