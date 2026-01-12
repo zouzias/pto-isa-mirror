@@ -221,6 +221,9 @@ PTO_INST RecordEvent TNOT(TileData &dst, TileData &src, WaitEvents&... events) {
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TRECIP(TileDataDst &dst, TileDataSrc &src, WaitEvents&... events) {
   TSYNC(events...);
+  /*
+   * A3 TRECIP does not support modifing source directly.
+   */
   MAP_INSTR_IMPL(TDIVS, dst, 1, src);
   return {};
 }
