@@ -132,19 +132,21 @@ AICORE inline void runMATMULFB(__gm__ aType *src0, __gm__ bType *src1, __gm__ fb
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 }
 
-template <typename outType, typename aType, typename bType, int M, int K, int N, int validM, int validK, int validN, bool isRelu = false>
+template <typename outType, typename aType, typename bType, int M, int K, int N, int validM, int validK, int validN, bool isRelu = false,
+    int indexRow = 0, int indexCol = 0>
 __global__ AICORE void runTMOV_nz2nz(__gm__ outType *out, __gm__ aType *src0, __gm__ bType *src1)
 {
     constexpr uint16_t sGRows_ = 16;
     constexpr uint16_t sGCols_ = CeilDiv<uint16_t>(512, sGRows_ * sizeof(outType));
-    constexpr uint16_t kGRows_ = CeilDiv<uint16_t>(validM, sGRows_);
-    constexpr uint16_t kGCols_ = CeilDiv<uint16_t>(validN, sGCols_);
 
+    constexpr int copyOutM = validM - indexRow;
+    constexpr int copyOutN = validN - indexCol;
+    constexpr uint16_t kGRows_ = CeilDiv<uint16_t>(copyOutM, sGRows_);
+    constexpr uint16_t kGCols_ = CeilDiv<uint16_t>(copyOutN, sGCols_);
     using DynShapeDim5 = Shape<1, kGCols_, kGRows_, sGRows_, sGCols_>;
     constexpr uint16_t gStride0 = kGCols_ * kGRows_ * sGCols_ * sGRows_;
     constexpr uint16_t gStride1 = kGRows_ * sGCols_ * sGRows_;
     using DynStridDim5 = pto::Stride<gStride0, gStride1, sGCols_ * sGRows_, sGCols_, 1>;
-
     using GlobalDataOut = GlobalTensor<outType, DynShapeDim5, DynStridDim5, Layout::NZ>;
     GlobalDataOut dstGlobal(out);
 
@@ -154,13 +156,17 @@ __global__ AICORE void runTMOV_nz2nz(__gm__ outType *out, __gm__ aType *src0, __
     AccTile cTile(validM, validN);
     TASSIGN(cTile, 0x0);
 
-    using DstTileData = Tile<TileType::Mat, outType, M, N, BLayout::ColMajor, M, N, SLayout::RowMajor, 512>;
+    using DstTileData = Tile<TileType::Mat, outType, M, N, BLayout::ColMajor, copyOutM, copyOutN, SLayout::RowMajor, 512>;
     DstTileData dstTileData;
     TASSIGN(dstTileData, 0x0);
     if constexpr (isRelu) {
         TMOV<DstTileData, AccTile, ReluPreMode::NormalRelu>(dstTileData, cTile);
     } else {
-        TMOV(dstTileData, cTile);
+        if (indexRow == 0 && indexCol == 0) {
+            TMOV(dstTileData, cTile);
+        } else {
+            TEXTRACT(dstTileData, cTile, indexRow, indexCol);
+        }
     }
 
     set_flag(PIPE_FIX, PIPE_MTE3, EVENT_ID0);
@@ -284,12 +290,16 @@ void launchTMOVAcc2MatNZ2NZ(uint8_t *out, uint8_t *src0, uint8_t *src1, void *st
     } else if constexpr (tilingKey == 4) {
         runTMOV_nz2nz<bfloat16_t, half, half, 48, 128, 64, 46, 128, 60, true><<<1, nullptr, stream>>>(
             reinterpret_cast<bfloat16_t *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
+    } else if constexpr (tilingKey == 5) {
+        runTMOV_nz2nz<half, half, half, 64, 64, 64, 64, 64, 64, false, 32, 32><<<1, nullptr, stream>>>(
+            reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1));
     }
 }
 template void launchTMOVAcc2MatNZ2NZ<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void launchTMOVAcc2MatNZ2NZ<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void launchTMOVAcc2MatNZ2NZ<3>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void launchTMOVAcc2MatNZ2NZ<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void launchTMOVAcc2MatNZ2NZ<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template <int32_t tilingKey>
 void launchTMOVAcc2MatSCQuantNz(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)

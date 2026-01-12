@@ -74,6 +74,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TColExpand.hpp"
 #include "pto/npu/a2a3/TTri.hpp"
 #include "pto/npu/a2a3/TPrefetch.hpp"
+#include "pto/npu/a2a3/TInsert.hpp"
 #endif
 
 #ifdef REGISTER_BASE
@@ -137,6 +138,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TColExpandMul.hpp"
 #include "pto/npu/a5/TColExpandSub.hpp"
 #include "pto/npu/a5/TTri.hpp"
+#include "pto/npu/a5/TInsert.hpp"
 #endif
 
 #ifdef __CPU_SIM
