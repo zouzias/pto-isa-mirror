@@ -32,6 +32,7 @@ python3 tests/script/build_st.py -r npu -v a3 -t tfillpad -g TFILLPADTest.case_f
 python3 tests/script/build_st.py -r npu -v a3 -t tpartmin -g TPARTMINTest.test0
 python3 tests/script/build_st.py -r npu -v a3 -t tpartmax -g TPARTMAXTest.test0
 python3 tests/script/build_st.py -r npu -v a3 -t ttrans -g TTRANSTest.case1_float_16_8_16_8
+python3 tests/script/build_st.py -r npu -v a3 -t ttri -g TTRITest.case_float_128x128_128x31_1__444
 
 python3 tests/script/build_st.py -r npu -v a5 -t tcvt -g TCVTTest.case1
 python3 tests/script/build_st.py -r npu -v a5 -t tmatmul -g TMATMULTest.case1
@@ -63,3 +64,4 @@ python3 tests/script/build_st.py -r npu -v a5 -t tmov -g TMOVTest.case_bias_dyna
 python3 tests/script/build_st.py -r npu -v a5 -t tmov -g TMOVTest.case_fixpipe1
 python3 tests/script/build_st.py -r npu -v a5 -t tstore_acc2gm -g TStoreAcc2gmTest.case1
 python3 tests/script/build_st.py -r npu -v a5 -t tstore_acc2gm -g TStoreAcc2gmTest.case17
+python3 tests/script/build_st.py -r npu -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_n3
