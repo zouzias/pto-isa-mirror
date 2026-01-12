@@ -119,7 +119,7 @@ void TRowExpand(typename TileDataOut::TileDType __out__ dst,
 }
 
 template <typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat, unsigned blockSizeElem>
-__tf__ PTO_INTERNAL
+__tf__ PTO_INTERNAL OP_NAME(TROWEXPAND) OP_TYPE(broadcast)  
 void TRowExpandBrcb(typename TileDataOut::TileDType __out__ dst,
                                   typename TileDataIn::TileDType __in__ src,
                                   unsigned dstValidRow,
