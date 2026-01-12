@@ -380,6 +380,26 @@ __tf__ AICORE void TExtractToBCompact(typename DstTileData::TileDType __out__ ds
     }
 }
 
+template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
+__tf__ AICORE void TExtractAccToMat(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
+    uint16_t validRow, uint16_t validCol, uint16_t indexRow, uint16_t indexCol)
+{
+    using SrcType = typename SrcTileData::DType;
+    using DstType = typename DstTileData::DType;
+    constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(DstType);
+    constexpr int32_t accC0Size = BLOCK_BYTE_SIZE / sizeof(float);
+    uint32_t srcOffset = SrcTileData::Rows * accC0Size * (indexCol / accC0Size) + (indexRow * accC0Size + (indexCol % accC0Size));
+    __cc__ SrcType *srcAddr = (__cc__ SrcType *)__cce_get_tile_ptr(src) + srcOffset;
+    __cbuf__ DstType *dstAddr = (__cbuf__ DstType *)__cce_get_tile_ptr(dst);
+
+    constexpr uint32_t dstStride_dst_D = DstTileData::Rows;
+    constexpr uint16_t srcStride = SrcTileData::Rows;
+    uint16_t nSize = CeilDivision(validCol, c0Size) * c0Size;
+    copy_matrix_cc_to_cbuf(
+        dstAddr, srcAddr, 0, nSize, validRow, dstStride_dst_D, 
+        srcStride, 0, QuantPre, reluMode, false, false);
+}
+
 template <typename DstTileData, typename SrcTileData, typename DstType, typename SrcType>
 PTO_INTERNAL void CheckTExtract()
 {
@@ -408,7 +428,7 @@ PTO_INTERNAL void CheckKAlignedMode(DstTileData &dst, SrcTileData &src)
 }
 
 template <typename DstTileData, typename SrcTileData>
-AICORE void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
+PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     CheckTExtract<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
     CheckKAlignedMode<DstTileData, SrcTileData>(dst, src);
@@ -434,7 +454,7 @@ AICORE void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow 
                 TExtractToA<DstTileData, SrcTileData, true>(dst.data(), src.data(), indexRow, indexCol);
             }
         }
-    } else {
+    } else if constexpr (DstTileData::Loc == TileType::Right) {
         static_assert(DstTileData::SFractal == SLayout::ColMajor && DstTileData::isRowMajor,
             "TExtract: RightTile Invalid Fractal.");
         if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
@@ -452,7 +472,57 @@ AICORE void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow 
                 TExtractToB<DstTileData, SrcTileData, true>(dst.data(), src.data(), indexRow, indexCol);
             }
         }
+    }  else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
+        // 拦截拦截
+        constexpr QuantMode_t quantPre =
+            GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>(); 
+        TExtractAccToMat<DstTileData, SrcTileData, quantPre, ReluPreMode::NoRelu>(dst.data(), src.data(),
+            dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
     }
+}
+
+// relu
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
+{
+    // 拦截
+    constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
+    TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(),
+        dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
+}
+
+// scalar quant
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar,
+    uint16_t indexRow = 0, uint16_t indexCol = 0)
+{
+    // 拦截
+    constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
+    set_quant_pre(preQuantScalar);
+    TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(),
+        dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
+}
+
+// vector quant
+template <typename FpTileData>
+__tf__ PTO_INTERNAL void SetFPC(typename FpTileData::TileDType __in__ fp, uint16_t indexCol)
+{
+    using FpType = typename FpTileData::DType;
+    __fbuf__ typename FpType = (__fbuf__ FpType *)__cce_get_tile_ptr(fp) + indexCol;
+    uint64_t deqTensorAddr = ((uint64_t)dstAddrFp >> static_cast<uint64_t>(7))
+                             << 8;  // fpc[15:8] means Quant_PRE_ADDR, uint of 128(2^7)bytes
+    set_fpc(deqTensorAddr);
+}
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp,
+     uint16_t indexRow = 0, uint16_t indexCol = 0)
+{
+    // 拦截
+    constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
+    SetFPC<FpTileData>(fp.data(), indexCol);
+    TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(),
+        dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
 }
 }  // namespace pto
 #endif  // TEXTRACT_HPP
