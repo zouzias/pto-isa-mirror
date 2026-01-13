@@ -1,0 +1,94 @@
+#!/usr/bin/python3
+# coding=utf-8
+# --------------------------------------------------------------------------------
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# --------------------------------------------------------------------------------
+
+import os
+import numpy as np
+np.random.seed(19)
+
+
+def gen_golden_data(param):
+    src_type = param.src_type
+    index_type = param.index_type
+    gShape0 = param.gShape0
+    gShape1 = param.gShape1
+    gShape2 = param.gShape2
+    gShape3 = param.gShape3
+    gShape4 = param.gShape4
+    gWholeShape0 = param.gWholeShape0
+    gWholeShape1 = param.gWholeShape1
+    gWholeShape2 = param.gWholeShape2
+    gWholeShape3 = param.gWholeShape3
+    gWholeShape4 = param.gWholeShape4
+    topk = param.topk
+
+    valid_row = gShape0 * gShape1 * gShape2 * gShape3
+    valid_col = gShape4
+    rows = gWholeShape0 * gWholeShape1 * gWholeShape2 * gWholeShape3
+    cols = gWholeShape4
+    
+    new_data = np.zeros((rows, cols)).astype(src_type)
+    for i in range(valid_row):
+        sequence = np.arange(i, i + valid_col)
+        data = np.random.permutation(sequence).astype(src_type)
+        new_data[i, :valid_col] = data
+
+    x1_gm = np.zeros((rows, cols * 2)) 
+    for i in range(valid_row):
+        counter = 0
+        for j in range(valid_col):
+            original_value = new_data[i, j]
+            x1_gm[i, j * 2] = original_value
+            x1_gm[i, j * 2 + 1] = counter
+            counter += 1
+
+    topk_values = np.zeros((rows, topk)).astype(src_type)
+    topk_indices = np.zeros((rows, topk)).astype(index_type)
+    for i in range(valid_row):
+        row = new_data[i, :valid_col]
+        indices = np.argpartition(row, -topk)[-topk:]
+        indices_sorted = indices[np.argsort(-row[indices])]
+        values = row[indices_sorted]
+
+        topk_values[i] = values
+        topk_indices[i] = indices_sorted
+
+    os.makedirs("input", exist_ok=True)
+    os.makedirs("output", exist_ok=True)
+    new_data.tofile("./input/x1_gm.bin")
+    topk_indices.tofile("./output/golden_i.bin")
+    topk_values.tofile("./output/golden_d.bin")
+
+
+class TopkParams:
+    def __init__(self, src_type, index_type, gShape0, gShape1, gShape2, gShape3, gShape4,
+                 gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4, topk, start):
+        self.src_type = src_type
+        self.index_type = index_type
+        self.gShape0 = gShape0
+        self.gShape1 = gShape1
+        self.gShape2 = gShape2
+        self.gShape3 = gShape3
+        self.gShape4 = gShape4
+        self.gWholeShape0 = gWholeShape0
+        self.gWholeShape1 = gWholeShape1
+        self.gWholeShape2 = gWholeShape2
+        self.gWholeShape3 = gWholeShape3
+        self.gWholeShape4 = gWholeShape4
+        self.topk = topk
+        self.start = start
+
+if __name__ == "__main__":
+
+    case_params_list = [
+        TopkParams(np.float32, np.int32, 1, 1, 1, 8, 1024, 1, 1, 1, 8, 1280, 1000, 0)
+    ]
+    gen_golden_data(case_params_list[0])
