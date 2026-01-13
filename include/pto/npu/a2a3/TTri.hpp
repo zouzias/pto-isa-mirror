@@ -87,11 +87,12 @@ __tf__ PTO_INTERNAL void TTri(typename TileData::TileDType __out__ dst, unsigned
 template <typename TileData, int isUpperOrLower, int diagonal>
 PTO_INTERNAL void TTRI_IMPL(TileData &dst) {
     static_assert(std::is_same<typename TileData::DType, int32_t>::value ||
-                  std::is_same<typename TileData::DType, int16_t>::value ||
-                  std::is_same<typename TileData::DType, uint32_t>::value ||
-                  std::is_same<typename TileData::DType, uint16_t>::value ||
-                  std::is_same<typename TileData::DType, half>::value ||
-                  std::is_same<typename TileData::DType, float>::value || "Fix: TTri has invalid data type.");
+                      std::is_same<typename TileData::DType, int16_t>::value ||
+                      std::is_same<typename TileData::DType, uint32_t>::value ||
+                      std::is_same<typename TileData::DType, uint16_t>::value ||
+                      std::is_same<typename TileData::DType, half>::value ||
+                      std::is_same<typename TileData::DType, float>::value,
+        "Fix: TTri has invalid data type.");
     static_assert(TileData::isRowMajor, "Fix: TTri has not supported Layout type.");
     static_assert(isUpperOrLower == 0 || isUpperOrLower == 1, "Fix: isUpperOrLower must be 0 or 1.");
     constexpr unsigned rowStride = TileData::RowStride;
