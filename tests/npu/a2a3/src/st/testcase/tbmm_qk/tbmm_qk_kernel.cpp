@@ -153,6 +153,77 @@ __global__ AICORE void LaunchTBMM_QK_kern_NT(__gm__ float *out, __gm__ half *q, 
     out = dstGlobal.data();
 }
 
+template<uint32_t TM, uint32_t TK, uint32_t TN>
+__global__ AICORE void LaunchTBMM_QK_kern_TN(__gm__ float *out, __gm__ half *q, __gm__ half *k) {
+    constexpr uint32_t M = TM; 
+    constexpr uint32_t N = TN; 
+    constexpr uint32_t K = TK; 
+    constexpr uint32_t validM = M;
+    constexpr uint32_t validN = N;
+    constexpr uint32_t validK = K;
+    constexpr uint32_t Cube_M = M;
+    constexpr uint32_t Cube_N = N;
+    constexpr uint32_t Cube_K = 64;
+
+    // Global tensor typedefs (static shapes)
+    // Q is transposed: K x M in memory, accessed as M x K
+    using GlobalDataSrc0 = GlobalTensor<half, pto::Shape<1, 1, 1, validM, Cube_K>,
+        pto::Stride<1 * validK * validM, 1 * validK * validM, validK * validM, 1, validM>, Layout::DN>;
+    // K is normal: K x N
+    using GlobalDataSrc1 = GlobalTensor<half, pto::Shape<1, 1, 1, Cube_K, validN>,
+        pto::Stride<1 * Cube_K * validN, 1 * Cube_K * validN, Cube_K * validN, validN, 1>, Layout::ND>;
+    using GlobalDataOut = GlobalTensor<float, pto::Shape<1, 1, 1, validM, validN>,
+        pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
+
+    GlobalDataOut dstGlobal(out);
+
+    // Mat tiles: half inputs, float accumulation
+    using TileMatAData = Tile<TileType::Mat, half, M, Cube_K, BLayout::RowMajor, M, Cube_K, SLayout::ColMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, half, Cube_K, N, BLayout::ColMajor, Cube_K, N, SLayout::RowMajor, 512>;
+    using AccTile = TileAcc<float, M, N, validM, validN>;
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
+
+    AccTile cTile;
+    TASSIGN(cTile, 0x0);
+
+    constexpr int iter = K / Cube_K;
+    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+
+    for (int16_t i = 0; i < iter; i++) {
+        GlobalDataSrc0 src0Global(q + i * Cube_K * validM);
+        GlobalDataSrc1 src1Global(k + i * Cube_K * validN);
+
+        /******************************TLOAD*****************************/
+        TLOAD(aMatTile, src0Global);
+        TLOAD(bMatTile, src1Global);
+
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+
+        /**************************TMOV && TEXTRACT**************************/
+        matmul_macro_pto<Cube_M, K, Cube_N>(aMatTile, bMatTile, cTile, i);
+
+        set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+    }
+
+    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    
+    /********************************TSTORE****************************/
+
+    TSTORE(dstGlobal, cTile);
+    out = dstGlobal.data();
+}
+
 
 
 // Explicit wrappers for specific (M,K,N) instantiations so tests can
@@ -195,4 +266,24 @@ extern "C" void LaunchTBMM_QK_128_256_128_NT(float *out, uint16_t *q, uint16_t *
 
 extern "C" void LaunchTBMM_QK_256_128_128_NT(float *out, uint16_t *q, uint16_t *k, void *stream) {
     LaunchTBMM_QK_kern_NT<256, 128, 128><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
+}
+
+extern "C" void LaunchTBMM_QK_128_128_128_TN(float *out, uint16_t *q, uint16_t *k, void *stream) {
+    LaunchTBMM_QK_kern_TN<128, 128, 128><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
+}
+
+extern "C" void LaunchTBMM_QK_256_128_64_TN(float *out, uint16_t *q, uint16_t *k, void *stream) {
+    LaunchTBMM_QK_kern_TN<256, 128, 64><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
+}
+
+extern "C" void LaunchTBMM_QK_64_256_64_TN(float *out, uint16_t *q, uint16_t *k, void *stream) {
+    LaunchTBMM_QK_kern_TN<64, 256, 64><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
+}
+
+extern "C" void LaunchTBMM_QK_128_256_128_TN(float *out, uint16_t *q, uint16_t *k, void *stream) {
+    LaunchTBMM_QK_kern_TN<128, 256, 128><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
+}
+
+extern "C" void LaunchTBMM_QK_256_128_128_TN(float *out, uint16_t *q, uint16_t *k, void *stream) {
+    LaunchTBMM_QK_kern_TN<256, 128, 128><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
 }
