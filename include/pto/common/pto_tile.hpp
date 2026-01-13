@@ -31,6 +31,9 @@ enum class Layout {
     MX_B_ND,
     MX_B_DN,
     MX_B_NN,
+    NC1HWC0,
+    NDC1HWC0,
+    FRACTAL_Z,
     MAX,
 };
 namespace GlobalTensorDim {
@@ -39,160 +42,370 @@ constexpr int DIM_1 = 1;
 constexpr int DIM_2 = 2;
 constexpr int DIM_3 = 3;
 constexpr int DIM_4 = 4;
-constexpr int TOTAL_DIM = 5;
+constexpr int DIM_5 = 5;
+constexpr int TOTAL_DIM = 6;
 } // namespace GlobalTensorDim
 
 constexpr int DYNAMIC = -1;
+constexpr int MAX_TILESHAPE_DIM = 6;           // 最大支持维度（6维）
 
-template <int N1 = DYNAMIC, int N2 = DYNAMIC, int N3 = DYNAMIC, int N4 = DYNAMIC, int N5 = DYNAMIC>
+
+// template <int N1 = DYNAMIC, int N2 = DYNAMIC, int N3 = DYNAMIC, int N4 = DYNAMIC, int N5 = DYNAMIC>
+// struct Shape {
+//     static constexpr int staticShape[5] = {N1, N2, N3, N4, N5};
+//     PTO_INTERNAL Shape(int n1, int n2, int n3, int n4, int n5)
+//     {
+//         if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = n1;
+//         if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = n2;
+//         if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = n3;
+//         if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = n4;
+//         if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = n5;
+//     }
+
+//     PTO_INTERNAL Shape() {
+//         if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = 1;
+//         if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = 1;
+//         if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = 1;
+//         if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = 1;
+//         if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = 1;
+//     }
+
+//     PTO_INTERNAL Shape(int n) {
+//         static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
+//                           GlobalTensorDim::DIM_1,
+//             "1-parameter constructors is only applicable to Stride with 1 dynamic dimension.");
+//         if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = n;
+//         else if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = n;
+//         else if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = n;
+//         else if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = n;
+//         else if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = n;
+//     }
+
+//     PTO_INTERNAL Shape(int n1, int n2) {
+//         static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
+//                           GlobalTensorDim::DIM_2,
+//             "2-parameter constructors is only applicable to Stride with 2 dynamic dimension.");
+
+//         int idx = 0;
+//         const int vals[] = {n1, n2};
+//         if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = vals[idx++];
+//         if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = vals[idx++];
+//         if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = vals[idx++];
+//         if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = vals[idx++];
+//         if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = vals[idx++];
+//     }
+
+//     PTO_INTERNAL Shape(int n1, int n2, int n3) {
+//         static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
+//                           GlobalTensorDim::DIM_3,
+//             "3-parameter constructors is only applicable to Stride with 3 dynamic dimension.");
+//         int idx = 0;
+//         const int vals[] = {n1, n2, n3};
+//         if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = vals[idx++];
+//         if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = vals[idx++];
+//         if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = vals[idx++];
+//         if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = vals[idx++];
+//         if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = vals[idx++];
+//     }
+
+//     PTO_INTERNAL Shape(int n1, int n2, int n3, int n4) {
+//         static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
+//                           GlobalTensorDim::DIM_4,
+//             "4-parameter constructors is only applicable to Stride with 4 dynamic dimension.");
+//         int idx = 0;
+//         const int vals[] = {n1, n2, n3, n4};
+//         if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = vals[idx++];
+//         if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = vals[idx++];
+//         if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = vals[idx++];
+//         if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = vals[idx++];
+//         if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = vals[idx++];
+//     }
+
+// public:
+//     int shape[GlobalTensorDim::TOTAL_DIM] = {1};
+// };
+
+
+namespace ShapeDetail {
+    template<int N, int... Shapes>
+    struct GetNthShape {
+        static constexpr int value = []() {
+            int idx = 0;
+            int val = 0; // 不足维度补0
+            ((idx == N ? (val = Shapes, idx++) : idx++), ...);
+            return val;
+        }();
+    };
+
+    template<int... Shapes>
+    struct CountDynamicDim {
+        static constexpr int value = []() {
+            int count = 0;
+            count += (GetNthShape<0, Shapes...>::value == DYNAMIC ? 1 : 0);
+            count += (GetNthShape<1, Shapes...>::value == DYNAMIC ? 1 : 0);
+            count += (GetNthShape<2, Shapes...>::value == DYNAMIC ? 1 : 0);
+            count += (GetNthShape<3, Shapes...>::value == DYNAMIC ? 1 : 0);
+            count += (GetNthShape<4, Shapes...>::value == DYNAMIC ? 1 : 0);
+            count += (GetNthShape<5, Shapes...>::value == DYNAMIC ? 1 : 0);
+            return count;
+        }();
+    };
+
+    template<int DimIdx, int... Shapes>
+    struct AssignDynamicDim {
+        static void apply(int* shape, const int* vals, int& val_idx) {
+            // 编译期判断：当前维度是否为动态
+            if constexpr (GetNthShape<DimIdx, Shapes...>::value == DYNAMIC) {
+                shape[DimIdx] = vals[val_idx++];
+            }
+            // 递归处理下一维（编译期判断是否继续）
+            if constexpr (DimIdx + 1 < static_cast<int>(MAX_TILESHAPE_DIM)) {
+                AssignDynamicDim<DimIdx + 1, Shapes...>::apply(shape, vals, val_idx);
+            }
+        }
+    };
+    template<int... Shapes>
+    struct AssignDynamicDim<static_cast<int>(MAX_TILESHAPE_DIM), Shapes...> {
+        static void apply(int* shape, const int* vals, int& val_idx) {}
+    };
+}
+
+template<int... Shapes>
 struct Shape {
-    static constexpr int staticShape[5] = {N1, N2, N3, N4, N5};
-    PTO_INTERNAL Shape(int n1, int n2, int n3, int n4, int n5)
-    {
-        if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = n1;
-        if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = n2;
-        if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = n3;
-        if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = n4;
-        if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = n5;
+    static constexpr int ORIGIN_DIM_COUNT = sizeof...(Shapes);
+    static constexpr int DYNAMIC_DIM_COUNT = ShapeDetail::CountDynamicDim<Shapes...>::value;
+    static constexpr int staticShape[static_cast<int>(MAX_TILESHAPE_DIM)] = {
+        ShapeDetail::GetNthShape<0, Shapes...>::value, // DIM_0
+        ShapeDetail::GetNthShape<1, Shapes...>::value, // DIM_1
+        ShapeDetail::GetNthShape<2, Shapes...>::value, // DIM_2
+        ShapeDetail::GetNthShape<3, Shapes...>::value, // DIM_3
+        ShapeDetail::GetNthShape<4, Shapes...>::value, // DIM_4
+        ShapeDetail::GetNthShape<5, Shapes...>::value  // DIM_5
+    };
+
+    PTO_INTERNAL Shape(int n1, int n2, int n3, int n4, int n5, int n6) {
+        if constexpr (staticShape[0] == DYNAMIC) shape[0] = n1;
+        if constexpr (staticShape[1] == DYNAMIC) shape[1] = n2;
+        if constexpr (staticShape[2] == DYNAMIC) shape[2] = n3;
+        if constexpr (staticShape[3] == DYNAMIC) shape[3] = n4;
+        if constexpr (staticShape[4] == DYNAMIC) shape[4] = n5;
+        if constexpr (staticShape[5] == DYNAMIC) shape[5] = n6;
     }
 
     PTO_INTERNAL Shape() {
-        if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = 1;
-        if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = 1;
-        if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = 1;
-        if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = 1;
-        if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = 1;
+        if constexpr (staticShape[0] == DYNAMIC) shape[0] = 1;
+        if constexpr (staticShape[1] == DYNAMIC) shape[1] = 1;
+        if constexpr (staticShape[2] == DYNAMIC) shape[2] = 1;
+        if constexpr (staticShape[3] == DYNAMIC) shape[3] = 1;
+        if constexpr (staticShape[4] == DYNAMIC) shape[4] = 1;
+        if constexpr (staticShape[5] == DYNAMIC) shape[5] = 1;
     }
 
     PTO_INTERNAL Shape(int n) {
-        static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
-                          GlobalTensorDim::DIM_1,
-            "1-parameter constructors is only applicable to Stride with 1 dynamic dimension.");
-        if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = n;
-        else if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = n;
-        else if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = n;
-        else if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = n;
-        else if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = n;
+        static_assert(DYNAMIC_DIM_COUNT == 1,
+            "1-parameter constructors is only applicable to Shape with 1 dynamic dimension.");
+        
+        int val_idx = 0;
+        const int vals[] = {n};
+        ShapeDetail::AssignDynamicDim<0, Shapes...>::apply(shape, vals, val_idx);
+
     }
 
     PTO_INTERNAL Shape(int n1, int n2) {
-        static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
-                          GlobalTensorDim::DIM_2,
-            "2-parameter constructors is only applicable to Stride with 2 dynamic dimension.");
+        static_assert(DYNAMIC_DIM_COUNT == 2,
+            "2-parameter constructors is only applicable to Shape with 2 dynamic dimension.");
 
-        int idx = 0;
+        int val_idx = 0;
         const int vals[] = {n1, n2};
-        if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = vals[idx++];
-        if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = vals[idx++];
-        if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = vals[idx++];
-        if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = vals[idx++];
-        if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = vals[idx++];
+        ShapeDetail::AssignDynamicDim<0, Shapes...>::apply(shape, vals, val_idx);
     }
 
     PTO_INTERNAL Shape(int n1, int n2, int n3) {
-        static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
-                          GlobalTensorDim::DIM_3,
-            "3-parameter constructors is only applicable to Stride with 3 dynamic dimension.");
-        int idx = 0;
+        static_assert(DYNAMIC_DIM_COUNT == 3,
+            "3-parameter constructors is only applicable to Shape with 3 dynamic dimension.");
+
+        int val_idx = 0;
         const int vals[] = {n1, n2, n3};
-        if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = vals[idx++];
-        if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = vals[idx++];
-        if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = vals[idx++];
-        if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = vals[idx++];
-        if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = vals[idx++];
+        ShapeDetail::AssignDynamicDim<0, Shapes...>::apply(shape, vals, val_idx);
     }
 
     PTO_INTERNAL Shape(int n1, int n2, int n3, int n4) {
-        static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
-                          GlobalTensorDim::DIM_4,
-            "4-parameter constructors is only applicable to Stride with 4 dynamic dimension.");
-        int idx = 0;
+        static_assert(DYNAMIC_DIM_COUNT == 4,
+            "4-parameter constructors is only applicable to Shape with 4 dynamic dimension.");
+
+        int val_idx = 0;
         const int vals[] = {n1, n2, n3, n4};
-        if constexpr (N1 == DYNAMIC) shape[GlobalTensorDim::DIM_0] = vals[idx++];
-        if constexpr (N2 == DYNAMIC) shape[GlobalTensorDim::DIM_1] = vals[idx++];
-        if constexpr (N3 == DYNAMIC) shape[GlobalTensorDim::DIM_2] = vals[idx++];
-        if constexpr (N4 == DYNAMIC) shape[GlobalTensorDim::DIM_3] = vals[idx++];
-        if constexpr (N5 == DYNAMIC) shape[GlobalTensorDim::DIM_4] = vals[idx++];
+        ShapeDetail::AssignDynamicDim<0, Shapes...>::apply(shape, vals, val_idx);
+    }
+    PTO_INTERNAL Shape(int n1, int n2, int n3, int n4, int n5) {
+        static_assert(DYNAMIC_DIM_COUNT == 5,
+            "5-parameter constructors is only applicable to Shape with 5 dynamic dimension.");
+
+        int val_idx = 0;
+        const int vals[] = {n1, n2, n3, n4, n5};
+        ShapeDetail::AssignDynamicDim<0, Shapes...>::apply(shape, vals, val_idx);
     }
 
 public:
-    int shape[GlobalTensorDim::TOTAL_DIM] = {1};
+    int shape[static_cast<int>(MAX_TILESHAPE_DIM)] = {1};
 };
 
-template <int SN1 = DYNAMIC, int SN2 = DYNAMIC, int SN3 = DYNAMIC, int SN4 = DYNAMIC, int SN5 = DYNAMIC>
+
+template<int... Strides>
 struct Stride {
-    static constexpr int staticStride[GlobalTensorDim::TOTAL_DIM] = {SN1, SN2, SN3, SN4, SN5};
-    PTO_INTERNAL Stride(int n1, int n2, int n3, int n4, int n5)
-    {
-        if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = n1;
-        if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = n2;
-        if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = n3;
-        if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = n4;
-        if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = n5;
+    static constexpr int ORIGIN_DIM_COUNT = sizeof...(Strides);
+    static constexpr int DYNAMIC_DIM_COUNT = ShapeDetail::CountDynamicDim<Strides...>::value;
+    static constexpr int staticStride[static_cast<int>(MAX_TILESHAPE_DIM)] = {
+        ShapeDetail::GetNthShape<0, Strides...>::value, // DIM_0
+        ShapeDetail::GetNthShape<1, Strides...>::value, // DIM_1
+        ShapeDetail::GetNthShape<2, Strides...>::value, // DIM_2
+        ShapeDetail::GetNthShape<3, Strides...>::value, // DIM_3
+        ShapeDetail::GetNthShape<4, Strides...>::value, // DIM_4
+        ShapeDetail::GetNthShape<5, Strides...>::value  // DIM_5
+    };
+
+    PTO_INTERNAL Stride(int n1, int n2, int n3, int n4, int n5, int n6) {
+        if constexpr (staticStride[0] == DYNAMIC) stride[0] = n1;
+        if constexpr (staticStride[1] == DYNAMIC) stride[1] = n2;
+        if constexpr (staticStride[2] == DYNAMIC) stride[2] = n3;
+        if constexpr (staticStride[3] == DYNAMIC) stride[3] = n4;
+        if constexpr (staticStride[4] == DYNAMIC) stride[4] = n5;
+        if constexpr (staticStride[5] == DYNAMIC) stride[5] = n6;
     }
 
     PTO_INTERNAL Stride() {
-        if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = 1;
-        if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = 1;
-        if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = 1;
-        if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = 1;
-        if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = 1;
+        if constexpr (staticStride[0] == DYNAMIC) stride[0] = 1;
+        if constexpr (staticStride[1] == DYNAMIC) stride[1] = 1;
+        if constexpr (staticStride[2] == DYNAMIC) stride[2] = 1;
+        if constexpr (staticStride[3] == DYNAMIC) stride[3] = 1;
+        if constexpr (staticStride[4] == DYNAMIC) stride[4] = 1;
+        if constexpr (staticStride[5] == DYNAMIC) stride[5] = 1;
     }
 
     PTO_INTERNAL Stride(int n) {
-        static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
-                          GlobalTensorDim::DIM_1,
+        static_assert(DYNAMIC_DIM_COUNT == 1,
             "1-parameter constructors is only applicable to Stride with 1 dynamic dimension.");
+        
+        int val_idx = 0;
+        const int vals[] = {n};
+        ShapeDetail::AssignDynamicDim<0, Strides...>::apply(stride, vals, val_idx);
 
-        if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = n;
-        else if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = n;
-        else if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = n;
-        else if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = n;
-        else if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = n;
     }
 
     PTO_INTERNAL Stride(int n1, int n2) {
-        static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
-                          GlobalTensorDim::DIM_2,
+        static_assert(DYNAMIC_DIM_COUNT == 2,
             "2-parameter constructors is only applicable to Stride with 2 dynamic dimension.");
-        int idx = 0;
+
+        int val_idx = 0;
         const int vals[] = {n1, n2};
-        if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = vals[idx++];
-        if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = vals[idx++];
-        if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = vals[idx++];
-        if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = vals[idx++];
-        if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = vals[idx++];
+        ShapeDetail::AssignDynamicDim<0, Strides...>::apply(stride, vals, val_idx);
     }
 
     PTO_INTERNAL Stride(int n1, int n2, int n3) {
-        static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
-                          GlobalTensorDim::DIM_3,
+        static_assert(DYNAMIC_DIM_COUNT == 3,
             "3-parameter constructors is only applicable to Stride with 3 dynamic dimension.");
-        int idx = 0;
+
+        int val_idx = 0;
         const int vals[] = {n1, n2, n3};
-        if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = vals[idx++];
-        if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = vals[idx++];
-        if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = vals[idx++];
-        if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = vals[idx++];
-        if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = vals[idx++];
+        ShapeDetail::AssignDynamicDim<0, Strides...>::apply(stride, vals, val_idx);
     }
 
     PTO_INTERNAL Stride(int n1, int n2, int n3, int n4) {
-        static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
-                          GlobalTensorDim::DIM_4,
+        static_assert(DYNAMIC_DIM_COUNT == 4,
             "4-parameter constructors is only applicable to Stride with 4 dynamic dimension.");
-        int idx = 0;
+
+        int val_idx = 0;
         const int vals[] = {n1, n2, n3, n4};
-        if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = vals[idx++];
-        if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = vals[idx++];
-        if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = vals[idx++];
-        if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = vals[idx++];
-        if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = vals[idx++];
+        ShapeDetail::AssignDynamicDim<0, Strides...>::apply(stride, vals, val_idx);
+    }
+    PTO_INTERNAL Stride(int n1, int n2, int n3, int n4, int n5) {
+        static_assert(DYNAMIC_DIM_COUNT == 5,
+            "5-parameter constructors is only applicable to Stride with 5 dynamic dimension.");
+
+        int val_idx = 0;
+        const int vals[] = {n1, n2, n3, n4, n5};
+        ShapeDetail::AssignDynamicDim<0, Strides...>::apply(stride, vals, val_idx);
     }
 
 public:
-    int stride[GlobalTensorDim::TOTAL_DIM] = {1};
+    int stride[static_cast<int>(MAX_TILESHAPE_DIM)] = {1};
 };
+
+
+// template <int SN1 = DYNAMIC, int SN2 = DYNAMIC, int SN3 = DYNAMIC, int SN4 = DYNAMIC, int SN5 = DYNAMIC>
+// struct Stride {
+//     static constexpr int staticStride[GlobalTensorDim::TOTAL_DIM] = {SN1, SN2, SN3, SN4, SN5};
+//     PTO_INTERNAL Stride(int n1, int n2, int n3, int n4, int n5)
+//     {
+//         if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = n1;
+//         if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = n2;
+//         if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = n3;
+//         if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = n4;
+//         if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = n5;
+//     }
+
+//     PTO_INTERNAL Stride() {
+//         if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = 1;
+//         if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = 1;
+//         if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = 1;
+//         if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = 1;
+//         if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = 1;
+//     }
+
+//     PTO_INTERNAL Stride(int n) {
+//         static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
+//                           GlobalTensorDim::DIM_1,
+//             "1-parameter constructors is only applicable to Stride with 1 dynamic dimension.");
+
+//         if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = n;
+//         else if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = n;
+//         else if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = n;
+//         else if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = n;
+//         else if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = n;
+//     }
+
+//     PTO_INTERNAL Stride(int n1, int n2) {
+//         static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
+//                           GlobalTensorDim::DIM_2,
+//             "2-parameter constructors is only applicable to Stride with 2 dynamic dimension.");
+//         int idx = 0;
+//         const int vals[] = {n1, n2};
+//         if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = vals[idx++];
+//         if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = vals[idx++];
+//         if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = vals[idx++];
+//         if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = vals[idx++];
+//         if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = vals[idx++];
+//     }
+
+//     PTO_INTERNAL Stride(int n1, int n2, int n3) {
+//         static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
+//                           GlobalTensorDim::DIM_3,
+//             "3-parameter constructors is only applicable to Stride with 3 dynamic dimension.");
+//         int idx = 0;
+//         const int vals[] = {n1, n2, n3};
+//         if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = vals[idx++];
+//         if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = vals[idx++];
+//         if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = vals[idx++];
+//         if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = vals[idx++];
+//         if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = vals[idx++];
+//     }
+
+//     PTO_INTERNAL Stride(int n1, int n2, int n3, int n4) {
+//         static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
+//                           GlobalTensorDim::DIM_4,
+//             "4-parameter constructors is only applicable to Stride with 4 dynamic dimension.");
+//         int idx = 0;
+//         const int vals[] = {n1, n2, n3, n4};
+//         if constexpr (SN1 == DYNAMIC) stride[GlobalTensorDim::DIM_0] = vals[idx++];
+//         if constexpr (SN2 == DYNAMIC) stride[GlobalTensorDim::DIM_1] = vals[idx++];
+//         if constexpr (SN3 == DYNAMIC) stride[GlobalTensorDim::DIM_2] = vals[idx++];
+//         if constexpr (SN4 == DYNAMIC) stride[GlobalTensorDim::DIM_3] = vals[idx++];
+//         if constexpr (SN5 == DYNAMIC) stride[GlobalTensorDim::DIM_4] = vals[idx++];
+//     }
+
+// public:
+//     int stride[GlobalTensorDim::TOTAL_DIM] = {1};
+// };
 
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_ = Layout::ND>
 struct GlobalTensor {
@@ -207,10 +420,12 @@ struct GlobalTensor {
 
     static constexpr int staticShape[GlobalTensorDim::TOTAL_DIM] = {Shape::staticShape[GlobalTensorDim::DIM_0],
         Shape::staticShape[GlobalTensorDim::DIM_1], Shape::staticShape[GlobalTensorDim::DIM_2],
-        Shape::staticShape[GlobalTensorDim::DIM_3], Shape::staticShape[GlobalTensorDim::DIM_4]};
+        Shape::staticShape[GlobalTensorDim::DIM_3], Shape::staticShape[GlobalTensorDim::DIM_4],
+        Shape::staticShape[GlobalTensorDim::DIM_5]};
     static constexpr int staticStride[GlobalTensorDim::TOTAL_DIM] = {Stride::staticStride[GlobalTensorDim::DIM_0],
         Stride::staticStride[GlobalTensorDim::DIM_1], Stride::staticStride[GlobalTensorDim::DIM_2],
-        Stride::staticStride[GlobalTensorDim::DIM_3], Stride::staticStride[GlobalTensorDim::DIM_4]};
+        Stride::staticStride[GlobalTensorDim::DIM_3], Stride::staticStride[GlobalTensorDim::DIM_4],
+        Stride::staticStride[GlobalTensorDim::DIM_5]};
     PTO_INTERNAL GlobalTensor(
         DType *data, const Shape &shape = defaultShape, const Stride &stride = defaultStride)
     {
@@ -231,7 +446,9 @@ struct GlobalTensor {
         if constexpr (staticShape[GlobalTensorDim::DIM_4] == DYNAMIC) {
             shape_.shape[GlobalTensorDim::DIM_4] = shape.shape[GlobalTensorDim::DIM_4];
         }
-
+        if constexpr (staticShape[GlobalTensorDim::DIM_5] == DYNAMIC) {
+            shape_.shape[GlobalTensorDim::DIM_5] = shape.shape[GlobalTensorDim::DIM_5];
+        }
         if constexpr (staticStride[GlobalTensorDim::DIM_0] == DYNAMIC) {
             stride_.stride[GlobalTensorDim::DIM_0] = stride.stride[GlobalTensorDim::DIM_0];
         }
@@ -247,6 +464,9 @@ struct GlobalTensor {
         if constexpr (staticStride[GlobalTensorDim::DIM_4] == DYNAMIC) {
             stride_.stride[GlobalTensorDim::DIM_4] = stride.stride[GlobalTensorDim::DIM_4];
         }
+        if constexpr (staticStride[GlobalTensorDim::DIM_5] == DYNAMIC) {
+            stride_.stride[GlobalTensorDim::DIM_5] = stride.stride[GlobalTensorDim::DIM_5];
+        }
     }
 
     PTO_INTERNAL int GetShape(const int dim)
@@ -257,6 +477,7 @@ struct GlobalTensor {
             case GlobalTensorDim::DIM_2: return GetShapeSize<staticShape[GlobalTensorDim::DIM_2]>(dim);
             case GlobalTensorDim::DIM_3: return GetShapeSize<staticShape[GlobalTensorDim::DIM_3]>(dim);
             case GlobalTensorDim::DIM_4: return GetShapeSize<staticShape[GlobalTensorDim::DIM_4]>(dim);
+            case GlobalTensorDim::DIM_5: return GetShapeSize<staticShape[GlobalTensorDim::DIM_5]>(dim);
             default: return -1;
         }
     }
@@ -269,6 +490,7 @@ struct GlobalTensor {
             case GlobalTensorDim::DIM_2: return GetStrideSize<staticStride[GlobalTensorDim::DIM_2]>(dim);
             case GlobalTensorDim::DIM_3: return GetStrideSize<staticStride[GlobalTensorDim::DIM_3]>(dim);
             case GlobalTensorDim::DIM_4: return GetStrideSize<staticStride[GlobalTensorDim::DIM_4]>(dim);
+            case GlobalTensorDim::DIM_5: return GetStrideSize<staticStride[GlobalTensorDim::DIM_5]>(dim);
             default: return -1;
         }
     }
@@ -302,6 +524,11 @@ struct GlobalTensor {
                 "dim 4 is dynamic, cannot be obtained using the template interface.");
             return staticShape[GlobalTensorDim::DIM_4];
         }
+        if constexpr (dim == GlobalTensorDim::DIM_5) {
+            static_assert(staticShape[GlobalTensorDim::DIM_5] != DYNAMIC,
+                "dim 5 is dynamic, cannot be obtained using the template interface.");
+            return staticShape[GlobalTensorDim::DIM_5];
+        }
         return -1;
     }
 
@@ -333,6 +560,11 @@ struct GlobalTensor {
             static_assert(staticStride[GlobalTensorDim::DIM_4] != DYNAMIC,
                 "dim 4 is dynamic, cannot be obtained using the template interface.");
             return staticStride[GlobalTensorDim::DIM_4];
+        }
+        if constexpr (dim == GlobalTensorDim::DIM_5) {
+            static_assert(staticStride[GlobalTensorDim::DIM_5] != DYNAMIC,
+                "dim 5 is dynamic, cannot be obtained using the template interface.");
+            return staticStride[GlobalTensorDim::DIM_5];
         }
         return -1;
     }
@@ -375,11 +607,11 @@ private:
 
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_>
 const typename GlobalTensor<Element_, Shape_, Stride_, Layout_>::Shape
-GlobalTensor<Element_, Shape_, Stride_, Layout_>::defaultShape{1, 1, 1, 1, 1};
+GlobalTensor<Element_, Shape_, Stride_, Layout_>::defaultShape{1, 1, 1, 1, 1, 1};
 
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_>
 const typename GlobalTensor<Element_, Shape_, Stride_, Layout_>::Stride
-GlobalTensor<Element_, Shape_, Stride_, Layout_>::defaultStride{1, 1, 1, 1, 1};
+GlobalTensor<Element_, Shape_, Stride_, Layout_>::defaultStride{1, 1, 1, 1, 1, 1};
 
 template <typename T, int rows = DYNAMIC, int cols = DYNAMIC, Layout Layout_ = Layout::ND>
 struct TileShape2D;
@@ -729,6 +961,89 @@ static constexpr int fractalMxSize = 32;
 static constexpr int cElemSize = 4;
 } // namespace TileConfig
 
+
+template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
+struct ConvTile {
+public:
+    using DType = Element_;
+    using ShapeType = Shape_;
+    static constexpr TileType Loc = Loc_;
+    static constexpr int BufferSize = BufferSize_;
+    static constexpr Layout layout = Layout_;
+
+    static constexpr int ORIGIN_DIM_COUNT = ShapeType::ORIGIN_DIM_COUNT;
+    static_assert(ORIGIN_DIM_COUNT >= 1 && ORIGIN_DIM_COUNT <= MAX_TILESHAPE_DIM, 
+                  "ConvTile only support 1D~6D Shapes!");
+    static constexpr int staticShape[MAX_TILESHAPE_DIM] = {
+        ShapeType::staticShape[0],
+        ShapeType::staticShape[1],
+        ShapeType::staticShape[2],
+        ShapeType::staticShape[3],
+        ShapeType::staticShape[4],
+        ShapeType::staticShape[5]
+    };
+    static constexpr int DYNAMIC_DIM_COUNT = ShapeType::DYNAMIC_DIM_COUNT;
+    static constexpr bool isDynamicDim[MAX_TILESHAPE_DIM] = {
+        ShapeType::staticShape[0] == DYNAMIC,
+        ShapeType::staticShape[1] == DYNAMIC,
+        ShapeType::staticShape[2] == DYNAMIC,
+        ShapeType::staticShape[3] == DYNAMIC,
+        ShapeType::staticShape[4] == DYNAMIC,
+        ShapeType::staticShape[5] == DYNAMIC
+    };
+    int shape[MAX_TILESHAPE_DIM] = {1};
+
+    PTO_INTERNAL constexpr int GetShape(int dim) const {
+        if (dim < 0 || dim >= ORIGIN_DIM_COUNT) {
+            return -1;
+        }
+        return isDynamicDim[dim] ? shape[dim] : staticShape[dim];
+    }
+
+    PTO_INTERNAL ConvTile() = default;
+
+    template <typename... Ints>
+    PTO_INTERNAL void SetDynamicShape(Ints... vals) {
+        static_assert(
+            sizeof...(vals) == DYNAMIC_DIM_COUNT, "Number of dynamic values does not match dynamic dimension count!");
+        static_assert((std::is_same_v<Ints, int> && ...), "Dynamic values must be int type!");
+
+        int idx = 0;
+        const int dynamicVals[] = {vals...};
+        for (int i = 0; i < MAX_TILESHAPE_DIM; ++i) {
+            if (isDynamicDim[i]) {
+                shape[i] = dynamicVals[idx++];
+            }
+        }
+    }
+
+    template <typename... Ints>
+    PTO_INTERNAL explicit ConvTile(Ints... dynamicVals) {
+        SetDynamicShape(dynamicVals...);
+    }
+
+
+#ifdef __PTO_AUTO__
+    using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(BufferSize);
+#else
+    using TileDType = typename MemoryQualifier<Loc, DType>::type;
+#endif
+
+    AICORE TileDType &data() {
+        return data_;
+    }
+    AICORE const TileDType &data() const {
+        return data_;
+    }
+    template <typename T, typename AddrType>
+    friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
+private:
+    AICORE void assignData(TileDType data) {
+        data_ = data;
+    }
+    TileDType data_;
+};
+
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,
     const BLayout BFractal_ = BLayout::RowMajor, const int RowValid_ = Rows_, const int ColValid_ = Cols_,
     const SLayout SFractal_ = SLayout::NoneBox, const int SFractalSize_ = TileConfig::fractalABSize,
@@ -1004,6 +1319,11 @@ template <typename T>
 constexpr bool is_boxed_tile =
     is_tile<T>::value && (is_tile<T>::layout_enum != SLayout::NoneBox);
 
+template<typename T>
+struct is_conv_tile : std::false_type {}; // 主模板
+template<TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
+struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {};
+
 template <typename tile_shape> struct is_Nz_layout {
   static constexpr bool value = !tile_shape::isRowMajor &&
                                 tile_shape::isBoxedLayout &&
@@ -1021,6 +1341,7 @@ template <typename tile_shape> struct is_Zz_layout {
                                 tile_shape::isBoxedLayout &&
                                 tile_shape::isInnerRowMajor;
 };
+template <typename T> constexpr bool is_conv_tile_v = is_conv_tile<T>::value;
 
 template <typename T> constexpr bool is_global_data_v = is_global<T>::value;
 

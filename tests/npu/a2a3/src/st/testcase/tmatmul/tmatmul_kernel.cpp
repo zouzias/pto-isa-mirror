@@ -46,6 +46,12 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
     GlobalDataSrc1 src1Global(src1);
     GlobalDataOut dstGlobal(out);
 
+    using GlobalDataConv = GlobalTensor<U, pto::Shape<1, 2, 3, 64, 64, 16>,
+        pto::Stride<2*3*64*64*16,3*64*64*16, 64*64*16, 64*16, 16, 1>, Layout::NC1HWC0>;
+    GlobalDataConv convGlobal(src0);
+
+    // static_assert( src0Global.template GetShape<5>() == -1); // 只支持5维
+
     using GlobalDataSrc2 = GlobalTensor<B, pto::Shape<1, 1, 1, 1, alignBiasN>,
         pto::Stride<alignBiasN, alignBiasN, alignBiasN, alignBiasN, 1>>;
     GlobalDataSrc2 src2Global(src2);
@@ -53,6 +59,56 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
     using TileMatAData = Tile<TileType::Mat, U, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
     using TileMatBData = Tile<TileType::Mat, S, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
     using TileBiasData = Tile<TileType::Mat, B, 1, alignBiasN, BLayout::RowMajor, 1, alignBiasN>;
+
+    ConvTile<TileType::Mat, U, 98304, Layout::NC1HWC0, pto::Shape<1, 3, 32, 64, 16>> tile5d;
+    ConvTile<TileType::Mat, U, 4096, Layout::NZ, pto::Shape<M, K>> tile2d;
+    ConvTile<TileType::Mat, U, 4096, Layout::NC1HWC0, pto::Shape<1, 2, DYNAMIC, 2, DYNAMIC, 16>> tile6d(8, 16);
+    static_assert(tile6d.staticShape[2] == -1);
+    static_assert(tile6d.staticShape[5] == 16);
+    static_assert(tile6d.GetShape(1) == 2);
+    static_assert(tile6d.ORIGIN_DIM_COUNT == 6);
+    static_assert(tile6d.DYNAMIC_DIM_COUNT == 2);
+    // static_assert(tile6d.GetShape(5) == 16);
+    ConvTile<TileType::Mat, U, 4096, Layout::NC1HWC0, pto::Shape<1, 8, 2, 16, 16>> tile5dStatic;
+    static_assert(tile5dStatic.staticShape[5] == 0);
+
+    using DynShapeDim3 = Shape<1, -1, -1>; // dynamic dim ==2
+    DynShapeDim3 dynShape3(8, 16);
+
+    // // Shape缺省模板参数是-1，表示动态维度 如果修改Shape，这种写法会报错
+    // using DynShapeDim2 = Shape<1>;// dynamic dim == 4
+    // DynShapeDim2 dynShape2(8, 16,2,2);
+    // DynShapeDim2 dynShape2;// 新的Shape 会认为 dynamic dim ==0
+
+    using DynShapeDim5 = Shape<1,-1, -1, -1, -1, -1>; // dynamic dim ==5
+    DynShapeDim5 dynShape5(8, 16, 2,2,2);
+
+    static_assert(dynShape5.staticShape[0] == 1);
+    static_assert(dynShape5.staticShape[1] == -1);
+    static_assert(dynShape5.staticShape[2] == -1);
+    static_assert(dynShape5.staticShape[3] == -1);
+    static_assert(dynShape5.staticShape[4] == -1);
+    static_assert(dynShape5.staticShape[5] == -1);
+
+    // PTO_ASSERT(dynShape5.shape[1] == 1, "ERROR: dynShape5.shape[1] == 8");
+
+    // PTO_ASSERT(dynShape5.shape[2] == 1111, "ERROR: dynShape5.shape[1] == 8");
+
+    using DynShapeDim1 = Shape<1,-1,8>; // dynamic dim ==1
+    DynShapeDim1 dynShape1(16);
+
+    static_assert(dynShape1.staticShape[1] == -1);
+
+    TASSIGN(tile5d, 0x0);
+    TASSIGN(tile2d, 0x20000);
+    TASSIGN(tile5dStatic, 0x30000);
+    static_assert(tile5d.staticShape[0] == 1);   // 静态维度0
+    static_assert(tile5d.staticShape[1] == 3); // 动态维度1（DYNAMIC=-1）
+    static_assert(tile5d.staticShape[5] == 0);   // 未定义的维度默认为 0
+    static_assert(tile2d.GetShape(0) == M);
+    static_assert(tile2d.GetShape(1) == K);
+
+    static_assert(tile2d.staticShape[2] == 0);   // 未定义的维度默认为 0
 
     using LeftTile = TileLeft<U, M, K, validM, validK>;
     using RightTile = TileRight<S, K, N, validK, validN>;
@@ -76,6 +132,7 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
     TASSIGN(biasTile, 0x0);
 
     /******************************TLOAD*****************************/
+    TLOAD(tile5d, convGlobal);
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
 
