@@ -102,9 +102,6 @@ PTO_INTERNAL void CheckMadMxValid()
         "TMatmulMX:No supported data type");
     static_assert((TileLeft::Cols % BASEK == 0), "TMatmulMX:k must be a multiple of 64.");
     static_assert(
-        (TileLeft::Rows == TileRes::Rows) && (TileLeft::Cols == TileRight::Rows) && (TileRight::Cols == TileRes::Cols),
-        "TMatmulMX:Inconsistent number of m, k, n");
-    static_assert(
         ((TileLeft::Loc == TileType::Left) && (!TileLeft::isRowMajor) && (TileLeft::SFractal == SLayout::RowMajor)) &&
             ((TileRight::Loc == TileType::Right) && (TileRight::isRowMajor) &&
                 (TileRight::SFractal == SLayout::ColMajor)) &&
@@ -133,9 +130,6 @@ PTO_INTERNAL void CheckMadValid()
                           (std::is_same_v<AType, hifloat8_t> && std::is_same_v<BType, hifloat8_t>),
             "No supported data type when Acc Type is float.");
     }
-    static_assert(
-        (TileLeft::Rows == TileRes::Rows) && (TileLeft::Cols == TileRight::Rows) && (TileRight::Cols == TileRes::Cols),
-        "Inconsistent number of m, k, n.");
     static_assert(
         ((TileLeft::Loc == TileType::Left) && (!TileLeft::isRowMajor) && (TileLeft::SFractal == SLayout::RowMajor)) &&
             ((TileRight::Loc == TileType::Right) && (TileRight::isRowMajor) &&
