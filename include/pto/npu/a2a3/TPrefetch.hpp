@@ -29,6 +29,29 @@ __tf__ AICORE void TPrefetchDoCopy(typename TileData::TileDType __out__ dstTile,
     TLoadInstrGm2ub<TileData, GlobalData>(dstPtr, srcPtr, nBurst, lenBurst, gmGap, ubGap, ubPad);
 }
 
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TPrefetchCopySlice(TileData &dst, typename GlobalData::DType *basePtr, int s3, int s4, int st3,
+    int st4, uint16_t tileRows, uint32_t maxColsPerChunk, bool fits)
+{
+    if (fits) {
+        TPrefetchDoCopy<TileData, GlobalData>(dst.data(), basePtr, static_cast<uint16_t>(s3),
+            static_cast<uint32_t>(s4), st3);
+        return;
+    }
+
+    for (int r = 0; r < s3; r += tileRows) {
+        const uint16_t rowChunk = static_cast<uint16_t>((s3 - r) < tileRows ? (s3 - r) : tileRows);
+        typename GlobalData::DType *rowPtr = basePtr + r * st3;
+        for (int c = 0; c < s4; c += static_cast<int>(maxColsPerChunk)) {
+            const uint32_t colChunk = static_cast<uint32_t>((s4 - c) < static_cast<int>(maxColsPerChunk)
+                                                              ? (s4 - c)
+                                                              : maxColsPerChunk);
+            typename GlobalData::DType *srcPtr = rowPtr + c * st4;
+            TPrefetchDoCopy<TileData, GlobalData>(dst.data(), srcPtr, rowChunk, colChunk, st3);
+        }
+    }
+}
+
 // Prefetch GlobalTensor into a Vec tile without layout/type checks (dst is temporary)
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TPREFETCH_IMPL(TileData &dst, GlobalData &src)
@@ -58,22 +81,8 @@ PTO_INTERNAL void TPREFETCH_IMPL(TileData &dst, GlobalData &src)
         for (int n1 = 0; n1 < s1; ++n1) {
             for (int n2 = 0; n2 < s2; ++n2) {
                 typename GlobalData::DType *basePtr = src.data() + n0 * st0 + n1 * st1 + n2 * st2;
-                if (fits) {
-                    TPrefetchDoCopy<TileData, GlobalData>(dst.data(), basePtr, static_cast<uint16_t>(s3),
-                        static_cast<uint32_t>(s4), st3);
-                    continue;
-                }
-                for (int r = 0; r < s3; r += tileRows) {
-                    const uint16_t rowChunk = static_cast<uint16_t>((s3 - r) < tileRows ? (s3 - r) : tileRows);
-                    typename GlobalData::DType *rowPtr = basePtr + r * st3;
-                    for (int c = 0; c < s4; c += static_cast<int>(maxColsPerChunk)) {
-                        const uint32_t colChunk = static_cast<uint32_t>((s4 - c) < static_cast<int>(maxColsPerChunk)
-                                                                              ? (s4 - c)
-                                                                              : maxColsPerChunk);
-                        typename GlobalData::DType *srcPtr = rowPtr + c * st4;
-                        TPrefetchDoCopy<TileData, GlobalData>(dst.data(), srcPtr, rowChunk, colChunk, st3);
-                    }
-                }
+                TPrefetchCopySlice<TileData, GlobalData>(dst, basePtr, s3, s4, st3, st4, tileRows, maxColsPerChunk,
+                    fits);
             }
         }
     }
