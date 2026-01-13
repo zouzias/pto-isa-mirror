@@ -44,7 +44,6 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 REPO_ROOT = Path(__file__).resolve().parent
 _PRINT_LOCK = threading.Lock()
 
-
 def _now_id() -> str:
     return time.strftime("%Y%m%d_%H%M%S")
 
@@ -59,6 +58,32 @@ def _format_table(rows: List[List[str]], headers: List[str]) -> str:
     out = [fmt.format(*headers), sep]
     out.extend(fmt.format(*[str(c) for c in r]) for r in rows)
     return "\n".join(out)
+
+
+def _parse_gtest_list(text: str) -> List[str]:
+    tests: List[str] = []
+    current_suite: Optional[str] = None
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        if not line.startswith(" "):
+            current_suite = line.strip()
+            continue
+        if current_suite is None:
+            continue
+        test_name = line.strip().split("#", 1)[0].strip()
+        if not test_name:
+            continue
+        tests.append(f"{current_suite}{test_name}")
+    return tests
+
+
+def _count_gtests(exe: Path, *, env: Dict[str, str], cwd: Optional[Path] = None) -> int:
+    rc, out, _ = _run([str(exe), "--gtest_list_tests"], cwd=cwd, env=env, timeout_sec=60, capture=True)
+    if rc != 0:
+        return 1
+    tests = _parse_gtest_list(out or "")
+    return max(1, len(tests))
 
 
 def _run(
@@ -412,6 +437,10 @@ class TaskResult:
     rc: int
     detail: str = ""
     perf: List[str] = field(default_factory=list)
+    skipped: bool = False
+    tests: int = 1
+    cpu_sec: Optional[float] = None
+    cpu_status: str = ""
 
 
 def _run_st_npu_parallel(
@@ -422,7 +451,6 @@ def _run_st_npu_parallel(
     jobs: int,
     devices: str,
     testcases: str,
-    split_gtest: bool,
     verbose: bool,
     progress: bool,
 ) -> List[TaskResult]:
@@ -437,8 +465,8 @@ def _run_st_npu_parallel(
         cmd.extend(["--devices", devices.strip()])
     if testcases.strip():
         cmd.extend(["--testcases", testcases.strip()])
-    if split_gtest:
-        cmd.append("--split-gtest")
+    # Abort early on timeout/deadlock; keeps runs responsive.
+    cmd.append("--abort-on-timeout")
 
     _log(f"[run-pto] ST(npu) cmd: {' '.join(cmd)}")
     rc, out, sec = _run_tee(
@@ -476,29 +504,38 @@ def _run_st_npu_parallel(
         if cols and cols[0] and cols[0].strip("-") == "":
             # Separator row like "-----  ---  ---- ..."
             continue
-        if len(cols) < 4:
+        if len(cols) < 5:
             continue
         task = cols[0]
-        dev = cols[1]
-        status = cols[2]
-        sec_s = cols[3]
-        rc_s = cols[4] if len(cols) > 4 else ("0" if status == "PASS" else str(rc))
+        status = cols[1]
+        tests_s = cols[2]
+        npu_time_s = cols[3]
+        cpu_time_s = cols[4]
         try:
-            tsec = float(sec_s)
+            tsec = float(npu_time_s.rstrip("s"))
         except Exception:
             tsec = 0.0
         try:
-            trc = int(rc_s)
+            tests_n = int(tests_s)
         except Exception:
-            trc = 0 if status == "PASS" else rc
+            tests_n = 1
+        cpu_sec = None
+        if cpu_time_s.strip() and cpu_time_s.strip() != "-":
+            try:
+                cpu_sec = float(cpu_time_s.rstrip("s"))
+            except Exception:
+                cpu_sec = None
         results.append(
             TaskResult(
                 category="st",
                 backend="npu",
-                name=f"{task} (dev={dev})",
+                name=task,
                 status=status,
                 sec=tsec,
-                rc=trc,
+                rc=0 if status.upper() == "PASS" else (130 if status.upper() == "SKIP" else 1),
+                skipped=(status.upper() == "SKIP"),
+                tests=tests_n,
+                cpu_sec=cpu_sec,
             )
         )
 
@@ -551,7 +588,7 @@ def _gen_st_goldens(
     # Use per-testcase filename to avoid races when running in parallel.
     workers = jobs if jobs > 0 else min(max(1, os.cpu_count() or 1), 16)
 
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
     def _one(tc: str) -> None:
         if progress:
@@ -633,12 +670,14 @@ def _run_st_sim_parallel(
             return TaskResult(category="st", backend="sim", name=tc, status="MISSING", sec=0.0, rc=2)
         if progress:
             _log(f"[run-pto] [RUN] ST(sim) {tc}")
-        rc, out, sec = _run([str(exe)], cwd=bin_dir, env=env, timeout_sec=timeout_sec, capture=True)
+        tests_n = _count_gtests(exe, env=env, cwd=bin_dir)
+        effective_timeout = int(timeout_sec) * tests_n
+        rc, out, sec = _run([str(exe)], cwd=bin_dir, env=env, timeout_sec=effective_timeout, capture=True)
         if verbose and out.strip():
             sys.stdout.write(out)
             sys.stdout.flush()
         if progress:
-            _log(f"[run-pto] [DONE] ST(sim) {tc} rc={rc} sec={sec:.1f}")
+            _log(f"[run-pto] [DONE] ST(sim) {tc} rc={rc} time={sec:.1f}s")
         return TaskResult(
             category="st",
             backend="sim",
@@ -647,12 +686,42 @@ def _run_st_sim_parallel(
             sec=sec,
             rc=rc,
             perf=_extract_perf_signals(out),
+            tests=tests_n,
         )
 
+    # Bounded scheduling so we can stop queueing new work after timeouts.
+    abort_event = threading.Event()
+
+    def _one_abort(tc: str) -> TaskResult:
+        if abort_event.is_set():
+            return TaskResult(category="st", backend="sim", name=tc, status="SKIP", sec=0.0, rc=130, skipped=True)
+        r = _one(tc)
+        if r.rc == 124:
+            abort_event.set()
+        return r
+
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futs = {pool.submit(_one, tc): tc for tc in pending}
-        for f in as_completed(futs):
-            results.append(f.result())
+        it = iter(pending)
+        in_flight = {}
+        for _ in range(max_workers):
+            try:
+                tc = next(it)
+            except StopIteration:
+                break
+            in_flight[pool.submit(_one_abort, tc)] = tc
+
+        while in_flight:
+            done, _pending = wait(set(in_flight.keys()), timeout=0.2, return_when=FIRST_COMPLETED)
+            for f in done:
+                _tc = in_flight.pop(f)
+                results.append(f.result())
+                if not abort_event.is_set():
+                    try:
+                        nxt = next(it)
+                    except StopIteration:
+                        nxt = None
+                    if nxt is not None:
+                        in_flight[pool.submit(_one_abort, nxt)] = nxt
 
     results.sort(key=lambda r: r.name)
     return results
@@ -702,17 +771,19 @@ def _run_cpu_st_parallel(
         raise RuntimeError(f"no cpu-st executables found under {build_dir / 'bin'}")
 
     max_workers = jobs if jobs > 0 else min(max(1, os.cpu_count() or 1), 16)
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
     def _one(name: str, exe: Path) -> TaskResult:
         if progress:
             _log(f"[run-pto] [RUN] ST(cpu) {name}")
-        rc, out, sec = _run([str(exe)], cwd=exe.parent, env=build_env, timeout_sec=timeout_sec, capture=True)
+        tests_n = _count_gtests(exe, env=build_env, cwd=exe.parent)
+        effective_timeout = int(timeout_sec) * tests_n
+        rc, out, sec = _run([str(exe)], cwd=exe.parent, env=build_env, timeout_sec=effective_timeout, capture=True)
         if verbose and out.strip():
             sys.stdout.write(out)
             sys.stdout.flush()
         if progress:
-            _log(f"[run-pto] [DONE] ST(cpu) {name} rc={rc} sec={sec:.1f}")
+            _log(f"[run-pto] [DONE] ST(cpu) {name} rc={rc} time={sec:.1f}s")
         return TaskResult(
             category="st",
             backend="cpu",
@@ -721,13 +792,159 @@ def _run_cpu_st_parallel(
             sec=sec,
             rc=rc,
             perf=_extract_perf_signals(out),
+            tests=tests_n,
         )
 
     results: List[TaskResult] = []
+    abort_event = threading.Event()
+
+    items = list(bins.items())
+
+    def _one_abort(name: str, exe: Path) -> TaskResult:
+        if abort_event.is_set():
+            return TaskResult(category="st", backend="cpu", name=name, status="SKIP", sec=0.0, rc=130, skipped=True)
+        r = _one(name, exe)
+        if r.rc == 124:
+            abort_event.set()
+        return r
+
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futs = {pool.submit(_one, name, exe): name for name, exe in bins.items()}
-        for f in as_completed(futs):
-            results.append(f.result())
+        it = iter(items)
+        in_flight = {}
+        for _ in range(max_workers):
+            try:
+                name, exe = next(it)
+            except StopIteration:
+                break
+            in_flight[pool.submit(_one_abort, name, exe)] = name
+
+        while in_flight:
+            done, _pending = wait(set(in_flight.keys()), timeout=0.2, return_when=FIRST_COMPLETED)
+            for f in done:
+                _name = in_flight.pop(f)
+                results.append(f.result())
+                if not abort_event.is_set():
+                    try:
+                        nxt_name, nxt_exe = next(it)
+                    except StopIteration:
+                        nxt_name, nxt_exe = None, None
+                    if nxt_name is not None:
+                        in_flight[pool.submit(_one_abort, nxt_name, nxt_exe)] = nxt_name
+    results.sort(key=lambda r: r.name)
+    return results
+
+
+def _run_cpu_st_subset(
+    *,
+    env: Dict[str, str],
+    timeout_sec: int,
+    jobs: int,
+    compiler: str,
+    testcases: List[str],
+    verbose: bool,
+    progress: bool,
+) -> List[TaskResult]:
+    wanted = {x.strip() for x in testcases if x.strip()}
+    if not wanted:
+        return []
+
+    src_dir = (REPO_ROOT / "tests" / "cpu" / "st").resolve()
+    build_dir = (REPO_ROOT / "build_cpu_st").resolve()
+    build_dir.mkdir(parents=True, exist_ok=True)
+    if progress:
+        _log(f"[run-pto] building CPU ST in {build_dir}")
+
+    build_env = dict(env)
+    if compiler:
+        build_env["CXX"] = compiler if os.path.isabs(compiler) else (shutil.which(compiler) or compiler)
+
+    rc, out, _ = _run(["cmake", "-S", str(src_dir), "-B", str(build_dir)], env=build_env, timeout_sec=1800, capture=True)
+    if rc != 0:
+        raise RuntimeError(f"cmake cpu-st failed (rc={rc})\n{out}")
+    build_jobs = jobs if jobs > 0 else 8
+    rc, out, _ = _run(["cmake", "--build", str(build_dir), "--parallel", str(int(build_jobs))], env=build_env, timeout_sec=3600, capture=True)
+    if rc != 0:
+        raise RuntimeError(f"build cpu-st failed (rc={rc})\n{out}")
+
+    # Generate goldens only for requested testcases.
+    for gen in _list_cpu_st_gen_scripts():
+        tc = gen.parent.name
+        if tc not in wanted:
+            continue
+        if progress:
+            _log(f"[run-pto] [GOLDEN] cpu-st {tc}")
+        rc, out, _ = _run([sys.executable, str(gen)], cwd=build_dir, env=build_env, timeout_sec=600, capture=True)
+        if verbose and out.strip():
+            sys.stdout.write(out)
+            sys.stdout.flush()
+        if rc != 0:
+            raise RuntimeError(f"cpu-st golden gen failed: {gen} (rc={rc})\n{out}")
+
+    bins = _detect_cpu_st_binaries(build_dir)
+    bins = {k: v for k, v in bins.items() if k in wanted}
+    if not bins:
+        return [TaskResult(category="st", backend="cpu", name=tc, status="MISSING", sec=0.0, rc=2, tests=0) for tc in sorted(wanted)]
+
+    max_workers = jobs if jobs > 0 else min(max(1, os.cpu_count() or 1), 16)
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+
+    def _one(name: str, exe: Path) -> TaskResult:
+        if progress:
+            _log(f"[run-pto] [RUN] ST(cpu) {name}")
+        tests_n = _count_gtests(exe, env=build_env, cwd=exe.parent)
+        effective_timeout = int(timeout_sec) * tests_n
+        rc, out, sec = _run([str(exe)], cwd=exe.parent, env=build_env, timeout_sec=effective_timeout, capture=True)
+        if verbose and out.strip():
+            sys.stdout.write(out)
+            sys.stdout.flush()
+        if progress:
+            _log(f"[run-pto] [DONE] ST(cpu) {name} rc={rc} time={sec:.1f}s")
+        return TaskResult(
+            category="st",
+            backend="cpu",
+            name=name,
+            status="PASS" if rc == 0 else "FAIL",
+            sec=sec,
+            rc=rc,
+            perf=_extract_perf_signals(out),
+            tests=tests_n,
+        )
+
+    results: List[TaskResult] = []
+    abort_event = threading.Event()
+
+    items = list(sorted(bins.items(), key=lambda kv: kv[0]))
+
+    def _one_abort(name: str, exe: Path) -> TaskResult:
+        if abort_event.is_set():
+            return TaskResult(category="st", backend="cpu", name=name, status="SKIP", sec=0.0, rc=130, skipped=True, tests=0)
+        r = _one(name, exe)
+        if r.rc == 124:
+            abort_event.set()
+        return r
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        it = iter(items)
+        in_flight = {}
+        for _ in range(max_workers):
+            try:
+                name, exe = next(it)
+            except StopIteration:
+                break
+            in_flight[pool.submit(_one_abort, name, exe)] = name
+
+        while in_flight:
+            done, _pending = wait(set(in_flight.keys()), timeout=0.2, return_when=FIRST_COMPLETED)
+            for f in done:
+                _name = in_flight.pop(f)
+                results.append(f.result())
+                if not abort_event.is_set():
+                    try:
+                        nxt_name, nxt_exe = next(it)
+                    except StopIteration:
+                        nxt_name, nxt_exe = None, None
+                    if nxt_name is not None:
+                        in_flight[pool.submit(_one_abort, nxt_name, nxt_exe)] = nxt_name
     results.sort(key=lambda r: r.name)
     return results
 
@@ -760,7 +977,7 @@ def _run_cpu_demos(*, verbose: bool, progress: bool) -> List[TaskResult]:
             )
         )
         if progress:
-            _log(f"[run-pto] [DONE] demo(cpu) {d} rc={rc} sec={sec:.1f}")
+            _log(f"[run-pto] [DONE] demo(cpu) {d} rc={rc} time={sec:.1f}s")
     return results
 
 
@@ -788,7 +1005,7 @@ def _run_baseline_demos(
         sys.stdout.write(out)
         sys.stdout.flush()
     if progress:
-        _log(f"[run-pto] [DONE] demo({backend}) baseline:gemm_basic rc={rc} sec={sec:.1f}")
+        _log(f"[run-pto] [DONE] demo({backend}) baseline:gemm_basic rc={rc} time={sec:.1f}s")
     return [
         TaskResult(
             category="demo",
@@ -809,6 +1026,7 @@ def _run_manual_kernels(
     env: Dict[str, str],
     verbose: bool,
     npu_id: int,
+    timeout_sec: int,
     progress: bool,
 ) -> List[TaskResult]:
     if backend not in ("npu", "sim"):
@@ -827,12 +1045,12 @@ def _run_manual_kernels(
             cmd.extend(["-n", str(int(npu_id))])
         if progress:
             _log(f"[run-pto] [RUN] kernel({backend}) manual:{name}")
-        rc, out, sec = _run(cmd, cwd=script.parent, env=env, timeout_sec=7200, capture=True)
+        rc, out, sec = _run(cmd, cwd=script.parent, env=env, timeout_sec=int(timeout_sec), capture=True)
         if verbose and out.strip():
             sys.stdout.write(out)
             sys.stdout.flush()
         if progress:
-            _log(f"[run-pto] [DONE] kernel({backend}) manual:{name} rc={rc} sec={sec:.1f}")
+            _log(f"[run-pto] [DONE] kernel({backend}) manual:{name} rc={rc} time={sec:.1f}s")
         results.append(
             TaskResult(
                 category="kernel",
@@ -861,11 +1079,21 @@ def main() -> int:
         default="st,demo,kernel",
         help="Comma list: st,demo,kernel (default: st,demo,kernel)",
     )
-    ap.add_argument("--timeout-sec", type=int, default=int(os.environ.get("PTO_ST_TIMEOUT_SEC", "120")))
+    ap.add_argument(
+        "--timeout-sec",
+        type=int,
+        default=int(os.environ.get("PTO_ST_TIMEOUT_SEC", "30")),
+        help="base timeout per gtest for ST (whole binaries use base*#gtests)",
+    )
+    ap.add_argument(
+        "--kernel-timeout-sec",
+        type=int,
+        default=int(os.environ.get("PTO_KERNEL_TIMEOUT_SEC", "300")),
+        help="timeout per manual kernel run.sh (default: 300s)",
+    )
     ap.add_argument("-j", "--jobs", type=int, default=0, help="Parallel workers (0: auto)")
     ap.add_argument("--devices", default="", help="Comma-separated physical NPU ids (NPU ST only)")
     ap.add_argument("--st-testcases", default="", help="Comma-separated ST testcase binaries to run (NPU/SIM only)")
-    ap.add_argument("--split-gtest", action="store_true", help="Split NPU ST binaries into per-gtest tasks (NPU only)")
     ap.add_argument("--cpu-compiler", default=os.environ.get("CXX", ""), help="C++ compiler for CPU ST (default: env CXX or system)")
     ap.add_argument("--npu-id", type=int, default=0, help="Manual kernels NPU id (when backend=npu)")
     ap.add_argument("--include-baseline", action="store_true", help="Also run baseline NPU/sim demos (e.g. demos/baseline/gemm_basic)")
@@ -916,7 +1144,6 @@ def main() -> int:
                     jobs=int(args.jobs),
                     devices=args.devices,
                     testcases=args.st_testcases,
-                    split_gtest=bool(args.split_gtest),
                     verbose=bool(args.verbose),
                     progress=bool(args.progress),
                 )
@@ -973,6 +1200,7 @@ def main() -> int:
                     env=ascend_env,
                     verbose=bool(args.verbose),
                     npu_id=int(args.npu_id),
+                    timeout_sec=int(args.kernel_timeout_sec),
                     progress=bool(args.progress),
                 )
             )
@@ -981,15 +1209,20 @@ def main() -> int:
     rows: List[List[str]] = []
     failures = 0
     for r in results:
-        ok = r.status.upper() in ("PASS", "OK") or (r.rc == 0 and r.status.upper() != "FAIL")
+        if r.skipped or r.status.upper() == "SKIP":
+            ok = True
+        else:
+            ok = r.status.upper() in ("PASS", "OK") or (r.rc == 0 and r.status.upper() != "FAIL")
         if not ok:
             failures += 1
         perf = r.perf[0] if r.perf else ""
-        rows.append([r.category, r.backend, r.name, r.status, f"{r.sec:.1f}", str(r.rc), perf])
+        tests_s = str(r.tests) if (r.category == "st" and r.tests > 0) else "-"
+        cpu_time_s = f"{r.cpu_sec:.1f}s" if (r.category == "st" and r.cpu_sec is not None) else ""
+        rows.append([r.category, r.backend, r.name, r.status, tests_s, f"{r.sec:.1f}s", cpu_time_s, perf])
 
     if rows:
         print()
-        print(_format_table(rows, headers=["CAT", "BACKEND", "NAME", "STATUS", "SEC", "RC", "PERF (first hit)"]))
+        print(_format_table(rows, headers=["CAT", "BACKEND", "NAME", "STATUS", "TESTS", "TIME", "CPU_TIME", "PERF (first hit)"]))
         print()
         print(f"[run-pto] total={len(results)} failed={failures}")
     else:

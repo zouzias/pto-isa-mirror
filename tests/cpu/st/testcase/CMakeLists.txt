@@ -50,9 +50,16 @@ tmov
 tmrgsort
 trowsum
 trowexpand
+trowexpandadd
+trowexpanddiv
+trowexpandmax
+trowexpandmin
+trowexpandmul
+trowexpandsub
 tadd
 texp
 tgather
+tgatherb
 trowmax
 tsqrt
 tfillpad
@@ -61,7 +68,9 @@ tsels
 tcmps
 tcolsum
 tcolmax
+tsub
 tcvt
+tmul
 tpartadd
 tpartmax
 tpartmin
@@ -69,6 +78,7 @@ trsqrt
 tsel
 tsort32
 trem
+tdiv
 tshl
 tshr
 tand
@@ -86,6 +96,7 @@ taddc
 tsubc
 tsubs
 trems
+tmax
 tmaxs
 tands
 tors
@@ -99,9 +110,13 @@ tmins
 trowmin
 tcolmin
 tcolexpand
+tcolexpanddiv
+tcolexpandmul
+tcolexpandsub
 tscatter
 mgather
 mscatter
+tassign
 hashfind
 setgetval
 )

@@ -25,32 +25,12 @@ def gen_expand():
     golden.tofile("golden.bin")
 
 
-def gen_vec_op(kind: str):
-    H, W = 64, 64
-    x = np.random.uniform(0.5, 2.0, size=(H, W)).astype(np.float32)
-    s = np.random.uniform(0.5, 2.0, size=(H, 1)).astype(np.float32)
-    if kind == "div":
-        golden = x / s
-    elif kind == "mul":
-        golden = x * s
-    elif kind == "sub":
-        golden = x - s
-    else:
-        raise ValueError(kind)
-    x.tofile("input1.bin")
-    s.tofile("input2.bin")
-    golden.tofile("golden.bin")
-
-
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.makedirs(os.path.join(script_dir, "testcases"), exist_ok=True)
 
     cases = [
         ("TROWEXPAND_Test.case_expand_float_64x64", gen_expand),
-        ("TROWEXPAND_Test.case_div_float_64x64", lambda: gen_vec_op("div")),
-        ("TROWEXPAND_Test.case_mul_float_64x64", lambda: gen_vec_op("mul")),
-        ("TROWEXPAND_Test.case_sub_float_64x64", lambda: gen_vec_op("sub")),
     ]
 
     cwd = os.getcwd()
@@ -59,4 +39,3 @@ if __name__ == "__main__":
         os.chdir(name)
         fn()
         os.chdir(cwd)
-

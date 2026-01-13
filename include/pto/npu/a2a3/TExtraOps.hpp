@@ -12,9 +12,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_NPU_A2A3_T_EXTRA_OPS_HPP
 
 #include <cstdint>
+#include <cstddef>
 #include <type_traits>
 
 #include <pto/common/pto_tile.hpp>
+#include <pto/common/event.hpp>
 
 namespace pto {
 /**
@@ -70,18 +72,52 @@ PTO_INTERNAL void CheckVecTile()
     static_assert(TileData::Loc == TileType::Vec, "Only Vec tiles are supported for this op on A2/A3");
 }
 
+template <typename T>
+inline constexpr bool kExtraOpsHalfLike = std::is_same_v<T, half> || std::is_same_v<T, float16_t>;
+
+PTO_INTERNAL void ExtraOpsWaitMte2ToScalar()
+{
+    PtoSetWaitFlag<PIPE_MTE2, PIPE_S>();
+}
+
+PTO_INTERNAL void ExtraOpsWaitScalarToMte3()
+{
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
+}
+
 template <typename DType>
 PTO_INTERNAL DType FpRemainder(DType x, DType y)
 {
-    if (y == static_cast<DType>(0)) {
+    const float yf = static_cast<float>(y);
+    if (yf == 0.0f) {
         return static_cast<DType>(0);
     }
     const float xf = static_cast<float>(x);
-    const float yf = static_cast<float>(y);
     const float q = xf / yf;
     const int64_t qi = static_cast<int64_t>(q); // trunc toward zero
     const float rf = xf - static_cast<float>(qi) * yf;
     return static_cast<DType>(rf);
+}
+
+template <typename T>
+PTO_INTERNAL T FromUnsigned(std::make_unsigned_t<T> v)
+{
+    if constexpr (!std::is_integral_v<T> || !std::is_signed_v<T>) {
+        return static_cast<T>(v);
+    } else {
+        using U = std::make_unsigned_t<T>;
+        constexpr uint32_t bits = sizeof(T) * 8U;
+        constexpr U signBit = U(1) << (bits - 1U);
+        if ((v & signBit) == 0) {
+            return static_cast<T>(v);
+        }
+        const U magnitude = static_cast<U>(~v + 1U);
+        if (magnitude == signBit) {
+            // -2^(bits-1)
+            return static_cast<T>(static_cast<int64_t>(-1) * (static_cast<int64_t>(1) << (bits - 1U)));
+        }
+        return static_cast<T>(-static_cast<int64_t>(magnitude));
+    }
 }
 
 template <typename TileData>
@@ -89,6 +125,7 @@ __tf__ PTO_INTERNAL void TREM_TF(typename TileData::TileDType __out__ dst, typen
     typename TileData::TileDType __in__ src1, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
@@ -105,6 +142,7 @@ __tf__ PTO_INTERNAL void TREM_TF(typename TileData::TileDType __out__ dst, typen
             }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -121,6 +159,8 @@ __tf__ PTO_INTERNAL void TSHL_TF(typename TileData::TileDType __out__ dst, typen
     typename TileData::TileDType __in__ src1, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    using U = std::make_unsigned_t<T>;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
@@ -129,10 +169,13 @@ __tf__ PTO_INTERNAL void TSHL_TF(typename TileData::TileDType __out__ dst, typen
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
-            const uint32_t sh = static_cast<uint32_t>(src1Ptr[off]) & (bits - 1U);
-            dstPtr[off] = static_cast<T>(src0Ptr[off] << sh);
+            const uint32_t sh = static_cast<uint32_t>(static_cast<U>(src1Ptr[off])) & (bits - 1U);
+            const U a = static_cast<U>(src0Ptr[off]);
+            const U out = static_cast<U>(a << sh);
+            dstPtr[off] = FromUnsigned<T>(out);
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -151,6 +194,8 @@ __tf__ PTO_INTERNAL void TSHR_TF(typename TileData::TileDType __out__ dst, typen
     typename TileData::TileDType __in__ src1, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    using U = std::make_unsigned_t<T>;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
@@ -159,10 +204,20 @@ __tf__ PTO_INTERNAL void TSHR_TF(typename TileData::TileDType __out__ dst, typen
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
-            const uint32_t sh = static_cast<uint32_t>(src1Ptr[off]) & (bits - 1U);
-            dstPtr[off] = static_cast<T>(src0Ptr[off] >> sh);
+            const U a = static_cast<U>(src0Ptr[off]);
+            const uint32_t sh = static_cast<uint32_t>(static_cast<U>(src1Ptr[off])) & (bits - 1U);
+            U out = static_cast<U>(a >> sh);
+            if constexpr (std::is_signed_v<T>) {
+                constexpr U signBit = U(1) << (bits - 1U);
+                if ((a & signBit) != 0 && sh != 0) {
+                    const U mask = static_cast<U>(~U(0)) << (bits - sh);
+                    out = static_cast<U>(out | mask);
+                }
+            }
+            dstPtr[off] = FromUnsigned<T>(out);
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -181,6 +236,7 @@ __tf__ PTO_INTERNAL void TAND_TF(typename TileData::TileDType __out__ dst, typen
     typename TileData::TileDType __in__ src1, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
@@ -190,6 +246,7 @@ __tf__ PTO_INTERNAL void TAND_TF(typename TileData::TileDType __out__ dst, typen
             dstPtr[off] = static_cast<T>(src0Ptr[off] & src1Ptr[off]);
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -208,6 +265,7 @@ __tf__ PTO_INTERNAL void TOR_TF(typename TileData::TileDType __out__ dst, typena
     typename TileData::TileDType __in__ src1, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
@@ -217,6 +275,7 @@ __tf__ PTO_INTERNAL void TOR_TF(typename TileData::TileDType __out__ dst, typena
             dstPtr[off] = static_cast<T>(src0Ptr[off] | src1Ptr[off]);
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -235,6 +294,7 @@ __tf__ PTO_INTERNAL void TXOR_TF(typename TileData::TileDType __out__ dst, typen
     typename TileData::TileDType __in__ src1, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
@@ -244,6 +304,7 @@ __tf__ PTO_INTERNAL void TXOR_TF(typename TileData::TileDType __out__ dst, typen
             dstPtr[off] = static_cast<T>(src0Ptr[off] ^ src1Ptr[off]);
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -262,14 +323,21 @@ __tf__ PTO_INTERNAL void TNEG_TF(typename TileData::TileDType __out__ dst, typen
     uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
-            dstPtr[off] = static_cast<T>(-srcPtr[off]);
+            if constexpr (kExtraOpsHalfLike<T>) {
+                const float v = static_cast<float>(srcPtr[off]);
+                dstPtr[off] = static_cast<T>(-v);
+            } else {
+                dstPtr[off] = static_cast<T>(-srcPtr[off]);
+            }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -286,6 +354,7 @@ __tf__ PTO_INTERNAL void TNOT_TF(typename TileData::TileDType __out__ dst, typen
     uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     for (uint32_t r = 0; r < validRow; ++r) {
@@ -294,6 +363,7 @@ __tf__ PTO_INTERNAL void TNOT_TF(typename TileData::TileDType __out__ dst, typen
             dstPtr[off] = static_cast<T>(~srcPtr[off]);
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -312,15 +382,22 @@ __tf__ PTO_INTERNAL void TRELU_TF(typename TileData::TileDType __out__ dst, type
     uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
             const T v = srcPtr[off];
-            dstPtr[off] = (v > static_cast<T>(0)) ? v : static_cast<T>(0);
+            if constexpr (kExtraOpsHalfLike<T>) {
+                const float vf = static_cast<float>(v);
+                dstPtr[off] = static_cast<T>((vf > 0.0f) ? vf : 0.0f);
+            } else {
+                dstPtr[off] = (v > static_cast<T>(0)) ? v : static_cast<T>(0);
+            }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -337,6 +414,7 @@ __tf__ PTO_INTERNAL void TPRELU_TF(typename TileData::TileDType __out__ dst, typ
     typename TileData::TileDType __in__ src1, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
@@ -345,9 +423,16 @@ __tf__ PTO_INTERNAL void TPRELU_TF(typename TileData::TileDType __out__ dst, typ
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
             const T x = src0Ptr[off];
             const T a = src1Ptr[off];
-            dstPtr[off] = (x > static_cast<T>(0)) ? x : static_cast<T>(x * a);
+            if constexpr (kExtraOpsHalfLike<T>) {
+                const float xf = static_cast<float>(x);
+                const float af = static_cast<float>(a);
+                dstPtr[off] = static_cast<T>((xf > 0.0f) ? xf : (xf * af));
+            } else {
+                dstPtr[off] = (x > static_cast<T>(0)) ? x : static_cast<T>(x * a);
+            }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -365,6 +450,7 @@ __tf__ PTO_INTERNAL void TADDC_TF(typename TileData::TileDType __out__ dst, type
     uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
@@ -372,9 +458,17 @@ __tf__ PTO_INTERNAL void TADDC_TF(typename TileData::TileDType __out__ dst, type
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
-            dstPtr[off] = static_cast<T>(src0Ptr[off] + src1Ptr[off] + src2Ptr[off]);
+            if constexpr (kExtraOpsHalfLike<T>) {
+                const float a = static_cast<float>(src0Ptr[off]);
+                const float b = static_cast<float>(src1Ptr[off]);
+                const float d = static_cast<float>(src2Ptr[off]);
+                dstPtr[off] = static_cast<T>(a + b + d);
+            } else {
+                dstPtr[off] = static_cast<T>(src0Ptr[off] + src1Ptr[off] + src2Ptr[off]);
+            }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -392,6 +486,7 @@ __tf__ PTO_INTERNAL void TSUBC_TF(typename TileData::TileDType __out__ dst, type
     uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
@@ -399,9 +494,17 @@ __tf__ PTO_INTERNAL void TSUBC_TF(typename TileData::TileDType __out__ dst, type
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
-            dstPtr[off] = static_cast<T>(src0Ptr[off] - src1Ptr[off] + src2Ptr[off]);
+            if constexpr (kExtraOpsHalfLike<T>) {
+                const float a = static_cast<float>(src0Ptr[off]);
+                const float b = static_cast<float>(src1Ptr[off]);
+                const float d = static_cast<float>(src2Ptr[off]);
+                dstPtr[off] = static_cast<T>(a - b + d);
+            } else {
+                dstPtr[off] = static_cast<T>(src0Ptr[off] - src1Ptr[off] + src2Ptr[off]);
+            }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -418,14 +521,22 @@ __tf__ PTO_INTERNAL void TSUBS_TF(typename TileData::TileDType __out__ dst, type
     typename TileData::DType scalar, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
+    const float sf = kExtraOpsHalfLike<T> ? static_cast<float>(scalar) : 0.0f;
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
-            dstPtr[off] = static_cast<T>(src0Ptr[off] - scalar);
+            if constexpr (kExtraOpsHalfLike<T>) {
+                const float v = static_cast<float>(src0Ptr[off]);
+                dstPtr[off] = static_cast<T>(v - sf);
+            } else {
+                dstPtr[off] = static_cast<T>(src0Ptr[off] - scalar);
+            }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -442,6 +553,7 @@ __tf__ PTO_INTERNAL void TREMS_TF(typename TileData::TileDType __out__ dst, type
     typename TileData::DType scalar, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     for (uint32_t r = 0; r < validRow; ++r) {
@@ -455,6 +567,7 @@ __tf__ PTO_INTERNAL void TREMS_TF(typename TileData::TileDType __out__ dst, type
             }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -471,15 +584,23 @@ __tf__ PTO_INTERNAL void TMAXS_TF(typename TileData::TileDType __out__ dst, type
     typename TileData::DType scalar, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
+    const float sf = kExtraOpsHalfLike<T> ? static_cast<float>(scalar) : 0.0f;
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
             const T v = src0Ptr[off];
-            dstPtr[off] = (v > scalar) ? v : scalar;
+            if constexpr (kExtraOpsHalfLike<T>) {
+                const float vf = static_cast<float>(v);
+                dstPtr[off] = static_cast<T>((vf > sf) ? vf : sf);
+            } else {
+                dstPtr[off] = (v > scalar) ? v : scalar;
+            }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -496,6 +617,7 @@ __tf__ PTO_INTERNAL void TANDS_TF(typename TileData::TileDType __out__ dst, type
     typename TileData::DType scalar, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     for (uint32_t r = 0; r < validRow; ++r) {
@@ -504,6 +626,7 @@ __tf__ PTO_INTERNAL void TANDS_TF(typename TileData::TileDType __out__ dst, type
             dstPtr[off] = static_cast<T>(src0Ptr[off] & scalar);
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -522,6 +645,7 @@ __tf__ PTO_INTERNAL void TORS_TF(typename TileData::TileDType __out__ dst, typen
     typename TileData::DType scalar, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     for (uint32_t r = 0; r < validRow; ++r) {
@@ -530,6 +654,7 @@ __tf__ PTO_INTERNAL void TORS_TF(typename TileData::TileDType __out__ dst, typen
             dstPtr[off] = static_cast<T>(src0Ptr[off] | scalar);
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -548,6 +673,7 @@ __tf__ PTO_INTERNAL void TXORS_TF(typename TileData::TileDType __out__ dst, type
     typename TileData::DType scalar, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     for (uint32_t r = 0; r < validRow; ++r) {
@@ -556,6 +682,7 @@ __tf__ PTO_INTERNAL void TXORS_TF(typename TileData::TileDType __out__ dst, type
             dstPtr[off] = static_cast<T>(src0Ptr[off] ^ scalar);
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -574,15 +701,23 @@ __tf__ PTO_INTERNAL void TLRELU_TF(typename TileData::TileDType __out__ dst, typ
     typename TileData::DType scalar, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
+    const float sf = kExtraOpsHalfLike<T> ? static_cast<float>(scalar) : 0.0f;
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
             const T v = src0Ptr[off];
-            dstPtr[off] = (v > static_cast<T>(0)) ? v : static_cast<T>(v * scalar);
+            if constexpr (kExtraOpsHalfLike<T>) {
+                const float vf = static_cast<float>(v);
+                dstPtr[off] = static_cast<T>((vf > 0.0f) ? vf : (vf * sf));
+            } else {
+                dstPtr[off] = (v > static_cast<T>(0)) ? v : static_cast<T>(v * scalar);
+            }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -599,15 +734,24 @@ __tf__ PTO_INTERNAL void TADDSC_TF(typename TileData::TileDType __out__ dst, typ
     typename TileData::DType scalar, typename TileData::TileDType __in__ src1, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
+    const float sf = kExtraOpsHalfLike<T> ? static_cast<float>(scalar) : 0.0f;
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
-            dstPtr[off] = static_cast<T>(src0Ptr[off] + scalar + src1Ptr[off]);
+            if constexpr (kExtraOpsHalfLike<T>) {
+                const float a = static_cast<float>(src0Ptr[off]);
+                const float b = static_cast<float>(src1Ptr[off]);
+                dstPtr[off] = static_cast<T>(a + sf + b);
+            } else {
+                dstPtr[off] = static_cast<T>(src0Ptr[off] + scalar + src1Ptr[off]);
+            }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>
@@ -624,15 +768,24 @@ __tf__ PTO_INTERNAL void TSUBSC_TF(typename TileData::TileDType __out__ dst, typ
     typename TileData::DType scalar, typename TileData::TileDType __in__ src1, uint32_t validRow, uint32_t validCol)
 {
     using T = typename TileData::DType;
+    ExtraOpsWaitMte2ToScalar();
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
+    const float sf = kExtraOpsHalfLike<T> ? static_cast<float>(scalar) : 0.0f;
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t off = GetTileElementOffset<TileData>(r, c);
-            dstPtr[off] = static_cast<T>(src0Ptr[off] - scalar + src1Ptr[off]);
+            if constexpr (kExtraOpsHalfLike<T>) {
+                const float a = static_cast<float>(src0Ptr[off]);
+                const float b = static_cast<float>(src1Ptr[off]);
+                dstPtr[off] = static_cast<T>(a - sf + b);
+            } else {
+                dstPtr[off] = static_cast<T>(src0Ptr[off] - scalar + src1Ptr[off]);
+            }
         }
     }
+    ExtraOpsWaitScalarToMte3();
 }
 
 template <typename TileData>

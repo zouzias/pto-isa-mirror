@@ -253,14 +253,33 @@ def run_binary(testcase, run_mode, args="all", timeout_sec=None):
             name = re.sub(r"[^0-9A-Za-z._-]+", "_", name)
             return name[:128]
 
-        # Guard against a stale/incorrect gtest filter silently running 0 tests.
-        def ensure_gtest_has_tests(gtest_filter=None):
+        def _parse_gtest_list(text: str):
+            tests = []
+            current_suite = None
+            for line in text.splitlines():
+                if not line.strip():
+                    continue
+                if not line.startswith(" "):  # suite line like "TMULSTest."
+                    current_suite = line.strip()
+                    continue
+                if current_suite is None:
+                    continue
+                test_name = line.strip().split("#", 1)[0].strip()
+                if not test_name:
+                    continue
+                tests.append(f"{current_suite}{test_name}")
+            return tests
+
+        def list_gtests(gtest_filter=None):
             cmd = ["./" + testcase, "--gtest_list_tests"]
             if gtest_filter:
                 cmd.append("--gtest_filter=" + gtest_filter)
-            out = run_command(cmd, capture_output=True, timeout_sec=min(timeout_sec or 30, 30))
-            # `--gtest_list_tests` output prints test names indented by two spaces.
-            return any(line.startswith("  ") for line in out.splitlines())
+            out = run_command(cmd, capture_output=True, timeout_sec=30)
+            return _parse_gtest_list(out or "")
+
+        # Guard against a stale/incorrect gtest filter silently running 0 tests.
+        def ensure_gtest_has_tests(gtest_filter=None):
+            return len(list_gtests(gtest_filter)) > 0
 
         if run_mode == "sim":
             tag = "all" if args == "all" else _sanitize_dir_name(args)
@@ -268,20 +287,27 @@ def run_binary(testcase, run_mode, args="all", timeout_sec=None):
             os.makedirs(camodel_log_dir, exist_ok=True)
             os.environ["CAMODEL_LOG_PATH"] = camodel_log_dir
 
-        if args != "all":
+        base_timeout_sec = int(timeout_sec or 30)
+        if args == "all":
+            num = len(list_gtests())
+            if num <= 0:
+                raise RuntimeError(f"no gtest cases found in binary: {testcase}")
+            effective_timeout_sec = base_timeout_sec * max(1, num)
+        else:
             if not ensure_gtest_has_tests(args):
                 raise RuntimeError(f"gtest_filter matched no tests: {args}")
+            effective_timeout_sec = base_timeout_sec
+
+        if args != "all":
             single_case = "--gtest_filter=" + args
             cmd = ["./" + testcase, single_case]
             print(f"run single testcase : {args}")
-            output = run_command(cmd, timeout_sec=timeout_sec)
+            output = run_command(cmd, timeout_sec=effective_timeout_sec)
             print(output)
         else : # all
-            if not ensure_gtest_has_tests():
-                raise RuntimeError(f"no gtest cases found in binary: {testcase}")
             cmd = ["./" + testcase]
             print(f"run testcase : {testcase}")
-            output = run_command(cmd, timeout_sec=timeout_sec)
+            output = run_command(cmd, timeout_sec=effective_timeout_sec)
             print(output)
 
     except Exception as e:
@@ -294,17 +320,22 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
-    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 or a5")
+    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本: a2, a3, or a5")
     parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例 (or 'all')")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
     parser.add_argument("-d", "--debug-enable", action='store_true', help="开启debug检查")
-    parser.add_argument("--timeout-sec", type=int, default=None, help="single test run timeout in seconds (detect deadlock)")
+    parser.add_argument("--timeout-sec", type=int, default=None, help="base timeout per gtest in seconds (whole binary uses base*#gtests)")
 
     args = parser.parse_args()
-    default_soc_version = "Ascend910B1"
-    if args.soc_version == "a5":
+    if args.soc_version == "a2":
+        default_soc_version = "Ascend910"
+    elif args.soc_version == "a3":
+        default_soc_version = "Ascend910B1"
+    elif args.soc_version == "a5":
         default_soc_version = "Ascend910_9599"
         ensure_python_module("en_dtypes", pip_spec="en_dtypes==0.0.4")
+    else:
+        raise ValueError(f"unsupported soc-version: {args.soc_version}")
     default_cases = "all"
     if args.gtest_filter != None:
         default_cases = args.gtest_filter
@@ -314,7 +345,7 @@ def main():
         # 获取当前脚本（run_st.py）的绝对路径
         script_path = os.path.abspath(__file__)
 
-        if args.soc_version == "a3":
+        if args.soc_version in ("a2", "a3"):
             target_dir = os.path.dirname(os.path.dirname(script_path))
             target_dir = target_dir + "/npu/a2a3/src/st"
         else : # a5
@@ -333,7 +364,7 @@ def main():
         if args.timeout_sec is not None:
             timeout_sec = args.timeout_sec
         else:
-            timeout_sec = int(os.environ.get("PTO_ST_TIMEOUT_SEC", "120" if args.run_mode == "npu" else "600"))
+            timeout_sec = int(os.environ.get("PTO_ST_TIMEOUT_SEC", "30"))
 
         if args.testcase == "all":
             if args.gtest_filter is not None:

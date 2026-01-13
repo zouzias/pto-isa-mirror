@@ -6,20 +6,21 @@
 
 - 构建 + 运行：`tests/script/run_st.py`
 - 仅构建：`tests/script/build_st.py`
+- 并行运行（NPU + CPU）：`tests/script/run_st_parallel.py`
 
 常用参数：
 
 - `-r, --run-mode`：`sim` 或 `npu`
-- `-v, --soc-version`：`a3` 或 `a5`（映射到内部的 `SOC_VERSION`）
+- `-v, --soc-version`：`a2` / `a3` / `a5`（映射到内部的 `SOC_VERSION`）
 - `-t, --testcase`：testcase 名（例如 `tmatmul`）
-- `-g, --gtest_filter`：可选 gtest 过滤器（运行单个 case）
 - `-d, --debug-enable`：可选 Debug 构建（仅 `run_st.py` 支持）
 
 示例：
 
 ```bash
-python3 tests/script/run_st.py -r npu -v a3 -t tmatmul -g TMATMULTest.case1
-python3 tests/script/run_st.py -r sim -v a5 -t tmatmul -g TMATMULTest.case1
+python3 tests/script/run_st.py -r npu -v a3 -t tmatmul
+python3 tests/script/run_st.py -r sim -v a5 -t tmatmul
+python3 tests/script/run_st_parallel.py -v a3 --timeout-sec 30
 ```
 
 ## CPU ST

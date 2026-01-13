@@ -12,10 +12,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_NPU_A2A3_MGATHER_SCATTER_HPP
 
 #include <type_traits>
+#include <pto/common/event.hpp>
 #include <pto/common/pto_tile.hpp>
 #include <pto/npu/a2a3/TExtraOps.hpp>
 
 namespace pto {
+
+PTO_INTERNAL void MGatherScatterWaitMte2ToScalar()
+{
+    PtoSetWaitFlag<PIPE_MTE2, PIPE_S>();
+}
+
+PTO_INTERNAL void MGatherScatterWaitScalarToMte3()
+{
+    PtoSetWaitFlag<PIPE_S, PIPE_MTE3>();
+}
 
 template <typename TileDst, typename GlobalData, typename TileInd>
 __tf__ PTO_INTERNAL void MGATHER_TF(typename TileDst::TileDType __out__ dstData, typename GlobalData::DType *base,
@@ -26,6 +37,7 @@ __tf__ PTO_INTERNAL void MGATHER_TF(typename TileDst::TileDType __out__ dstData,
     __ubuf__ DstT *dstPtr = (__ubuf__ DstT *)__cce_get_tile_ptr(dstData);
     __ubuf__ IndexT *idxPtr = (__ubuf__ IndexT *)__cce_get_tile_ptr(idxData);
 
+    MGatherScatterWaitMte2ToScalar();
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t dstOff = GetTileElementOffset<TileDst>(r, c);
@@ -34,6 +46,7 @@ __tf__ PTO_INTERNAL void MGATHER_TF(typename TileDst::TileDType __out__ dstData,
             dstPtr[dstOff] = base[idx];
         }
     }
+    MGatherScatterWaitScalarToMte3();
 }
 
 template <typename TileDst, typename GlobalData, typename TileInd>
@@ -64,6 +77,8 @@ __tf__ PTO_INTERNAL void MSCATTER_TF(typename GlobalData::DType *base, typename 
     using IndexT = typename TileInd::DType;
     __ubuf__ SrcT *srcPtr = (__ubuf__ SrcT *)__cce_get_tile_ptr(srcData);
     __ubuf__ IndexT *idxPtr = (__ubuf__ IndexT *)__cce_get_tile_ptr(idxData);
+
+    MGatherScatterWaitMte2ToScalar();
     for (uint32_t r = 0; r < validRow; ++r) {
         for (uint32_t c = 0; c < validCol; ++c) {
             const uint32_t srcOff = GetTileElementOffset<TileSrc>(r, c);

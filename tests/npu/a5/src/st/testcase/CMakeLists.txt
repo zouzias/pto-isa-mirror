@@ -105,18 +105,11 @@ endfunction()
 set(ALL_TESTCASES
     tci
     tmatmul
-    tmatmul_mx
-    tload_mix
-    tload_shape2d
     tload
-    tload_mx_ND_DN
-    tload_mx_NZ
-    tload_mx_gmtensor
     tmrgsort
     ttrans
     tstore
     textract
-    textract_compact
     trowsum
     trowmax
     trowmin
@@ -132,19 +125,26 @@ set(ALL_TESTCASES
     trowexpandmul
     trowexpandsub
     tgather
+    mgather
+    mscatter
     tcvt
     tsub
+    tsubc
+    tsubs
+    tsubsc
     tadd
+    taddc
+    taddsc
     tpartadd
     tfillpad
     tmin
     tmax
     tmins
+    tmaxs
     tmov
     tmul
     tdiv
     tcmps
-    tmov_acc2vec
     tsel
     tsels
     trsqrt
@@ -152,30 +152,32 @@ set(ALL_TESTCASES
     texp
     tabs
     tlog
+    tlrelu
+    tnot
     trecip
-    tstore_acc2gm
+    trem
+    trems
     tdivs
     tmuls
     tadds
     tgatherb
     tpartmin
     tpartmax
-    tmov_vect
     texpands
-    tmov_acc2mat
     tassign
-    tmov_ub2l1
     tcmp
-    tadd_tdiv
-    tmul_tadds
-    tsub_texp
-    tmuls_trowsum
-    trowexpand_tsqrt
-    trowexpand_trowsum
-    trowsum_trowexpand
-    trowexpand_tdiv
     tscatter
     tneg
+    tprelu
+    trelu
+    tand
+    tands
+    tor
+    tors
+    tshl
+    tshr
+    txor
+    txors
     tcolexpanddiv
     tcolexpandmul
     tcolexpandsub

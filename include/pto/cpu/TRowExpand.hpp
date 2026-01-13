@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_CPU_TROWEXPAND_HPP
 #define PTO_CPU_TROWEXPAND_HPP
 
+#include <algorithm>
 #include <type_traits>
 
 #include "pto/cpu/tile_offsets.hpp"
@@ -49,11 +50,36 @@ PTO_INTERNAL typename TileVec::DType load_row_scalar(TileVec &src1, std::size_t 
     }
     return static_cast<typename TileVec::DType>(src1.data()[rowIndex % static_cast<std::size_t>(TileVec::Numel)]);
 }
+
+template <typename TileVec>
+PTO_INTERNAL typename TileVec::DType load_row_expand_value(TileVec &src, std::size_t rowIndex, std::size_t colIndex)
+{
+    const std::size_t vr = static_cast<std::size_t>(src.GetValidRow());
+    const std::size_t vc = static_cast<std::size_t>(src.GetValidCol());
+    if (vr == 0 || vc == 0) {
+        return static_cast<typename TileVec::DType>(0);
+    }
+    if (vc == 1) {
+        const std::size_t r = (rowIndex < vr) ? rowIndex : (rowIndex % vr);
+        return static_cast<typename TileVec::DType>(src.data()[GetTileElementOffset<TileVec>(r, 0)]);
+    }
+    if (vr == 1) {
+        const std::size_t c = (colIndex < vc) ? colIndex : (colIndex % vc);
+        return static_cast<typename TileVec::DType>(src.data()[GetTileElementOffset<TileVec>(0, c)]);
+    }
+    const std::size_t r = (rowIndex < vr) ? rowIndex : (rowIndex % vr);
+    const std::size_t c = (colIndex < vc) ? colIndex : (colIndex % vc);
+    return static_cast<typename TileVec::DType>(src.data()[GetTileElementOffset<TileVec>(r, c)]);
+}
 } // namespace
 
-template <typename TileDst, typename TileSrc1>
-PTO_INTERNAL void TROWEXPANDDIV_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1)
+template <typename TileDst, typename TileSrc0, typename TileSrc1>
+PTO_INTERNAL void TROWEXPANDDIV_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1)
 {
+    constexpr bool src0eqdst = std::is_same_v<TileDst, TileSrc0>;
+    constexpr bool src1eqdst = std::is_same_v<TileDst, TileSrc1>;
+    static_assert(src0eqdst || src1eqdst, "TROWEXPANDDIV: invalid tile shape.");
+
     const std::size_t rows = static_cast<std::size_t>(dst.GetValidRow());
     const std::size_t cols = static_cast<std::size_t>(dst.GetValidCol());
     if (rows == 0 || cols == 0) {
@@ -61,17 +87,31 @@ PTO_INTERNAL void TROWEXPANDDIV_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1
     }
 
     cpu::parallel_for_rows(rows, cols, [&](std::size_t r) {
-        const auto s = load_row_scalar(src1, r);
-        for (std::size_t c = 0; c < cols; ++c) {
-            const auto v0 = static_cast<typename TileDst::DType>(src0.data()[GetTileElementOffset<TileDst>(r, c)]);
-            dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(v0 / s);
+        if constexpr (src0eqdst) {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src1, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src0.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(v0 / s);
+            }
+        } else {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src0, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src1.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(s / v0);
+            }
         }
     });
 }
 
-template <typename TileDst, typename TileSrc1>
-PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1)
+template <typename TileDst, typename TileSrc0, typename TileSrc1>
+PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1)
 {
+    constexpr bool src0eqdst = std::is_same_v<TileDst, TileSrc0>;
+    constexpr bool src1eqdst = std::is_same_v<TileDst, TileSrc1>;
+    static_assert(src0eqdst || src1eqdst, "TROWEXPANDMUL: invalid tile shape.");
+
     const std::size_t rows = static_cast<std::size_t>(dst.GetValidRow());
     const std::size_t cols = static_cast<std::size_t>(dst.GetValidCol());
     if (rows == 0 || cols == 0) {
@@ -79,17 +119,31 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1
     }
 
     cpu::parallel_for_rows(rows, cols, [&](std::size_t r) {
-        const auto s = load_row_scalar(src1, r);
-        for (std::size_t c = 0; c < cols; ++c) {
-            const auto v0 = static_cast<typename TileDst::DType>(src0.data()[GetTileElementOffset<TileDst>(r, c)]);
-            dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(v0 * s);
+        if constexpr (src0eqdst) {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src1, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src0.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(v0 * s);
+            }
+        } else {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src0, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src1.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(v0 * s);
+            }
         }
     });
 }
 
-template <typename TileDst, typename TileSrc1>
-PTO_INTERNAL void TROWEXPANDSUB_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1)
+template <typename TileDst, typename TileSrc0, typename TileSrc1>
+PTO_INTERNAL void TROWEXPANDSUB_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1)
 {
+    constexpr bool src0eqdst = std::is_same_v<TileDst, TileSrc0>;
+    constexpr bool src1eqdst = std::is_same_v<TileDst, TileSrc1>;
+    static_assert(src0eqdst || src1eqdst, "TROWEXPANDSUB: invalid tile shape.");
+
     const std::size_t rows = static_cast<std::size_t>(dst.GetValidRow());
     const std::size_t cols = static_cast<std::size_t>(dst.GetValidCol());
     if (rows == 0 || cols == 0) {
@@ -97,10 +151,116 @@ PTO_INTERNAL void TROWEXPANDSUB_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1
     }
 
     cpu::parallel_for_rows(rows, cols, [&](std::size_t r) {
-        const auto s = load_row_scalar(src1, r);
-        for (std::size_t c = 0; c < cols; ++c) {
-            const auto v0 = static_cast<typename TileDst::DType>(src0.data()[GetTileElementOffset<TileDst>(r, c)]);
-            dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(v0 - s);
+        if constexpr (src0eqdst) {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src1, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src0.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(v0 - s);
+            }
+        } else {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src0, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src1.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(s - v0);
+            }
+        }
+    });
+}
+
+template <typename TileDst, typename TileSrc0, typename TileSrc1>
+PTO_INTERNAL void TROWEXPANDADD_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1)
+{
+    constexpr bool src0eqdst = std::is_same_v<TileDst, TileSrc0>;
+    constexpr bool src1eqdst = std::is_same_v<TileDst, TileSrc1>;
+    static_assert(src0eqdst || src1eqdst, "TROWEXPANDADD: invalid tile shape.");
+
+    const std::size_t rows = static_cast<std::size_t>(dst.GetValidRow());
+    const std::size_t cols = static_cast<std::size_t>(dst.GetValidCol());
+    if (rows == 0 || cols == 0) {
+        return;
+    }
+
+    cpu::parallel_for_rows(rows, cols, [&](std::size_t r) {
+        if constexpr (src0eqdst) {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src1, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src0.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(v0 + s);
+            }
+        } else {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src0, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src1.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = static_cast<typename TileDst::DType>(v0 + s);
+            }
+        }
+    });
+}
+
+template <typename TileDst, typename TileSrc0, typename TileSrc1>
+PTO_INTERNAL void TROWEXPANDMAX_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1)
+{
+    constexpr bool src0eqdst = std::is_same_v<TileDst, TileSrc0>;
+    constexpr bool src1eqdst = std::is_same_v<TileDst, TileSrc1>;
+    static_assert(src0eqdst || src1eqdst, "TROWEXPANDMAX: invalid tile shape.");
+
+    const std::size_t rows = static_cast<std::size_t>(dst.GetValidRow());
+    const std::size_t cols = static_cast<std::size_t>(dst.GetValidCol());
+    if (rows == 0 || cols == 0) {
+        return;
+    }
+
+    cpu::parallel_for_rows(rows, cols, [&](std::size_t r) {
+        if constexpr (src0eqdst) {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src1, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src0.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = (v0 < s) ? s : v0;
+            }
+        } else {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src0, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src1.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = (v0 < s) ? s : v0;
+            }
+        }
+    });
+}
+
+template <typename TileDst, typename TileSrc0, typename TileSrc1>
+PTO_INTERNAL void TROWEXPANDMIN_IMPL(TileDst &dst, TileSrc0 &src0, TileSrc1 &src1)
+{
+    constexpr bool src0eqdst = std::is_same_v<TileDst, TileSrc0>;
+    constexpr bool src1eqdst = std::is_same_v<TileDst, TileSrc1>;
+    static_assert(src0eqdst || src1eqdst, "TROWEXPANDMIN: invalid tile shape.");
+
+    const std::size_t rows = static_cast<std::size_t>(dst.GetValidRow());
+    const std::size_t cols = static_cast<std::size_t>(dst.GetValidCol());
+    if (rows == 0 || cols == 0) {
+        return;
+    }
+
+    cpu::parallel_for_rows(rows, cols, [&](std::size_t r) {
+        if constexpr (src0eqdst) {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src1, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src0.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = (v0 < s) ? v0 : s;
+            }
+        } else {
+            for (std::size_t c = 0; c < cols; ++c) {
+                const auto s = static_cast<typename TileDst::DType>(load_row_expand_value(src0, r, c));
+                const auto v0 =
+                    static_cast<typename TileDst::DType>(src1.data()[GetTileElementOffset<TileDst>(r, c)]);
+                dst.data()[GetTileElementOffset<TileDst>(r, c)] = (v0 < s) ? v0 : s;
+            }
         }
     });
 }
@@ -108,4 +268,3 @@ PTO_INTERNAL void TROWEXPANDSUB_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1
 } // namespace pto
 
 #endif
-

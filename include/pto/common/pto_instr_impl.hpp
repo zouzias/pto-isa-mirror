@@ -123,9 +123,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TDiv.hpp"
 #include "pto/npu/a5/TMul.hpp"
 #include "pto/npu/a5/TScatter.hpp"
-#include "pto/npu/a5/TColExpandDiv.hpp"
-#include "pto/npu/a5/TColExpandMul.hpp"
-#include "pto/npu/a5/TColExpandSub.hpp"
+
+// A5 currently reuses a subset of A2/A3 instruction helpers for PTO ops that
+// are not yet implemented in the register-base backend.
+#include "pto/npu/a2a3/MGatherScatter.hpp"
+#include "pto/npu/a2a3/TColExpand.hpp"
+#include "pto/npu/a2a3/TExtraOps.hpp"
+#include "pto/npu/a2a3/TReshape.hpp"
 #endif
 
 #ifdef __CPU_SIM

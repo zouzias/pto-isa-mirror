@@ -116,5 +116,34 @@ namespace pto {
             }
         }
     }
+
+    // TMATMUL_MX is an optional ISA extension. On CPU we ignore the scaling
+    // tiles and fall back to the corresponding TMATMUL variants.
+    template <typename TileAcc, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale>
+    PTO_INTERNAL void TMATMUL_MX_IMPL(
+        TileAcc &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix, TileRightScale &bScaleMatrix)
+    {
+        (void)aScaleMatrix;
+        (void)bScaleMatrix;
+        TMATMUL_IMPL(cMatrix, aMatrix, bMatrix);
+    }
+
+    template <typename TileAcc, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale>
+    PTO_INTERNAL void TMATMUL_MX_IMPL(TileAcc &cOutMatrix, TileAcc &cInMatrix, TileLeft &aMatrix,
+        TileLeftScale &aScaleMatrix, TileRight &bMatrix, TileRightScale &bScaleMatrix)
+    {
+        (void)aScaleMatrix;
+        (void)bScaleMatrix;
+        TMATMUL_ACC_IMPL(cOutMatrix, cInMatrix, aMatrix, bMatrix);
+    }
+
+    template <typename TileAcc, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale, typename TileBias>
+    PTO_INTERNAL void TMATMUL_MX_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix,
+        TileRight &bMatrix, TileRightScale &bScaleMatrix, TileBias &biasMatrix)
+    {
+        (void)aScaleMatrix;
+        (void)bScaleMatrix;
+        TMATMUL_BIAS_IMPL(cMatrix, aMatrix, bMatrix, biasMatrix);
+    }
 }
 #endif

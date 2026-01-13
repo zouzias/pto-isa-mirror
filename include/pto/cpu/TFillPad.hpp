@@ -8,102 +8,99 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TFILLPAD_HPP
-#define TFILLPAD_HPP
+#ifndef PTO_CPU_TFILLPAD_HPP
+#define PTO_CPU_TFILLPAD_HPP
+
+#include <algorithm>
+#include <limits>
+#include <type_traits>
+
 #include <pto/common/pto_tile.hpp>
-#include "pto/cpu/tile_offsets.hpp"
+
 #include "pto/cpu/parallel.hpp"
+#include "pto/cpu/tile_offsets.hpp"
 
-using namespace std;
+namespace pto {
 
-namespace pto{
+template <typename TileDataDst>
+PTO_INTERNAL typename TileDataDst::DType GetFillPadValue()
+{
+    using T = typename TileDataDst::DType;
+    static_assert(TileDataDst::PadVal != PadValue::Null, "TFILLPAD: dst tile pad value can't be Null.");
 
-    template <typename TileDataDst, typename TileDataSrc>
-    void TFillPad(typename TileDataDst::TileDType dst,
-                                typename TileDataSrc::TileDType src,
-                                unsigned validDstRow, 
-                                unsigned validDstCol, 
-                                unsigned validSrcRow, 
-                                unsigned validSrcCol) {
-        typename TileDataDst::DType padVal = 0;
-
-        constexpr auto PadVal_ = TileDataDst::PadVal;
-        if constexpr (std::numeric_limits<typename TileDataDst::DType>::has_infinity)
-        {
-            if constexpr(PadVal_ == PadValue::Max)
-                padVal = std::numeric_limits<typename TileDataDst::DType>::infinity();
-            else if constexpr (PadVal_ == PadValue::Min)
-                padVal = -std::numeric_limits<typename TileDataDst::DType>::infinity();
+    if constexpr (std::numeric_limits<T>::has_infinity) {
+        if constexpr (TileDataDst::PadVal == PadValue::Max) {
+            return std::numeric_limits<T>::infinity();
         }
-        else 
-        {
-            if constexpr (PadVal_ == PadValue::Max)
-                padVal = std::numeric_limits<typename TileDataDst::DType>::max();
-            else if constexpr (PadVal_ == PadValue::Min)
-                padVal = std::numeric_limits<typename TileDataDst::DType>::min();
+        if constexpr (TileDataDst::PadVal == PadValue::Min) {
+            return -std::numeric_limits<T>::infinity();
         }
-
-        cpu::parallel_for_1d(0, TileDataDst::Rows, static_cast<std::size_t>(TileDataDst::Rows) * TileDataDst::Cols,
-            [&](std::size_t i) {
-                PTO_CPU_VECTORIZE_LOOP
-                for (std::size_t j = 0; j < TileDataDst::Cols; ++j) {
-                    if (i < validSrcRow && j < validSrcCol) {
-                        dst[GetTileElementOffset<TileDataDst>(i, j)] = src[GetTileElementOffset<TileDataSrc>(i, j)];
-                    } else {
-                        dst[GetTileElementOffset<TileDataDst>(i, j)] = padVal;
-                    }
-                }
-            });
-    }
-
-    template <typename TileDataDst, typename TileDataSrc, bool inplace>
-    PTO_INTERNAL void TFILLPAD_IMPL(TileDataDst &dst, TileDataSrc &src) {
-        constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileDataSrc::DType);
-        constexpr unsigned srcStride = TileDataSrc::RowStride;
-        constexpr unsigned dstStride = TileDataDst::RowStride;
-        unsigned validSrcRow = src.GetValidRow();
-        unsigned validSrcCol = src.GetValidCol();
-        unsigned validDstRow = dst.GetValidRow();
-        unsigned validDstCol = dst.GetValidCol();
-
-        using T = typename TileDataSrc::DType;
-        using U = typename TileDataDst::DType;
-        static_assert(TileDataDst::PadVal != PadValue::Null, "TFillPad, dst vecTile pad value can't be Null!");
-        static_assert(sizeof(T) == sizeof(U), "TFillPad, src and dst data type shouuld be the same!");
-        static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "TFillPad: Invalid data type!");
-        
-        if(validDstRow == 0 || validDstCol == 0) {
-            return;
+        return static_cast<T>(0);
+    } else {
+        if constexpr (TileDataDst::PadVal == PadValue::Max) {
+            return std::numeric_limits<T>::max();
         }
-        if constexpr (!inplace) 
-        {
-            TFillPad<TileDataDst, TileDataSrc>(dst.data(), src.data(), validDstRow, validDstCol, validSrcRow, validSrcCol);
+        if constexpr (TileDataDst::PadVal == PadValue::Min) {
+            return std::numeric_limits<T>::min();
         }
-        TFillPad<TileDataDst, TileDataSrc>(dst.data(), src.data(), validDstRow, validDstCol, validSrcRow, validSrcCol);
-    }
-
-    template <typename TileDataDst, typename TileDataSrc>
-    PTO_INTERNAL void TFILLPAD(TileDataDst &dst, TileDataSrc &src) {
-        static_assert(TileDataDst::Cols == TileDataSrc::Cols && TileDataDst::Rows == TileDataSrc::Rows, 
-        "TFillPad: dst and src should have the same rows/cols!");
-
-        TFILLPAD_IMPL<TileDataDst, TileDataSrc, false>(dst, src);
-    }
-
-    template <typename TileDataDst, typename TileDataSrc>
-    PTO_INTERNAL void TFILLPAD_INPLACE(TileDataDst &dst, TileDataSrc &src) {
-        static_assert(TileDataDst::Cols == TileDataSrc::Cols && TileDataDst::Rows == TileDataSrc::Rows, 
-        "TFillPad: dst and src should have the same rows/cols!");
-
-        TFILLPAD_IMPL<TileDataDst, TileDataSrc, true>(dst, src);
-    }
-
-    template <typename TileDataDst, typename TileDataSrc>
-    PTO_INTERNAL void TFILLPAD_EXPAND(TileDataDst &dst, TileDataSrc &src) {
-        static_assert(TileDataDst::Cols >= TileDataSrc::Cols && TileDataDst::Rows >= TileDataSrc::Rows, 
-        "TFillPad: dst and src should have the same rows/cols!");
-
-        TFILLPAD_IMPL<TileDataDst, TileDataSrc, false>(dst, src);
+        return static_cast<T>(0);
     }
 }
+
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TFillPad_Impl(TileDataDst &dst, TileDataSrc &src)
+{
+    using DstT = typename TileDataDst::DType;
+    using SrcT = typename TileDataSrc::DType;
+    static_assert(sizeof(DstT) == sizeof(SrcT), "TFILLPAD: src/dst dtype sizes must match.");
+    static_assert(sizeof(DstT) == 4 || sizeof(DstT) == 2 || sizeof(DstT) == 1, "TFILLPAD: invalid data type.");
+
+    const unsigned validSrcRow = src.GetValidRow();
+    const unsigned validSrcCol = src.GetValidCol();
+    const auto padVal = GetFillPadValue<TileDataDst>();
+
+    cpu::parallel_for_1d(
+        0,
+        TileDataDst::Rows,
+        static_cast<std::size_t>(TileDataDst::Rows) * TileDataDst::Cols,
+        [&](std::size_t r) {
+            PTO_CPU_VECTORIZE_LOOP
+            for (std::size_t c = 0; c < TileDataDst::Cols; ++c) {
+                const auto dstOff = GetTileElementOffset<TileDataDst>(r, c);
+                if (r < static_cast<std::size_t>(validSrcRow) && c < static_cast<std::size_t>(validSrcCol)) {
+                    dst.data()[dstOff] =
+                        static_cast<DstT>(src.data()[GetTileElementOffset<TileDataSrc>(r, c)]);
+                } else {
+                    dst.data()[dstOff] = padVal;
+                }
+            }
+        });
+}
+
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TFILLPAD_IMPL(TileDataDst &dst, TileDataSrc &src)
+{
+    static_assert(TileDataDst::Cols == TileDataSrc::Cols && TileDataDst::Rows == TileDataSrc::Rows,
+        "TFILLPAD: dst/src must have the same rows/cols.");
+    TFillPad_Impl(dst, src);
+}
+
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TFILLPAD_INPLACE_IMPL(TileDataDst &dst, TileDataSrc &src)
+{
+    static_assert(TileDataDst::Cols == TileDataSrc::Cols && TileDataDst::Rows == TileDataSrc::Rows,
+        "TFILLPAD_INPLACE: dst/src must have the same rows/cols.");
+    TFillPad_Impl(dst, src);
+}
+
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TFILLPAD_EXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
+{
+    static_assert(TileDataDst::Cols >= TileDataSrc::Cols && TileDataDst::Rows >= TileDataSrc::Rows,
+        "TFILLPAD_EXPAND: dst rows/cols must be >= src rows/cols.");
+    TFillPad_Impl(dst, src);
+}
+
+} // namespace pto
+
 #endif

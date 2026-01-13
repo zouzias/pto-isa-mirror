@@ -13,11 +13,47 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
+#include <type_traits>
 
 #include "pto/common/pto_tile.hpp"
 #include "pto/cpu/tile_offsets.hpp"
 
 namespace pto {
+    namespace cpu_detail {
+        template <typename T>
+        using UnsignedT = std::make_unsigned_t<T>;
+
+        template <typename T>
+        PTO_INTERNAL T FromUnsigned(UnsignedT<T> v) {
+            if constexpr (!std::is_integral_v<T>) {
+                return static_cast<T>(v);
+            } else if constexpr (!std::is_signed_v<T>) {
+                return static_cast<T>(v);
+            } else {
+                constexpr unsigned bits = sizeof(T) * 8U;
+                constexpr UnsignedT<T> sign_bit = UnsignedT<T>(1) << (bits - 1U);
+                if ((v & sign_bit) == 0) {
+                    return static_cast<T>(v);
+                }
+                // Two's complement negative: -(~v + 1).
+                const UnsignedT<T> magnitude = static_cast<UnsignedT<T>>(~v + 1U);
+                if (magnitude == sign_bit) {
+                    return std::numeric_limits<T>::min();
+                }
+                return static_cast<T>(-static_cast<std::int64_t>(magnitude));
+            }
+        }
+
+        template <typename T>
+        PTO_INTERNAL unsigned MaskedShift(T src1) {
+            static_assert(std::is_integral_v<T>, "shift op requires integral types");
+            constexpr unsigned bits = sizeof(T) * 8U;
+            return static_cast<unsigned>(static_cast<UnsignedT<T>>(src1)) & (bits - 1U);
+        }
+    } // namespace cpu_detail
+
     enum class ElementOp {
         // binary operation
         OP_ADD = 0,
@@ -130,14 +166,32 @@ namespace pto {
     template<typename DType>
     struct ElementOpCal<DType, ElementOp::OP_SHL> {
         static void apply(DType &dst, DType &src0, DType &src1, size_t) {
-            dst = src0 << src1;
+            static_assert(std::is_integral_v<DType>, "TSHL: intended for integral element types");
+            using U = cpu_detail::UnsignedT<DType>;
+            const unsigned sh = cpu_detail::MaskedShift(src1);
+            const U u0 = static_cast<U>(src0);
+            const U out = static_cast<U>(u0 << sh);
+            dst = cpu_detail::FromUnsigned<DType>(out);
         }
     };
 
     template<typename DType>
     struct ElementOpCal<DType, ElementOp::OP_SHR> {
         static void apply(DType &dst, DType &src0, DType &src1, size_t) {
-            dst = src0 >> src1;
+            static_assert(std::is_integral_v<DType>, "TSHR: intended for integral element types");
+            using U = cpu_detail::UnsignedT<DType>;
+            constexpr unsigned bits = sizeof(DType) * 8U;
+            const unsigned sh = cpu_detail::MaskedShift(src1);
+            const U u0 = static_cast<U>(src0);
+            U out = static_cast<U>(u0 >> sh);
+            if constexpr (std::is_signed_v<DType>) {
+                constexpr U sign_bit = U(1) << (bits - 1U);
+                if ((u0 & sign_bit) != 0 && sh != 0) {
+                    const U mask = static_cast<U>(~U(0)) << (bits - sh);
+                    out = static_cast<U>(out | mask);
+                }
+            }
+            dst = cpu_detail::FromUnsigned<DType>(out);
         }
     };
 
