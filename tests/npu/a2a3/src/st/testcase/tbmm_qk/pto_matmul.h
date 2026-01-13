@@ -90,7 +90,7 @@ namespace pto{
                                              "Check SLayout of TileDataA and TileDataB.");
         }
 
-        const uint64_t Cube_K = 64;
+        const uint64_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
 
         uint64_t pingpong = getPingPong(0);
 

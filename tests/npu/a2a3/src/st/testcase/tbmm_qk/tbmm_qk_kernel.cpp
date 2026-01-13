@@ -22,7 +22,7 @@ __global__ AICORE void LaunchTBMM_QK_kern_NN(__gm__ float *out, __gm__ half *q, 
     constexpr uint32_t validK = K;
     constexpr uint32_t Cube_M = M;
     constexpr uint32_t Cube_N = N;
-    constexpr uint32_t Cube_K = 64;
+    constexpr uint32_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
 
     // Global tensor typedefs (static shapes)
     using GlobalDataSrc0 = GlobalTensor<half, pto::Shape<1, 1, 1, validM, Cube_K>,
@@ -94,7 +94,7 @@ __global__ AICORE void LaunchTBMM_QK_kern_NT(__gm__ float *out, __gm__ half *q, 
     constexpr uint32_t validK = K;
     constexpr uint32_t Cube_M = M;
     constexpr uint32_t Cube_N = N;
-    constexpr uint32_t Cube_K = 64;
+    constexpr uint32_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
 
     // Global tensor typedefs (static shapes)
     using GlobalDataSrc0 = GlobalTensor<half, pto::Shape<1, 1, 1, validM, Cube_K>,
@@ -163,7 +163,7 @@ __global__ AICORE void LaunchTBMM_QK_kern_TN(__gm__ float *out, __gm__ half *q, 
     constexpr uint32_t validK = K;
     constexpr uint32_t Cube_M = M;
     constexpr uint32_t Cube_N = N;
-    constexpr uint32_t Cube_K = 64;
+    constexpr uint32_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
 
     // Global tensor typedefs (static shapes)
     // Q is transposed: K x M in memory, accessed as M x K
