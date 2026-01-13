@@ -175,6 +175,9 @@ python3 tests/script/run_st.py -r sim -v a5 -t tmatmul -g TMATMULTest.case1
 ```bash
 # Execute the following commands from the project root directory:
 chmod +x ./tests/run_st.sh
+chmod +x build.sh
+./build.sh --pkg
+./build_out/cann-pto-isa-*.run --full --quiet --install-path=$ASCEND_HOME_PATH/..
 ./tests/run_st.sh a5 npu simple
 ./tests/run_st.sh a3 sim all
 ```
@@ -218,18 +221,24 @@ source ${install-path}/cann/bin/setenv.bash
 
   ```bash
   chmod +x build.sh
+  ./build.sh --pkg
+  ./build_out/cann-pto-isa-*.run --full --quiet --install-path=$ASCEND_HOME_PATH/..
   ./build.sh --run_all --a3 --sim
   ```
 * Run Simplified ST Tests:
 
   ```bash
   chmod +x build.sh
+  ./build.sh --pkg
+  ./build_out/cann-pto-isa-*.run --full --quiet --install-path=$ASCEND_HOME_PATH/..
   ./build.sh --run_simple --a5 --npu
   ```
 * Packaging:
 
   ```bash
   chmod +x build.sh
+  ./build.sh --pkg
+  ./build_out/cann-pto-isa-*.run --full --quiet --install-path=$ASCEND_HOME_PATH/..
   ./build.sh --pkg
   ```
 

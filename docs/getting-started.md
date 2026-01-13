@@ -194,6 +194,9 @@ Set environment variables according to [Environment_Variables](./getting-started
   ```bash
   # Execute the following commands from the project root directory:
   chmod +x ./tests/run_st.sh
+  chmod +x build.sh
+  ./build.sh --pkg
+  ./build_out/cann-pto-isa-*.run --full --quiet --install-path=$ASCEND_HOME_PATH/..
   ./tests/run_st.sh a5 npu simple
   ulimit -n 65536;./tests/run_st.sh a3 sim all # use ulimit -n first if run on simulator
   ```
@@ -202,12 +205,16 @@ Set environment variables according to [Environment_Variables](./getting-started
 
   ```bash
   chmod +x build.sh
+  ./build.sh --pkg
+  ./build_out/cann-pto-isa-*.run --full --quiet --install-path=$ASCEND_HOME_PATH/..
   ./build.sh --run_all --a3 --sim
   ```
 - Run Simplified ST Tests:
 
   ```bash
   chmod +x build.sh
+  ./build.sh --pkg
+  ./build_out/cann-pto-isa-*.run --full --quiet --install-path=$ASCEND_HOME_PATH/..
   ./build.sh --run_simple --a5 --npu
   ```
 - Packaging:
