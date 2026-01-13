@@ -19,10 +19,12 @@ namespace pto
     template<typename T>
     struct ExpandSOp {
         PTO_INTERNAL static void BinSInstr(__ubuf__ T* dst, __ubuf__ T* src0, T scalar, uint8_t repeats) {
-            vector_dup(dst, scalar, repeats, 1, 1, 8, 8);
+            using BrcbType = std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint32_t>;
+            vector_dup((__ubuf__ BrcbType *)dst, (BrcbType)scalar, repeats, 1, 1, 8, 8);
         }
         PTO_INTERNAL static void BinSInstr(__ubuf__ T* dst, __ubuf__ T* src0, T scalar, uint8_t repeats, uint8_t dstRepeatStride, uint8_t srcRepeatStride) {
-            vector_dup(dst, scalar, repeats, 1, 1, dstRepeatStride, srcRepeatStride);
+            using BrcbType = std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint32_t>;
+            vector_dup((__ubuf__ BrcbType *)dst, (BrcbType)scalar, repeats, 1, 1, dstRepeatStride, srcRepeatStride);
         }
     };
     template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned stride>
@@ -40,17 +42,6 @@ namespace pto
     template <typename TileData>
     PTO_INTERNAL void TEXPANDS_IMPL(TileData &dst, typename TileData::DType scalar)
     {
-        static_assert(
-            std::is_same<typename TileData::DType, int32_t>::value ||
-            std::is_same<typename TileData::DType, int>::value ||
-            std::is_same<typename TileData::DType, int16_t>::value ||
-            std::is_same<typename TileData::DType, half>::value ||
-            std::is_same<typename TileData::DType, float16_t>::value ||
-            std::is_same<typename TileData::DType, float>::value ||
-            std::is_same<typename TileData::DType, bfloat16_t>::value ||
-            std::is_same<typename TileData::DType, float32_t>::value,
-                "TEXPANDS: Invalid data type");
-
         static_assert(TileData::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
         static_assert(TileData::ValidCol <= TileData::Cols, "Number of valid columns must not be greater than number of tile columns.");
         static_assert(TileData::ValidRow <= TileData::Rows, "Number of valid rows must not be greater than number of tile rows.");
