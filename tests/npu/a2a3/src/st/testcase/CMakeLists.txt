@@ -162,6 +162,8 @@ tfa
 tcolexpand
 ttri
 tnot
+tands
+tors
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)

@@ -735,24 +735,27 @@ PTO_INST RecordEvent TMAXS(TileData &dst, TileData &src0, typename TileData::DTy
   return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TANDS(TileData &dst, TileData &src0, typename TileData::DType scalar, WaitEvents&... events) {
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TANDS(TileDataDst &dst, TileDataSrc &src, typename TileDataDst::DType scalar,
+  WaitEvents&... events) {
   TSYNC(events...);
   MAP_INSTR_IMPL(TANDS, dst, src0, scalar);
   return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TORS(TileData &dst, TileData &src0, typename TileData::DType scalar, WaitEvents&... events) {
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TORS(TileDataDst &dst, TileDataSrc &src, typename TileDataDst::DType scalar,
+  WaitEvents&... events) {
   TSYNC(events...);
-  MAP_INSTR_IMPL(TORS, dst, src0, scalar);
+  MAP_INSTR_IMPL(TORS, dst, src, scalar);
   return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TXORS(TileData &dst, TileData &src0, typename TileData::DType scalar, WaitEvents&... events) {
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TXORS(TileDataDst &dst, TileDataSrc &src, typename TileDataDst::DType scalar,
+  WaitEvents&... events) {
   TSYNC(events...);
-  MAP_INSTR_IMPL(TXORS, dst, src0, scalar);
+  MAP_INSTR_IMPL(TXORS, dst, src, scalar);
   return {};
 }
 
