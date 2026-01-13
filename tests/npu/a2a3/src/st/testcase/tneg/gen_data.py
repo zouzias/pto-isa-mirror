@@ -12,27 +12,36 @@
 
 import os
 import numpy as np
-np.random.seed(19)
 
+np.random.seed(19)
 
 def gen_golden_data(case_name, param):
     dtype = param.dtype
 
-    h_valid, w_valid = param.valid_row, param.valid_col
+    H, W = [param.tile_row, param.tile_col]
+    h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = np.random.random(size=(h_valid, w_valid)).astype(dtype)
+    input1 = np.random.random(size=(H,W)).astype(dtype)
 
     # Perform the operation
-    golden = 1.0 / input1
+    golden = -input1
+
+    # Apply valid region constraints
+    output = np.zeros([H, W]).astype(dtype)
+    for h in range(H):
+        for w in range(W):
+            if h >= h_valid or w >= w_valid:
+                golden[h][w] = output[h][w]
 
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
     golden.tofile("golden.bin")
 
+    return output, input1, golden
 
-class TUnaryParams:
-    def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, in_place=False):
+class tunaryParams:
+    def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
         self.global_row = global_row
         self.global_col = global_col
@@ -40,8 +49,6 @@ class TUnaryParams:
         self.tile_col = tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
-        self.in_place = in_place
-
 
 def generate_case_name(param):
     dtype_str = {
@@ -51,9 +58,7 @@ def generate_case_name(param):
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
-    return f"TRECIPTest.case_{dtype_str}_{param.global_row}x{param.global_col}"\
-        f"_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_inPlace_{param.in_place}"
-
+    return f"TNEGTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.valid_row}x{param.valid_col}"
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -65,11 +70,13 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TUnaryParams(np.float32, 64, 64, 64, 64, 64, 64, False),
-        TUnaryParams(np.float16, 64, 64, 64, 64, 64, 64, False),
+        tunaryParams(np.float32, 64, 64, 64, 64, 64, 64),
+        tunaryParams(np.int32, 32, 32, 32, 32, 32, 32),
+        tunaryParams(np.float16, 32, 64, 32, 64, 32, 64),
+        tunaryParams(np.int16, 64, 16, 64, 16, 64, 16),
     ]
 
-    for param in case_params_list:
+    for i, param in enumerate(case_params_list):
         case_name = generate_case_name(param)
         if not os.path.exists(case_name):
             os.makedirs(case_name)

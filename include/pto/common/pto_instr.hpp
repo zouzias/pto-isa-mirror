@@ -197,17 +197,10 @@ PTO_INST RecordEvent TXOR(TileData &dst, TileData &src0, TileData &src1, WaitEve
   return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TLOG(TileData &dst, TileData &src, WaitEvents&... events) {
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TLOG(TileDataDst &dst, TileDataSrc &src, WaitEvents&... events) {
   TSYNC(events...);
   MAP_INSTR_IMPL(TLOG, dst, src);
-  return {};
-}
-
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TNEG(TileData &dst, TileData &src, WaitEvents&... events) {
-  TSYNC(events...);
-  MAP_INSTR_IMPL(TNEG, dst, src);
   return {};
 }
 
@@ -221,6 +214,9 @@ PTO_INST RecordEvent TNOT(TileData &dst, TileData &src, WaitEvents&... events) {
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TRECIP(TileDataDst &dst, TileDataSrc &src, WaitEvents&... events) {
   TSYNC(events...);
+  /*
+   * A3's TRECIP instruction does not support setting the source Tile and destination Tile to the same memory.
+   */
   MAP_INSTR_IMPL(TDIVS, dst, 1, src);
   return {};
 }
@@ -416,6 +412,13 @@ template <typename TileData, typename T, int descending, typename... WaitEvents>
 PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents&... events) {
   TSYNC(events...);
   TCI_IMPL<TileData, T, descending>(dst, start);
+  return {};
+}
+
+template <typename TileData, int isUpperOrLower, int diagonal, typename... WaitEvents>
+PTO_INST RecordEvent TTRI(TileData &dst, WaitEvents&... events) {
+  TSYNC(events...);
+  TTRI_IMPL<TileData, isUpperOrLower, diagonal>(dst);
   return {};
 }
 

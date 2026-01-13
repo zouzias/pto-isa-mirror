@@ -66,11 +66,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TCI.hpp"
 #include "pto/npu/a2a3/TColSum.hpp"
 #include "pto/npu/a2a3/TUnaryOp.hpp"
-#include "pto/npu/a2a3/TUnaryPlusOp.hpp"
 #include "pto/npu/a2a3/TGatherB.hpp"
 #include "pto/npu/a2a3/TColMin.hpp"
 #include "pto/npu/a2a3/TScatter.hpp"
 #include "pto/npu/a2a3/TColExpand.hpp"
+#include "pto/npu/a2a3/TTri.hpp"
 #endif
 
 #ifdef REGISTER_BASE
@@ -95,6 +95,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TColSum.hpp"
 #include "pto/npu/a5/TColMax.hpp"
 #include "pto/npu/a5/TColMin.hpp"
+#include "pto/npu/a5/TColExpand.hpp"
 #include "pto/npu/a5/TReshape.hpp"
 #include "pto/npu/a5/TRowReduce.hpp"
 #include "pto/npu/a5/TFillPad.hpp"
@@ -130,7 +131,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TColExpandDiv.hpp"
 #include "pto/npu/a5/TColExpandMul.hpp"
 #include "pto/npu/a5/TColExpandSub.hpp"
-#include "pto/npu/a5/TTril.hpp"
+#include "pto/npu/a5/TTri.hpp"
 #endif
 
 #ifdef __CPU_SIM

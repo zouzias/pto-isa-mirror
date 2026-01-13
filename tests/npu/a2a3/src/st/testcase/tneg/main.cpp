@@ -17,7 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-class TRECIPTest : public testing::Test {
+class TNEGTest : public testing::Test {
 protected:
     void SetUp() override
     {}
@@ -34,11 +34,11 @@ std::string GetGoldenDir() {
 }
 
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false>
-void LaunchTRecip(T *out, T *src, void *stream);
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+void LaunchTNeg(T *out, T *src, void *stream);
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false>
-void test_trecip() {
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+void test_tneg() {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
 
     aclInit(nullptr);
@@ -58,7 +58,7 @@ void test_trecip() {
     ReadFile(GetGoldenDir() + "/input1.bin", fileSize, srcHost, fileSize);
 
     aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTRecip<T, kGRows_, kGCols_, kTRows_, kTCols_, isInPlace>(dstDevice, srcDevice, stream);
+    LaunchTNeg<T, kGRows_, kGCols_, kTRows_, kTCols_>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -81,15 +81,7 @@ void test_trecip() {
 
     float eps = 0.0f;
     if constexpr (std::is_same_v<T, float>) {
-#ifdef ACCURATE_RECIP
         eps = 0.0001f;
-#else
-        // Known issue with accuracy for built-in `vrecip` intrinsic funtion
-        // Thats why epsilon is 0.003f, while requirement 0.0001f
-        // #define ACCURATE_RSQRT in TUnaryOp.hpp to enable accurate implementation
-        // or add_compile_definitions(ACCURATE_RSQRT) in CMake files
-        eps = 0.003f;
-#endif
     } else if constexpr (std::is_same_v<T, aclFloat16>) {
         eps = 0.001f;
     }
@@ -98,9 +90,15 @@ void test_trecip() {
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TRECIPTest, case_float_64x64_64x64_64x64_inPlace_False) {
-    test_trecip<float, 64, 64, 64, 64, false>();
+TEST_F(TNEGTest, case_float_64x64_64x64) {
+    test_tneg<float, 64, 64, 64, 64>();
 }
-TEST_F(TRECIPTest, case_half_64x64_64x64_64x64_inPlace_False) {
-    test_trecip<aclFloat16, 64, 64, 64, 64, false>();
+TEST_F(TNEGTest, case_int32_32x32_32x32) {
+    test_tneg<int32_t, 32, 32, 32, 32>();
+}
+TEST_F(TNEGTest, case_half_32x64_32x64) {
+    test_tneg<aclFloat16, 32, 64, 32, 64>();
+}
+TEST_F(TNEGTest, case_int16_64x16_64x16) {
+    test_tneg<int16_t, 64, 16, 64, 16>();
 }
