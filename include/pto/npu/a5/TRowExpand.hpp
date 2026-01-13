@@ -87,6 +87,41 @@ PTO_INTERNAL void TRowExpandInstr_PostUpdate(__ubuf__ T* dstPtr, __ubuf__ T* src
     }
 }
 
+
+template <typename T, unsigned DstStride, unsigned SrcStride>
+PTO_INTERNAL void TRowExpandBrcb(__ubuf__ T* dstPtr, __ubuf__ T* srcPtr, unsigned dstValidRow,
+                                             unsigned dstValidCol, uint16_t NumelIn, uint16_t NumelOut) {
+    constexpr auto nElemPerVlds = CCE_VL / BLOCK_BYTE_SIZE;//8 element
+    uint16_t repeatTimes = NumelIn / nElemPerVlds;
+    constexpr auto distValue = 
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    if constexpr (sizeof(T) == 4) {
+        __VEC_SCOPE__
+        {
+            RegTensor<T> vreg;
+            MaskReg preg;
+            uint32_t sreg = NumelOut;
+            for (uint16_t i = 0; i < (uint16_t)repeatTimes; i++) {
+                preg = CreatePredicate<T>(sreg);
+                vlds(vreg, srcPtr, (int32_t)(i * nElemPerVlds), E2B_B32);
+                vsts(vreg, dstPtr, (int32_t)(i * nElemPerVlds * DstStride), distValue, preg);
+            }
+        }
+    } else {
+        __VEC_SCOPE__
+        {
+            RegTensor<T> vreg;
+            MaskReg preg;
+            uint32_t sreg = NumelOut;
+            for (uint16_t i = 0; i < (uint16_t)repeatTimes; i++) {
+                preg = CreatePredicate<T>(sreg);
+                vlds(vreg, srcPtr, (int32_t)(i * nElemPerVlds), E2B_B16);
+                vsts(vreg, dstPtr, (int32_t)(i * nElemPerVlds * DstStride), distValue, preg);
+            }
+        }
+    }
+}
+
 template <typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat, unsigned blockSizeElem>
 __tf__ PTO_INTERNAL OP_NAME(TROWEXPAND) OP_TYPE(broadcast)
 void TRowExpand(typename TileDataOut::TileDType __out__ dst,
@@ -112,50 +147,36 @@ void TRowExpand(typename TileDataOut::TileDType __out__ dst,
                 dstPtr, srcPtr, dstValidRow, dstValidCol, repeatTimes, eleCntValue);
             break;
         default:
-            TRowExpandInstr_PostUpdate<T, TileDataOut::Cols, TileDataIn::Cols>(
-                dstPtr, srcPtr, dstValidRow, dstValidCol, repeatTimes, eleCntValue);
+            constexpr bool isBroadcastSupportType = (sizeof(T) == 2 || sizeof(T) == 4);
+            constexpr bool isStaticShape =
+            (TileDataIn::Rows == TileDataIn::ValidRow) && (TileDataIn::Cols == TileDataIn::ValidCol) &&
+            (TileDataOut::Rows == TileDataOut::ValidRow) && (TileDataOut::Cols == TileDataOut::ValidCol);
+
+            constexpr unsigned elemPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
+            constexpr bool isBroadcast = TileDataIn::isRowMajor ?
+            ((TileDataIn::Rows == 1) && (TileDataIn::Cols == TileDataOut::Rows) && (TileDataOut::Cols == elemPerBlock)) :
+            ((TileDataIn::Cols == 1) && (TileDataIn::Rows == TileDataOut::Rows) && (TileDataOut::Cols == elemPerBlock));
+
+            if constexpr (isBroadcastSupportType && isStaticShape && isBroadcast) {
+            /*
+                isBroadcastSupportType:
+                Only b16 and b32 are supported.
+                isStaticShape:
+                Broadcast is a special case where the src tile is a single row or column,
+                src and dst tile are static shapes to ensure that the tile data is saved continuously.
+                isBroadcast:
+                [1, M] -> [M, elemPerBlock], src is row major.
+                [M, 1] -> [M, elemPerBlock], src is column major.
+                The value of sizeof(T) x M is a multiple of 32Byte, it also means that M must be a multiple of 8,
+                this constraint is implemented by the Tile basic definition.
+            */
+                TRowExpandBrcb<T, TileDataOut::Cols, TileDataIn::Cols>(
+                    dstPtr, srcPtr, dstValidRow, dstValidCol, TileDataIn::Numel, TileDataOut::Numel);
+            } else {
+                TRowExpandInstr_PostUpdate<T, TileDataOut::Cols, TileDataIn::Cols>(
+                    dstPtr, srcPtr, dstValidRow, dstValidCol, repeatTimes, eleCntValue);
+            }
             break;
-    }
-}
-
-template <typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat, unsigned blockSizeElem>
-__tf__ PTO_INTERNAL void TRowExpandBrcb(typename TileDataOut::TileDType __out__ dst,
-                                  typename TileDataIn::TileDType __in__ src,
-                                  unsigned dstValidRow,
-                                  unsigned dstValidCol,
-                                  unsigned version = VFImplKind::VFIMPL_DEFAULT) {
-    using T = typename TileDataOut::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
-
-    constexpr auto nElemPerVlds = CCE_VL / BLOCK_BYTE_SIZE;//8 element
-    uint16_t repeatTimes = TileDataIn::Numel / nElemPerVlds;
-    constexpr auto distValue = 
-        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
-    if constexpr (sizeof(T) == 4) {
-        __VEC_SCOPE__
-        {
-            RegTensor<T> vreg;
-            MaskReg preg;
-            uint32_t sreg = TileDataOut::Numel;
-            for (uint16_t i = 0; i < (uint16_t)repeatTimes; i++) {
-                preg = CreatePredicate<T>(sreg);
-                vlds(vreg, srcPtr, (int32_t)(i * nElemPerVlds), E2B_B32);
-                vsts(vreg, dstPtr, (int32_t)(i * nElemPerVlds * TileDataOut::RowStride), distValue, preg);
-            }
-        }
-    } else {
-        __VEC_SCOPE__
-        {
-            RegTensor<T> vreg;
-            MaskReg preg;
-            uint32_t sreg = TileDataOut::Numel;
-            for (uint16_t i = 0; i < (uint16_t)repeatTimes; i++) {
-                preg = CreatePredicate<T>(sreg);
-                vlds(vreg, srcPtr, (int32_t)(i * nElemPerVlds), E2B_B16);
-                vsts(vreg, dstPtr, (int32_t)(i * nElemPerVlds * TileDataOut::RowStride), distValue, preg);
-            }
-        }
     }
 }
 
@@ -169,35 +190,9 @@ PTO_INTERNAL void TROWEXPAND_IMPL(TileDataOut &dst, TileDataIn &src)
     TRowExpandCheck<TileDataOut, TileDataIn>(src.GetValidRow(), src.GetValidCol(), dstValidRow);
 
     using T = typename TileDataOut::DType;
-    constexpr bool isBroadcastSupportType = (sizeof(T) == 2 || sizeof(T) == 4);
-    constexpr bool isStaticShape =
-      (TileDataIn::Rows == TileDataIn::ValidRow) && (TileDataIn::Cols == TileDataIn::ValidCol) &&
-      (TileDataOut::Rows == TileDataOut::ValidRow) && (TileDataOut::Cols == TileDataOut::ValidCol);
 
-    constexpr unsigned elemPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
-    constexpr bool isBroadcast = TileDataIn::isRowMajor ?
-      ((TileDataIn::Rows == 1) && (TileDataIn::Cols == TileDataOut::Rows) && (TileDataOut::Cols == elemPerBlock)) :
-      ((TileDataIn::Cols == 1) && (TileDataIn::Rows == TileDataOut::Rows) && (TileDataOut::Cols == elemPerBlock));
-
-    if constexpr (isBroadcastSupportType && isStaticShape && isBroadcast) {
-      /*
-        isBroadcastSupportType:
-          Only b16 and b32 are supported.
-        isStaticShape:
-          Broadcast is a special case where the src tile is a single row or column,
-          src and dst tile are static shapes to ensure that the tile data is saved continuously.
-        isBroadcast:
-          [1, M] -> [M, elemPerBlock], src is row major.
-          [M, 1] -> [M, elemPerBlock], src is column major.
-          The value of sizeof(T) x M is a multiple of 32Byte, it also means that M must be a multiple of 8,
-          this constraint is implemented by the Tile basic definition.
-      */
-        TRowExpandBrcb<TileDataOut, TileDataIn, elementsPerRepeat, blockSizeElem>(
-            dst.data(), src.data(), dstValidRow, dstValidCol);
-    } else {
-        TRowExpand<TileDataOut, TileDataIn, elementsPerRepeat, blockSizeElem>(
-            dst.data(), src.data(), dstValidRow, dstValidCol);
-    }
+    TRowExpand<TileDataOut, TileDataIn, elementsPerRepeat, blockSizeElem>(
+        dst.data(), src.data(), dstValidRow, dstValidCol);
 }
 }  // namespace pto
 #endif
