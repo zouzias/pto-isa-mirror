@@ -11,7 +11,7 @@ Entry scripts for building and running the repository test suites.
 Common arguments:
 
 - `-r, --run-mode`: `sim` or `npu`
-- `-v, --soc-version`: `a3` or `a5` (mapped to an internal `SOC_VERSION`)
+- `-v, --soc-version`: `a2`, `a3`, or `a5` (mapped to an internal `SOC_VERSION`)
 - `-t, --testcase`: testcase name (e.g., `tmatmul`)
 - `-g, --gtest_filter`: optional gtest filter (run a single case)
 - `-d, --debug-enable`: optional debug build (only in `run_st.py`)

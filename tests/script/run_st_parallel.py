@@ -117,6 +117,12 @@ def _source_ascend_env():
 
 
 def _soc_config(soc_version: str):
+    if soc_version == "a2":
+        return {
+            "soc_version": "a2",
+            "soc_name": "Ascend910",
+            "st_dir": Path("tests/npu/a2a3/src/st").resolve(),
+        }
     if soc_version == "a3":
         return {
             "soc_version": "a3",
@@ -651,7 +657,7 @@ def main():
     ap = argparse.ArgumentParser(
         description="Build + run NPU ST in parallel (default: 1 process per NPU)"
     )
-    ap.add_argument("-v", "--soc-version", choices=["a3", "a5"], default="a3", help="SOC version: a3 or a5")
+    ap.add_argument("-v", "--soc-version", choices=["a2", "a3", "a5"], default="a3", help="SOC version: a2, a3, or a5")
     ap.add_argument(
         "-j",
         "--jobs",

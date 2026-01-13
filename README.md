@@ -141,6 +141,24 @@ CPU simulation is cross-platform and does not require Ascend drivers/CANN:
 python3 tests/run_cpu.py --clean --verbose
 ```
 
+### Master Runner (recommended)
+
+Use `run-pto.py` to auto-detect your host + NPU (when available) and run ST / demos / manual kernels with a unified summary table.
+
+```bash
+# Auto mode: prefer NPU if detected, otherwise CPU
+python3 run-pto.py
+
+# NPU ST (parallel) on the detected SoC
+python3 run-pto.py --backend npu --soc auto --run st
+
+# Run a subset
+python3 run-pto.py --backend npu --soc a3 --run st --st-testcases tmatmul,tfa --devices 0,1,2,3
+
+# Less console noise
+python3 run-pto.py --no-progress
+```
+
 Build & run the GEMM demo (optional):
 
 ```bash
@@ -158,7 +176,7 @@ python3 tests/run_cpu.py --demo flash_attn --verbose
 Running ST requires a working Ascend CANN environment and is typically Linux-only.
 
 ```bash
-python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]
+python3 tests/script/run_st.py -r [sim|npu] -v [a2|a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]
 ```
 
 Note: the `a3` backend covers the A2/A3 family (`include/pto/npu/a2a3`).

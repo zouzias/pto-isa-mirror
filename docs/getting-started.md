@@ -115,6 +115,25 @@ This builds and runs the CPU ST test binaries under `tests/cpu/st` and executes 
 python3 tests/run_cpu.py --clean --verbose
 ```
 
+## Master Runner (`run-pto.py`)
+
+`run-pto.py` is the recommended entrypoint when you want a single command to run **ST / demos / manual kernels** and get a unified summary table.
+
+```bash
+# Auto: prefer NPU if detected, otherwise CPU
+python3 run-pto.py
+
+# NPU ST (parallel) on the detected SoC
+python3 run-pto.py --backend npu --soc auto --run st
+
+# SIM ST
+python3 run-pto.py --backend sim --soc a3 --run st --timeout-sec 600 -j 16
+
+# Show which testcase is running (default) / disable it
+python3 run-pto.py --progress
+python3 run-pto.py --no-progress
+```
+
 Common options:
 
 - Run a single testcase:
@@ -172,12 +191,22 @@ Common options:
 
 Set environment variables according to [Environment_Variables](./getting-started.md#environment-variables) first;
 
+- Recommended: run via `run-pto.py`
+
+  ```bash
+  # Run all NPU ST testcases in parallel and show progress
+  python3 run-pto.py --backend npu --soc auto --run st
+
+  # Run a subset on specific devices
+  python3 run-pto.py --backend npu --soc a3 --run st --st-testcases tmatmul,tfa --devices 0,1,2,3
+  ```
+
 - Running a Single ST Test Case
 
   Running ST requires a working Ascend CANN environment and is typically Linux-only.
 
   ```bash
-  python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]
+  python3 tests/script/run_st.py -r [sim|npu] -v [a2|a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]
   ```
 
   Note: the `a3` backend covers the A2/A3 family (`include/pto/npu/a2a3`).
