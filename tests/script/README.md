@@ -33,10 +33,15 @@ python3 tests/script/run_st_parallel.py -v a3 --timeout-sec 120
 python3 tests/script/run_st_parallel.py -v a5 --timeout-sec 120
 ```
 
-To use it from `tests/run_st.sh` (only affects `npu all`):
+`run_st_parallel.py` runs all NPU ST testcases by default.
+Use `--testcases` to restrict the run, or `--include-long` (reserved for future long/perf exclusions).
+
+`tests/run_st.sh` uses the parallel runner by default for `npu all`.
 
 ```bash
-PTO_ST_PARALLEL=1 PTO_ST_TIMEOUT_SEC=120 ./tests/run_st.sh a3 npu all
+PTO_ST_TIMEOUT_SEC=120 ./tests/run_st.sh a3 npu all
+PTO_ST_SERIAL=1 ./tests/run_st.sh a3 npu all
+PTO_ST_PARALLEL_ARGS="--timeout-sec 180" ./tests/run_st.sh a3 npu all
 ```
 
 ## CPU ST

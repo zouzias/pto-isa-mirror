@@ -11,6 +11,20 @@
 
 set -e
 
+# Best-effort: source Ascend toolkit env when user hasn't done so.
+if [ -z "${ASCEND_HOME_PATH:-}" ]; then
+  if [ -f "${HOME}/Ascend/ascend-toolkit/set_env.sh" ]; then
+    # shellcheck disable=SC1090
+    source "${HOME}/Ascend/ascend-toolkit/set_env.sh" >/dev/null 2>&1 || true
+  elif [ -f "${HOME}/Ascend/ascend-toolkit/bin/setenv.bash" ]; then
+    # shellcheck disable=SC1090
+    source "${HOME}/Ascend/ascend-toolkit/bin/setenv.bash" >/dev/null 2>&1 || true
+  elif [ -f "${HOME}/Ascend/ascend-toolkit/latest/bin/setenv.bash" ]; then
+    # shellcheck disable=SC1090
+    source "${HOME}/Ascend/ascend-toolkit/latest/bin/setenv.bash" >/dev/null 2>&1 || true
+  fi
+fi
+
 ENABLE_A3=false
 ENABLE_A5=false
 ENABLE_SIM=false
@@ -51,10 +65,10 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmin -g TCOLMINTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tgatherb -g TGATHERBTest.case_float_2x128_2x16_2x128
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tci -g TCITest.case1_int32
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcvt -g TCVTTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcvt -g TCVTTest.case_fp32_fp32_2x128
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmov -g TMOVTest.case14_scaling_dynamic_int32_int8_0_1_1_1_0_param
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmov_acc2mat -g TMOVTest.case_nz2nz_fb_quant_4
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t textract -g TEXTRACTTest.case1_half_0_1_param
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t textract -g TEXTRACTTest.case1_half_0_1_16_16_32_param
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmrgsort -g TMRGSORTTest.case_topk1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmul -g TMULTest.case_float_64x64_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tdiv -g TDIVTest.case_float_64x64_64x64_64x64
@@ -64,10 +78,10 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcmps -g TCMPSTest.case_float_8x64_8x64_8x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowsum -g TROWSUMTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowexpand -g TROWEXPANDTest.case0
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowexpandadd -g TROWEXPANDDIVTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowexpandadd -g TROWEXPANDADDTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowexpanddiv -g TROWEXPANDDIVTest.case2
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowexpandmax -g TROWEXPANDDIVTest.case3
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowexpandmin -g TROWEXPANDDIVTest.case4
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowexpandmax -g TROWEXPANDMAXTest.case3
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowexpandmin -g TROWEXPANDMINTest.case4
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowexpandmul -g TROWEXPANDMULTest.case5
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowexpandsub -g TROWEXPANDSUBTest.case6
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tgather -g TGATHERTest.case1_float_P0101
@@ -83,7 +97,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tload_gm2mat -g TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_1_1_1_1_1_1_1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trsqrt -g TRSQRTTest.case_float_64x64_64x64_64x64_inPlace_False
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsqrt -g TSQRTTest.case_float_64x64_64x64_64x64_inPlace_False
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t texp -g TEXPTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t texp -g TEXPTest.case_float_64x64_64x64_64x64_inPlace_False
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tabs -g TABSTest.case_float_64x64_64x64_64x64_inPlace_False
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tlog -g TLOGTest.case_float_64x64_64x64_64x64_inPlace_False
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trecip -g TRECIPTest.case_float_64x64_64x64_64x64_inPlace_False
@@ -98,7 +112,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
-    if [ "$RUN_TYPE" = "npu" ] && [ "$RUN_MODE" = "run_st.py" ] && [ "${PTO_ST_PARALLEL:-0}" = "1" ]; then
+    if [ "$RUN_TYPE" = "npu" ] && [ "$RUN_MODE" = "run_st.py" ] && [ "${PTO_ST_SERIAL:-0}" != "1" ]; then
       python3 tests/script/run_st_parallel.py -v a3 ${PTO_ST_PARALLEL_ARGS:-}
     else
       python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolexpand
@@ -157,7 +171,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolmax -g TCOLMAXTest.case01
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolmin -g TCOLMINTest.case01
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolsum -g TCOLSUMTest.case01
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcvt -g TCVTTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcvt -g TCVTTest.case_fp32_fp32_2x128
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdivs -g TDIVSTest.case4
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdivs -g TDIVSTest.case5
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t texp -g TEXPTest.case_float_64x64_64x64_64x64_inPlace_False
@@ -215,7 +229,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tneg -g TNEGTest.case_float_64x64_64x64
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
-    if [ "$RUN_TYPE" = "npu" ] && [ "$RUN_MODE" = "run_st.py" ] && [ "${PTO_ST_PARALLEL:-0}" = "1" ]; then
+    if [ "$RUN_TYPE" = "npu" ] && [ "$RUN_MODE" = "run_st.py" ] && [ "${PTO_ST_SERIAL:-0}" != "1" ]; then
       python3 tests/script/run_st_parallel.py -v a5 ${PTO_ST_PARALLEL_ARGS:-}
     else
       python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tadd

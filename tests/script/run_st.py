@@ -15,6 +15,73 @@ import subprocess
 import shutil
 import argparse
 import signal
+import re
+
+def _prepend_env_path(var: str, path: str):
+    if not path:
+        return
+    cur = os.environ.get(var, "")
+    if not cur:
+        os.environ[var] = path
+    else:
+        os.environ[var] = f"{path}:{cur}"
+
+def _first_existing_dir(candidates):
+    for p in candidates:
+        if p and os.path.isdir(p):
+            return p
+    return None
+
+def _source_ascend_env():
+    """
+    Best-effort loader for Ascend environment variables.
+
+    Prefer sourcing `ASCEND_HOME_PATH/bin/setenv.bash` when available. Fall back
+    to common user install locations. If nothing is found, assume the caller
+    already exported required env vars.
+    """
+    candidates = []
+    ascend_home = (os.environ.get("ASCEND_HOME_PATH") or "").strip()
+    if ascend_home:
+        candidates.extend(
+            [
+                os.path.join(ascend_home, "bin", "setenv.bash"),
+                os.path.join(ascend_home, "set_env.sh"),
+            ]
+        )
+    candidates.extend(
+        [
+            os.path.expanduser("~/Ascend/ascend-toolkit/set_env.sh"),
+            os.path.expanduser("~/Ascend/ascend-toolkit/bin/setenv.bash"),
+            os.path.expanduser("~/Ascend/ascend-toolkit/latest/bin/setenv.bash"),
+        ]
+    )
+
+    script = None
+    for p in candidates:
+        if os.path.exists(p):
+            script = p
+            break
+    if script is None:
+        return
+
+    bash = shutil.which("bash") or "bash"
+    print(f"run env shell: {script}")
+    result = subprocess.run(
+        [bash, "-lc", f"source {script} >/dev/null 2>&1 && env -0"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        print(f"warning: failed sourcing env script: {script}\n{result.stderr}")
+        return
+    for item in result.stdout.split("\0"):
+        if not item or "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        os.environ[key] = value
 
 def ensure_python_module(module_name: str, pip_spec: str = None, timeout_sec: int = 1800):
     try:
@@ -66,42 +133,41 @@ def run_command(command, cwd=None, check=True, capture_output=False, timeout_sec
         raise
 
 def set_env_variables(run_mode, soc_version):
-    if run_mode == "sim":
-        ld_lib_path = os.environ.get("LD_LIBRARY_PATH", "")
-        if ld_lib_path:
-            filtered_paths = [
-                path for path in ld_lib_path.split(':')
-                if '/runtime/lib64' not in path
+    _source_ascend_env()
+
+    if run_mode != "sim":
+        return
+
+    ascend_home = (os.environ.get("ASCEND_HOME_PATH") or "").strip()
+    if not ascend_home:
+        raise EnvironmentError("ASCEND_HOME_PATH is not set (required for sim mode)")
+
+    # Prefer real runtime libs for camodel; opt-in stub usage only when needed.
+    use_stub = os.environ.get("PTO_ST_USE_STUB", "0") == "1"
+    if use_stub:
+        stub_lib_dir = _first_existing_dir(
+            [
+                os.path.join(ascend_home, "runtime", "lib64", "stub"),
+                os.path.join(ascend_home, "acllib", "lib64", "stub", "linux", "aarch64"),
+                os.path.join(ascend_home, "acllib", "lib64", "stub"),
             ]
-            new_ld_lib = ':'.join(filtered_paths)
-            os.environ["LD_LIBRARY_PATH"] = new_ld_lib
-
-        ascend_home = os.environ.get("ASCEND_HOME_PATH")
-        if not ascend_home:
-            raise EnvironmentError("ASCEND_HOME_PATH is not set")
-
-        os.environ["LD_LIBRARY_PATH"] = f"{ascend_home}/runtime/lib64/stub:{os.environ.get('LD_LIBRARY_PATH', '')}"
-
-        setenv_path = os.path.join(ascend_home, "bin", "setenv.bash")
-        if os.path.exists(setenv_path):
-            print(f"run env shell: {setenv_path}")
-            result = subprocess.run(
-                f"source {setenv_path} && env",
-                shell=True,
-                executable=shutil.which("bash") or "bash",
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            for line in result.stdout.splitlines():
-                if '=' in line:
-                    key, value = line.split('=', 1)
-                    os.environ[key] = value
+        )
+        if stub_lib_dir:
+            _prepend_env_path("LD_LIBRARY_PATH", stub_lib_dir)
         else:
-            print(f"warning: not found {setenv_path}")
+            print("warning: PTO_ST_USE_STUB=1 but stub lib dir not found")
 
-        simulator_lib_path = os.path.join(ascend_home, "tools", "simulator", soc_version, "lib")
-        os.environ["LD_LIBRARY_PATH"] = f"{simulator_lib_path}:{os.environ.get('LD_LIBRARY_PATH', '')}"
+    simulator_lib_dir = _first_existing_dir(
+        [
+            os.path.join(ascend_home, "aarch64-linux", "simulator", soc_version, "lib"),
+            os.path.join(ascend_home, "arm64-linux", "simulator", soc_version, "lib"),
+            os.path.join(ascend_home, "tools", "simulator", soc_version, "lib"),  # legacy
+        ]
+    )
+    if simulator_lib_dir:
+        _prepend_env_path("LD_LIBRARY_PATH", simulator_lib_dir)
+    else:
+        print(f"warning: simulator lib path not found for soc `{soc_version}` under {ascend_home}")
 
 def build_project(run_mode, soc_version, testcase = "all", debug_enable = False):
     original_dir = os.getcwd()
@@ -179,6 +245,14 @@ def run_binary(testcase, run_mode, args="all", timeout_sec=None):
         build_dir = "build/bin/"
         os.chdir(build_dir)
 
+        def _sanitize_dir_name(name: str) -> str:
+            name = (name or "").strip()
+            if not name:
+                return "unknown"
+            # Avoid characters that can confuse downstream simulators/loggers.
+            name = re.sub(r"[^0-9A-Za-z._-]+", "_", name)
+            return name[:128]
+
         # Guard against a stale/incorrect gtest filter silently running 0 tests.
         def ensure_gtest_has_tests(gtest_filter=None):
             cmd = ["./" + testcase, "--gtest_list_tests"]
@@ -188,9 +262,13 @@ def run_binary(testcase, run_mode, args="all", timeout_sec=None):
             # `--gtest_list_tests` output prints test names indented by two spaces.
             return any(line.startswith("  ") for line in out.splitlines())
 
+        if run_mode == "sim":
+            tag = "all" if args == "all" else _sanitize_dir_name(args)
+            camodel_log_dir = os.path.join("..", "camodel_logs", testcase, tag)
+            os.makedirs(camodel_log_dir, exist_ok=True)
+            os.environ["CAMODEL_LOG_PATH"] = camodel_log_dir
+
         if args != "all":
-            if run_mode == "sim":
-                os.environ["CAMODEL_LOG_PATH"] = f"../{args}"
             if not ensure_gtest_has_tests(args):
                 raise RuntimeError(f"gtest_filter matched no tests: {args}")
             single_case = "--gtest_filter=" + args

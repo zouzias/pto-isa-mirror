@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_pipe.hpp>
 
 using namespace pto;
 
@@ -43,10 +44,9 @@ __global__ AICORE void runTEXPANDS( __gm__ T __out__ *out, T scalar) {
 
     GlobalData dstGlobal(out );
 
-    TEXPANDS(dstTile, scalar);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    PipeEvent<PIPE_V, PIPE_MTE3> evComputeToStore;
+    evComputeToStore = TEXPANDS(dstTile, scalar);
+    TSTORE(dstGlobal, dstTile, evComputeToStore);
     out = dstGlobal.data();
 }
 

@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_pipe.hpp>
 
 using namespace std;
 using namespace pto;
@@ -29,16 +30,13 @@ PTO_INTERNAL void runTAddS(__gm__ T *out, __gm__  T *src, T scalar) {
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x28000);
 
-    TLOAD(dstTile, dstGlobal);
-
-    TLOAD(srcTile, srcGlobal);
-
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TADDS(dstTile, srcTile, scalar);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    PipeEvent<PIPE_MTE2, PIPE_V> evLoadDstToVec;
+    PipeEvent<PIPE_MTE2, PIPE_V> evLoadSrcToVec;
+    PipeEvent<PIPE_V, PIPE_MTE3> evComputeToStore;
+    evLoadDstToVec = TLOAD(dstTile, dstGlobal);
+    evLoadSrcToVec = TLOAD(srcTile, srcGlobal);
+    evComputeToStore = TADDS(dstTile, srcTile, scalar, evLoadDstToVec, evLoadSrcToVec);
+    TSTORE(dstGlobal, dstTile, evComputeToStore);
     out = dstGlobal.data();
 }
 

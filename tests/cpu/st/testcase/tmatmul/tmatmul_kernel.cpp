@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_pipe.hpp>
 
 using namespace pto;
 
@@ -69,31 +70,28 @@ __global__ AICORE void RunTMATMUL(__gm__ outType *out, __gm__ AType *src0, __gm_
     TASSIGN(biasTile, 0x0);
 
     /******************************TLOAD*****************************/
-    TLOAD(aMatTile,src0Global);
-    TLOAD(bMatTile,src1Global);
-
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    PipeEvent<PIPE_MTE2, PIPE_MTE1> evLoadAToMov;
+    PipeEvent<PIPE_MTE2, PIPE_MTE1> evLoadBToMov;
+    evLoadAToMov = TLOAD(aMatTile, src0Global);
+    evLoadBToMov = TLOAD(bMatTile, src1Global);
 
     /**************************TMOV && TEXTRACT**************************/
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
+    PipeEvent<PIPE_MTE1, PIPE_M> evMovAToMatmul;
+    PipeEvent<PIPE_MTE1, PIPE_M> evMovBToMatmul;
+    evMovAToMatmul = TMOV(aTile, aMatTile, evLoadAToMov);
+    evMovBToMatmul = TMOV(bTile, bMatTile, evLoadBToMov);
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-
+    PipeEvent<PIPE_M, PIPE_FIX> evMatmulToStore;
     if constexpr (isBias) {
-        GlobalDataSrc2 src2Global(src2);        
-        TLOAD(biasTile,src2Global);        
-        TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
+        GlobalDataSrc2 src2Global(src2);
+        TLOAD(biasTile, src2Global);
+        evMatmulToStore = TMATMUL_BIAS(cTile, aTile, bTile, biasTile, evMovAToMatmul, evMovBToMatmul);
     } else {
-        TMATMUL(cTile, aTile, bTile);
+        evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMovAToMatmul, evMovBToMatmul);
     }
 
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     /********************************TSTORE****************************/
-    TSTORE(dstGlobal,cTile);
+    TSTORE(dstGlobal, cTile, evMatmulToStore);
 
     out = dstGlobal.data();
 }   

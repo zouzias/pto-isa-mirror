@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include <gtest/gtest.h>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_pipe.hpp>
 
 using namespace std;
 using namespace pto;
@@ -43,18 +44,15 @@ AICORE inline void runTEXTRACT(__gm__ DT *out, __gm__ ST *src)
     std::fill(dstTile.data(),dstTile.data()+rows*cols,0);
 
     /*************************************TLOAD****************************************/
-    TLOAD(srcTile,srcGlobal);
+    PipeEvent<PIPE_MTE2, PIPE_MTE1> evLoadToExtract;
+    PipeEvent<PIPE_MTE1, PIPE_MTE3> evExtractToStore;
+    evLoadToExtract = TLOAD(srcTile, srcGlobal);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-
-    /**********************************TMOV && TEXTRACT**********************************/
-    TEXTRACT(dstTile, srcTile, idxRow, idxCol);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    /**********************************TEXTRACT**********************************/
+    evExtractToStore = TEXTRACT(dstTile, srcTile, idxRow, idxCol, evLoadToExtract);
 
     /****************************************TSTORE*****************************************/
-    TSTORE(dstGlobal,dstTile);
+    TSTORE(dstGlobal, dstTile, evExtractToStore);
     out = dstGlobal.data();
 }
 
@@ -214,4 +212,3 @@ TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_2_1) {
 TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_2_2) {
     textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 2>();
 }
-

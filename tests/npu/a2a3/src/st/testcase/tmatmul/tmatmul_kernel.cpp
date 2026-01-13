@@ -76,24 +76,22 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
     TASSIGN(biasTile, 0x0);
 
     /******************************TLOAD*****************************/
-    TLOAD(aMatTile, src0Global);
-    RecordEvent evLoaded = TLOAD(bMatTile, src1Global);
-    if constexpr (isBias) {
-        evLoaded = TLOAD(biasDataTile, src2Global);
-    }
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
 
     /**************************TMOV**************************/
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = evLoaded;
-
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
     if constexpr (isBias) {
-        TMOV(aTile, aMatTile, evLoadToMte1);
-        TMOV(bTile, bMatTile, evLoadToMte1);
-        evMte1ToMatmul = TMOV(biasTile, biasDataTile, evLoadToMte1);
+        Event<Op::TLOAD, Op::TMOV_M2L> evLoadBiasToMte1;
+        evLoadBiasToMte1 = TLOAD(biasDataTile, src2Global);
+        TMOV(aTile, aMatTile, evLoadAToMte1);
+        TMOV(bTile, bMatTile, evLoadBToMte1);
+        evMte1ToMatmul = TMOV(biasTile, biasDataTile, evLoadBiasToMte1);
     } else {
-        TMOV(aTile, aMatTile, evLoadToMte1);
-        evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+        TMOV(aTile, aMatTile, evLoadAToMte1);
+        evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
     }
 
     /**************************TMATMUL**************************/
@@ -153,13 +151,14 @@ __global__ AICORE void RunTMATMUL_MX(__gm__ T *out, __gm__ U *src0, __gm__ S *sr
     TASSIGN(aScale, 0x0);
     TASSIGN(bScale, 0x20);
 
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
 
     Event<Op::TMOV_M2L, Op::TMATMUL_MX> evMte1ToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMte1);
-    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    TMOV(aTile, aMatTile, evLoadAToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
 
     Event<Op::TMATMUL_MX, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL_MX(cTile, aTile, aScale, bTile, bScale, evMte1ToMatmul);
@@ -226,25 +225,26 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
         GlobalDataSrc1 src1Global(src1 + validN * i * BASEK);
 
         /******************************TLOAD*****************************/
-        TLOAD(aMatTile, src0Global);
-        RecordEvent evLoaded = TLOAD(bMatTile, src1Global);
-        if constexpr (isBias) {
-            if (i == 0) {
-                evLoaded = TLOAD(biasDataTile, src2Global);
-            }
-        }
-
-        /**************************TMOV**************************/
-        Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-        evLoadToMte1 = evLoaded;
+        Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+        Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+        evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+        evLoadBToMte1 = TLOAD(bMatTile, src1Global);
 
         Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-        TMOV(aTile, aMatTile, evLoadToMte1);
-        evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
         if constexpr (isBias) {
             if (i == 0) {
-                evMte1ToMatmul = TMOV(biasTile, biasDataTile, evLoadToMte1);
+                Event<Op::TLOAD, Op::TMOV_M2L> evLoadBiasToMte1;
+                evLoadBiasToMte1 = TLOAD(biasDataTile, src2Global);
+                TMOV(aTile, aMatTile, evLoadAToMte1);
+                TMOV(bTile, bMatTile, evLoadBToMte1);
+                evMte1ToMatmul = TMOV(biasTile, biasDataTile, evLoadBiasToMte1);
+            } else {
+                TMOV(aTile, aMatTile, evLoadAToMte1);
+                evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
             }
+        } else {
+            TMOV(aTile, aMatTile, evLoadAToMte1);
+            evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
         }
 
         if (i == 0) {

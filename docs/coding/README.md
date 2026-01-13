@@ -11,4 +11,5 @@ Developer documentation for extending PTO Tile Lib: how Tiles are modeled, how i
 - Tile abstraction and programming model: [`docs/coding/Tile.md`](Tile.md)
 - Global memory tensors (shape/stride/layout): [`docs/coding/GlobalTensor.md`](GlobalTensor.md)
 - Events and synchronization model: [`docs/coding/Event.md`](Event.md)
+- Cross-core GM FIFO helpers (Pipe/TPUSH/TPOP): [`docs/coding/Pipe.md`](Pipe.md)
 - Scalar parameters and enums: [`docs/coding/Scalar.md`](Scalar.md)

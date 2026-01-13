@@ -87,6 +87,7 @@ def _source_ascend_env():
     candidates.extend(
         [
             os.path.expanduser("~/Ascend/ascend-toolkit/set_env.sh"),
+            os.path.expanduser("~/Ascend/ascend-toolkit/bin/setenv.bash"),
             os.path.expanduser("~/Ascend/ascend-toolkit/latest/bin/setenv.bash"),
         ]
     )
@@ -129,6 +130,23 @@ def _soc_config(soc_version: str):
             "st_dir": Path("tests/npu/a5/src/st").resolve(),
         }
     raise ValueError(f"unsupported soc_version: {soc_version}")
+
+def _ensure_npu_build(st_dir: Path):
+    """
+    Guard against reusing a sim build directory for NPU runs.
+
+    When `--skip-build` is used with a stale `build/` produced by `RUN_MODE=sim`,
+    the resulting binaries link camodel libs and fail at runtime.
+    """
+    cache = (st_dir / "build" / "CMakeCache.txt").resolve()
+    if not cache.exists():
+        raise FileNotFoundError(f"missing {cache} (cannot use --skip-build without an existing build)")
+    txt = cache.read_text(encoding="utf-8", errors="ignore")
+    if "RUN_MODE:STRING=npu" not in txt:
+        raise RuntimeError(
+            "existing `build/` is not an NPU build (RUN_MODE!=npu); "
+            "please remove `build/` or rerun without `--skip-build`"
+        )
 
 
 def _parse_npu_smi_info(text):
@@ -354,6 +372,9 @@ def _sanitize_filename(s, limit=180):
     if len(s) > limit:
         return s[:limit]
     return s
+
+
+_LONG_TESTCASES_DEFAULT = set()
 
 
 def _parse_gtest_list(text):
@@ -650,10 +671,14 @@ def main():
     ap.add_argument("--isolate", action="store_true", help="run each testcase in a private sandbox (slower)")
     ap.add_argument("--monitor-npu-smi", action="store_true",
                     help="poll `npu-smi` during test execution (slower, but can catch unhealthy devices)")
+    ap.add_argument("--include-long", action="store_true",
+                    help="include long/perf testcases (currently none excluded by default)")
     args = ap.parse_args()
 
     cfg = _soc_config(args.soc_version)
     st_dir = cfg["st_dir"]
+    if args.skip_build:
+        _ensure_npu_build(st_dir)
     env = _source_ascend_env()
     run_id = os.environ.get("PTO_ST_RUN_ID") or f"{time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}_{uuid.uuid4().hex[:8]}"
     work_dir = None
@@ -699,12 +724,21 @@ def main():
         sys.stdout.flush()
 
         testcases = _extract_testcases(st_dir=st_dir)
-        if args.testcases.strip():
+        explicit_testcases = bool(args.testcases.strip())
+        if explicit_testcases:
             wanted = {x.strip() for x in args.testcases.split(",") if x.strip()}
             testcases = [t for t in testcases if t in wanted]
             missing = sorted(wanted - set(testcases))
             if missing:
                 raise RuntimeError(f"unknown testcase(s): {missing}")
+        else:
+            include_long = args.include_long or (os.environ.get("PTO_ST_INCLUDE_LONG", "0") == "1")
+            if not include_long:
+                before = list(testcases)
+                testcases = [t for t in testcases if t not in _LONG_TESTCASES_DEFAULT]
+                removed = sorted(set(before) - set(testcases))
+                if removed:
+                    print(f"[INFO] excluding long testcases: {removed} (set `PTO_ST_INCLUDE_LONG=1` or pass `--include-long`)")
         print(f"[INFO] testcases: {len(testcases)}")
         sys.stdout.flush()
 

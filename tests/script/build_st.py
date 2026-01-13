@@ -15,6 +15,56 @@ import subprocess
 import shutil
 import argparse
 
+def _source_ascend_env():
+    """
+    Best-effort loader for Ascend environment variables.
+
+    This script is often invoked via `tests/run_st.sh` in environments where the
+    user has not manually sourced Ascend toolkit envs.
+    """
+    candidates = []
+    ascend_home = (os.environ.get("ASCEND_HOME_PATH") or "").strip()
+    if ascend_home:
+        candidates.extend(
+            [
+                os.path.join(ascend_home, "bin", "setenv.bash"),
+                os.path.join(ascend_home, "set_env.sh"),
+            ]
+        )
+    candidates.extend(
+        [
+            os.path.expanduser("~/Ascend/ascend-toolkit/set_env.sh"),
+            os.path.expanduser("~/Ascend/ascend-toolkit/bin/setenv.bash"),
+            os.path.expanduser("~/Ascend/ascend-toolkit/latest/bin/setenv.bash"),
+        ]
+    )
+
+    script = None
+    for p in candidates:
+        if os.path.exists(p):
+            script = p
+            break
+    if script is None:
+        return
+
+    bash = shutil.which("bash") or "bash"
+    print(f"run env shell: {script}")
+    result = subprocess.run(
+        [bash, "-lc", f"source {script} >/dev/null 2>&1 && env -0"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        print(f"warning: failed sourcing env script: {script}\n{result.stderr}")
+        return
+    for item in result.stdout.split("\0"):
+        if not item or "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        os.environ[key] = value
+
 def run_command(command, cwd=None, check=True):
     try:
         print(f"run command: {' '.join(command)}")
@@ -100,6 +150,8 @@ def main():
 
     original_dir = os.getcwd()
     try:
+        _source_ascend_env()
+
         # 获取当前脚本（run_st.py）的绝对路径
         script_path = os.path.abspath(__file__)
 

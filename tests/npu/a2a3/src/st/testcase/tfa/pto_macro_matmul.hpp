@@ -39,14 +39,6 @@ namespace pto{
     #define UNIT_FLAG_ENABLE(i, n) (LAST_LOOP(i, n) ? 3 : 2)
 
 
-    [aicore] inline uint64_t getPingPong(uint32_t flip){
-        static uint64_t pingpong = 0;
-        if(flip) {
-            pingpong = 1- pingpong;
-        }
-        return pingpong;
-    }
-
     // Memory constraints
     constexpr uint32_t MEM_BUFFER_SIZE_BYTES = 64 * 1024/2;  // 64KB per buffer with pingpong (32KB)
     constexpr uint32_t HALF_SIZE_BYTES = 2;                // sizeof(half) = 2 bytes
@@ -91,91 +83,104 @@ namespace pto{
         return layout_t::NONE;
     }
 
-     template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, layout_t LAYOUT = layout_t::NONE, typename TileDataA, typename TileDataB, typename TileDataC>
-    [aicore] inline RecordEvent pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, TileDataC &cAccTile){
-
-
+    template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, layout_t LAYOUT = layout_t::NONE, typename TileDataA,
+        typename TileDataB, typename TileDataC>
+    [aicore] inline RecordEvent pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, TileDataC &cAccTile,
+        bool accumulate = false) {
         constexpr layout_t layout = deduce_layout<TileDataA, TileDataB>();
 
         static_assert(layout != layout_t::NONE, "Deduced layout is NONE, check tile SLayouts");
-        // Assert that template LAYOUT matches deduced layout if LAYOUT is not NONE
-        if constexpr (LAYOUT != layout_t::NONE){
-            static_assert(LAYOUT == layout, "Layout mismatch: template LAYOUT does not match deduced layout from tile SLayouts. "
-                                             "Check SLayout of TileDataA and TileDataB.");
+        if constexpr (LAYOUT != layout_t::NONE) {
+            static_assert(LAYOUT == layout,
+                "Layout mismatch: template LAYOUT does not match deduced layout from tile SLayouts.");
         }
 
-        // Re-implement the original PIPE_M <-> PIPE_MTE1 ping-pong protocol via Event/TSYNC:
-        // - M -> MTE1: protect L0A/L0B reuse (wait before TEXTRACT, record after TMATMUL)
-        // - MTE1 -> M: ensure TEXTRACT finishes before TMATMUL (record+wait before TMATMUL)
-        //
-        // Use fixed event IDs 0/1 to match the original ping-pong tokens.
-        static bool primed = false;
-        if (!primed) {
-            Event<Op::TMATMUL, Op::TEXTRACT_M2LR, false, EVENT_ID0> ev0;
-            Event<Op::TMATMUL, Op::TEXTRACT_M2LR, false, EVENT_ID1> ev1;
-            ev0.Record();
-            ev1.Record();
-            primed = true;
-        }
-
-        uint64_t pingpong = getPingPong(0);
         const uint64_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
-        for (uint64_t k = 0 ; k < (uint64_t) (Tile_K / Cube_K); k++){
+        static_assert(Tile_K % Cube_K == 0, "Tile_K must be divisible by chosen Cube_K");
+
+        // Fast path: single K-slice matmul needs no ping-pong dependency events.
+        // This also avoids leaving unmatched TMATMUL->TEXTRACT events "recorded" without a corresponding wait,
+        // which can exhaust limited hardware event resources over multiple tiles on real NPU hardware.
+        if constexpr (Tile_K == Cube_K) {
             using LeftTile = TileLeft<half, Cube_M, Cube_K, Cube_M, Cube_K>;
-            LeftTile al0Tiles[2] = {LeftTile(), LeftTile()};
             using RightTile = TileRight<half, Cube_K, Cube_N, Cube_K, Cube_N>;
+            LeftTile al0;
+            RightTile bl0;
+
+            TASSIGN(al0, (uint64_t)L0A_BUF0);
+            TASSIGN(bl0, (uint64_t)L0B_BUF0);
+
+            // For NT layout, the input tiles may represent a larger K dimension; K-slice offset is 0 here.
+            if (layout == layout_t::NT) {
+                TASSIGN(aMatTile, (uint64_t)aMatTile.data());
+                TASSIGN(bMatTile, (uint64_t)bMatTile.data());
+            }
+
+            TEXTRACT(al0, aMatTile, 0, 0);
+            auto recordExtractB = TEXTRACT(bl0, bMatTile, 0, 0);
+            Event<Op::TEXTRACT_M2LR, Op::TMATMUL> evExtractToMatmul;
+            evExtractToMatmul = recordExtractB;
+
+            if (!accumulate) {
+                return TMATMUL(cAccTile, al0, bl0, evExtractToMatmul);
+            }
+            return TMATMUL_ACC(cAccTile, cAccTile, al0, bl0, evExtractToMatmul);
+        }
+
+        uint64_t pingpong = 0;
+        bool matmulRecorded[2] = {false, false};
+        Event<Op::TMATMUL, Op::TEXTRACT_M2LR> evMatmulToExtract[2];
+
+        RecordEvent lastMatmul = {};
+        for (uint64_t k = 0; k < (static_cast<uint64_t>(Tile_K) / Cube_K); k++) {
+            using LeftTile = TileLeft<half, Cube_M, Cube_K, Cube_M, Cube_K>;
+            using RightTile = TileRight<half, Cube_K, Cube_N, Cube_K, Cube_N>;
+            LeftTile al0Tiles[2] = {LeftTile(), LeftTile()};
             RightTile bl0Tiles[2] = {RightTile(), RightTile()};
 
-            TASSIGN(al0Tiles[0], (uint64_t) L0A_BUF0);
-            TASSIGN(al0Tiles[1], (uint64_t) L0A_BUF1);
-            TASSIGN(bl0Tiles[0], (uint64_t) L0B_BUF0);
-            TASSIGN(bl0Tiles[1], (uint64_t) L0B_BUF1);
-
-            Event<Op::TMATMUL, Op::TEXTRACT_M2LR, false, EVENT_ID0> evMatmulToExtract0;
-            Event<Op::TMATMUL, Op::TEXTRACT_M2LR, false, EVENT_ID1> evMatmulToExtract1;
-            Event<Op::TEXTRACT_M2LR, Op::TMATMUL, false, EVENT_ID0> evExtractToMatmul0;
-            Event<Op::TEXTRACT_M2LR, Op::TMATMUL, false, EVENT_ID1> evExtractToMatmul1;
-
-            // Wait for previous TMATMUL that used this pingpong L0 buffer.
-            if (pingpong == 0) {
-                evMatmulToExtract0.Wait();
-            } else {
-                evMatmulToExtract1.Wait();
-            }
+            TASSIGN(al0Tiles[0], (uint64_t)L0A_BUF0);
+            TASSIGN(al0Tiles[1], (uint64_t)L0A_BUF1);
+            TASSIGN(bl0Tiles[0], (uint64_t)L0B_BUF0);
+            TASSIGN(bl0Tiles[1], (uint64_t)L0B_BUF1);
 
             if (layout == layout_t::NT) {
-                TASSIGN(aMatTile, (uint64_t) aMatTile.data() + k * Cube_K * Cube_M * sizeof(typename TileDataA::DType));
-                TASSIGN(bMatTile, (uint64_t) bMatTile.data() + k * Cube_K * Cube_N * sizeof(typename TileDataB::DType));
-            } 
-
-            TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
-            TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
-
-            // Ensure TEXTRACT completes on MTE1 before TMATMUL starts on M.
-            if (pingpong == 0) {
-                evExtractToMatmul0.Record();
-                evExtractToMatmul0.Wait();
-            } else {
-                evExtractToMatmul1.Record();
-                evExtractToMatmul1.Wait();
+                TASSIGN(aMatTile,
+                    (uint64_t)aMatTile.data() + k * Cube_K * Cube_M * sizeof(typename TileDataA::DType));
+                TASSIGN(bMatTile,
+                    (uint64_t)bMatTile.data() + k * Cube_K * Cube_N * sizeof(typename TileDataB::DType));
             }
 
-            if (k == 0) {
-                TMATMUL(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
+            if (matmulRecorded[pingpong]) {
+                TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0, evMatmulToExtract[pingpong]);
             } else {
-                TMATMUL_ACC(cAccTile, cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
+                TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
+            }
+            auto recordExtractB = TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
+            Event<Op::TEXTRACT_M2LR, Op::TMATMUL> evExtractToMatmul;
+            evExtractToMatmul = recordExtractB;
+
+            if (k == 0 && !accumulate) {
+                lastMatmul = TMATMUL(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], evExtractToMatmul);
+            } else {
+                lastMatmul =
+                    TMATMUL_ACC(cAccTile, cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], evExtractToMatmul);
             }
 
-            // Signal MTE1 that TMATMUL has finished consuming the pingpong L0 buffers.
-            if (pingpong == 0) {
-                evMatmulToExtract0.Record();
-            } else {
-                evMatmulToExtract1.Record();
-            }
-            pingpong = getPingPong(1);
+            evMatmulToExtract[pingpong] = lastMatmul;
+            matmulRecorded[pingpong] = true;
+            pingpong ^= 1;
         }
 
-        return {};
+        // Drain any outstanding TMATMUL->TEXTRACT flags that were recorded but won't be consumed
+        // by a subsequent TEXTRACT within this call.
+        if (matmulRecorded[0]) {
+            TSYNC(evMatmulToExtract[0]);
+        }
+        if (matmulRecorded[1]) {
+            TSYNC(evMatmulToExtract[1]);
+        }
+
+        return lastMatmul;
     }
 
 }

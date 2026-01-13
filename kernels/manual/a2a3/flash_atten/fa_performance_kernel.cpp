@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <acl/acl.h>
 #include <pto/pto-inst.hpp>
+#include <pto/common/pto_pipe.hpp>
 
 #include "fa_performance_kernel.h"
 #include <pto/npu/a2a3/custom/Pto_prefetch.hpp>
@@ -279,7 +280,8 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, __gm__ half *q, __gm
         GlobalDataQ qGlobal(q);
         GlobalDataK kGlobal(k + s1_index * HEAD_SIZE);
 
-        wait_flag(PIPE_MTE1, PIPE_MTE2, qkMatTileEventId);
+        DynPipeEvent<PIPE_MTE1, PIPE_MTE2> evQkMatTile(static_cast<event_t>(qkMatTileEventId));
+        evQkMatTile.Wait();
 
         if (tile_id == 0 && sub_tile_id == 0) {
             TLOAD(qMatTile, qGlobal);
@@ -287,21 +289,22 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, __gm__ half *q, __gm
 
         TLOAD(kMatTile, kGlobal);
 
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        DynPipeEvent<PIPE_MTE2, PIPE_MTE1> evMte2ToMte1(EVENT_ID0);
+        evMte2ToMte1.Record().Wait();
 
-        wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+        DynPipeEvent<PIPE_FIX, PIPE_M> evAccSlot(static_cast<event_t>(accTileEvtID));
+        evAccSlot.Wait();
 
         pto_macro_matmul<Cube_S0, Cube_HEAD, Cube_S1>(qMatTile, kMatTile, qkAccTile);
 
-        set_flag(PIPE_MTE1, PIPE_MTE2, qkMatTileEventId);
-        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        evQkMatTile.Record();
+        DynPipeEvent<PIPE_M, PIPE_FIX> evMToFix(EVENT_ID0);
+        evMToFix.Record().Wait();
 
         const int sync_iter = tile_id;
         const bool should_wait_consume = should_wait_consumption<QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(sync_iter);
         if (sub_tile_id == 0 && should_wait_consume)
-            wait_flag_dev(BUF0_SM_CONSUMED); // wait for SM consume data
+            DynCvFlagEvent<PIPE_MTE2>(BUF0_SM_CONSUMED).Wait(); // wait for SM consume data
 
         using GlobalDataQK =
             GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
@@ -313,10 +316,10 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, __gm__ half *q, __gm
         GlobalDataQK qkGlobalTile(qk_tile_fifo + base_elems);
         TSTORE(qkGlobalTile, qkAccTile);
 
-        set_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+        evAccSlot.Record();
 
         if (sub_tile_id == static_cast<int>(kTileFactor) - 1)
-            ffts_cross_core_sync(PIPE_FIX, _getFFTSMsg(CV_CORE_SYNC, BUF0_QK_READY)); // notify for QK produce data
+            DynCvFlagEvent<PIPE_FIX>(BUF0_QK_READY).Record(); // notify for QK produce data
     }
 }
 
@@ -344,13 +347,14 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
         using GlobalVT =
             GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
 
-        wait_flag(PIPE_MTE1, PIPE_MTE2, svMatTileEventId);
+        DynPipeEvent<PIPE_MTE1, PIPE_MTE2> evSvMatTile(static_cast<event_t>(svMatTileEventId));
+        evSvMatTile.Wait();
 
         GlobalVT vLoad((__gm__ half *)(v + s1_index * HEAD_SIZE));
         TLOAD(vMatTile, vLoad);
 
         if (sub_tile_id == 0)
-            wait_flag_dev(BUF1_SM_READY); // wait for softmax produce data
+            DynCvFlagEvent<PIPE_MTE2>(BUF1_SM_READY).Wait(); // wait for softmax produce data
 
 // For TILE_S1 > CUBE_S1, need to stride by Tile_S1 for each Cube_S1 chunk
 #ifndef P_FIFO_USE_NZ
@@ -368,26 +372,27 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
         GlobalXexpTileT xexpLoad(p_tile_fifo + base_elems);
         TLOAD(pMatTile, xexpLoad);
         if (sub_tile_id == static_cast<int>(kTileFactor) - 1 && should_notify_consume)
-            ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(CV_CORE_SYNC, BUF1_SV_CONSUMED)); // notify SV consume data
+            DynCvFlagEvent<PIPE_MTE2>(BUF1_SV_CONSUMED).Record(); // notify SV consume data
 
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        DynPipeEvent<PIPE_MTE2, PIPE_MTE1> evMte2ToMte1(EVENT_ID0);
+        evMte2ToMte1.Record().Wait();
 
         if (sub_tile_id == 0) {
-            wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+            DynPipeEvent<PIPE_FIX, PIPE_M> evAccSlot(static_cast<event_t>(accTileEvtID));
+            evAccSlot.Wait();
             pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile, false);
         } else {
             pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile, true);
         }
 
-        set_flag(PIPE_MTE1, PIPE_MTE2, svMatTileEventId);
+        evSvMatTile.Record();
 
         if (sub_tile_id == static_cast<int>(kTileFactor) - 1) {
-            set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-            wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+            DynPipeEvent<PIPE_M, PIPE_FIX> evMToFix(EVENT_ID0);
+            evMToFix.Record().Wait();
 
             if (should_wait_consume)
-                wait_flag_dev(UPDATE_CONSUMED); // wait for update consume data
+                DynCvFlagEvent<PIPE_FIX>(UPDATE_CONSUMED).Wait(); // wait for update consume data
 
             using GlobalDataPV =
                 GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
@@ -396,9 +401,10 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
                 static_cast<size_t>(buf_idx_pv) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(HEAD_SIZE);
             GlobalDataPV pvGlobalTile((__gm__ float *)(pv_tile_fifo + base_elems_pv));
             TSTORE(pvGlobalTile, pvAccTile);
-            set_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+            DynPipeEvent<PIPE_FIX, PIPE_M> evAccSlot(static_cast<event_t>(accTileEvtID));
+            evAccSlot.Record();
 
-            ffts_cross_core_sync(PIPE_FIX, _getFFTSMsg(CV_CORE_SYNC, UPDATE_READY)); // notify update produce data
+            DynCvFlagEvent<PIPE_FIX>(UPDATE_READY).Record(); // notify update produce data
         }                                                                   // end loop
     }                                                                       // end if DAV_CUBE
 }
@@ -426,9 +432,10 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         const bool should_wait_consume = should_wait_consumption<QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(sync_iter);
         const bool should_notify_consume = should_notify_consumption<QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(sync_iter);
 
-        wait_flag(PIPE_V, PIPE_MTE2, pTileEventId);
+        DynPipeEvent<PIPE_V, PIPE_MTE2> evVToMte2(static_cast<event_t>(pTileEventId));
+        evVToMte2.Wait();
         if (row_slice == 0)
-            wait_flag_dev(BUF0_QK_READY); // wait for QK produce data
+            DynCvFlagEvent<PIPE_MTE2>(BUF0_QK_READY).Wait(); // wait for QK produce data
 
         const uint32_t buf_idx = static_cast<uint32_t>(tile_id % QKP_CV_FIFO);
         const size_t base_elems = static_cast<size_t>(buf_idx) * static_cast<size_t>(kTileFactor) *
@@ -453,10 +460,10 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         }
 
         if (row_slice == static_cast<int>(kTileFactor) - 1 && should_notify_consume)
-            ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(CV_CORE_SYNC, BUF0_SM_CONSUMED)); // notify for SM consume data
+            DynCvFlagEvent<PIPE_MTE2>(BUF0_SM_CONSUMED).Record(); // notify for SM consume data
 
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        DynPipeEvent<PIPE_MTE2, PIPE_V> evMte2ToV(EVENT_ID0);
+        evMte2ToV.Record().Wait();
 
         // Extract per-slice views into the per-core reduce tiles so each slice writes into its row range
         using ReduceSliceTile = Tile<TileType::Vec, float, Vec_S0, 1, BLayout::ColMajor, Vec_S0, 1>;
@@ -479,7 +486,8 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         // Extract current slice state from full-length reduce tiles
         // TODO: change to TEXTRACT when available
 
-        wait_flag(PIPE_MTE3, PIPE_V, pTileEventId);
+        DynPipeEvent<PIPE_MTE3, PIPE_V> evMte3ToV(static_cast<event_t>(pTileEventId));
+        evMte3ToV.Wait();
         if (initFlag) {
             pto_macro_fa_softmax<true, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice,
                 m2_global_max_slice, l2_global_sum_slice, l1_exp_max_slice, input_reduce_tmp, qkVecTile);
@@ -488,13 +496,13 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
                 m2_global_max_slice, l2_global_sum_slice, l1_exp_max_slice, input_reduce_tmp, qkVecTile);
         }
 
-        set_flag(PIPE_V, PIPE_MTE2, pTileEventId);
-        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        evVToMte2.Record();
+        DynPipeEvent<PIPE_V, PIPE_MTE3> evVToMte3(EVENT_ID0);
+        evVToMte3.Record().Wait();
 
         const bool should_wait_sv_consumed = should_wait_consumption<QKP_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(sync_iter);
         if (row_slice == 0 && should_wait_sv_consumed)
-            wait_flag_dev(BUF1_SV_CONSUMED); // wait for SV consume data
+            DynCvFlagEvent<PIPE_MTE3>(BUF1_SV_CONSUMED).Wait(); // wait for SV consume data
 
         using GlobalPTileHalfSub =
             GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
@@ -529,9 +537,10 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         }
 
         if (row_slice == static_cast<int>(kTileFactor) - 1)
-            ffts_cross_core_sync(PIPE_MTE3, _getFFTSMsg(CV_CORE_SYNC, BUF1_SM_READY)); // notify softmax produce data
+            DynCvFlagEvent<PIPE_MTE3>(BUF1_SM_READY).Record(); // notify softmax produce data
 
-        set_flag(PIPE_MTE3, PIPE_V, pTileEventId);
+        DynPipeEvent<PIPE_MTE3, PIPE_V> evMte3ToVDone(static_cast<event_t>(pTileEventId));
+        evMte3ToVDone.Record();
     }
 }
 
@@ -556,21 +565,21 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
         __gm__ float *pv_out_ptr = pv_tile_fifo + base_elems + subblock_base_rows * HEAD_SIZE;
         GlobalDataPV_VEC pvGlobalVec(pv_out_ptr);
 
-        wait_flag_dev(UPDATE_READY); // wait for update consume data
+        DynCvFlagEvent<PIPE_MTE2>(UPDATE_READY).Wait(); // wait for update consume data
 
         // softamx output and gu input buffer reuse
         const bool should_notify_consume = should_notify_consumption<PV_CV_FIFO, CV_FIFO_CONS_SYNC_PERIOD>(tile_id);
 
-        wait_flag(PIPE_V, PIPE_MTE2, guEventId);
+        DynPipeEvent<PIPE_V, PIPE_MTE2> evVToMte2(static_cast<event_t>(guEventId));
+        evVToMte2.Wait();
+        DynPipeEvent<PIPE_MTE2, PIPE_V> evMte2ToV(EVENT_ID0);
 
         if (tile_id == 0) {
             TLOAD(runningOTile, pvGlobalVec);
-            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            evMte2ToV.Record().Wait();
         } else {
             TLOAD(pvVecTile, pvGlobalVec);
-            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+            evMte2ToV.Record().Wait();
 
             if (tile_id < num_tiles - 1) {
                 pto_macro_fa_gu<ReduceTileF_T, TileOutT>(runningOTile, pvVecTile, l1_exp_max_ififo);
@@ -579,13 +588,13 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
             }
         }
 
-        set_flag(PIPE_V, PIPE_MTE2, guEventId);
+        evVToMte2.Record();
         if (should_notify_consume)
-            ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(CV_CORE_SYNC, UPDATE_CONSUMED)); // notify update consume data
+            DynCvFlagEvent<PIPE_MTE2>(UPDATE_CONSUMED).Record(); // notify update consume data
 
         if (tile_id == num_tiles - 1) {
-            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            DynPipeEvent<PIPE_V, PIPE_MTE3> evVToMte3(EVENT_ID0);
+            evVToMte3.Record().Wait();
             using GlobalOutT =
                 GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
             GlobalOutT outGlobal((__gm__ float *)(o_out + subblock_base_rows * HEAD_SIZE));
@@ -604,8 +613,10 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
 
     set_ffts_base_addr((uint64_t)ffts_addr);
     if constexpr (DAV_CUBE) {
-        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+        DynPipeEvent<PIPE_M, PIPE_MTE1> evMToMte1_0(EVENT_ID0);
+        DynPipeEvent<PIPE_M, PIPE_MTE1> evMToMte1_1(EVENT_ID1);
+        evMToMte1_0.Record();
+        evMToMte1_1.Record();
     }
 
     // Rename dimensions for clarity: S0 (rows total), Cube_S0 (per-block rows), S1 (cols), HEAD_SIZE (inner)
@@ -740,18 +751,18 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
 
     int num_tiles_s1 = S1 / Tile_S1;
     if constexpr (DAV_CUBE) {
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
-        set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-        set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+        DynPipeEvent<PIPE_MTE1, PIPE_MTE2>(EVENT_ID0).Record();
+        DynPipeEvent<PIPE_MTE1, PIPE_MTE2>(EVENT_ID1).Record();
+        DynPipeEvent<PIPE_MTE1, PIPE_MTE2>(EVENT_ID2).Record();
+        DynPipeEvent<PIPE_MTE1, PIPE_MTE2>(EVENT_ID3).Record();
+        DynPipeEvent<PIPE_FIX, PIPE_M>(EVENT_ID0).Record();
+        DynPipeEvent<PIPE_FIX, PIPE_M>(EVENT_ID1).Record();
     }
     if constexpr (DAV_VEC) {
-        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-        set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+        DynPipeEvent<PIPE_V, PIPE_MTE2>(EVENT_ID0).Record();
+        DynPipeEvent<PIPE_V, PIPE_MTE2>(EVENT_ID1).Record();
+        DynPipeEvent<PIPE_MTE3, PIPE_V>(EVENT_ID0).Record();
+        DynPipeEvent<PIPE_MTE3, PIPE_V>(EVENT_ID1).Record();
     }
 
     int p_gu_src_pingpong_id = 0; // shared ping-pong for softmax vec tiles, pv output tiles, and GU input tiles
@@ -847,29 +858,29 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         pending_consumption_events(num_tiles_s1, static_cast<int>(qkp_tile_fifo_size), CV_FIFO_CONS_SYNC_PERIOD);
 
     if constexpr (DAV_CUBE) {
-        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
-        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
-        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
+        DynPipeEvent<PIPE_M, PIPE_MTE1>(EVENT_ID0).Wait();
+        DynPipeEvent<PIPE_M, PIPE_MTE1>(EVENT_ID1).Wait();
+        DynPipeEvent<PIPE_MTE1, PIPE_MTE2>(EVENT_ID0).Wait();
+        DynPipeEvent<PIPE_MTE1, PIPE_MTE2>(EVENT_ID1).Wait();
+        DynPipeEvent<PIPE_MTE1, PIPE_MTE2>(EVENT_ID2).Wait();
+        DynPipeEvent<PIPE_MTE1, PIPE_MTE2>(EVENT_ID3).Wait();
+        DynPipeEvent<PIPE_FIX, PIPE_M>(EVENT_ID0).Wait();
+        DynPipeEvent<PIPE_FIX, PIPE_M>(EVENT_ID1).Wait();
         for (int i = 0; i < pending_qk_sm_consumed; ++i)
-            wait_flag_dev(BUF0_SM_CONSUMED);
+            DynCvFlagEvent<PIPE_MTE2>(BUF0_SM_CONSUMED).Wait();
         for (int i = 0; i < pending_update_consumed; ++i)
-            wait_flag_dev(UPDATE_CONSUMED);
-        wait_flag_dev(CV_BLOCK_END); // wait for vector done all reading
+            DynCvFlagEvent<PIPE_FIX>(UPDATE_CONSUMED).Wait();
+        DynCvFlagEvent<PIPE_MTE2>(CV_BLOCK_END).Wait(); // wait for vector done all reading
     }
 
     if constexpr (DAV_VEC) {
-        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
-        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+        DynPipeEvent<PIPE_V, PIPE_MTE2>(EVENT_ID0).Wait();
+        DynPipeEvent<PIPE_V, PIPE_MTE2>(EVENT_ID1).Wait();
+        DynPipeEvent<PIPE_MTE3, PIPE_V>(EVENT_ID0).Wait();
+        DynPipeEvent<PIPE_MTE3, PIPE_V>(EVENT_ID1).Wait();
         for (int i = 0; i < pending_sv_consumed; ++i)
-            wait_flag_dev(BUF1_SV_CONSUMED);
-        ffts_cross_core_sync(PIPE_MTE2, _getFFTSMsg(CV_CORE_SYNC, CV_BLOCK_END)); // cube can exit CV comm now
+            DynCvFlagEvent<PIPE_MTE3>(BUF1_SV_CONSUMED).Wait();
+        DynCvFlagEvent<PIPE_MTE2>(CV_BLOCK_END).Record(); // cube can exit CV comm now
     }
 
     pipe_barrier(PIPE_ALL);

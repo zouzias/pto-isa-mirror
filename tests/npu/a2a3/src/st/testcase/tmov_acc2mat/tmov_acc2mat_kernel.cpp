@@ -55,16 +55,15 @@ AICORE inline void runMATMUL(__gm__ aType *src0, __gm__ bType *src1)
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
     /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-    RecordEvent evLoaded = TLOAD(bMatTile, src1Global);
-
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMov;
-    evLoadToMov = evLoaded;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMov;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMov;
+    evLoadAToMov = TLOAD(aMatTile, src0Global);
+    evLoadBToMov = TLOAD(bMatTile, src1Global);
 
     /**********************************TMOV && TEXTRACT**********************************/
     Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMov);
-    evMovToMatmul = TMOV(bTile, bMatTile, evLoadToMov);
+    TMOV(aTile, aMatTile, evLoadAToMov);
+    evMovToMatmul = TMOV(bTile, bMatTile, evLoadBToMov);
 
     /**********************************TMATMUL**********************************/
     Event<Op::TMATMUL, Op::TMOV_A2M> evMatmulDone;
@@ -108,25 +107,23 @@ AICORE inline void runMATMULFB(__gm__ aType *src0, __gm__ bType *src1, __gm__ fb
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
     /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
-    RecordEvent evLoaded = TLOAD(fbMatTile, src2Global);
-
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    Event<Op::TLOAD, Op::TMOV_M2S> evLoadToFix;
-    evLoadToMte1 = evLoaded;
-    evLoadToFix = evLoaded;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2S> evLoadFbToFix;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
+    evLoadFbToFix = TLOAD(fbMatTile, src2Global);
 
     /**********************************TMOV && TEXTRACT**********************************/
     Event<Op::TMOV_M2L, Op::TMATMUL> evMovToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMte1);
-    evMovToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    TMOV(aTile, aMatTile, evLoadAToMte1);
+    evMovToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
 
     /**********************************TMATMUL**********************************/
     Event<Op::TMATMUL, Op::TMOV_A2M> evMatmulDone;
     evMatmulDone = TMATMUL(cTile, aTile, bTile, evMovToMatmul);
 
-    TSYNC(evLoadToFix);
+    TSYNC(evLoadFbToFix);
     TSYNC(evMatmulDone);
 }
 

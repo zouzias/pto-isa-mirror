@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_pipe.hpp>
 
 using namespace pto;
 
@@ -42,14 +43,14 @@ __global__ AICORE void runTGATHERB(__gm__ T __out__ *out, __gm__ T __in__ *src, 
     GlobalDataOffset offsetGlobal(offset);
     GlobalDataDst dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
-    TLOAD(offsetTile, offsetGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TGATHERB<TileDataDst, TileDataSrc, TileDataOffset>(dstTile, srcTile, offsetTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    PipeEvent<PIPE_MTE2, PIPE_V> evLoadSrcToVec;
+    PipeEvent<PIPE_MTE2, PIPE_V> evLoadOffToVec;
+    PipeEvent<PIPE_V, PIPE_MTE3> evComputeToStore;
+    evLoadSrcToVec = TLOAD(srcTile, srcGlobal);
+    evLoadOffToVec = TLOAD(offsetTile, offsetGlobal);
+    evComputeToStore =
+        TGATHERB<TileDataDst, TileDataSrc, TileDataOffset>(dstTile, srcTile, offsetTile, evLoadSrcToVec, evLoadOffToVec);
+    TSTORE(dstGlobal, dstTile, evComputeToStore);
     out = dstGlobal.data();
 }
 

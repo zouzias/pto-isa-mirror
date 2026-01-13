@@ -40,9 +40,9 @@ __global__ AICORE void TStoreAcc2gmNz2nd(__gm__ dstDataType *out, __gm__ srcData
     GlobalDataSrc1 src1Global(src1);
     GlobalDataOut dstGlobal(out);
 
-    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
-    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::RowMajor, validM, validK, SLayout::RowMajor, 512>;
+    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
+    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
     using RightTile = TileRight<srcDataType, K, N, validK, validN>;
     using AccTile = Tile<TileType::Acc, accDataType, Rows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor, 1024>;
 
@@ -59,13 +59,14 @@ __global__ AICORE void TStoreAcc2gmNz2nd(__gm__ dstDataType *out, __gm__ srcData
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
 
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
 
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMte1);
-    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    TMOV(aTile, aMatTile, evLoadAToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
 
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
@@ -110,10 +111,10 @@ __global__ AICORE void TStoreAcc2gmNz2nz(__gm__ dstDataType *out, __gm__ srcData
     GlobalDataSrc1 src1Global(src1);
     GlobalDataOut dstGlobal(out);
 
-    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
+    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
 
-    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::RowMajor, validM, validK, SLayout::RowMajor, 512>;
+    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
     using RightTile = TileRight<srcDataType, K, N, validK, validN>;
     using AccTile = Tile<TileType::Acc, accDataType, Rows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor, 1024>;
 
@@ -132,13 +133,14 @@ __global__ AICORE void TStoreAcc2gmNz2nz(__gm__ dstDataType *out, __gm__ srcData
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
 
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
 
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMte1);
-    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    TMOV(aTile, aMatTile, evLoadAToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
 
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
@@ -181,10 +183,10 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nd(
     GlobalDataSrc1 src1Global(src1);
     GlobalDataOut dstGlobal(out);
 
-    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
+    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
 
-    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::RowMajor, validM, validK, SLayout::RowMajor, 512>;
+    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
     using RightTile = TileRight<srcDataType, K, N, validK, validN>;
     using AccTile = Tile<TileType::Acc, accDataType, Rows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor, 1024>;
 
@@ -200,13 +202,14 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nd(
     TASSIGN(aTile, 0x0);
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
 
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMte1);
-    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    TMOV(aTile, aMatTile, evLoadAToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
 
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
@@ -258,10 +261,10 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nz(
     GlobalDataSrc1 src1Global(src1);
     GlobalDataOut dstGlobal(out);
 
-    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
+    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
 
-    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::RowMajor, validM, validK, SLayout::RowMajor, 512>;
+    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
     using RightTile = TileRight<srcDataType, K, N, validK, validN>;
     using AccTile = Tile<TileType::Acc, accDataType, Rows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor, 1024>;
 
@@ -278,13 +281,14 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nz(
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
 
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
 
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMte1);
-    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    TMOV(aTile, aMatTile, evLoadAToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
 
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
@@ -337,12 +341,12 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nd(
     GlobalDataSrc2 src2Global(quantTensor);
     GlobalDataOut dstGlobal(out);
 
-    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
+    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
     using TileMatScalingData =
         Tile<TileType::Mat, uint64_t, 1, alignScalingN, BLayout::RowMajor, 1, -1, SLayout::NoneBox>;
 
-    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::RowMajor, validM, validK, SLayout::RowMajor, 512>;
+    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
     using RightTile = TileRight<srcDataType, K, N, validK, validN>;
     using AccTile = Tile<TileType::Acc, accDataType, Rows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor, 1024>;
     using ScalingTile = Tile<TileType::Scaling, uint64_t, 1, alignScalingN, BLayout::RowMajor, 1, -1, SLayout::NoneBox>;
@@ -365,23 +369,21 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nd(
     TASSIGN(cTile, 0x0);
     TASSIGN(scalingTile, 0x0);
 
-    TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
-    RecordEvent evLoaded = TLOAD(scalingMatTile, src2Global);
-
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    Event<Op::TLOAD, Op::TMOV_M2S> evLoadToFix;
-    evLoadToMte1 = evLoaded;
-    evLoadToFix = evLoaded;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2S> evLoadScalingToFix;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
+    evLoadScalingToFix = TLOAD(scalingMatTile, src2Global);
 
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMte1);
-    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    TMOV(aTile, aMatTile, evLoadAToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
 
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
 
-    TMOV(scalingTile, scalingMatTile, evLoadToFix);
+    TMOV(scalingTile, scalingMatTile, evLoadScalingToFix);
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
     Event<Op::TSTORE_ACC, Op::SCALAR> evStoreDone;
     if constexpr (reluMode == 0) {
@@ -429,12 +431,12 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nz(
     GlobalDataSrc2 src2Global(quantTensor);
     GlobalDataOut dstGlobal(out);
 
-    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
+    using TileMatAData = Tile<TileType::Mat, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, srcDataType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
     using TileMatScalingData =
         Tile<TileType::Mat, uint64_t, 1, alignScalingN, BLayout::RowMajor, 1, -1, SLayout::NoneBox>;
 
-    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::RowMajor, validM, validK, SLayout::RowMajor, 512>;
+    using LeftTile = Tile<TileType::Left, srcDataType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
     using RightTile = TileRight<srcDataType, K, N, validK, validN>;
     using AccTile = Tile<TileType::Acc, accDataType, Rows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor, 1024>;
     using ScalingTile = Tile<TileType::Scaling, uint64_t, 1, alignScalingN, BLayout::RowMajor, 1, -1, SLayout::NoneBox>;
@@ -457,23 +459,21 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nz(
     TASSIGN(cTile, 0x0);
     TASSIGN(scalingTile, 0x0);
 
-    TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
-    RecordEvent evLoaded = TLOAD(scalingMatTile, src2Global);
-
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    Event<Op::TLOAD, Op::TMOV_M2S> evLoadToFix;
-    evLoadToMte1 = evLoaded;
-    evLoadToFix = evLoaded;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2S> evLoadScalingToFix;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
+    evLoadScalingToFix = TLOAD(scalingMatTile, src2Global);
 
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMte1);
-    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    TMOV(aTile, aMatTile, evLoadAToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
 
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
 
-    TMOV(scalingTile, scalingMatTile, evLoadToFix);
+    TMOV(scalingTile, scalingMatTile, evLoadScalingToFix);
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
     Event<Op::TSTORE_ACC, Op::SCALAR> evStoreDone;
     if constexpr (reluMode == 0) {

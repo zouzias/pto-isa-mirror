@@ -14,9 +14,20 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #include "pto/common/pto_instr_impl.hpp"
 
+#include <type_traits>
+
 #define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
 
 namespace pto {
+
+namespace detail {
+template <typename T, typename = void>
+struct is_tile_like : std::false_type {};
+
+template <typename T>
+struct is_tile_like<T, std::void_t<typename T::DType, decltype(T::Loc)>> : std::true_type {};
+} // namespace detail
+
 template <typename T, typename AddrType>
 PTO_INST void TASSIGN(T &obj, AddrType addr) {
   MAP_INSTR_IMPL(TASSIGN, obj, addr);
@@ -274,7 +285,8 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cOutMatrix, TileRes &cInMatrix, TileLef
 }
 
 template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
-    typename TileBias, typename... WaitEvents>
+    typename TileBias, typename... WaitEvents,
+    std::enable_if_t<detail::is_tile_like<TileBias>::value, int> = 0>
 PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
     TileRightScale &bScaleMatrix, TileBias &biasData, WaitEvents&... events)
 {

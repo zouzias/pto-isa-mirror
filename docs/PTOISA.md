@@ -21,6 +21,7 @@ The per-instruction reference pages in `docs/isa/` are written against the C++ i
 | Developer notes | [`docs/coding/GlobalTensor.md`](coding/GlobalTensor.md) | GlobalTensor (GM) wrapper and layouts. |
 | Developer notes | [`docs/coding/Scalar.md`](coding/Scalar.md) | Scalar wrapper and immediates. |
 | Developer notes | [`docs/coding/Event.md`](coding/Event.md) | Event tokens and synchronization. |
+| Developer notes | [`docs/coding/Pipe.md`](coding/Pipe.md) | Cross-core GM FIFO helpers (Pipe/TPUSH/TPOP). |
 | Developer notes | [`docs/coding/ProgrammingModel.md`](coding/ProgrammingModel.md) | PTO-Auto vs PTO-Manual overview. |
 | Machine model | [`docs/machine/abstract-machine.md`](machine/abstract-machine.md) | Abstract execution machine model. |
 | Source of truth | [`docs/reference/pto-intrinsics-header.md`](reference/pto-intrinsics-header.md) | C++ intrinsic API (authoritative); declared in `include/pto/common/pto_instr.hpp`. |

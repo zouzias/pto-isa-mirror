@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_pipe.hpp>
 
 using namespace std;
 using namespace pto;
@@ -46,17 +47,11 @@ inline AICORE void runTTRANS( __gm__ T __out__ *out, __gm__ T __in__ *src) {
                          pto::Shape(1, 1, 1, kGCols_, kGRows_),
                          pto::Stride(1, 1, 1, kGRows_, 1));
 
-    TLOAD(srcTile, srcGlobal);
-
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-
-    TTRANS(dstTile, srcTile, tmpTile);
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-
-    TSTORE(dstGlobal, dstTile);
+    PipeEvent<PIPE_MTE2, PIPE_V> evLoadToVec;
+    PipeEvent<PIPE_V, PIPE_MTE3> evComputeToStore;
+    evLoadToVec = TLOAD(srcTile, srcGlobal);
+    evComputeToStore = TTRANS(dstTile, srcTile, tmpTile, evLoadToVec);
+    TSTORE(dstGlobal, dstTile, evComputeToStore);
 
     out = dstGlobal.data();
 }

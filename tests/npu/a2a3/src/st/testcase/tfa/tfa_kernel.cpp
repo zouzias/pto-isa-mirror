@@ -117,8 +117,10 @@ PTO_INLINE AICORE void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuff
     constexpr std::size_t reduce_tile_bytes = tile_storage_bytes<ReduceTileF_T>();
     constexpr std::size_t xexp_bytes = tile_buffer_total_bytes<TileDataH_T, XexpBuffers>();
     constexpr std::size_t out_tile_bytes = tile_storage_bytes<TileOutT>();
-    constexpr std::size_t total_bytes =
-        src_bytes + xexp_bytes + (reduce_tile_bytes * (3U+ExpMaxBuffers)) + (float_tile_bytes * 1U) + out_tile_bytes;
+    constexpr std::size_t pv_bytes = tile_buffer_total_bytes<TileOutT, pvVecBuffers>();
+    constexpr std::size_t overlap_bytes = (src_bytes > pv_bytes) ? src_bytes : pv_bytes;
+    constexpr std::size_t total_bytes = overlap_bytes + xexp_bytes + (reduce_tile_bytes * (3U + ExpMaxBuffers)) +
+                                        (float_tile_bytes * 1U) + out_tile_bytes;
     static_assert(total_bytes <= MAX_VEC_UB_BYTES, "Vec tile UB allocation exceeds 192KB");
 
     uint32_t offset = 0;
@@ -203,27 +205,20 @@ PTO_INLINE AICORE void compute_qk(int tile_idx, __gm__ half *q, __gm__ half *k, 
         Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulDone;
         evMatmulDone = pto_macro_matmul<Cube_S0, Cube_HEAD, Cube_S1>(qMatTile, kMatTile, qkAccTile);
 
-        wait_flag_dev(BUF0_SM_CONSUMED); // wait for SM consume data (protect circular qk_out buffer)
+        using GlobalDataQK =
+            GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, S1, 1>>;
+        GlobalDataQK qkGlobalTile(qk_out + s1_index);
+        TSTORE(qkGlobalTile, qkAccTile, evMatmulDone);
+	        pipe_barrier(PIPE_ALL);
 
-        if constexpr (INTERMEDIATE_CHECK) {
-            using GlobalDataQK =
-                GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, S1, 1>>;
-            GlobalDataQK qkGlobalTile(qk_out + s1_index);
-            TSTORE(qkGlobalTile, qkAccTile, evMatmulDone);
-        } else {
-            using GlobalDataQK =
-                GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
-            const uint32_t buf_idx = static_cast<uint32_t>(tile_idx % QKV_CV_FIFO);
-            const size_t base_elems =
-                static_cast<size_t>(buf_idx) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Cube_S1);
-            GlobalDataQK qkGlobalTile(qk_out + base_elems);
-            TSTORE(qkGlobalTile, qkAccTile, evMatmulDone);
-        }
-        pipe_barrier(PIPE_ALL);
-
-        ffts_cross_core_sync(PIPE_FIX, getFFTSMsg(0x2, BUF0_QK_READY)); // notify for QK produce data
-    }
-}
+	        ffts_cross_core_sync(PIPE_FIX, getFFTSMsg(0x2, BUF0_QK_READY)); // notify for QK produce data
+	        // CV flags behave like single-bit latches: wait for the consumer ack before the next tile reuses the flag.
+	        constexpr int kNumTilesS1 = S1 / CUBE_S1;
+	        if (tile_idx != (kNumTilesS1 - 1)) {
+	            wait_flag_dev(BUF0_SM_CONSUMED);
+	        }
+	    }
+	}
 
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S1, int QKV_CV_FIFO, int PV_CV_FIFO, bool INTERMEDIATE_CHECK,
     typename TileMatPData, typename TileMatVData, typename TilePVData>
@@ -236,60 +231,41 @@ PTO_INLINE AICORE void compute_pv(int tile_idx, __gm__ half *p_out, __gm__ half 
 
     const int s1_index = tile_idx * static_cast<int>(Cube_S1);
 
-    if constexpr (DAV_CUBE) {
-        using GlobalVT =
-            GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
+	    if constexpr (DAV_CUBE) {
+	        using GlobalVT =
+	            GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
 
-        GlobalVT vLoad((__gm__ half *)(v + s1_index * HEAD_SIZE));
-        Event<Op::TLOAD, Op::TEXTRACT_M2LR> evLoadV = {};
-        evLoadV = TLOAD(vMatTile, vLoad);
+	        GlobalVT vLoad((__gm__ half *)(v + s1_index * HEAD_SIZE));
+	        Event<Op::TLOAD, Op::TEXTRACT_M2LR> evLoadV = {};
+	        evLoadV = TLOAD(vMatTile, vLoad);
 
-        wait_flag_dev(BUF1_SM_READY); // wait for softmax produce data
+		        wait_flag_dev(BUF1_SM_READY); // wait for softmax produce data
 
-        Event<Op::TLOAD, Op::TEXTRACT_M2LR> evLoadP = {};
-        if constexpr (INTERMEDIATE_CHECK) {
-            using GlobalXexpTileT =
-                GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, S1, 1>>;
-            GlobalXexpTileT xexpLoad(p_out + s1_index);
-            evLoadP = TLOAD(pMatTile, xexpLoad);
-        } else {
-            using GlobalXexpTileT =
-                GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
-            const uint32_t buf_idx = static_cast<uint32_t>(tile_idx % QKV_CV_FIFO);
-            const size_t base_elems =
-                static_cast<size_t>(buf_idx) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Cube_S1);
-            GlobalXexpTileT xexpLoad(p_out + base_elems);
-            evLoadP = TLOAD(pMatTile, xexpLoad);
-        }
+	        Event<Op::TLOAD, Op::TEXTRACT_M2LR> evLoadP = {};
+        using GlobalXexpTileT =
+            GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, S1, 1>>;
+        GlobalXexpTileT xexpLoad(p_out + s1_index);
+        evLoadP = TLOAD(pMatTile, xexpLoad);
         TSYNC(evLoadV, evLoadP);
-        ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(0x2, BUF1_SV_CONSUMED)); // notify SV consume data
+	        ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(0x2, BUF1_SV_CONSUMED)); // notify SV consume data
         Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulDone;
-        evMatmulDone = pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile);
+		        evMatmulDone = pto_macro_matmul<Cube_S0, Cube_S1, Cube_HEAD>(pMatTile, vMatTile, pvAccTile);
 
-        wait_flag_dev(UPDATE_CONSUMED); // wait for update consume data (protect circular pv_out buffer)
+        size_t partialOffsetElems =
+            static_cast<size_t>(tile_idx) * static_cast<size_t>(S0) * static_cast<size_t>(HEAD_SIZE);
+        using GlobalDataPV =
+            GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
+        GlobalDataPV pvGlobalTile((__gm__ float *)(pv_out + partialOffsetElems));
+        TSTORE(pvGlobalTile, pvAccTile, evMatmulDone);
+	        pipe_barrier(PIPE_ALL);
+		        ffts_cross_core_sync(PIPE_FIX, getFFTSMsg(0x2, UPDATE_READY)); // notify update produce data
 
-        if constexpr (INTERMEDIATE_CHECK) {
-            size_t partialOffsetElems =
-                static_cast<size_t>(tile_idx) * static_cast<size_t>(S0) * static_cast<size_t>(HEAD_SIZE);
-            using GlobalDataPV =
-                GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-            GlobalDataPV pvGlobalTile((__gm__ float *)(pv_out + partialOffsetElems));
-            TSTORE(pvGlobalTile, pvAccTile, evMatmulDone);
-        } else {
-            using GlobalDataPV =
-                GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-            
-            // GlobalDataPV pvGlobalTile((__gm__ float *)(pv_out));
-            const uint32_t buf_idx = static_cast<uint32_t>(tile_idx % PV_CV_FIFO);
-            const size_t base_elems =
-                static_cast<size_t>(buf_idx) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(HEAD_SIZE);
-            GlobalDataPV pvGlobalTile((__gm__ float *)(pv_out  + base_elems));
-            TSTORE(pvGlobalTile, pvAccTile, evMatmulDone);
-        }
-        pipe_barrier(PIPE_ALL);
-        ffts_cross_core_sync(PIPE_FIX, getFFTSMsg(0x2, UPDATE_READY)); // notify update produce data
-    }
-}
+		        constexpr int kNumTilesS1 = S1 / Cube_S1;
+		        if (tile_idx != (kNumTilesS1 - 1)) {
+		            wait_flag_dev(UPDATE_CONSUMED);
+		        }
+		    }
+		}
 
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S1, int QKV_CV_FIFO, bool INTERMEDIATE_CHECK, typename TileDataF_T,
     typename TileDataH_T, typename ReduceTileF_T>
@@ -302,83 +278,66 @@ PTO_INLINE AICORE void compute_p(int tile_idx, bool initFlag, __gm__ float *qk_o
     constexpr uint32_t Cube_S0 = S0;
     constexpr uint32_t Cube_S1 = CUBE_S1;
     static_assert(QKV_CV_FIFO >= 1, "QKV_CV_FIFO must be >= 1");
-    if constexpr (DAV_VEC) {
-        const int s1_index = tile_idx * static_cast<int>(Cube_S1);
-        wait_flag_dev(BUF0_QK_READY); // wait for QK produce data
+	    if constexpr (DAV_VEC) {
+	        const int s1_index = tile_idx * static_cast<int>(Cube_S1);
+	        wait_flag_dev(BUF0_QK_READY); // wait for QK produce data
 
-        if constexpr (INTERMEDIATE_CHECK) {
-            __gm__ float *qk_ptr = qk_out + Vec_S0 * S1 * get_subblockid();
-            qk_ptr += s1_index;
-            using GlobalDataQK_VEC =
-                GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, S1, 1>>;
-            GlobalDataQK_VEC qkGlobalTile(qk_ptr);
-            Event<Op::TLOAD, Op::VECTOR> evLoadQk = {};
-            evLoadQk = TLOAD(qkVecTile, qkGlobalTile);
-            TSYNC(evLoadQk);
-        } else {
-            const uint32_t buf_idx = static_cast<uint32_t>(tile_idx % QKV_CV_FIFO);
-            const size_t base_elems =
-                static_cast<size_t>(buf_idx) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Cube_S1);
-            __gm__ float *qk_ptr = qk_out + base_elems + Vec_S0 * Cube_S1 * get_subblockid();
-            using GlobalDataQK_VEC =
-                GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
-            GlobalDataQK_VEC qkGlobalTile(qk_ptr);
-            Event<Op::TLOAD, Op::VECTOR> evLoadQk = {};
-            evLoadQk = TLOAD(qkVecTile, qkGlobalTile);
-            TSYNC(evLoadQk);
-        }
+        __gm__ float *qk_ptr = qk_out + Vec_S0 * S1 * get_subblockid();
+        qk_ptr += s1_index;
+        using GlobalDataQK_VEC =
+            GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, S1, 1>>;
+        GlobalDataQK_VEC qkGlobalTile(qk_ptr);
+        Event<Op::TLOAD, Op::VECTOR> evLoadQk = {};
+        evLoadQk = TLOAD(qkVecTile, qkGlobalTile);
+        TSYNC(evLoadQk);
 
-        ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(0x2, BUF0_SM_CONSUMED)); // notify for SM consume data
+	        // Ack QK consumption so cube can safely reuse BUF0_QK_READY for the next tile.
+	        ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(0x2, BUF0_SM_CONSUMED));
 
         if (initFlag) {
-                pto_macro_fa_softmax<true, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max, l1_local_sum, m2_global_max,
+	                pto_macro_fa_softmax<true, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max, l1_local_sum, m2_global_max,
                 l2_global_sum, l1_exp_max, input_reduce_tmp, qkVecTile);
         } else {
                 pto_macro_fa_softmax<false, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max, l1_local_sum, m2_global_max,
                 l2_global_sum, l1_exp_max, input_reduce_tmp, qkVecTile);
         }
         Event<Op::VECTOR, Op::TSTORE_VEC> evSoftmaxToStore = {};
+
+        __gm__ half *p_ptr = p_out + Vec_S0 * S1 * get_subblockid();
+        p_ptr += s1_index;
+        using GlobalPTileHalf =
+            GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, S1, 1>>;
+        GlobalPTileHalf pTileHalf((__gm__ half *)(p_ptr));
         evSoftmaxToStore.Record();
+        TSTORE(pTileHalf, x_expT, evSoftmaxToStore);
+	        pipe_barrier(PIPE_ALL);
 
-        wait_flag_dev(BUF1_SV_CONSUMED); // wait for SV consume data (protect circular p_out buffer)
+	        ffts_cross_core_sync(PIPE_MTE3, getFFTSMsg(0x2, BUF1_SM_READY)); // notify softmax produce data
 
-        if constexpr (INTERMEDIATE_CHECK) {
-            __gm__ half *p_ptr = p_out + Vec_S0 * S1 * get_subblockid();
-            p_ptr += s1_index;
-            using GlobalPTileHalf =
-                GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, S1, 1>>;
-            GlobalPTileHalf pTileHalf((__gm__ half *)(p_ptr));
-            TSTORE(pTileHalf, x_expT, evSoftmaxToStore);
-        } else {
-            __gm__ half *p_ptr = p_out + Vec_S0 * Cube_S1 * get_subblockid();
-            using GlobalPTileHalf =
-                GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
-            const uint32_t buf_idx = static_cast<uint32_t>(tile_idx % QKV_CV_FIFO);
-            const size_t base_elems =
-                static_cast<size_t>(buf_idx) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Cube_S1);
-            p_ptr += base_elems;
-            GlobalPTileHalf pTileHalf((__gm__ half *)(p_ptr));
-            TSTORE(pTileHalf, x_expT, evSoftmaxToStore);
-        }
-        pipe_barrier(PIPE_ALL);
-
-        ffts_cross_core_sync(PIPE_MTE3, getFFTSMsg(0x2, BUF1_SM_READY)); // notify softmax produce data
+	        // Ensure BUF1_SM_READY is consumed before producing the next tile (single-bit CV flag).
+	        constexpr int kNumTilesS1 = S1 / Cube_S1;
+	        if (tile_idx != (kNumTilesS1 - 1)) {
+	            wait_flag_dev(BUF1_SV_CONSUMED);
+	        }
 
         if constexpr (INTERMEDIATE_CHECK) {
             __gm__ float *p_fp32_ptr = p_out_fp32 + Vec_S0 * Cube_S1 * get_subblockid() + s1_index;
             using GlobalPTileFP32 =
                 GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, S1, 1>>;
             GlobalPTileFP32 pTileFp32((__gm__ float *)(p_fp32_ptr));
+            evSoftmaxToStore.Record();
             TSTORE(pTileFp32, qkVecTile, evSoftmaxToStore);   //p_tile_fp32 reuse qk_vec_tile
 
             size_t gsumOffsetElems = static_cast<size_t>(tile_idx) * static_cast<size_t>(S0);
             using GlobalSumT = GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, 1>, pto::Stride<1, 1, 1, 1, 1>>;
             GlobalSumT gsum((__gm__ float *)(global_sum_out + gsumOffsetElems + Vec_S0 * get_subblockid()));
+            evSoftmaxToStore.Record();
             TSTORE(gsum, l2_global_sum, evSoftmaxToStore);
 
             size_t expOffsetElems = static_cast<size_t>(tile_idx) * static_cast<size_t>(S0);
             using GlobalExpT = GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, 1>, pto::Stride<1, 1, 1, 1, 1>>;
             GlobalExpT gexp((__gm__ float *)(exp_max_out + expOffsetElems + Vec_S0 * get_subblockid()));
+            evSoftmaxToStore.Record();
             TSTORE(gexp, l1_exp_max, evSoftmaxToStore);
         }
         pipe_barrier(PIPE_ALL);
@@ -401,54 +360,9 @@ PTO_INLINE AICORE void compute_gu(int tile_idx, int num_tiles_s1, __gm__ float *
         const size_t base_elems =
                 static_cast<size_t>(buf_idx) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(HEAD_SIZE);
 
-        if constexpr (INTERMEDIATE_CHECK) {
-            size_t partialOffsetElemsVec =
-                static_cast<size_t>(tile_idx) * static_cast<size_t>(S0) * static_cast<size_t>(HEAD_SIZE);
-            __gm__ float *pv_out_ptr = pv_out + partialOffsetElemsVec + Vec_S0 * HEAD_SIZE * get_subblockid();
-            GlobalDataPV_VEC pvGlobalVec(pv_out_ptr);
-
-            wait_flag_dev(UPDATE_READY); // wait for update consume data
-
-            if (tile_idx == 0) {
-                Event<Op::TLOAD, Op::VECTOR> evLoad = {};
-                evLoad = TLOAD(runningOTile, pvGlobalVec);
-                TSYNC(evLoad);
-            } else {
-                Event<Op::TLOAD, Op::VECTOR> evLoad = {};
-                evLoad = TLOAD(pvVecTile, pvGlobalVec);
-                TSYNC(evLoad);
-
-                if (tile_idx < num_tiles_s1 - 1) {
-                    pto_macro_fa_gu<ReduceTileF_T, TileOutT>(runningOTile, pvVecTile, l1_exp_max);
-                } else {
-                    pto_macro_fa_gu_last<ReduceTileF_T, TileOutT>(runningOTile, pvVecTile, l1_exp_max, l2_global_sum);
-                }
-            }
-
-            ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(0x2, UPDATE_CONSUMED)); // notify update consume data
-
-            if (tile_idx == num_tiles_s1 - 1) {
-                TSYNC<Op::VECTOR>();
-                using GlobalOutT =
-                    GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-                GlobalOutT outGlobal((__gm__ float *)(o_out + Vec_S0 * HEAD_SIZE * get_subblockid()));
-                TSTORE(outGlobal, runningOTile);
-            }
-
-            if constexpr (INTERMEDIATE_CHECK) {
-                TSYNC<Op::VECTOR>();
-                size_t oPartOffsetElems =
-                    static_cast<size_t>(tile_idx) * static_cast<size_t>(S0) * static_cast<size_t>(HEAD_SIZE);
-                using GlobalOutPartT =
-                    GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-                GlobalOutPartT outPartGM(
-                    (__gm__ float *)(o_parts_out + oPartOffsetElems + Vec_S0 * HEAD_SIZE * get_subblockid()));
-                TSTORE(outPartGM, runningOTile);
-            }
-            pipe_barrier(PIPE_ALL);
-            return;
-        }
-        __gm__ float *pv_out_ptr = pv_out + base_elems + Vec_S0 * HEAD_SIZE * get_subblockid();
+        size_t partialOffsetElemsVec =
+            static_cast<size_t>(tile_idx) * static_cast<size_t>(S0) * static_cast<size_t>(HEAD_SIZE);
+        __gm__ float *pv_out_ptr = pv_out + partialOffsetElemsVec + Vec_S0 * HEAD_SIZE * get_subblockid();
 
         GlobalDataPV_VEC pvGlobalVec(pv_out_ptr);
 
@@ -460,10 +374,12 @@ PTO_INLINE AICORE void compute_gu(int tile_idx, int num_tiles_s1, __gm__ float *
             Event<Op::TLOAD, Op::VECTOR> evLoad = {};
             evLoad = TLOAD(runningOTile, pvGlobalVec);
             TSYNC(evLoad);
+            ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(0x2, UPDATE_CONSUMED)); // ack UPDATE consumption
         } else {
             Event<Op::TLOAD, Op::VECTOR> evLoad = {};
             evLoad = TLOAD(pvVecTile, pvGlobalVec);
             TSYNC(evLoad);
+            ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(0x2, UPDATE_CONSUMED)); // ack UPDATE consumption
 
             if (tile_idx < num_tiles_s1 - 1) {
                 pto_macro_fa_gu<ReduceTileF_T, TileOutT>(runningOTile, pvVecTile, l1_exp_max);
@@ -472,29 +388,31 @@ PTO_INLINE AICORE void compute_gu(int tile_idx, int num_tiles_s1, __gm__ float *
             }
         }
 
-        ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(0x2, UPDATE_CONSUMED)); // notify update consume data
+	        if (tile_idx == num_tiles_s1 - 1) {
+	            TSYNC<Op::VECTOR>();
+	            using GlobalOutT =
+	                GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
+	            GlobalOutT outGlobal((__gm__ float *)(o_out + Vec_S0 * HEAD_SIZE * get_subblockid()));
+	            Event<Op::VECTOR, Op::TSTORE_VEC> evOutToStore = {};
+	            evOutToStore.Record();
+	            TSTORE(outGlobal, runningOTile, evOutToStore);
+	        }
 
-        if (tile_idx == num_tiles_s1 - 1) {
-            TSYNC<Op::VECTOR>();
-            using GlobalOutT =
-                GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-            GlobalOutT outGlobal((__gm__ float *)(o_out + Vec_S0 * HEAD_SIZE * get_subblockid()));
-            TSTORE(outGlobal, runningOTile);
-        }
-
-        if constexpr (INTERMEDIATE_CHECK) {
-            TSYNC<Op::VECTOR>();
-            size_t oPartOffsetElems =
-                static_cast<size_t>(tile_idx) * static_cast<size_t>(S0) * static_cast<size_t>(HEAD_SIZE);
-            using GlobalOutPartT =
-                GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-            GlobalOutPartT outPartGM(
-                (__gm__ float *)(o_parts_out + oPartOffsetElems + Vec_S0 * HEAD_SIZE * get_subblockid()));
-            TSTORE(outPartGM, runningOTile);
-        }
-        pipe_barrier(PIPE_ALL);
-    }
-}
+	        if constexpr (INTERMEDIATE_CHECK) {
+	            TSYNC<Op::VECTOR>();
+	            size_t oPartOffsetElems =
+	                static_cast<size_t>(tile_idx) * static_cast<size_t>(S0) * static_cast<size_t>(HEAD_SIZE);
+	            using GlobalOutPartT =
+	                GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
+	            GlobalOutPartT outPartGM(
+	                (__gm__ float *)(o_parts_out + oPartOffsetElems + Vec_S0 * HEAD_SIZE * get_subblockid()));
+	            Event<Op::VECTOR, Op::TSTORE_VEC> evOutPartToStore = {};
+	            evOutPartToStore.Record();
+	            TSTORE(outPartGM, runningOTile, evOutPartToStore);
+	        }
+	        pipe_barrier(PIPE_ALL);
+	    }
+	}
 
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S1, bool INTERMEDIATE_CHECK = false>
 __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__ half *k, __gm__ half *v,
@@ -574,74 +492,34 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         outOTileNBuffers>(qkVecTile, m1_local_max, input_reduce_tmp, l1_local_sum, m2_global_max,
         l2_global_sum, l1_exp_max, x_expT, pvVecTile, runningOTile);
 
-    int num_tiles_s1 = S1 / Cube_S1;
-    if constexpr (DAV_CUBE) {
-        for( int i = 0; i < qkGlobalTensorNBuffers; i++) {
-            st_dev(getFFTSMsg(0x2, BUF1_SV_CONSUMED), ffts_addr, 0);
-        }
-    }
-    if constexpr (DAV_VEC) {
-        st_dev(getFFTSMsg(0x2, UPDATE_CONSUMED), ffts_addr, 0);               
-        for( int i = 0; i < qkGlobalTensorNBuffers; i++) {
-            ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(0x2, BUF0_SM_CONSUMED));
-        }
-    }
+    const int num_tiles_s1 = S1 / Cube_S1;
 
-    int preload_pv_tile_idx = 0;
-
-    for (int preload_qk_idx = 0; preload_qk_idx < qkPreloadNum && preload_qk_idx < num_tiles_s1; preload_qk_idx++) {
+    // Lockstep schedule: avoid overwriting CV flags before the peer core consumes them.
+    // This keeps BUF0_QK_READY / BUF1_SM_READY / UPDATE_READY strictly 1:1 per tile.
+    for (int tile_idx = 0; tile_idx < num_tiles_s1; ++tile_idx) {
         if constexpr (DAV_CUBE) {
-            compute_qk<S0, HEAD_SIZE, S1, CUBE_S1, qkGlobalTensorNBuffers, INTERMEDIATE_CHECK>(preload_qk_idx, q, k,
-                qk_out, qMatTile[0], kMatTile[preload_qk_idx % kMatTNBuffers], qkAccTile);
-            if (preload_qk_idx >= preload_pv_offset && preload_pv_tile_idx < pvPreloadNum) {
-                compute_pv<S0, HEAD_SIZE, S1, CUBE_S1, pvGlobalTensorNBuffers, guGlobalTensorNBuffers, INTERMEDIATE_CHECK>(preload_pv_tile_idx, p_out, v,
-                    pv_out, pMatTile[preload_pv_tile_idx % pMatTNBuffers], vMatTile[preload_pv_tile_idx % vMatTNBuffers], pvAccTile);
-                preload_pv_tile_idx++;
-            }
+            compute_qk<S0, HEAD_SIZE, S1, CUBE_S1, qkGlobalTensorNBuffers, INTERMEDIATE_CHECK>(tile_idx, q, k, qk_out,
+                qMatTile[0], kMatTile[tile_idx % kMatTNBuffers], qkAccTile);
         }
 
         if constexpr (DAV_VEC) {
-            int tile_idx = preload_qk_idx;
-            bool initFlag = (preload_qk_idx == 0);
-            compute_p<S0, HEAD_SIZE, S1, CUBE_S1, qkGlobalTensorNBuffers, INTERMEDIATE_CHECK>(tile_idx, initFlag,
-                qk_out, p_out, p_out_fp32, global_sum_out, exp_max_out, qkVecTile[tile_idx % srcVecTNBuffers],
-                x_expT[tile_idx % xexpVecTNBuffers], input_reduce_tmp, m1_local_max, l1_local_sum,
-                m2_global_max, l2_global_sum, l1_exp_max[preload_qk_idx % qkGlobalTensorNBuffers]);
-        }
-    }
-
-    for (int S1_tile_idx = 0; S1_tile_idx < num_tiles_s1; S1_tile_idx++) {
-        int next_qk_tile_idx = (S1_tile_idx + qkPreloadNum) >= num_tiles_s1 ? -1 : (S1_tile_idx + qkPreloadNum); // 1
-
-        if constexpr (DAV_CUBE) {
-            if (next_qk_tile_idx != -1) {
-                compute_qk<S0, HEAD_SIZE, S1, CUBE_S1, qkGlobalTensorNBuffers, INTERMEDIATE_CHECK>(next_qk_tile_idx, q,
-                    k, qk_out, qMatTile[0], kMatTile[next_qk_tile_idx % kMatTNBuffers], qkAccTile);
-            }
-        }
-
-        if constexpr (DAV_VEC) {
-            if (next_qk_tile_idx != -1) {
-                bool initFlag = ((S1_tile_idx + qkPreloadNum) == 0);
-                compute_p<S0, HEAD_SIZE, S1, CUBE_S1, qkGlobalTensorNBuffers, INTERMEDIATE_CHECK>(next_qk_tile_idx,
-                    initFlag, qk_out, p_out, p_out_fp32, global_sum_out, exp_max_out, qkVecTile[next_qk_tile_idx % srcVecTNBuffers],
-                    x_expT[next_qk_tile_idx % xexpVecTNBuffers], input_reduce_tmp, m1_local_max, l1_local_sum,
-                    m2_global_max, l2_global_sum, l1_exp_max[next_qk_tile_idx % qkGlobalTensorNBuffers]);
-            }
+            const bool initFlag = (tile_idx == 0);
+            compute_p<S0, HEAD_SIZE, S1, CUBE_S1, qkGlobalTensorNBuffers, INTERMEDIATE_CHECK>(tile_idx, initFlag, qk_out,
+                p_out, p_out_fp32, global_sum_out, exp_max_out, qkVecTile[tile_idx % srcVecTNBuffers],
+                x_expT[tile_idx % xexpVecTNBuffers], input_reduce_tmp, m1_local_max, l1_local_sum, m2_global_max,
+                l2_global_sum, l1_exp_max[tile_idx % qkGlobalTensorNBuffers]);
         }
 
         if constexpr (DAV_CUBE) {
-            int S1_pv_tile_idx = preload_pv_tile_idx >= num_tiles_s1 ? -1 : preload_pv_tile_idx;
-            if (S1_pv_tile_idx != -1) {
-                compute_pv<S0, HEAD_SIZE, S1, CUBE_S1, pvGlobalTensorNBuffers, guGlobalTensorNBuffers, INTERMEDIATE_CHECK>(S1_pv_tile_idx, p_out, v,
-                pv_out, pMatTile[S1_pv_tile_idx % pMatTNBuffers], vMatTile[S1_pv_tile_idx % vMatTNBuffers], pvAccTile);
-                preload_pv_tile_idx++;
-            }
+            compute_pv<S0, HEAD_SIZE, S1, CUBE_S1, pvGlobalTensorNBuffers, guGlobalTensorNBuffers, INTERMEDIATE_CHECK>(
+                tile_idx, p_out, v, pv_out, pMatTile[tile_idx % pMatTNBuffers], vMatTile[tile_idx % vMatTNBuffers],
+                pvAccTile);
         }
 
         if constexpr (DAV_VEC) {
-            compute_gu<S0, HEAD_SIZE, S1, guGlobalTensorNBuffers, INTERMEDIATE_CHECK>(S1_tile_idx, num_tiles_s1, pv_out, o_out, o_parts_out,
-                runningOTile, pvVecTile[S1_tile_idx % outOTileNBuffers], l1_exp_max[S1_tile_idx % qkGlobalTensorNBuffers], l2_global_sum);         
+            compute_gu<S0, HEAD_SIZE, S1, guGlobalTensorNBuffers, INTERMEDIATE_CHECK>(tile_idx, num_tiles_s1, pv_out,
+                o_out, o_parts_out, runningOTile, pvVecTile[tile_idx % outOTileNBuffers],
+                l1_exp_max[tile_idx % qkGlobalTensorNBuffers], l2_global_sum);
         }
     }
     pipe_barrier(PIPE_ALL);

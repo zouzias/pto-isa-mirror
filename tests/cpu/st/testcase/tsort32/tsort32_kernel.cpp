@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/pto_pipe.hpp>
 
 using namespace pto;
 
@@ -36,14 +37,14 @@ __global__ AICORE void runTSort32( __gm__ T0 __out__ *out, __gm__ T0 __in__ *src
     TASSIGN(idxTile, kTRows * kTCols * sizeof(T0));
     TASSIGN(dstTile, kTRows * kTCols * sizeof(T0) + kTRows * kTCols * sizeof(T1));
 
-    TLOAD(srcTile, srcGlobal);
-    TLOAD(idxTile, idxGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TSORT32(dstTile, srcTile, idxTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    PipeEvent<PIPE_MTE2, PIPE_V> evLoadSrcToVec;
+    PipeEvent<PIPE_MTE2, PIPE_V> evLoadIdxToVec;
+    PipeEvent<PIPE_V, PIPE_MTE3> evComputeToStore;
+    evLoadSrcToVec = TLOAD(srcTile, srcGlobal);
+    evLoadIdxToVec = TLOAD(idxTile, idxGlobal);
+    TSYNC(evLoadSrcToVec, evLoadIdxToVec);
+    evComputeToStore = TSORT32(dstTile, srcTile, idxTile);
+    TSTORE(dstGlobal, dstTile, evComputeToStore);
     out = dstGlobal.data();
 }
 
@@ -65,4 +66,3 @@ template void launchTSort32<int32_t, uint32_t, 7, 32, 7, 32, 7, 32>
     (int32_t *out, int32_t *src, uint32_t *idx, aclrtStream stream);
 template void launchTSort32<aclFloat16, uint32_t, 32, 16, 32, 16, 32, 16>
     (aclFloat16 *out, aclFloat16 *src, uint32_t *idx, aclrtStream stream);
-

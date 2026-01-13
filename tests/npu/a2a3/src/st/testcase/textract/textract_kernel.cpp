@@ -52,14 +52,15 @@ AICORE inline void runTMOV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
     /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
     pipe_barrier(PIPE_ALL);
     /**********************************TMOV && TEXTRACT**********************************/
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMte1);
-    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    TMOV(aTile, aMatTile, evLoadAToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
     pipe_barrier(PIPE_ALL);
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
@@ -121,13 +122,14 @@ AICORE inline void runTMOV_UNALIGN(__gm__ T *out, __gm__ U *src0, __gm__ S *src1
     __cc__ CType *c = (__cc__ CType *)(cTile.data());
 
     /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
     /**********************************TMOV*******************************************/
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TMOV(aTile, aMatTile, evLoadToMte1);
-    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadToMte1);
+    TMOV(aTile, aMatTile, evLoadAToMte1);
+    evMte1ToMatmul = TMOV(bTile, bMatTile, evLoadBToMte1);
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
     /****************************************TSTORE*****************************************/
@@ -179,14 +181,15 @@ AICORE inline void runTEXTRACT(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
     /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
     pipe_barrier(PIPE_ALL);
     /**********************************TMOV && TEXTRACT**********************************/
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadToMte1);
-    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadToMte1);
+    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadAToMte1);
+    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadBToMte1);
     pipe_barrier(PIPE_ALL);
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
@@ -251,13 +254,14 @@ AICORE inline void runTEXTRACT_UNALIGN(__gm__ T *out, __gm__ U *src0, __gm__ S *
     __cc__ CType *c = (__cc__ CType *)(cTile.data());
 
     /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
     /**********************************TEXTRACT*******************************************/
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadToMte1);
-    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadToMte1);
+    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadAToMte1);
+    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadBToMte1);
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
     /****************************************TSTORE*****************************************/
@@ -309,14 +313,15 @@ AICORE inline void runTEXTRACT_DYNAMIC(__gm__ T *out, __gm__ U *src0, __gm__ S *
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
     /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
     pipe_barrier(PIPE_ALL);
     /**********************************TMOV && TEXTRACT**********************************/
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadToMte1);
-    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadToMte1);
+    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadAToMte1);
+    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadBToMte1);
     pipe_barrier(PIPE_ALL);
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
     evMatmulToStore = TMATMUL(cTile, aTile, bTile, evMte1ToMatmul);
@@ -381,14 +386,15 @@ AICORE inline void runTEXTRACT_COMPACT(__gm__ T *out, __gm__ U *src0, __gm__ S *
     __cc__ CType *c = (__cc__ CType *)(cTile.data());
 
     /*************************************TLOAD****************************************/
-    TLOAD(aMatTile, src0Global);
-    Event<Op::TLOAD, Op::TMOV_M2L> evLoadToMte1;
-    evLoadToMte1 = TLOAD(bMatTile, src1Global);
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadAToMte1;
+    Event<Op::TLOAD, Op::TMOV_M2L> evLoadBToMte1;
+    evLoadAToMte1 = TLOAD(aMatTile, src0Global);
+    evLoadBToMte1 = TLOAD(bMatTile, src1Global);
     pipe_barrier(PIPE_ALL);
     /**********************************TEXTRACT*******************************************/
     Event<Op::TMOV_M2L, Op::TMATMUL> evMte1ToMatmul;
-    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadToMte1);
-    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadToMte1);
+    TEXTRACT(aTile, aMatTile, indexM, indexK, evLoadAToMte1);
+    evMte1ToMatmul = TEXTRACT(bTile, bMatTile, indexK, indexN, evLoadBToMte1);
     pipe_barrier(PIPE_ALL);
     /****************************************TSTORE*****************************************/
     Event<Op::TMATMUL, Op::TSTORE_ACC> evMatmulToStore;
