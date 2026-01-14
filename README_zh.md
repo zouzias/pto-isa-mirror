@@ -10,6 +10,8 @@ PTO（Parallel Tile Operation）是昇腾 CANN 定义的一套面向 tile 的虚
 
 * **2025-12-27**：PTO Tile Library 正式开源发布。
 
+* **2026-01-13**：PTO Tile Library 支持预期能力。
+
 ## 概览
 
 PTO ISA 基于昇腾底层硬件与软件抽象，定义 90+ 条标准 tile 指令。

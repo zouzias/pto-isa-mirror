@@ -10,6 +10,8 @@ Parallel Tile Operation (PTO) is a virtual instruction set architecture designed
 
 * **2025-12-27**: PTO Tile Library becomes publicly available.
 
+* **2026-01-13**：PTO Tile Library supports the expected capabilities。
+
 ## Overview
 
 The PTO ISA (Instruction Set Architecture) is built on Ascend’s underlying hardware and software abstractions, providing over 90 standard tile-level operations.
