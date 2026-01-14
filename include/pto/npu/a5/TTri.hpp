@@ -23,29 +23,23 @@ __tf__ PTO_INTERNAL void TTriu(typename TileData::TileDType __out__ dst, unsigne
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
     unsigned numRepeatPerRow = CeilDivision(validCols, elementsPerRepeat);
-    constexpr uint32_t start_row = (diagonal > 0) ? 0 : (1 - diagonal);
-    constexpr uint32_t start_num = diagonal;
+    constexpr uint32_t start_num = diagonal; //starting number of zeros in the 1st row
     __VEC_SCOPE__ {
-        RegTensor<T> v_ones, v_zeros;
+        RegTensor<T> v_ones, v_zeros, vreg_out;
+        vector_s32  vreg_idx;
+        vector_bool preg_cmp;
         vbr(v_ones, (T)1);
         vbr(v_zeros, (T)0);
         constexpr auto distValue =
-            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
-        // store ones
-        for (uint16_t i = 0; i < (uint16_t)validRows; ++i) {
-            uint32_t num_ones = validCols;
-            for (uint16_t j = 0; j < (uint16_t)numRepeatPerRow; ++j) {
-                vector_bool preg_ones = CreatePredicate<T>(num_ones);
-                vsts(v_ones, dstPtr, i * rowStride + j * elementsPerRepeat, distValue, preg_ones);
-            }
-        }
-
-        // store zeros
-        for (uint16_t i = start_row; i < (uint16_t)validRows; ++i) {
-            uint32_t num_zeros = i + start_num;
-            for (uint16_t j = 0; j < (uint16_t)numRepeatPerRow; ++j) {
-                vector_bool preg_zeros = CreatePredicate<T>(num_zeros);
-                vsts(v_zeros, dstPtr, i * rowStride + j * elementsPerRepeat, distValue, preg_zeros);
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();        
+        for (uint16_t i = 0; i < (uint16_t) validRows; ++i) {
+            uint32_t num_elements = validCols;
+            for (uint16_t j = 0; j < (uint16_t) numRepeatPerRow; ++j){
+                vector_bool preg_st = CreatePredicate<T>(num_elements);
+                vci(vreg_idx, j * elementsPerRepeat);
+                vcmps_lt(preg_cmp, vreg_idx, (int)(i+start_num), preg_st);
+                vsel(vreg_out, v_zeros, v_ones, preg_cmp);
+                vsts(vreg_out, dstPtr, i * rowStride + j * elementsPerRepeat, distValue, preg_st);
             }
         }
     }
@@ -57,29 +51,23 @@ __tf__ PTO_INTERNAL void TTril(typename TileData::TileDType __out__ dst, unsigne
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
     unsigned numRepeatPerRow = CeilDivision(validCols, elementsPerRepeat);
-    constexpr uint32_t start_row = (diagonal < 0) ? (-diagonal) : (0);
-    constexpr uint32_t start_num = diagonal + 1;
+    constexpr uint32_t start_num = diagonal + 1; //starting number of ones in the 1st row
     __VEC_SCOPE__ {
-        RegTensor<T> v_ones, v_zeros;
+        RegTensor<T> v_ones, v_zeros, vreg_out;
+        vector_s32  vreg_idx;
+        vector_bool preg_cmp;
         vbr(v_ones, (T)1);
         vbr(v_zeros, (T)0);
         constexpr auto distValue =
-            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
-        // store zeros
-        for (uint16_t i = 0; i < (uint16_t)validRows; ++i) {
-            uint32_t num_zeros = validCols;
-            for (uint16_t j = 0; j < (uint16_t)numRepeatPerRow; ++j) {
-                vector_bool preg_zeros = CreatePredicate<T>(num_zeros);
-                vsts(v_zeros, dstPtr, i * rowStride + j * elementsPerRepeat, distValue, preg_zeros);
-            }
-        }
-
-        // store ones
-        for (uint16_t i = start_row; i < (uint16_t)validRows; ++i) {
-            uint32_t num_ones = i + start_num;
-            for (uint16_t j = 0; j < (uint16_t)numRepeatPerRow; ++j) {
-                vector_bool preg_ones = CreatePredicate<T>(num_ones);
-                vsts(v_ones, dstPtr, i * rowStride + j * elementsPerRepeat, distValue, preg_ones);
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();        
+        for (uint16_t i = 0; i < (uint16_t) validRows; ++i) {
+            uint32_t num_elements = validCols;
+            for (uint16_t j = 0; j < (uint16_t) numRepeatPerRow; ++j){
+                vector_bool preg_st = CreatePredicate<T>(num_elements);
+                vci(vreg_idx, j * elementsPerRepeat);
+                vcmps_lt(preg_cmp, vreg_idx, (int)(i+start_num), preg_st);
+                vsel(vreg_out, v_ones, v_zeros, preg_cmp);
+                vsts(vreg_out, dstPtr, i * rowStride + j * elementsPerRepeat, distValue, preg_st);
             }
         }
     }
