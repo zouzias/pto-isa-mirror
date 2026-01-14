@@ -69,18 +69,19 @@ PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, FpTileData& fp, Wa
 - **Implementation checks (A2A3)**:
   - Shapes must match: `SrcTileData::Rows == DstTileData::Rows` and `SrcTileData::Cols == DstTileData::Cols`.
   - Supported location pairs (compile-time checked):
-    - `Mat -> Left/Right/Bias/Scaling`
+    - `Mat -> Left/Right/Bias/Scale`
     - `Vec -> Vec`
     - `Acc -> Mat` (including optional pre-quant / relu / fp variants via overloads)
   - For `Acc -> Mat`, additional fractal/type constraints are enforced (e.g., `Acc` uses NZ-like fractal, `Mat` uses 512B fractal, and only specific dtype conversions are allowed).
 - **Implementation checks (A5)**:
   - For `Mat -> *`, shapes must match; for some `Vec` moves, the effective copy size is the min of src/dst valid rows/cols.
   - Supported location pairs include (target-dependent):
-    - `Mat -> Left/Right/Bias/Scaling`
+    - `Mat -> Left/Right/Bias/Scale`
     - `Vec -> Vec` and `Vec -> Mat`
     - `Acc -> Vec` and `Acc -> Mat` (including optional pre-quant / relu / fp variants via overloads)
   - For `Mat -> Left/Right`, additional fractal and dtype constraints are enforced via `CommonCheck` (source fractal must be compatible and element types must match).
   - For `Acc -> Vec/Mat`, additional fractal/type/alignment constraints are enforced via `CheckTMovAccValid`.
+  - For `Mat -> Scale`, additional fractal and dtype constraints are enforced via `CommonCheckMX` (source fractal must be compatible and element types must match).
 
 ## Examples
 
