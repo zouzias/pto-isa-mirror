@@ -20,6 +20,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+// Import rounding type definitions from __cce_simd namespace
+using __cce_simd::RoundRType;
+using __cce_simd::RoundAType;
+using __cce_simd::RoundFType;
+using __cce_simd::RoundCType;
+using __cce_simd::RoundZType;
+using __cce_simd::RoundOType;
+
 /**
  * Unified enum for all type conversion modes
  * Describes the vcvt intrinsic parameter pattern used for conversion
