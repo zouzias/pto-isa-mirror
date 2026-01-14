@@ -287,6 +287,8 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(typename DstTileData::TileDType __out__ 
         (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
         (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value),
         "Dst and src must be float/int32_t/half/bfloat16_t/int8_t/float8_e4m3_t/float8_e5m2_t/hifloat8_t.");
+    __ubuf__ T *dstPtr  = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *srcPtr  = (__ubuf__ T *)__cce_get_tile_ptr(src);
     constexpr int32_t srcRow = SrcTileData::Rows;
     constexpr int32_t srcCol = SrcTileData::Cols;
     constexpr int32_t srcByteSize = srcRow * srcCol * sizeof(T);
@@ -321,7 +323,8 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(typename DstTileData::TileDType __out__ 
 }
 
 template <typename DstTileData, typename SrcTileData>
-__tf__ PTO_INTERNAL void TMovVecToVec(typename DstTileData::TileDType __out__ dstData,
+__tf__ PTO_INTERNAL OP_NAME(TMOV) OP_TYPE(element_wise) 
+void TMovVecToVec(typename DstTileData::TileDType __out__ dstData,
     typename SrcTileData::TileDType __in__ srcData, unsigned validRow, unsigned validCol,
     unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
@@ -444,7 +447,13 @@ AICORE void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
         }
     } else if constexpr (SrcTileData::Loc == TileType::Vec) {
         if constexpr (DstTileData::Loc == TileType::Vec) {
-            TMovToVec<DstTileData, SrcTileData>(dst, src);
+            if constexpr ((SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox)) &&
+                (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor))) {
+                TMovToVecNd2Nz<typename DstTileData::DType, DstTileData, SrcTileData>(dst.data(), src.data(),
+                    src.GetValidRow(), src.GetValidCol());
+            } else {
+                TMovToVec<DstTileData, SrcTileData>(dst, src);
+            }
         } else if constexpr(DstTileData::Loc == TileType::Mat) {
             CommonCheck<DstTileData, SrcTileData>();
             TExtractVecToMat<DstTileData, SrcTileData>(dst.data(), src.data(), 0, 0, src.GetValidRow(),
