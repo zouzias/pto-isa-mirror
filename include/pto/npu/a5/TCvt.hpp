@@ -20,14 +20,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-// Import rounding type definitions from __cce_simd namespace
-using __cce_simd::RoundRType;
-using __cce_simd::RoundAType;
-using __cce_simd::RoundFType;
-using __cce_simd::RoundCType;
-using __cce_simd::RoundZType;
-using __cce_simd::RoundOType;
-
 /**
  * Unified enum for all type conversion modes
  * Describes the vcvt intrinsic parameter pattern used for conversion
@@ -721,7 +713,8 @@ inline AICORE void castData(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, int32
  */
 template <typename TileDataD, typename TileDataS, typename R>
 __tf__ PTO_INTERNAL OP_NAME(TCVT) OP_TYPE(element_wise)
-void implTCVT(TileDataD &dst, TileDataS &src, unsigned validRows, unsigned validCols, VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
+void implTCVT(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src, 
+             unsigned validRows, unsigned validCols, VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
     __VEC_SCOPE__ {
         uint16_t rows = (uint16_t) validRows;
@@ -729,7 +722,7 @@ void implTCVT(TileDataD &dst, TileDataS &src, unsigned validRows, unsigned valid
         for (uint16_t row = 0; row < rows; row++) {
             int32_t dstOffset = row * TileDataD::Cols;
             int32_t srcOffset = row * TileDataS::Cols;
-            castData<R>(dst.data(), src.data(), dstOffset, srcOffset, cols);
+            castData<R>(dst, src, dstOffset, srcOffset, cols);
         }
     }
 }
@@ -739,28 +732,28 @@ AICORE void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
     switch (mode) {
         case RoundMode::CAST_RINT:
-            implTCVT<TileDataD,TileDataS,RoundRType>(dst,src, dst.GetValidRow(), dst.GetValidCol());
+            implTCVT<TileDataD,TileDataS,RoundRType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             break;
         case RoundMode::CAST_ROUND:
-            implTCVT<TileDataD,TileDataS,RoundAType>(dst,src, dst.GetValidRow(), dst.GetValidCol());
+            implTCVT<TileDataD,TileDataS,RoundAType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             break;
         case RoundMode::CAST_FLOOR:
-            implTCVT<TileDataD,TileDataS,RoundFType>(dst,src, dst.GetValidRow(), dst.GetValidCol());
+            implTCVT<TileDataD,TileDataS,RoundFType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             break;
         case RoundMode::CAST_CEIL:
-            implTCVT<TileDataD,TileDataS,RoundCType>(dst,src, dst.GetValidRow(), dst.GetValidCol());
+            implTCVT<TileDataD,TileDataS,RoundCType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             break;
         case RoundMode::CAST_TRUNC:
-            implTCVT<TileDataD,TileDataS,RoundZType>(dst,src, dst.GetValidRow(), dst.GetValidCol());
+            implTCVT<TileDataD,TileDataS,RoundZType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             break;
         case RoundMode::CAST_ODD:
             if constexpr (std::is_same<typename TileDataD::DType, half>::value && 
                 std::is_same<typename TileDataS::DType, float>::value) {
-                implTCVT<TileDataD,TileDataS,RoundOType>(dst,src, dst.GetValidRow(), dst.GetValidCol());
+                implTCVT<TileDataD,TileDataS,RoundOType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             } 
             break;
         default:
-            implTCVT<TileDataD,TileDataS,RoundRType>(dst,src, dst.GetValidRow(), dst.GetValidCol());
+            implTCVT<TileDataD,TileDataS,RoundRType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             break;
     }
 }
