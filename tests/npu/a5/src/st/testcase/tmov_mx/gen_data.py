@@ -233,36 +233,36 @@ if __name__ == "__main__":
         # TExtract
         # normal
         TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 128, 64, 64, 'zznn'),
-        TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 32, 128, 64, 'zznn'),
-        TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 64, 128, 80, 'zznn'),  # when ... you need to use compact mode.
+        TMovmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 32, 128, 64, 'zznn'),
+        TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 64, 128, 80, 'zznn'),  # need to use compact mode.
 
         TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 115, 64, 30, 'ndnd'),
-        TMovmxParams(fp8_e5m2, fp8_e4m3fn, np.float32, 64, 120, 64, 'ndnd'),  # compact l0a、l0b  need
-        TMovmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 48, 192, 96, 'ndnd'),
+        TMovmxParams(fp8_e5m2, fp8_e4m3fn, np.float32, 64, 120, 64, 'ndnd'),
+        TMovmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 48, 192, 96, 'ndnd'),
 
         TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 128, 64, 64, 'dndn'),
-        TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 95, 11, 89, 'dndn'),
+        TMovmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 95, 12, 90, 'dndn'),
         TMovmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 4, 30, 8, 'dndn'),
         # startIdx != 0
         TMovmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 128, 64, 64, 'zznn', 64, 0, 32),
-        TMovmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 128, 128, 64, 'zznn', 32, 64, 0),
+        TMovmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 128, 128, 64, 'zznn', 32, 64, 0),
 
-        TMovmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 128, 64, 64, 'ndnd', 16, 0, 32),
+        TMovmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 128, 64, 254, 'ndnd', 16, 0, 64),
         TMovmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 48, 192, 96, 'ndnd', 16, 64, 32),
 
         TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 95, 120, 89, 'dndn', 16, 64, 32),
-        TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 48, 192, 96, 'dndn', 16, 0, 64),
+        TMovmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 48, 190, 98, 'dndn', 16, 0, 64),
 
         # TExtractCompact
         TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 46, 66, 45, 'zznn', 0, 0, 0, 128, 256, 128),
         TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 68, 130, 80, 'zznn', 16, 64, 32, 128, 256, 128),
-        TMovmxParams(fp8_e5m2, fp8_e5m2, np.float32, 127, 126, 129, 'zznn', 32, 64, 32, 256, 128, 256),
+        TMovmxParams(fp4_e2m1x2, fp4_e1m2x2, np.float32, 127, 126, 130, 'zznn', 32, 64, 64, 256, 128, 256),
         TMovmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 80, 96, 192, 'ndnd', 48, 0, 64, 128, 256, 256),
         TMovmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 98, 126, 108, 'ndnd', 32, 64, 32, 128, 256, 128),
-        TMovmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 68, 96, 80, 'ndnd', 0, 0, 0, 128, 256, 128),
+        TMovmxParams(fp4_e1m2x2, fp4_e2m1x2, np.float32, 68, 196, 80, 'ndnd', 0, 64, 64, 128, 256, 128),
         TMovmxParams(fp8_e5m2, fp8_e4m3fn, np.float32, 32, 64, 108, 'dndn', 16, 0, 32, 128, 256, 128),
         TMovmxParams(fp8_e5m2, fp8_e4m3fn, np.float32, 196, 146, 96, 'dndn', 64, 64, 32, 256, 256, 128),
-        TMovmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 97, 96, 122, 'dndn', 32, 0, 32, 128, 256, 128),
+        TMovmxParams(fp4_e2m1x2, fp4_e1m2x2, np.float32, 97, 96, 122, 'dndn', 32, 0, 64, 128, 256, 128),
     ]
 
 

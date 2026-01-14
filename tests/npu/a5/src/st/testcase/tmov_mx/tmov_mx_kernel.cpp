@@ -372,9 +372,9 @@ void LaunchTMOV_MX(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, ui
                 reinterpret_cast<float8_e5m2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 2) {
-        RunTMOVMX<format, float, float8_e5m2_t, float8_e5m2_t, float8_e8m0_t, 32, 128, 64, false>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float8_e5m2_t *>(src0),
-                reinterpret_cast<float8_e5m2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
+        RunTMOVMX<format, float, float4_e1m2x2_t, float4_e1m2x2_t, float8_e8m0_t, 32, 128, 64, true>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float4_e1m2x2_t *>(src0),
+                reinterpret_cast<float4_e1m2x2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 3) {
         RunTMOVMX<format, float, float8_e5m2_t, float8_e5m2_t, float8_e8m0_t, 64, 128, 80, false>
@@ -392,9 +392,9 @@ void LaunchTMOV_MX(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, ui
                 reinterpret_cast<float8_e4m3_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 6) {
-        RunTMOVMX<format, float, float8_e4m3_t, float8_e4m3_t, float8_e8m0_t, 48, 192, 96, false>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float8_e4m3_t *>(src0),
-                reinterpret_cast<float8_e4m3_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
+        RunTMOVMX<format, float, float4_e2m1x2_t, float4_e2m1x2_t, float8_e8m0_t, 48, 192, 96, true>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float4_e2m1x2_t *>(src0),
+                reinterpret_cast<float4_e2m1x2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 7) {
         RunTMOVMX<format, float, float8_e5m2_t, float8_e5m2_t, float8_e8m0_t, 128, 64, 64, false>
@@ -402,9 +402,9 @@ void LaunchTMOV_MX(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, ui
                 reinterpret_cast<float8_e5m2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 8) {
-        RunTMOVMX<format, float, float8_e5m2_t, float8_e5m2_t, float8_e8m0_t, 95, 11, 89, false>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float8_e5m2_t *>(src0),
-                reinterpret_cast<float8_e5m2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
+        RunTMOVMX<format, float, float4_e2m1x2_t, float4_e2m1x2_t, float8_e8m0_t, 95, 12, 90, true>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float4_e2m1x2_t *>(src0),
+                reinterpret_cast<float4_e2m1x2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 9) {
         RunTMOVMX<format, float, float8_e4m3_t, float8_e5m2_t, float8_e8m0_t, 4, 30, 8, false>
@@ -417,14 +417,14 @@ void LaunchTMOV_MX(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, ui
                 reinterpret_cast<float8_e4m3_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 11) {
-        RunTEXTRACTMX<format, float, float8_e4m3_t, float8_e4m3_t, float8_e8m0_t, 128, 128, 64, 32, 64, 0, false>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float8_e4m3_t *>(src0),
-                reinterpret_cast<float8_e4m3_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
+        RunTEXTRACTMX<format, float, float4_e2m1x2_t, float4_e2m1x2_t, float8_e8m0_t, 128, 128, 64, 32, 64, 0, true>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float4_e2m1x2_t *>(src0),
+                reinterpret_cast<float4_e2m1x2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 12) {
-        RunTEXTRACTMX<format, float, float8_e4m3_t, float8_e4m3_t, float8_e8m0_t, 128, 64, 64, 16, 0, 32, false>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float8_e4m3_t *>(src0),
-                reinterpret_cast<float8_e4m3_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
+        RunTEXTRACTMX<format, float, float4_e1m2x2_t, float4_e1m2x2_t, float8_e8m0_t, 128, 64, 254, 16, 0, 64, true>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float4_e1m2x2_t *>(src0),
+                reinterpret_cast<float4_e1m2x2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 13) {
         RunTEXTRACTMX<format, float, float8_e4m3_t, float8_e5m2_t, float8_e8m0_t, 48, 192, 96, 16, 64, 32, false>
@@ -437,9 +437,9 @@ void LaunchTMOV_MX(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, ui
                 reinterpret_cast<float8_e5m2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 15) {
-        RunTEXTRACTMX<format, float, float8_e5m2_t, float8_e5m2_t, float8_e8m0_t, 48, 192, 96, 16, 0, 64, false>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float8_e5m2_t *>(src0),
-                reinterpret_cast<float8_e5m2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
+        RunTEXTRACTMX<format, float, float4_e1m2x2_t, float4_e2m1x2_t, float8_e8m0_t, 48, 190, 98, 16, 0, 64, true>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float4_e1m2x2_t *>(src0),
+                reinterpret_cast<float4_e2m1x2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 16) {
         RunTEXTRACTMX_COMPACT<format, float, float8_e5m2_t, float8_e5m2_t, float8_e8m0_t, 46, 66, 45, 0, 0, 0, 128, 256, 128, false>
@@ -452,9 +452,9 @@ void LaunchTMOV_MX(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, ui
                 reinterpret_cast<float8_e5m2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 18) {
-        RunTEXTRACTMX_COMPACT<format, float, float8_e5m2_t, float8_e5m2_t, float8_e8m0_t, 127, 126, 129, 32, 64, 32, 256, 128, 256, false>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float8_e5m2_t *>(src0),
-                reinterpret_cast<float8_e5m2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
+        RunTEXTRACTMX_COMPACT<format, float, float4_e2m1x2_t, float4_e1m2x2_t, float8_e8m0_t, 127, 126, 130, 32, 64, 64, 256, 128, 256, true>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float4_e2m1x2_t *>(src0),
+                reinterpret_cast<float4_e1m2x2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 19) {
         RunTEXTRACTMX_COMPACT<format, float, float8_e4m3_t, float8_e4m3_t, float8_e8m0_t, 80, 96, 192, 48, 0, 64, 128, 256, 256, false>
@@ -467,9 +467,9 @@ void LaunchTMOV_MX(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, ui
                 reinterpret_cast<float8_e4m3_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 21) {
-        RunTEXTRACTMX_COMPACT<format, float, float8_e4m3_t, float8_e4m3_t, float8_e8m0_t, 68, 96, 80, 0, 0, 0, 128, 256, 128, false>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float8_e4m3_t *>(src0),
-                reinterpret_cast<float8_e4m3_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
+        RunTEXTRACTMX_COMPACT<format, float, float4_e1m2x2_t, float4_e2m1x2_t, float8_e8m0_t, 68, 196, 80, 0, 64, 64, 128, 256, 128, true>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float4_e1m2x2_t *>(src0),
+                reinterpret_cast<float4_e2m1x2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 22) {
         RunTEXTRACTMX_COMPACT<format, float, float8_e5m2_t, float8_e4m3_t, float8_e8m0_t, 32, 64, 108, 16, 0, 32, 128, 256, 128, false>
@@ -482,9 +482,9 @@ void LaunchTMOV_MX(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, ui
                 reinterpret_cast<float8_e4m3_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } else if constexpr (tilingKey == 24) {
-        RunTEXTRACTMX_COMPACT<format, float, float8_e4m3_t, float8_e5m2_t, float8_e8m0_t, 97, 96, 122, 32, 0, 32, 128, 256, 128, false>
-            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float8_e4m3_t *>(src0),
-                reinterpret_cast<float8_e5m2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
+        RunTEXTRACTMX_COMPACT<format, float, float4_e2m1x2_t, float4_e1m2x2_t, float8_e8m0_t, 97, 96, 122, 32, 0, 64, 128, 256, 128, true>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float4_e2m1x2_t *>(src0),
+                reinterpret_cast<float4_e1m2x2_t *>(src1), reinterpret_cast<float8_e8m0_t *>(src2),
                 reinterpret_cast<float8_e8m0_t *>(src3));
     } 
 }
