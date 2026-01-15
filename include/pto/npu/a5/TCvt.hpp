@@ -42,18 +42,18 @@ enum class CastMode {
     SAT_ROUND        // vcvt(..., RS_ENABLE, R()) - Saturation then rounding (reversed order)
 };
 
+#define FOR_ROWS \
+    for (uint16_t row = 0; row < validRows; row++) {\
+        int32_t dstOffset = row * dstCols;\
+        int32_t srcOffset = row * srcCols;\
+        uint32_t sreg = validCols;
+
 #define FOR_ELEMENTS(elNum) constexpr uint16_t elementsNum = (elNum);\
     uint16_t repeatTimes = CeilDivision(sreg, elementsNum);\
     for(uint16_t idx = 0; idx < repeatTimes; idx++) {
 
 
 #define END_FOR_ELEMENTS srcOffset += elementsNum;dstOffset += elementsNum;}
-
-#define FOR_ROWS \
-    for (uint16_t row = 0; row < validRows; row++) {\
-        int32_t dstOffset = row * dstCols;\
-        int32_t srcOffset = row * srcCols;\
-        uint32_t sreg = validCols;
 
 #define END_FOR_ROWS }
 
@@ -281,14 +281,13 @@ inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
 inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
-    typedef SRC __attribute__((ext_vector_type(ELE_CNT_B16))) SRC_VEC;
    
     uint32_t len16 = ELE_CNT_B16;
     MaskReg preg_b16 = CreatePredicate<half>(len16);
 
     FOR_ROWS
         FOR_ELEMENTS(ELE_CNT_B8)
-            SRC_VEC v_input_0, v_input_1;
+            RegTensor<SRC> v_input_0, v_input_1;
             DST_VEC v_output_odd, v_output_even, v_output;
             MaskReg preg_b8 = CreatePredicate<uint8_t>(sreg);
 
@@ -315,14 +314,13 @@ inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
 inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
-    typedef SRC __attribute__((ext_vector_type(ELE_CNT_B16))) SRC_VEC;
    
     uint32_t len16 = ELE_CNT_B16;
     MaskReg preg_b16 = CreatePredicate<half>(len16);
 
     FOR_ROWS
         FOR_ELEMENTS(ELE_CNT_B16)
-            SRC_VEC v_input_0;
+            RegTensor<SRC> v_input_0;
             DST_VEC v_output_even;
             MaskReg preg_b16_st = CreatePredicate<half>(sreg);
 
@@ -345,7 +343,6 @@ inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
  */
 template <typename SRC_VEC, typename DST, typename SRC>
 inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
-    typedef DST __attribute__((ext_vector_type(ELE_CNT_B16))) DST_VEC;
    
     uint32_t len8 = ELE_CNT_B8;
     MaskReg preg_b8 = CreatePredicate<uint8_t>(len8);
@@ -353,7 +350,7 @@ inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
     FOR_ROWS
         FOR_ELEMENTS(ELE_CNT_B16)
             SRC_VEC v_input_0;
-            DST_VEC v_output;
+            RegTensor<DST> v_output;
             MaskReg preg_b16 = CreatePredicate<half>(sreg);
 
             vlds(v_input_0, src, srcOffset, UNPK_B8);
@@ -370,7 +367,6 @@ inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
  */
 template <typename SRC_VEC, typename DST, typename SRC>
 inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
-    typedef DST __attribute__((ext_vector_type(ELE_CNT_B32))) DST_VEC;
    
     uint32_t len8 = ELE_CNT_B8;
     MaskReg preg_b8 = CreatePredicate<uint8_t>(len8);
@@ -385,7 +381,7 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
 
         FOR_ELEMENTS(ELE_CNT_B16)
             SRC_VEC v_input_0, v_input_1, v_input_2;
-            DST_VEC v_output_0, v_output_1;
+            RegTensor<DST> v_output_0, v_output_1;
             MaskReg preg_b16 = CreatePredicate<half>(sreg);
             MaskReg preg_b16_next = CreatePredicate<half>(next_len);
             MaskReg preg_b32;
@@ -409,41 +405,41 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
  *   - f32 -> e4m3/e5m2/h8 #rnd #sat #pp (ROUND_SAT_PART mode)
  *   - u32/s32 -> u8/s8 #sat #pp (SAT_PART mode)
  * Intrinsics:
- *   vcvt(..., R(), RS_ENABLE, PART_*) for floating point with rounding
- *   vcvt(..., RS_ENABLE, PART_*) for integer without rounding
+ *   vcvt(..., R(), RS_ENABLE, PART_P0) for floating point with rounding
+ *   vcvt(..., RS_ENABLE, PART_P0) for integer without rounding
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
 inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
-    typedef SRC __attribute__((ext_vector_type(ELE_CNT_B32))) SRC_VEC;
 
-    constexpr int INPUT_VL_LEN = 64; // Max vector length for 8-bit output
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
     MaskReg preg_idx = pset_b8(PAT_ALL);
+    
+    // Create index vector for vselr (selecting every 4th byte)
     DST_VEC v_idx;
-    vci((RegTensor<int8_t> &) v_idx, (int8_t) 0 , INC_ORDER);
-    vmuls((RegTensor<int16_t> &) v_idx, (RegTensor<int16_t> &) v_idx, (int16_t) 4, preg_idx); // multiply by 4 for byte addressing
+    vci((RegTensor<int8_t> &) v_idx, (int8_t) 0, INC_ORDER);
+    vmuls((RegTensor<int16_t> &) v_idx, (RegTensor<int16_t> &) v_idx, (int16_t) 4, preg_idx);
 
     FOR_ROWS
-        uint32_t preg_len_head = INPUT_VL_LEN;
-        uint32_t preg_len_tail = (sreg % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (sreg % INPUT_VL_LEN);
+        uint32_t preg_len_tail = (sreg % ELE_CNT_B32 == 0) ? ELE_CNT_B32 : (sreg % ELE_CNT_B32);
 
         FOR_ELEMENTS(ELE_CNT_B32)
-            SRC_VEC v_input_0;
-            DST_VEC v_output_0, v_output;
-            uint32_t preg_len = (idx == repeatTimes - 1) ? preg_len_tail : preg_len_head;
+            RegTensor<SRC> v_input;
+            DST_VEC v_output_p0, v_output;
+            uint32_t preg_len = (idx == repeatTimes - 1) ? preg_len_tail : ELE_CNT_B32;
             MaskReg preg_b8 = CreatePredicate<uint8_t>(preg_len);
 
-            vlds(v_input_0, src, srcOffset, NORM);
+            vlds(v_input, src, srcOffset, NORM);
+            
+            // Convert with or without rounding based on mode
             if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-                // Floating point conversion with rounding
-                vcvt(v_output_0, v_input_0, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
-                vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
+                vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
             } else {
-                // Integer conversion without rounding (SAT_PART mode)
-                vcvt(v_output_0, v_input_0, preg_b32, RS_ENABLE, PART_P0);
-                vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
+                vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
             }
+            
+            // Select every 4th byte to compact the result
+            vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_p0, (RegTensor<uint8_t> &) v_idx);
             vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
         END_FOR_ELEMENTS
     END_FOR_ROWS
@@ -592,29 +588,34 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf_
 /**
  * FP32 to H8
  * Conversion: f32 -> h8 #rnd #sat #pp
- * Uses cast32to8 helper
+ * Note: H8 conversion requires ROUND_A mode
  */
 template <typename R>
 inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
-    constexpr int INPUT_VL_LEN = 64; // Max vector length for 8-bit output
+    
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
     MaskReg preg_idx = pset_b8(PAT_ALL);
+    
+    // Create index vector for vselr (selecting every 4th byte)
     vector_u8 v_idx;
-    vci((RegTensor<int8_t> &) v_idx, (int8_t) 0 , INC_ORDER);
-    vmuls((RegTensor<int16_t> &) v_idx, (RegTensor<int16_t> &) v_idx, (int16_t) 4, preg_idx); // multiply by 4 for byte addressing
+    vci((RegTensor<int8_t> &) v_idx, (int8_t) 0, INC_ORDER);
+    vmuls((RegTensor<int16_t> &) v_idx, (RegTensor<int16_t> &) v_idx, (int16_t) 4, preg_idx);
     
     FOR_ROWS
-        uint32_t preg_len_head = INPUT_VL_LEN;
-        uint32_t preg_len_tail = (sreg % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (sreg % INPUT_VL_LEN);
+        uint32_t preg_len_tail = (sreg % ELE_CNT_B32 == 0) ? ELE_CNT_B32 : (sreg % ELE_CNT_B32);
+        
         FOR_ELEMENTS(ELE_CNT_B32)
-            vector_f32 v_input_0;
-            vector_hif8 v_output_0, v_output;
-            uint32_t preg_len = (idx == repeatTimes - 1) ? preg_len_tail : preg_len_head;
+            vector_f32 v_input;
+            vector_hif8 v_output_p0, v_output;
+            uint32_t preg_len = (idx == repeatTimes - 1) ? preg_len_tail : ELE_CNT_B32;
             MaskReg preg_b8 = CreatePredicate<uint8_t>(preg_len);
-            vlds(v_input_0, src, srcOffset, NORM);
-            vcvt(v_output_0, v_input_0, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
-            vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
+            
+            vlds(v_input, src, srcOffset, NORM);
+            vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
+            
+            // Select every 4th byte to compact the result
+            vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_p0, (RegTensor<uint8_t> &) v_idx);
             vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
         END_FOR_ELEMENTS
     END_FOR_ROWS
