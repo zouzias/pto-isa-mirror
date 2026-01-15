@@ -206,6 +206,7 @@ set(ALL_TESTCASES
     tnot
     trelu
     tquant
+    tsoftmax_fa
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
