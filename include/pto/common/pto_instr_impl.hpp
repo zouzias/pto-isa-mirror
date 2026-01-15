@@ -81,6 +81,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/TAdd.hpp"
 #include "pto/npu/a5/TAnd.hpp"
+#include "pto/npu/a5/TAnds.hpp"
 #include "pto/npu/a5/TOr.hpp"
 #include "pto/npu/a5/TAddS.hpp"
 #include "pto/npu/a5/TDivS.hpp"
