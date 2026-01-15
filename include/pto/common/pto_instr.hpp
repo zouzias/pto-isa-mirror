@@ -763,6 +763,12 @@ PTO_INST RecordEvent TANDS(TileData &dst, TileData &src0, typename TileData::DTy
   return {};
 }
 
+PTO_INST RecordEvent TADDS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TADDS, dst, src0, scalar);
+  return {};
+}
+
 template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TORS(TileData &dst, TileData &src0, typename TileData::DType scalar, WaitEvents&... events) {
   TSYNC(events...);
