@@ -326,8 +326,6 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
     uint32_t sReg = totalElements;
-    uint32_t len32 = ELE_CNT_B32;
-    MaskReg preg_b32 = CreatePredicate<float>(len32);
     MaskReg preg_idx = pset_b8(PAT_ALL);
     
     DST_VEC v_idx;
@@ -337,6 +335,8 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<SRC> v_input;
         DST_VEC v_output_p0, v_output;
+        uint32_t preg_len = (sReg > ELE_CNT_B32) ? ELE_CNT_B32 : sReg;
+        MaskReg preg_b32 = CreatePredicate<float>(preg_len);
         MaskReg preg_b8 = CreatePredicate<uint8_t>(sReg);
 
         vlds(v_input, src, i * ELE_CNT_B32, NORM);
@@ -349,7 +349,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         
         vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
         vsts((RegTensor<uint8_t> &)v_output, (__ubuf__ uint8_t *)dst, i * ELE_CNT_B32, NORM_B8, preg_b8);
-        // sReg is decremented by CreatePredicate with POST_UPDATE
+        sReg -= ELE_CNT_B32;
     }
 }
 
