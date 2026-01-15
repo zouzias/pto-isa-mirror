@@ -57,6 +57,7 @@ namespace pto {
     TCOLSUM,
     TCOLMAX,
     TCOLMIN,
+    TLRELU,
     TTRANS,
     TTRI,
     TREM,
