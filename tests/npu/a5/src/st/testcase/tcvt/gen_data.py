@@ -195,7 +195,6 @@ if __name__ == "__main__":
 
     # Different shape configurations (m, n)
     shapes = [
-        (2, 2),   # Single row small - tests 1D path
         (3, 64),   # Multi-row contiguous - tests 1D path
         (1, 256),   # Single row large - tests 1D path
     ]

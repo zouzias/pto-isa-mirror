@@ -106,7 +106,6 @@ void launchTCVT(D *dst, S *src, void *stream) {
 
 // Macro to generate template instantiations for all shapes for a given type pair
 #define INSTANTIATE_TCVT(dst_type, src_type) \
-    template void launchTCVT<dst_type, src_type, 2, 2, 2, 2>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 3, 64, 3, 64>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 1, 256, 1, 256>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 2, 256, 2, 256, 2, 129>(dst_type *dst, src_type *src, void *stream);

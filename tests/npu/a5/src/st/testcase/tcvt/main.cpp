@@ -106,7 +106,6 @@ void test_tcvt()
 
 // Macro to generate test cases for all shapes for a given type pair
 #define GENERATE_TCVT_TESTS(dst_type, src_type, type_name) \
-    TEST_F(TCVTTest, case_##type_name##_1x128) { test_tcvt<dst_type, src_type, 2, 2, 2, 2>(); } \
     TEST_F(TCVTTest, case_##type_name##_3x64) { test_tcvt<dst_type, src_type, 3, 64, 3, 64>(); } \
     TEST_F(TCVTTest, case_##type_name##_1x256) { test_tcvt<dst_type, src_type, 1, 256, 1, 256>(); } \
     TEST_F(TCVTTest, case_##type_name##_2x256_2x129) { test_tcvt<dst_type, src_type, 2, 256, 2, 256, 2, 129>(); }

@@ -123,19 +123,24 @@ inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
     uint32_t sReg = totalElements;
+    uint32_t len32 = ELE_CNT_B32;
+    MaskReg preg_b32 = CreatePredicate<float>(len32);
 
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<SRC> v_input_0;
         RegTensor<DST> v_output;
-        MaskReg preg_b32 = CreatePredicate<float>(sReg);
+        MaskReg preg_b32_st = CreatePredicate<float>(sReg);
         
         vlds(v_input_0, src, i * ELE_CNT_B32, NORM);
-        if constexpr (MODE == CastMode::ROUND_SAT) {
+        if constexpr (std::is_same<DST, SRC>::value) {
+            // Same type: use vtrc (truncate/round) instead of vcvt
+            vtrc(v_output, v_input_0, R(), preg_b32_st);
+        } else if constexpr (MODE == CastMode::ROUND_SAT) {
             vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE);
         } else {
             vcvt(v_output, v_input_0, preg_b32, R());
         }
-        vsts(v_output, dst, i * ELE_CNT_B32, NORM_B32, preg_b32);
+        vsts(v_output, dst, i * ELE_CNT_B32, NORM_B32, preg_b32_st);
         sReg -= ELE_CNT_B32;
     }
 }
@@ -177,11 +182,13 @@ inline AICORE void cast16to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B16);
     uint32_t sReg = totalElements;
+    uint32_t len16 = ELE_CNT_B16;
+    MaskReg preg_b16 = CreatePredicate<half>(len16);
 
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<SRC> v_input_0;
         RegTensor<DST> v_output;
-        MaskReg preg_b16 = CreatePredicate<half>(sReg);
+        MaskReg preg_b16_st = CreatePredicate<half>(sReg);
         
         vlds(v_input_0, src, i * ELE_CNT_B16, NORM);
         if constexpr (MODE == CastMode::ROUND_SAT) {
@@ -191,7 +198,7 @@ inline AICORE void cast16to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
         } else {
             vcvt(v_output, v_input_0, preg_b16, R());
         }
-        vsts(v_output, dst, i * ELE_CNT_B16, NORM_B16, preg_b16);
+        vsts(v_output, dst, i * ELE_CNT_B16, NORM_B16, preg_b16_st);
         sReg -= ELE_CNT_B16;
     }
 }
@@ -210,7 +217,7 @@ inline AICORE void cast16to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<SRC> v_input_0;
         RegTensor<DST> v_output;
-        MaskReg preg_b32 = CreatePredicate<float>(sReg);
+        MaskReg preg_b32_st = CreatePredicate<float>(sReg);
         
         vlds(v_input_0, src, i * ELE_CNT_B32, UNPK_B16);
         if constexpr (MODE == CastMode::EXPAND) {
@@ -220,7 +227,7 @@ inline AICORE void cast16to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
         } else {
             vcvt(v_output, v_input_0, preg_b16, R(), PART_EVEN);
         }
-        vsts(v_output, dst, i * ELE_CNT_B32, NORM_B32, preg_b32);
+        vsts(v_output, dst, i * ELE_CNT_B32, NORM_B32, preg_b32_st);
         sReg -= ELE_CNT_B32;
     }
 }
