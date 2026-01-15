@@ -133,6 +133,11 @@ set(ALL_TESTCASES
     tsub
     tand
     tor
+    trem
+    tprelu
+    tshl
+    tshr
+    txor
     tadd
     tpartadd
     tfillpad
