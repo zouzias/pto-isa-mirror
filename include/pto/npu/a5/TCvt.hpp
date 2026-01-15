@@ -84,7 +84,7 @@ inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *
             vcvt(v_output, v_input_0, preg_b64, R(), PART_EVEN);
         }
         vsts(v_output, dst, i * ELE_CNT_B64, PK_B64, preg_b32);
-        sReg -= ELE_CNT_B64;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -111,7 +111,7 @@ inline AICORE void cast32to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
         }
         vsts(v_output_even, dst, i * ELE_CNT_B32, PK_B32, preg_b32_st);
-        sReg -= ELE_CNT_B32;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -141,7 +141,7 @@ inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vcvt(v_output, v_input_0, preg_b32, R());
         }
         vsts(v_output, dst, i * ELE_CNT_B32, NORM_B32, preg_b32_st);
-        sReg -= ELE_CNT_B32;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -170,7 +170,7 @@ inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ S
             vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
         }
         vsts(v_output, dst, i * ELE_CNT_B64, NORM_B32, preg_b64);
-        sReg -= ELE_CNT_B64;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -199,7 +199,7 @@ inline AICORE void cast16to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vcvt(v_output, v_input_0, preg_b16, R());
         }
         vsts(v_output, dst, i * ELE_CNT_B16, NORM_B16, preg_b16_st);
-        sReg -= ELE_CNT_B16;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -228,7 +228,7 @@ inline AICORE void cast16to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vcvt(v_output, v_input_0, preg_b16, R(), PART_EVEN);
         }
         vsts(v_output, dst, i * ELE_CNT_B32, NORM_B32, preg_b32_st);
-        sReg -= ELE_CNT_B32;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -255,7 +255,7 @@ inline AICORE void cast16to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
             vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
         }
         vsts(v_output_even, dst, i * ELE_CNT_B16, PK_B16, preg_b16_st);
-        sReg -= ELE_CNT_B16;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -278,7 +278,7 @@ inline AICORE void cast8to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         vlds(v_input_0, src, i * ELE_CNT_B16, UNPK_B8);
         vcvt(v_output, v_input_0, preg_b8, PART_EVEN);
         vsts(v_output, dst, i * ELE_CNT_B16, NORM_B16, preg_b16);
-        sReg -= ELE_CNT_B16;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -314,7 +314,7 @@ inline AICORE void cast8to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         vcvt(v_output_1, v_input_2, preg_b8, PART_P0);
         vsts(v_output_0, dst, i * ELE_CNT_B16 * 2, NORM_B32, preg_b32);
         vsts(v_output_1, dst, i * ELE_CNT_B16 * 2 + ELE_CNT_B32, NORM_B32, preg_b32_next);
-        sReg -= ELE_CNT_B16;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -349,7 +349,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         
         vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
         vsts((RegTensor<uint8_t> &)v_output, (__ubuf__ uint8_t *)dst, i * ELE_CNT_B32, NORM_B8, preg_b8);
-        sReg -= ELE_CNT_B32;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -379,7 +379,7 @@ inline AICORE void cast32toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
         vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
         vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
         vsts((RegTensor<uint8_t> &)v_output, (__ubuf__ uint8_t *)dst, i * ELE_CNT_B32, NORM_B8, preg_b8);
-        sReg -= ELE_CNT_B32;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
@@ -403,7 +403,7 @@ inline AICORE void cast16toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
         vlds(v_input_0, src, i * ELE_CNT_B16, NORM);
         vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_ENABLE, PART_EVEN);
         vsts((RegTensor<uint8_t> &)v_output_even, (__ubuf__ uint8_t *)dst, i * ELE_CNT_B16, PK_B16, preg_b16_st);
-        sReg -= ELE_CNT_B16;
+        // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
 
