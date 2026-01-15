@@ -77,11 +77,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 #ifdef REGISTER_BASE
+#include "pto/npu/a5/TOrS.hpp"
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/TAdd.hpp"
 #include "pto/npu/a5/TAnd.hpp"
+#include "pto/npu/a5/TAndS.hpp"
 #include "pto/npu/a5/TOr.hpp"
+#include "pto/npu/a5/TXor.hpp"
 #include "pto/npu/a5/TAddS.hpp"
 #include "pto/npu/a5/TDivS.hpp"
 #include "pto/npu/a5/TMulS.hpp"
