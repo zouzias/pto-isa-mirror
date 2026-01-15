@@ -214,8 +214,16 @@ if __name__ == "__main__":
     ]
     
     # Partial tile configurations (m, n, valid_m, valid_n)
+    # These shapes trigger 2D path: ValidCol != Cols (non-contiguous)
     partial_shapes = [
-        (2, 256, 2, 129),  # Non-contiguous - tests 2D path
+        (2, 256, 2, 129),   # 2 rows, partial columns (129 < 256)
+        (4, 128, 4, 65),    # 4 rows, half columns
+        (3, 256, 3, 192),   # 3 rows, 3/4 columns
+        (2, 128, 2, 96),    # 2 rows, 3/4 columns
+        (8, 64, 8, 33),     # Many rows, half columns + 1
+        (4, 256, 3, 200),   # Partial rows AND columns
+        (6, 128, 4, 80),    # Both dimensions partial
+        (2, 256, 1, 200),   # Single valid row, partial columns
     ]
 
     case_name_list = []
