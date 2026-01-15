@@ -34,6 +34,8 @@ namespace pto {
     TMAX,
     TAND,
     TOR,
+    TXOR,
+    TXORS,
     TSEL,
     TEXP,
     TSELS,
