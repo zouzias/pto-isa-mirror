@@ -1648,11 +1648,13 @@ void implTCVT(typename TileDataD::TileDType __out__ dst,
         if constexpr (((TileDataD::ValidCol == TileDataD::Cols) && (TileDataS::ValidCol == TileDataS::Cols)) ||
             ((TileDataD::Rows == 1) && (TileDataS::Rows == 1))) {
             switch (version) {
-                case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
+                case VFImplKind::VFIMPL_DEFAULT:
+                case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
+                case VFImplKind::VFIMPL_1D_POST_UPDATE:
                     castData_1D_NoPostUpdate<R>(dstPtr, srcPtr, validRows, validCols, TileDataD::Cols, TileDataS::Cols);
                     break;
                 default:
-                    castData<R>(dstPtr, srcPtr, validRows, validCols, TileDataD::Cols, TileDataS::Cols);
+                    castData_1D_NoPostUpdate<R>(dstPtr, srcPtr, validRows, validCols, TileDataD::Cols, TileDataS::Cols);
                     break;
             }
 

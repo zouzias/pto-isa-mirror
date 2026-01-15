@@ -106,9 +106,9 @@ void launchTCVT(D *dst, S *src, void *stream) {
 
 // Macro to generate template instantiations for all shapes for a given type pair
 #define INSTANTIATE_TCVT(dst_type, src_type) \
-    template void launchTCVT<dst_type, src_type, 2, 128, 2, 128>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 2, 32, 2, 32>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 2, 2, 2, 2>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 3, 64, 3, 64>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 1, 256, 1, 256>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 2, 256, 2, 256, 2, 129>(dst_type *dst, src_type *src, void *stream);
 
 // FP32 Source
@@ -120,7 +120,7 @@ INSTANTIATE_TCVT(int16_t, float)
 INSTANTIATE_TCVT(int64_t, float)
 INSTANTIATE_TCVT(fp8_e4m3_wrapper, float)
 INSTANTIATE_TCVT(fp8_e5m2_wrapper, float)
-// INSTANTIATE_TCVT(hifloat8_wrapper, float)
+INSTANTIATE_TCVT(hifloat8_wrapper, float)
 
 // FP16 Source
 INSTANTIATE_TCVT(float, aclFloat16)

@@ -195,14 +195,14 @@ if __name__ == "__main__":
 
     # Different shape configurations (m, n)
     shapes = [
-        (2, 128),
-        (2, 32),
-        (3, 64),
+        (2, 2),   # Single row small - tests 1D path
+        (3, 64),   # Multi-row contiguous - tests 1D path
+        (1, 256),   # Single row large - tests 1D path
     ]
     
     # Partial tile configurations (m, n, valid_m, valid_n)
     partial_shapes = [
-        (2, 256, 2, 129),
+        (2, 256, 2, 129),  # Non-contiguous - tests 2D path
     ]
 
     case_name_list = []
