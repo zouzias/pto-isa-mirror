@@ -49,6 +49,14 @@ enum class CastMode {
 
 #define END_FOR_ELEMENTS srcOffset += elementsNum;dstOffset += elementsNum;}
 
+#define FOR_ROWS \
+    for (uint16_t row = 0; row < rows; row++) {\
+        int32_t dstOffset = row * dstCols;\
+        int32_t srcOffset = row * srcCols;\
+        uint32_t len = cols;
+
+#define END_FOR_ROWS }
+
 //--- Common templates --------------------------------------------------------
 /**
  * Cast 64-bit integer to 32-bit (signed/float)
@@ -58,26 +66,29 @@ enum class CastMode {
  *   vcvt(output, input, preg, R(), PART_EVEN)        // s64 -> f32 with rounding
  */
 template <typename R, typename DST, typename SRC>
-inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     vector_s64 v_input_0;
 
     const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
-    uint32_t len64 = len * 2; // As we operate with 64bit blocks using 32bit operations
-    MaskReg preg_b64 = CreatePredicate<float>(len64);
 
-    FOR_ELEMENTS(ELE_CNT_B64)
-        RegTensor<DST> v_output;
-        uint32_t len_even = len * 2; // As only the even part is taken
-        MaskReg preg_b32 = CreatePredicate<float>(len_even);
-        
-        vlds(v_input_0, src, srcOffset, NORM);
-        if constexpr (std::is_same<R, void>::value) {
-            vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
-        } else {
-            vcvt(v_output, v_input_0, preg_b64, R(), PART_EVEN);
-        }
-        vsts(v_output, dst, dstOffset, PK_B64, preg_b32);
-   END_FOR_ELEMENTS
+    FOR_ROWS
+        uint32_t len64 = len * 2; // As we operate with 64bit blocks using 32bit operations
+        MaskReg preg_b64 = CreatePredicate<float>(len64);
+
+        FOR_ELEMENTS(ELE_CNT_B64)
+            RegTensor<DST> v_output;
+            uint32_t len_even = len * 2; // As only the even part is taken
+            MaskReg preg_b32 = CreatePredicate<float>(len_even);
+            
+            vlds(v_input_0, src, srcOffset, NORM);
+            if constexpr (std::is_same<R, void>::value) {
+                vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
+            } else {
+                vcvt(v_output, v_input_0, preg_b64, R(), PART_EVEN);
+            }
+            vsts(v_output, dst, dstOffset, PK_B64, preg_b32);
+       END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -88,27 +99,29 @@ inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& ds
  *   vcvt(out_odd, in_1, preg, R(), RS_ENABLE, PART_ODD/EVEN)  // With rounding mode
  */
 template <typename R, typename DST, typename SRC>
-inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
     
-    FOR_ELEMENTS(ELE_CNT_B16)
-        RegTensor<SRC> v_input_0, v_input_1;
-        RegTensor<DST> v_output_odd, v_output_even, v_output;
-        MaskReg preg_b16 = CreatePredicate<half>(len);
+    FOR_ROWS
+        FOR_ELEMENTS(ELE_CNT_B16)
+            RegTensor<SRC> v_input_0, v_input_1;
+            RegTensor<DST> v_output_odd, v_output_even, v_output;
+            MaskReg preg_b16 = CreatePredicate<half>(len);
 
-        vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B32);
-        if constexpr (std::is_same<R, void>::value) {
-            vcvt(v_output_odd, v_input_1, preg_b32, RS_ENABLE, PART_ODD);
-            vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);    
-        } else {
-            vcvt(v_output_odd, v_input_1, preg_b32, R(), RS_ENABLE, PART_ODD);
-            vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
-        }
-        vor(v_output, v_output_even, v_output_odd, preg_b16);
-        vsts(v_output, dst, dstOffset, NORM_B16, preg_b16);
-   END_FOR_ELEMENTS
+            vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B32);
+            if constexpr (std::is_same<R, void>::value) {
+                vcvt(v_output_odd, v_input_1, preg_b32, RS_ENABLE, PART_ODD);
+                vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);    
+            } else {
+                vcvt(v_output_odd, v_input_1, preg_b32, R(), RS_ENABLE, PART_ODD);
+                vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
+            }
+            vor(v_output, v_output_even, v_output_odd, preg_b16);
+            vsts(v_output, dst, dstOffset, NORM_B16, preg_b16);
+       END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -119,24 +132,26 @@ inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dst
  *   vcvt(out_odd, in_1, preg, R(), RS_ENABLE, PART_ODD/EVEN)  // With rounding mode
  */
 template <typename R, typename DST, typename SRC>
-inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
     
-    FOR_ELEMENTS(ELE_CNT_B32)
-        RegTensor<SRC> v_input_0, v_input_1;
-        RegTensor<DST> v_output_odd, v_output_even, v_output;
-        MaskReg preg_b32_st = CreatePredicate<float>(len);
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B32)
+            RegTensor<SRC> v_input_0, v_input_1;
+            RegTensor<DST> v_output_odd, v_output_even, v_output;
+            MaskReg preg_b32_st = CreatePredicate<float>(len);
 
-        vlds(v_input_0, src, srcOffset, NORM);
-        if constexpr (std::is_same<R, void>::value) {
-            vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);    
-        } else {
-            vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
-        }
-        vsts(v_output_even, dst, dstOffset, PK_B32, preg_b32_st);
-   END_FOR_ELEMENTS
+            vlds(v_input_0, src, srcOffset, NORM);
+            if constexpr (std::is_same<R, void>::value) {
+                vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);    
+            } else {
+                vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
+            }
+            vsts(v_output_even, dst, dstOffset, PK_B32, preg_b32_st);
+       END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -146,21 +161,23 @@ inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
  *   ROUND:     s32 -> f32 #rnd     → vcvt(output, input, preg, R())
  */
 template <typename R, CastMode MODE, typename DST, typename SRC>
-inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
 
-    FOR_ELEMENTS(ELE_CNT_B32)
-        RegTensor<SRC> v_input_0;
-        RegTensor<DST> v_output;
-        MaskReg preg_b32 = CreatePredicate<float>(len);
-        
-        vlds(v_input_0, src, srcOffset, NORM);
-        if constexpr (MODE == CastMode::ROUND_SAT) {
-            vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE);
-        } else {
-            vcvt(v_output, v_input_0, preg_b32, R());
-        }
-        vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
-    END_FOR_ELEMENTS
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B32)
+            RegTensor<SRC> v_input_0;
+            RegTensor<DST> v_output;
+            MaskReg preg_b32 = CreatePredicate<float>(len);
+            
+            vlds(v_input_0, src, srcOffset, NORM);
+            if constexpr (MODE == CastMode::ROUND_SAT) {
+                vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE);
+            } else {
+                vcvt(v_output, v_input_0, preg_b32, R());
+            }
+            vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -171,26 +188,28 @@ inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dst
  *   vcvt(output, input, preg, R(), RS_ENABLE, PART_EVEN)    // f32 -> s64 (with rounding and saturation)
  */
 template <typename R, typename SRC>
-inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
 
     const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
 
-    FOR_ELEMENTS(ELE_CNT_B64)
-        RegTensor<SRC> v_input_0;
-        vector_s64 v_output;
-        uint32_t len64 = len * 2; // As we operate with 64bit blocks using 32bit operations
-        MaskReg preg_b64 = CreatePredicate<float>(len64);
-        
-        vlds(v_input_0, src, srcOffset, UNPK_B32);
-        if constexpr (std::is_same<R, void>::value) {
-            vcvt(v_output, v_input_0, preg_b32, PART_EVEN);
-        } else {
-            vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
-        }
-        vsts(v_output, dst, dstOffset, NORM_B32, preg_b64);
-    END_FOR_ELEMENTS
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B64)
+            RegTensor<SRC> v_input_0;
+            vector_s64 v_output;
+            uint32_t len64 = len * 2; // As we operate with 64bit blocks using 32bit operations
+            MaskReg preg_b64 = CreatePredicate<float>(len64);
+            
+            vlds(v_input_0, src, srcOffset, UNPK_B32);
+            if constexpr (std::is_same<R, void>::value) {
+                vcvt(v_output, v_input_0, preg_b32, PART_EVEN);
+            } else {
+                vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
+            }
+            vsts(v_output, dst, dstOffset, NORM_B32, preg_b64);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -201,23 +220,25 @@ inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, int32_t
  *   ROUND:      s16 -> f16 #rnd      → vcvt(output, input, preg, R())
  */
 template <typename R, CastMode MODE, typename DST, typename SRC >
-inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
 
-    FOR_ELEMENTS(ELE_CNT_B16)
-        RegTensor<SRC> v_input_0;
-        RegTensor<DST> v_output;
-        MaskReg preg_b16 = CreatePredicate<half>(len);
-        
-        vlds(v_input_0, src, srcOffset, NORM);
-        if constexpr (MODE == CastMode::ROUND_SAT) {
-            vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE);
-        } else if constexpr (MODE == CastMode::SAT_ROUND) {
-            vcvt(v_output, v_input_0, preg_b16, RS_ENABLE, R());
-        } else {
-            vcvt(v_output, v_input_0, preg_b16, R());
-        }
-        vsts(v_output, dst, dstOffset, NORM_B16, preg_b16);
-    END_FOR_ELEMENTS
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B16)
+            RegTensor<SRC> v_input_0;
+            RegTensor<DST> v_output;
+            MaskReg preg_b16 = CreatePredicate<half>(len);
+            
+            vlds(v_input_0, src, srcOffset, NORM);
+            if constexpr (MODE == CastMode::ROUND_SAT) {
+                vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE);
+            } else if constexpr (MODE == CastMode::SAT_ROUND) {
+                vcvt(v_output, v_input_0, preg_b16, RS_ENABLE, R());
+            } else {
+                vcvt(v_output, v_input_0, preg_b16, R());
+            }
+            vsts(v_output, dst, dstOffset, NORM_B16, preg_b16);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -228,26 +249,28 @@ inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dst
  *   ROUND_SAT_PART:  bf16 -> s32 #rnd #sat #part                       → vcvt(output, input, preg, R(), RS_ENABLE, PART_EVEN)
  */
 template <typename R, CastMode MODE, typename DST, typename SRC >
-inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
 
     uint32_t len16 = ELE_CNT_B16;
     MaskReg preg_b16 = CreatePredicate<half>(len16);
 
-    FOR_ELEMENTS(ELE_CNT_B32)
-        RegTensor<SRC> v_input_0;
-        RegTensor<DST> v_output;
-        MaskReg preg_b32 = CreatePredicate<float>(len);
-        
-        vlds(v_input_0, src, srcOffset, UNPK_B16);
-        if constexpr (MODE == CastMode::EXPAND) {
-            vcvt(v_output, v_input_0, preg_b16, PART_EVEN);
-        } else if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-            vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
-        } else {
-            vcvt(v_output, v_input_0, preg_b16, R(), PART_EVEN);
-        }
-        vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
-    END_FOR_ELEMENTS
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B32)
+            RegTensor<SRC> v_input_0;
+            RegTensor<DST> v_output;
+            MaskReg preg_b32 = CreatePredicate<float>(len);
+            
+            vlds(v_input_0, src, srcOffset, UNPK_B16);
+            if constexpr (MODE == CastMode::EXPAND) {
+                vcvt(v_output, v_input_0, preg_b16, PART_EVEN);
+            } else if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
+            } else {
+                vcvt(v_output, v_input_0, preg_b16, R(), PART_EVEN);
+            }
+            vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -257,29 +280,31 @@ inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dst
  *   SAT_PART:       s16 -> u8 #sat #part         → vcvt(..., RS_ENABLE, PART_*)
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
-inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     typedef SRC __attribute__((ext_vector_type(ELE_CNT_B16))) SRC_VEC;
    
     uint32_t len16 = ELE_CNT_B16;
     MaskReg preg_b16 = CreatePredicate<half>(len16);
 
-    FOR_ELEMENTS(ELE_CNT_B8)
-        SRC_VEC v_input_0, v_input_1;
-        DST_VEC v_output_odd, v_output_even, v_output;
-        MaskReg preg_b8 = CreatePredicate<uint8_t>(len);
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B8)
+            SRC_VEC v_input_0, v_input_1;
+            DST_VEC v_output_odd, v_output_even, v_output;
+            MaskReg preg_b8 = CreatePredicate<uint8_t>(len);
 
-        vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);
-        if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-            vcvt(v_output_odd, v_input_1, preg_b16, R(), RS_ENABLE, PART_ODD);
-            vcvt(v_output_even, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
-        } else {
-            // SAT_PART mode: s16 -> u8 without rounding
-            vcvt(v_output_odd, v_input_1, preg_b16, RS_ENABLE, PART_ODD);
-            vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
-        }
-        vor(v_output, v_output_even, v_output_odd, preg_b8);
-        vsts(v_output, dst, dstOffset, NORM_B8, preg_b8);
-    END_FOR_ELEMENTS
+            vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);
+            if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                vcvt(v_output_odd, v_input_1, preg_b16, R(), RS_ENABLE, PART_ODD);
+                vcvt(v_output_even, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
+            } else {
+                // SAT_PART mode: s16 -> u8 without rounding
+                vcvt(v_output_odd, v_input_1, preg_b16, RS_ENABLE, PART_ODD);
+                vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
+            }
+            vor(v_output, v_output_even, v_output_odd, preg_b8);
+            vsts(v_output, dst, dstOffset, NORM_B8, preg_b8);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -289,26 +314,28 @@ inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
  *   SAT_PART:       s16 -> u8 #sat #part         → vcvt(..., RS_ENABLE, PART_EVEN)
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
-inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     typedef SRC __attribute__((ext_vector_type(ELE_CNT_B16))) SRC_VEC;
    
     uint32_t len16 = ELE_CNT_B16;
     MaskReg preg_b16 = CreatePredicate<half>(len16);
 
-    FOR_ELEMENTS(ELE_CNT_B16)
-        SRC_VEC v_input_0;
-        DST_VEC v_output_even;
-        MaskReg preg_b16_st = CreatePredicate<half>(len);
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B16)
+            SRC_VEC v_input_0;
+            DST_VEC v_output_even;
+            MaskReg preg_b16_st = CreatePredicate<half>(len);
 
-        vlds(v_input_0, src, srcOffset, NORM);
-        if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-            vcvt(v_output_even, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
-        } else {
-            // SAT_PART mode: s16 -> u8 without rounding
-            vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
-        }
-        vsts(v_output_even, dst, dstOffset, PK_B16, preg_b16_st);
-    END_FOR_ELEMENTS
+            vlds(v_input_0, src, srcOffset, NORM);
+            if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                vcvt(v_output_even, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
+            } else {
+                // SAT_PART mode: s16 -> u8 without rounding
+                vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
+            }
+            vsts(v_output_even, dst, dstOffset, PK_B16, preg_b16_st);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -317,21 +344,23 @@ inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
  * Intrinsic: vcvt(output, input, preg, PART_EVEN)
  */
 template <typename SRC_VEC, typename DST, typename SRC>
-inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     typedef DST __attribute__((ext_vector_type(ELE_CNT_B16))) DST_VEC;
    
     uint32_t len8 = ELE_CNT_B8;
     MaskReg preg_b8 = CreatePredicate<uint8_t>(len8);
 
-    FOR_ELEMENTS(ELE_CNT_B16)
-        SRC_VEC v_input_0;
-        DST_VEC v_output;
-        MaskReg preg_b16 = CreatePredicate<half>(len);
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B16)
+            SRC_VEC v_input_0;
+            DST_VEC v_output;
+            MaskReg preg_b16 = CreatePredicate<half>(len);
 
-        vlds(v_input_0, src, srcOffset, UNPK_B8);
-        vcvt(v_output, v_input_0, preg_b8, PART_EVEN);
-        vsts(v_output, dst, dstOffset, NORM_B16, preg_b16);
-    END_FOR_ELEMENTS
+            vlds(v_input_0, src, srcOffset, UNPK_B8);
+            vcvt(v_output, v_input_0, preg_b8, PART_EVEN);
+            vsts(v_output, dst, dstOffset, NORM_B16, preg_b16);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -340,7 +369,7 @@ inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
  * Intrinsic: vcvt(output, input, preg, PART_*)
  */
 template <typename SRC_VEC, typename DST, typename SRC>
-inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     typedef DST __attribute__((ext_vector_type(ELE_CNT_B32))) DST_VEC;
    
     uint32_t len8 = ELE_CNT_B8;
@@ -350,25 +379,28 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
     MaskReg pg = pset_b8(PAT_ALL);
     SRC_VEC v_zero;
     vdup((RegTensor<uint8_t> &) v_zero, 0, pg, MODE_ZEROING);  
-    uint32_t next_len = (len > 64) ? len - 64 : 0;
 
-    FOR_ELEMENTS(ELE_CNT_B16)
-        SRC_VEC v_input_0, v_input_1, v_input_2;
-        DST_VEC v_output_0, v_output_1;
-        MaskReg preg_b16 = CreatePredicate<half>(len);
-        MaskReg preg_b16_next = CreatePredicate<half>(next_len);
-        MaskReg preg_b32;
-        MaskReg preg_b32_next;
-        punpack(preg_b32, preg_b16, LOWER);
-        punpack(preg_b32_next, preg_b16_next, LOWER);
+    FOR_ROWS(rows, cols)
+        uint32_t next_len = (len > 64) ? len - 64 : 0;
 
-        vlds((RegTensor<uint8_t> &) v_input_0, (__ubuf__ uint8_t *) src, srcOffset, UNPK_B8);
-        vintlv((RegTensor<uint8_t> &) v_input_1, (RegTensor<uint8_t> &) v_input_2, (RegTensor<uint8_t> &) v_input_0, (RegTensor<uint8_t> &) v_zero); // interleave with zero
-        vcvt(v_output_0, v_input_1, preg_b8, PART_P0);
-        vcvt(v_output_1, v_input_2, preg_b8, PART_P0);
-        vsts(v_output_0, dst, dstOffset + ELE_CNT_B32 * (idx * 2), NORM_B32, preg_b32);
-        vsts(v_output_1, dst, dstOffset + ELE_CNT_B32 * (idx * 2 + 1), NORM_B32, preg_b32_next);
-    END_FOR_ELEMENTS
+        FOR_ELEMENTS(ELE_CNT_B16)
+            SRC_VEC v_input_0, v_input_1, v_input_2;
+            DST_VEC v_output_0, v_output_1;
+            MaskReg preg_b16 = CreatePredicate<half>(len);
+            MaskReg preg_b16_next = CreatePredicate<half>(next_len);
+            MaskReg preg_b32;
+            MaskReg preg_b32_next;
+            punpack(preg_b32, preg_b16, LOWER);
+            punpack(preg_b32_next, preg_b16_next, LOWER);
+
+            vlds((RegTensor<uint8_t> &) v_input_0, (__ubuf__ uint8_t *) src, srcOffset, UNPK_B8);
+            vintlv((RegTensor<uint8_t> &) v_input_1, (RegTensor<uint8_t> &) v_input_2, (RegTensor<uint8_t> &) v_input_0, (RegTensor<uint8_t> &) v_zero); // interleave with zero
+            vcvt(v_output_0, v_input_1, preg_b8, PART_P0);
+            vcvt(v_output_1, v_input_2, preg_b8, PART_P0);
+            vsts(v_output_0, dst, dstOffset + ELE_CNT_B32 * (idx * 2), NORM_B32, preg_b32);
+            vsts(v_output_1, dst, dstOffset + ELE_CNT_B32 * (idx * 2 + 1), NORM_B32, preg_b32_next);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -381,12 +413,10 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
  *   vcvt(..., RS_ENABLE, PART_*) for integer without rounding
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
-inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     typedef SRC __attribute__((ext_vector_type(ELE_CNT_B32))) SRC_VEC;
 
     constexpr int INPUT_VL_LEN = 64; // Max vector length for 8-bit output
-    uint32_t preg_len_head = INPUT_VL_LEN;
-    uint32_t preg_len_tail = (len % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (len % INPUT_VL_LEN);
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
     MaskReg preg_idx = pset_b8(PAT_ALL);
@@ -394,24 +424,29 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
     vci((RegTensor<int8_t> &) v_idx, (int8_t) 0 , INC_ORDER);
     vmuls((RegTensor<int16_t> &) v_idx, (RegTensor<int16_t> &) v_idx, (int16_t) 4, preg_idx); // multiply by 4 for byte addressing
 
-    FOR_ELEMENTS(ELE_CNT_B32)
-        SRC_VEC v_input_0;
-        DST_VEC v_output_0, v_output;
-        uint32_t preg_len = (idx == repeatTimes - 1) ? preg_len_tail : preg_len_head;
-        MaskReg preg_b8 = CreatePredicate<uint8_t>(preg_len);
+    FOR_ROWS(rows, cols)
+        uint32_t preg_len_head = INPUT_VL_LEN;
+        uint32_t preg_len_tail = (len % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (len % INPUT_VL_LEN);
 
-        vlds(v_input_0, src, srcOffset, NORM);
-        if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-            // Floating point conversion with rounding
-            vcvt(v_output_0, v_input_0, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
-            vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
-        } else {
-            // Integer conversion without rounding (SAT_PART mode)
-            vcvt(v_output_0, v_input_0, preg_b32, RS_ENABLE, PART_P0);
-            vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
-        }
-        vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
-    END_FOR_ELEMENTS
+        FOR_ELEMENTS(ELE_CNT_B32)
+            SRC_VEC v_input_0;
+            DST_VEC v_output_0, v_output;
+            uint32_t preg_len = (idx == repeatTimes - 1) ? preg_len_tail : preg_len_head;
+            MaskReg preg_b8 = CreatePredicate<uint8_t>(preg_len);
+
+            vlds(v_input_0, src, srcOffset, NORM);
+            if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                // Floating point conversion with rounding
+                vcvt(v_output_0, v_input_0, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
+                vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
+            } else {
+                // Integer conversion without rounding (SAT_PART mode)
+                vcvt(v_output_0, v_input_0, preg_b32, RS_ENABLE, PART_P0);
+                vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
+            }
+            vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 
@@ -421,27 +456,31 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, int32_t& dstO
  * Intrinsic: vtrc(output, input, R(), preg)
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    FOR_ELEMENTS(ELE_CNT_B32)
-        vector_f32 v_input_0, v_output;
-        MaskReg preg_b32 = CreatePredicate<float>(len);
-        
-        vlds(v_input_0, src, srcOffset, NORM);
-        vtrc(v_output, v_input_0, R(), preg_b32);
-        vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
-    END_FOR_ELEMENTS
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B32)
+            vector_f32 v_input_0, v_output;
+            MaskReg preg_b32 = CreatePredicate<float>(len);
+            
+            vlds(v_input_0, src, srcOffset, NORM);
+            vtrc(v_output, v_input_0, R(), preg_b32);
+            vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    FOR_ELEMENTS(ELE_CNT_B32)
-        vector_f32 v_input_0, v_output;
-        MaskReg preg_b32 = CreatePredicate<float>(len);
-        
-        vlds(v_input_0, src, srcOffset, NORM);
-        vtrc(v_output, v_input_0, R(), preg_b32);
-        vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
-    END_FOR_ELEMENTS
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B32)
+            vector_f32 v_input_0, v_output;
+            MaskReg preg_b32 = CreatePredicate<float>(len);
+            
+            vlds(v_input_0, src, srcOffset, NORM);
+            vtrc(v_output, v_input_0, R(), preg_b32);
+            vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 /**
@@ -450,13 +489,13 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float 
  * Uses cast32to16 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ float16_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16<R>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float16_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float16_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16_2D_NoPostUpdate<R>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float16_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16_2D_NoPostUpdate<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 
@@ -466,13 +505,13 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float16_t *dst, __ubuf__ fl
  * Uses cast32to16 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ bfloat16_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16<R>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ bfloat16_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ bfloat16_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16_2D_NoPostUpdate<R>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ bfloat16_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16_2D_NoPostUpdate<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /**
@@ -481,13 +520,13 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ bfloat16_t *dst, __ubuf__ f
  * Uses cast32to16 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16<R>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16_2D_NoPostUpdate<R>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16_2D_NoPostUpdate<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /**
@@ -496,13 +535,13 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ floa
  * Intrinsic: vcvt(output, input, preg, R(), RS_ENABLE)
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to32<R, CastMode::ROUND_SAT>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to32<R, CastMode::ROUND_SAT>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to32<R, CastMode::ROUND_SAT>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to32<R, CastMode::ROUND_SAT>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /**
@@ -511,13 +550,13 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ floa
  * Uses cast32toS64 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32toS64<R>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32toS64<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32toS64<R>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32toS64<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /**
@@ -526,13 +565,13 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ floa
  * Uses cast32to8 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /**
@@ -541,13 +580,13 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf_
  * Uses cast32to8 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /**
@@ -556,10 +595,8 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf_
  * Uses cast32to8 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     constexpr int INPUT_VL_LEN = 64; // Max vector length for 8-bit output
-    uint32_t preg_len_head = INPUT_VL_LEN;
-    uint32_t preg_len_tail = (len % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (len % INPUT_VL_LEN);
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
     MaskReg preg_idx = pset_b8(PAT_ALL);
@@ -567,443 +604,449 @@ inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, int32
     vci((RegTensor<int8_t> &) v_idx, (int8_t) 0 , INC_ORDER);
     vmuls((RegTensor<int16_t> &) v_idx, (RegTensor<int16_t> &) v_idx, (int16_t) 4, preg_idx); // multiply by 4 for byte addressing
     
-    FOR_ELEMENTS(ELE_CNT_B32)
-        vector_f32 v_input_0;
-        vector_hif8 v_output_0, v_output;
-        uint32_t preg_len = (idx == repeatTimes - 1) ? preg_len_tail : preg_len_head;
-        MaskReg preg_b8 = CreatePredicate<uint8_t>(preg_len);
-        vlds(v_input_0, src, srcOffset, NORM);
-        vcvt(v_output_0, v_input_0, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
-        vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
-        vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
-    END_FOR_ELEMENTS
+    FOR_ROWS(rows, cols)
+        uint32_t preg_len_head = INPUT_VL_LEN;
+        uint32_t preg_len_tail = (len % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (len % INPUT_VL_LEN);
+        FOR_ELEMENTS(ELE_CNT_B32)
+            vector_f32 v_input_0;
+            vector_hif8 v_output_0, v_output;
+            uint32_t preg_len = (idx == repeatTimes - 1) ? preg_len_tail : preg_len_head;
+            MaskReg preg_b8 = CreatePredicate<uint8_t>(preg_len);
+            vlds(v_input_0, src, srcOffset, NORM);
+            vcvt(v_output_0, v_input_0, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
+            vselr((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_0, (RegTensor<uint8_t> &) v_idx);
+            vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     // Same complex logic as castData - just reuse it
-    castData<R>(dst, src, dstOffset, srcOffset, len);
+    castData<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 //--- Src:: FP16 ----------------------------------------------------------------------
 /** FP16 -> FP32 #part (type expansion) → vcvt(output, input, preg, PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** FP16 -> I32 #rnd #part → vcvt(output, input, preg, R(), PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<R, CastMode::ROUND_PART>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<R, CastMode::ROUND_PART>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<R, CastMode::ROUND_PART>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<R, CastMode::ROUND_PART>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** FP16 -> I16 #rnd #sat → vcvt(output, input, preg, R(), RS_ENABLE) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to16<R, CastMode::ROUND_SAT>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to16<R, CastMode::ROUND_SAT>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to16<R, CastMode::ROUND_SAT>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to16<R, CastMode::ROUND_SAT>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** FP16 -> I8 #rnd #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ int8_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int8_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** FP16 -> U8 #rnd #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** FP16 -> FP8_E5M2 #rnd #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** FP16 -> FP8_E4M3 #rnd #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** FP16 -> H8 #rnd #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     // FP16->H8 conversion only supports ROUND_A or ROUND_H modes
     // static_assert(std::is_same<R, RoundAType>::value || std::is_same<R, RoundCType>::value,
     //               "Fix: FP16 to HIFLOAT8 conversion only supports ROUND_A (CAST_ROUND) or ROUND_H (CAST_CEIL) rounding modes");
     uint32_t len16 = ELE_CNT_B16;
     MaskReg preg_b16 = CreatePredicate<half>(len16);
 
-    FOR_ELEMENTS(ELE_CNT_B8)
-        vector_f16 v_input_0, v_input_1;
-        vector_hif8 v_output_odd, v_output_even, v_output;
-        MaskReg preg_b8 = CreatePredicate<uint8_t>(len);
+    FOR_ROWS(rows, cols)
+        FOR_ELEMENTS(ELE_CNT_B8)
+            vector_f16 v_input_0, v_input_1;
+            vector_hif8 v_output_odd, v_output_even, v_output;
+            MaskReg preg_b8 = CreatePredicate<uint8_t>(len);
 
-        vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);
-        vcvt(v_output_odd, v_input_1, preg_b16, ROUND_A, RS_ENABLE, PART_ODD);
-        vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_ENABLE, PART_EVEN);
-        vor((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_even, (RegTensor<uint8_t> &) v_output_odd, preg_b8);
-        vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
-    END_FOR_ELEMENTS
+            vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);
+            vcvt(v_output_odd, v_input_1, preg_b16, ROUND_A, RS_ENABLE, PART_ODD);
+            vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_ENABLE, PART_EVEN);
+            vor((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_even, (RegTensor<uint8_t> &) v_output_odd, preg_b8);
+            vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
     // Same complex logic as castData - just reuse it
-    castData<R>(dst, src, dstOffset, srcOffset, len);
+    castData<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 //--- Src:: BF16 ----------------------------------------------------------------------
 /** BF16 -> FP32 #part (type expansion) → vcvt(output, input, preg, PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ bfloat16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ bfloat16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** BF16 -> I32 #rnd #sat #part → vcvt(output, input, preg, R(), RS_ENABLE, PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<R, CastMode::ROUND_SAT_PART>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ bfloat16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<R, CastMode::ROUND_SAT_PART>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<R, CastMode::ROUND_SAT_PART>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ bfloat16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<R, CastMode::ROUND_SAT_PART>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** BF16 -> F16 #sat #rnd → vcvt(output, input, preg, RS_ENABLE, R()) [reversed order] */
 template <typename R>
-inline AICORE void castData(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to16<R, CastMode::SAT_ROUND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to16<R, CastMode::SAT_ROUND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to16<R, CastMode::SAT_ROUND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to16<R, CastMode::SAT_ROUND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** BF16 -> FP8_E5M2 #rnd #sat #part → vcvt(..., R(), RS_ENABLE, PART_*) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ bfloat16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf__ bfloat16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** BF16 -> FP8_E4M3 #rnd #sat #part → vcvt(..., R(), RS_ENABLE, PART_*) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ bfloat16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ bfloat16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ bfloat16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 //--- Src:: U8,I8 ----------------------------------------------------------------------
 /** U8 -> FP16 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ half *dst, __ubuf__ uint8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to16<vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ half *dst, __ubuf__ uint8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to16<vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ uint8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to16<vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ uint8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to16<vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** U8 -> U16 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ uint8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to16<vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ uint8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to16<vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to16<vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to16<vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I8 -> FP16 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ half *dst, __ubuf__ int8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to16<vector_s8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ half *dst, __ubuf__ int8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to16<vector_s8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to16<vector_s8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to16<vector_s8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I8 -> I16 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ int8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to16<vector_s8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ int8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to16<vector_s8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to16<vector_s8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to16<vector_s8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I8 -> I32 #pp (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to32<vector_s8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to32<vector_s8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to32<vector_s8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to32<vector_s8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 //--- Src:: I16 ----------------------------------------------------------------------
 /** I16 -> U8 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ int16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<void, CastMode::SAT_PART, vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ int16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8<void, CastMode::SAT_PART, vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to8<void, CastMode::SAT_PART, vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to8<void, CastMode::SAT_PART, vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I16 -> FP16 #rnd → vcvt(output, input, preg, R()) */
 template <typename R>
-inline AICORE void castData(__ubuf__ half *dst, __ubuf__ int16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to16<R, CastMode::ROUND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ half *dst, __ubuf__ int16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to16<R, CastMode::ROUND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to16<R, CastMode::ROUND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to16<R, CastMode::ROUND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I16 -> FP32 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I16 -> U32 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint32_t *dst, __ubuf__ int16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ uint32_t *dst, __ubuf__ int16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint32_t *dst, __ubuf__ int16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint32_t *dst, __ubuf__ int16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I16 -> I32 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int16_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int16_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 //--- Src:: I32 ----------------------------------------------------------------------
 /** I32 -> FP32 #rnd → vcvt(output, input, preg, R()) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to32<R, CastMode::ROUND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to32<R, CastMode::ROUND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to32<R, CastMode::ROUND>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to32<R, CastMode::ROUND>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I32 -> I16 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ int32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ int32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16_2D_NoPostUpdate<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16_2D_NoPostUpdate<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I32 -> U16 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ int32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ int32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ int32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16_2D_NoPostUpdate<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ int32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16_2D_NoPostUpdate<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I32 -> I64 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32toS64<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32toS64<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32toS64<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32toS64<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I32 -> U8 #sat #pp */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 //--- Src:: U32 ----------------------------------------------------------------------
 /** U32 -> U8 #sat #pp */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ uint32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ uint32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ uint32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ uint32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** U32 -> U16 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ uint32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ uint32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16_2D_NoPostUpdate<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16_2D_NoPostUpdate<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** U32 -> I16 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ uint32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ uint32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint32_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast32to16_2D_NoPostUpdate<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint32_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast32to16_2D_NoPostUpdate<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 //--- Src:: I64 ----------------------------------------------------------------------
 /** I64 -> FP32 #rnd #part → vcvt(output, input, preg, R(), PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int64_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    castS64to32<R>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    castS64to32<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int64_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    castS64to32<R>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    castS64to32<R>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** I64 -> I32 #sat #part → vcvt(output, input, preg, RS_ENABLE, PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    castS64to32<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    castS64to32<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    castS64to32<void>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    castS64to32<void>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 //--- Src:: FP8 ----------------------------------------------------------------------
 /** E4M3 -> FP32 #pp (type expansion) → vcvt(output, input, preg, PART_EVEN/ODD) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to32<vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to32<vector_f8e4m3>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to32<vector_f8e4m3>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to32<vector_f8e4m3>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** E5M2 -> FP32 #pp (type expansion) → vcvt(output, input, preg, PART_EVEN/ODD) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to32<vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to32<vector_f8e5m2>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to32<vector_f8e5m2>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to32<vector_f8e5m2>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /** H8 -> FP32 #pp (type expansion) → vcvt(output, input, preg, PART_EVEN/ODD) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to32<vector_hif8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to32<vector_hif8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, int32_t& dstOffset, int32_t& srcOffset, uint32_t len) {
-    cast8to32<vector_hif8>(dst, src, dstOffset, srcOffset, len);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, uint32_t rows, uint32_t cols, uint32_t dstCols, uint32_t srcCols) {
+    cast8to32<vector_hif8>(dst, src, rows, cols, dstCols, srcCols);
 }
 
 /**
@@ -1024,17 +1067,13 @@ void implTCVT(typename TileDataD::TileDType __out__ dst,
     __VEC_SCOPE__ {
         uint16_t rows = (uint16_t) validRows;
         uint16_t cols = (uint16_t) validCols;
-        for (uint16_t row = 0; row < rows; row++) {
-            int32_t dstOffset = row * TileDataD::Cols;
-            int32_t srcOffset = row * TileDataS::Cols;
-            switch (version) {
-                case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
-                    castData_2D_NoPostUpdate<R>(dstPtr, srcPtr, dstOffset, srcOffset, cols);
-                    break;
-                default:
-                    castData<R>(dstPtr, srcPtr, dstOffset, srcOffset, cols);
-                    break;
-            }
+        switch (version) {
+            case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
+                castData_2D_NoPostUpdate<R>(dstPtr, srcPtr, rows, cols, TileDataD::Cols, TileDataS::Cols);
+                break;
+            default:
+                castData<R>(dstPtr, srcPtr, rows, cols, TileDataD::Cols, TileDataS::Cols);
+                break;
         }
     }
 }
