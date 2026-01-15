@@ -163,6 +163,7 @@ tscatter
 tfa
 tcolexpand
 ttri
+tlrelu
 tnot
 )
 
