@@ -43,7 +43,7 @@ enum class CastMode {
 };
 
 #define FOR_ELEMENTS(elNum) constexpr uint16_t elementsNum = (elNum);\
-    uint16_t repeatTimes = CeilDivision(cols, elementsNum);\
+    uint16_t repeatTimes = CeilDivision(len, elementsNum);\
     for(uint16_t idx = 0; idx < repeatTimes; idx++) {
 
 
@@ -52,7 +52,8 @@ enum class CastMode {
 #define FOR_ROWS \
     for (uint16_t row = 0; row < rows; row++) {\
         int32_t dstOffset = row * dstCols;\
-        int32_t srcOffset = row * srcCols;
+        int32_t srcOffset = row * srcCols;\
+        uint32_t len = cols;
 
 #define END_FOR_ROWS }
 
@@ -71,12 +72,12 @@ inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t ro
     const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
 
     FOR_ROWS
-        uint32_t len64 = cols * 2; // As we operate with 64bit blocks using 32bit operations
+        uint32_t len64 = len * 2; // As we operate with 64bit blocks using 32bit operations
         MaskReg preg_b64 = CreatePredicate<float>(len64);
 
         FOR_ELEMENTS(ELE_CNT_B64)
             RegTensor<DST> v_output;
-            uint32_t len_even = cols * 2; // As only the even part is taken
+            uint32_t len_even = len * 2; // As only the even part is taken
             MaskReg preg_b32 = CreatePredicate<float>(len_even);
             
             vlds(v_input_0, src, srcOffset, NORM);
@@ -107,7 +108,7 @@ inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t row
         FOR_ELEMENTS(ELE_CNT_B16)
             RegTensor<SRC> v_input_0, v_input_1;
             RegTensor<DST> v_output_odd, v_output_even, v_output;
-            MaskReg preg_b16 = CreatePredicate<half>(cols);
+            MaskReg preg_b16 = CreatePredicate<half>(len);
 
             vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B32);
             if constexpr (std::is_same<R, void>::value) {
@@ -140,7 +141,7 @@ inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
         FOR_ELEMENTS(ELE_CNT_B32)
             RegTensor<SRC> v_input_0, v_input_1;
             RegTensor<DST> v_output_odd, v_output_even, v_output;
-            MaskReg preg_b32_st = CreatePredicate<float>(cols);
+            MaskReg preg_b32_st = CreatePredicate<float>(len);
 
             vlds(v_input_0, src, srcOffset, NORM);
             if constexpr (std::is_same<R, void>::value) {
@@ -166,7 +167,7 @@ inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t row
         FOR_ELEMENTS(ELE_CNT_B32)
             RegTensor<SRC> v_input_0;
             RegTensor<DST> v_output;
-            MaskReg preg_b32 = CreatePredicate<float>(cols);
+            MaskReg preg_b32 = CreatePredicate<float>(len);
             
             vlds(v_input_0, src, srcOffset, NORM);
             if constexpr (MODE == CastMode::ROUND_SAT) {
@@ -197,7 +198,7 @@ inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_
         FOR_ELEMENTS(ELE_CNT_B64)
             RegTensor<SRC> v_input_0;
             vector_s64 v_output;
-            uint32_t len64 = cols * 2; // As we operate with 64bit blocks using 32bit operations
+            uint32_t len64 = len * 2; // As we operate with 64bit blocks using 32bit operations
             MaskReg preg_b64 = CreatePredicate<float>(len64);
             
             vlds(v_input_0, src, srcOffset, UNPK_B32);
@@ -225,7 +226,7 @@ inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t row
         FOR_ELEMENTS(ELE_CNT_B16)
             RegTensor<SRC> v_input_0;
             RegTensor<DST> v_output;
-            MaskReg preg_b16 = CreatePredicate<half>(cols);
+            MaskReg preg_b16 = CreatePredicate<half>(len);
             
             vlds(v_input_0, src, srcOffset, NORM);
             if constexpr (MODE == CastMode::ROUND_SAT) {
@@ -257,7 +258,7 @@ inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t row
         FOR_ELEMENTS(ELE_CNT_B32)
             RegTensor<SRC> v_input_0;
             RegTensor<DST> v_output;
-            MaskReg preg_b32 = CreatePredicate<float>(cols);
+            MaskReg preg_b32 = CreatePredicate<float>(len);
             
             vlds(v_input_0, src, srcOffset, UNPK_B16);
             if constexpr (MODE == CastMode::EXPAND) {
@@ -289,7 +290,7 @@ inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows
         FOR_ELEMENTS(ELE_CNT_B8)
             SRC_VEC v_input_0, v_input_1;
             DST_VEC v_output_odd, v_output_even, v_output;
-            MaskReg preg_b8 = CreatePredicate<uint8_t>(cols);
+            MaskReg preg_b8 = CreatePredicate<uint8_t>(len);
 
             vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);
             if constexpr (MODE == CastMode::ROUND_SAT_PART) {
@@ -323,7 +324,7 @@ inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         FOR_ELEMENTS(ELE_CNT_B16)
             SRC_VEC v_input_0;
             DST_VEC v_output_even;
-            MaskReg preg_b16_st = CreatePredicate<half>(cols);
+            MaskReg preg_b16_st = CreatePredicate<half>(len);
 
             vlds(v_input_0, src, srcOffset, NORM);
             if constexpr (MODE == CastMode::ROUND_SAT_PART) {
@@ -353,7 +354,7 @@ inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows
         FOR_ELEMENTS(ELE_CNT_B16)
             SRC_VEC v_input_0;
             DST_VEC v_output;
-            MaskReg preg_b16 = CreatePredicate<half>(cols);
+            MaskReg preg_b16 = CreatePredicate<half>(len);
 
             vlds(v_input_0, src, srcOffset, UNPK_B8);
             vcvt(v_output, v_input_0, preg_b8, PART_EVEN);
@@ -380,12 +381,12 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows
     vdup((RegTensor<uint8_t> &) v_zero, 0, pg, MODE_ZEROING);  
 
     FOR_ROWS
-        uint32_t next_len = (cols > 64) ? cols - 64 : 0;
+        uint32_t next_len = (len > 64) ? len - 64 : 0;
 
         FOR_ELEMENTS(ELE_CNT_B16)
             SRC_VEC v_input_0, v_input_1, v_input_2;
             DST_VEC v_output_0, v_output_1;
-            MaskReg preg_b16 = CreatePredicate<half>(cols);
+            MaskReg preg_b16 = CreatePredicate<half>(len);
             MaskReg preg_b16_next = CreatePredicate<half>(next_len);
             MaskReg preg_b32;
             MaskReg preg_b32_next;
@@ -425,7 +426,7 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t rows
 
     FOR_ROWS
         uint32_t preg_len_head = INPUT_VL_LEN;
-        uint32_t preg_len_tail = (cols % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (cols % INPUT_VL_LEN);
+        uint32_t preg_len_tail = (len % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (len % INPUT_VL_LEN);
 
         FOR_ELEMENTS(ELE_CNT_B32)
             SRC_VEC v_input_0;
@@ -459,7 +460,7 @@ inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float *src, uint32_t r
     FOR_ROWS
         FOR_ELEMENTS(ELE_CNT_B32)
             vector_f32 v_input_0, v_output;
-            MaskReg preg_b32 = CreatePredicate<float>(cols);
+            MaskReg preg_b32 = CreatePredicate<float>(len);
             
             vlds(v_input_0, src, srcOffset, NORM);
             vtrc(v_output, v_input_0, R(), preg_b32);
@@ -473,7 +474,7 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float 
     FOR_ROWS
         FOR_ELEMENTS(ELE_CNT_B32)
             vector_f32 v_input_0, v_output;
-            MaskReg preg_b32 = CreatePredicate<float>(cols);
+            MaskReg preg_b32 = CreatePredicate<float>(len);
             
             vlds(v_input_0, src, srcOffset, NORM);
             vtrc(v_output, v_input_0, R(), preg_b32);
@@ -605,7 +606,7 @@ inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint3
     
     FOR_ROWS
         uint32_t preg_len_head = INPUT_VL_LEN;
-        uint32_t preg_len_tail = (cols % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (cols % INPUT_VL_LEN);
+        uint32_t preg_len_tail = (len % INPUT_VL_LEN == 0) ? INPUT_VL_LEN : (len % INPUT_VL_LEN);
         FOR_ELEMENTS(ELE_CNT_B32)
             vector_f32 v_input_0;
             vector_hif8 v_output_0, v_output;
@@ -716,7 +717,7 @@ inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32
         FOR_ELEMENTS(ELE_CNT_B8)
             vector_f16 v_input_0, v_input_1;
             vector_hif8 v_output_odd, v_output_even, v_output;
-            MaskReg preg_b8 = CreatePredicate<uint8_t>(cols);
+            MaskReg preg_b8 = CreatePredicate<uint8_t>(len);
 
             vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);
             vcvt(v_output_odd, v_input_1, preg_b16, ROUND_A, RS_ENABLE, PART_ODD);
