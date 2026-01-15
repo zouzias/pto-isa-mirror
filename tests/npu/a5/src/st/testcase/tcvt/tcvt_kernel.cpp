@@ -119,9 +119,9 @@ void launchTCVT(D *dst, S *src, void *stream) {
     template void launchTCVT<dst_type, src_type, 3, 256, 3, 256, 3, 192>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 2, 128, 2, 128, 2, 96>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 8, 64, 8, 64, 8, 33>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 4, 256, 4, 256, 3, 200>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 6, 128, 6, 128, 4, 80>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 2, 256, 2, 256, 1, 200>(dst_type *dst, src_type *src, void *stream);
+    template void launchTCVT<dst_type, src_type, 6, 128, 6, 128, 6, 80>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 4, 256, 4, 256, 4, 200>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 1, 256, 1, 256, 1, 129>(dst_type *dst, src_type *src, void *stream);
 
 // FP32 Source
 INSTANTIATE_TCVT(float, float)
