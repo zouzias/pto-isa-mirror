@@ -194,9 +194,23 @@ if __name__ == "__main__":
     ]
 
     # Different shape configurations (m, n)
+    # Note: Tiles must be 32-byte aligned, so Cols * sizeof(T) must be >= 32 bytes
+    # - For 32-bit types (float, int32): need Cols >= 8
+    # - For 16-bit types (half, int16): need Cols >= 16  
+    # - For 8-bit types (int8, fp8): need Cols >= 32
+    # Using shapes that work for all types (Cols >= 32)
     shapes = [
-        (3, 64),   # Multi-row contiguous - tests 1D path
-        (1, 256),   # Single row large - tests 1D path
+        # Single-row shapes (triggers 1D: Rows == 1)
+        (1, 64),    # Single row small
+        (1, 128),   # Single row exactly one vector (ELE_CNT_B32 for 32-bit)
+        (1, 256),   # Single row large - needs 2 iterations for 32-bit
+        
+        # Multi-row contiguous shapes (triggers 1D: ValidCol == Cols)
+        (2, 32),    # Minimal aligned multi-row
+        (2, 64),    # Multi-row medium contiguous
+        (3, 64),    # Multi-row contiguous
+        (2, 128),   # Multi-row exactly one vector per row
+        (4, 32),    # Multiple small rows
     ]
     
     # Partial tile configurations (m, n, valid_m, valid_n)

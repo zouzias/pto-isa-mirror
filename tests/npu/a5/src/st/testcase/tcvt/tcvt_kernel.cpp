@@ -106,8 +106,14 @@ void launchTCVT(D *dst, S *src, void *stream) {
 
 // Macro to generate template instantiations for all shapes for a given type pair
 #define INSTANTIATE_TCVT(dst_type, src_type) \
-    template void launchTCVT<dst_type, src_type, 3, 64, 3, 64>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 1, 64, 1, 64>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 1, 128, 1, 128>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 1, 256, 1, 256>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 2, 32, 2, 32>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 2, 64, 2, 64>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 3, 64, 3, 64>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 2, 128, 2, 128>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 4, 32, 4, 32>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 2, 256, 2, 256, 2, 129>(dst_type *dst, src_type *src, void *stream);
 
 // FP32 Source

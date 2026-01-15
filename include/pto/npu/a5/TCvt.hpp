@@ -301,7 +301,7 @@ inline AICORE void cast8to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         SRC_VEC v_input_0, v_input_1, v_input_2;
         RegTensor<DST> v_output_0, v_output_1;
-        uint32_t next_len = (sReg > 64) ? sReg - 64 : 0;
+        uint32_t next_len = (sReg > ELE_CNT_B32) ? sReg - ELE_CNT_B32 : 0;
         MaskReg preg_b16_cur = CreatePredicate<half>(sReg);
         MaskReg preg_b16_next = CreatePredicate<half>(next_len);
         MaskReg preg_b32, preg_b32_next;
@@ -727,7 +727,7 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
     vdup((RegTensor<uint8_t> &) v_zero, 0, pg, MODE_ZEROING);  
 
     FOR_ROWS
-        uint32_t next_len = (sreg > 64) ? sreg - 64 : 0;
+        uint32_t next_len = (sreg > ELE_CNT_B32) ? sreg - ELE_CNT_B32 : 0;
 
         FOR_ELEMENTS(ELE_CNT_B16)
             SRC_VEC v_input_0, v_input_1, v_input_2;
