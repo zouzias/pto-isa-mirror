@@ -35,6 +35,41 @@ PTO_INTERNAL void TLoadInstr(__ubuf__ typename TileData::DType *dst, typename Gl
     }
 }
 
+// GM -> UBUF copy helper using stride-based parameters (A5 style)
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLoadInstrGm2ub(__ubuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
+    uint16_t nBurst, uint32_t lenBurst, uint32_t gmGap, uint32_t ubGap, uint32_t ubPad) {
+    if (nBurst == 0 || lenBurst == 0) {
+        return;
+    }
+
+    // Convert legacy gap inputs to stride bytes to leverage the v2 copy primitive.
+    const uint64_t gmStride = static_cast<uint64_t>(lenBurst) + static_cast<uint64_t>(gmGap);
+    const uint32_t ubStride = static_cast<uint32_t>(lenBurst + (ubGap << SHIFT_BLOCK_BYTE));
+    const bool enableUBPad = (ubPad != 0);
+    const uint32_t rightPad = enableUBPad ? ubPad : 0;
+
+    if constexpr (sizeof(typename TileData::DType) == 1) {
+        copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint8_t *>(dst), reinterpret_cast<__gm__ uint8_t *>(src),
+            0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/, rightPad /*right padding count*/,
+            enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
+    } else if constexpr (sizeof(typename TileData::DType) == 2) {
+        copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint16_t *>(dst), reinterpret_cast<__gm__ uint16_t *>(src),
+            0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/, rightPad /*right padding count*/,
+            enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
+    } else if constexpr (sizeof(typename TileData::DType) == 4) {
+        copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint32_t *>(dst), reinterpret_cast<__gm__ uint32_t *>(src),
+            0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/, rightPad /*right padding count*/,
+            enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
+    } else if constexpr (sizeof(typename TileData::DType) == 8) {
+        // b64 still uses b32 mover; padding count doubles in b32 units.
+        const uint32_t pad32 = rightPad << 1;
+        copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint32_t *>(dst), reinterpret_cast<__gm__ uint32_t *>(src),
+            0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/, pad32 /*right padding count*/,
+            enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
+    }
+}
+
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadVecND2ND(typename TileData::TileDType dstAddr, typename GlobalData::DType *srcAddr, int gShape0,
     int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3,
