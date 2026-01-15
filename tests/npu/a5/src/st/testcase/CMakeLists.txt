@@ -197,6 +197,7 @@ set(ALL_TESTCASES
     tcolexpand
     tnot
     trelu
+    tsoftmax_fa
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
