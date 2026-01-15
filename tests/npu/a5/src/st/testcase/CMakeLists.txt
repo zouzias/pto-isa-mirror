@@ -185,6 +185,8 @@ set(ALL_TESTCASES
     ttri
     tcolexpand
     tnot
+    tands
+    tors
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
