@@ -968,7 +968,8 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                              ReduceTileD1 &tmp2) {
 
             if(!init){
-                TCOLMAX(local_max, input_x);  //for DN case, pto dont support colmax now
+                /*
+                TCOLMAX(local_max, input_x);
                 TMULS(tmp2, local_max, 0.8f);
                 TMAX(tmp1, tmp2, new_global_max);
                 TSUB(tmp1, new_global_max, tmp1);
@@ -982,9 +983,25 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 TCVT(x_exp, input_x, RoundMode::CAST_ROUND);
                 TMUL(new_global_sum, exp_max, new_global_sum);
                 TADD(new_global_sum, new_global_sum, local_sum);
+                */
+
+                TCOLMAX(local_max, input_x);
+                TMAX(local_max, local_max, new_global_max);
+                TSUB(exp_max, new_global_max, local_max);
+                TMULS(new_global_max, local_max, 1.0f);
+                TMULS(exp_max, exp_max, 0.8f);
+                TEXP(exp_max, exp_max);
+                TCOLEXPANDSUB(input_x, input_x, local_max);
+                TMULS(input_x, input_x, 0.8f);
+                TEXP(input_x, input_x);
+                TCOLSUM(local_sum, input_x, tmp1, false);
+                TCVT(x_exp, input_x, RoundMode::CAST_ROUND);
+                TMUL(new_global_sum, exp_max, new_global_sum);
+                TADD(new_global_sum, new_global_sum, local_sum);
             }
             else {
-                TCOLMAX(local_max, input_x);  //for DN case, pto dont support colmax now
+                /*
+                TCOLMAX(local_max, input_x);
                 TCOLEXPAND(tmp0, local_max);
                 TSUB(input_x, input_x, tmp0);
                 TMULS(input_x, input_x, 0.8f);
@@ -994,6 +1011,15 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 TCOLSUM(new_global_sum, input_x, tmp0, false);
                 TMULS(input_x, input_x, 1.0f);  //KeepProb, compiler cannot optimize
                 TCVT(x_exp, input_x, RoundMode::CAST_ROUND);
+                */
+
+                TCOLMAX(new_global_max, input_x);
+                TCOLEXPANDSUB(input_x, input_x, new_global_max);
+                TMULS(input_x, input_x, 0.8f);
+                TEXP(input_x, input_x);
+                TCOLSUM(new_global_sum, input_x, tmp1, false);
+                TMULS(input_x, input_x, 1.0f);
+                TCVT(x_exp, input_x, RoundMode::CAST_ROUND);    //1111 ND output
             }
 
     }

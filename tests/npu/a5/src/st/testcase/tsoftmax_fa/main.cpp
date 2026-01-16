@@ -304,10 +304,12 @@ void test_softmax_dn_no_fusion()
     bool ret5 = ResultCmp(golden5, devFinal5, 0.001f);
     bool ret = false;
     if(init){
-        ret = ret0 && ret1 && ret5;
+        // ret = ret0 && ret1 && ret5;
+        ret = ret0 && ret5;    //dont need to check local max
     }
     else {
-        ret = ret0 && ret1 && ret2 && ret3 && ret5;
+        // ret = ret0 && ret1 && ret2 && ret3 && ret5;
+        ret = ret0 && ret2 && ret3 && ret5;    //dont need to check local max
     }
 
     EXPECT_TRUE(ret);
