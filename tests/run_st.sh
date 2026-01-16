@@ -76,6 +76,8 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsels -g TSELSTest.case_half_16x256_16x256_16x256
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsort32 -g TSort32Test.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tadd -g TADDTest.case_float_64x64_64x64
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tand -g TANDTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tor -g TANDTest.case2
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tpartadd -g TPARTADDTest.case_float_64x64_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsel -g TSELTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tfillpad -g TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX
@@ -96,6 +98,12 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcmp -g TCMPTest.case_float_1x64_1x64_1x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tscatter -g TSCATTERTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t ttri -g TTRITest.case_float_128x128_128x31_1__444
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tnot -g TNOTTest.case_int16_64x64_64x64_64x64
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trelu -g TNOTTest.case_int32_64x64_64x64_64x64
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tands -g TANDSTest.case_int16_64x64_64x64_64x64
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tors -g TORSTest.case_int16_64x64_64x64_64x64
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tshls -g TSHLSTest.case_int16_64x64_64x64_64x64
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tshrs -g TSHRSTest.case_int16_64x64_64x64_64x64
 
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
@@ -128,6 +136,8 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tload_gm2mat
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tload
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tadd
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tand
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tor
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsels
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmins
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsub
@@ -143,6 +153,12 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcmp
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tscatter
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t ttri
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tnot
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trelu
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tands
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tors
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tshls
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tshrs
   fi
 fi
 
@@ -150,6 +166,7 @@ if [ "$ENABLE_A5" = "true" ]; then
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tadd -g TADDTest.case_float_64x64_64x64_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tadds -g TADDSTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tand -g TANDTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tci -g TCITest.case5
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcmps -g TCMPSTest.case_float_8x64_8x64_8x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolmax -g TCOLMAXTest.case01
@@ -181,9 +198,11 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov -g TMOVTest.case_bias1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov_acc2vec -g TMOVTest.case_nz2nd_1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov_vect -g TMOVTest.vect_copy_case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov_mx -g TMOVMXTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmrgsort -g TMRGSORTTest.case_topk1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmul -g TMULTest.case_float_64x64_64x64_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmuls -g TMULSTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tor -g TANDTest.case2
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpartadd -g TPARTADDTest.case_float_64x64_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpartmax -g TPARTMAXTest.case_fp32_64x64_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpartmin -g TPARTMINTest.case_fp32_64x64_64x64_64x64
@@ -214,10 +233,12 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tneg -g TNEGTest.case_float_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolexpand -g TCOLEXPANDTest.case_float_1_8_128_63
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_n3
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tnot -g TNOTTest.case_int16_64x64_64x64_64x64
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tadd
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tadds
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tand
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tci
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcmps
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolmax
@@ -245,9 +266,11 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov_acc2vec
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov_vect
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov_mx
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmrgsort
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmul
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmuls
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tor
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpartadd
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpartmax
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpartmin
@@ -278,5 +301,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tneg
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolexpand
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttri
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tnot
   fi
 fi

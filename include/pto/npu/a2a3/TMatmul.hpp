@@ -33,7 +33,9 @@ __tf__ AICORE void TMatmul(typename TileRes::TileDType __out__ cMatrix, typename
     __cc__ typename TileRes::DType *c = (__cc__ typename TileRes::DType *)__cce_get_tile_ptr(cMatrix);
     __ca__ typename TileLeft::DType *a = (__ca__ typename TileLeft::DType *)__cce_get_tile_ptr(aMatrix);
     __cb__ typename TileRight::DType *b = (__cb__ typename TileRight::DType *)__cce_get_tile_ptr(bMatrix);
-
+    if (m == 1) {
+        m = 16; // avoid gemv mode, if m is 1, the gemv mode will be used in a3
+    }
     mad(c, a, b, m, k, n, 0, kDirectionAlign, cmatrixSource, cmatrixInitVal);
 }
 
@@ -47,7 +49,9 @@ __tf__ AICORE void TMatmulBias(typename TileRes::TileDType __out__ cMatrix,
     __cb__ typename TileRight::DType *b = (__cb__ typename TileRight::DType *)__cce_get_tile_ptr(bMatrix);
     uint64_t xd = ((uint64_t)c) & 0xffffffffULL | ((bias & 0xffffffffULL) << 32);
     c = (__cc__ typename TileRes::DType *)xd;
-
+    if (m == 1) {
+        m = 16; // avoid gemv mode, if m is 1, the gemv mode will be used in a3
+    }
     mad(c, a, b, m, k, n, 0, kDirectionAlign, cmatrixSource, cmatrixInitVal);
 }
 
@@ -66,10 +70,6 @@ PTO_INTERNAL void CheckStaticMad()
                       ((std::is_same<CType, float>::value) && (std::is_same<AType, bfloat16_t>::value) &&
                           (std::is_same<BType, bfloat16_t>::value)),
         "The data type is not supported.");
-
-    static_assert(
-        (TileLeft::Rows == TileRes::Rows) && (TileLeft::Cols == TileRight::Rows) && (TileRight::Cols == TileRes::Cols),
-        "Inconsistent number of m, k, n.");
 
     static_assert(TileLeft::Loc == TileType::Left, "TileLeft TileType must be set to TileType::Left.");
     static_assert(TileRight::Loc == TileType::Right, "TileRight TileType must be set to TileType::Right.");

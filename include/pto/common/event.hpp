@@ -32,6 +32,8 @@ namespace pto {
     TMIN,
     TMINS,
     TMAX,
+    TAND,
+    TOR,
     TSEL,
     TEXP,
     TSELS,
@@ -56,6 +58,8 @@ namespace pto {
     TCOLMAX,
     TCOLMIN,
     TTRANS,
+    TTRI,
+    TREM,
     TMOV_V2V,       /* Vec to Vec */
     TMOV_V2M,       /* Vec to Mat */
     TEXTRACT_V2M,   /* Vec to Mat */
@@ -70,6 +74,10 @@ namespace pto {
     TMATMUL,
     TMATMUL_MX,
     TEXTRACT_M2LR,  /* Mat to Left/Right */
+    TANDS,
+    TORS,
+    TSHLS,
+    TSHRS,
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
   };
 

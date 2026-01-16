@@ -28,16 +28,17 @@ constexpr pipe_t opPipeList[] = {
     PIPE_MTE2 /* TLOAD */, PIPE_MTE3 /* TSTORE_VEC */, PIPE_S /* SCALAR */, PIPE_S /* TRESHAPE */,
     PIPE_V /* VECTOR */, PIPE_V /* TADD */, PIPE_V /* TADDS */, PIPE_V /* TSUB */,
     PIPE_V /* TMUL */, PIPE_V /* TMULS */, PIPE_V /* TDIV */, PIPE_V /* TDIVS */,
-    PIPE_V /* TMIN */, PIPE_V /* TMINS */, PIPE_V /* TMAX */, PIPE_V /* TSEL */,
+    PIPE_V /* TMIN */, PIPE_V /* TMINS */, PIPE_V /* TMAX */, PIPE_V /* TAND */, PIPE_V /* TOR */, PIPE_V /* TSEL */,
     PIPE_V /* TEXP */, PIPE_V /* TSELS */, PIPE_V /* TSQRT */, PIPE_V /* TRSQRT */,
     PIPE_V /* TEXPANDS */, PIPE_V /* TPARTADD */, PIPE_V /* TPARTMAX */, PIPE_V /* TPARTMIN */,
     PIPE_V /* TCMPS */, PIPE_V /* TMRGSORT */, PIPE_V /* TSORT32 */, PIPE_S /* TCI */,
     PIPE_V /* TGATHER */, PIPE_V /* TGATHERB */, PIPE_V /* TCVT */, PIPE_V /* TROWSUM */,
     PIPE_V /* TROWMAX */, PIPE_V /* TROWMIN */, PIPE_V /* TROWEXPAND */, PIPE_V /* TCOLSUM */,
-    PIPE_V /* TCOLMAX */, PIPE_V /* TCOLMIN */, PIPE_V /* TTRANS */, PIPE_V /* TMOV_V2V */,
-    PIPE_FIX /* TMOV_V2M */, PIPE_FIX /* TEXTRACT_V2M */, PIPE_MTE1 /* TMOV_M2B */, PIPE_MTE1 /* TMOV_M2L */,
-    PIPE_MTE1 /* TMOV_M2R */, PIPE_FIX /* TMOV_M2S */, PIPE_FIX /* TMOV_A2V */, PIPE_FIX /* TMOV_A2M */,
-    PIPE_FIX /* TSTORE_ACC */, PIPE_MTE3 /* TSTORE_MAT */, PIPE_M /* TMATMUL */, PIPE_MTE1 /* TEXTRACT_M2LR */,
+    PIPE_V /* TCOLMAX */, PIPE_V /* TCOLMIN */, PIPE_V /* TTRANS */, PIPE_V /* TTRI */, PIPE_V /* TREM */, 
+    PIPE_V /* TMOV_V2V */, PIPE_FIX /* TMOV_V2M */, PIPE_FIX /* TEXTRACT_V2M */, PIPE_MTE1 /* TMOV_M2B */, 
+    PIPE_MTE1 /* TMOV_M2L */, PIPE_MTE1 /* TMOV_M2R */, PIPE_FIX /* TMOV_M2S */, PIPE_FIX /* TMOV_A2V */, 
+    PIPE_FIX /* TMOV_A2M */, PIPE_FIX /* TSTORE_ACC */, PIPE_MTE3 /* TSTORE_MAT */, PIPE_M /* TMATMUL */, 
+    PIPE_MTE1 /* TEXTRACT_M2LR */, PIPE_V /* TANDS */, PIPE_V /* TORS */, PIPE_V /* TSHLS */, PIPE_V /* TSHRS */,
   };
 
   template <Op OpCode>

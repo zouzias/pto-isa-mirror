@@ -19,6 +19,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/a2a3/TSync.hpp"
 #include "pto/npu/a2a3/TAdd.hpp"
+#include "pto/npu/a2a3/TAnd.hpp"
+#include "pto/npu/a2a3/TOr.hpp"
 #include "pto/npu/a2a3/TMins.hpp"
 #include "pto/npu/a2a3/TAddS.hpp"
 #include "pto/npu/a2a3/TDivS.hpp"
@@ -66,18 +68,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TCI.hpp"
 #include "pto/npu/a2a3/TColSum.hpp"
 #include "pto/npu/a2a3/TUnaryOp.hpp"
+#include "pto/npu/a2a3/TBitwiseSOp.hpp"
 #include "pto/npu/a2a3/TGatherB.hpp"
 #include "pto/npu/a2a3/TColMin.hpp"
 #include "pto/npu/a2a3/TScatter.hpp"
 #include "pto/npu/a2a3/TColExpand.hpp"
 #include "pto/npu/a2a3/TTri.hpp"
 #include "pto/npu/a2a3/TPrefetch.hpp"
+#include "pto/npu/a2a3/TRem.hpp"
 #endif
 
 #ifdef REGISTER_BASE
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/TAdd.hpp"
+#include "pto/npu/a5/TAnd.hpp"
+#include "pto/npu/a5/TOr.hpp"
 #include "pto/npu/a5/TAddS.hpp"
 #include "pto/npu/a5/TDivS.hpp"
 #include "pto/npu/a5/TMulS.hpp"
@@ -116,6 +122,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TRowExpandMin.hpp"
 #include "pto/npu/a5/TRowExpandMul.hpp"
 #include "pto/npu/a5/TRowExpandSub.hpp"
+#include "pto/npu/a5/TRowExpandExpdif.hpp"
 #include "pto/npu/a5/TPartAdd.hpp"
 #include "pto/npu/a5/TPartMax.hpp"
 #include "pto/npu/a5/TPartMin.hpp"
@@ -132,6 +139,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TColExpandDiv.hpp"
 #include "pto/npu/a5/TColExpandMul.hpp"
 #include "pto/npu/a5/TColExpandSub.hpp"
+#include "pto/npu/a5/TColExpandExpdif.hpp"
 #include "pto/npu/a5/TTri.hpp"
 #endif
 
