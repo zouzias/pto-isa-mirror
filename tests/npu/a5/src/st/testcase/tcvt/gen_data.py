@@ -127,19 +127,20 @@ class tcvtParams:
 
 if __name__ == "__main__":
     # Type conversion pairs: (name_suffix, source_type, destination_type)
+    # Order matches TCvt.hpp organization by source type
     type_pairs = [
-        # FP32 Source
-        ("fp32_fp32", np.float32, np.float32),
+        # FP32 Source → fp16, bf16, int16, int32, int64, fp8 variants
         ("fp32_fp16", np.float32, np.float16),
         ("fp32_bf16", np.float32, bfloat16),
-        ("fp32_int32", np.float32, np.int32),
         ("fp32_int16", np.float32, np.int16),
+        ("fp32_int32", np.float32, np.int32),
         ("fp32_int64", np.float32, np.int64),
         ("fp32_fp8_e4m3", np.float32, fp8_e4m3),
         ("fp32_fp8_e5m2", np.float32, fp8_e5m2),
         ("fp32_h8", np.float32, hifloat8),
+        ("fp32_fp32", np.float32, np.float32),  # Same-type rounding
         
-        # FP16 Source
+        # FP16 Source → fp32, int32, int16, int8, uint8, h8
         ("fp16_fp32", np.float16, np.float32),
         ("fp16_int32", np.float16, np.int32),
         ("fp16_int16", np.float16, np.int16),
@@ -147,44 +148,44 @@ if __name__ == "__main__":
         ("fp16_uint8", np.float16, np.uint8),
         ("fp16_h8", np.float16, hifloat8),
 
-        # BF16 Source
+        # BF16 Source → fp32, int32, half
         ("bf16_fp32", bfloat16, np.float32),
         ("bf16_int32", bfloat16, np.int32),
         ("bf16_fp16", bfloat16, np.float16),
 
-        # INT32 Source
+        # U8 Source → half, uint16
+        ("uint8_fp16", np.uint8, np.float16),
+        # ("uint8_uint16", np.uint8, np.uint16),
+
+        # I8 Source → half, int16, int32
+        ("int8_fp16", np.int8, np.float16),
+        ("int8_int16", np.int8, np.int16),
+        ("int8_int32", np.int8, np.int32),
+
+        # I16 Source → uint8, half, float, uint32, int32
+        ("int16_uint8", np.int16, np.uint8),
+        ("int16_fp16", np.int16, np.float16),
+        ("int16_fp32", np.int16, np.float32),
+        ("int16_uint32", np.int16, np.uint32),
+        ("int16_int32", np.int16, np.int32),
+
+        # I32 Source → float, int16, uint16, int64, uint8
         ("int32_fp32", np.int32, np.float32),
         ("int32_int16", np.int32, np.int16),
         # ("int32_uint16", np.int32, np.uint16),
         ("int32_int64", np.int32, np.int64),
         ("int32_uint8", np.int32, np.uint8),
 
-        # UINT32 Source
+        # U32 Source → uint8, uint16, int16
         ("uint32_uint8", np.uint32, np.uint8),
-        ("uint32_uint16", np.uint32, np.uint16),
+        # ("uint32_uint16", np.uint32, np.uint16),
         ("uint32_int16", np.uint32, np.int16),
 
-        # INT16 Source
-        ("int16_fp16", np.int16, np.float16),
-        ("int16_fp32", np.int16, np.float32),
-        ("int16_uint32", np.int16, np.uint32),
-        ("int16_int32", np.int16, np.int32),
-        ("int16_uint8", np.int16, np.uint8),
-
-        # INT8 Source
-        ("int8_fp16", np.int8, np.float16),
-        ("int8_int16", np.int8, np.int16),
-        ("int8_int32", np.int8, np.int32),
-
-        # UINT8 Source
-        ("uint8_fp16", np.uint8, np.float16),
-        # ("uint8_uint16", np.uint8, np.uint16),
-
-        # INT64 Source
+        # I64 Source → float, int32
         ("int64_fp32", np.int64, np.float32),
         ("int64_int32", np.int64, np.int32),
 
-        # FP8 Source
+        # FP8 Source → float
         ("fp8_e4m3_fp32", fp8_e4m3, np.float32),
         ("fp8_e5m2_fp32", fp8_e5m2, np.float32),
         ("h8_fp32", hifloat8, np.float32),
