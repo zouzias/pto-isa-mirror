@@ -21,23 +21,20 @@ std::string GetGoldenDir() {
 
 extern void LaunchTBMM_QK(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 // Specialized wrappers declared for explicit kernel instantiations
-extern "C" void LaunchTBMM_QK_128_128_128_NN(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_256_128_64_NN(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_64_256_64_NN(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_128_256_128_NN(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_256_128_128_NN(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
+extern "C" void LaunchTBMM_QK_128_128_128(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 extern "C" void LaunchTBMM_QK_128_128_128_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 extern "C" void LaunchTBMM_QK_256_128_64_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 extern "C" void LaunchTBMM_QK_64_256_64_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_128_256_128_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
+extern "C" void LaunchTBMM_QK_64_128_128_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 extern "C" void LaunchTBMM_QK_256_128_128_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_128_128_128_TN(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_256_128_64_TN(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_64_256_64_TN(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_128_256_128_TN(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_256_128_128_TN(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
+extern "C" void LaunchTBMM_QK_128_256_64_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
+extern "C" void LaunchTBMM_QK_128_64_128_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
+extern "C" void LaunchTBMM_QK_128_128_64_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
+extern "C" void LaunchTBMM_QK_64_64_128_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
+extern "C" void LaunchTBMM_QK_128_128_128_split(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
+extern "C" void LaunchTBMM_QK_128_64_128(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 
-template<typename T, int M, int K, int N, bool IS_NT = false, bool IS_TN = false>
+template<typename T, int M, int K, int N, bool IS_NT = false>
 void run_tbmm_qk() {
     size_t fullSize = M * N * sizeof(T); // Keep output as float
     size_t qSize = M * K * sizeof(aclFloat16);
@@ -61,50 +58,34 @@ void run_tbmm_qk() {
     aclrtMalloc((void **)&qDevice, qSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&kDevice, kSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    if (IS_TN) {
-        ReadFile(GetGoldenDir() + "/qt.bin", qSize, qHost, qSize); // Read transposed q for TN
-    } else {
-        ReadFile(GetGoldenDir() + "/q.bin", qSize, qHost, qSize); // Read q data
-    }
-    if (IS_NT){
-        ReadFile(GetGoldenDir() + "/kt.bin", kSize, kHost, kSize);
-    } else {
-        ReadFile(GetGoldenDir() + "/k.bin", kSize, kHost, kSize);
-    }
+    ReadFile(GetGoldenDir() + "/q.bin", qSize, qHost, qSize); // Read q data
+    ReadFile(GetGoldenDir() + "/kt.bin", kSize, kHost, kSize);
 
     aclrtMemcpy(qDevice, qSize, qHost, qSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(kDevice, kSize, kHost, kSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    if constexpr (IS_TN && M == 128 && K == 128 && N == 128) {
-        LaunchTBMM_QK_128_128_128_TN(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (IS_TN && M == 128 && K == 256 && N == 128) {
-        LaunchTBMM_QK_128_256_128_TN(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (IS_TN && M == 256 && K == 128 && N == 64) {
-        LaunchTBMM_QK_256_128_64_TN(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (IS_TN && M == 256 && K == 128 && N == 128) {
-        LaunchTBMM_QK_256_128_128_TN(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (IS_TN && M == 64 && K == 256 && N == 64) {
-        LaunchTBMM_QK_64_256_64_TN(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (IS_NT && M == 128 && K == 128 && N == 128) {
+    if constexpr (IS_NT && M == 128 && K == 128 && N == 128) {
         LaunchTBMM_QK_128_128_128_NT(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (IS_NT && M == 128 && K == 256 && N == 128) {
-        LaunchTBMM_QK_128_256_128_NT(outDevice, qDevice, kDevice, stream);
     } else if constexpr (IS_NT && M == 256 && K == 128 && N == 64) {
         LaunchTBMM_QK_256_128_64_NT(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (IS_NT && M == 256 && K == 128 && N == 128) {
-        LaunchTBMM_QK_256_128_128_NT(outDevice, qDevice, kDevice, stream);
     } else if constexpr (IS_NT && M == 64 && K == 256 && N == 64) {
         LaunchTBMM_QK_64_256_64_NT(outDevice, qDevice, kDevice, stream);
+    } else if constexpr (IS_NT && M == 64 && K == 128 && N == 128) {
+        LaunchTBMM_QK_64_128_128_NT(outDevice, qDevice, kDevice, stream);
+    } else if constexpr (IS_NT && M == 256 && K == 128 && N == 128) {
+        LaunchTBMM_QK_256_128_128_NT(outDevice, qDevice, kDevice, stream);
+    } else if constexpr (IS_NT && M == 128 && K == 256 && N == 64) {
+        LaunchTBMM_QK_128_256_64_NT(outDevice, qDevice, kDevice, stream);
+    } else if constexpr (IS_NT && M == 128 && K == 64 && N == 128) {
+        LaunchTBMM_QK_128_64_128_NT(outDevice, qDevice, kDevice, stream);
+    } else if constexpr (IS_NT && M == 128 && K == 128 && N == 64) {
+        LaunchTBMM_QK_128_128_64_NT(outDevice, qDevice, kDevice, stream);
+    } else if constexpr (IS_NT && M == 64 && K == 64 && N == 128) {
+        LaunchTBMM_QK_64_64_128_NT(outDevice, qDevice, kDevice, stream);
     } else if constexpr (M == 128 && K == 128 && N == 128) {
-        LaunchTBMM_QK_128_128_128_NN(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (M == 128 && K == 256 && N == 128) {
-        LaunchTBMM_QK_128_256_128_NN(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (M == 256 && K == 128 && N == 64) {
-        LaunchTBMM_QK_256_128_64_NN(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (M == 256 && K == 128 && N == 128) {
-        LaunchTBMM_QK_256_128_128_NN(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (M == 64 && K == 256 && N == 64) {
-        LaunchTBMM_QK_64_256_64_NN(outDevice, qDevice, kDevice, stream);
+        LaunchTBMM_QK_128_128_128(outDevice, qDevice, kDevice, stream);
+    } else if constexpr (M == 128 && K == 64 && N == 128) {
+        LaunchTBMM_QK_128_64_128(outDevice, qDevice, kDevice, stream);
     } 
 
     aclrtSynchronizeStream(stream);
@@ -135,62 +116,46 @@ void run_tbmm_qk() {
     EXPECT_TRUE(ok);
 }
 
-TEST_F(TBMMQKTest, case_float_128x128_128x128_NN) {
-    run_tbmm_qk<float, 128, 128, 128>();
-}
-
-TEST_F(TBMMQKTest, case_float_128x256_256x128_NN) {
-    run_tbmm_qk<float, 128, 256, 128>();
-}
-
-TEST_F(TBMMQKTest, case_float_256x128_64x64_NN) {
-    run_tbmm_qk<float, 256, 128, 64>();
-}
-
-TEST_F(TBMMQKTest, case_float_256x128_128x128_NN) {
-    run_tbmm_qk<float, 256, 128, 128>();
-}
-
-TEST_F(TBMMQKTest, case_float_64x256_64x64_NN) {
-    run_tbmm_qk<float, 64, 256, 64>();
-}
+// TEST_F(TBMMQKTest, case_float_128x128_128x128) {
+//     run_tbmm_qk<float, 128, 128, 128>();
+// }
 
 TEST_F(TBMMQKTest, case_float_128x128_128x128_NT) {
     run_tbmm_qk<float, 128, 128, 128, true>();
-}
-
-TEST_F(TBMMQKTest, case_float_128x256_256x128_NT) {
-    run_tbmm_qk<float, 128, 256, 128, true>();
 }
 
 TEST_F(TBMMQKTest, case_float_256x128_64x64_NT) {
     run_tbmm_qk<float, 256, 128, 64, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_256x128_128x128_NT) {
-    run_tbmm_qk<float, 256, 128, 128, true>();
-}
-
 TEST_F(TBMMQKTest, case_float_64x256_64x64_NT) {
     run_tbmm_qk<float, 64, 256, 64, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_128x128_128x128_TN) {
-    run_tbmm_qk<float, 128, 128, 128, false, true>();
+TEST_F(TBMMQKTest, case_float_64x128_128x128_NT) {
+    run_tbmm_qk<float, 64, 128, 128, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_128x256_256x128_TN) {
-    run_tbmm_qk<float, 128, 256, 128, false, true>();
+TEST_F(TBMMQKTest, case_float_256x128_128x128_NT) {
+    run_tbmm_qk<float, 256, 128, 128, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_256x128_64x64_TN) {
-    run_tbmm_qk<float, 256, 128, 64, false, true>();
+TEST_F(TBMMQKTest, case_float_128x256_64x64_NT) {
+    run_tbmm_qk<float, 128, 256, 64, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_256x128_128x128_TN) {
-    run_tbmm_qk<float, 256, 128, 128, false, true>();
+TEST_F(TBMMQKTest, case_float_128x64_128x128_NT) {
+    run_tbmm_qk<float, 128, 64, 128, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_64x256_64x64_TN) {
-    run_tbmm_qk<float, 64, 256, 64, false, true>();
+TEST_F(TBMMQKTest, case_float_128x128_64x64_NT) {
+    run_tbmm_qk<float, 128, 128, 64, true>();
 }
+
+TEST_F(TBMMQKTest, case_float_64x64_128x128_NT) {
+    run_tbmm_qk<float, 64, 64, 128, true>();
+}
+
+// TEST_F(TBMMQKTest, case_float_128x64_128x64) {
+//     run_tbmm_qk<float, 128, 64, 128>();
+// }

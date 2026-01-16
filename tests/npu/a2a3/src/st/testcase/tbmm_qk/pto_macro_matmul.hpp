@@ -1,4 +1,18 @@
-//#include "TMatmul_Custom.hpp"
+/*
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
+#ifndef PTO_MACRO_MATMUL_HPP
+#define PTO_MACRO_MATMUL_HPP
+
+#include <pto/pto-inst.hpp>
+
 namespace pto{
 
     /**
@@ -25,7 +39,7 @@ namespace pto{
     #define UNIT_FLAG_ENABLE(i, n) (LAST_LOOP(i, n) ? 3 : 2)
 
 
-    [aicore] inline uint64_t getPingPong(uint32_t flip){
+    AICORE inline uint64_t getPingPong(uint32_t flip){
         static uint64_t pingpong = 0;
         if(flip) {
             pingpong = 1- pingpong;
@@ -33,11 +47,10 @@ namespace pto{
         return pingpong;
     }
 
-    // Memory constraints
-    constexpr uint32_t MEM_BUFFER_SIZE_BYTES = 64 * 1024/2;  // 64KB per buffer with pingpong (32KB)
-    constexpr uint32_t HALF_SIZE_BYTES = 2;                // sizeof(half) = 2 bytes
-    constexpr uint32_t CANDIDATE_CUBE_K[] = {32, 64, 128, 256};
-    constexpr uint32_t NUM_CANDIDATES = 4;
+    // Memory constraints (L0 ping-pong is 32 KiB per buffer in this implementation).
+    // Tuning knob: if you change L0 layout or buffer addresses, re-check these constraints.
+    constexpr uint32_t MEM_BUFFER_SIZE_BYTES = 64 * 1024 / 2; // 64KB per buffer with pingpong (32KB)
+    constexpr uint32_t HALF_SIZE_BYTES = 2;                   // sizeof(half) = 2 bytes
 
     /**
     * Calculate the largest Cube_K value that fits in the 64KB memory buffer.
@@ -48,10 +61,12 @@ namespace pto{
     * @param Cube_N - The tile dimension N
     * @return - Largest Cube_K value (32, 64, 128, or 256) that fits in memory
     */
-    [aicore] inline constexpr uint32_t calculateFittingCubeK(uint32_t Cube_M, uint32_t Cube_N) {
-        uint32_t bestCubeK = 32;  // Default to smallest value
-        
-        // Test candidates from largest to smallest to find the largest that fits
+	    // Choose the largest Cube_K that fits both L0A (Cube_M x Cube_K) and L0B (Cube_K x Cube_N)
+	    // so TMATMUL stays compute-dense while respecting L0 ping-pong capacity.
+	    AICORE inline constexpr uint32_t calculateFittingCubeK(uint32_t Cube_M, uint32_t Cube_N) {
+	        uint32_t bestCubeK = 32;  // Default to smallest value
+	        
+	        // Test candidates from largest to smallest to find the largest that fits
         if (Cube_M * 256 * HALF_SIZE_BYTES <= MEM_BUFFER_SIZE_BYTES && 
             256 * Cube_N * HALF_SIZE_BYTES <= MEM_BUFFER_SIZE_BYTES) {
             bestCubeK = 256;
@@ -69,7 +84,7 @@ namespace pto{
 
     // Deduce layout_t from SLayouts
     template<typename TileDataA, typename TileDataB>
-    [aicore] inline constexpr layout_t deduce_layout() {
+    AICORE inline constexpr layout_t deduce_layout() {
         if constexpr (TileDataA::SFractal == SLayout::RowMajor && TileDataB::SFractal == SLayout::RowMajor) return layout_t::NN;
         if constexpr (TileDataA::SFractal == SLayout::RowMajor && TileDataB::SFractal == SLayout::ColMajor) return layout_t::NT;
         if constexpr (TileDataA::SFractal == SLayout::ColMajor && TileDataB::SFractal == SLayout::RowMajor) return layout_t::TN;
@@ -78,7 +93,7 @@ namespace pto{
     }
 
      template <unsigned Cube_M, unsigned Tile_K, unsigned Cube_N, layout_t LAYOUT = layout_t::NONE, typename TileDataA, typename TileDataB, typename TileDataC>
-    [aicore] inline void matmul_macro_pto(TileDataA &aMatTile, TileDataB &bMatTile, TileDataC &cAccTile){
+    AICORE inline void pto_macro_matmul(TileDataA &aMatTile, TileDataB &bMatTile, TileDataC &cAccTile, bool accumulate = false) {
 
 
         constexpr layout_t layout = deduce_layout<TileDataA, TileDataB>();
@@ -89,9 +104,14 @@ namespace pto{
             static_assert(LAYOUT == layout, "Layout mismatch: template LAYOUT does not match deduced layout from tile SLayouts. "
                                              "Check SLayout of TileDataA and TileDataB.");
         }
+        
 
+
+
+        // Ping-pong is used to overlap TEXTRACT (L1->L0) with TMATMUL on alternating buffers.
         uint64_t pingpong = getPingPong(0);
-        const uint64_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
+        const uint64_t calculatedCubeK = calculateFittingCubeK(Cube_M, Cube_N);
+        const uint64_t Cube_K = (calculatedCubeK > Tile_K) ? Tile_K : calculatedCubeK;
         for (uint64_t k = 0 ; k < (uint64_t) (Tile_K / Cube_K); k++){
             using LeftTile = TileLeft<half, Cube_M, Cube_K, Cube_M, Cube_K>;
             LeftTile al0Tiles[2] = {LeftTile(), LeftTile()};
@@ -103,6 +123,7 @@ namespace pto{
             TASSIGN(bl0Tiles[0], (uint64_t) L0B_BUF0);
             TASSIGN(bl0Tiles[1], (uint64_t) L0B_BUF1);
 
+            // Wait until previous TMATMUL finishes using this L0 buffer before overwriting it via TEXTRACT.
             wait_flag(PIPE_M, PIPE_MTE1, pingpong);
 
             if (layout == layout_t::NT) {
@@ -110,13 +131,15 @@ namespace pto{
                 TASSIGN(bMatTile, (uint64_t) bMatTile.data() + k * Cube_K * Cube_N * sizeof(typename TileDataB::DType));
             } 
 
+            // TEXTRACT slices the current Cube_K panel into L0A/L0B.
             TEXTRACT(al0Tiles[pingpong], aMatTile, 0, 0);
             TEXTRACT(bl0Tiles[pingpong], bMatTile, 0, 0);
 
             set_flag(PIPE_MTE1, PIPE_M, pingpong);
             wait_flag(PIPE_MTE1, PIPE_M, pingpong);
 
-            if (k == 0){
+            // TMATMUL: first K-slice initializes, subsequent slices accumulate.
+            if (k == 0 && !accumulate) {
                 TMATMUL(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong]);
                 // TMATMUL_UF(cAccTile, al0Tiles[pingpong], bl0Tiles[pingpong], UNIT_FLAG_ENABLE(k, (K / Cube_K)));
             } else {
@@ -130,3 +153,5 @@ namespace pto{
     }
 
 }
+
+#endif // PTO_MACRO_MATMUL_H
