@@ -332,9 +332,9 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<SRC> v_input;
         DST_VEC v_output_p0, v_output;
-        uint32_t preg_len = (sReg > ELE_CNT_B32) ? ELE_CNT_B32 : sReg;
-        MaskReg preg_b32 = CreatePredicate<float>(preg_len);
-        MaskReg preg_b8 = CreatePredicate<uint8_t>(preg_len);
+        uint32_t cur_len = sReg;
+        MaskReg preg_b32 = CreatePredicate<float>(sReg);
+        MaskReg preg_b8 = CreatePredicate<uint8_t>(cur_len);
 
         vlds(v_input, src, i * ELE_CNT_B32, NORM);
         
@@ -346,7 +346,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         
         vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
         vsts((RegTensor<uint8_t> &)v_output, (__ubuf__ uint8_t *)dst, i * ELE_CNT_B32, NORM_B8, preg_b8);
-        sReg -= ELE_CNT_B32;
+        // sReg is decremented by the first CreatePredicate with POST_UPDATE
     }
 }
 
