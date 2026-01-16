@@ -138,6 +138,7 @@ tsub
 tmins
 tmin
 tmax
+tmaxs
 tload_gm2mat
 tstore_acc2gm
 trsqrt

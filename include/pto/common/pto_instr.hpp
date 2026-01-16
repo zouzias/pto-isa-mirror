@@ -752,11 +752,9 @@ PTO_INST RecordEvent TREMS(TileData &dst, TileData &src0, typename TileData::DTy
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TMAXS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar,
-                           WaitEvents&... events)
-{
+PTO_INST RecordEvent TMAXS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, WaitEvents&... events) {
   TSYNC(events...);
-  MAP_INSTR_IMPL(TMAXS, dst, src0, scalar);
+  MAP_INSTR_IMPL(TMAXS, dst, src, scalar);
   return {};
 }
 

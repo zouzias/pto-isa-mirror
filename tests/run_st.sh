@@ -83,6 +83,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsel -g TSELTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tfillpad -g TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmins
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmaxs TMAXSTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tload_gm2mat -g TLoadGM2L1Test.ND2NZ_bfloat16_t_1_1_1_1_1_1_1_1_1_1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trsqrt -g TRSQRTTest.case_float_64x64_64x64_64x64_inPlace_False
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsqrt -g TSQRTTest.case_float_64x64_64x64_64x64_inPlace_False
@@ -142,6 +143,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tor
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsels
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmins
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmaxs
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsub
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tci
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tgatherb
