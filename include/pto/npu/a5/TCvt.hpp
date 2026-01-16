@@ -717,31 +717,29 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
    
     uint32_t len8 = ELE_CNT_B8;
     MaskReg preg_b8 = CreatePredicate<uint8_t>(len8);
-    uint32_t len16 = ELE_CNT_B16;
-    MaskReg preg_b16 = CreatePredicate<half>(len16);
     MaskReg pg = pset_b8(PAT_ALL);
     SRC_VEC v_zero;
     vdup((RegTensor<uint8_t> &) v_zero, 0, pg, MODE_ZEROING);  
 
     FOR_ROWS
-        uint32_t next_len = (sreg > ELE_CNT_B32) ? sreg - ELE_CNT_B32 : 0;
-
+        int32_t rowDstOffset = row * dstCols;
         FOR_ELEMENTS(ELE_CNT_B16)
             SRC_VEC v_input_0, v_input_1, v_input_2;
             RegTensor<DST> v_output_0, v_output_1;
-            MaskReg preg_b16 = CreatePredicate<half>(sreg);
+            uint32_t next_len = (sreg > ELE_CNT_B32) ? sreg - ELE_CNT_B32 : 0;
+            MaskReg preg_b16_cur = CreatePredicate<half>(sreg);
             MaskReg preg_b16_next = CreatePredicate<half>(next_len);
             MaskReg preg_b32;
             MaskReg preg_b32_next;
-            punpack(preg_b32, preg_b16, LOWER);
+            punpack(preg_b32, preg_b16_cur, LOWER);
             punpack(preg_b32_next, preg_b16_next, LOWER);
 
             vlds((RegTensor<uint8_t> &) v_input_0, (__ubuf__ uint8_t *) src, srcOffset, UNPK_B8);
             vintlv((RegTensor<uint8_t> &) v_input_1, (RegTensor<uint8_t> &) v_input_2, (RegTensor<uint8_t> &) v_input_0, (RegTensor<uint8_t> &) v_zero); // interleave with zero
             vcvt(v_output_0, v_input_1, preg_b8, PART_P0);
             vcvt(v_output_1, v_input_2, preg_b8, PART_P0);
-            vsts(v_output_0, dst, dstOffset + ELE_CNT_B32 * (idx * 2), NORM_B32, preg_b32);
-            vsts(v_output_1, dst, dstOffset + ELE_CNT_B32 * (idx * 2 + 1), NORM_B32, preg_b32_next);
+            vsts(v_output_0, dst, rowDstOffset + ELE_CNT_B32 * (idx * 2), NORM_B32, preg_b32);
+            vsts(v_output_1, dst, rowDstOffset + ELE_CNT_B32 * (idx * 2 + 1), NORM_B32, preg_b32_next);
         END_FOR_ELEMENTS
     END_FOR_ROWS
 }
