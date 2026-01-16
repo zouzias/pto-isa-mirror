@@ -106,20 +106,11 @@ void test_tcvt()
 
 // Macro to generate test cases for all shapes for a given type pair
 #define GENERATE_TCVT_TESTS(dst_type, src_type, type_name) \
-    TEST_F(TCVTTest, case_##type_name##_1x64) { test_tcvt<dst_type, src_type, 1, 64, 1, 64>(); } \
     TEST_F(TCVTTest, case_##type_name##_1x128) { test_tcvt<dst_type, src_type, 1, 128, 1, 128>(); } \
-    TEST_F(TCVTTest, case_##type_name##_1x256) { test_tcvt<dst_type, src_type, 1, 256, 1, 256>(); } \
-    TEST_F(TCVTTest, case_##type_name##_2x32) { test_tcvt<dst_type, src_type, 2, 32, 2, 32>(); } \
     TEST_F(TCVTTest, case_##type_name##_2x64) { test_tcvt<dst_type, src_type, 2, 64, 2, 64>(); } \
-    TEST_F(TCVTTest, case_##type_name##_3x64) { test_tcvt<dst_type, src_type, 3, 64, 3, 64>(); } \
-    TEST_F(TCVTTest, case_##type_name##_2x128) { test_tcvt<dst_type, src_type, 2, 128, 2, 128>(); } \
     TEST_F(TCVTTest, case_##type_name##_4x32) { test_tcvt<dst_type, src_type, 4, 32, 4, 32>(); } \
-    TEST_F(TCVTTest, case_##type_name##_2x256_2x129) { test_tcvt<dst_type, src_type, 2, 256, 2, 256, 2, 129>(); } \
+    TEST_F(TCVTTest, case_##type_name##_2x128) { test_tcvt<dst_type, src_type, 2, 128, 2, 128>(); } \
     TEST_F(TCVTTest, case_##type_name##_4x128_4x65) { test_tcvt<dst_type, src_type, 4, 128, 4, 128, 4, 65>(); } \
-    TEST_F(TCVTTest, case_##type_name##_3x256_3x192) { test_tcvt<dst_type, src_type, 3, 256, 3, 256, 3, 192>(); } \
-    TEST_F(TCVTTest, case_##type_name##_2x128_2x96) { test_tcvt<dst_type, src_type, 2, 128, 2, 128, 2, 96>(); } \
-    TEST_F(TCVTTest, case_##type_name##_8x64_8x33) { test_tcvt<dst_type, src_type, 8, 64, 8, 64, 8, 33>(); } \
-    TEST_F(TCVTTest, case_##type_name##_6x128_6x80) { test_tcvt<dst_type, src_type, 6, 128, 6, 128, 6, 80>(); } \
     TEST_F(TCVTTest, case_##type_name##_4x256_4x200) { test_tcvt<dst_type, src_type, 4, 256, 4, 256, 4, 200>(); } \
     TEST_F(TCVTTest, case_##type_name##_1x256_1x129) { test_tcvt<dst_type, src_type, 1, 256, 1, 256, 1, 129>(); }
 

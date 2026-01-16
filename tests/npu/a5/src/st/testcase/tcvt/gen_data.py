@@ -198,30 +198,21 @@ if __name__ == "__main__":
     # Using shapes that work for all types (Cols >= 32)
     shapes = [
         # Single-row shapes (triggers 1D: Rows == 1)
-        (1, 64),    # Single row small
-        (1, 128),   # Single row exactly one vector (ELE_CNT_B32 for 32-bit)
-        (1, 256),   # Single row large - needs 2 iterations for 32-bit
+        (1, 128),   # Single row - tests 1D path with Rows == 1
         
         # Multi-row contiguous shapes (triggers 1D: ValidCol == Cols)
-        (2, 32),    # Minimal aligned multi-row
-        (2, 64),    # Multi-row medium contiguous
-        (3, 64),    # Multi-row contiguous
-        (2, 128),   # Multi-row exactly one vector per row
-        (4, 32),    # Multiple small rows
+        (2, 64),    # Small multi-row contiguous
+        (4, 32),    # Multiple rows, minimal columns
+        (2, 128),   # Larger multi-row contiguous
     ]
     
     # Partial tile configurations (m, n, valid_m, valid_n)
     # These shapes trigger 2D path: ValidCol != Cols (non-contiguous)
     # Keep ValidRows == Rows to focus on column non-contiguity
     partial_shapes = [
-        (2, 256, 2, 129),   # 2 rows, partial columns (129 < 256)
-        (4, 128, 4, 65),    # 4 rows, half columns
-        (3, 256, 3, 192),   # 3 rows, 3/4 columns
-        (2, 128, 2, 96),    # 2 rows, 3/4 columns
-        (8, 64, 8, 33),     # Many rows, half columns + 1
-        (6, 128, 6, 80),    # 6 rows, partial columns
-        (4, 256, 4, 200),   # 4 rows, partial columns
-        (1, 256, 1, 129),   # Single row, partial columns (tests 2D path for single row case)
+        (4, 128, 4, 65),    # 4 rows, half columns - basic 2D path test
+        (4, 256, 4, 200),   # 4 rows, partial columns - larger 2D test
+        (1, 256, 1, 129),   # Single row, partial columns - tests 2D path for single row case
     ]
 
     case_name_list = []

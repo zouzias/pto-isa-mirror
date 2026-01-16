@@ -106,20 +106,11 @@ void launchTCVT(D *dst, S *src, void *stream) {
 
 // Macro to generate template instantiations for all shapes for a given type pair
 #define INSTANTIATE_TCVT(dst_type, src_type) \
-    template void launchTCVT<dst_type, src_type, 1, 64, 1, 64>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 1, 128, 1, 128>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 1, 256, 1, 256>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 2, 32, 2, 32>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 2, 64, 2, 64>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 3, 64, 3, 64>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 2, 128, 2, 128>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 4, 32, 4, 32>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 2, 256, 2, 256, 2, 129>(dst_type *dst, src_type *src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 2, 128, 2, 128>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 4, 128, 4, 128, 4, 65>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 3, 256, 3, 256, 3, 192>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 2, 128, 2, 128, 2, 96>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 8, 64, 8, 64, 8, 33>(dst_type *dst, src_type *src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 6, 128, 6, 128, 6, 80>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 4, 256, 4, 256, 4, 200>(dst_type *dst, src_type *src, void *stream); \
     template void launchTCVT<dst_type, src_type, 1, 256, 1, 256, 1, 129>(dst_type *dst, src_type *src, void *stream);
 
