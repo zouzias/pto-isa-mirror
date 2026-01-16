@@ -72,13 +72,26 @@ constexpr const uint64_t BITS_IN_BYTE = 8;
         typename TileDataSrc::TileDType __in__ src0, 
         typename TileDataSrc::TileDType __in__ src1, 
         CmpMode mode, unsigned numRepeatPerLine,
-        unsigned numRemainPerLine, unsigned validRow,
-        unsigned elementsPerRepeat, unsigned blockSizeElem) 
+        unsigned numRemainPerLine, unsigned validRow, unsigned validCol,
+        unsigned elementsPerRepeat, unsigned blockSizeElem, bool isFullTile) 
     {
         __ubuf__ typename TileDataDst::DType *dstPtr = (__ubuf__ typename TileDataDst::DType *)__cce_get_tile_ptr(dst);
         __ubuf__ typename TileDataSrc::DType *src0Ptr = (__ubuf__ typename TileDataSrc::DType *)__cce_get_tile_ptr(src0);
         __ubuf__ typename TileDataSrc::DType *src1Ptr = (__ubuf__ typename TileDataSrc::DType *)__cce_get_tile_ptr(src1);
         
+        if(isFullTile){
+            unsigned repeats = validRow * validCol * sizeof(T) / REPEAT_BYTE;
+            CmpCall<TileDataDst, TileDataSrc>(
+                                    dstPtr,
+                                    src0Ptr,
+                                    src1Ptr,
+                                    mode,
+                                    repeats,
+                                    1,
+                                    1,
+                                    8,
+                                    8);
+        }
         set_mask_count();
         set_vector_mask(0, TileDataDst::Cols);
         size_t dst_offset = 0;
@@ -120,10 +133,13 @@ constexpr const uint64_t BITS_IN_BYTE = 8;
         unsigned numRemainPerLine = src0.GetValidCol() % elementsPerRepeat;
         constexpr unsigned SS = REPEAT_BYTE / sizeof(typename TileDataSrc::DType);
         unsigned validRow = src0.GetValidRow();
+        unsigned validCol = src0.GetValidCol();
+        bool isFullTile = validCol <= TileDataSrc::Cols;
+
         using T = typename TileDataSrc::DType;
         constexpr uint64_t DS = BITS_IN_BYTE * (sizeof(float)/sizeof(T));
         TCmp<TileDataDst, TileDataSrc, T, SS, DS>(dst.data(), src0.data(), src1.data(), cmpMode, numRepeatPerLine, numRemainPerLine,
-                                                validRow, elementsPerRepeat, blockSizeElem);
+                                                validRow, validCol, elementsPerRepeat, blockSizeElem, isFullTile);
     }
 }
 #endif
