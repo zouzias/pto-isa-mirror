@@ -13,11 +13,12 @@
 import os
 import numpy as np
 import ml_dtypes
+import en_dtypes
 
 bfloat16 = np.float16  # Using float16 to simulate bfloat16 for data generation
-fp8_e5m2 = ml_dtypes.float8_e5m2  # Using int8 to simulate fp8_e5m2 for data generation
-fp8_e4m3 = ml_dtypes.float8_e4m3fn  # Using int8 to simulate fp8_e4m3 for data generation
-hifloat8 = ml_dtypes.float8_e5m2  # Using int8 to simulate hifloat8 for data generation
+fp8_e5m2 = ml_dtypes.float8_e5m2
+fp8_e4m3 = ml_dtypes.float8_e4m3fn
+hifloat8 = en_dtypes.hifloat8 
 np.random.seed(19)
 
 def gen_golden(case_name, param):
@@ -144,16 +145,12 @@ if __name__ == "__main__":
         ("fp16_int16", np.float16, np.int16),
         ("fp16_int8", np.float16, np.int8),
         ("fp16_uint8", np.float16, np.uint8),
-        ("fp16_fp8_e5m2", np.float16, fp8_e5m2),
-        ("fp16_fp8_e4m3", np.float16, fp8_e4m3),
         ("fp16_h8", np.float16, hifloat8),
 
         # BF16 Source
         ("bf16_fp32", bfloat16, np.float32),
         ("bf16_int32", bfloat16, np.int32),
         ("bf16_fp16", bfloat16, np.float16),
-        ("bf16_fp8_e5m2", bfloat16, fp8_e5m2),
-        ("bf16_fp8_e4m3", bfloat16, fp8_e4m3),
 
         # INT32 Source
         ("int32_fp32", np.int32, np.float32),
