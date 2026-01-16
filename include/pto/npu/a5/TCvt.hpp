@@ -290,10 +290,9 @@ inline AICORE void cast8to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B16);
     uint32_t sReg = totalElements;
+    uint32_t next_len = (sReg > ELE_CNT_B32) ? sReg - ELE_CNT_B32 : 0;
     uint32_t len8 = ELE_CNT_B8;
     MaskReg preg_b8 = CreatePredicate<uint8_t>(len8);
-    uint32_t len16 = ELE_CNT_B16;
-    MaskReg preg_b16 = CreatePredicate<half>(len16);
     MaskReg pg = pset_b8(PAT_ALL);
     SRC_VEC v_zero;
     vdup((RegTensor<uint8_t> &)v_zero, 0, pg, MODE_ZEROING);
@@ -301,7 +300,6 @@ inline AICORE void cast8to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         SRC_VEC v_input_0, v_input_1, v_input_2;
         RegTensor<DST> v_output_0, v_output_1;
-        uint32_t next_len = (sReg > ELE_CNT_B32) ? sReg - ELE_CNT_B32 : 0;
         MaskReg preg_b16_cur = CreatePredicate<half>(sReg);
         MaskReg preg_b16_next = CreatePredicate<half>(next_len);
         MaskReg preg_b32, preg_b32_next;
@@ -312,9 +310,8 @@ inline AICORE void cast8to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         vintlv((RegTensor<uint8_t> &)v_input_1, (RegTensor<uint8_t> &)v_input_2, (RegTensor<uint8_t> &)v_input_0, (RegTensor<uint8_t> &)v_zero);
         vcvt(v_output_0, v_input_1, preg_b8, PART_P0);
         vcvt(v_output_1, v_input_2, preg_b8, PART_P0);
-        vsts(v_output_0, dst, i * ELE_CNT_B16 * 2, NORM_B32, preg_b32);
-        vsts(v_output_1, dst, i * ELE_CNT_B16 * 2 + ELE_CNT_B32, NORM_B32, preg_b32_next);
-        // sReg is decremented by CreatePredicate with POST_UPDATE
+        vsts(v_output_0, dst, ELE_CNT_B32 * (i * 2), NORM_B32, preg_b32);
+        vsts(v_output_1, dst, ELE_CNT_B32 * (i * 2 + 1), NORM_B32, preg_b32_next);
     }
 }
 
@@ -337,7 +334,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         DST_VEC v_output_p0, v_output;
         uint32_t preg_len = (sReg > ELE_CNT_B32) ? ELE_CNT_B32 : sReg;
         MaskReg preg_b32 = CreatePredicate<float>(preg_len);
-        MaskReg preg_b8 = CreatePredicate<uint8_t>(sReg);
+        MaskReg preg_b8 = CreatePredicate<uint8_t>(preg_len);
 
         vlds(v_input, src, i * ELE_CNT_B32, NORM);
         
