@@ -54,6 +54,7 @@ namespace pto {
     TROWMAX,
     TROWMIN,
     TROWEXPAND,
+    TMAXS,
     TCOLSUM,
     TCOLMAX,
     TCOLMIN,
