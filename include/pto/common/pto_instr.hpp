@@ -789,11 +789,18 @@ PTO_INST RecordEvent TSHRS(TileDataDst &dst, TileDataSrc &src, typename TileData
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
+<<<<<<< HEAD
 PTO_INST RecordEvent TXORS(
     TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar, TileDataTmp &tmp, WaitEvents &...events)
 {
   TSYNC(events...);
   MAP_INSTR_IMPL(TXORS, dst, src0, scalar, tmp);
+=======
+PTO_INST RecordEvent TXORS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
+  TileDataTmp &tmp, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TXORS, dst, src, scalar, tmp);
+>>>>>>> 3b00a715... Add TXOR TXORS
   return {};
 }
 
