@@ -24,6 +24,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 #include "pto_macro_matmul.hpp"
 #include "pto_macro_fa_softmax.hpp"
+#include "pto_macro_fa_softmax_dn.hpp"
 #include "pto_macro_fa_gu.hpp"
 
 using namespace std;
@@ -494,7 +495,8 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
         // Extract per-slice views into the per-core reduce tiles so each slice writes into its row range
-        using ReduceSliceTile = Tile<TileType::Vec, float, Vec_S0, 1, BLayout::ColMajor, Vec_S0, 1>;
+        // using ReduceSliceTile = Tile<TileType::Vec, float, Vec_S0, 1, BLayout::ColMajor, Vec_S0, 1>;
+        using ReduceSliceTile = Tile<TileType::Vec, float, 1, Vec_S0, BLayout::RowMajor, 1, Vec_S0>;
         // reduce tiles live per vector core; offset only by row_slice within the core (no subblock stride)
         const size_t reduce_slice_rows = static_cast<size_t>(row_slice * Vec_S0);
         const uint64_t reduce_row_byte_offset = reduce_slice_rows * sizeof(float);
@@ -516,10 +518,14 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
 
         wait_flag(PIPE_MTE3, PIPE_V, pTileEventId);
         if (initFlag) {
-            pto_macro_fa_softmax<true, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice,
+            // pto_macro_fa_softmax<true, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice,
+            //     m2_global_max_slice, l2_global_sum_slice, l1_exp_max_slice, input_reduce_tmp, qkVecTile);
+            pto_macro_fa_softmax_dn<true, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice,
                 m2_global_max_slice, l2_global_sum_slice, l1_exp_max_slice, input_reduce_tmp, qkVecTile);
         } else {
-            pto_macro_fa_softmax<false, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice,
+            // pto_macro_fa_softmax<false, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice,
+            //     m2_global_max_slice, l2_global_sum_slice, l1_exp_max_slice, input_reduce_tmp, qkVecTile);
+            pto_macro_fa_softmax_dn<false, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice,
                 m2_global_max_slice, l2_global_sum_slice, l1_exp_max_slice, input_reduce_tmp, qkVecTile);
         }
 
@@ -717,7 +723,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     using TileDataH_T = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Tile_S1>;
     constexpr uint32_t SubblockRows = Cube_S0 / VEC_CORES;
     // Reduce tiles cover one vector core's rows (Cube_S0 / VEC_CORES); slices are extracted per row_slice
-    using ReduceTileF_T = Tile<TileType::Vec, float, SubblockRows, 1, BLayout::ColMajor, SubblockRows, 1>;
+    // using ReduceTileF_T = Tile<TileType::Vec, float, SubblockRows, 1, BLayout::ColMajor, SubblockRows, 1>;
+    using ReduceTileF_T = Tile<TileType::Vec, float, 1, SubblockRows, BLayout::RowMajor, 1, SubblockRows>;
 
     TileDataF_T qkVecTile[srcVecTNBuffers];
     ReduceTileF_T m1_local_max;
