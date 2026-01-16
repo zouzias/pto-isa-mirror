@@ -359,8 +359,6 @@ inline AICORE void cast32toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
     uint32_t sReg = totalElements;
-    uint32_t len32 = ELE_CNT_B32;
-    MaskReg preg_b32 = CreatePredicate<float>(len32);
     MaskReg preg_idx = pset_b8(PAT_ALL);
     
     vector_hif8 v_idx;
@@ -370,7 +368,9 @@ inline AICORE void cast32toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         vector_f32 v_input;
         vector_hif8 v_output_p0, v_output;
-        MaskReg preg_b8 = CreatePredicate<uint8_t>(sReg);
+        uint32_t cur_len = sReg;
+        MaskReg preg_b32 = CreatePredicate<float>(sReg);
+        MaskReg preg_b8 = CreatePredicate<uint8_t>(cur_len);
 
         vlds(v_input, src, i * ELE_CNT_B32, NORM);
         vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
