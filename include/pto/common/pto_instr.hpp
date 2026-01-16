@@ -203,10 +203,10 @@ PTO_INST RecordEvent TOR(TileData &dst, TileData &src0, TileData &src1, WaitEven
   return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TXOR(TileData &dst, TileData &src0, TileData &src1, WaitEvents&... events) {
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TXOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataDst &tmp, WaitEvents&... events) {
   TSYNC(events...);
-  MAP_INSTR_IMPL(TXOR, dst, src0, src1);
+  MAP_INSTR_IMPL(TXOR, dst, src0, src1, tmp);
   return {};
 }
 
