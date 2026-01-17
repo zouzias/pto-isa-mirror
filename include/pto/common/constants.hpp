@@ -81,6 +81,54 @@ enum class CompactMode {
     Normal,
 };
 
+enum class SetFmatrixMode {
+    FMATRIX_A_AUTO,
+    FMATRIX_B_AUTO,
+    FMATRIX_A_MANUAL,
+    FMATRIX_B_MANUAL
+};
+
+struct Img2colTileConfig{
+    uint8_t padList[4] = {0};
+    uint16_t fmapH = 0;
+    uint16_t fmapW = 0;
+    uint16_t filterH = 1;
+    uint16_t filterW = 1;
+    uint8_t dilationH = 1;
+    uint8_t dilationW = 1;
+    uint8_t strideH = 1;
+    uint8_t strideW = 1;
+    uint16_t channelSize = 0;
+    uint64_t padValue = 0;
+    bool transpose = false;
+    bool smallChannel = false;
+
+    AICORE Img2colTileConfig() = default;
+    AICORE Img2colTileConfig(
+        const uint16_t fmapH_, const uint16_t fmapW_, const uint8_t padList_[4],
+        const uint16_t filterH_, const uint16_t filterW_,
+        const uint8_t dilationH_, const uint8_t dilationW_,
+        const uint8_t strideH_, const uint8_t strideW_, const uint16_t channelSize_,
+        const uint64_t padValue_, const bool transpose_, const bool smallChannel_) 
+    :fmapH(fmapH_),
+    fmapW(fmapW_),
+    filterH(filterH_),
+    filterW(filterW_),
+    dilationH(dilationH_),
+    dilationW(dilationW_),
+    strideH(strideH_),
+    strideW(strideW_),
+    channelSize(channelSize_),
+    padValue(padValue_),
+    transpose(transpose_),
+    smallChannel(smallChannel_)
+    {
+        for (int32_t i = 0; i < 4; i++){
+            padList[i] = padList_[i];
+        }
+    }
+}
+
 template <typename DType, PadValue PadVal>
 struct PadValueMap {
     PTO_STATIC_ASSERT(sizeof(DType) < 0, "TLOAD: Unsupported DType for PadValue!");

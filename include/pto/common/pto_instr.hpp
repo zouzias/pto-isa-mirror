@@ -376,6 +376,22 @@ PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src,
   return {};
 }
 
+template <typename TileData, typename ConvTileData, 
+          SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
+PTO_INST RecordEvent TIMG2COL(TileData &dst, ConvTileData &src,
+                            uint16_t posM = 0, uint16_t posK = 0, Img2colTileConfig &cfg, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TIMG2COL, dst, src, posM, posK, cfg);
+  return {};
+}
+
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
+PTO_INST RecordEvent TSETFMATRIX(Img2colTileConfig &cfg, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TSETFMATRIX, cfg);
+  return {};
+}
+
 template <typename TileData, PadValue PadVal = PadValue::Zero, typename... WaitEvents>
 PTO_INST RecordEvent TFILLPAD(TileData &dst, TileData &src, WaitEvents&... events) {
   TSYNC(events...);
