@@ -201,6 +201,40 @@ __tf__ AICORE void TExtractToB(typename DstTileData::TileDType __out__ dst, type
     }
 }
 
+template <typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractToBConv(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
+    uint16_t FTC1, uint16_t FTH, uint16_t FTW, uint16_t FTN, uint16_t indexRow, uint16_t indexCol)
+{
+    using SrcType = typename SrcTileData::DType;
+    using DstType = typename DstTileData::DType;
+    constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(SrcType);
+    constexpr int32_t srcRow = SrcTileData::Rows;
+    constexpr int32_t srcCol = SrcTileData::Cols;
+    int32_t dstRow = FTN;
+    int32_t dstCol = FTC1 * FTH * FTW * c0Size;
+    __cbuf__ SrcType *srcAddr = (__cbuf__ SrcType *)__cce_get_tile_ptr(src);
+    __cb__ DstType *dstAddr = (__cb__ DstType *)__cce_get_tile_ptr(dst);
+
+    uint16_t dstGap = 0;
+    uint16_t dstRowNum = (dstRow * sizeof(DstType)) >> SHIFT_BLOCK_BYTE; // 分型个数
+    uint16_t dstColNum = dstCol >> SHIFT_BLOCK_LEN;
+    constexpr uint16_t srcColNum = srcCol >> SHIFT_BLOCK_LEN;
+    constexpr uint16_t srcRowNum = (srcRow * sizeof(SrcType)) >> SHIFT_BLOCK_BYTE;
+    // 计算源矩阵、目标矩阵行列中512B小分型矩阵的个数
+    uint16_t blockNum = CUBE_BLOCK_SIZE >> (sizeof(SrcType) == 1    ? 0 :
+                                               sizeof(SrcType) == 2 ? 1 :
+                                               sizeof(SrcType) == 4 ? 2 :
+                                                                      0);
+    uint16_t startIdx0 =
+        (indexRow * sizeof(SrcType) * srcColNum >> SHIFT_BLOCK_BYTE) + (indexCol >> SHIFT_BLOCK_LEN);
+    dstGap = dstColNum - 1;
+    for (uint16_t i = 0; i < dstColNum; i++) {
+        load_cbuf_to_cb(
+            dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, 0, false, addr_cal_mode_t(0));
+        dstAddr += blockNum;
+    }
+}
+
 /************************compact Mode*****************************/
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol>
 PTO_INTERNAL void TExtractToANonTransposeCompact(__ca__ DstType *dstAddr, __cbuf__ SrcType *srcAddr, uint16_t indexRow,
