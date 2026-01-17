@@ -194,9 +194,9 @@ __global__ AICORE void RunTEXTRACTMX(
     GlobalDataOut dstGlobal(out);
 
     using TileMatAData =
-        Tile<TileType::Mat, AType, M, kAlign, BLayout::ColMajor, validM, kAlign, SLayout::RowMajor, 512>;
+        Tile<TileType::Mat, AType, M, kAlign, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
     using TileMatBData =
-        Tile<TileType::Mat, BType, kAlign, N, BLayout::ColMajor, kAlign, validN, SLayout::RowMajor, 512>;
+        Tile<TileType::Mat, BType, kAlign, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
     using TileScaleAData =
         Tile<TileType::Mat, ScaleType, M, kMX, BLayout::RowMajor, validM, kMX, SLayout::RowMajor, 32>;
     using TileScaleBData =
