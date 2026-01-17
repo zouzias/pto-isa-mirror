@@ -172,35 +172,46 @@ PTO_INTERNAL void TMovToRight(DstTileData &dst, SrcTileData &src)
         }
     }
 }
-
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TMOV_CONVTILE_IMPL(DstTileData &dst, SrcTileData &src)
+{
+    if constexpr (SrcTileData::layout == pto::Layout::FRACTAL_Z) { // C1HWNC0, dst dim4 is c0Size
+        TExtractToBConv<DstTileData, SrcTileData>(dst.data(), src.data(), src.GetShape(0), src.GetShape(1), 
+        src.GetShape(2), src.GetShape(3), 0, 0);
+    }
+}
 template <typename DstTileData, typename SrcTileData>
 AICORE void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
-    static_assert((SrcTileData::Rows == DstTileData::Rows) && ((SrcTileData::Cols == DstTileData::Cols)),
-        "TMov: The shape of src needs to be the same as that of dst.");
-    static_assert((SrcTileData::Loc == TileType::Mat &&
-                      (DstTileData::Loc == TileType::Left || DstTileData::Loc == TileType::Right ||
-                          DstTileData::Loc == TileType::Bias || DstTileData::Loc == TileType::Scaling)) ||
-                      (DstTileData::Loc == TileType::Vec && SrcTileData::Loc == TileType::Vec) ||
-                      (DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Acc),
-        "TMov: Invalid TileType.");
-    if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left) {
-        TMovToLeft<DstTileData, SrcTileData>(dst,src);
-    } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Right) {
-        TMovToRight<DstTileData, SrcTileData>(dst,src);
-    } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Bias) {
-        TMovToBt<DstTileData, SrcTileData>(dst.data(), src.data());
-    } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Scaling) {
-        TMovToFb<DstTileData, SrcTileData>(dst.data(), src.data());
-    } else if constexpr (SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Vec) {
-        TMovToVec<DstTileData, SrcTileData>(dst, src);
-    } else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
-        CheckTMovCcToCb<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
-        uint16_t m = src.GetValidRow();
-        uint16_t n = src.GetValidCol();
-        constexpr QuantMode_t quantPre =
-            GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
-        TMovCcToCb<DstTileData, SrcTileData, quantPre, ReluPreMode::NoRelu>(dst.data(), src.data(), m, n);
+    if constexpr (is_conv_tile_v<SrcTileData>) {
+        TMOV_CONVTILE_IMPL(dst, src);
+    } else {
+        static_assert((SrcTileData::Rows == DstTileData::Rows) && ((SrcTileData::Cols == DstTileData::Cols)),
+            "TMov: The shape of src needs to be the same as that of dst.");
+        static_assert((SrcTileData::Loc == TileType::Mat &&
+                        (DstTileData::Loc == TileType::Left || DstTileData::Loc == TileType::Right ||
+                            DstTileData::Loc == TileType::Bias || DstTileData::Loc == TileType::Scaling)) ||
+                        (DstTileData::Loc == TileType::Vec && SrcTileData::Loc == TileType::Vec) ||
+                        (DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Acc),
+            "TMov: Invalid TileType.");
+        if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left) {
+            TMovToLeft<DstTileData, SrcTileData>(dst,src);
+        } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Right) {
+            TMovToRight<DstTileData, SrcTileData>(dst,src);
+        } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Bias) {
+            TMovToBt<DstTileData, SrcTileData>(dst.data(), src.data());
+        } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Scaling) {
+            TMovToFb<DstTileData, SrcTileData>(dst.data(), src.data());
+        } else if constexpr (SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Vec) {
+            TMovToVec<DstTileData, SrcTileData>(dst, src);
+        } else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
+            CheckTMovCcToCb<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
+            uint16_t m = src.GetValidRow();
+            uint16_t n = src.GetValidCol();
+            constexpr QuantMode_t quantPre =
+                GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
+            TMovCcToCb<DstTileData, SrcTileData, quantPre, ReluPreMode::NoRelu>(dst.data(), src.data(), m, n);
+        }
     }
 }
 
