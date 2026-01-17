@@ -124,7 +124,7 @@ __global__ AICORE void RunTMOVMX(
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
 
-    if constexpr((kAlign - validK) * sizeof(AType) >= C0_SIZE_BYTE) { 
+    if constexpr((kAlign - validK) * sizeof(AType) > C0_SIZE_BYTE) { 
         TFILLPAD(aMatTile, aMatTile); //TLOAD can only pad to 32B，mmad_mx needs to be aligned to 64 in k direction 
     }
     TFILLPAD(bMatTile, bMatTile); //B input is nk,  TLOAD does not pad zeros in k direction
@@ -194,9 +194,9 @@ __global__ AICORE void RunTEXTRACTMX(
     GlobalDataOut dstGlobal(out);
 
     using TileMatAData =
-        Tile<TileType::Mat, AType, M, kAlign, BLayout::ColMajor, validM, kAlign, SLayout::RowMajor, 512>;
+        Tile<TileType::Mat, AType, M, kAlign, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
     using TileMatBData =
-        Tile<TileType::Mat, BType, kAlign, N, BLayout::ColMajor, kAlign, validN, SLayout::RowMajor, 512>;
+        Tile<TileType::Mat, BType, kAlign, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
     using TileScaleAData =
         Tile<TileType::Mat, ScaleType, M, kMX, BLayout::RowMajor, validM, kMX, SLayout::RowMajor, 32>;
     using TileScaleBData =
@@ -236,7 +236,7 @@ __global__ AICORE void RunTEXTRACTMX(
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
 
-    if constexpr((kAlign - validK) * sizeof(AType) >= C0_SIZE_BYTE) {
+    if constexpr((kAlign - validK) * sizeof(AType) > C0_SIZE_BYTE) {
         TFILLPAD(aMatTile, aMatTile);
     }
     TFILLPAD(bMatTile, bMatTile);
