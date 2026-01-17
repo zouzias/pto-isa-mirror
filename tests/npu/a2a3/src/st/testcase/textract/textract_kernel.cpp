@@ -175,12 +175,29 @@ AICORE inline void runTEXTRACT(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
     using LeftTile = TileLeft<U, mValid, kValid, mValid, kValid>;
     using RightTile = TileRight<S, kValid, nValid, kValid, nValid>;
     using AccTile = TileAcc<T, mValid, nValid, mValid, nValid>;
-
+    using LeftConvTile = ConvTile<TileType::Mat, U, 98304, Layout::NC1HWC0, pto::ConvTileShape<1,3,32,64,16>>;
+    LeftConvTile tile5d;
+    Img2colTileConfig convcfg;
+    convcfg.channelSize = 2;
+    convcfg.dilationH = 3;
+    convcfg.dilationW = 4;
+    convcfg.filterH = 300;
+    convcfg.filterW = 400;
+    convcfg.fmapH = 1000;
+    convcfg.fmapW = 2000;
+    convcfg.strideH = 5;
+    convcfg.strideW = 6;
+    convcfg.transpose = true;
+    convcfg.padList[0] = 1;
+    convcfg.padList[1] = 2;
+    convcfg.padList[2] = 3;
+    convcfg.padList[3] = 4;
+    convcfg.padValue = 7;
     TileMatAData aMatTile;
     TileMatBData bMatTile;
     TASSIGN(aMatTile, 0x0);
     TASSIGN(bMatTile, 0x10000);
-
+    TASSIGN(tile5d, 0x20000);
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
@@ -194,6 +211,10 @@ AICORE inline void runTEXTRACT(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     /**********************************TMOV && TEXTRACT**********************************/
+    TSETFMATRIX<SetFmatrixMode::FMATRIX_A_MANUAL>(convcfg);
+    for (int i = 0; i < 3; i++) {
+        TIMG2COL<LeftTile, LeftConvTile, SetFmatrixMode::FMATRIX_A_MANUAL>(aTile, tile5d, 0, 0, convcfg);
+    }
     TEXTRACT(aTile, aMatTile, indexM, indexK);
     TEXTRACT(bTile, bMatTile, indexK, indexN);
     pipe_barrier(PIPE_ALL);
