@@ -744,10 +744,10 @@ PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar,
   return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREMS(TileData &dst, TileData &src0, typename TileData::DType scalar, WaitEvents&... events) {
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, TileDataTmp &tmp, WaitEvents&... events) {
   TSYNC(events...);
-  MAP_INSTR_IMPL(TREMS, dst, src0, scalar);
+  MAP_INSTR_IMPL(TREMS, dst, src, scalar, tmp);
   return {};
 }
 

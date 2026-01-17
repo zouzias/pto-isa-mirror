@@ -135,10 +135,14 @@ tpartmin
 tpartmax
 tsel
 tsub
+tsubs
+trem
+trems
+tlrelu
+tmaxs
 tmins
 tmin
 tmax
-tmaxs
 tload_gm2mat
 tstore_acc2gm
 trsqrt
@@ -164,7 +168,6 @@ tscatter
 tfa
 tcolexpand
 ttri
-tlrelu
 tnot
 trelu
 tands

@@ -54,14 +54,16 @@ namespace pto {
     TROWMAX,
     TROWMIN,
     TROWEXPAND,
-    TMAXS,
     TCOLSUM,
     TCOLMAX,
     TCOLMIN,
-    TLRELU,
     TTRANS,
     TTRI,
     TREM,
+    TREMS,
+    TSUBS,
+    TMAXS,
+    TLRELU,
     TMOV_V2V,       /* Vec to Vec */
     TMOV_V2M,       /* Vec to Mat */
     TEXTRACT_V2M,   /* Vec to Mat */
