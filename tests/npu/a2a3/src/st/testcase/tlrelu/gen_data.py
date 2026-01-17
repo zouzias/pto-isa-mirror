@@ -12,8 +12,8 @@
 
 import os
 import struct
-import ctypes
 import numpy as np
+
 np.random.seed(42)
 
 
@@ -33,10 +33,10 @@ def gen_golden_data(param):
                 output_arr[i, j] = input_arr[i, j] * scalar[0, 0]
             else:
                 output_arr[i, j] = input_arr[i, j]
-    input_arr.tofile('input.bin')
-    with open("scalar.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(scalar[0, 0])))
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    with open("scalar.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(scalar[0, 0])))
+    output_arr.tofile("golden.bin")
 
 
 class TLRELUParams:
@@ -47,6 +47,7 @@ class TLRELUParams:
         self.dst_tile_col = dst_tile_col
         self.row = row
         self.col = col
+
 
 if __name__ == "__main__":
     case_params_list = [
@@ -61,7 +62,7 @@ if __name__ == "__main__":
         TLRELUParams("TLRELUTest.case9", np.float32, 31, 256, 31, 128),
         TLRELUParams("TLRELUTest.case10", np.float16, 15, 192, 15, 64 * 3),
         TLRELUParams("TLRELUTest.case11", np.float32, 7, 512, 7, 64 * 7),
-        TLRELUParams("TLRELUTest.case12", np.float32, 256, 32, 256, 16)
+        TLRELUParams("TLRELUTest.case12", np.float32, 256, 32, 256, 16),
     ]
 
     for _, case in enumerate(case_params_list):
