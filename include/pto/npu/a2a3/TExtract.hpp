@@ -201,6 +201,40 @@ __tf__ AICORE void TExtractToB(typename DstTileData::TileDType __out__ dst, type
     }
 }
 
+template <typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractToBConv(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
+    uint16_t FTC1, uint16_t FTH, uint16_t FTW, uint16_t FTN, uint16_t indexRow, uint16_t indexCol)
+{
+    using SrcType = typename SrcTileData::DType;
+    using DstType = typename DstTileData::DType;
+    constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(SrcType);
+    constexpr int32_t dstRow = DstTileData::Rows;
+    constexpr int32_t dstCol = DstTileData::Cols;
+    int32_t srcRow = FTC1 * FTH * FTW * c0Size;
+    int32_t srcCol = FTN;
+    __cbuf__ SrcType *srcAddr = (__cbuf__ SrcType *)__cce_get_tile_ptr(src);
+    __cb__ DstType *dstAddr = (__cb__ DstType *)__cce_get_tile_ptr(dst);
+
+    uint16_t dstGap = 0;
+    constexpr uint16_t dstRowNum = (dstRow * sizeof(DstType)) >> SHIFT_BLOCK_BYTE; // 分型个数
+    constexpr uint16_t dstColNum = dstCol >> SHIFT_BLOCK_LEN;
+    uint16_t srcColNum = srcCol >> SHIFT_BLOCK_LEN;
+    uint16_t srcRowNum = (srcRow * sizeof(SrcType)) >> SHIFT_BLOCK_BYTE;
+    // 计算源矩阵、目标矩阵行列中512B小分型矩阵的个数
+    uint16_t blockNum = CUBE_BLOCK_SIZE >> (sizeof(SrcType) == 1    ? 0 :
+                                               sizeof(SrcType) == 2 ? 1 :
+                                               sizeof(SrcType) == 4 ? 2 :
+                                                                      0);
+    uint16_t startIdx0 =
+        (indexRow * sizeof(SrcType) * srcColNum >> SHIFT_BLOCK_BYTE) + (indexCol >> SHIFT_BLOCK_LEN);
+    dstGap = dstColNum - 1;
+    for (uint16_t i = 0; i < dstColNum; i++) {
+        load_cbuf_to_cb(
+            dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, 0, false, addr_cal_mode_t(0));
+        dstAddr += blockNum;
+    }
+}
+
 /************************compact Mode*****************************/
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol>
 PTO_INTERNAL void TExtractToANonTransposeCompact(__ca__ DstType *dstAddr, __cbuf__ SrcType *srcAddr, uint16_t indexRow,
@@ -397,52 +431,64 @@ PTO_INTERNAL void CheckTExtract()
                       (SrcTileData::SFractal == SLayout::RowMajor && !SrcTileData::isRowMajor),
         "TExtract: SrcTile Invalid Fractal.");
 }
-
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TEXTRACT_CONVTILE_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
+{
+    if constexpr (SrcTileData::layout == pto::Layout::FRACTAL_Z) { // C1HWNC0, dst dim4 is c0Size
+        TExtractToBConv<DstTileData, SrcTileData>(dst.data(), src.data(), src.GetShape(0), src.GetShape(1), 
+        src.GetShape(2), src.GetShape(3), indexRow, indexCol);
+    }
+}
 template <typename DstTileData, typename SrcTileData>
 AICORE void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
-    CheckTExtract<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
-    PTO_ASSERT(indexRow + DstTileData::Rows <= SrcTileData::Rows,
-        "The sum of indexRow and dstRow should be less than srcRow!");
-    PTO_ASSERT(indexCol + DstTileData::Cols <= SrcTileData::Cols,
-        "The sum of indexCol and dstCol should be less than srcCol!");
-    if constexpr (DstTileData::Loc == TileType::Left) {
-        static_assert(DstTileData::SFractal == SLayout::RowMajor && DstTileData::isRowMajor,
-            "TExtract: LeftTile Invalid Fractal.");
-        if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
-            if constexpr (DstTileData::Compact == CompactMode::Normal) {
-                TExtractToACompact<DstTileData, SrcTileData, false>(
-                    dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
-            } else {
-                TExtractToA<DstTileData, SrcTileData, false>(dst.data(), src.data(), indexRow, indexCol);
-            }
-        } else {
-            if constexpr (DstTileData::Compact == CompactMode::Normal) {
-                TExtractToACompact<DstTileData, SrcTileData, true>(
-                    dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
-            } else {
-                TExtractToA<DstTileData, SrcTileData, true>(dst.data(), src.data(), indexRow, indexCol);
-            }
-        }
+    if constexpr (is_conv_tile_v<SrcTileData>) {
+        TEXTRACT_CONVTILE_IMPL(dst, src, indexRow, indexCol);
     } else {
-        static_assert(DstTileData::SFractal == SLayout::ColMajor && DstTileData::isRowMajor,
-            "TExtract: RightTile Invalid Fractal.");
-        if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
-            if constexpr (DstTileData::Compact == CompactMode::Normal) {
-                TExtractToBCompact<DstTileData, SrcTileData, false>(
-                    dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol());
+        CheckTExtract<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
+        PTO_ASSERT(indexRow + DstTileData::Rows <= SrcTileData::Rows,
+            "The sum of indexRow and dstRow should be less than srcRow!");
+        PTO_ASSERT(indexCol + DstTileData::Cols <= SrcTileData::Cols,
+            "The sum of indexCol and dstCol should be less than srcCol!");
+        if constexpr (DstTileData::Loc == TileType::Left) {
+            static_assert(DstTileData::SFractal == SLayout::RowMajor && DstTileData::isRowMajor,
+                "TExtract: LeftTile Invalid Fractal.");
+            if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
+                if constexpr (DstTileData::Compact == CompactMode::Normal) {
+                    TExtractToACompact<DstTileData, SrcTileData, false>(
+                        dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
+                } else {
+                    TExtractToA<DstTileData, SrcTileData, false>(dst.data(), src.data(), indexRow, indexCol);
+                }
             } else {
-                TExtractToB<DstTileData, SrcTileData, false>(dst.data(), src.data(), indexRow, indexCol);
+                if constexpr (DstTileData::Compact == CompactMode::Normal) {
+                    TExtractToACompact<DstTileData, SrcTileData, true>(
+                        dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
+                } else {
+                    TExtractToA<DstTileData, SrcTileData, true>(dst.data(), src.data(), indexRow, indexCol);
+                }
             }
         } else {
-            if constexpr (DstTileData::Compact == CompactMode::Normal) {
-                TExtractToBCompact<DstTileData, SrcTileData, true>(
-                    dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol());
+            static_assert(DstTileData::SFractal == SLayout::ColMajor && DstTileData::isRowMajor,
+                "TExtract: RightTile Invalid Fractal.");
+            if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
+                if constexpr (DstTileData::Compact == CompactMode::Normal) {
+                    TExtractToBCompact<DstTileData, SrcTileData, false>(
+                        dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol());
+                } else {
+                    TExtractToB<DstTileData, SrcTileData, false>(dst.data(), src.data(), indexRow, indexCol);
+                }
             } else {
-                TExtractToB<DstTileData, SrcTileData, true>(dst.data(), src.data(), indexRow, indexCol);
+                if constexpr (DstTileData::Compact == CompactMode::Normal) {
+                    TExtractToBCompact<DstTileData, SrcTileData, true>(
+                        dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol());
+                } else {
+                    TExtractToB<DstTileData, SrcTileData, true>(dst.data(), src.data(), indexRow, indexCol);
+                }
             }
         }
     }
+
 }
 }  // namespace pto
 #endif  // TEXTRACT_HPP
