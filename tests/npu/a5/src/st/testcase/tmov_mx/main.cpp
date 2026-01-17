@@ -56,8 +56,8 @@ void TmovMXTest(uint32_t validM, uint32_t validK, uint32_t validN, uint16_t inde
     uint16_t baseM = 0, uint16_t baseK = 0, uint16_t baseN = 0)
 {
     uint32_t kAlign = CeilAlign<uint32_t>(validK, 64);
-    size_t aFileSize = isFp4 ? CeilDiv<uint32_t>(validM * kAlign, 2) : validM * kAlign * sizeof(U);
-    size_t bFileSize = isFp4 ? CeilDiv<uint32_t>(kAlign * validN, 2) : kAlign * validN * sizeof(S);
+    size_t aFileSize = isFp4 ? CeilDiv<uint32_t>(validM * validK, 2) : validM * validK * sizeof(U);
+    size_t bFileSize = isFp4 ? CeilDiv<uint32_t>(validK * validN, 2) : validK * validN * sizeof(S);
     size_t aScaleFileSize = validM * CeilDiv<uint32_t>(kAlign, 32);
     size_t bScaleFileSize = validN * CeilDiv<uint32_t>(kAlign, 32);
 
