@@ -45,6 +45,14 @@ if __name__ == '__main__':
         ('TBMMQKTest.case_float_256x128x128_TN', (256, 128, 128)),
         ('TBMMQKTest.case_float_128x256x64_TN', (128, 256, 64)),
         ('TBMMQKTest.case_float_128x128x64_TN', (128, 128, 64)),
+        # NN variant cases
+        ('TBMMQKTest.case_float_128x128x128_NN', (128, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x64_NN', (256, 128, 64)),
+        ('TBMMQKTest.case_float_64x256x64_NN', (64, 256, 64)),
+        ('TBMMQKTest.case_float_64x128x128_NN', (64, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x128_NN', (256, 128, 128)),
+        ('TBMMQKTest.case_float_128x256x64_NN', (128, 256, 64)),
+        ('TBMMQKTest.case_float_128x128x64_NN', (128, 128, 64)),
     ]
     for name, (M, K, N) in cases:
         case_dir = os.path.join(script_dir, name)
