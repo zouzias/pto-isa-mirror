@@ -28,9 +28,7 @@ extern "C" void LaunchTBMM_QK_64_256_64_NT(float *out, aclFloat16 *q, aclFloat16
 extern "C" void LaunchTBMM_QK_64_128_128_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 extern "C" void LaunchTBMM_QK_256_128_128_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 extern "C" void LaunchTBMM_QK_128_256_64_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_128_64_128_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 extern "C" void LaunchTBMM_QK_128_128_64_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
-extern "C" void LaunchTBMM_QK_64_64_128_NT(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 extern "C" void LaunchTBMM_QK_128_128_128_split(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 extern "C" void LaunchTBMM_QK_128_64_128(float *out, aclFloat16 *q, aclFloat16 *k, void *stream);
 
@@ -76,12 +74,8 @@ void run_tbmm_qk() {
         LaunchTBMM_QK_256_128_128_NT(outDevice, qDevice, kDevice, stream);
     } else if constexpr (IS_NT && M == 128 && K == 256 && N == 64) {
         LaunchTBMM_QK_128_256_64_NT(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (IS_NT && M == 128 && K == 64 && N == 128) {
-        LaunchTBMM_QK_128_64_128_NT(outDevice, qDevice, kDevice, stream);
     } else if constexpr (IS_NT && M == 128 && K == 128 && N == 64) {
         LaunchTBMM_QK_128_128_64_NT(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (IS_NT && M == 64 && K == 64 && N == 128) {
-        LaunchTBMM_QK_64_64_128_NT(outDevice, qDevice, kDevice, stream);
     } else if constexpr (M == 128 && K == 128 && N == 128) {
         LaunchTBMM_QK_128_128_128(outDevice, qDevice, kDevice, stream);
     }
@@ -139,15 +133,7 @@ TEST_F(TBMMQKTest, case_float_128x256x64_NT) {
     run_tbmm_qk<float, 128, 256, 64, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_128x64x128_NT) {
-    run_tbmm_qk<float, 128, 64, 128, true>();
-}
-
 TEST_F(TBMMQKTest, case_float_128x128x64_NT) {
     run_tbmm_qk<float, 128, 128, 64, true>();
-}
-
-TEST_F(TBMMQKTest, case_float_64x64x128_NT) {
-    run_tbmm_qk<float, 64, 64, 128, true>();
 }
 

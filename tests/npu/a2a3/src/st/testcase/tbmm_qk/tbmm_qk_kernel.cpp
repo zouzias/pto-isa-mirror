@@ -234,21 +234,14 @@ extern "C" void LaunchTBMM_QK_128_256_64_NT(float *out, uint16_t *q, uint16_t *k
     LaunchTBMM_QK_kern_NT<128, 256, 64><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
 }
 
-extern "C" void LaunchTBMM_QK_128_64_128_NT(float *out, uint16_t *q, uint16_t *k, void *stream) {
-    LaunchTBMM_QK_kern_NT<128, 64, 128><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
-}
-
 extern "C" void LaunchTBMM_QK_128_128_64_NT(float *out, uint16_t *q, uint16_t *k, void *stream) {
     LaunchTBMM_QK_kern_NT<128, 128, 64><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
 }
 
-extern "C" void LaunchTBMM_QK_64_64_128_NT(float *out, uint16_t *q, uint16_t *k, void *stream) {
-    LaunchTBMM_QK_kern_NT<64, 64, 128><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
-}
-
-extern "C" void LaunchTBMM_QK_128_128_128_split(float *out, uint16_t *q, uint16_t *k, void *stream) {
-    LaunchTBMM_QK_kern_split_K<128, 128, 128><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
-}
+// Note: split_K kernel commented out due to Tile_K < calculated Cube_K assertion
+// extern "C" void LaunchTBMM_QK_128_128_128_split(float *out, uint16_t *q, uint16_t *k, void *stream) {
+//     LaunchTBMM_QK_kern_split_K<128, 128, 128><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
+// }
 
 // extern "C" void LaunchTBMM_QK_128_64_128(float *out, uint16_t *q, uint16_t *k, void *stream) {
 //     LaunchTBMM_QK_kern<128, 64, 128><<<1, nullptr, stream>>>(out, (half*)q, (half*)k);
