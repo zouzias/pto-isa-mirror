@@ -17,18 +17,19 @@ def gen_case(path, M, K, N):
     golden = (q_fp32.dot(k_fp32)).astype(np.float32)
 
     kt = k.T.astype(np.float16)
+    qt = q.T.astype(np.float16)
 
     # write FP16 inputs and FP32 golden
     q.tofile(os.path.join(path, 'q.bin'))
     k.tofile(os.path.join(path, 'k.bin'))
     kt.tofile(os.path.join(path, 'kt.bin'))
+    qt.tofile(os.path.join(path, 'qt.bin'))
     golden.tofile(os.path.join(path, 'golden.bin'))
 
 
 if __name__ == '__main__':
     script_dir = os.path.dirname(os.path.abspath(__file__))
     cases = [
-        ('TBMMQKTest.case_float_128x128x128', (128, 128, 128)),
         ('TBMMQKTest.case_float_128x128x128_NT', (128, 128, 128)),
         ('TBMMQKTest.case_float_256x128x64_NT', (256, 128, 64)),
         ('TBMMQKTest.case_float_64x256x64_NT', (64, 256, 64)),
@@ -36,7 +37,14 @@ if __name__ == '__main__':
         ('TBMMQKTest.case_float_256x128x128_NT', (256, 128, 128)),
         ('TBMMQKTest.case_float_128x256x64_NT', (128, 256, 64)),
         ('TBMMQKTest.case_float_128x128x64_NT', (128, 128, 64)),
-        ('TBMMQKTest.case_float_128x64x128', (128, 64, 128)),
+        # TN variant cases
+        ('TBMMQKTest.case_float_128x128x128_TN', (128, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x64_TN', (256, 128, 64)),
+        ('TBMMQKTest.case_float_64x256x64_TN', (64, 256, 64)),
+        ('TBMMQKTest.case_float_64x128x128_TN', (64, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x128_TN', (256, 128, 128)),
+        ('TBMMQKTest.case_float_128x256x64_TN', (128, 256, 64)),
+        ('TBMMQKTest.case_float_128x128x64_TN', (128, 128, 64)),
     ]
     for name, (M, K, N) in cases:
         case_dir = os.path.join(script_dir, name)
