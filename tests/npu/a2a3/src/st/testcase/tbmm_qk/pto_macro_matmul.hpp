@@ -110,6 +110,11 @@ namespace pto{
         static_assert(Tile_K >= Cube_K, 
                       "Tile_K must be >= calculated Cube_K. Either increase Tile_K or adjust Cube_M/Cube_N.");
 
+        // Only NT layout supports inner K loop (Tile_K/Cube_K > 1) due to TEXTRACT memory layout constraints
+        // For NN, TN, and TT layouts, outer K loop is not supported, so Tile_K must equal Cube_K
+        static_assert(layout == layout_t::NT || Tile_K == Cube_K,
+                      "Only NT layout supports inner K loop (Tile_K/Cube_K > 1). "
+                      "For NN, TN, and TT layouts, Tile_K must equal Cube_K (K loop at L1 level not supported).");
 
 
         // Ping-pong is used to overlap TEXTRACT (L1->L0) with TMATMUL on alternating buffers.
