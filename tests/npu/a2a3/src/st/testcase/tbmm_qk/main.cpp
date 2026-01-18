@@ -84,9 +84,7 @@ void run_tbmm_qk() {
         LaunchTBMM_QK_64_64_128_NT(outDevice, qDevice, kDevice, stream);
     } else if constexpr (M == 128 && K == 128 && N == 128) {
         LaunchTBMM_QK_128_128_128(outDevice, qDevice, kDevice, stream);
-    } else if constexpr (M == 128 && K == 64 && N == 128) {
-        LaunchTBMM_QK_128_64_128(outDevice, qDevice, kDevice, stream);
-    } 
+    }
 
     aclrtSynchronizeStream(stream);
 
@@ -116,46 +114,40 @@ void run_tbmm_qk() {
     EXPECT_TRUE(ok);
 }
 
-// TEST_F(TBMMQKTest, case_float_128x128_128x128) {
-//     run_tbmm_qk<float, 128, 128, 128>();
-// }
 
-TEST_F(TBMMQKTest, case_float_128x128_128x128_NT) {
+TEST_F(TBMMQKTest, case_float_128x128x128_NT) {
     run_tbmm_qk<float, 128, 128, 128, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_256x128_64x64_NT) {
+TEST_F(TBMMQKTest, case_float_256x128x64_NT) {
     run_tbmm_qk<float, 256, 128, 64, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_64x256_64x64_NT) {
+TEST_F(TBMMQKTest, case_float_64x256x64_NT) {
     run_tbmm_qk<float, 64, 256, 64, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_64x128_128x128_NT) {
+TEST_F(TBMMQKTest, case_float_64x128x128_NT) {
     run_tbmm_qk<float, 64, 128, 128, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_256x128_128x128_NT) {
+TEST_F(TBMMQKTest, case_float_256x128x128_NT) {
     run_tbmm_qk<float, 256, 128, 128, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_128x256_64x64_NT) {
+TEST_F(TBMMQKTest, case_float_128x256x64_NT) {
     run_tbmm_qk<float, 128, 256, 64, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_128x64_128x128_NT) {
+TEST_F(TBMMQKTest, case_float_128x64x128_NT) {
     run_tbmm_qk<float, 128, 64, 128, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_128x128_64x64_NT) {
+TEST_F(TBMMQKTest, case_float_128x128x64_NT) {
     run_tbmm_qk<float, 128, 128, 64, true>();
 }
 
-TEST_F(TBMMQKTest, case_float_64x64_128x128_NT) {
+TEST_F(TBMMQKTest, case_float_64x64x128_NT) {
     run_tbmm_qk<float, 64, 64, 128, true>();
 }
 
-// TEST_F(TBMMQKTest, case_float_128x64_128x64) {
-//     run_tbmm_qk<float, 128, 64, 128>();
-// }

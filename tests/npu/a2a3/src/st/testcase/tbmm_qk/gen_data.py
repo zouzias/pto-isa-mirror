@@ -28,17 +28,16 @@ def gen_case(path, M, K, N):
 if __name__ == '__main__':
     script_dir = os.path.dirname(os.path.abspath(__file__))
     cases = [
-        ('TBMMQKTest.case_float_128x128_128x128', (128, 128, 128)),
-        ('TBMMQKTest.case_float_128x128_128x128_NT', (128, 128, 128)),
-        ('TBMMQKTest.case_float_256x128_64x64_NT', (256, 128, 64)),
-        ('TBMMQKTest.case_float_64x256_64x64_NT', (64, 256, 64)),
-        ('TBMMQKTest.case_float_64x128_128x128_NT', (64, 128, 128)),
-        ('TBMMQKTest.case_float_256x128_128x128_NT', (256, 128, 128)),
-        ('TBMMQKTest.case_float_128x256_64x64_NT', (128, 256, 64)),
-        ('TBMMQKTest.case_float_128x64_128x128_NT', (128, 64, 128)),
-        ('TBMMQKTest.case_float_128x128_64x64_NT', (128, 128, 64)),
-        ('TBMMQKTest.case_float_64x64_128x128_NT', (64, 64, 128)),
-        ('TBMMQKTest.case_float_128x64_128x64', (128, 64, 128)),
+        ('TBMMQKTest.case_float_128x128x128', (128, 128, 128)),
+        ('TBMMQKTest.case_float_128x128x128_NT', (128, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x64_NT', (256, 128, 64)),
+        ('TBMMQKTest.case_float_64x256x64_NT', (64, 256, 64)),
+        ('TBMMQKTest.case_float_64x128x128_NT', (64, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x128_NT', (256, 128, 128)),
+        ('TBMMQKTest.case_float_128x256x64_NT', (128, 256, 64)),
+        ('TBMMQKTest.case_float_128x64x128_NT', (128, 64, 128)),
+        ('TBMMQKTest.case_float_128x128x64_NT', (128, 128, 64)),
+        ('TBMMQKTest.case_float_64x64x128_NT', (64, 64, 128)),
     ]
     for name, (M, K, N) in cases:
         case_dir = os.path.join(script_dir, name)
