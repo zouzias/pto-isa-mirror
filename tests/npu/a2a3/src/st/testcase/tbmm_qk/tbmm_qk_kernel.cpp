@@ -288,6 +288,78 @@ __global__ AICORE void LaunchTBMM_QK_kern_TN(__gm__ float *out, __gm__ half *q, 
 }
 
 
+// TT variant: both Q and K are transposed
+template<uint32_t TM, uint32_t TK, uint32_t TN>
+__global__ AICORE void LaunchTBMM_QK_kern_TT(__gm__ float *out, __gm__ half *q, __gm__ half *k) {
+    constexpr uint32_t M = TM; 
+    constexpr uint32_t N = TN; 
+    constexpr uint32_t K = TK; 
+    constexpr uint32_t Cube_M = M;
+    constexpr uint32_t Cube_N = N;
+    constexpr uint32_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
+
+    // Global tensor typedefs (static shapes)
+    using GlobalDataSrc0 = GlobalTensor<half, pto::Shape<1, 1, 1, M, Cube_K>,
+        pto::Stride<1 , 1 , 1 , 1, M>, Layout::DN>;
+    using GlobalDataSrc1 = GlobalTensor<half, pto::Shape<1, 1, 1, Cube_K, N>,
+        pto::Stride<1 , 1 , 1, 1, K>, Layout::DN>;
+    using GlobalDataOut = GlobalTensor<float, pto::Shape<1, 1, 1, M, N>,
+        pto::Stride<1 , 1 , 1, N, 1>>;
+
+    GlobalDataOut dstGlobal(out);
+
+    // Mat tiles: half inputs, float accumulation
+    using TileMatAData = Tile<TileType::Mat, half, M, Cube_K, BLayout::RowMajor, M, Cube_K, SLayout::ColMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, half, Cube_K, N, BLayout::RowMajor, Cube_K, N, SLayout::ColMajor, 512>;
+    using AccTile = TileAcc<float, M, N, M, N>;
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
+
+    AccTile cTile;
+    TASSIGN(cTile, 0x0);
+
+    constexpr int iter = K / Cube_K;
+    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+
+    for (int16_t i = 0; i < iter; i++) {
+        GlobalDataSrc0 src0Global(q + i * Cube_K * M);
+        GlobalDataSrc1 src1Global(k + i * Cube_K);
+
+        /******************************TLOAD*****************************/
+        TLOAD(aMatTile, src0Global);
+        TLOAD(bMatTile, src1Global);
+
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+
+        /**************************TMOV && TEXTRACT**************************/
+        if (i == 0) {
+            pto_macro_matmul<Cube_M, Cube_K, Cube_N>(aMatTile, bMatTile, cTile, false);
+        } else {
+            pto_macro_matmul<Cube_M, Cube_K, Cube_N>(aMatTile, bMatTile, cTile, true);
+        }
+        
+
+        set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+    }
+
+    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    
+    /********************************TSTORE****************************/
+
+    TSTORE(dstGlobal, cTile);
+    out = dstGlobal.data();
+}
+
 
 // Explicit wrappers - use macros to reduce boilerplate
 #define DEFINE_KERNEL_WRAPPER(M, K, N, VARIANT) \
@@ -330,5 +402,14 @@ DEFINE_KERNEL_WRAPPER(64, 128, 128, TN)
 DEFINE_KERNEL_WRAPPER(256, 128, 128, TN)
 DEFINE_KERNEL_WRAPPER(128, 256, 64, TN)
 DEFINE_KERNEL_WRAPPER(128, 128, 64, TN)
+
+// TT variant wrappers
+DEFINE_KERNEL_WRAPPER(128, 128, 128, TT)
+DEFINE_KERNEL_WRAPPER(256, 128, 64, TT)
+DEFINE_KERNEL_WRAPPER(64, 256, 64, TT)
+DEFINE_KERNEL_WRAPPER(64, 128, 128, TT)
+DEFINE_KERNEL_WRAPPER(256, 128, 128, TT)
+DEFINE_KERNEL_WRAPPER(128, 256, 64, TT)
+DEFINE_KERNEL_WRAPPER(128, 128, 64, TT)
 
 #undef DEFINE_KERNEL_WRAPPER

@@ -59,9 +59,18 @@ DECLARE_KERNEL_WRAPPER(256, 128, 128, NN)
 DECLARE_KERNEL_WRAPPER(128, 256, 64, NN)
 DECLARE_KERNEL_WRAPPER(128, 128, 64, NN)
 
+// TT variant wrappers
+DECLARE_KERNEL_WRAPPER(128, 128, 128, TT)
+DECLARE_KERNEL_WRAPPER(256, 128, 64, TT)
+DECLARE_KERNEL_WRAPPER(64, 256, 64, TT)
+DECLARE_KERNEL_WRAPPER(64, 128, 128, TT)
+DECLARE_KERNEL_WRAPPER(256, 128, 128, TT)
+DECLARE_KERNEL_WRAPPER(128, 256, 64, TT)
+DECLARE_KERNEL_WRAPPER(128, 128, 64, TT)
+
 #undef DECLARE_KERNEL_WRAPPER
 
-template<typename T, int M, int K, int N, bool IS_NT = false, bool IS_TN = false, bool IS_NN = false, bool IS_NT_INNER = false>
+template<typename T, int M, int K, int N, bool IS_NT = false, bool IS_TN = false, bool IS_NN = false, bool IS_NT_INNER = false, bool IS_TT = false>
 void run_tbmm_qk() {
     size_t fullSize = M * N * sizeof(T); // Keep output as float
     size_t qSize = M * K * sizeof(aclFloat16);
@@ -85,8 +94,8 @@ void run_tbmm_qk() {
     aclrtMalloc((void **)&qDevice, qSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&kDevice, kSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    std::string qFile = IS_TN ? "/qt.bin" : "/q.bin";
-    std::string kFile = (IS_NT || IS_NT_INNER) ? "/kt.bin" : "/k.bin";
+    std::string qFile = (IS_TN || IS_TT) ? "/qt.bin" : "/q.bin";
+    std::string kFile = (IS_NT || IS_NT_INNER || IS_TT) ? "/kt.bin" : "/k.bin";
     ReadFile(GetGoldenDir() + qFile, qSize, qHost, qSize); // Read q data
     ReadFile(GetGoldenDir() + kFile, kSize, kHost, kSize);
 
@@ -127,6 +136,13 @@ void run_tbmm_qk() {
     DISPATCH_KERNEL(256, 128, 128, NN, IS_NN)
     DISPATCH_KERNEL(128, 256, 64, NN, IS_NN)
     DISPATCH_KERNEL(128, 128, 64, NN, IS_NN)
+    DISPATCH_KERNEL(128, 128, 128, TT, IS_TT)
+    DISPATCH_KERNEL(256, 128, 64, TT, IS_TT)
+    DISPATCH_KERNEL(64, 256, 64, TT, IS_TT)
+    DISPATCH_KERNEL(64, 128, 128, TT, IS_TT)
+    DISPATCH_KERNEL(256, 128, 128, TT, IS_TT)
+    DISPATCH_KERNEL(128, 256, 64, TT, IS_TT)
+    DISPATCH_KERNEL(128, 128, 64, TT, IS_TT)
     { /* Default: do nothing */ }
 
     #undef DISPATCH_KERNEL
@@ -200,5 +216,14 @@ DEFINE_TEST_CASE(64, 128, 128, NN, false, false, true)
 DEFINE_TEST_CASE(256, 128, 128, NN, false, false, true)
 DEFINE_TEST_CASE(128, 256, 64, NN, false, false, true)
 DEFINE_TEST_CASE(128, 128, 64, NN, false, false, true)
+
+// TT variant test cases
+DEFINE_TEST_CASE(128, 128, 128, TT, false, false, false, false, true)
+DEFINE_TEST_CASE(256, 128, 64, TT, false, false, false, false, true)
+DEFINE_TEST_CASE(64, 256, 64, TT, false, false, false, false, true)
+DEFINE_TEST_CASE(64, 128, 128, TT, false, false, false, false, true)
+DEFINE_TEST_CASE(256, 128, 128, TT, false, false, false, false, true)
+DEFINE_TEST_CASE(128, 256, 64, TT, false, false, false, false, true)
+DEFINE_TEST_CASE(128, 128, 64, TT, false, false, false, false, true)
 
 #undef DEFINE_TEST_CASE
