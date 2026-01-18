@@ -30,6 +30,7 @@ def gen_case(path, M, K, N):
 if __name__ == '__main__':
     script_dir = os.path.dirname(os.path.abspath(__file__))
     cases = [
+        # NT variant cases (outer K loop - default)
         ('TBMMQKTest.case_float_128x128x128_NT', (128, 128, 128)),
         ('TBMMQKTest.case_float_256x128x64_NT', (256, 128, 64)),
         ('TBMMQKTest.case_float_64x256x64_NT', (64, 256, 64)),
@@ -37,6 +38,14 @@ if __name__ == '__main__':
         ('TBMMQKTest.case_float_256x128x128_NT', (256, 128, 128)),
         ('TBMMQKTest.case_float_128x256x64_NT', (128, 256, 64)),
         ('TBMMQKTest.case_float_128x128x64_NT', (128, 128, 64)),
+        # NT_inner variant cases (inner K loop)
+        ('TBMMQKTest.case_float_128x128x128_NT_inner', (128, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x64_NT_inner', (256, 128, 64)),
+        ('TBMMQKTest.case_float_64x256x64_NT_inner', (64, 256, 64)),
+        ('TBMMQKTest.case_float_64x128x128_NT_inner', (64, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x128_NT_inner', (256, 128, 128)),
+        ('TBMMQKTest.case_float_128x256x64_NT_inner', (128, 256, 64)),
+        ('TBMMQKTest.case_float_128x128x64_NT_inner', (128, 128, 64)),
         # TN variant cases
         ('TBMMQKTest.case_float_128x128x128_TN', (128, 128, 128)),
         ('TBMMQKTest.case_float_256x128x64_TN', (256, 128, 64)),
