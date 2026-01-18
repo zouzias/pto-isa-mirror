@@ -142,22 +142,21 @@ __global__ AICORE void LaunchTBMM_QK_kern_TN(__gm__ float *out, __gm__ half *q, 
     constexpr uint32_t K = TK; 
     constexpr uint32_t Cube_M = M;
     constexpr uint32_t Cube_N = N;
+    constexpr uint32_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
 
     // Global tensor typedefs (static shapes)
-    using GlobalDataSrc0 = GlobalTensor<half, pto::Shape<1, 1, 1, M, K>,
-        pto::Stride<1 , 1 , 1, 1, M>, Layout::DN>;
-    using GlobalDataSrc1 = GlobalTensor<half, pto::Shape<1, 1, 1, K, N>,
+    using GlobalDataSrc0 = GlobalTensor<half, pto::Shape<1, 1, 1, M, Cube_K>,
+        pto::Stride<1 , 1 , 1 , 1, M>, Layout::DN>;
+    using GlobalDataSrc1 = GlobalTensor<half, pto::Shape<1, 1, 1, Cube_K, N>,
         pto::Stride<1 , 1 , 1, N, 1>>;
     using GlobalDataOut = GlobalTensor<float, pto::Shape<1, 1, 1, M, N>,
-        pto::Stride<1 * M * N, 1 * M * N, M * N, N, 1>>;
+        pto::Stride<1 , 1 , 1, N, 1>>;
 
-    GlobalDataSrc0 src0Global(q);
-    GlobalDataSrc1 src1Global(k);
     GlobalDataOut dstGlobal(out);
 
     // Mat tiles: half inputs, float accumulation
-    using TileMatAData = Tile<TileType::Mat, half, M, K, BLayout::RowMajor, M, K, SLayout::ColMajor, 512>;
-    using TileMatBData = Tile<TileType::Mat, half, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
+    using TileMatAData = Tile<TileType::Mat, half, M, Cube_K, BLayout::RowMajor, M, Cube_K, SLayout::ColMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, half, Cube_K, N, BLayout::ColMajor, Cube_K, N, SLayout::RowMajor, 512>;
     using AccTile = TileAcc<float, M, N, M, N>;
 
     TileMatAData aMatTile;
@@ -168,18 +167,32 @@ __global__ AICORE void LaunchTBMM_QK_kern_TN(__gm__ float *out, __gm__ half *q, 
     AccTile cTile;
     TASSIGN(cTile, 0x0);
 
-    /******************************TLOAD*****************************/
-    TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
-
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-
+    constexpr int iter = K / Cube_K;
     set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
     set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
 
-    /**************************TMOV && TEXTRACT**************************/
-    pto_macro_matmul<Cube_M, K, Cube_N>(aMatTile, bMatTile, cTile);
+    for (int16_t i = 0; i < iter; i++) {
+        GlobalDataSrc0 src0Global(q + i * Cube_K * M);
+        GlobalDataSrc1 src1Global(k + N * i * Cube_K);
+
+        /******************************TLOAD*****************************/
+        TLOAD(aMatTile, src0Global);
+        TLOAD(bMatTile, src1Global);
+
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+
+        /**************************TMOV && TEXTRACT**************************/
+        if (i == 0) {
+            pto_macro_matmul<Cube_M, Cube_K, Cube_N>(aMatTile, bMatTile, cTile, false);
+        } else {
+            pto_macro_matmul<Cube_M, Cube_K, Cube_N>(aMatTile, bMatTile, cTile, true);
+        }
+        
+
+        set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+    }
 
     wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
