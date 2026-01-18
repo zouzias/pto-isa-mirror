@@ -79,20 +79,16 @@ __global__ AICORE void LaunchTBMM_QK_kern_NT(__gm__ float *out, __gm__ half *q, 
     constexpr uint32_t M = TM; 
     constexpr uint32_t N = TN; 
     constexpr uint32_t K = TK; 
-    constexpr uint32_t validM = M;
-    constexpr uint32_t validN = N;
-    constexpr uint32_t validK = K;
     constexpr uint32_t Cube_M = M;
     constexpr uint32_t Cube_N = N;
-    constexpr uint32_t Cube_K = K > 128 ? 64 : K;
 
     // Global tensor typedefs (static shapes)
-    using GlobalDataSrc0 = GlobalTensor<half, pto::Shape<1, 1, 1, validM, validK>,
-        pto::Stride<1 , 1 , 1, validK, 1>>;
-    using GlobalDataSrc1 = GlobalTensor<half, pto::Shape<1, 1, 1, validK, validN>,
-        pto::Stride<1 , 1 , 1, 1, validK>, Layout::DN>;
-    using GlobalDataOut = GlobalTensor<float, pto::Shape<1, 1, 1, validM, validN>,
-        pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
+    using GlobalDataSrc0 = GlobalTensor<half, pto::Shape<1, 1, 1, M, K>,
+        pto::Stride<1 , 1 , 1, K, 1>>;
+    using GlobalDataSrc1 = GlobalTensor<half, pto::Shape<1, 1, 1, K, N>,
+        pto::Stride<1 , 1 , 1, 1, K>, Layout::DN>;
+    using GlobalDataOut = GlobalTensor<float, pto::Shape<1, 1, 1, M, N>,
+        pto::Stride<1 * M * N, 1 * M * N, M * N, N, 1>>;
 
     GlobalDataSrc0 src0Global(q);
     GlobalDataSrc1 src1Global(k);
@@ -101,7 +97,7 @@ __global__ AICORE void LaunchTBMM_QK_kern_NT(__gm__ float *out, __gm__ half *q, 
     // Mat tiles: half inputs, float accumulation
     using TileMatAData = Tile<TileType::Mat, half, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
     using TileMatBData = Tile<TileType::Mat, half, K, N, BLayout::RowMajor, K, N, SLayout::ColMajor, 512>;
-    using AccTile = TileAcc<float, M, N, validM, validN>;
+    using AccTile = TileAcc<float, M, N, M, N>;
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
@@ -122,7 +118,7 @@ __global__ AICORE void LaunchTBMM_QK_kern_NT(__gm__ float *out, __gm__ half *q, 
     set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
 
     /**************************TMOV && TEXTRACT**************************/
-    pto_macro_matmul<Cube_M, validK, Cube_N>(aMatTile, bMatTile, cTile);
+    pto_macro_matmul<Cube_M, K, Cube_N>(aMatTile, bMatTile, cTile);
 
     wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
