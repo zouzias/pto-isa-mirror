@@ -77,13 +77,12 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 )
 
 include_directories(
-    ${ASCEND_HOME_PATH}/include
-    ${ASCEND_DRIVER_PATH}/kernel/inc
     ${PROJECT_SOURCE_DIR}/../../../include
     ${PROJECT_SOURCE_DIR}/../../..
+    ${ASCEND_HOME_PATH}/include
+    ${ASCEND_DRIVER_PATH}/kernel/inc
     ${SHMEM_HOME_PATH}/shmem/include
     ${SHMEM_HOME_PATH}/memfabric_hybrid/include/smem/device
-
 )
 
 add_subdirectory(testcase)
