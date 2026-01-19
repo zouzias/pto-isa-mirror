@@ -98,8 +98,8 @@ def build_project(run_mode, soc_version, testcase = "all", debug_enable = False)
             text=True
         )
 
-        # make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
-        make_cmd = ["make"]
+        make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
+        # make_cmd = ["make"]
         cpu_count = os.cpu_count() or 4
         make_cmd.extend(["-j", str(cpu_count)])
 

@@ -20,7 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
     
-constexpr const uint32_t BLOCK_SIZE = 32;
+constexpr const uint32_t BLOCK_SIZE_ = 32;
 constexpr const uint32_t FLOAT_DST_STRIDE_COEF = 2;
 constexpr const uint32_t HALF_DST_STRIDE_COEF = 4;
 constexpr const uint32_t MAX_UB_TMP = 32 * 255;
@@ -57,9 +57,9 @@ __tf__ AICORE inline void TSort32Impl(
             for (uint32_t j = 0; j < loopNum; j++) {
                 uint32_t repeatNum = (j == loopNum -1) ? tailRepeatNum : REPEAT_MAX;
                 vbitsort(
-                    dstPtr + i * dstStride + j * REPEAT_MAX * BLOCK_SIZE * typeCoef,
-                    srcPtr + i * srcStride + j * REPEAT_MAX * BLOCK_SIZE,
-                    idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE,
+                    dstPtr + i * dstStride + j * REPEAT_MAX * BLOCK_SIZE_ * typeCoef,
+                    srcPtr + i * srcStride + j * REPEAT_MAX * BLOCK_SIZE_,
+                    idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE_,
                     repeatNum
                 );    
             }
@@ -77,24 +77,24 @@ PTO_INTERNAL void LargeTmpBufferImpl(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, __u
     for (int32_t i = 0; i < validRow; i++) {
         for (int32_t j = 0; j < loopNum; j++) {
             if (j < loopNum - 1) {
-                vbitsort(dstPtr + i * dstStride + j * REPEAT_MAX * BLOCK_SIZE * typeCoef,
-                    srcPtr + i * srcStride + j * REPEAT_MAX * BLOCK_SIZE, idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE,
+                vbitsort(dstPtr + i * dstStride + j * REPEAT_MAX * BLOCK_SIZE_ * typeCoef,
+                    srcPtr + i * srcStride + j * REPEAT_MAX * BLOCK_SIZE_, idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE_,
                     REPEAT_MAX);
             } else {
                 //sort for last block
-                vbitsort(dstPtr + i * dstStride + j * REPEAT_MAX * BLOCK_SIZE * typeCoef,
-                    srcPtr + i * srcStride + j * REPEAT_MAX * BLOCK_SIZE, idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE,
+                vbitsort(dstPtr + i * dstStride + j * REPEAT_MAX * BLOCK_SIZE_ * typeCoef,
+                    srcPtr + i * srcStride + j * REPEAT_MAX * BLOCK_SIZE_, idxPtr + i * idxStride + j * REPEAT_MAX * BLOCK_SIZE_,
                     srcTailRepeatNum - 1);
 
                 // copy row src cbuf to tmp cbuf
-                uint16_t lenBurst = PTO_DIV_ROUNDUP(srcTailPerRow * sizeof(T), BLOCK_SIZE);
-                copy_ubuf_to_ubuf(tmpPtr, srcPtr + i * srcStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE,
+                uint16_t lenBurst = PTO_DIV_ROUNDUP(srcTailPerRow * sizeof(T), BLOCK_SIZE_);
+                copy_ubuf_to_ubuf(tmpPtr, srcPtr + i * srcStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE_,
                     0, 1, lenBurst, 0, 0);
 
                 __VEC_SCOPE__{
                     RegTensor<T> vreg_padded; 
                     uint32_t count_preg = sizeof(T)*srcTailPerRow/2;
-                    uint32_t st_count   = sizeof(T)*PTO_CEIL(srcTailPerRow, BLOCK_SIZE)/2;
+                    uint32_t st_count   = sizeof(T)*PTO_CEIL(srcTailPerRow, BLOCK_SIZE_)/2;
                     vector_bool st_preg = plt_b16(st_count, POST_UPDATE);
                     vector_bool preg_tail_inv = plt_b16(count_preg, POST_UPDATE);
                     vector_bool preg_all = pset_b16(PAT_ALL);
@@ -102,7 +102,7 @@ PTO_INTERNAL void LargeTmpBufferImpl(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, __u
                     pnot(preg_tail, preg_tail_inv, preg_all);
                     vector_align ld_align_reg, st_align_reg;
                     // pad the last 32 elements
-                    __ubuf__ T * tmpPtr_lastRepeatPerRow = tmpPtr + PTO_CEIL(srcTailPerRow, BLOCK_SIZE) - BLOCK_SIZE;
+                    __ubuf__ T * tmpPtr_lastRepeatPerRow = tmpPtr + PTO_CEIL(srcTailPerRow, BLOCK_SIZE_) - BLOCK_SIZE_;
                     __ubuf__ T * tmpDstPtr =  tmpPtr_lastRepeatPerRow;
                     // only load and pad the last unaligned 32 elements per row, No need for post-update 
                     vlds(vreg_padded, tmpPtr_lastRepeatPerRow, 0, NORM);   
@@ -111,8 +111,8 @@ PTO_INTERNAL void LargeTmpBufferImpl(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, __u
                 }
 
                 // sort for tmp and out to dst
-                vbitsort(dstPtr + i * dstStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE * typeCoef, tmpPtr,
-                    idxPtr + i * idxStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE, 1);
+                vbitsort(dstPtr + i * dstStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE_ * typeCoef, tmpPtr,
+                    idxPtr + i * idxStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE_, 1);
             }
         }
     }
@@ -139,21 +139,21 @@ __tf__ AICORE void TSort32Impl(typename DstTileData::TileDType __out__ dst,
 
     T minVal = -(0.0 / 0.0);
     if (srcShapeBytesPerRow * sizeof(float) / sizeof(T) <= MAX_UB_TMP) {
-        uint16_t lenBurst = PTO_DIV_ROUNDUP(srcShapeBytesPerRow, BLOCK_SIZE);
+        uint16_t lenBurst = PTO_DIV_ROUNDUP(srcShapeBytesPerRow, BLOCK_SIZE_);
         for (int32_t i = 0; i < validRow; i++) {
             copy_ubuf_to_ubuf(tmpPtr, srcPtr + i * srcStride, 0, 1, lenBurst, 0, 0);
 
             __VEC_SCOPE__{
                 RegTensor<T> vreg_padded; 
                 uint32_t count_preg = (sizeof(T)*srcTailPerRow)/2;
-                uint32_t st_count   = sizeof(T)*PTO_CEIL(srcTailPerRow, BLOCK_SIZE)/2;
+                uint32_t st_count   = sizeof(T)*PTO_CEIL(srcTailPerRow, BLOCK_SIZE_)/2;
                 vector_bool st_preg = plt_b16(st_count, POST_UPDATE);
                 vector_bool preg_tail_inv = plt_b16(count_preg, POST_UPDATE);
                 vector_bool preg_all = pset_b16(PAT_ALL);
                 vector_bool preg_tail;
                 pnot(preg_tail, preg_tail_inv, preg_all);
                 vector_align ld_align_reg, st_align_reg;
-                __ubuf__ T * tmpPtr_lastRepeatPerRow = tmpPtr + PTO_CEIL(srcStride, BLOCK_SIZE) - BLOCK_SIZE; // pad the last 32 elements
+                __ubuf__ T * tmpPtr_lastRepeatPerRow = tmpPtr + PTO_CEIL(srcStride, BLOCK_SIZE_) - BLOCK_SIZE_; // pad the last 32 elements
                 __ubuf__ T * tmpDstPtr =  tmpPtr_lastRepeatPerRow;
                 // only load and pad the last unaligned 32 elements per row, No need for post-update 
                 vlds(vreg_padded, tmpPtr_lastRepeatPerRow, 0, NORM);   
@@ -214,9 +214,9 @@ AICORE inline void TSORT32_IMPL(
     unsigned repeatNumPerRow = src.GetValidCol() / 32;
 
     constexpr unsigned byteSize     = sizeof(typename DstTileData::DType);
-    constexpr unsigned dstStride    = PTO_CEIL(DstTileData::RowStride * byteSize, BLOCK_SIZE) / byteSize;
-    constexpr unsigned srcStride    = PTO_CEIL(SrcTileData::RowStride * byteSize, BLOCK_SIZE) / byteSize;
-    constexpr unsigned tmpIdxStride = PTO_CEIL(IdxTileData::RowStride * 4,        BLOCK_SIZE) / 4;
+    constexpr unsigned dstStride    = PTO_CEIL(DstTileData::RowStride * byteSize, BLOCK_SIZE_) / byteSize;
+    constexpr unsigned srcStride    = PTO_CEIL(SrcTileData::RowStride * byteSize, BLOCK_SIZE_) / byteSize;
+    constexpr unsigned tmpIdxStride = PTO_CEIL(IdxTileData::RowStride * 4,        BLOCK_SIZE_) / 4;
     
     unsigned idxStride = idx.GetValidRow() == 1 ? 0 : tmpIdxStride;
 
@@ -226,7 +226,7 @@ AICORE inline void TSORT32_IMPL(
     } else {
         unsigned srcShapeBytesPerRow = src.GetValidCol() * byteSize;
         unsigned srcTailPerRow = src.GetValidCol() % 32;
-        unsigned srcTailRepeatNum = PTO_DIV_ROUNDUP(src.GetValidCol(),BLOCK_SIZE)% REPEAT_MAX;
+        unsigned srcTailRepeatNum = PTO_DIV_ROUNDUP(src.GetValidCol(),BLOCK_SIZE_)% REPEAT_MAX;
         TSort32Impl<DstTileData, SrcTileData, IdxTileData, TmpTileData, dstStride, srcStride>(
             dst.data(), src.data(), idx.data(), tmp.data(), validRow, repeatNumPerRow, idxStride,
             srcShapeBytesPerRow, srcTailPerRow, srcTailRepeatNum);

@@ -185,6 +185,11 @@ set(ALL_TESTCASES
     tcolexpandsub
     trowexpandbrcb
     ttril
+    ttri
+    tcolexpand
+    tnot
+    trelu
+    deepseekhc
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
