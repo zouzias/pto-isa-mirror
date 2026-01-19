@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""
+Generate Q/K input and golden output for TBMM_QK 128x128x128 (float32)
+Writes: q.bin, k.bin, golden.bin
+"""
+import os
+import numpy as np
+
+np.random.seed(7)
+
+def gen_case(path, M, K, N):
+    # generate inputs in FP16, compute golden in FP32
+    q_fp32 = (np.random.randn(M, K).astype(np.float16) * 1.5).astype(np.float32)
+    k_fp32 = (np.random.randn(K, N).astype(np.float16) * 1.5).astype(np.float32)
+    q = q_fp32.astype(np.float16)
+    k = k_fp32.astype(np.float16)
+    golden = (q_fp32.dot(k_fp32)).astype(np.float32)
+
+    kt = k.T.astype(np.float16)
+    qt = q.T.astype(np.float16)
+
+    # write FP16 inputs and FP32 golden
+    q.tofile(os.path.join(path, 'q.bin'))
+    k.tofile(os.path.join(path, 'k.bin'))
+    kt.tofile(os.path.join(path, 'kt.bin'))
+    qt.tofile(os.path.join(path, 'qt.bin'))
+    golden.tofile(os.path.join(path, 'golden.bin'))
+
+
+if __name__ == '__main__':
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    cases = [
+        # NT variant cases (outer K loop - default)
+        ('TBMMQKTest.case_float_128x128x128_NT', (128, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x64_NT', (256, 128, 64)),
+        ('TBMMQKTest.case_float_64x256x64_NT', (64, 256, 64)),
+        ('TBMMQKTest.case_float_64x128x128_NT', (64, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x128_NT', (256, 128, 128)),
+        ('TBMMQKTest.case_float_128x256x64_NT', (128, 256, 64)),
+        ('TBMMQKTest.case_float_128x128x64_NT', (128, 128, 64)),
+        # NT_inner variant cases (inner K loop)
+        ('TBMMQKTest.case_float_128x128x128_NT_inner', (128, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x64_NT_inner', (256, 128, 64)),
+        ('TBMMQKTest.case_float_64x256x64_NT_inner', (64, 256, 64)),
+        ('TBMMQKTest.case_float_64x128x128_NT_inner', (64, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x128_NT_inner', (256, 128, 128)),
+        ('TBMMQKTest.case_float_128x256x64_NT_inner', (128, 256, 64)),
+        ('TBMMQKTest.case_float_128x128x64_NT_inner', (128, 128, 64)),
+        # TN variant cases
+        ('TBMMQKTest.case_float_128x128x128_TN', (128, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x64_TN', (256, 128, 64)),
+        ('TBMMQKTest.case_float_64x256x64_TN', (64, 256, 64)),
+        ('TBMMQKTest.case_float_64x128x128_TN', (64, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x128_TN', (256, 128, 128)),
+        ('TBMMQKTest.case_float_128x256x64_TN', (128, 256, 64)),
+        ('TBMMQKTest.case_float_128x128x64_TN', (128, 128, 64)),
+        # NN variant cases
+        ('TBMMQKTest.case_float_128x128x128_NN', (128, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x64_NN', (256, 128, 64)),
+        ('TBMMQKTest.case_float_64x256x64_NN', (64, 256, 64)),
+        ('TBMMQKTest.case_float_64x128x128_NN', (64, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x128_NN', (256, 128, 128)),
+        ('TBMMQKTest.case_float_128x256x64_NN', (128, 256, 64)),
+        ('TBMMQKTest.case_float_128x128x64_NN', (128, 128, 64)),
+        # TT variant cases
+        ('TBMMQKTest.case_float_128x128x128_TT', (128, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x64_TT', (256, 128, 64)),
+        ('TBMMQKTest.case_float_64x256x64_TT', (64, 256, 64)),
+        ('TBMMQKTest.case_float_64x128x128_TT', (64, 128, 128)),
+        ('TBMMQKTest.case_float_256x128x128_TT', (256, 128, 128)),
+        ('TBMMQKTest.case_float_128x256x64_TT', (128, 256, 64)),
+        ('TBMMQKTest.case_float_128x128x64_TT', (128, 128, 64)),
+    ]
+    for name, (M, K, N) in cases:
+        case_dir = os.path.join(script_dir, name)
+        os.makedirs(case_dir, exist_ok=True)
+        gen_case(case_dir, M, K, N)

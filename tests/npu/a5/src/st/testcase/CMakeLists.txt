@@ -103,6 +103,7 @@ set(ALL_TESTCASES
     tsubs
     tmaxs    
     tci
+    tbmm_qk
     tmatmul
     tmatmul_mx
     tload_mix
