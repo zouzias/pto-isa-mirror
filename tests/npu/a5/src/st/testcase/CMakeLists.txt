@@ -12,7 +12,6 @@ function(pto_vec_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-vec -DREGISTER_BASE -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE 
-        ${PROJECT_SOURCE_DIR}/../../../../../include
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
@@ -22,7 +21,6 @@ function(pto_vec_st NAME)
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../../../include
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
 
@@ -44,7 +42,6 @@ function(pto_cube_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-cube -DREGISTER_BASE -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE 
-        ${PROJECT_SOURCE_DIR}/../../../../../include
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
@@ -54,7 +51,6 @@ function(pto_cube_st NAME)
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../../../include 
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
 
@@ -77,14 +73,15 @@ function(pto_mix_st NAME)
     target_compile_options(${NAME}_kernel_mix PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310 -DREGISTER_BASE -std=c++17)
 
     target_include_directories(${NAME}_kernel_mix PRIVATE 
-        ${PROJECT_SOURCE_DIR}/../../../../../include
+        ${ASCEND_HOME_PATH}/pkg_inc/
+        ${ASCEND_HOME_PATH}/pkg_inc/profiling/
+        ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
     )
     target_link_options(${NAME}_kernel_mix PRIVATE --cce-fatobj-link)
 
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE 
-        ${PROJECT_SOURCE_DIR}/../../../../../include
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
 
@@ -103,15 +100,22 @@ endfunction()
 
 # 定义测试用例列表 testcase下如有新增用例目录需要在此加
 set(ALL_TESTCASES
+    tsubs
+    tmaxs    
     tci
     tmatmul
+    tmatmul_mx
     tload_mix
     tload_shape2d
     tload
+    tload_mx_ND_DN
+    tload_mx_NZ
+    tload_mx_gmtensor
     tmrgsort
     ttrans
     tstore
     textract
+    textract_compact
     trowsum
     trowmax
     trowmin
@@ -120,9 +124,22 @@ set(ALL_TESTCASES
     tcolmin
     tsort32
     trowexpand
+    trowexpandadd
+    trowexpanddiv
+    trowexpandmax
+    trowexpandmin
+    trowexpandmul
+    trowexpandsub
+    trowexpandexpdif
     tgather
     tcvt
     tsub
+    tand
+    tor
+    tands
+    tors
+    txor
+    txors
     tadd
     tpartadd
     tfillpad
@@ -130,15 +147,19 @@ set(ALL_TESTCASES
     tmax
     tmins
     tmov
+    tmov_mx
     tmul
     tdiv
     tcmps
-    tmov_l0c2ub
+    tmov_acc2vec
     tsel
     tsels
     trsqrt
     tsqrt
     texp
+    tabs
+    tlog
+    trecip
     tstore_acc2gm
     tdivs
     tmuls
@@ -147,8 +168,30 @@ set(ALL_TESTCASES
     tpartmin
     tpartmax
     tmov_vect
-    tassign
     texpands
+    tmov_acc2mat
+    tassign
+    tmov_ub2l1
+    tcmp
+    tadd_tdiv
+    tmul_tadds
+    tsub_texp
+    tmuls_trowsum
+    trowexpand_tsqrt
+    trowexpand_trowsum
+    trowsum_trowexpand
+    trowexpand_tdiv
+    tscatter
+    tneg
+    tcolexpanddiv
+    tcolexpandmul
+    tcolexpandsub
+    tcolexpandexpdif
+    trowexpandbrcb
+    ttri
+    tcolexpand
+    tnot
+    trelu
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)

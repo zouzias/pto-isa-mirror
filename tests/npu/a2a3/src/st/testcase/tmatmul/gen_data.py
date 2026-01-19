@@ -25,6 +25,12 @@ def gen_golden_data(case_name, param):
 
     m, k, n, is_bias, is_atrans, is_btrans = param.m, param.k, param.n, param.is_bias, False, False
 
+    # The bias addr needs to be 64B aligned.
+    if bias_type == np.float16:
+        bias_n_align = (int)((np.ceil((n * 2) / 64) * 64) / 2)
+    elif bias_type == np.float32 or bias_type == np.int32:
+        bias_n_align = (int)((np.ceil((n * 4) / 64) * 64) / 4)
+
     x1_gm = np.random.randint(1, 5, [m, k]).astype(src_type)
     x2_gm = np.random.randint(1, 5, [k, n]).astype(src_type)
     bias_gm = np.random.randint(1, 10, [n, ]).astype(bias_type)
@@ -39,9 +45,12 @@ def gen_golden_data(case_name, param):
     if is_btrans:
         x2_gm = x2_gm.transpose()
 
+    bias_padded = np.zeros(bias_n_align, dtype = bias_type)
+    bias_padded[:n] = bias_gm
+
     x1_gm.tofile("./x1_gm.bin")
     x2_gm.tofile("./x2_gm.bin")
-    bias_gm.tofile("./bias_gm.bin")
+    bias_padded.tofile("./bias_gm.bin")
     golden.tofile("./golden.bin")
 
 
@@ -66,6 +75,7 @@ if __name__ == "__main__":
         "TMATMULTest.case1", # 此名称要和TEST_F(TMATMULTest, case1)定义的名称一致
         "TMATMULTest.case2",
         "TMATMULTest.case3",
+        "TMATMULTest.case4",
         "TMATMULBIASTest.case1",
         "TMATMULBIASTest.case2",
         "TMATMULBIASTest.case3",
@@ -76,18 +86,19 @@ if __name__ == "__main__":
     ]
 
     case_params_list = [
-        tmatmulParams(np.float16, np.float16, np.float32, 128, 128, 64, False),
-        tmatmulParams(np.int8, np.int8, np.int32, 128, 128, 64, False),
-        tmatmulParams(np.float16, np.float16, np.float32, 127, 63, 63, False),
+        tmatmulParams(np.float16, np.float16, np.float32, 31, 120, 58, False),
+        tmatmulParams(np.int8, np.int8, np.int32, 65, 90, 89, False),
+        tmatmulParams(np.float16, np.float16, np.float32, 5, 75, 11, False),
+        tmatmulParams(np.float16, np.float16, np.float32, 1, 256, 64, False),
         # bias test
-        tmatmulParams(np.float16, np.float16, np.float32, 128, 128, 64, True, np.float32),
-        tmatmulParams(np.float16, np.float16, np.float32, 128, 128, 63, True, np.float32),
+        tmatmulParams(np.float16, np.float16, np.float32, 26, 100, 94, True, np.float32),
+        tmatmulParams(np.float16, np.float16, np.float32, 101, 288, 67, True, np.float32),
         tmatmulParams(np.float32, np.float32, np.float32, 15, 16, 15, True, np.float32),
-        tmatmulParams(np.int8, np.int8, np.int32, 127, 127, 63, True),
-        tmatmulParams(bfloat16, bfloat16, np.float32, 128, 128, 64, True, np.float32),
-        tmatmulParams(np.int8, np.int8, np.int32, 128, 128, 64, True),
+        tmatmulParams(np.int8, np.int8, np.int32, 55, 127, 29, True),
+        tmatmulParams(bfloat16, bfloat16, np.float32, 11, 402, 30, True, np.float32),
+        tmatmulParams(np.int8, np.int8, np.int32, 150, 89, 50, True),
         # bias + acc test
-        tmatmulParams(np.int8, np.int8, np.int32, 128, 128, 64, True),
+        tmatmulParams(np.int8, np.int8, np.int32, 135, 78, 88, True),
     ]
 
     for i, case_name in enumerate(case_name_list):

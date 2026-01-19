@@ -12,7 +12,6 @@ function(pto_vec_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-vec -DMEMORY_BASE -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../../../include
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
@@ -22,7 +21,6 @@ function(pto_vec_st NAME)
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../../../include
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
 
@@ -44,7 +42,6 @@ function(pto_cube_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-cube -DMEMORY_BASE -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../../../include
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
@@ -54,7 +51,6 @@ function(pto_cube_st NAME)
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../../../include
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
 
@@ -66,6 +62,35 @@ function(pto_cube_st NAME)
 
     target_link_libraries(${NAME} PRIVATE
         ${NAME}_kernel
+        $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
+        $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
+        stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
+    )
+endfunction()
+
+function(pto_mix_st NAME)
+    add_library(${NAME}_kernel_mix SHARED ${NAME}_kernel.cpp)
+    target_compile_options(${NAME}_kernel_mix PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220 -DMEMORY_BASE -std=c++17)
+    target_include_directories(${NAME}_kernel_mix PRIVATE
+        ${ASCEND_HOME_PATH}/pkg_inc/
+        ${ASCEND_HOME_PATH}/pkg_inc/profiling/
+        ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
+    )
+    target_link_options(${NAME}_kernel_mix PRIVATE --cce-fatobj-link)
+
+    add_executable(${NAME} main.cpp)
+    target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
+    target_include_directories(${NAME} PRIVATE
+        ${PROJECT_SOURCE_DIR}/../../../../common
+    )
+
+    target_link_directories(${NAME} PUBLIC
+        ${ASCEND_HOME_PATH}/lib64
+        ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
+    )
+
+    target_link_libraries(${NAME} PRIVATE
+        ${NAME}_kernel_mix
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
         stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
@@ -91,13 +116,20 @@ tstore
 tsels
 tdiv
 tmov_vect
+tmov_acc2mat
 trowexpand
+trowexpandadd
 trowexpanddiv
+trowexpandmax
+trowexpandmin
 trowexpandmul
 trowexpandsub
 tcvt
 tmul
 tadd
+taddplus
+tand
+tor
 tpartadd
 tpartmin
 tpartmax
@@ -111,8 +143,12 @@ tstore_acc2gm
 trsqrt
 tsqrt
 texp
+tabs
+tlog
+trecip
 tdivs
 tmuls
+tneg
 tadds
 tgatherb
 tci
@@ -120,19 +156,21 @@ tcolmax
 tcolmin
 texpands
 tcolsum
+tcmp
 tassign
-taddplus
-tsubplus
-tmulplus
-tdivplus
-tminplus
-tmaxplus
-taddsplus
-tdivsplus
-tmulsplus
-trsqrtplus
-tsqrtplus
-texpplus
+tstore_mat2gm
+tscatter
+tfa
+tcolexpand
+ttri
+tnot
+trelu
+tands
+tors
+tshls
+tshrs
+txor
+txors
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)

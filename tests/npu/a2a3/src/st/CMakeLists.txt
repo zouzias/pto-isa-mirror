@@ -68,12 +68,16 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 )
 
 include_directories(
+    ${PROJECT_SOURCE_DIR}/../../../../../include
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )
 
 if (DEFINED ENV{ACCURATE_RSQRT})
     add_compile_definitions(ACCURATE_RSQRT)
+endif ()
+if (DEFINED ENV{ACCURATE_RECIP})
+    add_compile_definitions(ACCURATE_RECIP)
 endif ()
 
 add_subdirectory(testcase)

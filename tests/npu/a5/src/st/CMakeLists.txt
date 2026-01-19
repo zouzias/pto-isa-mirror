@@ -35,7 +35,7 @@ find_package(GTest REQUIRED)
 add_compile_options(
     -D_FORTIFY_SOURCE=2
     -O2 -std=c++17
-    -Wno-macro-redefined -Wno-ignored-attributes
+    -Wno-macro-redefined -Wno-ignored-attributes -Wno-unknown-attributes
     -fstack-protector-strong
 )
 # add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
@@ -68,6 +68,7 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 )
 
 include_directories(
+    ${PROJECT_SOURCE_DIR}/../../../../../include 
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )
