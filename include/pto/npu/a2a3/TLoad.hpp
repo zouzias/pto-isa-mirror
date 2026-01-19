@@ -274,32 +274,12 @@ PTO_INTERNAL void TLoadGm2L1Nz2nz(__cbuf__ typename TileData::DType *dstAddr, ty
 }
 
 template <typename TileData, typename GlobalData>
-__tf__ AICORE void TLoadGm2L1(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
-    int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
-    int gStride3, int gStride4, int validRow, int validCol) {
-    __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
-    typename GlobalData::DType *srcAddr = src;
-    if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::ND) {
-        TLoadGm2L1Nd2nd<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
-            gStride1, gStride2, gStride3, gStride4, validRow, validCol);
-    } else if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::DN) {
-        TLoadGm2L1Dn2dn<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
-            gStride1, gStride2, gStride3, gStride4, validRow, validCol);
-    } else if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::NZ) {
-        TLoadGm2L1Nz2nz<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
-            gStride1, gStride2, gStride3, gStride4, validRow, validCol);
-    }
-}
-
-template <typename TileData, typename GlobalData>
-__tf__ AICORE void TLoadGm2L1Nd2nz(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
+PTO_INTERNAL void TLoadGm2L1Nd2nz(__cbuf__ typename TileData::DType *dstAddr, typename GlobalData::DType *srcAddr,
     int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
     int gStride3, int gStride4, int validRow, int validCol) {
     static_assert(GlobalData::staticShape[0] == 1 && GlobalData::staticShape[1] == 1 && GlobalData::staticShape[2] == 1,
         "Fix: GlobalTensor ony support 2 dim when ND2NZ!");
-    static_assert(TileData::SFractalSize == 512, "Fix: TileData ony support SFractalSize = 512Bytes!");
-    __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
-    typename GlobalData::DType *srcAddr = src;
+    static_assert(TileData::SFractalSize == 512 || TileData::SFractalSize == 32, "Fix: TileData ony support SFractalSize = 512Bytes or 32Bytes!");
     PTO_ASSERT(gShape3 > 0 && gShape3 <= 16384, "The Shape3 of GlobalTensor must be in range of [1, 16384]!");
     PTO_ASSERT(gShape4 > 0 && gShape4 <= 65535, "The Shape4 of GlobalTensor must be must be in range of [1, 65535]!");
     PTO_ASSERT(
@@ -310,11 +290,51 @@ __tf__ AICORE void TLoadGm2L1Nd2nz(typename TileData::TileDType __out__ dst, typ
     uint16_t dValue = gShape4;
     uint16_t srcDValue = gStride3;
     uint16_t dstNzC0Stride = TileData::Rows;
+    typename GlobalData::DType *srcAddrP = srcAddr;
+    __cbuf__ typename TileData::DType *dstAddrP = dstAddr;
     // Parameter list:
     // dst, src, sid, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
     // dstNzC0Stride, dstNzNStride, dstNzMatrixStride
-    TLoadNd2nzInstr<TileData, GlobalData>(dstAddr, srcAddr, 1, nValue, dValue, 0, srcDValue, TileData::Rows, 1, 1);
+    TLoadNd2nzInstr<TileData, GlobalData>(dstAddrP, srcAddrP, 1, nValue, dValue, 0, srcDValue, TileData::Rows, 1, 1);
 }
+
+template <typename TileData, typename GlobalData>
+__tf__ AICORE void TLoadGm2L1(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
+    int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
+    int gStride3, int gStride4, int validRow, int validCol) {
+    __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
+    typename GlobalData::DType *srcAddr = src;
+    if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::ND) {
+        if (validRow == 1) {
+            TLoadGm2L1Nd2nz<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+        } else {
+            TLoadGm2L1Nd2nd<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+        }
+    } else if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::DN) {
+        if (validRow == 1) {
+            TLoadGm2L1Nd2nz<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+        } else {
+            TLoadGm2L1Dn2dn<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+        }
+    } else if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::NZ) {
+        TLoadGm2L1Nz2nz<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+            gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+    }
+}
+
+template <typename TileData, typename GlobalData>
+__tf__ AICORE void TLoadGm2L1TransNz(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
+    int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
+    int gStride3, int gStride4, int validRow, int validCol) {
+        __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
+        typename GlobalData::DType *srcAddr = src;
+        TLoadGm2L1Nd2nz<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+            gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+    }
 
 template <typename TileData, typename GlobalData>
 __tf__ AICORE void TLoadGm2L1Dn2zn(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
@@ -397,7 +417,7 @@ AICORE void TLOAD_IMPL(TileData &dst, GlobalData &src) {
                 src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
         } else if constexpr (GlobalData::layout == pto::Layout::ND &&
                              GetTileLayoutCustom<TileData>() == TileLayoutCustom::NZ) {
-            TLoadGm2L1Nd2nz<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(pto::GlobalTensorDim::DIM_0),
+            TLoadGm2L1TransNz<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(pto::GlobalTensorDim::DIM_0),
                 src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
                 src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
                 src.GetStride(pto::GlobalTensorDim::DIM_0), src.GetStride(pto::GlobalTensorDim::DIM_1),
