@@ -1,0 +1,17 @@
+module {
+  func.func @main(%x: !pto.memref<gm,8x8xf32>, %w: !pto.memref<gm,8x8xf32>, %bias: !pto.memref<gm,8x8xf32>, %out: !pto.memref<gm,8x8xf32>) {
+    %c0 = arith.constant 0 : index
+    %tx = pto.alloc_tile : !pto.tilebuf<8x8xf32>
+    pto.tload ins(%x[%c0, %c0] : !pto.memref<gm,8x8xf32>) outs(%tx : !pto.tilebuf<8x8xf32>)
+    %tw = pto.alloc_tile : !pto.tilebuf<8x8xf32>
+    pto.tload ins(%w[%c0, %c0] : !pto.memref<gm,8x8xf32>) outs(%tw : !pto.tilebuf<8x8xf32>)
+    %tb = pto.alloc_tile : !pto.tilebuf<8x8xf32>
+    pto.tload ins(%bias[%c0, %c0] : !pto.memref<gm,8x8xf32>) outs(%tb : !pto.tilebuf<8x8xf32>)
+    %tm = pto.alloc_tile : !pto.tilebuf<8x8xf32>
+    pto.tmatmul ins(%tx, %tw : !pto.tilebuf<8x8xf32>, !pto.tilebuf<8x8xf32>) outs(%tm : !pto.tilebuf<8x8xf32>)
+    %to = pto.alloc_tile : !pto.tilebuf<8x8xf32>
+    pto.tadd ins(%tm, %tb : !pto.tilebuf<8x8xf32>, !pto.tilebuf<8x8xf32>) outs(%to : !pto.tilebuf<8x8xf32>)
+    pto.tstore ins(%to : !pto.tilebuf<8x8xf32>) outs(%out[%c0, %c0] : !pto.memref<gm,8x8xf32>)
+    return
+  }
+}

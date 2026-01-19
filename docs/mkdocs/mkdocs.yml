@@ -56,9 +56,14 @@ nav:
       - ISA conventions: docs/isa/conventions.md
       - PTO ISA table: docs/PTOISA.md
       - Intrinsics header: docs/reference/pto-intrinsics-header.md
+      - PTO MLIR dialect: docs/reference/pto-mlir-dialect.md
       - PTO-AS spec: docs/grammar/PTO-AS.md
       - Grammar conventions: docs/grammar/conventions.md
       - Grammar index: docs/grammar/README.md
+  - Tools:
+      - pypto (Python frontend): docs/tools/pypto.md
+      - ptoas (assembler): docs/tools/ptoas.md
+      - MLIR dev env: docs/tools/mlir-dev-env.md
   - Machine Model:
       - Abstract machine: docs/machine/abstract-machine.md
       - Machine index: docs/machine/README.md

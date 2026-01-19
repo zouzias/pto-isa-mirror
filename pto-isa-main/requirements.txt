@@ -1,0 +1,10 @@
+# PTO ISA Compiler Dependencies
+# Python 3.8+ required
+
+# No external dependencies required for core functionality
+# The compiler is implemented using only Python standard library
+
+# Optional dependencies for development and testing:
+# pytest>=7.0.0        # For running tests
+# mypy>=1.0.0          # For static type checking
+# black>=23.0.0        # For code formatting

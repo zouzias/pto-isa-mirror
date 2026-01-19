@@ -198,6 +198,23 @@ Set environment variables according to [Environment_Variables](./getting-started
   ulimit -n 65536;./tests/run_st.sh a3 sim all # use ulimit -n first if run on simulator
   ```
 
+## PTO MLIR Demo Toolchain (PyPTO → `.pto` → `ptoas` → `.bin`)
+
+This repo includes a minimal end-to-end demo flow:
+
+1. `python/pypto` emits a `.pto` file (MLIR-compatible text using `pto.*` ops)
+2. `ptoas` turns that `.pto` into a runnable binary using BiSheng (`bisheng`)
+
+Example (NPU):
+
+```bash
+export PYTHONPATH="$PWD/python${PYTHONPATH:+:$PYTHONPATH}"
+python3 -m pypto emit demo/pyPTO/vec_add.py -o demo/pto/vec_add.pto
+python3 -m ptoas demo/pto/vec_add.pto -o demo/bin/vec_add.bin --soc a3 --run-mode npu
+mkdir -p demo/out
+demo/bin/vec_add.bin --out-dir demo/out
+```
+
 - Run Full ST Tests:
 
   ```bash

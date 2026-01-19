@@ -29,7 +29,7 @@ Exact syntax depends on the instruction; see per-instruction pages (for example 
 
 ## 6.4 Examples
 
-Load–compute–store (schematic):
+Load–compute–store (schematic, instruction-centric):
 
 ```asm
 // t0, t1, tout are Vec tiles
@@ -46,8 +46,22 @@ TSYNC   TLOAD, TADD
 TSYNC   TADD,  TSTORE
 ```
 
+MLIR-compatible `.pto` example (dialect-qualified ops):
+
+```text
+module {
+  func.func @main(%a: !pto.memref<gm,64x64xf32>, %b: !pto.memref<gm,64x64xf32>, %out: !pto.memref<gm,64x64xf32>) {
+    %c0 = arith.constant 0 : index
+    %t0 = pto.tload %a[%c0, %c0] : (!pto.memref<gm,64x64xf32>, index, index) -> !pto.tile<64x64xf32>
+    %t1 = pto.tload %b[%c0, %c0] : (!pto.memref<gm,64x64xf32>, index, index) -> !pto.tile<64x64xf32>
+    %t2 = pto.tadd %t0, %t1 : (!pto.tile<64x64xf32>, !pto.tile<64x64xf32>) -> !pto.tile<64x64xf32>
+    pto.tstore %out[%c0, %c0], %t2 : (!pto.memref<gm,64x64xf32>, index, index, !pto.tile<64x64xf32>) -> ()
+    return
+  }
+}
+```
+
 For real examples and constraints, see:
 
 - `docs/grammar/PTO-AS.md`
 - `docs/isa/README.md`
-
