@@ -39,7 +39,7 @@ std::string GetGoldenDir() {
     return fullPath;
 }
 
-template <uint32_t caseId, typename T, typename TI, uint32_t SRC0ROW, uint32_t SRC0COL, uint32_t SRC1ROW, uint32_t SRC1COL>
+template <uint32_t caseId, typename T, typename TI, uint32_t SRC0ROW, uint32_t SRC0COL, uint32_t SRC1ROW, uint32_t SRC1COL, uint32_t DSTROW, uint32_t DSTCOL>
 bool TScatterTestFramework()
 {
     aclInit(nullptr);
@@ -48,7 +48,7 @@ bool TScatterTestFramework()
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    size_t dstByteSize = SRC0ROW * SRC0COL * sizeof(T);
+    size_t dstByteSize = DSTROW * DSTCOL * sizeof(T);
     size_t srcByteSize = SRC0ROW * SRC0COL * sizeof(T);
     size_t indByteSize = SRC1ROW * SRC1COL * sizeof(TI);
     T *dstHost;
@@ -93,9 +93,9 @@ bool TScatterTestFramework()
     ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
 
-    for (int i = 0; i < SRC1ROW; i++) {
-        for (int j = 0; j < SRC1COL; j++) {
-            TI ix = *(indHost + i * SRC1COL + j);
+    for (int i = 0; i < DSTROW; i++) {
+        for (int j = 0; j < DSTCOL; j++) {
+            TI ix = *(indHost + i * DSTCOL + j);
             if (golden[ix] != devFinal[ix]) {
                 return false;
             }
@@ -106,46 +106,51 @@ bool TScatterTestFramework()
 
 TEST_F(TSCATTERTest, case1)
 {
-    bool ret = TScatterTestFramework<1, int16_t, uint16_t, 2, 32, 1, 32>();
+    bool ret = TScatterTestFramework<1, int16_t, uint16_t, 2, 32, 1, 32, 1, 32>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TSCATTERTest, case2)
 {
-    bool ret = TScatterTestFramework<2, aclFloat16, uint16_t, 63, 64, 63, 64>();
+    bool ret = TScatterTestFramework<2, aclFloat16, uint16_t, 63, 64, 63, 64, 63, 64>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TSCATTERTest, case3)
 {
-    bool ret = TScatterTestFramework<3, int32_t, uint32_t, 31, 128, 31, 128>();
+    bool ret = TScatterTestFramework<3, int32_t, uint32_t, 31, 128, 31, 128, 31, 128>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TSCATTERTest, case4)
 {
-    bool ret = TScatterTestFramework<4, int16_t, int16_t, 15, 192, 15, 192>();
+    bool ret = TScatterTestFramework<4, int16_t, int16_t, 15, 192, 15, 192, 15, 192>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TSCATTERTest, case5)
 {
-    bool ret = TScatterTestFramework<5, float, int32_t, 7, 448, 7, 448>();
+    bool ret = TScatterTestFramework<5, float, int32_t, 7, 448, 7, 448, 7, 448>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TSCATTERTest, case6)
 {
-    bool ret = TScatterTestFramework<6, int8_t, uint16_t, 256, 32, 256, 32>();
+    bool ret = TScatterTestFramework<6, int8_t, uint16_t, 256, 32, 256, 32, 256, 32>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TSCATTERTest, case7)
 {
-    bool ret = TScatterTestFramework<7, float, uint32_t, 32, 64, 32, 64>();
+    bool ret = TScatterTestFramework<7, float, uint32_t, 32, 64, 32, 64, 32, 64>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TSCATTERTest, case8)
 {
-    bool ret = TScatterTestFramework<8, uint16_t, int16_t, 32, 64, 32, 64>();
+    bool ret = TScatterTestFramework<8, uint16_t, int16_t, 32, 64, 32, 64, 32, 64>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TSCATTERTest, case9)
+{
+    bool ret = TScatterTestFramework<9, float, uint32_t, 1, 89, 1, 89, 1, 349>();
     EXPECT_TRUE(ret);
 }

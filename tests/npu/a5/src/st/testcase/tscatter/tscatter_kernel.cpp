@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
-template<typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_, int kTCols_>
+template<typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_, int kTCols_, int kGRows_, int kGCols_>
 PTO_INTERNAL void runTScatter(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *src0, __gm__ Tsrc1 __in__ *src1) {
     using DynShapeDim5_src0 = pto::Shape<1, 1, 1, kGRows0_, kGCols0_>;
     using DynStridDim5_src0 = pto::Stride<1, 1, 1, kGCols0_, 1>;
@@ -29,12 +29,12 @@ PTO_INTERNAL void runTScatter(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *sr
     using DynStridDim5_dst = pto::Stride<1, 1, 1, kGCols0_, 1>;
     using GlobalData_dst = GlobalTensor<Tsrc0, DynShapeDim5_dst, DynStridDim5_dst>;
 
-    constexpr int src0_row = kGRows0_;
-    constexpr int src0_col = kGCols0_;
-    constexpr int src1_row = kGRows1_;
-    constexpr int src1_col = kGCols1_;
-    constexpr int dst_row = kGRows0_;
-    constexpr int dst_col = kGCols0_;
+    constexpr int src0_row = kTRows_;
+    constexpr int src0_col = kTCols_;
+    constexpr int src1_row = kTRows_;
+    constexpr int src1_col = kTCols_;
+    constexpr int dst_row = kGRows_;
+    constexpr int dst_col = kGCols_;
 
     using TileData_src0 = Tile<TileType::Vec, Tsrc0, kGRows0_, kGCols0_, BLayout::RowMajor, -1, -1>;
     using TileData_src1 = Tile<TileType::Vec, Tsrc1, kGRows1_, kGCols1_, BLayout::RowMajor, -1, -1>;
@@ -63,35 +63,39 @@ PTO_INTERNAL void runTScatter(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *sr
 
 extern "C" __global__ AICORE void launchTSCATTERCase1(__gm__ int16_t *out, __gm__ int16_t *src, __gm__ uint16_t *indexes)
 {
-    runTScatter<int16_t, uint16_t, 2, 32, 1, 32, 2, 32>(out, src, indexes);
+    runTScatter<int16_t, uint16_t, 2, 32, 1, 32, 2, 32, 1, 32>(out, src, indexes);
 }
 extern "C" __global__ AICORE void launchTSCATTERCase2(__gm__ half *out, __gm__ half *src, __gm__ uint16_t *indexes)
 {
-    runTScatter<half, uint16_t, 63, 64, 63, 64, 63, 63>(out, src, indexes);
+    runTScatter<half, uint16_t, 63, 64, 63, 64, 63, 64, 63, 64>(out, src, indexes);
 }
 extern "C" __global__ AICORE void launchTSCATTERCase3(__gm__ int32_t *out, __gm__ int32_t *src, __gm__ uint32_t *indexes)
 {
-    runTScatter<int32_t, uint32_t, 31, 128, 31, 128, 31, 128>(out, src, indexes);
+    runTScatter<int32_t, uint32_t, 31, 128, 31, 128, 31, 128, 31, 128>(out, src, indexes);
 }
 extern "C" __global__ AICORE void launchTSCATTERCase4(__gm__ int16_t *out, __gm__ int16_t *src, __gm__ int16_t *indexes)
 {
-    runTScatter<int16_t, int16_t, 15, 192, 15, 192, 15, 192>(out, src, indexes);
+    runTScatter<int16_t, int16_t, 15, 192, 15, 192, 15, 192, 15, 192>(out, src, indexes);
 }
 extern "C" __global__ AICORE void launchTSCATTERCase5(__gm__ float *out, __gm__ float *src, __gm__ int32_t *indexes)
 {
-    runTScatter<float, int32_t, 7, 448, 7, 448, 7, 448>(out, src, indexes);
+    runTScatter<float, int32_t, 7, 448, 7, 448, 7, 448, 7, 448>(out, src, indexes);
 }
 extern "C" __global__ AICORE void launchTSCATTERCase6(__gm__ int8_t *out, __gm__ int8_t *src, __gm__ uint16_t *indexes)
 {
-    runTScatter<int8_t, uint16_t, 256, 32, 256, 32, 256, 32>(out, src, indexes);
+    runTScatter<int8_t, uint16_t, 256, 32, 256, 32, 256, 32, 256, 32>(out, src, indexes);
 }
 extern "C" __global__ AICORE void launchTSCATTERCase7(__gm__ float *out, __gm__ float *src, __gm__ uint32_t *indexes)
 {
-    runTScatter<float, uint32_t, 32, 64, 32, 64, 32, 64>(out, src, indexes);
+    runTScatter<float, uint32_t, 32, 64, 32, 64, 32, 64, 32, 64>(out, src, indexes);
 }
 extern "C" __global__ AICORE void launchTSCATTERCase8(__gm__ bfloat16_t *out, __gm__ bfloat16_t *src, __gm__ int16_t *indexes)
 {
-    runTScatter<bfloat16_t, int16_t, 32, 64, 32, 64, 32, 64>(out, src, indexes);
+    runTScatter<bfloat16_t, int16_t, 32, 64, 32, 64, 32, 64, 32, 64>(out, src, indexes);
+}
+extern "C" __global__ AICORE void launchTSCATTERCase9(__gm__ float *out, __gm__ float *src, __gm__ uint32_t *indexes)
+{
+    runTScatter<float, uint32_t, 1, 352, 1, 352, 1, 89, 1, 349>(out, src, indexes);
 }
 
 template <uint32_t caseId>
@@ -133,6 +137,10 @@ void launchTScatterTestCase(void *out, void *src, void *indexes, aclrtStream str
             );
             break;
         }
+        case 9: {
+            launchTSCATTERCase9<<<1, nullptr, stream>>>((float *)out, (float *)src, (uint32_t *)indexes);
+            break;
+        }
         default: {
         }
     }
@@ -147,3 +155,4 @@ template void launchTScatterTestCase<5>(void *out, void *src, void *indexes, acl
 template void launchTScatterTestCase<6>(void *out, void *src, void *indexes, aclrtStream stream);
 template void launchTScatterTestCase<7>(void *out, void *src, void *indexes, aclrtStream stream);
 template void launchTScatterTestCase<8>(void *out, void *src, void *indexes, aclrtStream stream);
+template void launchTScatterTestCase<9>(void *out, void *src, void *indexes, aclrtStream stream);
