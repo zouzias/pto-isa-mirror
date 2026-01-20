@@ -17,6 +17,7 @@ ENABLE_SIM=false
 ENABLE_NPU=false
 RUN_TYPE=sim
 RUN_MODE=run_st.py
+CANN_3RD_LIB_PATH=""
 
 if [ "$1" = "a3" ]; then
   ENABLE_A3=true
@@ -41,6 +42,10 @@ fi
 
 if [ "$4" = "build_only" ]; then
   RUN_MODE=build_st.py
+fi
+
+if [ "$5" != "" ]; then
+  CANN_3RD_LIB_PATH=$5
 fi
 
 if [ "$ENABLE_A3" = "true" ]; then                 # A2A3

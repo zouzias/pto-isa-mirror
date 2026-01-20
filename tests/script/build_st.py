@@ -32,7 +32,7 @@ def run_command(command, cwd=None, check=True):
         raise
 
 
-def build_project(run_mode, soc_version, testcase = "all"):
+def build_project(run_mode, soc_version, third_path, testcase = "all"):
     original_dir = os.getcwd()
     # 清理并创建build目录
     build_dir = "build"
@@ -44,6 +44,7 @@ def build_project(run_mode, soc_version, testcase = "all"):
     try:
         cmake_cmd = [
             "cmake",
+            f"-CANN_3RD_LIB_PATH={third_path}"
             f"-DRUN_MODE={run_mode}",
             f"-DSOC_VERSION={soc_version}",
             f"-DTEST_CASE={testcase}",
@@ -87,8 +88,10 @@ def main():
     parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 or a5")
     parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
+    parser.add_argument("-p", "--third_party_path", required=False, help="可选 三方库路径")
 
     args = parser.parse_args()
+    CANN_3RD_LIB_PATH = args.third_party_path
     default_soc_version = "Ascend910B1"
     if args.soc_version == "a5":
         default_soc_version = "Ascend910_9599"
@@ -112,7 +115,7 @@ def main():
         os.chdir(target_dir)
 
         # 执行构建
-        build_project(args.run_mode, default_soc_version, args.testcase)
+        build_project(args.run_mode, default_soc_version, CANN_3RD_LIB_PATH, args.testcase)
 
     except Exception as e:
         print(f"run failed: {str(e)}", file=sys.stderr)
