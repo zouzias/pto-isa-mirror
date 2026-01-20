@@ -8,27 +8,18 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef EXTENTION_CSRC_UTILS_H
-#define EXTENTION_CSRC_UTILS_H
+#ifndef PTO_GEMM_BASIC_TORCH_CSRC_UTILS_H
+#define PTO_GEMM_BASIC_TORCH_CSRC_UTILS_H
+
 #include <ATen/ATen.h>
 #include <torch/library.h>
+
 #include "torch_npu/csrc/core/npu/NPUStream.h"
 #include "torch_npu/csrc/framework/OpCommand.h"
 
 namespace ascendc_path {
 
 #define DEVICE_TYPE c10::DeviceType::PrivateUse1
-
-inline at::Tensor CopyTensorHostToDevice(const at::Tensor &cpu_tensor) {
-    at::Tensor cpuPinMemTensor = cpu_tensor.pin_memory();
-    int deviceIndex = 0;
-    c10_npu::GetDevice(&deviceIndex);
-    return cpuPinMemTensor.to(c10::Device(DEVICE_TYPE, deviceIndex), cpuPinMemTensor.scalar_type(), true, true);
-}
-
-inline at::Tensor CopyScalarToDevice(const c10::Scalar &cpu_scalar, at::ScalarType scalar_data_type) {
-    return CopyTensorHostToDevice(scalar_to_tensor(cpu_scalar).to(scalar_data_type));
-}
 
 inline void *ConvertType(const at::Tensor &at_tensor) {
     return const_cast<void *>(at_tensor.storage().data());
@@ -56,5 +47,8 @@ constexpr auto ConvertTypes(Ts &...args) {
         };                                                                                                           \
         at_npu::native::OpCommand::RunOpApi(#kernel_name, acl_call);                                                 \
     } while (false)
+
 } // namespace ascendc_path
+
 #endif
+

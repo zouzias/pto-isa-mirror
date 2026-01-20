@@ -5,11 +5,14 @@
 build
 build_tests
 demos/**/build/
+demos/**/dist/
+demos/**/*.egg-info/
 site/
 .venv-mkdocs/
 *.o
 output/
 __pycache__/
 *.log
+fusion_result.json
 tests/npu/a2a3/src/st/build
 tests/npu/a5/src/st/build
