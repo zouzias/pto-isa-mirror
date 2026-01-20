@@ -399,7 +399,7 @@ __tf__ AICORE void TLoadGm2L1Dn2zn(typename TileData::TileDType __out__ dst, typ
 }
 
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void CheckTloadData(TileData &dst, GlobalData &src) {
+PTO_INTERNAL void CheckNormalTileData(TileData &dst, GlobalData &src) {
     static_assert(
         std::is_same_v<typename TileData::DType, int8_t> || std::is_same_v<typename TileData::DType, uint8_t> ||
             std::is_same_v<typename TileData::DType, int16_t> || std::is_same_v<typename TileData::DType, uint16_t> ||
@@ -428,8 +428,8 @@ PTO_INTERNAL void CheckTloadData(TileData &dst, GlobalData &src) {
 }
 
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src) {
-    CheckTloadData<TileData, GlobalData>(dst, src);
+PTO_INTERNAL void TLOAD_TILE_IMPL(TileData &dst, GlobalData &src) {
+    CheckNormalTileData<TileData, GlobalData>(dst, src);
     constexpr bool isSameLayout =
         (GlobalData::layout == pto::Layout::ND && GetTileLayoutCustom<TileData>() == TileLayoutCustom::ND) ||
         (GlobalData::layout == pto::Layout::DN && GetTileLayoutCustom<TileData>() == TileLayoutCustom::DN) ||
@@ -472,6 +472,110 @@ PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src) {
                 src.GetStride(pto::GlobalTensorDim::DIM_2), src.GetStride(pto::GlobalTensorDim::DIM_3),
                 src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
         }
+    }
+}
+
+template <typename TileData, typename GlobalData>
+__tf__ AICORE void TLoad5HD(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src, int srcN,
+    int srcC1, int srcH, int srcW, int srcC0, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
+    int dstN, int dstC1, int dstH, int dstW)
+{
+    __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
+    typename GlobalData::DType *srcAddr = src;
+
+    constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename TileData::DType);
+    typename GlobalData::DType *srcAddrP = srcAddr;
+    __cbuf__ typename TileData::DType *dstAddrP = dstAddr;
+
+    uint16_t nBurst = dstH;
+    uint16_t lenBurst = dstW;
+    uint16_t gmGap = ((gStride2 - srcW * c0ElemCount) * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
+    uint16_t l1Gap = 0;
+    for (uint32_t i = 0; i < dstN; i++) { // N
+        int64_t dstAddr1 = i * dstH * dstW * dstC1 * c0ElemCount;
+        int64_t srcAddr1 = i * gStride0;
+        for (uint32_t j = 0; j < dstC1; j++) { // C1
+            srcAddrP = srcAddr + srcAddr1 + j * gStride1;
+            dstAddrP = dstAddr + dstAddr1 + j * dstH * dstW * c0ElemCount;
+            TLoadInstrGm2L1<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, l1Gap);
+        }
+    }
+}
+
+template <typename TileData, typename GlobalData>
+__tf__ AICORE void TLoadFractalZ(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
+    int srcC1, int srcH, int srcW, int srcN, int srcC0, int gStride0, int gStride1, int gStride2, int gStride3,
+    int gStride4, int dstC1, int dstH, int dstW, int dstN)
+{
+    PTO_ASSERT(srcH == dstH && srcW == dstW, "Fix: layout is Fractal_Z, [srcH,srcW] && [dstH,dstW] should be same!");
+    __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
+    typename GlobalData::DType *srcAddr = src;
+
+    constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename TileData::DType);
+    typename GlobalData::DType *srcAddrP = srcAddr;
+    __cbuf__ typename TileData::DType *dstAddrP = dstAddr;
+
+    uint32_t lenBurst = dstN;
+    uint32_t gmGap = ((gStride2 - srcN * c0ElemCount) * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
+    uint32_t l1Gap = 0;
+    constexpr uint32_t maxSupportBurst = 4095;
+
+    if (dstC1 * dstH * dstW <= maxSupportBurst) { // if burst < 4095, only load once
+        uint16_t nBurst = dstC1 * dstH * dstW;
+        TLoadInstrGm2L1<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, l1Gap);
+    } else {
+        uint16_t nBurst = dstH * dstW;
+        for (uint32_t i = 0; i < dstC1; i++) {
+            srcAddrP = srcAddr + i * gStride0;
+            dstAddrP = dstAddr + i * dstH * dstW * dstN * c0ElemCount;
+            TLoadInstrGm2L1<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, l1Gap);
+        }
+    }
+}
+
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void CheckConvTileData(TileData &dst, GlobalData &src) {
+    static_assert(
+        std::is_same_v<typename TileData::DType, int8_t> || std::is_same_v<typename TileData::DType, uint8_t> ||
+            std::is_same_v<typename TileData::DType, int16_t> || std::is_same_v<typename TileData::DType, uint16_t> ||
+            std::is_same_v<typename TileData::DType, int32_t> || std::is_same_v<typename TileData::DType, uint32_t> ||
+            std::is_same_v<typename TileData::DType, half> || std::is_same_v<typename TileData::DType, bfloat16_t> ||
+            std::is_same_v<typename TileData::DType, float>,
+        "Fix: Data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/bfloat16_t/float!");
+    static_assert(TileData::Loc == pto::TileType::Mat, "Fix: Dst TileType must be Mat!");
+    static_assert(sizeof(typename TileData::DType) == sizeof(typename GlobalData::DType),
+        "Fix: Source dtype must be same with dst dtype!");
+
+    constexpr bool isSameLayout =
+        (GlobalData::layout == pto::Layout::NC1HWC0 && TileData::layout == pto::Layout::NC1HWC0) ||
+        (GlobalData::layout == pto::Layout::FRACTAL_Z && TileData::layout == pto::Layout::FRACTAL_Z);
+    static_assert(isSameLayout == true, "Fix: Src Dst layout must be NC1HWC0 or FRACTAL_Z!");
+    static_assert(TileData::totalDimCount == 5, "Fix: Dst TileData DimCount only support 5");
+    static_assert(TileData::staticShape[4] == C0_SIZE_BYTE / sizeof(typename TileData::DType),
+        "Fix: Dst TileData Dim4 value must be 32 / sizeof(Dtype)");
+}
+
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLOAD_CONVTILE_IMPL(TileData &dst, GlobalData &src)
+{
+    CheckConvTileData<TileData, GlobalData>(dst, src);
+    if constexpr (GlobalData::layout == pto::Layout::NC1HWC0) { // layout is NC1HWC0, dst dim4 is c0Size
+        TLoad5HD<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2),
+            src.GetShape(3), src.GetShape(4), src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
+            src.GetStride(4), dst.GetShape(0), dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
+    } else if constexpr (GlobalData::layout == pto::Layout::FRACTAL_Z) { // C1HWNC0, dst dim4 is c0Size
+        TLoadFractalZ<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2),
+            src.GetShape(3), src.GetShape(4), src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
+            src.GetStride(4), dst.GetShape(0), dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
+    }
+}
+
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src) {
+    if constexpr (is_conv_tile_v<TileData>) {
+        TLOAD_CONVTILE_IMPL(dst, src);
+    } else {
+        TLOAD_TILE_IMPL(dst, src);
     }
 }
 } // namespace pto
