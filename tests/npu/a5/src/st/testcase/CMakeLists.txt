@@ -194,6 +194,7 @@ set(ALL_TESTCASES
     tcolexpand
     tnot
     trelu
+    tlrelu
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
