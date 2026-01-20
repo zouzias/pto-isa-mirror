@@ -80,6 +80,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 #ifdef REGISTER_BASE
+#include "pto/npu/a5/arch.hpp"
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/TAdd.hpp"

@@ -17,21 +17,21 @@ template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstr(__ubuf__ typename TileData::DType *dst, typename GlobalData::DType *src, uint32_t nBurst,
     uint32_t lenBurst, uint64_t gmStride, uint32_t ubStride, bool enableUBPad) {
     if constexpr (sizeof(typename TileData::DType) == 1) {
-        copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint8_t *>(dst), reinterpret_cast<__gm__ uint8_t *>(src),
-            0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/, 0 /*right padding count*/,
-            enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
+        pto_copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint8_t *>(dst),
+            reinterpret_cast<__gm__ uint8_t *>(src), 0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/,
+            0 /*right padding count*/, enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
     } else if constexpr (sizeof(typename TileData::DType) == 2) {
-        copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint16_t *>(dst), reinterpret_cast<__gm__ uint16_t *>(src),
-            0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/, 0 /*right padding count*/,
-            enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
+        pto_copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint16_t *>(dst),
+            reinterpret_cast<__gm__ uint16_t *>(src), 0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/,
+            0 /*right padding count*/, enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
     } else if constexpr (sizeof(typename TileData::DType) == 4) {
-        copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint32_t *>(dst), reinterpret_cast<__gm__ uint32_t *>(src),
-            0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/, 0 /*right padding count*/,
-            enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
+        pto_copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint32_t *>(dst),
+            reinterpret_cast<__gm__ uint32_t *>(src), 0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/,
+            0 /*right padding count*/, enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
     } else if constexpr (sizeof(typename TileData::DType) == 8) {
-        copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint32_t *>(dst), reinterpret_cast<__gm__ uint32_t *>(src),
-            0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/, 0 /*right padding count*/,
-            enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
+        pto_copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint32_t *>(dst),
+            reinterpret_cast<__gm__ uint32_t *>(src), 0 /*sid*/, nBurst, lenBurst, 0 /*left padding count*/,
+            0 /*right padding count*/, enableUBPad /*data select bit*/, 0 /*l2 cache ctl*/, gmStride, ubStride);
     }
 }
 
@@ -60,9 +60,9 @@ PTO_INTERNAL void TLoadVecND2ND(typename TileData::TileDType dstAddr, typename G
     uint64_t loop1_src_stride = GetByteSize<typename TileData::DType>(gStride2);
     uint64_t loop2_dst_stride = GetByteSize<typename TileData::DType>(dstStride1);
     uint64_t loop1_dst_stride = GetByteSize<typename TileData::DType>(dstStride2);
-    set_loop2_stride_outtoub(loop2_dst_stride << 40 | loop2_src_stride);
-    set_loop1_stride_outtoub(loop1_dst_stride << 40 | loop1_src_stride);
-    set_loop_size_outtoub(loop2 << 21 | loop1);
+    pto_set_loop2_stride_outtoub(loop2_dst_stride, loop2_src_stride);
+    pto_set_loop1_stride_outtoub(loop1_dst_stride, loop1_src_stride);
+    pto_set_loop_size_outtoub(loop2, loop1);
     for (uint32_t i = 0; i < gShape0; i++) {
         int64_t dstAddr0 = i * dstStride0;
         int64_t srcAddr0 = i * gStride0;
@@ -93,9 +93,9 @@ PTO_INTERNAL void TLoadVecDN2DN(typename TileData::TileDType dstAddr, typename G
     uint64_t loop1_src_stride = GetByteSize<typename TileData::DType>(gStride2);
     uint64_t loop2_dst_stride = GetByteSize<typename TileData::DType>(dstStride1);
     uint64_t loop1_dst_stride = GetByteSize<typename TileData::DType>(dstStride2);
-    set_loop2_stride_outtoub(loop2_dst_stride << 40 | loop2_src_stride);
-    set_loop1_stride_outtoub(loop1_dst_stride << 40 | loop1_src_stride);
-    set_loop_size_outtoub(loop2 << 21 | loop1);
+    pto_set_loop2_stride_outtoub(loop2_dst_stride, loop2_src_stride);
+    pto_set_loop1_stride_outtoub(loop1_dst_stride, loop1_src_stride);
+    pto_set_loop_size_outtoub(loop2, loop1);
     if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
                   std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
         dstStride0 = dstStride0 >> 1; // fp4 dstAddr offset need divide 2 as use b8 to move
@@ -123,7 +123,7 @@ PTO_INTERNAL void TLoadVecNZ2NZ(typename TileData::TileDType dstAddr, typename G
     __ubuf__ typename TileData::DType *dstAddrP = dstAddr;
 
     int64_t tileStride = gShape1 * TileData::Rows * gShape4;
-    set_loop_size_outtoub(1ULL << 21 | 1ULL);
+    pto_set_loop_size_outtoub(1ULL, 1ULL);
     if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
                   std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
         tileStride = tileStride >> 1; // fp4 dstAddr offset need divide 2 as use b8 to move
@@ -144,7 +144,7 @@ __tf__ PTO_INTERNAL OP_NAME(TLOAD) OP_TYPE(memory) void TLoad(typename TileData:
     typename GlobalData::DType *srcAddr = src;
     constexpr bool enableUBPad = TileData::PadVal != PadValue::Null;
     if constexpr (enableUBPad) {
-        set_mov_pad_val(GetPadValue<TileData>());
+        pto_set_mov_pad_val(GetPadValue<TileData>());
     }
     if constexpr (TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox)) {
         TLoadVecND2ND<TileData, GlobalData>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,

@@ -10,7 +10,10 @@
 
 function(pto_vec_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
-    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-vec -DREGISTER_BASE -std=c++17)
+    if(CCE_AICORE_ARCH STREQUAL "dav-c310")
+        set(CCE_AICORE_ARCH dav-c310-vec)
+    endif()
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${CCE_AICORE_ARCH} -DREGISTER_BASE -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE 
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
@@ -27,20 +30,23 @@ function(pto_vec_st NAME)
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
-        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     )
 
     target_link_libraries(${NAME} PRIVATE
         ${NAME}_kernel
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
+        $<BUILD_INTERFACE:$<$<AND:$<STREQUAL:${RUN_MODE},npu>,$<STREQUAL:${CCE_AICORE_ARCH},Kirin9030>>:ai_runtime>>
         stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
     )
 endfunction()
 
 function(pto_cube_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
-    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-cube -DREGISTER_BASE -std=c++17)
+    if(CCE_AICORE_ARCH STREQUAL "dav-c310")
+        set(CCE_AICORE_ARCH dav-c310-cube)
+    endif()
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${CCE_AICORE_ARCH}-cube -DREGISTER_BASE -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE 
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
@@ -57,20 +63,20 @@ function(pto_cube_st NAME)
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
-        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     )
 
     target_link_libraries(${NAME} PRIVATE
         ${NAME}_kernel
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
+        $<BUILD_INTERFACE:$<$<AND:$<STREQUAL:${RUN_MODE},npu>,$<STREQUAL:${CCE_AICORE_ARCH},Kirin9030>>:ai_runtime>>
         stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
     )
 endfunction()
 
 function(pto_mix_st NAME)
     add_library(${NAME}_kernel_mix SHARED ${NAME}_kernel.cpp)
-    target_compile_options(${NAME}_kernel_mix PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310 -DREGISTER_BASE -std=c++17)
+    target_compile_options(${NAME}_kernel_mix PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${CCE_AICORE_ARCH} -DREGISTER_BASE -std=c++17)
 
     target_include_directories(${NAME}_kernel_mix PRIVATE 
         ${ASCEND_HOME_PATH}/pkg_inc/
@@ -94,6 +100,7 @@ function(pto_mix_st NAME)
         ${NAME}_kernel_mix
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
+        $<BUILD_INTERFACE:$<$<AND:$<STREQUAL:${RUN_MODE},npu>,$<STREQUAL:${CCE_AICORE_ARCH},Kirin9030>>:ai_runtime>>
         stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
     )
 endfunction()
