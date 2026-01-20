@@ -787,8 +787,10 @@ PTO_INST RecordEvent TXORS(
   return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TLRELU(TileData &dst, TileData &src0, typename TileData::DType scalar, WaitEvents&... events) {
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TLRELU(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar,
+                            WaitEvents&... events)
+{
   TSYNC(events...);
   MAP_INSTR_IMPL(TLRELU, dst, src0, scalar);
   return {};
