@@ -428,7 +428,7 @@ PTO_INTERNAL void CheckTloadData(TileData &dst, GlobalData &src) {
 }
 
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src) {
+PTO_INTERNAL void TLOAD_TILE_IMPL(TileData &dst, GlobalData &src) {
     CheckTloadData<TileData, GlobalData>(dst, src);
     constexpr bool isSameLayout =
         (GlobalData::layout == pto::Layout::ND && GetTileLayoutCustom<TileData>() == TileLayoutCustom::ND) ||
@@ -472,6 +472,95 @@ PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src) {
                 src.GetStride(pto::GlobalTensorDim::DIM_2), src.GetStride(pto::GlobalTensorDim::DIM_3),
                 src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
         }
+    }
+}
+
+template <typename TileData, typename GlobalData>
+__tf__ AICORE void TLoad5HD(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src, int srcN,
+    int srcC1, int srcH, int srcW, int srcC0, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
+    int dstN, int dstC1, int dstH, int dstW)
+{
+    __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
+    typename GlobalData::DType *srcAddr = src;
+
+    constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename TileData::DType);
+    typename GlobalData::DType *srcAddrP = srcAddr;
+    __cbuf__ typename TileData::DType *dstAddrP = dstAddr;
+
+    uint16_t nBurst = dstH;
+    uint16_t lenBurst = dstW;
+    uint16_t gmGap =
+        ((gStride2 - srcW * c0ElemCount) * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE; // unit: 32B
+    uint16_t l1Gap = 0;
+    for (uint32_t i = 0; i < dstN; i++) { // N
+        int64_t dstAddr1 = i * dstH * dstW * dstC1 * c0ElemCount;
+        int64_t srcAddr1 = i * gStride0;
+        for (uint32_t j = 0; j < dstC1; j++) { // C1
+            srcAddrP = srcAddr + srcAddr1 + j * gStride1;
+            dstAddrP = dstAddr + dstAddr1 + j * dstH * dstW * c0ElemCount;
+            TLoadInstrGm2L1<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, l1Gap);
+        }
+    }
+}
+
+template <typename TileData, typename GlobalData>
+__tf__ AICORE void TLoadFractalZ(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
+    int srcC1, int srcH, int srcW, int srcN, int srcC0, int gStride0, int gStride1, int gStride2, int gStride3,
+    int gStride4, int dstC1, int dstH, int dstW, int dstN)
+{
+    __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *)__cce_get_tile_ptr(dst);
+    typename GlobalData::DType *srcAddr = src;
+
+    constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename TileData::DType);
+    typename GlobalData::DType *srcAddrP = srcAddr;
+    __cbuf__ typename TileData::DType *dstAddrP = dstAddr;
+
+    uint32_t lenBurst = dstN;
+    uint32_t gmGap = ((gStride2 - srcN * c0ElemCount) * sizeof(typename TileData::DType)) >> SHIFT_BLOCK_BYTE;
+    uint32_t l1Gap = 0;
+
+    if (dstC1 * dstH * dstW <= 4095) { // if burst < 4095, only load once
+        uint16_t nBurst = dstC1 * dstH * dstW;
+        TLoadInstrGm2L1<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, l1Gap);
+    } else { // assert H*W not cut
+        uint16_t nBurst = dstH * dstW;
+        for (uint32_t i = 0; i < dstC1; i++) {
+            srcAddrP = srcAddr + i * gStride0;
+            dstAddrP = dstAddr + i * dstH * dstW * dstN * c0ElemCount;
+            TLoadInstrGm2L1<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmGap, l1Gap);
+        }
+    }
+}
+
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLOAD_CONVTILE_IMPL(TileData &dst, GlobalData &src)
+{
+    if constexpr (GlobalData::layout == pto::Layout::NC1HWC0) {
+        static_assert(TileData::totalDimCount == 5); // NC1HWC0
+        TLoad5HD<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(pto::GlobalTensorDim::DIM_0),
+            src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
+            src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
+            src.GetStride(pto::GlobalTensorDim::DIM_0), src.GetStride(pto::GlobalTensorDim::DIM_1),
+            src.GetStride(pto::GlobalTensorDim::DIM_2), src.GetStride(pto::GlobalTensorDim::DIM_3),
+            src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetShape(0), dst.GetShape(1), dst.GetShape(2),
+            dst.GetShape(3));
+    } else if constexpr (GlobalData::layout == pto::Layout::FRACTAL_Z) { // C1HWNC0
+        TLoadFractalZ<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(pto::GlobalTensorDim::DIM_0),
+            src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
+            src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
+            src.GetStride(pto::GlobalTensorDim::DIM_0), src.GetStride(pto::GlobalTensorDim::DIM_1),
+            src.GetStride(pto::GlobalTensorDim::DIM_2), src.GetStride(pto::GlobalTensorDim::DIM_3),
+            src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetShape(0), dst.GetShape(1), dst.GetShape(2),
+            dst.GetShape(3));
+    }
+}
+
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src) {
+    if constexpr (is_conv_tile_v<TileData>) {
+        TLOAD_CONVTILE_IMPL(dst, src);
+    } else {
+        TLOAD_TILE_IMPL(dst, src);
     }
 }
 } // namespace pto

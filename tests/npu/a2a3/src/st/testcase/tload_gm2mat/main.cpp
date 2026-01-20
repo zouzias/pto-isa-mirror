@@ -43,6 +43,7 @@ void test_tload()
     // format = 2: NZ2NZ
     // format = 3: ND2NZ
     // format = 4: DN2ZN
+    // format = 5: NC1HWC02NC1HWC0
     size_t srcDataSize = gWholeShape0 * gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4 * sizeof(DataType);
     size_t dstDataSize = gShape0 * gShape1 * gShape2 * gShape3 * gShape4 * sizeof(DataType);
     constexpr int c0Size = 32 / sizeof(DataType);
@@ -250,4 +251,51 @@ TEST_F(TLoadGM2L1Test, DN2ZN_int16_t_1_1_1_155_250_1_1_1_752_1000)
 TEST_F(TLoadGM2L1Test, DN2ZN_int8_t_1_1_1_1023_511_1_1_1_1024_1024)
 {
     test_tload<4, int8_t, 1, 1, 1, 1023, 511, 1, 1, 1, 1024, 1024>();
+}
+
+TEST_F(TLoadGM2L1Test, NC1HWC02NC1HWC0_int8_t_2_4_8_128_32_3_4_128_128_32)
+{
+    test_tload<5, int8_t, 2, 4, 8, 128, 32, 3, 4, 128, 128, 32>();
+}
+TEST_F(TLoadGM2L1Test, NC1HWC02NC1HWC0_int8_t_3_4_128_8_32_3_4_128_128_32)
+{
+    test_tload<5, int8_t, 3, 4, 128, 8, 32, 3, 4, 128, 128, 32>();
+}
+TEST_F(TLoadGM2L1Test, NC1HWC02NC1HWC0_int8_t_3_4_8_128_32_3_8_8_128_32)
+{
+    test_tload<5, int8_t, 3, 4, 8, 128, 32, 3, 8, 8, 128, 32>();
+}
+
+TEST_F(TLoadGM2L1Test, NC1HWC02NC1HWC0_bfloat16_1_16_10_100_16_1_16_100_100_16)
+{
+    test_tload<5, uint16_t, 1, 16, 10, 100, 16, 1, 16, 100, 100, 16>();
+}
+TEST_F(TLoadGM2L1Test, NC1HWC02NC1HWC0_bfloat16_10_16_16_2_16_256_16_100_16_16)
+{
+    test_tload<5, uint16_t, 10, 16, 16, 2, 16, 256, 16, 100, 16, 16>();
+}
+TEST_F(TLoadGM2L1Test, NC1HWC02NC1HWC0_bfloat16_1_1_1_8192_16_8_16_16_8192_16)
+{
+    test_tload<5, uint16_t, 1, 1, 1, 8192, 16, 8, 16, 16, 8192, 16>();
+}
+
+TEST_F(TLoadGM2L1Test, FZ2FZ_bfloat16_1_7_7_20_16_3_7_7_100_16)
+{
+    test_tload<6, uint16_t, 1, 7, 7, 20, 16, 3, 7, 7, 100, 16>();
+}
+TEST_F(TLoadGM2L1Test, FZ2FZ_bfloat16_128_7_7_2_16_256_7_7_16_16)
+{
+    test_tload<6, uint16_t, 128, 7, 7, 2, 16, 256, 7, 7, 16, 16>();
+}
+TEST_F(TLoadGM2L1Test, FZ2FZ_bfloat16_192_3_3_8_16_256_3_3_8_16)
+{
+    test_tload<6, uint16_t, 192, 3, 3, 8, 16, 256, 3, 3, 8, 16>();
+}
+TEST_F(TLoadGM2L1Test, FZ2FZ_int8_t_2_3_3_64_32_3_3_3_128_32)
+{
+    test_tload<6, int8_t, 2, 3, 3, 64, 32, 3, 3, 3, 128, 32>();
+}
+TEST_F(TLoadGM2L1Test, FZ2FZ_int8_t_3_5_5_128_32_8_5_5_128_32)
+{
+    test_tload<6, int8_t, 3, 5, 5, 128, 32, 8, 5, 5, 128, 32>();
 }
