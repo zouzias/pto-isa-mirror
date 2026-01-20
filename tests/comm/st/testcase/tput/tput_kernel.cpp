@@ -23,8 +23,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 
 // #define __RAW_SHMEM__
-// #define __TPUT_LOCAL__
-// #define __TPUT_REMOTE__
 #define __ALL_TILE__
 
 template <typename T, size_t count>
@@ -51,62 +49,26 @@ __global__ AICORE void TPutKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
     int32_t magic = 459000 + my_rank;
 
 #ifdef __RAW_SHMEM__
-    shmem_mte_put_mem_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
+    #if defined(ASCEND_SHMEM)
+        shmem_mte_put_mem_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
+        shmem_quiet();
+        shmemi_barrier_core_soft();
 
-    shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
-    shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, SHMEM_CMP_EQ, 459000 + next_rank);
+        shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
+        shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, CANN_SHMEM_CMP_EQ, 459000 + next_rank);
 
-    shmem_mte_get_mem_nbi(dst, send_shmem, tmp_buff, ub_size, count, next_rank, EVENT_ID0);
+        shmem_mte_get_mem_nbi(dst, send_shmem, tmp_buff, ub_size, count, next_rank, EVENT_ID0);
+    #elif defined(CANN_SHMEM)
+        aclshmemx_mte_put_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
+        aclshmem_quiet();
+        aclshmemi_barrier_core_soft();
+
+        aclshmemx_signal_op(shmem_sync + 0, magic, CANN_SHMEM_SIGNAL_SET, my_rank);
+        aclshmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, CANN_SHMEM_CMP_EQ, 459000 + next_rank);
+
+        aclshmemx_mte_get_nbi(dst, send_shmem, tmp_buff, ub_size, count, next_rank, EVENT_ID0);
+    #endif
 #endif    
-
-#ifdef __TPUT_LOCAL__
-    __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + count);
-
-    Global sendG(send_shmem, shape, stride);
-    Global recvG(recv_shmem, shape, stride);
-
-    shmem_mte_put_mem_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
-
-
-    recvG.SetRank(my_rank);
-    pto::comm::TPUT(recvG, sendG);
-    pto::comm::TWAIT();
-
-    shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
-    shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, SHMEM_CMP_EQ, 459000 + next_rank);
-
-    shmem_mte_get_mem_nbi(dst, recv_shmem, tmp_buff, ub_size, count, next_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
-#endif
-
-#ifdef __TPUT_REMOTE__
-    int prev_rank = (my_rank + nranks - 1) % nranks;
-
-    __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + count);
-
-    Global sendG(send_shmem, shape, stride);
-    Global recvG(recv_shmem, shape, stride);
-
-    shmem_mte_put_mem_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
-
-    recvG.SetRank(prev_rank);
-    pto::comm::TPUT(recvG, sendG);
-    pto::comm::TWAIT();
-
-    shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
-    shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, SHMEM_CMP_EQ, 459000 + next_rank);
-
-    shmem_mte_get_mem_nbi(dst, recv_shmem, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
-#endif
 
 #ifdef __ALL_TILE__
     int prev_rank = (my_rank + nranks - 1) % nranks;
@@ -139,8 +101,13 @@ __global__ AICORE void TPutKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
     pto::comm::TPUT(recvG, sendG);
     pto::comm::TWAIT();
 
-    shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
-    shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, SHMEM_CMP_EQ, 459000 + next_rank);
+    #if defined(CANN_SHMEM)
+        aclshmemx_signal_op(shmem_sync + 0, magic, CANN_SHMEM_SIGNAL_SET, my_rank);
+        aclshmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, CANN_SHMEM_CMP_EQ, 459000 + next_rank);
+    #elif defined(ASCEND_SHMEM)
+        shmemx_signal_op(shmem_sync + 0, magic, CANN_SHMEM_SIGNAL_SET, my_rank);
+        shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, CANN_SHMEM_CMP_EQ, 459000 + next_rank);
+    #endif
 
     TLOAD(dstBufTile, recvG);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
@@ -184,6 +151,7 @@ bool RunPutRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     env.ipPort = ip;
     
     if(!ShmemInitFromEnv(env)){
+        std::cerr << "ShmemInitFromEnv failed!" << std::endl;
         return false;
     }
 

@@ -23,10 +23,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 
 // #define __RAW_SHMEM__
-// #define __TPUT_LOCAL__
-// #define __TPUT_REMOTE__
-// #define __TGET_REMOTE__
-
 #define __ALL_TILE__
 
 template <typename T, size_t count>
@@ -53,84 +49,26 @@ __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
     int32_t magic = 459000 + my_rank;
 
 #ifdef __RAW_SHMEM__
-    shmem_mte_put_mem_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
+    #if defined(ASCEND_SHMEM)
+        shmem_mte_put_mem_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
+        shmem_quiet();
+        shmemi_barrier_core_soft();
 
-    shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
-    shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, SHMEM_CMP_EQ, 459000 + next_rank);
+        shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
+        shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, CANN_SHMEM_CMP_EQ, 459000 + next_rank);
 
-    shmem_mte_get_mem_nbi(dst, send_shmem, tmp_buff, ub_size, count, next_rank, EVENT_ID0);
+        shmem_mte_get_mem_nbi(dst, send_shmem, tmp_buff, ub_size, count, next_rank, EVENT_ID0);
+    #elif defined(CANN_SHMEM)
+        aclshmemx_mte_put_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
+        aclshmem_quiet();
+        aclshmemi_barrier_core_soft();
+
+        aclshmemx_signal_op(shmem_sync + 0, magic, CANN_SHMEM_SIGNAL_SET, my_rank);
+        aclshmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, CANN_SHMEM_CMP_EQ, 459000 + next_rank);
+
+        aclshmemx_mte_get_nbi(dst, send_shmem, tmp_buff, ub_size, count, next_rank, EVENT_ID0);
+    #endif
 #endif    
-
-#ifdef __TPUT_LOCAL__
-    __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + count);
-
-    Global sendG(send_shmem, shape, stride);
-    Global recvG(recv_shmem, shape, stride);
-
-    shmem_mte_put_mem_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
-
-    recvG.SetRank(my_rank);
-    pto::comm::TPUT(recvG, sendG);
-    pto::comm::TWAIT();
-
-    shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
-    shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, SHMEM_CMP_EQ, 459000 + next_rank);
-
-    shmem_mte_get_mem_nbi(dst, recv_shmem, tmp_buff, ub_size, count, next_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
-#endif
-
-#ifdef __TPUT_REMOTE__
-    int prev_rank = (my_rank + nranks - 1) % nranks;
-
-    __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + count);
-
-    Global sendG(send_shmem, shape, stride);
-    Global recvG(recv_shmem, shape, stride);
-
-    shmem_mte_put_mem_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
-
-    recvG.SetRank(prev_rank);
-    pto::comm::TPUT(recvG, sendG);
-    pto::comm::TWAIT();
-
-    shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
-    shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, SHMEM_CMP_EQ, 459000 + next_rank);
-
-    shmem_mte_get_mem_nbi(dst, recv_shmem, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
-#endif
-
-#ifdef __TGET_REMOTE__
-    __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + count);
-
-    Global sendG(send_shmem, shape, stride);
-    Global recvG(recv_shmem, shape, stride);
-
-    shmem_mte_put_mem_nbi(send_shmem, src, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
-
-    shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
-    shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, SHMEM_CMP_EQ, 459000 + next_rank);
-
-
-    recvG.SetRank(next_rank);
-    pto::comm::TGET(recvG, sendG);
-    pto::comm::TWAIT();
-
-    shmem_mte_get_mem_nbi(dst, recv_shmem, tmp_buff, ub_size, count, my_rank, EVENT_ID0);
-    shmem_quiet();
-    shmemi_barrier_core_soft();
-#endif
 
 
 #ifdef __ALL_TILE__
@@ -160,11 +98,11 @@ __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
     pto::comm::TWAIT();
-    pto::comm::TPUT(recvG, sendG, prev_rank);
-    pto::comm::TWAIT();
+    pto::comm::TBARRIER();
 
-    shmemx_signal_op(shmem_sync + 0, magic, SHMEM_SIGNAL_SET, my_rank);
-    shmem_signal_wait_until((__gm__ int32_t *)shmem_ptr(shmem_sync, next_rank) + 0, SHMEM_CMP_EQ, 459000 + next_rank);
+    sendG.SetRank(next_rank);
+    pto::comm::TGET(recvG, sendG);
+    pto::comm::TWAIT();
 
     TLOAD(dstBufTile, recvG);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
@@ -223,7 +161,7 @@ bool RunGetRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
 
     // 初始化Input/Output Host
     for (size_t i = 0; i < count; ++i) {
-        reinterpret_cast<T*>(input_host)[i] = static_cast<T>(i + rank_id * 10000); // 使不同 rank 有不同数据
+        reinterpret_cast<T*>(input_host)[i] = static_cast<T>(i + (rank_id + 1) * 10000); // 使不同 rank 有不同数据
         reinterpret_cast<T*>(output_host)[i] = static_cast<T>(-1);
     }
     // 把主机数据拷到 device 端
@@ -240,10 +178,10 @@ bool RunGetRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     bool is_ok = true;
     for(int i = 0; i < count; ++i){
         T value = reinterpret_cast<T*>(output_host)[i];
-        if(value != static_cast<T>(i + (rank_id + 1) % n_ranks * 10000)){
-            std::cout << "Rank " << rank_id << " " << " Device " << device_id << " Status " << status << std::endl;
-            std::cout << "Expected value: " << static_cast<T>(i + (rank_id + 1) % n_ranks * 10000) << std::endl;
-            std::cout << "Actual value: " << value << std::endl;
+        if(value != static_cast<T>(i + ((rank_id + 1) % n_ranks + 1) * 10000)){
+            std::cout << "Rank " << rank_id  << " " 
+                      << "Expected value: " << static_cast<T>(i + ((rank_id + 1) % n_ranks + 1) * 10000) << " "
+                      << "Actual value: " << value << std::endl;
             is_ok = false;
             break;
         }
