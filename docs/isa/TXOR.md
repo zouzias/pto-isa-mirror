@@ -32,6 +32,7 @@ PTO_INST RecordEvent TXOR(TileData& dst, TileData& src0, TileData& src1, WaitEve
 
 - Intended for integral element types.
 - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+- Temporary space is required by A3 for calculation, while not used by A5.
 
 ## Examples
 
@@ -41,9 +42,15 @@ PTO_INST RecordEvent TXOR(TileData& dst, TileData& src0, TileData& src1, WaitEve
 using namespace pto;
 
 void example() {
-  using TileT = Tile<TileType::Vec, int32_t, 16, 16>;
-  TileT a, b, out;
-  TXOR(out, a, b);
+  using TileDst = Tile<TileType::Vec, uint32_t, 16, 16>;
+  using TileSrc0 = Tile<TileType::Vec, uint32_t, 16, 16>;
+  using TileSrc1 = Tile<TileType::Vec, uint32_t, 16, 16>;
+  using TileTmp = Tile<TileType::Vec, uint32_t, 16, 16>;
+  TileDst dst;
+  TileSrc0 src0;
+  TileSrc1 src1;
+  TileTmp tmp;
+  TXOR(dst, src0, src1, tmp);
 }
 ```
 
