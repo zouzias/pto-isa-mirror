@@ -277,10 +277,12 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, __gm__ half *q, __gm
 
         const int s1_index = tile_id * static_cast<int>(Tile_S1) + sub_tile_id * static_cast<int>(Cube_S1);
 
+        using GlobalDataK = GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>,
+            pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
         using GlobalDataQ =
-            GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
-        using GlobalDataK = GlobalTensor<half, pto::Shape<1, 1, 1, HEAD_SIZE, Cube_S1>,
-            pto::Stride<1, 1, 1, 1, HEAD_SIZE>, Layout::DN>; // BNSD - (N, K) layout
+            GlobalTensor<half, pto::Shape<1, 1, 1, HEAD_SIZE, Cube_S0>, pto::Stride<1, 1, 1, 1, HEAD_SIZE>, Layout::DN>;
+
+
 
         GlobalDataQ qGlobal(q);
         GlobalDataK kGlobal(k + s1_index * HEAD_SIZE);
@@ -298,7 +300,7 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, __gm__ half *q, __gm
 
         wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
 
-        pto_macro_matmul<Cube_S0, Cube_HEAD, Cube_S1>(qMatTile, kMatTile, qkAccTile);
+        pto_macro_matmul<Cube_S1, Cube_HEAD, Cube_S0>(kMatTile, qMatTile, qkAccTile);
 
         set_flag(PIPE_MTE1, PIPE_MTE2, qkMatTileEventId);
         set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
@@ -654,9 +656,9 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
 
     // Define tile types for first QK matmul
     using TileMatQData =
-        Tile<TileType::Mat, half, Cube_S0, HEAD_SIZE, BLayout::ColMajor, Cube_S0, HEAD_SIZE, SLayout::RowMajor, 512>;
+        Tile<TileType::Mat, half, Cube_S0, HEAD_SIZE, BLayout::RowMajor, Cube_S0, HEAD_SIZE, SLayout::ColMajor, 512>;
     using TileMatKData =
-        Tile<TileType::Mat, half, HEAD_SIZE, Cube_S1, BLayout::RowMajor, HEAD_SIZE, Cube_S1, SLayout::ColMajor, 512>;
+        Tile<TileType::Mat, half, HEAD_SIZE, Cube_S1, BLayout::ColMajor, HEAD_SIZE, Cube_S1, SLayout::RowMajor, 512>;
     // Accumulator rows must match Cube_S0 (per-block rows), not logical S0
     using TileQKData = TileAcc<float, Cube_S0, Cube_S1, Cube_S0, Cube_S1>;
 
@@ -666,9 +668,9 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
 
     // Define tile types for second PV matmul
     using TileMatPData =
-        Tile<TileType::Mat, half, Cube_S0, Cube_S1, BLayout::ColMajor, Cube_S0, Cube_S1, SLayout::RowMajor, 512>;
+        Tile<TileType::Mat, half, Cube_S0, Cube_S1, BLayout::RowMajor, Cube_S0, Cube_S1, SLayout::ColMajor, 512>;
     using TileMatVData =
-        Tile<TileType::Mat, half, Cube_S1, HEAD_SIZE, BLayout::ColMajor, Cube_S1, HEAD_SIZE, SLayout::RowMajor, 512>;
+        Tile<TileType::Mat, half, Cube_S1, HEAD_SIZE, BLayout::RowMajor, Cube_S1, HEAD_SIZE, SLayout::ColMajor, 512>;
     using TilePVData = TileAcc<float, Cube_S0, HEAD_SIZE, Cube_S0, HEAD_SIZE>;
 
     TileMatPData pMatTile[pMatTNBuffers];

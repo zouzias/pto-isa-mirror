@@ -216,11 +216,11 @@ void run_tfa() {
         devToml.close();
     }
 
-    ReadFile(GetGoldenDir() + "/q.bin", qSize, qHost, qSize); // Read q data
+    ReadFile(GetGoldenDir() + "/qt.bin", qSize, qHost, qSize); // Read q data
     ReadFile(GetGoldenDir() + "/kt.bin", kSize, kHost, kSize);
     // read v
     aclrtMallocHost((void **)(&vHost), S1 * HEAD_SIZE * sizeof(aclFloat16));
-    ReadFile(GetGoldenDir() + "/v.bin", vSize, vHost, vSize);
+    ReadFile(GetGoldenDir() + "/vt.bin", vSize, vHost, vSize);
 
     aclrtMemcpy(qDevice, qSize, qHost, qSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(kDevice, kSize, kHost, kSize, ACL_MEMCPY_HOST_TO_DEVICE);
