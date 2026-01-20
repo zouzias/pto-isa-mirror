@@ -350,7 +350,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
 
     if constexpr (DAV_CUBE) {
         using GlobalVT =
-            GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
+            GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>, Layout::DN>;
 
         wait_flag(PIPE_MTE1, PIPE_MTE2, svMatTileEventId);
 
@@ -363,7 +363,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
 // For TILE_S1 > CUBE_S1, need to stride by Tile_S1 for each Cube_S1 chunk
 #ifndef P_FIFO_USE_NZ
         using GlobalXexpTileT =
-            GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
+            GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, 1, Cube_S0>, Layout::DN>;
 #else
         using GlobalXexpTileT = GlobalTensor<half, pto::Shape<1, Cube_S1 / 16, Cube_S0 / 16, 16, 16>,
             pto::Stride<Cube_S0 * Cube_S1, Cube_S0 * 16, 16 * 16, 16, 1>, Layout::NZ>;
