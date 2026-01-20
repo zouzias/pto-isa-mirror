@@ -24,6 +24,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TXor.hpp"
 #include "pto/npu/a2a3/TMins.hpp"
 #include "pto/npu/a2a3/TAddS.hpp"
+#include "pto/npu/a2a3/TSubS.hpp"
+#include "pto/npu/a2a3/TRemS.hpp"
 #include "pto/npu/a2a3/TDivS.hpp"
 #include "pto/npu/a2a3/TMulS.hpp"
 #include "pto/npu/a2a3/TSub.hpp"
@@ -67,6 +69,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TRowExpandMul.hpp"
 #include "pto/npu/a2a3/TRowExpandSub.hpp"
 #include "pto/npu/a2a3/TCI.hpp"
+#include "pto/npu/a2a3/TMaxS.hpp"
 #include "pto/npu/a2a3/TColSum.hpp"
 #include "pto/npu/a2a3/TUnaryOp.hpp"
 #include "pto/npu/a2a3/TBitwiseSOp.hpp"
@@ -75,8 +78,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TScatter.hpp"
 #include "pto/npu/a2a3/TColExpand.hpp"
 #include "pto/npu/a2a3/TTri.hpp"
+#include "pto/npu/a2a3/TLRelu.hpp"
 #include "pto/npu/a2a3/TPrefetch.hpp"
 #include "pto/npu/a2a3/TRem.hpp"
+#include "pto/npu/a2a3/TInsert.hpp"
 #endif
 
 #ifdef REGISTER_BASE
@@ -152,6 +157,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TColExpandExpdif.hpp"
 #include "pto/npu/a5/TTri.hpp"
 #include "pto/npu/a5/TPrefetch.hpp"
+#include "pto/npu/a5/TInsert.hpp"
 #endif
 
 #ifdef __CPU_SIM

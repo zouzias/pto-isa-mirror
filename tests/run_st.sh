@@ -49,6 +49,11 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolsum -g TCOLSUMTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmax -g TCOLMAXTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmin -g TCOLMINTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trem -g TREMTest.case_half_16x64_16x128_16x128_16x64
+    # python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trems -g TREMSTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsubs -g TSUBSTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmaxs -g TMAXSTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tlrelu -g TLRELUTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tgatherb -g TGATHERBTest.case_float_2x128_2x16_2x128
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tci -g TCITest.case1_int32
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcvt -g TCVTTest.case1
@@ -113,6 +118,11 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolsum
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmax
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmin
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trem
+    # python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trems
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsubs
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmaxs
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tlrelu
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcvt
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmatmul
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmov
@@ -223,7 +233,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsqrt -g TSQRTTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tstore -g TStoreTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tstore_acc2gm -g TStoreAcc2gmTest.case7
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttrans -g TTRANSTest.case_float_66x88_9x16_7x15
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttrans -g TTRANSTest.case_float_8x8_2x8_2x8
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcmp -g TCMPTest.case_half_32x32_32x32_32x32
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tadd_tdiv -g TADD_TDIVTest.case_float_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmul_tadds -g TMUL_TADDSTest.case_float_64x64_64x64
@@ -240,6 +250,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_n3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tnot -g TNOTTest.case_int16_64x64_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trelu -g TNOTTest.case_int32_64x64_64x64_64x64
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov_acc2mat -g TMOVTest.case_nz2nz_insert
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tlrelu
@@ -310,5 +321,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttri
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tnot
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trelu
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov_acc2mat
   fi
 fi

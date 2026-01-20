@@ -60,6 +60,10 @@ namespace pto {
     TTRANS,
     TTRI,
     TREM,
+    TREMS,
+    TSUBS,
+    TMAXS,
+    TLRELU,
     TMOV_V2V,       /* Vec to Vec */
     TMOV_V2M,       /* Vec to Mat */
     TEXTRACT_V2M,   /* Vec to Mat */
@@ -80,6 +84,8 @@ namespace pto {
     TSHRS,
     TXOR,
     TXORS,
+    TEXTRACT_A2M,   /* Acc to Mat */
+    TINSERT_A2M,
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
   };
 
