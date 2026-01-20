@@ -119,24 +119,92 @@ def cmake_friendly_path(p: Optional[str]) -> Optional[str]:
     return p
 
 
+def get_compiler_major_version(compiler_path: str) -> int:
+    """
+    Get the major version number of the compiler.
+    """
+    if not compiler_path:
+        return 0
+    try:
+        # Run --version
+        result = subprocess.run(
+            [compiler_path, "--version"],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if result.returncode != 0:
+            return 0
+
+        # Extract version number: Match the first number in strings like "18.1.0" or "14.2"
+        # Compatible with output from clang version 18.x and gcc (Ubuntu ...) 11.x
+        match = re.search(r'(\d+)\.', result.stdout)
+        if match:
+            return int(match.group(1))
+    except Exception:
+        pass
+    return 0
+
+# --- Core Function ---
+
 def detect_compilers(cxx_arg: Optional[str], cc_arg: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    # 1. Prioritize passed arguments or environment variables
     cxx = cxx_arg or os.environ.get("CXX")
     cc = cc_arg or os.environ.get("CC")
 
+    # 2. Automatic detection logic (if CXX is not specified)
     if not cxx:
-        cxx = shutil.which("clang++") or shutil.which("g++")
+        found_compiler = False
+
+        # Priority 1: Check for Clang++ (Version >= 16)
+        clang_candidate = shutil.which("clang++")
+        if clang_candidate:
+            ver = get_compiler_major_version(clang_candidate)
+            print(f"[Debug] Found clang++ at {clang_candidate}, version: {ver}")
+            if ver >= 16:
+                cxx = clang_candidate
+                cc = shutil.which("clang")
+                found_compiler = True
+
+        # Priority 2: If Clang not found/satisfied, Check for G++ (Version >= 14)
+        if not found_compiler:
+            gcc_candidate = shutil.which("g++")
+            if gcc_candidate:
+                ver = get_compiler_major_version(gcc_candidate)
+                print(f"[Debug] Found g++ at {gcc_candidate}, version: {ver}")
+                if ver >= 14:
+                    cxx = gcc_candidate
+                    cc = shutil.which("gcc")
+                    found_compiler = True
+
+        # If neither requirement is met
+        if not found_compiler:
+            raise RuntimeError(
+                "Could not find a suitable compiler.\n"
+                "Requirements:\n"
+                " - Clang++ >= 16\n"
+                " - OR G++ >= 14"
+            )
+
+    # 3. If CXX exists but is not an absolute path, try to resolve it
     elif not Path(cxx).is_absolute():
         cxx = shutil.which(cxx) or cxx
 
+    # 4. Supplementary detection for CC
+    # (If auto-detection above wasn't used, or user only specified CXX)
     if not cc:
-        if cxx and Path(cxx).name in ("clang++", "clang-cl"):
+        if cxx and "clang" in Path(cxx).name:
             cc = shutil.which("clang")
-        elif cxx and Path(cxx).name == "g++":
+        elif cxx and "g++" in Path(cxx).name:
             cc = shutil.which("gcc")
     elif not Path(cc).is_absolute():
         cc = shutil.which(cc) or cc
-    cxx = cmake_friendly_path(cxx)
-    cc = cmake_friendly_path(cc)
+
+    # 5. Format paths
+    if cxx:
+        cxx = cmake_friendly_path(cxx)
+    if cc:
+        cc = cmake_friendly_path(cc)
 
     return cxx, cc
 
