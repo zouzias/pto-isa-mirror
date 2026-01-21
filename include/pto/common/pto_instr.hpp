@@ -344,8 +344,7 @@ PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLe
 }
 
 // UF-aware overloads for TMATMUL_ACC: explicit input/output or shared accumulator tile.
-template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
-    typename... WaitEvents>
+template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_ACC(
     TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents&... events) {
   TSYNC(events...);
