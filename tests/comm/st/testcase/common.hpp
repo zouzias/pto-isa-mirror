@@ -7,16 +7,14 @@
 #include <cstdlib>
 #include <iostream>
 
+#if defined(ASCEND_SHMEM)
 #include "shmem_api.h"
 #include "host/shmem_host_sync.h"
+#elif defined(CANN_SHMEM)
+#include "shmem.h"
+#endif
 #include "pto/comm/context_manager.hpp"
 
-// extern "C" {
-// void shmem_barrier_all();
-// void shmem_quiet();
-// int shmem_my_pe();
-// int shmem_n_pes();
-// }
 
 struct ShmemEnv {
     int rank {0};
@@ -29,7 +27,7 @@ inline bool LoadEnv(ShmemEnv &env)
 {
     const char *rankEnv = std::getenv("SHMEM_RANK");
     const char *sizeEnv = std::getenv("SHMEM_SIZE");
-    const char *ipEnv = std::getenv("SHMEM_IP_PORT");
+    const char *ipEnv   = std::getenv("SHMEM_IP_PORT");
     const char *heapEnv = std::getenv("SHMEM_HEAP_BYTES");
 
     if (rankEnv == nullptr || sizeEnv == nullptr || ipEnv == nullptr) {
@@ -47,19 +45,6 @@ inline bool LoadEnv(ShmemEnv &env)
 
 inline bool ShmemInitFromEnv(ShmemEnv &env)
 {
-    // if (!LoadEnv(env)) {
-    //     return false;
-    // }
-    // it is duplicated with pto::comm::ContextManager::Init
-    // shmem_init_attr_t *attr = nullptr;
-    // if (shmem_set_attr(env.rank, env.size, env.heapBytes, env.ipPort, &attr) != 0) {
-    //     std::cerr << "[ERROR] shmem_set_attr failed\n";
-    //     return false;
-    // }
-    // if (shmem_init_attr(attr) != 0) {
-    //     std::cerr << "[ERROR] shmem_init_attr failed\n";
-    //     return false;
-    // }
     pto::comm::InitOptions opts;
     opts.backend = pto::comm::BackendKind::Shmem;
     opts.rank = env.rank;

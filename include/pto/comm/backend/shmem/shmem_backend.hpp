@@ -7,13 +7,27 @@
 
 #include <type_traits>
 
+#if defined(ASCEND_SHMEM)
 #include "shmem_api.h"
+#elif defined(CANN_SHMEM)
+#include "shmem.h"
+#endif
+
 #include "pto/comm/comm_types.hpp"
 #include "pto/comm/backend/shmem/copy_param_builder.hpp"
 #include "pto/common/pto_tile.hpp"
 
 namespace pto {
 namespace backend {
+
+#if defined(CANN_SHMEM)
+#define CANN_SHMEM_SIGNAL_SET ACLSHMEM_SIGNAL_SET
+#define CANN_SHMEM_CMP_EQ ACLSHMEM_CMP_EQ
+#elif defined(ASCEND_SHMEM)
+#define CANN_SHMEM_SIGNAL_SET SHMEM_SIGNAL_SET
+#define CANN_SHMEM_CMP_EQ SHMEM_CMP_EQ
+#endif
+
 
 struct ShmemInitOptions {
     int rank {0};
@@ -69,20 +83,47 @@ DEFINE_SHMEM_OPS(__gm__ uint16_t, uint16);
 DEFINE_SHMEM_OPS(__gm__ uint32_t, uint32);
 DEFINE_SHMEM_OPS(__gm__ uint64_t, uint64);
 DEFINE_SHMEM_OPS(__gm__ char, char);
+#if defined(ASCEND_SHMEM)
 DEFINE_SHMEM_OPS(__gm__ half, half);
 DEFINE_SHMEM_OPS(__gm__ bfloat16_t, bfloat16);
+#endif
 
 #undef DEFINE_SHMEM_OPS
 
 struct ShmemBackend {
     static int Init(const ShmemInitOptions &opts)
     {
+#if defined(ASCEND_SHMEM)
         shmem_init_attr_t *attr = nullptr;
         const int ret = shmem_set_attr(opts.rank, opts.nranks, opts.heapBytes, opts.ipPort, &attr);
         if (ret != 0) {
             return ret;
         }
         return shmem_init_attr(attr);
+#elif defined(CANN_SHMEM)
+        aclshmemx_init_attr_t attributes;
+        
+        attributes.my_pe = opts.rank;
+        attributes.n_pes = opts.nranks;
+        attributes.local_mem_size = opts.heapBytes;
+        
+        size_t ipLen = 0;
+        if (opts.ipPort != nullptr) {
+            for (; ipLen < ACLSHMEM_MAX_IP_PORT_LEN - 1 && opts.ipPort[ipLen] != '\0'; ++ipLen) {
+                attributes.ip_port[ipLen] = opts.ipPort[ipLen];
+            }
+        }
+        attributes.ip_port[ipLen] = '\0';
+        
+        constexpr int attrVersion = (1 << 16) + sizeof(aclshmemx_init_attr_t);
+        attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE, 
+                                  DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
+        
+        aclshmemx_uniqueid_t defaultUid = ACLSHMEM_UNIQUEID_INITIALIZER;
+        attributes.comm_args = reinterpret_cast<void *>(&defaultUid);
+        
+        return aclshmemx_init_attr(ACLSHMEMX_INIT_WITH_DEFAULT, &attributes);
+#endif
     }
 
 
@@ -153,7 +194,10 @@ struct ShmemBackend {
 
         // Initialize dstGlobal with local source data
         ShmemOps<DType>::Get(dstGlobal.data(), srcGlobal.data(), srcParams, my_rank);
-        shmem_quiet();
+
+        Wait();
+        // shmem_quiet();
+
 
         const uint32_t totalElems = srcParams.repeat * ((srcParams.srcStrideElems == 0) ? srcParams.lenElems : srcParams.srcStrideElems);
         DType *dstPtr = dstGlobal.data();
@@ -171,8 +215,10 @@ struct ShmemBackend {
             }
         }
 
-        shmem_quiet();
-        shmem_barrier_all();
+        // shmem_quiet();
+        // shmem_barrier_all();
+        Wait();
+        Barrier();
     }
 
     template <typename ParallelGroup, typename GlobalDstData>
@@ -207,8 +253,10 @@ struct ShmemBackend {
             ShmemOps<DType>::Put(remoteDstPtr, srcGlobal.data(), srcParams, pe);
         }
 
-        shmem_quiet();
-        shmem_barrier_all();
+        // shmem_quiet();
+        // shmem_barrier_all();
+        Wait();
+        Barrier();
     }
 
 
@@ -231,21 +279,33 @@ struct ShmemBackend {
                 // Put root's source data into PE r's destination tensor in ParallelGroup
                 ShmemOps<DType>::Put(pg[r].data(), srcGlobal.data(), srcParams, pe);
             }
-            shmem_quiet();
+            // shmem_quiet();
+            Wait();
         }
 
-        shmem_barrier_all();
+        // shmem_barrier_all();
+        Barrier();
     }
 
 
     PTO_INST static void Barrier()
     {
-        shmem_barrier_all();
+        // shmem_barrier_all();
+        #if defined(ASCEND_SHMEM)
+            shmem_barrier_all();
+        #elif defined(CANN_SHMEM)
+            aclshmem_barrier_all();
+        #endif
     }
 
     PTO_INST static void Wait()
     {
-        shmem_quiet();
+        // shmem_quiet();
+        #if defined(ASCEND_SHMEM)
+            shmem_quiet();
+        #elif defined(CANN_SHMEM)
+            aclshmem_quiet();
+        #endif
     }
 
 private:

@@ -26,6 +26,12 @@ PTO_INST void TWAIT()
     MAP_INSTR_IMPL(TWAIT);
 }
 
+PTO_INST void TBARRIER()
+{
+    MAP_INSTR_IMPL(TBARRIER);
+}
+
+
 template <typename ParallelGroup, typename GlobalDstData>
 PTO_INST void TALLREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal)
 {

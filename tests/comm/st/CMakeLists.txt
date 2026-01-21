@@ -32,6 +32,22 @@ else()
     message(STATUS "SHMEM_HOME_PATH: ${SHMEM_HOME_PATH}")
 endif()
 
+# SHMEM 版本选择: ASCEND_SHMEM = 老版本(shmem_api.h), CANN_SHMEM = 新版本(shmem.h)
+if(DEFINED ENV{SHMEM_BACKEND})
+    set(SHMEM_BACKEND $ENV{SHMEM_BACKEND})
+endif()
+if(NOT DEFINED SHMEM_BACKEND)
+    # 自动检测: 优先查找新版 shmem.h
+    if(EXISTS "${SHMEM_HOME_PATH}/shmem/include/shmem.h")
+        set(SHMEM_BACKEND "CANN_SHMEM")
+    elseif(EXISTS "${SHMEM_HOME_PATH}/shmem/include/shmem_api.h")
+        set(SHMEM_BACKEND "ASCEND_SHMEM")
+    else()
+        message(FATAL_ERROR "Cannot find shmem.h or shmem_api.h in ${SHMEM_HOME_PATH}/shmem/include/")
+    endif()
+endif()
+message(STATUS "SHMEM_BACKEND: ${SHMEM_BACKEND}")
+
 
 set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
 
@@ -76,13 +92,30 @@ set(CMAKE_CPP_COMPILE_OPTIONS
     "SHELL:-include stddef.h"
 )
 
+# 公共 include 路径
 include_directories(
     ${PROJECT_SOURCE_DIR}/../../../include
     ${PROJECT_SOURCE_DIR}/../../..
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_DRIVER_PATH}/kernel/inc
-    ${SHMEM_HOME_PATH}/shmem/include
-    ${SHMEM_HOME_PATH}/memfabric_hybrid/include/smem/device
 )
+
+# 根据 SHMEM 版本设置不同的 include 路径和编译宏
+if(SHMEM_BACKEND STREQUAL "ASCEND_SHMEM")
+    add_compile_definitions(ASCEND_SHMEM)
+    include_directories(
+        ${SHMEM_HOME_PATH}/shmem/include
+        ${SHMEM_HOME_PATH}/memfabric_hybrid/include/smem/device
+    )
+else()  # CANN_SHMEM
+    add_compile_definitions(CANN_SHMEM)
+    include_directories(
+        ${SHMEM_HOME_PATH}/shmem/include
+        ${SHMEM_HOME_PATH}/shmem/include/device
+        ${SHMEM_HOME_PATH}/../src/device
+    )
+endif()
+
+
 
 add_subdirectory(testcase)
