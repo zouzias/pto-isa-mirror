@@ -47,7 +47,7 @@ PTO_INTERNAL void SetContMaskByDType(unsigned n) {
     SetContinuousMask(n);
 }
 
-PTO_INTERNAL int32_t CeilDivision(int32_t num1, int32_t num2) {
+PTO_INTERNAL constexpr int32_t CeilDivision(int32_t num1, int32_t num2) {
     if (num2 == 0) {
         return 0;
     }

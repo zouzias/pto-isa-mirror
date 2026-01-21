@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/memory.hpp"
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/utils.hpp>
 #ifdef __CPU_SIM
 #include <iomanip>
 #endif
@@ -727,8 +728,10 @@ static constexpr int alignedSize = 32;
 static constexpr int fixedRowSize = 16;
 static constexpr int fixedColSize = 16;
 static constexpr int fixedMxRowSize = 16;
+static constexpr int fixedGemvRowSize = 1;
 static constexpr int fixedMxColSize = 2;
 static constexpr int fractalABSize = 512;
+static constexpr int fractalGemvSize = 32;
 static constexpr int fractalCSize = 1024;
 static constexpr int fractalMxSize = 32;
 static constexpr int cElemSize = 4;
@@ -940,6 +943,8 @@ struct Tile {
         return TileConfig::fixedRowSize;
       } else if constexpr (SFractalSize_ == TileConfig::fractalMxSize) {
         return TileConfig::fixedMxRowSize;
+      } else if constexpr (SFractalSize_ == TileConfig::fractalGemvSize) {
+        return TileConfig::fixedGemvRowSize;
       } else {
         return isBoxedLayout
                    ? (isInnerRowMajor ? TileConfig::fixedRowSize
@@ -1047,6 +1052,7 @@ struct Tile {
          );
 
     static_assert(SFractalSize_ == TileConfig::fractalABSize ||
+                      SFractalSize_ == TileConfig::fractalGemvSize ||
                       SFractalSize_ == TileConfig::fractalCSize ||
                       SFractalSize_ == TileConfig::fractalMxSize,
                   "SFractalSize_ illegal");
@@ -1111,6 +1117,20 @@ using TileLeft =
 
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+struct TileLeftGemvHelper {
+    // 拆成 n个 1*16 , 向上取整
+    static constexpr int Rows = CeilDivision(Cols_, BLOCK_LEN);
+    using type = Tile<TileType::Left, Element_, Rows , BLOCK_LEN, 
+        BLayout::RowMajor, Rows, BLOCK_LEN, SLayout::RowMajor, TileConfig::fractalGemvSize>;
+};
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using TileLeftGemv =
+    typename TileLeftGemvHelper<Element_, Rows_, Cols_, RowValid_, ColValid_>::type;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeftCompact =
     Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_,
          ColValid_, SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
@@ -1122,6 +1142,20 @@ template <typename Element_, const int Rows_, const int Cols_,
 using TileLeft =
     Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_,
          ColValid_, SLayout::RowMajor, TileConfig::fractalABSize>;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+struct TileLeftGemvHelper {
+    // 拆成 n个 1*16 , 向上取整
+    static constexpr int Rows = CeilDivision(Cols_, BLOCK_LEN);
+    using type = Tile<TileType::Left, Element_, Rows , BLOCK_LEN, 
+        BLayout::ColMajor, Rows, BLOCK_LEN, SLayout::RowMajor, TileConfig::fractalGemvSize>;
+};
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using TileLeftGemv =
+    typename TileLeftGemvHelper<Element_, Rows_, Cols_, RowValid_, ColValid_>::type;
 
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>

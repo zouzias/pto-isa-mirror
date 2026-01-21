@@ -67,6 +67,8 @@ if __name__ == "__main__":
         "TMATMULTest.case2",
         "TMATMULTest.case3",
         "TMATMULTest.case4",
+        "TMATMULTest.case5",  # gemv 1*n 
+        "TMATMULTest.case6",
         "TMATMULBIASTest.case1",
         "TMATMULBIASTest.case2",
         "TMATMULBIASTest.case3",
@@ -81,6 +83,8 @@ if __name__ == "__main__":
         tmatmulParams(np.int8, np.int8, np.int32, 65, 90, 89, False),
         tmatmulParams(np.float16, np.float16, np.float32, 5, 75, 11, False),
         tmatmulParams(np.float16, np.float16, np.float32, 1, 256, 64, False),
+        tmatmulParams(np.float16, np.float16, np.float32, 1, 16, 32, False),
+        tmatmulParams(np.float16, np.float16, np.float32, 1, 512, 32, False),
         # bias test
         tmatmulParams(np.float16, np.float16, np.float32, 26, 100, 94, True, np.float32),
         tmatmulParams(np.float16, np.float16, np.float32, 101, 288, 67, True, np.float32),
