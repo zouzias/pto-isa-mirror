@@ -80,6 +80,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TTri.hpp"
 #include "pto/npu/a2a3/TLRelu.hpp"
 #include "pto/npu/a2a3/TPrefetch.hpp"
+#include "pto/npu/a2a3/TPrelu.hpp"
 #include "pto/npu/a2a3/TRem.hpp"
 #include "pto/npu/a2a3/TInsert.hpp"
 #endif
@@ -96,6 +97,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TXorS.hpp"
 #include "pto/npu/a5/TShlS.hpp"
 #include "pto/npu/a5/TShrS.hpp"
+#include "pto/npu/a5/TPrelu.hpp"
+#include "pto/npu/a5/TRem.hpp"
 #include "pto/npu/a5/TAddS.hpp"
 #include "pto/npu/a5/TSubS.hpp"
 #include "pto/npu/a5/TDivS.hpp"
