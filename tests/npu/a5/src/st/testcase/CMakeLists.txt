@@ -194,6 +194,7 @@ set(ALL_TESTCASES
     tcolexpand
     tnot
     trelu
+    tinsert_custom
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)

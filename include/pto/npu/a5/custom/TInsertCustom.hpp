@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TINSERT_HPP
-#define TINSERT_HPP
+#ifndef TINSERT_CUSTOM_HPP
+#define TINSERT_CUSTOM_HPP
 
 #ifndef TINSERT_MODE_DEFINED
 #define TINSERT_MODE_DEFINED
@@ -25,14 +25,15 @@ namespace pto {
 
 template <typename T, typename DstTileData, typename SrcTileData>
 AICORE inline void ComputeNZBlockParams(uint32_t validRow, uint32_t validCol, uint32_t dstRow, TInsertMode mode,
-        uint16_t &burstNum, uint16_t &burstLen, uint16_t &srcGap, uint16_t &dstGap, uint32_t &alignedRow,
-        uint32_t &c0Size, uint32_t &dstOffset, uint32_t indexRow = 0, uint32_t indexCol = 0)
+        uint16_t &burstNum, uint16_t &burstLen, uint16_t &srcGap, uint16_t &dstGap, uint32_t &dstOffset,
+        uint32_t indexRow = 0, uint32_t indexCol = 0)
 {
+    
     constexpr uint32_t typeSize = sizeof(T);
-    c0Size = BLOCK_BYTE_SIZE / typeSize;
+    uint32_t c0Size = BLOCK_BYTE_SIZE / typeSize;
     constexpr uint32_t nzRow = FRACTAL_NZ_ROW;
     burstNum = CeilDivision(validCol, c0Size);
-    alignedRow = CeilDivision(validRow, nzRow) * nzRow;
+    uint32_t alignedRow = CeilDivision(validRow, nzRow) * nzRow;
     burstLen = (alignedRow * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
     dstOffset = static_cast<uint32_t>(indexRow * c0Size);
     switch (mode) {
@@ -44,11 +45,11 @@ AICORE inline void ComputeNZBlockParams(uint32_t validRow, uint32_t validCol, ui
         case TInsertMode::SPLIT2_NZ_PLUS_1:
         case TInsertMode::SPLIT4_NZ_PLUS_1:
             srcGap = 0;
-            dstGap = dstRow - validRow + 1;
+            dstGap = static_cast<uint16_t>(dstRow - validRow + 1);
             break;
         default:
             srcGap = 0;
-            dstGap = dstRow - validRow + 1;
+            dstGap = static_cast<uint16_t>(dstRow - validRow + 1);
             break;
     }
 }
@@ -61,8 +62,9 @@ __tf__ AICORE void TInsertImpl(typename DstTileData::TileDType __out__ dst,
     __cbuf__ T *dstAddr = (__cbuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     uint16_t burstNum, burstLen, srcGap, dstGap;
-    uint32_t alignedRow, c0Size, dstOffset;
-    ComputeNZBlockParams<T, DstTileData, SrcTileData>(validRow, validCol, dstRow, mode, burstNum, burstLen, srcGap, dstGap, alignedRow, c0Size, dstOffset, indexRow, indexCol);
+    uint32_t dstOffset;
+    ComputeNZBlockParams<T, DstTileData, SrcTileData>(validRow, validCol, dstRow, mode, burstNum, burstLen, srcGap,
+            dstGap, dstOffset, indexRow, indexCol);
     __cbuf__ T *dstAddr2 = dstAddr + dstOffset;
     copy_ubuf_to_cbuf(dstAddr2, srcAddr, 0, burstNum, burstLen, srcGap, dstGap);
 }
@@ -132,29 +134,29 @@ __tf__ AICORE void TInsertSplit4Impl(typename DstTileData::TileDType __out__ dst
     copy_ubuf_to_cbuf(dstQ3, srcQ3, 0, quarterBurstNum, burstLen, 0, 1);
 }
 
-template <TInsertMode mode = TInsertMode::SPLIT4_NZ_PLUS_1, typename DstTileData, typename SrcTileData>
-PTO_INTERNAL void TINSERT2_IMPL(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0)
+template <TInsertMode mode = TInsertMode::NZ, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TINSERT_CUSTOM(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0)
 {
     using T = typename SrcTileData::DType;
     static_assert(DstTileData::Loc == TileType::Mat,
-            "TINSERT: Destination must be Mat tile (L1/cbuf)");
+            "TINSERT CUSTOM : Destination must be Mat tile (L1/cbuf)");
     static_assert(SrcTileData::Loc == TileType::Vec,
-            "TINSERT: Source must be Vec tile (UB/ubuf)");
+            "TINSERT CUSTOM : Source must be Vec tile (UB/ubuf)");
     static_assert(std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
-            "TINSERT: Source and destination data types must match");
+            "TINSERT CUSTOM : Source and destination data types must match");
     static_assert(!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::RowMajor),
-            "TINSERT: Source must be NZ format (column-major, RowMajor fractal)");
+            "TINSERT CUSTOM : Source must be NZ format (column-major, RowMajor fractal)");
     static_assert(!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor),
-            "TINSERT: Destination must be NZ format (column-major, RowMajor fractal)");
+            "TINSERT CUSTOM : Destination must be NZ format (column-major, RowMajor fractal)");
     static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
     (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
     (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
     (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value),
-            "TINSERT: Dst and src must be float/int32_t/half/bfloat16_t/int8_t/float8_e4m3_t/float8_e5m2_t/hifloat8_t.");
+            "TINSERT CUSTOM : Dst and src must be float/int32_t/half/bfloat16_t/int8_t/float8_e4m3_t/float8_e5m2_t/hifloat8_t.");
     PTO_ASSERT(indexRow + SrcTileData::Rows <= DstTileData::Rows,
-        "The sum of indexRow and srcRow should be less than dstRow!");
+            "TINSERT CUSTOM : The sum of indexRow and srcRow should be less than dstRow!");
     PTO_ASSERT(indexCol + SrcTileData::Cols <= DstTileData::Cols,
-        "The sum of indexCol and srcCol should be less than dstCol!");
+            "TINSERT CUSTOM : The sum of indexCol and srcCol should be less than dstCol!");
     
     uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
     uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());

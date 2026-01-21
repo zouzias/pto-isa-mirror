@@ -20,11 +20,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/custom/TSyncCVID.hpp>
 #include <pto/npu/a5/custom/TSync_Custom.hpp>
 #include <pto/npu/a5/TMov.hpp>
+#include <pto/npu/a5/custom/TInsertCustom.hpp>
 #endif
 #include "pto_macro_matmul.hpp"
 #include "pto_macro_fa_softmax.hpp"
 #include "pto_macro_fa_gu.hpp"
-#include "TInsert2.hpp"
 
 using namespace std;
 using namespace pto;
@@ -570,7 +570,7 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             
             TMOV(xExpSubNZ, xExpSubND);
             
-            TINSERT2_IMPL<TInsertMode::NZ>(pMatTile, xExpSubNZ, static_cast<uint32_t>(row_offset), 0);
+            TINSERT_CUSTOM<TInsertMode::NZ>(pMatTile, xExpSubNZ, static_cast<uint32_t>(row_offset), 0);
         }
 #else
         using GlobalPTileHalfSub =
