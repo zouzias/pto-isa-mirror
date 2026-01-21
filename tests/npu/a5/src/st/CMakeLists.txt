@@ -67,17 +67,38 @@ add_link_options(
     -s
     -Wl,-z,relro
     -Wl,-z,now
-    )
-
-set(CMAKE_CCE_COMPILE_OPTIONS
-    -xcce
-    -Xhost-start -Xhost-end
-    "SHELL:-mllvm -cce-aicore-stack-size=0x8000"
-    "SHELL:-mllvm -cce-aicore-function-stack-size=0x8000"
-    "SHELL:-mllvm -cce-aicore-record-overflow=true"
-    "SHELL:-mllvm -cce-aicore-addr-transform"
-    "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
 )
+
+if(SOC_VERSION STREQUAL "Ascend910_9599")
+    set(CCE_AICORE_ARCH dav-c310)
+    set(CMAKE_CCE_COMPILE_OPTIONS
+        -xcce
+        "SHELL:-mllvm -cce-aicore-stack-size=0x8000"
+        "SHELL:-mllvm -cce-aicore-function-stack-size=0x8000"
+        "SHELL:-mllvm -cce-aicore-record-overflow=true"
+        "SHELL:-mllvm -cce-aicore-addr-transform"
+        "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
+    )
+elseif(SOC_VERSION STREQUAL "Kirin9030")
+    set(CCE_AICORE_ARCH dav-l311)
+    set(CMAKE_CCE_COMPILE_OPTIONS
+        -xcce
+        -DPTO_COMPILE_KIRIN9030
+        "SHELL:--cce-aicore-input-parameter-size=0x1000"
+        "SHELL:-mllvm -cce-aicore-function-stack-size=0x4000"
+        "SHELL:-mllvm -cce-aicore-record-overflow=true"
+        "SHELL:-mllvm -cce-aicore-addr-transform"
+        "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
+        "SHELL:-mllvm --cce-aicore-or-combine=false"
+        "SHELL:-mllvm -instcombine-code-sinking=false"
+        "SHELL:-mllvm --cce-aicore-jump-expand=true"
+    )
+    if(RUN_MODE STREQUAL "npu")
+        set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} -cce-kernel-launch=aclrtLaunch")
+    endif()
+else()
+    message(FATAL_ERROR "Unsupported SOC_VERSION: ${SOC_VERSION}")
+endif()
 
 if(DEBUG_MODE)
     message(STATUS "Debug Mode Enabled, Add Debug Options")

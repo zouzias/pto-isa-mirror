@@ -7,17 +7,21 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+// Implementation of interface adaptation layer for device-side and cloud-side compatibility
+#ifndef ARCH_MACRO_HPP
+#define ARCH_MACRO_HPP
 
-#ifndef PTO_INST_HPP
-#define PTO_INST_HPP
-
-#ifdef __CPU_SIM
-#include "pto/common/cpu_stub.hpp"
+#if PTO_COMPILE_KIRIN9030
+#define float8_e4m3_t uint8_t
+#define float8_e5m2_t uint8_t  
+#define hifloat8_t uint8_t
+// #define bfloat16_t half
+#define float4_e2m1x2_t uint8_t
+#define float4_e1m2x2_t uint8_t
+#define float8_e8m0_t uint8_t
+#define __tf__
+#define __in__
+#define __out__
+#define __cce_get_tile_ptr
 #endif
-
-
-#include <pto/common/arch_macro.hpp>
-#include <pto/common/pto_tile.hpp>
-#include "pto/common/pto_instr.hpp"
-
 #endif

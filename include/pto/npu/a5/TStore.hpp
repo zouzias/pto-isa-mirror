@@ -47,7 +47,7 @@ PTO_INTERNAL constexpr QuantMode_t GetScalarPreQuantModeGm()
         } else if constexpr (std::is_same<DstType, __gm__ bfloat16_t>::value) {
             quantPre = QuantMode_t::QF322BF16_PRE;
         }
-#ifdef __CCE_AICORE__
+#if defined (__CCE_AICORE__) && __NPU_ARCH__ != 3113
         else if constexpr (std::is_same<DstType, __gm__ float8_e4m3_t>::value) {
             quantPre = QuantMode_t::QF322FP8_PRE;
         } else if constexpr (std::is_same<DstType, __gm__ float>::value) {
@@ -80,7 +80,7 @@ PTO_INTERNAL constexpr QuantMode_t GetVectorPreQuantModeGm()
         } else if constexpr (std::is_same<DstType, __gm__ bfloat16_t>::value) {
             quantPre = QuantMode_t::VQF322BF16_PRE;
         }
-#ifdef __CCE_AICORE__
+#if defined (__CCE_AICORE__) && __NPU_ARCH__ != 3113
         else if constexpr (std::is_same<DstType, __gm__ float8_e4m3_t>::value) {
             quantPre = QuantMode_t::VQF322FP8_PRE;
         } else if constexpr (std::is_same<DstType, __gm__ float>::value) {
@@ -343,7 +343,7 @@ template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TStoreInstr(typename GlobalData::DType *dst, __ubuf__ typename TileData::DType *src, uint32_t nBurst,
     uint32_t lenBurst, uint64_t burstDstStride, uint32_t burstSrcStride)
 {
-    copy_ubuf_to_gm_align_v2(dst, src, 0, nBurst, lenBurst, 0, burstDstStride, burstSrcStride);
+    pto_copy_ubuf_to_gm_align_v2(dst, src, 0, nBurst, lenBurst, 0, burstDstStride, burstSrcStride);
 }
 
 template <typename GlobalData, typename TileData>

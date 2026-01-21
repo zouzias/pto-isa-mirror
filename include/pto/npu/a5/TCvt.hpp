@@ -62,14 +62,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-// Import rounding type definitions from __cce_simd namespace
-using __cce_simd::RoundRType;
-using __cce_simd::RoundAType;
-using __cce_simd::RoundFType;
-using __cce_simd::RoundCType;
-using __cce_simd::RoundZType;
-using __cce_simd::RoundOType;
-
 /**
  * Unified enum for all type conversion modes
  * Describes the vcvt intrinsic parameter pattern used for conversion
@@ -406,6 +398,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     }
 }
 
+#if __NPU_ARCH__ != 3113
 /**
  * Cast 32-bit to hifloat8 - 1D version
  * 
@@ -462,6 +455,7 @@ inline AICORE void cast16toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
         // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
+#endif
 
 //=============================================================================================
 // 2D Helper Templates - For non-contiguous data with padding
@@ -977,6 +971,7 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ floa
     cast32toS64<R>(dst, src, validRows, validCols, dstCols, srcCols);
 }
 
+#if __NPU_ARCH__ != 3113
 /**
  * FP32 to FP8_E4M3
  * Conversion: f32 -> e4m3 #rnd #sat #pp
@@ -1048,6 +1043,7 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ f
     // Same complex logic as castData - just reuse it
     castData<R>(dst, src, validRows, validCols, dstCols, srcCols);
 }
+#endif
 
 //---------------------------------------------------------------------------------------------
 // Source: FP16 (half) - 2D versions
@@ -1108,7 +1104,7 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ half
     cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
 }
 
-
+#if __NPU_ARCH__ != 3113
 /** FP16 -> H8 #rnd #sat #part */
 template <typename R>
 inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
@@ -1138,6 +1134,7 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ h
     // Same complex logic as castData - just reuse it
     castData<R>(dst, src, validRows, validCols, dstCols, srcCols);
 }
+#endif
 
 //---------------------------------------------------------------------------------------------
 // Source: BFloat16 - 2D versions
@@ -1417,6 +1414,7 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int6
     castS64to32<void>(dst, src, validRows, validCols, dstCols, srcCols);
 }
 
+#if __NPU_ARCH__ != 3113
 //---------------------------------------------------------------------------------------------
 // Source: FP8 variants (float8_e4m3_t, float8_e5m2_t, hifloat8_t) - 2D versions
 //---------------------------------------------------------------------------------------------
@@ -1457,6 +1455,7 @@ template <typename R>
 inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
     cast8to32<vector_hif8>(dst, src, validRows, validCols, dstCols, srcCols);
 }
+#endif
 
 //=============================================================================================
 // castData_1D_NoPostUpdate Overloads - Organized by Source Type (8→16→32→64-bit sources)
@@ -1495,6 +1494,7 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int8
     cast8to32_1D_NoPostUpdate<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols);
 }
 
+#if __NPU_ARCH__ != 3113
 // Source: FP8_E4M3
 template <typename R>
 inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
@@ -1512,6 +1512,7 @@ template <typename R>
 inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
     cast8to32_1D_NoPostUpdate<vector_hif8>(dst, src, validRows, validCols, dstCols, srcCols);
 }
+#endif
 
 //---------------------------------------------------------------------------------------------
 // Source: 16-bit types (half/fp16, bfloat16, int16_t) - 1D versions
@@ -1547,6 +1548,7 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ half
     cast16to8_1D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
 }
 
+#if __NPU_ARCH__ != 3113
 // Note: FP16 -> FP8_E5M2 and FP16 -> FP8_E4M3 conversions are NOT supported
 // Only FP16 -> Hifloat8 (H8) conversion is supported
 
@@ -1554,6 +1556,7 @@ template <typename R>
 inline AICORE void castData_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
     cast16toH8_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols);
 }
+#endif
 
 // Source: BFloat16
 template <typename R>
@@ -1634,6 +1637,7 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ floa
     cast32toS64_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols);
 }
 
+#if __NPU_ARCH__ != 3113
 template <typename R>
 inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
     cast32to8_1D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, validRows, validCols, dstCols, srcCols);
@@ -1648,6 +1652,7 @@ template <typename R>
 inline AICORE void castData_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
     cast32toH8_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols);
 }
+#endif
 
 // Source: I32 (signed 32-bit integer)
 template <typename R>

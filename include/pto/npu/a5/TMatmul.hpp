@@ -39,7 +39,7 @@ __tf__ AICORE void TMatmul(typename TileRes::TileDType __out__ cMatrix, typename
     __ca__ typename TileLeft::DType *a = (__ca__ typename TileLeft::DType *)__cce_get_tile_ptr(aMatrix);
     __cb__ typename TileRight::DType *b = (__cb__ typename TileRight::DType *)__cce_get_tile_ptr(bMatrix);
 
-    mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
+    pto_mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
@@ -56,7 +56,7 @@ __tf__ AICORE void TMatmulBias(typename TileRes::TileDType __out__ cMatrix,
     uint64_t xd = ((uint64_t)c) & 0xffffffffULL | ((bias & 0xffffffffULL) << 32);
     c = (__cc__ typename TileRes::DType *)xd;
 
-    mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
+    pto_mad(c, a, b, m, k, n, static_cast<uint8_t>(Phase), gemvCtrl, cmatrixSource, cmatrixInitVal);
 }
 
 template <typename TileRes, typename TileLeft, typename TileRight, bool biasBufferCtrl, bool cmatrixInitVal>
@@ -141,6 +141,24 @@ PTO_INTERNAL void CheckMadValid()
     using AType = typename TileLeft::DType;
     using BType = typename TileRight::DType;
     using CType = typename TileRes::DType;
+#if __NPU_ARCH__ == 3113
+    static_assert(std::is_same_v<CType, int32_t> || std::is_same_v<CType, uint32_t> || std::is_same_v<CType, half>,
+        "TMATMUL: Acc Type support int32_t/uint32_t/half.");
+    if constexpr (std::is_same_v<CType, half>) {
+        static_assert(std::is_same_v<AType, half> && std::is_same_v<BType, half>,
+            "TMATMUL: Left Type and Rigth Type must be half when Acc Type is half.");
+    } else if constexpr (std::is_same_v<CType, uint32_t>) {
+        static_assert(std::is_same_v<AType, uint8_t> && std::is_same_v<BType, uint8_t>,
+            "TMATMUL: Left Type and Rigth Type must be uint8_t when Acc Type is uint32_t.");
+    } else if constexpr (std::is_same_v<CType, int32_t>) {
+        static_assert((std::is_same_v<AType, int8_t> && std::is_same_v<BType, int8_t>) ||
+            (std::is_same_v<AType, uint8_t> && std::is_same_v<BType, int8_t>) ||
+            (std::is_same_v<AType, uint8_t> && std::is_same_v<BType, uint8_t>) ||
+            (std::is_same_v<AType, int16_t> && std::is_same_v<BType, int8_t>),
+            "TMATMUL: [LeftType, RigthType] must be [uint8_t, int8_t] / [uint8_t, uint8_t] / [int16_t, int8_t]"
+            " when Acc Type is int32_t.");
+    }
+#else
     static_assert(std::is_same_v<CType, int32_t> || std::is_same_v<CType, float>, "Acc Type support int32_t or float.");
     if constexpr (std::is_same_v<CType, int32_t>) {
         static_assert(std::is_same_v<AType, int8_t> && std::is_same_v<BType, int8_t>,
@@ -156,6 +174,7 @@ PTO_INTERNAL void CheckMadValid()
                           (std::is_same_v<AType, hifloat8_t> && std::is_same_v<BType, hifloat8_t>),
             "No supported data type when Acc Type is float.");
     }
+#endif
     static_assert(
         ((TileLeft::Loc == TileType::Left) && (!TileLeft::isRowMajor) && (TileLeft::SFractal == SLayout::RowMajor)) &&
             ((TileRight::Loc == TileType::Right) && (TileRight::isRowMajor) &&
