@@ -119,6 +119,7 @@ __tf__ AICORE void TGather_b16_bc(typename TileDataD::TileDType __out__ dst,
     }
 }
 
+#if __NPU_ARCH__ != 3113
 template <typename TileDataD, typename TileDataS0, typename TileDataS1>
 __tf__ AICORE void TGather_fp8_e4m3(typename TileDataD::TileDType __out__ dst,
     typename TileDataS0::TileDType __in__ src0, typename TileDataS1::TileDType __in__ src1, unsigned validCol,
@@ -176,6 +177,7 @@ __tf__ AICORE void TGather_fp8_e5m2(typename TileDataD::TileDType __out__ dst,
         }
     }
 }
+#endif
 
 template <typename TileDataD, typename TileDataS0, typename TileDataS1>
 AICORE void TGather(typename TileDataD::TileDType __out__ dst, typename TileDataS0::TileDType __in__ src0,
@@ -187,11 +189,14 @@ AICORE void TGather(typename TileDataD::TileDType __out__ dst, typename TileData
         TGather_b16<TileDataD, TileDataS0, TileDataS1>(dst, src0, src1, validCol, validRow);
     } else if constexpr (sizeof(typename TileDataS0::DType) == 2 && sizeof(typename TileDataS1::DType) == 4) {
         TGather_b16_bc<TileDataD, TileDataS0, TileDataS1>(dst, src0, src1, validCol, validRow);
-    } else if constexpr (std::is_same<typename TileDataS0::DType, float8_e4m3_t>::value) {
+    }
+#if __NPU_ARCH__ != 3113
+    else if constexpr (std::is_same<typename TileDataS0::DType, float8_e4m3_t>::value) {
         TGather_fp8_e4m3<TileDataD, TileDataS0, TileDataS1>(dst, src0, src1, validCol, validRow);
     } else {
         TGather_fp8_e5m2<TileDataD, TileDataS0, TileDataS1>(dst, src0, src1, validCol, validRow);
     }
+#endif
 }
 
 template <typename TileDataD, typename TileDataS0, typename TileDataS1>
