@@ -178,6 +178,7 @@ tshls
 tshrs
 txor
 txors
+tsoftmax_fa
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
