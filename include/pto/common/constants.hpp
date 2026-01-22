@@ -252,14 +252,14 @@ struct PadValueMap<uint8_t, PadValue::Max> {
 };
 
 #if defined(REGISTER_BASE)
-template <PadValue PadVal>
-struct PadValueMap<float4_e1m2x2_t, PadVal> {
-    static constexpr auto value = uint8_t(0);
-};
-template <PadValue PadVal>
-struct PadValueMap<float4_e2m1x2_t, PadVal> {
-    static constexpr auto value = uint8_t(0);
-};
+// template <PadValue PadVal>
+// struct PadValueMap<float4_e1m2x2_t, PadVal> {
+//     static constexpr auto value = uint8_t(0);
+// };
+// template <PadValue PadVal>
+// struct PadValueMap<float4_e2m1x2_t, PadVal> {
+//     static constexpr auto value = uint8_t(0);
+// };
 #endif
 
 template <typename TileData>
