@@ -14,6 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+constexpr const int SHIFT_VECTOR = 8; 
+
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol, int32_t dstRow, int32_t dstCol>
 PTO_INTERNAL void TExtractToANonTranspose(
     __ca__ DstType *dstAddr, __cbuf__ SrcType *srcAddr, uint16_t indexRow, uint16_t indexCol)
@@ -97,6 +99,51 @@ __tf__ AICORE void TExtractToA(typename DstTileData::TileDType __out__ dst, type
         PTO_ASSERT((indexRow % fractalSize) == 0, "indexRow must be aligned");
         PTO_ASSERT((indexCol % fractalSize) == 0, "indexCol must be aligned");
         TExtractToATranspose<SrcType, DstType, srcRow, srcCol, dstRow, dstCol>(dstAddr, srcAddr, indexRow, indexCol);
+    }
+}
+
+template <typename DstTileData, typename SrcTileData, bool Transpose>
+__tf__ AICORE void TExtractToAVector(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
+    uint16_t indexRow, uint16_t indexCol)
+{
+    using SrcType = std::conditional_t<(sizeof(typename SrcTileData::DType) == 2), half, typename SrcTileData::DType>;
+    using DstType = std::conditional_t<(sizeof(typename DstTileData::DType) == 2), half, typename DstTileData::DType>;
+    __cbuf__ SrcType *srcAddr = (__cbuf__ SrcType *)__cce_get_tile_ptr(src);
+    __ca__ DstType *dstAddr = (__ca__ DstType *)__cce_get_tile_ptr(dst);
+
+    constexpr int32_t srcRow = SrcTileData::Rows;
+    constexpr int32_t srcCol = SrcTileData::Cols;
+    constexpr int32_t dstRow = DstTileData::Rows;
+    constexpr int32_t dstCol = DstTileData::Cols;
+    constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(SrcType);
+    constexpr int32_t fractalSize = (sizeof(SrcType) == 1) ? 32 : 16;
+
+    if constexpr (!Transpose) {
+        // srcRow/srcCol/dstRow/dstCol对齐校验
+        static_assert((srcCol % c0Size) == 0, "srcCol must be aligned to C0Size");
+        static_assert((dstRow % 16) == 0, "dstRow must be aligned to 16");
+        static_assert((dstCol % c0Size) == 0, "dstCol must be aligned to C0Size");
+        PTO_ASSERT((indexRow % 16) == 0, "indexRow must be aligned to 16");
+        PTO_ASSERT((indexCol % c0Size) == 0, "indexCol must be aligned to C0Size");
+
+        uint16_t baseIdx = indexCol * sizeof(SrcType) >> SHIFT_VECTOR ;
+        uint8_t repeatTimes = CeilDivision(srcCol * sizeof(SrcType), CUBE_BLOCK_SIZE);
+        uint16_t srcStride = 1;
+        uint16_t dstStride = 0;
+        load_cbuf_to_ca(dstAddr, srcAddr, baseIdx, repeatTimes, srcStride, dstStride, 0 /*sid*/, false, 0 /*addr_cal_mode*/);
+    } else {
+        // L1->L0A:load_cbuf_to_ca_transpose
+        static_assert((srcRow % fractalSize) == 0, "srcCol must be aligned");
+        static_assert((dstRow % fractalSize) == 0, "dstRow must be aligned");
+        static_assert((dstCol % fractalSize) == 0, "dstCol must be aligned");
+        PTO_ASSERT((indexRow % fractalSize) == 0, "indexRow must be aligned");
+        PTO_ASSERT((indexCol % fractalSize) == 0, "indexCol must be aligned");
+
+        uint16_t baseIdx = indexRow * sizeof(SrcType) >> SHIFT_VECTOR ;
+        uint8_t repeatTimes = CeilDivision(srcRow * sizeof(SrcType), CUBE_BLOCK_SIZE);
+        uint16_t srcStride = 1;
+        uint16_t dstStride = 0;
+        load_cbuf_to_ca(dstAddr, srcAddr, baseIdx, repeatTimes, srcStride, dstStride, 0 /*sid*/, false, 0 /*addr_cal_mode*/);
     }
 }
 
@@ -433,6 +480,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
             if constexpr (DstTileData::Compact == CompactMode::Normal) {
                 TExtractToACompact<DstTileData, SrcTileData, false>(
                     dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
+            } else if constexpr (DstTileData::Compact == CompactMode::Vector) {
+                TExtractToAVector<DstTileData, SrcTileData, false>(dst.data(), src.data(), indexRow, indexCol);
             } else {
                 TExtractToA<DstTileData, SrcTileData, false>(dst.data(), src.data(), indexRow, indexCol);
             }
@@ -440,7 +489,9 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
             if constexpr (DstTileData::Compact == CompactMode::Normal) {
                 TExtractToACompact<DstTileData, SrcTileData, true>(
                     dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
-            } else {
+            } else if constexpr (DstTileData::Compact == CompactMode::Vector) {
+                TExtractToAVector<DstTileData, SrcTileData, true>(dst.data(), src.data(), indexRow, indexCol);
+            }  else {
                 TExtractToA<DstTileData, SrcTileData, true>(dst.data(), src.data(), indexRow, indexCol);
             }
         }

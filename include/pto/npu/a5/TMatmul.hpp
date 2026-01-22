@@ -22,6 +22,7 @@ enum class AccPhase : uint8_t {
     Partial = 0x2,
     Final = 0x3,
 };
+
 template <typename TileLeft>
 PTO_INTERNAL constexpr bool GetGemvCtrl()
 {
@@ -29,11 +30,12 @@ PTO_INTERNAL constexpr bool GetGemvCtrl()
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
-    bool cmatrixSource, bool cmatrixInitVal>
+    bool cmatrixSource, bool cmatrixInitVal, bool gemvCtrl>
 __tf__ AICORE void TMatmul(typename TileRes::TileDType __out__ cMatrix, typename TileLeft::TileDType __in__ aMatrix,
     typename TileRight::TileDType __in__ bMatrix, uint16_t m, uint16_t k, uint16_t n)
 {
-    constexpr bool gemvCtrl = GetGemvCtrl<TileLeft>();
+    // constexpr bool gemvCtrl = GetGemvCtrl<TileLeft>();
+    // when gemv = 1 , GEMV mode is disable.
 
     __cc__ typename TileRes::DType *c = (__cc__ typename TileRes::DType *)__cce_get_tile_ptr(cMatrix);
     __ca__ typename TileLeft::DType *a = (__ca__ typename TileLeft::DType *)__cce_get_tile_ptr(aMatrix);
@@ -43,12 +45,12 @@ __tf__ AICORE void TMatmul(typename TileRes::TileDType __out__ cMatrix, typename
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
-    bool cmatrixSource, bool cmatrixInitVal>
+    bool cmatrixSource, bool cmatrixInitVal, bool gemvCtrl>
 __tf__ AICORE void TMatmulBias(typename TileRes::TileDType __out__ cMatrix,
     typename TileLeft::TileDType __in__ aMatrix, typename TileRight::TileDType __in__ bMatrix, uint64_t bias,
     uint16_t m, uint16_t k, uint16_t n)
 {
-    constexpr bool gemvCtrl = GetGemvCtrl<TileLeft>();
+    // constexpr bool gemvCtrl = GetGemvCtrl<TileLeft>();
 
     __cc__ typename TileRes::DType *c = (__cc__ typename TileRes::DType *)__cce_get_tile_ptr(cMatrix);
     __ca__ typename TileLeft::DType *a = (__ca__ typename TileLeft::DType *)__cce_get_tile_ptr(aMatrix);
@@ -134,7 +136,6 @@ PTO_INTERNAL void CheckDynamicMmad(uint16_t aMatrixRow, uint16_t aMatrixCol, uin
     PTO_ASSERT(bMatrixCol >= 1 && bMatrixCol <= elementSize, "ERROR: The range of valid bMatrixCol is [1, 4095].");
 }
 
-
 template <typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void CheckMadValid()
 {
@@ -175,7 +176,7 @@ PTO_INTERNAL void TMATMUL_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &b
     uint16_t n = bMatrix.GetValidCol();
     CheckDynamicMmad(m, k, n);
 
-    TMatmul<Phase, TileRes, TileLeft, TileRight, false, true>(cMatrix.data(), aMatrix.data(), bMatrix.data(), m, k, n);
+    TMatmul<Phase, TileRes, TileLeft, TileRight, false, true, true>(cMatrix.data(), aMatrix.data(), bMatrix.data(), m, k, n);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
@@ -189,7 +190,8 @@ PTO_INTERNAL void TMATMUL_ACC_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, Tile
     uint16_t n = bMatrix.GetValidCol();
     CheckDynamicMmad(m, k, n);
 
-    TMatmul<Phase, TileRes, TileLeft, TileRight, false, false>(cOutMatrix.data(), aMatrix.data(), bMatrix.data(), m, k, n);
+    TMatmul<Phase, TileRes, TileLeft, TileRight, false, false, true>(
+        cOutMatrix.data(), aMatrix.data(), bMatrix.data(), m, k, n);
 }
 
 // Convenience overload where the accumulator tile is both the input and output.
@@ -214,7 +216,46 @@ PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRig
     uint16_t n = bMatrix.GetValidCol();
     CheckDynamicMmad(m, k, n);
 
-    TMatmulBias<Phase, TileRes, TileLeft, TileRight, true, false>(
+    TMatmulBias<Phase, TileRes, TileLeft, TileRight, true, false, true>(
+        cMatrix.data(), aMatrix.data(), bMatrix.data(), biasData.data(), m, k, n);
+}
+
+template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
+PTO_INTERNAL void TGEMV_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
+{
+    CheckMadValid<TileRes, TileLeft, TileRight>();
+    uint16_t m = 1;
+    uint16_t k = bMatrix.GetValidRow();
+    uint16_t n = bMatrix.GetValidCol();
+    // CheckDynamicMad<isGemv>(m, k, n);
+    TMatmul<Phase, TileRes, TileLeft, TileRight, false, true, false>(
+        cMatrix.data(), aMatrix.data(), bMatrix.data(), m, k, n);
+}
+
+template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
+PTO_INTERNAL void TGEMV_ACC_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix)
+{
+    CheckMadValid<TileRes, TileLeft, TileRight>();
+    uint16_t m = 1;
+    uint16_t k = bMatrix.GetValidRow();
+    uint16_t n = bMatrix.GetValidCol();
+    // CheckDynamicMad(m, k, n);
+    TMatmul<Phase, TileRes, TileLeft, TileRight, false, false, false>(
+        cOutMatrix.data(), aMatrix.data(), bMatrix.data(), m, k, n);
+}
+
+template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight, typename TileBias>
+PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData)
+{
+    CheckMadValid<TileRes, TileLeft, TileRight>();
+    static_assert(std::is_same_v<typename TileRes::DType, typename TileBias::DType>, "No supported bias data type.");
+    static_assert((TileBias::Loc == TileType::Bias) && (TileBias::Rows == 1), "TileBias must be single row.");
+    uint16_t m = 1;
+    uint16_t k = bMatrix.GetValidRow();
+    uint16_t n = bMatrix.GetValidCol();
+    // CheckDynamicMad(m, k, n);
+
+    TMatmulBias<Phase, TileRes, TileLeft, TileRight, true, false, false>(
         cMatrix.data(), aMatrix.data(), bMatrix.data(), biasData.data(), m, k, n);
 }
 

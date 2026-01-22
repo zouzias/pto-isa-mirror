@@ -115,7 +115,7 @@ __tf__ AICORE void TExtractToA(typename DstTileData::TileDType __out__ dst, type
     constexpr int c0Size = isFp4Type ? BLOCK_BYTE_SIZE * KHALF / typeSize : BLOCK_BYTE_SIZE / typeSize;
 
     if constexpr (!Transpose) {
-        static_assert((srcRow % FRACTAL_NZ_ROW) == 0, "srcRow must be aligned to 16");
+        static_assert((srcRow % FRACTAL_NZ_ROW) == 0 || srcRow == 1, "srcRow must be aligned to 16 or srcRow == 1.");
         static_assert((srcCol % c0Size) == 0, "srcCol must be aligned to C0Size");
         static_assert((dstRow % FRACTAL_NZ_ROW) == 0, "dstRow must be aligned to 16");
         static_assert((dstCol % c0Size) == 0, "dstCol must be aligned to C0Size");
