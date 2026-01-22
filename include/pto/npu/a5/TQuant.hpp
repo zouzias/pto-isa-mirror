@@ -77,7 +77,51 @@ PTO_INTERNAL void AbsReduceMax_f32_opt(__ubuf__ float* srcPtr,
     }
 }
 
-// Computing scalar focus and exponent for b8 e4m3 quantization
+
+//Assumption: input total size is a multiple of 2K elements
+PTO_INTERNAL void AbsReduceMax_f32_opt_largesizes(__ubuf__ float* srcPtr,
+                                                __ubuf__ float* maxPtr,
+                                                unsigned vl_count,
+                                                unsigned elementsPerRepeat,
+                                                unsigned total_elements_count) {
+    
+    vector_f32 vreg_in_1, vreg_in_2, vreg_in_3, vreg_in_4, vreg_max_0, vreg_max_1, vreg_max;
+    vector_f32 vreg_dintlv_1, vreg_dintlv_2, vreg_dintlv_3, vreg_dintlv_4, vreg_gp_max;
+    vector_f32 vreg_dintlv_out_1, vreg_dintlv_out_2, vreg_dintlv_out_3, vreg_dintlv_out_4;
+    vector_bf16 vreg_max_bf16;
+    vector_align ureg_max;
+    uint32_t total_count = total_elements_count;
+    MaskReg preg_lower16 = pset_b16(PAT_VL16);
+    static constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<float, DistVST::DIST_NORM>())>();
+    for (uint16_t i = 0; i < (uint16_t) vl_count/32; ++i){
+        for (uint16_t j = 0; j < 8; ++j){ //handling 4 VLs per loop, each VL is 256 B (64 fp32)
+            MaskReg preg_vl0 = CreatePredicate<float>(total_count);
+            MaskReg preg_vl1 = CreatePredicate<float>(total_count);
+            MaskReg preg_vl2 = CreatePredicate<float>(total_count);
+            MaskReg preg_vl3 = CreatePredicate<float>(total_count);
+            vlds(vreg_in_1, vreg_in_2, srcPtr,       (i*32+j*4)*elementsPerRepeat, DINTLV_B32); 
+            vlds(vreg_in_3, vreg_in_4, srcPtr + 128, (i*32+j*4)*elementsPerRepeat, DINTLV_B32);
+            vabs(vreg_in_1, vreg_in_1, preg_vl0);
+            vabs(vreg_in_3, vreg_in_3, preg_vl2);
+            vdintlv(vreg_dintlv_out_1, vreg_dintlv_out_2, vreg_in_1, vreg_in_3);
+            vabs(vreg_in_2, vreg_in_2, preg_vl1);
+            vabs(vreg_in_4, vreg_in_4, preg_vl3);
+            vdintlv(vreg_dintlv_out_3, vreg_dintlv_out_4, vreg_in_2, vreg_in_4);
+            vmax(vreg_max_0, vreg_dintlv_out_1, vreg_dintlv_out_2, preg_vl0);
+            vmax(vreg_max_1, vreg_dintlv_out_3, vreg_dintlv_out_4, preg_vl1);
+            vmax(vreg_max,   vreg_max_0,        vreg_max_1,        preg_vl0);
+            vcgmax(vreg_gp_max, vreg_max, preg_vl0);
+            // vcvt(vreg_max_bf16, vreg_gp_max, preg_vl0, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+            // vsts(vreg_max_bf16, maxPtr, i*8, PK_B32, preg_lower16);
+            vstus(ureg_max, 8, vreg_gp_max, maxPtr, POST_UPDATE);
+        }
+        vstas(ureg_max, maxPtr, 0, POST_UPDATE);
+    }
+}
+
+
+// Computing scalar focus and exponent for F32 -> b8 e4m3 quantization
 PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ float* maxPtr,
                                             __ubuf__ uint8_t* expPtr,
                                             __ubuf__ float* scalingPtr,
@@ -126,6 +170,55 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling(__ubuf__ float* maxPtr,
     }
 }
 
+// Computing scalar focus and exponent for Bf16 -> b8 e4m3 quantization
+PTO_INTERNAL void ExtractB8ExponentAndScalingFromBF16(__ubuf__ bfloat16_t* maxPtr,
+                                                    __ubuf__ uint8_t* expPtr,
+                                                    __ubuf__ bfloat16_t* scalingPtr,
+                                                    unsigned exp_max_loop_count,
+                                                    unsigned total_elements_count,
+                                                    unsigned elementsPerRepeat) {
+    static constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<bfloat16_t, DistVST::DIST_NORM>())>();
+    vector_bf16 vb16_max;
+    vector_s16  vb16_exponent, vb16_shared_exp, vb16_scaling, vb16_nan, vb16_subnorm;
+    vector_s16  vb16_b8_shared_exp, vb16_b8_nan, vb16_b8_emax, vb16_exp_mask, vb16_exp_max;
+    constexpr int shr = 7;
+    vbr(vb16_exp_mask, 0x7F80);
+    vbr(vb16_b8_nan, 0xFF);
+    vbr(vb16_subnorm, 0x7F80);
+    vbr(vb16_exp_max, 0xFE);
+    vbr(vb16_exponent, 0x7F80);
+    vbr(vb16_b8_emax, 8);           // Max exponent for e4m3 is 8   
+    vector_bool preg_inf;    
+    uint32_t total_count = total_elements_count;
+    for (uint16_t i = 0; i < (uint16_t) exp_max_loop_count; ++i){
+        vector_bool preg_b16 = CreatePredicate<bfloat16_t>(total_count);
+        vlds((vector_s16&)vb16_max, (__ubuf__ int16_t*)maxPtr, i*128, NORM);
+        // Getting biased exponent
+        vand((vector_s16&)vb16_exponent, (vector_s16&)vb16_max, vb16_exp_mask, preg_b16, MODE_ZEROING);
+        vshrs((vector_s16&)vb16_exponent, (vector_s16&)vb16_exponent, shr, preg_b16, MODE_ZEROING);
+        // Offsetting exponent to get shared exponent for fp8 e4m3
+        vsub((vector_u16&)vb16_shared_exp, (vector_u16&)vb16_exponent, (vector_u16&)vb16_b8_emax, preg_b16);
+
+        // calculating scaling factor = 1/shared_exponent
+        vsub((vector_s16&)vb16_scaling, (vector_s16&)vb16_exp_max, (vector_s16&)vb16_shared_exp, preg_b16);
+        vshls((vector_u16&)vb16_scaling, (vector_u16&)vb16_scaling, shr, preg_b16, MODE_ZEROING);
+
+        // Handling special cases for NaN and Subnormal
+        vcmps_ne(preg_inf, (vector_s16&)vb16_exponent, 0xFF, preg_b16);
+        vsel(vb16_scaling,    vb16_scaling,    vb16_b8_nan, preg_inf);
+        vsel(vb16_shared_exp, vb16_shared_exp, vb16_b8_nan, preg_inf);
+        
+        // clamp to scale_bits range
+        vcmps_ge(preg_inf, (vector_s16&)vb16_scaling, -127, preg_b16);
+        vsel(vb16_scaling,    vb16_scaling,    vb16_subnorm, preg_inf);
+        vsel(vb16_shared_exp, vb16_shared_exp, vb16_subnorm, preg_inf);
+        
+        vsts((vector_s16 &)vb16_shared_exp, ((__ubuf__ int16_t *)expPtr),     i*64,  PK_B16,    preg_b16);
+        vsts((vector_s16 &)vb16_scaling,    ((__ubuf__ int16_t *)scalingPtr), i*128, distValue, preg_b16);
+    }
+}
+
 
 PTO_INTERNAL void CalcQuantizedFP8Values(__ubuf__ float* srcPtr,
                                         __ubuf__ float* scalingPtr,
@@ -152,6 +245,114 @@ PTO_INTERNAL void CalcQuantizedFP8Values(__ubuf__ float* srcPtr,
     }
 }
 
+PTO_INTERNAL void CalcQuantizedFP8Values_B32_2(__ubuf__ float* srcPtr,
+                                        __ubuf__ float* scalingPtr,
+                                        __ubuf__ uint8_t* dstPtr,
+                                        unsigned vl_count,
+                                        unsigned elementsPerRepeat,
+                                        unsigned total_elements_count,
+                                        MaskReg &preg_lower32,
+                                        MaskReg &preg_upper32) {
+    vector_f32 vb32_scaling, vb32_in_0, vb32_in_1, vb32_in_2, vb32_in_3, vb32_out_1, vb32_out_2, vb32_out_3, vb32_out_4, vb32_out;
+    vector_f32 vb32_in_even_0, vb32_in_odd_0, vb32_in_even_1, vb32_in_odd_1; 
+    vector_f8e4m3 vb8_out, vb8_out_0, vb8_out_1, vb8_out_2, vb8_out_3, vb8_or, vb8_or_0, vb8_or_1;
+    uint32_t elem_count = total_elements_count;
+    MaskReg preg_ALL    = pset_b32(PAT_ALL);
+    MaskReg preg_ALL_b8 = pset_b8(PAT_ALL);
+        static constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<float, DistVST::DIST_NORM>())>();
+    for(uint16_t i = 0; i < (uint16_t) vl_count/4; ++i){
+            MaskReg preg = CreatePredicate<float>(elem_count);
+            vlds(vb32_scaling, scalingPtr, 8*i, E2B_B32);
+            vlds(vb32_in_0, vb32_in_1, srcPtr,       4*i*elementsPerRepeat, DINTLV_B32);
+            vlds(vb32_in_2, vb32_in_3, srcPtr + 128, 4*i*elementsPerRepeat, DINTLV_B32);
+            vdintlv(vb32_in_even_0, vb32_in_even_1, vb32_in_0, vb32_in_2);
+            vmul(vb32_out_1, vb32_in_even_0, vb32_scaling, preg_ALL, MODE_ZEROING); // 0 4 8 12 ...
+            vmul(vb32_out_3, vb32_in_even_1, vb32_scaling, preg_ALL, MODE_ZEROING); // 2 6 10 14 ...
+            vdintlv(vb32_in_odd_0,  vb32_in_odd_1, vb32_in_1, vb32_in_3);
+            vmul(vb32_out_2, vb32_in_odd_0, vb32_scaling, preg_ALL, MODE_ZEROING); // 1 5 9 13 ...
+            vmul(vb32_out_4, vb32_in_odd_1, vb32_scaling, preg_ALL, MODE_ZEROING); // 3 7 11 15 ...
+            vcvt((vector_f8e4m3 &)vb8_out_0, (vector_f32 &)vb32_out_1, preg_ALL, ROUND_R, RS_ENABLE, PART_P0, MODE_ZEROING);
+            vcvt((vector_f8e4m3 &)vb8_out_1, (vector_f32 &)vb32_out_2, preg_ALL, ROUND_R, RS_ENABLE, PART_P1, MODE_ZEROING);
+            vcvt((vector_f8e4m3 &)vb8_out_2, (vector_f32 &)vb32_out_3, preg_ALL, ROUND_R, RS_ENABLE, PART_P2, MODE_ZEROING);
+            vcvt((vector_f8e4m3 &)vb8_out_3, (vector_f32 &)vb32_out_4, preg_ALL, ROUND_R, RS_ENABLE, PART_P3, MODE_ZEROING);
+            vor(vb8_out_0, vb8_out_0, vb8_out_1, preg_ALL_b8);
+            vor(vb8_out_2, vb8_out_2, vb8_out_3, preg_ALL_b8);
+            vor(vb8_out, vb8_out_0, vb8_out_2, preg_ALL_b8);
+            vsts((vector_u8 &) vb8_out, (__ubuf__ uint8_t* )dstPtr, 4*i*elementsPerRepeat, distValue, preg_ALL_b8);
+    }
+}
+
+PTO_INTERNAL void CalcQuantizedFP8Values_Unrolled(__ubuf__ float* srcPtr,
+                                        __ubuf__ float* scalingPtr,
+                                        __ubuf__ uint8_t* dstPtr,
+                                        unsigned vl_count,
+                                        unsigned elementsPerRepeat,
+                                        unsigned total_elements_count,
+                                        MaskReg &preg_lower32,
+                                        MaskReg &preg_upper32) {
+    vector_f32 vb32_scaling_0, vb32_scaling_1, vb32_scaling_2, vb32_scaling_3; 
+    vector_f32 vb32_scaling_4, vb32_scaling_5, vb32_scaling_6, vb32_scaling_7; 
+    vector_f32 vb32_in_0, vb32_in_1, vb32_in_2, vb32_in_3;
+    vector_f32 vb32_out, vb32_out_0, vb32_out_1, vb32_out_2, vb32_out_3, vb32_out_4, vb32_out_5, vb32_out_6, vb32_out_7; 
+    vector_f32 vb32_1st_64, vb32_2nd_64, vb32_3rd_64, vb32_4th_64;
+    vector_f32 vb32_dintlv_even_0, vb32_dintlv_odd_0, vb32_dintlv_even_1, vb32_dintlv_odd_1;
+    vector_f32 vb32_dintlv_out_0, vb32_dintlv_out_1, vb32_dintlv_out_2, vb32_dintlv_out_3;  
+    vector_f8e4m3 vb8_out, vb8_out_0, vb8_out_1, vb8_out_2, vb8_out_3;
+    vector_f8e4m3 vb_out_intlv_0, vb_out_intlv_1;
+    static constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<float, DistVST::DIST_NORM>())>();
+    uint32_t elem_count = total_elements_count;
+    MaskReg preg_ALL = pset_b32(PAT_ALL);
+    for(uint16_t i = 0; i < (uint16_t) vl_count/4; ++i){
+            MaskReg preg = CreatePredicate<float>(elem_count);
+            vlds(vb32_scaling_0, scalingPtr,   8*i, BRC_B32); // 0 1 2 3 4 5 6 7 .....
+            vlds(vb32_scaling_1, scalingPtr+1, 8*i, BRC_B32); // 33 34 35 36 37 .....
+            vlds(vb32_in_0, srcPtr, 4*i*elementsPerRepeat, NORM);
+            vmul(vb32_out_0, vb32_in_0, vb32_scaling_0, preg_lower32, MODE_ZEROING); // 0 1 2 3 4 5 
+            vmul(vb32_out_1, vb32_in_0, vb32_scaling_1, preg_upper32, MODE_ZEROING); // 32 33 34 35 36 37
+            vor(vb32_1st_64, vb32_out_0, vb32_out_1, preg_ALL); // 0 ... 63
+             
+            vlds(vb32_scaling_2, scalingPtr+2, 8*i, BRC_B32);
+            vlds(vb32_scaling_3, scalingPtr+3, 8*i, BRC_B32);
+            vlds(vb32_in_1, srcPtr, (4*i+1)*elementsPerRepeat, NORM);
+            vmul(vb32_out_2, vb32_in_1, vb32_scaling_2, preg_lower32, MODE_ZEROING);
+            vmul(vb32_out_3, vb32_in_1, vb32_scaling_3, preg_upper32, MODE_ZEROING);
+            vor(vb32_2nd_64, vb32_out_2, vb32_out_3, preg_ALL);
+            vdintlv(vb32_dintlv_even_0, vb32_dintlv_odd_0, vb32_1st_64, vb32_2nd_64);
+
+
+            vlds(vb32_scaling_4, scalingPtr+4, 8*i, BRC_B32);
+            vlds(vb32_scaling_5, scalingPtr+5, 8*i, BRC_B32);
+            vlds(vb32_in_2, srcPtr, (4*i+2)*elementsPerRepeat, NORM);
+            vmul(vb32_out_4, vb32_in_2, vb32_scaling_4, preg_lower32, MODE_ZEROING);
+            vmul(vb32_out_5, vb32_in_2, vb32_scaling_5, preg_upper32, MODE_ZEROING);
+            vor(vb32_3rd_64, vb32_out_4, vb32_out_5, preg_ALL);
+            
+
+            vlds(vb32_scaling_6, scalingPtr+6, 8*i, BRC_B32);
+            vlds(vb32_scaling_7, scalingPtr+7, 8*i, BRC_B32);
+            vlds(vb32_in_3, srcPtr, (4*i+3)*elementsPerRepeat, NORM);
+            vmul(vb32_out_6, vb32_in_3, vb32_scaling_6, preg_lower32, MODE_ZEROING);
+            vmul(vb32_out_7, vb32_in_3, vb32_scaling_7, preg_upper32, MODE_ZEROING);
+            vor(vb32_4th_64, vb32_out_6, vb32_out_7, preg_ALL);
+            vdintlv(vb32_dintlv_even_1, vb32_dintlv_odd_1, vb32_3rd_64, vb32_4th_64);
+
+            vdintlv(vb32_dintlv_out_0, vb32_dintlv_out_2, vb32_dintlv_even_0, vb32_dintlv_even_1);
+            vdintlv(vb32_dintlv_out_1, vb32_dintlv_out_3, vb32_dintlv_odd_0,  vb32_dintlv_odd_1);
+
+            vcvt((vector_f8e4m3 &)vb8_out_0, (vector_f32 &)vb32_dintlv_out_0, preg_ALL, ROUND_R, RS_ENABLE, PART_P0, MODE_ZEROING);
+            vcvt((vector_f8e4m3 &)vb8_out_1, (vector_f32 &)vb32_dintlv_out_1, preg_ALL, ROUND_R, RS_ENABLE, PART_P1, MODE_ZEROING);
+            vcvt((vector_f8e4m3 &)vb8_out_2, (vector_f32 &)vb32_dintlv_out_2, preg_ALL, ROUND_R, RS_ENABLE, PART_P2, MODE_ZEROING);
+            vcvt((vector_f8e4m3 &)vb8_out_3, (vector_f32 &)vb32_dintlv_out_3, preg_ALL, ROUND_R, RS_ENABLE, PART_P3, MODE_ZEROING);
+            
+            vor(vb8_out_0, vb8_out_0, vb8_out_1, preg_ALL);
+            vor(vb8_out_2, vb8_out_2, vb8_out_3, preg_ALL);
+            vor(vb8_out, vb8_out_0, vb8_out_2, preg_ALL);
+            vsts((vector_u8 &) vb8_out, (__ubuf__ uint8_t* )dstPtr, 4*i*elementsPerRepeat, distValue, preg_ALL);
+    }
+}
+
 template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, typename TileDataMax, unsigned SrcStride>
 __tf__ PTO_INTERNAL void TQuant(typename TileDataSrc::TileDType __in__  src,
                                 typename TileDataExp::TileDType __out__ exp,
@@ -175,6 +376,7 @@ __tf__ PTO_INTERNAL void TQuant(typename TileDataSrc::TileDType __in__  src,
         constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
         unsigned numRepeatPerRow = CeilDivision(validCols, elementsPerRepeat);
         unsigned exp_max_loop_count = CeilDivision(validRows * TileDataSrc::Cols, 32*elementsPerRepeat);
+        unsigned exp_max_loop_count_bf16 = CeilDivision(validRows * TileDataSrc::Cols, 32*128);
         MaskReg preg_lower32 = pset_b32(PAT_VL32);
         MaskReg preg_upper32;
         MaskReg preg_ALL = pset_b32(PAT_ALL);
@@ -184,6 +386,8 @@ __tf__ PTO_INTERNAL void TQuant(typename TileDataSrc::TileDType __in__  src,
         // if total valid size less than 1024, don't unroll
         if (validRows * validCols <= 1024) {
             AbsReduceMax_Naive(srcPtr, maxPtr, total_elements_count, vl_count, elementsPerRepeat, preg_lower32, preg_upper32);
+        } else if ((validRows * validCols)%2048 == 0) {
+            AbsReduceMax_f32_opt_largesizes(srcPtr, maxPtr, vl_count, elementsPerRepeat, total_elements_count);
         } else { // unroll by 4
             AbsReduceMax_f32_opt(srcPtr, maxPtr, vl_count, elementsPerRepeat, total_elements_count);
         }
@@ -192,8 +396,16 @@ __tf__ PTO_INTERNAL void TQuant(typename TileDataSrc::TileDType __in__  src,
         ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_max_loop_count, 
                                             total_elements_count, elementsPerRepeat);
         mem_bar(VST_VLD);
-        CalcQuantizedFP8Values(srcPtr, scalingPtr, (__ubuf__ uint8_t*)dstPtr, vl_count, 
+        
+        // use unrolled way if size is large 
+        if (validRows * validCols > 4096 && (validRows * validCols)%256==0) {
+            CalcQuantizedFP8Values_B32_2(srcPtr, scalingPtr, (__ubuf__ uint8_t*)dstPtr, vl_count, 
                     elementsPerRepeat, total_elements_count, preg_lower32, preg_upper32);
+        }
+        else {
+            CalcQuantizedFP8Values(srcPtr, scalingPtr, (__ubuf__ uint8_t*)dstPtr, vl_count, 
+                    elementsPerRepeat, total_elements_count, preg_lower32, preg_upper32);
+        }
     }
 }
 
