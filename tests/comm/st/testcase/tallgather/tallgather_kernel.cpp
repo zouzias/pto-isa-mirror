@@ -59,7 +59,7 @@ __global__ AICORE void TAllGatherKernelImpl(__gm__ T *dst, __gm__ T *src, int nr
     pto::comm::ParallelGroup<Global> pg(tensorPtrs, actual_nranks, my_rank);
     
     pto::comm::TALLGATHER(pg, dstG);
-    pto::comm::TWAIT();
+    pto::comm::TQUIET();
 }
 
 template <typename T, size_t count>

@@ -52,7 +52,7 @@ __global__ AICORE void TAllReduceKernelImpl(__gm__ T *input, __gm__ T *output, i
     pto::comm::ParallelGroup<Global> pg(tensorPtrs, actual_nranks, my_rank);
     
     pto::comm::TALLREDUCE(pg, outputG);
-    pto::comm::TWAIT();
+    pto::comm::TQUIET();
 }
 
 template <typename T, size_t count>

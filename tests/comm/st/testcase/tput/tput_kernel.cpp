@@ -97,9 +97,8 @@ __global__ AICORE void TPutKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
     recvG.SetRank(prev_rank);
-    pto::comm::TWAIT();
     pto::comm::TPUT(recvG, sendG);
-    pto::comm::TWAIT();
+    pto::comm::TQUIET();
 
     #if defined(CANN_SHMEM)
         aclshmemx_signal_op(shmem_sync + 0, magic, CANN_SHMEM_SIGNAL_SET, my_rank);

@@ -97,12 +97,12 @@ __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
-    pto::comm::TWAIT();
+    pto::comm::TQUIET();
     pto::comm::TBARRIER();
 
     sendG.SetRank(next_rank);
     pto::comm::TGET(recvG, sendG);
-    pto::comm::TWAIT();
+    pto::comm::TQUIET();
 
     TLOAD(dstBufTile, recvG);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
