@@ -36,7 +36,7 @@ struct ShmemInitOptions {
     const char *ipPort {nullptr};
 };
 
-// Helper trait按类型分发到具体的shmem函数
+// Helper trait to dispatch to specific shmem functions by type
 template <typename T>
 struct ShmemOps;
 
@@ -306,6 +306,64 @@ struct ShmemBackend {
         #elif defined(CANN_SHMEM)
             aclshmem_quiet();
         #endif
+    }
+
+    // ========================================================================
+    // Notify: Send flag notification to remote PE
+    // Target address and PE info are obtained from GlobalSignalData's data() and GetRank()
+    // Uses int32_t type, compatible with shmem signal API
+    // ========================================================================
+
+    // Notify: Compile-time specified op (recommended, zero overhead)
+    template <pto::comm::NotifyOp op, typename GlobalSignalData>
+    PTO_INST static void Notify(GlobalSignalData &dstSignal, int32_t value)
+    {
+        // Type check via sizeof to ensure 32-bit type
+        static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
+                      "ShmemBackend::Notify: signal type must be 32-bit (int32_t)");
+
+        const int pe = dstSignal.GetRank();
+        auto dstPtr = dstSignal.data();
+
+        if constexpr (op == pto::comm::NotifyOp::AtomicAdd) {
+            #if defined(ASCEND_SHMEM)
+                shmem_int32_atomic_add(dstPtr, value, pe);
+            #elif defined(CANN_SHMEM)
+                aclshmem_int32_atomic_add(dstPtr, value, pe);
+            #endif
+        } else {
+            // Set mode uses signal_op
+            #if defined(ASCEND_SHMEM)
+                shmemx_signal_op(dstPtr, value, CANN_SHMEM_SIGNAL_SET, pe);
+            #elif defined(CANN_SHMEM)
+                aclshmemx_signal_op(dstPtr, value, CANN_SHMEM_SIGNAL_SET, pe);
+            #endif
+        }
+    }
+
+    // Notify: Runtime specified op
+    template <typename GlobalSignalData>
+    PTO_INST static void Notify(GlobalSignalData &dstSignal, int32_t value, pto::comm::NotifyOp op)
+    {
+        static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
+                      "ShmemBackend::Notify: signal type must be 32-bit (int32_t)");
+
+        const int pe = dstSignal.GetRank();
+        auto dstPtr = dstSignal.data();
+
+        if (op == pto::comm::NotifyOp::AtomicAdd) {
+            #if defined(ASCEND_SHMEM)
+                shmem_int32_atomic_add(dstPtr, value, pe);
+            #elif defined(CANN_SHMEM)
+                aclshmem_int32_atomic_add(dstPtr, value, pe);
+            #endif
+        } else {
+            #if defined(ASCEND_SHMEM)
+                shmemx_signal_op(dstPtr, value, CANN_SHMEM_SIGNAL_SET, pe);
+            #elif defined(CANN_SHMEM)
+                aclshmemx_signal_op(dstPtr, value, CANN_SHMEM_SIGNAL_SET, pe);
+            #endif
+        }
     }
 
 private:

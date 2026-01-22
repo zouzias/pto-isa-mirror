@@ -50,6 +50,25 @@ PTO_INST void TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal,
     MAP_INSTR_IMPL(TBROADCAST, parallelGroup, srcGlobal, root);
 }
 
+// ============================================================================
+// TNOTIFY: Send flag notification to remote PE
+// dstSignal's data() and GetRank() already contain target location and PE info
+// Signal type is int32_t, compatible with shmem signal API
+// ============================================================================
+
+// Compile-time specified NotifyOp (recommended, zero overhead)
+template <NotifyOp op = NotifyOp::Set, typename GlobalSignalData>
+PTO_INST void TNOTIFY(GlobalSignalData &dstSignal, int32_t value = 1)
+{
+    TNOTIFY_IMPL<op>(dstSignal, value);
+}
+
+// Runtime specified NotifyOp
+template <typename GlobalSignalData>
+PTO_INST void TNOTIFY(GlobalSignalData &dstSignal, int32_t value, NotifyOp op)
+{
+    TNOTIFY_IMPL(dstSignal, value, op);
+}
 
 } // namespace comm
 } // namespace pto

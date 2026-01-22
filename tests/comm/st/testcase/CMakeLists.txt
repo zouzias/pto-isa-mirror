@@ -59,6 +59,7 @@ endfunction()
 set(ALL_TESTCASES
 tget
 tput
+tnotify
 tallgather
 tallreduce
 tbroadcast
