@@ -9,6 +9,6 @@
 #include "pto/comm/TAllReduce.hpp"
 #include "pto/comm/TAllGather.hpp"
 #include "pto/comm/TBroadCast.hpp"
-#include "pto/comm/TNOTIFY.hpp"
+#include "pto/comm/TNotify.hpp"
 
 #endif // PTO_COMM_INSTR_IMPL_HPP
