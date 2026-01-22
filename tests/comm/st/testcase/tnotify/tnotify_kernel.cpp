@@ -46,7 +46,7 @@ __global__ AICORE void TNotifyAtomicAddKernel(__gm__ int32_t *shmem_counter)
 
     // Each rank performs atomic add 1 to rank 0's counter
     pto::comm::TNOTIFY<pto::comm::NotifyOp::AtomicAdd>(counterSignal, 1);
-    pto::comm::TWAIT();
+    pto::comm::TQUIET();
 
     // Global synchronization
     pto::comm::TBARRIER();
@@ -77,7 +77,7 @@ __global__ AICORE void TNotifySetKernel(__gm__ int32_t *shmem_signals)
     // Set next rank's signal to own rank_id + 100
     int32_t value = static_cast<int32_t>(my_rank + 100);
     pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(nextSignal, value);
-    pto::comm::TWAIT();
+    pto::comm::TQUIET();
 
     // Global synchronization
     pto::comm::TBARRIER();
@@ -111,7 +111,7 @@ __global__ AICORE void TNotifyScoreboardKernel(__gm__ int32_t *shmem_scoreboard)
     // Set own slot value
     int32_t value = static_cast<int32_t>(my_rank + 1000);
     pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(slotSignal, value);
-    pto::comm::TWAIT();
+    pto::comm::TQUIET();
 
     // Global synchronization
     pto::comm::TBARRIER();
@@ -326,6 +326,13 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
     TNotifyScoreboardKernel<numSlots><<<1, nullptr, stream>>>(shmem_scoreboard);
     status = aclrtSynchronizeStream(stream);
 
+    // Host-side global synchronization to ensure all ranks' kernels have completed
+    #if defined(ASCEND_SHMEM)
+        shmem_barrier_all();
+    #elif defined(CANN_SHMEM)
+        aclshmem_barrier_all();
+    #endif
+
     bool is_ok = true;
 
     // Only rank 0 verifies scoreboard, using busy-wait polling + timeout mechanism
@@ -370,12 +377,6 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
                 is_ok = false;
             }
         }
-    }
-
-    // Non-rank-0 processes wait for a while to ensure rank 0 has enough time to verify
-    // Avoid releasing resources too early which would cause rank 0 read failures
-    if (rank_id != 0) {
-        usleep(100000);  // Wait 100ms
     }
 
     pto::comm::ContextManager::SymmetricFree(shmem_scoreboard);

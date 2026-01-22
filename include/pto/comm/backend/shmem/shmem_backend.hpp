@@ -195,7 +195,7 @@ struct ShmemBackend {
         // Initialize dstGlobal with local source data
         ShmemOps<DType>::Get(dstGlobal.data(), srcGlobal.data(), srcParams, my_rank);
 
-        Wait();
+        Quiet();
         // shmem_quiet();
 
 
@@ -217,7 +217,7 @@ struct ShmemBackend {
 
         // shmem_quiet();
         // shmem_barrier_all();
-        Wait();
+        Quiet();
         Barrier();
     }
 
@@ -255,7 +255,7 @@ struct ShmemBackend {
 
         // shmem_quiet();
         // shmem_barrier_all();
-        Wait();
+        Quiet();
         Barrier();
     }
 
@@ -280,7 +280,7 @@ struct ShmemBackend {
                 ShmemOps<DType>::Put(pg[r].data(), srcGlobal.data(), srcParams, pe);
             }
             // shmem_quiet();
-            Wait();
+            Quiet();
         }
 
         // shmem_barrier_all();
@@ -298,7 +298,7 @@ struct ShmemBackend {
         #endif
     }
 
-    PTO_INST static void Wait()
+    PTO_INST static void Quiet()
     {
         // shmem_quiet();
         #if defined(ASCEND_SHMEM)
@@ -364,6 +364,167 @@ struct ShmemBackend {
                 aclshmemx_signal_op(dstPtr, value, CANN_SHMEM_SIGNAL_SET, pe);
             #endif
         }
+    }
+
+    // ========================================================================
+    // SignalWait: Wait until signal meets the comparison condition
+    // Reads signal from GlobalSignalData and blocks until condition is satisfied
+    // Uses int32_t type, compatible with shmem signal API
+    // ========================================================================
+
+    // Convert WaitCmp enum to shmem comparison constant
+    PTO_INST static int WaitCmpToShmem(pto::comm::WaitCmp cmp)
+    {
+        #if defined(ASCEND_SHMEM)
+            switch (cmp) {
+                case pto::comm::WaitCmp::EQ: return SHMEM_CMP_EQ;
+                case pto::comm::WaitCmp::NE: return SHMEM_CMP_NE;
+                case pto::comm::WaitCmp::GT: return SHMEM_CMP_GT;
+                case pto::comm::WaitCmp::GE: return SHMEM_CMP_GE;
+                case pto::comm::WaitCmp::LT: return SHMEM_CMP_LT;
+                case pto::comm::WaitCmp::LE: return SHMEM_CMP_LE;
+                default: return SHMEM_CMP_EQ;
+            }
+        #elif defined(CANN_SHMEM)
+            switch (cmp) {
+                case pto::comm::WaitCmp::EQ: return ACLSHMEM_CMP_EQ;
+                case pto::comm::WaitCmp::NE: return ACLSHMEM_CMP_NE;
+                case pto::comm::WaitCmp::GT: return ACLSHMEM_CMP_GT;
+                case pto::comm::WaitCmp::GE: return ACLSHMEM_CMP_GE;
+                case pto::comm::WaitCmp::LT: return ACLSHMEM_CMP_LT;
+                case pto::comm::WaitCmp::LE: return ACLSHMEM_CMP_LE;
+                default: return ACLSHMEM_CMP_EQ;
+            }
+        #endif
+    }
+
+    // SignalWait: Compile-time specified comparison (recommended, zero overhead)
+    template <pto::comm::WaitCmp cmp, typename GlobalSignalData>
+    PTO_INST static void SignalWait(GlobalSignalData &signal, int32_t cmpValue)
+    {
+        static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
+                      "ShmemBackend::SignalWait: signal type must be 32-bit (int32_t)");
+
+        auto sigPtr = signal.data();
+        const int shmemCmp = WaitCmpToShmem(cmp);
+
+        #if defined(ASCEND_SHMEM)
+            shmem_int32_wait_until(sigPtr, shmemCmp, cmpValue);
+        #elif defined(CANN_SHMEM)
+            aclshmem_signal_wait_until(sigPtr, shmemCmp, cmpValue);
+        #endif
+    }
+
+    // SignalWait: Runtime specified comparison
+    template <typename GlobalSignalData>
+    PTO_INST static void SignalWait(GlobalSignalData &signal, pto::comm::WaitCmp cmp, int32_t cmpValue)
+    {
+        static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
+                      "ShmemBackend::SignalWait: signal type must be 32-bit (int32_t)");
+
+        auto sigPtr = signal.data();
+        const int shmemCmp = WaitCmpToShmem(cmp);
+
+        #if defined(ASCEND_SHMEM)
+            shmem_int32_wait_until(sigPtr, shmemCmp, cmpValue);
+        #elif defined(CANN_SHMEM)
+            aclshmem_signal_wait_until(sigPtr, shmemCmp, cmpValue);
+        #endif
+    }
+
+    // SignalWaitAll: Wait until all signals in array meet the comparison condition
+    template <pto::comm::WaitCmp cmp, typename GlobalSignalData>
+    PTO_INST static void SignalWaitAll(GlobalSignalData *signals, int count, int32_t cmpValue)
+    {
+        static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
+                      "ShmemBackend::SignalWaitAll: signal type must be 32-bit (int32_t)");
+
+        for (int i = 0; i < count; ++i) {
+            SignalWait<cmp>(signals[i], cmpValue);
+        }
+    }
+
+    // SignalWaitAll: Runtime specified comparison
+    template <typename GlobalSignalData>
+    PTO_INST static void SignalWaitAll(GlobalSignalData *signals, int count, pto::comm::WaitCmp cmp, int32_t cmpValue)
+    {
+        static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
+                      "ShmemBackend::SignalWaitAll: signal type must be 32-bit (int32_t)");
+
+        for (int i = 0; i < count; ++i) {
+            SignalWait(signals[i], cmp, cmpValue);
+        }
+    }
+
+    // ========================================================================
+    // SignalTest: Non-blocking test if signal meets the comparison condition
+    // Returns true if condition is satisfied, false otherwise
+    // Uses int32_t type, compatible with shmem signal API
+    // ========================================================================
+
+    // SignalTest: Compile-time specified comparison (recommended, zero overhead)
+    template <pto::comm::WaitCmp cmp, typename GlobalSignalData>
+    PTO_INST static bool SignalTest(GlobalSignalData &signal, int32_t cmpValue)
+    {
+        static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
+                      "ShmemBackend::SignalTest: signal type must be 32-bit (int32_t)");
+
+        auto sigPtr = signal.data();
+        const int shmemCmp = WaitCmpToShmem(cmp);
+
+        #if defined(ASCEND_SHMEM)
+            return shmem_int32_test(sigPtr, shmemCmp, cmpValue) != 0;
+        #elif defined(CANN_SHMEM)
+            return aclshmem_int32_test(sigPtr, shmemCmp, cmpValue) != 0;
+        #endif
+    }
+
+    // SignalTest: Runtime specified comparison
+    template <typename GlobalSignalData>
+    PTO_INST static bool SignalTest(GlobalSignalData &signal, pto::comm::WaitCmp cmp, int32_t cmpValue)
+    {
+        static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
+                      "ShmemBackend::SignalTest: signal type must be 32-bit (int32_t)");
+
+        auto sigPtr = signal.data();
+        const int shmemCmp = WaitCmpToShmem(cmp);
+
+        #if defined(ASCEND_SHMEM)
+            return shmem_int32_test(sigPtr, shmemCmp, cmpValue) != 0;
+        #elif defined(CANN_SHMEM)
+            return aclshmem_int32_test(sigPtr, shmemCmp, cmpValue) != 0;
+        #endif
+    }
+
+    // SignalTestAll: Non-blocking test if all signals in array meet the comparison condition
+    // Returns true only if ALL signals satisfy the condition
+    template <pto::comm::WaitCmp cmp, typename GlobalSignalData>
+    PTO_INST static bool SignalTestAll(GlobalSignalData *signals, int count, int32_t cmpValue)
+    {
+        static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
+                      "ShmemBackend::SignalTestAll: signal type must be 32-bit (int32_t)");
+
+        for (int i = 0; i < count; ++i) {
+            if (!SignalTest<cmp>(signals[i], cmpValue)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // SignalTestAll: Runtime specified comparison
+    template <typename GlobalSignalData>
+    PTO_INST static bool SignalTestAll(GlobalSignalData *signals, int count, pto::comm::WaitCmp cmp, int32_t cmpValue)
+    {
+        static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
+                      "ShmemBackend::SignalTestAll: signal type must be 32-bit (int32_t)");
+
+        for (int i = 0; i < count; ++i) {
+            if (!SignalTest(signals[i], cmp, cmpValue)) {
+                return false;
+            }
+        }
+        return true;
     }
 
 private:

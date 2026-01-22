@@ -9,12 +9,12 @@
 namespace pto {
 namespace comm {
 
-// 2D拷贝描述，单位均为元素个数
+// 2D copy descriptor, all units are in element count
 struct Copy2DParams {
-    uint32_t repeat {1};         // 行数或重复次数
-    uint32_t lenElems {0};       // 每次拷贝的元素数
-    uint32_t srcStrideElems {0}; // 源步长（元素数）
-    uint32_t dstStrideElems {0}; // 目的步长（元素数）
+    uint32_t repeat {1};         // Number of rows or repeat count
+    uint32_t lenElems {0};       // Number of elements per copy
+    uint32_t srcStrideElems {0}; // Source stride (in elements)
+    uint32_t dstStrideElems {0}; // Destination stride (in elements)
 
     static Copy2DParams Contiguous(uint32_t elemCount, uint32_t repeatCount = 1)
     {
@@ -27,16 +27,16 @@ struct Copy2DParams {
     }
 };
 
-// ParallelGroup: 用于把参与集合通信的 GlobalTensor 组成一个 "组"(team)。
+// ParallelGroup: Used to group GlobalTensors participating in collective communication into a "team".
 //
-// 说明：
-// - 这里仅做轻量"视图"封装：不在设备侧动态分配内存，避免引入 `std::vector` 等不支持的容器。
-// - 组内的每个元素一般表示"该 team rank 对应的 GlobalTensor 视图"（通常通过 SetRank 映射到 world rank）。
+// Notes:
+// - This is a lightweight "view" wrapper: no dynamic memory allocation on device side, avoiding unsupported containers like `std::vector`.
+// - Each element in the group typically represents "the GlobalTensor view for that team rank" (usually mapped to world rank via SetRank).
 template <typename GlobalData>
 struct ParallelGroup {
-    using value_type = GlobalData;  // 类型别名，用于类型萃取
+    using value_type = GlobalData;  // Type alias for type traits
     
-    GlobalData **tensors {nullptr}; // 指向外部数组：tensors[teamRank] -> GlobalTensor*
+    GlobalData **tensors {nullptr}; // Points to external array: tensors[teamRank] -> GlobalTensor*
     int nranks {0};
     int my_rank {-1};
 
@@ -53,10 +53,10 @@ struct ParallelGroup {
     AICORE constexpr const GlobalData &operator[](int teamRank) const { return *tensors[teamRank]; }
 };
 
-// 类型萃取：从 ParallelGroup<GlobalData> 中提取 GlobalData 类型
+// Type traits: Extract GlobalData type from ParallelGroup<GlobalData>
 template <typename T>
 struct ParallelGroupTraits {
-    // 如果不是 ParallelGroup，这里会触发编译错误
+    // If not ParallelGroup, this will trigger a compile error
     static_assert(std::is_same_v<T, void>, 
                   "TALLREDUCE: T must be ParallelGroup<GlobalData>");
 };
@@ -66,9 +66,26 @@ struct ParallelGroupTraits<ParallelGroup<GlobalData>> {
     using GlobalDataType = GlobalData;
 };
 
-// 后端枚举，便于后续扩展
+// Backend enum, for future extension
 enum class BackendKind : uint8_t {
     Shmem = 0,
+};
+
+// NotifyOp: Notification operation type
+enum class NotifyOp : uint8_t {
+    AtomicAdd = 0,  // Atomic add operation
+    Set = 1,        // Direct set operation
+};
+
+// WaitCmp: Comparison operators for signal wait operations
+// Compatible with shmem comparison constants
+enum class WaitCmp : uint8_t {
+    EQ = 0,  // Equal
+    NE = 1,  // Not equal
+    GT = 2,  // Greater than
+    GE = 3,  // Greater than or equal to
+    LT = 4,  // Less than
+    LE = 5,  // Less than or equal to
 };
 
 } // namespace comm
