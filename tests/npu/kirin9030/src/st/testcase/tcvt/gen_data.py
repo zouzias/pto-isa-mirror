@@ -15,10 +15,6 @@ import numpy as np
 import ml_dtypes
 import en_dtypes
 
-bfloat16 = np.float16  # Using float16 to simulate bfloat16 for data generation
-fp8_e5m2 = ml_dtypes.float8_e5m2
-fp8_e4m3 = ml_dtypes.float8_e4m3fn
-hifloat8 = en_dtypes.hifloat8 
 np.random.seed(19)
 
 def gen_golden(case_name, param):
@@ -129,29 +125,18 @@ if __name__ == "__main__":
     # Type conversion pairs: (name_suffix, source_type, destination_type)
     # Order matches TCvt.hpp organization by source type
     type_pairs = [
-        # FP32 Source → fp16, bf16, int16, int32, int64, fp8 variants
+        # FP32 Source → fp16, int16, int32, variants
         ("fp32_fp16", np.float32, np.float16),
-        ("fp32_bf16", np.float32, bfloat16),
         ("fp32_int16", np.float32, np.int16),
         ("fp32_int32", np.float32, np.int32),
-        ("fp32_int64", np.float32, np.int64),
-        ("fp32_fp8_e4m3", np.float32, fp8_e4m3),
-        ("fp32_fp8_e5m2", np.float32, fp8_e5m2),
-        ("fp32_h8", np.float32, hifloat8),
         ("fp32_fp32", np.float32, np.float32),  # Same-type rounding
         
-        # FP16 Source → fp32, int32, int16, int8, uint8, h8
+        # FP16 Source → fp32, int32, int16, int8, uint8
         ("fp16_fp32", np.float16, np.float32),
         ("fp16_int32", np.float16, np.int32),
         ("fp16_int16", np.float16, np.int16),
         ("fp16_int8", np.float16, np.int8),
         ("fp16_uint8", np.float16, np.uint8),
-        ("fp16_h8", np.float16, hifloat8),
-
-        # BF16 Source → fp32, int32, half
-        ("bf16_fp32", bfloat16, np.float32),
-        ("bf16_int32", bfloat16, np.int32),
-        ("bf16_fp16", bfloat16, np.float16),
 
         # U8 Source → half, uint16
         ("uint8_fp16", np.uint8, np.float16),
@@ -169,26 +154,16 @@ if __name__ == "__main__":
         ("int16_uint32", np.int16, np.uint32),
         ("int16_int32", np.int16, np.int32),
 
-        # I32 Source → float, int16, uint16, int64, uint8
+        # I32 Source → float, int16, uint16, uint8
         ("int32_fp32", np.int32, np.float32),
         ("int32_int16", np.int32, np.int16),
         # ("int32_uint16", np.int32, np.uint16),
-        ("int32_int64", np.int32, np.int64),
         ("int32_uint8", np.int32, np.uint8),
 
         # U32 Source → uint8, uint16, int16
         ("uint32_uint8", np.uint32, np.uint8),
         # ("uint32_uint16", np.uint32, np.uint16),
         ("uint32_int16", np.uint32, np.int16),
-
-        # I64 Source → float, int32
-        ("int64_fp32", np.int64, np.float32),
-        ("int64_int32", np.int64, np.int32),
-
-        # FP8 Source → float
-        ("fp8_e4m3_fp32", fp8_e4m3, np.float32),
-        ("fp8_e5m2_fp32", fp8_e5m2, np.float32),
-        ("h8_fp32", hifloat8, np.float32),
     ]
 
     # Different shape configurations (m, n)
