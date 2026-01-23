@@ -154,6 +154,41 @@ __tf__ AICORE void TExtractToA(typename DstTileData::TileDType __out__ dst, type
 }
 
 template <typename DstTileData, typename SrcTileData, bool isFp4Type>
+__tf__ AICORE void TExtractToAVector(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
+    uint16_t indexRow, uint16_t indexCol, uint16_t dstValidCol)
+{
+    constexpr int32_t srcCol = SrcTileData::Cols;
+    constexpr int32_t dstCol = DstTileData::Cols;
+    using DataType = typename SrcTileData::DType;
+    constexpr int typeSize = sizeof(DataType);
+    constexpr int32_t fractalSize =
+        isFp4Type ? CUBE_BLOCK_SIZE * KHALF / typeSize : CUBE_BLOCK_SIZE / typeSize;
+
+    int32_t kAlign = (dstValidCol + fractalSize - 1) &~ (fractalSize - 1);
+
+    static_assert((srcCol % fractalSize) == 0, "srcCol * sizeof(DataType) must be aligned to 512B");
+    static_assert((dstCol % fractalSize) == 0, "dstCol * sizeof(DataType) must be aligned to 512B");
+    PTO_ASSERT((indexRow == 1), "indexRow must be 1");
+    PTO_ASSERT((indexCol % fractalSize) == 0, "indexCol * sizeof(DataType) must be aligned to 512B");
+
+    __cbuf__ DataType *srcAddr = (__cbuf__ DataType *)__cce_get_tile_ptr(src);
+    __ca__ DataType *dstAddr = (__ca__ DataType *)__cce_get_tile_ptr(dst);
+
+    uint16_t mStartPosition = 0;
+    uint16_t kStartPosition = (indexCol * typeSize) >> SHIFT_FRACTAL_BYTE;
+    constexpr uint8_t mStep = 1;
+    uint8_t kStep = kAlign / fractalSize;
+    constexpr uint16_t srcStride = 1;
+    constexpr uint16_t dstStride = 1;
+
+    if constexpr (isFp4Type) {
+        load_cbuf_to_ca_s4(dstAddr, srcAddr, 0, kStartPosition / KHALF, 1, kStep / KHALF, 1, 1, 0);
+    } else {
+        load_cbuf_to_ca(dstAddr, srcAddr, 0, kStartPosition, 1, kStep, 1, 1, 0);
+    }
+}
+
+template <typename DstTileData, typename SrcTileData, bool isFp4Type>
 __tf__ AICORE void TExtractToACompact(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
     uint16_t indexRow, uint16_t indexCol, uint16_t madM, uint16_t madK) 
 {
@@ -416,13 +451,17 @@ template <typename DstTileData, typename SrcTileData>
 AICORE void TExtractToLeft(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
 {
     static_assert((SrcTileData::SFractal == SLayout::ColMajor && SrcTileData::isRowMajor) ||
-                      (SrcTileData::SFractal == SLayout::RowMajor && !SrcTileData::isRowMajor),
+                      (SrcTileData::SFractal == SLayout::RowMajor && !SrcTileData::isRowMajor) ||
+                      SrcTileData::isRowMajor,
         "TExtract: SrcTile Invalid Fractal");
     static_assert(
         DstTileData::SFractal == SLayout::RowMajor && !DstTileData::isRowMajor, "TExtract: DstTile Invalid Fractal");
     constexpr bool isFp4Type = std::is_same<typename SrcTileData::DType, float4_e2m1x2_t>::value ||
-        std::is_same<typename SrcTileData::DType, float4_e1m2x2_t>::value;
-    if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
+                               std::is_same<typename SrcTileData::DType, float4_e1m2x2_t>::value;
+    if constexpr (SrcTileData::Rows == 1 && SrcTileData::isRowMajor) {
+        TExtractToAVector<DstTileData, SrcTileData, isFp4Type>(
+            dst.data(), src.data(), indexRow, indexCol, dst.GetValidCol());
+    } else if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
         if constexpr (DstTileData::Compact == CompactMode::Normal) {
             TExtractToACompact<DstTileData, SrcTileData, isFp4Type>(
                 dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol());
