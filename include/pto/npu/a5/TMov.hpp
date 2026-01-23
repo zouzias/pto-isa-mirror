@@ -340,6 +340,8 @@ AICORE void TMovToLeft(DstTileData &dst, SrcTileData &src)
         if constexpr (DstTileData::Compact == CompactMode::Normal) {
             TExtractToACompact<DstTileData, SrcTileData, isFp4Type>(dst.data(), src.data(), 0, 0,
                 dst.GetValidRow(), dst.GetValidCol());
+        } else if constexpr (DstTileData::Compact == CompactMode::Vector) {
+            TExtractToAVector<DstTileData, SrcTileData, isFp4Type>(dst.data(), src.data(), 0, 0);
         } else {
             TExtractToA<DstTileData, SrcTileData, false, isFp4Type>(dst.data(), src.data(), 0, 0);
         }

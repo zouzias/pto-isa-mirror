@@ -183,7 +183,7 @@ PTO_INTERNAL void TLoadCubeCheck() {
     // ND2NZ or DN2NZ
     if constexpr ((GlobalData::layout == pto::Layout::ND || GlobalData::layout == pto::Layout::DN) &&
                   (!TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) {
-        static_assert(TileData::SFractalSize == 512, "Fix: TileData SFractalSize must be 512 of NZ format in L1");
+        static_assert(TileData::SFractalSize == 512 || TileData::SFractalSize == 32, "Fix: TileData SFractalSize must be 512 or 32 of NZ format in L1!");
         static_assert(sizeof(typename TileData::DType) != 8, "Fix: DType not support b64 in ND2NZ or DN2NZ");
         // globaltensor only support 2 dim
         static_assert(

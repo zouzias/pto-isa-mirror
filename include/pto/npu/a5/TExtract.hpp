@@ -154,6 +154,44 @@ __tf__ AICORE void TExtractToA(typename DstTileData::TileDType __out__ dst, type
 }
 
 template <typename DstTileData, typename SrcTileData, bool isFp4Type>
+__tf__ AICORE void TExtractToAVector(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
+    uint16_t indexRow, uint16_t indexCol)
+{
+    constexpr int32_t srcRow = SrcTileData::Rows;
+    constexpr int32_t srcCol = SrcTileData::Cols;
+    constexpr int32_t dstRow = DstTileData::Rows;
+    constexpr int32_t dstCol = DstTileData::Cols;
+    using DataType = typename SrcTileData::DType;
+    constexpr int typeSize = sizeof(DataType);
+    constexpr int c0Size = isFp4Type ? BLOCK_BYTE_SIZE * KHALF / typeSize : BLOCK_BYTE_SIZE / typeSize;
+
+    // 拆成 n个 1*c0size(B) 32B , 向上取整  1*300 -> 19 * 16
+    constexpr int32_t ReshapeCols = c0Size;
+    constexpr int32_t ReshapeRows = CeilDivision(dstCol, ReshapeCols);
+
+    static_assert(srcRow == 1, "srcRow must be aligned to 16 or srcRow == 1.");
+    static_assert((srcCol % c0Size) == 0, "srcCol must be aligned to C0Size");
+    static_assert(dstRow == 1, "dstRow must be aligned to 16 or dstRow == 1.");
+    static_assert((dstCol % c0Size) == 0, "dstCol must be aligned to C0Size");
+
+    __cbuf__ DataType *srcAddr = (__cbuf__ DataType *)__cce_get_tile_ptr(src);
+    __ca__ DataType *dstAddr = (__ca__ DataType *)__cce_get_tile_ptr(dst);
+
+    uint16_t mStartPosition = indexRow >> SHIFT_FRACTAL_NZ_ROW;
+    uint16_t kStartPosition = (indexCol * typeSize) >> SHIFT_BLOCK_BYTE;
+    constexpr uint8_t mStep = (ReshapeRows + BLOCK_LEN - 1) >> SHIFT_BLOCK_LEN;
+    constexpr uint8_t kStep = (ReshapeCols * typeSize) >> SHIFT_BLOCK_BYTE;
+    constexpr uint16_t srcStride = srcRow >> SHIFT_FRACTAL_NZ_ROW;  // aaa
+    constexpr uint16_t dstStride = ReshapeRows >> SHIFT_FRACTAL_NZ_ROW;
+
+    if constexpr (isFp4Type) {
+        load_cbuf_to_ca_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF, srcStride, dstStride, 0);
+    } else {
+        load_cbuf_to_ca(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
+    }
+}
+
+template <typename DstTileData, typename SrcTileData, bool isFp4Type>
 __tf__ AICORE void TExtractToACompact(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
     uint16_t indexRow, uint16_t indexCol, uint16_t madM, uint16_t madK) 
 {
@@ -426,6 +464,8 @@ AICORE void TExtractToLeft(DstTileData &dst, SrcTileData &src, uint16_t indexRow
         if constexpr (DstTileData::Compact == CompactMode::Normal) {
             TExtractToACompact<DstTileData, SrcTileData, isFp4Type>(
                 dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol());
+        } else if constexpr (DstTileData::Compact == CompactMode::Vector) {
+            TExtractToAVector<DstTileData, SrcTileData, isFp4Type>(dst.data(), src.data(), indexRow, indexCol);
         } else {
             TExtractToA<DstTileData, SrcTileData, false, isFp4Type>(dst.data(), src.data(), indexRow, indexCol);
         }

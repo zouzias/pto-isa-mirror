@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/memory.hpp"
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
+#include <pto/common/utils.hpp>
 #ifdef __CPU_SIM
 #include <iomanip>
 #endif
@@ -729,6 +730,7 @@ static constexpr int fixedColSize = 16;
 static constexpr int fixedMxRowSize = 16;
 static constexpr int fixedMxColSize = 2;
 static constexpr int fractalABSize = 512;
+static constexpr int fixedVectorSize = 32;
 static constexpr int fractalCSize = 1024;
 static constexpr int fractalMxSize = 32;
 static constexpr int cElemSize = 4;
@@ -938,6 +940,8 @@ struct Tile {
         static_assert(sizeof(DType) == TileConfig::cElemSize,
                       "Size of datatype != 4");
         return TileConfig::fixedRowSize;
+      } else if constexpr (SFractalSize_ == TileConfig::fixedVectorSize && (Rows_ == 1 || Cols_ == 1)) {
+        return isInnerRowMajor ? 1 : TileConfig::fixedRowSize;
       } else if constexpr (SFractalSize_ == TileConfig::fractalMxSize) {
         return TileConfig::fixedMxRowSize;
       } else {
@@ -953,6 +957,8 @@ struct Tile {
         static_assert(sizeof(DType) == TileConfig::cElemSize,
                       "Size of datatype != 4");
         return TileConfig::fixedColSize;
+      } else if constexpr (SFractalSize_ == TileConfig::fixedVectorSize && (Rows_ == 1 || Cols_ == 1)) {
+        return isInnerRowMajor ? TileConfig::fixedColSize : 1;
       } else if constexpr (SFractalSize_ == TileConfig::fractalMxSize) {
         return TileConfig::fixedMxColSize;
       } else {
@@ -1031,7 +1037,7 @@ struct Tile {
 
     static_assert(InnerRows != 0 && InnerCols != 0,
                   "rows or cols of fractal size is 0.");
-    static_assert((Loc == TileType::Vec) || (SFractalSize_ == TileConfig::fractalMxSize) || (Rows % InnerRows == 0),
+    static_assert((Loc == TileType::Vec) || (SFractalSize_ == TileConfig::fractalMxSize) || (Compact_ == CompactMode::Vector) || (Rows % InnerRows == 0),
                   "Layout rows must be divisible by inner box rows");
     static_assert(Cols % InnerCols == 0,
                   "Layout cols must be divisible by inner box cols");
@@ -1040,13 +1046,14 @@ struct Tile {
         (BFractal_ == BLayout::RowMajor && SFractal_ == SLayout::NoneBox && Cols * sizeof(DType) % TileConfig::alignedSize == 0) ||
         (BFractal_ == BLayout::ColMajor && SFractal_ == SLayout::NoneBox && Rows * sizeof(DType) % TileConfig::alignedSize == 0) ||
         (SFractal_ != SLayout::NoneBox) &&
-        (((Loc == TileType::Vec) || (SFractalSize_ == TileConfig::fractalMxSize) || (Rows % InnerRows == 0)) && Cols % InnerCols == 0),
+        (((Loc == TileType::Vec) || (SFractalSize_ == TileConfig::fractalMxSize) || (Compact_ == CompactMode::Vector) || (Rows % InnerRows == 0)) && Cols % InnerCols == 0),
         "BFractal_ is RowMajor and SFractal_ is NoneBox: Rows must be 32 bytes align, \
          BFractal_ is ColMajor and SFractal_ is NoneBox: Cols must be 32 bytes align, \
          SFractal_ in not NoneBox: Rows/Cols must be integer multiple of InnerRows/InnerCols."
          );
 
     static_assert(SFractalSize_ == TileConfig::fractalABSize ||
+                      SFractalSize_ == TileConfig::fixedVectorSize ||
                       SFractalSize_ == TileConfig::fractalCSize ||
                       SFractalSize_ == TileConfig::fractalMxSize,
                   "SFractalSize_ illegal");
@@ -1111,6 +1118,12 @@ using TileLeft =
 
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using TileLeftVector =
+    Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_, 
+        ColValid_, SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Vector>;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeftCompact =
     Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_,
          ColValid_, SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
@@ -1122,6 +1135,12 @@ template <typename Element_, const int Rows_, const int Cols_,
 using TileLeft =
     Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_,
          ColValid_, SLayout::RowMajor, TileConfig::fractalABSize>;
+
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using TileLeftVector =
+    Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_,
+        ColValid_, SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Vector>;
 
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>

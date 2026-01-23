@@ -74,7 +74,6 @@ __global__ AICORE void RunTMATMUL_GEMV_CLOSE(__gm__ T *out, __gm__ U *src0, __gm
     TASSIGN(cTile, 0x0);
     TASSIGN(biasTile, 0x0);
 
-
     /******************************TLOAD*****************************/
     TLOAD(aMatTile, src0Global);
     // clear l1 buffer which exceed the valid shape
@@ -293,6 +292,115 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
     out = dstGlobal.data();
 }
 
+template <typename T, typename U, typename S, typename B, int validM, int validK, int validN, bool isBias>
+__global__ AICORE void RunTMATMUL_GEMV_OPEN(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, __gm__ B *src2)
+{
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(U);
+    constexpr int M = CeilAlign<int>(validM, 16);
+    constexpr int N = CeilAlign<int>(validN, blockAlign);
+    constexpr int K = CeilAlign<int>(validK, blockAlign);
+
+    using GlobalDataSrc0 = GlobalTensor<U, pto::Shape<1, 1, 1, validM, validK>,
+        pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
+    using GlobalDataSrc1 = GlobalTensor<S, pto::Shape<1, 1, 1, validK, validN>,
+        pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, validN, 1>>;
+    using GlobalDataOut = GlobalTensor<T, pto::Shape<1, 1, 1, validM, validN>,
+        pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
+    GlobalDataSrc0 src0Global(src0);
+    GlobalDataSrc1 src1Global(src1);
+    GlobalDataOut dstGlobal(out);
+
+    using GlobalDataSrc2 = GlobalTensor<B, pto::Shape<1, 1, 1, 1, validN>,
+        pto::Stride<validN, validN, validN, validN, 1>>;
+    GlobalDataSrc2 src2Global(src2);
+
+    using TileMatADataGemv =
+        Tile<TileType::Mat, U, 1, K, BLayout::ColMajor, 1, validK, SLayout::RowMajor, 32>; // [1, K] gemv layout
+    
+    // constexpr int reshpeM = CeilDivision(validK, 16);
+    // assert  rows  must be divisible by inner box rows   512 -> inner row = 16
+    // constexpr int reshpeMAlign = CeilAlign<int>(reshpeM, 16);
+    // using TileMatAData = Tile<TileType::Mat, U, reshpeMAlign, 16, BLayout::ColMajor, reshpeM, 16, SLayout::RowMajor, 512>;
+
+    // 需要申请512B对齐的静态shape (validK * sizeof(T) + 511)/512 * 512  / sizeof(T)
+    // 不512B对齐好像也没关系？
+    // textract仅仅支持src为NZ格式的，所以aMatTile需要是NZ的 , 静态shape对齐到32B就可以
+
+    using TileMatAData =Tile<TileType::Mat, U, 1, K, BLayout::ColMajor, 1, validK, SLayout::RowMajor, 32>;  // innerRow = 1, innerCol = 16
+    // mx的 innerRow = 16, innerCol = 2，所以会被assert
+    // using TileMatAData = Tile<TileType::Mat, U, 1, K, BLayout::ColMajor, 1, validK, SLayout::RowMajor, 32>;
+    using TileMatBData = Tile<TileType::Mat, S, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
+    using TileBiasData = Tile<TileType::Mat, B, 1, N, BLayout::RowMajor, 1, validN>;
+
+    // TileLeftVector语法糖，用户输入1*k 在语法糖内部转成 [K/16, 16]
+    // L0A上如果是K*1呢？  ...
+    // using LeftTile = TileLeftVector<U, 1, K, 1, validK>;
+    using LeftTile = TileLeftVector<U, 1, K, 1, validK>;
+
+    using RightTile = TileRight<S, K, N, validK, validN>;
+    using AccTile = TileAcc<T, M, N, validM, validN>;
+
+    using BiasTile = Tile<TileType::Bias, B, 1, N, BLayout::RowMajor, 1, validN>;
+
+    TileMatADataGemv aMatTileGemv;
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    TileBiasData biasDataTile;
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x20000);
+    TASSIGN(biasDataTile, 0x40000);
+
+    LeftTile aTile;
+    RightTile bTile;
+    AccTile cTile;
+    BiasTile biasTile;
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
+    TASSIGN(biasTile, 0x0);
+
+    /******************************TLOAD*****************************/
+    
+    TLOAD(aMatTile, src0Global);
+    TLOAD(bMatTile, src1Global);
+
+    if constexpr (isBias) {
+        TLOAD(biasDataTile, src2Global);
+    }
+
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+
+    /**************************TMOV && TEXTRACT**************************/
+    // TRESHAPE assert : 原始的和后面的total size必须一致
+    // TRESHAPE(aMatTile, aMatTileGemv);  // reshape [1, K] -> [K/16, 16] as aTile is gemv layout before TEXTRACT
+    //  1 * 16   -> rows/innerrows == 0 
+    
+    TEXTRACT(aTile, aMatTile, 0, 0);
+    TMOV(bTile, bMatTile);
+
+    if constexpr (isBias) {
+        TMOV(biasTile, biasDataTile);
+    }
+
+    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+
+    if constexpr (isBias) {
+        TGEMV_BIAS(cTile, aTile, bTile, biasTile);
+    } else {
+        // TMATMUL(cTile, aTile, bTile);
+        TGEMV(cTile, aTile, bTile);
+    }
+
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+
+    /********************************TSTORE****************************/
+    TSTORE(dstGlobal, cTile);
+    out = dstGlobal.data();
+}
+
 template <int32_t tilingKey>
 void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 {
@@ -308,6 +416,12 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
             reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
     } else if constexpr (tilingKey == 4) {
         RunTMATMUL_GEMV_CLOSE<float, half, half, float, 1, 256, 64, false><<<1, nullptr, stream>>>(
+            reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
+    } else if constexpr (tilingKey == 5) {
+        RunTMATMUL_GEMV_OPEN<float, half, half, float, 1, 16, 32, false><<<1, nullptr, stream>>>(
+            reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
+    } else if constexpr (tilingKey == 6) {
+        RunTMATMUL_GEMV_OPEN<float, half, half, float, 1, 200, 32, false><<<1, nullptr, stream>>>(
             reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
     }
 }
@@ -348,6 +462,7 @@ template void LaunchTMATMUL<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, void 
 template void LaunchTMATMUL<3>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMATMUL<6>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template void LaunchTMATMULBIAS<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
 template void LaunchTMATMULBIAS<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
