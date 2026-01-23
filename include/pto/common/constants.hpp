@@ -80,6 +80,7 @@ enum class PadValue {
 enum class CompactMode {
     Null,
     Normal,
+    Vector,
 };
 
 template <typename DType, PadValue PadVal>
@@ -287,10 +288,10 @@ PTO_INTERNAL constexpr TileLayoutCustom GetTileLayoutCustom()
     } else if constexpr (!TileData::isRowMajor && (TileData::SFractal == SLayout::NoneBox)) {
         return TileLayoutCustom::DN;
     } else if constexpr (!TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor) &&
-                         TileData::SFractalSize == 512) {
+                         (TileData::SFractalSize == 512 || TileData::SFractalSize == 32)) {
         return TileLayoutCustom::NZ;
     } else if constexpr (TileData::isRowMajor && (TileData::SFractal == SLayout::ColMajor) &&
-                         TileData::SFractalSize == 512) {
+                         (TileData::SFractalSize == 512 || TileData::SFractalSize == 32)) {
         return TileLayoutCustom::ZN;
     } else if constexpr (TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor) &&
                          TileData::SFractalSize == 512) {

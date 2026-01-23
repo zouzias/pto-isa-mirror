@@ -47,7 +47,7 @@ PTO_INTERNAL void SetContMaskByDType(unsigned n) {
     SetContinuousMask(n);
 }
 
-PTO_INTERNAL int32_t CeilDivision(int32_t num1, int32_t num2) {
+PTO_INTERNAL constexpr int32_t CeilDivision(int32_t num1, int32_t num2) {
     if (num2 == 0) {
         return 0;
     }
@@ -55,7 +55,7 @@ PTO_INTERNAL int32_t CeilDivision(int32_t num1, int32_t num2) {
 }
 
 template <typename T>
-PTO_INTERNAL T CeilAlignment(T num1, T num2) {
+PTO_INTERNAL constexpr T CeilAlignment(T num1, T num2) {
     if (num2 == 0) {
         return 0;
     }

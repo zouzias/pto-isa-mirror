@@ -14,6 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+constexpr const int SHIFT_VECTOR = 8; 
+
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol, int32_t dstRow, int32_t dstCol>
 PTO_INTERNAL void TExtractToANonTranspose(
     __ca__ DstType *dstAddr, __cbuf__ SrcType *srcAddr, uint16_t indexRow, uint16_t indexCol)
@@ -98,6 +100,35 @@ __tf__ AICORE void TExtractToA(typename DstTileData::TileDType __out__ dst, type
         PTO_ASSERT((indexCol % fractalSize) == 0, "indexCol must be aligned");
         TExtractToATranspose<SrcType, DstType, srcRow, srcCol, dstRow, dstCol>(dstAddr, srcAddr, indexRow, indexCol);
     }
+}
+
+template <typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractToAVector(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
+    uint16_t indexRow, uint16_t indexCol)
+{
+    using DataType = typename SrcTileData::DType;
+    __cbuf__ DataType *srcAddr = (__cbuf__ DataType *)__cce_get_tile_ptr(src);
+    __ca__ DataType *dstAddr = (__ca__ DataType *)__cce_get_tile_ptr(dst);
+    // half: 1*512 -> 32*16   or  1*200 ->  13*16
+    constexpr int32_t srcRow = SrcTileData::Rows;
+    constexpr int32_t srcCol = SrcTileData::Cols;
+    constexpr int32_t dstRow = DstTileData::Rows;
+    constexpr int32_t dstCol = DstTileData::Cols;
+    constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(DataType);
+
+    // srcRow/srcCol/dstRow/dstCol对齐校验
+    static_assert((srcCol % c0Size) == 0, "srcCol must be aligned to C0Size");
+    static_assert((dstCol % c0Size) == 0, "dstCol must be aligned to C0Size");
+    PTO_ASSERT((indexCol % c0Size) == 0, "indexCol must be aligned to C0Size");
+    // 拆成 n个 1*c0size(B) 32B , 向上取整
+    constexpr int32_t ReshapeCols = BLOCK_BYTE_SIZE / sizeof(DataType);
+    constexpr int32_t ReshapeRows =  CeilDivision(dstCol, ReshapeCols);
+
+    uint16_t baseIdx = indexCol * sizeof(DataType) >> SHIFT_VECTOR ;
+    constexpr uint8_t repeatTimes = CeilDivision(ReshapeRows, BLOCK_LEN);
+    uint16_t srcStride = 1;
+    load_cbuf_to_ca(dstAddr, srcAddr, baseIdx, repeatTimes, srcStride, 0 /*sid*/, false);
+    
 }
 
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol, int32_t dstRow, int32_t dstCol>
@@ -433,6 +464,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
             if constexpr (DstTileData::Compact == CompactMode::Normal) {
                 TExtractToACompact<DstTileData, SrcTileData, false>(
                     dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
+            } else if constexpr (DstTileData::Compact == CompactMode::Vector) {
+                TExtractToAVector<DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol);
             } else {
                 TExtractToA<DstTileData, SrcTileData, false>(dst.data(), src.data(), indexRow, indexCol);
             }
@@ -440,7 +473,9 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
             if constexpr (DstTileData::Compact == CompactMode::Normal) {
                 TExtractToACompact<DstTileData, SrcTileData, true>(
                     dst.data(), src.data(), indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
-            } else {
+            } else if constexpr (DstTileData::Compact == CompactMode::Vector) {
+                TExtractToAVector<DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol);
+            }  else {
                 TExtractToA<DstTileData, SrcTileData, true>(dst.data(), src.data(), indexRow, indexCol);
             }
         }

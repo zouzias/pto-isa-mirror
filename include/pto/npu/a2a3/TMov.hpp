@@ -113,6 +113,8 @@ PTO_INTERNAL void TMovToLeft(DstTileData &dst, SrcTileData &src)
         if constexpr (DstTileData::Compact == CompactMode::Normal) {
             TExtractToACompact<DstTileData, SrcTileData, false>(
                 dst.data(), src.data(), 0, 0, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
+        } else if constexpr (DstTileData::Compact == CompactMode::Vector) {
+            TExtractToAVector<DstTileData, SrcTileData, false>(dst.data(), src.data(), 0, 0);
         } else {
             TExtractToA<DstTileData, SrcTileData, false>(dst.data(), src.data(), 0, 0);
         }
@@ -158,9 +160,9 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
                       (DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Acc),
         "TMov: Invalid TileType.");
     if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left) {
-        TMovToLeft<DstTileData, SrcTileData>(dst,src);
+        TMovToLeft<DstTileData, SrcTileData>(dst, src);
     } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Right) {
-        TMovToRight<DstTileData, SrcTileData>(dst,src);
+        TMovToRight<DstTileData, SrcTileData>(dst, src);
     } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Bias) {
         TMovToBt<DstTileData, SrcTileData>(dst.data(), src.data());
     } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Scaling) {
