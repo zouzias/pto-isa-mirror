@@ -458,6 +458,23 @@ PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData 
   return {};
 }
 
+template <typename TileData, typename ConvTileData, 
+          SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
+PTO_INST RecordEvent TIMG2COL(TileData &dst, ConvTileData &src,
+                            uint16_t posM = 0, uint16_t posK = 0,
+                            const Img2colTileConfig &cfg = Img2colTileConfig{}, WaitEvents&... events) {
+  TSYNC(events...);
+  TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK, cfg);
+  return {};
+}
+
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents
+PTO_INST RecordEvent TSETFMATRIX(const Img2colTileConfig &cfg = Img2colTileConfig{}, WaitEvents&... events) {
+  TSYNC(events...);
+  TSETFMATRIX_IMPL<FmatrixMode>(cfg);
+  return {};
+}
+
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
                             uint16_t indexRow, uint16_t indexCol, WaitEvents&... events) {
