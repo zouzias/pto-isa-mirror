@@ -89,6 +89,7 @@ namespace pto {
     TXORS,
     TEXTRACT_A2M,   /* Acc to Mat */
     TINSERT_A2M,
+    TIMG2COl,
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
   };
 
