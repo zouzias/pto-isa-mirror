@@ -179,6 +179,7 @@ tshls
 tshrs
 txor
 txors
+timg2col
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
