@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # This file is a part of the CANN Open Software.
 # Licensed under CANN Open Software License Agreement Version 1.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -48,13 +48,13 @@ do
     esac
 done
 
-if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
-    echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
+if [[ ! "${SOC_VERSION}" =~ "^Ascend910_9599" ]]; then
+    echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}, this folder only support running on A5."
     exit 1
 fi
 
-if [[ "${SOC_VERSION}" =~ ^Ascend910B4-1 ]] && [ "${RUN_MODE}" == "sim" ]; then
-    echo "[ERROR] SocVersion: ${SOC_VERSION} can not support sim mode, please use Ascend910B4."
+if [[ "${SOC_VERSION}" =~ "^Ascend910_9599" ]] && [ "${RUN_MODE}" == "sim" ]; then
+    echo "[ERROR] SocVersion: ${SOC_VERSION} can not support sim mode, please use Ascend910_9599."
     exit 1
 fi
 
