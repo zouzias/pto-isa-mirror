@@ -85,7 +85,7 @@ def main():
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
     parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 or a5")
-    parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
+    parser.add_argument("-t", "--testcase", required=False, help="需要执行的用例")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
 
     args = parser.parse_args()
