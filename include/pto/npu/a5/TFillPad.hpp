@@ -146,7 +146,10 @@ __tf__ PTO_INTERNAL void TFillPad(typename TileData::TileDType __out__ dst, uint
 {
     using U = typename TileData::DType;
     __cbuf__ U *dstPtr = (__cbuf__ U *)__cce_get_tile_ptr(dst);
-    constexpr uint32_t elementsPerBlock = C0_SIZE_BYTE / sizeof(U);
+    uint32_t elementsPerBlock = C0_SIZE_BYTE / sizeof(U);
+    if constexpr (std::is_same<U, float4_e1m2x2_t>::value || std::is_same<U, float4_e2m1x2_t>::value) {
+        elementsPerBlock = B4_C0_SIZE;
+    }
     uint32_t alignedValidCol = CeilAlignment(dstValidCol, elementsPerBlock);
 
 #if defined(__DAV_CUBE__)
@@ -161,8 +164,8 @@ __tf__ PTO_INTERNAL void TFillPad(typename TileData::TileDType __out__ dst, uint
     if (blockLen != 0) {
         create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + dstValidRow * elementsPerBlock), repeatConfig, 0);
     }
-    if (alignedValidCol != TileData::Cols) { // if alignedValidCol is not equal to TileData::Cols, need to pad the left column
-        blockLen = TileData::Rows;        // unit is 32B
+    if (alignedValidCol < TileData::Cols) { // if alignedValidCol is not equal to TileData::Cols, need to pad the left column
+        blockLen = TileData::Rows * (TileData::Cols - alignedValidCol) / elementsPerBlock; // unit is 32B
         repeatConfig = (static_cast<uint64_t>(blockLen) << 16) | // [30:16] is the block number of each repeat
                        (static_cast<uint64_t>(0) << 32) | 1;     // [46:32] is the repeat gap
         create_cbuf_matrix((__cbuf__ uint16_t *)(dstPtr + TileData::Rows * alignedValidCol), repeatConfig, 0);
