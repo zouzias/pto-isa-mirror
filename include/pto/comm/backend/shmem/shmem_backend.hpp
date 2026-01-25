@@ -216,14 +216,10 @@ struct ShmemBackend {
 
         // Initialize dstGlobal with local source data
         ShmemOps<DType>::Get(dstGlobal.data(), srcGlobal.data(), srcParams, my_rank);
-<<<<<<< HEAD
 
         Quiet();
         // shmem_quiet();
 
-=======
-        Wait();
->>>>>>> 3e53425 ([feat] update the perf-opt. all-reduce impl (Bizhao Shi bizhao.shi@gmail.com))
 
         const uint32_t totalElems = srcParams.repeat * ((srcParams.srcStrideElems == 0) ? srcParams.lenElems : srcParams.srcStrideElems);
         DType *dstPtr = dstGlobal.data();
@@ -241,13 +237,9 @@ struct ShmemBackend {
             }
         }
 
-<<<<<<< HEAD
         // shmem_quiet();
         // shmem_barrier_all();
         Quiet();
-=======
-        Wait();
->>>>>>> 3e53425 ([feat] update the perf-opt. all-reduce impl (Bizhao Shi bizhao.shi@gmail.com))
         Barrier();
     }
 
@@ -546,7 +538,6 @@ struct ShmemBackend {
         Barrier();
     }
 
-<<<<<<< HEAD
 
     PTO_INST static void Barrier()
     {
@@ -787,8 +778,6 @@ struct ShmemBackend {
         return true;
     }
 
-=======
->>>>>>> 3e53425 ([feat] update the perf-opt. all-reduce impl (Bizhao Shi bizhao.shi@gmail.com))
 private:
     template <typename GlobalData>
     struct GlobalDataTraits {

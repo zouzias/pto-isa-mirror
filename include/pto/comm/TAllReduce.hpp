@@ -11,17 +11,9 @@
 namespace pto {
 namespace comm {
 
-<<<<<<< HEAD
-
-// Main implementation: Uses type traits to keep a simple calling interface
-// Users only need to pass ParallelGroup<GlobalData>, compiler will automatically deduce types
-template <BackendKind backend = BackendKind::Shmem, typename ParallelGroupType, typename GlobalDstData>
-AICORE void TALLREDUCE_IMPL(ParallelGroupType &pg, GlobalDstData &dstGlobal)
-=======
 template <BackendKind backend = BackendKind::Shmem, typename ParallelGroupType, typename GlobalDstData, typename TileData>
 AICORE void TALLREDUCE_IMPL(ParallelGroupType &pg, GlobalDstData &dstGlobal, 
                             TileData &tile0, TileData &tile1, TileData &tile2)
->>>>>>> 3e53425 ([feat] update the perf-opt. all-reduce impl (Bizhao Shi bizhao.shi@gmail.com))
 {
     // Use type traits to get GlobalData type (if not ParallelGroup<...>, this will trigger compile error)
     using GlobalData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
