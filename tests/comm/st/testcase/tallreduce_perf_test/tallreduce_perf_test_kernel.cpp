@@ -70,7 +70,7 @@ __global__ AICORE void TAllReducePerfKernelImpl(
 
     
     pto::comm::TALLREDUCE(pg, dstGlobal, src0Tile, src1Tile, dstTile);
-    pto::comm::TWAIT();
+    pto::comm::TQUIET();
     
     int64_t end_cycle = AscendC::GetSystemCycle();
     

@@ -142,24 +142,6 @@ struct ShmemBackend {
         shmem_free(ptr);
     }
 
-    PTO_INST static void Barrier()
-    {
-        #if defined(ASCEND_SHMEM)
-            shmem_barrier_all();
-        #elif defined(CANN_SHMEM)
-            aclshmem_barrier_all();
-        #endif
-    }
-
-    PTO_INST static void Wait()
-    {
-        #if defined(ASCEND_SHMEM)
-            shmem_quiet();
-        #elif defined(CANN_SHMEM)
-            aclshmem_quiet();
-        #endif
-    }
-
     template <typename GlobalSrcData, typename GlobalDstData>
     PTO_INST static void Put(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
     {
