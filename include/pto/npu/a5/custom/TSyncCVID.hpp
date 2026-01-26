@@ -26,7 +26,7 @@ enum CVCommFftsEvent : uint16_t {
 
 // Global CV comm defaults
 constexpr int kCvCommSlotBytes = 512;
-constexpr int kCvMaxCores = 25;
+constexpr int kCvMaxCores = 36;
 
 #define CORE_PER_DIE 18
 #define AIV_RATIO 2
