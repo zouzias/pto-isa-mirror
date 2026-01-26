@@ -591,6 +591,9 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             
             TINSERT_CUSTOM<TInsertMode::NZ>(pMatTile, xExpSubNZ, static_cast<uint32_t>(row_offset), 0);
         }
+        // Ensure TINSERT (MTE2) operations complete before signaling
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #else
         using GlobalPTileHalfSub =
             GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
@@ -837,8 +840,19 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     __gm__ float *qk_tile_fifo_block = qk_tile_fifo + static_cast<size_t>(comm_slot) * qk_fifo_block_stride;
     __gm__ float *pv_tile_fifo_block = pv_tile_fifo + static_cast<size_t>(comm_slot) * pv_fifo_block_stride;
 
+#if USE_L0C_TO_DUAL_UB_PATH
+    // When using TMOV path (L0C -> UB), use TMOV_C2UB sync type for proper MTE3 synchronization
+    constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> qk2smSync = {BUF0_QK_READY};
+#else
     constexpr TSync_Custom<SyncOpType::TSTORE_C2GM, SyncOpType::TLOAD> qk2smSync = {BUF0_QK_READY};
+#endif
+
+#if USE_UB_TO_L1_PATH
+    // When using TINSERT path (UB -> L1), use TINSERT_V2L1 sync type for proper MTE2 synchronization
+    constexpr TSync_Custom<SyncOpType::TINSERT_V2L1, SyncOpType::TLOAD> sm2pvSync = {BUF1_SM_READY};
+#else
     constexpr TSync_Custom<SyncOpType::TSTORE_V2GM, SyncOpType::TLOAD> sm2pvSync = {BUF1_SM_READY};
+#endif
     constexpr TSync_Custom<SyncOpType::TSTORE_C2GM, SyncOpType::TLOAD> pv2guSync = {UPDATE_READY};
 
     int num_tiles_s1 = S1 / Tile_S1;
@@ -860,6 +874,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     int p_gu_src_pingpong_id = 0; // shared ping-pong for softmax vec tiles, pv output tiles, and GU input tiles
     int k_src_pingpong_id = 0;    // separate ping-pong for K tiles
     int pv_src_pingpong_id = 0;   // separate ping-pong for P V tiles
+    int qk_vec_pingpong_id = 0;   // shared ping-pong for qkVecTile (L0C->UB path, same for Cube and Vec)
 
     int qkAccTileEvtID = 0;
     int pvAccTileEvtID = 0;
@@ -873,14 +888,33 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                 compute_qk<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
                     INTERMEDIATE_CHECK>(preload_tile, sub_tile, q_block, k, qk_tile_fifo_block, qMatTile[0],
                     kMatTile[k_src_pingpong_id % kMatTNBuffers],
-                    qkAccTile, qkVecTile[k_src_pingpong_id % srcVecTNBuffers], // Pass UB Vec tile for L0C->UB path
+                    qkAccTile, qkVecTile[qk_vec_pingpong_id % srcVecTNBuffers], // Pass UB Vec tile for L0C->UB path (shared with Vec)
                     k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync);
                 k_src_pingpong_id++;
             }
+            // All sub_tiles write to different column offsets of the SAME qkVecTile,
+            // so only increment after all sub_tiles are done
+            qk_vec_pingpong_id++;
         }
         if constexpr (DAV_VEC) {
             for (int row_slice = 0; row_slice < static_cast<int>(kTileFactor); ++row_slice) {
                 // Init only on the very first S1 tile; row_slice partitions rows within that tile
+#if USE_L0C_TO_DUAL_UB_PATH
+                // For L0C->UB path: Vec must read from same qkVecTile that Cube wrote to
+                // But we process all row_slices from the same tile, so don't increment until last slice
+                compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
+                    INTERMEDIATE_CHECK>(preload_tile, row_slice, qk_tile_fifo_block, p_tile_fifo_block,
+                    exp_max_ififo_block, global_sum_block, exp_max_block,
+                    qkVecTile[qk_vec_pingpong_id % srcVecTNBuffers], x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers],
+                    input_reduce_tmp, m1_local_max, l1_local_sum, m2_global_max, l2_global_sum,
+                    l1_exp_max_ififo[preload_tile % qkp_tile_fifo_size],
+                    pMatTile[preload_tile % pMatTNBuffers], // Pass L1 Mat tile for UB->L1 path
+                    p_gu_src_pingpong_id % xexpVecTNBuffers,
+                    qk2smSync, sm2pvSync);
+                p_gu_src_pingpong_id++;
+                if (row_slice == static_cast<int>(kTileFactor) - 1)
+                    qk_vec_pingpong_id++;  // Only increment after all row slices processed
+#else
                 compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
                     INTERMEDIATE_CHECK>(preload_tile, row_slice, qk_tile_fifo_block, p_tile_fifo_block,
                     exp_max_ififo_block, global_sum_block, exp_max_block,
@@ -891,6 +925,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                     p_gu_src_pingpong_id % xexpVecTNBuffers,
                     qk2smSync, sm2pvSync);
                 p_gu_src_pingpong_id++;
+#endif
             }
         }
     }
@@ -910,14 +945,33 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                     compute_qk<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
                         CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK>(next_qk_tile, sub_tile, q_block, k,
                         qk_tile_fifo_block, qMatTile[0], kMatTile[k_src_pingpong_id % kMatTNBuffers], 
-                        qkAccTile, qkVecTile[k_src_pingpong_id % srcVecTNBuffers], // Pass UB Vec tile for L0C->UB path
+                        qkAccTile, qkVecTile[qk_vec_pingpong_id % srcVecTNBuffers], // Pass UB Vec tile for L0C->UB path (shared with Vec)
                         k_src_pingpong_id % kMatTNBuffers, qkAccTileEvtID, qk2smSync);
                     k_src_pingpong_id++;
+                    // All sub_tiles write to different column offsets of the SAME qkVecTile,
+                    // so only increment after all sub_tiles are done
+                    if (sub_tile == static_cast<int>(kTileFactor) - 1)
+                        qk_vec_pingpong_id++;
                 }
             }
 
             if constexpr (DAV_VEC) {
                 if (next_qk_tile != -1) {
+#if USE_L0C_TO_DUAL_UB_PATH
+                    // For L0C->UB path: Vec must read from same qkVecTile that Cube wrote to
+                    // All row_slices read from the same tile, so only increment after all are done
+                    compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
+                        CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK>(next_qk_tile, sub_tile, qk_tile_fifo_block,
+                        p_tile_fifo_block, exp_max_ififo_block, global_sum_block, exp_max_block,
+                        qkVecTile[qk_vec_pingpong_id % srcVecTNBuffers],
+                        x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers], input_reduce_tmp, m1_local_max, l1_local_sum,
+                        m2_global_max, l2_global_sum, l1_exp_max_ififo[next_qk_tile % qkp_tile_fifo_size],
+                        pMatTile[next_qk_tile % pMatTNBuffers], // Pass L1 Mat tile for UB->L1 path
+                        p_gu_src_pingpong_id % xexpVecTNBuffers, qk2smSync, sm2pvSync);
+                    p_gu_src_pingpong_id++;
+                    if (sub_tile == static_cast<int>(kTileFactor) - 1)
+                        qk_vec_pingpong_id++;  // Only increment after all sub_tiles processed
+#else
                     compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
                         CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK>(next_qk_tile, sub_tile, qk_tile_fifo_block,
                         p_tile_fifo_block, exp_max_ififo_block, global_sum_block, exp_max_block,
@@ -927,6 +981,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                         pMatTile[next_qk_tile % pMatTNBuffers], // Pass L1 Mat tile for UB->L1 path
                         p_gu_src_pingpong_id % xexpVecTNBuffers, qk2smSync, sm2pvSync);
                     p_gu_src_pingpong_id++;
+#endif
                 }
             }
 
