@@ -13,3 +13,9 @@ __pycache__/
 *.log
 tests/npu/a2a3/src/st/build
 tests/npu/a5/src/st/build
+kernels/manual/a5/flash_atten/build/
+*.dump
+kernels/manual/a5/flash_atten/build*/
+*.bin
+*.vcd
+*.so
