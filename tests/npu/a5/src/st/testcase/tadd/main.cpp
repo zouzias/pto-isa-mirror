@@ -31,7 +31,7 @@ std::string GetGoldenDir() {
 
 template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
     int vCols>
-void LaunchTAdd(T *out, T *src0, T *src1, void *stream);
+void LaunchTAdd(T *out, T *src0, T *src1, void *stream, int);
 
 template <int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows, int vCols>
 void LaunchTAddHalf(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);

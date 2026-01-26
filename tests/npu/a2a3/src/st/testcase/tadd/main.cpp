@@ -32,7 +32,7 @@ std::string GetGoldenDir() {
 }
 
 
-template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
+template <typename T, int kTRows_, int kTCols_, int vRows, int vCols, int>
 void LaunchTAdd(T *out, T *src0, T *src1, void *stream);
 
 template<typename T, int kTRows_, int kTCols_, int vRows, int vCols>
