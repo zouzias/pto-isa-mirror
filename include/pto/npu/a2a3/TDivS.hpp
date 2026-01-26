@@ -103,15 +103,6 @@ namespace pto
     template <typename T> 
     struct DivSOp {
         PTO_INTERNAL static void BinSInstr(__ubuf__ T *dst, __ubuf__ T *src0, T src1, uint8_t repeats) {
-            float divider = static_cast<float>(src1);
-            if (divider != 0.0f)
-            {
-                divider = 1.0f / divider;
-            }
-            else
-            {
-                divider = 1.0 / 0.0;
-            }
             if constexpr (std::is_same<T, int32_t>::value)
             {
                 vconv_s322f32(reinterpret_cast<__ubuf__ float *>(dst), src0, repeats, 1, 1, 8, 8);
@@ -130,27 +121,15 @@ namespace pto
                 vconv_f162s16z(dst, reinterpret_cast<__ubuf__ half *>(dst), repeats, 1, 1, 8, 8);
                 pipe_barrier(PIPE_V);
             }
-            else if constexpr (std::is_same<T, half>::value)
+            else
             {
                 vector_dup(dst, src1, repeats, 1, 1, 8, 0);
                 pipe_barrier(PIPE_V);
                 vdiv(dst, src0, dst, repeats, 1, 1, 1, 8, 8, 8);
             }
-            else
-            {
-                vmuls(dst, src0, divider, repeats, 1, 1, 8, 8);
-            }
+            
         }
         PTO_INTERNAL static void BinSInstr(__ubuf__ T *dst, __ubuf__ T *src0, T src1, uint8_t repeats, uint8_t dstRepeatStride, uint8_t srcRepeatStride) {
-            float divider = static_cast<float>(src1);
-            if (divider != 0.0f)
-            {
-                divider = 1.0f / divider;
-            }
-            else
-            {
-                divider = 1.0 / 0.0;
-            }
             if constexpr (std::is_same<T, int32_t>::value)
             {
                 vconv_s322f32(reinterpret_cast<__ubuf__ float *>(dst), src0, repeats, 1, 1, dstRepeatStride, srcRepeatStride);
@@ -169,15 +148,11 @@ namespace pto
                 vconv_f162s16z(dst, reinterpret_cast<__ubuf__ half *>(dst), repeats, 1, 1, dstRepeatStride, dstRepeatStride);
                 pipe_barrier(PIPE_V);
             }
-            else if constexpr (std::is_same<T, half>::value)
+            else 
             {
                 vector_dup(dst, src1, repeats, 1, 1, dstRepeatStride, 0);
                 pipe_barrier(PIPE_V);
                 vdiv(dst, src0, dst, repeats, 1, 1, 1, dstRepeatStride, srcRepeatStride, dstRepeatStride);
-            }
-            else
-            {
-                vmuls(dst, src0, divider, repeats, 1, 1, dstRepeatStride, srcRepeatStride);
             }
         }
     };
