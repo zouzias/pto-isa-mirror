@@ -19,8 +19,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #elif defined(__DAV_C310_CUBE__) || defined(__DAV_C310_VEC__)
 #include <pto/npu/a5/custom/TSyncCVID.hpp>
 #include <pto/npu/a5/custom/TSync_Custom.hpp>
-#include <pto/npu/a5/TMov.hpp>
-#include <pto/npu/a5/custom/TInsertCustom.hpp>
 #endif
 #include "pto_macro_matmul.hpp"
 #include "pto_macro_fa_softmax.hpp"
@@ -51,21 +49,12 @@ enum CoreEvtID : uint32_t {
 };
 
 #define VEC_CORES 2
-
-#ifndef USE_UB_TO_L1_PATH
-#define USE_UB_TO_L1_PATH 1  // Set to 0 to use legacy GM path
-#endif
-
 // -----------------------------------------------------------------------------
 // Performance tuning knobs (high-level)
 //
 // The kernel is a cross-core pipeline (Cube + Vec) with explicit FIFOs:
 //   QK (Cube):  compute_qk   -> qk_tile_fifo (fp32)
-#if USE_UB_TO_L1_PATH
-//   P  (Vec):   compute_p    -> pMatTile (L1, via TMOV+TINSERT) + l1_exp_max_ififo
-#else
 //   P  (Vec):   compute_p    -> p_tile_fifo  (fp16 x_exp) + l1_exp_max_ififo
-#endif
 //   PV (Cube):  compute_pv   -> pv_tile_fifo (fp32)
 //   GU (Vec):   compute_gu   -> o_out (fp32) with running rescale/update
 //
@@ -95,7 +84,7 @@ constexpr bool DAV_VEC = false;
 #endif
 
 constexpr std::size_t MAX_TILE_L1_BYTES = 512U * 1024U;
-constexpr std::size_t MAX_VEC_UB_BYTES = 256U * 1024U;
+constexpr std::size_t MAX_VEC_UB_BYTES = 192U * 1024U;
 
 // Decide whether to block or signal consumption flags for a given tile index.
 // Reverse dependency: notify one step before the corresponding wait within each sync period.
@@ -369,29 +358,6 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
         if (sub_tile_id == 0)
             sm2pvSync.wait(); // wait for softmax produce data
 
-#if USE_UB_TO_L1_PATH
-        if constexpr (!INTERMEDIATE_CHECK) {
-            if (sub_tile_id == static_cast<int>(kTileFactor) - 1 && should_notify_consume)
-                sm2pvSync.free(); // notify SV consume data
-        } else {
-            // For INTERMEDIATE_CHECK, use legacy path via GM
-#ifndef P_FIFO_USE_NZ
-            using GlobalXexpTileT =
-                GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
-#else
-            using GlobalXexpTileT = GlobalTensor<half, pto::Shape<1, Cube_S1 / 16, Cube_S0 / 16, 16, 16>,
-                pto::Stride<Cube_S0 * Cube_S1, Cube_S0 * 16, 16 * 16, 16, 1>, Layout::NZ>;
-#endif
-            const uint32_t buf_idx = static_cast<uint32_t>(tile_id % QKP_CV_FIFO);
-            const size_t base_elems =
-                static_cast<size_t>(buf_idx) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Tile_S1) +
-                static_cast<size_t>(sub_tile_id) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Cube_S1);
-            GlobalXexpTileT xexpLoad(p_tile_fifo + base_elems);
-            TLOAD(pMatTile, xexpLoad);
-            if (sub_tile_id == static_cast<int>(kTileFactor) - 1 && should_notify_consume)
-                sm2pvSync.free();
-        }
-#else
 // For TILE_S1 > CUBE_S1, need to stride by Tile_S1 for each Cube_S1 chunk
 #ifndef P_FIFO_USE_NZ
         using GlobalXexpTileT =
@@ -409,7 +375,6 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
         TLOAD(pMatTile, xexpLoad);
         if (sub_tile_id == static_cast<int>(kTileFactor) - 1 && should_notify_consume)
             sm2pvSync.free(); // notify SV consume data
-#endif
 
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
@@ -446,12 +411,11 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
 
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QKP_CV_FIFO,
     int CV_FIFO_CONS_SYNC_PERIOD, bool INTERMEDIATE_CHECK, typename TileDataF_T, typename TileDataH_T,
-    typename ReduceTileF_T, typename TileMatPData, typename TSyncQK2SM, typename TSyncSM2PV>
+    typename ReduceTileF_T, typename TSyncQK2SM, typename TSyncSM2PV>
 AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_fifo, __gm__ half *p_tile_fifo,
     __gm__ float *exp_max_ififo, __gm__ float *global_sum_out, __gm__ float *exp_max_out, TileDataF_T &qkVecTile,
     TileDataH_T &x_expT, TileDataF_T &input_reduce_tmp, ReduceTileF_T &m1_local_max, ReduceTileF_T &l1_local_sum,
     ReduceTileF_T &m2_global_max, ReduceTileF_T &l2_global_sum, ReduceTileF_T &l1_exp_max_ififo,
-    TileMatPData &pMatTile, // L1 Mat tile for UB->L1 path
     uint64_t pTileEventId, TSyncQK2SM &qk2smSync, TSyncSM2PV sm2pvSync) {
     constexpr uint32_t Cube_S0 = CUBE_S0;
     constexpr uint32_t Cube_S1 = CUBE_S1;
@@ -538,41 +502,6 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         if (row_slice == 0 && should_wait_sv_consumed)
             sm2pvSync.allocate(); // wait for SV consume data
 
-#if USE_UB_TO_L1_PATH
-        // For INTERMEDIATE_CHECK, we still need to write to p_tile_fifo for verification
-        using GlobalPTileHalfSub =
-            GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
-        using TileDataH_Sub = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
-        __gm__ half *p_ptr = p_tile_fifo + base_elems + row_offset * static_cast<size_t>(Cube_S1);
-        
-        using TileDataH_NZ = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::ColMajor, Vec_S0, Cube_S1, SLayout::RowMajor>;
-        
-        for (int sub_col = 0; sub_col < static_cast<int>(kTileFactor); ++sub_col) {
-            using TileDataH_Sub_ND = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
-            TileDataH_Sub_ND xExpSubND;
-            const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
-            TASSIGN(xExpSubND, (uint64_t)x_expT.data() + col_byte_offset);
-            
-            // Also write to GM for INTERMEDIATE_CHECK verification
-            if constexpr (INTERMEDIATE_CHECK) {
-                __gm__ half *p_ptr_sub =
-                    p_ptr + static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S1) * static_cast<size_t>(Cube_S0);
-                GlobalPTileHalfSub pTileHalfSub((__gm__ half *)(p_ptr_sub));
-                TileDataH_Sub xExpSub;
-                TASSIGN(xExpSub, (uint64_t)x_expT.data() + col_byte_offset);
-                TSTORE(pTileHalfSub, xExpSub);
-            }
-            
-            // Allocate temporary NZ buffer in UB
-            // Use qkVecTile buffer space since it's not needed at this point
-            TileDataH_NZ xExpSubNZ;
-            TASSIGN(xExpSubNZ, (uint64_t)qkVecTile.data() + sub_col * Vec_S0 * Cube_S1 * sizeof(half));
-            
-            TMOV(xExpSubNZ, xExpSubND);
-            
-            TINSERT_CUSTOM<TInsertMode::NZ>(pMatTile, xExpSubNZ, static_cast<uint32_t>(row_offset), 0);
-        }
-#else
         using GlobalPTileHalfSub =
             GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
         using TileDataH_Sub = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
@@ -587,7 +516,6 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             TASSIGN(xExpSub, (uint64_t)x_expT.data() + col_byte_offset);
             TSTORE(pTileHalfSub, xExpSub);
         }
-#endif
 
         if constexpr (INTERMEDIATE_CHECK) {
             // On the final row_slice, emit the exp_max for this subblock only (Cube_S0 / VEC_CORES rows)
@@ -866,9 +794,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                     exp_max_ififo_block, global_sum_block, exp_max_block,
                     qkVecTile[p_gu_src_pingpong_id % srcVecTNBuffers], x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers],
                     input_reduce_tmp, m1_local_max, l1_local_sum, m2_global_max, l2_global_sum,
-                    l1_exp_max_ififo[preload_tile % qkp_tile_fifo_size],
-                    pMatTile[preload_tile % pMatTNBuffers], // Pass L1 Mat tile for UB->L1 path
-                    p_gu_src_pingpong_id % xexpVecTNBuffers,
+                    l1_exp_max_ififo[preload_tile % qkp_tile_fifo_size], p_gu_src_pingpong_id % xexpVecTNBuffers,
                     qk2smSync, sm2pvSync);
                 p_gu_src_pingpong_id++;
             }
@@ -903,7 +829,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                         qkVecTile[p_gu_src_pingpong_id % srcVecTNBuffers],
                         x_expT[p_gu_src_pingpong_id % xexpVecTNBuffers], input_reduce_tmp, m1_local_max, l1_local_sum,
                         m2_global_max, l2_global_sum, l1_exp_max_ififo[next_qk_tile % qkp_tile_fifo_size],
-                        pMatTile[next_qk_tile % pMatTNBuffers], // Pass L1 Mat tile for UB->L1 path
                         p_gu_src_pingpong_id % xexpVecTNBuffers, qk2smSync, sm2pvSync);
                     p_gu_src_pingpong_id++;
                 }
@@ -1000,7 +925,7 @@ void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclF
     const uint64_t tensor_elems = static_cast<uint64_t>(S0) * static_cast<uint64_t>(HEAD_SIZE);
     const uint64_t tensor_bytes = tensor_elems * sizeof(half);
     constexpr bool kPrefetchUseSdma = true; //simulation cannot use sdma
-    constexpr int kPrefetchAivCores = 64; // only used when kPrefetchUseSdma is false
+    constexpr int kPrefetchAivCores = 40; // only used when kPrefetchUseSdma is false
 
     if constexpr (kPrefetchUseSdma) {
         PTO_PREFETCH((__gm__ void *)q, tensor_bytes, stream);
