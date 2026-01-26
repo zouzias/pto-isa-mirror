@@ -24,10 +24,10 @@ def gen_golden(case_name, param):
     valid_m, valid_n = param.valid_m, param.valid_n
 
     # Generate input data with reasonable ranges
-    if srctype == np.float32 or srctype == np.float16 or srctype == bfloat16:
+    if srctype == np.float32 or srctype == np.float16:
         # Floating point: range [-100, 100]
         x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
-    elif srctype == np.int8 or srctype == fp8_e5m2 or srctype == fp8_e4m3 or srctype == hifloat8:
+    elif srctype == np.int8:
         # int8/fp8/hifloat8: full range [-128, 127]
         x1_gm = np.random.randint(-128, 128, [m, n]).astype(srctype)
     elif srctype == np.uint8:
