@@ -31,11 +31,10 @@ PTO_INST void TBARRIER()
     MAP_INSTR_IMPL(TBARRIER);
 }
 
-
-template <typename ParallelGroup, typename GlobalDstData>
-PTO_INST void TALLREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal)
+template <typename ParallelGroup, typename GlobalDstData, typename TileData>
+PTO_INST void TALLREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal, TileData &tile0, TileData &tile1, TileData &tile2)
 {
-    MAP_INSTR_IMPL(TALLREDUCE, parallelGroup, dstGlobal);
+    MAP_INSTR_IMPL(TALLREDUCE, parallelGroup, dstGlobal, tile0, tile1, tile2);
 }
 
 template <typename ParallelGroup, typename GlobalDstData>

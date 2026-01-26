@@ -11,11 +11,9 @@
 namespace pto {
 namespace comm {
 
-
-// Main implementation: Uses type traits to keep a simple calling interface
-// Users only need to pass ParallelGroup<GlobalData>, compiler will automatically deduce types
-template <BackendKind backend = BackendKind::Shmem, typename ParallelGroupType, typename GlobalDstData>
-AICORE void TALLREDUCE_IMPL(ParallelGroupType &pg, GlobalDstData &dstGlobal)
+template <BackendKind backend = BackendKind::Shmem, typename ParallelGroupType, typename GlobalDstData, typename TileData>
+AICORE void TALLREDUCE_IMPL(ParallelGroupType &pg, GlobalDstData &dstGlobal, 
+                            TileData &tile0, TileData &tile1, TileData &tile2)
 {
     // Use type traits to get GlobalData type (if not ParallelGroup<...>, this will trigger compile error)
     using GlobalData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
@@ -33,7 +31,7 @@ AICORE void TALLREDUCE_IMPL(ParallelGroupType &pg, GlobalDstData &dstGlobal)
                    "All tensors in ParallelGroup must have the same shape!");
     }
     
-    BackendSelector<backend>::type::template AllReduce(pg, dstGlobal);
+    BackendSelector<backend>::type::template AllReduce(pg, dstGlobal, tile0, tile1, tile2);
 }
 
 } // namespace comm
