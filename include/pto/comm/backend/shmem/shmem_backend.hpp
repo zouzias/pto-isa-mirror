@@ -142,6 +142,16 @@ struct ShmemBackend {
         shmem_free(ptr);
     }
 
+    static int GetRankID()
+    {
+        return shmem_my_pe();
+    }
+
+    static int GetRankSize()
+    {
+        return shmem_n_pes();
+    }
+
     template <typename GlobalSrcData, typename GlobalDstData>
     PTO_INST static void Put(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
     {

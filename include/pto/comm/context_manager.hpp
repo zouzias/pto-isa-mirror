@@ -81,10 +81,41 @@ public:
         return backend_;
     }
 
+    static int GetRankID()
+    {
+        switch (backend_) {
+            case BackendKind::Shmem:
+                return backend::ShmemBackend::GetRankID();
+            default:
+                return -1;
+        }
+    }
+
+    static int GetRankSize()
+    {
+        switch (backend_) {
+            case BackendKind::Shmem:
+                return backend::ShmemBackend::GetRankSize();
+            default:
+                return -1;
+        }
+    }
+
 private:
     static inline BackendKind backend_ = BackendKind::Shmem;
     static inline bool initialized_ = false;
 };
+
+// Convenience functions for direct access
+inline int GetRankID()
+{
+    return ContextManager::GetRankID();
+}
+
+inline int GetRankSize()
+{
+    return ContextManager::GetRankSize();
+}
 
 } // namespace comm
 } // namespace pto
