@@ -181,8 +181,12 @@ struct ShmemBackend {
     }
 
 
+    // ========================================================================
+    // AllReduce - Naive implementation (preserved for reference)
+    // Uses direct remote memory access via shmem_ptr, slow due to per-element access
+    // ========================================================================
     template <typename ParallelGroup, typename GlobalDstData>
-    PTO_INST static void AllReduce(ParallelGroup &pg, GlobalDstData &dstGlobal)
+    PTO_INST static void AllReduceNaive(ParallelGroup &pg, GlobalDstData &dstGlobal)
     {
         using GlobalData = typename pto::comm::ParallelGroupTraits<ParallelGroup>::GlobalDataType;
         using DType = typename GlobalData::DType;
@@ -213,10 +217,10 @@ struct ShmemBackend {
         DType *dstPtr = dstGlobal.data();
 
         for (int teamRank = 0; teamRank < nranks; ++teamRank) {
-            if (teamRank == my_rank) continue;
-
             const int pe = pg[teamRank].GetRank();
-            DType *remoteSrcPtr = reinterpret_cast<DType *>(shmem_ptr(pg[teamRank].data(), pe));
+            if(pe == my_rank) continue;
+
+            DType *remoteSrcPtr = reinterpret_cast<DType *>(pg[teamRank].data());
 
             if (remoteSrcPtr != nullptr) {
                 for (uint32_t i = 0; i < totalElems; ++i) {
@@ -229,6 +233,235 @@ struct ShmemBackend {
         // shmem_barrier_all();
         Quiet();
         Barrier();
+    }
+
+    // ========================================================================
+    // AllReduce - Bulk Optimized implementation
+    // Uses bulk shmem_get to fetch remote data, then performs local addition
+    // ========================================================================
+    template <typename ParallelGroup, typename GlobalDstData, typename TileData>
+    PTO_INST static void AllReduceBulk(ParallelGroup &pg, GlobalDstData &dstGlobal, 
+        TileData &src0BufTile, TileData &src1BufTile)
+    {
+        using GlobalData = typename pto::comm::ParallelGroupTraits<ParallelGroup>::GlobalDataType;
+        using DType = typename GlobalData::DType;
+
+        const int my_rank = pg.GetRank();
+        const int nranks = pg.GetSize();
+
+        if (nranks <= 0) return;
+
+        // Local source tensor (in shmem)
+        auto &srcGlobal = pg[my_rank];
+        auto srcParams = BuildCopyParams(srcGlobal);
+
+        if (nranks == 1) {
+            // Single rank: just copy local data to output
+            TLOAD(src0BufTile, srcGlobal);
+            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            TSTORE(dstGlobal, src0BufTile);
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            return;
+        }
+
+        TLOAD(src0BufTile, srcGlobal);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+        int cnt = 0;
+        for (int iters = 0; iters < nranks; ++iters) {
+            auto & remoteGlobal = pg[iters];
+            int pe = remoteGlobal.GetRank();
+            if (pe == my_rank) continue;
+            cnt++;
+            TLOAD(src1BufTile, remoteGlobal);
+            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
+            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
+            TADD(src0BufTile, src0BufTile, src1BufTile);
+            if(cnt < (nranks - 1)){
+                set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+            }else{
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);                
+            }
+        }
+
+        // Step 3: Store final result to output
+        TSTORE(dstGlobal, src0BufTile);
+    }
+
+    // ========================================================================
+    // AllReduce - Ping-Pong optimized implementation
+    // Overlaps data transfer with computation using double buffering
+    // ===================================================
+    template <typename ParallelGroup, typename GlobalDstData, typename TileData>
+    PTO_INST static void AllReducePingPong(ParallelGroup &pg, GlobalDstData &dstGlobal, 
+        TileData &accTile, TileData &pingTile, TileData &pongTile)
+    {
+        using GlobalData = typename pto::comm::ParallelGroupTraits<ParallelGroup>::GlobalDataType;
+        using DType = typename GlobalData::DType;
+
+        const int my_rank = pg.GetRank();
+        const int nranks = pg.GetSize();
+
+        if (nranks <= 0) return;
+
+        auto &srcGlobal = pg[my_rank];
+
+        if (nranks == 1) {
+            TLOAD(accTile, srcGlobal);
+            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            TSTORE(dstGlobal, accTile);
+            return;
+        }
+
+        // Build list of remote rank indices (skip self)
+        int remoteIdx[16];
+        int numRemote = 0;
+        for (int i = 0; i < nranks; ++i) {
+            if (pg[i].GetRank() != my_rank) {
+                remoteIdx[numRemote++] = i;
+            }
+        }
+
+        // Step 1: Load local data into accumulator
+        TLOAD(accTile, srcGlobal);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+        // Step 2: Start prefetching first remote data into pingTile
+        TLOAD(pingTile, pg[remoteIdx[0]]);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
+
+        // Wait for local data ready
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+        // Ping-pong processing
+        for (int i = 0; i < numRemote; ++i) {
+            const bool hasNext = (i + 1 < numRemote);
+            const bool usePing = (i % 2 == 0);
+            
+            TileData &currentTile = usePing ? pingTile : pongTile;
+            TileData &nextTile = usePing ? pongTile : pingTile;
+            const auto currentEvent = usePing ? EVENT_ID1 : EVENT_ID2;
+            const auto nextEvent = usePing ? EVENT_ID2 : EVENT_ID1;
+
+            // Start prefetch of next remote data (overlapped with current TADD)
+            if (hasNext) {
+                TLOAD(nextTile, pg[remoteIdx[i + 1]]);
+                set_flag(PIPE_MTE2, PIPE_V, nextEvent);
+            }
+
+            // Wait for current remote data ready
+            wait_flag(PIPE_MTE2, PIPE_V, currentEvent);
+
+            // Add current remote data to accumulator
+            TADD(accTile, accTile, currentTile);
+
+            // Sync based on next operation
+            if (hasNext) {
+                set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+            } else {
+                // Last iteration: prepare for TSTORE
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            }
+        }
+
+        // Step 3: Store final result
+        TSTORE(dstGlobal, accTile);
+    }
+
+
+    // ========================================================================
+    // AllReduce - Ring algorithm with Ping-Pong prefetch
+    // Each rank fetches data from other ranks in ring order and accumulates
+    // Uses double buffering to overlap data transfer with computation
+    // ========================================================================
+    template <typename ParallelGroup, typename GlobalDstData, typename TileData>
+    PTO_INST static void AllReduceRing(ParallelGroup &pg, GlobalDstData &dstGlobal, 
+        TileData &sendTile, TileData &recvTile, TileData &accTile)
+    {
+        using GlobalData = typename pto::comm::ParallelGroupTraits<ParallelGroup>::GlobalDataType;
+        using DType = typename GlobalData::DType;
+
+        const int my_rank = pg.GetRank();
+        const int nranks = pg.GetSize();
+
+        if (nranks <= 0) return;
+
+        auto &srcGlobal = pg[my_rank];
+
+        // 单 rank 场景：直接拷贝
+        if (nranks == 1) {
+            TLOAD(accTile, srcGlobal);
+            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            TSTORE(dstGlobal, accTile);
+            return;
+        }
+
+        // Step 1: 加载本地数据到累加器
+        TLOAD(accTile, srcGlobal);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+        // Step 2: 预取第一个远程数据到 sendTile
+        int firstRemoteIdx = (my_rank - 1 + nranks) % nranks;
+        TLOAD(sendTile, pg[firstRemoteIdx]);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
+
+        // 等待本地数据就绪
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+        // Step 3: Ping-pong 环形累加
+        for (int step = 0; step < nranks - 1; ++step) {
+            const bool hasNext = (step + 1 < nranks - 1);
+            const bool useSendTile = (step % 2 == 0);
+            
+            TileData &currentTile = useSendTile ? sendTile : recvTile;
+            TileData &nextTile = useSendTile ? recvTile : sendTile;
+            const auto currentEvent = useSendTile ? EVENT_ID1 : EVENT_ID2;
+            const auto nextEvent = useSendTile ? EVENT_ID2 : EVENT_ID1;
+
+            // 预取下一轮数据 (与当前 TADD 重叠)
+            if (hasNext) {
+                int nextSrcIdx = (my_rank - step - 2 + nranks) % nranks;
+                TLOAD(nextTile, pg[nextSrcIdx]);
+                set_flag(PIPE_MTE2, PIPE_V, nextEvent);
+            }
+
+            // 等待当前数据就绪
+            wait_flag(PIPE_MTE2, PIPE_V, currentEvent);
+
+            // 累加
+            TADD(accTile, accTile, currentTile);
+
+            // 同步
+            if (hasNext) {
+                set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+            } else {
+                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            }
+        }
+
+        // Step 3: 存储最终结果
+        TSTORE(dstGlobal, accTile);
+    }
+
+    template <typename ParallelGroup, typename GlobalDstData, typename TileData>
+    PTO_INST static void AllReduce(ParallelGroup &pg, GlobalDstData &dstGlobal, 
+        TileData &tile0, TileData &tile1, TileData &tile2)
+    {
+        // AllReduceNaive(pg, dstGlobal);
+        // AllReduceBulk(pg, dstGlobal, tile0, tile1);
+        AllReducePingPong(pg, dstGlobal, tile0, tile1, tile2);
+        // AllReduceRing(pg, dstGlobal, tile0, tile1, tile2);
     }
 
     template <typename ParallelGroup, typename GlobalDstData>

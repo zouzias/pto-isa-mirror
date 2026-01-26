@@ -63,10 +63,11 @@ tnotify
 twait
 ttest
 tallgather
-tallreduce
+# tallreduce # archived
 tbroadcast
 shmem_init
 shmem_malloc
+tallreduce_perf_test
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
