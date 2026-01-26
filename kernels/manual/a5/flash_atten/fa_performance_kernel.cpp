@@ -660,6 +660,9 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             // Use dedicated NZ buffer (nzConvBuffer) instead of qkVecTile to avoid overwriting QK data
             // nzConvBuffer is allocated at a separate UB location
             TMOV(nzConvBuffer, xExpSubND);
+
+            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             
             TINSERT_CUSTOM<TInsertMode::NZ>(pMatTile, nzConvBuffer, static_cast<uint32_t>(row_offset), 0);
         }
