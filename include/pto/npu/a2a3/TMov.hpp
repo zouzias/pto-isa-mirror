@@ -10,7 +10,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef TMOV_HPP
 #define TMOV_HPP
-#include "common.hpp"
 #include "TExtract.hpp"
 #include "TCopy.hpp"
 
@@ -105,52 +104,40 @@ __tf__ AICORE void TMovCcToCb(typename DstTileData::TileDType __out__ dst, typen
         dstAddr, srcAddr, 0, validCol, SrcTileData::Rows, dstStride_dst_D, 
         srcStride, 0, QuantPre, reluMode, false, false);
 }
-
-template <typename DstTileData, typename SrcTileData>
-PTO_INTERNAL void TMovToLeft(DstTileData &dst, SrcTileData &src)
+template <typename DstTileData, typename SrcTileData, typename DstType, typename SrcType, bool isCastQuant>
+PTO_INTERNAL void CheckTMovCcToCb()
 {
-    if constexpr (SrcTileData::Rows == 1 && SrcTileData::isRowMajor) {
-            TExtractToAVector<DstTileData, SrcTileData>(dst.data(), src.data(), 0, 0, dst.GetValidCol());
-    } else if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
-        if constexpr (DstTileData::Compact == CompactMode::Normal) {
-            TExtractToACompact<DstTileData, SrcTileData, false>(
-                dst.data(), src.data(), 0, 0, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
-        } else {
-            TExtractToA<DstTileData, SrcTileData, false>(dst.data(), src.data(), 0, 0);
-        }
+    static_assert((SrcTileData::Loc == TileType::Acc), "Source TileType only support Acc.");
+    static_assert((DstTileData::Loc == TileType::Mat), "Destination TileType only support Mat.");
+    static_assert(
+        (DstTileData::SFractalSize == TileConfig::fractalABSize), "Destination SFractalSize only support 512.");
+    static_assert(((DstTileData::Cols * sizeof(DstType) % C0_SIZE_BYTE == 0) && ((DstTileData::Cols) > 0)),
+        "Dst Tile Cols * sizeof(DstType) must be multiples of 32 and not 0.");
+    static_assert((!SrcTileData::isRowMajor && SrcTileData::SFractal == SLayout::RowMajor),
+        "Src fractal format should be (BFractal: ColMajor, SFractal: RowMajor).");
+    static_assert((!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor),
+        "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor).");
+    static_assert(((std::is_same<SrcType, float>::value) || (std::is_same<SrcType, int32_t>::value)),
+        "Src data type only support float or int32_t.");
+    if constexpr (isCastQuant) {
+        static_assert((std::is_same<SrcType, float>::value), "The src data type must be restricted to float.");
+        static_assert((std::is_same<DstType, half>::value) || (std::is_same<DstType, bfloat16_t>::value),
+            "The output data type must be restricted to half/bfloat16_t.");
     } else {
-        if constexpr (DstTileData::Compact == CompactMode::Normal || sizeof(typename SrcTileData::DType) == 1) {
-            TExtractToACompact<DstTileData, SrcTileData, true>(
-                dst.data(), src.data(), 0, 0, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
-        } else {
-            TExtractToA<DstTileData, SrcTileData, true>(dst.data(), src.data(), 0, 0);
+        if constexpr (std::is_same<SrcType, float>::value) {
+            static_assert((std::is_same<DstType, int8_t>::value), "The output data type must be restricted to int8_t.");
+        } else if constexpr (std::is_same<SrcType, int32_t>::value) {
+            static_assert((std::is_same<DstType, int8_t>::value) || (std::is_same<DstType, uint8_t>::value) ||
+                              (std::is_same<DstType, half>::value) || (std::is_same<DstType, int16_t>::value),
+                "The output data type must be restricted to int8_t/uint8_t/half/int16_t.");
         }
     }
 }
 
 template <typename DstTileData, typename SrcTileData>
-PTO_INTERNAL void TMovToRight(DstTileData &dst, SrcTileData &src)
+AICORE void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
-    if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
-        if constexpr (DstTileData::Compact == CompactMode::Normal) {
-            TExtractToBCompact<DstTileData, SrcTileData, false>(
-                dst.data(), src.data(), 0, 0, dst.GetValidRow(), dst.GetValidCol());
-        } else {
-            TExtractToB<DstTileData, SrcTileData, false>(dst.data(), src.data(), 0, 0);
-        }
-    } else {
-        if constexpr (DstTileData::Compact == CompactMode::Normal || sizeof(typename SrcTileData::DType) == 1) {
-            TExtractToBCompact<DstTileData, SrcTileData, true>(
-                dst.data(), src.data(), 0, 0, dst.GetValidRow(), dst.GetValidCol());
-        } else {
-            TExtractToB<DstTileData, SrcTileData, true>(dst.data(), src.data(), 0, 0);
-        }
-    }
-}
-
-template <typename DstTileData, typename SrcTileData>
-PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
-{
+    CheckKAlignedMode<DstTileData, SrcTileData>(dst, src);
     static_assert((SrcTileData::Rows == DstTileData::Rows) && ((SrcTileData::Cols == DstTileData::Cols)),
         "TMov: The shape of src needs to be the same as that of dst.");
     static_assert((SrcTileData::Loc == TileType::Mat &&
@@ -160,9 +147,17 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
                       (DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Acc),
         "TMov: Invalid TileType.");
     if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left) {
-        TMovToLeft<DstTileData, SrcTileData>(dst, src);
+        if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
+            TExtractToA<DstTileData, SrcTileData, false>(dst.data(), src.data(), 0, 0);
+        } else {
+            TExtractToA<DstTileData, SrcTileData, true>(dst.data(), src.data(), 0, 0);
+        }
     } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Right) {
-        TMovToRight<DstTileData, SrcTileData>(dst, src);
+        if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
+            TExtractToB<DstTileData, SrcTileData, false>(dst.data(), src.data(), 0, 0);
+        } else {
+            TExtractToB<DstTileData, SrcTileData, true>(dst.data(), src.data(), 0, 0);
+        }
     } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Bias) {
         TMovToBt<DstTileData, SrcTileData>(dst.data(), src.data());
     } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Scaling) {
@@ -170,7 +165,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
     } else if constexpr (SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Vec) {
         TMovToVec<DstTileData, SrcTileData>(dst, src);
     } else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
-        CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
+        CheckTMovCcToCb<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
         uint16_t m = src.GetValidRow();
         uint16_t n = src.GetValidCol();
         constexpr QuantMode_t quantPre =
@@ -183,7 +178,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
-    CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
+    static_assert((DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Acc), "TMov: Invalid TileType.");
     uint16_t m = src.GetValidRow();
     uint16_t n = src.GetValidCol();
     constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
@@ -194,7 +189,7 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar)
 {
-    CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, false>();
+    CheckTMovCcToCb<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, false>();
     uint16_t m = src.GetValidRow();
     uint16_t n = src.GetValidCol();
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
@@ -215,7 +210,7 @@ __tf__ PTO_INTERNAL void SetFPC(typename FpTileData::TileDType __in__ fp)
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp)
 {
-    CheckTMovAccToMat<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, false>();
+    CheckTMovCcToCb<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, false>();
     static_assert(FpTileData::Loc == TileType::Scaling, "Fp only support Scaling.");
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     uint16_t m = src.GetValidRow();
