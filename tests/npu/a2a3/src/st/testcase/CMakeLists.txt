@@ -179,6 +179,10 @@ tshls
 tshrs
 txor
 txors
+tcolexpanddiv
+tcolexpandexpdif
+tcolexpandmul
+tcolexpandsub
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)
