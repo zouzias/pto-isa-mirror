@@ -73,6 +73,7 @@ checkopts() {
 
   parsed_args=$(getopt -a -o j:hvuO: -l help,verbose,cov,make_clean,noexec,pkg,run_all,a3,a5,sim,npu,run_simple,build,cann_3rd_lib_path: -- "$@") || {
   usage
+  
   exit 1
   }
 
