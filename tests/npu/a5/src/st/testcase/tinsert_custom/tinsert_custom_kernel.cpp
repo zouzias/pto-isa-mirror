@@ -33,7 +33,8 @@ AICORE void runTInsertCustom(__gm__ T *out, __gm__ T *src)
     using OutGlobalData = GlobalTensor<T, OutShapeDim5, OutStridDim5, Layout::NZ>;
 
     using SrcVecTile = Tile<TileType::Vec, T, Rows, Cols, BLayout::RowMajor, -1, -1>;
-    using TmpVecTile = Tile<TileType::Vec, T, Rows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
+    constexpr uint32_t TmpRows = (Mode == TInsertMode::NZ) ? Rows : (Rows + 1);
+    using TmpVecTile = Tile<TileType::Vec, T, TmpRows, Cols, BLayout::ColMajor, Rows, Cols, SLayout::RowMajor>;
     using DstVecTile = Tile<TileType::Vec, T, Rows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
     using MatTile = Tile<TileType::Mat, T, Rows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
 
@@ -57,7 +58,9 @@ AICORE void runTInsertCustom(__gm__ T *out, __gm__ T *src)
     constexpr uint32_t burstNum = Cols / c0Size;
     constexpr uint16_t burstLen = (alignedRow * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
 
-    constexpr uint16_t dstGap = (Mode == TInsertMode::NZ) ? 0 : 1;
+    // NZ+1 is now on source (UB) side, L1 destination is plain NZ
+    // For readback from L1: srcGap=0 (plain NZ in L1), dstGap=0
+    constexpr uint16_t srcGap = 0;
 
     __cbuf__ T *matAddr = matTile.data();
     __ubuf__ T *dstUbAddr = dstTile.data();
@@ -82,8 +85,8 @@ AICORE void runTInsertCustom(__gm__ T *out, __gm__ T *src)
     set_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
 
-    copy_cbuf_to_ubuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, 0, burstNum, burstLen, dstGap, 0);
-    copy_cbuf_to_ubuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, 1, burstNum, burstLen, dstGap, 0);
+    copy_cbuf_to_ubuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, 0, burstNum, burstLen, srcGap, 0);
+    copy_cbuf_to_ubuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, 1, burstNum, burstLen, srcGap, 0);
 
     set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);

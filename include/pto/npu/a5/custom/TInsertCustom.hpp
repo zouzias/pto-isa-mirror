@@ -44,12 +44,12 @@ AICORE inline void ComputeNZBlockParams(uint32_t validRow, uint32_t validCol, ui
         case TInsertMode::NZ_PLUS_1:
         case TInsertMode::SPLIT2_NZ_PLUS_1:
         case TInsertMode::SPLIT4_NZ_PLUS_1:
-            srcGap = 0;
-            dstGap = static_cast<uint16_t>(dstRow - validRow + 1);
+            srcGap = 1;
+            dstGap = static_cast<uint16_t>(dstRow - validRow);
             break;
         default:
-            srcGap = 0;
-            dstGap = static_cast<uint16_t>(dstRow - validRow + 1);
+            srcGap = 1;
+            dstGap = static_cast<uint16_t>(dstRow - validRow);
             break;
     }
 }
@@ -87,15 +87,17 @@ __tf__ AICORE void TInsertSplit2Impl(typename DstTileData::TileDType __out__ dst
     uint16_t halfBurstNum = totalBurstNum >> 1;
     uint32_t dstOffset = DstTileData::Rows * c0Size * (indexCol / c0Size) + (indexRow * c0Size + (indexCol % c0Size));
     
+    // srcGap=1 for NZ+1 source layout, dstGap=0 for plain NZ destination
     __cbuf__ T *dstAddr0 = dstAddr + dstOffset;
-    copy_ubuf_to_cbuf(dstAddr0, srcAddr, 0, halfBurstNum, burstLen, 0, 1);
+    copy_ubuf_to_cbuf(dstAddr0, srcAddr, 0, halfBurstNum, burstLen, 1, 0);
 
-    uint32_t srcOffset = halfBurstNum * alignedRow * c0Size;
-    dstOffset = halfBurstNum * (burstLen + 1) * BLOCK_BYTE_SIZE / typeSize;
+    // Source offset accounts for NZ+1 layout: (burstLen + 1) per column
+    uint32_t srcOffset = halfBurstNum * (burstLen + 1) * BLOCK_BYTE_SIZE / typeSize;
+    dstOffset = halfBurstNum * burstLen * BLOCK_BYTE_SIZE / typeSize;
     __ubuf__ T *srcAddr2 = srcAddr + srcOffset;
     __cbuf__ T *dstAddr2 = dstAddr0 + dstOffset;
 
-    copy_ubuf_to_cbuf(dstAddr2, srcAddr2, 0, halfBurstNum, burstLen, 0, 1);
+    copy_ubuf_to_cbuf(dstAddr2, srcAddr2, 0, halfBurstNum, burstLen, 1, 0);
 }
 
 template <typename T, typename DstTileData, typename SrcTileData>
@@ -114,24 +116,26 @@ __tf__ AICORE void TInsertSplit4Impl(typename DstTileData::TileDType __out__ dst
     uint16_t totalBurstNum = CeilDivision(validCol, c0Size);
     uint16_t burstLen = (alignedRow * c0Size * typeSize) / BLOCK_BYTE_SIZE;
     uint16_t quarterBurstNum = totalBurstNum >> 2;
-    uint32_t srcBlockSize = alignedRow * c0Size;
-    uint32_t dstBlockSize = (burstLen + 1) * BLOCK_BYTE_SIZE / typeSize;
+    // srcBlockSize accounts for NZ+1 layout: (burstLen + 1) per column
+    uint32_t srcBlockSize = (burstLen + 1) * BLOCK_BYTE_SIZE / typeSize;
+    uint32_t dstBlockSize = burstLen * BLOCK_BYTE_SIZE / typeSize;
     uint32_t dstOffset = DstTileData::Rows * c0Size * (indexCol / c0Size) + (indexRow * c0Size + (indexCol % c0Size));
 
+    // srcGap=1 for NZ+1 source layout, dstGap=0 for plain NZ destination
     __cbuf__ T *dstAddr0 = dstAddr + dstOffset;
-    copy_ubuf_to_cbuf(dstAddr0, srcAddr, 0, quarterBurstNum, burstLen, 0, 1);
+    copy_ubuf_to_cbuf(dstAddr0, srcAddr, 0, quarterBurstNum, burstLen, 1, 0);
 
     __ubuf__ T *srcQ1 = srcAddr + quarterBurstNum * srcBlockSize;
     __cbuf__ T *dstQ1 = dstAddr0 + quarterBurstNum * dstBlockSize;
-    copy_ubuf_to_cbuf(dstQ1, srcQ1, 0, quarterBurstNum, burstLen, 0, 1);
+    copy_ubuf_to_cbuf(dstQ1, srcQ1, 0, quarterBurstNum, burstLen, 1, 0);
 
     __ubuf__ T *srcQ2 = srcAddr + 2 * quarterBurstNum * srcBlockSize;
     __cbuf__ T *dstQ2 = dstAddr + 2 * quarterBurstNum * dstBlockSize;
-    copy_ubuf_to_cbuf(dstQ2, srcQ2, 0, quarterBurstNum, burstLen, 0, 1);
+    copy_ubuf_to_cbuf(dstQ2, srcQ2, 0, quarterBurstNum, burstLen, 1, 0);
 
     __ubuf__ T *srcQ3 = srcAddr + 3 * quarterBurstNum * srcBlockSize;
     __cbuf__ T *dstQ3 = dstAddr + 3 * quarterBurstNum * dstBlockSize;
-    copy_ubuf_to_cbuf(dstQ3, srcQ3, 0, quarterBurstNum, burstLen, 0, 1);
+    copy_ubuf_to_cbuf(dstQ3, srcQ3, 0, quarterBurstNum, burstLen, 1, 0);
 }
 
 template <TInsertMode mode = TInsertMode::NZ, typename DstTileData, typename SrcTileData>
