@@ -32,6 +32,9 @@ __global__ AICORE void TAllReduceKernelImpl(__gm__ T *input, __gm__ T *output, i
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
 
+    // UB Tile definition: must be pre-allocated for native implementation
+    using TileData = pto::Tile<pto::TileType::Vec, T, 1, count, pto::BLayout::RowMajor, -1, -1>;
+
     int my_rank = shmem_my_pe();
 
     ShapeDyn shape(1, 1, 1, 1, count);
@@ -51,15 +54,28 @@ __global__ AICORE void TAllReduceKernelImpl(__gm__ T *input, __gm__ T *output, i
     
     pto::comm::ParallelGroup<Global> pg(tensorPtrs, actual_nranks, my_rank);
     
-    pto::comm::TALLREDUCE(pg, outputG);
+    // Allocate UB tiles for ping-pong double buffering
+    // These must be pre-allocated and passed to the instruction
+    TileData accTile(1, count);
+    TileData pingTile(1, count);
+    TileData pongTile(1, count);
+    
+    // Assign UB addresses (compiler would do this in real usage)
+    TASSIGN(accTile, 0x0);
+    TASSIGN(pingTile, 0x10000);
+    TASSIGN(pongTile, 0x20000);
+    
+    // Call TALLREDUCE with UB tiles
+    pto::comm::TALLREDUCE(pg, outputG, accTile, pingTile, pongTile);
     pto::comm::TQUIET();
 }
 
 template <typename T, size_t count>
 bool RunAllReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size){
     
-    int32_t ret = shmem_set_conf_store_tls(false, nullptr, 0);
-    if(ret != 0){
+    // Initialize shmem TLS configuration
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
+    if (ret != 0) {
         std::cerr << "[ERROR] Failed to init shmem tls\n";
         return false;
     }
@@ -76,18 +92,25 @@ bool RunAllReduceKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     status |= aclrtSetDevice(device_id);
     status |= aclrtCreateStream(&stream);
 
+    // Initialize shmem symmetric heap
     ShmemEnv env;
     const char *ip = "tcp://127.0.0.1:8766";
     env.rank = rank_id;
     env.size = n_ranks;
     env.ipPort = ip;
+    env.heapBytes = local_mem_size;
     
-    if(!ShmemInitFromEnv(env)){
+    if (!ShmemInitFromEnv(env)) {
+        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
         return false;
     }
 
-    void *global_data_ptr;
-    global_data_ptr = pto::comm::ContextManager::SymmetricAlloc(count * sizeof(T));
+    // Allocate symmetric heap memory for input (shared across ranks)
+    void *input_ptr = ShmemMalloc(count * sizeof(T));
+    if (input_ptr == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
 
     T *input_host;
     aclrtMallocHost(reinterpret_cast<void**>(&input_host), count * sizeof(T));
@@ -97,19 +120,26 @@ bool RunAllReduceKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 
     T* output_device;
     aclrtMalloc(reinterpret_cast<void**>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    
     // Initialize input data: Rank R has data i + R * 100
     for (size_t i = 0; i < count; ++i) {
         input_host[i] = static_cast<T>(i + rank_id * 100);
     }
 
-    aclrtMemcpy(global_data_ptr, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(input_ptr, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
 #if ENABLE_DEBUG_PRINT
-    std::cout << "[DEBUG] Rank " << rank_id << " data_ptr: " << global_data_ptr << std::endl;
+    std::cout << "[DEBUG] Rank " << rank_id << " input_ptr: " << input_ptr << std::endl;
 #endif
 
-    TAllReduceKernelImpl<T, count><<<1, nullptr, stream>>>((T*)global_data_ptr, (T*)output_device, n_ranks);
+    // Barrier to ensure all ranks have initialized their data
+    ShmemBarrierAll();
+
+    TAllReduceKernelImpl<T, count><<<1, nullptr, stream>>>((T*)input_ptr, (T*)output_device, n_ranks);
     status = aclrtSynchronizeStream(stream);
+
+    // Barrier after kernel execution
+    ShmemBarrierAll();
 
     aclrtMemcpy(output_host, count * sizeof(T), output_device, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -147,7 +177,9 @@ bool RunAllReduceKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
     aclrtFree(output_device);
-    pto::comm::ContextManager::SymmetricFree(global_data_ptr);
+    ShmemFree(input_ptr);
+
+    ShmemFinalize();
 
     status |= aclrtDestroyStream(stream);
     status |= aclrtResetDevice(device_id);
@@ -184,4 +216,3 @@ bool RunAllReduce(int n_ranks, int n_devices, int first_rank_id, int first_devic
 template bool RunAllReduce<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunAllReduce<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunAllReduce<int32_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-

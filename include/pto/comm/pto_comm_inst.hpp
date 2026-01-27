@@ -1,58 +1,92 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #ifndef PTO_COMM_INST_HPP
 #define PTO_COMM_INST_HPP
 
 #include "pto/comm/comm_types.hpp"
 #include "pto/comm/pto_comm_instr_impl.hpp"
 
-#define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
-
 namespace pto {
 namespace comm {
 
-template < typename GlobalDstData, typename GlobalSrcData>
-PTO_INST void TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
+// ============================================================================
+// TPUT: Remote write operation - write local data to remote PE's memory
+// Note: UB tile must be pre-allocated by compiler
+// ============================================================================
+
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+PTO_INST void TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, TileData &ubTile)
 {
-    MAP_INSTR_IMPL(TPUT, dstGlobal, srcGlobal);
+    TPUT_IMPL(dstGlobal, srcGlobal, ubTile);
 }
 
-template < typename GlobalDstData, typename GlobalSrcData>
-PTO_INST void TGET(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
-{
-    MAP_INSTR_IMPL(TGET, dstGlobal, srcGlobal);
-}
+// ============================================================================
+// TGET: Remote read operation - read remote PE's data to local memory
+// Note: UB tile must be pre-allocated by compiler
+// ============================================================================
 
-PTO_INST void TQUIET()
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+PTO_INST void TGET(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, TileData &ubTile)
 {
-    MAP_INSTR_IMPL(TQUIET);
+    TGET_IMPL(dstGlobal, srcGlobal, ubTile);
 }
 
 PTO_INST void TBARRIER()
 {
-    MAP_INSTR_IMPL(TBARRIER);
+    TBARRIER_IMPL();
 }
+
+template <typename GlobalSignalData>
+PTO_INST void TBARRIER(GlobalSignalData *barrierSignals, int nranks, int my_rank)
+{
+    TBARRIER_IMPL(barrierSignals, nranks, my_rank);
+}
+
+// ============================================================================
+// TALLREDUCE: All-reduce operation across parallel group
+// Note: All UB tiles (accTile, pingTile, pongTile) must be pre-allocated by compiler
+// ============================================================================
 
 template <typename ParallelGroup, typename GlobalDstData, typename TileData>
-PTO_INST void TALLREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal, TileData &tile0, TileData &tile1, TileData &tile2)
+PTO_INST void TALLREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal, 
+                         TileData &accTile, TileData &pingTile, TileData &pongTile)
 {
-    MAP_INSTR_IMPL(TALLREDUCE, parallelGroup, dstGlobal, tile0, tile1, tile2);
+    TALLREDUCE_IMPL(parallelGroup, dstGlobal, accTile, pingTile, pongTile);
 }
 
-template <typename ParallelGroup, typename GlobalDstData>
-PTO_INST void TALLGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal)
+// ============================================================================
+// TALLGATHER: All-gather operation across parallel group
+// Note: UB tile must be pre-allocated by compiler
+// ============================================================================
+
+template <typename ParallelGroup, typename GlobalDstData, typename TileData>
+PTO_INST void TALLGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal, TileData &ubTile)
 {
-    MAP_INSTR_IMPL(TALLGATHER, parallelGroup, dstGlobal);
+    TALLGATHER_IMPL(parallelGroup, dstGlobal, ubTile);
 }
 
-template <typename ParallelGroup, typename GlobalSrcData>
-PTO_INST void TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal, int root)
+// ============================================================================
+// TBROADCAST: Broadcast data from root rank to all ranks
+// Note: UB tile must be pre-allocated by compiler
+// ============================================================================
+
+template <typename ParallelGroup, typename GlobalSrcData, typename TileData>
+PTO_INST void TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal, int root, TileData &ubTile)
 {
-    MAP_INSTR_IMPL(TBROADCAST, parallelGroup, srcGlobal, root);
+    TBROADCAST_IMPL(parallelGroup, srcGlobal, root, ubTile);
 }
 
 // ============================================================================
 // TNOTIFY: Send flag notification to remote PE
-// dstSignal's data() and GetRank() already contain target location and PE info
-// Signal type is int32_t, compatible with shmem signal API
+// Signal type is int32_t
 // ============================================================================
 
 // Compile-time specified NotifyOp (recommended, zero overhead)
@@ -72,12 +106,10 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignal, int32_t value, NotifyOp op)
 // ============================================================================
 // TWAIT: Wait until signal(s) meet comparison condition
 // Used in conjunction with TNOTIFY for synchronization
-// signal contains the local signal to wait on
-// Signal type is int32_t, compatible with shmem signal API
+// Signal type is int32_t
 // ============================================================================
 
 // Compile-time specified comparison (recommended, zero overhead)
-// Default: wait until signal == cmpValue
 template <WaitCmp cmp = WaitCmp::EQ, typename GlobalSignalData>
 PTO_INST void TWAIT(GlobalSignalData &signal, int32_t cmpValue)
 {
@@ -92,7 +124,6 @@ PTO_INST void TWAIT(GlobalSignalData &signal, WaitCmp cmp, int32_t cmpValue)
 }
 
 // Wait for all signals in array to meet condition
-// Compile-time specified comparison
 template <WaitCmp cmp = WaitCmp::EQ, typename GlobalSignalData>
 PTO_INST void TWAIT_ALL(GlobalSignalData *signals, int count, int32_t cmpValue)
 {
@@ -109,11 +140,9 @@ PTO_INST void TWAIT_ALL(GlobalSignalData *signals, int count, WaitCmp cmp, int32
 // ============================================================================
 // TTEST: Non-blocking test if signal(s) meet comparison condition
 // Returns true if condition is satisfied, false otherwise
-// Used for polling-based synchronization with timeout or interleaved work
 // ============================================================================
 
 // Compile-time specified comparison (recommended, zero overhead)
-// Returns true if signal meets condition
 template <WaitCmp cmp = WaitCmp::EQ, typename GlobalSignalData>
 PTO_INST bool TTEST(GlobalSignalData &signal, int32_t cmpValue)
 {
@@ -128,7 +157,6 @@ PTO_INST bool TTEST(GlobalSignalData &signal, WaitCmp cmp, int32_t cmpValue)
 }
 
 // Test all signals in array (returns true only if ALL meet condition)
-// Compile-time specified comparison
 template <WaitCmp cmp = WaitCmp::EQ, typename GlobalSignalData>
 PTO_INST bool TTEST_ALL(GlobalSignalData *signals, int count, int32_t cmpValue)
 {
@@ -146,4 +174,3 @@ PTO_INST bool TTEST_ALL(GlobalSignalData *signals, int count, WaitCmp cmp, int32
 } // namespace pto
 
 #endif // PTO_COMM_INST_HPP
-

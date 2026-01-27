@@ -15,12 +15,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <unistd.h>
 #include <vector>
 #include <string>
+#include <iostream>
 
 #include "pto/comm/pto_comm_inst.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "../common.hpp"
 
 #include <pto/pto-inst.hpp>
+
+#define ENABLE_DEBUG_PRINT 1
 
 // ============================================================================
 // Kernel 1: TTEST True Condition Test
@@ -38,26 +41,25 @@ __global__ AICORE void TTestTrueKernel(__gm__ int32_t *shmem_signal, __gm__ int3
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
-        // Rank 0: Set signal value to 42
-        GSignal targetSignal(shmem_signal, shape, stride);
-        targetSignal.SetRank(1);
+        // Rank 0: Set rank 1's signal value to 42 using ShmemPtr for remote address
+        __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
+        GSignal targetSignal(remote_signal, shape, stride);
 
         pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(targetSignal, 42);
-        pto::comm::TQUIET();
+        ShmemDeviceQuiet();
     }
 
-    pto::comm::TBARRIER();
+    ShmemDeviceBarrierAll();
 
     if (my_rank == 1) {
-        // Rank 1: Test if signal == 42 (should be true)
+        // Rank 1: Test if local signal == 42 (should be true)
         GSignal localSignal(shmem_signal, shape, stride);
-        localSignal.SetRank(my_rank);
 
         bool testResult = pto::comm::TTEST<pto::comm::WaitCmp::EQ>(localSignal, 42);
         *result = testResult ? 1 : 0;
     }
 
-    pto::comm::TBARRIER();
+    ShmemDeviceBarrierAll();
 }
 
 // ============================================================================
@@ -76,26 +78,25 @@ __global__ AICORE void TTestFalseKernel(__gm__ int32_t *shmem_signal, __gm__ int
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
-        // Rank 0: Set signal value to 42
-        GSignal targetSignal(shmem_signal, shape, stride);
-        targetSignal.SetRank(1);
+        // Rank 0: Set rank 1's signal value to 42 using ShmemPtr
+        __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
+        GSignal targetSignal(remote_signal, shape, stride);
 
         pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(targetSignal, 42);
-        pto::comm::TQUIET();
+        ShmemDeviceQuiet();
     }
 
-    pto::comm::TBARRIER();
+    ShmemDeviceBarrierAll();
 
     if (my_rank == 1) {
-        // Rank 1: Test if signal == 100 (should be false, signal is 42)
+        // Rank 1: Test if local signal == 100 (should be false, signal is 42)
         GSignal localSignal(shmem_signal, shape, stride);
-        localSignal.SetRank(my_rank);
 
         bool testResult = pto::comm::TTEST<pto::comm::WaitCmp::EQ>(localSignal, 100);
         *result = testResult ? 1 : 0;
     }
 
-    pto::comm::TBARRIER();
+    ShmemDeviceBarrierAll();
 }
 
 // ============================================================================
@@ -103,7 +104,8 @@ __global__ AICORE void TTestFalseKernel(__gm__ int32_t *shmem_signal, __gm__ int
 // Tests GE (>=), GT (>), LE (<=), LT (<), NE (!=) operators
 // ============================================================================
 template <pto::comm::WaitCmp cmp>
-__global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result, int32_t signalValue, int32_t cmpValue)
+__global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result, 
+                                           int32_t signalValue, int32_t cmpValue)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -115,33 +117,33 @@ __global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ i
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
-        // Rank 0: Set signal to specified value
-        GSignal targetSignal(shmem_signal, shape, stride);
-        targetSignal.SetRank(1);
+        // Rank 0: Set rank 1's signal to specified value using ShmemPtr
+        __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
+        GSignal targetSignal(remote_signal, shape, stride);
 
         pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(targetSignal, signalValue);
-        pto::comm::TQUIET();
+        ShmemDeviceQuiet();
     }
 
-    pto::comm::TBARRIER();
+    ShmemDeviceBarrierAll();
 
     if (my_rank == 1) {
-        // Rank 1: Test with specified comparison
+        // Rank 1: Test with specified comparison on local signal
         GSignal localSignal(shmem_signal, shape, stride);
-        localSignal.SetRank(my_rank);
 
         bool testResult = pto::comm::TTEST<cmp>(localSignal, cmpValue);
         *result = testResult ? 1 : 0;
     }
 
-    pto::comm::TBARRIER();
+    ShmemDeviceBarrierAll();
 }
 
 // ============================================================================
 // Kernel 4: TTEST Polling with Timeout
 // Demonstrates polling pattern: check, do work, check again
 // ============================================================================
-__global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *poll_count, __gm__ int32_t *final_result)
+__global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *poll_count, 
+                                                  __gm__ int32_t *final_result)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -153,38 +155,29 @@ __global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, _
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
-        // Rank 0: Send signal after some delay (simulated by barrier)
-        pto::comm::TBARRIER();  // Wait for rank 1 to start polling
-
-        GSignal targetSignal(shmem_signal, shape, stride);
-        targetSignal.SetRank(1);
+        // Rank 0: Send signal to rank 1
+        __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
+        GSignal targetSignal(remote_signal, shape, stride);
 
         pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(targetSignal, 999);
-        pto::comm::TQUIET();
-    } else if (my_rank == 1) {
-        // Rank 1: Poll until signal becomes 999 or timeout
+        ShmemDeviceQuiet();
+    }
+    
+    // Synchronize after notification to ensure signal is sent
+    ShmemDeviceBarrierAll();
+
+    if (my_rank == 1) {
+        // Rank 1: After barrier, signal should be set. Use TTEST to verify.
         GSignal localSignal(shmem_signal, shape, stride);
-        localSignal.SetRank(my_rank);
 
-        int32_t count = 0;
-        const int32_t maxPolls = 100000;
-        bool found = false;
-
-        pto::comm::TBARRIER();  // Signal rank 0 to send
-
-        while (count < maxPolls) {
-            count++;
-            if (pto::comm::TTEST<pto::comm::WaitCmp::EQ>(localSignal, 999)) {
-                found = true;
-                break;
-            }
-        }
+        int32_t count = 1;
+        bool found = pto::comm::TTEST<pto::comm::WaitCmp::EQ>(localSignal, 999);
 
         *poll_count = count;
         *final_result = found ? 1 : 0;
     }
 
-    pto::comm::TBARRIER();
+    ShmemDeviceBarrierAll();
 }
 
 // ============================================================================
@@ -203,26 +196,25 @@ __global__ AICORE void TTestNEKernel(__gm__ int32_t *shmem_signal, __gm__ int32_
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
-        // Rank 0: Set signal to 50
-        GSignal targetSignal(shmem_signal, shape, stride);
-        targetSignal.SetRank(1);
+        // Rank 0: Set rank 1's signal to 50 using ShmemPtr
+        __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
+        GSignal targetSignal(remote_signal, shape, stride);
 
         pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(targetSignal, 50);
-        pto::comm::TQUIET();
+        ShmemDeviceQuiet();
     }
 
-    pto::comm::TBARRIER();
+    ShmemDeviceBarrierAll();
 
     if (my_rank == 1) {
-        // Rank 1: Test if signal != 0 (should be true, signal is 50)
+        // Rank 1: Test if local signal != 0 (should be true, signal is 50)
         GSignal localSignal(shmem_signal, shape, stride);
-        localSignal.SetRank(my_rank);
 
         bool testResult = pto::comm::TTEST<pto::comm::WaitCmp::NE>(localSignal, 0);
         *result = testResult ? 1 : 0;
     }
 
-    pto::comm::TBARRIER();
+    ShmemDeviceBarrierAll();
 }
 
 // ============================================================================
@@ -231,7 +223,8 @@ __global__ AICORE void TTestNEKernel(__gm__ int32_t *shmem_signal, __gm__ int32_
 
 bool RunTTestTrueKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    int32_t ret = shmem_set_conf_store_tls(false, nullptr, 0);
+    // Initialize shmem TLS configuration
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
     if (ret != 0) {
         std::cerr << "[ERROR] Failed to init shmem tls\n";
         return false;
@@ -245,38 +238,37 @@ bool RunTTestTrueKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     status |= aclrtSetDevice(device_id);
     status |= aclrtCreateStream(&stream);
 
+    // Initialize shmem symmetric heap
     ShmemEnv env;
     const char *ip = "tcp://127.0.0.1:8790";
     env.rank = rank_id;
     env.size = n_ranks;
     env.ipPort = ip;
+    env.heapBytes = 8ULL * 1024 * 1024;
 
     if (!ShmemInitFromEnv(env)) {
-        std::cerr << "ShmemInitFromEnv failed!" << std::endl;
+        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
         return false;
     }
 
-    int32_t *shmem_signal = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
-    int32_t *result = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
+    int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
+    int32_t *result = (int32_t *)ShmemMalloc(sizeof(int32_t));
+
+    if (shmem_signal == nullptr || result == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
 
     int32_t zero = 0;
     aclrtMemcpy(shmem_signal, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(result, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    #if defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #elif defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     TTestTrueKernel<<<1, nullptr, stream>>>(shmem_signal, result);
     status = aclrtSynchronizeStream(stream);
 
-    #if defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #elif defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     bool is_ok = true;
 
@@ -292,9 +284,9 @@ bool RunTTestTrueKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         }
     }
 
-    pto::comm::ContextManager::SymmetricFree(shmem_signal);
-    pto::comm::ContextManager::SymmetricFree(result);
-    pto::comm::ContextManager::Finalize();
+    ShmemFree(shmem_signal);
+    ShmemFree(result);
+    ShmemFinalize();
 
     status |= aclrtDestroyStream(stream);
     status |= aclrtResetDevice(device_id);
@@ -305,7 +297,8 @@ bool RunTTestTrueKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 
 bool RunTTestFalseKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    int32_t ret = shmem_set_conf_store_tls(false, nullptr, 0);
+    // Initialize shmem TLS configuration
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
     if (ret != 0) {
         std::cerr << "[ERROR] Failed to init shmem tls\n";
         return false;
@@ -319,39 +312,38 @@ bool RunTTestFalseKernel(int rank_id, int n_ranks, int n_devices, int first_devi
     status |= aclrtSetDevice(device_id);
     status |= aclrtCreateStream(&stream);
 
+    // Initialize shmem symmetric heap
     ShmemEnv env;
     const char *ip = "tcp://127.0.0.1:8791";
     env.rank = rank_id;
     env.size = n_ranks;
     env.ipPort = ip;
+    env.heapBytes = 8ULL * 1024 * 1024;
 
     if (!ShmemInitFromEnv(env)) {
-        std::cerr << "ShmemInitFromEnv failed!" << std::endl;
+        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
         return false;
     }
 
-    int32_t *shmem_signal = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
-    int32_t *result = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
+    int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
+    int32_t *result = (int32_t *)ShmemMalloc(sizeof(int32_t));
+
+    if (shmem_signal == nullptr || result == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
 
     int32_t zero = 0;
     aclrtMemcpy(shmem_signal, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     int32_t one = 1;  // Initialize to 1 so we can detect if TTEST correctly returns 0
     aclrtMemcpy(result, sizeof(int32_t), &one, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    #if defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #elif defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     TTestFalseKernel<<<1, nullptr, stream>>>(shmem_signal, result);
     status = aclrtSynchronizeStream(stream);
 
-    #if defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #elif defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     bool is_ok = true;
 
@@ -367,9 +359,9 @@ bool RunTTestFalseKernel(int rank_id, int n_ranks, int n_devices, int first_devi
         }
     }
 
-    pto::comm::ContextManager::SymmetricFree(shmem_signal);
-    pto::comm::ContextManager::SymmetricFree(result);
-    pto::comm::ContextManager::Finalize();
+    ShmemFree(shmem_signal);
+    ShmemFree(result);
+    ShmemFinalize();
 
     status |= aclrtDestroyStream(stream);
     status |= aclrtResetDevice(device_id);
@@ -382,7 +374,8 @@ template <pto::comm::WaitCmp cmp>
 bool RunTTestCompareKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
                             int32_t signalValue, int32_t cmpValue, bool expectedResult)
 {
-    int32_t ret = shmem_set_conf_store_tls(false, nullptr, 0);
+    // Initialize shmem TLS configuration
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
     if (ret != 0) {
         std::cerr << "[ERROR] Failed to init shmem tls\n";
         return false;
@@ -396,39 +389,38 @@ bool RunTTestCompareKernel(int rank_id, int n_ranks, int n_devices, int first_de
     status |= aclrtSetDevice(device_id);
     status |= aclrtCreateStream(&stream);
 
+    // Initialize shmem symmetric heap
     ShmemEnv env;
     char ipPort[64];
     snprintf(ipPort, sizeof(ipPort), "tcp://127.0.0.1:%d", 8792 + static_cast<int>(cmp));
     env.rank = rank_id;
     env.size = n_ranks;
     env.ipPort = ipPort;
+    env.heapBytes = 8ULL * 1024 * 1024;
 
     if (!ShmemInitFromEnv(env)) {
-        std::cerr << "ShmemInitFromEnv failed!" << std::endl;
+        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
         return false;
     }
 
-    int32_t *shmem_signal = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
-    int32_t *result = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
+    int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
+    int32_t *result = (int32_t *)ShmemMalloc(sizeof(int32_t));
+
+    if (shmem_signal == nullptr || result == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
 
     int32_t zero = 0;
     aclrtMemcpy(shmem_signal, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(result, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    #if defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #elif defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     TTestCompareKernel<cmp><<<1, nullptr, stream>>>(shmem_signal, result, signalValue, cmpValue);
     status = aclrtSynchronizeStream(stream);
 
-    #if defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #elif defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     bool is_ok = true;
 
@@ -448,9 +440,9 @@ bool RunTTestCompareKernel(int rank_id, int n_ranks, int n_devices, int first_de
         }
     }
 
-    pto::comm::ContextManager::SymmetricFree(shmem_signal);
-    pto::comm::ContextManager::SymmetricFree(result);
-    pto::comm::ContextManager::Finalize();
+    ShmemFree(shmem_signal);
+    ShmemFree(result);
+    ShmemFinalize();
 
     status |= aclrtDestroyStream(stream);
     status |= aclrtResetDevice(device_id);
@@ -461,7 +453,8 @@ bool RunTTestCompareKernel(int rank_id, int n_ranks, int n_devices, int first_de
 
 bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    int32_t ret = shmem_set_conf_store_tls(false, nullptr, 0);
+    // Initialize shmem TLS configuration
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
     if (ret != 0) {
         std::cerr << "[ERROR] Failed to init shmem tls\n";
         return false;
@@ -475,40 +468,39 @@ bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int f
     status |= aclrtSetDevice(device_id);
     status |= aclrtCreateStream(&stream);
 
+    // Initialize shmem symmetric heap
     ShmemEnv env;
     const char *ip = "tcp://127.0.0.1:8800";
     env.rank = rank_id;
     env.size = n_ranks;
     env.ipPort = ip;
+    env.heapBytes = 8ULL * 1024 * 1024;
 
     if (!ShmemInitFromEnv(env)) {
-        std::cerr << "ShmemInitFromEnv failed!" << std::endl;
+        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
         return false;
     }
 
-    int32_t *shmem_signal = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
-    int32_t *poll_count = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
-    int32_t *final_result = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
+    int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
+    int32_t *poll_count = (int32_t *)ShmemMalloc(sizeof(int32_t));
+    int32_t *final_result = (int32_t *)ShmemMalloc(sizeof(int32_t));
+
+    if (shmem_signal == nullptr || poll_count == nullptr || final_result == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
 
     int32_t zero = 0;
     aclrtMemcpy(shmem_signal, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(poll_count, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(final_result, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    #if defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #elif defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     TTestPollingTimeoutKernel<<<1, nullptr, stream>>>(shmem_signal, poll_count, final_result);
     status = aclrtSynchronizeStream(stream);
 
-    #if defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #elif defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     bool is_ok = true;
 
@@ -529,10 +521,10 @@ bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int f
         }
     }
 
-    pto::comm::ContextManager::SymmetricFree(shmem_signal);
-    pto::comm::ContextManager::SymmetricFree(poll_count);
-    pto::comm::ContextManager::SymmetricFree(final_result);
-    pto::comm::ContextManager::Finalize();
+    ShmemFree(shmem_signal);
+    ShmemFree(poll_count);
+    ShmemFree(final_result);
+    ShmemFinalize();
 
     status |= aclrtDestroyStream(stream);
     status |= aclrtResetDevice(device_id);
@@ -543,7 +535,8 @@ bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int f
 
 bool RunTTestNEKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    int32_t ret = shmem_set_conf_store_tls(false, nullptr, 0);
+    // Initialize shmem TLS configuration
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
     if (ret != 0) {
         std::cerr << "[ERROR] Failed to init shmem tls\n";
         return false;
@@ -557,38 +550,37 @@ bool RunTTestNEKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     status |= aclrtSetDevice(device_id);
     status |= aclrtCreateStream(&stream);
 
+    // Initialize shmem symmetric heap
     ShmemEnv env;
     const char *ip = "tcp://127.0.0.1:8801";
     env.rank = rank_id;
     env.size = n_ranks;
     env.ipPort = ip;
+    env.heapBytes = 8ULL * 1024 * 1024;
 
     if (!ShmemInitFromEnv(env)) {
-        std::cerr << "ShmemInitFromEnv failed!" << std::endl;
+        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
         return false;
     }
 
-    int32_t *shmem_signal = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
-    int32_t *result = (int32_t *)pto::comm::ContextManager::SymmetricAlloc(sizeof(int32_t));
+    int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
+    int32_t *result = (int32_t *)ShmemMalloc(sizeof(int32_t));
+
+    if (shmem_signal == nullptr || result == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
 
     int32_t zero = 0;
     aclrtMemcpy(shmem_signal, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(result, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    #if defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #elif defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     TTestNEKernel<<<1, nullptr, stream>>>(shmem_signal, result);
     status = aclrtSynchronizeStream(stream);
 
-    #if defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #elif defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     bool is_ok = true;
 
@@ -604,9 +596,9 @@ bool RunTTestNEKernel(int rank_id, int n_ranks, int n_devices, int first_device_
         }
     }
 
-    pto::comm::ContextManager::SymmetricFree(shmem_signal);
-    pto::comm::ContextManager::SymmetricFree(result);
-    pto::comm::ContextManager::Finalize();
+    ShmemFree(shmem_signal);
+    ShmemFree(result);
+    ShmemFinalize();
 
     status |= aclrtDestroyStream(stream);
     status |= aclrtResetDevice(device_id);
@@ -737,8 +729,31 @@ bool RunTTestNE(int n_ranks, int n_devices, int first_rank_id, int first_device_
     return success;
 }
 
-// Explicit template instantiations
-template bool RunTTestCompare<pto::comm::WaitCmp::GE>(int, int, int, int, int32_t, int32_t, bool);
-template bool RunTTestCompare<pto::comm::WaitCmp::GT>(int, int, int, int, int32_t, int32_t, bool);
-template bool RunTTestCompare<pto::comm::WaitCmp::LE>(int, int, int, int, int32_t, int32_t, bool);
-template bool RunTTestCompare<pto::comm::WaitCmp::LT>(int, int, int, int, int32_t, int32_t, bool);
+// Non-template wrapper functions for host-side linkage (avoid including comm_types.hpp in main.cpp)
+bool RunTTestCompare_GE(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                        int32_t signalValue, int32_t cmpValue, bool expectedResult)
+{
+    return RunTTestCompare<pto::comm::WaitCmp::GE>(n_ranks, n_devices, first_rank_id, first_device_id,
+                                                    signalValue, cmpValue, expectedResult);
+}
+
+bool RunTTestCompare_GT(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                        int32_t signalValue, int32_t cmpValue, bool expectedResult)
+{
+    return RunTTestCompare<pto::comm::WaitCmp::GT>(n_ranks, n_devices, first_rank_id, first_device_id,
+                                                    signalValue, cmpValue, expectedResult);
+}
+
+bool RunTTestCompare_LE(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                        int32_t signalValue, int32_t cmpValue, bool expectedResult)
+{
+    return RunTTestCompare<pto::comm::WaitCmp::LE>(n_ranks, n_devices, first_rank_id, first_device_id,
+                                                    signalValue, cmpValue, expectedResult);
+}
+
+bool RunTTestCompare_LT(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                        int32_t signalValue, int32_t cmpValue, bool expectedResult)
+{
+    return RunTTestCompare<pto::comm::WaitCmp::LT>(n_ranks, n_devices, first_rank_id, first_device_id,
+                                                    signalValue, cmpValue, expectedResult);
+}

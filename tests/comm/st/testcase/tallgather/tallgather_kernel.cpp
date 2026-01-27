@@ -32,6 +32,9 @@ __global__ AICORE void TAllGatherKernelImpl(__gm__ T *dst, __gm__ T *src, int nr
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
 
+    // UB Tile definition: must be pre-allocated for native implementation
+    using TileData = pto::Tile<pto::TileType::Vec, T, 1, count, pto::BLayout::RowMajor, -1, -1>;
+
     int my_rank = shmem_my_pe();
 
     ShapeDyn srcShape(1, 1, 1, 1, count);
@@ -43,8 +46,6 @@ __global__ AICORE void TAllGatherKernelImpl(__gm__ T *dst, __gm__ T *src, int nr
     dstG.SetRank(my_rank);
 
     // Create ParallelGroup: each tensor in the group represents the input buffer on a different rank.
-    // In symmetric memory model, all ranks see the same address for src, so we use the same base pointer
-    // but set different ranks via SetRank(i) to access data on rank i.
     Global baseSrcG(src, srcShape, srcStride);
     Global tensors[16];
     Global *tensorPtrs[16];
@@ -52,21 +53,27 @@ __global__ AICORE void TAllGatherKernelImpl(__gm__ T *dst, __gm__ T *src, int nr
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
         tensors[i] = baseSrcG;
-        tensors[i].SetRank(i);  // Each tensor corresponds to rank i's symmetric memory region
+        tensors[i].SetRank(i);  // Each tensor corresponds to rank i's memory region
         tensorPtrs[i] = &tensors[i];
     }
     
     pto::comm::ParallelGroup<Global> pg(tensorPtrs, actual_nranks, my_rank);
     
-    pto::comm::TALLGATHER(pg, dstG);
+    // Allocate UB tile for staging data
+    TileData ubTile(1, count);
+    TASSIGN(ubTile, 0x0);
+    
+    // Call TALLGATHER with UB tile
+    pto::comm::TALLGATHER(pg, dstG, ubTile);
     pto::comm::TQUIET();
 }
 
 template <typename T, size_t count>
 bool RunAllGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size){
     
-    int32_t ret = shmem_set_conf_store_tls(false, nullptr, 0);
-    if(ret != 0){
+    // Initialize shmem TLS configuration
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
+    if (ret != 0) {
         std::cerr << "[ERROR] Failed to init shmem tls\n";
         return false;
     }
@@ -83,23 +90,29 @@ bool RunAllGatherKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     status |= aclrtSetDevice(device_id);
     status |= aclrtCreateStream(&stream);
 
+    // Initialize shmem symmetric heap
     ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8766";
+    const char *ip = "tcp://127.0.0.1:8767";
     env.rank = rank_id;
     env.size = n_ranks;
     env.ipPort = ip;
+    env.heapBytes = local_mem_size;
     
-    if(!ShmemInitFromEnv(env)){
+    if (!ShmemInitFromEnv(env)) {
+        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
         return false;
     }
 
-    // Use SymmetricAlloc for both input and output to ensure they are accessible by all ranks
+    // Use ShmemMalloc for both input and output to ensure they are accessible by all ranks
     size_t input_size = count * sizeof(T);
     size_t output_size = n_ranks * count * sizeof(T);
-    void* shmem_ptr = pto::comm::ContextManager::SymmetricAlloc(input_size + output_size);
-    
-    void* input_ptr = shmem_ptr;
-    void* output_ptr = (uint8_t*)shmem_ptr + input_size;
+    void* input_ptr = ShmemMalloc(input_size);
+    void* output_ptr = ShmemMalloc(output_size);
+
+    if (input_ptr == nullptr || output_ptr == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
 
     T *input_host, *output_host;
     aclrtMallocHost(reinterpret_cast<void**>(&input_host), input_size);
@@ -115,8 +128,14 @@ bool RunAllGatherKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 
     aclrtMemcpy(input_ptr, input_size, input_host, input_size, ACL_MEMCPY_HOST_TO_DEVICE);
 
+    // Barrier to ensure all ranks have initialized their data
+    ShmemBarrierAll();
+
     TAllGatherKernelImpl<T, count><<<1, nullptr, stream>>>((T*)output_ptr, (T*)input_ptr, n_ranks);
     status = aclrtSynchronizeStream(stream);
+
+    // Barrier after kernel execution
+    ShmemBarrierAll();
 
     aclrtMemcpy(output_host, output_size, output_ptr, output_size, ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -155,8 +174,10 @@ bool RunAllGatherKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
-    // input_ptr and output_ptr are both part of shmem_ptr, freed below
-    pto::comm::ContextManager::SymmetricFree(shmem_ptr);
+    ShmemFree(input_ptr);
+    ShmemFree(output_ptr);
+
+    ShmemFinalize();
 
     status |= aclrtDestroyStream(stream);
     status |= aclrtResetDevice(device_id);

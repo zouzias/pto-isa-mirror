@@ -1,3 +1,13 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
 #include <cstddef>
 #include <cstdint>
 
@@ -22,6 +32,9 @@ __global__ AICORE void TBroadCastKernelImpl(__gm__ T *input, __gm__ T *output, i
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
 
+    // UB Tile definition: must be pre-allocated for native implementation
+    using TileData = pto::Tile<pto::TileType::Vec, T, 1, count, pto::BLayout::RowMajor, -1, -1>;
+
     int my_rank = shmem_my_pe();
 
     ShapeDyn shape(1, 1, 1, 1, count);
@@ -41,15 +54,21 @@ __global__ AICORE void TBroadCastKernelImpl(__gm__ T *input, __gm__ T *output, i
     
     pto::comm::ParallelGroup<Global> pg(tensorPtrs, actual_nranks, my_rank);
     
-    pto::comm::TBROADCAST(pg, tempG, root);
+    // Allocate UB tile for staging data
+    TileData ubTile(1, count);
+    TASSIGN(ubTile, 0x0);
+    
+    // Call TBROADCAST with UB tile
+    pto::comm::TBROADCAST(pg, tempG, root, ubTile);
     pto::comm::TQUIET();
 }
 
 template <typename T, size_t count>
 bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root){
     
-    int32_t ret = shmem_set_conf_store_tls(false, nullptr, 0);
-    if(ret != 0){
+    // Initialize shmem TLS configuration
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
+    if (ret != 0) {
         std::cerr << "[ERROR] Failed to init shmem tls\n";
         return false;
     }
@@ -66,27 +85,32 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     status |= aclrtSetDevice(device_id);
     status |= aclrtCreateStream(&stream);
 
+    // Initialize shmem symmetric heap
     ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8766";
+    const char *ip = "tcp://127.0.0.1:8768";
     env.rank = rank_id;
     env.size = n_ranks;
     env.ipPort = ip;
+    env.heapBytes = 8ULL * 1024 * 1024;
     
-    if(!ShmemInitFromEnv(env)){
+    if (!ShmemInitFromEnv(env)) {
+        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
         return false;
     }
 
-    void *global_data_ptr;
-    global_data_ptr = pto::comm::ContextManager::SymmetricAlloc(count * sizeof(T));
+    void *input_ptr = ShmemMalloc(count * sizeof(T));
+    void *output_ptr = ShmemMalloc(count * sizeof(T));
+
+    if (input_ptr == nullptr || output_ptr == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
 
     T *input_host;
     aclrtMallocHost(reinterpret_cast<void**>(&input_host), count * sizeof(T));
 
     T* output_host;
     aclrtMallocHost(reinterpret_cast<void**>(&output_host), count * sizeof(T));
-
-    T* output_device;
-    output_device = (T*)pto::comm::ContextManager::SymmetricAlloc(count * sizeof(T));
 
     // Initialize input data: Rank root has data i + root * 100, others have 0
     for (size_t i = 0; i < count; ++i) {
@@ -98,8 +122,8 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         output_host[i] = static_cast<T>(0);
     }
 
-    aclrtMemcpy(global_data_ptr, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(output_device, count * sizeof(T), output_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(input_ptr, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(output_ptr, count * sizeof(T), output_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
 #if ENABLE_DEBUG_PRINT
     if (rank_id == root) {
@@ -109,10 +133,16 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     }
 #endif
 
-    TBroadCastKernelImpl<T, count><<<1, nullptr, stream>>>((T*)global_data_ptr, (T*)output_device, n_ranks, root);
+    // Barrier to ensure all ranks have initialized their data
+    ShmemBarrierAll();
+
+    TBroadCastKernelImpl<T, count><<<1, nullptr, stream>>>((T*)input_ptr, (T*)output_ptr, n_ranks, root);
     status = aclrtSynchronizeStream(stream);
 
-    aclrtMemcpy(output_host, count * sizeof(T), output_device, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+    // Barrier after kernel execution
+    ShmemBarrierAll();
+
+    aclrtMemcpy(output_host, count * sizeof(T), output_ptr, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
     // Verify: All ranks should have data Sum_{R=root} (i + root * 100)
     bool is_ok = true;
@@ -143,8 +173,10 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
-    pto::comm::ContextManager::SymmetricFree(output_device);
-    pto::comm::ContextManager::SymmetricFree(global_data_ptr);
+    ShmemFree(input_ptr);
+    ShmemFree(output_ptr);
+
+    ShmemFinalize();
 
     status |= aclrtDestroyStream(stream);
     status |= aclrtResetDevice(device_id);
@@ -179,4 +211,3 @@ bool RunBroadCast(int n_ranks, int n_devices, int first_rank_id, int first_devic
 // Explicit instantiations
 template bool RunBroadCast<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
 template bool RunBroadCast<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-
