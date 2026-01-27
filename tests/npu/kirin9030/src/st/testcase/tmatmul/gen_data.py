@@ -13,7 +13,7 @@
 import os
 import numpy as np
 
-np.random.seed(19)
+np.random.seed(20260127)
 
 
 def gen_golden_data(case_name, param):
@@ -31,9 +31,9 @@ def gen_golden_data(case_name, param):
         False,
     )
 
-    x1_gm = np.random.randint(1, 5, [m, k]).astype(a_type)
-    x2_gm = np.random.randint(1, 5, [k, n]).astype(b_type)
-    bias_gm = np.random.randint(1, 10, [n]).astype(bias_type)
+    x1_gm = np.random.randint(-10, 10, [m, k]).astype(a_type)
+    x2_gm = np.random.randint(-10, 10, [k, n]).astype(b_type)
+    bias_gm = np.random.randint(-1000, 1000, [n]).astype(bias_type)
 
     if is_atrans:
         x1_gm = x1_gm.transpose()
@@ -74,17 +74,32 @@ class tmatmulParams:
 if __name__ == "__main__":
     # 用例名称
     case_name_list = [
-        "TMATMULTest.case1",
-        "TMATMULTest.case2",
+        "TMATMULTest.case_norm_1",
+        "TMATMULTest.case_norm_2",
+        "TMATMULTest.case_norm_3",
+        "TMATMULTest.case_norm_4",
+        "TMATMULTest.case_norm_5",
+
         "TMATMULTest.case_bias_1",
         "TMATMULTest.case_bias_2",
+        "TMATMULTest.case_bias_3",
+        "TMATMULTest.case_bias_4",
+        "TMATMULTest.case_bias_5",
     ]
 
     case_params_list = [
         tmatmulParams(np.float16, np.float16, np.float16, 40, 50, 60, False),
         tmatmulParams(np.int8, np.int8, np.int32, 6, 7, 8, False),
+        tmatmulParams(np.float16, np.float16, np.float16, 1, 16, 1026, False),
+        tmatmulParams(np.int8, np.int8, np.int32, 26, 15, 27, False),
+        tmatmulParams(np.int8, np.int8, np.int32, 101, 1, 99, False),
+
+
         tmatmulParams(np.int8, np.int8, np.int32, 8, 7, 6, True),
         tmatmulParams(np.float16, np.float16, np.float16, 16, 15, 16, True, np.float16),
+        tmatmulParams(np.int8, np.int8, np.int32, 66, 11, 1, True),
+        tmatmulParams(np.float16, np.float16, np.float16, 1, 16, 1, True, np.float16),
+        tmatmulParams(np.float16, np.float16, np.float16, 29, 11, 41, True, np.float16),
     ]
 
     for i, case_name in enumerate(case_name_list):

@@ -92,14 +92,29 @@ void tmatmul_test(uint32_t M, uint32_t K, uint32_t N)
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TMATMULTest, case1)
+TEST_F(TMATMULTest, case_norm_1)
 {
     tmatmul_test<aclFloat16, aclFloat16, aclFloat16, 1>(40, 50, 60);
 }
 
-TEST_F(TMATMULTest, case2)
+TEST_F(TMATMULTest, case_norm_2)
 {
     tmatmul_test<int32_t, int8_t, int8_t, 2>(6, 7, 8);
+}
+
+TEST_F(TMATMULTest, case_norm_3)
+{
+    tmatmul_test<aclFloat16, aclFloat16, aclFloat16, 3>(1, 16, 1026);
+}
+
+TEST_F(TMATMULTest, case_norm_4)
+{
+    tmatmul_test<int32_t, int8_t, int8_t, 4>(26, 15, 27);
+}
+
+TEST_F(TMATMULTest, case_norm_5)
+{
+    tmatmul_test<int32_t, int8_t, int8_t, 5>(101, 1, 99);
 }
 
 template <typename T, typename U, typename S, typename B, int32_t key>
@@ -174,4 +189,19 @@ TEST_F(TMATMULTest, case_bias_1)
 TEST_F(TMATMULTest, case_bias_2)
 {
     tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 2>(16, 15, 16);
+}
+
+TEST_F(TMATMULTest, case_bias_3)
+{
+    tmatmul_bias_test<int32_t, int8_t, int8_t, int32_t, 3>(66, 11, 1);
+}
+
+TEST_F(TMATMULTest, case_bias_4)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 4>(1, 16, 1);
+}
+
+TEST_F(TMATMULTest, case_bias_5)
+{
+    tmatmul_bias_test<aclFloat16, aclFloat16, aclFloat16, aclFloat16, 5>(29, 11, 41);
 }

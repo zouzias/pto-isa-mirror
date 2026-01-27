@@ -60,8 +60,8 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
     TileMatBData bMatTile;
     TileBiasData biasDataTile;
     TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, 0x10000);
-    TASSIGN(biasDataTile, 0x20000);
+    TASSIGN(bMatTile, M * K * sizeof(AType));
+    TASSIGN(biasDataTile, M * K * sizeof(AType) + K * N * sizeof(BType));
 
     LeftTile aTile;
     RightTile bTile;
@@ -139,8 +139,8 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(
     TileMatBData bMatTile;
     TileBiasData biasDataTile;
     TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, 0x10000);
-    TASSIGN(biasDataTile, 0x20000);
+    TASSIGN(bMatTile, M * K * sizeof(AType));
+    TASSIGN(biasDataTile, M * K * sizeof(AType) + K * N * sizeof(BType));
 
     LeftTile aTile;
     RightTile bTile;
@@ -206,11 +206,25 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
         RunTMATMUL<int32_t, int8_t, int8_t, int32_t, 6, 7, 8, false>
             <<<1, nullptr, stream>>>(reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0),
                 reinterpret_cast<int8_t *>(src1), nullptr);
+    } else if constexpr (tilingKey == 3) {
+        RunTMATMUL<half, half, half, half, 1, 16, 1026, false><<<1, nullptr, stream>>>(
+            reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
+    } else if constexpr (tilingKey == 4) {
+        RunTMATMUL<int32_t, int8_t, int8_t, int32_t, 26, 15, 27, false>
+            <<<1, nullptr, stream>>>(reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0),
+                reinterpret_cast<int8_t *>(src1), nullptr);
+    } else if constexpr (tilingKey == 5) {
+        RunTMATMUL<int32_t, int8_t, int8_t, int32_t, 101, 1, 99, false>
+            <<<1, nullptr, stream>>>(reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0),
+                reinterpret_cast<int8_t *>(src1), nullptr);
     }
 }
 
 template void LaunchTMATMUL<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMATMUL<3>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMATMUL<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMATMUL<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template <int32_t tilingKey>
 void LaunchTMATMULBIAS(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream)
@@ -222,8 +236,21 @@ void LaunchTMATMULBIAS(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2
     } else if constexpr (tilingKey == 2) {
         RunTMATMUL<half, half, half, half, 16, 15, 16, true><<<1, nullptr, stream>>>(reinterpret_cast<half *>(out),
             reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), reinterpret_cast<half *>(src2));
+    } else if constexpr (tilingKey == 3) {
+        RunTMATMUL<int32_t, int8_t, int8_t, int32_t, 66, 11, 1, true>
+            <<<1, nullptr, stream>>>(reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0),
+                reinterpret_cast<int8_t *>(src1), reinterpret_cast<int32_t *>(src2));
+    } else if constexpr (tilingKey == 4) {
+        RunTMATMUL<half, half, half, half, 1, 16, 1, true><<<1, nullptr, stream>>>(reinterpret_cast<half *>(out),
+            reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), reinterpret_cast<half *>(src2));
+    } else if constexpr (tilingKey == 5) {
+        RunTMATMUL<half, half, half, half, 29, 11, 41, true><<<1, nullptr, stream>>>(reinterpret_cast<half *>(out),
+            reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), reinterpret_cast<half *>(src2));
     }
 }
 
 template void LaunchTMATMULBIAS<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
 template void LaunchTMATMULBIAS<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+template void LaunchTMATMULBIAS<3>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+template void LaunchTMATMULBIAS<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+template void LaunchTMATMULBIAS<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
