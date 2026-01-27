@@ -68,7 +68,7 @@ __global__ AICORE void TAllReducePerfKernelImpl(
     ShmemDeviceBarrierAll();
 
     AscendC::PipeBarrier<PIPE_ALL>();
-    
+
     int64_t start_cycle = AscendC::GetSystemCycle();
 
     pto::comm::TALLREDUCE(pg, dstGlobal, src0Tile, src1Tile, dstTile);
@@ -158,7 +158,7 @@ bool RunAllReducePerfKernel(
     }
 
     for(int i = 0; i < config.warmup_iters; ++i) {
-        TAllReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<config.block_num, nullptr, stream>>>(
+        TAllReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(
             srcDevice, resDevice, (T*) shmemBufferDevice, nullptr, 0);
         aclrtSynchronizeStream(stream);
     }
@@ -180,7 +180,7 @@ bool RunAllReducePerfKernel(
     auto wall_start = std::chrono::high_resolution_clock::now();
     
     for (int i = 0; i < config.measure_iters; ++i) {
-        TAllReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<config.block_num, nullptr, stream>>>(
+        TAllReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(
             srcDevice, resDevice, (T*) shmemBufferDevice, perfDevice, i);
         aclrtSynchronizeStream(stream);
     }
