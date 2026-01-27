@@ -756,7 +756,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 
         vector_bool preg_src = pset_b32(PAT_ALL);
         vector_bool preg_b16_all = pset_b16(PAT_ALL);
-        // vector_bool preg_b16_half = pset_b16(PK_B64);
+        vector_bool preg_b16_half = pset_b16(PAT_VL64);
         vector_bool preg_b8_all = pset_b8(PAT_ALL);
         uint32_t destItems = 1;
         vector_bool preg_reduce = plt_b32(destItems, POST_UPDATE);
@@ -779,13 +779,11 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
             for (uint16_t i = 0; i < uint16_t(ubM) ; ++i) {
                 vbr(max_2a, -INFINITY);
                 __ubuf__ float *row_ptr = src0_ub + i * TileDataS1::RowStride;
-                // vlds(src_in2, new_global_max_Ptr, 0, NORM);
                 for (uint16_t iter_n = 0; iter_n < uint16_t(repeatTimes) ; ++iter_n) {
                     vlds(src_in1, row_ptr, elementsPerRepeat, NORM, POST_UPDATE);
                     vcmax(max_1a, src_in1, preg_src, MODE_ZEROING);
                     vmax(max_2a, max_2a, max_1a, preg_src, MODE_ZEROING);
                 }
-                // vmax(max_2a, max_2a, src_in2, preg_src, MODE_ZEROING);
                 vsts(max_2a, local_max_Ptr+i, 0, distValue, preg_reduce);
             }
         }
@@ -880,14 +878,14 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
         else {
             vlds(max_2a, local_max_Ptr, 0, NORM);
             vlds(src_in1, new_global_max_Ptr, 0, NORM);
-            // vlds(src_in2, new_global_sum_Ptr, 0, NORM);
             vmax(max_2a, max_2a, src_in1, preg_src, MODE_ZEROING);
-            vsub(vreg_exp_max, src_in1, max_2a, preg_src, MODE_ZEROING);
-            vsts(max_2a, new_global_max_Ptr, 0, NORM_B32, preg_src);
+            vsub(vreg_exp_max, src_in1, max_2a, preg_b16_half, MODE_ZEROING);
+            vsts(max_2a, new_global_max_Ptr, 0, NORM_B32, preg_b16_half);
 
-            vmuls(vreg_exp_max, vreg_exp_max, 0.8f, preg_src, MODE_ZEROING);
-            vexp(vreg_exp_max, vreg_exp_max, preg_src, MODE_ZEROING);
+            vmuls(vreg_exp_max, vreg_exp_max, 0.8f, preg_b16_half, MODE_ZEROING);
+            vexp(vreg_exp_max, vreg_exp_max, preg_b16_half, MODE_ZEROING);
             vsts(vreg_exp_max, exp_max_Ptr, 0, NORM_B32, preg_src);
+            // mem_bar(VST_VLD);
 
             for (uint16_t i = 0; i < uint16_t(ubM) ; ++i) {
                 if(remains){
@@ -950,13 +948,13 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
                     vsts(sum_2a, local_sum_Ptr+i, 0, distValue, preg_reduce);
                 }
             }
+            mem_bar(VST_VLD);
+            vlds(src_in1, local_sum_Ptr, 0, NORM);
+            vlds(src_in2, new_global_sum_Ptr, 0, NORM);
+            vmul(src_in2, vreg_exp_max, src_in2, preg_src, MODE_ZEROING);
+            vadd(src_in2, src_in2, src_in1, preg_src, MODE_ZEROING);
+            vsts(src_in2, new_global_sum_Ptr, 0, NORM_B32, preg_src);
         }
-        mem_bar(VST_VLD);
-        vlds(src_in1, local_sum_Ptr, 0, NORM);
-        vlds(src_in2, new_global_sum_Ptr, 0, NORM);
-        vmul(src_in2, vreg_exp_max, src_in2, preg_src, MODE_ZEROING);
-        vadd(src_in2, src_in2, src_in1, preg_src, MODE_ZEROING);
-        vsts(src_in2, new_global_sum_Ptr, 0, NORM_B32, preg_src);
     }
 }
 
