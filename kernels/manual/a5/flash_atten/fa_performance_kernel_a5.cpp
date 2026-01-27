@@ -657,14 +657,15 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
                 TSTORE(pTileHalfSub, xExpSub);
             }
             
-            // Use dedicated NZ buffer (nzConvBuffer) instead of qkVecTile to avoid overwriting QK data
-            // nzConvBuffer is allocated at a separate UB location
+            // Use dedicated NZ or NZ+1 buffer (nzConvBuffer) instead of qkVecTile to avoid overwriting QK data
+            // nzConvBuffer is allocated at a separate UB location.  For NZ, allocate tile as Vec_S0; For NZ+1, allocate tile as Vec_S0+1
+            //(Vec_S0+1) rows will trigger TMOV's isOptForConflict -> NZ+1 output
             TMOV(nzConvBuffer, xExpSubND);
 
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             
-            TINSERT_CUSTOM<TInsertMode::NZ>(pMatTile, nzConvBuffer, static_cast<uint32_t>(row_offset), 0);
+            TINSERT_CUSTOM<TInsertMode::NZ_PLUS_1>(pMatTile, nzConvBuffer, static_cast<uint32_t>(row_offset), 0);
         }
 #else
         using GlobalPTileHalfSub =
@@ -879,7 +880,9 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     using TileDataF_T = Tile<TileType::Vec, float, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Tile_S1>;
     using TileDataH_T = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Tile_S1>;
     // NZ buffer for TINSERT path - separate from qkVecTile to avoid overwriting QK data
-    using TileDataH_NZ_T = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::ColMajor, Vec_S0, Cube_S1, SLayout::RowMajor>;
+    // NZ+1 buffer for TINSERT path - sized to (Vec_S0 + 1) to trigger isOptForConflict in TMOV
+    constexpr uint32_t NzBufRows = Vec_S0 + 1;
+    using TileDataH_NZ_T = Tile<TileType::Vec, half, NzBufRows, Cube_S1, BLayout::ColMajor, Vec_S0, Cube_S1, SLayout::RowMajor>;
     constexpr uint32_t SubblockRows = Cube_S0 / VEC_CORES;
     // Reduce tiles cover one vector core's rows (Cube_S0 / VEC_CORES); slices are extracted per row_slice
     using ReduceTileF_T = Tile<TileType::Vec, float, SubblockRows, 1, BLayout::ColMajor, SubblockRows, 1>;
@@ -901,9 +904,14 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         outOTileNBuffers>(qkVecTile, m1_local_max, input_reduce_tmp, l1_local_sum, m2_global_max, l2_global_sum,
         l1_exp_max_ififo, x_expT, pvVecTile, runningOTile);
 
+    // For NZ :
     // Allocate NZ conversion buffer at end of UB - separate from qkVecTile to avoid overwriting QK data
     // NZ buffer size: Vec_S0 * Cube_S1 * sizeof(half) = 64 * 128 * 2 = 16KB
-    constexpr uint32_t nzBufSize = Vec_S0 * Cube_S1 * sizeof(half);
+
+    // For NZ + 1 :
+    // Allocate NZ+1 conversion buffer at end of UB - separate from qkVecTile to avoid overwriting QK data
+    // NZ+1 buffer size : (VEC_S0 + 1) * Cube_S1 * sizeof(half) = 65 * 128 * 2 = 16.25KB
+    constexpr uint32_t nzBufSize = NzBufRows * Cube_S1 * sizeof(half);
     constexpr uint32_t nzBufOffset = MAX_VEC_UB_BYTES - nzBufSize; // Place at end of UB (256KB - 16KB = 240KB)
     if constexpr (DAV_VEC) {
         TASSIGN(nzConvBuffer, nzBufOffset);
