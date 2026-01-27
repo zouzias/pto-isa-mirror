@@ -20,8 +20,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
-template <typename T, uint32_t ROWS_, uint32_t COLS_, uint32_t VALID_R_, uint32_t VALID_C, uint32_t ALIGN_C>
-AICORE void runTSORT32( __gm__ T *out, __gm__ T *src, __gm__ uint32_t *idx, __gm__ T *tmp){
+template <typename T, uint32_t ROWS_, uint32_t COLS_, uint32_t VALID_R_, uint32_t VALID_C,
+    uint32_t ALIGN_C = (VALID_C + 31 - 1) / 32 * 32>
+__global__ AICORE void runTSORT32( __gm__ T *out, __gm__ T *src, __gm__ uint32_t *idx, __gm__ T *tmp){
 
     constexpr uint32_t TYPE_COEF = sizeof(float)/sizeof(T);
     using SrcShapeDim5 = pto::Shape<1, 1, 1, ROWS_, COLS_>;
@@ -75,43 +76,15 @@ AICORE void runTSORT32( __gm__ T *out, __gm__ T *src, __gm__ uint32_t *idx, __gm
     out = dstGlobal.data();
 }
 
-// extern "C" __global__ AICORE void launchTSORT32_1(__gm__ uint64_t *out, __gm__ uint64_t *src, __gm__ uint32_t *idx,
-//         __gm__ uint64_t *tmp)
-// {
-//     constexpr uint32_t ROWS = 2;
-//     constexpr uint32_t COLS = 32;
-//     constexpr uint32_t VALID_R = 2;
-//     constexpr uint32_t VALID_C = 32;
-//     constexpr uint32_t ALIGN_C = (VALID_C + 31 - 1) / 32 * 32;
-//     runTSORT32<float, ROWS, COLS, VALID_R, VALID_C, ALIGN_C>(
-//             reinterpret_cast<__gm__ float *>(out),
-//             reinterpret_cast<__gm__ float *>(src), idx, reinterpret_cast<__gm__ float *>(tmp));
-// }
-
-extern "C" __global__ AICORE void launchTSORT32_2(__gm__ uint64_t *out, __gm__ uint64_t *src, __gm__ uint32_t *idx,
-        __gm__ uint64_t *tmp)
+template <uint32_t tRows, uint32_t tCols, uint32_t vRows, uint32_t vCols,
+    uint32_t alignedCols = (vCols + 31 - 1) / 32 * 32>
+void launchTSORT32Half(uint64_t *out, uint64_t *src, uint32_t *idx, uint64_t *tmp, void* stream)
 {
-    constexpr uint32_t ROWS = 4;
-    constexpr uint32_t COLS = 64;
-    constexpr uint32_t VALID_R = 4;
-    constexpr uint32_t VALID_C = 64;
-    constexpr uint32_t ALIGN_C = (VALID_C + 31 - 1) / 32 * 32;
-    
-    runTSORT32<half, ROWS, COLS, VALID_R, VALID_C, ALIGN_C>(
-                reinterpret_cast<__gm__ half *>(out),
-                reinterpret_cast<__gm__ half *>(src), idx, reinterpret_cast<__gm__ half *>(tmp));
+    runTSORT32<half, tRows, tCols, vRows, vCols, alignedCols><<<1, nullptr, stream>>>(
+        reinterpret_cast<half *>(out), reinterpret_cast<half *>(src), idx,
+        reinterpret_cast<half *>(tmp));
 }
 
-
-template <int32_t testKey>
-void launchTSORT32(uint64_t *out, uint64_t *src, uint32_t *idx, uint64_t *tmp, void* stream){
-    cout << "launchTSORT32 start!" << endl;
-    if constexpr (testKey == 1) {
-        // launchTSORT32_1<<<1, nullptr, stream>>>(out, src, idx, tmp);
-    } else if constexpr (testKey == 2) {
-        launchTSORT32_2<<<1, nullptr, stream>>>(out, src, idx, tmp);
-    }
-    cout << "launchTSORT32 end!" << endl;
-}
-
-template void launchTSORT32<2>(uint64_t *out, uint64_t *src, uint32_t *idx, uint64_t *tmp, void* stream);
+template void launchTSORT32Half<2, 32, 2, 32>(uint64_t *out, uint64_t *src, uint32_t *idx, uint64_t *tmp, void* stream);
+template void launchTSORT32Half<4, 64, 4, 64>(uint64_t *out, uint64_t *src, uint32_t *idx, uint64_t *tmp, void* stream);
+template void launchTSORT32Half<1, 32 * 256, 1, 32 * 256>(uint64_t *out, uint64_t *src, uint32_t *idx, uint64_t *tmp, void* stream);

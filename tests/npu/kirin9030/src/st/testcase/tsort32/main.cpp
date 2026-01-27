@@ -15,8 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-template <int32_t testKey>
-void launchTSORT32(uint64_t *out, uint64_t *src, uint32_t *idx, uint64_t *tmp, void* stream);
+template <uint32_t tRows, uint32_t tCols, uint32_t vRows, uint32_t vCols,
+    uint32_t alignedCols = (vCols + 31 - 1) / 32 * 32>
+void launchTSORT32Half(uint64_t *out, uint64_t *src, uint32_t *idx, uint64_t *tmp, void* stream);
 
 class TSort32Test : public testing::Test{
 protected:
@@ -34,19 +35,19 @@ std::string GetGoldenDir() {
     return fullPath;
 }
 
-template <int32_t testKey, typename dType>
-void tsort32_test(int32_t rows, int32_t cols, int32_t colsAlign)
+template <typename T, bool isHalf, uint32_t tRows, uint32_t tCols, uint32_t vRows, uint32_t vCols,
+    uint32_t colsAlign = (vCols + 31 - 1) / 32 * 32>
+void tsort32_test()
 {
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    int shape[2] = {rows, cols};
-    int typeSize = sizeof(float);
-    size_t srcByteSize = shape[0] * shape[1] * typeSize;
-    size_t idxByteSize = shape[0] * shape[1] * sizeof(uint32_t);
-    size_t dstByteSize = 2 * shape[0] * shape[1] * typeSize;
+    int typeSize = sizeof(uint32_t);
+    size_t srcByteSize = vRows * vCols * typeSize;
+    size_t idxByteSize = vRows * vCols * sizeof(uint32_t);
+    size_t dstByteSize = 2 * vRows * vCols * typeSize;
     size_t tmpByteSize = 1 * colsAlign * typeSize;
     uint64_t *dstHost, *srcHost, *tmpHost;
     uint64_t *dstDevice, *srcDevice, *tmpDevice;
@@ -70,7 +71,13 @@ void tsort32_test(int32_t rows, int32_t cols, int32_t colsAlign)
     aclrtMemcpy(idxDevice, idxByteSize, idxHost, idxByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(tmpDevice, tmpByteSize, tmpHost, tmpByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    launchTSORT32<testKey>(dstDevice, srcDevice, idxDevice, tmpDevice, stream);
+    if constexpr (isHalf) {
+        launchTSORT32Half<tRows, tCols, vRows, vCols, colsAlign>
+            (dstDevice, srcDevice, idxDevice, tmpDevice, stream);
+    } else {
+        launchTSORT32<T, tRows, tCols, vRows, vCols, colsAlign>
+            (dstDevice, srcDevice, idxDevice, tmpDevice, stream);
+    }
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -89,8 +96,8 @@ void tsort32_test(int32_t rows, int32_t cols, int32_t colsAlign)
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<dType> golden(dstByteSize);
-    std::vector<dType> devFinal(dstByteSize);
+    std::vector<T> golden(dstByteSize);
+    std::vector<T> devFinal(dstByteSize);
     ReadFile(GetGoldenDir() + "/golden_output.bin", dstByteSize, golden.data(), dstByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
 
@@ -98,22 +105,17 @@ void tsort32_test(int32_t rows, int32_t cols, int32_t colsAlign)
     EXPECT_TRUE(ret);
 }
 
-// TEST_F(TSort32Test, case1)
-// {
-//     tsort32_test<1, float>(2, 32, 32);
-// }
+TEST_F(TSort32Test, case1)
+{
+    tsort32_test<aclFloat16, true, 2, 32, 2, 32>();
+}
 
 TEST_F(TSort32Test, case2)
 {
-    tsort32_test<2, uint16_t>(4, 64, 64);
+    tsort32_test<aclFloat16, true, 4, 64, 4, 64>();
 }
 
-// TEST_F(TSort32Test, case3)
-// {
-//     tsort32_test<3, float>(1, 32 * 256, 32 * 256);
-// }
-// 
-// TEST_F(TSort32Test, case4)
-// {
-//     tsort32_test<4, float>(2, 13, 16);
-// }
+TEST_F(TSort32Test, case3)
+{
+    tsort32_test<aclFloat16, true, 1, 32 * 256, 1, 32 * 256>();
+}

@@ -96,10 +96,10 @@ if __name__ == "__main__":
     ]
 
     case_params_list = [
-        tsort32Params(np.float32, 2, 32),
+        tsort32Params(np.float16, 2, 32),
         tsort32Params(np.float16, 4, 64),
-        tsort32Params(np.float32, 1, 256 * 32),
-        tsort32Params(np.float32, 2, 13),
+        tsort32Params(np.float16, 1, 256 * 32),
+        tsort32Params(np.float16, 2, 13),
     ]
 
     for i, case_name  in enumerate(case_name_list):
