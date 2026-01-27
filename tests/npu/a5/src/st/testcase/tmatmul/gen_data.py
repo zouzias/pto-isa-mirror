@@ -121,6 +121,64 @@ def HF8(input):
         input = (1 + m3/2) * 2 ** (f2 * (8 + e2 * 4 + e3 * 2 + e4)) * f1
         return input
 
+def float32_to_tf32(x, round_mode="roundTiesToEven"):
+    """
+    将float32转换为TF32格式(E8M10)
+    """
+    # 将float32转换为二进制表示
+    packed = struct.pack('f', x)
+    bits = struct.unpack('I', packed)[0]
+    
+    # 提取符号、指数和尾数
+    sign = (bits >> 31) & 0x1
+    exponent = (bits >> 23) & 0xFF
+    mantissa = bits & 0x7FFFFF
+    
+    # 处理特殊值
+    if exponent == 0xFF:
+        if mantissa != 0:
+            return float('nan')
+        return float('inf') * (-1 if sign else 1)
+    
+    # 处理次正规数和零
+    if exponent == 0:
+        if mantissa == 0:
+            return 0.0 if sign == 0 else -0.0
+        return 0.0 if sign == 0 else -0.0
+    
+    # 将23位尾数转换为10位尾数
+    mantissa_23bit = mantissa
+    mantissa_10bit = mantissa_23bit >> 13
+    
+    # 应用舍入模式
+    lost_bits = mantissa_23bit & 0x1FFF
+    
+    if round_mode == "CAST_RINT":
+        # roundTiesToEven: 四舍六入五成双
+        if lost_bits > 0x1000:
+            mantissa_10bit += 1
+        elif lost_bits == 0x1000:
+            if mantissa_10bit & 0x1:
+                mantissa_10bit += 1
+    elif round_mode == "CAST_ROUND":
+        # roundTiesAway: 四舍五入，0.5时远离零
+        if lost_bits >= 0x1000:
+            mantissa_10bit += 1
+    
+    # 检查尾数溢出
+    if mantissa_10bit >= 0x400:
+        mantissa_10bit = mantissa_10bit >> 1
+        exponent += 1
+    
+    # 检查指数溢出
+    if exponent >= 0xFF:
+        return float('inf') if sign == 0 else -float('inf')
+    
+    # 重建TF32（仍为float32格式，但精度为TF32）
+    tf32_mantissa = mantissa_10bit << 13
+    tf32_bits = (sign << 31) | (exponent << 23) | tf32_mantissa
+    
+    return struct.unpack('f', struct.pack('I', tf32_bits))[0]
 
 def gen_golden_data(case_name, param):
     is_hifloat = False
@@ -133,9 +191,9 @@ def gen_golden_data(case_name, param):
 
     m, k, n, is_bias, is_atrans, is_btrans = param.m, param.k, param.n, param.is_bias, False, False
 
-    x1_gm = np.random.randint(1, 5, [m, k]).astype(a_type)
-    x2_gm = np.random.randint(1, 5, [k, n]).astype(b_type)
-    bias_gm = np.random.randint(1, 10, [n, ]).astype(bias_type)
+    x1_gm = np.random.uniform(-10, 10, [m, k]).astype(a_type)
+    x2_gm = np.random.uniform(-10, 10, [k, n]).astype(b_type)
+    bias_gm = np.random.uniform(1, 10, [n, ]).astype(bias_type)
 
     if is_atrans:
         x1_gm = x1_gm.transpose()
@@ -167,6 +225,17 @@ def gen_golden_data(case_name, param):
         x1_gm = s1.reshape(x1_gm.shape)
         x2_gm = s2.reshape(x2_gm.shape)
 
+    # TF32计算
+    if param.is_tf32:
+        # 确定舍入模式
+        round_mode = param.tf32_trans
+        
+        tf32_func = np.vectorize(lambda x: float32_to_tf32(x, round_mode))
+        
+        # 应用TF32转换
+        x1_gm = tf32_func(x1_gm.astype(np.float32))
+        x2_gm = tf32_func(x2_gm.astype(np.float32))
+
     if is_bias:
         golden = np.matmul(x1_gm.astype(dst_type), x2_gm.astype(dst_type)).astype(dst_type) + bias_gm.astype(dst_type)
     else:
@@ -177,7 +246,7 @@ def gen_golden_data(case_name, param):
 
 
 class tmatmulParams:
-    def __init__(self, atype, btype, ctype, m, k, n, is_bias, bias_type = None):
+    def __init__(self, atype, btype, ctype, m, k, n, is_bias, bias_type = None, is_tf32 = False, tf32_trans = "CAST_RINT"):
         self.atype = atype
         self.btype = btype
         self.ctype = ctype
@@ -189,6 +258,8 @@ class tmatmulParams:
             self.bias_type = bias_type
         else:
             self.bias_type = ctype
+        self.is_tf32 = is_tf32
+        self.tf32_trans = tf32_trans
 
 
 if __name__ == "__main__":
@@ -205,6 +276,7 @@ if __name__ == "__main__":
         "TMATMULTest.case9",
         "TMATMULTest.case10",
         "TMATMULTest.case11",
+        "TMATMULTest.case12",
 
         "TMATMULTest.case_bias_1",
         "TMATMULTest.case_bias_2",
@@ -230,6 +302,8 @@ if __name__ == "__main__":
         tmatmulParams(fp8_e5m2, fp8_e5m2, np.float32, 120, 90, 160, False),
         tmatmulParams(np.uint8, np.uint8, np.float32, 30, 90, 60, False),
         tmatmulParams(np.float16, np.float16, np.float32, 1, 300, 60, False),
+
+        tmatmulParams(np.float32, np.float32, np.float32, 16, 32, 64, False, np.float32, True, "CAST_RINT"),
 
         tmatmulParams(np.int8, np.int8, np.int32, 8, 7, 6, True),
         tmatmulParams(np.float16, np.float16, np.float32, 16, 15, 16, True, np.float16),

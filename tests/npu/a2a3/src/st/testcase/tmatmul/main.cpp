@@ -161,6 +161,16 @@ TEST_F(TMATMULTest, case6)
     TmatmulTest<float, uint16_t, uint16_t, 6>(M, K, N);
 }
 
+TEST_F(TMATMULTest, case7)
+{
+    TmatmulTest<float, float, float, 7>(16, 32, 64);
+}
+
+TEST_F(TMATMULTest, case8)
+{
+    TmatmulTest<float, float, float, 8>(5, 75, 11);
+}
+
 template <typename T, typename U, typename S, typename biasType, int32_t key>
 void TmatmulBiasTest(uint32_t M, uint32_t K, uint32_t N)
 {

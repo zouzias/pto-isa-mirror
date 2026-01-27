@@ -197,7 +197,7 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(
 }
 
 template <typename T, typename U, typename S, typename B, int validM, int validK, int validN, bool isBias>
-__global__ AICORE void RunTMATMUL_GEMV_OPEN(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, __gm__ B *src2)
+__global__ AICORE void RunTGEMV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, __gm__ B *src2)
 {
     constexpr int blockAlign = C0_SIZE_BYTE / sizeof(U);
     constexpr int M = CeilAlign<int>(validM, 16);
@@ -282,6 +282,91 @@ __global__ AICORE void RunTMATMUL_GEMV_OPEN(__gm__ T *out, __gm__ U *src0, __gm_
     out = dstGlobal.data();
 }
 
+template <typename OutType, typename AType, typename BType, typename BiasType, int validM, int validK, int validN,
+    bool isBias, RoundMode tf32TransMode>
+__global__ AICORE void RunTMATMUL_TF32(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1, __gm__ BiasType *src2)
+{
+    constexpr int blockAlign = C0_SIZE_BYTE / sizeof(AType);
+    constexpr int M = CeilAlign<int>(validM, 16);
+    constexpr int N = CeilAlign<int>(validN, blockAlign);
+    constexpr int K = CeilAlign<int>(validK, 16);
+
+    using GlobalDataSrc0 = GlobalTensor<AType, pto::Shape<1, 1, 1, validM, validK>,
+        pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
+    using GlobalDataSrc1 = GlobalTensor<BType, pto::Shape<1, 1, 1, validK, validN>,
+        pto::Stride<1 * validK * validN, 1 * validK * validN, validK * validN, validN, 1>>;
+    using GlobalDataSrc2 = GlobalTensor<BiasType, pto::Shape<1, 1, 1, 1, validN>,
+        pto::Stride<1 * validN, 1 * validN, 1 * validN, validN, 1>>;
+    using GlobalDataOut = GlobalTensor<OutType, pto::Shape<1, 1, 1, validM, validN>,
+        pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
+    GlobalDataSrc0 src0Global(src0);
+    GlobalDataSrc1 src1Global(src1);
+    GlobalDataSrc2 src2Global(src2);
+    GlobalDataOut dstGlobal(out);
+
+    using TileMatAData = Tile<TileType::Mat, AType, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, BType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
+    using TileBiasData = Tile<TileType::Mat, BiasType, 1, N, BLayout::RowMajor, 1, validN>;
+
+    using LeftTile = TileLeft<AType, M, K, validM, validK>;
+    using RightTile = TileRight<BType, K, N, validK, validN>;
+    using AccTile = TileAcc<OutType, M, N, validM, validN>;
+    using BiasTile = Tile<TileType::Bias, OutType, 1, N, BLayout::RowMajor, 1, validN>;
+
+    TileMatAData aMatTile;
+    TileMatBData bMatTile;
+    TileBiasData biasDataTile;
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
+    TASSIGN(biasDataTile, 0x20000);
+
+    LeftTile aTile;
+    RightTile bTile;
+    AccTile cTile;
+    BiasTile biasTile;
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
+    TASSIGN(biasTile, 0x0);
+
+    /*************************************TLOAD****************************************/
+    TLOAD(aMatTile, src0Global);
+    TLOAD(bMatTile, src1Global);
+    if constexpr (isBias) {
+        TLOAD(biasDataTile, src2Global);
+    }
+
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+
+    /**********************************TMOV && TEXTRACT**********************************/
+
+    TMOV(aTile, aMatTile);
+    TMOV(bTile, bMatTile);
+    if constexpr (isBias) {
+        TMOV(biasTile, biasDataTile);
+    }
+
+    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+
+    /**********************************TMATMUL**********************************/
+    if constexpr (isBias) {
+        TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
+    } else {
+        SetTF32Mode<1>(tf32TransMode);
+        TMATMUL(cTile, aTile, bTile);
+    }
+
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+
+    /**********************************TSTORE**********************************/
+    TSTORE(dstGlobal, cTile);
+
+    out = dstGlobal.data();
+}
+
 template <int32_t tilingKey>
 void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 {
@@ -323,9 +408,13 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
             <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<hifloat8_t *>(src0),
                 reinterpret_cast<hifloat8_t *>(src1), nullptr);
     } else if constexpr (tilingKey == 11) {
-        RunTMATMUL_GEMV_OPEN<float, half, half, float, 1, 300, 60, false>
+        RunTGEMV<float, half, half, float, 1, 300, 60, false>
             <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0),
                 reinterpret_cast<half *>(src1), nullptr);
+    } else if constexpr (tilingKey == 12) {
+        RunTMATMUL_TF32<float, float, float, float, 16, 32, 64, false, RoundMode::CAST_RINT>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0),
+                reinterpret_cast<float *>(src1), nullptr);
     }
 }
 
@@ -340,6 +429,7 @@ template void LaunchTMATMUL<8>(uint8_t *out, uint8_t *src0, uint8_t *src1, void 
 template void LaunchTMATMUL<9>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<10>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void LaunchTMATMUL<11>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+template void LaunchTMATMUL<12>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template <int32_t tilingKey>
 void LaunchTMATMULBIAS(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream)
