@@ -15,6 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+constexpr const int ELEMENT_SIZE = 4095; 
+
 template <typename TileLeft>
 PTO_INTERNAL constexpr bool GetGemvCtrl()
 {
@@ -117,10 +119,9 @@ PTO_INTERNAL void CheckMadMxValid()
 
 PTO_INTERNAL void CheckDynamicMmad(uint16_t aMatrixRow, uint16_t aMatrixCol, uint16_t bMatrixCol)
 {
-    constexpr uint16_t elementSize = 4095;
-    PTO_ASSERT(aMatrixRow >= 1 && aMatrixRow <= elementSize, "ERROR: The range of valid aMatrixRow is [1, 4095].");
-    PTO_ASSERT(aMatrixCol >= 1 && aMatrixCol <= elementSize, "ERROR: The range of valid aMatrixCol is [1, 4095].");
-    PTO_ASSERT(bMatrixCol >= 1 && bMatrixCol <= elementSize, "ERROR: The range of valid bMatrixCol is [1, 4095].");
+    PTO_ASSERT(aMatrixRow >= 1 && aMatrixRow <= ELEMENT_SIZE, "ERROR: The range of valid aMatrixRow is [1, 4095].");
+    PTO_ASSERT(aMatrixCol >= 1 && aMatrixCol <= ELEMENT_SIZE, "ERROR: The range of valid aMatrixCol is [1, 4095].");
+    PTO_ASSERT(bMatrixCol >= 1 && bMatrixCol <= ELEMENT_SIZE, "ERROR: The range of valid bMatrixCol is [1, 4095].");
 }
 
 template <typename TileRes, typename TileLeft, typename TileRight>
@@ -215,8 +216,8 @@ PTO_INTERNAL void TGEMV_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMa
     CheckMadValid<TileRes, TileLeft, TileRight>();
     uint16_t k = bMatrix.GetValidRow();
     uint16_t n = bMatrix.GetValidCol();
-    PTO_ASSERT(k >= 1 && k <= elementSize, "ERROR: The range of valid aMatrixCol is [1, 4095].");
-    PTO_ASSERT(n >= 1 && n <= elementSize, "ERROR: The range of valid bMatrixCol is [1, 4095].");
+    PTO_ASSERT(k >= 1 && k <= ELEMENT_SIZE, "ERROR: The range of valid aMatrixCol is [1, 4095].");
+    PTO_ASSERT(n >= 1 && n <= ELEMENT_SIZE, "ERROR: The range of valid bMatrixCol is [1, 4095].");
     TMatmul<Phase, TileRes, TileLeft, TileRight, false, true, false>(
         cMatrix.data(), aMatrix.data(), bMatrix.data(), 1, k, n);
 }
@@ -227,8 +228,8 @@ PTO_INTERNAL void TGEMV_ACC_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLe
     CheckMadValid<TileRes, TileLeft, TileRight>();
     uint16_t k = bMatrix.GetValidRow();
     uint16_t n = bMatrix.GetValidCol();
-    PTO_ASSERT(k >= 1 && k <= elementSize, "ERROR: The range of valid aMatrixCol is [1, 4095].");
-    PTO_ASSERT(n >= 1 && n <= elementSize, "ERROR: The range of valid bMatrixCol is [1, 4095].");
+    PTO_ASSERT(k >= 1 && k <= ELEMENT_SIZE, "ERROR: The range of valid aMatrixCol is [1, 4095].");
+    PTO_ASSERT(n >= 1 && n <= ELEMENT_SIZE, "ERROR: The range of valid bMatrixCol is [1, 4095].");
     TMatmul<Phase, TileRes, TileLeft, TileRight, false, false, false>(
         cOutMatrix.data(), aMatrix.data(), bMatrix.data(), 1, k, n);
 }
@@ -243,8 +244,8 @@ PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight
 
     uint16_t k = bMatrix.GetValidRow();
     uint16_t n = bMatrix.GetValidCol();
-    PTO_ASSERT(k >= 1 && k <= elementSize, "ERROR: The range of valid aMatrixCol is [1, 4095].");
-    PTO_ASSERT(n >= 1 && n <= elementSize, "ERROR: The range of valid bMatrixCol is [1, 4095].");
+    PTO_ASSERT(k >= 1 && k <= ELEMENT_SIZE, "ERROR: The range of valid aMatrixCol is [1, 4095].");
+    PTO_ASSERT(n >= 1 && n <= ELEMENT_SIZE, "ERROR: The range of valid bMatrixCol is [1, 4095].");
 
     TMatmulBias<Phase, TileRes, TileLeft, TileRight, true, false, false>(
         cMatrix.data(), aMatrix.data(), bMatrix.data(), biasData.data(), 1, k, n);
@@ -294,6 +295,21 @@ PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftS
 
     TMatmulMxBias<TileRes, TileLeft, TileRight, true, false>(
         cMatrix.data(), aMatrix.data(), bMatrix.data(), biasData.data(), m, k, n);
+}
+
+template<bool isEnable>
+PTO_INTERNAL void SetTF32Mode(RoundMode tf32TransMode)
+{
+    if constexpr (isEnable) {
+        set_ctrl(sbitset1(get_ctrl(), 46));
+        if (tf32TransMode == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), 47));
+        } else if (tf32TransMode == RoundMode::CAST_RINT)  {
+            set_ctrl(sbitset0(get_ctrl(), 47));
+        } else {
+            PTO_ASSERT(false, "Unsupported RoundMode for TF32.");
+        }
+    }
 }
 } // namespace pto
 #endif
