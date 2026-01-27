@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Remote write operation: write local data to remote PE's memory. Data is transferred via a UB tile as intermediate staging buffer.
+Remote write operation: write local data to remote NPU's memory. Data is transferred via a UB tile as intermediate staging buffer.
 
 ## Math Interpretation
 
@@ -38,8 +38,8 @@ PTO_INST void TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, TileData 
   - `TileData::DType` must equal `GlobalSrcData::RawDType`.
   - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
 - **Memory constraints**:
-  - `dstGlobal` must point to remote PE's symmetric memory (obtained via `ShmemPtr`).
-  - `srcGlobal` must point to local PE's symmetric memory.
+  - `dstGlobal` must point to remote address (on target NPU).
+  - `srcGlobal` must point to local address (on current NPU).
   - `ubTile` must be pre-allocated in Unified Buffer.
 - **Valid region**:
   - Transfer size is determined by `ubTile.GetValidRow()` / `ubTile.GetValidCol()`.
@@ -55,7 +55,7 @@ PTO_INST void TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, TileData 
 using namespace pto;
 
 template <typename T>
-void example_tput(__gm__ T* local_data, __gm__ T* remote_data, int remote_pe) {
+void example_tput(__gm__ T* local_data, __gm__ T* remote_addr, int target_npu) {
     using TileT = Tile<TileType::Vec, T, 16, 16>;
     using GShape = Shape<1, 1, 1, 16, 16>;
     using GStride = BaseShape2D<T, 16, 16, Layout::ND>;
@@ -64,8 +64,7 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_data, int remote_pe) {
     // Local source tensor
     GTensor srcG(local_data);
     
-    // Remote destination tensor (address obtained via ShmemPtr)
-    __gm__ T* remote_addr = ShmemPtr(remote_data, remote_pe);
+    // Remote destination tensor
     GTensor dstG(remote_addr);
     
     // UB staging buffer
@@ -84,15 +83,12 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_data, int remote_pe) {
 using namespace pto;
 
 template <typename T, int SIZE>
-void ring_put(__gm__ T* send_buf, __gm__ T* recv_buf, int my_rank, int nranks) {
+void ring_put(__gm__ T* send_buf, __gm__ T* remote_recv_addr, int my_rank, int nranks) {
     using TileT = Tile<TileType::Vec, T, 1, SIZE>;
     using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, Stride<SIZE,SIZE,SIZE,SIZE,1>, Layout::ND>;
 
-    int next_rank = (my_rank + 1) % nranks;
-    
     GTensor sendG(send_buf);
-    __gm__ T* remote_recv = ShmemPtr(recv_buf, next_rank);
-    GTensor recvG(remote_recv);
+    GTensor recvG(remote_recv_addr);
     
     TileT ubTile;
     comm::TPUT(recvG, sendG, ubTile);

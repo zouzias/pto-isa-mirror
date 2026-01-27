@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Asynchronous remote read operation using SDMA (System DMA) engine. Directly transfers data from remote PE's GM to local GM without UB staging. The operation returns immediately and completes in the background, allowing computation-communication overlap.
+Asynchronous remote read operation using SDMA (System DMA) engine. Directly transfers data from remote NPU's GM to local GM without UB staging. The operation returns immediately and completes in the background, allowing computation-communication overlap.
 
 ## Math Interpretation
 
@@ -44,8 +44,8 @@ PTO_INST SdmaEvent TGET_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
   - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
   - Element size must be 1, 2, 4, or 8 bytes.
 - **Memory constraints**:
-  - `srcGlobal` must point to remote PE's symmetric memory (obtained via `ShmemPtr`).
-  - `dstGlobal` must point to local PE's symmetric memory.
+  - `srcGlobal` must point to remote address (on source NPU).
+  - `dstGlobal` must point to local address (on current NPU).
   - Both addresses must be 32-byte aligned for optimal performance.
 - **SDMA constraints**:
   - Maximum transfer size per operation: implementation-defined (typically 64MB).
@@ -75,13 +75,12 @@ PTO_INST SdmaEvent TGET_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
 using namespace pto;
 
 template <typename T>
-void example_tget_sdma(__gm__ T* local_data, __gm__ T* remote_data, int remote_pe) {
+void example_tget_sdma(__gm__ T* local_data, __gm__ T* remote_addr, int source_npu) {
     using GShape = Shape<1, 1, 1, 64, 256>;
     using GStride = BaseShape2D<T, 64, 256, Layout::ND>;
     using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
 
-    // Remote source tensor (address obtained via ShmemPtr)
-    __gm__ T* remote_addr = ShmemPtr(remote_data, remote_pe);
+    // Remote source tensor
     GTensor srcG(remote_addr);
     
     // Local destination tensor
@@ -94,7 +93,7 @@ void example_tget_sdma(__gm__ T* local_data, __gm__ T* remote_data, int remote_p
     // ...
     
     // Wait for transfer completion before using the data
-    comm::TWAIT_SDMA(event);
+    comm::TWAIT(event);
 }
 ```
 
@@ -106,13 +105,12 @@ void example_tget_sdma(__gm__ T* local_data, __gm__ T* remote_data, int remote_p
 using namespace pto;
 
 template <typename T, int SIZE>
-void prefetch_and_compute(__gm__ T* local_buf, __gm__ T* remote_buf, 
-                          __gm__ T* compute_buf, int remote_pe) {
+void prefetch_and_compute(__gm__ T* local_buf, __gm__ T* remote_addr, 
+                          __gm__ T* compute_buf, int source_npu) {
     using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, Stride<SIZE,SIZE,SIZE,SIZE,1>, Layout::ND>;
     using TileT = Tile<TileType::Vec, T, 1, SIZE>;
 
     // Start prefetching remote data
-    __gm__ T* remote_addr = ShmemPtr(remote_buf, remote_pe);
     GTensor remoteSrcG(remote_addr);
     GTensor localDstG(local_buf);
     
@@ -126,7 +124,7 @@ void prefetch_and_compute(__gm__ T* local_buf, __gm__ T* remote_buf,
     TSTORE(computeG, tile);
     
     // Wait for prefetch to complete
-    comm::TWAIT_SDMA(prefetch_event);
+    comm::TWAIT(prefetch_event);
     
     // Now local_buf contains the prefetched data
     TLOAD(tile, localDstG);
@@ -143,7 +141,7 @@ using namespace pto;
 
 template <typename T, int SIZE>
 void double_buffer_processing(__gm__ T* buffer_a, __gm__ T* buffer_b,
-                              __gm__ T* remote_data[], int num_chunks, int remote_pe) {
+                              __gm__ T* remote_data[], int num_chunks, int source_npu) {
     using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, Stride<SIZE,SIZE,SIZE,SIZE,1>, Layout::ND>;
     using TileT = Tile<TileType::Vec, T, 1, SIZE>;
 
@@ -151,10 +149,9 @@ void double_buffer_processing(__gm__ T* buffer_a, __gm__ T* buffer_b,
     GTensor bufB(buffer_b);
     
     // Initial fetch into buffer A
-    __gm__ T* remote0 = ShmemPtr(remote_data[0], remote_pe);
-    GTensor remoteSrc0(remote0);
+    GTensor remoteSrc0(remote_data[0]);
     auto event_a = comm::TGET_SDMA(bufA, remoteSrc0);
-    comm::TWAIT_SDMA(event_a);
+    comm::TWAIT(event_a);
     
     for (int i = 1; i < num_chunks; ++i) {
         // Determine current and next buffers
@@ -162,8 +159,7 @@ void double_buffer_processing(__gm__ T* buffer_a, __gm__ T* buffer_b,
         GTensor& next_buf = (i % 2 == 1) ? bufB : bufA;
         
         // Start fetching next chunk into next buffer
-        __gm__ T* remote_i = ShmemPtr(remote_data[i], remote_pe);
-        GTensor remoteSrcI(remote_i);
+        GTensor remoteSrcI(remote_data[i]);
         auto fetch_event = comm::TGET_SDMA(next_buf, remoteSrcI);
         
         // Process current buffer while fetching
@@ -173,7 +169,7 @@ void double_buffer_processing(__gm__ T* buffer_a, __gm__ T* buffer_b,
         TSTORE(curr_buf, tile);
         
         // Wait for fetch before next iteration
-        comm::TWAIT_SDMA(fetch_event);
+        comm::TWAIT(fetch_event);
     }
     
     // Process final chunk
@@ -184,7 +180,7 @@ void double_buffer_processing(__gm__ T* buffer_a, __gm__ T* buffer_b,
 }
 ```
 
-### Gather from Multiple PEs
+### Gather from Multiple NPUs
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -200,23 +196,22 @@ void gather_from_all(__gm__ T* local_result, __gm__ T* remote_chunks[],
     SdmaEvent events[nranks];
     
     // Initiate all GET operations
-    for (int pe = 0; pe < nranks; ++pe) {
-        if (pe == my_rank) continue;  // Skip self
+    for (int npu = 0; npu < nranks; ++npu) {
+        if (npu == my_rank) continue;  // Skip self
         
-        __gm__ T* remote_addr = ShmemPtr(remote_chunks[pe], pe);
-        GTensor remoteSrcG(remote_addr);
+        GTensor remoteSrcG(remote_chunks[npu]);
         
-        // Each PE's data goes to different offset in local_result
-        __gm__ T* local_offset = local_result + pe * CHUNK_SIZE;
+        // Each NPU's data goes to different offset in local_result
+        __gm__ T* local_offset = local_result + npu * CHUNK_SIZE;
         GTensor localDstG(local_offset);
         
-        events[pe] = comm::TGET_SDMA(localDstG, remoteSrcG);
+        events[npu] = comm::TGET_SDMA(localDstG, remoteSrcG);
     }
     
     // Wait for all transfers to complete
-    for (int pe = 0; pe < nranks; ++pe) {
-        if (pe == my_rank) continue;
-        comm::TWAIT_SDMA(events[pe]);
+    for (int npu = 0; npu < nranks; ++npu) {
+        if (npu == my_rank) continue;
+        comm::TWAIT(events[npu]);
     }
 }
 ```
@@ -230,23 +225,22 @@ using namespace pto;
 
 template <typename T, int SIZE>
 void bidirectional_exchange(__gm__ T* send_buf, __gm__ T* recv_buf,
-                            int partner_pe) {
+                            __gm__ T* remote_recv_addr, __gm__ T* remote_send_addr,
+                            int partner_npu) {
     using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, Stride<SIZE,SIZE,SIZE,SIZE,1>, Layout::ND>;
 
     // Send to partner (PUT)
     GTensor sendG(send_buf);
-    __gm__ T* remote_recv = ShmemPtr(recv_buf, partner_pe);
-    GTensor remoteDstG(remote_recv);
+    GTensor remoteDstG(remote_recv_addr);
     auto put_event = comm::TPUT_SDMA(remoteDstG, sendG);
     
     // Receive from partner (GET)
-    __gm__ T* remote_send = ShmemPtr(send_buf, partner_pe);
-    GTensor remoteSrcG(remote_send);
+    GTensor remoteSrcG(remote_send_addr);
     GTensor localRecvG(recv_buf);
     auto get_event = comm::TGET_SDMA(localRecvG, remoteSrcG);
     
     // Wait for both operations to complete
-    comm::TWAIT_SDMA(put_event);
-    comm::TWAIT_SDMA(get_event);
+    comm::TWAIT(put_event);
+    comm::TWAIT(get_event);
 }
 ```

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-All-reduce operation across parallel group. Performs element-wise reduction (sum) of data from all PEs and distributes the result to all PEs.
+All-reduce operation across parallel group. Performs element-wise reduction (sum) of data from all NPUs and distributes the result to all NPUs.
 
 ## Math Interpretation
 
@@ -38,7 +38,7 @@ PTO_INST void TALLREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal,
   - `ParallelGroup::value_type::RawDType` must equal `GlobalDstData::RawDType`.
   - `TileData::DType` must equal `GlobalDstData::RawDType`.
 - **Memory constraints**:
-  - `dstGlobal` must point to symmetric memory accessible by all PEs.
+  - `dstGlobal` must point to memory accessible by all NPUs.
   - `accTile`, `pingTile`, `pongTile` must be pre-allocated UB tiles.
 - **ParallelGroup constraints**:
   - Must contain valid pointers to GlobalTensors for all participating ranks.

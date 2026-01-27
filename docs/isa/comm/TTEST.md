@@ -50,7 +50,7 @@ PTO_INST bool TTEST_ALL(GlobalSignalData *signals, int count, WaitCmp cmp, int32
 - **Type constraints**:
   - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-  - `signal` must point to local PE's memory (not remote).
+  - `signal` must point to local address (on current NPU).
 - **Return value**:
   - Returns `true` if condition is satisfied, `false` otherwise.
 - **Comparison operators** (WaitCmp):
@@ -72,10 +72,10 @@ PTO_INST bool TTEST_ALL(GlobalSignalData *signals, int count, WaitCmp cmp, int32
 
 using namespace pto;
 
-bool check_ready(__gm__ int32_t* signal) {
+bool check_ready(__gm__ int32_t* local_signal) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-    GSignal sigG(signal);
+    GSignal sigG(local_signal);
     
     // Check if signal == 1
     return comm::TTEST<comm::WaitCmp::EQ>(sigG, 1);
@@ -89,10 +89,10 @@ bool check_ready(__gm__ int32_t* signal) {
 
 using namespace pto;
 
-bool poll_with_timeout(__gm__ int32_t* signal, int max_iterations) {
+bool poll_with_timeout(__gm__ int32_t* local_signal, int max_iterations) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-    GSignal sigG(signal);
+    GSignal sigG(local_signal);
     
     for (int i = 0; i < max_iterations; ++i) {
         if (comm::TTEST<comm::WaitCmp::EQ>(sigG, 1)) {
@@ -111,10 +111,10 @@ bool poll_with_timeout(__gm__ int32_t* signal, int max_iterations) {
 
 using namespace pto;
 
-void process_with_progress(__gm__ int32_t* counter, int expected_count) {
+void process_with_progress(__gm__ int32_t* local_counter, int expected_count) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-    GSignal counterG(counter);
+    GSignal counterG(local_counter);
     
     while (!comm::TTEST<comm::WaitCmp::GE>(counterG, expected_count)) {
         // Do some useful work while waiting
@@ -131,9 +131,9 @@ void process_with_progress(__gm__ int32_t* counter, int expected_count) {
 
 using namespace pto;
 
-void compare_wait_test(__gm__ int32_t* signal) {
+void compare_wait_test(__gm__ int32_t* local_signal) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-    GSignal sigG(signal);
+    GSignal sigG(local_signal);
 
     // Blocking: spins until signal == 1
     comm::TWAIT<comm::WaitCmp::EQ>(sigG, 1);

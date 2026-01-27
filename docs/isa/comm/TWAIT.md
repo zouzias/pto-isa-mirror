@@ -50,7 +50,7 @@ PTO_INST void TWAIT_ALL(GlobalSignalData *signals, int count, WaitCmp cmp, int32
 - **Type constraints**:
   - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-  - `signal` must point to local PE's memory (not remote).
+  - `signal` must point to local address (on current NPU).
 - **Comparison operators** (WaitCmp):
   | Value | Condition |
   |-------|-----------|
@@ -70,10 +70,10 @@ PTO_INST void TWAIT_ALL(GlobalSignalData *signals, int count, WaitCmp cmp, int32
 
 using namespace pto;
 
-void wait_for_ready(__gm__ int32_t* signal) {
+void wait_for_ready(__gm__ int32_t* local_signal) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-    GSignal sigG(signal);
+    GSignal sigG(local_signal);
     
     // Wait until signal == 1
     comm::TWAIT<comm::WaitCmp::EQ>(sigG, 1);
@@ -87,10 +87,10 @@ void wait_for_ready(__gm__ int32_t* signal) {
 
 using namespace pto;
 
-void wait_for_count(__gm__ int32_t* counter, int expected_count) {
+void wait_for_count(__gm__ int32_t* local_counter, int expected_count) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-    GSignal counterG(counter);
+    GSignal counterG(local_counter);
     
     // Wait until counter >= expected_count
     comm::TWAIT<comm::WaitCmp::GE>(counterG, expected_count);
@@ -105,21 +105,20 @@ void wait_for_count(__gm__ int32_t* counter, int expected_count) {
 using namespace pto;
 
 // Producer: notify when data is ready
-void producer(__gm__ int32_t* flag, int consumer_pe) {
+void producer(__gm__ int32_t* remote_flag, int consumer_npu) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
     // ... produce data ...
     
-    __gm__ int32_t* remote_flag = ShmemPtr(flag, consumer_pe);
     GSignal flagG(remote_flag);
     comm::TNOTIFY<comm::NotifyOp::Set>(flagG, 1);
 }
 
 // Consumer: wait for data
-void consumer(__gm__ int32_t* flag) {
+void consumer(__gm__ int32_t* local_flag) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-    GSignal flagG(flag);
+    GSignal flagG(local_flag);
     comm::TWAIT<comm::WaitCmp::EQ>(flagG, 1);
     
     // ... consume data ...

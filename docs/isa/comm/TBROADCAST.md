@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Broadcast data from root rank to all ranks in the parallel group. The root PE's data is copied to all other PEs.
+Broadcast data from root rank to all ranks in the parallel group. The root NPU's data is copied to all other NPUs.
 
 ## Math Interpretation
 
@@ -37,7 +37,7 @@ PTO_INST void TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal,
   - `ParallelGroup::value_type::RawDType` must equal `GlobalSrcData::RawDType`.
   - `TileData::DType` must equal `GlobalSrcData::RawDType`.
 - **Memory constraints**:
-  - `srcGlobal` must point to symmetric memory accessible by all PEs.
+  - `srcGlobal` must point to memory accessible by all NPUs.
   - `ubTile` must be pre-allocated in UB.
 - **Root constraints**:
   - `root` must be valid: `0 <= root < parallelGroup.nranks`.
@@ -66,13 +66,13 @@ void broadcast(__gm__ T** group_tensors, __gm__ T* data, int root, int my_rank, 
     }
     Group group(tensors, nranks, my_rank);
 
-    // Source tensor (same memory on all PEs, root's data will be broadcast)
+    // Source tensor (same memory on all NPUs, root's data will be broadcast)
     GTensor srcG(data);
 
     TileT ubTile;
     comm::TBROADCAST(group, srcG, root, ubTile);
     
-    // Now all PEs have root's data in their srcG
+    // Now all NPUs have root's data in their srcG
 }
 ```
 
@@ -83,7 +83,7 @@ void broadcast(__gm__ T** group_tensors, __gm__ T* data, int root, int my_rank, 
 
 using namespace pto;
 
-// Root PE (rank 0) broadcasts configuration to all workers
+// Root NPU (rank 0) broadcasts configuration to all workers
 template <typename T>
 void broadcast_config(comm::ParallelGroup<...>& group, GlobalTensor<T, ...>& config) {
     using TileT = Tile<TileType::Vec, T, 1, 64>;

@@ -2,11 +2,11 @@
 
 ## Introduction
 
-All-gather operation across parallel group. Each PE contributes its local data, and all PEs receive the concatenated result from all ranks.
+All-gather operation across parallel group. Each NPU contributes its local data, and all NPUs receive the concatenated result from all ranks.
 
 ## Math Interpretation
 
-After the operation, each PE has the concatenated data from all ranks:
+After the operation, each NPU has the concatenated data from all ranks:
 
 $$ \mathrm{dst}^{(k)}[\text{offset}(r) : \text{offset}(r+1)] = \mathrm{src}^{(r)} \quad \forall r \in [0, N), \forall k \in [0, N) $$
 
@@ -38,7 +38,7 @@ PTO_INST void TALLGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal,
   - `TileData::DType` must equal `GlobalDstData::RawDType`.
 - **Memory constraints**:
   - `dstGlobal` must be large enough to hold data from all ranks.
-  - `dstGlobal` must point to symmetric memory accessible by all PEs.
+  - `dstGlobal` must point to memory accessible by all NPUs.
   - `ubTile` must be pre-allocated in UB.
 - **ParallelGroup constraints**:
   - Must contain valid pointers to GlobalTensors for all participating ranks.

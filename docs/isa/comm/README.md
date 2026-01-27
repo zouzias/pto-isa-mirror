@@ -18,12 +18,11 @@ This directory contains the per-instruction reference for the PTO Communication 
 - `TGET_SDMA`: `docs/isa/comm/TGET_SDMA.md` - Asynchronous remote read (GM → GM direct)
 
 ## Signal-Based Synchronization
-- `TNOTIFY`: `docs/isa/comm/TNOTIFY.md` - Send flag notification to remote PE
+- `TNOTIFY`: `docs/isa/comm/TNOTIFY.md` - Send flag notification to remote NPU
 - `TWAIT`: `docs/isa/comm/TWAIT.md` - Wait until signal meets condition
 - `TTEST`: `docs/isa/comm/TTEST.md` - Non-blocking test if signal meets condition
 
 ## Collective Communication
-- `TBARRIER`: `docs/isa/comm/TBARRIER.md` - Global barrier synchronization
 - `TALLREDUCE`: `docs/isa/comm/TALLREDUCE.md` - All-reduce operation
 - `TALLGATHER`: `docs/isa/comm/TALLGATHER.md` - All-gather operation
 - `TBROADCAST`: `docs/isa/comm/TBROADCAST.md` - Broadcast from root rank
@@ -54,13 +53,13 @@ Comparison operators for `TWAIT` and `TTEST`:
 
 ### ParallelGroup
 
-Lightweight wrapper for collective communication across multiple PEs:
+Lightweight wrapper for collective communication across multiple NPUs:
 
 ```cpp
 template <typename GlobalData>
 struct ParallelGroup {
     GlobalData **tensors;  // Array of GlobalTensor pointers
     int nranks;            // Number of ranks in the group
-    int my_rank;           // Current PE's rank
+    int my_rank;           // Current NPU's rank
 };
 ```

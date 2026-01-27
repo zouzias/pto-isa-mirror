@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Asynchronous remote write operation using SDMA (System DMA) engine. Directly transfers data from local GM to remote PE's GM without UB staging. The operation returns immediately and completes in the background, allowing computation-communication overlap.
+Asynchronous remote write operation using SDMA (System DMA) engine. Directly transfers data from local GM to remote NPU's GM without UB staging. The operation returns immediately and completes in the background, allowing computation-communication overlap.
 
 ## Math Interpretation
 
@@ -44,8 +44,8 @@ PTO_INST SdmaEvent TPUT_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
   - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
   - Element size must be 1, 2, 4, or 8 bytes.
 - **Memory constraints**:
-  - `dstGlobal` must point to remote PE's symmetric memory (obtained via `ShmemPtr`).
-  - `srcGlobal` must point to local PE's symmetric memory.
+  - `dstGlobal` must point to remote address (on target NPU).
+  - `srcGlobal` must point to local address (on current NPU).
   - Both addresses must be 32-byte aligned for optimal performance.
 - **SDMA constraints**:
   - Maximum transfer size per operation: implementation-defined (typically 64MB).
@@ -75,7 +75,7 @@ PTO_INST SdmaEvent TPUT_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
 using namespace pto;
 
 template <typename T>
-void example_tput_sdma(__gm__ T* local_data, __gm__ T* remote_data, int remote_pe) {
+void example_tput_sdma(__gm__ T* local_data, __gm__ T* remote_addr, int target_npu) {
     using GShape = Shape<1, 1, 1, 64, 256>;
     using GStride = BaseShape2D<T, 64, 256, Layout::ND>;
     using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
@@ -83,8 +83,7 @@ void example_tput_sdma(__gm__ T* local_data, __gm__ T* remote_data, int remote_p
     // Local source tensor
     GTensor srcG(local_data);
     
-    // Remote destination tensor (address obtained via ShmemPtr)
-    __gm__ T* remote_addr = ShmemPtr(remote_data, remote_pe);
+    // Remote destination tensor
     GTensor dstG(remote_addr);
     
     // Initiate asynchronous transfer
@@ -106,16 +105,13 @@ void example_tput_sdma(__gm__ T* local_data, __gm__ T* remote_data, int remote_p
 using namespace pto;
 
 template <typename T, int SIZE>
-void overlap_comm_compute(__gm__ T* send_buf, __gm__ T* recv_buf, 
+void overlap_comm_compute(__gm__ T* send_buf, __gm__ T* remote_recv_addr, 
                           __gm__ T* compute_buf, int my_rank, int nranks) {
     using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, Stride<SIZE,SIZE,SIZE,SIZE,1>, Layout::ND>;
     using TileT = Tile<TileType::Vec, T, 1, SIZE>;
 
-    int next_rank = (my_rank + 1) % nranks;
-    
     GTensor sendG(send_buf);
-    __gm__ T* remote_recv = ShmemPtr(recv_buf, next_rank);
-    GTensor recvG(remote_recv);
+    GTensor recvG(remote_recv_addr);
     
     // Start asynchronous data transfer
     auto put_event = comm::TPUT_SDMA(recvG, sendG);
@@ -140,23 +136,23 @@ void overlap_comm_compute(__gm__ T* send_buf, __gm__ T* recv_buf,
 using namespace pto;
 
 template <typename T>
-void pipelined_transfer(__gm__ T* buffers[], int num_buffers, int remote_pe) {
+void pipelined_transfer(__gm__ T* local_buffers[], __gm__ T* remote_buffers[], 
+                        int num_buffers, int target_npu) {
     using GTensor = GlobalTensor<T, Shape<1,1,1,64,64>, Stride<4096,4096,4096,64,1>, Layout::ND>;
     
     SdmaEvent events[num_buffers];
     
     // Initiate all transfers
     for (int i = 0; i < num_buffers; ++i) {
-        GTensor srcG(buffers[i]);
-        __gm__ T* remote_addr = ShmemPtr(buffers[i], remote_pe);
-        GTensor dstG(remote_addr);
+        GTensor srcG(local_buffers[i]);
+        GTensor dstG(remote_buffers[i]);
         
         events[i] = comm::TPUT_SDMA(dstG, srcG);
     }
     
     // Wait for all transfers to complete
     for (int i = 0; i < num_buffers; ++i) {
-        comm::TWAIT_SDMA(events[i]);
+        comm::TWAIT(events[i]);
     }
 }
 ```
@@ -169,18 +165,14 @@ void pipelined_transfer(__gm__ T* buffers[], int num_buffers, int remote_pe) {
 using namespace pto;
 
 template <typename T, int CHUNK_SIZE>
-void ring_allreduce_step(__gm__ T* send_chunk, __gm__ T* recv_chunk,
+void ring_allreduce_step(__gm__ T* send_chunk, __gm__ T* remote_recv_addr,
                          int my_rank, int nranks, int step) {
     using GTensor = GlobalTensor<T, Shape<1,1,1,1,CHUNK_SIZE>, 
                                   Stride<CHUNK_SIZE,CHUNK_SIZE,CHUNK_SIZE,CHUNK_SIZE,1>, Layout::ND>;
 
-    int send_to = (my_rank + 1) % nranks;
-    int recv_from = (my_rank + nranks - 1) % nranks;
-    
     // Asynchronous send to next rank
     GTensor sendG(send_chunk);
-    __gm__ T* remote_recv = ShmemPtr(recv_chunk, send_to);
-    GTensor remoteDstG(remote_recv);
+    GTensor remoteDstG(remote_recv_addr);
     
     auto send_event = comm::TPUT_SDMA(remoteDstG, sendG);
     

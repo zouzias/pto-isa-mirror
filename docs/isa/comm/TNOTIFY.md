@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Send flag notification to remote PE. Used for lightweight synchronization between PEs without transferring bulk data.
+Send flag notification to remote NPU. Used for lightweight synchronization between NPUs without transferring bulk data.
 
 ## Math Interpretation
 
@@ -44,7 +44,7 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignal, int32_t value, NotifyOp op);
 - **Type constraints**:
   - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-  - `dstSignal` must point to remote PE's symmetric memory (obtained via `ShmemPtr`).
+  - `dstSignal` must point to remote address (on target NPU).
 - **Operation semantics**:
   - `NotifyOp::Set`: Direct store to remote memory.
   - `NotifyOp::AtomicAdd`: Hardware atomic add using `st_atomic` instruction.
@@ -58,12 +58,11 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignal, int32_t value, NotifyOp op);
 
 using namespace pto;
 
-void notify_set(__gm__ int32_t* signal, int target_pe) {
+void notify_set(__gm__ int32_t* remote_signal, int target_npu) {
     using GShape = Shape<1, 1, 1, 1, 1>;
     using GStride = Stride<1, 1, 1, 1, 1>;
     using GSignal = GlobalTensor<int32_t, GShape, GStride, Layout::ND>;
 
-    __gm__ int32_t* remote_signal = ShmemPtr(signal, target_pe);
     GSignal sigG(remote_signal);
     
     // Set remote signal to 42
@@ -78,10 +77,9 @@ void notify_set(__gm__ int32_t* signal, int target_pe) {
 
 using namespace pto;
 
-void atomic_increment(__gm__ int32_t* counter, int target_pe) {
+void atomic_increment(__gm__ int32_t* remote_counter, int target_npu) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-    __gm__ int32_t* remote_counter = ShmemPtr(counter, target_pe);
     GSignal counterG(remote_counter);
     
     // Atomically add 1 to remote counter
@@ -96,10 +94,9 @@ void atomic_increment(__gm__ int32_t* counter, int target_pe) {
 
 using namespace pto;
 
-void notify_runtime(__gm__ int32_t* signal, int target_pe, bool use_atomic) {
+void notify_runtime(__gm__ int32_t* remote_signal, int target_npu, bool use_atomic) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-    __gm__ int32_t* remote_signal = ShmemPtr(signal, target_pe);
     GSignal sigG(remote_signal);
     
     comm::NotifyOp op = use_atomic ? comm::NotifyOp::AtomicAdd : comm::NotifyOp::Set;
