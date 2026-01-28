@@ -161,6 +161,8 @@ PTO_INTERNAL void BinaryInstr(__ubuf__ typename TileDataDst::DType *dst, __ubuf_
     ScalarType src1, unsigned kValidRows, unsigned kValidCols, VFImplKind version)
 {
     using T = typename TileDataDst::DType;
+    __builtin_assume(kValidRows > 0);
+    __builtin_assume(kValidCols > 0);
     if constexpr ((TileDataDst::ValidCol == TileDataDst::Cols) && (TileDataSrc::ValidCol == TileDataSrc::Cols)) {
         TBinSOps_1D_selector<Op, TileDataDst, TileDataSrc, ScalarType, elementsPerRepeat,
             blockSizeElem, dstRowStride, srcRowStride>(dst, src0, src1, kValidRows, kValidCols, version);

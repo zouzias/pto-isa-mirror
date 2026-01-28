@@ -1723,6 +1723,10 @@ void implTCVT(typename TileDataD::TileDType __out__ dst,
 {
     using T1 = typename TileDataD::DType;
     using T2 = typename TileDataS::DType;
+
+    __builtin_assume(validRows > 0);
+    __builtin_assume(validCols > 0);
+
     __ubuf__ T1 *dstPtr = (__ubuf__ T1 *)__cce_get_tile_ptr(dst);
     __ubuf__ T2 *srcPtr = (__ubuf__ T2 *)__cce_get_tile_ptr(src);
     __VEC_SCOPE__ {

@@ -169,6 +169,9 @@ PTO_INTERNAL void BinaryInstr(__ubuf__ typename TileDataDst::DType *dst, __ubuf_
             (TileDataSrc1::ValidCol == TileDataSrc1::Cols)) ||
         ((TileDataDst::Rows == 1) && (TileDataSrc0::Rows == 1) && (TileDataSrc1::Rows == 1));
 
+    __builtin_assume(validRows > 0);
+    __builtin_assume(validCols > 0);
+
     if constexpr (isContiguous) {
         TBinOp1DSwitch<Op, T, ElementsPerRepeat, BlockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
             dst, src0, src1, validRows, validCols, version);

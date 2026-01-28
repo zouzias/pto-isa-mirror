@@ -126,6 +126,9 @@ PTO_INTERNAL void TRowReduceImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
                                  __ubuf__ typename TileDataOut::DType *srcPtr,
                                   uint32_t rows, uint32_t cols, unsigned version) {
   using TIN = typename TileDataIn::DType;
+  __builtin_assume(rows > 0);
+  __builtin_assume(cols > 0);
+
   uint16_t repeatTimes = CeilDivision(cols, elementsPerRepeat);
   __VEC_SCOPE__ {
     RegTensor<TIN> vreg0;

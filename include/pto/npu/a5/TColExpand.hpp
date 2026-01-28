@@ -121,6 +121,10 @@ namespace pto {
         constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileDataDst::DType);
         unsigned dstValidRow = dst.GetValidRow();
         unsigned dstValidCol = dst.GetValidCol();
+
+        __builtin_assume(dstValidRow > 0);
+        __builtin_assume(dstValidCol > 0);
+
         TColExpandCheck<TileDataDst, TileDataSrc>(src.GetValidRow(), src.GetValidCol(), dstValidCol);
         TColExpand<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem>(
             dst.data(), src.data(), dstValidRow, dstValidCol);

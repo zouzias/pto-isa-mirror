@@ -179,6 +179,9 @@ PTO_INTERNAL void TROWEXPAND_IMPL(TileDataOut &dst, TileDataIn &src)
 {
     unsigned dstValidRow = dst.GetValidRow();
     unsigned dstValidCol = dst.GetValidCol();
+
+    __builtin_assume(dstValidRow > 0);
+    __builtin_assume(dstValidCol > 0);
     TRowExpandCheck<TileDataOut, TileDataIn>(src.GetValidRow(), src.GetValidCol(), dstValidRow);
     TRowExpand<TileDataOut, TileDataIn>(dst.data(), src.data(), dstValidRow, dstValidCol);
 }
