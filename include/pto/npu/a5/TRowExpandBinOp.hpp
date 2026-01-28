@@ -124,6 +124,8 @@ PTO_INTERNAL void RowExpandBinaryInstr(__ubuf__ typename TileData::DType *dstPtr
                               __ubuf__ typename TileData::DType *src0Ptr, 
                               __ubuf__ typename TileDataSrc::DType *src1Ptr,
                               unsigned kValidRows, unsigned kValidCols) {
+    __builtin_assume(kValidRows > 0);
+    __builtin_assume(kValidCols > 0);
     if constexpr (TileDataSrc::isRowMajor) {
         if constexpr (TileData::ValidCol == TileData::Cols) {
             TRowExpandBinOps_2D_NoPostUpdate2<Op, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(dstPtr, src0Ptr, src1Ptr, kValidRows, kValidCols);

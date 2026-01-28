@@ -106,6 +106,8 @@ namespace pto {
     unsigned validRow, unsigned validCol, VFImplKind version) {
     using T = typename DstTile::DType;
     constexpr unsigned nRepeatElem = CCE_VL / sizeof(T);
+    __builtin_assume(validRow > 0);
+    __builtin_assume(validCol > 0);
     if constexpr (((DstTile::ValidCol == DstTile::Cols) && (SrcTile::ValidCol == SrcTile::Cols)) ||
       ((DstTile::Rows == 1) && (SrcTile::Rows == 1))) {
       TUnaryOps_1D_Switch<Op, T, DstTile, SrcTile, nRepeatElem>(dst, src, validRow, validCol, version);
