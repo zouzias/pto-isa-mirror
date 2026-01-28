@@ -168,6 +168,7 @@ set(ALL_TESTCASES
     tlog
     trecip
     tstore_acc2gm
+    timg2col
     tdivs
     tmuls
     tadds
