@@ -32,11 +32,15 @@ __global__ AICORE void runTCmps(__gm__ uint8_t __out__ *out, __gm__ T __in__ *sr
     GlobalData_dst dstGlobal(out);
 
     TLOAD(src0Tile, src0Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TCMPS(dstTile, src0Tile, src1[0], cmpMode);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }

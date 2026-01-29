@@ -50,8 +50,10 @@ __global__ AICORE void runTEXPANDS(__gm__ T *out, __gm__ T *scalar)
     TASSIGN(dstTile, 0x0);
 
     TEXPANDS(dstTile, src);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
