@@ -38,13 +38,12 @@ __global__ AICORE void runTRowsum(__gm__ T __out__ *out, __gm__ T __in__ *src, _
     GlobalData srcGlobal(src + offset, Shape(1, 1, 1, kGRows_, kGCols_), pto::Stride(1, 1, 1, kGCols_, 1));
     GlobalData dstGlobal(out + offset, Shape(1, 1, 1, kGRows_, kGCols_), pto::Stride(1, 1, 1, kGCols_, 1));
 
-    TLOAD(srcTile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TROWSUM(dstTile, srcTile, tmpTile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    Event<Op::TLOAD, Op::TROWSUM> event0;
+    Event<Op::TROWSUM, Op::TSTORE_VEC> event1;
+
+    event0 = TLOAD(srcTile, srcGlobal);
+    event1 = TROWSUM(dstTile, srcTile, tmpTile, event0);
+    TSTORE(dstGlobal, dstTile, event1);
     out = dstGlobal.data();
 }
 
@@ -67,6 +66,10 @@ template void launchTROWSUMTest<float, smallSize, smallSize, smallSize, smallSiz
                                                                                    aclrtStream stream);
 template void launchTROWSUMTest<uint16_t, smallSize, smallSize, smallSize, smallSize>(uint16_t *out, uint16_t *src,
                                                                                       aclrtStream stream);
-template void launchTROWSUMTest<float, bigSize666, bigSize666, bigSize666, bigSizeAligned>(float *out, float *src,
-                                                                                           aclrtStream stream);
+
+// FIXME: this is wrong, the tile size 666x672 is way larger than the UB size (192KB for A2 and 256KB for A5).
+// If we check the error code returned by aclrtSynchronizeStream on the host side, it will return an error.
+// We should use a smaller tile size here for both dstTile and srcTile to fit into UB at the same time.
+// template void launchTROWSUMTest<float, bigSize666, bigSize666, bigSize666, bigSizeAligned>(float *out,
+//     float *src, aclrtStream stream);
 }; // namespace TRowSumTest
