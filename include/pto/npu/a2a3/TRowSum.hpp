@@ -102,9 +102,10 @@ PTO_INTERNAL void TROWSUM_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &t
     int validCol = src.GetValidCol();
     int validRow = src.GetValidRow();
     TRowReduceCheck<TileDataOut, TileDataIn>(validRow, validCol, dst.GetValidRow());
-    if (validCol == 0 || validRow == 0) {
-        return;
-    }
+    // there is already a PTO_ASSERT checking this
+    // if (validCol == 0 || validRow == 0) {
+    //   return;
+    // }
 
     TRowSum<typename TileDataIn::DType, TileDataOut, TileDataIn, TileDataTmp>(dst.data(), src.data(), tmp.data(),
                                                                               validCol, validRow);
