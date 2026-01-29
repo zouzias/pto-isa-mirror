@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename TileData>
-__tf__ PTO_INTERNAL void tf_create_cbuf_matrix(typename TileData::TileDType tile, int64_t repeat_bit, int n) {
+__tf__ PTO_INTERNAL void tf_create_cbuf_matrix(typename TileData::TileDType __out__ tile, int64_t repeat_bit, int n) {
     create_cbuf_matrix((__cbuf__ uint16_t *)__cce_get_tile_ptr(tile), repeat_bit, n);
 }
 
