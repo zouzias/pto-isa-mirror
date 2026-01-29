@@ -495,7 +495,7 @@ __tf__ PTO_INTERNAL void TLoadCube(typename TileData::TileDType __out__ dst, typ
                                    int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
 #if defined(__DAV_CUBE__)
-    using L1Type = typename TileData::TileDType;
+    using L1Type = __cbuf__ typename TileData::DType *;
     L1Type dstAddr = (L1Type)__cce_get_tile_ptr(dst);
 
     // ND2NZ or DN2NZ
@@ -664,7 +664,7 @@ PTO_INTERNAL void TLoadMxCubeAND2ZZ(__cbuf__ typename TileData::DType *dst, type
 }
 
 template <typename TileData, typename GlobalData>
-__tf__ PTO_INTERNAL void TLoadMxCubeAVector(__cbuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
+__tf__ PTO_INTERNAL void TLoadMxCubeAVector(typename TileData::TileDType __out__ dst, typename GlobalData::DType *src,
                                             int gShape0, int gShape1, int gShape2, int gShape3, int gShape4,
                                             int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
                                             int validRow, int validCol)
@@ -674,7 +674,7 @@ __tf__ PTO_INTERNAL void TLoadMxCubeAVector(__cbuf__ typename TileData::DType *d
                    GlobalData::staticShape[2] == 1 && GlobalData::staticShape[3] == 1),
                   "Vector input must have the first 4 dimensions of staticShpae all equal to 1.");
     using L1Type = typename TileData::TileDType;
-    __cbuf__ typename TileData::DType *dstAddrP = dst;
+    __cbuf__ typename TileData::DType *dstAddrP = __cce_get_tile_ptr(dst);
     typename GlobalData::DType *srcAddrP = src;
 
     uint32_t lenBurst = validCol * sizeof(L1Type);
@@ -768,8 +768,9 @@ __tf__ PTO_INTERNAL void TLoadMxCube(typename TileData::TileDType __out__ dst, t
                                      int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                                      int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
-    using L1Type = typename TileData::TileDType;
+    using L1Type = __cbuf__ typename TileData::DType *;
     L1Type dstAddr = (L1Type)__cce_get_tile_ptr(dst);
+    
     // ZZ2ZZ or NN2NN
     if constexpr (GlobalData::layout == pto::Layout::MX_A_ZZ &&
                   (TileData::isRowMajor && TileData::SFractal == SLayout::RowMajor)) {
