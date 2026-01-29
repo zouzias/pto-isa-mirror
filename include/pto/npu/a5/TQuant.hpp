@@ -223,7 +223,7 @@ __tf__ PTO_INTERNAL void TQuant(typename TileDataSrc::TileDType __in__  src,
                                 typename TileDataExp::TileDType __out__ exp,
                                 typename TileDataOut::TileDType __out__ dst,
                                 typename TileDataMax::TileDType __out__ max,
-                                typename TileDataMax::TileDType __out__ scaling,
+                                typename TileDataSrc::TileDType __out__ scaling,
                                 unsigned validRows,
                                 unsigned validCols) {
     
@@ -277,11 +277,11 @@ __tf__ PTO_INTERNAL void TQuant(typename TileDataSrc::TileDType __in__  src,
 }
 
 template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, typename TileDataMax, int mode>
-PTO_INTERNAL void TQUANT_IMPL(TileDataSrc &src,
-                            TileDataExp &exp,
-                            TileDataOut &dst,
-                            TileDataMax &max,
-                            TileDataSrc &scaling) {
+PTO_INTERNAL void TQUANT_IMPL(TileDataSrc __in__ &src,
+                            TileDataExp __out__ &exp,
+                            TileDataOut __out__ &dst,
+                            TileDataMax __out__ &max,
+                            TileDataSrc __out__ &scaling) {
     using T = typename TileDataSrc::DType;
     static_assert(std::is_same<T, float32_t>::value, "Fix: Input has to be float 32");
 
