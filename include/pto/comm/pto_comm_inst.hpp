@@ -29,6 +29,25 @@ PTO_INST void TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, TileData 
 }
 
 // ============================================================================
+// TPUT_SDMA: Asynchronous remote write operation using SDMA engine
+// Direct GM to GM transfer without UB staging
+// Returns SdmaEvent for synchronization
+// ============================================================================
+
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INST SdmaEvent TPUT_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
+{
+    return TPUT_SDMA_IMPL(dstGlobal, srcGlobal);
+}
+
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INST SdmaEvent TPUT_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
+                              uint32_t numRows, uint32_t numCols)
+{
+    return TPUT_SDMA_IMPL(dstGlobal, srcGlobal, numRows, numCols);
+}
+
+// ============================================================================
 // TGET: Remote read operation - read remote PE's data to local memory
 // Note: UB tile must be pre-allocated by compiler
 // ============================================================================
@@ -37,6 +56,26 @@ template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
 PTO_INST void TGET(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, TileData &ubTile)
 {
     TGET_IMPL(dstGlobal, srcGlobal, ubTile);
+}
+
+// ============================================================================
+// TGET_SDMA: Asynchronous remote read operation using SDMA engine
+// Direct GM to GM transfer without UB staging
+// Returns SdmaEvent for synchronization
+// Data flow: srcGlobal (remote GM) -> dstGlobal (local GM)
+// ============================================================================
+
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INST SdmaEvent TGET_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
+{
+    return TGET_SDMA_IMPL(dstGlobal, srcGlobal);
+}
+
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INST SdmaEvent TGET_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
+                              uint32_t numRows, uint32_t numCols)
+{
+    return TGET_SDMA_IMPL(dstGlobal, srcGlobal, numRows, numCols);
 }
 
 PTO_INST void TBARRIER()

@@ -86,6 +86,28 @@ enum class WaitCmp : uint8_t {
     LE = 5,  // Less than or equal to
 };
 
+// ============================================================================
+// SdmaEvent: Event handle for SDMA asynchronous operations
+//
+// Used to track and synchronize SDMA transfer operations.
+// The event can be used with TWAIT_SDMA to wait for completion.
+// ============================================================================
+
+struct SdmaEvent {
+    uint64_t event_id;  // SDMA event identifier
+    
+    constexpr SdmaEvent() : event_id(0) {}
+    constexpr explicit SdmaEvent(uint64_t id) : event_id(id) {}
+    
+    constexpr bool operator==(const SdmaEvent& other) const {
+        return event_id == other.event_id;
+    }
+    
+    constexpr bool operator!=(const SdmaEvent& other) const {
+        return event_id != other.event_id;
+    }
+};
+
 } // namespace comm
 } // namespace pto
 

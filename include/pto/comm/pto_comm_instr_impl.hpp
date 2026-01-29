@@ -15,7 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Each instruction is implemented directly using Ascend intrinsics
 
 #include "pto/comm/TPut.hpp"
+#include "pto/comm/TPut_sdma.hpp"
 #include "pto/comm/TGet.hpp"
+#include "pto/comm/TGet_sdma.hpp"
 #include "pto/comm/TBarrier.hpp"
 #include "pto/comm/TAllReduce.hpp"
 #include "pto/comm/TAllGather.hpp"
