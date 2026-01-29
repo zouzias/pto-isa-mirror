@@ -27,8 +27,8 @@ tput %dst_remote, %src_local, %ub_tile : (!pto.memref<...>, !pto.memref<...>, !p
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
-template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
-PTO_INST void TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, TileData &ubTile);
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, TileData &ubTile, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -72,25 +72,5 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr, int target_npu) {
     
     // Perform remote write
     comm::TPUT(dstG, srcG, ubTile);
-}
-```
-
-### Ring Communication Pattern
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-template <typename T, int SIZE>
-void ring_put(__gm__ T* send_buf, __gm__ T* remote_recv_addr, int my_rank, int nranks) {
-    using TileT = Tile<TileType::Vec, T, 1, SIZE>;
-    using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, Stride<SIZE,SIZE,SIZE,SIZE,1>, Layout::ND>;
-
-    GTensor sendG(send_buf);
-    GTensor recvG(remote_recv_addr);
-    
-    TileT ubTile;
-    comm::TPUT(recvG, sendG, ubTile);
 }
 ```

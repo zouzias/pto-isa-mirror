@@ -2,24 +2,24 @@
 
 ## Introduction
 
-Broadcast data from root rank to all ranks in the parallel group. The root NPU's data is copied to all other NPUs.
+Broadcast data from current NPU to all ranks in the parallel group. The calling NPU is the root and its data is copied to all other NPUs.
+
+> **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
 
 ## Math Interpretation
 
 After the operation:
 
-$$ \mathrm{dst}^{(k)}_{i,j} = \mathrm{src}^{(\text{root})}_{i,j} \quad \forall k \in [0, N) $$
+$$ \mathrm{dst}^{(k)}_{i,j} = \mathrm{src}^{(\text{my\_rank})}_{i,j} \quad \forall k \in [0, N) $$
 
-where $N$ is the number of ranks and `root` is the broadcasting rank.
+where $N$ is the number of ranks and `my_rank` is the calling NPU (root).
 
 ## Assembly Syntax
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
-
 ```text
-tbroadcast %group, %src, %root, %ub_tile
+tbroadcast %group, %src, %ub_tile
 ```
 
 ## C++ Intrinsic
@@ -27,8 +27,8 @@ tbroadcast %group, %src, %root, %ub_tile
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
-template <typename ParallelGroup, typename GlobalSrcData, typename TileData>
-PTO_INST void TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal, int root, TileData &ubTile);
+template <typename ParallelGroup, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal, TileData &ubTile, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -37,12 +37,11 @@ PTO_INST void TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal,
   - `ParallelGroup::value_type::RawDType` must equal `GlobalSrcData::RawDType`.
   - `TileData::DType` must equal `GlobalSrcData::RawDType`.
 - **Memory constraints**:
-  - `srcGlobal` must point to memory accessible by all NPUs.
+  - `srcGlobal` must point to local memory (current NPU).
   - `ubTile` must be pre-allocated in UB.
-- **Root constraints**:
-  - `root` must be valid: `0 <= root < parallelGroup.nranks`.
 - **ParallelGroup constraints**:
-  - Must contain valid pointers to GlobalTensors for all participating ranks.
+  - All tensors must point to symmetric addresses across NPUs.
+  - `parallelGroup.my_rank` identifies the calling NPU as the broadcast root.
 
 ## Examples
 
@@ -53,84 +52,23 @@ PTO_INST void TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal,
 
 using namespace pto;
 
-template <typename T, int SIZE>
-void broadcast(__gm__ T** group_tensors, __gm__ T* data, int root, int my_rank, int nranks) {
+template <typename T, int SIZE, int NRANKS>
+void broadcast(__gm__ T* group_addrs[NRANKS], __gm__ T* my_data, int my_rank) {
     using TileT = Tile<TileType::Vec, T, 1, SIZE>;
-    using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, Stride<SIZE,SIZE,SIZE,SIZE,1>, Layout::ND>;
-    using Group = comm::ParallelGroup<GTensor>;
+    using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, 
+                                 BaseShape2D<T, 1, SIZE, Layout::ND>, Layout::ND>;
 
-    // Create ParallelGroup
-    GTensor* tensors[nranks];
-    for (int i = 0; i < nranks; ++i) {
-        tensors[i] = new GTensor(group_tensors[i]);
+    // Stack-allocated tensors (no memory leak)
+    GTensor tensors[NRANKS];
+    for (int i = 0; i < NRANKS; ++i) {
+        tensors[i] = GTensor(group_addrs[i]);
     }
-    Group group(tensors, nranks, my_rank);
-
-    // Source tensor (same memory on all NPUs, root's data will be broadcast)
-    GTensor srcG(data);
-
+    
+    comm::ParallelGroup<GTensor> group(tensors, NRANKS, my_rank);
+    GTensor srcG(my_data);
     TileT ubTile;
-    comm::TBROADCAST(group, srcG, root, ubTile);
     
-    // Now all NPUs have root's data in their srcG
-}
-```
-
-### Broadcast Configuration Parameters
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-// Root NPU (rank 0) broadcasts configuration to all workers
-template <typename T>
-void broadcast_config(comm::ParallelGroup<...>& group, GlobalTensor<T, ...>& config) {
-    using TileT = Tile<TileType::Vec, T, 1, 64>;
-    
-    TileT ubTile;
-    int root = 0;  // Rank 0 is the root
-    
-    comm::TBROADCAST(group, config, root, ubTile);
-    
-    // All workers now have the same configuration
-}
-```
-
-### Model Weight Distribution
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-// Master worker broadcasts initialized weights to all workers
-template <typename T>
-void distribute_weights(comm::ParallelGroup<...>& group, GlobalTensor<T, ...>& weights, int master_rank) {
-    using TileT = Tile<TileType::Vec, T, 16, 16>;
-    
-    TileT ubTile;
-    comm::TBROADCAST(group, weights, master_rank, ubTile);
-}
-```
-
-### Conditional Broadcast
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-// Different roots broadcast different data sections
-template <typename T>
-void rotating_broadcast(comm::ParallelGroup<...>& group, GlobalTensor<T, ...>* data_sections, 
-                        int num_sections, int my_rank) {
-    using TileT = Tile<TileType::Vec, T, 1, 128>;
-    TileT ubTile;
-
-    for (int section = 0; section < num_sections; ++section) {
-        int root = section % group.GetSize();
-        comm::TBROADCAST(group, data_sections[section], root, ubTile);
-    }
+    // Current NPU broadcasts its data to all others
+    comm::TBROADCAST(group, srcG, ubTile);
 }
 ```

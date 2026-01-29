@@ -1,0 +1,74 @@
+# TSCATTER
+
+## Introduction
+
+Scatter operation: distribute different chunks of data from local NPU to multiple remote NPUs. The inverse of `TGATHER`.
+
+> **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
+
+## Math Interpretation
+
+After the operation, each remote NPU receives its portion:
+
+$$ \mathrm{dst}^{(r)}_{i,j} = \mathrm{src}^{\mathrm{local}}[\text{offset}(r) + i, j] \quad \forall r \in [0, N) $$
+
+where $N$ is the number of ranks and $\text{offset}(r)$ is the starting position for rank $r$'s chunk in the source data.
+
+## Assembly Syntax
+
+PTO-AS form: see `docs/grammar/PTO-AS.md`.
+
+```text
+tscatter %group, %src, %ub_tile
+```
+
+## C++ Intrinsic
+
+Declared in `include/pto/comm/pto_comm_inst.hpp`:
+
+```cpp
+template <typename ParallelGroup, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal, TileData &ubTile, WaitEvents&... events);
+```
+
+## Constraints
+
+- **Type constraints**:
+  - `ParallelGroup::value_type::RawDType` must equal `GlobalSrcData::RawDType`.
+  - `TileData::DType` must equal `GlobalSrcData::RawDType`.
+- **Memory constraints**:
+  - `srcGlobal` must be large enough to hold data for all ranks.
+  - `ubTile` must be pre-allocated in UB.
+- **ParallelGroup constraints**:
+  - All tensors must point to symmetric addresses across NPUs.
+
+## Examples
+
+### Basic Scatter
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+
+using namespace pto;
+
+template <typename T, int CHUNK_SIZE, int NRANKS>
+void scatter(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
+    using TileT = Tile<TileType::Vec, T, 1, CHUNK_SIZE>;
+    using GChunk = GlobalTensor<T, Shape<1,1,1,1,CHUNK_SIZE>, 
+                                BaseShape2D<T, 1, CHUNK_SIZE, Layout::ND>, Layout::ND>;
+    using GSource = GlobalTensor<T, Shape<1,1,1,NRANKS,CHUNK_SIZE>, 
+                                 BaseShape2D<T, NRANKS, CHUNK_SIZE, Layout::ND>, Layout::ND>;
+
+    // Stack-allocated tensors (no memory leak)
+    GChunk tensors[NRANKS];
+    for (int i = 0; i < NRANKS; ++i) {
+        tensors[i] = GChunk(group_addrs[i]);
+    }
+    
+    comm::ParallelGroup<GChunk> group(tensors, NRANKS, my_rank);
+    GSource srcG(local_data);
+    TileT ubTile;
+    
+    comm::TSCATTER(group, srcG, ubTile);
+}
+```

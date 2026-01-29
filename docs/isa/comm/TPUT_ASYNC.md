@@ -1,8 +1,14 @@
-# TPUT_SDMA
+# TPUT_ASYNC
 
 ## Introduction
 
-Asynchronous remote write operation using SDMA (System DMA) engine. Directly transfers data from local GM to remote NPU's GM without UB staging. The operation returns immediately and completes in the background, allowing computation-communication overlap.
+Asynchronous remote write operation using configurable DMA engine. Directly transfers data from local GM to remote NPU's GM. The operation returns immediately with an event handle.
+
+## Template Parameters
+
+- `engine`: DMA engine selection
+  - `DmaEngine::SDMA` (default) - System DMA
+  - `DmaEngine::URMA` - A5 URMA (UB Remote Memory Access) based on Unified Bus
 
 ## Math Interpretation
 
@@ -10,7 +16,7 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}^{\mathrm{remote}}_{i,j} = \mathrm{src}^{\mathrm{local}}_{i,j} $$
 
-Data flow: `srcGlobal (local GM)` → `SDMA` → `dstGlobal (remote GM)`
+Data flow: `srcGlobal (local GM)` → `DMA Engine` → `dstGlobal (remote GM)`
 
 ## Assembly Syntax
 
@@ -19,7 +25,8 @@ PTO-AS form: see `docs/grammar/PTO-AS.md`.
 Asynchronous form:
 
 ```text
-%event = tput_sdma %dst_remote, %src_local : (!pto.memref<...>, !pto.memref<...>) -> !pto.event
+%event = tput_async<sdma> %dst_remote, %src_local : (!pto.memref<...>, !pto.memref<...>) -> !pto.event
+%event = tput_async<urma> %dst_remote, %src_local : (!pto.memref<...>, !pto.memref<...>) -> !pto.event
 ```
 
 ## C++ Intrinsic
@@ -27,14 +34,14 @@ Asynchronous form:
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
-// Asynchronous SDMA PUT - returns event for synchronization
-template <typename GlobalDstData, typename GlobalSrcData>
-PTO_INST SdmaEvent TPUT_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal);
+// Asynchronous PUT with template-specified DMA engine
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, WaitEvents&... events);
 
 // With explicit size specification
-template <typename GlobalDstData, typename GlobalSrcData>
-PTO_INST SdmaEvent TPUT_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, 
-                              uint32_t numRows, uint32_t numCols);
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, 
+                                uint32_t numRows, uint32_t numCols, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -47,15 +54,16 @@ PTO_INST SdmaEvent TPUT_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
   - `dstGlobal` must point to remote address (on target NPU).
   - `srcGlobal` must point to local address (on current NPU).
   - Both addresses must be 32-byte aligned for optimal performance.
-- **SDMA constraints**:
-  - Maximum transfer size per operation: implementation-defined (typically 64MB).
-  - SDMA channel must be available (limited concurrent operations).
+- **DMA constraints**:
+  - SDMA: Allows 2D transfer
+  - URMA: 1D transfer
+  - DMA channel must be available (limited concurrent operations).
 - **Valid region**:
   - Transfer size is determined by GlobalTensor shape or explicit parameters.
 
 ## Comparison with TPUT
 
-| Feature | TPUT | TPUT_SDMA |
+| Feature | TPUT | TPUT_ASYNC |
 |---------|------|-----------|
 | Execution | Synchronous | Asynchronous |
 | Data path | GM → UB → GM | GM → GM (direct) |
@@ -66,7 +74,7 @@ PTO_INST SdmaEvent TPUT_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
 
 ## Examples
 
-### Basic Asynchronous PUT
+### Basic Asynchronous PUT with SDMA (default)
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -75,7 +83,7 @@ PTO_INST SdmaEvent TPUT_SDMA(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
 using namespace pto;
 
 template <typename T>
-void example_tput_sdma(__gm__ T* local_data, __gm__ T* remote_addr, int target_npu) {
+void example_tput_async(__gm__ T* local_data, __gm__ T* remote_addr, int target_npu) {
     using GShape = Shape<1, 1, 1, 64, 256>;
     using GStride = BaseShape2D<T, 64, 256, Layout::ND>;
     using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
@@ -86,14 +94,36 @@ void example_tput_sdma(__gm__ T* local_data, __gm__ T* remote_addr, int target_n
     // Remote destination tensor
     GTensor dstG(remote_addr);
     
-    // Initiate asynchronous transfer
-    auto event = comm::TPUT_SDMA(dstG, srcG);
+    // Initiate asynchronous transfer using SDMA (default)
+    auto event = comm::TPUT_ASYNC(dstG, srcG);
     
     // Do other computation while transfer is in progress
     // ...
     
     // Wait for transfer completion
-    comm::TWAIT(event);
+    TSYNC(event);
+}
+```
+
+### Using URMA 
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+
+using namespace pto;
+
+template <typename T, int SIZE>
+void low_latency_put(__gm__ T* send_buf, __gm__ T* remote_recv_addr) {
+    using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, Stride<SIZE,SIZE,SIZE,SIZE,1>, Layout::ND>;
+
+    GTensor sendG(send_buf);
+    GTensor recvG(remote_recv_addr);
+    
+    // Use URMA for low-latency small transfer
+    auto event = comm::TPUT_ASYNC<comm::DmaEngine::URMA>(recvG, sendG);
+    
+    // Wait for completion
+    TSYNC(event);
 }
 ```
 
@@ -113,8 +143,8 @@ void overlap_comm_compute(__gm__ T* send_buf, __gm__ T* remote_recv_addr,
     GTensor sendG(send_buf);
     GTensor recvG(remote_recv_addr);
     
-    // Start asynchronous data transfer
-    auto put_event = comm::TPUT_SDMA(recvG, sendG);
+    // Start asynchronous data transfer with SDMA
+    auto put_event = comm::TPUT_ASYNC<comm::DmaEngine::SDMA>(recvG, sendG);
     
     // Perform local computation while transfer is in progress
     GTensor computeG(compute_buf);
@@ -124,7 +154,7 @@ void overlap_comm_compute(__gm__ T* send_buf, __gm__ T* remote_recv_addr,
     TSTORE(computeG, tile);
     
     // Wait for transfer to complete before using the data
-    comm::TWAIT(put_event);
+    TSYNC(put_event);
 }
 ```
 
@@ -140,46 +170,17 @@ void pipelined_transfer(__gm__ T* local_buffers[], __gm__ T* remote_buffers[],
                         int num_buffers, int target_npu) {
     using GTensor = GlobalTensor<T, Shape<1,1,1,64,64>, Stride<4096,4096,4096,64,1>, Layout::ND>;
     
-    SdmaEvent events[num_buffers];
+    comm::AsyncEvent events[num_buffers];
     
     // Initiate all transfers
     for (int i = 0; i < num_buffers; ++i) {
         GTensor srcG(local_buffers[i]);
         GTensor dstG(remote_buffers[i]);
         
-        events[i] = comm::TPUT_SDMA(dstG, srcG);
+        events[i] = comm::TPUT_ASYNC(dstG, srcG);
     }
     
     // Wait for all transfers to complete
-    for (int i = 0; i < num_buffers; ++i) {
-        comm::TWAIT(events[i]);
-    }
-}
-```
-
-### Ring AllReduce with SDMA
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-template <typename T, int CHUNK_SIZE>
-void ring_allreduce_step(__gm__ T* send_chunk, __gm__ T* remote_recv_addr,
-                         int my_rank, int nranks, int step) {
-    using GTensor = GlobalTensor<T, Shape<1,1,1,1,CHUNK_SIZE>, 
-                                  Stride<CHUNK_SIZE,CHUNK_SIZE,CHUNK_SIZE,CHUNK_SIZE,1>, Layout::ND>;
-
-    // Asynchronous send to next rank
-    GTensor sendG(send_chunk);
-    GTensor remoteDstG(remote_recv_addr);
-    
-    auto send_event = comm::TPUT_SDMA(remoteDstG, sendG);
-    
-    // Local reduction while waiting (if recv_chunk already has data)
-    // ...
-    
-    // Ensure send completes before next step
-    comm::TWAIT(send_event);
+    TSYNC(events, num_buffers);
 }
 ```

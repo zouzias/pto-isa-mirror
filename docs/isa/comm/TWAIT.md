@@ -2,25 +2,33 @@
 
 ## Introduction
 
-Blocking wait until signal(s) meet comparison condition. Used in conjunction with `TNOTIFY` for synchronization.
+Blocking wait until signal(s) meet comparison condition. Used in conjunction with `TNOTIFY` for flag-based synchronization.
+
+Supports single signal or 2D signal matrix (shape derived from GlobalTensor).
+
+> **Note**: For waiting on `AsyncEvent` (from `TPUT_ASYNC`/`TGET_ASYNC`), use `TSYNC` instead.
 
 ## Math Interpretation
 
 Wait (spin) until the following condition is satisfied:
 
+Single signal:
+
 $$ \mathrm{signal} \;\mathtt{cmp}\; \mathrm{cmpValue} $$
 
-where `cmp` ∈ {`==`, `!=`, `>`, `>=`, `<`, `<=`}
+Signal matrix (all must satisfy):
+
+$$ \forall i,j: \mathrm{signal}_{i,j} \;\mathtt{cmp}\; \mathrm{cmpValue} $$
+
+where `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
 
 ## Assembly Syntax
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
-
 ```text
-twait<EQ> %signal, %cmp_value : (!pto.memref<i32>, i32)
-twait<GE> %signal, %cmp_value : (!pto.memref<i32>, i32)
+twait %signal, %cmp_value {cmp = #pto.cmp<EQ>} : (!pto.memref<i32>, i32)
+twait %signal_matrix, %cmp_value {cmp = #pto.cmp<GE>} : (!pto.memref<i32, MxN>, i32)
 ```
 
 ## C++ Intrinsic
@@ -28,21 +36,8 @@ twait<GE> %signal, %cmp_value : (!pto.memref<i32>, i32)
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
-// Compile-time specified comparison (recommended, zero overhead)
-template <WaitCmp cmp = WaitCmp::EQ, typename GlobalSignalData>
-PTO_INST void TWAIT(GlobalSignalData &signal, int32_t cmpValue);
-
-// Runtime specified comparison
-template <typename GlobalSignalData>
-PTO_INST void TWAIT(GlobalSignalData &signal, WaitCmp cmp, int32_t cmpValue);
-
-// Wait for all signals in array to meet condition
-template <WaitCmp cmp = WaitCmp::EQ, typename GlobalSignalData>
-PTO_INST void TWAIT_ALL(GlobalSignalData *signals, int count, int32_t cmpValue);
-
-// Runtime specified comparison
-template <typename GlobalSignalData>
-PTO_INST void TWAIT_ALL(GlobalSignalData *signals, int count, WaitCmp cmp, int32_t cmpValue);
+template <typename GlobalSignalData, typename... WaitEvents>
+PTO_INST void TWAIT(GlobalSignalData &signal, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -51,6 +46,9 @@ PTO_INST void TWAIT_ALL(GlobalSignalData *signals, int count, WaitCmp cmp, int32
   - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
   - `signal` must point to local address (on current NPU).
+- **Shape semantics**:
+  - For single signal: Shape is `<1,1,1,1,1>`.
+  - For signal matrix: Shape determines the 2D region to wait on. All signals must satisfy the condition.
 - **Comparison operators** (WaitCmp):
   | Value | Condition |
   |-------|-----------|
@@ -63,7 +61,7 @@ PTO_INST void TWAIT_ALL(GlobalSignalData *signals, int count, WaitCmp cmp, int32
 
 ## Examples
 
-### Wait for Signal Equals Value
+### Wait for Single Signal
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -76,11 +74,32 @@ void wait_for_ready(__gm__ int32_t* local_signal) {
     GSignal sigG(local_signal);
     
     // Wait until signal == 1
-    comm::TWAIT<comm::WaitCmp::EQ>(sigG, 1);
+    comm::TWAIT(sigG, 1, comm::WaitCmp::EQ);
 }
 ```
 
-### Wait for Counter Reaches Threshold
+### Wait for Signal Matrix
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+
+using namespace pto;
+
+// Wait for signals from a 4x8 grid of workers
+void wait_worker_grid(__gm__ int32_t* signal_matrix) {
+    constexpr int ROWS = 4;
+    constexpr int COLS = 8;
+    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,ROWS,COLS>, 
+                                 Stride<ROWS*COLS,ROWS*COLS,ROWS*COLS,COLS,1>, Layout::ND>;
+
+    GSignal sigMatrix(signal_matrix);
+    
+    // Wait until all 32 signals == 1
+    comm::TWAIT(sigMatrix, 1, comm::WaitCmp::EQ);
+}
+```
+
+### Wait for Counter Threshold
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -93,7 +112,7 @@ void wait_for_count(__gm__ int32_t* local_counter, int expected_count) {
     GSignal counterG(local_counter);
     
     // Wait until counter >= expected_count
-    comm::TWAIT<comm::WaitCmp::GE>(counterG, expected_count);
+    comm::TWAIT(counterG, expected_count, comm::WaitCmp::GE);
 }
 ```
 
@@ -105,13 +124,13 @@ void wait_for_count(__gm__ int32_t* local_counter, int expected_count) {
 using namespace pto;
 
 // Producer: notify when data is ready
-void producer(__gm__ int32_t* remote_flag, int consumer_npu) {
+void producer(__gm__ int32_t* remote_flag) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
     // ... produce data ...
     
     GSignal flagG(remote_flag);
-    comm::TNOTIFY<comm::NotifyOp::Set>(flagG, 1);
+    comm::TNOTIFY(flagG, 1, comm::NotifyOp::Set);
 }
 
 // Consumer: wait for data
@@ -119,7 +138,7 @@ void consumer(__gm__ int32_t* local_flag) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
     GSignal flagG(local_flag);
-    comm::TWAIT<comm::WaitCmp::EQ>(flagG, 1);
+    comm::TWAIT(flagG, 1, comm::WaitCmp::EQ);
     
     // ... consume data ...
 }
