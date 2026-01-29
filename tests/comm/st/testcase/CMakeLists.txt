@@ -59,6 +59,8 @@ endfunction()
 set(ALL_TESTCASES
 tget
 tput
+tget_sdma
+tput_sdma
 tnotify
 twait
 ttest

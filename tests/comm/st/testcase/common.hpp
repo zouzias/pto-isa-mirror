@@ -85,7 +85,7 @@ inline int ShmemInit(const ShmemEnv &env)
     // Set option attributes
     constexpr int attrVersion = (1 << 16) + sizeof(aclshmemx_init_attr_t);
     constexpr int DEFAULT_TIMEOUT = 120;  // seconds
-    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE, 
+    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_SDMA, 
                               DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
     
     // Use default unique ID

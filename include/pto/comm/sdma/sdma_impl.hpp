@@ -53,6 +53,9 @@ inline bool SDMA::init(struct pto_comm_init_attr_t *attributes)
     return true;
 }
 
+// TODO: wait and test are now defined inline in sdma.hpp with PTO_INTERNAL attribute
+// The out-of-line definitions below are disabled to avoid conflicts
+#if 0
 // Wait for SDMA event completion
 inline void SDMA::wait(const SdmaEvent &event)
 {
@@ -84,6 +87,7 @@ inline bool SDMA::test(const SdmaEvent &event)
     
     return false;
 }
+#endif
 
 } // namespace sdma
 } // namespace comm

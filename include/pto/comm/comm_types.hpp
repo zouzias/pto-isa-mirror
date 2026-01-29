@@ -96,14 +96,14 @@ enum class WaitCmp : uint8_t {
 struct SdmaEvent {
     uint64_t event_id;  // SDMA event identifier
     
-    constexpr SdmaEvent() : event_id(0) {}
-    constexpr explicit SdmaEvent(uint64_t id) : event_id(id) {}
+    AICORE constexpr SdmaEvent() : event_id(0) {}
+    AICORE constexpr explicit SdmaEvent(uint64_t id) : event_id(id) {}
     
-    constexpr bool operator==(const SdmaEvent& other) const {
+    AICORE constexpr bool operator==(const SdmaEvent& other) const {
         return event_id == other.event_id;
     }
     
-    constexpr bool operator!=(const SdmaEvent& other) const {
+    AICORE constexpr bool operator!=(const SdmaEvent& other) const {
         return event_id != other.event_id;
     }
 };

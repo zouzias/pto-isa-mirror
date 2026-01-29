@@ -75,14 +75,14 @@ public:
     
     // PUT using GlobalTensor shape to determine transfer size
     template <typename GlobalDstData, typename GlobalSrcData>
-    static SdmaEvent put(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
+    PTO_INTERNAL static SdmaEvent put(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
     {
         return put_impl(dstGlobal, srcGlobal);
     }
     
     // PUT with explicit size specification
     template <typename GlobalDstData, typename GlobalSrcData>
-    static SdmaEvent put(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
+    PTO_INTERNAL static SdmaEvent put(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
                          uint64_t transfer_size)
     {
         return put_impl(dstGlobal, srcGlobal, transfer_size);
@@ -95,14 +95,14 @@ public:
     // GET using GlobalTensor shape to determine transfer size
     // Data flow: srcGlobal (remote GM) -> dstGlobal (local GM)
     template <typename GlobalDstData, typename GlobalSrcData>
-    static SdmaEvent get(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
+    PTO_INTERNAL static SdmaEvent get(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
     {
         return get_impl(dstGlobal, srcGlobal);
     }
     
     // GET with explicit size specification
     template <typename GlobalDstData, typename GlobalSrcData>
-    static SdmaEvent get(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
+    PTO_INTERNAL static SdmaEvent get(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
                          uint64_t transfer_size)
     {
         return get_impl(dstGlobal, srcGlobal, transfer_size);
@@ -113,15 +113,30 @@ public:
     // ========================================================================
     
     // Wait for SDMA event completion
-    static void wait(const SdmaEvent &event);
+    // Note: Current implementation is synchronous, so wait is a no-op
+    // (the put/get operations already complete before returning)
+    PTO_INTERNAL static void wait(const SdmaEvent &event)
+    {
+        // Current implementation is synchronous - operations complete
+        // before returning from put/get, so nothing to wait for.
+        // Future async implementation would poll/wait here.
+        (void)event;
+    }
     
     // Test if SDMA event is complete (non-blocking)
-    static bool test(const SdmaEvent &event);
+    // Note: Current implementation is synchronous, always returns true
+    PTO_INTERNAL static bool test(const SdmaEvent &event)
+    {
+        // Current implementation is synchronous - operations complete
+        // before returning from put/get, so always complete.
+        (void)event;
+        return true;
+    }
 
 private:
     // Internal implementation of PUT
     template <typename GlobalDstData, typename GlobalSrcData>
-    static SdmaEvent put_impl(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
+    PTO_INTERNAL static SdmaEvent put_impl(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
     {
         __gm__ detail::pto_sdma_op_res_info_t* op_res_info = detail::pto_comm_get_sdma_op_res_info();
         if (op_res_info == nullptr) {
@@ -176,7 +191,7 @@ private:
     
     // Internal implementation of PUT with explicit size
     template <typename GlobalDstData, typename GlobalSrcData>
-    static SdmaEvent put_impl(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
+    PTO_INTERNAL static SdmaEvent put_impl(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
                               uint64_t transfer_size)
     {
         __gm__ detail::pto_sdma_op_res_info_t* op_res_info = detail::pto_comm_get_sdma_op_res_info();
@@ -221,7 +236,7 @@ private:
     // Internal implementation of GET
     // Data flow: srcGlobal (remote) -> dstGlobal (local)
     template <typename GlobalDstData, typename GlobalSrcData>
-    static SdmaEvent get_impl(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
+    PTO_INTERNAL static SdmaEvent get_impl(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
     {
         __gm__ detail::pto_sdma_op_res_info_t* op_res_info = detail::pto_comm_get_sdma_op_res_info();
         if (op_res_info == nullptr) {
@@ -276,7 +291,7 @@ private:
     
     // Internal implementation of GET with explicit size
     template <typename GlobalDstData, typename GlobalSrcData>
-    static SdmaEvent get_impl(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
+    PTO_INTERNAL static SdmaEvent get_impl(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal,
                               uint64_t transfer_size)
     {
         __gm__ detail::pto_sdma_op_res_info_t* op_res_info = detail::pto_comm_get_sdma_op_res_info();

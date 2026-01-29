@@ -105,7 +105,7 @@ PTO_INTERNAL uint32_t pto_comm_select_sdma_channel(uint32_t block_idx, uint32_t 
 PTO_INTERNAL void dcci_cacheline(__gm__ uint8_t* addr)
 {
     using namespace AscendC;
-    GlobalTensor<uint8_t> global;
+    AscendC::GlobalTensor<uint8_t> global;
     global.SetGlobalBuffer(addr);
 
     // Important: add hint to avoid dcci being optimized by compiler
