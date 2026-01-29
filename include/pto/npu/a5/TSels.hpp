@@ -59,7 +59,7 @@ __tf__ PTO_INTERNAL void TSels_b32(typename TileDataDst::TileDType __out__ dst,
 
             if (sReg > 0) {
                 colOffset0 = 2 * loopTimes * elementsPerRepeat;
-                plds(tmpMask, (__ubuf__ uint32_t *)mask, i * maskRowStride + 2 * 8 * loopTimes, US);
+                plds(tmpMask, maskPtr, i * maskRowStride + 2 * 8 * loopTimes, US);
                 punpack(selMask0, tmpMask, LOWER);
                 vlds(vreg0, srcPtr, (int32_t)(i * TileDataSrc::RowStride + colOffset0), NORM);
                 vsel(dreg0, vreg0, vregScalar, selMask0);

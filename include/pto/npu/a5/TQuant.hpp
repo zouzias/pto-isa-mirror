@@ -221,7 +221,7 @@ template <typename TileDataOut, typename TileDataSrc, typename TileDataExp, type
 __tf__ PTO_INTERNAL void TQuant_MXFP8(typename TileDataOut::TileDType __out__ dst,
                                       typename TileDataExp::TileDType __out__ exp,
                                       typename TileDataMax::TileDType __out__ max,
-                                      typename TileDataMax::TileDType __out__ scaling,
+                                      typename TileDataSrc::TileDType __out__ scaling,
                                       typename TileDataSrc::TileDType __in__ src, unsigned validRows,
                                       unsigned validCols)
 {

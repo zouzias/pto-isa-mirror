@@ -72,15 +72,21 @@ __global__ AICORE void TStoreAcc2gmNz2nd(__gm__ dstDataType *out, __gm__ srcData
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
     TMATMUL(cTile, aTile, bTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
         TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile);
@@ -88,8 +94,10 @@ __global__ AICORE void TStoreAcc2gmNz2nd(__gm__ dstDataType *out, __gm__ srcData
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
         TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile);
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+#endif
     out = dstGlobal.data();
 }
 
@@ -147,15 +155,21 @@ __global__ AICORE void TStoreAcc2gmNz2nz(__gm__ dstDataType *out, __gm__ srcData
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
     TMATMUL(cTile, aTile, bTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
         TSTORE<AccTile, GlobalDataOut, atomicTypeEnum>(dstGlobal, cTile);
@@ -163,8 +177,10 @@ __global__ AICORE void TStoreAcc2gmNz2nz(__gm__ dstDataType *out, __gm__ srcData
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
         TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile);
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+#endif
     out = dstGlobal.data();
 }
 
@@ -225,15 +241,21 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nd(__gm__ dstDataType *out, __gm__ s
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
     TMATMUL(cTile, aTile, bTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     uint64_t preQuantScalar = static_cast<uint64_t>(*reinterpret_cast<int32_t *>(&scalarQuant));
     if (sizeof(dstDataType) == 1) {
         constexpr bool sign = (std::is_same_v<dstDataType, int8_t>) ? true : false;
@@ -247,8 +269,10 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nd(__gm__ dstDataType *out, __gm__ s
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
         TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, preQuantScalar);
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+#endif
     out = dstGlobal.data();
 }
 
@@ -307,15 +331,21 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nz(__gm__ dstDataType *out, __gm__ s
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
     TMATMUL(cTile, aTile, bTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     uint64_t preQuantScalar = static_cast<uint64_t>(*reinterpret_cast<int32_t *>(&scalarQuant));
     if (sizeof(dstDataType) == 1) {
         constexpr bool sign = (std::is_same_v<dstDataType, int8_t>) ? true : false;
@@ -328,8 +358,10 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nz(__gm__ dstDataType *out, __gm__ s
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
         TSTORE<AccTile, GlobalDataOut, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, preQuantScalar);
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+#endif
     out = dstGlobal.data();
 }
 
@@ -402,15 +434,21 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nd(__gm__ dstDataType *out, __gm__ s
     TLOAD(bMatTile, src1Global);
     TLOAD(scalingMatTile, src2Global);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
     TMATMUL(cTile, aTile, bTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     TMOV(scalingTile, scalingMatTile);
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
@@ -419,8 +457,10 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nd(__gm__ dstDataType *out, __gm__ s
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
         TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, scalingTile);
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+#endif
     out = dstGlobal.data();
 }
 
@@ -491,15 +531,21 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nz(__gm__ dstDataType *out, __gm__ s
     TLOAD(bMatTile, src1Global);
     TLOAD(scalingMatTile, src2Global);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
     TMATMUL(cTile, aTile, bTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     TMOV(scalingTile, scalingMatTile);
     constexpr AtomicType atomicTypeEnum = atomicType == 1 ? AtomicType::AtomicAdd : AtomicType::AtomicNone;
     if constexpr (reluMode == 0) {
@@ -508,8 +554,10 @@ __global__ AICORE void TStoreAcc2gmVectorNz2nz(__gm__ dstDataType *out, __gm__ s
         constexpr ReluPreMode reluPreMode = ReluPreMode::NormalRelu;
         TSTORE_FP<AccTile, GlobalDataOut, ScalingTile, atomicTypeEnum, reluPreMode>(dstGlobal, cTile, scalingTile);
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+#endif
     out = dstGlobal.data();
 }
 
