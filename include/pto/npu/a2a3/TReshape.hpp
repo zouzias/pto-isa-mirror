@@ -50,7 +50,7 @@ PTO_INTERNAL void TRESHAPE_IMPL(TileDataOut &dst, TileDataIn &src) {
           (SFractal != SLayout::NoneBox && NewSFractal != SLayout::NoneBox),
       "TRESHAPE: Cannot reshape between boxed and non-boxed layouts.");
 
-  TASSIGN_IMPL(dst, reinterpret_cast<uintptr_t>(src.data()));
+  TASSIGN_IMPL(dst, src.data());
 }
 } // namespace pto
 
