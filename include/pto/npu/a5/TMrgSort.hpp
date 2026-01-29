@@ -208,8 +208,8 @@ PTO_INTERNAL void CheckStatic()
 
 template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData,
     typename Src2TileData, typename Src3TileData, bool exhausted>
-PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, MrgSortExecutedNumList &executedNumList, TmpTileData &tmp,
-    Src0TileData &src0, Src1TileData &src1, Src2TileData &src2, Src3TileData &src3)
+PTO_INTERNAL void TMRGSORT_IMPL(DstTileData __out__ &dst, MrgSortExecutedNumList &executedNumList, TmpTileData __in__ &tmp,
+    Src0TileData __in__ &src0, Src1TileData __in__ &src1, Src2TileData __in__ &src2, Src3TileData __in__ &src3)
 {
     CheckStatic<DstTileData, TmpTileData, Src0TileData, Src1TileData, Src2TileData, Src3TileData>();
     CheckOverMemory<DstTileData, TmpTileData, Src0TileData, Src1TileData, Src2TileData, Src3TileData, LIST_NUM_4>();
@@ -238,7 +238,7 @@ PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, MrgSortExecutedNumList &execut
     unsigned src1Col = src1.GetValidCol() >> ELE_NUM_SHIFT;
     unsigned src2Col = src2.GetValidCol() >> ELE_NUM_SHIFT;
     TMrgsort<DstTileData, TmpTileData, Src0TileData, Src1TileData, Src2TileData, Src2TileData, exhausted, LIST_NUM_3>(
-        dst.data(), tmp.data(), src0.data(), src1.data(), src2.data(), nullptr, executedNumList.mrgSortList0,
+        dst.data(), tmp.data(), src0.data(), src1.data(), src2.data(), src2.data(), executedNumList.mrgSortList0,
         executedNumList.mrgSortList1, executedNumList.mrgSortList2, executedNumList.mrgSortList3, dst.GetValidCol(),
         src0Col, src1Col, src2Col, EMPTY_LIST_SIZE);
 }
@@ -254,7 +254,7 @@ PTO_INTERNAL void TMRGSORT_IMPL(
     unsigned src0Col = src0.GetValidCol() >> ELE_NUM_SHIFT;
     unsigned src1Col = src1.GetValidCol() >> ELE_NUM_SHIFT;
     TMrgsort<DstTileData, TmpTileData, Src0TileData, Src1TileData, Src1TileData, Src1TileData, exhausted, LIST_NUM_2>(
-        dst.data(), tmp.data(), src0.data(), src1.data(), nullptr, nullptr, executedNumList.mrgSortList0,
+        dst.data(), tmp.data(), src0.data(), src1.data(), src1.data(), src1.data(), executedNumList.mrgSortList0,
         executedNumList.mrgSortList1, executedNumList.mrgSortList2, executedNumList.mrgSortList3, dst.GetValidCol(),
         src0Col, src1Col, EMPTY_LIST_SIZE, EMPTY_LIST_SIZE);
 }
