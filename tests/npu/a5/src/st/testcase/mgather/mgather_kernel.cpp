@@ -44,16 +44,9 @@ inline AICORE void runMGATHER(__gm__ T __out__ *out, __gm__ T __in__ *table, __g
     GlobalData_idx idxGlobal(indices);
     GlobalData_out outGlobal(out);
 
-    TLOAD(idxTile, idxGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-
-    MGATHER(outTile, tableGlobal, idxTile);
-
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-
-    TSTORE(outGlobal, outTile);
+    Event<Op::TLOAD, Op::MGATHER> event0 = TLOAD(idxTile, idxGlobal);
+    Event<Op::MGATHER, Op::TSTORE_VEC> event1 = MGATHER(outTile, tableGlobal, idxTile, event0);
+    TSTORE(outGlobal, outTile, event1);
 }
 
 extern "C" __global__ AICORE void runMGATHER_half_16x64_8x32(__gm__ half *out, __gm__ half *table,
