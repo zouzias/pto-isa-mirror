@@ -124,7 +124,7 @@ namespace pto {
         __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
         __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
         if constexpr(std::is_same<T, int16_t>::value) {
-            TDivs_naive<T, TileDataDst::Cols, TileDataSrc::Cols>(dst, src0, src1, validRow, validCol);
+            TDivs_naive<T, TileDataDst::Cols, TileDataSrc::Cols>(dstPtr, src0Ptr, src1, validRow, validCol);
         } else {
             BinaryInstr<DivSOp<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
                     dstPtr, src0Ptr, src1, validRow, validCol, version);
@@ -144,7 +144,7 @@ namespace pto {
         __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
         __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
         if constexpr(std::is_same<T, int16_t>::value) {
-            TSDiv_naive<T, TileDataDst::Cols, TileDataSrc::Cols>(dst, src0, src1, validRow, validCol);
+            TSDiv_naive<T, TileDataDst::Cols, TileDataSrc::Cols>(dstPtr, src0Ptr, src1, validRow, validCol);
         } else {
             BinaryInstr<DivSOpS<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
                     dstPtr, src0Ptr, src1, validRow, validCol, version);

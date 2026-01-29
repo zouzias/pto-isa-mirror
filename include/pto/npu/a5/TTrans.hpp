@@ -21,26 +21,26 @@ using namespace std;
 
 namespace pto {
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB32RowWise(typename TileData::TileDType __out__ dst, typename TileData::TileDType __in__ src) {
-    using T = typename TileData::DType;
+template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
+__tf__ PTO_INTERNAL void TTransB32RowWise(typename TileDataDst::TileDType __out__ dst, typename TileDataSrc::TileDType __in__ src) {
+    using T = typename TileDataSrc::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint32_t> || std::is_same_v<T, int32_t> || std::is_same_v<T, float>) {
-        uint16_t repeatTimes = CeilDivision(TileData::Cols, elementsPerRepeat);
+        uint16_t repeatTimes = CeilDivision(TileDataSrc::Cols, elementsPerRepeat);
         __VEC_SCOPE__ {
             RegTensor<uint32_t> vreg0;
             RegTensor<T> vreg1;
             MaskReg preg;
             constexpr auto distValue =
                 std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM_B32>())>();
-            for (uint16_t row = 0; row < (uint16_t)TileData::Rows; ++row) {
-                uint32_t sreg = (uint32_t)TileData::Cols;
+            for (uint16_t row = 0; row < (uint16_t)TileDataSrc::Rows; ++row) {
+                uint32_t sreg = (uint32_t)TileDataSrc::Cols;
                 for (uint16_t chunk = 0; chunk < repeatTimes; ++chunk) {
                     preg = CreatePredicate<T>(sreg);
                     vci((RegTensor<int32_t> &)vreg0, (int32_t)(chunk * elementsPerRepeat), INC_ORDER);
-                    vmins(vreg0, vreg0, (uint32_t)(TileData::Cols - 1), preg);
+                    vmins(vreg0, vreg0, (uint32_t)(TileDataSrc::Cols - 1), preg);
                     vmuls(vreg0, vreg0, srcStride, preg);
                     vadds(vreg0, vreg0, row, preg);
                     vgather2(vreg1, srcPtr, (RegTensor<uint32_t> &)vreg0, preg);
@@ -53,27 +53,27 @@ __tf__ PTO_INTERNAL void TTransB32RowWise(typename TileData::TileDType __out__ d
     }
 }
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB16RowWise(typename TileData::TileDType __out__ dst, typename TileData::TileDType __in__ src) {
-    using T = typename TileData::DType;
+template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
+__tf__ PTO_INTERNAL void TTransB16RowWise(typename TileDataDst::TileDType __out__ dst, typename TileDataSrc::TileDType __in__ src) {
+    using T = typename TileDataSrc::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint16_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, half> ||
                   std::is_same_v<T, bfloat16_t>) {
-        uint16_t repeatTimes = CeilDivision(TileData::Cols, elementsPerRepeat);
+        uint16_t repeatTimes = CeilDivision(TileDataSrc::Cols, elementsPerRepeat);
         __VEC_SCOPE__ {
             RegTensor<uint16_t> vreg0;
             RegTensor<T> vreg1;
             MaskReg preg;
             constexpr auto distValue =
                 std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM_B16>())>();
-            for (uint16_t row = 0; row < (uint16_t)TileData::Rows; ++row) {
-                uint32_t sreg = (uint32_t)TileData::Cols;
+            for (uint16_t row = 0; row < (uint16_t)TileDataSrc::Rows; ++row) {
+                uint32_t sreg = (uint32_t)TileDataSrc::Cols;
                 for (uint16_t chunk = 0; chunk < repeatTimes; ++chunk) {
                     preg = CreatePredicate<T>(sreg);
                     vci((RegTensor<int16_t> &)vreg0, (int16_t)(chunk * elementsPerRepeat), INC_ORDER);
-                    vmins(vreg0, vreg0, (uint16_t)(TileData::Cols - 1), preg);
+                    vmins(vreg0, vreg0, (uint16_t)(TileDataSrc::Cols - 1), preg);
                     vmuls(vreg0, vreg0, srcStride, preg);
                     vadds(vreg0, vreg0, row, preg);
                     vgather2(vreg1, srcPtr, (RegTensor<uint16_t> &)vreg0, preg);
@@ -86,27 +86,27 @@ __tf__ PTO_INTERNAL void TTransB16RowWise(typename TileData::TileDType __out__ d
     }
 }
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB8RowWise(typename TileData::TileDType __out__ dst, typename TileData::TileDType __in__ src) {
-    using T = typename TileData::DType;
+template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
+__tf__ PTO_INTERNAL void TTransB8RowWise(typename TileDataDst::TileDType __out__ dst, typename TileDataSrc::TileDType __in__ src) {
+    using T = typename TileDataSrc::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>) {
         constexpr uint32_t sregLower = elementsPerRepeat >> 1;
-        uint16_t repeatTimes = CeilDivision(TileData::Cols, sregLower);
+        uint16_t repeatTimes = CeilDivision(TileDataSrc::Cols, sregLower);
         __VEC_SCOPE__ {
             RegTensor<uint16_t> vreg0;
             RegTensor<T> vreg1;
             MaskReg preg;
             constexpr auto distValue =
                 std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_PK_B16>())>();
-            for (uint16_t row = 0; row < (uint16_t)TileData::Rows; ++row) {
-                uint32_t sreg = (uint32_t)TileData::Cols;
+            for (uint16_t row = 0; row < (uint16_t)TileDataSrc::Rows; ++row) {
+                uint32_t sreg = (uint32_t)TileDataSrc::Cols;
                 for (uint16_t chunk = 0; chunk < repeatTimes; ++chunk) {
                     preg = CreatePredicate<uint16_t>(sreg);
                     vci((RegTensor<int16_t> &)vreg0, (int16_t)(chunk * sregLower), INC_ORDER);
-                    vmins(vreg0, vreg0, (uint16_t)(TileData::Cols - 1), preg);
+                    vmins(vreg0, vreg0, (uint16_t)(TileDataSrc::Cols - 1), preg);
                     vmuls(vreg0, vreg0, srcStride, preg);
                     vadds(vreg0, vreg0, row, preg);
                     vgather2((RegTensor<uint16_t> &)vreg1, (__ubuf__ uint8_t *)srcPtr, (RegTensor<uint16_t> &)vreg0, preg);
@@ -119,26 +119,26 @@ __tf__ PTO_INTERNAL void TTransB8RowWise(typename TileData::TileDType __out__ ds
     }
 }
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB32ColWise(typename TileData::TileDType __out__ dst, typename TileData::TileDType __in__ src) {
-    using T = typename TileData::DType;
+template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
+__tf__ PTO_INTERNAL void TTransB32ColWise(typename TileDataDst::TileDType __out__ dst, typename TileDataSrc::TileDType __in__ src) {
+    using T = typename TileDataSrc::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint32_t> || std::is_same_v<T, int32_t> || std::is_same_v<T, float>) {
-        uint16_t repeatTimes = CeilDivision(TileData::Rows, elementsPerRepeat);
+        uint16_t repeatTimes = CeilDivision(TileDataSrc::Rows, elementsPerRepeat);
         __VEC_SCOPE__ {
             RegTensor<uint32_t> vreg0;
             RegTensor<T> vreg1;
             MaskReg preg;
             constexpr auto distValue =
                 std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM_B32>())>();
-            for (uint16_t col = 0; col < (uint16_t)TileData::Cols; ++col) {
-                uint32_t sreg = (uint32_t)TileData::Rows;
+            for (uint16_t col = 0; col < (uint16_t)TileDataSrc::Cols; ++col) {
+                uint32_t sreg = (uint32_t)TileDataSrc::Rows;
                 for (uint16_t chunk = 0; chunk < repeatTimes; ++chunk) {
                     preg = CreatePredicate<T>(sreg);
                     vci((RegTensor<int32_t> &)vreg0, (int32_t)(chunk * elementsPerRepeat), INC_ORDER);
-                    vmins(vreg0, vreg0, (uint32_t)(TileData::Rows - 1), preg);
+                    vmins(vreg0, vreg0, (uint32_t)(TileDataSrc::Rows - 1), preg);
                     vmuls(vreg0, vreg0, srcStride, preg);
                     vadds(vreg0, vreg0, col, preg);
                     vgather2(vreg1, srcPtr, (RegTensor<uint32_t> &)vreg0, preg);
@@ -151,27 +151,27 @@ __tf__ PTO_INTERNAL void TTransB32ColWise(typename TileData::TileDType __out__ d
     }
 }
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB16ColWise(typename TileData::TileDType __out__ dst, typename TileData::TileDType __in__ src) {
-    using T = typename TileData::DType;
+template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
+__tf__ PTO_INTERNAL void TTransB16ColWise(typename TileDataDst::TileDType __out__ dst, typename TileDataSrc::TileDType __in__ src) {
+    using T = typename TileDataSrc::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint16_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, half> ||
                   std::is_same_v<T, bfloat16_t>) {
-        uint16_t repeatTimes = CeilDivision(TileData::Rows, elementsPerRepeat);
+        uint16_t repeatTimes = CeilDivision(TileDataSrc::Rows, elementsPerRepeat);
         __VEC_SCOPE__ {
             RegTensor<uint16_t> vreg0;
             RegTensor<T> vreg1;
             MaskReg preg;
             constexpr auto distValue =
                 std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM_B16>())>();
-            for (uint16_t col = 0; col < (uint16_t)TileData::Cols; ++col) {
-                uint32_t sreg = (uint32_t)TileData::Rows;
+            for (uint16_t col = 0; col < (uint16_t)TileDataSrc::Cols; ++col) {
+                uint32_t sreg = (uint32_t)TileDataSrc::Rows;
                 for (uint16_t chunk = 0; chunk < repeatTimes; ++chunk) {
                     preg = CreatePredicate<T>(sreg);
                     vci((RegTensor<int16_t> &)vreg0, (int16_t)(chunk * elementsPerRepeat), INC_ORDER);
-                    vmins(vreg0, vreg0, (uint16_t)(TileData::Rows - 1), preg);
+                    vmins(vreg0, vreg0, (uint16_t)(TileDataSrc::Rows - 1), preg);
                     vmuls(vreg0, vreg0, srcStride, preg);
                     vadds(vreg0, vreg0, col, preg);
                     vgather2(vreg1, srcPtr, (RegTensor<uint16_t> &)vreg0, preg);
@@ -184,27 +184,27 @@ __tf__ PTO_INTERNAL void TTransB16ColWise(typename TileData::TileDType __out__ d
     }
 }
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB8ColWise(typename TileData::TileDType __out__ dst, typename TileData::TileDType __in__ src) {
-    using T = typename TileData::DType;
+template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
+__tf__ PTO_INTERNAL void TTransB8ColWise(typename TileDataDst::TileDType __out__ dst, typename TileDataSrc::TileDType __in__ src) {
+    using T = typename TileDataSrc::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>) {
         constexpr uint32_t sregLower = elementsPerRepeat >> 1;
-        uint16_t repeatTimes = CeilDivision(TileData::Rows, sregLower);
+        uint16_t repeatTimes = CeilDivision(TileDataSrc::Rows, sregLower);
         __VEC_SCOPE__ {
             RegTensor<uint16_t> vreg0;
             RegTensor<T> vreg1;
             MaskReg preg;
             constexpr auto distValue =
                 std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_PK_B16>())>();
-            for (uint16_t col = 0; col < (uint16_t)TileData::Cols; ++col) {
-                uint32_t sreg = (uint32_t)TileData::Rows;
+            for (uint16_t col = 0; col < (uint16_t)TileDataSrc::Cols; ++col) {
+                uint32_t sreg = (uint32_t)TileDataSrc::Rows;
                 for (uint16_t chunk = 0; chunk < repeatTimes; ++chunk) {
                     preg = CreatePredicate<uint16_t>(sreg);
                     vci((RegTensor<int16_t> &)vreg0, (int16_t)(chunk * sregLower), INC_ORDER);
-                    vmins(vreg0, vreg0, (uint16_t)(TileData::Rows - 1), preg);
+                    vmins(vreg0, vreg0, (uint16_t)(TileDataSrc::Rows - 1), preg);
                     vmuls(vreg0, vreg0, srcStride, preg);
                     vadds(vreg0, vreg0, col, preg);
                     vgather2((RegTensor<uint16_t> &)vreg1, (__ubuf__ uint8_t *)srcPtr, (RegTensor<uint16_t> &)vreg0, preg);
@@ -240,21 +240,21 @@ PTO_INTERNAL void TTRANS_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &t
     constexpr unsigned staticRepeatTimes = (TileDataSrc::Rows + elementsPerRepeat - 1) / elementsPerRepeat;
     if constexpr (sizeof(T) == 4) {
         if constexpr (staticRepeatTimes > TileDataSrc::Cols) {
-            TTransB32RowWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
+            TTransB32RowWise<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
         } else {
-            TTransB32ColWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
+            TTransB32ColWise<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
         }
     } else if constexpr (sizeof(T) == 2) {
         if constexpr (staticRepeatTimes > TileDataSrc::Cols) {
-            TTransB16RowWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
+            TTransB16RowWise<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
         } else {
-            TTransB16ColWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
+            TTransB16ColWise<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
         }
     } else if constexpr (sizeof(T) == 1) {
         if constexpr (staticRepeatTimes > TileDataSrc::Cols) {
-            TTransB8RowWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
+            TTransB8RowWise<TileDataDst, TileDataSrc, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
         } else {
-            TTransB8ColWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
+            TTransB8ColWise<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
         }
     } else {
         static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "Fix: TTRANS has invalid data type.");

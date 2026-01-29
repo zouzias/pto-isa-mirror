@@ -106,7 +106,7 @@ namespace pto {
 
   template <typename T, typename TileDataOut, typename TileDataIn, typename TileDataTmp, bool isBinary>
   __tf__ PTO_INTERNAL void TColSum(typename TileDataOut::TileDType __out__ dstData,
-    typename TileDataIn::TileDType __in__ srcData, typename TileDataIn::TileDType __in__ tmpData,
+    typename TileDataIn::TileDType __in__ srcData, typename TileDataTmp::TileDType __in__ tmpData,
     uint16_t validRow, int validCol, unsigned version) {
     __ubuf__ T *dst = (__ubuf__ T *)__cce_get_tile_ptr(dstData);
     __ubuf__ T *src = (__ubuf__ T *)__cce_get_tile_ptr(srcData);
