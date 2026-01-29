@@ -55,7 +55,7 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, Ti
 using namespace pto;
 
 template <typename T>
-void example_tput(__gm__ T* local_data, __gm__ T* remote_addr, int target_npu) {
+void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
     using TileT = Tile<TileType::Vec, T, 16, 16>;
     using GShape = Shape<1, 1, 1, 16, 16>;
     using GStride = BaseShape2D<T, 16, 16, Layout::ND>;

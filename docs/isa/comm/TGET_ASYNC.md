@@ -48,13 +48,17 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGloba
 - **Memory constraints**:
   - `srcGlobal` must point to remote address (on source NPU).
   - `dstGlobal` must point to local address (on current NPU).
-  - Both addresses must be 32-byte aligned for optimal performance.
+  - Both addresses should be naturally aligned to element size; 32-byte alignment is recommended for best performance.
 - **DMA constraints**:
   - SDMA: Supports 2D transfer. 
   - URMA: Supports 1D transfer.
-  - DMA channel must be available (limited concurrent operations).
+  - DMA channel availability is limited; implementations may serialize requests when channels are exhausted.
 - **Valid region**:
   - Transfer size is determined by GlobalTensor shape or explicit parameters.
+
+## Completion Semantics
+
+After `TSYNC(event)` returns, all writes to `dstGlobal` performed by the asynchronous transfer are complete and visible to subsequent operations on the current NPU.
 
 ## Examples
 
@@ -67,7 +71,7 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGloba
 using namespace pto;
 
 template <typename T>
-void example_tget_async(__gm__ T* local_data, __gm__ T* remote_addr, int source_npu) {
+void example_tget_async(__gm__ T* local_data, __gm__ T* remote_addr) {
     using GShape = Shape<1, 1, 1, 64, 256>;
     using GStride = BaseShape2D<T, 64, 256, Layout::ND>;
     using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
@@ -120,7 +124,7 @@ using namespace pto;
 
 template <typename T, int SIZE>
 void prefetch_and_compute(__gm__ T* local_buf, __gm__ T* remote_addr, 
-                          __gm__ T* compute_buf, int source_npu) {
+                          __gm__ T* compute_buf) {
     using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, Stride<SIZE,SIZE,SIZE,SIZE,1>, Layout::ND>;
     using TileT = Tile<TileType::Vec, T, 1, SIZE>;
 

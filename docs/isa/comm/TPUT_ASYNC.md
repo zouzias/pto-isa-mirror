@@ -37,11 +37,6 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 // Asynchronous PUT with template-specified DMA engine
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, WaitEvents&... events);
-
-// With explicit size specification
-template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
-PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, 
-                                uint32_t numRows, uint32_t numCols, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -53,26 +48,18 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGloba
 - **Memory constraints**:
   - `dstGlobal` must point to remote address (on target NPU).
   - `srcGlobal` must point to local address (on current NPU).
-  - Both addresses must be 32-byte aligned for optimal performance.
+  - Both addresses should be naturally aligned to element size; 32-byte alignment is recommended for best performance.
 - **DMA constraints**:
   - SDMA: Allows 2D transfer
   - URMA: 1D transfer
-  - DMA channel must be available (limited concurrent operations).
+  - DMA channel availability is limited; implementations may serialize requests when channels are exhausted.
 - **Valid region**:
   - Transfer size is determined by GlobalTensor shape or explicit parameters.
 
-## Comparison with TPUT
+## Completion Semantics
 
-| Feature | TPUT | TPUT_ASYNC |
-|---------|------|-----------|
-| Execution | Synchronous | Asynchronous |
-| Data path | GM → UB → GM | GM → GM (direct) |
-| UB required | Yes | No |
-| Overlap | No | Yes (with computation) |
-| Latency | Lower for small transfers | Lower for large transfers |
-| Throughput | Limited by UB size | Higher for bulk transfers |
+After `TSYNC(event)` returns, all stores to `dstGlobal` performed by the asynchronous transfer are complete and visible to subsequent operations on the current NPU.
 
-## Examples
 
 ### Basic Asynchronous PUT with SDMA (default)
 
@@ -83,7 +70,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGloba
 using namespace pto;
 
 template <typename T>
-void example_tput_async(__gm__ T* local_data, __gm__ T* remote_addr, int target_npu) {
+void example_tput_async(__gm__ T* local_data, __gm__ T* remote_addr) {
     using GShape = Shape<1, 1, 1, 64, 256>;
     using GStride = BaseShape2D<T, 64, 256, Layout::ND>;
     using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
@@ -167,7 +154,7 @@ using namespace pto;
 
 template <typename T>
 void pipelined_transfer(__gm__ T* local_buffers[], __gm__ T* remote_buffers[], 
-                        int num_buffers, int target_npu) {
+                        int num_buffers) {
     using GTensor = GlobalTensor<T, Shape<1,1,1,64,64>, Stride<4096,4096,4096,64,1>, Layout::ND>;
     
     comm::AsyncEvent events[num_buffers];

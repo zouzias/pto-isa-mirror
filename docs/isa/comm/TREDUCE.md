@@ -6,6 +6,8 @@ Reduce operation: gather data from multiple remote NPUs and perform element-wise
 
 > **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
 
+Only the root needs to execute `TREDUCE`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation.
+
 ## Math Interpretation
 
 For each element `(i, j)` in the valid region:
@@ -42,7 +44,8 @@ PTO_INST RecordEvent TREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlo
   - `dstGlobal` must point to local address (on current NPU).
   - `accTile`, `recvTile` must be pre-allocated UB tiles.
 - **ParallelGroup constraints**:
-  - All tensors must point to symmetric addresses across NPUs.
+  - `parallelGroup.tensors[r]` must refer to rank `r`'s source buffer (remote GM as seen by the root).
+  - `parallelGroup.my_rank` identifies the calling NPU as the reduce root.
 
 ## Examples
 

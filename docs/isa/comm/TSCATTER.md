@@ -2,9 +2,11 @@
 
 ## Introduction
 
-Scatter operation: distribute different chunks of data from local NPU to multiple remote NPUs. The inverse of `TGATHER`.
+Scatter operation: distribute different chunks of data from the calling NPU (root) to multiple ranks in the parallel group. This is the inverse of `TGATHER` (root gather).
 
 > **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
+
+Only the root needs to execute `TSCATTER`. Non-root ranks only need to ensure their destination buffers are allocated and writable for the duration of the operation.
 
 ## Math Interpretation
 
@@ -37,10 +39,11 @@ PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGl
   - `ParallelGroup::value_type::RawDType` must equal `GlobalSrcData::RawDType`.
   - `TileData::DType` must equal `GlobalSrcData::RawDType`.
 - **Memory constraints**:
-  - `srcGlobal` must be large enough to hold data for all ranks.
+  - `srcGlobal` must point to local memory (current NPU) and be large enough to hold data for all ranks.
   - `ubTile` must be pre-allocated in UB.
 - **ParallelGroup constraints**:
-  - All tensors must point to symmetric addresses across NPUs.
+  - `parallelGroup.tensors[r]` must refer to rank `r`'s destination buffer (remote GM as seen by the root).
+  - `parallelGroup.my_rank` identifies the calling NPU as the scatter root.
 
 ## Examples
 

@@ -2,13 +2,15 @@
 
 ## Introduction
 
-All-gather operation across parallel group. Each NPU contributes its local data, and all NPUs receive the concatenated result from all ranks.
+Gather operation across a parallel group. The calling NPU is the root and gathers data from all ranks into a single concatenated output buffer on the root.
+
+Only the root needs to execute `TGATHER`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation.
 
 ## Math Interpretation
 
-After the operation, each NPU has the concatenated data from all ranks:
+After the operation (on the calling/root NPU):
 
-$$ \mathrm{dst}^{(k)}[\text{offset}(r) : \text{offset}(r+1)] = \mathrm{src}^{(r)} \quad \forall r \in [0, N), \forall k \in [0, N) $$
+$$ \mathrm{dst}^{(\text{my\_rank})}[\text{offset}(r) : \text{offset}(r+1)] = \mathrm{src}^{(r)} \quad \forall r \in [0, N) $$
 
 where $N$ is the number of ranks and $\text{offset}(r)$ is the starting position for rank $r$'s contribution.
 
@@ -35,14 +37,15 @@ PTO_INST RecordEvent TGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlo
   - `ParallelGroup::value_type::RawDType` must equal `GlobalDstData::RawDType`.
   - `TileData::DType` must equal `GlobalDstData::RawDType`.
 - **Memory constraints**:
-  - `dstGlobal` must point to memory accessible by all NPUs.
+  - `dstGlobal` must point to local memory (current NPU) and be large enough to hold the concatenated result from all ranks.
   - `ubTile` must be pre-allocated in UB.
 - **ParallelGroup constraints**:
-  - Must contain valid pointers to GlobalTensors for all participating ranks.
+  - `parallelGroup.tensors[r]` must refer to rank `r`'s source buffer (remote GM as seen by the root).
+  - `parallelGroup.my_rank` identifies the calling NPU as the gather root.
 
 ## Examples
 
-### Basic All-Gather
+### Basic Gather (Root Collects)
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -67,6 +70,7 @@ void gather(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
     GResult dstG(result);
     TileT ubTile;
     
+    // The calling NPU (group.my_rank) gathers data from all ranks into `result`.
     comm::TGATHER(group, dstG, ubTile);
 }
 ```

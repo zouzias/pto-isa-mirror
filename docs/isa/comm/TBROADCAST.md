@@ -6,6 +6,8 @@ Broadcast data from current NPU to all ranks in the parallel group. The calling 
 
 > **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
 
+Only the root needs to execute `TBROADCAST`. Non-root ranks only need to ensure their destination buffers are allocated and writable for the duration of the operation.
+
 ## Math Interpretation
 
 After the operation:
@@ -40,7 +42,7 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &src
   - `srcGlobal` must point to local memory (current NPU).
   - `ubTile` must be pre-allocated in UB.
 - **ParallelGroup constraints**:
-  - All tensors must point to symmetric addresses across NPUs.
+  - `parallelGroup.tensors[k]` must refer to rank `k`'s destination buffer (remote GM as seen by the root).
   - `parallelGroup.my_rank` identifies the calling NPU as the broadcast root.
 
 ## Examples

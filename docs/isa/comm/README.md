@@ -39,24 +39,8 @@ DMA engine selection for `TPUT_ASYNC` / `TGET_ASYNC`:
 
 | Value | Description |
 |-------|-------------|
-| `DmaEngine::SDMA` | System DMA - high bandwidth, for large transfers (>4KB) |
-| `DmaEngine::URMA` | User-space RMA - low latency, for small transfers (<4KB) |
-
-### AsyncEvent
-
-Event handle returned by asynchronous operations. Use `TSYNC(event)` to wait:
-
-```cpp
-struct AsyncEvent {
-    uint64_t handle;
-    DmaEngine engine;
-    bool valid() const;
-};
-
-// Usage:
-AsyncEvent event = comm::TPUT_ASYNC<DmaEngine::SDMA>(dst, src);
-TSYNC(event);  // Wait for completion
-```
+| `DmaEngine::SDMA` | System DMA, supports 2D transfer|
+| `DmaEngine::URMA` | A5 URMA using Unified Bus, supports 1D transfer|
 
 ### NotifyOp
 
@@ -104,11 +88,14 @@ Wrapper for collective communication across multiple NPUs:
 ```cpp
 template <typename GlobalData>
 struct ParallelGroup {
-    GlobalData *tensors;   // Array of GlobalTensors (not pointers)
-    int nranks;            // Number of ranks
-    int my_rank;           // Current NPU's rank
-    
-    // Factory function (recommended)
-    static ParallelGroup Create(__gm__ T** addrs, int nranks, int my_rank);
+    // Pointer to an array of `GlobalData` objects (each wraps a GM address).
+    // The array itself is local metadata; the wrapped addresses may refer to local or remote GM,
+    // depending on the collective instruction.
+    GlobalData *tensors;
+    int nranks;   // Number of ranks
+    int my_rank;  // Current NPU's rank
+
+    // Factory function (recommended): build from an existing tensor array.
+    static ParallelGroup Create(GlobalData *tensors, int nranks, int my_rank);
 };
 ```
