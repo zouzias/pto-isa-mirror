@@ -903,7 +903,9 @@ public:
     }
 
 #ifdef __PTO_AUTO__
-    using TileDType = typename MemoryQualifier<Loc_, DType>::type tile_size(bufferSize);
+    using TileDType = std::conditional_t<Loc_ == TileType::Bias,
+        typename MemoryQualifier<Loc, DType>::type, // special handling for Bias Tile
+        typename MemoryQualifier<Loc, DType>::type tile_size(bufferSize)>;
 #else
     using TileDType = typename MemoryQualifier<Loc_, DType>::type;
 #endif
@@ -1052,7 +1054,9 @@ struct Tile {
     using TileDType = Tile::DType[Rows*Cols];
 #else
     #ifdef __PTO_AUTO__
-        using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols);
+        using TileDType = std::conditional_t<Loc == TileType::Bias,
+            typename MemoryQualifier<Loc, DType>::type, // special handling for Bias Tile
+            typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols)>;
     #else
         using TileDType = typename MemoryQualifier<Loc, DType>::type;
     #endif
