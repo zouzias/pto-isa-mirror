@@ -14,6 +14,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
+template <typename TileData>
+__tf__ PTO_INTERNAL void tf_create_cbuf_matrix(typename TileData::TileDType tile, int64_t repeat_bit, int n) {
+    create_cbuf_matrix((__cbuf__ uint16_t *)__cce_get_tile_ptr(tile), repeat_bit, n);
+}
+
+template <typename TileDataDst, typename TileDataSrc>
+__tf__ PTO_INTERNAL void tf_copy_cbuf_to_ubuf(
+    typename TileDataDst::TileDType __out__ dst, typename TileDataSrc::TileDType __in__ src, 
+    int vec_core, int block_count, int block_len, int src_stride, int dst_stride) {
+        copy_cbuf_to_ubuf(
+            (__ubuf__ void *)__cce_get_tile_ptr(dst), 
+            (__cbuf__ void *)__cce_get_tile_ptr(src), 
+            vec_core, block_count, block_len, src_stride, dst_stride);
+}
+
 template <typename T, int N1, int N2, int N3, int M, int K, int WN1, int WN2, int WN3, int WN4, int WN5, int baseM,
     int baseK>
 AICORE inline void runTLOAD_MIX_ND2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
@@ -40,15 +55,15 @@ AICORE inline void runTLOAD_MIX_ND2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     TileMatAData aMatTile;
     TASSIGN(aMatTile, 0x0);
 
-    __cbuf__ T *srcMatAddr = aMatTile.data();
-    __ubuf__ T *srcUbAddr = srcTile.data();
-    __gm__ T *outAddr = dstGlobal.data();
+    // __cbuf__ T *srcMatAddr = aMatTile.data();
+    // __ubuf__ T *srcUbAddr = srcTile.data();
+    // __gm__ T *outAddr = dstGlobal.data();
 
     // L1清0 方便测试非对齐场景
 #if defined(__DAV_CUBE__)
     int64_t repeatBit =
         (static_cast<uint64_t>(baseM * baseK * sizeof(T) / 32) << 16) | (static_cast<uint64_t>(0) << 32) | 1;
-    create_cbuf_matrix((__cbuf__ uint16_t *)srcMatAddr, repeatBit, 0);
+    tf_create_cbuf_matrix<TileMatAData>(aMatTile.data(), repeatBit, 0);
 #endif
 
     /*************************************TLOAD****************************************/
@@ -61,11 +76,11 @@ AICORE inline void runTLOAD_MIX_ND2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    copy_cbuf_to_ubuf(
-        (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);  // move to vector
+    tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
+        srcTile.data(), aMatTile.data(), 0, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core0
-    copy_cbuf_to_ubuf(
-        (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);  // move to vector
+    tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
+        srcTile.data(), aMatTile.data(), 1, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core1
     set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
@@ -106,15 +121,15 @@ AICORE inline void runTLOAD_MIX_DN2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     TileMatAData aMatTile;
     TASSIGN(aMatTile, 0x0);
 
-    __cbuf__ T *srcMatAddr = aMatTile.data();
-    __ubuf__ T *srcUbAddr = srcTile.data();
-    __gm__ T *outAddr = dstGlobal.data();
+    // __cbuf__ T *srcMatAddr = aMatTile.data();
+    // __ubuf__ T *srcUbAddr = srcTile.data();
+    // __gm__ T *outAddr = dstGlobal.data();
 
     // L1清0 方便测试非对齐场景
 #if defined(__DAV_CUBE__)
     int64_t repeatBit =
         (static_cast<uint64_t>(baseM * baseK * sizeof(T) / 32) << 16) | (static_cast<uint64_t>(0) << 32) | 1;
-    create_cbuf_matrix((__cbuf__ uint16_t *)srcMatAddr, repeatBit, 0);
+    tf_create_cbuf_matrix<TileMatAData>(aMatTile.data(), repeatBit, 0);
 #endif
 
     /*************************************TLOAD****************************************/
@@ -127,11 +142,11 @@ AICORE inline void runTLOAD_MIX_DN2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    copy_cbuf_to_ubuf(
-        (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);  // move to vector
+    tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
+        srcTile.data(), aMatTile.data(), 0, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core0
-    copy_cbuf_to_ubuf(
-        (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);  // move to vector
+    tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
+        srcTile.data(), aMatTile.data(), 1, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core1
     set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
@@ -174,9 +189,9 @@ AICORE inline void runTLOAD_MIX_ND2ND(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     TileMatAData aMatTile;
     TASSIGN(aMatTile, 0x0);
 
-    __cbuf__ T *srcMatAddr = aMatTile.data();
-    __ubuf__ T *srcUbAddr = srcTile.data();
-    __gm__ T *outAddr = dstGlobal.data();
+    // __cbuf__ T *srcMatAddr = aMatTile.data();
+    // __ubuf__ T *srcUbAddr = srcTile.data();
+    // __gm__ T *outAddr = dstGlobal.data();
 
     /*************************************TLOAD****************************************/
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
@@ -188,11 +203,11 @@ AICORE inline void runTLOAD_MIX_ND2ND(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    copy_cbuf_to_ubuf(
-        (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);  // move to vector
+    tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
+        srcTile.data(), aMatTile.data(), 0, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core0
-    copy_cbuf_to_ubuf(
-        (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);  // move to vector
+    tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
+        srcTile.data(), aMatTile.data(), 1, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core1
     set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
@@ -236,9 +251,9 @@ AICORE inline void runTLOAD_MIX_DN2DN(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     TileMatAData aMatTile;
     TASSIGN(aMatTile, 0x0);
 
-    __cbuf__ T *srcMatAddr = aMatTile.data();
-    __ubuf__ T *srcUbAddr = srcTile.data();
-    __gm__ T *outAddr = dstGlobal.data();
+    // __cbuf__ T *srcMatAddr = aMatTile.data();
+    // __ubuf__ T *srcUbAddr = srcTile.data();
+    // __gm__ T *outAddr = dstGlobal.data();
 
     /*************************************TLOAD****************************************/
     TLOAD<TileMatAData, GlobalDataSrc0>(aMatTile, src0Global);
@@ -250,11 +265,11 @@ AICORE inline void runTLOAD_MIX_DN2DN(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    copy_cbuf_to_ubuf(
-        (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);  // move to vector
+    tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
+        srcTile.data(), aMatTile.data(), 0, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core0
-    copy_cbuf_to_ubuf(
-        (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);  // move to vector
+    tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
+        srcTile.data(), aMatTile.data(), 1, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core1
     set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
@@ -301,15 +316,15 @@ AICORE inline void runTLOAD_MIX_NZ2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     TileMatAData aMatTile;
     TASSIGN(aMatTile, 0x0);
 
-    __cbuf__ T *srcMatAddr = aMatTile.data();
-    __ubuf__ T *srcUbAddr = srcTile.data();
-    __gm__ T *outAddr = dstGlobal.data();
+    // __cbuf__ T *srcMatAddr = aMatTile.data();
+    // __ubuf__ T *srcUbAddr = srcTile.data();
+    // __gm__ T *outAddr = dstGlobal.data();
 
     // L1清0 方便测试非对齐场景
 #if defined(__DAV_CUBE__)
     int64_t repeatBit =
         (static_cast<uint64_t>(baseM * baseK * sizeof(T) / 32) << 16) | (static_cast<uint64_t>(0) << 32) | 1;
-    create_cbuf_matrix((__cbuf__ uint16_t *)srcMatAddr, repeatBit, 0);
+    tf_create_cbuf_matrix<TileMatAData>(aMatTile.data(), repeatBit, 0);
 #endif
 
     /*************************************TLOAD****************************************/
@@ -322,11 +337,11 @@ AICORE inline void runTLOAD_MIX_NZ2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     uint16_t blockLen = baseM * baseK * sizeof(T) / 32;
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    copy_cbuf_to_ubuf(
-        (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);  // move to vector
+    tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
+        srcTile.data(), aMatTile.data(), 0, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core0
-    copy_cbuf_to_ubuf(
-        (__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);  // move to vector
+    tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
+        srcTile.data(), aMatTile.data(), 1, blockCount, blockLen, 0, 0);  // move to vector
                                                                                                   // core1
     set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
