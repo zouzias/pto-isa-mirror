@@ -103,9 +103,11 @@ TEST_F(TROWSUMTest, test2)
     EXPECT_TRUE(res);
 }
 
-TEST_F(TROWSUMTest, test3)
-{
-    bool res = TRowSumTest<float, bigSize666, bigSize666, bigSize666, bigSizeAligned>();
-    EXPECT_TRUE(res);
-}
+// FIXME: The tile size inside trowsum_kernel.cpp is way larger than the UB size (192KB for A2 and 256KB for A5),
+// which should return an error from aclrtSynchronizeStream and fail.
+// TEST_F(TROWSUMTest, test3)
+// {
+//     bool res = TRowSumTest<float, bigSize666, bigSize666, bigSize666, bigSizeAligned>();
+//     EXPECT_TRUE(res);
+// }
 } // namespace TRowSumTest
