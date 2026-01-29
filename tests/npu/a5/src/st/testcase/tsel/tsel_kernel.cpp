@@ -56,15 +56,14 @@ __global__ AICORE void runTSel(__gm__ T __out__ *out, __gm__ uint8_t __in__ *mas
     GlobalData dstGlobal(out);
     MaskGlobal maskGlobal(mask);
 
+    Event<Op::TLOAD, Op::TSEL> event0;
+    Event<Op::TSEL, Op::TSTORE_VEC> event1;
+
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
-    TLOAD(maskTile, maskGlobal);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TSEL<TileData, MaskTile>(dstTile, maskTile, src0Tile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    event0 = TLOAD(maskTile, maskGlobal);
+    event1 = TSEL<TileData, MaskTile>(dstTile, maskTile, src0Tile, src1Tile, event0);
+    TSTORE(dstGlobal, dstTile, event1);
     out = dstGlobal.data();
 }
 

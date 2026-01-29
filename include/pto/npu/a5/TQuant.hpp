@@ -239,12 +239,15 @@ PTO_INTERNAL void ReorderB8IndicesZZ(__ubuf__ uint8_t *E8m0ZZPtr, __ubuf__ uint8
     }
 }
 
+
+TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
+                              TileDataSrc *scaling, TileDataExp *exp_zz, TileDataIdx *vgather_idx
 // TQuant: fp32 -> mxed fp8(e4m3) quantization, supports ND and NZ store modes
 template <VecStoreMode store_mode, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
           typename TileDataMax, typename TileDataIdx>
 __tf__ PTO_INTERNAL void TQuant_MXFP8(
     typename TileDataOut::TileDType __out__ dst, typename TileDataExp::TileDType __out__ exp,
-    typename TileDataMax::TileDType __out__ max, typename TileDataMax::TileDType __out__ scaling,
+    typename TileDataMax::TileDType __out__ max, typename TileDataSrc::TileDType __out__ scaling,
     typename TileDataExp::TileDType __out__ exp_zz, typename TileDataIdx::TileDType __in__ vgather_idx,
     typename TileDataSrc::TileDType __in__ src, unsigned validRows, unsigned validCols)
 {
