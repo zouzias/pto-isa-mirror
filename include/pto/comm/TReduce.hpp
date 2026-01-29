@@ -290,11 +290,9 @@ PTO_INTERNAL void TreduceSimplePingPong(ParallelGroupType &parallelGroup, Global
 {
     if (nranks == 1) {
         TLOAD(accTileData, parallelGroup[rootIdx]);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
         TSTORE(dstGlobalData, accTileData);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         return;
     }
 
