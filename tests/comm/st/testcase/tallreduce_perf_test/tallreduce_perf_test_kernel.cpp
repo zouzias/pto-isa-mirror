@@ -65,12 +65,15 @@ __global__ AICORE void TAllReducePerfKernelImpl(
     
     pto::comm::ParallelGroup<Global> pg(tensorPtrs, nranks, my_rank);
     
+    ShmemDeviceBarrierAll();
+
+    AscendC::PipeBarrier<PIPE_ALL>();
 
     int64_t start_cycle = AscendC::GetSystemCycle();
 
-    
     pto::comm::TALLREDUCE(pg, dstGlobal, src0Tile, src1Tile, dstTile);
-    pto::comm::TQUIET();
+
+    AscendC::PipeBarrier<PIPE_ALL>();
     
     int64_t end_cycle = AscendC::GetSystemCycle();
     
@@ -125,8 +128,9 @@ bool RunAllReducePerfKernel(
     T *srcHost, *resHost;
     aclrtMallocHost((void **)(&srcHost), fileSize);
     aclrtMallocHost((void **)(&resHost), fileSize);
+    T seed = 3367;
     for (int i = 0; i < count; ++i) {
-        srcHost[i] = static_cast<T>((rank_id + 1) * 100 + i);
+        srcHost[i] = static_cast<T>((rank_id + 1) * 100 + i + seed);
         resHost[i] = static_cast<T>(-1);
     }
     T *srcDevice, *resDevice;
@@ -135,7 +139,13 @@ bool RunAllReducePerfKernel(
     aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(resDevice, fileSize, resHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    void *shmemBufferDevice = pto::comm::ContextManager::SymmetricAlloc(4 * fileSize);
+    void *shmemBufferDevice = ShmemMalloc(4 * fileSize);
+
+    if(shmemBufferDevice == nullptr){
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        ShmemFinalize();
+        return false;
+    }
 
     int64_t *perfHost;
     aclrtMallocHost(reinterpret_cast<void**>(&perfHost), config.measure_iters * sizeof(int64_t));
@@ -148,34 +158,36 @@ bool RunAllReducePerfKernel(
     }
 
     for(int i = 0; i < config.warmup_iters; ++i) {
-        TAllReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<config.block_num, nullptr, stream>>>(
+        TAllReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(
             srcDevice, resDevice, (T*) shmemBufferDevice, nullptr, 0);
         aclrtSynchronizeStream(stream);
     }
 
     // Barrier to ensure all ranks finished warmup
-    #if defined(CANN_SHMEM)
-        aclshmem_barrier_all();
-    #elif defined(ASCEND_SHMEM)
-        shmem_barrier_all();
-    #endif
+    ShmemBarrierAll();
 
     if (rank_id == 0 && config.verbose) {
         std::cout << "[PERF] Starting measurement (" << config.measure_iters << " iterations)..." << std::endl;
     }
     
-    // Clear cycle results
+    aclrtMemcpy(resDevice, fileSize, resHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemset(perfDevice, config.measure_iters * sizeof(int64_t), 0, config.measure_iters * sizeof(int64_t));
     
+    aclrtSynchronizeStream(stream);
+
+    ShmemBarrierAll();
+
     auto wall_start = std::chrono::high_resolution_clock::now();
     
     for (int i = 0; i < config.measure_iters; ++i) {
-        TAllReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<config.block_num, nullptr, stream>>>(
+        TAllReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(
             srcDevice, resDevice, (T*) shmemBufferDevice, perfDevice, i);
         aclrtSynchronizeStream(stream);
     }
     auto wall_end = std::chrono::high_resolution_clock::now();
     double wall_time_ms = std::chrono::duration<double, std::milli>(wall_end - wall_start).count();
+
+    ShmemBarrierAll();
 
     // Copy cycle results back
     aclrtMemcpy(perfHost, config.measure_iters * sizeof(int64_t), 
@@ -190,68 +202,74 @@ bool RunAllReducePerfKernel(
     // ========================================================================
     if (rank_id == 0) {
         // check the correctness
+        bool flag = true;
         for(int i = 0; i < count; ++i) {
             if (config.verbose) {
                 if(i < 5) std::cout << "resHost[" << i << "] = " << resHost[i] << std::endl;
             }
 
-            T expected = n_ranks * (n_ranks + 1) / 2 * 100 + i * n_ranks;
+            T expected = n_ranks * (n_ranks + 1) / 2 * 100 + i * n_ranks + seed * n_ranks;
             T actual = resHost[i];
             if (actual != expected) {
                 std::cerr << "[ERROR] TALLREDUCE failed\n";
-                return false;
+                flag = false;
+                status = 1;
+                break;
             }
         }
-
-        // Convert cycles to microseconds
-        // Based on rdma_perftest: cycles / 50.0 = us
-        constexpr double CYCLES_PER_US = 50.0;
-        std::vector<double> latencies_us;
-        
-        for (int i = 0; i < config.measure_iters; ++i) {
-            double cycles = static_cast<double>(perfHost[i]);
-            double us = cycles / CYCLES_PER_US;
-            latencies_us.push_back(us);
+        if(flag){
+            // Convert cycles to microseconds
+            // Based on rdma_perftest: cycles / 50.0 = us
+            constexpr double CYCLES_PER_US = 50.0;
+            std::vector<double> latencies_us;
             
-            if (config.verbose) {
-                std::cout << "  Iter " << std::setw(3) << i 
-                          << ": " << std::fixed << std::setprecision(2) << us << " us"
-                          << " (" << perfHost[i] << " cycles)" << std::endl;
+            for (int i = 0; i < config.measure_iters; ++i) {
+                double cycles = static_cast<double>(perfHost[i]);
+                double us = cycles / CYCLES_PER_US;
+                latencies_us.push_back(us);
+                
+                if (config.verbose) {
+                    std::cout << "  Iter " << std::setw(3) << i 
+                            << ": " << std::fixed << std::setprecision(2) << us << " us"
+                            << " (" << perfHost[i] << " cycles)" << std::endl;
+                }
             }
+            
+            PerfStats stats = CalculateStats(latencies_us, fileSize);
+            
+            // Print summary
+            std::cout << "\n================================================================" << std::endl;
+            std::cout << "  TALLREDUCE Performance Test Results" << std::endl;
+            std::cout << "================================================================" << std::endl;
+            std::cout << "  Configuration:" << std::endl;
+            std::cout << "    - Data type:      " << typeid(T).name() << std::endl;
+            std::cout << "    - Element count:  " << count << std::endl;
+            std::cout << "    - Data size:      " << fileSize << " bytes (" 
+                    << (fileSize / 1024.0) << " KB)" << std::endl;
+            std::cout << "    - Rank count:     " << n_ranks << std::endl;
+            std::cout << "    - Warmup iters:   " << config.warmup_iters << std::endl;
+            std::cout << "    - Measure iters:  " << config.measure_iters << std::endl;
+            std::cout << std::endl;
+            std::cout << "  Latency Statistics:" << std::endl;
+            std::cout << "    - Min:            " << std::fixed << std::setprecision(2) 
+                    << stats.min_us << " us" << std::endl;
+            std::cout << "    - Max:            " << stats.max_us << " us" << std::endl;
+            std::cout << "    - Average:        " << stats.avg_us << " us" << std::endl;
+            std::cout << "    - Median:         " << stats.median_us << " us" << std::endl;
+            std::cout << "    - Std Dev:        " << stats.std_dev_us << " us" << std::endl;
+            std::cout << std::endl;
+            std::cout << "  Throughput:" << std::endl;
+            std::cout << "    - Bandwidth:      " << std::setprecision(3) 
+                    << stats.bandwidth_gbps << " GB/s" << std::endl;
+            std::cout << "    - Message Rate:   " << stats.msg_rate_mops << " Mops/s" << std::endl;
+            std::cout << std::endl;
+            std::cout << "  Wall Clock Time:    " << std::setprecision(2) 
+                    << wall_time_ms << " ms (total)" << std::endl;
+            std::cout << "================================================================\n" << std::endl;
         }
-        
-        PerfStats stats = CalculateStats(latencies_us, fileSize);
-        
-        // Print summary
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "  TALLREDUCE Performance Test Results" << std::endl;
-        std::cout << "================================================================" << std::endl;
-        std::cout << "  Configuration:" << std::endl;
-        std::cout << "    - Data type:      " << typeid(T).name() << std::endl;
-        std::cout << "    - Element count:  " << count << std::endl;
-        std::cout << "    - Data size:      " << fileSize << " bytes (" 
-                  << (fileSize / 1024.0) << " KB)" << std::endl;
-        std::cout << "    - Rank count:     " << n_ranks << std::endl;
-        std::cout << "    - Warmup iters:   " << config.warmup_iters << std::endl;
-        std::cout << "    - Measure iters:  " << config.measure_iters << std::endl;
-        std::cout << std::endl;
-        std::cout << "  Latency Statistics:" << std::endl;
-        std::cout << "    - Min:            " << std::fixed << std::setprecision(2) 
-                  << stats.min_us << " us" << std::endl;
-        std::cout << "    - Max:            " << stats.max_us << " us" << std::endl;
-        std::cout << "    - Average:        " << stats.avg_us << " us" << std::endl;
-        std::cout << "    - Median:         " << stats.median_us << " us" << std::endl;
-        std::cout << "    - Std Dev:        " << stats.std_dev_us << " us" << std::endl;
-        std::cout << std::endl;
-        std::cout << "  Throughput:" << std::endl;
-        std::cout << "    - Bandwidth:      " << std::setprecision(3) 
-                  << stats.bandwidth_gbps << " GB/s" << std::endl;
-        std::cout << "    - Message Rate:   " << stats.msg_rate_mops << " Mops/s" << std::endl;
-        std::cout << std::endl;
-        std::cout << "  Wall Clock Time:    " << std::setprecision(2) 
-                  << wall_time_ms << " ms (total)" << std::endl;
-        std::cout << "================================================================\n" << std::endl;
     }
+
+    ShmemBarrierAll();
 
     // Cleanup
     aclrtFreeHost(srcHost);
@@ -260,7 +278,9 @@ bool RunAllReducePerfKernel(
     aclrtFree(resDevice);
     aclrtFreeHost(perfHost);
     aclrtFree(perfDevice);
-    pto::comm::ContextManager::SymmetricFree(shmemBufferDevice);
+    ShmemFree(shmemBufferDevice);
+
+    ShmemFinalize();
 
     status |= aclrtDestroyStream(stream);
     status |= aclrtResetDevice(device_id);

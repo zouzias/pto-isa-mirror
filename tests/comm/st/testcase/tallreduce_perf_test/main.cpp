@@ -10,7 +10,7 @@ struct TestArgs {
     int first_device_id = 0;
     int warmup_iters = 20;
     int measure_iters = 50;
-    bool verbose = false;
+    bool verbose = true;
     std::string test_size = "all";  // small, medium, large, all
     bool help = false;
 };

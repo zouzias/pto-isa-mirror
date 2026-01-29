@@ -19,7 +19,6 @@
 struct PerfTestConfig {
     int warmup_iters = 20;       // Warmup iterations
     int measure_iters = 50;      // Measurement iterations
-    int block_num = 1;           // Number of blocks
     bool verbose = true;         // Print per-iteration results
 };
 

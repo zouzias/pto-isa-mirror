@@ -120,6 +120,8 @@ PTO_INTERNAL void TALLREDUCE_IMPL(ParallelGroupType &pg, GlobalDstData &dstGloba
 
     // Step 3: Store final result
     TSTORE(dstGlobal, accTile);
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 }
 
 } // namespace comm
