@@ -21,6 +21,9 @@ function(pto_comm_st NAME)
         $ENV{ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api/impl
         $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include/interface
         $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include/utils
+        # $ENV{ASCEND_HOME_PATH}/pkg_inc/
+        # $ENV{ASCEND_HOME_PATH}/pkg_inc/profiling/
+        # $ENV{ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
     )
     target_link_directories(${NAME}_kernel PRIVATE
         ${SHMEM_HOME_PATH}/shmem/lib

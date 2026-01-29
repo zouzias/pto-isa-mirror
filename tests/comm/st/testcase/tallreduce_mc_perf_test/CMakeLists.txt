@@ -1,0 +1,1 @@
+pto_comm_st(tallreduce_mc_perf_test)
