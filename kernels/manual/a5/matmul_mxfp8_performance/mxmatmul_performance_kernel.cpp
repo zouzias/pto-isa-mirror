@@ -76,7 +76,7 @@ template <typename T, typename U, typename X, uint32_t baseM, uint32_t baseK, ui
     typename TileScaleB, typename LeftTile, typename RightTile, typename LeftScaleTile, typename RightScaleTile, typename ResTile>
 AICORE inline void InitBuffers(TileMatA aMatTile[BUFFER_NUM], TileMatB bMatTile[BUFFER_NUM], TileScaleA aScaleMatTile[BUFFER_NUM], 
     TileScaleB bScaleMatTile[BUFFER_NUM], LeftTile aTile[BUFFER_NUM], RightTile bTile[BUFFER_NUM], 
-    LeftScaleTile aScaleTile[BUFFER_NUM], RightScaleTile bScaleTile[BUFFER_NUM], ResTile& cTile)
+    LeftScaleTile aScaleTile[BUFFER_NUM], RightScaleTile bScaleTile[BUFFER_NUM], size_t tileNum, ResTile& cTile)
 {
     // L1 staging buffers (aMatTile/bMatTile) are double-buffered for TLOAD overlap.
     TASSIGN(aMatTile[0], 0x0);
@@ -279,10 +279,11 @@ AICORE inline void RunMxMatmul(__gm__ T *out, __gm__ U *src0, __gm__ U *src1, __
     LeftScaleTile aScaleTile[BUFFER_NUM];
     RightScaleTile bScaleTile[BUFFER_NUM];
     ResTile cTile;
-
+    
+    size_t tileNum = BUFFER_NUM;
     InitBuffers<T, U, X, baseM, baseK, baseN, baseScaleK, stepKa, stepKb, stepKscaleA, stepKscaleB, TileMatA, 
         TileMatB, TileScaleA, TileScaleB, LeftTile, RightTile, LeftScaleTile, RightScaleTile, ResTile>(
-        aMatTile, bMatTile, aScaleMatTile, bScaleMatTile, aTile, bTile, aScaleTile, bScaleTile, cTile);
+        aMatTile, bMatTile, aScaleMatTile, bScaleMatTile, aTile, bTile, aScaleTile, bScaleTile, tileNum, cTile);
 
     uint8_t mte2DBFlag = 0, mte2mxDBFlag = 0, mte1DBFlag = 0;
 
