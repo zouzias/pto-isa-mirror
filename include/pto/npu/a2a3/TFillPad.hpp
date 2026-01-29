@@ -31,42 +31,6 @@ AICORE constexpr auto getCopyNullPtr()
     }
 }
 
-template <typename TileDataDst, typename TileDataSrc>
-__tf__ PTO_INTERNAL void TFillPad_CopyData(typename TileDataDst::TileDType __out__ dst,
-                                           typename TileDataSrc::TileDType __in__ src, uint64_t dstValidRow,
-                                           uint64_t dstValidCol, uint64_t srcValidRow, uint64_t srcValidCol)
-{
-    set_mask_count(); // counter mode
-    using T = typename TileDataSrc::DType;
-    auto srcPtr = getCopyNullPtr<TileDataSrc>();
-    auto dstPtr = getCopyNullPtr<TileDataDst>();
-    srcPtr = (decltype(srcPtr))__cce_get_tile_ptr(src);
-    dstPtr = (decltype(dstPtr))__cce_get_tile_ptr(dst);
-    constexpr uint64_t copySrcCols = (sizeof(T) == 1) ? TileDataSrc::Cols / 2 : TileDataSrc::Cols;
-    constexpr uint64_t copyDstCols = (sizeof(T) == 1) ? TileDataDst::Cols / 2 : TileDataDst::Cols;
-
-    set_vector_mask(0, copySrcCols);
-
-    uint64_t srcCopyRow = srcValidRow;
-    auto _srcPtr = srcPtr;
-    auto _dstPtr = dstPtr;
-    if constexpr (TileDataSrc::Rows > REPEAT_MAX) {
-        while (srcCopyRow > REPEAT_MAX) {
-            uint8_t repeat = REPEAT_MAX;
-            uint16_t srcRepeatStride = TileDataSrc::Cols * sizeof(T) / 32;
-            uint16_t dstRepeatStride = TileDataDst::Cols * sizeof(T) / 32;
-            vcopy(_dstPtr, _srcPtr, repeat, 1, 1, dstRepeatStride, srcRepeatStride);
-            srcCopyRow -= REPEAT_MAX;
-            _srcPtr += REPEAT_MAX * copySrcCols;
-            _dstPtr += REPEAT_MAX * copyDstCols;
-        }
-    }
-    uint8_t repeat = srcCopyRow;
-    uint16_t srcRepeatStride = TileDataSrc::Cols * sizeof(T) / 32;
-    uint16_t dstRepeatStride = TileDataDst::Cols * sizeof(T) / 32;
-    vcopy(_dstPtr, _srcPtr, repeat, 1, 1, dstRepeatStride, srcRepeatStride);
-}
-
 template <typename T>
 PTO_INTERNAL uint64_t getPadMask(uint64_t validCol)
 {
@@ -181,6 +145,78 @@ template <typename TileDataDst, typename TileDataSrc>
 __tf__ PTO_INTERNAL void TFillPad(typename TileDataDst::TileDType __out__ dst,
                                   typename TileDataSrc::TileDType __in__ src, uint64_t dstValidRow,
                                   uint64_t dstValidCol, uint64_t srcValidRow, uint64_t srcValidCol)
+{
+    set_mask_count(); // counter mode
+    using T = typename TileDataSrc::DType;
+    auto srcPtr = getCopyNullPtr<TileDataSrc>();
+    auto dstPtr = getCopyNullPtr<TileDataDst>();
+    srcPtr = (decltype(srcPtr))__cce_get_tile_ptr(src);
+    dstPtr = (decltype(dstPtr))__cce_get_tile_ptr(dst);
+    constexpr uint64_t copySrcCols = (sizeof(T) == 1) ? TileDataSrc::Cols / 2 : TileDataSrc::Cols;
+    constexpr uint64_t copyDstCols = (sizeof(T) == 1) ? TileDataDst::Cols / 2 : TileDataDst::Cols;
+
+    set_vector_mask(0, copySrcCols);
+
+    uint64_t srcCopyRow = srcValidRow;
+    auto _srcPtr = srcPtr;
+    auto _dstPtr = dstPtr;
+    if constexpr (TileDataSrc::Rows > REPEAT_MAX) {
+        while (srcCopyRow > REPEAT_MAX) {
+            uint8_t repeat = REPEAT_MAX;
+            uint16_t srcRepeatStride = TileDataSrc::Cols * sizeof(T) / 32;
+            uint16_t dstRepeatStride = TileDataDst::Cols * sizeof(T) / 32;
+            vcopy(_dstPtr, _srcPtr, repeat, 1, 1, dstRepeatStride, srcRepeatStride);
+            srcCopyRow -= REPEAT_MAX;
+            _srcPtr += REPEAT_MAX * copySrcCols;
+            _dstPtr += REPEAT_MAX * copyDstCols;
+        }
+    }
+    uint8_t repeat = srcCopyRow;
+    uint16_t srcRepeatStride = TileDataSrc::Cols * sizeof(T) / 32;
+    uint16_t dstRepeatStride = TileDataDst::Cols * sizeof(T) / 32;
+    vcopy(_dstPtr, _srcPtr, repeat, 1, 1, dstRepeatStride, srcRepeatStride);
+
+    auto padValue = GetPadValue<TileDataDst>();
+
+    uint64_t elements_per_block = (sizeof(T) == 1) ? 16 : 32 / sizeof(T);
+    uint64_t srcValidCol32B = (sizeof(T) == 1) ?
+                                  CeilDivision(CeilDivision(srcValidCol, 2), elements_per_block) * elements_per_block :
+                                  CeilDivision(srcValidCol, elements_per_block) * elements_per_block;
+    uint64_t padOffset = srcValidCol32B;
+    uint64_t padCols = copyDstCols - srcValidCol32B;
+
+    // handle 32B-aligned padding (was inlined previously)
+    if constexpr (TileDataDst::PadVal != TileDataSrc::PadVal) {
+        if constexpr (sizeof(T) == 1) {
+            Handle32BAlignedPad_Byte<TileDataDst, TileDataSrc>(dstPtr, srcValidRow, srcValidCol, srcValidCol32B,
+                                                               padValue);
+        } else {
+            Handle32BAlignedPad_Other<TileDataDst, TileDataSrc>(dstPtr, srcValidRow, srcValidCol, srcValidCol32B,
+                                                                padValue);
+        }
+    }
+
+    uint64_t dupPadValue = sizeof(T) == 1 ? ((uint64_t)padValue) << 8 | ((uint64_t)padValue) : padValue;
+
+    // pad right for single row
+    PadRightSingleRow<TileDataDst, TileDataSrc>(dstPtr, padOffset, padCols, dupPadValue);
+
+    // pad right for remaining rows (if any)
+    if constexpr (TileDataSrc::Rows > 1) {
+        PadRightRemainingRows<TileDataDst, TileDataSrc>(dstPtr, padOffset, copyDstCols, srcValidRow);
+    }
+
+    // pad bottom rows
+    PadBottomRows<TileDataDst, TileDataSrc>(dstPtr, srcValidRow, dstValidRow, copyDstCols, dupPadValue);
+
+    set_mask_norm(); // restore to norm mode
+    set_vector_mask(-1, -1);
+} // end of tf
+
+template <typename TileDataDst, typename TileDataSrc>
+__tf__ PTO_INTERNAL void TFillPad_Inplace(typename TileDataDst::TileDType __out__ dst,
+                                          typename TileDataSrc::TileDType __in__ src, uint64_t dstValidRow,
+                                          uint64_t dstValidCol, uint64_t srcValidRow, uint64_t srcValidCol)
 {
     using T = typename TileDataSrc::DType;
     auto srcPtr = getCopyNullPtr<TileDataSrc>();
