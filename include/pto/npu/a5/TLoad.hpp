@@ -453,7 +453,7 @@ __tf__ PTO_INTERNAL void TLoadCube(typename TileData::TileDType __out__ dst, typ
     int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
     int gStride3, int gStride4, int validRow, int validCol) {
 #if defined(__DAV_CUBE__)
-    using L1Type = typename TileData::TileDType;
+    using L1Type = __cbuf__ typename TileData::DType *;
     L1Type dstAddr = (L1Type)__cce_get_tile_ptr(dst);
 
     // ND2NZ or DN2NZ
@@ -715,7 +715,7 @@ template <typename TileData, typename GlobalData>
 __tf__ PTO_INTERNAL void TLoadMxCube(typename TileData::TileDType __out__ dst, typename GlobalData::DType __in__ *src,
     int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
     int gStride3, int gStride4, int validRow, int validCol) {
-    using L1Type = typename TileData::TileDType;
+    using L1Type = __cbuf__ typename TileData::DType *;
     L1Type dstAddr = (L1Type)__cce_get_tile_ptr(dst);
     // ZZ2ZZ or NN2NN
     if constexpr (GlobalData::layout == pto::Layout::MX_A_ZZ &&
