@@ -81,9 +81,9 @@ AICORE void runTmovUb2l1( __gm__ T *out, __gm__ T *src)
 
     set_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
-    tf_copy_cbuf_to_ubuf<T, DstTileData, SrcTileData>(
+    tf_copy_cbuf_to_ubuf<T, DstTileData, MatTileData>(
                     dstTile.data(), matTile.data(), 0, blockLen);
-    tf_copy_cbuf_to_ubuf<DstTileData, SrcTileData>(
+    tf_copy_cbuf_to_ubuf<T, DstTileData, MatTileData>(
                     dstTile.data(), matTile.data(), 1, blockLen);
     set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);

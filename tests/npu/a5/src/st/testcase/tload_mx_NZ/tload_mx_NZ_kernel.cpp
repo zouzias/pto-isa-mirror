@@ -77,7 +77,7 @@ AICORE inline void runTLOAD_SCALE(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
         tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
             srcTile.data(), aMatTile.data(), 0, blockCount, l12ubBlockLen, srcStride, 0, i, tileMatStride, tileUbStride); // move to vector0
         tf_copy_cbuf_to_ubuf<TileUBData, TileMatAData>(
-            srcTile.data(), aMatTile.data(), 0, blockCount, l12ubBlockLen, srcStride, 0, i, tileMatStride, tileUbStride); // move to vector0
+            srcTile.data(), aMatTile.data(), 1, blockCount, l12ubBlockLen, srcStride, 0, i, tileMatStride, tileUbStride); // move to vector1
     }
 
     set_intra_block(PIPE_MTE1, syncID);

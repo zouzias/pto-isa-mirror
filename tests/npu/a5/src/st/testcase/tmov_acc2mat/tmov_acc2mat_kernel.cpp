@@ -211,7 +211,7 @@ AICORE inline void VecCopyOut(GlobalData &dst, TileData &src, int rows, int cols
     uint64_t burstDstStride = gStride1 * sizeof(typename TileData::DType);
     uint32_t burstSrcStride = TileData::Rows * c0Size;
     int64_t tileStride = gShape1 * TileData::Rows * gShape4;
-    tf_copy_cbuf_to_ubuf<GlobalData, TileData>(
+    tf_copy_ubuf_to_gm<GlobalData, TileData>(
                     dst.data(), src.data(), startDstAddr, gShape0, gStride0, nBurst, lenBurst, burstDstStride, burstSrcStride, tileStride);
 }
 

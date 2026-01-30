@@ -47,6 +47,21 @@ AICORE inline constexpr uint8_t getMode()
     return 1 + DualDstCtl;
 }
 
+template <typename GlobalData, typename TileData>
+__tf__ PTO_INTERNAL void tf_copy_ubuf_to_gm(
+    typename GlobalData::DType __out__ *dst, typename TileData::TileDType __in__ src, int startDstAddr, int gShape0, int gStride0, uint16_t nBurst,
+    uint32_t lenBurst, uint64_t burstDstStride, uint32_t burstSrcStride, int64_t tileStride) {
+    typename GlobalData::DType *dstAddr = dst;
+    __ubuf__ typename TileData::DType *srcAddr = __cce_get_tile_ptr(src);
+    typename GlobalData::DType *dstGlobalAddr = dstAddr;
+    __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
+    for (uint32_t k = 0; k < gShape0; k++) {
+        dstGlobalAddr = dstAddr + k * gStride0;
+        srcTileAddr = srcAddr + k * tileStride + startDstAddr;
+        copy_ubuf_to_gm_align_v2(dstGlobalAddr, srcTileAddr, 0, nBurst, lenBurst, 0, burstDstStride, burstSrcStride);
+    }
+}
+
 template <typename AType, typename BType, typename fbType, int M, int K, int N, int validM, int validK, int validN>
 AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ fbType *src2)
 {
@@ -176,15 +191,9 @@ AICORE inline void UBCopyOut(GlobalData &dst, TileData &src, int rows, int cols,
     uint64_t burstDstStride = gStride1 * sizeof(typename TileData::DType);
     uint32_t burstSrcStride = TileData::Rows * c0Size;
     int64_t tileStride = gShape1 * TileData::Rows * gShape4;
-    typename GlobalData::DType *dstAddr = dst.data();
-    __ubuf__ typename TileData::DType *srcAddr = src.data();
-    typename GlobalData::DType *dstGlobalAddr = dstAddr;
-    __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
-    for (uint32_t k = 0; k < gShape0; k++) {
-        dstGlobalAddr = dstAddr + k * gStride0;
-        srcTileAddr = srcAddr + k * tileStride + startDstAddr;
-        copy_ubuf_to_gm_align_v2(dstGlobalAddr, srcTileAddr, 0, nBurst, lenBurst, 0, burstDstStride, burstSrcStride);
-    }
+
+    tf_copy_ubuf_to_gm<GlobalData, TileData>(
+                    dst.data(), src.data(), startDstAddr, gShape0, gStride0, nBurst, lenBurst, burstDstStride, burstSrcStride, tileStride);
 }
 
 template <typename OutType, typename SrcTileData, int validM, int validN, Layout layoutType = Layout::ND,
