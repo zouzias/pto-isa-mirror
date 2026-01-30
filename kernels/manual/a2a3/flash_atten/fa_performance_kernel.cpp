@@ -54,6 +54,8 @@ enum CoreEvtID : uint32_t
 };
 
 #define VEC_CORES 2
+#define SM_USE_NZ 0
+
 // -----------------------------------------------------------------------------
 // Performance tuning knobs (high-level)
 //
@@ -539,8 +541,11 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
         // Extract per-slice views into the per-core reduce tiles so each slice writes into its row range
-        // using ReduceSliceTile = Tile<TileType::Vec, float, Vec_S0, 1, BLayout::ColMajor, Vec_S0, 1>;
-        using ReduceSliceTile = Tile<TileType::Vec, float, 1, Vec_S0, BLayout::RowMajor, 1, Vec_S0>;
+        #ifndef Softmax_DN
+            using ReduceSliceTile = Tile<TileType::Vec, float, Vec_S0, 1, BLayout::ColMajor, Vec_S0, 1>;
+        #else
+            using ReduceSliceTile = Tile<TileType::Vec, float, 1, Vec_S0, BLayout::RowMajor, 1, Vec_S0>;
+        #endif
         // reduce tiles live per vector core; offset only by row_slice within the core (no subblock stride)
         const size_t reduce_slice_rows = static_cast<size_t>(row_slice * Vec_S0);
         const uint64_t reduce_row_byte_offset = reduce_slice_rows * sizeof(float);
@@ -570,6 +575,15 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
                 l1_exp_max_slice, input_reduce_tmp, qkVecTile, triu, s0_index, s1_index);
         }
 
+        // #if SM_USE_NZ
+        //     using TileDataH_NZ = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::ColMajor, Vec_S0, Tile_S1, SLayout::RowMajor>;
+        //     TileDataH_NZ xExpNZ;
+        //     TASSIGN(xExpNZ, (uint64_t)qkVecTile.data());
+        //     TMOV(xExpNZ, x_expT);
+        //     // pipe_barrier(PIPE_ALL);    //no use
+        //     // mem_bar(VST_VLD);    //no use
+        // #endif
+
         set_flag(PIPE_V, PIPE_MTE2, pTileEventId);
         set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -583,14 +597,47 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         using TileDataH_Sub = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
         __gm__ half *p_ptr = p_tile_fifo + base_elems + row_offset * static_cast<size_t>(Cube_S1);
         for (int sub_col = 0; sub_col < static_cast<int>(kTileFactor); ++sub_col) {
-            __gm__ half *p_ptr_sub =
-                p_ptr + static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S1) * static_cast<size_t>(Cube_S0);
-            GlobalPTileHalfSub pTileHalfSub((__gm__ half *)(p_ptr_sub));
+            #if SM_USE_NZ
+                using TileDataH_Sub_NZ = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::ColMajor, Vec_S0, Cube_S1, SLayout::RowMajor>;
+                using TileDataH_Sub_ND = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
+                
+                TileDataH_Sub_ND xExpSubND;
+                const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
+                TASSIGN(xExpSubND, (uint64_t)x_expT.data() + col_byte_offset);
 
-            TileDataH_Sub xExpSub;
-            const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
-            TASSIGN(xExpSub, (uint64_t)x_expT.data() + col_byte_offset);
-            TSTORE(pTileHalfSub, xExpSub);
+                TileDataH_Sub_NZ xExpSubNZ;
+                TASSIGN(xExpSubNZ, (uint64_t)qkVecTile.data() + sub_col * Vec_S0 * Cube_S1 * sizeof(half));
+                
+                TMOV(xExpSubNZ, xExpSubND);
+                // set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);    //error
+                // wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+
+
+                //just for check
+                // using TileDataH_Sub_NZ = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::ColMajor, Vec_S0, Cube_S1, SLayout::RowMajor>;
+                using GlobalPTileHalfSub_NZ = GlobalTensor<half, pto::Shape<1, Cube_S1 / 16, Vec_S0 / 16, 16, 16>,
+                    pto::Stride<Cube_S0 * Cube_S1, Cube_S0 * 16, 16 * 16, 16, 1>, Layout::NZ>;
+
+                __gm__ half *p_ptr_sub =
+                    p_ptr + static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S1) * static_cast<size_t>(Cube_S0);
+                GlobalPTileHalfSub_NZ pTileHalfSub_NZ((__gm__ half *)(p_ptr_sub));
+                // TileDataH_Sub_NZ xExpSubNZ;
+                // const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
+                // TASSIGN(xExpSubNZ, (uint64_t)xExpNZ.data() + col_byte_offset);
+                TSTORE(pTileHalfSub_NZ, xExpSubNZ);
+                pipe_barrier(PIPE_MTE3);    //need to wait otherwise load other data
+
+            #else
+                __gm__ half *p_ptr_sub =
+                    p_ptr + static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S1) * static_cast<size_t>(Cube_S0);
+                GlobalPTileHalfSub pTileHalfSub((__gm__ half *)(p_ptr_sub));
+
+                TileDataH_Sub xExpSub;
+                const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
+                TASSIGN(xExpSub, (uint64_t)x_expT.data() + col_byte_offset);
+                TSTORE(pTileHalfSub, xExpSub);
+            #endif
         }
 
         if constexpr (INTERMEDIATE_CHECK) {
@@ -772,8 +819,11 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     using TileDataH_T = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Tile_S1>;
     constexpr uint32_t SubblockRows = Cube_S0 / VEC_CORES;
     // Reduce tiles cover one vector core's rows (Cube_S0 / VEC_CORES); slices are extracted per row_slice
-    // using ReduceTileF_T = Tile<TileType::Vec, float, SubblockRows, 1, BLayout::ColMajor, SubblockRows, 1>;
-    using ReduceTileF_T = Tile<TileType::Vec, float, 1, SubblockRows, BLayout::RowMajor, 1, SubblockRows>;
+    #ifndef Softmax_DN
+        using ReduceTileF_T = Tile<TileType::Vec, float, SubblockRows, 1, BLayout::ColMajor, SubblockRows, 1>;
+    #else
+        using ReduceTileF_T = Tile<TileType::Vec, float, 1, SubblockRows, BLayout::RowMajor, 1, SubblockRows>;
+    #endif
 
     TileDataF_T qkVecTile[srcVecTNBuffers];
     ReduceTileF_T m1_local_max;
