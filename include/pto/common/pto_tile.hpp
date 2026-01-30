@@ -34,8 +34,10 @@ enum class Layout {
     NC1HWC0,
     NCHW,
     NHWC,
-    FRACTAL_Z,
+    NCDHW,
+    FRACTAL_Z, // [c1hw,n/16,16,c0]
     FRACTAL_Z_S16S8,
+    FRACTAL_Z_3D, // [c1dhw,n/16,16,c0]
     MAX,
 };
 namespace GlobalTensorDim {
