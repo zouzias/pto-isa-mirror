@@ -26,6 +26,8 @@ constexpr int DN2ZN = 5;
 constexpr int NC1HWC02NC1HWC0 = 6;
 constexpr int FZ2FZ = 7;
 constexpr int FZ4D2FZ4D = 8;
+constexpr int NHWC2NC1HWC0 = 9;
+constexpr int NCHW2NC1HWC0 = 10;
 } // namespace GlobalTensorDim
 
 
@@ -58,7 +60,8 @@ void TLOADMIXFUNC()
     size_t bFileSize = N4 * N5 * sizeof(T);
     size_t cFileSize = BASEM * BASEK * sizeof(T);
     if constexpr (format == TloadMixTestFormat::NC1HWC02NC1HWC0 || format == TloadMixTestFormat::FZ4D2FZ4D ||
-                  format == TloadMixTestFormat::FZ2FZ) {
+                  format == TloadMixTestFormat::FZ2FZ || format == TloadMixTestFormat::NHWC2NC1HWC0 ||
+                  format == TloadMixTestFormat::NCHW2NC1HWC0) {
         cFileSize = N1 * N2 * N3 * N4 * N5 * sizeof(T);
     }
 
@@ -298,6 +301,58 @@ TEST_F(TLOADMIXTest, FZ4D2FZ4D_int8_t_1_125_3_16_32_1_250_5_16_32)
 TEST_F(TLOADMIXTest, FZ4D2FZ4D_float_1_126_3_16_8_1_4704_7_16_8)
 {
     TLOADMIXFUNC<float, 8, 1, 126, 3, 16, 8, 1, 4704, 7, 16, 8, 1, 1>();
+}
+
+// 9 : NHWC2NC1HWC0
+TEST_F(TLOADMIXTest, NHWC2NC1HWC0_int8_t_1_3_11_109_32_1_3_1023_1000_111)
+{
+    TLOADMIXFUNC<int8_t, 9, 1, 3, 11, 109, 32, 1, 3, 1023, 1000, 111, 1, 1>();
+}
+TEST_F(TLOADMIXTest, NHWC2NC1HWC0_int8_t_3_2_121_9_32_1_3_128_127_65)
+{
+    TLOADMIXFUNC<int8_t, 9, 3, 2, 121, 9, 32, 1, 3, 128, 127, 65, 1, 1>();
+}
+TEST_F(TLOADMIXTest, NHWC2NC1HWC0_bfloat16_1_6_10_100_16_1_1_100_100_96)
+{
+    TLOADMIXFUNC<uint16_t, 9, 1, 6, 10, 100, 16, 1, 1, 100, 100, 96, 1, 1>();
+}
+TEST_F(TLOADMIXTest, NHWC2NC1HWC0_bfloat16_10_16_16_2_16_1_256_100_16_255)
+{
+    TLOADMIXFUNC<uint16_t, 9, 10, 16, 16, 2, 16, 1, 256, 100, 16, 255, 1, 1>();
+}
+TEST_F(TLOADMIXTest, NHWC2NC1HWC0_float_1_1_56_112_8_1_2_224_224_25)
+{
+    TLOADMIXFUNC<float, 9, 1, 1, 56, 112, 8, 1, 2, 224, 224, 25, 1, 1>();
+}
+TEST_F(TLOADMIXTest, NHWC2NC1HWC0_float_2_1_56_43_8_1_3_333_188_19)
+{
+    TLOADMIXFUNC<float, 9, 2, 1, 56, 43, 8, 1, 3, 333, 188, 19, 1, 1>();
+}
+
+// 10 : NCHW2NC1HWC0
+TEST_F(TLOADMIXTest, NCHW2NC1HWC0_int8_t_1_3_11_109_32_1_3_111_1023_1000)
+{
+    TLOADMIXFUNC<int8_t, 10, 1, 3, 11, 109, 32, 1, 3, 111, 1023, 1000, 1, 1>();
+}
+TEST_F(TLOADMIXTest, NCHW2NC1HWC0_int8_t_3_2_121_9_32_1_3_65_128_127)
+{
+    TLOADMIXFUNC<int8_t, 10, 3, 2, 121, 9, 32, 1, 3, 65, 128, 127, 1, 1>();
+}
+TEST_F(TLOADMIXTest, NCHW2NC1HWC0_bfloat16_1_6_10_100_16_1_1_96_100_100)
+{
+    TLOADMIXFUNC<uint16_t, 10, 1, 6, 10, 100, 16, 1, 1, 96, 100, 100, 1, 1>();
+}
+TEST_F(TLOADMIXTest, NCHW2NC1HWC0_bfloat16_10_16_16_2_16_1_256_255_100_16)
+{
+    TLOADMIXFUNC<uint16_t, 10, 10, 16, 16, 2, 16, 1, 256, 255, 100, 16, 1, 1>();
+}
+TEST_F(TLOADMIXTest, NCHW2NC1HWC0_float_1_1_56_112_8_1_2_25_224_224)
+{
+    TLOADMIXFUNC<float, 10, 1, 1, 56, 112, 8, 1, 2, 25, 224, 224, 1, 1>();
+}
+TEST_F(TLOADMIXTest, NCHW2NC1HWC0_float_2_1_56_43_8_1_3_19_333_188)
+{
+    TLOADMIXFUNC<float, 10, 2, 1, 56, 43, 8, 1, 3, 19, 333, 188, 1, 1>();
 }
 
 template <typename T, int format, int dtype, int N1, int N2, int N3, int N4, int N5, int WN1, int WN2, int WN3, int WN4,
