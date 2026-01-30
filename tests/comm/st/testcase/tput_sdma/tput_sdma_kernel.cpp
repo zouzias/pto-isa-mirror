@@ -25,16 +25,18 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 
 #define ENABLE_DEBUG_PRINT 1
-#define ENABLE_SDMA_KERNEL 0  // Set to 1 to enable SDMA kernel, 0 to disable
 
 // ============================================================================
 // 1D Vector Test Kernel - SDMA version
 // TPUT_SDMA: Asynchronous remote write using SDMA engine (direct GM to GM)
+// 
+// Data flow (Ring communication):
+//   Rank i sends srcG directly to Rank (i-1)'s recv buffer
+//   Rank i receives data from Rank (i+1) into its recv buffer
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TPutSdmaKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
-#if ENABLE_SDMA_KERNEL
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
@@ -43,33 +45,26 @@ __global__ AICORE void TPutSdmaKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T
     StrideDyn stride(count, count, count, count, 1);
 
     int my_rank = shmem_my_pe();
-    int next_rank = (my_rank + 1) % nranks;
     int prev_rank = (my_rank + nranks - 1) % nranks;
 
+    // Shared memory layout: only need recv buffer (no send buffer needed)
     __gm__ T *shmem_data = (__gm__ T *)((__gm__ T *)shmem + 64 * sizeof(int32_t));
-    __gm__ T *send_shmem = (__gm__ T *)((__gm__ T *)shmem_data + 0);
-    __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + count);
+    __gm__ T *recv_shmem = shmem_data;
 
     Global srcG(src, shape, stride);
     Global dstG(dst, shape, stride);
-
-    Global sendG(send_shmem, shape, stride);
     Global recvG(recv_shmem, shape, stride);
 
-    // Copy local data to send buffer using SDMA (local GM to local GM)
-    auto copy_event = pto::comm::TPUT_SDMA(sendG, srcG);
-    pto::comm::sdma::SDMA::wait(copy_event);
-
-    // Synchronize to ensure all ranks have prepared their send buffers
+    // Synchronize to ensure all ranks are ready
     ShmemDeviceBarrierAll();
 
     // Get remote PE's recv buffer address
     __gm__ T *remote_recv_shmem = ShmemPtr(recv_shmem, prev_rank);
     Global remoteRecvG(remote_recv_shmem, shape, stride);
     
-    // TPUT_SDMA: Asynchronous write from local sendG to remote recvG
-    // Direct GM to GM transfer without UB staging
-    auto put_event = pto::comm::TPUT_SDMA(remoteRecvG, sendG);
+    // TPUT_SDMA: Direct transfer from local srcG to remote recvG
+    // No intermediate local buffer needed
+    auto put_event = pto::comm::TPUT_SDMA(remoteRecvG, srcG);
     
     // Wait for SDMA transfer completion
     pto::comm::sdma::SDMA::wait(put_event);
@@ -79,16 +74,9 @@ __global__ AICORE void TPutSdmaKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T
     // Then synchronize all PEs
     ShmemDeviceBarrierAll();
 
-    // Copy result from recv buffer to output using SDMA
+    // Copy result from local recv buffer to output using SDMA
     auto result_event = pto::comm::TPUT_SDMA(dstG, recvG);
     pto::comm::sdma::SDMA::wait(result_event);
-#else
-    // SDMA kernel disabled - empty stub
-    (void)dst;
-    (void)src;
-    (void)shmem;
-    (void)nranks;
-#endif
 }
 
 template <typename T, size_t count>
@@ -236,11 +224,14 @@ template bool RunPutSdmaRing<uint8_t, 512>(int n_ranks, int n_devices, int first
 // ============================================================================
 // 2D Test Kernel - SDMA version
 // Tests TPUT_SDMA with 2D shape GlobalTensor (rows x cols)
+// 
+// Data flow (Ring communication):
+//   Rank i sends srcG directly to Rank (i-1)'s recv buffer
+//   Rank i receives data from Rank (i+1) into its recv buffer
 // ============================================================================
 template <typename T, size_t rows, size_t cols>
 __global__ AICORE void TPutSdmaKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
-#if ENABLE_SDMA_KERNEL
     constexpr size_t total_count = rows * cols;
     
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -252,32 +243,26 @@ __global__ AICORE void TPutSdmaKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__
     StrideDyn stride(total_count, total_count, total_count, cols, 1);
 
     int my_rank = shmem_my_pe();
-    int next_rank = (my_rank + 1) % nranks;
     int prev_rank = (my_rank + nranks - 1) % nranks;
 
+    // Shared memory layout: only need recv buffer (no send buffer needed)
     __gm__ T *shmem_data = (__gm__ T *)((__gm__ T *)shmem + 64 * sizeof(int32_t));
-    __gm__ T *send_shmem = (__gm__ T *)((__gm__ T *)shmem_data + 0);
-    __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + total_count);
+    __gm__ T *recv_shmem = shmem_data;
 
     Global srcG(src, shape, stride);
     Global dstG(dst, shape, stride);
-
-    Global sendG(send_shmem, shape, stride);
     Global recvG(recv_shmem, shape, stride);
 
-    // Copy local data to send buffer using SDMA
-    auto copy_event = pto::comm::TPUT_SDMA(sendG, srcG);
-    pto::comm::sdma::SDMA::wait(copy_event);
-
-    // Synchronize to ensure all ranks have prepared their send buffers
+    // Synchronize to ensure all ranks are ready
     ShmemDeviceBarrierAll();
 
     // Get remote PE's recv buffer address
     __gm__ T *remote_recv_shmem = ShmemPtr(recv_shmem, prev_rank);
     Global remoteRecvG(remote_recv_shmem, shape, stride);
     
-    // TPUT_SDMA: Asynchronous write from local sendG to remote recvG
-    auto put_event = pto::comm::TPUT_SDMA(remoteRecvG, sendG);
+    // TPUT_SDMA: Direct transfer from local srcG to remote recvG
+    // No intermediate local buffer needed
+    auto put_event = pto::comm::TPUT_SDMA(remoteRecvG, srcG);
     
     // Wait for SDMA transfer completion
     pto::comm::sdma::SDMA::wait(put_event);
@@ -287,16 +272,9 @@ __global__ AICORE void TPutSdmaKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__
     // Then synchronize all PEs
     ShmemDeviceBarrierAll();
 
-    // Copy result from recv buffer to output using SDMA
+    // Copy result from local recv buffer to output using SDMA
     auto result_event = pto::comm::TPUT_SDMA(dstG, recvG);
     pto::comm::sdma::SDMA::wait(result_event);
-#else
-    // SDMA kernel disabled - empty stub
-    (void)dst;
-    (void)src;
-    (void)shmem;
-    (void)nranks;
-#endif
 }
 
 template <typename T, size_t rows, size_t cols>

@@ -17,10 +17,43 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/comm_types.hpp"
 #include <cstdint>
 
+// ============================================================================
+// Debug Print Support
+// Enable by compiling with DEBUG_MODE=ON (adds --cce-enable-print flag)
+// Usage: PTO_SDMA_DEBUG_PRINT("message: %d\n", value);
+// ============================================================================
+#ifdef _DEBUG
+    #define PTO_SDMA_DEBUG_ENABLED 1
+    #define PTO_SDMA_DEBUG_PRINT(...) AscendC::printf(__VA_ARGS__)
+#else
+    #define PTO_SDMA_DEBUG_ENABLED 0
+    #define PTO_SDMA_DEBUG_PRINT(...) ((void)0)
+#endif
+
 namespace pto {
 namespace comm {
 namespace sdma {
 namespace detail {
+
+// ============================================================================
+// Device Memory Address Constants (same as aclshmem)
+// ============================================================================
+
+// Device memory layout constants for accessing shared state
+constexpr uint64_t PTO_SHM_DEVICE_END_ADDR = 0x180000000000ULL - (1UL << 30UL);
+constexpr uint64_t PTO_SHM_DEVICE_PRE_META_SIZE = 128UL;  // 128B per entity
+constexpr uint64_t PTO_SHM_DEVICE_GLOBAL_META_SIZE = PTO_SHM_DEVICE_PRE_META_SIZE;  // 128B
+constexpr uint64_t PTO_OBJECT_NUM_MAX = 511UL;  // Maximum entity count
+
+constexpr uint64_t PTO_SHM_DEVICE_USER_CONTEXT_PRE_SIZE = 64UL * 1024UL;  // 64K per context
+constexpr uint64_t PTO_SHM_DEVICE_META_SIZE = PTO_SHM_DEVICE_PRE_META_SIZE * PTO_OBJECT_NUM_MAX
+                                             + PTO_SHM_DEVICE_GLOBAL_META_SIZE;  // 64K total metadata
+
+constexpr uint64_t PTO_SHM_DEVICE_INFO_SIZE = PTO_SHM_DEVICE_USER_CONTEXT_PRE_SIZE * PTO_OBJECT_NUM_MAX
+                                             + PTO_SHM_DEVICE_META_SIZE;  // ~32M total
+
+constexpr uint64_t PTO_SHM_DEVICE_META_ADDR = PTO_SHM_DEVICE_END_ADDR - PTO_SHM_DEVICE_INFO_SIZE;
+constexpr uint64_t PTO_SHM_DEVICE_USER_CONTEXT_ADDR = PTO_SHM_DEVICE_META_ADDR + PTO_SHM_DEVICE_META_SIZE;
 
 // ============================================================================
 // Device-side SDMA Resource Access
@@ -52,41 +85,66 @@ struct pto_comm_global_state_t {
     // ... other state members
 };
 
-// Function to get global state (should be provided by PTO runtime)
+// Helper function to get extra context address (same as aclshmemi_get_extra_context_addr)
+PTO_INTERNAL __gm__ void* pto_comm_get_extra_context_addr(uint32_t shmemId)
+{
+    PTO_SDMA_DEBUG_PRINT("[get_extra_context_addr] shmemId=%u\n", shmemId);
+    if (shmemId >= PTO_OBJECT_NUM_MAX) {
+        PTO_SDMA_DEBUG_PRINT("[get_extra_context_addr] ERROR: shmemId >= PTO_OBJECT_NUM_MAX(%lu)\n", 
+                             PTO_OBJECT_NUM_MAX);
+        return nullptr;
+    }
+    uint64_t ctxAddr = PTO_SHM_DEVICE_USER_CONTEXT_ADDR + shmemId * PTO_SHM_DEVICE_USER_CONTEXT_PRE_SIZE;
+    PTO_SDMA_DEBUG_PRINT("[get_extra_context_addr] ctxAddr=0x%lx\n", ctxAddr);
+    return reinterpret_cast<__gm__ void*>(ctxAddr);
+}
+
+// Function to get global state (same implementation as aclshmemi_get_state)
 PTO_INTERNAL __gm__ pto_comm_global_state_t* pto_comm_get_state()
 {
-    // TODO: Replace with actual PTO runtime function to get global state
-    // Example: return reinterpret_cast<__gm__ pto_comm_global_state_t*>(pto_get_global_state_addr());
-    return nullptr;
+    PTO_SDMA_DEBUG_PRINT("[get_state] Enter\n");
+    auto* state = reinterpret_cast<__gm__ pto_comm_global_state_t*>(pto_comm_get_extra_context_addr(0));
+    PTO_SDMA_DEBUG_PRINT("[get_state] state=%p\n", state);
+    return state;
 }
 
 // Get SDMA operation resource info pointer
 PTO_INTERNAL __gm__ pto_sdma_op_res_info_t* pto_comm_get_sdma_op_res_info()
 {
+    PTO_SDMA_DEBUG_PRINT("[get_sdma_op_res_info] Enter\n");
     __gm__ pto_comm_global_state_t* state = pto_comm_get_state();
     if (state == nullptr || state->sdma_op_res_info_addr == 0) {
+        PTO_SDMA_DEBUG_PRINT("[get_sdma_op_res_info] ERROR: state=%p, op_res_info_addr=0x%lx\n",
+                             state, state ? state->sdma_op_res_info_addr : 0);
         return nullptr;
     }
+    PTO_SDMA_DEBUG_PRINT("[get_sdma_op_res_info] op_res_info_addr=0x%lx\n", state->sdma_op_res_info_addr);
     return reinterpret_cast<__gm__ pto_sdma_op_res_info_t*>(state->sdma_op_res_info_addr);
 }
 
 // Get SDMA workspace address
 PTO_INTERNAL uint64_t pto_comm_get_sdma_workspace_addr()
 {
+    PTO_SDMA_DEBUG_PRINT("[get_sdma_workspace_addr] Enter\n");
     __gm__ pto_comm_global_state_t* state = pto_comm_get_state();
     if (state == nullptr) {
+        PTO_SDMA_DEBUG_PRINT("[get_sdma_workspace_addr] ERROR: state is NULL\n");
         return 0;
     }
+    PTO_SDMA_DEBUG_PRINT("[get_sdma_workspace_addr] workspace_addr=0x%lx\n", state->sdma_workspace_addr);
     return state->sdma_workspace_addr;
 }
 
 // Get SDMA flag address
 PTO_INTERNAL uint64_t pto_comm_get_sdma_flag_addr()
 {
+    PTO_SDMA_DEBUG_PRINT("[get_sdma_flag_addr] Enter\n");
     __gm__ pto_comm_global_state_t* state = pto_comm_get_state();
     if (state == nullptr) {
+        PTO_SDMA_DEBUG_PRINT("[get_sdma_flag_addr] ERROR: state is NULL\n");
         return 0;
     }
+    PTO_SDMA_DEBUG_PRINT("[get_sdma_flag_addr] flag_addr=0x%lx\n", state->sdma_flag_addr);
     return state->sdma_flag_addr;
 }
 
@@ -94,7 +152,10 @@ PTO_INTERNAL uint64_t pto_comm_get_sdma_flag_addr()
 PTO_INTERNAL uint32_t pto_comm_select_sdma_channel(uint32_t block_idx, uint32_t num_channels = 40)
 {
     // Simple round-robin selection
-    return block_idx % num_channels;
+    uint32_t channel = block_idx % num_channels;
+    PTO_SDMA_DEBUG_PRINT("[select_sdma_channel] block_idx=%u, num_channels=%u, selected=%u\n",
+                         block_idx, num_channels, channel);
+    return channel;
 }
 
 // ============================================================================
@@ -104,6 +165,7 @@ PTO_INTERNAL uint32_t pto_comm_select_sdma_channel(uint32_t block_idx, uint32_t 
 // Helper: Invalidate single cache line
 PTO_INTERNAL void dcci_cacheline(__gm__ uint8_t* addr)
 {
+    PTO_SDMA_DEBUG_PRINT("[dcci_cacheline] addr=%p\n", addr);
     using namespace AscendC;
     AscendC::GlobalTensor<uint8_t> global;
     global.SetGlobalBuffer(addr);
@@ -112,6 +174,7 @@ PTO_INTERNAL void dcci_cacheline(__gm__ uint8_t* addr)
     __asm__ __volatile__("");
     DataCacheCleanAndInvalid<uint8_t, CacheLine::SINGLE_CACHE_LINE, DcciDst::CACHELINE_OUT>(global);
     __asm__ __volatile__("");
+    PTO_SDMA_DEBUG_PRINT("[dcci_cacheline] Done\n");
 }
 
 // Helper: Copy from GM to GM using AscendC API
@@ -119,6 +182,8 @@ template <typename T>
 PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32_t size,
                                  AscendC::TBuf<AscendC::TPosition::VECOUT> &tmp_buf)
 {
+    PTO_SDMA_DEBUG_PRINT("[copy_gm_to_gm] dst=%p, src=%p, size=%u, elem_size=%lu\n",
+                         dst, src, size, sizeof(T));
     AscendC::GlobalTensor<T> gm_src;
     AscendC::GlobalTensor<T> gm_dst;
     gm_src.SetGlobalBuffer((__gm__ T *)src, size);
@@ -126,6 +191,7 @@ PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32
     AscendC::LocalTensor<T> x_local = tmp_buf.template Get<T>();
 
     uint32_t cp_len = size * sizeof(T);
+    PTO_SDMA_DEBUG_PRINT("[copy_gm_to_gm] cp_len=%u\n", cp_len);
     AscendC::DataCopyExtParams cp_params{1, cp_len, 0, 0, 0};
     AscendC::DataCopyPadExtParams<T> pad_params{false, 0, 0, 0};
     AscendC::DataCopyPad(x_local, gm_src, cp_params, pad_params);
@@ -133,12 +199,14 @@ PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32
 
     AscendC::DataCopyPad(gm_dst, x_local, cp_params);
     AscendC::PipeBarrier<PIPE_ALL>();
+    PTO_SDMA_DEBUG_PRINT("[copy_gm_to_gm] Done\n");
 }
 
 // Helper: Set a single value in GM memory using AscendC API
 template <typename T>
 PTO_INTERNAL void set_value(__gm__ uint8_t* addr, AscendC::TBuf<AscendC::TPosition::VECOUT> &tmp_buf, T x)
 {
+    PTO_SDMA_DEBUG_PRINT("[set_value] addr=%p, size=%lu\n", addr, sizeof(T));
     AscendC::GlobalTensor<T> gm_dst;
     gm_dst.SetGlobalBuffer((__gm__ T *)addr);
     AscendC::LocalTensor<T> x_local = tmp_buf.template Get<T>();
@@ -147,14 +215,17 @@ PTO_INTERNAL void set_value(__gm__ uint8_t* addr, AscendC::TBuf<AscendC::TPositi
     AscendC::DataCopyExtParams cp_out_params{1, sizeof(T), 0, 0, 0};
     AscendC::DataCopyPad(gm_dst, x_local, cp_out_params);
     AscendC::PipeBarrier<PIPE_ALL>();
+    PTO_SDMA_DEBUG_PRINT("[set_value] Done\n");
 }
 
 // Helper: Get a single value from GM memory using AscendC API
 template <typename T>
 PTO_INTERNAL T get_value(__gm__ uint8_t* addr, AscendC::TBuf<AscendC::TPosition::VECOUT> &tmp_buf)
 {
+    PTO_SDMA_DEBUG_PRINT("[get_value] addr=%p, size=%lu\n", addr, sizeof(T));
     dcci_cacheline(addr);
     T x = *((__gm__ T *)addr);
+    PTO_SDMA_DEBUG_PRINT("[get_value] Done\n");
     return x;
 }
 
@@ -167,9 +238,15 @@ PTO_INTERNAL void add_one_memcpy_sqe(__gm__ batch_write_channel_info_t* channel_
                                      uint32_t sq_tail,
                                      uint32_t task_id)
 {
+    PTO_SDMA_DEBUG_PRINT("[add_one_memcpy_sqe] src=%p, dst=%p, len=%u, sq_tail=%u, task_id=%u\n",
+                         src, dst, length, sq_tail, task_id);
+    
     __gm__ batch_write_item_t *sqe = 
         (__gm__ batch_write_item_t *)(channel_info->sq_base);
     sqe += (sq_tail % channel_info->sq_depth);
+    
+    PTO_SDMA_DEBUG_PRINT("[add_one_memcpy_sqe] sqe=%p, sq_base=0x%lx, sq_depth=%u, stream_id=%u\n",
+                         sqe, channel_info->sq_base, channel_info->sq_depth, channel_info->stream_id);
 
     sqe->type = RT_STARS_SQE_TYPE_SDMA;
     sqe->blockDim = 0;
@@ -190,6 +267,8 @@ PTO_INTERNAL void add_one_memcpy_sqe(__gm__ batch_write_channel_info_t* channel_
 
     uint64_t src_addr = reinterpret_cast<uint64_t>(src);
     uint64_t dst_addr = reinterpret_cast<uint64_t>(dst);
+    
+    PTO_SDMA_DEBUG_PRINT("[add_one_memcpy_sqe] src_addr=0x%lx, dst_addr=0x%lx\n", src_addr, dst_addr);
 
     sqe->srcAddrLow = static_cast<uint32_t>(src_addr & 0xFFFFFFFF);
     sqe->srcAddrHigh = static_cast<uint32_t>((src_addr >> 32) & 0xFFFFFFFF);
@@ -198,6 +277,7 @@ PTO_INTERNAL void add_one_memcpy_sqe(__gm__ batch_write_channel_info_t* channel_
     sqe->linkType = static_cast<uint8_t>(255U);
 
     AscendC::PipeBarrier<PIPE_ALL>();
+    PTO_SDMA_DEBUG_PRINT("[add_one_memcpy_sqe] Done\n");
 }
 
 // Initialize SDMA Configuration
@@ -208,6 +288,9 @@ PTO_INTERNAL bool init_sdma_config(__gm__ uint8_t* context_gm,
                                    sdma_config_t& config,
                                    AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
 {
+    PTO_SDMA_DEBUG_PRINT("[init_sdma_config] Enter: context_gm=%p, message_len=%lu, block_idx=%u, comm_block_dim=%u\n",
+                         context_gm, message_len, block_idx, comm_block_dim);
+    
     // Get queue info
     __gm__ batch_write_flag_info_t *flag_info = 
         (__gm__ batch_write_flag_info_t*)context_gm;
@@ -216,10 +299,14 @@ PTO_INTERNAL bool init_sdma_config(__gm__ uint8_t* context_gm,
     // Check if block_idx is valid, block * queue_num must be < SDMA_MAX_CHAN
     if (block_idx >= comm_block_dim || 
         block_idx >= (SDMA_MAX_CHAN / config.queue_num)) {
+        PTO_SDMA_DEBUG_PRINT("[init_sdma_config] ERROR: block_idx out of range (>=%u or >=%u)\n",
+                             comm_block_dim, SDMA_MAX_CHAN / config.queue_num);
         return false;
     }
 
     uint32_t used_block_dim = AscendC::Std::min<uint32_t>(comm_block_dim, SDMA_MAX_CHAN / config.queue_num);
+    PTO_SDMA_DEBUG_PRINT("[init_sdma_config] used_block_dim=%u, queue_num=%u\n", 
+                         used_block_dim, config.queue_num);
 
     // Calculate block parameters
     config.block_bytes = 1024 * 1024; // 1MB per SQE
@@ -230,9 +317,13 @@ PTO_INTERNAL bool init_sdma_config(__gm__ uint8_t* context_gm,
     if (block_idx < extra_bytes) {
         config.per_core_bytes += 1; // Earlier cores transfer 1 more byte than later cores
     }
+    
+    PTO_SDMA_DEBUG_PRINT("[init_sdma_config] block_bytes=%lu, per_core_bytes=%lu, extra_bytes=%lu\n",
+                         config.block_bytes, config.per_core_bytes, extra_bytes);
 
     config.iter_num = (config.per_core_bytes + config.block_bytes - 1) / config.block_bytes; // Number of SQEs needed
     if (config.iter_num == 0) {
+        PTO_SDMA_DEBUG_PRINT("[init_sdma_config] iter_num=0, no transfer needed\n");
         return true;
     }
 
@@ -246,6 +337,9 @@ PTO_INTERNAL bool init_sdma_config(__gm__ uint8_t* context_gm,
         config.comm_block_offset = extra_bytes * (base_per_core + 1) + 
                                    (block_idx - extra_bytes) * base_per_core;
     }
+    
+    PTO_SDMA_DEBUG_PRINT("[init_sdma_config] Done: iter_num=%u, comm_block_offset=%lu\n",
+                         config.iter_num, config.comm_block_offset);
 
     return true;
 }
@@ -259,8 +353,13 @@ PTO_INTERNAL void prepare_workspace(__gm__ uint8_t* workspace,
                                     uint32_t my_pe,
                                     AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
 {
+    PTO_SDMA_DEBUG_PRINT("[prepare_workspace] Enter: workspace=%p, flag_addr=%p, block_idx=%u, my_pe=%u\n",
+                         workspace, flag_addr, block_idx, my_pe);
+    
     // Per-core workspace size for flag data: flag_length + flag receive area flag_length*queue_num
     uint64_t per_core_workspace_size = config.queue_num * SDMA_FLAG_LENGTH;
+    PTO_SDMA_DEBUG_PRINT("[prepare_workspace] per_core_workspace_size=%lu, queue_num=%u\n",
+                         per_core_workspace_size, config.queue_num);
 
     // Current core's workspace starting position: placed after the channel
     __gm__ uint8_t* my_workspace = workspace + SDMA_FLAG_LENGTH + 
@@ -276,8 +375,12 @@ PTO_INTERNAL void prepare_workspace(__gm__ uint8_t* workspace,
                                    my_pe * SDMA_MAX_CHAN * SDMA_FLAG_LENGTH + 
                                    block_idx * per_core_workspace_size;
 
+    PTO_SDMA_DEBUG_PRINT("[prepare_workspace] send_workspace=%p, recv_workspace=%p, remote_recv=%p\n",
+                         layout.send_workspace, layout.recv_workspace, layout.remote_recv_workspace);
+
     // Initialize send flag
     set_value<uint32_t>((__gm__ uint8_t*)layout.send_workspace, tmp_buf, config.queue_num);
+    PTO_SDMA_DEBUG_PRINT("[prepare_workspace] Done\n");
 }
 
 // Initialize SQ Tail Array
@@ -286,13 +389,19 @@ PTO_INTERNAL void init_sq_tail_array(__gm__ batch_write_channel_info_t* batch_wr
                                      uint32_t* sq_tail,
                                      AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
 {
+    PTO_SDMA_DEBUG_PRINT("[init_sq_tail_array] Enter: channel_info=%p, queue_num=%u\n",
+                         batch_write_channel_info, queue_num);
+    
     for (uint32_t queue_id = 0U; queue_id < queue_num; ++queue_id) {
         __gm__ batch_write_channel_info_t* channel_info = 
             batch_write_channel_info + queue_id;
         // Get sq_tail field (offset 4 bytes)
         sq_tail[queue_id] = get_value<uint32_t>(
             ((__gm__ uint8_t*)channel_info) + 4, tmp_buf);
+        PTO_SDMA_DEBUG_PRINT("[init_sq_tail_array] queue_id=%u, sq_tail=%u\n",
+                             queue_id, sq_tail[queue_id]);
     }
+    PTO_SDMA_DEBUG_PRINT("[init_sq_tail_array] Done\n");
 }
 
 // Submit Data Transfer SQEs
@@ -305,6 +414,9 @@ PTO_INTERNAL void submit_data_transfer_sqes(
     uint32_t* sq_tail,
     AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
 {
+    PTO_SDMA_DEBUG_PRINT("[submit_data_transfer_sqes] Enter: send=%p, recv=%p, iter_num=%u\n",
+                         send_buffer, recv_buffer, config.iter_num);
+    
     for (uint32_t idx = 0U; idx < config.iter_num; ++idx) {
         uint32_t queue_idx = idx % config.queue_num;
         __gm__ batch_write_channel_info_t* channel_info = 
@@ -323,6 +435,9 @@ PTO_INTERNAL void submit_data_transfer_sqes(
         __gm__ uint8_t* dst_addr = recv_buffer + config.comm_block_offset + 
                                    idx * config.block_bytes;
 
+        PTO_SDMA_DEBUG_PRINT("[submit_data_transfer_sqes] idx=%u, queue_idx=%u, transfer_bytes=%u\n",
+                             idx, queue_idx, transfer_bytes);
+
         add_one_memcpy_sqe(channel_info, src_addr, dst_addr,
                            0, transfer_bytes, sq_tail[queue_idx], 
                            sq_tail[queue_idx] - channel_info->sq_head);
@@ -330,6 +445,7 @@ PTO_INTERNAL void submit_data_transfer_sqes(
         sq_tail[queue_idx] = (sq_tail[queue_idx] + 1) % SQ_DEPTH;
         AscendC::PipeBarrier<PIPE_ALL>();
     }
+    PTO_SDMA_DEBUG_PRINT("[submit_data_transfer_sqes] Done\n");
 }
 
 // Submit Flag Transfer SQEs
@@ -340,19 +456,26 @@ PTO_INTERNAL void submit_flag_transfer_sqes(
     uint32_t* sq_tail,
     AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
 {
+    PTO_SDMA_DEBUG_PRINT("[submit_flag_transfer_sqes] Enter: queue_num=%u\n", config.queue_num);
+    
     for (uint32_t queue_id = 0U; queue_id < config.queue_num; ++queue_id) {
         __gm__ batch_write_channel_info_t* channel_info = 
             batch_write_channel_info + queue_id;
 
+        __gm__ uint8_t* flag_dst = layout.remote_recv_workspace + queue_id * SDMA_FLAG_LENGTH;
+        PTO_SDMA_DEBUG_PRINT("[submit_flag_transfer_sqes] queue_id=%u, send=%p, dst=%p\n",
+                             queue_id, layout.send_workspace, flag_dst);
+
         add_one_memcpy_sqe(channel_info,
                            layout.send_workspace,      // Source: current core's send flag
-                           layout.remote_recv_workspace + queue_id * SDMA_FLAG_LENGTH, // Dest: remote window's position for current queue
+                           flag_dst, // Dest: remote window's position for current queue
                            0, 8, sq_tail[queue_id], 
                            sq_tail[queue_id] - channel_info->sq_head);
 
         sq_tail[queue_id] = (sq_tail[queue_id] + 1) % SQ_DEPTH;
         AscendC::PipeBarrier<PIPE_ALL>();
     }
+    PTO_SDMA_DEBUG_PRINT("[submit_flag_transfer_sqes] Done\n");
 }
 
 // Flush Cache and Ring Doorbell
@@ -362,10 +485,18 @@ PTO_INTERNAL void flush_cache_and_ring_doorbell(
     uint32_t* sq_tail,
     AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
 {
+    PTO_SDMA_DEBUG_PRINT("[flush_cache_and_ring_doorbell] Enter: queue_num=%u, iter_num=%u\n",
+                         config.queue_num, config.iter_num);
+    
     auto item_size = config.iter_num * sizeof(batch_write_item_t);
+    PTO_SDMA_DEBUG_PRINT("[flush_cache_and_ring_doorbell] item_size=%lu\n", item_size);
+    
     for (uint8_t queue_id = 0; queue_id < config.queue_num; queue_id++) {
         __gm__ batch_write_channel_info_t* channel_info = 
             batch_write_channel_info + queue_id;
+
+        PTO_SDMA_DEBUG_PRINT("[flush_cache_and_ring_doorbell] queue_id=%u, sq_base=0x%lx, sq_reg_base=0x%lx\n",
+                             queue_id, channel_info->sq_base, channel_info->sq_reg_base);
 
         // Flush entire data cache to ensure all SQEs are written to HBM
         AscendC::GlobalTensor<uint8_t> write_info;
@@ -373,10 +504,14 @@ PTO_INTERNAL void flush_cache_and_ring_doorbell(
         AscendC::DataCacheCleanAndInvalid<uint8_t, AscendC::CacheLine::ENTIRE_DATA_CACHE,
             AscendC::DcciDst::CACHELINE_OUT>(write_info);
 
+        PTO_SDMA_DEBUG_PRINT("[flush_cache_and_ring_doorbell] Cache flushed, ringing doorbell with sq_tail=%u\n",
+                             sq_tail[queue_id]);
+
         // Ring doorbell for each channel
         set_value<uint32_t>((__gm__ uint8_t*)(channel_info->sq_reg_base) + 8, 
                            tmp_buf, sq_tail[queue_id]); // 8: position of third uint32
     }
+    PTO_SDMA_DEBUG_PRINT("[flush_cache_and_ring_doorbell] Done\n");
 }
 
 // Poll for Completion
@@ -387,6 +522,8 @@ PTO_INTERNAL bool poll_for_completion(
     uint32_t* sq_tail,
     AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
 {
+    PTO_SDMA_DEBUG_PRINT("[poll_for_completion] Enter: queue_num=%u\n", config.queue_num);
+    
     const uint32_t max_times = 1000000;
     for (uint8_t queue_id = 0; queue_id < config.queue_num; queue_id++) {
         __gm__ batch_write_channel_info_t* channel_info = 
@@ -394,6 +531,9 @@ PTO_INTERNAL bool poll_for_completion(
 
         auto local_recv_workspace = layout.recv_workspace + queue_id * SDMA_FLAG_LENGTH;
         auto remote_recv_workspace = layout.remote_recv_workspace + queue_id * SDMA_FLAG_LENGTH;
+
+        PTO_SDMA_DEBUG_PRINT("[poll_for_completion] queue_id=%u, local_recv=%p, remote_recv=%p\n",
+                             queue_id, local_recv_workspace, remote_recv_workspace);
 
         uint32_t send_value = 0;
         uint32_t times = 0;
@@ -403,6 +543,20 @@ PTO_INTERNAL bool poll_for_completion(
             copy_gm_to_gm<uint32_t>(local_recv_workspace, remote_recv_workspace, 1, tmp_buf);
             send_value = get_value<uint32_t>(local_recv_workspace, tmp_buf);
             times++;
+            
+            // Print progress every 100000 iterations
+            if (times % 100000 == 0) {
+                PTO_SDMA_DEBUG_PRINT("[poll_for_completion] Polling queue_id=%u, times=%u\n",
+                                     queue_id, times);
+            }
+        }
+
+        if (times >= max_times) {
+            PTO_SDMA_DEBUG_PRINT("[poll_for_completion] WARNING: queue_id=%u timeout after %u iterations\n",
+                                 queue_id, times);
+        } else {
+            PTO_SDMA_DEBUG_PRINT("[poll_for_completion] queue_id=%u completed, times=%u, send_value=%u\n",
+                                 queue_id, times, send_value);
         }
 
         // Clean up status area data
@@ -413,35 +567,193 @@ PTO_INTERNAL bool poll_for_completion(
         set_value<uint32_t>(((__gm__ uint8_t*)channel_info) + 4, tmp_buf, sq_tail[queue_id]);
     }
 
+    PTO_SDMA_DEBUG_PRINT("[poll_for_completion] Done\n");
     return true;
 }
 
-// Main SDMA Post Send Function
-PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
-                                  __gm__ uint8_t* send_buffer,
-                                  uint64_t opcode,
-                                  uint64_t message_len)
+// Debug status codes for sdma_post_send
+enum class SdmaDebugStatus : uint32_t {
+    NOT_STARTED = 0,
+    DEVICE_STATE_NULL = 1,
+    CONTEXT_GM_NULL = 2,
+    FLAG_ADDR_NULL = 3,
+    UB_INIT_DONE = 10,
+    CONFIG_INIT_FAILED = 11,
+    CONFIG_ITER_ZERO = 12,
+    CONFIG_INIT_DONE = 20,
+    WORKSPACE_PREPARED = 30,
+    SQ_TAIL_INIT_DONE = 40,
+    DATA_SQES_SUBMITTED = 50,
+    FLAG_SQES_SUBMITTED = 60,
+    DOORBELL_RUNG = 70,
+    POLL_STARTED = 80,
+    POLL_COMPLETED = 90,
+    ALL_DONE = 100
+};
+
+// Helper: Write debug status to a debug buffer in GM
+// debug_buffer should be pre-allocated in the test kernel
+PTO_INTERNAL void write_debug_status(__gm__ uint32_t* debug_buffer, 
+                                     uint32_t block_idx,
+                                     SdmaDebugStatus status,
+                                     AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
 {
+    if (debug_buffer != nullptr) {
+        set_value<uint32_t>((__gm__ uint8_t*)(debug_buffer + block_idx), 
+                           tmp_buf, static_cast<uint32_t>(status));
+    }
+}
+
+// Main SDMA Post Send Function
+// debug_buffer: optional debug status buffer (pass nullptr to disable debug)
+PTO_INTERNAL void sdma_post_send_debug(__gm__ uint8_t* recv_buffer,
+                                        __gm__ uint8_t* send_buffer,
+                                        uint64_t opcode,
+                                        uint64_t message_len,
+                                        __gm__ uint32_t* debug_buffer)
+{
+    const auto block_idx = AscendC::GetBlockIdx();
+    
+    // Initialize temporary UB buffer early for debug writes
+    AscendC::TBuf<AscendC::TPosition::VECOUT> tmp_buf;
+    GetTPipePtr()->InitBuffer(tmp_buf, UB_ALIGN_SIZE * 2);
+    
     __gm__ detail::pto_comm_global_state_t* device_state = detail::pto_comm_get_state();
     if (device_state == nullptr) {
+        write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::DEVICE_STATE_NULL, tmp_buf);
         return;
     }
 
     __gm__ uint8_t* context_gm = reinterpret_cast<__gm__ uint8_t*>(
         device_state->sdma_workspace_addr);
     if (context_gm == nullptr) {
+        write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::CONTEXT_GM_NULL, tmp_buf);
         return;
     }
 
     __gm__ uint8_t* flag_addr = reinterpret_cast<__gm__ uint8_t*>(
         device_state->sdma_flag_addr);
     if (flag_addr == nullptr) {
+        write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::FLAG_ADDR_NULL, tmp_buf);
         return;
     }
+
+    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::UB_INIT_DONE, tmp_buf);
+
+    // 2. Get current core info
+    const auto comm_block_dim = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
+
+    // 3. Initialize configuration parameters
+    sdma_config_t config;
+    if (!init_sdma_config(context_gm, message_len, block_idx, comm_block_dim, 
+                          config, tmp_buf)) {
+        write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::CONFIG_INIT_FAILED, tmp_buf);
+        AscendC::PipeBarrier<PIPE_ALL>();
+        return;
+    }
+    if (config.iter_num == 0) {
+        write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::CONFIG_ITER_ZERO, tmp_buf);
+        return; // No transfer task, exit directly
+    }
+    
+    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::CONFIG_INIT_DONE, tmp_buf);
+
+    // 4. Get channel info
+    __gm__ batch_write_channel_info_t* batch_write_channel_base =
+        (__gm__ batch_write_channel_info_t *)(context_gm + 
+                                               sizeof(batch_write_flag_info_t));
+    // Channel info for current block
+    __gm__ batch_write_channel_info_t* batch_write_channel_info = 
+        batch_write_channel_base + block_idx * config.queue_num;
+
+    // 5.1 Calculate workspace
+    __gm__ uint8_t* workspace = context_gm + 
+                                 sizeof(batch_write_flag_info_t) + 
+                                 SDMA_MAX_CHAN * sizeof(batch_write_channel_info_t);
+    
+    // 5.2 Prepare workspace
+    // TODO: Get my_pe from device state (currently using block_idx as placeholder)
+    uint32_t my_pe = block_idx;
+    workspace_layout_t workspace_layout;
+    prepare_workspace(workspace, flag_addr, config, workspace_layout, 
+                      block_idx, my_pe, tmp_buf);
+    
+    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::WORKSPACE_PREPARED, tmp_buf);
+
+    // 6. Initialize sq_tail array
+    uint32_t sq_tail[64] = {0};  // Assume max 64 queues
+    init_sq_tail_array(batch_write_channel_info, config.queue_num, sq_tail, tmp_buf);
+    
+    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::SQ_TAIL_INIT_DONE, tmp_buf);
+
+    // 8. Submit data transfer SQEs
+    submit_data_transfer_sqes(batch_write_channel_info, send_buffer, recv_buffer,
+                              static_cast<uint32_t>(opcode), config, sq_tail, tmp_buf);
+    
+    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::DATA_SQES_SUBMITTED, tmp_buf);
+
+    // 9. Submit flag transfer SQEs
+    submit_flag_transfer_sqes(batch_write_channel_info, workspace_layout, config, 
+                               sq_tail, tmp_buf);
+    
+    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::FLAG_SQES_SUBMITTED, tmp_buf);
+
+    // 10. Flush cache and ring doorbell
+    flush_cache_and_ring_doorbell(batch_write_channel_info, config, sq_tail, tmp_buf);
+    
+    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::DOORBELL_RUNG, tmp_buf);
+
+    // 11. Poll for completion
+    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::POLL_STARTED, tmp_buf);
+    
+    if (!poll_for_completion(batch_write_channel_info, workspace_layout, config, 
+                             sq_tail, tmp_buf)) {
+        // Transfer failed - status already indicates POLL_STARTED
+    }
+    
+    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::POLL_COMPLETED, tmp_buf);
+
+    AscendC::PipeBarrier<PIPE_ALL>();
+    
+    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::ALL_DONE, tmp_buf);
+}
+
+// Main SDMA Post Send Function (with optional debug prints)
+PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
+                                  __gm__ uint8_t* send_buffer,
+                                  uint64_t opcode,
+                                  uint64_t message_len)
+{
+    PTO_SDMA_DEBUG_PRINT("[SDMA] sdma_post_send called: recv=%p, send=%p, len=%lu\n", 
+                         recv_buffer, send_buffer, message_len);
+    
+    __gm__ detail::pto_comm_global_state_t* device_state = detail::pto_comm_get_state();
+    if (device_state == nullptr) {
+        PTO_SDMA_DEBUG_PRINT("[SDMA] ERROR: device_state is NULL!\n");
+        return;
+    }
+    PTO_SDMA_DEBUG_PRINT("[SDMA] device_state=%p\n", device_state);
+
+    __gm__ uint8_t* context_gm = reinterpret_cast<__gm__ uint8_t*>(
+        device_state->sdma_workspace_addr);
+    if (context_gm == nullptr) {
+        PTO_SDMA_DEBUG_PRINT("[SDMA] ERROR: context_gm (workspace_addr) is NULL!\n");
+        return;
+    }
+    PTO_SDMA_DEBUG_PRINT("[SDMA] context_gm=%p\n", context_gm);
+
+    __gm__ uint8_t* flag_addr = reinterpret_cast<__gm__ uint8_t*>(
+        device_state->sdma_flag_addr);
+    if (flag_addr == nullptr) {
+        PTO_SDMA_DEBUG_PRINT("[SDMA] ERROR: flag_addr is NULL!\n");
+        return;
+    }
+    PTO_SDMA_DEBUG_PRINT("[SDMA] flag_addr=%p\n", flag_addr);
 
     // 1. Initialize UB buffer
     AscendC::TBuf<AscendC::TPosition::VECOUT> tmp_buf;
     GetTPipePtr()->InitBuffer(tmp_buf, UB_ALIGN_SIZE * 2);
+    PTO_SDMA_DEBUG_PRINT("[SDMA] UB buffer initialized\n");
 
     // 2. Get current core info
     const auto block_idx = AscendC::GetBlockIdx();
@@ -508,17 +820,22 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
 template <typename T>
 PTO_INTERNAL void sdma_write(__gm__ T* dst, __gm__ T* src, uint64_t messageLen)
 {
+    PTO_SDMA_DEBUG_PRINT("[sdma_write] dst=%p, src=%p, messageLen=%lu\n", dst, src, messageLen);
     sdma_post_send((__gm__ uint8_t*)dst, (__gm__ uint8_t*)src, 0, messageLen);
+    PTO_SDMA_DEBUG_PRINT("[sdma_write] Done\n");
 }
 
 // Get Remote PE Address
 PTO_INTERNAL __gm__ void* sdma_ptr(__gm__ void *ptr, int pe)
 {
+    PTO_SDMA_DEBUG_PRINT("[sdma_ptr] ptr=%p, pe=%d\n", ptr, pe);
     __gm__ detail::pto_comm_global_state_t* device_state = detail::pto_comm_get_state();
     if (device_state == nullptr) {
+        PTO_SDMA_DEBUG_PRINT("[sdma_ptr] ERROR: device_state is NULL\n");
         return nullptr;
     }
     // TODO: Implement address translation
+    PTO_SDMA_DEBUG_PRINT("[sdma_ptr] Returning ptr=%p (no translation)\n", ptr);
     return ptr;
 }
 
@@ -527,7 +844,9 @@ PTO_INTERNAL __gm__ void* sdma_ptr(__gm__ void *ptr, int pe)
 template <typename T>
 PTO_INTERNAL void put(__gm__ T* dst, __gm__ T* src, uint64_t transfer_size)
 {
+    PTO_SDMA_DEBUG_PRINT("[put] dst=%p, src=%p, transfer_size=%lu\n", dst, src, transfer_size);
     sdma_write((__gm__ uint8_t*)dst, (__gm__ uint8_t*)src, transfer_size);
+    PTO_SDMA_DEBUG_PRINT("[put] Done\n");
 }
 
 // GET: Device-side get implementation
@@ -537,9 +856,11 @@ PTO_INTERNAL void put(__gm__ T* dst, __gm__ T* src, uint64_t transfer_size)
 template <typename T>
 PTO_INTERNAL void get(__gm__ T* dst, __gm__ T* src, uint64_t transfer_size)
 {
+    PTO_SDMA_DEBUG_PRINT("[get] dst=%p, src=%p, transfer_size=%lu\n", dst, src, transfer_size);
     // For GET, we read from remote (src) to local (dst)
     // The underlying SDMA operation is the same as PUT, just with different semantics
     sdma_write((__gm__ uint8_t*)dst, (__gm__ uint8_t*)src, transfer_size);
+    PTO_SDMA_DEBUG_PRINT("[get] Done\n");
 }
 
 } // namespace detail

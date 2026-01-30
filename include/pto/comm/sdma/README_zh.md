@@ -237,6 +237,501 @@ PTO_INTERNAL SdmaEvent TGET_SDMA_IMPL(GlobalDstData &dstGlobal, GlobalSrcData &s
 | `put()` | 公共 put 接口（在 detail 命名空间下） |
 | `get()` | 公共 get 接口（在 detail 命名空间下） |
 
+---
+
+## `sdma_post_send` 函数实现详解
+
+本节详细说明 `sdma_post_send` 函数及其调用的子函数实现逻辑。
+
+### 调用层次结构
+
+```
+TPUT_SDMA (TPut_sdma.hpp)
+    └── sdma::SDMA::put (sdma.hpp)
+            └── detail::put (sdma_device_impl.hpp)
+                    └── sdma_write
+                            └── sdma_post_send  ← 核心实现
+                                    ├── init_sdma_config
+                                    ├── prepare_workspace
+                                    ├── init_sq_tail_array
+                                    ├── submit_data_transfer_sqes
+                                    │       └── add_one_memcpy_sqe
+                                    ├── submit_flag_transfer_sqes
+                                    │       └── add_one_memcpy_sqe
+                                    ├── flush_cache_and_ring_doorbell
+                                    └── poll_for_completion
+```
+
+### 核心数据结构
+
+#### 1. 全局状态结构 `pto_comm_global_state_t`
+
+```cpp
+struct pto_comm_global_state_t {
+    uint64_t sdma_workspace_addr;    // SDMA 工作空间地址
+    uint64_t sdma_flag_addr;         // SDMA 同步标志地址
+    uint64_t sdma_op_res_info_addr;  // SDMA 操作资源信息地址
+};
+```
+
+#### 2. SDMA 配置结构 `sdma_config_t`
+
+```cpp
+struct sdma_config_t {
+    uint32_t queue_num;           // 每个 core 使用的队列数（默认 1）
+    uint64_t block_bytes;         // 每个 SQE 传输的数据块大小（1MB）
+    uint64_t per_core_bytes;      // 当前 core 需传输的总字节数
+    uint64_t comm_block_offset;   // 当前 core 在数据中的起始偏移
+    uint32_t iter_num;            // 需要提交的 SQE 数量
+};
+```
+
+#### 3. 工作空间布局 `workspace_layout_t`
+
+```cpp
+struct workspace_layout_t {
+    __gm__ uint8_t* send_workspace;        // 本地发送标志区
+    __gm__ uint8_t* recv_workspace;        // 本地接收标志区
+    __gm__ uint8_t* remote_recv_workspace; // 远程接收标志区
+};
+```
+
+#### 4. 通道信息 `batch_write_channel_info_t`
+
+```cpp
+struct batch_write_channel_info_t {
+    uint32_t sq_head;      // SQ 头指针
+    uint32_t sq_tail;      // SQ 尾指针
+    uint32_t sq_depth;     // SQ 深度
+    uint64_t sq_base;      // SQ 基地址
+    uint64_t sq_reg_base;  // SQ 寄存器基地址（门铃）
+    uint32_t stream_id;    // 流 ID
+    // ...
+};
+```
+
+### `sdma_post_send` 主函数流程
+
+```cpp
+void sdma_post_send(__gm__ uint8_t* recv_buffer,
+                    __gm__ uint8_t* send_buffer,
+                    uint64_t opcode,
+                    uint64_t message_len)
+```
+
+#### 执行流程图
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          sdma_post_send                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Step 1: 获取全局状态                                                    │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  device_state = pto_comm_get_state()                            │   │
+│  │  context_gm   = device_state->sdma_workspace_addr               │   │
+│  │  flag_addr    = device_state->sdma_flag_addr                    │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                               ↓                                         │
+│  Step 2: 初始化 UB 临时缓冲区                                            │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  tmp_buf.InitBuffer(UB_ALIGN_SIZE * 2)                          │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                               ↓                                         │
+│  Step 3: 获取当前 core 信息                                              │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  block_idx = GetBlockIdx()                                      │   │
+│  │  comm_block_dim = GetBlockNum() * GetSubBlockNum()              │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                               ↓                                         │
+│  Step 4: 初始化 SDMA 配置 → init_sdma_config()                          │
+│                               ↓                                         │
+│  Step 5: 准备工作空间 → prepare_workspace()                             │
+│                               ↓                                         │
+│  Step 6: 初始化 SQ 尾指针数组 → init_sq_tail_array()                    │
+│                               ↓                                         │
+│  Step 7: 提交数据传输 SQE → submit_data_transfer_sqes()                 │
+│                               ↓                                         │
+│  Step 8: 提交标志传输 SQE → submit_flag_transfer_sqes()                 │
+│                               ↓                                         │
+│  Step 9: 刷缓存并敲门铃 → flush_cache_and_ring_doorbell()               │
+│                               ↓                                         │
+│  Step 10: 轮询等待完成 → poll_for_completion()                          │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 各子函数详解
+
+#### 1. `init_sdma_config` - 初始化 SDMA 配置
+
+**功能**：根据消息长度和 core 数量，计算每个 core 的传输任务分配。
+
+```cpp
+bool init_sdma_config(__gm__ uint8_t* context_gm,
+                      uint64_t message_len,
+                      uint32_t block_idx,
+                      uint32_t comm_block_dim,
+                      sdma_config_t& config,
+                      TBuf& tmp_buf)
+```
+
+**计算逻辑**：
+
+```
+输入: message_len = 10MB, comm_block_dim = 4 (4个core)
+
+1. 基本分配:
+   per_core_bytes = 10MB / 4 = 2.5MB
+
+2. 余数处理 (如果 message_len % comm_block_dim != 0):
+   前 extra_bytes 个 core 各多传 1 字节
+
+3. SQE 数量计算:
+   block_bytes = 1MB (每个 SQE 最大传输量)
+   iter_num = ceil(per_core_bytes / block_bytes) = ceil(2.5) = 3
+
+4. 偏移计算:
+   block_idx=0: offset = 0
+   block_idx=1: offset = 2.5MB
+   block_idx=2: offset = 5MB
+   block_idx=3: offset = 7.5MB
+```
+
+**数据分片示意图**：
+
+```
+message_len = 10MB, 4 cores
+
+Core 0: [0MB ─────── 2.5MB]     iter_num=3: [0-1MB][1-2MB][2-2.5MB]
+Core 1: [2.5MB ───── 5MB]       iter_num=3: [2.5-3.5MB][3.5-4.5MB][4.5-5MB]
+Core 2: [5MB ─────── 7.5MB]     iter_num=3: [5-6MB][6-7MB][7-7.5MB]
+Core 3: [7.5MB ───── 10MB]      iter_num=3: [7.5-8.5MB][8.5-9.5MB][9.5-10MB]
+```
+
+---
+
+#### 2. `prepare_workspace` - 准备工作空间
+
+**功能**：为每个 core 分配同步标志的发送/接收区域。
+
+```cpp
+void prepare_workspace(__gm__ uint8_t* workspace,
+                       __gm__ uint8_t* flag_addr,
+                       const sdma_config_t& config,
+                       workspace_layout_t& layout,
+                       uint32_t block_idx,
+                       uint32_t my_pe,
+                       TBuf& tmp_buf)
+```
+
+**工作空间布局**：
+
+```
+workspace (context_gm + header_size):
+┌──────────────────────────────────────────────────────────────┐
+│  send_workspace (8B)  │  Core 0 recv │  Core 1 recv │  ...  │
+│    (公共发送标志)      │   (8B)       │   (8B)       │       │
+└──────────────────────────────────────────────────────────────┘
+                        ↑
+                        └── 每个 core 的接收标志区
+
+flag_addr (远程标志区):
+┌──────────────────────────────────────────────────────────────┐
+│  PE 0 flags  │  PE 1 flags  │  PE 2 flags  │  ...           │
+│  (40*8B)     │  (40*8B)     │  (40*8B)     │                 │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**初始化操作**：
+- 设置 `send_workspace` 值为 `queue_num`（作为完成标志）
+
+---
+
+#### 3. `init_sq_tail_array` - 初始化 SQ 尾指针
+
+**功能**：从通道信息中读取当前的 SQ tail 值。
+
+```cpp
+void init_sq_tail_array(__gm__ batch_write_channel_info_t* channel_info,
+                        uint32_t queue_num,
+                        uint32_t* sq_tail,
+                        TBuf& tmp_buf)
+```
+
+**操作**：
+- 遍历每个队列，读取 `channel_info->sq_tail` 到本地数组
+- 后续 SQE 提交时基于此值递增
+
+---
+
+#### 4. `add_one_memcpy_sqe` - 构建单个 SDMA SQE
+
+**功能**：在 SQ 中构建一个 SDMA 内存拷贝描述符。
+
+```cpp
+void add_one_memcpy_sqe(__gm__ batch_write_channel_info_t* channel_info,
+                        __gm__ uint8_t* src,
+                        __gm__ uint8_t* dst,
+                        uint64_t opcode,
+                        uint32_t length,
+                        uint32_t sq_tail,
+                        uint32_t task_id)
+```
+
+**SQE 结构填充**：
+
+```
+batch_write_item_t (SDMA SQE):
+┌────────────────────────────────────────────────────────────┐
+│  type        = RT_STARS_SQE_TYPE_SDMA                      │
+│  blockDim    = 0                                           │
+│  rtStreamId  = channel_info->stream_id                     │
+│  taskId      = task_id (用于跟踪)                          │
+│  opcode      = 0 (memcpy)                                  │
+│  length      = 传输字节数                                   │
+│  srcAddrLow  = src 地址低 32 位                             │
+│  srcAddrHigh = src 地址高 32 位                             │
+│  dstAddrLow  = dst 地址低 32 位                             │
+│  dstAddrHigh = dst 地址高 32 位                             │
+│  sssv/dssv   = 1 (地址有效)                                 │
+│  sns/dns     = 1 (非安全)                                   │
+│  qos         = 6 (服务质量)                                 │
+│  linkType    = 255 (无链接)                                 │
+└────────────────────────────────────────────────────────────┘
+```
+
+**SQ 环形缓冲区**：
+
+```
+SQ (Submission Queue):
+┌─────┬─────┬─────┬─────┬─────┬─────┬─────┬─────┐
+│ SQE │ SQE │ SQE │     │     │     │     │     │
+│  0  │  1  │  2  │     │     │     │     │     │
+└─────┴─────┴─────┴─────┴─────┴─────┴─────┴─────┘
+  ↑                       ↑
+  head                   tail (新 SQE 写入位置)
+
+位置计算: sqe_idx = sq_tail % sq_depth
+```
+
+---
+
+#### 5. `submit_data_transfer_sqes` - 提交数据传输 SQE
+
+**功能**：为当前 core 的数据传输任务提交所有 SQE。
+
+```cpp
+void submit_data_transfer_sqes(
+    __gm__ batch_write_channel_info_t* channel_info,
+    __gm__ uint8_t* send_buffer,
+    __gm__ uint8_t* recv_buffer,
+    uint32_t opcode,
+    const sdma_config_t& config,
+    uint32_t* sq_tail,
+    TBuf& tmp_buf)
+```
+
+**执行逻辑**：
+
+```
+for idx in 0..iter_num:
+    queue_idx = idx % queue_num  // 轮询使用多个队列
+    
+    // 计算本次传输大小
+    if idx == iter_num - 1:
+        transfer_bytes = per_core_bytes - idx * block_bytes  // 最后一块可能不足 1MB
+    else:
+        transfer_bytes = block_bytes  // 1MB
+    
+    // 计算源/目标地址
+    src_addr = send_buffer + comm_block_offset + idx * block_bytes
+    dst_addr = recv_buffer + comm_block_offset + idx * block_bytes
+    
+    // 提交 SQE
+    add_one_memcpy_sqe(channel_info, src_addr, dst_addr, ...)
+    sq_tail[queue_idx]++
+```
+
+**示意图**：
+
+```
+Core 0 提交 3 个 SQE:
+
+SQE 0: send[0MB-1MB]    → recv[0MB-1MB]
+SQE 1: send[1MB-2MB]    → recv[1MB-2MB]
+SQE 2: send[2MB-2.5MB]  → recv[2MB-2.5MB]  (最后一块)
+```
+
+---
+
+#### 6. `submit_flag_transfer_sqes` - 提交标志传输 SQE
+
+**功能**：提交同步标志的传输 SQE，用于通知远端数据传输完成。
+
+```cpp
+void submit_flag_transfer_sqes(
+    __gm__ batch_write_channel_info_t* channel_info,
+    const workspace_layout_t& layout,
+    const sdma_config_t& config,
+    uint32_t* sq_tail,
+    TBuf& tmp_buf)
+```
+
+**执行逻辑**：
+- 将本地 `send_workspace` 的标志值传输到远端 `remote_recv_workspace`
+- 标志值非零表示传输完成
+
+```
+send_workspace (本地)  ──SDMA──>  remote_recv_workspace (远端)
+     [queue_num]                      [queue_num]
+```
+
+---
+
+#### 7. `flush_cache_and_ring_doorbell` - 刷缓存并敲门铃
+
+**功能**：确保 SQE 写入 HBM，然后通知硬件开始处理。
+
+```cpp
+void flush_cache_and_ring_doorbell(
+    __gm__ batch_write_channel_info_t* channel_info,
+    const sdma_config_t& config,
+    uint32_t* sq_tail,
+    TBuf& tmp_buf)
+```
+
+**执行步骤**：
+
+```
+1. 刷新数据缓存 (DCCI)
+   ┌─────────────────────────────────────────────┐
+   │  DataCacheCleanAndInvalid(sq_base, size)   │
+   │  确保所有 SQE 从 cache 写入 HBM             │
+   └─────────────────────────────────────────────┘
+                        ↓
+2. 敲门铃 (Ring Doorbell)
+   ┌─────────────────────────────────────────────┐
+   │  写入 sq_reg_base + 8 = sq_tail            │
+   │  通知硬件有新的 SQE 待处理                  │
+   └─────────────────────────────────────────────┘
+```
+
+**门铃寄存器布局**：
+
+```
+sq_reg_base:
+┌──────────┬──────────┬──────────┬──────────┐
+│  reg[0]  │  reg[1]  │  reg[2]  │  ...     │
+│  (4B)    │  (4B)    │  tail    │          │
+└──────────┴──────────┴──────────┴──────────┘
+                       ↑
+                       offset = 8 (第三个 uint32)
+```
+
+---
+
+#### 8. `poll_for_completion` - 轮询等待完成
+
+**功能**：等待远端发送的完成标志。
+
+```cpp
+bool poll_for_completion(
+    __gm__ batch_write_channel_info_t* channel_info,
+    const workspace_layout_t& layout,
+    const sdma_config_t& config,
+    uint32_t* sq_tail,
+    TBuf& tmp_buf)
+```
+
+**执行逻辑**：
+
+```
+for each queue:
+    times = 0
+    while send_value == 0 && times < max_times:
+        // 从远端拷贝标志到本地
+        copy_gm_to_gm(local_recv, remote_recv, 1)
+        send_value = get_value(local_recv)
+        times++
+    
+    // 清理标志区
+    set_value(remote_recv, 0)
+    set_value(local_recv, 0)
+    
+    // 更新通道 tail 值
+    set_value(channel_info->sq_tail, sq_tail[queue])
+```
+
+**完成检测机制**：
+
+```
+发送端                              接收端
+────────                           ────────
+1. 提交数据 SQE                    
+2. 提交标志 SQE ─────────────────> 标志区被写入非零值
+3. 敲门铃                          
+4. 轮询等待... <───────────────── 检测到标志非零，传输完成
+```
+
+---
+
+### 完整数据流时序图
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             SDMA 传输时序                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  AI Core                    SDMA Engine                     Remote PE       │
+│  ────────                   ───────────                     ─────────       │
+│     │                           │                               │           │
+│     │  1. 初始化配置            │                               │           │
+│     │─────────────────>         │                               │           │
+│     │                           │                               │           │
+│     │  2. 写入数据 SQE          │                               │           │
+│     │─────────────────>         │                               │           │
+│     │                           │                               │           │
+│     │  3. 写入标志 SQE          │                               │           │
+│     │─────────────────>         │                               │           │
+│     │                           │                               │           │
+│     │  4. DCCI 刷缓存           │                               │           │
+│     │─────────────────>         │                               │           │
+│     │                           │                               │           │
+│     │  5. 敲门铃                │                               │           │
+│     │─────────────────>         │                               │           │
+│     │                           │  6. 执行数据 DMA              │           │
+│     │                           │──────────────────────────────>│           │
+│     │                           │                               │           │
+│     │                           │  7. 执行标志 DMA              │           │
+│     │                           │──────────────────────────────>│           │
+│     │                           │                               │           │
+│     │  8. 轮询标志区            │                               │           │
+│     │<─ ─ ─ ─ ─ ─ ─ ─ ─         │                               │           │
+│     │     (等待非零)            │                               │           │
+│     │                           │                               │           │
+│     │  9. 检测到完成            │                               │           │
+│     │<──────────────────────────│───────────────────────────────│           │
+│     │                           │                               │           │
+│     │  10. 清理标志，更新 tail  │                               │           │
+│     │─────────────────>         │                               │           │
+│     │                           │                               │           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 辅助函数说明
+
+| 函数 | 功能 |
+|------|------|
+| `dcci_cacheline(addr)` | 无效化单个 cache line |
+| `copy_gm_to_gm<T>(dst, src, size, buf)` | GM 到 GM 拷贝（经 UB 中转） |
+| `set_value<T>(addr, buf, value)` | 写入单个值到 GM |
+| `get_value<T>(addr, buf)` | 从 GM 读取单个值 |
+| `pto_comm_get_state()` | 获取全局通信状态指针 |
+| `pto_comm_select_sdma_channel(idx)` | 选择 SDMA 通道（轮询） |
+
 ## 重要注意事项
 
 1. **Host/Device 分离**：

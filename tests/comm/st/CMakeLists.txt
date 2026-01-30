@@ -63,7 +63,7 @@ add_compile_options(
     -Wno-macro-redefined -Wno-ignored-attributes
     -fstack-protector-strong
 )
-add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+# add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 add_link_options(
     -s
     -Wl,-z,relro
