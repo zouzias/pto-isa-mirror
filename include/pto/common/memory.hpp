@@ -31,6 +31,8 @@ enum class TileType {
 enum class BLayout {
   RowMajor = 0,
   ColMajor = 1,
+  PackedA = 2,
+  PackedB = 3,
 };
 
 enum class SLayout {

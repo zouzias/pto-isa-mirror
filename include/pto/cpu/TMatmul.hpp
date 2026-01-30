@@ -7,6 +7,9 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+#if defined (__aarch64__)
+#include "pto/cpu/aarch64/TMatmul.hpp"
+#else
 
 #ifndef TMATMUL_HPP
 #define TMATMUL_HPP
@@ -73,7 +76,7 @@ namespace pto {
             "Non-conforming bias fractal");
     }
 
-    template <typename TileAcc, typename TileLeft, typename TileRight>
+    template <AccPhase Phase = AccPhase::Unspecified, typename TileAcc, typename TileLeft, typename TileRight>
     PTO_INTERNAL void TMATMUL_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
     {
         CheckMadValid<TileAcc, TileLeft, TileRight>();
@@ -85,7 +88,7 @@ namespace pto {
         TMatmulNzZn<TileAcc, TileLeft, TileRight>(cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), m, n, k);
     }
 
-    template <typename TileAcc, typename TileLeft, typename TileRight>
+    template <AccPhase Phase = AccPhase::Unspecified, typename TileAcc, typename TileLeft, typename TileRight>
     PTO_INTERNAL void TMATMUL_ACC_IMPL(TileAcc &cOutMatrix, TileAcc &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix)
     {
         CheckMadValid<TileAcc, TileLeft, TileRight>();
@@ -97,7 +100,7 @@ namespace pto {
         TMatmulNzZn<TileAcc, TileLeft, TileRight>(cOutMatrix.data(), cInMatrix.data(), aMatrix.data(), bMatrix.data(), m, n, k);
     }
 
-    template <typename TileAcc, typename TileLeft, typename TileRight, typename TileBias>
+    template <AccPhase Phase = AccPhase::Unspecified, typename TileAcc, typename TileLeft, typename TileRight, typename TileBias>
     PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasMatrix)
     {
         CheckMadValid<TileAcc, TileLeft, TileRight>();
@@ -117,4 +120,5 @@ namespace pto {
         }
     }
 }
+#endif
 #endif

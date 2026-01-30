@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TILE_OFFSETS_HPP
 
 #include <unistd.h>
+#include "pto/common/constants.hpp"
 namespace pto {
     template <typename TileData>
     using TypeSum = std::conditional_t<std::is_same_v<typename TileData::DType, half>, float, typename TileData::DType>;
@@ -46,7 +47,22 @@ namespace pto {
 
     template <typename TileData>
     size_t GetTileElementOffset(size_t r, size_t c) {
-        if constexpr (TileData::SFractal == SLayout::NoneBox)
+        if constexpr (TileData::BFractal == BLayout::PackedA || TileData::BFractal == BLayout::PackedB) {
+            if constexpr (TileData::BFractal == BLayout::PackedA) {
+                size_t k = TileData::Cols;
+                size_t mb = r / PACKED_ROW;
+                size_t mi = r % PACKED_ROW;
+                return mb * k * PACKED_ROW + c * PACKED_ROW + mi;
+            } else if constexpr (TileData::BFractal == BLayout::PackedB) {
+                size_t k = TileData::Rows;
+                size_t nb = c / PACKED_COL;
+                size_t ni = c % PACKED_COL;
+                return nb * k * PACKED_COL + r * PACKED_COL + ni;
+            } else {
+                return 0;
+            }
+        }
+        else if constexpr (TileData::SFractal == SLayout::NoneBox)
             return GetTileElementOffsetPlain<TileData>(r,c);
         else {
             size_t subTileR = r / TileData::InnerRows;

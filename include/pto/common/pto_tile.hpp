@@ -36,6 +36,8 @@ enum class Layout {
     NHWC,
     FRACTAL_Z,
     FRACTAL_Z_S16S8,
+    AARCH64_PACKED_A,
+    AARCH64_PACKED_B,
     MAX,
 };
 namespace GlobalTensorDim {
@@ -722,6 +724,63 @@ struct TileShape2D<T, rows, cols, Layout::MX_B_DN>
     using Parent::Parent;
 };
 
+template <typename T, int rows, int cols>
+struct BaseShape2D<T, rows, cols, Layout::AARCH64_PACKED_A>
+    : public Stride<GetBaseShape2DStride0<T, rows, cols>(),
+        cols == DYNAMIC ? DYNAMIC : cols * PACKED_ROW,
+        PACKED_ROW, 1, 1> {
+            using Parent = Stride<GetBaseShape2DStride0<T, rows, cols>(),
+            cols == DYNAMIC ? DYNAMIC : cols * PACKED_ROW,
+            PACKED_ROW, 1, 1>;
+
+            PTO_INTERNAL BaseShape2D():Parent() {}
+            PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+                : Parent(dynamicRows * dynamicCols, dynamicCols * PACKED_ROW, PACKED_ROW, 1, 1) {}
+            using Parent::Parent;
+};
+
+template <typename T, int rows, int cols>
+struct TileShape2D<T, rows, cols, Layout::AARCH64_PACKED_A>
+    : public Stride<1, rows == DYNAMIC ? DYNAMIC : (rows + PACKED_ROW -1) / PACKED_ROW, cols, PACKED_ROW, 1> {
+            using Parent = Stride<1, rows == DYNAMIC ? DYNAMIC : (rows + PACKED_ROW -1) / PACKED_ROW, cols, PACKED_ROW, 1>;
+
+            static constexpr int C0Size = PACKED_ROW;
+
+            PTO_INTERNAL TileShape2D():Parent() {}
+            PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols)
+                : Parent(1, (dynamicRows + PACKED_ROW - 1) / PACKED_ROW, dynamicCols, PACKED_ROW, 1) {}
+            using Parent::Parent;
+};
+
+template <typename T, int rows, int cols>
+struct BaseShape2D<T, rows, cols, Layout::AARCH64_PACKED_B>
+    : public Stride<GetBaseShape2DStride0<T, rows, cols>(),
+        cols == DYNAMIC ? DYNAMIC : cols * PACKED_COL,
+        PACKED_COL, 1, 1> {
+            using Parent = Stride<GetBaseShape2DStride0<T, rows, cols>(),
+            cols == DYNAMIC ? DYNAMIC : cols * PACKED_COL,
+            PACKED_COL, 1, 1>;
+
+            PTO_INTERNAL BaseShape2D():Parent() {}
+            PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+                : Parent(dynamicRows * dynamicCols, dynamicRows * PACKED_COL, PACKED_COL, 1, 1) {}
+            using Parent::Parent;
+};
+
+template <typename T, int rows, int cols>
+struct TileShape2D<T, rows, cols, Layout::AARCH64_PACKED_B>
+    : public Stride<1, rows == DYNAMIC ? DYNAMIC : (rows + PACKED_COL -1) / PACKED_COL, cols, PACKED_COL, 1> {
+            using Parent = Stride<1, rows == DYNAMIC ? DYNAMIC : (rows + PACKED_COL -1) / PACKED_COL, cols, PACKED_COL, 1>;
+
+            static constexpr int C0Size = PACKED_COL;
+
+            PTO_INTERNAL TileShape2D():Parent() {}
+            PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols)
+                : Parent(1, (dynamicCols + PACKED_COL - 1) / PACKED_COL, dynamicRows, PACKED_COL, 1) {}
+            using Parent::Parent;
+};
+
+
 namespace TileConfig {
 static constexpr int alignedSize = 32;
 static constexpr int fixedRowSize = 16;
@@ -1040,6 +1099,8 @@ struct Tile {
     static_assert(
         (BFractal_ == BLayout::RowMajor && SFractal_ == SLayout::NoneBox && Cols * sizeof(DType) % TileConfig::alignedSize == 0) ||
         (BFractal_ == BLayout::ColMajor && SFractal_ == SLayout::NoneBox && Rows * sizeof(DType) % TileConfig::alignedSize == 0) ||
+        (BFractal_ == BLayout::PackedA && SFractal_ == SLayout::NoneBox) ||
+        (BFractal_ == BLayout::PackedB && SFractal_ == SLayout::NoneBox) ||
         (SFractal_ != SLayout::NoneBox) &&
         (((Loc == TileType::Vec) || (SFractalSize_ == TileConfig::fractalMxSize) || 
             (Rows_ == 1) || (Rows % InnerRows == 0)) && Cols % InnerCols == 0),
@@ -1119,11 +1180,19 @@ using TileLeftCompact =
 #endif
 
 #if defined (REGISTER_BASE) || defined (__CPU_SIM)
+#if defined (__aarch64__)
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using TileLeft =
+    Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::PackedA, RowValid_,
+         ColValid_, SLayout::NoneBox, TileConfig::fractalABSize>;
+#else
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft =
     Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_,
          ColValid_, SLayout::RowMajor, TileConfig::fractalABSize>;
+#endif
 
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
@@ -1132,11 +1201,19 @@ using TileLeftCompact =
          ColValid_, SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
 #endif
 
+#if defined (__aarch64__)
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using TileRight =
+  Tile<TileType::Right, Element_, Rows_, Cols_, BLayout::PackedB, RowValid_,
+       ColValid_, SLayout::NoneBox, TileConfig::fractalABSize>;
+#else
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileRight =
   Tile<TileType::Right, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_,
        ColValid_, SLayout::ColMajor, TileConfig::fractalABSize>;
+#endif
 
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
@@ -1168,11 +1245,19 @@ using TileRightScaleCompact =
   Tile<TileType::ScaleRight, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_,
        ColValid_, SLayout::ColMajor, TileConfig::fractalMxSize, PadValue::Null, CompactMode::Normal>;
 
+#if defined (__aarch64__)
+template <typename Element_, const int Rows_, const int Cols_,
+          const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+using TileAcc =
+    Tile<TileType::Acc, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_,
+         ColValid_, SLayout::NoneBox, TileConfig::fractalCSize>;
+#else
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileAcc =
     Tile<TileType::Acc, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_,
          ColValid_, SLayout::RowMajor, TileConfig::fractalCSize>;
+#endif
 
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>

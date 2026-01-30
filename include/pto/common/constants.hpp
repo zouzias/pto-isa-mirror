@@ -29,6 +29,8 @@ constexpr const int BLOCK_LEN = 16;
 constexpr const int CUBE_BLOCK_SIZE = 512;
 constexpr const int C0_SIZE_BYTE = 32;
 constexpr const int FRACTAL_NZ_ROW = 16;
+constexpr const int PACKED_ROW = 32;
+constexpr const int PACKED_COL = 32;
 constexpr const int ACC_C0_SIZE = 16;
 constexpr const uint32_t B4_C0_SIZE = 64;
 

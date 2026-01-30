@@ -80,6 +80,23 @@ if (CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
     add_compile_options(-O2)
 endif()
 
+if (ARCH STREQUAL "aarch64")
+    include(CheckCXXCompilerFlag)
+    set(SME_FLAGS "-march=armv9-a+sve+sme")
+    set(CMAKE_REQUIRED_LINK_OPTIONS "${SME_FLAGS}" "--rtlib=compiler-rt" "-lgcc_s")
+    check_cxx_compiler_flag("${SME_FLAGS}" HAS_SME_SUPPORT)
+    unset(CMAKE_REQUIRED_LINK_OPTIONS)
+
+    if (HAS_SME_SUPPORT)
+	message(STATUS "SME Support: Enabled")
+	add_compile_options(${SME_FLAGS})
+	add_link_options(${SME_FLAGS} --rtlib=compiler-rt -lgcc_s)
+    else()
+	message(STATUS "SME Support: Disabled")
+	add_compile_options(-march=armv9-a+sve)
+    endif()
+endif()
+
 # add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 if (UNIX AND NOT APPLE)
     add_link_options(

@@ -10,8 +10,14 @@
 
 function(pto_cpu_sim_st NAME)
     set(FILES_LIST main.cpp)
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${NAME}_kernel.cpp)
-        list(APPEND FILES_LIST ${NAME}_kernel.cpp)
+    set(KERNEL_SRC ${NAME}_kernel.cpp)
+
+    if(ARCH STREQUAL "aarch64" AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/aarch64/${NAME}_kernel.cpp)
+	set(KERNEL_SRC aarch64/${NAME}_kernel.cpp)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${KERNEL_SRC})
+	    list(APPEND FILES_LIST ${KERNEL_SRC})
     endif()
     add_executable(${NAME} ${FILES_LIST})
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS} -std=c++23)

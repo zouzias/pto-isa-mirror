@@ -27,7 +27,11 @@ template <typename outType, typename AType, typename BType, typename BiasType, i
     bool isBias>
 __global__ AICORE void RunTMATMUL(__gm__ outType *out, __gm__ AType *src0, __gm__ BType *src1, __gm__ BiasType *src2)
 {
+#if defined(__aarch64__)
+    constexpr int blockAlign = pto::PACKED_ROW;
+#else
     constexpr int blockAlign = (sizeof(AType) == 1) ? 32 : 16;
+#endif
     constexpr int M = CeilAlign<int>(validM, blockAlign);
     constexpr int N = CeilAlign<int>(validN, blockAlign);
     constexpr int K = CeilAlign<int>(validK, blockAlign);

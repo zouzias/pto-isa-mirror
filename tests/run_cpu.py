@@ -139,6 +139,12 @@ def get_compiler_major_version(compiler_path: str) -> int:
             logging.warning("Failed to run --version on: %s", compiler_path)
             return 0
 
+        match = re.search(r'clang version\s+(\d+)\.', result.stdout)
+        if match:
+            version = int(match.group(1))
+            logging.debug("Parsed version for %s: %d", compiler_path, version)
+            return version
+        
         match = re.search(r'(\d+)\.', result.stdout)
         if match:
             version = int(match.group(1))
@@ -463,6 +469,7 @@ def parse_arguments():
     parser.add_argument("--demo-only", action="store_true", help="Same as --demo (demo runs without CPU ST).")
     parser.add_argument("--generator", default=None, help="CMake generator(Windows required: 'MinGW Makefiles' etc..)")
     parser.add_argument("--cmake_prefix_path", default=None, help="-DCMAKE_PREFIX_PATH=<path> e.g. D:\\gtest")
+    parser.add_argument("--arch", default="cpu", help="Target Architecture (e.g. cpu, aarch64). Default: cpu")
     args = parser.parse_args()
     return args
 
@@ -475,6 +482,7 @@ def setup_environment(args) -> None:
 
 def log_build_info(args, cxx, cc) -> None:
     logging.info(f"[INFO] build_type={args.build_type}")
+    logging.info(f"[INFO] arch={args.arch}")
     if cxx:
         logging.info(f"[INFO] cxx={cxx}")
     if cc:
@@ -552,7 +560,10 @@ def parse_expected_testcases(source_dir: Path) -> Optional[set[str]]:
 def determine_need_build(args, source_dir: Path, build_dir: Path) -> bool:
     binaries_before = find_binaries(build_dir, args.build_type) if build_dir.exists() else {}
     configured_testcase = read_cmake_cache_var(build_dir, "TEST_CASE") if build_dir.exists() else None
+    configured_arch = read_cmake_cache_var(build_dir, "ARCH") if build_dir.exists() else None
     config_mismatch = False
+    if configured_arch != args.arch:
+        config_mismatch = True
     if args.testcase:
         if configured_testcase != args.testcase:
             config_mismatch = True
@@ -601,6 +612,7 @@ def perform_build(args, source_dir, build_dir, cxx, cc) -> bool:
             "-B",
             str(build_dir),
             f"-DCMAKE_BUILD_TYPE={args.build_type}",
+            f"-DARCH={args.arch}",
             *([f"-DTEST_CASE={args.testcase}"] if args.testcase else []),
             *([f"-DCMAKE_C_COMPILER={cc}"] if cc else []),
             *([f"-DCMAKE_CXX_COMPILER={cxx}"] if cxx else []),

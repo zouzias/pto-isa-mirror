@@ -142,7 +142,11 @@ namespace pto {
         // macOS libc++ (and some other toolchains) may not ship <stdfloat> yet.
         // For CPU simulation, a best-effort 16-bit float type is sufficient.
         typedef _Float16 half;
+    #if defined(__aarch64__)
+        typedef __bf16 bfloat16_t;
+    #else
         typedef _Float16 bfloat16_t;
+    #endif
         typedef _Float16 aclFloat16;
     #endif
 #endif

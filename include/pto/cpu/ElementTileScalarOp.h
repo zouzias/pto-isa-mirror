@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "pto/cpu/ElementOp.h"
 #include "pto/cpu/parallel.hpp"
+#include "pto/common/memory.hpp"
 
 namespace pto {
     template<typename tile_shape, ElementOp op>
@@ -20,7 +21,7 @@ namespace pto {
                                unsigned validCol)
     {
         using DType = typename tile_shape::DType;
-        if constexpr (tile_shape::SFractal == SLayout::NoneBox) {
+        if constexpr (tile_shape::SFractal == SLayout::NoneBox && tile_shape::BFractal != BLayout::PackedA && tile_shape::BFractal != BLayout::PackedB) {
             if constexpr (tile_shape::isRowMajor) {
                 cpu::parallel_for_rows(validRow, validCol, [&](std::size_t r) {
                     const std::size_t base = r * tile_shape::Cols;
@@ -63,7 +64,7 @@ namespace pto {
                                size_t extra = 0)
     {
         using DType = typename tile_shape::DType;
-        if constexpr (tile_shape::SFractal == SLayout::NoneBox) {
+        if constexpr (tile_shape::SFractal == SLayout::NoneBox && tile_shape::BFractal != BLayout::PackedA && tile_shape::BFractal != BLayout::PackedB) {
             if constexpr (tile_shape::isRowMajor) {
                 cpu::parallel_for_rows(validRow, validCol, [&](std::size_t r) {
                     const std::size_t base = r * tile_shape::Cols;
@@ -110,11 +111,16 @@ namespace pto {
     }
 
     template <typename tile_shape>
-    PTO_INTERNAL void TREMS_IMPL(tile_shape &dst, tile_shape &src, typename tile_shape::DType scalar, tile_shape &tmp) {
-        (void)tmp;
+    PTO_INTERNAL void TREMS_IMPL(tile_shape &dst, tile_shape &src, typename tile_shape::DType scalar) {
         unsigned row = dst.GetValidRow();
         unsigned col = dst.GetValidCol();
         UnaryTileScalarOpImpl<tile_shape, ElementOp::OP_REMS>(dst.data(), src.data(), scalar, row, col);
+    }
+
+    template <typename tile_shape>
+    PTO_INTERNAL void TREMS_IMPL(tile_shape &dst, tile_shape &src, typename tile_shape::DType scalar, tile_shape &tmp) {
+        (void)tmp;
+        TREMS_IMPL(dst, src, scalar);
     }
 
     template <typename tile_shape>
