@@ -22,16 +22,6 @@ namespace pto
     PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src) {
         assert (src.GetValidRow() == dst.GetValidRow() && src.GetValidCol() == dst.GetValidCol());
 
-        if constexpr (
-            DstTileData::BFractal == SrcTileData::BFractal &&
-            DstTileData::SFractal == SrcTileData::SFractal &&
-            DstTileData::isRowMajor == SrcTileData::isRowMajor &&
-            DstTileData::InnerRows == SrcTileData::InnerRows&&
-            DstTileData::InnerCols == SrcTileData::InnerCols
-        ) {
-            return;
-        }
-
         for(size_t c=0; c<src.GetValidCol(); c++) {
             for(size_t r=0; r<src.GetValidRow(); r++) {
                 size_t srcTileIdx = GetTileElementOffset<SrcTileData>(r,c);
