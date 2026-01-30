@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "pto/cpu/ElementOp.h"
 #include "pto/cpu/parallel.hpp"
+#include <type_traits>
 
 namespace pto {
     template<typename tile_shape, ElementOp op>
@@ -156,6 +157,22 @@ namespace pto {
         unsigned row = dst.GetValidRow();
         unsigned col = dst.GetValidCol();
         UnaryTileScalarOpImpl<tile_shape, ElementOp::OP_LRELU>(dst.data(), src.data(), scalar, row, col);
+    }
+
+    template <typename tile_shape>
+    PTO_INTERNAL void TSHLS_IMPL(tile_shape &dst, tile_shape &src, typename tile_shape::DType scalar) {
+        static_assert(std::is_integral_v<typename tile_shape::DType>, "TSHLS only supports integral types in CPU-SIM");
+        unsigned row = dst.GetValidRow();
+        unsigned col = dst.GetValidCol();
+        UnaryTileScalarOpImpl<tile_shape, ElementOp::OP_SHL>(dst.data(), src.data(), scalar, row, col);
+    }
+
+    template <typename tile_shape>
+    PTO_INTERNAL void TSHRS_IMPL(tile_shape &dst, tile_shape &src, typename tile_shape::DType scalar) {
+        static_assert(std::is_integral_v<typename tile_shape::DType>, "TSHRS only supports integral types in CPU-SIM");
+        unsigned row = dst.GetValidRow();
+        unsigned col = dst.GetValidCol();
+        UnaryTileScalarOpImpl<tile_shape, ElementOp::OP_SHR>(dst.data(), src.data(), scalar, row, col);
     }
 
     template<typename tile_shape, ElementOp op>

@@ -131,11 +131,14 @@ namespace pto {
         int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
         int gStride3, int gStride4, int validRow, int validCol)
     {
-        assert((gShape0*gShape1*gShape2*gShape3 == validRow && gShape4==validCol && TileData::isRowMajor) ||
-            (gShape0*gShape1*gShape2*gShape4 == validCol && gShape3==validRow && !TileData::isRowMajor));
+        // Allow loading a tile whose runtime valid shape is a prefix/sub-rectangle of the underlying GlobalTensor.
+        // Row-major: validRow is flattened from dims [0..3], validCol from dim 4.
+        // Col-major:  validCol is flattened from dims [0..2,4], validRow from dim 3.
+        assert((gShape0 * gShape1 * gShape2 * gShape3 >= validRow && gShape4 >= validCol && TileData::isRowMajor) ||
+            (gShape0 * gShape1 * gShape2 * gShape4 >= validCol && gShape3 >= validRow && !TileData::isRowMajor));
 
         // Filling padding
-        std::fill(dst,dst+(TileData::Cols*TileData::Rows),getPadValue<TileData>());
+        std::fill(dst, dst + (TileData::Cols * TileData::Rows), getPadValue<TileData>());
 
         //Filling data
         if(TileData::SFractal == SLayout::NoneBox) {

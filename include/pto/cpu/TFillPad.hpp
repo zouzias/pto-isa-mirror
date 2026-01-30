@@ -90,18 +90,30 @@ namespace pto{
 
     template <typename TileDataDst, typename TileDataSrc>
     PTO_INTERNAL void TFILLPAD_INPLACE(TileDataDst &dst, TileDataSrc &src) {
-        static_assert(TileDataDst::Cols == TileDataSrc::Cols && TileDataDst::Rows == TileDataSrc::Rows, 
+        static_assert(TileDataDst::Cols == TileDataSrc::Cols && TileDataDst::Rows == TileDataSrc::Rows,
         "TFillPad: dst and src should have the same rows/cols!");
 
         TFILLPAD_IMPL<TileDataDst, TileDataSrc, true>(dst, src);
     }
 
+    // MAP_INSTR_IMPL compatibility (pto/common/pto_instr.hpp expects *_IMPL symbols).
+    template <typename TileDataDst, typename TileDataSrc>
+    PTO_INTERNAL void TFILLPAD_INPLACE_IMPL(TileDataDst &dst, TileDataSrc &src) {
+        TFILLPAD_INPLACE<TileDataDst, TileDataSrc>(dst, src);
+    }
+
     template <typename TileDataDst, typename TileDataSrc>
     PTO_INTERNAL void TFILLPAD_EXPAND(TileDataDst &dst, TileDataSrc &src) {
-        static_assert(TileDataDst::Cols >= TileDataSrc::Cols && TileDataDst::Rows >= TileDataSrc::Rows, 
+        static_assert(TileDataDst::Cols >= TileDataSrc::Cols && TileDataDst::Rows >= TileDataSrc::Rows,
         "TFillPad: dst and src should have the same rows/cols!");
 
         TFILLPAD_IMPL<TileDataDst, TileDataSrc, false>(dst, src);
+    }
+
+    // MAP_INSTR_IMPL compatibility (pto/common/pto_instr.hpp expects *_IMPL symbols).
+    template <typename TileDataDst, typename TileDataSrc>
+    PTO_INTERNAL void TFILLPAD_EXPAND_IMPL(TileDataDst &dst, TileDataSrc &src) {
+        TFILLPAD_EXPAND<TileDataDst, TileDataSrc>(dst, src);
     }
 }
 #endif
