@@ -16,8 +16,16 @@ The `TPRINT` instruction outputs the logical view of data stored in a Tile or Gl
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
+Synchronous form - Level1:
+
 ```text
-tprint %src : !pto.tile<...> | !pto.global<...>
+pto.tprint %src : !pto.tile<...> | !pto.partition_tensor_view<MxNx dtype> -> ()
+```
+
+Synchronous form - Level2:
+
+```text
+pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNx dtype>)
 ```
 
 ## C++ Intrinsic

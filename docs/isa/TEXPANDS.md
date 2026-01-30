@@ -14,11 +14,18 @@ $$ \mathrm{dst}_{i,j} = \mathrm{scalar} $$
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%dst = texpands %scalar : f32, !pto.tile<...>
+%dst = pto.texpands %scalar : dtype -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

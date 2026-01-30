@@ -10,7 +10,7 @@ Index-based gather (conceptual):
 
 Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. For `0 <= i < R` and `0 <= j < C`:
 
-$$ \mathrm{dst}_{i,j} = \mathrm{src0}\!\left[\mathrm{indices}_{i,j}\right] $$
+$$ \mathrm{dst}_{i,j} = \mathrm{src}\!\left[\mathrm{indices}_{i,j}\right] $$
 
 Exact index interpretation and bounds behavior are implementation-defined.
 
@@ -20,17 +20,30 @@ Mask-pattern gather is an implementation-defined selection/reduction controlled 
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Index-based gather:
+Index-based gather - Level1:
 
 ```text
-%dst = tgather %src0, %indices : !pto.tile<...> -> !pto.tile<...>
+%dst = pto.tgather %src, %indices : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-Mask-pattern gather:
+Index-based gather - Level2:
 
 ```text
-%dst = tgather %src {maskPattern = #pto.mask_pattern<P0101>} : !pto.tile<...> -> !pto.tile<...>
+pto.tgather ins(%src, %indices : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
+
+Mask-pattern gather - Level1:
+
+```text
+%dst = pto.tgather %src {maskPattern = #pto.mask_pattern<P0101>} : !pto.tile<...> -> !pto.tile<...>
+```
+
+Mask-pattern gather - Level2:
+
+```text
+pto.tgather ins(%src {maskPattern = #pto.mask_pattern<P0101>} : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/type.hpp`:

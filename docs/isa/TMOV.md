@@ -22,16 +22,28 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} $$
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-The PTO IR design recommends splitting `TMOV` into a family of ops:
+The PTO IR design recommends splitting `TMOV` into a family of ops.
 
+Synchronous form - Level1:
 ```text
-%left  = tmov.m2l %mat  : !pto.tile<...> -> !pto.tile<...>
-%right = tmov.m2r %mat  : !pto.tile<...> -> !pto.tile<...>
-%bias  = tmov.m2b %mat  : !pto.tile<...> -> !pto.tile<...>
-%scale = tmov.m2s %mat  : !pto.tile<...> -> !pto.tile<...>
-%vec   = tmov.a2v %acc  : !pto.tile<...> -> !pto.tile<...>
-%v1    = tmov.v2v %v0   : !pto.tile<...> -> !pto.tile<...>
+%left  = pto.tmov.m2l %mat  : !pto.tile<...> -> !pto.tile<...>
+%right = pto.tmov.m2r %mat  : !pto.tile<...> -> !pto.tile<...>
+%bias  = pto.tmov.m2b %mat  : !pto.tile<...> -> !pto.tile<...>
+%scale = pto.tmov.m2s %mat  : !pto.tile<...> -> !pto.tile<...>
+%vec   = pto.tmov.a2v %acc  : !pto.tile<...> -> !pto.tile<...>
+%v1    = pto.tmov.v2v %v0   : !pto.tile<...> -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+```text
+pto.tmov.m2l ins(%mat : !pto.tile_buf<...>) outs(%left  : !pto.tile_buf<...>)
+pto.tmov.m2r ins(%mat : !pto.tile_buf<...>) outs(%right : !pto.tile_buf<...>)
+pto.tmov.m2b ins(%mat : !pto.tile_buf<...>) outs(%bias  : !pto.tile_buf<...>)
+pto.tmov.m2s ins(%mat : !pto.tile_buf<...>) outs(%scale : !pto.tile_buf<...>)
+pto.tmov.a2v ins(%acc : !pto.tile_buf<...>) outs(%vec   : !pto.tile_buf<...>)
+pto.tmov.v2v ins(%v0  : !pto.tile_buf<...>) outs(%v1    : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:

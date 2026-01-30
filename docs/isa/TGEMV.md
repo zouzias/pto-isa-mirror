@@ -36,14 +36,24 @@ $$ \mathrm{C}_{0,j} = \mathrm{Bias}_{0,j} + \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \c
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%acc = tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%c = tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 
-%acc1 = tgemv.acc %acc0, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%c_out = tgemv.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 
-%acc = tgemv.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%c = tgemv.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+Synchronous form - Level2:
+
+```text
+tgemv ins(%a, %b : !pto.tile<...>, !pto.tile<...>) outs(%c : !pto.tile<...>)
+
+tgemv.acc ins(%c_in, %a, %b : !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) outs(%c_out : !pto.tile<...>)
+
+tgemv.bias ins(%a, %b, %bias : !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) outs(%c : !pto.tile<...>)
 ```
 
 ## C++ Intrinsic

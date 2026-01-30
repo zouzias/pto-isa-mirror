@@ -19,6 +19,20 @@ Synchronous form:
 ```text
 %dst = mgather %mem, %idx : !pto.memref<...>, !pto.tile<...> -> !pto.tile<...>
 ```
+
+Synchronous form - Level1:
+
+```text
+%dst = pto.mgather %mem, %idx : (!pto.partition_tensor_view<MxNx dtype>, !pto.tile<...>) 
+                              -> !pto.tile<loc, dtype, rows, cols, blayout, slayout, fractal, pad>
+```
+
+Synchronous form - Level2:
+
+```text
+pto.mgather ins(%mem, %idx : )
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

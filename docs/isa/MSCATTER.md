@@ -16,11 +16,18 @@ If multiple elements map to the same destination location, the final value is im
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-mscatter %src, %mem, %idx : !pto.memref<...>, !pto.tile<...>, !pto.tile<...>
+pto.mscatter %src, %idx, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNx dtype>) -> ()
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.mscatter ins(%src, %idx : !pto.tile<...>, !pto.tile<...>), outs(%mem : !pto.partition_tensor_view<MxNx dtype>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
