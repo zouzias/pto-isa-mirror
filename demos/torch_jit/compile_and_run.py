@@ -13,7 +13,7 @@
 import torch
 import torch_npu
 
-from jit_util import jit_compile
+from jit_util_add import jit_compile
 
 
 def test_add():
