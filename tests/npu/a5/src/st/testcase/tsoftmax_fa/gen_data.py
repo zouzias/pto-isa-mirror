@@ -216,6 +216,14 @@ if __name__ == "__main__":
         TSoftmaxFAParams("TSOFTMAXFATest.case18_B1_N1_S64_H64_DN_fusion_no_init", 1, 1, 64, 64, False, True),
         TSoftmaxFAParams("TSOFTMAXFATest.case19_B1_N1_S64_H64_ND_fusion_init", 1, 1, 64, 64, True, False),
         TSoftmaxFAParams("TSOFTMAXFATest.case20_B1_N1_S64_H64_ND_fusion_no_init", 1, 1, 64, 64, False, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case21_B1_N1_S64_H128_ND_no_fusion_no_init", 1, 1, 64, 128, False, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case22_B1_N1_S64_H128_ND_no_fusion_init", 1, 1, 64, 128, True, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case23_B1_N1_S64_H128_ND_fusion_no_init", 1, 1, 64, 128, False, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case24_B1_N1_S64_H128_ND_fusion_init", 1, 1, 64, 128, True, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case25_B1_N1_S128_H128_ND_no_fusion_no_init", 1, 1, 128, 128, False, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case26_B1_N1_S128_H128_ND_no_fusion_init", 1, 1, 128, 128, True, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case27_B1_N1_S128_H128_ND_fusion_no_init", 1, 1, 64, 128, False, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case28_B1_N1_S128_H128_ND_fusion_init", 1, 1, 64, 128, True, False),
     ]
     for case in case_params_list:
         if not os.path.exists(case.name):

@@ -106,6 +106,7 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 Tile1D_fp32 p_tile_f32_1d;
                 Tile1D_out x_exp_1d;
 
+                /*
                 TROWMAX(local_max, input_x, tmp_float);
                 TRESHAPE(tmp_shw_local_max, local_max);
                 TRESHAPE(tmp_shw_new_global_max, new_global_max);
@@ -128,6 +129,37 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 TROWSUM(local_sum, p_tile_f32, tmp_float);
                 TRESHAPE(tmp_shw_local_sum, local_sum);
                 TADD(tmp_shw_new_global_sum, tmp_shw_new_global_sum, tmp_shw_local_sum);
+                */
+                TROWMAX(local_max, input_x, tmp_float);
+                pipe_barrier(PIPE_V);
+                TRESHAPE(tmp_shw_local_max, local_max);
+                TRESHAPE(tmp_shw_new_global_max, new_global_max);
+                TMAX(tmp_shw_local_max, tmp_shw_local_max, tmp_shw_new_global_max);
+                pipe_barrier(PIPE_V);
+                TRESHAPE(tmp_shw_exp_max, exp_max);
+                TSUB(tmp_shw_exp_max, tmp_shw_new_global_max, tmp_shw_local_max);
+                pipe_barrier(PIPE_V);
+
+                TMULS(tmp_shw_new_global_max, tmp_shw_local_max, 1.0f); // just copy
+                pipe_barrier(PIPE_V);
+                TROWEXPANDSUB(p_tile_f32, input_x, local_max);
+                TMULS(tmp_shw_exp_max, tmp_shw_exp_max, 0.8f);
+                TMULS(p_tile_f32, p_tile_f32, 0.8f);
+                TEXP(tmp_shw_exp_max, tmp_shw_exp_max);
+                TRESHAPE(tmp_shw_exp_max, exp_max);
+                TEXP(p_tile_f32, p_tile_f32);
+                TRESHAPE(tmp_shw_exp_max, exp_max);
+                //TCVT(x_exp, p_tile_f32, RoundMode::CAST_ROUND);
+                TRESHAPE(p_tile_f32_1d, p_tile_f32);
+                TRESHAPE(x_exp_1d, x_exp);    
+                TCVT(x_exp_1d, p_tile_f32_1d, RoundMode::CAST_ROUND);
+                pipe_barrier(PIPE_V);
+                TRESHAPE(tmp_shw_new_global_sum, new_global_sum);
+                TMUL(tmp_shw_new_global_sum, tmp_shw_exp_max, tmp_shw_new_global_sum);
+                TROWSUM(local_sum, p_tile_f32, tmp_float);
+                TRESHAPE(tmp_shw_local_sum, local_sum);
+                pipe_barrier(PIPE_V);
+                TADD(tmp_shw_new_global_sum, tmp_shw_new_global_sum, tmp_shw_local_sum);
 
             }
             else {
@@ -136,6 +168,7 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 Tile1D_fp32 p_tile_f32_1d;
                 Tile1D_out x_exp_1d;
 
+                /*
                 TROWMAX(new_global_max, input_x, tmp_float);
                 TROWEXPANDSUB(tmp_float, input_x, new_global_max);
                 TMULS(tmp_float, tmp_float, 0.8f);
@@ -144,6 +177,17 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 TMULS(input_x, input_x, 1.0f);
                 TRESHAPE(p_tile_f32_1d, p_tile_f32);
                 TRESHAPE(x_exp_1d, x_exp);
+                TCVT(x_exp_1d, p_tile_f32_1d, RoundMode::CAST_ROUND);
+                */
+                TROWMAX(new_global_max, input_x, tmp_float);
+                pipe_barrier(PIPE_V);
+                TROWEXPANDSUB(p_tile_f32, input_x, new_global_max);
+                TMULS(p_tile_f32, p_tile_f32, 0.8f);
+                TEXP(p_tile_f32, p_tile_f32);
+                pipe_barrier(PIPE_V);
+                TROWSUM(new_global_sum, p_tile_f32, tmp_float);
+                TRESHAPE(p_tile_f32_1d, p_tile_f32);
+                TRESHAPE(x_exp_1d, x_exp);   
                 TCVT(x_exp_1d, p_tile_f32_1d, RoundMode::CAST_ROUND);
             }
 

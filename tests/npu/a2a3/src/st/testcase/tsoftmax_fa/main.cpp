@@ -674,3 +674,43 @@ TEST_F(TSOFTMAXFATest, case20_B1_N1_S64_H64_ND_fusion_no_init)
 {
     test_softmax_nd_fusion<64, 64, 0>();
 }
+
+TEST_F(TSOFTMAXFATest, case21_B1_N1_S64_H128_ND_no_fusion_no_init)
+{
+    test_softmax_nd_no_fusion<64, 128, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case22_B1_N1_S64_H128_ND_no_fusion_init)
+{
+    test_softmax_nd_no_fusion<64, 128, 1>();
+}
+
+TEST_F(TSOFTMAXFATest, case23_B1_N1_S64_H128_ND_fusion_no_init)
+{
+    test_softmax_nd_fusion<64, 128, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case24_B1_N1_S64_H128_ND_fusion_init)
+{
+    test_softmax_nd_fusion<64, 128, 1>();
+}
+
+TEST_F(TSOFTMAXFATest, case25_B1_N1_S128_H128_ND_no_fusion_no_init)
+{
+    test_softmax_nd_no_fusion<128, 128, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case26_B1_N1_S128_H128_ND_no_fusion_init)
+{
+    test_softmax_nd_no_fusion<128, 128, 1>();
+}
+
+TEST_F(TSOFTMAXFATest, case27_B1_N1_S128_H128_ND_fusion_no_init)
+{
+    test_softmax_nd_fusion<128, 128, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case28_B1_N1_S128_H128_ND_fusion_init)
+{
+    test_softmax_nd_fusion<128, 128, 1>();
+}

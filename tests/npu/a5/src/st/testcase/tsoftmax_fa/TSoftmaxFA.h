@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+// only for ubN=64 optimization
 template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init>
  __tf__ AICORE void TSOFTMAX_DN_FUSION(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
                              TileDataD1 &local_max, TileDataD1 &local_sum,
@@ -722,6 +723,261 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, T
     }
 }
 
+/*
+// general DN
+template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init>
+ __tf__ AICORE void TSOFTMAX_DN_FUSION3(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
+                             TileDataD1 &local_max, TileDataD1 &local_sum,
+                             TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
+                             TileDataD1 &exp_max) {
+
+    __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
+    __ubuf__ typename TileDataS1::DType *input_x_Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(input_x.data());
+    __ubuf__ typename TileDataS2::DType *bit_mask_Ptr = (__ubuf__ typename TileDataS2::DType *)__cce_get_tile_ptr(bit_mask.data());
+    __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
+    __ubuf__ typename TileDataD1::DType *local_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_sum.data());
+    __ubuf__ typename TileDataD1::DType *new_global_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());
+    __ubuf__ typename TileDataD1::DType *new_global_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
+    __ubuf__ typename TileDataD1::DType *exp_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(exp_max.data());
+
+    float scale = 0.8;
+    float keepProb = 1.0;
+
+    unsigned ubM = TileDataD2::Rows;
+    unsigned ubN = TileDataD2::Cols;
+
+    __VEC_SCOPE__{
+        __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
+    __ubuf__ typename TileDataS1::DType *input_x_Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(input_x.data());
+    __ubuf__ typename TileDataS2::DType *bit_mask_Ptr = (__ubuf__ typename TileDataS2::DType *)__cce_get_tile_ptr(bit_mask.data());
+    __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
+    __ubuf__ typename TileDataD1::DType *local_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_sum.data());
+    __ubuf__ typename TileDataD1::DType *new_global_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());
+    __ubuf__ typename TileDataD1::DType *new_global_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
+    __ubuf__ typename TileDataD1::DType *exp_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(exp_max.data());
+
+    float scale = 0.8;
+    float keepProb = 1.0;
+
+    unsigned ubM = TileDataD2::Rows;
+    unsigned ubN = TileDataD2::Cols;
+    unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileDataS1::DType);
+
+    uint16_t repeatTimes = CeilDivision(ubN, elementsPerRepeat);
+
+    __VEC_SCOPE__{
+        vector_f32 src_in1, src_in2;
+        vector_f32 max_1a, max_2a;
+        vector_f32 sum_1a, sum_1b, sum_2a, sum_2b;
+        vector_f32 vreg_exp_max;
+
+        __ubuf__ float *src0_ub = (__ubuf__ float *)input_x_Ptr;
+
+        vector_bool preg_src = pset_b32(PAT_ALL);
+        vector_bool preg_b16_all = pset_b16(PAT_ALL);
+        vector_bool preg_b16_half = pset_b16(PAT_VL64);
+        vector_bool preg_b8_all = pset_b8(PAT_ALL);
+        uint32_t destItems = 1;
+        vector_bool preg_reduce = plt_b32(destItems, POST_UPDATE);
+        constexpr auto distValue =std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<typename TileDataS1::DType, DistVST::DIST_ONEPT>())>();
+
+        if(init){
+            for (uint16_t i = 0; i < uint16_t(ubM) ; ++i) {
+                vbr(max_2a, -INFINITY);
+                __ubuf__ float *row_ptr = src0_ub + i * TileDataS1::RowStride;
+                for (uint16_t iter_n = 0; iter_n < uint16_t(repeatTimes) ; ++iter_n) {
+                    vlds(src_in1, row_ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                    vcmax(max_1a, src_in1, preg_src, MODE_ZEROING);
+                    vmax(max_2a, max_2a, max_1a, preg_src, MODE_ZEROING);
+                }
+                vsts(max_2a, new_global_max_Ptr+i, 0, distValue, preg_reduce);
+            }
+        }
+        else {
+            vlds(src_in2, new_global_max_Ptr, 0, NORM);
+            for (uint16_t i = 0; i < uint16_t(ubM) ; ++i) {
+                vbr(max_2a, -INFINITY);
+                __ubuf__ float *row_ptr = src0_ub + i * TileDataS1::RowStride;
+                for (uint16_t iter_n = 0; iter_n < uint16_t(repeatTimes) ; ++iter_n) {
+                    vlds(src_in1, row_ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                    vcmax(max_1a, src_in1, preg_src, MODE_ZEROING);
+                    vmax(max_2a, max_2a, max_1a, preg_src, MODE_ZEROING);
+                }
+                vsts(max_2a, local_max_Ptr+i, 0, distValue, preg_reduce);
+            }
+        }
+        
+
+        mem_bar(VST_VLD);
+        unsigned stride = 1;
+        vector_align ureg_1;
+        vector_f32 vreg_uld;
+        vector_f32 vreg0;
+        vector_f32 vreg1;
+        vector_f32 vreg2;
+        vector_f32 vreg3;
+        vector_f32 vreg4;
+        vector_f16 vreg2_f16;
+        vector_f16 vreg4_f16;
+        vector_f16 vreg_x_exp_f16_pack, vreg_x_exp_f16_packa;
+        unsigned remains = repeatTimes % 2;
+        if(init){
+            for (uint16_t i = 0; i < uint16_t(ubM) ; ++i) {
+                if(remains){
+                    vldas(ureg_1, (__ubuf__ float*)(new_global_max_Ptr + i*stride));
+                    vldus(vreg_uld, ureg_1, (__ubuf__ float*)(new_global_max_Ptr + i*stride));
+                    vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
+                    __ubuf__ float *row_ptr = src0_ub + i * TileDataS1::RowStride;
+                    vbr(sum_2a, 0);
+
+                    for (uint16_t j = 0; j < (uint16_t)(repeatTimes); ++j) {
+                        vlds(vreg0, row_ptr,  j * elementsPerRepeat, NORM);
+
+                        vsub(vreg2, vreg0, vreg1, preg_src, MODE_ZEROING);
+
+                        vmuls(vreg2, vreg2, 0.8f, preg_src, MODE_ZEROING);
+
+                        vexp(vreg2, vreg2, preg_src, MODE_ZEROING);
+
+                        vcadd(sum_1a, vreg2, preg_src, MODE_ZEROING);
+                        vadd(sum_2a, sum_2a, sum_1a, preg_src, MODE_ZEROING);
+
+                        // vmuls(vreg2, vreg2, 1.0f, preg_src, MODE_ZEROING);
+
+                        // vcvt(vreg2_f16, vreg2, preg_src, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+                        vmulscvt(vreg2_f16, vreg2, 1.0f, preg_src, PART_EVEN);
+
+                        vsts(vreg2_f16, ((__ubuf__ half *) x_exp_Ptr + i*ubN + j*elementsPerRepeat), 0, PK_B32, preg_b16_all);
+                    }
+                    vsts(sum_2a, new_global_sum_Ptr+i, 0, distValue, preg_reduce);
+                }
+                else {
+                    vldas(ureg_1, (__ubuf__ float*)(new_global_max_Ptr + i*stride));
+                    vldus(vreg_uld, ureg_1, (__ubuf__ float*)(new_global_max_Ptr + i*stride));
+                    vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
+                    __ubuf__ float *row_ptr = src0_ub + i * TileDataS1::RowStride;
+                    vbr(sum_2a, 0);
+                    vbr(sum_2b, 0);
+
+                    //unroll 2 to make use of vcvt
+                    for (uint16_t j = 0; j < (uint16_t)(repeatTimes / 2); ++j) {
+                        vlds(vreg0, row_ptr,  (j*2) * elementsPerRepeat, NORM);
+                        vlds(vreg3, row_ptr,  (j*2+1) * elementsPerRepeat, NORM);
+
+                        vsub(vreg2, vreg0, vreg1, preg_src, MODE_ZEROING);
+                        vsub(vreg4, vreg3, vreg1, preg_src, MODE_ZEROING);
+
+                        vmuls(vreg2, vreg2, 0.8f, preg_src, MODE_ZEROING);
+                        vmuls(vreg4, vreg4, 0.8f, preg_src, MODE_ZEROING);
+
+                        vexp(vreg2, vreg2, preg_src, MODE_ZEROING);
+                        vexp(vreg4, vreg4, preg_src, MODE_ZEROING);
+
+                        vcadd(sum_1a, vreg2, preg_src, MODE_ZEROING);
+                        vcadd(sum_1b, vreg4, preg_src, MODE_ZEROING);
+                        vadd(sum_2a, sum_2a, sum_1a, preg_src, MODE_ZEROING);
+                        vadd(sum_2b, sum_2b, sum_1b, preg_src, MODE_ZEROING);
+
+                        // vmuls(vreg2, vreg2, 1.0f, preg_src, MODE_ZEROING);
+                        // vmuls(vreg4, vreg4, 1.0f, preg_src, MODE_ZEROING);
+
+                        // vcvt(vreg2_f16, vreg2, preg_src, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+                        // vcvt(vreg4_f16, vreg4, preg_src, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+                        vmulscvt(vreg2_f16, vreg2, 1.0f, preg_src, PART_EVEN);
+                        vmulscvt(vreg4_f16, vreg4, 1.0f, preg_src, PART_EVEN);
+
+                        vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg2_f16, vreg4_f16);
+                        vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i*ubN + j*2*elementsPerRepeat), 0, NORM_B32, preg_src);
+                    }
+                    vadd(sum_2a, sum_2a, sum_2b, preg_src, MODE_ZEROING);
+                    vsts(sum_2a, new_global_sum_Ptr+i, 0, distValue, preg_reduce);
+                }
+            }
+        }
+        else {
+            vlds(max_2a, local_max_Ptr, 0, NORM);
+            vlds(src_in1, new_global_max_Ptr, 0, NORM);
+            vmax(max_2a, max_2a, src_in1, preg_src, MODE_ZEROING);
+            vsub(vreg_exp_max, src_in1, max_2a, preg_b16_half, MODE_ZEROING);
+            vsts(max_2a, new_global_max_Ptr, 0, NORM_B32, preg_b16_half);
+
+            vmuls(vreg_exp_max, vreg_exp_max, 0.8f, preg_b16_half, MODE_ZEROING);
+            vexp(vreg_exp_max, vreg_exp_max, preg_b16_half, MODE_ZEROING);
+            vsts(vreg_exp_max, exp_max_Ptr, 0, NORM_B32, preg_src);
+            // mem_bar(VST_VLD);
+
+            for (uint16_t i = 0; i < uint16_t(ubM) ; ++i) {
+                if(remains){
+                    vldas(ureg_1, (__ubuf__ float*)(new_global_max_Ptr + i*stride));
+                    vldus(vreg_uld, ureg_1, (__ubuf__ float*)(new_global_max_Ptr + i*stride));
+                    vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
+                    __ubuf__ float *row_ptr = src0_ub + i * TileDataS1::RowStride;
+                    vbr(sum_2a, 0);
+
+                    for (uint16_t j = 0; j < (uint16_t)(repeatTimes); ++j) {
+                        vlds(vreg0, row_ptr,  j * elementsPerRepeat, NORM);
+
+                        vsub(vreg2, vreg0, vreg1, preg_src, MODE_ZEROING);
+
+                        vmuls(vreg2, vreg2, 0.8f, preg_src, MODE_ZEROING);
+                        vexp(vreg2, vreg2, preg_src, MODE_ZEROING);
+
+                        vcadd(sum_1a, vreg2, preg_src, MODE_ZEROING);
+                        vadd(sum_2a, sum_2a, sum_1a, preg_src, MODE_ZEROING);
+
+                        vcvt(vreg2_f16, vreg2, preg_src, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+
+                        vsts(vreg2_f16, ((__ubuf__ half *) x_exp_Ptr + i*ubN + j*elementsPerRepeat), 0, PK_B32, preg_b16_all);
+                    }
+                    vsts(sum_2a, local_sum_Ptr+i, 0, distValue, preg_reduce);
+                }
+                else {
+                    vldas(ureg_1, (__ubuf__ float*)(new_global_max_Ptr + i*stride));
+                    vldus(vreg_uld, ureg_1, (__ubuf__ float*)(new_global_max_Ptr + i*stride));
+                    vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
+                    __ubuf__ float *row_ptr = src0_ub + i * TileDataS1::RowStride;
+                    vbr(sum_2a, 0);
+                    vbr(sum_2b, 0);
+
+                    //unroll 2 to make use of vcvt
+                    for (uint16_t j = 0; j < (uint16_t)(repeatTimes / 2); ++j) {
+                        vlds(vreg0, row_ptr,  (j*2) * elementsPerRepeat, NORM);
+                        vlds(vreg3, row_ptr,  (j*2+1) * elementsPerRepeat, NORM);
+
+                        vsub(vreg2, vreg0, vreg1, preg_src, MODE_ZEROING);
+                        vsub(vreg4, vreg3, vreg1, preg_src, MODE_ZEROING);
+
+                        vmuls(vreg2, vreg2, 0.8f, preg_src, MODE_ZEROING);
+                        vmuls(vreg4, vreg4, 0.8f, preg_src, MODE_ZEROING);
+                        vexp(vreg2, vreg2, preg_src, MODE_ZEROING);
+                        vexp(vreg4, vreg4, preg_src, MODE_ZEROING);
+
+                        vcadd(sum_1a, vreg2, preg_src, MODE_ZEROING);
+                        vcadd(sum_1b, vreg4, preg_src, MODE_ZEROING);
+                        vadd(sum_2a, sum_2a, sum_1a, preg_src, MODE_ZEROING);
+                        vadd(sum_2b, sum_2b, sum_1b, preg_src, MODE_ZEROING);
+
+                        vcvt(vreg2_f16, vreg2, preg_src, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+                        vcvt(vreg4_f16, vreg4, preg_src, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+
+                        vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg2_f16, vreg4_f16);
+                        vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i*ubN + j*2*elementsPerRepeat), 0, NORM_B32, preg_src);
+                    }
+                    vadd(sum_2a, sum_2a, sum_2b, preg_src, MODE_ZEROING);
+                    vsts(sum_2a, local_sum_Ptr+i, 0, distValue, preg_reduce);
+                }
+            }
+            mem_bar(VST_VLD);
+            vlds(src_in1, local_sum_Ptr, 0, NORM);
+            vlds(src_in2, new_global_sum_Ptr, 0, NORM);
+            vmul(src_in2, vreg_exp_max, src_in2, preg_src, MODE_ZEROING);
+            vadd(src_in2, src_in2, src_in1, preg_src, MODE_ZEROING);
+            vsts(src_in2, new_global_sum_Ptr, 0, NORM_B32, preg_src);
+        }
+    }
+}
+*/
+
 template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init>
  __tf__ AICORE void TSOFTMAX_ND_FUSION(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
                              TileDataD1 &local_max, TileDataD1 &local_sum,
@@ -959,7 +1215,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 }
 
 template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typename TileDataS2, int init>
-    AICORE void TSOFTMAX_DN_NOFUSION(TileDataD1 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
+    inline AICORE void TSOFTMAX_DN_NOFUSION(TileDataD1 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, //add inline keyword to enable vf fusion
                              ReduceTileD1 &local_max, ReduceTileD1 &local_sum,
                              ReduceTileD1 &new_global_max, ReduceTileD1 &new_global_sum,
                              ReduceTileD1 &exp_max,

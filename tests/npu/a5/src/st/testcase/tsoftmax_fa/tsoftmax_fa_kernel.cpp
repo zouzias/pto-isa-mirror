@@ -150,21 +150,38 @@ __global__ AICORE void runSoftmax_dn_nofusion( __gm__ aclFloat16 __out__ *x_exp,
     using GlobalData_U8 = GlobalTensor<uint8_t, Shape<1, 1, 1, seq, headSize>, pto::Stride<1, 1, 1, headSize, 1>>;
     using GlobalReduce_F = GlobalTensor<float, Shape<1, 1, 1, 1, headSize>, pto::Stride<1, 1, 1, 1, 1>>;
 
-    using TileData_F = Tile<TileType::Vec, float, seq, headSize, BLayout::RowMajor, -1, -1>;
-    using TileData_U8 = Tile<TileType::Vec, uint8_t, headSize, seq, BLayout::RowMajor, -1, -1>;
-    using TileData_H = Tile<TileType::Vec, half, seq, headSize, BLayout::RowMajor, -1, -1>;
-    using ReduceTile_F = Tile<TileType::Vec, float, 1, headSize, BLayout::RowMajor, -1, -1>;
-    TileData_F src0Tile(seq, headSize);
-    TileData_U8 src1Tile(headSize, seq);
-    ReduceTile_F dst0Tile(1, headSize);
-    ReduceTile_F dst1Tile(1, headSize);
-    ReduceTile_F dst2Tile(1, headSize);
-    ReduceTile_F dst3Tile(1, headSize);
-    ReduceTile_F dst4Tile(1, headSize);
-    TileData_H dst5Tile(seq, headSize);
-    TileData_F input_expand_tmp(seq, headSize);
-    ReduceTile_F input_reduce_tmp1(1, headSize);
-    ReduceTile_F input_reduce_tmp2(1, headSize);
+    // using TileData_F = Tile<TileType::Vec, float, seq, headSize, BLayout::RowMajor, -1, -1>;
+    // using TileData_U8 = Tile<TileType::Vec, uint8_t, headSize, seq, BLayout::RowMajor, -1, -1>;
+    // using TileData_H = Tile<TileType::Vec, half, seq, headSize, BLayout::RowMajor, -1, -1>;
+    // using ReduceTile_F = Tile<TileType::Vec, float, 1, headSize, BLayout::RowMajor, -1, -1>;
+    // TileData_F src0Tile(seq, headSize);
+    // TileData_U8 src1Tile(headSize, seq);
+    // ReduceTile_F dst0Tile(1, headSize);
+    // ReduceTile_F dst1Tile(1, headSize);
+    // ReduceTile_F dst2Tile(1, headSize);
+    // ReduceTile_F dst3Tile(1, headSize);
+    // ReduceTile_F dst4Tile(1, headSize);
+    // TileData_H dst5Tile(seq, headSize);
+    // TileData_F input_expand_tmp(seq, headSize);
+    // ReduceTile_F input_reduce_tmp1(1, headSize);
+    // ReduceTile_F input_reduce_tmp2(1, headSize);
+
+    //for vf fusion tile assignment
+    using TileData_F = Tile<TileType::Vec, float, seq, headSize, BLayout::RowMajor>;
+    using TileData_U8 = Tile<TileType::Vec, uint8_t, seq, headSize, BLayout::RowMajor>;
+    using TileData_H = Tile<TileType::Vec, half, seq, headSize, BLayout::RowMajor>;
+    using ReduceTile_F = Tile<TileType::Vec, float, 1, headSize, BLayout::RowMajor>;
+    TileData_F src0Tile;
+    TileData_U8 src1Tile;
+    ReduceTile_F dst0Tile;
+    ReduceTile_F dst1Tile;
+    ReduceTile_F dst2Tile;
+    ReduceTile_F dst3Tile;
+    ReduceTile_F dst4Tile;
+    TileData_H dst5Tile;
+    TileData_F input_expand_tmp;
+    ReduceTile_F input_reduce_tmp1;
+    ReduceTile_F input_reduce_tmp2;
 
     constexpr std::size_t float_tile_bytes = static_cast<std::size_t>(headSize) * static_cast<std::size_t>(seq) * sizeof(float);
     constexpr std::size_t U16_tile_bytes = static_cast<std::size_t>(headSize) * static_cast<std::size_t>(seq) * sizeof(uint16_t);
@@ -546,6 +563,10 @@ template void launchTSOFTMAX_nd_fusion<128, 64, 1>(aclFloat16 *x_exp, float *inp
 template void launchTSOFTMAX_nd_fusion<128, 64, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_nd_fusion<256, 64, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_nd_fusion<256, 64, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_nd_fusion<64, 128, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_nd_fusion<64, 128, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_nd_fusion<128, 128, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_nd_fusion<128, 128, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
 template <int seq, int headSize, int init>
 void launchTSOFTMAX_nd_nofusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream){
@@ -554,7 +575,13 @@ void launchTSOFTMAX_nd_nofusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_
     cout << "launch softmax ND nofusion end!" << endl;
 }
 
+template void launchTSOFTMAX_nd_nofusion<64, 64, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_nd_nofusion<64, 64, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_nd_nofusion<128, 64, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_nd_nofusion<128, 64, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_nd_nofusion<256, 64, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_nd_nofusion<256, 64, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_nd_nofusion<64, 128, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_nd_nofusion<64, 128, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_nd_nofusion<128, 128, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_nd_nofusion<128, 128, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
