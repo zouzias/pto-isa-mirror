@@ -39,7 +39,7 @@ __tf__ AICORE void TMovToBt(typename DstTileData::TileDType __out__ dst, typenam
         "TMov: The memory occupation of BiasTile exceeds 4.0KB bias table size.");
 
     __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)__cce_get_tile_ptr(src);
-    uint64_t dstAddrP = (uint64_t)__cce_get_tile_ptr(dst);
+    uint64_t dstAddrP = (uint64_t)dst;
 
     bool convControl = false;
     constexpr uint16_t burstNum = 1;
