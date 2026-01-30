@@ -519,6 +519,7 @@ PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData 
   return {};
 }
 
+#ifdef MEMORY_BASE
 template <typename TileData, typename ConvTileData,
           SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL,
           typename T = uint64_t, typename... WaitEvents>
@@ -536,6 +537,7 @@ PTO_INST RecordEvent TSETFMATRIX(const Img2colTileConfig<T> &cfg = Img2colTileCo
   TSETFMATRIX_IMPL<FmatrixMode, T>(cfg);
   return {};
 }
+#endif
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
@@ -1094,6 +1096,7 @@ PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
   return {};
 }
 
+#ifdef REGISTER_BASE
 template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, 
           typename TileDataMax, int mode, typename... WaitEvents>
 PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst, 
@@ -1102,6 +1105,7 @@ PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst
   TQUANT_IMPL<TileDataSrc, TileDataExp, TileDataOut, TileDataMax, mode>(src, exp, dst, max, scaling);
   return {};
 }
+#endif
 
 } // namespace pto
 #endif
