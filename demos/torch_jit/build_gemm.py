@@ -7,7 +7,7 @@ def build_gemm_so():
     build_dir = tempfile.mkdtemp(prefix="jit_gemm_")
     env = os.environ.copy()
 
-    # Pick up the same SOC_VERSION your working project uses
+    # Pick up the same SOC_VERSION
     soc = env.get("SOC_VERSION", "ascend910b2")
 
     subprocess.check_call([
