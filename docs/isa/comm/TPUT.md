@@ -10,7 +10,7 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}^{\mathrm{remote}}_{i,j} = \mathrm{src}^{\mathrm{local}}_{i,j} $$
 
-Data flow: `srcGlobal (local GM)` → `ubTile (UB)` → `dstGlobal (remote GM)`
+Data flow: `srcGlobalData (local GM)` → `stagingTileData (UB)` → `dstGlobalData (remote GM)`
 
 ## Assembly Syntax
 
@@ -28,7 +28,7 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, TileData &ubTile, WaitEvents&... events);
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -38,11 +38,11 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, Ti
   - `TileData::DType` must equal `GlobalSrcData::RawDType`.
   - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
 - **Memory constraints**:
-  - `dstGlobal` must point to remote address (on target NPU).
-  - `srcGlobal` must point to local address (on current NPU).
-  - `ubTile` must be pre-allocated in Unified Buffer.
+  - `dstGlobalData` must point to remote address (on target NPU).
+  - `srcGlobalData` must point to local address (on current NPU).
+  - `stagingTileData` must be pre-allocated in Unified Buffer.
 - **Valid region**:
-  - Transfer size is determined by `ubTile.GetValidRow()` / `ubTile.GetValidCol()`.
+  - Transfer size is determined by `stagingTileData.GetValidRow()` / `stagingTileData.GetValidCol()`.
 
 ## Examples
 
@@ -68,9 +68,9 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
     GTensor dstG(remote_addr);
     
     // UB staging buffer
-    TileT ubTile;
+    TileT stagingTile;
     
     // Perform remote write
-    comm::TPUT(dstG, srcG, ubTile);
+    comm::TPUT(dstG, srcG, stagingTile);
 }
 ```

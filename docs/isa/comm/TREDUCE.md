@@ -31,8 +31,8 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <typename ParallelGroup, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal, 
-                              TileData &accTile, TileData &recvTile, ReduceOp op, WaitEvents&... events);
+PTO_INST RecordEvent TREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobalData, 
+                              TileData &accTileData, TileData &recvTileData, ReduceOp op, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -41,8 +41,8 @@ PTO_INST RecordEvent TREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlo
   - `ParallelGroup::value_type::RawDType` must equal `GlobalDstData::RawDType`.
   - `TileData::DType` must equal `GlobalDstData::RawDType`.
 - **Memory constraints**:
-  - `dstGlobal` must point to local address (on current NPU).
-  - `accTile`, `recvTile` must be pre-allocated UB tiles.
+  - `dstGlobalData` must point to local address (on current NPU).
+  - `accTileData`, `recvTileData` must be pre-allocated UB tiles.
 - **ParallelGroup constraints**:
   - `parallelGroup.tensors[r]` must refer to rank `r`'s source buffer (remote GM as seen by the root).
   - `parallelGroup.my_rank` identifies the calling NPU as the reduce root.

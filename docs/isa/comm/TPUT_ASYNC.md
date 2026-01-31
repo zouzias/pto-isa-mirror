@@ -16,7 +16,7 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}^{\mathrm{remote}}_{i,j} = \mathrm{src}^{\mathrm{local}}_{i,j} $$
 
-Data flow: `srcGlobal (local GM)` → `DMA Engine` → `dstGlobal (remote GM)`
+Data flow: `srcGlobalData (local GM)` → `DMA Engine` → `dstGlobalData (remote GM)`
 
 ## Assembly Syntax
 
@@ -36,7 +36,7 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 ```cpp
 // Asynchronous PUT with template-specified DMA engine
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
-PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, WaitEvents&... events);
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -46,8 +46,8 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGloba
   - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
   - Element size must be 1, 2, 4, or 8 bytes.
 - **Memory constraints**:
-  - `dstGlobal` must point to remote address (on target NPU).
-  - `srcGlobal` must point to local address (on current NPU).
+  - `dstGlobalData` must point to remote address (on target NPU).
+  - `srcGlobalData` must point to local address (on current NPU).
   - Both addresses should be naturally aligned to element size; 32-byte alignment is recommended for best performance.
 - **DMA constraints**:
   - SDMA: Allows 2D transfer
@@ -58,7 +58,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGloba
 
 ## Completion Semantics
 
-After `TSYNC(event)` returns, all stores to `dstGlobal` performed by the asynchronous transfer are complete and visible to subsequent operations on the current NPU.
+After `TSYNC(event)` returns, all stores to `dstGlobalData` performed by the asynchronous transfer are complete and visible to subsequent operations on the current NPU.
 
 
 ### Basic Asynchronous PUT with SDMA (default)
@@ -135,10 +135,10 @@ void overlap_comm_compute(__gm__ T* send_buf, __gm__ T* remote_recv_addr,
     
     // Perform local computation while transfer is in progress
     GTensor computeG(compute_buf);
-    TileT tile;
-    TLOAD(tile, computeG);
-    // ... compute on tile ...
-    TSTORE(computeG, tile);
+    TileT computeTile;
+    TLOAD(computeTile, computeG);
+    // ... compute on computeTile ...
+    TSTORE(computeG, computeTile);
     
     // Wait for transfer to complete before using the data
     TSYNC(put_event);

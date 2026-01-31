@@ -30,7 +30,7 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <typename ParallelGroup, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal, TileData &ubTile, WaitEvents&... events);
+PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobalData, TileData &stagingTileData, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -39,8 +39,8 @@ PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGl
   - `ParallelGroup::value_type::RawDType` must equal `GlobalSrcData::RawDType`.
   - `TileData::DType` must equal `GlobalSrcData::RawDType`.
 - **Memory constraints**:
-  - `srcGlobal` must point to local memory (current NPU) and be large enough to hold data for all ranks.
-  - `ubTile` must be pre-allocated in UB.
+  - `srcGlobalData` must point to local memory (current NPU) and be large enough to hold data for all ranks.
+  - `stagingTileData` must be pre-allocated in UB.
 - **ParallelGroup constraints**:
   - `parallelGroup.tensors[r]` must refer to rank `r`'s destination buffer (remote GM as seen by the root).
   - `parallelGroup.my_rank` identifies the calling NPU as the scatter root.
@@ -70,8 +70,8 @@ void scatter(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
     
     comm::ParallelGroup<GChunk> group(tensors, NRANKS, my_rank);
     GSource srcG(local_data);
-    TileT ubTile;
+    TileT stagingTile;
     
-    comm::TSCATTER(group, srcG, ubTile);
+    comm::TSCATTER(group, srcG, stagingTile);
 }
 ```

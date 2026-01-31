@@ -35,7 +35,7 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST bool TTEST(GlobalSignalData &signal, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
+PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -43,7 +43,7 @@ PTO_INST bool TTEST(GlobalSignalData &signal, int32_t cmpValue, WaitCmp cmp, Wai
 - **Type constraints**:
   - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-  - `signal` must point to local address (on current NPU).
+  - `signalData` must point to local address (on current NPU).
 - **Return value**:
   - Returns `true` if condition is satisfied, `false` otherwise.
   - For signal matrix, returns `true` only if ALL signals satisfy the condition.

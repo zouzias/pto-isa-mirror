@@ -16,7 +16,7 @@ For each element `(i, j)` in the valid region:
 
 $$ \mathrm{dst}^{\mathrm{local}}_{i,j} = \mathrm{src}^{\mathrm{remote}}_{i,j} $$
 
-Data flow: `srcGlobal (remote GM)` → `DMA Engine` → `dstGlobal (local GM)`
+Data flow: `srcGlobalData (remote GM)` → `DMA Engine` → `dstGlobalData (local GM)`
 
 ## Assembly Syntax
 
@@ -36,7 +36,7 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 ```cpp
 // Asynchronous GET with template-specified DMA engine
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
-PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, WaitEvents&... events);
+PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -46,8 +46,8 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGloba
   - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
   - Element size must be 1, 2, 4, or 8 bytes.
 - **Memory constraints**:
-  - `srcGlobal` must point to remote address (on source NPU).
-  - `dstGlobal` must point to local address (on current NPU).
+  - `srcGlobalData` must point to remote address (on source NPU).
+  - `dstGlobalData` must point to local address (on current NPU).
   - Both addresses should be naturally aligned to element size; 32-byte alignment is recommended for best performance.
 - **DMA constraints**:
   - SDMA: Supports 2D transfer. 
@@ -58,7 +58,7 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobal, GlobalSrcData &srcGloba
 
 ## Completion Semantics
 
-After `TSYNC(event)` returns, all writes to `dstGlobal` performed by the asynchronous transfer are complete and visible to subsequent operations on the current NPU.
+After `TSYNC(event)` returns, all writes to `dstGlobalData` performed by the asynchronous transfer are complete and visible to subsequent operations on the current NPU.
 
 ## Examples
 
@@ -136,16 +136,16 @@ void prefetch_and_compute(__gm__ T* local_buf, __gm__ T* remote_addr,
     
     // Compute on local data while prefetch is in progress
     GTensor computeG(compute_buf);
-    TileT tile;
-    TLOAD(tile, computeG);
-    // ... compute on tile ...
-    TSTORE(computeG, tile);
+    TileT computeTile;
+    TLOAD(computeTile, computeG);
+    // ... compute on computeTile ...
+    TSTORE(computeG, computeTile);
     
     // Wait for prefetch to complete
     TSYNC(prefetch_event);
     
     // Now local_buf contains the prefetched data
-    TLOAD(tile, localDstG);
+    TLOAD(computeTile, localDstG);
     // ... use prefetched data ...
 }
 ```

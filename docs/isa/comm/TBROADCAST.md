@@ -30,7 +30,7 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <typename ParallelGroup, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobal, TileData &ubTile, WaitEvents&... events);
+PTO_INST RecordEvent TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobalData, TileData &stagingTileData, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -39,8 +39,8 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &src
   - `ParallelGroup::value_type::RawDType` must equal `GlobalSrcData::RawDType`.
   - `TileData::DType` must equal `GlobalSrcData::RawDType`.
 - **Memory constraints**:
-  - `srcGlobal` must point to local memory (current NPU).
-  - `ubTile` must be pre-allocated in UB.
+  - `srcGlobalData` must point to local memory (current NPU).
+  - `stagingTileData` must be pre-allocated in UB.
 - **ParallelGroup constraints**:
   - `parallelGroup.tensors[k]` must refer to rank `k`'s destination buffer (remote GM as seen by the root).
   - `parallelGroup.my_rank` identifies the calling NPU as the broadcast root.
@@ -68,9 +68,9 @@ void broadcast(__gm__ T* group_addrs[NRANKS], __gm__ T* my_data, int my_rank) {
     
     comm::ParallelGroup<GTensor> group(tensors, NRANKS, my_rank);
     GTensor srcG(my_data);
-    TileT ubTile;
+    TileT stagingTile;
     
     // Current NPU broadcasts its data to all others
-    comm::TBROADCAST(group, srcG, ubTile);
+    comm::TBROADCAST(group, srcG, stagingTile);
 }
 ```

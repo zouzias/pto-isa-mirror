@@ -37,7 +37,7 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST void TWAIT(GlobalSignalData &signal, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
+PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -45,7 +45,7 @@ PTO_INST void TWAIT(GlobalSignalData &signal, int32_t cmpValue, WaitCmp cmp, Wai
 - **Type constraints**:
   - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-  - `signal` must point to local address (on current NPU).
+  - `signalData` must point to local address (on current NPU).
 - **Shape semantics**:
   - For single signal: Shape is `<1,1,1,1,1>`.
   - For signal matrix: Shape determines the 2D region to wait on. All signals must satisfy the condition.

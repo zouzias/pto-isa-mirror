@@ -28,7 +28,7 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 template <typename ParallelGroup, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlobal, TileData &ubTile, WaitEvents&... events);
+PTO_INST RecordEvent TGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlobalData, TileData &stagingTileData, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -37,8 +37,8 @@ PTO_INST RecordEvent TGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlo
   - `ParallelGroup::value_type::RawDType` must equal `GlobalDstData::RawDType`.
   - `TileData::DType` must equal `GlobalDstData::RawDType`.
 - **Memory constraints**:
-  - `dstGlobal` must point to local memory (current NPU) and be large enough to hold the concatenated result from all ranks.
-  - `ubTile` must be pre-allocated in UB.
+  - `dstGlobalData` must point to local memory (current NPU) and be large enough to hold the concatenated result from all ranks.
+  - `stagingTileData` must be pre-allocated in UB.
 - **ParallelGroup constraints**:
   - `parallelGroup.tensors[r]` must refer to rank `r`'s source buffer (remote GM as seen by the root).
   - `parallelGroup.my_rank` identifies the calling NPU as the gather root.
@@ -68,9 +68,9 @@ void gather(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
     
     comm::ParallelGroup<GChunk> group(tensors, NRANKS, my_rank);
     GResult dstG(result);
-    TileT ubTile;
+    TileT stagingTile;
     
     // The calling NPU (group.my_rank) gathers data from all ranks into `result`.
-    comm::TGATHER(group, dstG, ubTile);
+    comm::TGATHER(group, dstG, stagingTile);
 }
 ```
