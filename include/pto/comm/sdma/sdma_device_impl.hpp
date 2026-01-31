@@ -34,6 +34,13 @@ namespace sdma {
 namespace detail {
 
 // ============================================================================
+// Temporary Buffer Tile Type Definition
+// ============================================================================
+// Define a Tile type for temporary buffer operations
+// Size: 1 row x 512 columns of uint8_t = 512 bytes (UB_ALIGN_SIZE * 2)
+using TmpBufTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, 512, pto::BLayout::RowMajor, -1, -1>;
+
+// ============================================================================
 // Device Memory Address Constants (same as aclshmem)
 // ============================================================================
 
@@ -153,16 +160,19 @@ PTO_INTERNAL void dcci_cacheline(__gm__ uint8_t* addr)
     __asm__ __volatile__("");
 }
 
-// Helper: Copy from GM to GM using AscendC API
+// Helper: Copy from GM to GM using Tile
 template <typename T>
 PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32_t size,
-                                 AscendC::TBuf<AscendC::TPosition::VECOUT> &tmp_buf)
+                                 TmpBufTile& tmp_tile)
 {
     AscendC::GlobalTensor<T> gm_src;
     AscendC::GlobalTensor<T> gm_dst;
     gm_src.SetGlobalBuffer((__gm__ T *)src, size);
     gm_dst.SetGlobalBuffer((__gm__ T *)dst, size);
-    AscendC::LocalTensor<T> x_local = tmp_buf.template Get<T>();
+    
+    // Reinterpret the uint8_t tile as T* for the copy operation
+    AscendC::LocalTensor<T> x_local;
+    x_local.SetTensor(reinterpret_cast<__ubuf__ T*>(tmp_tile.GetAddr()));
 
     uint32_t cp_len = size * sizeof(T);
     AscendC::DataCopyExtParams cp_params{1, cp_len, 0, 0, 0};
@@ -174,13 +184,16 @@ PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32
     AscendC::PipeBarrier<PIPE_ALL>();
 }
 
-// Helper: Set a single value in GM memory using AscendC API
+// Helper: Set a single value in GM memory using Tile
 template <typename T>
-PTO_INTERNAL void set_value(__gm__ uint8_t* addr, AscendC::TBuf<AscendC::TPosition::VECOUT> &tmp_buf, T x)
+PTO_INTERNAL void set_value(__gm__ uint8_t* addr, TmpBufTile& tmp_tile, T x)
 {
     AscendC::GlobalTensor<T> gm_dst;
     gm_dst.SetGlobalBuffer((__gm__ T *)addr);
-    AscendC::LocalTensor<T> x_local = tmp_buf.template Get<T>();
+    
+    // Reinterpret the uint8_t tile as T* for the set operation
+    AscendC::LocalTensor<T> x_local;
+    x_local.SetTensor(reinterpret_cast<__ubuf__ T*>(tmp_tile.GetAddr()));
     x_local.SetValue(0, x);
     AscendC::PipeBarrier<PIPE_ALL>();
     AscendC::DataCopyExtParams cp_out_params{1, sizeof(T), 0, 0, 0};
@@ -188,9 +201,9 @@ PTO_INTERNAL void set_value(__gm__ uint8_t* addr, AscendC::TBuf<AscendC::TPositi
     AscendC::PipeBarrier<PIPE_ALL>();
 }
 
-// Helper: Get a single value from GM memory using AscendC API
+// Helper: Get a single value from GM memory
 template <typename T>
-PTO_INTERNAL T get_value(__gm__ uint8_t* addr, AscendC::TBuf<AscendC::TPosition::VECOUT> &tmp_buf)
+PTO_INTERNAL T get_value(__gm__ uint8_t* addr, TmpBufTile& tmp_tile)
 {
     dcci_cacheline(addr);
     T x = *((__gm__ T *)addr);
@@ -245,7 +258,7 @@ PTO_INTERNAL bool init_sdma_config(__gm__ uint8_t* context_gm,
                                    uint32_t block_idx,
                                    uint32_t comm_block_dim,
                                    sdma_config_t& config,
-                                   AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
+                                   TmpBufTile& tmp_tile)
 {
     // Get queue info
     __gm__ batch_write_flag_info_t *flag_info = 
@@ -296,7 +309,7 @@ PTO_INTERNAL void prepare_workspace(__gm__ uint8_t* workspace,
                                     workspace_layout_t &layout,
                                     uint32_t block_idx,
                                     uint32_t my_pe,
-                                    AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
+                                    TmpBufTile& tmp_tile)
 {
     // Per-core workspace size for flag data: flag_length + flag receive area flag_length*queue_num
     uint64_t per_core_workspace_size = config.queue_num * SDMA_FLAG_LENGTH;
@@ -316,21 +329,21 @@ PTO_INTERNAL void prepare_workspace(__gm__ uint8_t* workspace,
                                    block_idx * per_core_workspace_size;
 
     // Initialize send flag
-    set_value<uint32_t>((__gm__ uint8_t*)layout.send_workspace, tmp_buf, config.queue_num);
+    set_value<uint32_t>((__gm__ uint8_t*)layout.send_workspace, tmp_tile, config.queue_num);
 }
 
 // Initialize SQ Tail Array
 PTO_INTERNAL void init_sq_tail_array(__gm__ batch_write_channel_info_t* batch_write_channel_info,
                                      uint32_t queue_num,
                                      uint32_t* sq_tail,
-                                     AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
+                                     TmpBufTile& tmp_tile)
 {
     for (uint32_t queue_id = 0U; queue_id < queue_num; ++queue_id) {
         __gm__ batch_write_channel_info_t* channel_info = 
             batch_write_channel_info + queue_id;
         // Get sq_tail field (offset 4 bytes)
         sq_tail[queue_id] = get_value<uint32_t>(
-            ((__gm__ uint8_t*)channel_info) + 4, tmp_buf);
+            ((__gm__ uint8_t*)channel_info) + 4, tmp_tile);
     }
 }
 
@@ -342,7 +355,7 @@ PTO_INTERNAL void submit_data_transfer_sqes(
     uint32_t opcode,
     const sdma_config_t& config,
     uint32_t* sq_tail,
-    AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
+    TmpBufTile& tmp_tile)
 {
     for (uint32_t idx = 0U; idx < config.iter_num; ++idx) {
         uint32_t queue_idx = idx % config.queue_num;
@@ -377,7 +390,7 @@ PTO_INTERNAL void submit_flag_transfer_sqes(
     const workspace_layout_t &layout,
     const sdma_config_t& config,
     uint32_t* sq_tail,
-    AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
+    TmpBufTile& tmp_tile)
 {
     for (uint32_t queue_id = 0U; queue_id < config.queue_num; ++queue_id) {
         __gm__ batch_write_channel_info_t* channel_info = 
@@ -399,7 +412,7 @@ PTO_INTERNAL void flush_cache_and_ring_doorbell(
     __gm__ batch_write_channel_info_t* batch_write_channel_info,
     const sdma_config_t& config,
     uint32_t* sq_tail,
-    AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
+    TmpBufTile& tmp_tile)
 {
     auto item_size = config.iter_num * sizeof(batch_write_item_t);
     for (uint8_t queue_id = 0; queue_id < config.queue_num; queue_id++) {
@@ -414,7 +427,7 @@ PTO_INTERNAL void flush_cache_and_ring_doorbell(
 
         // Ring doorbell for each channel
         set_value<uint32_t>((__gm__ uint8_t*)(channel_info->sq_reg_base) + 8, 
-                           tmp_buf, sq_tail[queue_id]); // 8: position of third uint32
+                           tmp_tile, sq_tail[queue_id]); // 8: position of third uint32
     }
 }
 
@@ -424,7 +437,7 @@ PTO_INTERNAL bool poll_for_completion(
     const workspace_layout_t &layout,
     const sdma_config_t& config,
     uint32_t* sq_tail,
-    AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
+    TmpBufTile& tmp_tile)
 {
     const uint32_t max_times = 1000000;
     for (uint8_t queue_id = 0; queue_id < config.queue_num; queue_id++) {
@@ -439,17 +452,17 @@ PTO_INTERNAL bool poll_for_completion(
 
         // Poll until flag is received or timeout
         while (send_value == 0 && times < max_times) {
-            copy_gm_to_gm<uint32_t>(local_recv_workspace, remote_recv_workspace, 1, tmp_buf);
-            send_value = get_value<uint32_t>(local_recv_workspace, tmp_buf);
+            copy_gm_to_gm<uint32_t>(local_recv_workspace, remote_recv_workspace, 1, tmp_tile);
+            send_value = get_value<uint32_t>(local_recv_workspace, tmp_tile);
             times++;
         }
 
         // Clean up status area data
-        set_value<uint32_t>(remote_recv_workspace, tmp_buf, 0);
-        set_value<uint32_t>(local_recv_workspace, tmp_buf, 0);
+        set_value<uint32_t>(remote_recv_workspace, tmp_tile, 0);
+        set_value<uint32_t>(local_recv_workspace, tmp_tile, 0);
 
         // Update tail value in channel info
-        set_value<uint32_t>(((__gm__ uint8_t*)channel_info) + 4, tmp_buf, sq_tail[queue_id]);
+        set_value<uint32_t>(((__gm__ uint8_t*)channel_info) + 4, tmp_tile, sq_tail[queue_id]);
     }
 
     return true;
@@ -478,9 +491,9 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
         return;
     }
 
-    // 1. Initialize UB buffer
-    AscendC::TBuf<AscendC::TPosition::VECOUT> tmp_buf;
-    GetTPipePtr()->InitBuffer(tmp_buf, UB_ALIGN_SIZE * 2);
+    // 1. Initialize UB buffer using Tile
+    TmpBufTile tmp_tile(1, 512);
+    TASSIGN(tmp_tile, 0x0);
 
     // 2. Get current core info
     const auto block_idx = AscendC::GetBlockIdx();
@@ -489,7 +502,7 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
     // 3. Initialize configuration parameters
     sdma_config_t config;
     if (!init_sdma_config(context_gm, message_len, block_idx, comm_block_dim, 
-                          config, tmp_buf)) {
+                          config, tmp_tile)) {
         AscendC::PipeBarrier<PIPE_ALL>();
         return;
     }
@@ -515,26 +528,26 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
     uint32_t my_pe = block_idx;
     workspace_layout_t workspace_layout;
     prepare_workspace(workspace, flag_addr, config, workspace_layout, 
-                      block_idx, my_pe, tmp_buf);
+                      block_idx, my_pe, tmp_tile);
 
     // 6. Initialize sq_tail array
     uint32_t sq_tail[64] = {0};  // Assume max 64 queues
-    init_sq_tail_array(batch_write_channel_info, config.queue_num, sq_tail, tmp_buf);
+    init_sq_tail_array(batch_write_channel_info, config.queue_num, sq_tail, tmp_tile);
 
     // 8. Submit data transfer SQEs
     submit_data_transfer_sqes(batch_write_channel_info, send_buffer, recv_buffer,
-                              static_cast<uint32_t>(opcode), config, sq_tail, tmp_buf);
+                              static_cast<uint32_t>(opcode), config, sq_tail, tmp_tile);
 
     // 9. Submit flag transfer SQEs
     submit_flag_transfer_sqes(batch_write_channel_info, workspace_layout, config, 
-                               sq_tail, tmp_buf);
+                               sq_tail, tmp_tile);
 
     // 10. Flush cache and ring doorbell
-    flush_cache_and_ring_doorbell(batch_write_channel_info, config, sq_tail, tmp_buf);
+    flush_cache_and_ring_doorbell(batch_write_channel_info, config, sq_tail, tmp_tile);
 
     // 11. Poll for completion
     if (!poll_for_completion(batch_write_channel_info, workspace_layout, config, 
-                             sq_tail, tmp_buf)) {
+                             sq_tail, tmp_tile)) {
         // Transfer failed
     }
 
