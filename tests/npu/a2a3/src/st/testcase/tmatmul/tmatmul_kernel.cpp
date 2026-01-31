@@ -25,7 +25,6 @@ AICORE constexpr inline T CeilAlign(T num_1, T num_2)
     return (num_1 + num_2 - 1) / num_2 * num_2;
 }
 
-
 template <typename T, typename U, typename S, typename B, int validM, int validK, int validN, bool isBias>
 __global__ AICORE void RunTMATMUL_GEMV_CLOSE(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, __gm__ B *src2)
 {
@@ -44,8 +43,8 @@ __global__ AICORE void RunTMATMUL_GEMV_CLOSE(__gm__ T *out, __gm__ U *src0, __gm
     GlobalDataSrc1 src1Global(src1);
     GlobalDataOut dstGlobal(out);
 
-    using GlobalDataSrc2 = GlobalTensor<B, pto::Shape<1, 1, 1, 1, validN>,
-        pto::Stride<validN, validN, validN, validN, 1>>;
+    using GlobalDataSrc2 =
+        GlobalTensor<B, pto::Shape<1, 1, 1, 1, validN>, pto::Stride<validN, validN, validN, validN, 1>>;
     GlobalDataSrc2 src2Global(src2);
 
     using TileMatAData = Tile<TileType::Mat, U, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
@@ -131,8 +130,8 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
     GlobalDataSrc1 src1Global(src1);
     GlobalDataOut dstGlobal(out);
 
-    using GlobalDataSrc2 = GlobalTensor<B, pto::Shape<1, 1, 1, 1, validN>,
-        pto::Stride<validN, validN, validN, validN, 1>>;
+    using GlobalDataSrc2 =
+        GlobalTensor<B, pto::Shape<1, 1, 1, 1, validN>, pto::Stride<validN, validN, validN, validN, 1>>;
     GlobalDataSrc2 src2Global(src2);
 
     using TileMatAData = Tile<TileType::Mat, U, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
@@ -210,8 +209,8 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
         pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
     using GlobalDataSrc1 = GlobalTensor<S, pto::Shape<1, 1, 1, BASEK, validN>,
         pto::Stride<1 * BASEK * validN, 1 * BASEK * validN, BASEK * validN, validN, 1>>;
-    using GlobalDataSrc2 = GlobalTensor<B, pto::Shape<1, 1, 1, 1, validN>,
-        pto::Stride<validN, validN, validN, validN, 1>>;
+    using GlobalDataSrc2 =
+        GlobalTensor<B, pto::Shape<1, 1, 1, 1, validN>, pto::Stride<validN, validN, validN, validN, 1>>;
     using GlobalDataOut = GlobalTensor<T, pto::Shape<1, 1, 1, validM, validN>,
         pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
     GlobalDataSrc2 src2Global(src2);
@@ -251,6 +250,8 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
         GlobalDataSrc1 src1Global(src1 + validN * i * BASEK);
 
         /******************************TLOAD*****************************/
+        TFILLPAD(aMatTile, aMatTile);
+        TFILLPAD(bMatTile, bMatTile);
         TLOAD(aMatTile, src0Global);
         TLOAD(bMatTile, src1Global);
 
@@ -278,7 +279,7 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
             } else {
                 TMATMUL<AccPhase::Partial>(cTile, aTile, bTile);
             }
-        } else if ( i == iter - 1) {
+        } else if (i == iter - 1) {
             TMATMUL_ACC<AccPhase::Final>(cTile, cTile, aTile, bTile);
         } else {
             TMATMUL_ACC<AccPhase::Partial>(cTile, cTile, aTile, bTile);
@@ -452,8 +453,8 @@ __global__ AICORE void RunTGEMVSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S *s
         pto::Stride<1 * validM * validK, 1 * validM * validK, validM * validK, validK, 1>>;
     using GlobalDataSrc1 = GlobalTensor<S, pto::Shape<1, 1, 1, BASEK, validN>,
         pto::Stride<1 * BASEK * validN, 1 * BASEK * validN, BASEK * validN, validN, 1>>;
-    using GlobalDataSrc2 = GlobalTensor<B, pto::Shape<1, 1, 1, 1, validN>,
-        pto::Stride<validN, validN, validN, validN, 1>>;
+    using GlobalDataSrc2 =
+        GlobalTensor<B, pto::Shape<1, 1, 1, 1, validN>, pto::Stride<validN, validN, validN, validN, 1>>;
     using GlobalDataOut = GlobalTensor<T, pto::Shape<1, 1, 1, validM, validN>,
         pto::Stride<1 * validM * validN, 1 * validM * validN, validM * validN, validN, 1>>;
     GlobalDataSrc2 src2Global(src2);
@@ -495,6 +496,8 @@ __global__ AICORE void RunTGEMVSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S *s
         /******************************TLOAD*****************************/
         TLOAD(aMatTile, src0Global);
         TLOAD(bMatTile, src1Global);
+        TFILLPAD(aMatTile, aMatTile);
+        TFILLPAD(bMatTile, bMatTile);
 
         if constexpr (isBias) {
             TLOAD(biasDataTile, src2Global);
@@ -520,7 +523,7 @@ __global__ AICORE void RunTGEMVSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S *s
             } else {
                 TGEMV<AccPhase::Partial>(cTile, aTile, bTile);
             }
-        } else if ( i == iter - 1) {
+        } else if (i == iter - 1) {
             TGEMV_ACC<AccPhase::Final>(cTile, cTile, aTile, bTile);
         } else {
             TGEMV_ACC<AccPhase::Partial>(cTile, cTile, aTile, bTile);
