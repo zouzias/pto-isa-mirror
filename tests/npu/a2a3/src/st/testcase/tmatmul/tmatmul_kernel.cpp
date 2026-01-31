@@ -280,13 +280,15 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
             } else {
                 TMATMUL<AccPhase::Partial>(cTile, aTile, bTile);
             }
+            set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
         } else if ( i == iter - 1) {
             TMATMUL_ACC<AccPhase::Final>(cTile, cTile, aTile, bTile);
         } else {
             TMATMUL_ACC<AccPhase::Partial>(cTile, cTile, aTile, bTile);
+            set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
         }
-        set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
     }
 
     TSTORE<STPhase::Final>(dstGlobal, cTile);
@@ -522,13 +524,15 @@ __global__ AICORE void RunTGEMVSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S *s
             } else {
                 TGEMV<AccPhase::Partial>(cTile, aTile, bTile);
             }
-        } else if ( i == iter - 1) {
+            set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+        } else if (i == iter - 1) {
             TGEMV_ACC<AccPhase::Final>(cTile, cTile, aTile, bTile);
         } else {
             TGEMV_ACC<AccPhase::Partial>(cTile, cTile, aTile, bTile);
+            set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
         }
-        set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
     }
 
     TSTORE<STPhase::Final>(dstGlobal, cTile);
