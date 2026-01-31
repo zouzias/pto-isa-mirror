@@ -177,6 +177,7 @@ set(ALL_TESTCASES
     tmov_vect
     texpands
     tmov_acc2mat
+    timg2col
     tassign
     tmov_ub2l1
     tcmp
