@@ -27,16 +27,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define ENABLE_DEBUG_PRINT 1
 
 // ============================================================================
-// Device-side Debug Print Support
-// Enable by compiling with DEBUG_MODE=ON (adds --cce-enable-print flag)
-// ============================================================================
-#ifdef _DEBUG
-    #define KERNEL_DEBUG_PRINT(...) AscendC::printf(__VA_ARGS__)
-#else
-    #define KERNEL_DEBUG_PRINT(...) ((void)0)
-#endif
-
-// ============================================================================
 // 1D Vector Test Kernel - SDMA version
 // TPUT_SDMA: Asynchronous remote write using SDMA engine (direct GM to GM)
 // 
@@ -51,68 +41,43 @@ __global__ AICORE void TPutSdmaKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
 
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] ======== Kernel Start ========\n");
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] dst=%p, src=%p, shmem=%p, nranks=%d\n", dst, src, shmem, nranks);
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] count=%lu, sizeof(T)=%lu\n", count, sizeof(T));
-
     ShapeDyn shape(1, 1, 1, 1, count);
     StrideDyn stride(count, count, count, count, 1);
 
     int my_rank = shmem_my_pe();
     int prev_rank = (my_rank + nranks - 1) % nranks;
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] my_rank=%d, prev_rank=%d\n", my_rank, prev_rank);
 
     // Shared memory layout: only need recv buffer (no send buffer needed)
     __gm__ T *shmem_data = (__gm__ T *)((__gm__ T *)shmem + 64 * sizeof(int32_t));
     __gm__ T *recv_shmem = shmem_data;
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] shmem_data=%p, recv_shmem=%p\n", shmem_data, recv_shmem);
 
     Global srcG(src, shape, stride);
     Global dstG(dst, shape, stride);
     Global recvG(recv_shmem, shape, stride);
 
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] GlobalTensors created, calling ShmemDeviceBarrierAll...\n");
-    
     // Synchronize to ensure all ranks are ready
     ShmemDeviceBarrierAll();
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] First barrier done\n");
 
     // Get remote PE's recv buffer address
     __gm__ T *remote_recv_shmem = ShmemPtr(recv_shmem, prev_rank);
     Global remoteRecvG(remote_recv_shmem, shape, stride);
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] remote_recv_shmem=%p (target pe=%d)\n", remote_recv_shmem, prev_rank);
-    
+
     // TPUT_SDMA: Direct transfer from local srcG to remote recvG
     // No intermediate local buffer needed
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] Calling TPUT_SDMA (local->remote)...\n");
     auto put_event = pto::comm::TPUT_SDMA(remoteRecvG, srcG);
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] TPUT_SDMA returned, waiting for completion...\n");
-    
+
     // Wait for SDMA transfer completion
     pto::comm::sdma::SDMA::wait(put_event);
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] SDMA wait done, calling ShmemDeviceQuiet...\n");
-    
+
     // Ensure all remote operations from this PE are complete
     ShmemDeviceQuiet();
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] Quiet done, calling second barrier...\n");
-    
+
     // Then synchronize all PEs
     ShmemDeviceBarrierAll();
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] Second barrier done, copying result to output...\n");
 
     // Copy result from local recv buffer to output using SDMA
     auto result_event = pto::comm::TPUT_SDMA(dstG, recvG);
     pto::comm::sdma::SDMA::wait(result_event);
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel] ======== Kernel Complete ========\n");
 }
 
 template <typename T, size_t count>
@@ -274,69 +239,44 @@ __global__ AICORE void TPutSdmaKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
 
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] ======== Kernel Start ========\n");
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] dst=%p, src=%p, shmem=%p, nranks=%d\n", dst, src, shmem, nranks);
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] rows=%lu, cols=%lu, total_count=%lu\n", rows, cols, total_count);
-
     // 2D GlobalTensor shape: [1, 1, 1, rows, cols]
     ShapeDyn shape(1, 1, 1, rows, cols);
     StrideDyn stride(total_count, total_count, total_count, cols, 1);
 
     int my_rank = shmem_my_pe();
     int prev_rank = (my_rank + nranks - 1) % nranks;
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] my_rank=%d, prev_rank=%d\n", my_rank, prev_rank);
 
     // Shared memory layout: only need recv buffer (no send buffer needed)
     __gm__ T *shmem_data = (__gm__ T *)((__gm__ T *)shmem + 64 * sizeof(int32_t));
     __gm__ T *recv_shmem = shmem_data;
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] shmem_data=%p, recv_shmem=%p\n", shmem_data, recv_shmem);
 
     Global srcG(src, shape, stride);
     Global dstG(dst, shape, stride);
     Global recvG(recv_shmem, shape, stride);
 
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] GlobalTensors created, calling ShmemDeviceBarrierAll...\n");
-    
     // Synchronize to ensure all ranks are ready
     ShmemDeviceBarrierAll();
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] First barrier done\n");
 
     // Get remote PE's recv buffer address
     __gm__ T *remote_recv_shmem = ShmemPtr(recv_shmem, prev_rank);
     Global remoteRecvG(remote_recv_shmem, shape, stride);
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] remote_recv_shmem=%p (target pe=%d)\n", remote_recv_shmem, prev_rank);
-    
+
     // TPUT_SDMA: Direct transfer from local srcG to remote recvG
     // No intermediate local buffer needed
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] Calling TPUT_SDMA (local->remote)...\n");
     auto put_event = pto::comm::TPUT_SDMA(remoteRecvG, srcG);
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] TPUT_SDMA returned, waiting for completion...\n");
-    
+
     // Wait for SDMA transfer completion
     pto::comm::sdma::SDMA::wait(put_event);
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] SDMA wait done, calling ShmemDeviceQuiet...\n");
-    
+
     // Ensure all remote operations from this PE are complete
     ShmemDeviceQuiet();
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] Quiet done, calling second barrier...\n");
-    
+
     // Then synchronize all PEs
     ShmemDeviceBarrierAll();
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] Second barrier done, copying result to output...\n");
 
     // Copy result from local recv buffer to output using SDMA
     auto result_event = pto::comm::TPUT_SDMA(dstG, recvG);
     pto::comm::sdma::SDMA::wait(result_event);
-    
-    KERNEL_DEBUG_PRINT("[TPutSdmaKernel2D] ======== Kernel Complete ========\n");
 }
 
 template <typename T, size_t rows, size_t cols>

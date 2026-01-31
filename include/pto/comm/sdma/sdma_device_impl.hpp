@@ -17,6 +17,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/comm_types.hpp"
 #include <cstdint>
 
+// ============================================================================
+// SDMA Debug Print Interface
+// Usage: Compile with -D_DEBUG --cce-enable-print to enable debug output
+// Note: cce::printf buffer is limited, excessive output may be truncated
+// ============================================================================
+#ifdef _DEBUG
+    #define PTO_SDMA_DEBUG_PRINT(...) cce::printf(__VA_ARGS__)
+#else
+    #define PTO_SDMA_DEBUG_PRINT(...) ((void)0)
+#endif
+
 namespace pto {
 namespace comm {
 namespace sdma {
@@ -442,153 +453,6 @@ PTO_INTERNAL bool poll_for_completion(
     }
 
     return true;
-}
-
-// Debug status codes for sdma_post_send
-enum class SdmaDebugStatus : uint32_t {
-    NOT_STARTED = 0,
-    DEVICE_STATE_NULL = 1,
-    CONTEXT_GM_NULL = 2,
-    FLAG_ADDR_NULL = 3,
-    UB_INIT_DONE = 10,
-    CONFIG_INIT_FAILED = 11,
-    CONFIG_ITER_ZERO = 12,
-    CONFIG_INIT_DONE = 20,
-    WORKSPACE_PREPARED = 30,
-    SQ_TAIL_INIT_DONE = 40,
-    DATA_SQES_SUBMITTED = 50,
-    FLAG_SQES_SUBMITTED = 60,
-    DOORBELL_RUNG = 70,
-    POLL_STARTED = 80,
-    POLL_COMPLETED = 90,
-    ALL_DONE = 100
-};
-
-// Helper: Write debug status to a debug buffer in GM
-// debug_buffer should be pre-allocated in the test kernel
-PTO_INTERNAL void write_debug_status(__gm__ uint32_t* debug_buffer, 
-                                     uint32_t block_idx,
-                                     SdmaDebugStatus status,
-                                     AscendC::TBuf<AscendC::TPosition::VECOUT>& tmp_buf)
-{
-    if (debug_buffer != nullptr) {
-        set_value<uint32_t>((__gm__ uint8_t*)(debug_buffer + block_idx), 
-                           tmp_buf, static_cast<uint32_t>(status));
-    }
-}
-
-// Main SDMA Post Send Function
-// debug_buffer: optional debug status buffer (pass nullptr to disable debug)
-PTO_INTERNAL void sdma_post_send_debug(__gm__ uint8_t* recv_buffer,
-                                        __gm__ uint8_t* send_buffer,
-                                        uint64_t opcode,
-                                        uint64_t message_len,
-                                        __gm__ uint32_t* debug_buffer)
-{
-    const auto block_idx = AscendC::GetBlockIdx();
-    
-    // Initialize temporary UB buffer early for debug writes
-    AscendC::TBuf<AscendC::TPosition::VECOUT> tmp_buf;
-    GetTPipePtr()->InitBuffer(tmp_buf, UB_ALIGN_SIZE * 2);
-    
-    __gm__ detail::pto_comm_global_state_t* device_state = detail::pto_comm_get_state();
-    if (device_state == nullptr) {
-        write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::DEVICE_STATE_NULL, tmp_buf);
-        return;
-    }
-
-    __gm__ uint8_t* context_gm = reinterpret_cast<__gm__ uint8_t*>(
-        device_state->sdma_workspace_addr);
-    if (context_gm == nullptr) {
-        write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::CONTEXT_GM_NULL, tmp_buf);
-        return;
-    }
-
-    __gm__ uint8_t* flag_addr = reinterpret_cast<__gm__ uint8_t*>(
-        device_state->sdma_flag_addr);
-    if (flag_addr == nullptr) {
-        write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::FLAG_ADDR_NULL, tmp_buf);
-        return;
-    }
-
-    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::UB_INIT_DONE, tmp_buf);
-
-    // 2. Get current core info
-    const auto comm_block_dim = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
-
-    // 3. Initialize configuration parameters
-    sdma_config_t config;
-    if (!init_sdma_config(context_gm, message_len, block_idx, comm_block_dim, 
-                          config, tmp_buf)) {
-        write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::CONFIG_INIT_FAILED, tmp_buf);
-        AscendC::PipeBarrier<PIPE_ALL>();
-        return;
-    }
-    if (config.iter_num == 0) {
-        write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::CONFIG_ITER_ZERO, tmp_buf);
-        return; // No transfer task, exit directly
-    }
-    
-    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::CONFIG_INIT_DONE, tmp_buf);
-
-    // 4. Get channel info
-    __gm__ batch_write_channel_info_t* batch_write_channel_base =
-        (__gm__ batch_write_channel_info_t *)(context_gm + 
-                                               sizeof(batch_write_flag_info_t));
-    // Channel info for current block
-    __gm__ batch_write_channel_info_t* batch_write_channel_info = 
-        batch_write_channel_base + block_idx * config.queue_num;
-
-    // 5.1 Calculate workspace
-    __gm__ uint8_t* workspace = context_gm + 
-                                 sizeof(batch_write_flag_info_t) + 
-                                 SDMA_MAX_CHAN * sizeof(batch_write_channel_info_t);
-    
-    // 5.2 Prepare workspace
-    // TODO: Get my_pe from device state (currently using block_idx as placeholder)
-    uint32_t my_pe = block_idx;
-    workspace_layout_t workspace_layout;
-    prepare_workspace(workspace, flag_addr, config, workspace_layout, 
-                      block_idx, my_pe, tmp_buf);
-    
-    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::WORKSPACE_PREPARED, tmp_buf);
-
-    // 6. Initialize sq_tail array
-    uint32_t sq_tail[64] = {0};  // Assume max 64 queues
-    init_sq_tail_array(batch_write_channel_info, config.queue_num, sq_tail, tmp_buf);
-    
-    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::SQ_TAIL_INIT_DONE, tmp_buf);
-
-    // 8. Submit data transfer SQEs
-    submit_data_transfer_sqes(batch_write_channel_info, send_buffer, recv_buffer,
-                              static_cast<uint32_t>(opcode), config, sq_tail, tmp_buf);
-    
-    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::DATA_SQES_SUBMITTED, tmp_buf);
-
-    // 9. Submit flag transfer SQEs
-    submit_flag_transfer_sqes(batch_write_channel_info, workspace_layout, config, 
-                               sq_tail, tmp_buf);
-    
-    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::FLAG_SQES_SUBMITTED, tmp_buf);
-
-    // 10. Flush cache and ring doorbell
-    flush_cache_and_ring_doorbell(batch_write_channel_info, config, sq_tail, tmp_buf);
-    
-    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::DOORBELL_RUNG, tmp_buf);
-
-    // 11. Poll for completion
-    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::POLL_STARTED, tmp_buf);
-    
-    if (!poll_for_completion(batch_write_channel_info, workspace_layout, config, 
-                             sq_tail, tmp_buf)) {
-        // Transfer failed - status already indicates POLL_STARTED
-    }
-    
-    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::POLL_COMPLETED, tmp_buf);
-
-    AscendC::PipeBarrier<PIPE_ALL>();
-    
-    write_debug_status(debug_buffer, block_idx, SdmaDebugStatus::ALL_DONE, tmp_buf);
 }
 
 // Main SDMA Post Send Function

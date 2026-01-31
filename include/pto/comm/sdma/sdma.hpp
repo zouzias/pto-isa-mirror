@@ -138,6 +138,19 @@ private:
     template <typename GlobalDstData, typename GlobalSrcData>
     PTO_INTERNAL static SdmaEvent put_impl(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
     {
+        // Debug: Check device state before accessing
+        __gm__ detail::pto_comm_global_state_t* device_state = detail::pto_comm_get_state();
+        if (device_state == nullptr) {
+            // Device state is null - shmem not initialized properly
+            return SdmaEvent(0);
+        }
+        
+        // Check if SDMA workspace is initialized (non-zero address)
+        if (device_state->sdma_workspace_addr == 0) {
+            // SDMA workspace not initialized
+            return SdmaEvent(0);
+        }
+        
         __gm__ detail::pto_sdma_op_res_info_t* op_res_info = detail::pto_comm_get_sdma_op_res_info();
         if (op_res_info == nullptr) {
             return SdmaEvent(0);
@@ -238,6 +251,19 @@ private:
     template <typename GlobalDstData, typename GlobalSrcData>
     PTO_INTERNAL static SdmaEvent get_impl(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal)
     {
+        // Debug: Check device state before accessing
+        __gm__ detail::pto_comm_global_state_t* device_state = detail::pto_comm_get_state();
+        if (device_state == nullptr) {
+            // Device state is null - shmem not initialized properly
+            return SdmaEvent(0);
+        }
+        
+        // Check if SDMA workspace is initialized (non-zero address)
+        if (device_state->sdma_workspace_addr == 0) {
+            // SDMA workspace not initialized
+            return SdmaEvent(0);
+        }
+        
         __gm__ detail::pto_sdma_op_res_info_t* op_res_info = detail::pto_comm_get_sdma_op_res_info();
         if (op_res_info == nullptr) {
             return SdmaEvent(0);
