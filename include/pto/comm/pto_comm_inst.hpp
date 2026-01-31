@@ -196,13 +196,6 @@ PTO_INST RecordEvent TREDUCE_PINGPONG(ParallelGroupT &parallelGroup, GlobalDstDa
     return {};
 }
 
-
-template <typename GlobalSignalData>
-PTO_INST void TBARRIER(GlobalSignalData *barrierSignals, int nranks, int my_rank)
-{
-    TBARRIER_IMPL(barrierSignals, nranks, my_rank);
-}
-
 } // namespace comm
 } // namespace pto
 
