@@ -292,6 +292,36 @@ PTO_INST RecordEvent TSUBC(TileData &dst, TileData &src0, TileData &src1, TileDa
   return {};
 }
 
+#ifdef REGISTER_BASE
+template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
+    typename... WaitEvents>
+PTO_INST RecordEvent TGEMV_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
+    TileRightScale &bScaleMatrix, WaitEvents &...events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TGEMV_MX, cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix);
+    return {};
+}
+
+template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale, typename... WaitEvents>
+PTO_INST RecordEvent TGEMV_MX(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix,
+    TileRight &bMatrix, TileRightScale &bScaleMatrix, WaitEvents &...events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TGEMV_MX, cOutMatrix, cInMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix);
+    return {};
+}
+
+template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
+    typename TileBias, typename... WaitEvents>
+PTO_INST RecordEvent TGEMV_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
+    TileRightScale &bScaleMatrix, TileBias &biasData, WaitEvents &...events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TGEMV_MX, cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix, biasData);
+    return {};
+}
+
 template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
     typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_MX(
@@ -321,6 +351,7 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
     MAP_INSTR_IMPL(TMATMUL_MX, cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix, biasData);
     return {};
 }
+#endif
 
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents&... events) {
