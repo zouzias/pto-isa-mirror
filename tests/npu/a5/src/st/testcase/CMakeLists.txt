@@ -201,6 +201,7 @@ set(ALL_TESTCASES
     tnot
     trelu
     tquant
+    tstore_acc2gm5d
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

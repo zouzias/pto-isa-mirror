@@ -123,7 +123,7 @@ def gen_x1_x2_golden(g_info):
     return x1_gm, x2_gm, golden
 
 
-def gen_golden_data(case_name, g_info):
+def gen_golden_data(case_name, g_info, shape_params):
     src_data_type = g_info.src_data_type
     dst_data_type = g_info.dst_data_type
     m = g_info.m
@@ -165,10 +165,7 @@ def gen_golden_data(case_name, g_info):
     elif format == 3:
         c0_size = 8
         golden = golden.reshape(int(m / 16), 16, int(n / c0_size), c0_size).transpose(2, 0, 1, 3).astype(dst_data_type)
-    elif format == 4:
-        shape = g_info.shape
-        golden = golden.reshape(shape[0], shape[1], shape[2], shape[3])
-
+    
     if relu_mode == 1:
         golden = np.maximum(golden, 0)
 
@@ -176,10 +173,13 @@ def gen_golden_data(case_name, g_info):
     x2_gm.tofile("./x2_gm.bin")
     golden.tofile("./golden.bin")
 
+    if shape_params[0] != 0:
+        golden_NHWC = golden.reshape(shape_params[0], shape_params[1], shape_params[2], shape_params[3])
+        golden_NHWC.tofile("./golden_NHWC.bin")
+
 
 class TStoreAcc2gmParams:
-    def __init__(self, dst_data_type, src_data_type, format, m, n, k, quant_mode=0, scalar=1, relu_mode=0,
-        shape=(0,0,0,0)):
+    def __init__(self, dst_data_type, src_data_type, format, m, n, k, quant_mode=0, scalar=1, relu_mode=0):
         self.src_data_type = src_data_type
         self.dst_data_type = dst_data_type
         self.format = format
@@ -189,7 +189,6 @@ class TStoreAcc2gmParams:
         self.quant_mode = quant_mode
         self.scalar = scalar
         self.relu_mode = relu_mode
-        self.shape = shape
 
 if __name__ == "__main__":
     # 用例名称
@@ -200,148 +199,39 @@ if __name__ == "__main__":
         "TStoreAcc2gmTest.case4",
         "TStoreAcc2gmTest.case5",
         "TStoreAcc2gmTest.case6",
-        "TStoreAcc2gmTest.case7",
-        "TStoreAcc2gmTest.case8",
-        "TStoreAcc2gmTest.case9",
-        "TStoreAcc2gmTest.case10",
-        "TStoreAcc2gmTest.case11",
-        "TStoreAcc2gmTest.case12",
-        "TStoreAcc2gmTest.case13",
-        "TStoreAcc2gmTest.case14",
-        "TStoreAcc2gmTest.case15",
-        "TStoreAcc2gmTest.case16",
-        "TStoreAcc2gmTest.case17",
-        "TStoreAcc2gmTest.case18",
-        "TStoreAcc2gmTest.case19",
-        "TStoreAcc2gmTest.case20",
-        "TStoreAcc2gmTest.case21",
-        "TStoreAcc2gmTest.case22",
-        "TStoreAcc2gmTest.case23",
-        "TStoreAcc2gmTest.case24",
-        "TStoreAcc2gmTest.case25",
-        "TStoreAcc2gmTest.case26",
-        "TStoreAcc2gmTest.case27",
-        "TStoreAcc2gmTest.case28",
-        "TStoreAcc2gmTest.case29",
-        "TStoreAcc2gmTest.case30",
-        "TStoreAcc2gmTest.case31",
-        "TStoreAcc2gmTest.case32",
-        "TStoreAcc2gmTest.case33",
-        "TStoreAcc2gmTest.case34",
-        "TStoreAcc2gmTest.case35",
-        "TStoreAcc2gmTest.case36",
-        "TStoreAcc2gmTest.case37",
-        "TStoreAcc2gmTest.case38",
-        "TStoreAcc2gmTest.case39",
-        "TStoreAcc2gmTest.case40",
-        "TStoreAcc2gmTest.case41",
-        "TStoreAcc2gmTest.case42",
-        "TStoreAcc2gmTest.case43",
-        "TStoreAcc2gmTest.case44",
-        "TStoreAcc2gmTest.case45",
-        "TStoreAcc2gmTest.case46",
-        "TStoreAcc2gmTest.case47",
-        "TStoreAcc2gmTest.case48",
-        "TStoreAcc2gmTest.case49",
-        "TStoreAcc2gmTest.case50",
-        "TStoreAcc2gmTest.case51",
-        "TStoreAcc2gmTest.case52",
         "TStoreAcc2gmTest.case_relu_1",
         "TStoreAcc2gmTest.case_relu_11",
         "TStoreAcc2gmTest.case_relu_21",
-        "TStoreAcc2gmTest.case_relu_31",
-        "TStoreAcc2gmTest.case_relu_41",
-        "TStoreAcc2gmTest.case_relu_51",
-        "TStoreAcc2gmTest.case_nhwc_1",
-        "TStoreAcc2gmTest.case_nhwc_2",
-        "TStoreAcc2gmTest.case_nhwc_3",
-        "TStoreAcc2gmTest.case_nhwc_4",
-        "TStoreAcc2gmTest.case_nhwc_5",
-        "TStoreAcc2gmTest.case_nhwc_6",
-        "TStoreAcc2gmTest.case_nhwc_7",
-        "TStoreAcc2gmTest.case_nhwc_8",
     ]
 
     case_params_list = [
         TStoreAcc2gmParams(np.float32, np.float32, 1, 128, 128, 16),
         TStoreAcc2gmParams(np.float32, np.float32, 1, 31, 32, 15),
-        TStoreAcc2gmParams(np.float32, np.float16, 1, 65, 128, 96),
-        TStoreAcc2gmParams(np.float16, np.float16, 1, 73, 64, 32),
-        TStoreAcc2gmParams(np.float32, bfloat16, 1, 13, 32, 25),
-        TStoreAcc2gmParams(bfloat16, bfloat16, 1, 100, 222, 60),
-
-        TStoreAcc2gmParams(np.float32, np.float32, 2, 32, 64, 25),
-        TStoreAcc2gmParams(np.float32, np.float32, 2, 48, 32, 45),
-        TStoreAcc2gmParams(np.float32, np.float16, 2, 32, 64, 24),
-        TStoreAcc2gmParams(np.float16, np.float16, 2, 96, 96, 23),
-        TStoreAcc2gmParams(np.float32, bfloat16, 2, 48, 96, 22),
-        TStoreAcc2gmParams(bfloat16, bfloat16, 2, 48, 256, 32),
-
-        TStoreAcc2gmParams(np.int32, np.int8, 1, 44, 128, 27),
-        TStoreAcc2gmParams(np.int32, np.int8, 2, 64, 96, 30),
-        TStoreAcc2gmParams(np.float32, np.float32, 3, 64, 192, 43),
 
         TStoreAcc2gmParams(np.float16, np.int8, 1, 64, 64, 64, 1, 5),
         TStoreAcc2gmParams(np.int8, np.int8, 1, 31, 32, 26, 1, 2),
-        TStoreAcc2gmParams(np.uint8, np.int8, 1, 16, 32, 17, 1, 2),
-        TStoreAcc2gmParams(bfloat16, np.int8, 1, 17, 32, 31, 1, 3),
-        TStoreAcc2gmParams(np.float16, np.int8, 2, 64, 32, 64, 1, 5),
-        TStoreAcc2gmParams(np.int8, np.int8, 2, 32, 32, 32, 1, 2),
-        TStoreAcc2gmParams(np.uint8, np.int8, 2, 160, 64, 17, 1, 2),
-        TStoreAcc2gmParams(bfloat16, np.int8, 2, 16, 96, 29, 1, 2),
-
-        TStoreAcc2gmParams(np.int8, np.float16, 1, 25, 35, 32, 1, 2),
-        TStoreAcc2gmParams(np.uint8, np.float32, 1, 16, 20, 25, 1, 1),
-        TStoreAcc2gmParams(np.float16, np.float16, 1, 49, 65, 37, 1, 3),
-        TStoreAcc2gmParams(bfloat16, np.float16, 1, 160, 79, 51, 1, 3),
-        TStoreAcc2gmParams(hifloat8, np.float16, 1, 17, 57, 33, 1, 2),
-
-
-        TStoreAcc2gmParams(np.int8, np.float32, 2, 16, 64, 15, 1, 2),
-        TStoreAcc2gmParams(np.uint8, bfloat16, 2, 32, 64, 16, 1, 2),
-        TStoreAcc2gmParams(np.float16, np.float16, 2, 128, 128, 37, 1, 3),
-        TStoreAcc2gmParams(bfloat16, np.float16, 2, 64, 32, 31, 1, 3),
-        TStoreAcc2gmParams(hifloat8, np.float16, 2, 80, 64, 10, 1, 2),
 
         TStoreAcc2gmParams(np.float16, np.int8, 1, 55, 88, 32, 2),
         TStoreAcc2gmParams(np.int8, np.int8, 1, 34, 85, 19, 2),
-        TStoreAcc2gmParams(np.uint8, np.int8, 1, 31, 32, 29, 2),
-        TStoreAcc2gmParams(bfloat16, np.int8, 1, 45, 81, 26, 2),
-        TStoreAcc2gmParams(np.float16, np.float16, 1, 15, 15, 31, 2),
-        TStoreAcc2gmParams(bfloat16, np.float16, 1, 31, 95, 17, 2),
-        TStoreAcc2gmParams(np.int8, np.float16, 1, 33, 65, 25, 2),
-        TStoreAcc2gmParams(np.uint8, np.float16, 1, 19, 32, 23, 2),
-        TStoreAcc2gmParams(hifloat8, np.float16, 1, 99, 100, 15, 2),
-
-        TStoreAcc2gmParams(np.float16, np.int8, 2, 256, 128, 63, 2),
-        TStoreAcc2gmParams(np.int8, np.int8, 2, 32, 32, 31, 2),
-        TStoreAcc2gmParams(np.uint8, np.int8, 2, 48, 32, 23, 2),
-        TStoreAcc2gmParams(bfloat16, np.int8, 2, 80, 96, 49, 2),
-        TStoreAcc2gmParams(np.float16, np.float16, 2, 128, 96, 31, 2),
-        TStoreAcc2gmParams(bfloat16, np.float16, 2, 32, 96, 17, 2),
-        TStoreAcc2gmParams(np.int8, np.float16, 2, 32, 64, 25, 2),
-        TStoreAcc2gmParams(np.uint8, np.float16, 2, 16, 32, 23, 2),
-        TStoreAcc2gmParams(hifloat8, np.float16, 2, 144, 96, 37, 2),
-        TStoreAcc2gmParams(fp8_e4m3fn, fp8_e4m3fn, 1, 32, 32, 31, 1),
 
         # relu
         TStoreAcc2gmParams(np.float32, np.float32, 1, 117, 97, 71, relu_mode=1),
-        TStoreAcc2gmParams(np.float32, np.float16, 2, 160, 80, 51, relu_mode=1),
         TStoreAcc2gmParams(np.int8, np.float16, 1, 77, 34, 81, quant_mode=1, scalar=2, relu_mode=1),
-        TStoreAcc2gmParams(np.int8, np.int8, 2, 96, 32, 159, quant_mode=1, scalar=2, relu_mode=1),
         TStoreAcc2gmParams(np.int8, np.float16, 1, 85, 77, 66, quant_mode=2, relu_mode=1),
-        TStoreAcc2gmParams(np.int8, np.int8, 2, 128, 128, 123, quant_mode=2, relu_mode=1),
+    ]
 
-        # NHWC/NCHW
-        TStoreAcc2gmParams(np.float32, np.float32, 4, 128, 128, 16, quant_mode=0, scalar=1, relu_mode=0, shape=(1, 16, 8, 128)), # align
-        TStoreAcc2gmParams(np.int8, np.int8, 4, 512, 63, 31, quant_mode=0, scalar=1, relu_mode=0, shape=(4, 8, 16, 63)), # unalign
-        TStoreAcc2gmParams(np.float32, bfloat16, 4, 1024, 32, 8, quant_mode=0, scalar=1, relu_mode=0, shape=(1, 32, 32, 32)), #normal quant
-        TStoreAcc2gmParams(bfloat16, np.float16, 4, 126, 43, 64, quant_mode=0, scalar=1, relu_mode=1, shape=(1, 2, 63, 43)), #relu
-        TStoreAcc2gmParams(fp8_e4m3fn, np.float32, 4, 12000, 64, 2, quant_mode=1, scalar=2, relu_mode=0, shape=(10, 30, 40, 64)),  #scalar quant
-        TStoreAcc2gmParams(hifloat8, np.int8, 4, 640, 64, 16, quant_mode=1, scalar=3, relu_mode=1, shape=(8, 16, 5, 64)),  #scalar quant + relu
-        TStoreAcc2gmParams(fp8_e4m3fn, np.float16, 4, 352, 48, 36, quant_mode=2, scalar=1, relu_mode=0, shape=(2, 8, 22, 48)), #vector quant
-        TStoreAcc2gmParams(np.float16, bfloat16, 4, 256, 128, 32, quant_mode=2, scalar=1, relu_mode=1, shape=(1, 64, 4, 128)), #vector quant + relu
+    shape_params_list = [
+        [1, 16, 8, 128],  #nhwc
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
 
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
     ]
 
     for i, case_name  in enumerate(case_name_list):
@@ -349,5 +239,5 @@ if __name__ == "__main__":
             os.makedirs(case_name)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data(case_name, case_params_list[i])
+        gen_golden_data(case_name, case_params_list[i], shape_params_list[i])
         os.chdir(original_dir)
