@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/sdma/sdma_types.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/pto-inst.hpp"
 #include <cstdint>
 
 // ============================================================================
@@ -172,7 +173,7 @@ PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32
     
     // Reinterpret the uint8_t tile as T* for the copy operation
     AscendC::LocalTensor<T> x_local;
-    x_local.SetTensor(reinterpret_cast<__ubuf__ T*>(tmp_tile.GetAddr()));
+    x_local.SetLocalTensor(reinterpret_cast<__ubuf__ T*>(tmp_tile.data()));
 
     uint32_t cp_len = size * sizeof(T);
     AscendC::DataCopyExtParams cp_params{1, cp_len, 0, 0, 0};
@@ -193,7 +194,7 @@ PTO_INTERNAL void set_value(__gm__ uint8_t* addr, TmpBufTile& tmp_tile, T x)
     
     // Reinterpret the uint8_t tile as T* for the set operation
     AscendC::LocalTensor<T> x_local;
-    x_local.SetTensor(reinterpret_cast<__ubuf__ T*>(tmp_tile.GetAddr()));
+    x_local.SetLocalTensor(reinterpret_cast<__ubuf__ T*>(tmp_tile.data()));
     x_local.SetValue(0, x);
     AscendC::PipeBarrier<PIPE_ALL>();
     AscendC::DataCopyExtParams cp_out_params{1, sizeof(T), 0, 0, 0};
