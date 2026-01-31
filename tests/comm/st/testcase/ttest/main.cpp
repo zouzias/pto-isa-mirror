@@ -35,6 +35,8 @@ bool RunTTestCompare_LT(int n_ranks, int n_devices, int first_rank_id, int first
 
 // TTEST Polling with Timeout: Polling loop pattern
 bool RunTTestPollingTimeout(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+// TTEST Polling with Timeout (miss): should time out without finding signal
+bool RunTTestPollingTimeoutMiss(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 
 // TTEST NE: Test not-equal comparison
 bool RunTTestNE(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
@@ -97,6 +99,8 @@ TEST(TTest, LT_False) {
 
 // Test polling loop with TTEST until signal arrives
 TEST(TTest, PollingTimeout) { ASSERT_TRUE(RunTTestPollingTimeout(2, 2, 0, 0)); }
+// Test polling loop timeout when signal is delayed too long
+TEST(TTest, PollingTimeoutMiss) { ASSERT_TRUE(RunTTestPollingTimeoutMiss(2, 2, 0, 0)); }
 
 int main(int argc, char **argv)
 {

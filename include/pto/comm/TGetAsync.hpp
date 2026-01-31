@@ -1,0 +1,108 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
+#ifndef PTO_COMM_TGET_ASYNC_HPP
+#define PTO_COMM_TGET_ASYNC_HPP
+
+#include "pto/common/debug.h"
+#include "pto/common/type.hpp"
+#include "pto/common/constants.hpp"
+#include "pto/comm/comm_types.hpp"
+
+namespace pto {
+namespace comm {
+
+// ============================================================================
+// TGET_ASYNC_IMPL: Asynchronous remote read operation implementation
+// 
+// Directly transfers data from remote NPU's GM to local GM without UB staging.
+// Returns AsyncEvent for synchronization with TSYNC.
+//
+// Data flow: srcGlobalData (remote GM) → DMA Engine → dstGlobalData (local GM)
+// ============================================================================
+
+namespace detail {
+
+// SDMA implementation
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TGET_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData)
+{
+    using T = typename GlobalSrcData::RawDType;
+    
+    static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>,
+        "TGET_ASYNC: src/dst element type mismatch");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout,
+        "TGET_ASYNC: src/dst layout mismatch");
+
+    // Get transfer parameters from GlobalTensor
+    const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
+    const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
+    const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+    const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+    const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+    
+    const uint32_t totalElems = gShape0 * gShape1 * gShape2 * gShape3 * gShape4;
+    
+    // TODO: Call actual SDMA GET intrinsic
+    // uint64_t eventHandle = __sdma_get_async(dstGlobalData.data(), srcGlobalData.data(), 
+    //                                          totalElems * sizeof(T));
+    uint64_t eventHandle = 1;  // Placeholder
+    
+    return AsyncEvent(eventHandle, DmaEngine::SDMA);
+}
+
+// URMA implementation
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TGET_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData)
+{
+    using T = typename GlobalSrcData::RawDType;
+    
+    static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>,
+        "TGET_ASYNC: src/dst element type mismatch");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout,
+        "TGET_ASYNC: src/dst layout mismatch");
+
+    // Get transfer parameters from GlobalTensor
+    const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
+    const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
+    const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+    const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+    const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+    
+    const uint32_t totalElems = gShape0 * gShape1 * gShape2 * gShape3 * gShape4;
+    
+    // TODO: Call actual URMA GET intrinsic
+    // uint64_t eventHandle = __urma_get_async(dstGlobalData.data(), srcGlobalData.data(), 
+    //                                          totalElems * sizeof(T));
+    uint64_t eventHandle = 1;  // Placeholder
+    
+    return AsyncEvent(eventHandle, DmaEngine::URMA);
+}
+
+} // namespace detail
+
+// ============================================================================
+// Main TGET_ASYNC_IMPL with DmaEngine template parameter
+// ============================================================================
+
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TGET_ASYNC_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData)
+{
+    if constexpr (engine == DmaEngine::SDMA) {
+        return detail::TGET_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData);
+    } else {
+        return detail::TGET_ASYNC_URMA_IMPL(dstGlobalData, srcGlobalData);
+    }
+}
+
+} // namespace comm
+} // namespace pto
+
+#endif // PTO_COMM_TGET_ASYNC_HPP

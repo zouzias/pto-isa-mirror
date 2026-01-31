@@ -45,7 +45,7 @@ __global__ AICORE void TTestTrueKernel(__gm__ int32_t *shmem_signal, __gm__ int3
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
         GSignal targetSignal(remote_signal, shape, stride);
 
-        pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(targetSignal, 42);
+        pto::comm::TNOTIFY(targetSignal, 42, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
     }
 
@@ -55,7 +55,7 @@ __global__ AICORE void TTestTrueKernel(__gm__ int32_t *shmem_signal, __gm__ int3
         // Rank 1: Test if local signal == 42 (should be true)
         GSignal localSignal(shmem_signal, shape, stride);
 
-        bool testResult = pto::comm::TTEST<pto::comm::WaitCmp::EQ>(localSignal, 42);
+        bool testResult = pto::comm::TTEST(localSignal, 42, pto::comm::WaitCmp::EQ);
         *result = testResult ? 1 : 0;
     }
 
@@ -82,7 +82,7 @@ __global__ AICORE void TTestFalseKernel(__gm__ int32_t *shmem_signal, __gm__ int
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
         GSignal targetSignal(remote_signal, shape, stride);
 
-        pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(targetSignal, 42);
+        pto::comm::TNOTIFY(targetSignal, 42, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
     }
 
@@ -92,7 +92,7 @@ __global__ AICORE void TTestFalseKernel(__gm__ int32_t *shmem_signal, __gm__ int
         // Rank 1: Test if local signal == 100 (should be false, signal is 42)
         GSignal localSignal(shmem_signal, shape, stride);
 
-        bool testResult = pto::comm::TTEST<pto::comm::WaitCmp::EQ>(localSignal, 100);
+        bool testResult = pto::comm::TTEST(localSignal, 100, pto::comm::WaitCmp::EQ);
         *result = testResult ? 1 : 0;
     }
 
@@ -121,7 +121,7 @@ __global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ i
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
         GSignal targetSignal(remote_signal, shape, stride);
 
-        pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(targetSignal, signalValue);
+        pto::comm::TNOTIFY(targetSignal, signalValue, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
     }
 
@@ -131,7 +131,7 @@ __global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ i
         // Rank 1: Test with specified comparison on local signal
         GSignal localSignal(shmem_signal, shape, stride);
 
-        bool testResult = pto::comm::TTEST<cmp>(localSignal, cmpValue);
+        bool testResult = pto::comm::TTEST(localSignal, cmpValue, cmp);
         *result = testResult ? 1 : 0;
     }
 
@@ -142,8 +142,9 @@ __global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ i
 // Kernel 4: TTEST Polling with Timeout
 // Demonstrates polling pattern: check, do work, check again
 // ============================================================================
-__global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *poll_count, 
-                                                  __gm__ int32_t *final_result)
+__global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *poll_count,
+                                                  __gm__ int32_t *final_result, int32_t delay_iters,
+                                                  int32_t max_polls, bool send_signal)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -154,24 +155,34 @@ __global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, _
 
     int my_rank = shmem_my_pe();
 
-    if (my_rank == 0) {
-        // Rank 0: Send signal to rank 1
+    // Sync start for polling
+    ShmemDeviceBarrierAll();
+
+    if (my_rank == 0 && send_signal) {
+        // Rank 0: delay before sending signal
+        for (int32_t i = 0; i < delay_iters; ++i) {
+            __asm__ __volatile__("");
+        }
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
         GSignal targetSignal(remote_signal, shape, stride);
 
-        pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(targetSignal, 999);
+        pto::comm::TNOTIFY(targetSignal, 999, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
     }
-    
-    // Synchronize after notification to ensure signal is sent
-    ShmemDeviceBarrierAll();
 
     if (my_rank == 1) {
-        // Rank 1: After barrier, signal should be set. Use TTEST to verify.
+        // Rank 1: Poll with TTEST until signal or timeout
         GSignal localSignal(shmem_signal, shape, stride);
 
-        int32_t count = 1;
-        bool found = pto::comm::TTEST<pto::comm::WaitCmp::EQ>(localSignal, 999);
+        int32_t count = 0;
+        bool found = false;
+        while (count < max_polls) {
+            if (pto::comm::TTEST(localSignal, 999, pto::comm::WaitCmp::EQ)) {
+                found = true;
+                break;
+            }
+            ++count;
+        }
 
         *poll_count = count;
         *final_result = found ? 1 : 0;
@@ -200,7 +211,7 @@ __global__ AICORE void TTestNEKernel(__gm__ int32_t *shmem_signal, __gm__ int32_
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
         GSignal targetSignal(remote_signal, shape, stride);
 
-        pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(targetSignal, 50);
+        pto::comm::TNOTIFY(targetSignal, 50, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
     }
 
@@ -210,7 +221,7 @@ __global__ AICORE void TTestNEKernel(__gm__ int32_t *shmem_signal, __gm__ int32_
         // Rank 1: Test if local signal != 0 (should be true, signal is 50)
         GSignal localSignal(shmem_signal, shape, stride);
 
-        bool testResult = pto::comm::TTEST<pto::comm::WaitCmp::NE>(localSignal, 0);
+        bool testResult = pto::comm::TTEST(localSignal, 0, pto::comm::WaitCmp::NE);
         *result = testResult ? 1 : 0;
     }
 
@@ -451,7 +462,8 @@ bool RunTTestCompareKernel(int rank_id, int n_ranks, int n_devices, int first_de
     return (status == 0) && is_ok;
 }
 
-bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
+bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
+                                  int32_t delay_iters, int32_t max_polls, bool expected_found, bool send_signal)
 {
     // Initialize shmem TLS configuration
     int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
@@ -497,7 +509,8 @@ bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int f
 
     ShmemBarrierAll();
 
-    TTestPollingTimeoutKernel<<<1, nullptr, stream>>>(shmem_signal, poll_count, final_result);
+    TTestPollingTimeoutKernel<<<1, nullptr, stream>>>(shmem_signal, poll_count, final_result,
+                                                      delay_iters, max_polls, send_signal);
     status = aclrtSynchronizeStream(stream);
 
     ShmemBarrierAll();
@@ -510,14 +523,18 @@ bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int f
         aclrtMemcpy(&count, sizeof(int32_t), poll_count, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
         aclrtMemcpy(&found, sizeof(int32_t), final_result, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
 
-        if (found != 1) {
-            std::cerr << "TTest Polling Timeout test failed! Should find signal, found=" << found << std::endl;
+        const int32_t expected = expected_found ? 1 : 0;
+        if (found != expected) {
+            std::cerr << "TTest Polling Timeout test failed! expected=" << expected
+                      << ", found=" << found << std::endl;
             is_ok = false;
-        } else if (count <= 0 || count > 100000) {
+        } else if (count < 0 || count > max_polls) {
             std::cerr << "TTest Polling Timeout test failed! Poll count out of range: " << count << std::endl;
             is_ok = false;
-        } else {
+        } else if (expected_found) {
             std::cout << "Rank 1: TTEST polling found signal after " << count << " iterations" << std::endl;
+        } else {
+            std::cout << "Rank 1: TTEST polling timed out after " << count << " iterations" << std::endl;
         }
     }
 
@@ -689,7 +706,32 @@ bool RunTTestPollingTimeout(int n_ranks, int n_devices, int first_rank_id, int f
     for (int r = 0; r < n_ranks; ++r) {
         pid_t pid = fork();
         if (pid == 0) {
-            const bool ok = RunTTestPollingTimeoutKernel(first_rank_id + r, n_ranks, n_devices, first_device_id);
+            const bool ok = RunTTestPollingTimeoutKernel(first_rank_id + r, n_ranks, n_devices, first_device_id,
+                                                         50000, 200000, true, true);
+            _exit(ok ? 0 : 1);
+        } else if (pid > 0) {
+            pids.push_back(pid);
+        } else {
+            return false;
+        }
+    }
+    bool success = true;
+    for (pid_t p : pids) {
+        int status = 0;
+        waitpid(p, &status, 0);
+        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
+    }
+    return success;
+}
+
+bool RunTTestPollingTimeoutMiss(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    std::vector<pid_t> pids;
+    for (int r = 0; r < n_ranks; ++r) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            const bool ok = RunTTestPollingTimeoutKernel(first_rank_id + r, n_ranks, n_devices, first_device_id,
+                                                         0, 50000, false, false);
             _exit(ok ? 0 : 1);
         } else if (pid > 0) {
             pids.push_back(pid);

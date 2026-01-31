@@ -40,27 +40,30 @@ __global__ AICORE void TBroadCastKernelImpl(__gm__ T *input, __gm__ T *output, i
     ShapeDyn shape(1, 1, 1, 1, count);
     StrideDyn stride(count, count, count, count, 1);
     
-    Global tempG(input, shape, stride);
-    Global outputG(output, shape, stride);
-    Global *tensorPtrs[16];
-    Global tensors[16];
+    Global srcG(input, shape, stride);
     
+    // Create ParallelGroup: each tensor is the destination buffer on that rank
+    Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        tensors[i] = outputG; // ParallelGroup should be destinations
-        tensors[i].SetRank(i);
-        tensorPtrs[i] = &tensors[i];
+        __gm__ T *remoteDst = ShmemPtr(output, i);
+        tensors[i] = Global(remoteDst, shape, stride);
     }
     
-    pto::comm::ParallelGroup<Global> pg(tensorPtrs, actual_nranks, my_rank);
+    // TBROADCAST: root is the calling rank (my_rank)
+    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, my_rank);
     
     // Allocate UB tile for staging data
     TileData ubTile(1, count);
     TASSIGN(ubTile, 0x0);
     
-    // Call TBROADCAST with UB tile
-    pto::comm::TBROADCAST(pg, tempG, root, ubTile);
-    pto::comm::TQUIET();
+    // Only root executes TBROADCAST
+    if (my_rank == root) {
+        pto::comm::TBROADCAST(pg, srcG, ubTile);
+    }
+    
+    ShmemDeviceQuiet();
+    ShmemDeviceBarrierAll();
 }
 
 template <typename T, size_t count>

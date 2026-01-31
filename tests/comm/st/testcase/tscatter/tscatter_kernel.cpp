@@ -25,54 +25,57 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #define ENABLE_DEBUG_PRINT 1
 
+// ============================================================================
+// TSCATTER Test Kernel
+// Tests the TSCATTER collective - root scatters data to all ranks
+// ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TAllReduceKernelImpl(__gm__ T *input, __gm__ T *output, int nranks)
+__global__ AICORE void TScatterKernelImpl(__gm__ T *src, __gm__ T *dst, int nranks)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
 
-    // UB Tile definition: must be pre-allocated for native implementation
+    // UB Tile definition
     using TileData = pto::Tile<pto::TileType::Vec, T, 1, count, pto::BLayout::RowMajor, -1, -1>;
 
     int my_rank = shmem_my_pe();
 
-    ShapeDyn shape(1, 1, 1, 1, count);
-    StrideDyn stride(count, count, count, count, 1);
-    
-    Global tempG(input, shape, stride);
-    Global outputG(output, shape, stride);
-    Global *tensorPtrs[16];
+    // Source shape: root has [1, 1, 1, nranks, count] elements
+    ShapeDyn srcShape(1, 1, 1, nranks, count);
+    StrideDyn srcStride(nranks * count, nranks * count, nranks * count, count, 1);
+    Global srcG(src, srcShape, srcStride);
+
+    // Destination shape: each rank receives [1, 1, 1, 1, count] elements
+    ShapeDyn dstShape(1, 1, 1, 1, count);
+    StrideDyn dstStride(count, count, count, count, 1);
+
+    // Create ParallelGroup: each tensor in the group is the destination buffer on that rank
     Global tensors[16];
-    
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        tensors[i] = tempG;
-        tensors[i].SetRank(i);
-        tensorPtrs[i] = &tensors[i];
+        __gm__ T *remoteDst = ShmemPtr(dst, i);
+        tensors[i] = Global(remoteDst, dstShape, dstStride);
     }
     
-    pto::comm::ParallelGroup<Global> pg(tensorPtrs, actual_nranks, my_rank);
+    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, my_rank);
     
-    // Allocate UB tiles for ping-pong double buffering
-    // These must be pre-allocated and passed to the instruction
-    TileData accTile(1, count);
-    TileData pingTile(1, count);
-    TileData pongTile(1, count);
+    // Allocate UB tile for staging data
+    TileData ubTile(1, count);
+    TASSIGN(ubTile, 0x0);
     
-    // Assign UB addresses (compiler would do this in real usage)
-    TASSIGN(accTile, 0x0);
-    TASSIGN(pingTile, 0x10000);
-    TASSIGN(pongTile, 0x20000);
+    // Only root (rank 0) executes TSCATTER
+    if (my_rank == 0) {
+        pto::comm::TSCATTER(pg, srcG, ubTile);
+    }
     
-    // Call TALLREDUCE with UB tiles
-    pto::comm::TALLREDUCE(pg, outputG, accTile, pingTile, pongTile);
-    pto::comm::TQUIET();
+    ShmemDeviceQuiet();
+    ShmemDeviceBarrierAll();
 }
 
 template <typename T, size_t count>
-bool RunAllReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size){
-    
+bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
+{
     // Initialize shmem TLS configuration
     int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
     if (ret != 0) {
@@ -94,7 +97,7 @@ bool RunAllReduceKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 
     // Initialize shmem symmetric heap
     ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8766";
+    const char *ip = "tcp://127.0.0.1:8771";
     env.rank = rank_id;
     env.size = n_ranks;
     env.ipPort = ip;
@@ -105,52 +108,60 @@ bool RunAllReduceKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         return false;
     }
 
-    // Allocate symmetric heap memory for input (shared across ranks)
-    void *input_ptr = ShmemMalloc(count * sizeof(T));
-    if (input_ptr == nullptr) {
+    // Allocate symmetric heap memory
+    size_t dst_size = count * sizeof(T);
+    size_t src_size = n_ranks * count * sizeof(T);
+    void* dst_ptr = ShmemMalloc(dst_size);
+    void* src_ptr = nullptr;
+    
+    // Only root allocates source buffer
+    if (rank_id == 0) {
+        src_ptr = ShmemMalloc(src_size);
+    } else {
+        src_ptr = ShmemMalloc(dst_size);  // Dummy allocation for symmetry
+    }
+
+    if (src_ptr == nullptr || dst_ptr == nullptr) {
         std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
         return false;
     }
 
-    T *input_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&input_host), count * sizeof(T));
+    T *src_host, *dst_host;
+    aclrtMallocHost(reinterpret_cast<void**>(&src_host), src_size);
+    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), dst_size);
 
-    T* output_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&output_host), count * sizeof(T));
-
-    T* output_device;
-    aclrtMalloc(reinterpret_cast<void**>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
-    
-    // Initialize input data: Rank R has data i + R * 100
-    for (size_t i = 0; i < count; ++i) {
-        input_host[i] = static_cast<T>(i + rank_id * 100);
+    // Root initializes source data: data for rank r at offset r*count
+    if (rank_id == 0) {
+        for (int r = 0; r < n_ranks; ++r) {
+            for (size_t i = 0; i < count; ++i) {
+                src_host[r * count + i] = static_cast<T>(i + r * 10000);
+            }
+        }
+        aclrtMemcpy(src_ptr, src_size, src_host, src_size, ACL_MEMCPY_HOST_TO_DEVICE);
     }
-
-    aclrtMemcpy(input_ptr, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-
-#if ENABLE_DEBUG_PRINT
-    std::cout << "[DEBUG] Rank " << rank_id << " input_ptr: " << input_ptr << std::endl;
-#endif
+    
+    // Initialize destination to -1
+    for (size_t i = 0; i < count; ++i) {
+        dst_host[i] = static_cast<T>(-1);
+    }
+    aclrtMemcpy(dst_ptr, dst_size, dst_host, dst_size, ACL_MEMCPY_HOST_TO_DEVICE);
 
     // Barrier to ensure all ranks have initialized their data
     ShmemBarrierAll();
 
-    TAllReduceKernelImpl<T, count><<<1, nullptr, stream>>>((T*)input_ptr, (T*)output_device, n_ranks);
+    TScatterKernelImpl<T, count><<<1, nullptr, stream>>>((T*)src_ptr, (T*)dst_ptr, n_ranks);
     status = aclrtSynchronizeStream(stream);
 
     // Barrier after kernel execution
     ShmemBarrierAll();
 
-    aclrtMemcpy(output_host, count * sizeof(T), output_device, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+    // All ranks verify their received data
+    aclrtMemcpy(dst_host, dst_size, dst_ptr, dst_size, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    // Verify: Expected result is Sum_{R=0}^{n_ranks-1} (i + R * 100) 
     bool is_ok = true;
     for (size_t i = 0; i < count; ++i) {
-        T expected = 0;
-        for (int r = 0; r < n_ranks; ++r) {
-            expected += static_cast<T>(i + r * 100);
-        }
-        T actual = output_host[i];
+        T expected = static_cast<T>(i + rank_id * 10000);
+        T actual = dst_host[i];
         if (actual != expected) {
             std::cout << "Rank " << rank_id << " validation failed at index " << i 
                       << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
@@ -162,22 +173,16 @@ bool RunAllReduceKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 #if ENABLE_DEBUG_PRINT
     if (is_ok && rank_id == 0) {
         std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] Rank 0: TALLREDUCE SUCCESSFUL!" << std::endl;
-        std::cout << "Summary: Reduced " << n_ranks << " segments, result size " << count << " elements." << std::endl;
-        std::cout << "Sample Result (First 5 elements): [ ";
-        for (size_t i = 0; i < (count > 5 ? 5 : count); ++i) {
-            std::cout << (float)output_host[i] << " ";
-        }
-        if (count > 5) std::cout << "... ";
-        std::cout << "]" << std::endl;
+        std::cout << "[DEBUG] Rank 0: TSCATTER SUCCESSFUL!" << std::endl;
+        std::cout << "Summary: Scattered " << n_ranks << " segments, each with " << count << " elements." << std::endl;
         std::cout << "================================================================\n" << std::endl;
     }
 #endif
 
-    aclrtFreeHost(input_host);
-    aclrtFreeHost(output_host);
-    aclrtFree(output_device);
-    ShmemFree(input_ptr);
+    aclrtFreeHost(src_host);
+    aclrtFreeHost(dst_host);
+    ShmemFree(src_ptr);
+    ShmemFree(dst_ptr);
 
     ShmemFinalize();
 
@@ -189,13 +194,14 @@ bool RunAllReduceKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 }
 
 template <typename T, size_t count>
-bool RunAllReduce(int n_ranks, int n_devices, int first_rank_id, int first_device_id){
+bool RunScatter(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     std::vector<pid_t> pids;
     uint64_t local_mem_size = 1024UL * 1024UL * 1024;
-    for (int r = 0; r < n_ranks; ++r){
+    for (int r = 0; r < n_ranks; ++r) {
         pid_t pid = fork();
         if (pid == 0) { // child
-            const bool ok = RunAllReduceKernel<T, count>(first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
+            const bool ok = RunScatterKernel<T, count>(first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
             _exit(ok ? 0 : 1);
         } else if (pid > 0) {
             pids.push_back(pid);
@@ -213,6 +219,6 @@ bool RunAllReduce(int n_ranks, int n_devices, int first_rank_id, int first_devic
 }
 
 // Explicit instantiations
-template bool RunAllReduce<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunAllReduce<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunAllReduce<int32_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunScatter<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunScatter<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunScatter<uint8_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);

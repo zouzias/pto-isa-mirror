@@ -16,7 +16,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <vector>
 #include <string>
 #include <iostream>
-
 #include "pto/comm/pto_comm_inst.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "../common.hpp"
@@ -46,7 +45,8 @@ __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
     int next_rank = (my_rank + 1) % nranks;
     int prev_rank = (my_rank + nranks - 1) % nranks;
 
-    __gm__ T *shmem_data = (__gm__ T *)((__gm__ T *)shmem + 64 * sizeof(int32_t));
+    __gm__ uint8_t *shmem_bytes = reinterpret_cast<__gm__ uint8_t *>(shmem);
+    __gm__ T *shmem_data = reinterpret_cast<__gm__ T *>(shmem_bytes + 64 * sizeof(int32_t));
     __gm__ T *send_shmem = (__gm__ T *)((__gm__ T *)shmem_data + 0);
     __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + count);
 
@@ -57,17 +57,17 @@ __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
     Global recvG(recv_shmem, shape, stride);
 
     // Allocate UB tiles for data staging
-    TileData srcBufTile(1, count);
-    TileData dstBufTile(1, count);
+    TileData stagingTile(1, count);
+    TileData resultTile(1, count);
 
-    TASSIGN(srcBufTile, 0x0);
-    TASSIGN(dstBufTile, 0x10000);
+    TASSIGN(stagingTile, 0x0);
+    TASSIGN(resultTile, 0x10000);
 
     // Load local data to UB, then store to local shared memory (send buffer)
-    TLOAD(srcBufTile, srcG);
+    TLOAD(stagingTile, srcG);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(sendG, srcBufTile);
+    TSTORE(sendG, stagingTile);
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
@@ -79,7 +79,8 @@ __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
     Global remoteSendG(remote_send_shmem, shape, stride);
     
     // TGET: read from remote sendG (next rank's send buffer) to local recvG
-    pto::comm::TGET(recvG, remoteSendG, dstBufTile);
+    // Returns RecordEvent for dependency tracking (can be ignored for simple cases)
+    pto::comm::TGET(recvG, remoteSendG, stagingTile);
 
     // Ensure all remote operations from this PE are complete
     ShmemDeviceQuiet();
@@ -87,10 +88,10 @@ __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
     ShmemDeviceBarrierAll();
 
     // Load from local recvG to UB, then store to local dstG
-    TLOAD(dstBufTile, recvG);
+    TLOAD(resultTile, recvG);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstG, dstBufTile);
+    TSTORE(dstG, resultTile);
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 }
@@ -263,7 +264,8 @@ __global__ AICORE void TGetKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *
     int next_rank = (my_rank + 1) % nranks;
     int prev_rank = (my_rank + nranks - 1) % nranks;
 
-    __gm__ T *shmem_data = (__gm__ T *)((__gm__ T *)shmem + 64 * sizeof(int32_t));
+    __gm__ uint8_t *shmem_bytes = reinterpret_cast<__gm__ uint8_t *>(shmem);
+    __gm__ T *shmem_data = reinterpret_cast<__gm__ T *>(shmem_bytes + 64 * sizeof(int32_t));
     __gm__ T *send_shmem = (__gm__ T *)((__gm__ T *)shmem_data + 0);
     __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + total_count);
 
@@ -274,17 +276,17 @@ __global__ AICORE void TGetKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *
     Global recvG(recv_shmem, shape, stride);
 
     // Allocate UB tiles for data staging - 2D Vec Tiles (rows x cols)
-    TileData srcBufTile(rows, cols);
-    TileData dstBufTile(rows, cols);
+    TileData stagingTile(rows, cols);
+    TileData resultTile(rows, cols);
 
-    TASSIGN(srcBufTile, 0x0);
-    TASSIGN(dstBufTile, 0x10000);
+    TASSIGN(stagingTile, 0x0);
+    TASSIGN(resultTile, 0x10000);
 
     // Load local data to UB, then store to local shared memory (send buffer)
-    TLOAD(srcBufTile, srcG);
+    TLOAD(stagingTile, srcG);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(sendG, srcBufTile);
+    TSTORE(sendG, stagingTile);
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
@@ -296,7 +298,8 @@ __global__ AICORE void TGetKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *
     Global remoteSendG(remote_send_shmem, shape, stride);
     
     // TGET: read from remote sendG (next rank's send buffer) to local recvG
-    pto::comm::TGET(recvG, remoteSendG, dstBufTile);
+    // Returns RecordEvent for dependency tracking (can be ignored for simple cases)
+    pto::comm::TGET(recvG, remoteSendG, stagingTile);
 
     // Ensure all remote operations from this PE are complete
     ShmemDeviceQuiet();
@@ -304,10 +307,10 @@ __global__ AICORE void TGetKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *
     ShmemDeviceBarrierAll();
 
     // Load from local recvG to UB, then store to local dstG
-    TLOAD(dstBufTile, recvG);
+    TLOAD(resultTile, recvG);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstG, dstBufTile);
+    TSTORE(dstG, resultTile);
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 }

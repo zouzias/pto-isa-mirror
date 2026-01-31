@@ -20,22 +20,14 @@ namespace pto {
 namespace comm {
 
 // ============================================================================
-// TGET: Remote read operation - read remote PE's data to local memory
+// TGET_IMPL: Remote read operation implementation
 // 
-// Native implementation using Ascend intrinsics.
-// Data flow: srcGlobal (remote GM) -> ubTile (UB) -> dstGlobal (local GM)
-//
-// Parameters:
-//   - dstGlobal: Destination GlobalTensor on local PE
-//   - srcGlobal: Source GlobalTensor on remote PE
-//   - ubTile: UB tile for data staging (must be pre-allocated by compiler)
-//
-// Note: UB tile must be passed as parameter. The compiler is responsible for
-// UB allocation and scheduling.
+// Data flow: srcGlobalData (remote GM) → stagingTileData (UB) → dstGlobalData (local GM)
 // ============================================================================
 
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
-PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, TileData &ubTile)
+PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, 
+                            TileData &stagingTileData)
 {
     using T = typename GlobalSrcData::RawDType;
     
@@ -47,12 +39,12 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobal, GlobalSrcData &srcGlobal, 
         "TGET: TileData element type must match GlobalData element type");
 
     // Load from remote GM to UB
-    TLOAD(ubTile, srcGlobal);
+    TLOAD(stagingTileData, srcGlobalData);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     
     // Store from UB to local GM
-    TSTORE(dstGlobal, ubTile);
+    TSTORE(dstGlobalData, stagingTileData);
 }
 
 } // namespace comm

@@ -20,22 +20,15 @@ namespace pto {
 namespace comm {
 
 // ============================================================================
-// TBROADCAST: Broadcast data from root rank to all ranks
+// TBROADCAST_IMPL: Broadcast data from current NPU (root) to all ranks
 // 
-// Native implementation using Ascend intrinsics.
-//
-// Parameters:
-//   - pg: ParallelGroup containing GlobalTensors from all participating ranks
-//   - srcGlobal: Source GlobalTensor (data from root rank)
-//   - root: Root rank index that provides the data
-//   - ubTile: UB tile for data staging (must be pre-allocated by compiler)
-//
-// Note: UB tile must be passed as parameter. The compiler is responsible for
-// UB allocation and scheduling.
+// The calling NPU (parallelGroup.my_rank) is the root and its data is copied
+// to all other NPUs.
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
-PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &pg, GlobalSrcData &srcGlobal, int root, TileData &ubTile)
+PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
+                                  TileData &stagingTileData)
 {
     using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
     using T = typename GlobalSrcData::RawDType;
@@ -43,34 +36,28 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &pg, GlobalSrcData &srcGloba
     static_assert(std::is_same_v<T, typename TileData::DType>,
         "TBROADCAST: TileData element type must match GlobalData element type");
 
-    const int my_rank = pg.GetRank();
-    const int nranks = pg.GetSize();
+    const int my_rank = parallelGroup.GetRank();
+    const int nranks = parallelGroup.GetSize();
 
     PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
-    PTO_ASSERT(root >= 0 && root < nranks, "Root rank must be valid!");
 
     if (nranks == 1) {
         return; // Nothing to broadcast
     }
 
-    if (my_rank == root) {
-        // Root loads data to UB once
-        TLOAD(ubTile, srcGlobal);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        
-        // Broadcast to all ranks
-        for (int r = 0; r < nranks; ++r) {
-            TSTORE(pg[r], ubTile);
-            if (r < nranks - 1) {
-                set_flag(PIPE_MTE3, PIPE_MTE3, EVENT_ID0);
-                wait_flag(PIPE_MTE3, PIPE_MTE3, EVENT_ID0);
-            }
+    // Root loads data to UB once
+    TLOAD(stagingTileData, srcGlobalData);
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    
+    // Broadcast to all ranks (including self)
+    for (int r = 0; r < nranks; ++r) {
+        TSTORE(parallelGroup[r], stagingTileData);
+        if (r < nranks - 1) {
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
     }
-    
-    // Synchronization point (barrier)
-    // Note: In a real multi-device scenario, this would use hardware sync
 }
 
 } // namespace comm

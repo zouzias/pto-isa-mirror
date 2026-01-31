@@ -1,4 +1,4 @@
-#include "tallreduce_perf_test.h"
+#include "treduce_perf_test.h"
 
 // ============================================================================
 // Command Line Argument Parser
@@ -11,24 +11,23 @@ struct TestArgs {
     int warmup_iters = 20;
     int measure_iters = 50;
     bool verbose = true;
-    std::string test_size = "all";  // small, medium, large, all
+    std::string test_size = "all";  // small, large, all
     bool help = false;
 };
 
 void PrintUsage(const char *prog) {
     std::cout << "Usage: " << prog << " [options]\n"
               << "Options:\n"
-              << "  -r, --ranks N          Number of ranks (default: 2)\n"
-              << "  -d, --devices N        Number of devices (default: 2)\n"
-              << "  -w, --warmup N         Warmup iterations (default: 5)\n"
-              << "  -m, --measure N        Measurement iterations (default: 20)\n"
-              << "  -s, --size SIZE        Test size: small, medium, large, all (default: all)\n"
+              << "  -r, --ranks N          Number of ranks (default: 4)\n"
+              << "  -d, --devices N        Number of devices (default: 4)\n"
+              << "  -w, --warmup N         Warmup iterations (default: 20)\n"
+              << "  -m, --measure N        Measurement iterations (default: 50)\n"
+              << "  -s, --size SIZE        Test size: small, large, all (default: all)\n"
               << "  -q, --quiet            Disable per-iteration output\n"
               << "  -h, --help             Show this help message\n"
               << "\nTest Sizes:\n"
               << "  small:   256, 1024 elements\n"
-              << "  medium:  4096, 16384 elements\n"
-              << "  large:   65536, 262144 elements\n"
+              << "  large:   16384, 32768 elements\n"
               << "  all:     Run all sizes\n"
               << std::endl;
 }
@@ -70,17 +69,15 @@ bool RunSmallTests(const TestArgs &args, const PerfTestConfig &config) {
     bool success = true;
     
     std::cout << "[TEST] float x 64x64 elements (16 KB)" << std::endl;
-    success &= RunAllReducePerf<float, 64, 64, 64, 64>(
+    success &= RunReducePerf<float, 64, 64, 64, 64>(
         args.n_ranks, args.n_devices, args.first_rank_id, args.first_device_id, config);
     
     std::cout << "[TEST] float x 16x256 elements (16 KB)" << std::endl;
-    success &= RunAllReducePerf<float, 16, 256, 16, 256>(
+    success &= RunReducePerf<float, 16, 256, 16, 256>(
         args.n_ranks, args.n_devices, args.first_rank_id, args.first_device_id, config);
     
     return success;
 }
-
-
 
 bool RunLargeTests(const TestArgs &args, const PerfTestConfig &config) {
     std::cout << "\n========================================" << std::endl;
@@ -89,16 +86,12 @@ bool RunLargeTests(const TestArgs &args, const PerfTestConfig &config) {
     
     bool success = true;
     
-    // Note: Each tile needs rows*cols*sizeof(T) bytes in UB
-    // With 3 tiles (src0, src1, dst), total UB usage = 3 * tile_size
-    // UB is typically 192-256KB, so max tile size ~ 64KB
-    
     std::cout << "[TEST] int32_t x 128x128 elements (64 KB)" << std::endl;
-    success &= RunAllReducePerf<int32_t, 128, 128, 128, 128>(
+    success &= RunReducePerf<int32_t, 128, 128, 128, 128>(
         args.n_ranks, args.n_devices, args.first_rank_id, args.first_device_id, config);
     
     std::cout << "[TEST] int32_t x 64x256 elements (64 KB)" << std::endl;
-    success &= RunAllReducePerf<int32_t, 64, 256, 64, 256>(
+    success &= RunReducePerf<int32_t, 64, 256, 64, 256>(
         args.n_ranks, args.n_devices, args.first_rank_id, args.first_device_id, config);
     
     return success;
@@ -117,7 +110,7 @@ int main(int argc, char **argv) {
     
     // Print test configuration
     std::cout << "============================================================" << std::endl;
-    std::cout << "  TALLREDUCE Performance Test Suite" << std::endl;
+    std::cout << "  TREDUCE Performance Test Suite" << std::endl;
     std::cout << "============================================================" << std::endl;
     std::cout << "  Configuration:" << std::endl;
     std::cout << "    Ranks:            " << args.n_ranks << std::endl;
@@ -150,4 +143,3 @@ int main(int argc, char **argv) {
     
     return success ? 0 : 1;
 }
-

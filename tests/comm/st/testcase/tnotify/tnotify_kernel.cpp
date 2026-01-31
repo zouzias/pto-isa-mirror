@@ -49,7 +49,7 @@ __global__ AICORE void TNotifyAtomicAddKernel(__gm__ int32_t *shmem_counter, int
     GSignal counterSignal(remote_counter, shape, stride);
 
     // Each rank performs atomic add 1 to rank 0's counter
-    pto::comm::TNOTIFY<pto::comm::NotifyOp::AtomicAdd>(counterSignal, 1);
+    pto::comm::TNOTIFY(counterSignal, 1, pto::comm::NotifyOp::AtomicAdd);
 
     // Ensure remote operation completes
     ShmemDeviceQuiet();
@@ -82,7 +82,7 @@ __global__ AICORE void TNotifySetKernel(__gm__ int32_t *shmem_signals, int nrank
 
     // Set next rank's signal to own rank_id + 100
     int32_t value = static_cast<int32_t>(my_rank + 100);
-    pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(nextSignal, value);
+    pto::comm::TNOTIFY(nextSignal, value, pto::comm::NotifyOp::Set);
 
     // Ensure remote operation completes
     ShmemDeviceQuiet();
@@ -119,7 +119,7 @@ __global__ AICORE void TNotifyScoreboardKernel(__gm__ int32_t *shmem_scoreboard,
 
     // Set own slot value
     int32_t value = static_cast<int32_t>(my_rank + 1000);
-    pto::comm::TNOTIFY<pto::comm::NotifyOp::Set>(slotSignal, value);
+    pto::comm::TNOTIFY(slotSignal, value, pto::comm::NotifyOp::Set);
 
     // Ensure remote operation completes
     ShmemDeviceQuiet();

@@ -1,17 +1,16 @@
-#include "tallreduce_perf_test.h"
+#include "treduce_perf_test.h"
 
 #include "pto/comm/pto_comm_inst.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "../common.hpp"
 #include <pto/pto-inst.hpp>
 
-
 // ============================================================================
-// Device-side Kernel: TAllReduce with cycle counting
+// Device-side Kernel: TReduce with cycle counting
 // ============================================================================
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
-__global__ AICORE void TAllReducePerfKernelImpl(
-    __gm__ T *input, __gm__ T *output, __gm__ T *shmem,
+__global__ AICORE void TReducePerfKernelImpl(
+    __gm__ T *input, __gm__ T *output,
     __gm__ int64_t *cycle_results,  // Store cycle counts
     int iteration)
 {
@@ -20,18 +19,14 @@ __global__ AICORE void TAllReducePerfKernelImpl(
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
 
-
-    TileData src0Tile(vRows, vCols);
-    TileData src1Tile(vRows, vCols);
-    TileData dstTile(vRows, vCols);
+    TileData accTile(vRows, vCols);
+    TileData recvTile(vRows, vCols);
     
     constexpr size_t tileBytes = kTRows_ * kTCols_ * sizeof(T);
     constexpr size_t alignedTileBytes = ((tileBytes + 31) / 32) * 32;
     
-    TASSIGN(src0Tile, 0);
-    TASSIGN(src1Tile, 0 + alignedTileBytes);
-    TASSIGN(dstTile,  0 + alignedTileBytes * 2);
-
+    TASSIGN(accTile, 0);
+    TASSIGN(recvTile, 0 + alignedTileBytes);
 
     int my_rank = shmem_my_pe();
     int nranks = shmem_n_pes();
@@ -39,31 +34,16 @@ __global__ AICORE void TAllReducePerfKernelImpl(
     ShapeDyn shape(1, 1, 1, vRows, vCols);
     StrideDyn stride(1, 1, 1, kTCols_, 1);
     
-    Global srcGlobal(input, shape, stride);
     Global dstGlobal(output, shape, stride);
 
-    Global srcShmemGlobal(shmem, shape, stride);
-
-    // Load the src out of the shmem region to the shmem region
-    TLOAD(src0Tile, srcGlobal);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(srcShmemGlobal, src0Tile);
-    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-
-
-    Global *tensorPtrs[16];
     Global tensors[16];
-
-    for (int i = 0; i < nranks; ++i) {
-        Global srcShmemPtr((__gm__ T*)shmem_ptr(shmem, i), shape, stride);
-        tensors[i] = srcShmemPtr;
-        tensors[i].SetRank(i);
-        tensorPtrs[i] = &tensors[i];
+    int actual_nranks = (nranks > 16) ? 16 : nranks;
+    for (int i = 0; i < actual_nranks; ++i) {
+        __gm__ T *remoteInput = ShmemPtr(input, i);
+        tensors[i] = Global(remoteInput, shape, stride);
     }
     
-    pto::comm::ParallelGroup<Global> pg(tensorPtrs, nranks, my_rank);
+    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, my_rank);
     
     ShmemDeviceBarrierAll();
 
@@ -71,7 +51,9 @@ __global__ AICORE void TAllReducePerfKernelImpl(
 
     int64_t start_cycle = AscendC::GetSystemCycle();
 
-    pto::comm::TALLREDUCE(pg, dstGlobal, src0Tile, src1Tile, dstTile);
+    if (my_rank == 0) {
+        pto::comm::TREDUCE(pg, dstGlobal, accTile, recvTile, pto::comm::ReduceOp::Sum);
+    }
 
     AscendC::PipeBarrier<PIPE_ALL>();
     
@@ -80,21 +62,20 @@ __global__ AICORE void TAllReducePerfKernelImpl(
     if (my_rank == 0 && cycle_results != nullptr) {
         cycle_results[iteration] = end_cycle - start_cycle;
     }
-
 }
 
 // ============================================================================
 // Host-side Performance Test Runner
 // ============================================================================
 template<typename T, int kTRows_, int kTCols_, int vRows, int vCols>
-bool RunAllReducePerfKernel(
+bool RunReducePerfKernel(
     int rank_id, 
     int n_ranks, 
     int n_devices, 
     int first_device_id,
     const PerfTestConfig &config)
 {
-    int32_t ret = shmem_set_conf_store_tls(false, nullptr, 0);
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
     if (ret != 0) {
         std::cerr << "[ERROR] Failed to init shmem tls\n";
         return false;
@@ -114,7 +95,7 @@ bool RunAllReducePerfKernel(
     status |= aclrtCreateStream(&stream);
 
     ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8766";
+    const char *ip = "tcp://127.0.0.1:8767";
     env.rank = rank_id;
     env.size = n_ranks;
     env.ipPort = ip;
@@ -136,16 +117,17 @@ bool RunAllReducePerfKernel(
     T *srcDevice, *resDevice;
     aclrtMalloc((void **)(&srcDevice), fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)(&resDevice), fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(resDevice, fileSize, resHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    void *shmemBufferDevice = ShmemMalloc(4 * fileSize);
-
-    if(shmemBufferDevice == nullptr){
+    void *shmemInputDevice = ShmemMalloc(fileSize);
+    if (shmemInputDevice == nullptr) {
         std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
         ShmemFinalize();
         return false;
     }
+
+    aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(shmemInputDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(resDevice, fileSize, resHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
     int64_t *perfHost;
     aclrtMallocHost(reinterpret_cast<void**>(&perfHost), config.measure_iters * sizeof(int64_t));
@@ -158,12 +140,11 @@ bool RunAllReducePerfKernel(
     }
 
     for(int i = 0; i < config.warmup_iters; ++i) {
-        TAllReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(
-            srcDevice, resDevice, (T*) shmemBufferDevice, nullptr, 0);
+        TReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(
+            (T*)shmemInputDevice, resDevice, nullptr, 0);
         aclrtSynchronizeStream(stream);
     }
 
-    // Barrier to ensure all ranks finished warmup
     ShmemBarrierAll();
 
     if (rank_id == 0 && config.verbose) {
@@ -180,8 +161,8 @@ bool RunAllReducePerfKernel(
     auto wall_start = std::chrono::high_resolution_clock::now();
     
     for (int i = 0; i < config.measure_iters; ++i) {
-        TAllReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(
-            srcDevice, resDevice, (T*) shmemBufferDevice, perfDevice, i);
+        TReducePerfKernelImpl<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(
+            (T*)shmemInputDevice, resDevice, perfDevice, i);
         aclrtSynchronizeStream(stream);
     }
     auto wall_end = std::chrono::high_resolution_clock::now();
@@ -189,37 +170,30 @@ bool RunAllReducePerfKernel(
 
     ShmemBarrierAll();
 
-    // Copy cycle results back
     aclrtMemcpy(perfHost, config.measure_iters * sizeof(int64_t), 
                 perfDevice, config.measure_iters * sizeof(int64_t),
                 ACL_MEMCPY_DEVICE_TO_HOST);
 
-    // Copy result data back for verification
-    aclrtMemcpy(resHost, fileSize, resDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    // ========================================================================
-    // Results Analysis (only rank 0)
-    // ========================================================================
     if (rank_id == 0) {
-        // check the correctness
+        aclrtMemcpy(resHost, fileSize, resDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
         bool flag = true;
         for(int i = 0; i < count; ++i) {
             if (config.verbose) {
                 if(i < 5) std::cout << "resHost[" << i << "] = " << resHost[i] << std::endl;
             }
 
-            T expected = n_ranks * (n_ranks + 1) / 2 * 100 + i * n_ranks + seed * n_ranks;
+            T expected = static_cast<T>(n_ranks * (i + seed) + 100 * (n_ranks * (n_ranks + 1) / 2));
             T actual = resHost[i];
             if (actual != expected) {
-                std::cerr << "[ERROR] TALLREDUCE failed\n";
+                std::cerr << "[ERROR] TREDUCE failed\n";
                 flag = false;
                 status = 1;
                 break;
             }
         }
+
         if(flag){
-            // Convert cycles to microseconds
-            // Based on rdma_perftest: cycles / 50.0 = us
             constexpr double CYCLES_PER_US = 50.0;
             std::vector<double> latencies_us;
             
@@ -230,55 +204,32 @@ bool RunAllReducePerfKernel(
                 
                 if (config.verbose) {
                     std::cout << "  Iter " << std::setw(3) << i 
-                            << ": " << std::fixed << std::setprecision(2) << us << " us"
-                            << " (" << perfHost[i] << " cycles)" << std::endl;
+                              << ": " << std::fixed << std::setprecision(2) << us << " us"
+                              << " (" << perfHost[i] << " cycles)" << std::endl;
                 }
             }
             
             PerfStats stats = CalculateStats(latencies_us, fileSize);
             
-            // Print summary
-            std::cout << "\n================================================================" << std::endl;
-            std::cout << "  TALLREDUCE Performance Test Results" << std::endl;
-            std::cout << "================================================================" << std::endl;
-            std::cout << "  Configuration:" << std::endl;
-            std::cout << "    - Data type:      " << typeid(T).name() << std::endl;
-            std::cout << "    - Element count:  " << count << std::endl;
-            std::cout << "    - Data size:      " << fileSize << " bytes (" 
-                    << (fileSize / 1024.0) << " KB)" << std::endl;
-            std::cout << "    - Rank count:     " << n_ranks << std::endl;
-            std::cout << "    - Warmup iters:   " << config.warmup_iters << std::endl;
-            std::cout << "    - Measure iters:  " << config.measure_iters << std::endl;
-            std::cout << std::endl;
-            std::cout << "  Latency Statistics:" << std::endl;
-            std::cout << "    - Min:            " << std::fixed << std::setprecision(2) 
-                    << stats.min_us << " us" << std::endl;
-            std::cout << "    - Max:            " << stats.max_us << " us" << std::endl;
-            std::cout << "    - Average:        " << stats.avg_us << " us" << std::endl;
-            std::cout << "    - Median:         " << stats.median_us << " us" << std::endl;
-            std::cout << "    - Std Dev:        " << stats.std_dev_us << " us" << std::endl;
-            std::cout << std::endl;
-            std::cout << "  Throughput:" << std::endl;
-            std::cout << "    - Bandwidth:      " << std::setprecision(3) 
-                    << stats.bandwidth_gbps << " GB/s" << std::endl;
-            std::cout << "    - Message Rate:   " << stats.msg_rate_mops << " Mops/s" << std::endl;
-            std::cout << std::endl;
-            std::cout << "  Wall Clock Time:    " << std::setprecision(2) 
-                    << wall_time_ms << " ms (total)" << std::endl;
-            std::cout << "================================================================\n" << std::endl;
+            std::cout << "\n[PERF] Results Summary (n_ranks=" << n_ranks << ")" << std::endl;
+            std::cout << "  Min Latency:    " << stats.min_us << " us" << std::endl;
+            std::cout << "  Max Latency:    " << stats.max_us << " us" << std::endl;
+            std::cout << "  Avg Latency:    " << stats.avg_us << " us" << std::endl;
+            std::cout << "  Median Latency: " << stats.median_us << " us" << std::endl;
+            std::cout << "  Std Dev:        " << stats.std_dev_us << " us" << std::endl;
+            std::cout << "  Bandwidth:      " << stats.bandwidth_gbps << " GB/s" << std::endl;
+            std::cout << "  Msg Rate:       " << stats.msg_rate_mops << " Mops/s" << std::endl;
+            std::cout << "  Wall Time:      " << wall_time_ms << " ms" << std::endl;
         }
     }
 
-    ShmemBarrierAll();
-
-    // Cleanup
     aclrtFreeHost(srcHost);
     aclrtFreeHost(resHost);
+    aclrtFreeHost(perfHost);
     aclrtFree(srcDevice);
     aclrtFree(resDevice);
-    aclrtFreeHost(perfHost);
     aclrtFree(perfDevice);
-    ShmemFree(shmemBufferDevice);
+    ShmemFree(shmemInputDevice);
 
     ShmemFinalize();
 
@@ -292,8 +243,8 @@ bool RunAllReducePerfKernel(
 // ============================================================================
 // Multi-process Launcher
 // ============================================================================
-template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
-bool RunAllReducePerf(
+template<typename T, int kTRows_, int kTCols_, int vRows, int vCols>
+bool RunReducePerf(
     int n_ranks, 
     int n_devices, 
     int first_rank_id, 
@@ -301,11 +252,10 @@ bool RunAllReducePerf(
     const PerfTestConfig &config)
 {
     std::vector<pid_t> pids;
-    
     for (int r = 0; r < n_ranks; ++r) {
         pid_t pid = fork();
-        if (pid == 0) { // child
-            const bool ok = RunAllReducePerfKernel<T, kTRows_, kTCols_, vRows, vCols>(
+        if (pid == 0) {
+            const bool ok = RunReducePerfKernel<T, kTRows_, kTCols_, vRows, vCols>(
                 first_rank_id + r, n_ranks, n_devices, first_device_id, config);
             _exit(ok ? 0 : 1);
         } else if (pid > 0) {
@@ -314,7 +264,6 @@ bool RunAllReducePerf(
             return false;
         }
     }
-    
     bool success = true;
     for (pid_t p : pids) {
         int status = 0;
@@ -326,16 +275,12 @@ bool RunAllReducePerf(
     return success;
 }
 
-// ============================================================================
-// Explicit Instantiations for Common Configurations
-// ============================================================================
-
-// Small size tests
-template bool RunAllReducePerf<float, 64, 64, 64, 64>(int, int, int, int, const PerfTestConfig&);
-template bool RunAllReducePerf<float, 16, 256, 16, 256>(int, int, int, int, const PerfTestConfig&);
-
-// Large size tests (max ~64KB per tile to fit 3 tiles in UB)
-template bool RunAllReducePerf<int32_t, 128, 128, 128, 128>(int, int, int, int, const PerfTestConfig&);
-template bool RunAllReducePerf<int32_t, 64, 256, 64, 256>(int, int, int, int, const PerfTestConfig&);
-
-
+// Explicit instantiations
+template bool RunReducePerf<float, 64, 64, 64, 64>(
+    int n_ranks, int n_devices, int first_rank_id, int first_device_id, const PerfTestConfig &config);
+template bool RunReducePerf<float, 16, 256, 16, 256>(
+    int n_ranks, int n_devices, int first_rank_id, int first_device_id, const PerfTestConfig &config);
+template bool RunReducePerf<int32_t, 128, 128, 128, 128>(
+    int n_ranks, int n_devices, int first_rank_id, int first_device_id, const PerfTestConfig &config);
+template bool RunReducePerf<int32_t, 64, 256, 64, 256>(
+    int n_ranks, int n_devices, int first_rank_id, int first_device_id, const PerfTestConfig &config);
