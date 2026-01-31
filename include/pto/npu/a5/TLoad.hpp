@@ -498,7 +498,7 @@ template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadMxCubeCheck() {
     // support ZZ2ZZ NN2NN
     static_assert(((GlobalData::layout == pto::Layout::MX_A_ZZ || GlobalData::layout == pto::Layout::MX_A_ND ||
-                       GlobalData::layout == pto::Layout::MX_A_DN) &&
+                       GlobalData::layout == pto::Layout::MX_A_DN || GlobalData::layout == pto::Layout::ND) &&
                       (TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) ||
                       ((GlobalData::layout == pto::Layout::MX_B_NN || GlobalData::layout == pto::Layout::MX_B_ND ||
                            GlobalData::layout == pto::Layout::MX_B_DN) &&
@@ -613,6 +613,53 @@ PTO_INTERNAL void TLoadMxCubeAND2ZZ(__cbuf__ typename TileData::DType *dst, type
 
     copy_gm_to_cbuf_multi_dn2nz(reinterpret_cast<__cbuf__ uint16_t *>(dst), reinterpret_cast<__gm__ uint16_t *>(src),
         0 /*sid*/, loop1SrcStride, 0, nValue, dValue, 0, false);
+}
+
+template <typename TileData, typename GlobalData>
+__tf__ PTO_INTERNAL void TLoadMxCubeAVector(__cbuf__ typename TileData::DType *dst, typename GlobalData::DType *src, int gShape0,
+    int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3,
+    int gStride4, int validRow, int validCol) {
+    // L1: shape <1,1,1,1,k> stride <k,k,k,k,1>
+    using L1Type = typename TileData::TileDType;
+    L1Type dstAddr = (L1Type)__cce_get_tile_ptr(dst);
+    TLoadCubeND2ND<TileData, GlobalData>(dstAddr, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+            gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+    
+    // using L1Type = typename TileData::TileDType;
+    // __cbuf__ typename TileData::DType *dstAddrP = dst;
+    // typename GlobalData::DType *srcAddrP = src;
+
+    // uint32_t nBurst = gShape3;
+    // uint32_t lenBurst = validCol* sizeof(L1Type);
+    // uint64_t gmStride = gStride3 * sizeof(L1Type);
+    // constexpr uint32_t dstStride = TileData::Cols * sizeof(L1Type);
+
+    // constexpr uint32_t blockSizeElem = BLOCK_BYTE_SIZE / sizeof(L1Type);  // 32B
+    // uint32_t gapElement = (TileData::Cols - validCol);
+    // uint32_t padCount = gapElement % blockSizeElem;
+    // set_pad_val_outtol1(GetPadValue<TileData>());
+
+    // int64_t dstStride2 = gShape3 * TileData::Cols;
+    // int64_t dstStride1 = gShape2 * dstStride2;
+    // int64_t dstStride0 = gShape1 * dstStride1;
+
+    // uint64_t loop2 = gShape1;
+    // uint64_t loop1 = gShape2;
+    // uint64_t loop2SrcStride = GetByteSize<L1Type>(gStride1);
+    // uint64_t loop1SrcStride = GetByteSize<L1Type>(gStride2);
+    // uint64_t loop2DstStride = GetByteSize<L1Type>(dstStride1);
+    // uint64_t loop1DstStride = GetByteSize<L1Type>(dstStride2);
+
+    // set_loop2_stride_outtol1(loop2DstStride << 40 | loop2SrcStride);
+    // set_loop1_stride_outtol1(loop1DstStride << 40 | loop1SrcStride);
+    // set_loop_size_outtol1(loop2 << 21 | loop1);
+    // for (uint32_t i = 0; i < gShape0; i++) {
+    //     int64_t dstAddr0 = i * dstStride0;
+    //     int64_t srcAddr0 = i * gStride0;
+    //     dstAddrP = dst + dstAddr0;
+    //     srcAddrP = src + srcAddr0;
+    //     TLoadCubeInstr<TileData, GlobalData>(dstAddrP, srcAddrP, nBurst, lenBurst, gmStride, dstStride, padCount);
+    // }
 }
 
 template <typename TileData, typename GlobalData>
@@ -775,7 +822,12 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData &dst, GlobalData &src) {
             src.GetStride(pto::GlobalTensorDim::DIM_2), src.GetStride(pto::GlobalTensorDim::DIM_3),
             src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
     } else if constexpr (TileData::Loc == pto::TileType::Mat) {
-        if constexpr (!IsScale<TileData, GlobalData>()) {
+        if constexpr ((TileData::Rows == 1) && (TileData::SFractal == SLayout::RowMajor && TileData::isRowMajor)) {
+            TLoadMxCubeCheck<TileData, GlobalData>();
+            TLoadMxCubeAVector<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(0), src.GetShape(1),
+                src.GetShape(2), src.GetShape(3), src.GetShape(4), src.GetStride(0), src.GetStride(1), src.GetStride(2),
+                src.GetStride(3), src.GetStride(4), dst.GetValidRow(), dst.GetValidCol());
+        } else if constexpr (!IsScale<TileData, GlobalData>()) {
             TLoadCubeCheck<TileData, GlobalData>();
             TLoadCube<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(pto::GlobalTensorDim::DIM_0),
                 src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
