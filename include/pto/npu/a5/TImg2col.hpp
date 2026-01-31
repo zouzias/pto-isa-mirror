@@ -36,6 +36,7 @@ PTO_INTERNAL void SetFmatrix(const Img2colTileConfig<T> &cfg)
         }
     }
 }
+
 template <typename TileData, typename ConvTileData, SetFmatrixMode FmatrixMode>
 __tf__ PTO_INTERNAL void TImg2col(typename TileData::TileDType __out__ dst, typename ConvTileData::TileDType __in__ src,
     uint16_t stepM, uint16_t stepK, uint16_t posM, uint16_t posK, uint8_t strideW, uint8_t strideH, uint16_t filterW,
@@ -58,28 +59,44 @@ __tf__ PTO_INTERNAL void TImg2col(typename TileData::TileDType __out__ dst, type
                          dilationW, dilationH, highFilterW, highFilterH, transpose, fmatrixCtrl, channelSize);
 }
 
+template <typename TileData, typename ConvTileData>
+PTO_INTERNAL void Timg2colConvTileCheck(TileData &dst, ConvTileData &src) {
+    static_assert((ConvTileData::Loc == TileType::Mat), "TImg2col: Source TileType only support Mat.");
+    static_assert((TileData::Loc == TileType::Left), "TImg2col: Destination TileType only support Left.");
+    static_assert((ConvTileData::layout == Layout::NC1HWC0), "TImg2col: Source layout only support NC1HWC0.");
+    static_assert(TileData::SFractal == SLayout::RowMajor && !TileData::isRowMajor,
+                 "TImg2col: Destination layout only support SLayout is RowMajor ang BLayout is ColMajor.");
+    static_assert(std::is_same_v<typename ConvTileData::DType, typename TileData::DType>,
+                 "TImg2col: Destination and Source tile data types must be the same.");
+    static_assert(
+        std::is_same_v<typename TileData::DType, int8_t> || std::is_same_v<typename TileData::DType, uint8_t> ||
+            std::is_same_v<typename TileData::DType, int16_t> || std::is_same_v<typename TileData::DType, uint16_t> ||
+            std::is_same_v<typename TileData::DType, int32_t> || std::is_same_v<typename TileData::DType, uint32_t> ||
+            std::is_same_v<typename TileData::DType, half> || std::is_same_v<typename TileData::DType, bfloat16_t> ||
+            std::is_same_v<typename TileData::DType, float>,
+        "Fix: Data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/bfloat16_t/float!");
+}
+
 template <typename TileData, typename ConvTileData,
           SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint64_t>
 AICORE void TIMG2COL_IMPL(TileData &dst, ConvTileData &src,
                           uint16_t posM, uint16_t posK, const Img2colTileConfig<T> &cfg)
 {
-    static_assert((ConvTileData::Loc == TileType::Mat), "TImg2col: Source TileType only support Mat.");
-    static_assert((TileData::Loc == TileType::Left), "TImg2col: Destination TileType only support Left.");
-    static_assert((ConvTileData::layout == Layout::NC1HWC0), "TImg2col: Source layout only support NC1HWC0.");
-    static_assert(TileData::SFractal == SLayout::RowMajor && TileData::isRowMajor,
-                 "TImg2col: Destination layout only support SLayout is RowMajor ang BLayout is RowMajor.");
-    static_assert(std::is_same_v<typename ConvTileData::DType, typename TileData::DType>,
-                 "TImg2col: Destination and Source tile data types must be the same.");
-    static_assert(std::is_same_v<typename TileData::DType, int8_t> || std::is_same_v<typename TileData::DType, half> ||
-                  std::is_same_v<typename TileData::DType, bfloat16_t> || std::is_same_v<typename TileData::DType, float>,
-                  "TImg2col: Invalid data type.");
+    Timg2colConvTileCheck<TileData, ConvTileData>(dst, src);
     if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
         SetFmatrix<FmatrixMode>(cfg);
     }
     constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
     uint16_t stepM = dst.GetValidRow();
     uint16_t stepK = CeilAlignment(dst.GetValidCol(), c0Size);
-
+    uint16_t dstStride = CeilDivision(dst.GetValidRow(), FRACTAL_NZ_ROW);
+    uint64_t repeatValue = 0x1010001ULL;
+    repeatValue = (repeatValue & ~(0xFFFFULL << 32)) | (static_cast<uint64_t>(dstStride) << 32);
+    if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL) {
+        set_l3d_rpt(repeatValue);
+    } else {
+        set_l3d_rpt_b(repeatValue);
+    }
     TImg2col<TileData, ConvTileData, FmatrixMode>(dst.data(), src.data(), stepM, stepK, posM, posK, cfg.strideW, cfg.strideH,
                                      cfg.filterW, cfg.filterH, cfg.dilationW, cfg.dilationH, cfg.transpose, cfg.channelSize);
 }
