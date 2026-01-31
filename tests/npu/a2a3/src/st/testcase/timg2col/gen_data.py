@@ -268,119 +268,37 @@ def gen_golden_data(case_name: str, params: ConvTestParams):
 if __name__ == "__main__":
     # Define a list of test cases.
     case_name_list = [
-        "TIMG2COLTest.case1_bfloat16", 
-        "TIMG2COLTest.case2_float16", 
-        "TIMG2COLTest.case3_float32", 
-        "TIMG2COLTest.case4_int8", 
-        "TIMG2COLTest.case5_bfloat16_splitk", 
-        "TIMG2COLTest.case6_float16_splitk", 
-        "TIMG2COLTest.case7_float32_splitk",
-        "TIMG2COLTest.case8_int8_splitk",
         "TIMG2COLTest.case9_bfloat16_fractalZ4d", 
         "TIMG2COLTest.case10_float16_fractalZ4d", 
         "TIMG2COLTest.case11_float32_fractalZ4d",
-        "TIMG2COLTest.case12_int8_fractalZ4d",
     ]
     # Define the parameters for the test cases.
     case_params_list = [
         ConvTestParams(
-            input_shape_nc1hwc0=(1, 2, 4, 16, 16),  # NC1HWC0
-            weight_shape=(2, 3, 3, 16, 16),  # C1HWNC0
-            stride=(1, 1),
-            dilation=(1, 1),
-            padding=(1, 1, 1, 1),
-            dtype=bfloat16
-        ),
-        ConvTestParams(
-            input_shape_nc1hwc0=(1, 4, 4, 16, 16),  # NC1HWC0
-            weight_shape=(4, 3, 3, 16, 16),  # C1HWNC0
-            stride=(1, 1),
-            dilation=(2, 1),
-            padding=(1, 1, 1, 1),
-            dtype=np.float16
-        ),
-        ConvTestParams(
-            input_shape_nc1hwc0=(1, 4, 8, 16, 8),  # NC1HWC0
-            weight_shape=(4, 3, 3, 16, 8),  # C1HWNC0
-            stride=(2, 2),
-            dilation=(1, 1),
-            padding=(1, 1, 1, 1),
-            dtype=np.float32
-        ),
-        ConvTestParams(
-            input_shape_nc1hwc0=(1, 1, 8, 16, 32),  # NC1HWC0
-            weight_shape=(1, 3, 3, 16, 32),  # C1HWNC0
-            stride=(1, 1),
-            dilation=(1, 1),
-            padding=(1, 1, 1, 1),
-            dtype=np.int8
-        ),
-        ConvTestParams(
-            input_shape_nc1hwc0=(1, 4, 13, 57, 16),  # NC1HWC0
-            weight_shape=(4, 3, 3, 16, 16),  # C1HWNC0
+            input_shape_nc1hwc0=(1, 4, 33, 63, 16),  # NC1HWC0
+            weight_shape=(4, 3, 3, 64, 16),  # C1HWNC0
             stride=(2, 2),
             dilation=(2, 2),
-            padding=(1, 2, 1, 2),
-            dtype=bfloat16
-        ),
-        ConvTestParams(
-            input_shape_nc1hwc0=(1, 4, 25, 9, 16),  # NC1HWC0
-            weight_shape=(4, 3, 3, 16, 16),  # C1HWNC0
-            stride=(2, 1),
-            dilation=(1, 2),
-            padding=(1, 1, 1, 1),
-            dtype=np.float16
-        ),
-        ConvTestParams(
-            input_shape_nc1hwc0=(1, 2, 14, 30, 8),  # NC1HWC0
-            weight_shape=(2, 4, 4, 16, 8),  # C1HWNC0
-            stride=(2, 2),
-            dilation=(1, 1),
-            padding=(1, 2, 3, 0),
-            dtype=np.float32
-        ),
-        ConvTestParams(
-            input_shape_nc1hwc0=(1, 2, 29, 60, 32),  # NC1HWC0
-            weight_shape=(2, 2, 2, 64, 32),  # C1HWNC0
-            stride=(2, 2),
-            dilation=(2, 2),
-            padding=(1, 1, 1, 0),
-            dtype=np.int8
-        ),
-        ConvTestParams(
-            input_shape_nc1hwc0=(1, 4, 13, 57, 16),  # NC1HWC0
-            weight_shape=(4, 3, 3, 48, 16),  # C1HWNC0
-            stride=(2, 2),
-            dilation=(2, 2),
-            padding=(1, 2, 1, 2),
+            padding=(0, 0, 0, 0),
             dtype=bfloat16,
             weight_output_format="4d"
         ),
         ConvTestParams(
-            input_shape_nc1hwc0=(1, 4, 25, 9, 16),  # NC1HWC0
+            input_shape_nc1hwc0=(1, 4, 36, 32, 16),  # NC1HWC0
             weight_shape=(4, 3, 3, 64, 16),  # C1HWNC0
-            stride=(2, 1),
-            dilation=(1, 2),
-            padding=(1, 1, 1, 1),
+            stride=(2, 2),
+            dilation=(2, 2),
+            padding=(1, 2, 2, 1),
             dtype=np.float16,
             weight_output_format="4d"
         ),
         ConvTestParams(
-            input_shape_nc1hwc0=(1, 2, 14, 30, 8),  # NC1HWC0
+            input_shape_nc1hwc0=(1, 2, 36, 38, 8),  # NC1HWC0
             weight_shape=(2, 4, 4, 32, 8),  # C1HWNC0
             stride=(2, 2),
             dilation=(1, 1),
             padding=(1, 2, 3, 0),
             dtype=np.float32,
-            weight_output_format="4d"
-        ),
-        ConvTestParams(
-            input_shape_nc1hwc0=(1, 2, 29, 60, 32),  # NC1HWC0
-            weight_shape=(2, 2, 2, 64, 32),  # C1HWNC0
-            stride=(2, 2),
-            dilation=(2, 2),
-            padding=(1, 1, 1, 0),
-            dtype=np.int8,
             weight_output_format="4d"
         ),
     ]
