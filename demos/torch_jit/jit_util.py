@@ -29,14 +29,10 @@ def compile_cpp(src_path, verbose=False, timeout=10):
         "-shared",
         "-xcce",
         "--npu-arch=dav-2201",
+        "-DMEMORY_BASE",  # here hardcoded for A2A3; TODO: expose this option to jit interface
         "-O2",
         "-std=c++17",
-        f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw",
-        f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw/impl",
-        f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw/interface",
-        f"-I{ASCEND_TOOLKIT_HOME}/include",
-        f"-I{PTO_LIB_PATH}/include",
-        f"-I{PTO_LIB_PATH}/include/common",
+        f"-I{PTO_LIB_PATH}/include"
     ]
 
     command = ["bisheng", *flags, src_path, "-o", lib_path]
