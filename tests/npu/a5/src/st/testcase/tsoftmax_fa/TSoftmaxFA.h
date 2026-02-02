@@ -996,11 +996,12 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
     float scale = 0.8;
     float keepProb = 1.0;
 
-    unsigned ubM = TileDataD2::Rows;
-    unsigned ubN = TileDataD2::Cols;
+    unsigned ubM = TileDataD2::Rows;    //
+    unsigned ubN = TileDataD2::Cols;    //128
     unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileDataS1::DType);
 
-    uint16_t repeatTimes = CeilDivision(ubN, elementsPerRepeat);
+    uint16_t repeatTimes = CeilDivision(ubN, elementsPerRepeat);    //2
+    uint16_t rowRepeat = CeilDivision(ubM, elementsPerRepeat);
 
     __VEC_SCOPE__{
         vector_f32 src_in1, src_in2;
@@ -1132,16 +1133,19 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
             }
         }
         else {
-            vlds(max_2a, local_max_Ptr, 0, NORM);
-            vlds(src_in1, new_global_max_Ptr, 0, NORM);
-            vmax(max_2a, max_2a, src_in1, preg_src, MODE_ZEROING);
-            vsub(vreg_exp_max, src_in1, max_2a, preg_b16_half, MODE_ZEROING);
-            vsts(max_2a, new_global_max_Ptr, 0, NORM_B32, preg_b16_half);
 
-            vmuls(vreg_exp_max, vreg_exp_max, 0.8f, preg_b16_half, MODE_ZEROING);
-            vexp(vreg_exp_max, vreg_exp_max, preg_b16_half, MODE_ZEROING);
-            vsts(vreg_exp_max, exp_max_Ptr, 0, NORM_B32, preg_src);
-            // mem_bar(VST_VLD);
+            for (uint16_t j = 0; j < (uint16_t)(rowRepeat); ++j) {
+                vlds(max_2a, local_max_Ptr, j * elementsPerRepeat, NORM);
+                vlds(src_in1, new_global_max_Ptr, j * elementsPerRepeat, NORM);
+                vmax(max_2a, max_2a, src_in1, preg_src, MODE_ZEROING);
+                vsub(vreg_exp_max, src_in1, max_2a, preg_src, MODE_ZEROING);
+                vsts(max_2a, new_global_max_Ptr, j * elementsPerRepeat, NORM_B32, preg_src);
+
+                vmuls(vreg_exp_max, vreg_exp_max, 0.8f, preg_src, MODE_ZEROING);
+                vexp(vreg_exp_max, vreg_exp_max, preg_src, MODE_ZEROING);
+                vsts(vreg_exp_max, exp_max_Ptr, j * elementsPerRepeat, NORM_B32, preg_src);
+            }
+            mem_bar(VST_VLD);
 
             for (uint16_t i = 0; i < uint16_t(ubM) ; ++i) {
                 if(remains){
@@ -1205,11 +1209,14 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
                 }
             }
             mem_bar(VST_VLD);
-            vlds(src_in1, local_sum_Ptr, 0, NORM);
-            vlds(src_in2, new_global_sum_Ptr, 0, NORM);
-            vmul(src_in2, vreg_exp_max, src_in2, preg_src, MODE_ZEROING);
-            vadd(src_in2, src_in2, src_in1, preg_src, MODE_ZEROING);
-            vsts(src_in2, new_global_sum_Ptr, 0, NORM_B32, preg_src);
+            for(uint16_t j = 0; j < (uint16_t)(rowRepeat); ++j)
+            {
+                vlds(src_in1, local_sum_Ptr, j * elementsPerRepeat, NORM);
+                vlds(src_in2, new_global_sum_Ptr, j * elementsPerRepeat, NORM);
+                vmul(src_in2, vreg_exp_max, src_in2, preg_src, MODE_ZEROING);
+                vadd(src_in2, src_in2, src_in1, preg_src, MODE_ZEROING);
+                vsts(src_in2, new_global_sum_Ptr, j * elementsPerRepeat, NORM_B32, preg_src);
+            }
         }
     }
 }

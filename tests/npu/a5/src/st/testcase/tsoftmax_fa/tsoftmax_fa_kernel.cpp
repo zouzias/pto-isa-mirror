@@ -26,6 +26,7 @@ __global__ AICORE void runSoftmax_dn_fusion( __gm__ aclFloat16 __out__ *x_exp,
                                    __gm__ float __out__ *new_global_sum, 
                                    __gm__ float __out__ *exp_max) {
 
+    //TODO: change shape order
     using GlobalData_F = GlobalTensor<float,Shape<1, 1, 1, headSize, seq>, pto::Stride<1, 1, 1, seq, 1>>;
     using GlobalData_U16 = GlobalTensor<uint16_t, Shape<1, 1, 1, headSize, seq>, pto::Stride<1, 1, 1, seq, 1>>;
     using GlobalData_U8 = GlobalTensor<uint8_t, Shape<1, 1, 1, headSize, seq>, pto::Stride<1, 1, 1, seq, 1>>;
@@ -292,7 +293,6 @@ __global__ AICORE void runSoftmax_nd_fusion( __gm__ aclFloat16 __out__ *x_exp,
                                    __gm__ float __out__ *new_global_sum, 
                                    __gm__ float __out__ *exp_max) {
 
-    //suppose to be 64*256
     using GlobalData_F = GlobalTensor<float, Shape<1, 1, 1, headSize, seq>, pto::Stride<1, 1, 1, seq, 1>>;
     using GlobalData_U16 = GlobalTensor<uint16_t, Shape<1, 1, 1, headSize, seq>, pto::Stride<1, 1, 1, seq, 1>>;
     using GlobalData_U8 = GlobalTensor<uint8_t, Shape<1, 1, 1, headSize, seq>, pto::Stride<1, 1, 1, seq, 1>>;
@@ -536,7 +536,8 @@ template void launchTSOFTMAX_dn_fusion<128, 64, 0>(aclFloat16 *x_exp, float *inp
 template void launchTSOFTMAX_dn_fusion<128, 64, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_dn_fusion<256, 64, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_dn_fusion<256, 64, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
-
+template void launchTSOFTMAX_dn_fusion<128, 128, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_dn_fusion<128, 128, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
 template <int seq, int headSize, int init>
 void launchTSOFTMAX_dn_nofusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream){
