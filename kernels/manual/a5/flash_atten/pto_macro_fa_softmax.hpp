@@ -112,8 +112,8 @@ __tf__ AICORE inline void softmax_opt_fa_init_impl(TileDataD2 __out__ x_exp, Til
         vector_f16 vreg4_f16;
         vector_f16 vreg_x_exp_f16_pack, vreg_x_exp_f16_packa;
         unsigned remains = repeatTimes % 2;
-        for (uint16_t i = 0; i < uint16_t(ubM); ++i) {
-            if (remains) {
+        if (remains) {
+            for (uint16_t i = 0; i < uint16_t(ubM); ++i) {
                 vldas(ureg_1, (__ubuf__ float *)(new_global_max_Ptr + i * stride));
                 vldus(vreg_uld, ureg_1, (__ubuf__ float *)(new_global_max_Ptr + i * stride));
                 vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
@@ -138,7 +138,9 @@ __tf__ AICORE inline void softmax_opt_fa_init_impl(TileDataD2 __out__ x_exp, Til
                         preg_b16_all);
                 }
                 vsts(sum_2a, new_global_sum_Ptr + i, 0, distValue, preg_reduce);
-            } else {
+            }
+        } else {
+            for (uint16_t i = 0; i < uint16_t(ubM); ++i) {
                 vldas(ureg_1, (__ubuf__ float *)(new_global_max_Ptr + i * stride));
                 vldus(vreg_uld, ureg_1, (__ubuf__ float *)(new_global_max_Ptr + i * stride));
                 vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
@@ -229,6 +231,7 @@ __tf__ AICORE inline void softmax_opt_fa_not_init_impl(TileDataD2 __out__ x_exp,
     unsigned ubN = TileDataD2::Cols;
     unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileDataS1::DType);
     uint16_t repeatTimes = CeilDivision(ubN, elementsPerRepeat);
+    uint16_t rowsRepeat = CeilDivision(ubM, elementsPerRepeat);
 
     __VEC_SCOPE__ {
         vector_f32 src_in1, src_in2;
@@ -272,19 +275,21 @@ __tf__ AICORE inline void softmax_opt_fa_not_init_impl(TileDataD2 __out__ x_exp,
         vector_f16 vreg_x_exp_f16_pack, vreg_x_exp_f16_packa;
         unsigned remains = repeatTimes % 2;
 
-        vlds(max_2a, local_max_Ptr, 0, NORM);
-        vlds(src_in1, new_global_max_Ptr, 0, NORM);
-        vmax(max_2a, max_2a, src_in1, preg_src, MODE_ZEROING);
-        vsub(vreg_exp_max, src_in1, max_2a, preg_b16_half, MODE_ZEROING);
-        vsts(max_2a, new_global_max_Ptr, 0, NORM_B32, preg_b16_half);
+        for (uint16_t j = 0; j < (uint16_t)(rowsRepeat); ++j) {
+            vlds(max_2a, local_max_Ptr, j * elementsPerRepeat, NORM);
+            vlds(src_in1, new_global_max_Ptr, j * elementsPerRepeat, NORM);
+            vmax(max_2a, max_2a, src_in1, preg_src, MODE_ZEROING);
+            vsub(vreg_exp_max, src_in1, max_2a, preg_src, MODE_ZEROING);
+            vsts(max_2a, new_global_max_Ptr, j * elementsPerRepeat, NORM_B32, preg_src);
 
-        vmuls(vreg_exp_max, vreg_exp_max, scale, preg_b16_half, MODE_ZEROING);
-        vexp(vreg_exp_max, vreg_exp_max, preg_b16_half, MODE_ZEROING);
-        vsts(vreg_exp_max, exp_max_Ptr, 0, NORM_B32, preg_src);
+            vmuls(vreg_exp_max, vreg_exp_max, scale, preg_src, MODE_ZEROING);
+            vexp(vreg_exp_max, vreg_exp_max, preg_src, MODE_ZEROING);
+            vsts(vreg_exp_max, exp_max_Ptr, j * elementsPerRepeat, NORM_B32, preg_src);
+        }
         mem_bar(VST_VLD);
 
-        for (uint16_t i = 0; i < uint16_t(ubM); ++i) {
-            if (remains) {
+        if (remains) {
+            for (uint16_t i = 0; i < uint16_t(ubM); ++i) {
                 vldas(ureg_1, (__ubuf__ float *)(new_global_max_Ptr + i * stride));
                 vldus(vreg_uld, ureg_1, (__ubuf__ float *)(new_global_max_Ptr + i * stride));
                 vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
@@ -308,7 +313,9 @@ __tf__ AICORE inline void softmax_opt_fa_not_init_impl(TileDataD2 __out__ x_exp,
                         preg_b16_all);
                 }
                 vsts(sum_2a, local_sum_Ptr + i, 0, distValue, preg_reduce);
-            } else {
+            }
+        } else {
+            for (uint16_t i = 0; i < uint16_t(ubM); ++i) {
                 vldas(ureg_1, (__ubuf__ float *)(new_global_max_Ptr + i * stride));
                 vldus(vreg_uld, ureg_1, (__ubuf__ float *)(new_global_max_Ptr + i * stride));
                 vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
@@ -345,11 +352,14 @@ __tf__ AICORE inline void softmax_opt_fa_not_init_impl(TileDataD2 __out__ x_exp,
             }
         }
         mem_bar(VST_VLD);
-        vlds(src_in1, local_sum_Ptr, 0, NORM);
-        vlds(src_in2, new_global_sum_Ptr, 0, NORM);
-        vmul(src_in2, vreg_exp_max, src_in2, preg_src, MODE_ZEROING);
-        vadd(src_in2, src_in2, src_in1, preg_src, MODE_ZEROING);
-        vsts(src_in2, new_global_sum_Ptr, 0, NORM_B32, preg_src);
+        for(uint16_t j = 0; j < (uint16_t)(rowsRepeat); ++j)
+        {
+            vlds(src_in1, local_sum_Ptr, j * elementsPerRepeat, NORM);
+            vlds(src_in2, new_global_sum_Ptr, j * elementsPerRepeat, NORM);
+            vmul(src_in2, vreg_exp_max, src_in2, preg_src, MODE_ZEROING);
+            vadd(src_in2, src_in2, src_in1, preg_src, MODE_ZEROING);
+            vsts(src_in2, new_global_sum_Ptr, j * elementsPerRepeat, NORM_B32, preg_src);
+        }
     }
 #else
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);

@@ -71,11 +71,11 @@ __tf__ AICORE inline void pto_macro_fa_gu(
                 uint32_t sreg = (uint32_t)(ubN);
                 for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
                     preg = CreatePredicate<T>(sreg);
-                    vlds(vreg0, prev_sv_tile_Ptr,  i * rowStride + j * elementsPerRepeat, NORM);
+                    vlds(vreg0, prev_sv_tile_Ptr,  0, NORM, POST_UPDATE);
                     vmul(vreg2, vreg0, vreg1, preg, MODE_ZEROING);
-                    vlds(vreg3, est_sv_tile_Ptr,  i * rowStride + j * elementsPerRepeat, NORM);
+                    vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
                     vadd(vreg3, vreg2, vreg3, preg, MODE_ZEROING);
-                    vsts(vreg3, prev_sv_tile_Ptr, i * rowStride + j * elementsPerRepeat, distValue, preg);
+                    vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, distValue, preg, POST_UPDATE);
                 }
             }
         }
@@ -134,12 +134,12 @@ __tf__ AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, 
                 uint32_t sreg = (uint32_t)(ubN);
                 for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
                     preg = CreatePredicate<T>(sreg);
-                    vlds(vreg0, prev_sv_tile_Ptr,  i * rowStride + j * elementsPerRepeat, NORM);
+                    vlds(vreg0, prev_sv_tile_Ptr,  0, NORM, POST_UPDATE);
                     vmul(vreg2, vreg0, vreg1, preg, MODE_ZEROING);
-                    vlds(vreg3, est_sv_tile_Ptr,  i * rowStride + j * elementsPerRepeat, NORM);
+                    vlds(vreg3, est_sv_tile_Ptr,  elementsPerRepeat, NORM, POST_UPDATE);
                     vadd(vreg3, vreg2, vreg3, preg, MODE_ZEROING);
                     vdiv(vreg3, vreg3, vreg4, preg, MODE_ZEROING);
-                    vsts(vreg3, prev_sv_tile_Ptr, i * rowStride + j * elementsPerRepeat, distValue, preg);
+                    vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, distValue, preg, POST_UPDATE);
                 }
             }
         }
