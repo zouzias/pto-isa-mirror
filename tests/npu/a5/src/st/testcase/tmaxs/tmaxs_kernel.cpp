@@ -56,7 +56,6 @@ __global__ AICORE void runTMAXS(__gm__ T __out__ *out, __gm__ T __in__ *src0, __
     dstGlobalType dstGlobal(out + offset);
 
     TLOAD(src0Tile, src0Global);
-    TLOAD(dstTile, dstGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     TMAXS(dstTile, src0Tile, scalar[0]);

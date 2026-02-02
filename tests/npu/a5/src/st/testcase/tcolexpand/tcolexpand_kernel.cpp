@@ -37,7 +37,6 @@ __global__ AICORE void runCOLEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalData srcGlobal(src + offset);
     DstGlobalData dstGlobal(out + offset);
 
-    TLOAD(dstTile, dstGlobal);
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);

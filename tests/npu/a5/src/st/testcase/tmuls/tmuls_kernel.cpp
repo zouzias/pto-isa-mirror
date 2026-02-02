@@ -29,7 +29,6 @@ PTO_INTERNAL void runTMuls(__gm__ T *out, __gm__  T *src, T scalar) {
     dstTileData dstTile(validRow, validCol);
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x26000);
-    TLOAD(dstTile, dstGlobal);
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
