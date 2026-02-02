@@ -95,15 +95,15 @@ AICORE inline void runTEXTRACT(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    // TASSIGN(aMatTile, 0x0);
-    // TASSIGN(bMatTile, 0x10000);
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
 
     LeftTile aTile;
     RightTile bTile;
     ResTile cTile;
-    // TASSIGN(aTile, 0x0);
-    // TASSIGN(bTile, 0x0);
-    // TASSIGN(cTile, 0x0);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -161,8 +161,8 @@ AICORE inline void runTEXTRACT_DYNAMIC(__gm__ T *out, __gm__ U *src0, __gm__ S *
 
     TileMatAData aMatTile(m, k);
     TileMatBData bMatTile(k, n);
-    // TASSIGN(aMatTile, 0x0);
-    // TASSIGN(bMatTile, 0x10000);
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
 
     int validM = m - indexM;
     int validK = k - indexK;
@@ -171,9 +171,9 @@ AICORE inline void runTEXTRACT_DYNAMIC(__gm__ T *out, __gm__ U *src0, __gm__ S *
     LeftTile aTile(validM, validK);
     RightTile bTile(validN);
     ResTile cTile(validM);
-    // TASSIGN(aTile, 0x0);
-    // TASSIGN(bTile, 0x0);
-    // TASSIGN(cTile, 0x0);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -233,17 +233,17 @@ AICORE inline void runTEXTRACTMX(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, 
     TileMatBData bMatTile;
     TileMatAmxData amxMatTile;
     TileMatBmxData bmxMatTile;
-    // TASSIGN(aMatTile, 0x0);
-    // TASSIGN(bMatTile, 0x10000);
-    // TASSIGN(amxMatTile, 0x20000);
-    // TASSIGN(bmxMatTile, 0x30000);
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
+    TASSIGN(amxMatTile, 0x20000);
+    TASSIGN(bmxMatTile, 0x30000);
 
     LeftTile aTile;
     RightTile bTile;
     ResTile cTile;
-    // TASSIGN(aTile, 0x0);
-    // TASSIGN(bTile, 0x0);
-    // TASSIGN(cTile, 0x0);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
 
     auto &a = aTile.data();
     auto &b = bTile.data();
@@ -504,15 +504,15 @@ AICORE inline void runTMOV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    // TASSIGN(aMatTile, 0x0);
-    // TASSIGN(bMatTile, 0x10000);
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
 
     LeftTile aTile;
     RightTile bTile;
     ResTile cTile;
-    // TASSIGN(aTile, 0x0);
-    // TASSIGN(bTile, 0x0);
-    // TASSIGN(cTile, 0x0);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -566,15 +566,15 @@ AICORE inline void runTMOV_DYNAMIC(__gm__ T *out, __gm__ U *src0, __gm__ S *src1
 
     TileMatAData aMatTile(m, k);
     TileMatBData bMatTile(k, n);
-    // TASSIGN(aMatTile, 0x0);
-    // TASSIGN(bMatTile, 0x10000);
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
 
     LeftTile aTile(m, k);
     RightTile bTile(n);
     ResTile cTile(m);
-    // TASSIGN(aTile, 0x0);
-    // TASSIGN(bTile, 0x0);
-    // TASSIGN(cTile, 0x0);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -625,15 +625,15 @@ AICORE inline void runTMOV_UNALIGN(__gm__ T *out, __gm__ U *src0, __gm__ S *src1
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    // TASSIGN(aMatTile, 0x0);
-    // TASSIGN(bMatTile, 0x10000);
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
 
     LeftTile aTile;
     RightTile bTile;
     ResTile cTile;
-    // TASSIGN(aTile, 0x0);
-    // TASSIGN(bTile, 0x0);
-    // TASSIGN(cTile, 0x0);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -694,17 +694,17 @@ AICORE inline void runTMOVMX(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, __gm
     TileMatBData bMatTile;
     TileMatAmxData amxMatTile;
     TileMatBmxData bmxMatTile;
-    // TASSIGN(aMatTile, 0x0);
-    // TASSIGN(bMatTile, 0x10000);
-    // TASSIGN(amxMatTile, 0x20000);
-    // TASSIGN(bmxMatTile, 0x30000);
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, 0x10000);
+    TASSIGN(amxMatTile, 0x20000);
+    TASSIGN(bmxMatTile, 0x30000);
 
     LeftTile aTile;
     RightTile bTile;
     ResTile cTile;
-    // TASSIGN(aTile, 0x0);
-    // TASSIGN(bTile, 0x0);
-    // TASSIGN(cTile, 0x0);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
 
     auto &a = aTile.data();
     auto &b = bTile.data();
