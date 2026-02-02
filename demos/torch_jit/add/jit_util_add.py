@@ -16,13 +16,10 @@ import ctypes
 
 import torch
 
+ASCEND_TOOLKIT_HOME = os.environ["ASCEND_TOOLKIT_HOME"]
 
 def compile_cpp(src_path, verbose=False, timeout=10):
-    assert src_path.endswith(".cpp")
     lib_path = src_path.removesuffix(".cpp") + ".so"
-
-    ASCEND_TOOLKIT_HOME = os.environ["ASCEND_TOOLKIT_HOME"]
-    PTO_LIB_PATH = os.environ["PTO_LIB_PATH"]
 
     flags = [
         "-fPIC",
@@ -34,9 +31,7 @@ def compile_cpp(src_path, verbose=False, timeout=10):
         f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw",
         f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw/impl",
         f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw/interface",
-        f"-I{ASCEND_TOOLKIT_HOME}/include",
-        f"-I{PTO_LIB_PATH}/include",
-        f"-I{PTO_LIB_PATH}/include/common",
+        f"-I{ASCEND_TOOLKIT_HOME}/include"
     ]
 
     command = ["bisheng", *flags, src_path, "-o", lib_path]
@@ -58,6 +53,7 @@ def torch_to_ctypes(tensor):
 
 
 def load_lib(lib_path, check_type=True):
+    lib_path = os.path.abspath(lib_path)
     lib = ctypes.CDLL(lib_path)
 
     if check_type:  # otherwise will get segfault for mismatched type
