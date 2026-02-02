@@ -67,6 +67,10 @@ namespace TRowSumTest {
         float *src, aclrtStream stream);
     template void launchTROWSUMTest<uint16_t, smallSize, smallSize, smallSize, smallSize>(uint16_t *out,
         uint16_t *src, aclrtStream stream);
-    template void launchTROWSUMTest<float, bigSize666, bigSize666, bigSize666, bigSizeAligned>(float *out,
-        float *src, aclrtStream stream);
+
+    // FIXME: this is wrong, the tile size 666x672 is way larger than the UB size (192KB for A2 and 256KB for A5).
+    // If we check the error code returned by aclrtSynchronizeStream on the host side, it will return an error.
+    // We should use a smaller tile size here for both dstTile and srcTile to fit into UB at the same time.
+    // template void launchTROWSUMTest<float, bigSize666, bigSize666, bigSize666, bigSizeAligned>(float *out,
+    //     float *src, aclrtStream stream);
 };
