@@ -24,6 +24,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 #include "pto_macro_matmul.hpp"
 #include "pto_macro_fa_softmax.hpp"
+#include "pto_macro_fa_softmax_dn.hpp"
 #include "pto_macro_fa_gu.hpp"
 
 using namespace std;
@@ -293,10 +294,17 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, __gm__ half *q, __gm
                 return;
             }
         }
+        #if ND_LAYOUT
         using GlobalDataQ =
             GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, HEAD_SIZE, 1>>;
         using GlobalDataK = GlobalTensor<half, pto::Shape<1, 1, 1, HEAD_SIZE, Cube_S1>,
-            pto::Stride<1, 1, 1, 1, HEAD_SIZE>, Layout::DN>; // BNSD - (N, K) layout
+            pto::Stride<1, 1, 1, 1, HEAD_SIZE>, Layout::DN>; 
+        #else
+        using GlobalDataQ =
+ 	                 GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S0, HEAD_SIZE>, pto::Stride<1, 1, 1, 1, HEAD_SIZE>, Layout::DN>;
+        using GlobalDataK = GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, HEAD_SIZE>,
+            pto::Stride<1, 1, 1, HEAD_SIZE, 1>>; // DN layout version
+        #endif
 
         GlobalDataQ qGlobal(q);
         GlobalDataK kGlobal(k + s1_index * HEAD_SIZE);
@@ -312,11 +320,20 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, __gm__ half *q, __gm
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
+        #if ND_LAYOUT
         #if UF_ENABLE
         pto_macro_matmul<Cube_S0, Cube_HEAD, Cube_S1>(qMatTile, kMatTile, qkAccTile, AccMode::InitFinalSum);
         #else
         wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
         pto_macro_matmul<Cube_S0, Cube_HEAD, Cube_S1>(qMatTile, kMatTile, qkAccTile, AccMode::Init);
+        #endif
+        #else
+        #if UF_ENABLE
+        pto_macro_matmul<Cube_S1, Cube_HEAD, Cube_S0>(kMatTile, qMatTile, qkAccTile, AccMode::InitFinalSum);
+        #else
+        wait_flag(PIPE_FIX, PIPE_M, accTileEvtID);
+        pto_macro_matmul<Cube_S1, Cube_HEAD, Cube_S0>(kMatTile, qMatTile, qkAccTile, AccMode::Init);
+        #endif
         #endif
 
         set_flag(PIPE_MTE1, PIPE_MTE2, qkMatTileEventId);
@@ -383,6 +400,7 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
         if (sub_tile_id == 0)
             sm2pvSync.wait(); // wait for softmax produce data
 
+        #if ND_LAYOUT
 // For TILE_S1 > CUBE_S1, need to stride by Tile_S1 for each Cube_S1 chunk
 #ifndef P_FIFO_USE_NZ
         using GlobalXexpTileT =
@@ -391,6 +409,11 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
         using GlobalXexpTileT = GlobalTensor<half, pto::Shape<1, Cube_S1 / 16, Cube_S0 / 16, 16, 16>,
             pto::Stride<Cube_S0 * Cube_S1, Cube_S0 * 16, 16 * 16, 16, 1>, Layout::NZ>;
 #endif
+#else
+        // DN layout version
+        using GlobalXexpTileT =
+            GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, Cube_S0>, pto::Stride<1, 1, 1, 1, Cube_S0>, Layout::DN>;
+        #endif
 
         const uint32_t buf_idx = static_cast<uint32_t>(tile_id % QKP_CV_FIFO);
         const size_t base_elems =
@@ -484,11 +507,22 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         const uint32_t buf_idx = static_cast<uint32_t>(tile_id % QKP_CV_FIFO);
         const size_t base_elems = static_cast<size_t>(buf_idx) * static_cast<size_t>(kTileFactor) *
                                   static_cast<size_t>(Cube_S0) * static_cast<size_t>(Cube_S1);
+        #if ND_LAYOUT
         __gm__ float *qk_ptr = qk_tile_fifo + base_elems + row_offset * static_cast<size_t>(Cube_S1);
+        #else
+        __gm__ float *qk_ptr = qk_tile_fifo + base_elems + row_offset; // DN layout version
+        #endif
 
+        #if ND_LAYOUT
         using GlobalDataQK_Sub =
             GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
         using TileDataF_Sub = Tile<TileType::Vec, float, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
+        #else
+ 	         using GlobalDataQK_Sub =
+ 	                 GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S1, Vec_S0>, pto::Stride<1, 1, 1, Cube_S0, 1>>;
+ 	         using TileDataF_Sub = Tile<TileType::Vec, float, Tile_S1, Vec_S0, BLayout::RowMajor, Cube_S1, Vec_S0>;
+ 	    #endif
+        
         for (int sub_col = 0; sub_col < static_cast<int>(kTileFactor); ++sub_col) {
             __gm__ float *qk_ptr_sub =
                 qk_ptr + static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Cube_S1);
@@ -507,7 +541,11 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
         // Extract per-slice views into the per-core reduce tiles so each slice writes into its row range
+        #if ND_LAYOUT
         using ReduceSliceTile = Tile<TileType::Vec, float, Vec_S0, 1, BLayout::ColMajor, Vec_S0, 1>;
+        #else
+        using ReduceSliceTile = Tile<TileType::Vec, float, 1, Vec_S0, BLayout::RowMajor, 1, Vec_S0>;
+        #endif
         // reduce tiles live per vector core; offset only by row_slice within the core (no subblock stride)
         const size_t reduce_slice_rows = static_cast<size_t>(row_slice * Vec_S0);
         const uint64_t reduce_row_byte_offset = reduce_slice_rows * sizeof(float);
@@ -528,14 +566,25 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         // TODO: change to TEXTRACT when available
 
         wait_flag(PIPE_MTE3, PIPE_V, pTileEventId);
+        
         if (initFlag) {
+        #if ND_LAYOUT
             pto_macro_fa_softmax<true, HEAD_SIZE, CAUSAL_MASK>(x_expT, qkVecTile, m1_local_max_slice,
                 l1_local_sum_slice, m2_global_max_slice, l2_global_sum_slice, l1_exp_max_slice, input_reduce_tmp,
                 qkVecTile, triu, s0_index, s1_index);
+        #else
+            pto_macro_fa_softmax_dn<true, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice,
+                m2_global_max_slice, l2_global_sum_slice, l1_exp_max_slice, input_reduce_tmp, qkVecTile);
+        #endif
         } else {
+        #if ND_LAYOUT
             pto_macro_fa_softmax<false, HEAD_SIZE, CAUSAL_MASK>(x_expT, qkVecTile, m1_local_max_slice, 
                 l1_local_sum_slice, m2_global_max_slice, l2_global_sum_slice, l1_exp_max_slice, input_reduce_tmp,
                 qkVecTile, triu, s0_index, s1_index);
+        #else
+            pto_macro_fa_softmax_dn<false, HEAD_SIZE>(x_expT, qkVecTile, m1_local_max_slice, l1_local_sum_slice,
+                        m2_global_max_slice, l2_global_sum_slice, l1_exp_max_slice, input_reduce_tmp, qkVecTile);
+        #endif
         }
 
         set_flag(PIPE_V, PIPE_MTE2, pTileEventId);
@@ -546,14 +595,23 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         if (row_slice == 0 && should_wait_sv_consumed)
             sm2pvSync.allocate(); // wait for SV consume data
 
+        #if ND_LAYOUT
         using GlobalPTileHalfSub =
             GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
         using TileDataH_Sub = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
         __gm__ half *p_ptr = p_tile_fifo + base_elems + row_offset * static_cast<size_t>(Cube_S1);
+         #else
+        using GlobalPTileHalfSub =
+                GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, Vec_S0>, pto::Stride<1, 1, 1, Cube_S0, 1>>;
+        using TileDataH_Sub = Tile<TileType::Vec, half, Tile_S1, Vec_S0, BLayout::RowMajor, Cube_S1, Vec_S0>;
+        __gm__ half *p_ptr = p_tile_fifo + base_elems + row_offset; // DN layout version
+ 	    #endif
+        
         for (int sub_col = 0; sub_col < static_cast<int>(kTileFactor); ++sub_col) {
             __gm__ half *p_ptr_sub =
                 p_ptr + static_cast<size_t>(sub_col) * static_cast<size_t>(Cube_S1) * static_cast<size_t>(Cube_S0);
             GlobalPTileHalfSub pTileHalfSub((__gm__ half *)(p_ptr_sub));
+       
 
             TileDataH_Sub xExpSub;
             const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
@@ -697,23 +755,44 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     static_assert((qkPreloadNum > 1) || (kTileFactor == 1), "qkPreloadNum must be > 1 unless kTileFactor == 1");
 
     // Define tile types for first QK matmul
+    #if ND_LAYOUT
     using TileMatQData =
         Tile<TileType::Mat, half, Cube_S0, HEAD_SIZE, BLayout::ColMajor, Cube_S0, HEAD_SIZE, SLayout::RowMajor, 512>;
     using TileMatKData =
         Tile<TileType::Mat, half, HEAD_SIZE, Cube_S1, BLayout::RowMajor, HEAD_SIZE, Cube_S1, SLayout::ColMajor, 512>;
     // Accumulator rows must match Cube_S0 (per-block rows), not logical S0
     using TileQKData = TileAcc<float, Cube_S0, Cube_S1, Cube_S0, Cube_S1>;
+    #else
+    // DN layout version
+    using TileMatQData =
+        Tile<TileType::Mat, half, HEAD_SIZE, Cube_S0, BLayout::RowMajor, HEAD_SIZE, Cube_S0, SLayout::ColMajor, 512>;
+    using TileMatKData =
+        Tile<TileType::Mat, half, Cube_S1, HEAD_SIZE, BLayout::ColMajor, Cube_S1, HEAD_SIZE, SLayout::RowMajor, 512>;
+    // Accumulator rows must match Cube_S0 (per-block rows), not logical S0
+    using TileQKData = TileAcc<float, Cube_S1, Cube_S0, Cube_S1, Cube_S0>;
+    #endif
 
     TileMatQData qMatTile[qMatTNBuffers];
     TileMatKData kMatTile[kMatTNBuffers];
     TileQKData qkAccTile;
 
+    #if ND_LAYOUT
     // Define tile types for second PV matmul
     using TileMatPData =
         Tile<TileType::Mat, half, Cube_S0, Cube_S1, BLayout::ColMajor, Cube_S0, Cube_S1, SLayout::RowMajor, 512>;
     using TileMatVData =
         Tile<TileType::Mat, half, Cube_S1, HEAD_SIZE, BLayout::ColMajor, Cube_S1, HEAD_SIZE, SLayout::RowMajor, 512>;
     using TilePVData = TileAcc<float, Cube_S0, HEAD_SIZE, Cube_S0, HEAD_SIZE>;
+    #else
+    // DN layout version
+    // For DN, P is stored in GM as (Cube_S1, Cube_S0). Consume it as P^T with shape (Cube_S0, Cube_S1)
+    // to align with Left(M×K) for TMATMUL(Cube_S0, Cube_S1, HEAD_SIZE).
+    using TileMatPData =
+        Tile<TileType::Mat, half, Cube_S0, Cube_S1, BLayout::RowMajor, Cube_S0, Cube_S1, SLayout::ColMajor, 512>;
+    using TileMatVData =
+        Tile<TileType::Mat, half, Cube_S1, HEAD_SIZE, BLayout::ColMajor, Cube_S1, HEAD_SIZE, SLayout::RowMajor, 512>;
+    using TilePVData = TileAcc<float, Cube_S0, HEAD_SIZE, Cube_S0, HEAD_SIZE>;
+    #endif
 
     TileMatPData pMatTile[pMatTNBuffers];
     TileMatVData vMatTile[vMatTNBuffers];
@@ -728,11 +807,20 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     // Define tile types for FA softmax P computation
     // UB offsets for softmax tiles
     // Define per-tile vector tiles sized to Cube_S1
+    #if ND_LAYOUT
     using TileDataF_T = Tile<TileType::Vec, float, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Tile_S1>;
     using TileDataH_T = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Tile_S1>;
     constexpr uint32_t SubblockRows = Cube_S0 / VEC_CORES;
     // Reduce tiles cover one vector core's rows (Cube_S0 / VEC_CORES); slices are extracted per row_slice
     using ReduceTileF_T = Tile<TileType::Vec, float, SubblockRows, 1, BLayout::ColMajor, SubblockRows, 1>;
+    #else
+    // DN layout version
+    using TileDataF_T = Tile<TileType::Vec, float, Tile_S1, Vec_S0, BLayout::RowMajor, Tile_S1, Vec_S0>;
+    using TileDataH_T = Tile<TileType::Vec, half, Tile_S1, Vec_S0, BLayout::RowMajor, Tile_S1, Vec_S0>;
+    constexpr uint32_t SubblockRows = Cube_S0 / VEC_CORES;
+    // Reduce tiles cover one vector core's rows (Cube_S0 / VEC_CORES); slices are extracted per row_slice
+    using ReduceTileF_T = Tile<TileType::Vec, float, 1, SubblockRows, BLayout::RowMajor, 1, SubblockRows>;
+    #endif
 
     TileDataF_T qkVecTile[srcVecTNBuffers];
     ReduceTileF_T m1_local_max;

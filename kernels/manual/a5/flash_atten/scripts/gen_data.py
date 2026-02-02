@@ -27,7 +27,7 @@ np.random.seed(7)
 
 S0_BASE = 64
 HEAD_SIZE = 128
-TILE_S1_DEFAULT = 256
+TILE_S1_DEFAULT = 128
 
 def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, is_causal=False):
     # generate inputs in FP16, compute golden in FP32
@@ -190,6 +190,8 @@ if __name__ == '__main__':
             cases.append((entry["name"], (entry["s0"], entry["head_size"], entry["s1"], entry.get("cube_s1", 128), entry.get("tile_s1", TILE_S1_DEFAULT))))
     else:
         cases = [
+            ('case_float_H_128_S0_128_S1_256', (128, HEAD_SIZE, 256, 128, TILE_S1_DEFAULT)),
+            ('case_float_H_128_S0_128_S1_512', (128, HEAD_SIZE, 512, 128, TILE_S1_DEFAULT)),
             ('case_float_H_128_S0_128_S1_1024', (128, HEAD_SIZE, 1024, 128, TILE_S1_DEFAULT)),
             ('case_float_H_128_S0_128_S1_2048', (128, HEAD_SIZE, 2048, 128, TILE_S1_DEFAULT)),
             ('case_float_H_128_S0_128_S1_8192', (128, HEAD_SIZE, 8192, 128, TILE_S1_DEFAULT)),

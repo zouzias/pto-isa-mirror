@@ -30,10 +30,12 @@ import os
 from pathlib import Path
 from typing import List, Dict
 
-TILE_S1_DEFAULT = 256
+TILE_S1_DEFAULT = 128
 QK_PRELOAD_DEFAULT = 4
 
 DEFAULT_CASES = [
+    (128, 128, 256, 128, TILE_S1_DEFAULT, False),
+    (128, 128, 512, 128, TILE_S1_DEFAULT, False),
     (128, 128, 1024, 128, TILE_S1_DEFAULT, False),
     (128, 128, 2048, 128, TILE_S1_DEFAULT, False),
     (128, 128, 8192, 128, TILE_S1_DEFAULT, False),
