@@ -208,8 +208,8 @@ PTO_INTERNAL void CheckStatic()
 
 template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData,
     typename Src2TileData, typename Src3TileData, bool exhausted>
-PTO_INTERNAL void TMRGSORT_IMPL(DstTileData __out__ &dst, MrgSortExecutedNumList &executedNumList, TmpTileData __in__ &tmp,
-    Src0TileData __in__ &src0, Src1TileData __in__ &src1, Src2TileData __in__ &src2, Src3TileData __in__ &src3)
+PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, MrgSortExecutedNumList &executedNumList, TmpTileData &tmp,
+    Src0TileData &src0, Src1TileData &src1, Src2TileData &src2, Src3TileData &src3)
 {
     CheckStatic<DstTileData, TmpTileData, Src0TileData, Src1TileData, Src2TileData, Src3TileData>();
     CheckOverMemory<DstTileData, TmpTileData, Src0TileData, Src1TileData, Src2TileData, Src3TileData, LIST_NUM_4>();
