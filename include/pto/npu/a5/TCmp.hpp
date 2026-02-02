@@ -133,8 +133,8 @@ void TCmp_32B(
         uint32_t offset2 = (validRow / 2) * 4;
         for (uint16_t i = 0; i < (uint16_t)(repeatTimes % 2); ++i) {
             preg0 = plt_b32(sreg, POST_UPDATE);
-            vlds(vreg0, __cce_get_tile_ptr(src0) + offset0, 0, NORM);
-            vlds(vreg1, __cce_get_tile_ptr(src1) + offset0, 0, NORM);
+            vlds(vreg0, srcPtr0 + offset0, 0, NORM);
+            vlds(vreg1, srcPtr1 + offset0, 0, NORM);
             CmpCall<vector_bool, dataType0>(preg5, vreg0, vreg1, mode, preg0);
             ppack(preg6, preg5, LOWER);
             psts(preg6, ((__ubuf__ uint32_t *)dstPtr + offset2), 0, PK);
