@@ -133,7 +133,8 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
 	uint64_t pc;
 	asm volatile("MOV %0, PC\n":"+l"(pc));
 	preload((void*)pc, 2);	
-	while(get_icache_prl_st()){asm("nop");}
+	// asm("nop") seems to compile for a2a3; will crash in HiIPUJumpOpt pass for A5
+	while(get_icache_prl_st()){ /*asm("nop");*/ }
 
 #ifdef DEBUGLOG
 	gLog += block_idx*LOGSIZE;
