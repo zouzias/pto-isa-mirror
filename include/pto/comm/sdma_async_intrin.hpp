@@ -12,8 +12,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COMM_SDMA_ASYNC_INTRIN_HPP
 
 #include "kernel_operator.h"
-#include "pto/comm/sdma/sdma_types.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/comm/sdma_types.hpp"
 #include "pto/pto-inst.hpp"
 #include <cstdint>
 

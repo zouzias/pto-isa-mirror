@@ -16,7 +16,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Point-to-Point Communication (Synchronous)
 #include "pto/comm/TPut.hpp"
-#include "pto/comm/TPut_sdma.hpp"
 #include "pto/comm/TGet.hpp"
 
 // Point-to-Point Communication (Asynchronous)
