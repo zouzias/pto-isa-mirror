@@ -28,27 +28,19 @@ namespace comm {
 //   device side, avoiding unsupported containers like std::vector.
 // - Each element in the group typically represents "the GlobalTensor view 
 //   for that team rank" (usually mapped to world rank via SetRank).
-// - `tensors` points to an array of GlobalData objects (not pointers).
 // ============================================================================
 
 template <typename GlobalData>
 struct ParallelGroup {
     using value_type = GlobalData;  // Type alias for type traits
     
-    GlobalData *tensors {nullptr};  // Points to external array of GlobalData objects
+    GlobalData **tensors {nullptr}; // Points to external array: tensors[teamRank] -> GlobalTensor*
     int nranks {0};
     int my_rank {-1};
 
     constexpr ParallelGroup() = default;
-    
-    // Constructor: takes array of GlobalData objects
-    AICORE constexpr ParallelGroup(GlobalData *tensorArray, int size, int rank_id) 
-        : tensors(tensorArray), nranks(size), my_rank(rank_id) {}
-
-    // Factory function (recommended)
-    AICORE static constexpr ParallelGroup Create(GlobalData *tensorArray, int size, int rank_id) {
-        return ParallelGroup(tensorArray, size, rank_id);
-    }
+    AICORE constexpr ParallelGroup(GlobalData **tensorPtrs, int size, int rank_id) 
+        : tensors(tensorPtrs), nranks(size), my_rank(rank_id) {}
 
     AICORE constexpr int size() const { return nranks; }
     AICORE constexpr bool empty() const { return nranks == 0; }
@@ -56,8 +48,8 @@ struct ParallelGroup {
     AICORE constexpr int GetRank() const { return my_rank; }
     AICORE constexpr int GetSize() const { return nranks; }
 
-    AICORE constexpr GlobalData &operator[](int teamRank) { return tensors[teamRank]; }
-    AICORE constexpr const GlobalData &operator[](int teamRank) const { return tensors[teamRank]; }
+    AICORE constexpr GlobalData &operator[](int teamRank) { return *tensors[teamRank]; }
+    AICORE constexpr const GlobalData &operator[](int teamRank) const { return *tensors[teamRank]; }
 };
 
 // Type traits: Extract GlobalData type from ParallelGroup<GlobalData>
@@ -70,28 +62,6 @@ struct ParallelGroupTraits {
 template <typename GlobalData>
 struct ParallelGroupTraits<ParallelGroup<GlobalData>> {
     using GlobalDataType = GlobalData;
-};
-
-// ============================================================================
-// DmaEngine: DMA engine type for asynchronous data transfer
-// ============================================================================
-
-enum class DmaEngine : uint8_t {
-    SDMA = 0,  // System DMA - high bandwidth, for large transfers
-    URMA = 1,  // User-space RMA - low latency, for small transfers
-};
-
-// ============================================================================
-// AsyncEvent: Event handle for asynchronous operations
-// ============================================================================
-
-struct AsyncEvent {
-    uint64_t handle {0};
-    DmaEngine engine {DmaEngine::SDMA};
-    
-    constexpr AsyncEvent() = default;
-    AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e) : handle(h), engine(e) {}
-    AICORE constexpr bool valid() const { return handle != 0; }
 };
 
 // ============================================================================
@@ -117,13 +87,25 @@ enum class WaitCmp : uint8_t {
 };
 
 // ============================================================================
-// ReduceOp: Reduction operators for TREDUCE
+// SdmaEvent: Event handle for SDMA asynchronous operations
+//
+// Used to track and synchronize SDMA transfer operations.
+// The event can be used with TWAIT_SDMA to wait for completion.
 // ============================================================================
 
-enum class ReduceOp : uint8_t {
-    Sum = 0,  // Element-wise sum
-    Max = 1,  // Element-wise maximum
-    Min = 2,  // Element-wise minimum
+struct SdmaEvent {
+    uint64_t event_id;  // SDMA event identifier
+    
+    constexpr SdmaEvent() : event_id(0) {}
+    constexpr explicit SdmaEvent(uint64_t id) : event_id(id) {}
+    
+    constexpr bool operator==(const SdmaEvent& other) const {
+        return event_id == other.event_id;
+    }
+    
+    constexpr bool operator!=(const SdmaEvent& other) const {
+        return event_id != other.event_id;
+    }
 };
 
 } // namespace comm

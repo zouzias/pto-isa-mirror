@@ -61,6 +61,9 @@ set(ALL_TESTCASES
 # Point-to-Point Communication (Synchronous)
 tput
 tget
+# Point-to-Point Communication (Asynchronous)
+tput_async
+tget_async
 # Signal-Based Synchronization
 tnotify
 twait

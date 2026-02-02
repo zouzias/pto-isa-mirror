@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/type.hpp"
 #include "pto/common/constants.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/comm/sdma_async_intrin.hpp"
 
 namespace pto {
 namespace comm {
@@ -50,10 +51,8 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
     
     const uint32_t totalElems = gShape0 * gShape1 * gShape2 * gShape3 * gShape4;
     
-    // TODO: Call actual SDMA PUT intrinsic
-    // uint64_t eventHandle = __sdma_put_async(dstGlobalData.data(), srcGlobalData.data(), 
-    //                                          totalElems * sizeof(T));
-    uint64_t eventHandle = 1;  // Placeholder
+    uint64_t eventHandle = sdma::__sdma_put_async(dstGlobalData.data(), srcGlobalData.data(),
+                                                  totalElems * sizeof(T));
     
     return AsyncEvent(eventHandle, DmaEngine::SDMA);
 }

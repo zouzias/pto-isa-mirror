@@ -18,7 +18,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <iostream>
 
 #include "pto/comm/pto_comm_inst.hpp"
-#include "pto/comm/sdma/sdma.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "../common.hpp"
 
@@ -27,15 +26,18 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define ENABLE_DEBUG_PRINT 1
 
 // ============================================================================
-// 1D Vector Test Kernel - SDMA version
-// TGET_SDMA: Asynchronous remote read using SDMA engine (direct GM to GM)
+// 1D Vector Tile Test Kernel
+// TGET_ASYNC: Remote read operation - each rank reads data from next rank
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TGetSdmaKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
+__global__ AICORE void TGetAsyncKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
+
+    // UB Tile definition: 1D Vector Tile
+    using TileData = pto::Tile<pto::TileType::Vec, T, 1, count, pto::BLayout::RowMajor, -1, -1>;
 
     ShapeDyn shape(1, 1, 1, 1, count);
     StrideDyn stride(count, count, count, count, 1);
@@ -44,7 +46,8 @@ __global__ AICORE void TGetSdmaKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T
     int next_rank = (my_rank + 1) % nranks;
     int prev_rank = (my_rank + nranks - 1) % nranks;
 
-    __gm__ T *shmem_data = (__gm__ T *)((__gm__ T *)shmem + 64 * sizeof(int32_t));
+    __gm__ uint8_t *shmem_bytes = reinterpret_cast<__gm__ uint8_t *>(shmem);
+    __gm__ T *shmem_data = reinterpret_cast<__gm__ T *>(shmem_bytes + 64 * sizeof(int32_t));
     __gm__ T *send_shmem = (__gm__ T *)((__gm__ T *)shmem_data + 0);
     __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + count);
 
@@ -54,9 +57,20 @@ __global__ AICORE void TGetSdmaKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T
     Global sendG(send_shmem, shape, stride);
     Global recvG(recv_shmem, shape, stride);
 
-    // Copy local data to send buffer using SDMA (local GM to local GM)
-    auto copy_event = pto::comm::TPUT_SDMA(sendG, srcG);
-    pto::comm::sdma::SDMA::wait(copy_event);
+    // Allocate UB tiles for data staging
+    TileData stagingTile(1, count);
+    TileData resultTile(1, count);
+
+    TASSIGN(stagingTile, 0x0);
+    TASSIGN(resultTile, 0x10000);
+
+    // Load local data to UB, then store to local shared memory (send buffer)
+    TLOAD(stagingTile, srcG);
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    TSTORE(sendG, stagingTile);
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
     // Synchronize to ensure all ranks have written their send buffers
     ShmemDeviceBarrierAll();
@@ -65,25 +79,26 @@ __global__ AICORE void TGetSdmaKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T
     __gm__ T *remote_send_shmem = ShmemPtr(send_shmem, next_rank);
     Global remoteSendG(remote_send_shmem, shape, stride);
     
-    // TGET_SDMA: Asynchronous read from remote sendG to local recvG
-    // Direct GM to GM transfer without UB staging
-    auto get_event = pto::comm::TGET_SDMA(recvG, remoteSendG);
-    
-    // Wait for SDMA transfer completion
-    pto::comm::sdma::SDMA::wait(get_event);
+    // TGET_ASYNC: read from remote sendG (next rank's send buffer) to local recvG
+    auto get_event = pto::comm::TGET_ASYNC(recvG, remoteSendG);
+    (void)get_event;
 
     // Ensure all remote operations from this PE are complete
     ShmemDeviceQuiet();
     // Then synchronize all PEs
     ShmemDeviceBarrierAll();
 
-    // Copy result from recv buffer to output using SDMA
-    auto result_event = pto::comm::TPUT_SDMA(dstG, recvG);
-    pto::comm::sdma::SDMA::wait(result_event);
+    // Load from local recvG to UB, then store to local dstG
+    TLOAD(resultTile, recvG);
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    TSTORE(dstG, resultTile);
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 }
 
 template <typename T, size_t count>
-bool RunGetSdmaRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
+bool RunGetAsyncRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
 {
     // Initialize shmem TLS configuration
     int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
@@ -143,7 +158,7 @@ bool RunGetSdmaRingKernel(int rank_id, int n_ranks, int n_devices, int first_dev
     // Barrier to ensure all ranks have initialized
     ShmemBarrierAll();
 
-    TGetSdmaKernelImpl<T, count><<<1, nullptr, stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
+    TGetAsyncKernelImpl<T, count><<<1, nullptr, stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
     status = aclrtSynchronizeStream(stream);
 
     // Barrier after kernel execution
@@ -152,7 +167,6 @@ bool RunGetSdmaRingKernel(int rank_id, int n_ranks, int n_devices, int first_dev
     aclrtMemcpy(output_host, count * sizeof(T), output_ptr, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
     // Verify: Each rank should get data from next rank
-    // rank_id reads from (rank_id + 1) % n_ranks, which has data: i + next_rank * 10000
     bool is_ok = true;
     int next_rank = (rank_id + 1) % n_ranks;
     for (int i = 0; i < count; ++i) {
@@ -170,7 +184,7 @@ bool RunGetSdmaRingKernel(int rank_id, int n_ranks, int n_devices, int first_dev
 #if ENABLE_DEBUG_PRINT
     if (is_ok && rank_id == 0) {
         std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] Rank 0: TGET_SDMA Ring SUCCESSFUL!" << std::endl;
+        std::cout << "[DEBUG] Rank 0: TGET_ASYNC Ring SUCCESSFUL!" << std::endl;
         std::cout << "Sample Result (First 5 elements): [ ";
         for (size_t i = 0; i < (count > 5 ? 5 : count); ++i) {
             std::cout << (float)reinterpret_cast<T*>(output_host)[i] << " ";
@@ -197,14 +211,14 @@ bool RunGetSdmaRingKernel(int rank_id, int n_ranks, int n_devices, int first_dev
 }
 
 template <typename T, size_t count>
-bool RunGetSdmaRing(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+bool RunGetAsyncRing(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     std::vector<pid_t> pids;
     uint64_t local_mem_size = 1024UL * 1024UL * 1024;
     for (int r = 0; r < n_ranks; ++r) {
         pid_t pid = fork();
         if (pid == 0) { // child
-            const bool ok = RunGetSdmaRingKernel<T, count>(first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
+            const bool ok = RunGetAsyncRingKernel<T, count>(first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
             _exit(ok ? 0 : 1);
         } else if (pid > 0) {
             pids.push_back(pid);
@@ -222,22 +236,25 @@ bool RunGetSdmaRing(int n_ranks, int n_devices, int first_rank_id, int first_dev
 }
 
 // Explicit instantiations for 1D tests
-template bool RunGetSdmaRing<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunGetSdmaRing<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunGetSdmaRing<uint8_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunGetAsyncRing<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunGetAsyncRing<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunGetAsyncRing<uint8_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 
 // ============================================================================
-// 2D Test Kernel - SDMA version
-// Tests TGET_SDMA with 2D shape GlobalTensor (rows x cols)
+// 2D Tile Test Kernel
+// Tests TGET_ASYNC with 2D Vec Tile (rows x cols) stored in UB
 // ============================================================================
 template <typename T, size_t rows, size_t cols>
-__global__ AICORE void TGetSdmaKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
+__global__ AICORE void TGetAsyncKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
     constexpr size_t total_count = rows * cols;
     
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
+
+    // UB Tile definition: 2D Vec Tile (rows x cols) stored in Unified Buffer
+    using TileData = pto::Tile<pto::TileType::Vec, T, rows, cols, pto::BLayout::RowMajor, -1, -1>;
 
     // 2D GlobalTensor shape: [1, 1, 1, rows, cols]
     ShapeDyn shape(1, 1, 1, rows, cols);
@@ -247,7 +264,8 @@ __global__ AICORE void TGetSdmaKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__
     int next_rank = (my_rank + 1) % nranks;
     int prev_rank = (my_rank + nranks - 1) % nranks;
 
-    __gm__ T *shmem_data = (__gm__ T *)((__gm__ T *)shmem + 64 * sizeof(int32_t));
+    __gm__ uint8_t *shmem_bytes = reinterpret_cast<__gm__ uint8_t *>(shmem);
+    __gm__ T *shmem_data = reinterpret_cast<__gm__ T *>(shmem_bytes + 64 * sizeof(int32_t));
     __gm__ T *send_shmem = (__gm__ T *)((__gm__ T *)shmem_data + 0);
     __gm__ T *recv_shmem = (__gm__ T *)((__gm__ T *)shmem_data + total_count);
 
@@ -257,9 +275,20 @@ __global__ AICORE void TGetSdmaKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__
     Global sendG(send_shmem, shape, stride);
     Global recvG(recv_shmem, shape, stride);
 
-    // Copy local data to send buffer using SDMA
-    auto copy_event = pto::comm::TPUT_SDMA(sendG, srcG);
-    pto::comm::sdma::SDMA::wait(copy_event);
+    // Allocate UB tiles for data staging - 2D Vec Tiles (rows x cols)
+    TileData stagingTile(rows, cols);
+    TileData resultTile(rows, cols);
+
+    TASSIGN(stagingTile, 0x0);
+    TASSIGN(resultTile, 0x10000);
+
+    // Load local data to UB, then store to local shared memory (send buffer)
+    TLOAD(stagingTile, srcG);
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    TSTORE(sendG, stagingTile);
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
     // Synchronize to ensure all ranks have written their send buffers
     ShmemDeviceBarrierAll();
@@ -268,24 +297,26 @@ __global__ AICORE void TGetSdmaKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__
     __gm__ T *remote_send_shmem = ShmemPtr(send_shmem, next_rank);
     Global remoteSendG(remote_send_shmem, shape, stride);
     
-    // TGET_SDMA: Asynchronous read from remote sendG to local recvG
-    auto get_event = pto::comm::TGET_SDMA(recvG, remoteSendG);
-    
-    // Wait for SDMA transfer completion
-    pto::comm::sdma::SDMA::wait(get_event);
+    // TGET_ASYNC: read from remote sendG (next rank's send buffer) to local recvG
+    auto get_event = pto::comm::TGET_ASYNC(recvG, remoteSendG);
+    (void)get_event;
 
     // Ensure all remote operations from this PE are complete
     ShmemDeviceQuiet();
     // Then synchronize all PEs
     ShmemDeviceBarrierAll();
 
-    // Copy result from recv buffer to output using SDMA
-    auto result_event = pto::comm::TPUT_SDMA(dstG, recvG);
-    pto::comm::sdma::SDMA::wait(result_event);
+    // Load from local recvG to UB, then store to local dstG
+    TLOAD(resultTile, recvG);
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    TSTORE(dstG, resultTile);
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 }
 
 template <typename T, size_t rows, size_t cols>
-bool RunGetSdmaRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
+bool RunGetAsyncRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
 {
     constexpr size_t total_count = rows * cols;
     
@@ -350,7 +381,7 @@ bool RunGetSdmaRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_d
     // Barrier to ensure all ranks have initialized
     ShmemBarrierAll();
 
-    TGetSdmaKernel2DImpl<T, rows, cols><<<1, nullptr, stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
+    TGetAsyncKernel2DImpl<T, rows, cols><<<1, nullptr, stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
     status = aclrtSynchronizeStream(stream);
 
     // Barrier after kernel execution
@@ -379,7 +410,7 @@ bool RunGetSdmaRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_d
 #if ENABLE_DEBUG_PRINT
     if (is_ok && rank_id == 0) {
         std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] Rank 0: TGET_SDMA 2D Ring SUCCESSFUL! (" << rows << "x" << cols << ")" << std::endl;
+        std::cout << "[DEBUG] Rank 0: TGET_ASYNC 2D Ring SUCCESSFUL! (" << rows << "x" << cols << ")" << std::endl;
         std::cout << "Sample Result (First row): [ ";
         for (size_t c = 0; c < (cols > 5 ? 5 : cols); ++c) {
             std::cout << (float)reinterpret_cast<T*>(output_host)[c] << " ";
@@ -406,14 +437,14 @@ bool RunGetSdmaRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_d
 }
 
 template <typename T, size_t rows, size_t cols>
-bool RunGetSdmaRing2D(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+bool RunGetAsyncRing2D(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     std::vector<pid_t> pids;
     uint64_t local_mem_size = 1024UL * 1024UL * 1024;
     for (int r = 0; r < n_ranks; ++r) {
         pid_t pid = fork();
         if (pid == 0) { // child
-            const bool ok = RunGetSdmaRing2DKernel<T, rows, cols>(first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
+            const bool ok = RunGetAsyncRing2DKernel<T, rows, cols>(first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
             _exit(ok ? 0 : 1);
         } else if (pid > 0) {
             pids.push_back(pid);
@@ -431,6 +462,6 @@ bool RunGetSdmaRing2D(int n_ranks, int n_devices, int first_rank_id, int first_d
 }
 
 // Explicit instantiations for 2D shape tests
-template bool RunGetSdmaRing2D<float, 16, 16>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunGetSdmaRing2D<float, 8, 32>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunGetSdmaRing2D<int32_t, 4, 64>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunGetAsyncRing2D<float, 16, 16>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunGetAsyncRing2D<float, 8, 32>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunGetAsyncRing2D<int32_t, 4, 64>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
