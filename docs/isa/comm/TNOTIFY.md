@@ -18,11 +18,9 @@ $$ \mathrm{signal}^{\mathrm{remote}} \mathrel{+}= \mathrm{value} \quad (\text{at
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
-
 ```text
-tnotify<Set> %signal_remote, %value : (!pto.memref<i32>, i32)
-tnotify<AtomicAdd> %signal_remote, %value : (!pto.memref<i32>, i32)
+tnotify %signal_remote, %value {op = #pto.notify_op<Set>} : (!pto.memref<i32>, i32)
+tnotify %signal_remote, %value {op = #pto.notify_op<AtomicAdd>} : (!pto.memref<i32>, i32)
 ```
 
 ## C++ Intrinsic
@@ -30,13 +28,8 @@ tnotify<AtomicAdd> %signal_remote, %value : (!pto.memref<i32>, i32)
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
-// Compile-time specified NotifyOp (recommended, zero overhead)
-template <NotifyOp op = NotifyOp::Set, typename GlobalSignalData>
-PTO_INST void TNOTIFY(GlobalSignalData &dstSignal, int32_t value = 1);
-
-// Runtime specified NotifyOp
-template <typename GlobalSignalData>
-PTO_INST void TNOTIFY(GlobalSignalData &dstSignal, int32_t value, NotifyOp op);
+template <typename GlobalSignalData, typename... WaitEvents>
+PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp op, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -44,7 +37,8 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignal, int32_t value, NotifyOp op);
 - **Type constraints**:
   - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-  - `dstSignal` must point to remote address (on target NPU).
+  - `dstSignalData` must point to remote address (on target NPU).
+  - `dstSignalData` should be 4-byte aligned.
 - **Operation semantics**:
   - `NotifyOp::Set`: Direct store to remote memory.
   - `NotifyOp::AtomicAdd`: Hardware atomic add using `st_atomic` instruction.
@@ -58,15 +52,13 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignal, int32_t value, NotifyOp op);
 
 using namespace pto;
 
-void notify_set(__gm__ int32_t* remote_signal, int target_npu) {
-    using GShape = Shape<1, 1, 1, 1, 1>;
-    using GStride = Stride<1, 1, 1, 1, 1>;
-    using GSignal = GlobalTensor<int32_t, GShape, GStride, Layout::ND>;
+void notify_set(__gm__ int32_t* remote_signal) {
+    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
     GSignal sigG(remote_signal);
     
-    // Set remote signal to 42
-    comm::TNOTIFY<comm::NotifyOp::Set>(sigG, 42);
+    // Set remote signal to 1
+    comm::TNOTIFY(sigG, 1, comm::NotifyOp::Set);
 }
 ```
 
@@ -77,29 +69,40 @@ void notify_set(__gm__ int32_t* remote_signal, int target_npu) {
 
 using namespace pto;
 
-void atomic_increment(__gm__ int32_t* remote_counter, int target_npu) {
+void atomic_increment(__gm__ int32_t* remote_counter) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
     GSignal counterG(remote_counter);
     
     // Atomically add 1 to remote counter
-    comm::TNOTIFY<comm::NotifyOp::AtomicAdd>(counterG, 1);
+    comm::TNOTIFY(counterG, 1, comm::NotifyOp::AtomicAdd);
 }
 ```
 
-### Runtime Operation Selection
+### Producer-Consumer Pattern
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
 
 using namespace pto;
 
-void notify_runtime(__gm__ int32_t* remote_signal, int target_npu, bool use_atomic) {
+// Producer: notify when data is ready
+void producer(__gm__ int32_t* remote_flag) {
     using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
 
-    GSignal sigG(remote_signal);
+    // ... produce data ...
     
-    comm::NotifyOp op = use_atomic ? comm::NotifyOp::AtomicAdd : comm::NotifyOp::Set;
-    comm::TNOTIFY(sigG, 1, op);
+    GSignal flagG(remote_flag);
+    comm::TNOTIFY(flagG, 1, comm::NotifyOp::Set);
+}
+
+// Consumer: wait for data
+void consumer(__gm__ int32_t* local_flag) {
+    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
+
+    GSignal flagG(local_flag);
+    comm::TWAIT(flagG, 1, comm::WaitCmp::EQ);
+    
+    // ... consume data ...
 }
 ```

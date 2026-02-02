@@ -56,20 +56,26 @@ endfunction()
 
 
 # Test case list - add new test directories here
+# Aligned with SPEC: docs/isa/comm/README.md
 set(ALL_TESTCASES
-tget
+# Point-to-Point Communication (Synchronous)
 tput
-tget_sdma
-tput_sdma
+tget
+# Signal-Based Synchronization
 tnotify
 twait
 ttest
-tallgather
-# tallreduce # archived
+# Collective Communication
+tgather
+tscatter
+treduce
 tbroadcast
-shmem_init
-shmem_malloc
-tallreduce_perf_test
+# Performance tests
+treduce_perf_test
+# Archived / Legacy tests (not aligned with SPEC naming)
+# tallgather        # replaced by tgather
+# tallreduce        # replaced by treduce
+# tallreduce_perf_test  # uses old API
 )
 
 if(TEST_CASE IN_LIST ALL_TESTCASES)

@@ -19,7 +19,6 @@
 struct PerfTestConfig {
     int warmup_iters = 20;       // Warmup iterations
     int measure_iters = 50;      // Measurement iterations
-    int block_num = 1;           // Number of blocks
     bool verbose = true;         // Print per-iteration results
 };
 
@@ -63,9 +62,7 @@ PerfStats CalculateStats(const std::vector<double> &latencies_us, size_t data_by
     }
     stats.std_dev_us = std::sqrt(sq_sum / sorted.size());
     
-    // Bandwidth: bytes / time
-    // AllReduce involves: each rank sends data_bytes, total communication ≈ data_bytes * (nranks-1) * 2
-    // For simplicity, we compute effective bandwidth as data_bytes / latency
+    // Effective bandwidth: data_bytes / latency
     stats.bandwidth_gbps = (data_bytes / (stats.avg_us * 1e-6)) / (1024.0 * 1024.0 * 1024.0);
     
     // Message rate
@@ -74,8 +71,7 @@ PerfStats CalculateStats(const std::vector<double> &latencies_us, size_t data_by
     return stats;
 }
 
-
 // Forward declarations
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
-bool RunAllReducePerf(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                      const PerfTestConfig &config);
+bool RunReducePerf(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                   const PerfTestConfig &config);

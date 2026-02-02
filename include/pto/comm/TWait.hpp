@@ -12,51 +12,23 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COMM_TWAIT_HPP
 
 #include "pto/common/type.hpp"
+#include "pto/common/utils.hpp"
 #include "pto/comm/comm_types.hpp"
 
 namespace pto {
 namespace comm {
 
 // ============================================================================
-// TWAIT: Wait until signal(s) meet comparison condition
+// TWAIT_IMPL: Blocking wait until signal(s) meet comparison condition
 // 
-// Native implementation using Ascend intrinsics.
-// Used in conjunction with TNOTIFY for synchronization.
-// Signal is stored in GlobalTensor data structure.
-//
-// Parameters:
-//   - signal: GlobalTensor containing the signal to wait on (local memory)
-//   - cmpValue: Value to compare against
-//
 // Signal type must be int32_t.
-// Note: This instruction does not require UB allocation.
+// For signal matrix: Shape determines the 2D region to wait on. All signals must satisfy.
 // ============================================================================
 
 namespace detail {
 
-// Helper: Compare signal value with compile-time comparison operator
-template <WaitCmp cmp>
-PTO_INTERNAL bool CompareSignal(int32_t sigVal, int32_t cmpVal)
-{
-    if constexpr (cmp == WaitCmp::EQ) {
-        return sigVal == cmpVal;
-    } else if constexpr (cmp == WaitCmp::NE) {
-        return sigVal != cmpVal;
-    } else if constexpr (cmp == WaitCmp::GT) {
-        return sigVal > cmpVal;
-    } else if constexpr (cmp == WaitCmp::GE) {
-        return sigVal >= cmpVal;
-    } else if constexpr (cmp == WaitCmp::LT) {
-        return sigVal < cmpVal;
-    } else if constexpr (cmp == WaitCmp::LE) {
-        return sigVal <= cmpVal;
-    } else {
-        return false;
-    }
-}
-
 // Helper: Compare signal value with runtime comparison operator
-PTO_INTERNAL bool CompareSignalRuntime(int32_t sigVal, WaitCmp cmp, int32_t cmpVal)
+PTO_INTERNAL bool CompareSignalRuntime(int32_t sigVal, int32_t cmpVal, WaitCmp cmp)
 {
     switch (cmp) {
         case WaitCmp::EQ: return sigVal == cmpVal;
@@ -71,56 +43,40 @@ PTO_INTERNAL bool CompareSignalRuntime(int32_t sigVal, WaitCmp cmp, int32_t cmpV
 
 } // namespace detail
 
-// Compile-time specified comparison (recommended, zero overhead)
-template <WaitCmp cmp = WaitCmp::EQ, typename GlobalSignalData>
-PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signal, int32_t cmpValue)
+template <typename GlobalSignalData>
+PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp)
 {
     static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
         "TWAIT: signal type must be 32-bit (int32_t)");
 
-    volatile int32_t *sigPtr = reinterpret_cast<volatile int32_t*>(signal.data());
+    // Get signal matrix dimensions from GlobalTensor shape
+    const int rows = signalData.GetShape(GlobalTensorDim::DIM_3);
+    const int cols = signalData.GetShape(GlobalTensorDim::DIM_4);
+    const int totalSignals = rows * cols;
 
-    while (!detail::CompareSignal<cmp>(*sigPtr, cmpValue)) {
-        // Spin wait with memory fence
-        pipe_barrier(PIPE_ALL);
-    }
-}
+    volatile __gm__ int32_t *basePtr = reinterpret_cast<volatile __gm__ int32_t*>(signalData.data());
 
-// Runtime specified comparison
-template <typename GlobalSignalData>
-PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signal, WaitCmp cmp, int32_t cmpValue)
-{
-    static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
-        "TWAIT: signal type must be 32-bit (int32_t)");
-
-    volatile int32_t *sigPtr = reinterpret_cast<volatile int32_t*>(signal.data());
-
-    while (!detail::CompareSignalRuntime(*sigPtr, cmp, cmpValue)) {
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-// TWAIT_ALL_IMPL: Wait for all signals in array to meet condition
-template <WaitCmp cmp = WaitCmp::EQ, typename GlobalSignalData>
-PTO_INTERNAL void TWAIT_ALL_IMPL(GlobalSignalData *signals, int count, int32_t cmpValue)
-{
-    static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
-        "TWAIT_ALL: signal type must be 32-bit (int32_t)");
-
-    for (int i = 0; i < count; ++i) {
-        TWAIT_IMPL<cmp>(signals[i], cmpValue);
-    }
-}
-
-// Runtime specified comparison
-template <typename GlobalSignalData>
-PTO_INTERNAL void TWAIT_ALL_IMPL(GlobalSignalData *signals, int count, WaitCmp cmp, int32_t cmpValue)
-{
-    static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
-        "TWAIT_ALL: signal type must be 32-bit (int32_t)");
-
-    for (int i = 0; i < count; ++i) {
-        TWAIT_IMPL(signals[i], cmp, cmpValue);
+    // Wait until all signals in the matrix satisfy the condition
+    bool allSatisfied = false;
+    uint32_t spin = 0;
+    constexpr uint32_t kFenceInterval = 64;
+    while (!allSatisfied) {
+        allSatisfied = true;
+        for (int i = 0; i < totalSignals; ++i) {
+            __asm__ __volatile__("");
+            dcci((__gm__ void *)(basePtr + i), SINGLE_CACHE_LINE);
+            __asm__ __volatile__("");
+            if (!detail::CompareSignalRuntime(basePtr[i], cmpValue, cmp)) {
+                allSatisfied = false;
+                break;
+            }
+        }
+        if (!allSatisfied) {
+            // Spin wait with periodic memory fence to reduce contention
+            if ((++spin % kFenceInterval) == 0) {
+                pipe_barrier(PIPE_ALL);
+            }
+        }
     }
 }
 

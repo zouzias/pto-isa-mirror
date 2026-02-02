@@ -14,16 +14,24 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Native implementation of communication instructions
 // Each instruction is implemented directly using Ascend intrinsics
 
+// Point-to-Point Communication (Synchronous)
 #include "pto/comm/TPut.hpp"
 #include "pto/comm/TPut_sdma.hpp"
 #include "pto/comm/TGet.hpp"
-#include "pto/comm/TGet_sdma.hpp"
-#include "pto/comm/TBarrier.hpp"
-#include "pto/comm/TAllReduce.hpp"
-#include "pto/comm/TAllGather.hpp"
-#include "pto/comm/TBroadCast.hpp"
+
+// Point-to-Point Communication (Asynchronous)
+#include "pto/comm/TPutAsync.hpp"
+#include "pto/comm/TGetAsync.hpp"
+
+// Signal-Based Synchronization
 #include "pto/comm/TNotify.hpp"
 #include "pto/comm/TWait.hpp"
 #include "pto/comm/TTest.hpp"
+
+// Collective Communication
+#include "pto/comm/TGather.hpp"
+#include "pto/comm/TScatter.hpp"
+#include "pto/comm/TBroadCast.hpp"
+#include "pto/comm/TReduce.hpp"
 
 #endif // PTO_COMM_INSTR_IMPL_HPP

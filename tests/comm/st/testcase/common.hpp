@@ -15,6 +15,12 @@
 #include "shmem.h"
 #endif
 
+#if defined(CANN_SHMEM)
+using ShmemUniqueId = aclshmemx_uniqueid_t;
+#else
+struct ShmemUniqueId { uint8_t _unused[1]; };
+#endif
+
 // ============================================================================
 // ShmemEnv: Environment configuration for shmem initialization
 // ============================================================================
@@ -110,6 +116,46 @@ inline bool ShmemInitFromEnv(ShmemEnv &env)
 {
     const int ret = ShmemInit(env);
     return (ret == 0);
+}
+
+// ============================================================================
+// ShmemInitFromEnvWithUniqueId: Initialize shmem with a provided unique id
+// ============================================================================
+inline bool ShmemInitFromEnvWithUniqueId(ShmemEnv &env, const ShmemUniqueId *uid)
+{
+#if defined(CANN_SHMEM)
+    if (uid == nullptr) {
+        return ShmemInitFromEnv(env);
+    }
+
+    aclshmemx_init_attr_t attributes;
+    attributes.my_pe = env.rank;
+    attributes.n_pes = env.size;
+    attributes.local_mem_size = env.heapBytes;
+
+    size_t ipLen = 0;
+    if (env.ipPort != nullptr) {
+        for (; ipLen < ACLSHMEM_MAX_IP_PORT_LEN - 1 && env.ipPort[ipLen] != '\0'; ++ipLen) {
+            attributes.ip_port[ipLen] = env.ipPort[ipLen];
+        }
+    }
+    attributes.ip_port[ipLen] = '\0';
+
+    constexpr int attrVersion = (1 << 16) + sizeof(aclshmemx_init_attr_t);
+    constexpr int DEFAULT_TIMEOUT = 120;  // seconds
+    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE,
+                              DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
+
+    attributes.comm_args = reinterpret_cast<void *>(const_cast<ShmemUniqueId *>(uid));
+    int initRet = aclshmemx_init_attr(ACLSHMEMX_INIT_WITH_DEFAULT, &attributes);
+    if (initRet != 0) {
+        std::cerr << "[ERROR] aclshmemx_init_attr failed with code: " << initRet << std::endl;
+    }
+    return (initRet == 0);
+#else
+    (void)uid;
+    return ShmemInitFromEnv(env);
+#endif
 }
 
 // ============================================================================

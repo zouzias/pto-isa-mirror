@@ -12,60 +12,48 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COMM_TNOTIFY_HPP
 
 #include "pto/common/type.hpp"
+#include "pto/common/utils.hpp"
 #include "pto/comm/comm_types.hpp"
 
 namespace pto {
 namespace comm {
 
+namespace detail {
+PTO_INTERNAL void DcciSignal(__gm__ int32_t *ptr)
+{
+    __asm__ __volatile__("");
+    dcci(ptr, SINGLE_CACHE_LINE);
+    __asm__ __volatile__("");
+}
+} // namespace detail
+
 // ============================================================================
-// TNOTIFY: Send flag notification to remote PE
+// TNOTIFY_IMPL: Send flag notification to remote NPU
 // 
-// Native implementation using Ascend intrinsics.
-// dstSignal's data() pointer should be a remote address obtained via ShmemPtr.
-//
-// Parameters:
-//   - dstSignal: Remote signal GlobalTensor (contains target address)
-//   - value: Value to set/accumulate
-//
 // Signal type must be int32_t.
-// Note: This instruction does not require UB allocation.
+// dstSignalData should be 4-byte aligned.
 // ============================================================================
 
-// Compile-time specified NotifyOp (recommended, zero overhead)
-template <NotifyOp op = NotifyOp::Set, typename GlobalSignalData>
-PTO_INTERNAL void TNOTIFY_IMPL(GlobalSignalData &dstSignal, int32_t value = 1)
+template <typename GlobalSignalData>
+PTO_INTERNAL void TNOTIFY_IMPL(GlobalSignalData &dstSignalData, int32_t value, NotifyOp op)
 {
     static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
         "TNOTIFY: signal type must be 32-bit (int32_t)");
 
-    volatile __gm__ int32_t *sigPtr = (volatile __gm__ int32_t *)dstSignal.data();
+    volatile __gm__ int32_t *sigPtr = (volatile __gm__ int32_t *)dstSignalData.data();
 
-    if constexpr (op == NotifyOp::AtomicAdd) {
+    if (op == NotifyOp::AtomicAdd) {
         // Atomic add using hardware atomic instruction
         set_st_atomic_cfg(ATOMIC_S32, ATOMIC_SUM);
+        detail::DcciSignal((__gm__ int32_t *)sigPtr);
         st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
+        detail::DcciSignal((__gm__ int32_t *)sigPtr);
+        dsb(DSB_DDR);
     } else {
         // Set operation - direct store to remote memory
         *sigPtr = value;
-    }
-    
-    pipe_barrier(PIPE_ALL);
-}
-
-// Runtime specified NotifyOp version
-template <typename GlobalSignalData>
-PTO_INTERNAL void TNOTIFY_IMPL(GlobalSignalData &dstSignal, int32_t value, NotifyOp op)
-{
-    static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
-        "TNOTIFY: signal type must be 32-bit (int32_t)");
-
-    volatile __gm__ int32_t *sigPtr = (volatile __gm__ int32_t *)dstSignal.data();
-
-    if (op == NotifyOp::AtomicAdd) {
-        set_st_atomic_cfg(ATOMIC_S32, ATOMIC_SUM);
-        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
-    } else {
-        *sigPtr = value;
+        detail::DcciSignal((__gm__ int32_t *)sigPtr);
+        dsb(DSB_DDR);
     }
     
     pipe_barrier(PIPE_ALL);
