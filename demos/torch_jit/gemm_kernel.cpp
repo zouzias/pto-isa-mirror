@@ -244,28 +244,6 @@ __global__ AICORE void GemmPerformance(__gm__ uint8_t *out, __gm__ uint8_t *src0
         reinterpret_cast<__gm__ half *>(src0), reinterpret_cast<__gm__ half *>(src1));
 }
 
-template <typename T>
-void LaunchGEMME2E(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
-{
-    constexpr uint32_t blockDim = 24;
-    constexpr uint32_t m = 6144;
-    constexpr uint32_t n = 6144;
-    constexpr uint32_t k = 6144;
-    constexpr uint32_t singleCoreM = 1536;
-    constexpr uint32_t singleCoreN = 1024;
-    constexpr uint32_t singleCoreK = 6144;
-    constexpr uint32_t baseM = 128;
-    constexpr uint32_t baseN = 256;
-    constexpr uint32_t baseK = 64;
-    constexpr uint32_t stepM = 1;
-    constexpr uint32_t stepKa = 4;
-    constexpr uint32_t stepKb = 4;
-    constexpr uint32_t stepN = 1;
-    GemmPerformance<T, blockDim, m, k, n, singleCoreM, singleCoreK, singleCoreN, baseM, baseK, baseN, stepM, stepKa,
-        stepKb, stepN><<<blockDim, nullptr, stream>>>(out, src0, src1);
-}
-
-template void LaunchGEMME2E<uint16_t>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 extern "C" __global__ AICORE void gemm_kernel_entry(GM_ADDR out,
                                                     GM_ADDR src0,
@@ -296,6 +274,7 @@ extern "C" __global__ AICORE void gemm_kernel_entry(GM_ADDR out,
 
 
 #else
+
 
 #define MEMORY_BASE
 #include <pto/common/type.hpp>

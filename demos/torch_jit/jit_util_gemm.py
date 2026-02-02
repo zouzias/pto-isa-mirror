@@ -18,27 +18,25 @@ import subprocess
 
 import torch
 
+ASCEND_TOOLKIT_HOME = os.environ["ASCEND_TOOLKIT_HOME"]
 
 def torch_to_ctypes(t: torch.Tensor) -> ctypes.c_void_p:
     return ctypes.c_void_p(t.data_ptr())
 
 
 def compile_gemm(kernel_cpp: str, verbose: bool = False, timeout: int = 120) -> str:
-    env = os.environ.copy()
-    ASCEND_TOOLKIT_HOME = env["ASCEND_TOOLKIT_HOME"]
-    PTO_LIB_PATH = env["PTO_LIB_PATH"]
 
     # output .so next to kernel_cpp
     lib_path = os.path.join(os.path.dirname(kernel_cpp), "gemm_jit.so")
 
     # ABI define
     abi_flag = []
-    abi = env.get("GLIBCXX_USE_CXX11_ABI", "").strip()
+    abi = os.environ.get("GLIBCXX_USE_CXX11_ABI", "").strip()
     if abi in ("0", "1"):
         abi_flag = [f"-D_GLIBCXX_USE_CXX11_ABI={abi}"]
 
     # NPU arch
-    npu_arch = env.get("NPU_ARCH", "dav-2201").strip()
+    npu_arch = os.environ.get("NPU_ARCH", "dav-2201").strip()
 
     flags = [
         "-fPIC",
@@ -51,10 +49,7 @@ def compile_gemm(kernel_cpp: str, verbose: bool = False, timeout: int = 120) -> 
         f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw",
         f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw/impl",
         f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw/interface",
-        f"-I{ASCEND_TOOLKIT_HOME}/include",
-        f"-I{ASCEND_TOOLKIT_HOME}/tools",
-        f"-I{PTO_LIB_PATH}/include",
-        f"-I{PTO_LIB_PATH}/include/common"
+        f"-I{ASCEND_TOOLKIT_HOME}/include"
     ]
 
     cmd = ["bisheng", *flags, kernel_cpp, "-o", lib_path]
@@ -110,10 +105,7 @@ def jit_compile_gemm(verbose: bool = False, clean_up: bool = True):
     """
     Builds gemm_kernel.cpp into gemm_jit.so,
     loads call_kernel, and returns gemm(c, a, b).
-
-    clean_up=True deletes the .so after loading.
     """
-    root = os.path.dirname(__file__)
     kernel_cpp = "gemm_kernel.cpp"
 
     lib_path = compile_gemm(kernel_cpp, verbose=verbose)
