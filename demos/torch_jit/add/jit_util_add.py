@@ -16,13 +16,11 @@ import ctypes
 
 import torch
 
+ASCEND_TOOLKIT_HOME = os.environ["ASCEND_TOOLKIT_HOME"]
+
 
 def compile_cpp(src_path, verbose=False, timeout=10):
-    assert src_path.endswith(".cpp")
     lib_path = src_path.removesuffix(".cpp") + ".so"
-
-    ASCEND_TOOLKIT_HOME = os.environ["ASCEND_TOOLKIT_HOME"]
-    PTO_LIB_PATH = os.environ["PTO_LIB_PATH"]
 
     flags = [
         "-fPIC",
@@ -35,8 +33,6 @@ def compile_cpp(src_path, verbose=False, timeout=10):
         f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw/impl",
         f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw/interface",
         f"-I{ASCEND_TOOLKIT_HOME}/include",
-        f"-I{PTO_LIB_PATH}/include",
-        f"-I{PTO_LIB_PATH}/include/common",
     ]
 
     command = ["bisheng", *flags, src_path, "-o", lib_path]
@@ -58,6 +54,7 @@ def torch_to_ctypes(tensor):
 
 
 def load_lib(lib_path, check_type=True):
+    lib_path = os.path.abspath(lib_path)
     lib = ctypes.CDLL(lib_path)
 
     if check_type:  # otherwise will get segfault for mismatched type
@@ -68,21 +65,15 @@ def load_lib(lib_path, check_type=True):
             ctypes.c_void_p,  # x
             ctypes.c_void_p,  # y
             ctypes.c_void_p,  # z
-            ctypes.c_int,     # N
+            ctypes.c_int,  # N
         ]
         lib.call_kernel.restype = None
 
     default_block_dim = 20  # 910B4, TODO: query platform information
     default_stream_ptr = torch.npu.current_stream()._as_parameter_
 
-    def add_func(
-        x,
-        y,
-        z,
-        block_dim=default_block_dim,
-        stream_ptr=default_stream_ptr
-        ):
-        N = x.numel()
+    def add_func(x, y, z, block_dim=default_block_dim, stream_ptr=default_stream_ptr):
+        n = x.numel()
         # TODO: customize call args according to cpp `void call_kernel` signature
         lib.call_kernel(
             block_dim,
@@ -90,7 +81,7 @@ def load_lib(lib_path, check_type=True):
             torch_to_ctypes(x),
             torch_to_ctypes(y),
             torch_to_ctypes(z),
-            N
+            n,
         )
 
     return add_func
