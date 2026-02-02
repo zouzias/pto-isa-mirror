@@ -13,7 +13,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "kernel_operator.h"
 #include "pto/comm/sdma_types.hpp"
-#include "pto/common/pto_tile.hpp"
 #include "pto/comm/comm_types.hpp"
 #include "pto/pto-inst.hpp"
 #include <cstdint>
@@ -24,9 +23,9 @@ namespace sdma {
 namespace detail {
 
 // ============================================================================
-// Temporary Buffer Tile Type Definition
+// Temporary Buffer Type Definition
 // ============================================================================
-using TmpBufTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, 512, pto::BLayout::RowMajor, -1, -1>;
+using TmpBuf = AscendC::TBuf<AscendC::TPosition::VECOUT>;
 
 // ============================================================================
 // Device Memory Address Constants (same as aclshmem)
@@ -133,39 +132,54 @@ PTO_INTERNAL void dcci_cacheline(__gm__ uint8_t* addr)
 
 template <typename T>
 PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32_t size,
-                               TmpBufTile& tmp_tile)
+                               TmpBuf& tmp_buf)
 {
-    __ubuf__ uint8_t* ub_ptr = tmp_tile.data();
-    __gm__ uint8_t* gm_src_ptr = src;
-    __gm__ uint8_t* gm_dst_ptr = dst;
-
     uint32_t copy_bytes = size * sizeof(T);
 
-    for (uint32_t i = 0; i < copy_bytes; ++i) {
-        ub_ptr[i] = gm_src_ptr[i];
-    }
+    AscendC::GlobalTensor<uint8_t> gm_src;
+    AscendC::GlobalTensor<uint8_t> gm_dst;
+    gm_src.SetGlobalBuffer(src, copy_bytes);
+    gm_dst.SetGlobalBuffer(dst, copy_bytes);
+
+    AscendC::LocalTensor<uint8_t> ub = tmp_buf.Get<uint8_t>();
+    AscendC::DataCopyExtParams cp_params{1, copy_bytes, 0, 0, 0};
+    AscendC::DataCopyPadExtParams<uint8_t> pad_params{false, 0, 0, 0};
+
+    AscendC::DataCopyPad(ub, gm_src, cp_params, pad_params);
     AscendC::PipeBarrier<PIPE_ALL>();
 
-    for (uint32_t i = 0; i < copy_bytes; ++i) {
-        gm_dst_ptr[i] = ub_ptr[i];
-    }
+    AscendC::DataCopyPad(gm_dst, ub, cp_params);
     AscendC::PipeBarrier<PIPE_ALL>();
 }
 
 template <typename T>
-PTO_INTERNAL void set_value(__gm__ uint8_t* addr, TmpBufTile& tmp_tile, T x)
+PTO_INTERNAL void set_value(__gm__ uint8_t* addr, TmpBuf& tmp_buf, T x)
 {
-    __gm__ T* gm_ptr = reinterpret_cast<__gm__ T*>(addr);
-    gm_ptr[0] = x;
+    AscendC::GlobalTensor<T> gm_dst;
+    gm_dst.SetGlobalBuffer((__gm__ T *)addr);
+    AscendC::LocalTensor<T> x_local = tmp_buf.Get<T>();
+    x_local.SetValue(0, x);
+
+    AscendC::DataCopyExtParams cp_out_params{1, sizeof(T), 0, 0, 0};
+    AscendC::DataCopyPad(gm_dst, x_local, cp_out_params);
     AscendC::PipeBarrier<PIPE_ALL>();
 }
 
 template <typename T>
-PTO_INTERNAL T get_value(__gm__ uint8_t* addr, TmpBufTile& tmp_tile)
+PTO_INTERNAL T get_value(__gm__ uint8_t* addr, TmpBuf& tmp_buf)
 {
     dcci_cacheline(addr);
-    T x = *((__gm__ T *)addr);
-    return x;
+
+    AscendC::GlobalTensor<T> gm_src;
+    AscendC::LocalTensor<T> x_local = tmp_buf.Get<T>();
+    gm_src.SetGlobalBuffer((__gm__ T*)addr, 1);
+
+    AscendC::DataCopyExtParams cp_in_params{1, sizeof(T), 0, 0, 0};
+    AscendC::DataCopyPadExtParams<T> pad_params{false, 0, 0, 0};
+    AscendC::DataCopyPad(x_local, gm_src, cp_in_params, pad_params);
+    AscendC::PipeBarrier<PIPE_ALL>();
+
+    return x_local.GetValue(0);
 }
 
 PTO_INTERNAL void add_one_memcpy_sqe(__gm__ batch_write_channel_info_t* channel_info,
@@ -214,7 +228,7 @@ PTO_INTERNAL bool init_sdma_config(__gm__ uint8_t* context_gm,
                                   uint32_t block_idx,
                                   uint32_t comm_block_dim,
                                   sdma_config_t& config,
-                                  TmpBufTile& tmp_tile)
+                                  TmpBuf& tmp_buf)
 {
     __gm__ batch_write_flag_info_t *flag_info =
         (__gm__ batch_write_flag_info_t*)context_gm;
@@ -258,7 +272,7 @@ PTO_INTERNAL void prepare_workspace(__gm__ uint8_t* workspace,
                                    workspace_layout_t &layout,
                                    uint32_t block_idx,
                                    uint32_t my_pe,
-                                   TmpBufTile& tmp_tile)
+                                   TmpBuf& tmp_buf)
 {
     uint64_t per_core_workspace_size = config.queue_num * SDMA_FLAG_LENGTH;
 
@@ -272,19 +286,19 @@ PTO_INTERNAL void prepare_workspace(__gm__ uint8_t* workspace,
                                    my_pe * SDMA_MAX_CHAN * SDMA_FLAG_LENGTH +
                                    block_idx * per_core_workspace_size;
 
-    set_value<uint32_t>((__gm__ uint8_t*)layout.send_workspace, tmp_tile, config.queue_num);
+    set_value<uint32_t>((__gm__ uint8_t*)layout.send_workspace, tmp_buf, config.queue_num);
 }
 
 PTO_INTERNAL void init_sq_tail_array(__gm__ batch_write_channel_info_t* batch_write_channel_info,
                                     uint32_t queue_num,
                                     uint32_t* sq_tail,
-                                    TmpBufTile& tmp_tile)
+                                    TmpBuf& tmp_buf)
 {
     for (uint32_t queue_id = 0U; queue_id < queue_num; ++queue_id) {
         __gm__ batch_write_channel_info_t* channel_info =
             batch_write_channel_info + queue_id;
         sq_tail[queue_id] = get_value<uint32_t>(
-            ((__gm__ uint8_t*)channel_info) + 4, tmp_tile);
+            ((__gm__ uint8_t*)channel_info) + 4, tmp_buf);
     }
 }
 
@@ -295,7 +309,7 @@ PTO_INTERNAL void submit_data_transfer_sqes(
     uint32_t opcode,
     const sdma_config_t& config,
     uint32_t* sq_tail,
-    TmpBufTile& tmp_tile)
+    TmpBuf& tmp_buf)
 {
     for (uint32_t idx = 0U; idx < config.iter_num; ++idx) {
         uint32_t queue_idx = idx % config.queue_num;
@@ -326,7 +340,7 @@ PTO_INTERNAL void submit_flag_transfer_sqes(
     const workspace_layout_t &layout,
     const sdma_config_t& config,
     uint32_t* sq_tail,
-    TmpBufTile& tmp_tile)
+    TmpBuf& tmp_buf)
 {
     for (uint32_t queue_id = 0U; queue_id < config.queue_num; ++queue_id) {
         __gm__ batch_write_channel_info_t* channel_info =
@@ -347,7 +361,7 @@ PTO_INTERNAL void flush_cache_and_ring_doorbell(
     __gm__ batch_write_channel_info_t* batch_write_channel_info,
     const sdma_config_t& config,
     uint32_t* sq_tail,
-    TmpBufTile& tmp_tile)
+    TmpBuf& tmp_buf)
 {
     auto item_size = config.iter_num * sizeof(batch_write_item_t);
     for (uint8_t queue_id = 0; queue_id < config.queue_num; queue_id++) {
@@ -360,7 +374,7 @@ PTO_INTERNAL void flush_cache_and_ring_doorbell(
             AscendC::DcciDst::CACHELINE_OUT>(write_info);
 
         set_value<uint32_t>((__gm__ uint8_t*)(channel_info->sq_reg_base) + 8,
-                           tmp_tile, sq_tail[queue_id]);
+                           tmp_buf, sq_tail[queue_id]);
     }
 }
 
@@ -369,7 +383,7 @@ PTO_INTERNAL bool poll_for_completion(
     const workspace_layout_t &layout,
     const sdma_config_t& config,
     uint32_t* sq_tail,
-    TmpBufTile& tmp_tile)
+    TmpBuf& tmp_buf)
 {
     const uint32_t max_times = 1000000;
     for (uint8_t queue_id = 0; queue_id < config.queue_num; queue_id++) {
@@ -383,15 +397,15 @@ PTO_INTERNAL bool poll_for_completion(
         uint32_t times = 0;
 
         while (send_value == 0 && times < max_times) {
-            copy_gm_to_gm<uint32_t>(local_recv_workspace, remote_recv_workspace, 1, tmp_tile);
-            send_value = get_value<uint32_t>(local_recv_workspace, tmp_tile);
+            copy_gm_to_gm<uint32_t>(local_recv_workspace, remote_recv_workspace, 1, tmp_buf);
+            send_value = get_value<uint32_t>(local_recv_workspace, tmp_buf);
             times++;
         }
 
-        set_value<uint32_t>(remote_recv_workspace, tmp_tile, 0);
-        set_value<uint32_t>(local_recv_workspace, tmp_tile, 0);
+        set_value<uint32_t>(remote_recv_workspace, tmp_buf, 0);
+        set_value<uint32_t>(local_recv_workspace, tmp_buf, 0);
 
-        set_value<uint32_t>(((__gm__ uint8_t*)channel_info) + 4, tmp_tile, sq_tail[queue_id]);
+        set_value<uint32_t>(((__gm__ uint8_t*)channel_info) + 4, tmp_buf, sq_tail[queue_id]);
     }
 
     return true;
@@ -419,15 +433,15 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
         return;
     }
 
-    TmpBufTile tmp_tile(1, 512);
-    TASSIGN(tmp_tile, 0x0);
+    TmpBuf tmp_buf;
+    GetTPipePtr()->InitBuffer(tmp_buf, UB_ALIGN_SIZE * 2);
 
     const auto block_idx = AscendC::GetBlockIdx();
     const auto comm_block_dim = AscendC::GetBlockNum() * AscendC::GetSubBlockNum();
 
     sdma_config_t config;
     if (!init_sdma_config(context_gm, message_len, block_idx, comm_block_dim,
-                          config, tmp_tile)) {
+                          config, tmp_buf)) {
         AscendC::PipeBarrier<PIPE_ALL>();
         return;
     }
@@ -448,21 +462,21 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
     uint32_t my_pe = block_idx;
     workspace_layout_t workspace_layout;
     prepare_workspace(workspace, flag_addr, config, workspace_layout,
-                     block_idx, my_pe, tmp_tile);
+                     block_idx, my_pe, tmp_buf);
 
     uint32_t sq_tail[64] = {0};
-    init_sq_tail_array(batch_write_channel_info, config.queue_num, sq_tail, tmp_tile);
+    init_sq_tail_array(batch_write_channel_info, config.queue_num, sq_tail, tmp_buf);
 
     submit_data_transfer_sqes(batch_write_channel_info, send_buffer, recv_buffer,
-                              static_cast<uint32_t>(opcode), config, sq_tail, tmp_tile);
+                              static_cast<uint32_t>(opcode), config, sq_tail, tmp_buf);
 
     submit_flag_transfer_sqes(batch_write_channel_info, workspace_layout, config,
-                              sq_tail, tmp_tile);
+                              sq_tail, tmp_buf);
 
-    flush_cache_and_ring_doorbell(batch_write_channel_info, config, sq_tail, tmp_tile);
+    flush_cache_and_ring_doorbell(batch_write_channel_info, config, sq_tail, tmp_buf);
 
     (void)poll_for_completion(batch_write_channel_info, workspace_layout, config,
-                              sq_tail, tmp_tile);
+                              sq_tail, tmp_buf);
 
     AscendC::PipeBarrier<PIPE_ALL>();
 }
