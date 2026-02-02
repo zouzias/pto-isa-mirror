@@ -65,15 +65,16 @@ __tf__ AICORE inline void pto_macro_fa_gu(
             vector_align ureg_1;
             constexpr auto distValue = std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
             for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
-                vldas(ureg_1, (__ubuf__ T*)(exp_max_Ptr + i*stride));
-                vldus(vreg_uld, ureg_1, (__ubuf__ T*)(exp_max_Ptr + i*stride));
-                vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
+                // vldas(ureg_1, (__ubuf__ T*)(exp_max_Ptr + i*stride));
+                // vldus(vreg_uld, ureg_1, (__ubuf__ T*)(exp_max_Ptr + i*stride));
+                // vdup(vreg1, vreg_uld, preg_b8_all, POS_LOWEST, MODE_ZEROING);
+                vlds(vreg1, (__ubuf__ T*)(exp_max_Ptr), i*stride, BRC_B32);
                 uint32_t sreg = (uint32_t)(ubN);
                 for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
                     preg = CreatePredicate<T>(sreg);
                     vlds(vreg0, prev_sv_tile_Ptr,  0, NORM, POST_UPDATE);
-                    vmul(vreg2, vreg0, vreg1, preg, MODE_ZEROING);
                     vlds(vreg3, est_sv_tile_Ptr, elementsPerRepeat, NORM, POST_UPDATE);
+                    vmul(vreg2, vreg0, vreg1, preg, MODE_ZEROING);
                     vadd(vreg3, vreg2, vreg3, preg, MODE_ZEROING);
                     vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, distValue, preg, POST_UPDATE);
                 }
@@ -125,18 +126,20 @@ __tf__ AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, 
             vector_align ureg_2;
             constexpr auto distValue = std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
             for (uint16_t i = 0; i < (uint16_t)(ubM); ++i) {
-                vldas(ureg_1, (__ubuf__ T*)(exp_max_Ptr + i*stride));
-                vldus(vreg_uld1, ureg_1, (__ubuf__ T*)(exp_max_Ptr + i*stride));
-                vdup(vreg1, vreg_uld1, preg_b8_all, POS_LOWEST, MODE_ZEROING);
-                vldas(ureg_2, (__ubuf__ T*)(new_global_sum_Ptr + i*stride));
-                vldus(vreg_uld2, ureg_2, (__ubuf__ T*)(new_global_sum_Ptr + i*stride));
-                vdup(vreg4, vreg_uld2, preg_b8_all, POS_LOWEST, MODE_ZEROING);
+                // vldas(ureg_1, (__ubuf__ T*)(exp_max_Ptr + i*stride));
+                // vldus(vreg_uld1, ureg_1, (__ubuf__ T*)(exp_max_Ptr + i*stride));
+                // vdup(vreg1, vreg_uld1, preg_b8_all, POS_LOWEST, MODE_ZEROING);
+                vlds(vreg1, (__ubuf__ T*)(exp_max_Ptr), i*stride, BRC_B32);
+                // vldas(ureg_2, (__ubuf__ T*)(new_global_sum_Ptr + i*stride));
+                // vldus(vreg_uld2, ureg_2, (__ubuf__ T*)(new_global_sum_Ptr + i*stride));
+                // vdup(vreg4, vreg_uld2, preg_b8_all, POS_LOWEST, MODE_ZEROING);
+                vlds(vreg4, (__ubuf__ T*)(new_global_sum_Ptr), i*stride, BRC_B32);
                 uint32_t sreg = (uint32_t)(ubN);
                 for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
                     preg = CreatePredicate<T>(sreg);
                     vlds(vreg0, prev_sv_tile_Ptr,  0, NORM, POST_UPDATE);
-                    vmul(vreg2, vreg0, vreg1, preg, MODE_ZEROING);
                     vlds(vreg3, est_sv_tile_Ptr,  elementsPerRepeat, NORM, POST_UPDATE);
+                    vmul(vreg2, vreg0, vreg1, preg, MODE_ZEROING);
                     vadd(vreg3, vreg2, vreg3, preg, MODE_ZEROING);
                     vdiv(vreg3, vreg3, vreg4, preg, MODE_ZEROING);
                     vsts(vreg3, prev_sv_tile_Ptr, elementsPerRepeat, distValue, preg, POST_UPDATE);
