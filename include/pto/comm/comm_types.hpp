@@ -68,6 +68,37 @@ struct ParallelGroupTraits<ParallelGroup<GlobalData>> {
 // NotifyOp: Notification operation type for TNOTIFY
 // ============================================================================
 
+// ============================================================================
+// DmaEngine: DMA engine selection for async point-to-point ops
+// ============================================================================
+
+enum class DmaEngine : uint8_t {
+    SDMA = 0,  // System DMA, supports 2D transfer
+    URMA = 1,  // A5 URMA, supports 1D transfer
+};
+
+// ============================================================================
+// AsyncEvent: Event handle for async DMA operations
+// ============================================================================
+
+struct AsyncEvent {
+    uint64_t handle {0};
+    DmaEngine engine {DmaEngine::SDMA};
+    
+    constexpr AsyncEvent() = default;
+    AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e) : handle(h), engine(e) {}
+    AICORE constexpr bool valid() const { return handle != 0; }
+    PTO_INTERNAL void Wait() const
+    {
+        if (handle == 0) {
+            return;
+        }
+        // Current SDMA/URMA async intrinsics complete synchronously.
+        // Keep no-op; add engine-specific wait when available.
+        (void)engine;
+    }
+};
+
 enum class NotifyOp : uint8_t {
     AtomicAdd = 0,  // Atomic add operation
     Set = 1,        // Direct set operation
@@ -87,25 +118,13 @@ enum class WaitCmp : uint8_t {
 };
 
 // ============================================================================
-// SdmaEvent: Event handle for SDMA asynchronous operations
-//
-// Used to track and synchronize SDMA transfer operations.
-// The event can be used with TWAIT_SDMA to wait for completion.
+// ReduceOp: Reduction operators for TREDUCE
 // ============================================================================
 
-struct SdmaEvent {
-    uint64_t event_id;  // SDMA event identifier
-    
-    constexpr SdmaEvent() : event_id(0) {}
-    constexpr explicit SdmaEvent(uint64_t id) : event_id(id) {}
-    
-    constexpr bool operator==(const SdmaEvent& other) const {
-        return event_id == other.event_id;
-    }
-    
-    constexpr bool operator!=(const SdmaEvent& other) const {
-        return event_id != other.event_id;
-    }
+enum class ReduceOp : uint8_t {
+    Sum = 0,  // Element-wise sum
+    Max = 1,  // Element-wise maximum
+    Min = 2,  // Element-wise minimum
 };
 
 } // namespace comm
