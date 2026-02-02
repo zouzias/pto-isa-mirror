@@ -166,22 +166,23 @@ template <typename T>
 PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32_t size,
                                  TmpBufTile& tmp_tile)
 {
-    AscendC::GlobalTensor<T> gm_src;
-    AscendC::GlobalTensor<T> gm_dst;
-    gm_src.SetGlobalBuffer((__gm__ T *)src, size);
-    gm_dst.SetGlobalBuffer((__gm__ T *)dst, size);
+    // Use direct memory copy via UB buffer
+    __ubuf__ uint8_t* ub_ptr = tmp_tile.data();
+    __gm__ uint8_t* gm_src_ptr = src;
+    __gm__ uint8_t* gm_dst_ptr = dst;
     
-    // Reinterpret the uint8_t tile as T* for the copy operation
-    AscendC::LocalTensor<T> x_local;
-    x_local.SetLocalTensor(reinterpret_cast<__ubuf__ T*>(tmp_tile.data()));
-
-    uint32_t cp_len = size * sizeof(T);
-    AscendC::DataCopyExtParams cp_params{1, cp_len, 0, 0, 0};
-    AscendC::DataCopyPadExtParams<T> pad_params{false, 0, 0, 0};
-    AscendC::DataCopyPad(x_local, gm_src, cp_params, pad_params);
+    uint32_t copy_bytes = size * sizeof(T);
+    
+    // Copy from GM to UB
+    for (uint32_t i = 0; i < copy_bytes; ++i) {
+        ub_ptr[i] = gm_src_ptr[i];
+    }
     AscendC::PipeBarrier<PIPE_ALL>();
-
-    AscendC::DataCopyPad(gm_dst, x_local, cp_params);
+    
+    // Copy from UB to GM
+    for (uint32_t i = 0; i < copy_bytes; ++i) {
+        gm_dst_ptr[i] = ub_ptr[i];
+    }
     AscendC::PipeBarrier<PIPE_ALL>();
 }
 
@@ -189,16 +190,9 @@ PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32
 template <typename T>
 PTO_INTERNAL void set_value(__gm__ uint8_t* addr, TmpBufTile& tmp_tile, T x)
 {
-    AscendC::GlobalTensor<T> gm_dst;
-    gm_dst.SetGlobalBuffer((__gm__ T *)addr);
-    
-    // Reinterpret the uint8_t tile as T* for the set operation
-    AscendC::LocalTensor<T> x_local;
-    x_local.SetLocalTensor(reinterpret_cast<__ubuf__ T*>(tmp_tile.data()));
-    x_local.SetValue(0, x);
-    AscendC::PipeBarrier<PIPE_ALL>();
-    AscendC::DataCopyExtParams cp_out_params{1, sizeof(T), 0, 0, 0};
-    AscendC::DataCopyPad(gm_dst, x_local, cp_out_params);
+    // Direct write to GM
+    __gm__ T* gm_ptr = reinterpret_cast<__gm__ T*>(addr);
+    gm_ptr[0] = x;
     AscendC::PipeBarrier<PIPE_ALL>();
 }
 
