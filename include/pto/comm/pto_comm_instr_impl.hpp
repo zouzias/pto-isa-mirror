@@ -33,4 +33,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/TBroadCast.hpp"
 #include "pto/comm/TReduce.hpp"
 
+// Collective Communication with Optimizations
+#include "pto/comm/TReducePingPong.hpp"
+
 #endif // PTO_COMM_INSTR_IMPL_HPP
