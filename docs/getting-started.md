@@ -271,7 +271,7 @@ This project supports building from source. Before building, prepare the environ
 
 1. **Install the community edition CANN toolkit**
 
-    Download the appropriate `Ascend-cann-toolkit_${cann_version}_linux-${arch}.run` installer for your environment.
+    Download the appropriate `Ascend-cann-toolkit_${cann_version}_linux-${arch}.run` installer for your environment.[download](https://www.hiascend.com/developer/download/community/result?module=cann)
     
     ```bash
     # Ensure the installer is executable
