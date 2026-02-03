@@ -11,16 +11,14 @@ full text of the License.
 */
 #include <cstdint>
 
-#include "kernel_operator.h"
 #define MEMORY_BASE
-#define NUM_BLOCKS 20 // number of AICs
 
 #if defined __CCE_AICORE__ == 220 && \
     defined(__DAV_C220_VEC__) // Placeholder for VEC compilation (the real
                               // kernel is CUBE-only).
 #include <pto/common/type.hpp>
 
-extern "C" __global__ AICORE void batch_matrix_square_fp16(GM_ADDR x, GM_ADDR z,
+extern "C" __global__ AICORE void batch_matrix_square_fp16(__gm__ void *x, __gm__ void *z,
                                                            uint32_t matrix_size,
                                                            uint32_t block_dim)
 {
@@ -45,10 +43,9 @@ AICORE inline void WaitFlag(uint32_t id)
 }
 
 template <typename InputT, typename OutputT, uint32_t MatrixSize>
-AICORE void runKernelBatchMatrixSquare(__gm__ OutputT *z, __gm__ InputT *x,
-                                       uint32_t block_dim)
+AICORE void runKernelBatchMatrixSquare(__gm__ OutputT *z, __gm__ InputT *x)
 {
-    if (get_block_idx() < block_dim)
+    if (get_block_idx() < get_block_num())
     {
         constexpr uint32_t tile_len = MatrixSize * MatrixSize;
         const uint32_t global_index = get_block_idx() * tile_len;
@@ -110,47 +107,44 @@ AICORE void runKernelBatchMatrixSquare(__gm__ OutputT *z, __gm__ InputT *x,
     }
 }
 
-extern "C" __global__ AICORE void batch_matrix_square_fp16(GM_ADDR x, GM_ADDR z,
-                                                           uint32_t matrix_size,
-                                                           uint32_t block_dim)
+extern "C" __global__ AICORE void batch_matrix_square_fp16(__gm__ void *x, __gm__ void *z,
+                                                           uint32_t matrix_size)
 {
     switch (matrix_size)
     {
     case 16:
         runKernelBatchMatrixSquare<half, float, 16>((__gm__ float *)z,
-                                                    (__gm__ half *)x, block_dim);
+                                                    (__gm__ half *)x);
         break;
     case 32:
         runKernelBatchMatrixSquare<half, float, 32>((__gm__ float *)z,
-                                                    (__gm__ half *)x, block_dim);
+                                                    (__gm__ half *)x);
         break;
     case 64:
         runKernelBatchMatrixSquare<half, float, 64>((__gm__ float *)z,
-                                                    (__gm__ half *)x, block_dim);
+                                                    (__gm__ half *)x);
         break;
     case 96:
         runKernelBatchMatrixSquare<half, float, 96>((__gm__ float *)z,
-                                                    (__gm__ half *)x, block_dim);
+                                                    (__gm__ half *)x);
         break;
     case 128:
         runKernelBatchMatrixSquare<half, float, 128>((__gm__ float *)z,
-                                                     (__gm__ half *)x, block_dim);
+                                                     (__gm__ half *)x);
         break;
     }
 }
 #else
 
 #include <pto/common/type.hpp>
-extern "C" __global__ AICORE void batch_matrix_square_fp16(GM_ADDR x, GM_ADDR z,
-                                                           uint32_t matrix_size,
-                                                           uint32_t block_dim)
+extern "C" __global__ AICORE void batch_matrix_square_fp16(__gm__ void *x, __gm__ void *z,
+                                                           uint32_t matrix_size)
 {
 }
 
 #endif
-extern "C" void call_kernel(uint32_t blockDim, void *stream, uint8_t *out,
+extern "C" void call_kernel(uint32_t block_dim, void *stream, uint8_t *out,
                             uint8_t *src, uint32_t matrix_size)
 {
-    batch_matrix_square_fp16<<<NUM_BLOCKS, nullptr, stream>>>(src, out, matrix_size,
-                                                              blockDim);
+    batch_matrix_square_fp16<<<block_dim, nullptr, stream>>>(src, out, matrix_size);
 }
