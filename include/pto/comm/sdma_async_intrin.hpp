@@ -419,7 +419,8 @@ PTO_INTERNAL void flush_cache_and_ring_doorbell(
     uint32_t* sq_tail,
     TmpBuf& tmp_buf)
 {
-    auto item_size = config.iter_num * sizeof(batch_write_item_t);
+    // Include both data transfer SQEs and flag transfer SQE (+1 for flag)
+    auto item_size = (config.iter_num + 1) * sizeof(batch_write_item_t);
     for (uint8_t queue_id = 0; queue_id < config.queue_num; queue_id++) {
         __gm__ batch_write_channel_info_t* channel_info =
             batch_write_channel_info + queue_id;
@@ -494,9 +495,11 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
     if (!init_sdma_config(context_gm, message_len, block_idx, comm_block_dim,
                           config, tmp_buf)) {
         AscendC::PipeBarrier<PIPE_ALL>();
+        localPipe.Destroy();
         return;
     }
     if (config.iter_num == 0) {
+        localPipe.Destroy();
         return;
     }
 
