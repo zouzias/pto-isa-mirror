@@ -28,12 +28,6 @@ def compile_cpp(src_path: str, verbose: bool = False, timeout: int = 120) -> str
     # output .so next to src_path
     lib_path = os.path.join(os.path.dirname(src_path), "batch_matrix_square_jit.so")
 
-    # ABI define
-    abi_flag = []
-    abi = os.environ.get("GLIBCXX_USE_CXX11_ABI", "").strip()
-    if abi in ("0", "1"):
-        abi_flag = [f"-D_GLIBCXX_USE_CXX11_ABI={abi}"]
-
     # NPU arch
     npu_arch = os.environ.get("NPU_ARCH", "dav-2201").strip()
 
@@ -42,13 +36,9 @@ def compile_cpp(src_path: str, verbose: bool = False, timeout: int = 120) -> str
         "-shared",
         "-xcce",
         f"--npu-arch={npu_arch}",
+        "-DMEMORY_BASE",
         "-O2",
         "-std=c++17",
-        *abi_flag,
-        f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw",
-        f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw/impl",
-        f"-I{ASCEND_TOOLKIT_HOME}/compiler/tikcpp/tikcfw/interface",
-        f"-I{ASCEND_TOOLKIT_HOME}/include",
         f"-I{PTO_LIB_PATH}/include"
     ]
 
@@ -84,7 +74,6 @@ def load_lib(lib_path: str, check_type: bool = True):
         ]
         lib.call_kernel.restype = None
 
-    # default_block_dim = 20
     default_stream_ptr = torch.npu.current_stream()._as_parameter_
 
     def batch_matrix_square(
