@@ -90,7 +90,10 @@ namespace pto {
     };
     template <typename T, unsigned DstCols, unsigned SrcCols>
     PTO_INTERNAL void TDivs_naive(__ubuf__ T *dst, __ubuf__ T* src0, T src1, unsigned validRow, unsigned validCol) {
-        PtoSetWaitFlag<PIPE_V, PIPE_S>();
+        // auto mode adds in synchronization during compilation
+        #ifndef __PTO_AUTO__
+            PtoSetWaitFlag<PIPE_V, PIPE_S>();
+        #endif
         for (int i = 0; i < validRow; i++) {
             for (int j = 0; j < validCol; j++) {
                 int dstOffset = i * DstCols + j;
@@ -102,7 +105,10 @@ namespace pto {
 
     template <typename T, unsigned DstCols, unsigned SrcCols>
     PTO_INTERNAL void TSDiv_naive(__ubuf__ T *dst, __ubuf__ T* src0, T src1, unsigned validRow, unsigned validCol) {
-        PtoSetWaitFlag<PIPE_V, PIPE_S>();
+        // auto mode adds in synchronization during compilation
+        #ifndef __PTO_AUTO__
+            PtoSetWaitFlag<PIPE_V, PIPE_S>();
+        #endif
         for (int i = 0; i < validRow; i++) {
             for (int j = 0; j < validCol; j++) {
                 int dstOffset = i * DstCols + j;
