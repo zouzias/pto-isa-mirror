@@ -79,7 +79,7 @@ AICORE void runKernelBatchMatrixSquare(__gm__ OutputT *z, __gm__ InputT *x)
 #endif
 }
 
-__global__ AICORE void batch_matrix_square_fp16(__gm__ void *x, __gm__ void *z,
+__global__ AICORE void batch_matrix_square_fp16(__gm__ void *z, __gm__ void *x,
                                                 uint32_t matrix_size)
 {
     switch (matrix_size)
@@ -110,5 +110,5 @@ __global__ AICORE void batch_matrix_square_fp16(__gm__ void *x, __gm__ void *z,
 extern "C" void call_kernel(uint32_t block_dim, void *stream, uint8_t *out,
                             uint8_t *src, uint32_t matrix_size)
 {
-    batch_matrix_square_fp16<<<block_dim, nullptr, stream>>>(src, out, matrix_size);
+    batch_matrix_square_fp16<<<block_dim, nullptr, stream>>>(out, src, matrix_size);
 }
