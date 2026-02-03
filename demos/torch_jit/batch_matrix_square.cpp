@@ -16,9 +16,6 @@ using namespace pto;
 template <typename InputT, typename OutputT, uint32_t MatrixSize>
 AICORE void runKernelBatchMatrixSquare(__gm__ OutputT *z, __gm__ InputT *x)
 {
-// #if defined __CCE_AICORE__ == 220 && defined(__DAV_C220_VEC__)
-// // Placeholder for AIV -- nothing to do on vector unit.
-// #el
 #if (__CHECK_FEATURE_AT_PRECOMPILE) || (__CCE_AICORE__ == 220 && defined(__DAV_C220_CUBE__)) // CUBE compilation
     constexpr uint32_t TileLen = MatrixSize * MatrixSize;
     const uint32_t global_index = get_block_idx() * TileLen;
@@ -78,7 +75,7 @@ AICORE void runKernelBatchMatrixSquare(__gm__ OutputT *z, __gm__ InputT *x)
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0); // FIX pipe waits for M pipe to set flag
     TSTORE(z_global_out, c_l0_tile);
 #else
-// Nothing to do.
+// Placeholder for AIV -- nothing to do on vector unit.
 #endif
 }
 
