@@ -101,7 +101,7 @@ ISA 参考基于以下程序员可见的模型：
 | Tile-标量 / Tile-立即数 | isa/TORS.md | Tile 与标量的逐元素按位或。 |
 | Tile-标量 / Tile-立即数 | isa/TREMS.md | 与标量的逐元素余数，余数符号与除数相同：`remainder(src, scalar)`。 |
 | Tile-标量 / Tile-立即数 | isa/TFMODS.md | 与标量的逐元素余数，余数符号与被除数相同：`fmod(src, scalar)`。 |
-| Tile-标量 / Tile-立即数 | isa/TSELS.md | 使用标量 `selectMode` 在两个源 Tile 中选择一个（全局选择）。 |
+| Tile-标量 / Tile-立即数 | isa/TSELS.md | 使用掩码Tile在源Tile和标量之间进行选择（源Tile逐元素选择）。  |
 | Tile-标量 / Tile-立即数 | isa/TSUBS.md | 从 Tile 中逐元素减去一个标量。 |
 | Tile-标量 / Tile-立即数 | isa/TSUBSC.md | 融合逐元素运算：`src0 - scalar + src1`。 |
 | Tile-标量 / Tile-立即数 | isa/TXORS.md | Tile 与标量的逐元素按位异或。 |

@@ -101,7 +101,7 @@ This table covers all PTO instructions exposed by `include/pto/common/pto_instr.
 | Tile-Scalar / Tile-Immediate | [`TORS`](isa/TORS.md) | Elementwise bitwise OR of a tile and a scalar. |
 | Tile-Scalar / Tile-Immediate | [`TREMS`](isa/TREMS.md) | Elementwise remainder with a scalar: `remainder(src, scalar)`. |
 | Tile-Scalar / Tile-Immediate | [`TFMODS`](isa/TFMODS.md) | Elementwise remainder with a scalar: `fmod(src, scalar)`. |
-| Tile-Scalar / Tile-Immediate | [`TSELS`](isa/TSELS.md) | Select one of two source tiles using a scalar `selectMode` (global select). |
+| Tile-Scalar / Tile-Immediate | [`TSELS`](isa/TSELS.md) | Select between source tile and scalar using a mask tile (per-element selection for source tile). |
 | Tile-Scalar / Tile-Immediate | [`TSUBS`](isa/TSUBS.md) | Elementwise subtract a scalar from a tile. |
 | Tile-Scalar / Tile-Immediate | [`TSUBSC`](isa/TSUBSC.md) | Elementwise fused op: `src0 - scalar + src1`. |
 | Tile-Scalar / Tile-Immediate | [`TXORS`](isa/TXORS.md) | Elementwise bitwise XOR of a tile and a scalar. |

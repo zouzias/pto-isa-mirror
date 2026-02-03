@@ -53,7 +53,7 @@
 - [`TXORS`](TXORS.md) — tile 与标量逐元素按位异或。
 - [`TCMPS`](TCMPS.md) — tile 与标量比较，并写入逐元素的比较结果。
 - [`TEXPANDS`](TEXPANDS.md) — 将标量广播到目标 tile。
-- [`TSELS`](TSELS.md) — 使用标量 `selectMode` 在两张 tile 之间选择（全局选择）。
+- [`TSELS`](TSELS.md) — 通过 mask tile 在源tile和标量之间选择（源tile逐元素选择）。
 - [`TLRELU`](TLRELU.md) — 带标量 slope 的 Leaky ReLU。
 - [`TADDSC`](TADDSC.md) — 逐元素融合加法：`src0 + scalar + src1`。
 - [`TSUBSC`](TSUBSC.md) — 逐元素融合运算：`src0 - scalar + src1`。
