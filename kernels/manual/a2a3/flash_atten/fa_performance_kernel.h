@@ -15,13 +15,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstddef>
 #include <cstdint>
 
-#define ND_LAYOUT 1
+#define ND_LAYOUT 0
 
 // Shared defaults for FA performance kernels and host driver
 constexpr int kFaCvFifoSize = 8;
 constexpr int kFaCvFifoConsSyncPeriod = kFaCvFifoSize / 2;
 constexpr int kFaCubeS1 = 128;
-constexpr int kFaTileS1 = 128;
+constexpr int kFaTileS1 = 256;
 constexpr int kFaQkPreload = 4;
 constexpr std::size_t kFaProfileBytesPerBlock = 1024 * 3; // cube + two vec subblocks
 constexpr std::size_t kFaCvCommSlotBytes = 512U;

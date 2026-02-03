@@ -30,7 +30,7 @@ import os
 from pathlib import Path
 from typing import List, Dict
 
-TILE_S1_DEFAULT = 128
+TILE_S1_DEFAULT = 256
 QK_PRELOAD_DEFAULT = 4
 
 DEFAULT_CASES = [

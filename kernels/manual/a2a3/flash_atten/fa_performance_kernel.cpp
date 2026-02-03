@@ -518,9 +518,9 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             GlobalTensor<float, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
         using TileDataF_Sub = Tile<TileType::Vec, float, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
         #else
- 	         using GlobalDataQK_Sub =
- 	                 GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S1, Vec_S0>, pto::Stride<1, 1, 1, Cube_S0, 1>>;
- 	         using TileDataF_Sub = Tile<TileType::Vec, float, Tile_S1, Vec_S0, BLayout::RowMajor, Cube_S1, Vec_S0>;
+        using GlobalDataQK_Sub =
+                GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S1, Vec_S0>, pto::Stride<1, 1, 1, Cube_S0, 1>>;
+        using TileDataF_Sub = Tile<TileType::Vec, float, Tile_S1, Vec_S0, BLayout::RowMajor, Cube_S1, Vec_S0>;
  	    #endif
         
         for (int sub_col = 0; sub_col < static_cast<int>(kTileFactor); ++sub_col) {
@@ -529,7 +529,11 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             GlobalDataQK_Sub qkGlobalSub(qk_ptr_sub);
 
             TileDataF_Sub qkVecSub;
+            #if ND_LAYOUT
             const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(float));
+            #else
+            const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * Vec_S0 * sizeof(float));
+            #endif
             TASSIGN(qkVecSub, (uint64_t)qkVecTile.data() + col_byte_offset);
             TLOAD(qkVecSub, qkGlobalSub);
         }
@@ -614,7 +618,11 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
        
 
             TileDataH_Sub xExpSub;
+            #if ND_LAYOUT
             const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
+            #else
+            const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * Vec_S0 * sizeof(half));
+            #endif
             TASSIGN(xExpSub, (uint64_t)x_expT.data() + col_byte_offset);
             TSTORE(pTileHalfSub, xExpSub);
         }
