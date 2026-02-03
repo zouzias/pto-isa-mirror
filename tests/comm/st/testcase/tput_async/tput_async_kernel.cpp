@@ -77,7 +77,6 @@ __global__ AICORE void TPutAsyncKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ 
     Global remoteRecvG(remote_recv_shmem, shape, stride);
     
     // TPUT_ASYNC: write local sendG to remote recvG (previous rank's recv buffer)
-    AscendC::TPipe pipe;
     auto put_event = pto::comm::TPUT_ASYNC(remoteRecvG, sendG);
     (void)put_event;
     
@@ -85,6 +84,16 @@ __global__ AICORE void TPutAsyncKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ 
     ShmemDeviceQuiet();
     // Then synchronize all PEs
     ShmemDeviceBarrierAll();
+
+    // Invalidate cache to ensure we read the latest data written by SDMA
+    {
+        AscendC::GlobalTensor<uint8_t> recv_cache;
+        recv_cache.SetGlobalBuffer(reinterpret_cast<__gm__ uint8_t*>(recv_shmem), count * sizeof(T));
+        AscendC::DataCacheCleanAndInvalid<uint8_t, 
+            AscendC::CacheLine::ENTIRE_DATA_CACHE, 
+            AscendC::DcciDst::CACHELINE_OUT>(recv_cache);
+    }
+    AscendC::PipeBarrier<PIPE_ALL>();
 
     // Now recvG on my rank should have data from next rank
     // Load from local recvG to UB, then store to local dstG
@@ -299,6 +308,16 @@ __global__ AICORE void TPutAsyncKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm_
     ShmemDeviceQuiet();
     // Then synchronize all PEs
     ShmemDeviceBarrierAll();
+
+    // Invalidate cache to ensure we read the latest data written by SDMA
+    {
+        AscendC::GlobalTensor<uint8_t> recv_cache;
+        recv_cache.SetGlobalBuffer(reinterpret_cast<__gm__ uint8_t*>(recv_shmem), total_count * sizeof(T));
+        AscendC::DataCacheCleanAndInvalid<uint8_t, 
+            AscendC::CacheLine::ENTIRE_DATA_CACHE, 
+            AscendC::DcciDst::CACHELINE_OUT>(recv_cache);
+    }
+    AscendC::PipeBarrier<PIPE_ALL>();
 
     // Now recvG on my rank should have data from next rank
     // Load from local recvG to UB, then store to local dstG

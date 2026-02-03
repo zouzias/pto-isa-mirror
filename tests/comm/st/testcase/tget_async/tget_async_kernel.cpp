@@ -127,8 +127,8 @@ bool RunGetAsyncRingKernel(int rank_id, int n_ranks, int n_devices, int first_de
     env.ipPort = ip;
     env.heapBytes = local_mem_size;
     
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
+    if (ShmemInitForSdma(env) != 0) {
+        std::cerr << "[ERROR] ShmemInitForSdma failed!" << std::endl;
         return false;
     }
 
