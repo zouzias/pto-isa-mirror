@@ -27,7 +27,6 @@ function(pto_vec_st NAME)
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
-        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     )
 
     target_link_libraries(${NAME} PRIVATE
@@ -57,7 +56,6 @@ function(pto_cube_st NAME)
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
-        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     )
 
     target_link_libraries(${NAME} PRIVATE
@@ -177,6 +175,7 @@ set(ALL_TESTCASES
     tmov_vect
     texpands
     tmov_acc2mat
+    timg2col
     tassign
     tmov_ub2l1
     tcmp

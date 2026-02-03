@@ -22,6 +22,8 @@ constexpr const int SHIFT_M_STEP_B4 = 2;      // 2^2 = 4
 
 constexpr const int SHIFT_MX_COL = 1;         // 2^1 = 2
 constexpr const int SHIFT_MX_ROW = 4;         // 2^4 = 16
+constexpr const int CO_SIZE_SCALE = 2;
+constexpr const int SCALE_CUBE_BLOCK_SIZE = 32;
 
 template <typename DstTileData, typename SrcTileData>
 __tf__ AICORE void TExtractToAmx(typename DstTileData::TileDType __out__ dst,
@@ -38,7 +40,15 @@ __tf__ AICORE void TExtractToAmx(typename DstTileData::TileDType __out__ dst,
     uint16_t rowStartPosition = indexRow >> SHIFT_MX_ROW;
     uint16_t colStartPosition = (indexCol * sizeof(DataType)) >> SHIFT_MX_COL;
 
-    if constexpr(DstTileData::Compact == CompactMode::Normal) {
+    if constexpr (DstTileData::Rows == 1) {
+        uint8_t shiftCol = CeilDivision(validCol * sizeof(DataType), SCALE_CUBE_BLOCK_SIZE) * CO_SIZE_SCALE;
+        uint8_t colStep = (shiftCol * sizeof(DataType)) >> SHIFT_MX_COL;
+        uint16_t srcStride = shiftCol >> SHIFT_MX_COL;
+        uint16_t dstStride = shiftCol >> SHIFT_MX_COL;
+
+        load_cbuf_to_ca_mx(dstAddr, static_cast<__cbuf__ void *>(srcAddr), rowStartPosition, colStartPosition, 1,
+            colStep, srcStride, dstStride);
+    } else if constexpr (DstTileData::Compact == CompactMode::Normal) {
         uint16_t validRowAlign = CeilDivision(validRow, FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW;
         uint8_t rowStep = validRowAlign >> SHIFT_MX_ROW;
         uint8_t colStep = (validCol * sizeof(DataType)) >> SHIFT_MX_COL;
@@ -147,7 +157,7 @@ __tf__ AICORE void TExtractToAVector(typename DstTileData::TileDType __out__ dst
 {
     using DataType = typename SrcTileData::DType;
     constexpr int typeSize = sizeof(DataType);
-    constexpr int32_t fractalSize = isFp4Type ? CUBE_BLOCK_SIZE * KHALF / typeSize : CUBE_BLOCK_SIZE / typeSize;
+    constexpr int32_t fractalSize = isFp4Type ? CUBE_BLOCK_SIZE * KHALF : CUBE_BLOCK_SIZE / typeSize;
     int32_t kAlign = (dstValidCol + fractalSize - 1) & ~(fractalSize - 1);
 
     static_assert((SrcTileData::Cols % fractalSize) == 0, "srcCol * sizeof(DataType) must be aligned to 512B");
@@ -159,7 +169,7 @@ __tf__ AICORE void TExtractToAVector(typename DstTileData::TileDType __out__ dst
     uint16_t kStartPosition = (indexCol * typeSize) >> SHIFT_FRACTAL_BYTE;
     uint8_t kStep = kAlign / fractalSize;
     if constexpr (isFp4Type) {
-        load_cbuf_to_ca_s4(dstAddr, srcAddr, 0, kStartPosition / KHALF, 1, kStep / KHALF, 1, 1, 0);
+        load_cbuf_to_ca_s4(dstAddr, srcAddr, 0, kStartPosition / KHALF, 1, kStep, 1, 1, 0);
     } else {
         load_cbuf_to_ca(dstAddr, srcAddr, 0, kStartPosition, 1, kStep, 1, 1, 0);
     }
@@ -469,7 +479,7 @@ AICORE void TExtractToRight(DstTileData &dst, SrcTileData &src, uint16_t indexRo
 }
 
 template <typename DstTileData, typename SrcTileData>
-PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
+PTO_INTERNAL void TEXTRACT_TILE_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
 {
     static_assert(is_textract_supported_type<typename DstTileData::DType>,
         "TExtract: Unsupported data type! Supported types: int8_t, hifloat8_t, fp8_e5m2_t, fp8_e4m3fn_t, \
@@ -497,6 +507,73 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
             GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>(); 
         TExtractAccToMat<DstTileData, SrcTileData, quantPre, ReluPreMode::NoRelu>(dst.data(), src.data(),
             dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractToBConv(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
+    uint16_t srcCol, uint16_t dstValidRow, uint16_t dstValidCol, uint16_t indexRow, uint16_t indexCol)
+{
+    using DataType = typename SrcTileData::DType;
+    constexpr int c0Size = BLOCK_BYTE_SIZE / sizeof(DataType);
+
+    __cbuf__ DataType *srcAddr = (__cbuf__ DataType *)__cce_get_tile_ptr(src);
+    __cb__ DataType *dstAddr = (__cb__ DataType *)__cce_get_tile_ptr(dst);
+    uint16_t dstValidColAlign = CeilDivision(dstValidCol, FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW;
+    uint16_t dstValidRowAlign = CeilDivision(dstValidRow, c0Size) * c0Size;
+
+    uint16_t mStartPosition = indexCol >> SHIFT_BLOCK_LEN;
+    uint16_t kStartPosition = (indexRow * sizeof(DataType)) >> SHIFT_BLOCK_BYTE;
+    uint8_t mStep = dstValidColAlign >> SHIFT_BLOCK_LEN;
+    uint8_t kStep = (dstValidRowAlign * sizeof(DataType)) >> SHIFT_BLOCK_BYTE;
+    uint16_t srcStride = srcCol >> SHIFT_BLOCK_LEN;
+    uint16_t dstStride = dstValidColAlign >> SHIFT_BLOCK_LEN;
+    load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
+}
+
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TextractConvTileCheck(DstTileData &dst, SrcTileData &src) {
+    static_assert(
+        std::is_same_v<typename DstTileData::DType, int8_t> || std::is_same_v<typename DstTileData::DType, uint8_t> ||
+            std::is_same_v<typename DstTileData::DType, int16_t> || std::is_same_v<typename DstTileData::DType, uint16_t> ||
+            std::is_same_v<typename DstTileData::DType, int32_t> || std::is_same_v<typename DstTileData::DType, uint32_t> ||
+            std::is_same_v<typename DstTileData::DType, half> || std::is_same_v<typename DstTileData::DType, bfloat16_t> ||
+            std::is_same_v<typename DstTileData::DType, float>,
+        "Fix: Data type must be int8_t/uint8_t/int16_t/uint16_t/int32_t/uint32_t/half/bfloat16_t/float!");
+    static_assert(SrcTileData::Loc == pto::TileType::Mat, "Fix: Src TileType must be Mat!");
+    static_assert(DstTileData::Loc == pto::TileType::Right, "Fix: Dst TileType must be Right!");
+    static_assert(sizeof(typename DstTileData::DType) == sizeof(typename SrcTileData::DType),
+        "Fix: Source dtype must be same with dst dtype!");
+
+    static_assert((SrcTileData::layout == Layout::FRACTAL_Z), "TExtract: Source layout only support FRACTAL_Z.");
+    static_assert(DstTileData::SFractal == SLayout::ColMajor && DstTileData::isRowMajor,
+                 "TExtract: Destination layout only support SLayout is ColMajor ang BLayout is RowMajor.");
+}
+
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TEXTRACT_CONVTILE_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
+{
+    TextractConvTileCheck<DstTileData, SrcTileData>(dst, src);
+    constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename SrcTileData::DType);
+    if constexpr (SrcTileData::totalDimCount == 4) { // ConvTile layout is [C1HW,N/16,16,C0]
+        static_assert(SrcTileData::staticShape[2] == FRACTAL_NZ_ROW && SrcTileData::staticShape[3] == c0ElemCount,
+            "Fix: The SrcTileData last 2 dim must be static and satisfy [16, 32 / sizeof(DataType)]");
+        uint16_t srcCol = src.GetShape(1) * src.GetShape(2);
+        TExtractToBConv<DstTileData, SrcTileData>(dst.data(), src.data(),
+            srcCol, dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
+    } else { //  [C1,H,W,N,C0]
+        TExtractToBConv<DstTileData, SrcTileData>(dst.data(), src.data(),
+            src.GetShape(3), dst.GetValidRow(), dst.GetValidCol(), indexRow, indexCol);
+    }
+}
+
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
+{
+    if constexpr (is_conv_tile_v<SrcTileData>) {
+        TEXTRACT_CONVTILE_IMPL(dst, src, indexRow, indexCol);
+    } else {
+        TEXTRACT_TILE_IMPL(dst, src, indexRow, indexCol);
     }
 }
 
