@@ -181,6 +181,22 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupT &parallelGroup, GlobalDstData &dstGl
     return {};
 }
 
+// ============================================================================
+// TALLREDUCE: Reduce operation with ping-pong double buffering
+// Only the root needs to execute. Non-root ranks ensure source buffers are ready.
+// ============================================================================
+
+template <typename ParallelGroupT, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TREDUCE_PINGPONG(ParallelGroupT &parallelGroup, GlobalDstData &dstGlobalData, 
+                                     TileData &accTileData, TileData &pingTileData, TileData &pongTileData, 
+                                     ReduceOp op, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    TREDUCE_PINGPONG_IMPL(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
+    return {};
+}
+
+
 template <typename GlobalSignalData>
 PTO_INST void TBARRIER(GlobalSignalData *barrierSignals, int nranks, int my_rank)
 {
