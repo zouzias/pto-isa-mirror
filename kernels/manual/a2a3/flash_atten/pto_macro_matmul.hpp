@@ -139,13 +139,22 @@ namespace pto{
             static_assert(LAYOUT == layout, "Layout mismatch: template LAYOUT does not match deduced layout from tile SLayouts. "
                                              "Check SLayout of TileDataA and TileDataB.");
         }
-        
 
+        const uint64_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N);
+        
+        static_assert(Tile_K >= Cube_K, 
+                "Tile_K must be >= calculated Cube_K. Either increase Tile_K or adjust Cube_M/Cube_N.");
+
+        // Only NT layout supports inner K loop (Tile_K/Cube_K > 1) due to TEXTRACT memory layout constraints
+        // For NN, TN, and TT layouts, outer K loop is not supported, so Tile_K must equal Cube_K
+        static_assert(layout == layout_t::NT || Tile_K == Cube_K,
+                      "Only NT layout supports inner K loop (Tile_K/Cube_K > 1). "
+                      "For NN, TN, and TT layouts, Tile_K must equal Cube_K (K loop at L1 level not supported).");
 
 
         // Ping-pong is used to overlap TEXTRACT (L1->L0) with TMATMUL on alternating buffers.
         uint64_t pingpong = getPingPong(0);
-        const uint64_t Cube_K = calculateFittingCubeK(Cube_M, Cube_N) > Tile_K ? Tile_K : calculateFittingCubeK(Cube_M, Cube_N);
+        
         const uint64_t kSegments = (uint64_t)(Tile_K / Cube_K);
         for (uint64_t k = 0 ; k < kSegments; k++){
             using LeftTile = TileLeft<half, Cube_M, Cube_K, Cube_M, Cube_K>;
