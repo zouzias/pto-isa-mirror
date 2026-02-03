@@ -303,7 +303,7 @@ PTO_INTERNAL bool init_sdma_config(__gm__ uint8_t* context_gm,
 
     uint32_t used_block_dim = AscendC::Std::min<uint32_t>(comm_block_dim, SDMA_MAX_CHAN / config.queue_num);
 
-    config.block_bytes = 1024 * 1024;
+    config.block_bytes = 32 * 1024;
     config.per_core_bytes = message_len / used_block_dim;
 
     uint64_t extra_bytes = message_len % used_block_dim;
@@ -340,7 +340,6 @@ PTO_INTERNAL void prepare_workspace(__gm__ uint8_t* workspace,
 
     layout.send_workspace = workspace;
     layout.recv_workspace = my_workspace;
-    layout.remote_recv_workspace = layout.recv_workspace;
 
     set_value<uint32_t>((__gm__ uint8_t*)layout.send_workspace, tmp_buf, config.queue_num);
 }
@@ -404,7 +403,7 @@ PTO_INTERNAL void submit_flag_transfer_sqes(
 
         add_one_memcpy_sqe(channel_info,
                            layout.send_workspace,
-                           layout.remote_recv_workspace + queue_id * SDMA_FLAG_LENGTH,
+                           layout.recv_workspace,
                            0, 8, sq_tail[queue_id],
                            sq_tail[queue_id] - channel_info->sq_head);
 
@@ -419,8 +418,7 @@ PTO_INTERNAL void flush_cache_and_ring_doorbell(
     uint32_t* sq_tail,
     TmpBuf& tmp_buf)
 {
-    // Include both data transfer SQEs and flag transfer SQE (+1 for flag)
-    auto item_size = (config.iter_num + 1) * sizeof(batch_write_item_t);
+    auto item_size = config.iter_num * sizeof(batch_write_item_t);
     for (uint8_t queue_id = 0; queue_id < config.queue_num; queue_id++) {
         __gm__ batch_write_channel_info_t* channel_info =
             batch_write_channel_info + queue_id;
@@ -447,20 +445,19 @@ PTO_INTERNAL bool poll_for_completion(
         __gm__ batch_write_channel_info_t* channel_info =
             batch_write_channel_info + queue_id;
 
-        auto local_recv_workspace = layout.recv_workspace + queue_id * SDMA_FLAG_LENGTH;
-        auto remote_recv_workspace = layout.remote_recv_workspace + queue_id * SDMA_FLAG_LENGTH;
-
         uint32_t send_value = 0;
         uint32_t times = 0;
 
         while (send_value == 0 && times < max_times) {
-            copy_gm_to_gm<uint32_t>(local_recv_workspace, remote_recv_workspace, 1, tmp_buf);
-            send_value = get_value<uint32_t>(local_recv_workspace, tmp_buf);
+            send_value = get_value<uint32_t>(layout.recv_workspace, tmp_buf);
             times++;
         }
 
-        set_value<uint32_t>(remote_recv_workspace, tmp_buf, 0);
-        set_value<uint32_t>(local_recv_workspace, tmp_buf, 0);
+        if (send_value == 0) {
+            return false;
+        }
+
+        set_value<uint32_t>(layout.recv_workspace, tmp_buf, 0);
 
         set_value<uint32_t>(((__gm__ uint8_t*)channel_info) + 4, tmp_buf, sq_tail[queue_id]);
     }
@@ -528,8 +525,12 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
 
     flush_cache_and_ring_doorbell(batch_write_channel_info, config, sq_tail, tmp_buf);
 
-    (void)poll_for_completion(batch_write_channel_info, workspace_layout, config,
-                              sq_tail, tmp_buf);
+    if (!poll_for_completion(batch_write_channel_info, workspace_layout, config,
+                             sq_tail, tmp_buf)) {
+        AscendC::PipeBarrier<PIPE_ALL>();
+        localPipe.Destroy();
+        return;
+    }
 
     AscendC::PipeBarrier<PIPE_ALL>();
     localPipe.Destroy();

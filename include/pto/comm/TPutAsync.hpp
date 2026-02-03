@@ -17,11 +17,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/comm_types.hpp"
 #include "pto/comm/sdma_async_intrin.hpp"
 
-#if defined(CANN_SHMEM)
-// Include SHMEM library's SDMA implementation for better compatibility
-#include "shmemi_device_sdma.hpp"
-#endif
-
 namespace pto {
 namespace comm {
 
@@ -55,20 +50,9 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
     const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
     
     const uint32_t totalElems = gShape0 * gShape1 * gShape2 * gShape3 * gShape4;
-    const uint64_t transferSize = totalElems * sizeof(T);
     
-#if defined(CANN_SHMEM)
-    // Use SHMEM library's SDMA implementation for better compatibility
-    aclshmemi_sdma_post_send(
-        reinterpret_cast<__gm__ uint8_t*>(dstGlobalData.data()),
-        reinterpret_cast<__gm__ uint8_t*>(srcGlobalData.data()),
-        0,  // opcode
-        transferSize);
-    uint64_t eventHandle = reinterpret_cast<uint64_t>(srcGlobalData.data());
-#else
     uint64_t eventHandle = sdma::__sdma_put_async(dstGlobalData.data(), srcGlobalData.data(),
-                                                  transferSize);
-#endif
+                                                  totalElems * sizeof(T));
     
     return AsyncEvent(eventHandle, DmaEngine::SDMA);
 }

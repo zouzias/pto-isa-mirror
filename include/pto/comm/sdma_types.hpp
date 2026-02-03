@@ -42,7 +42,6 @@ struct sdma_config_t {
 struct workspace_layout_t {
     __gm__ uint8_t* send_workspace;        // Local send flag workspace
     __gm__ uint8_t* recv_workspace;        // Local receive flag workspace
-    __gm__ uint8_t* remote_recv_workspace; // Remote receive flag workspace
 };
 
 // ============================================================================
