@@ -26,24 +26,23 @@ __global__ AICORE void runSoftmax_dn_fusion( __gm__ aclFloat16 __out__ *x_exp,
                                    __gm__ float __out__ *new_global_sum, 
                                    __gm__ float __out__ *exp_max) {
 
-    //TODO: change shape order
-    using GlobalData_F = GlobalTensor<float,Shape<1, 1, 1, headSize, seq>, pto::Stride<1, 1, 1, seq, 1>>;
-    using GlobalData_U16 = GlobalTensor<uint16_t, Shape<1, 1, 1, headSize, seq>, pto::Stride<1, 1, 1, seq, 1>>;
-    using GlobalData_U8 = GlobalTensor<uint8_t, Shape<1, 1, 1, headSize, seq>, pto::Stride<1, 1, 1, seq, 1>>;
+    using GlobalData_F = GlobalTensor<float,Shape<1, 1, 1, seq, headSize>, pto::Stride<1, 1, 1, headSize, 1>>;
+    using GlobalData_U16 = GlobalTensor<uint16_t, Shape<1, 1, 1, seq, headSize>, pto::Stride<1, 1, 1, headSize, 1>>;
+    using GlobalData_U8 = GlobalTensor<uint8_t, Shape<1, 1, 1, seq, headSize>, pto::Stride<1, 1, 1, headSize, 1>>;
     using GlobalReduce_F = GlobalTensor<float, Shape<1, 1, 1, 1, headSize>, pto::Stride<1, 1, 1, 1, 1>>;
 
-    using TileData_F = Tile<TileType::Vec, float, headSize, seq, BLayout::RowMajor, -1, -1>;
-    using TileData_U8 = Tile<TileType::Vec, uint8_t, headSize, seq, BLayout::RowMajor, -1, -1>;
-    using TileData_H = Tile<TileType::Vec, half, headSize, seq, BLayout::RowMajor, -1, -1>;
+    using TileData_F = Tile<TileType::Vec, float, seq, headSize, BLayout::RowMajor, -1, -1>;
+    using TileData_U8 = Tile<TileType::Vec, uint8_t, seq, headSize, BLayout::RowMajor, -1, -1>;
+    using TileData_H = Tile<TileType::Vec, half, seq, headSize, BLayout::RowMajor, -1, -1>;
     using ReduceTile_F = Tile<TileType::Vec, float, 1, headSize, BLayout::RowMajor, -1, -1>;
-    TileData_F src0Tile(headSize, seq);
-    TileData_U8 src1Tile(headSize, seq);
+    TileData_F src0Tile(seq, headSize);
+    TileData_U8 src1Tile(seq, headSize);
     ReduceTile_F dst0Tile(1, headSize);
     ReduceTile_F dst1Tile(1, headSize);
     ReduceTile_F dst2Tile(1, headSize);
     ReduceTile_F dst3Tile(1, headSize);
     ReduceTile_F dst4Tile(1, headSize);
-    TileData_H dst5Tile(headSize, seq);
+    TileData_H dst5Tile(seq, headSize);
 
     constexpr std::size_t float_tile_bytes = static_cast<std::size_t>(headSize) * static_cast<std::size_t>(seq) * sizeof(float);
     constexpr std::size_t U16_tile_bytes = static_cast<std::size_t>(headSize) * static_cast<std::size_t>(seq) * sizeof(uint16_t);

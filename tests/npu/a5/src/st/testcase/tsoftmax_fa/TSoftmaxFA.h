@@ -36,8 +36,8 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
     float scale = 0.8;
     float keepProb = 1.0;
 
-    unsigned ubM = TileDataD2::Rows;
-    unsigned ubN = TileDataD2::Cols;
+    unsigned ubM = TileDataD2::Cols;
+    unsigned ubN = TileDataD2::Rows;
 
     __VEC_SCOPE__{
         // --------- flash softmax -------------
@@ -199,12 +199,12 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 
             vmuls(vreg_x_f32_a, vreg_x_f32_a, scale, preg_108);
             vmuls(vreg_x_f32_b, vreg_x_f32_b, scale, preg_108);
-            vexpdif(vreg_x_exp_even, vreg_x_f32_a, max_0a, preg_134, PART_ODD);// 0 ²»¸ÐÖªpart_xx
+            vexpdif(vreg_x_exp_even, vreg_x_f32_a, max_0a, preg_134, PART_ODD);// 0 ??????part_xx
             vexpdif(vreg_x_exp_odd, vreg_x_f32_b, max_0a, preg_134, PART_ODD); // 1
 
             vmuls(vreg_x_f32_1_a, vreg_x_f32_1_a, scale, preg_108);
             vmuls(vreg_x_f32_1_b, vreg_x_f32_1_b, scale, preg_108);
-            vexpdif(vreg_x_exp_even_1, vreg_x_f32_1_a, max_0a, preg_134, PART_ODD);// 0 ²»¸ÐÖªpart_xx
+            vexpdif(vreg_x_exp_even_1, vreg_x_f32_1_a, max_0a, preg_134, PART_ODD);// 0 ??????part_xx
             vexpdif(vreg_x_exp_odd_1, vreg_x_f32_1_b, max_0a, preg_134, PART_ODD); // 1
 
             // vmuls(vreg_x_exp_even, vreg_x_exp_even, 1.0f, preg_108);
@@ -292,9 +292,8 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, T
 
     float scale = 0.8;
     float keepProb = 1.0;
-    unsigned ubM_ = TileDataD2::Rows;
-    // unsigned ubM_ = 128;
-    unsigned ubN_ = TileDataD2::Cols;
+    unsigned ubM_ = TileDataD2::Cols;
+    unsigned ubN_ = TileDataD2::Rows;
     using T = typename TileDataS1::DType;
     using T1 = typename TileDataS1::DType;
     using T2 = typename TileDataD2::DType;
@@ -351,7 +350,7 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, T
                 RegTensor<T> v_local_max, v_global_max, v_expdif;
                 for (uint16_t i = 0; i < (uint16_t)(reduceRow); ++i) {
                     for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
-                        // 这里多个ld
+                        // ÕâÀï¶à¸öld
                         vlds(v_local_max,  local_max_Ptr + i * ubM_, j * elementsPerRepeat, NORM);
                         vlds(v_global_max, new_global_max_Ptr + i * ubM_, j * elementsPerRepeat, NORM);
 
@@ -651,52 +650,52 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, T
             vector_f16 vreg_x_exp_f16_1_pack;
             vector_f16 vreg_x_exp_f16_1_packa;
             //NZ output
-            for (uint16_t i0 = 0; i0 < uint16_t(ubN_ / 4) ; ++i0) {
-                vector_address areg_x_2 = vag_b16(128);
-                vld(vreg_x_exp_even_f16, ((__ubuf__ half *)input_x_Ptr), areg_x_2, NORM);
-                vld(vreg_x_exp_odd_f16,  ((__ubuf__ half *)input_x_Ptr+ ubN_*ubM_), areg_x_2, NORM);
-                vld(vreg_x_exp_even_f16_1,((__ubuf__ half *)input_x_Ptr + ubN_*ubM_/2), areg_x_2, NORM);
-                vld(vreg_x_exp_odd_f16_1, ((__ubuf__ half *)input_x_Ptr+ ubN_*ubM_ + ubN_*ubM_/2), areg_x_2, NORM);
+            // for (uint16_t i0 = 0; i0 < uint16_t(ubN_ / 4) ; ++i0) {
+            //     vector_address areg_x_2 = vag_b16(128);
+            //     vld(vreg_x_exp_even_f16, ((__ubuf__ half *)input_x_Ptr), areg_x_2, NORM);
+            //     vld(vreg_x_exp_odd_f16,  ((__ubuf__ half *)input_x_Ptr+ ubN_*ubM_), areg_x_2, NORM);
+            //     vld(vreg_x_exp_even_f16_1,((__ubuf__ half *)input_x_Ptr + ubN_*ubM_/2), areg_x_2, NORM);
+            //     vld(vreg_x_exp_odd_f16_1, ((__ubuf__ half *)input_x_Ptr+ ubN_*ubM_ + ubN_*ubM_/2), areg_x_2, NORM);
                 
-                vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
-                vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
+            //     vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
+            //     vdintlv(vreg_x_exp_f16_1_pack, vreg_x_exp_f16_1_packa, vreg_x_exp_even_f16_1, vreg_x_exp_odd_f16_1);
                 
-                vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) x_exp_Ptr),
-                        0x810001,                                                             
-                        preg_136,                                                                 
-                        POST_UPDATE);                                                             
-                vsstb(vreg_x_exp_f16_1_pack, ((__ubuf__ half *&) x_exp_1),
-                        0x810001,                                                                 
-                        preg_136,                                                                
-                        POST_UPDATE); 
+            //     vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) x_exp_Ptr),
+            //             0x810001,                                                             
+            //             preg_136,                                                                 
+            //             POST_UPDATE);                                                             
+            //     vsstb(vreg_x_exp_f16_1_pack, ((__ubuf__ half *&) x_exp_1),
+            //             0x810001,                                                                 
+            //             preg_136,                                                                
+            //             POST_UPDATE); 
                 
-                // vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) x_exp_Ptr),
-                //         0x810001,
-                //         // 0x810000,                                                         
-                //         preg_136);                                                             
-                // vsstb(vreg_x_exp_f16_1_pack, ((__ubuf__ half *&) x_exp_1),
-                //         0x810001,  
-                //         // 0x810000,                                                                  
-                //         preg_136); 
-                // // x_exp_Ptr += i0*129*32+32;
-                // // x_exp_1 += i0*129*32+32;
-                // // x_exp_Ptr += i0*129*32+16;
-                // // x_exp_1 += i0*129*32+16;
-                // // x_exp_Ptr += i0*32;
-                // x_exp_Ptr += 8;  //32B for half, should be 16, why 8?
-                // x_exp_1 += 8;
-            }
+            //     // vsstb(vreg_x_exp_f16_pack, ((__ubuf__ half *&) x_exp_Ptr),
+            //     //         0x810001,
+            //     //         // 0x810000,                                                         
+            //     //         preg_136);                                                             
+            //     // vsstb(vreg_x_exp_f16_1_pack, ((__ubuf__ half *&) x_exp_1),
+            //     //         0x810001,  
+            //     //         // 0x810000,                                                                  
+            //     //         preg_136); 
+            //     // // x_exp_Ptr += i0*129*32+32;
+            //     // // x_exp_1 += i0*129*32+32;
+            //     // // x_exp_Ptr += i0*129*32+16;
+            //     // // x_exp_1 += i0*129*32+16;
+            //     // // x_exp_Ptr += i0*32;
+            //     // x_exp_Ptr += 8;  //32B for half, should be 16, why 8?
+            //     // x_exp_1 += 8;
+            // }
 
             //ND output
-            // for (uint16_t i0 = 0; i0 < uint16_t(ubN_ / 2) ; ++i0) {
-            //     vector_address areg_x_2 = vag_b16(256);
-            //     vld(vreg_x_exp_even_f16, ((__ubuf__ half *)input_x_Ptr), areg_x_2, NORM);
-            //     vld(vreg_x_exp_odd_f16,  ((__ubuf__ half *)input_x_Ptr + 128), areg_x_2, NORM);
+            for (uint16_t i0 = 0; i0 < uint16_t(ubN_ / 2) ; ++i0) {
+                vector_address areg_x_2 = vag_b16(256);
+                vld(vreg_x_exp_even_f16, ((__ubuf__ half *)input_x_Ptr), areg_x_2, NORM);
+                vld(vreg_x_exp_odd_f16,  ((__ubuf__ half *)input_x_Ptr + 128), areg_x_2, NORM);
 
-            //     vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
+                vdintlv(vreg_x_exp_f16_pack, vreg_x_exp_f16_packa, vreg_x_exp_even_f16, vreg_x_exp_odd_f16);
 
-            //     vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_136);
-            // }
+                vsts(vreg_x_exp_f16_pack, ((__ubuf__ half *) x_exp_Ptr + i0*128), 0, NORM_B16, preg_136);
+            }
         }
 
         
@@ -1220,6 +1219,215 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
         }
     }
 }
+
+/*
+//optimized for 64*128 ND
+template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init>
+ __tf__ AICORE void TSOFTMAX_ND_FUSION(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
+                             TileDataD1 &local_max, TileDataD1 &local_sum,
+                             TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
+                             TileDataD1 &exp_max) {
+
+    __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
+    __ubuf__ typename TileDataS1::DType *input_x_Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(input_x.data());
+    __ubuf__ typename TileDataS2::DType *bit_mask_Ptr = (__ubuf__ typename TileDataS2::DType *)__cce_get_tile_ptr(bit_mask.data());
+    __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
+    __ubuf__ typename TileDataD1::DType *local_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_sum.data());
+    __ubuf__ typename TileDataD1::DType *new_global_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());
+    __ubuf__ typename TileDataD1::DType *new_global_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
+    __ubuf__ typename TileDataD1::DType *exp_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(exp_max.data());
+
+    float scale = 0.8;
+    float keepProb = 1.0;
+
+    unsigned ubM = TileDataD2::Rows;
+    unsigned ubN = TileDataD2::Cols;
+    unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileDataS1::DType);
+
+    uint16_t repeatTimes = CeilDivision(ubN, elementsPerRepeat);
+
+    if(init){
+        __VEC_SCOPE__{
+            __ubuf__ float *src0_ub      = (__ubuf__ float *)input_x_Ptr;
+            __ubuf__ float *src0_ub_bkup = (__ubuf__ float *)input_x_Ptr;
+            __ubuf__ float *max_ptr_bkup = (__ubuf__ float *)new_global_max_Ptr;
+            __ubuf__ float *sum_ptr_bkup = (__ubuf__ float *)new_global_sum_Ptr;
+            __ubuf__ half *x_exp_bkup = (__ubuf__ half *)x_exp_Ptr;
+        
+            vector_f32 vb32_in_even, vb32_in_odd, vb32_in_even_unroll, vb32_in_odd_unroll;
+            vector_f32 vb32_max, vb32_max_unroll, vb32_row_max, vb32_row_max_unroll;
+            vector_bool preg_b32_all = pset_b32(PAT_ALL);
+            vector_bool preg_b16_all = pset_b16(PAT_ALL);
+            vector_bool preg_b8_all = pset_b8(PAT_ALL);
+            constexpr auto distValue =std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<typename TileDataS1::DType, DistVST::DIST_ONEPT>())>();
+            vector_align ureg_max, ureg_max_unroll;
+
+            // Finding max per row, Assumptions ubM <=64 (valid rows), ubN=128 (valid cols), if ubm is more than 64, need one more outer loop
+            // Assuming data is continuous, validRows = Static Rows, validCols = Static Cols 
+            for (uint16_t i = 0; i < uint16_t(ubM/2) ; ++i) {
+                vlds(vb32_in_even,        vb32_in_odd,        src0_ub, 128, DINTLV_B32, POST_UPDATE);
+                vlds(vb32_in_even_unroll, vb32_in_odd_unroll, src0_ub, 128, DINTLV_B32, POST_UPDATE);
+                vmax(vb32_max,        vb32_in_even,        vb32_in_odd,         preg_b32_all);
+                vmax(vb32_max_unroll, vb32_in_even_unroll, vb32_in_odd_unroll,  preg_b32_all);
+                vcmax(vb32_row_max,        vb32_max,        preg_b32_all, MODE_ZEROING);
+                vcmax(vb32_row_max_unroll, vb32_max_unroll, preg_b32_all, MODE_ZEROING);
+                vstus(ureg_max, 1, vb32_row_max,        new_global_max_Ptr, POST_UPDATE);
+                vstus(ureg_max, 1, vb32_row_max_unroll, new_global_max_Ptr, POST_UPDATE);
+            }
+            vstas(ureg_max,  new_global_max_Ptr, 0, POST_UPDATE);
+            mem_bar(VST_VLD);
+//-------------------------------------------------------------------------------------
+            // Compute exp and sum
+            src0_ub = src0_ub_bkup; // reset input pointer
+            new_global_max_Ptr = max_ptr_bkup; // reset new_global_max pointer
+            vector_align ureg_sum;
+            vector_f32 vb32_max_0, vb32_max_1, vreg0, vreg1, vreg2, vreg3, vb32_add0, vb32_add1, vb32_sum0, vb32_sum1;
+            vector_f16 vb16_x_exp_0, vb16_x_exp_1, vb16_x_exp_2, vb16_x_exp_3;
+            for (uint16_t j = 0; j < (uint16_t)(ubM / 2); ++j) {
+                vlds(vb32_max_0, new_global_max_Ptr, 1, BRC_B32, POST_UPDATE);
+                vmuls(vb32_max_0, vb32_max_0, scale, preg_b32_all);
+
+                vlds(vreg0, vreg1, src0_ub, 128, DINTLV_B32, POST_UPDATE);        
+                vmuls(vreg0, vreg0, scale, preg_b32_all);
+                vmuls(vreg1, vreg1, scale, preg_b32_all);
+                
+                vlds(vreg2, vreg3, src0_ub, 128, DINTLV_B32, POST_UPDATE);
+                vmuls(vreg2, vreg2, scale, preg_b32_all);
+                vmuls(vreg3, vreg3, scale, preg_b32_all);
+
+                vlds(vb32_max_1, new_global_max_Ptr, 1, BRC_B32, POST_UPDATE);
+                vmuls(vb32_max_1, vb32_max_1, scale, preg_b32_all);
+
+                vexpdif(vreg0, vreg0, vb32_max_0, preg_b32_all, PART_EVEN); // 0 2 4 6 8 10
+                vexpdif(vreg1, vreg1, vb32_max_0, preg_b32_all, PART_EVEN); // 1 3 5 7 9 11
+                vexpdif(vreg2, vreg2, vb32_max_1, preg_b32_all, PART_EVEN); // 64 66 68 70 72 
+                vexpdif(vreg3, vreg3, vb32_max_1, preg_b32_all, PART_EVEN); // 65 67 69 71 73
+                vadd(vb32_add0, vreg0, vreg1, preg_b32_all, MODE_ZEROING); 
+                vadd(vb32_add1, vreg2, vreg3, preg_b32_all, MODE_ZEROING);
+
+                vcadd(vb32_sum0, vb32_add0, preg_b32_all, MODE_ZEROING);
+                vcadd(vb32_sum1, vb32_add1, preg_b32_all, MODE_ZEROING);
+                vstus(ureg_sum, 1, vb32_sum0, new_global_sum_Ptr, POST_UPDATE);
+                vstus(ureg_sum, 1, vb32_sum1, new_global_sum_Ptr, POST_UPDATE);
+                
+                vcvt(vb16_x_exp_0, vreg0, preg_b32_all, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING); 
+                vcvt(vb16_x_exp_1, vreg1, preg_b32_all, ROUND_R, RS_ENABLE, PART_ODD, MODE_ZEROING);
+                vor(vb16_x_exp_0, vb16_x_exp_0, vb16_x_exp_1, preg_b16_all, MODE_ZEROING);
+
+                vcvt(vb16_x_exp_2, vreg2, preg_b32_all, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+                vcvt(vb16_x_exp_3, vreg3, preg_b32_all, ROUND_R, RS_ENABLE, PART_ODD, MODE_ZEROING);
+                vor(vb16_x_exp_2, vb16_x_exp_2, vb16_x_exp_3, preg_b16_all, MODE_ZEROING);
+                
+                vsts(vb16_x_exp_0, (__ubuf__ half *&) x_exp_Ptr, 128, NORM_B16, preg_b16_all, POST_UPDATE);
+                vsts(vb16_x_exp_2, (__ubuf__ half *&) x_exp_Ptr, 128, NORM_B16, preg_b16_all, POST_UPDATE);
+            }
+            vstas(ureg_sum, new_global_sum_Ptr, 0, POST_UPDATE);
+        }
+    }
+    else {
+        __VEC_SCOPE__ {
+            __ubuf__ float *src0_ub         = (__ubuf__ float *)input_x_Ptr;
+            __ubuf__ float *src0_ub_bkup    = (__ubuf__ float *)input_x_Ptr;
+            __ubuf__ float *local_max_bkup  = (__ubuf__ float *)local_max_Ptr;
+            __ubuf__ float *local_sum_bkup  = (__ubuf__ float *)local_sum_Ptr;
+            __ubuf__ float *global_max_bkup = (__ubuf__ float *)new_global_max_Ptr;
+            __ubuf__ float *global_sum_bkup = (__ubuf__ float *)new_global_sum_Ptr;
+            __ubuf__ half *x_exp_bkup       = (__ubuf__ half *)x_exp_Ptr;
+        
+            vector_f32 vb32_in_even, vb32_in_odd, vb32_in_even_unroll, vb32_in_odd_unroll;
+            vector_f32 vb32_max, vb32_max_unroll, vb32_row_max, vb32_row_max_unroll;
+            vector_bool preg_b32_all = pset_b32(PAT_ALL);
+            vector_bool preg_b16_all = pset_b16(PAT_ALL);
+            vector_bool preg_b8_all  = pset_b8(PAT_ALL);
+            vector_align ureg_max;
+
+            // ----------------Updating Max Per Row-------------------------
+            // Finding max per row, Assumptions ubM <=64 (valid rows), ubN=128 (valid cols), if ubm is more than 64, need one more outer loop
+            // Assuming data is continuous, validRows = Static Rows, validCols = Static Cols 
+            for (uint16_t i = 0; i < uint16_t(ubM/2) ; ++i) {
+                vlds(vb32_in_even,        vb32_in_odd,        src0_ub, 128, DINTLV_B32, POST_UPDATE);
+                vlds(vb32_in_even_unroll, vb32_in_odd_unroll, src0_ub, 128, DINTLV_B32, POST_UPDATE);
+                vmax(vb32_max,        vb32_in_even,        vb32_in_odd,         preg_b32_all);
+                vmax(vb32_max_unroll, vb32_in_even_unroll, vb32_in_odd_unroll,  preg_b32_all);
+                vcmax(vb32_row_max,        vb32_max,        preg_b32_all, MODE_ZEROING);
+                vcmax(vb32_row_max_unroll, vb32_max_unroll, preg_b32_all, MODE_ZEROING);
+                vstus(ureg_max, 1, vb32_row_max,        local_max_Ptr, POST_UPDATE);
+                vstus(ureg_max, 1, vb32_row_max_unroll, local_max_Ptr, POST_UPDATE);
+            }
+            vstas(ureg_max,  local_max_Ptr, 0, POST_UPDATE);
+            mem_bar(VST_VLD);
+            //--------------------------Updating Global Max------------------------
+            local_max_Ptr = local_max_bkup; // reset local_max pointer
+            vector_f32 vb32_local_max, vb32_global_max, vreg_exp_max;
+            
+            vlds(vb32_local_max,  local_max_Ptr,      0, NORM);
+            vlds(vb32_global_max, new_global_max_Ptr, 0, NORM);
+            vmax(vb32_local_max, vb32_local_max,  vb32_global_max, preg_b32_all, MODE_ZEROING);
+            vsub(vreg_exp_max,   vb32_global_max, vb32_local_max,  preg_b32_all, MODE_ZEROING);
+            vsts(vb32_local_max, new_global_max_Ptr, 0, NORM_B32, preg_b32_all);
+            
+            vmuls(vreg_exp_max, vreg_exp_max, scale, preg_b32_all, MODE_ZEROING);
+            vexp(vreg_exp_max, vreg_exp_max, preg_b32_all, MODE_ZEROING);
+            vsts(vreg_exp_max, exp_max_Ptr, 0, NORM_B32, preg_b32_all);
+            mem_bar(VST_VLD);
+            //-----------------------Calculating local sum and exp--------------------------
+            src0_ub = src0_ub_bkup; // reset input pointer
+            new_global_max_Ptr = global_max_bkup; // reset new_global_max pointer
+            vector_align ureg_sum;
+            vector_f32 vb32_max_0, vb32_max_1, vreg0, vreg1, vreg2, vreg3, vb32_add0, vb32_add1, vb32_sum0, vb32_sum1;
+            vector_f16 vb16_x_exp_0, vb16_x_exp_1, vb16_x_exp_2, vb16_x_exp_3;
+            vector_f32 vb32_local_sum, vb32_global_sum;
+            for (uint16_t j = 0; j < (uint16_t)(ubM / 2); ++j) {
+                vlds(vb32_max_0, new_global_max_Ptr, 1, BRC_B32, POST_UPDATE);
+                vmuls(vb32_max_0, vb32_max_0, scale, preg_b32_all);
+
+                vlds(vreg0, vreg1, src0_ub, 128, DINTLV_B32, POST_UPDATE);        
+                vmuls(vreg0, vreg0, scale, preg_b32_all);
+                vmuls(vreg1, vreg1, scale, preg_b32_all);
+                
+                vlds(vreg2, vreg3, src0_ub, 128, DINTLV_B32, POST_UPDATE);
+                vmuls(vreg2, vreg2, scale, preg_b32_all);
+                vmuls(vreg3, vreg3, scale, preg_b32_all);
+
+                vlds(vb32_max_1, new_global_max_Ptr, 1, BRC_B32, POST_UPDATE);
+                vmuls(vb32_max_1, vb32_max_1, scale, preg_b32_all);
+
+                vexpdif(vreg0, vreg0, vb32_max_0, preg_b32_all, PART_EVEN); // 0 2 4 6 8 10
+                vexpdif(vreg1, vreg1, vb32_max_0, preg_b32_all, PART_EVEN); // 1 3 5 7 9 11
+                vexpdif(vreg2, vreg2, vb32_max_1, preg_b32_all, PART_EVEN); // 64 66 68 70 72 
+                vexpdif(vreg3, vreg3, vb32_max_1, preg_b32_all, PART_EVEN); // 65 67 69 71 73
+                vadd(vb32_add0, vreg0, vreg1, preg_b32_all, MODE_ZEROING); 
+                vadd(vb32_add1, vreg2, vreg3, preg_b32_all, MODE_ZEROING);
+
+                vcadd(vb32_sum0, vb32_add0, preg_b32_all, MODE_ZEROING);
+                vcadd(vb32_sum1, vb32_add1, preg_b32_all, MODE_ZEROING);
+                vstus(ureg_sum, 1, vb32_sum0, local_sum_Ptr, POST_UPDATE);
+                vstus(ureg_sum, 1, vb32_sum1, local_sum_Ptr, POST_UPDATE);
+                
+                vcvt(vb16_x_exp_0, vreg0, preg_b32_all, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING); 
+                vcvt(vb16_x_exp_1, vreg1, preg_b32_all, ROUND_R, RS_ENABLE, PART_ODD,  MODE_ZEROING);
+                vor(vb16_x_exp_0, vb16_x_exp_0, vb16_x_exp_1, preg_b16_all, MODE_ZEROING);
+
+                vcvt(vb16_x_exp_2, vreg2, preg_b32_all, ROUND_R, RS_ENABLE, PART_EVEN, MODE_ZEROING);
+                vcvt(vb16_x_exp_3, vreg3, preg_b32_all, ROUND_R, RS_ENABLE, PART_ODD,  MODE_ZEROING);
+                vor(vb16_x_exp_2, vb16_x_exp_2, vb16_x_exp_3, preg_b16_all, MODE_ZEROING);
+                
+                vsts(vb16_x_exp_0, (__ubuf__ half *&) x_exp_Ptr, 128, NORM_B16, preg_b16_all, POST_UPDATE);
+                vsts(vb16_x_exp_2, (__ubuf__ half *&) x_exp_Ptr, 128, NORM_B16, preg_b16_all, POST_UPDATE);
+            }
+            vstas(ureg_sum, local_sum_Ptr, 0, POST_UPDATE);
+            mem_bar(VST_VLD);
+            //-----------------------Updating Global Sum--------------------------
+            local_sum_Ptr = local_sum_bkup; // reset local_sum pointer
+            vlds(vb32_local_sum,  local_sum_Ptr,      0, NORM);
+            vlds(vb32_global_sum, new_global_sum_Ptr, 0, NORM);
+            vmul(vb32_global_sum, vreg_exp_max,    vb32_global_sum, preg_b32_all, MODE_ZEROING);
+            vadd(vb32_global_sum, vb32_global_sum, vb32_local_sum,  preg_b32_all, MODE_ZEROING);
+            vsts(vb32_global_sum, new_global_sum_Ptr, 0, NORM_B32,  preg_b32_all);
+        }
+    }
+}
+*/
 
 template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typename TileDataS2, int init>
     inline AICORE void TSOFTMAX_DN_NOFUSION(TileDataD1 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, //add inline keyword to enable vf fusion
