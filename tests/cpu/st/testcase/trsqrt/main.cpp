@@ -17,8 +17,7 @@ using namespace PtoTestCommon;
 template <int kRows, int kCols>
 void LaunchTRSQRT(float *out, float *src, void *stream);
 
-class TRSQRT_Test : public testing::Test {
-};
+class TRSQRT_Test : public testing::Test {};
 
 static std::string GetGoldenDir()
 {

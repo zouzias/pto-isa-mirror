@@ -32,7 +32,8 @@ constexpr unsigned MAX_TILE_SIZE = (0x10000 - 0x100);  // Maximum tile size
 constexpr uint32_t tileNum = 2;                        // tile number on one vector core
 
 template <typename T, unsigned tileRows, unsigned tileCols>
-AICORE void runTAdd(__gm__ T *z, __gm__ T *x, __gm__ T *y, uint32_t totalLength) {
+AICORE void runTAdd(__gm__ T *z, __gm__ T *x, __gm__ T *y, uint32_t totalLength)
+{
     set_mask_norm();
     set_vector_mask(-1, -1);
     static_assert(BLOCK_ROWS * BLOCK_COLS == BLOCK_DIM, "Wrong block tilling!");
@@ -117,7 +118,8 @@ AICORE void runTAdd(__gm__ T *z, __gm__ T *x, __gm__ T *y, uint32_t totalLength)
 }
 
 // kernel entry
-__global__ AICORE void add_custom(GM_ADDR x, GM_ADDR y, GM_ADDR z, uint32_t totalLength) {
+__global__ AICORE void add_custom(GM_ADDR x, GM_ADDR y, GM_ADDR z, uint32_t totalLength)
+{
     // Define the tile size
     constexpr unsigned tileRows = 20;
     constexpr unsigned tileCols = 2048;
@@ -125,18 +127,17 @@ __global__ AICORE void add_custom(GM_ADDR x, GM_ADDR y, GM_ADDR z, uint32_t tota
     runTAdd<half, tileRows, tileCols>((__gm__ half *)z, (__gm__ half *)x, (__gm__ half *)y, totalLength);
 }
 
-#else  // else branch for `#if defined(__DAV_C220_VEC__)`
+#else // else branch for `#if defined(__DAV_C220_VEC__)`
 
 // NOTE: `AICORE` is not recognized here
-__global__ [aicore] void add_custom(GM_ADDR x, GM_ADDR y, GM_ADDR z, uint32_t totalLength) {
+__global__[aicore] void add_custom(GM_ADDR x, GM_ADDR y, GM_ADDR z, uint32_t totalLength)
+{
     // do nothing for Cube branch, just ensure `add_custom` is defined globally
 }
 
-extern "C" void call_kernel(
-    uint32_t blockDim, void* stream,
-    uint8_t* x, uint8_t* y, uint8_t* z, int N)
+extern "C" void call_kernel(uint32_t blockDim, void *stream, uint8_t *x, uint8_t *y, uint8_t *z, int N)
 {
-    add_custom<<<blockDim, nullptr, stream>>>(x, y, z, N);
+    add_custom<<<blockDim, nullptr, stream> > >(x, y, z, N);
 }
 
 #endif
