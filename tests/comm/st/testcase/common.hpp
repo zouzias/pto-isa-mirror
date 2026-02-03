@@ -55,6 +55,60 @@ inline bool LoadEnv(ShmemEnv &env)
 }
 
 // ============================================================================
+// ShmemInit: Initialize shmem symmetric heap for sdma engine
+// ============================================================================
+inline int ShmemInitForSdma(const ShmemEnv &env)
+{
+#if defined(ASCEND_SHMEM)
+    shmem_init_attr_t *attr = nullptr;
+    const int ret = shmem_set_attr(env.rank, env.size, env.heapBytes, env.ipPort, &attr);
+    if (ret != 0) {
+        std::cerr << "[ERROR] shmem_set_attr failed with code: " << ret << std::endl;
+        return ret;
+    }
+    int initRet = shmem_init_attr(attr);
+    if (initRet != 0) {
+        std::cerr << "[ERROR] shmem_init_attr failed with code: " << initRet << std::endl;
+    }
+    return initRet;
+#elif defined(CANN_SHMEM)
+    aclshmemx_init_attr_t attributes;
+    
+    attributes.my_pe = env.rank;
+    attributes.n_pes = env.size;
+    attributes.local_mem_size = env.heapBytes;
+    
+    // Copy IP:port string
+    size_t ipLen = 0;
+    if (env.ipPort != nullptr) {
+        for (; ipLen < ACLSHMEM_MAX_IP_PORT_LEN - 1 && env.ipPort[ipLen] != '\0'; ++ipLen) {
+            attributes.ip_port[ipLen] = env.ipPort[ipLen];
+        }
+    }
+    attributes.ip_port[ipLen] = '\0';
+    
+    // Set option attributes
+    constexpr int attrVersion = (1 << 16) + sizeof(aclshmemx_init_attr_t);
+    constexpr int DEFAULT_TIMEOUT = 120;  // seconds
+    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_SDMA, 
+                              DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
+    
+    // Use default unique ID
+    aclshmemx_uniqueid_t defaultUid = ACLSHMEM_UNIQUEID_INITIALIZER;
+    attributes.comm_args = reinterpret_cast<void *>(&defaultUid);
+    
+    int initRet = aclshmemx_init_attr(ACLSHMEMX_INIT_WITH_DEFAULT, &attributes);
+    if (initRet != 0) {
+        std::cerr << "[ERROR] aclshmemx_init_attr failed with code: " << initRet << std::endl;
+    }
+    return initRet;
+#else
+    std::cerr << "[ERROR] No shmem backend defined (ASCEND_SHMEM or CANN_SHMEM)" << std::endl;
+    return -1;
+#endif
+}
+
+// ============================================================================
 // ShmemInit: Initialize shmem symmetric heap with given options
 // Adapted from ShmemBackend::Init in shmem_backend.hpp
 // ============================================================================
@@ -91,7 +145,7 @@ inline int ShmemInit(const ShmemEnv &env)
     // Set option attributes
     constexpr int attrVersion = (1 << 16) + sizeof(aclshmemx_init_attr_t);
     constexpr int DEFAULT_TIMEOUT = 120;  // seconds
-    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_SDMA, 
+    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE, 
                               DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
     
     // Use default unique ID

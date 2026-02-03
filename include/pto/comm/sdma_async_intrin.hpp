@@ -483,6 +483,7 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
         return;
     }
 
+    AscendC::TPipe localPipe;
     TmpBuf tmp_buf;
     GetTPipePtr()->InitBuffer(tmp_buf, UB_ALIGN_SIZE * 2);
 
@@ -528,6 +529,7 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
                               sq_tail, tmp_buf);
 
     AscendC::PipeBarrier<PIPE_ALL>();
+    localPipe.Destroy();
 }
 
 template <typename T>
