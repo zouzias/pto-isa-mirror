@@ -77,6 +77,7 @@ __global__ AICORE void TPutAsyncKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ 
     Global remoteRecvG(remote_recv_shmem, shape, stride);
     
     // TPUT_ASYNC: write local sendG to remote recvG (previous rank's recv buffer)
+    AscendC::TPipe pipe;
     auto put_event = pto::comm::TPUT_ASYNC(remoteRecvG, sendG);
     (void)put_event;
     

@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/sdma_types.hpp"
 #include "pto/comm/comm_types.hpp"
 #include "pto/pto-inst.hpp"
+#include <cstddef>
 #include <cstdint>
 
 namespace pto {
@@ -64,10 +65,68 @@ struct pto_sdma_op_res_info_t {
     uint64_t workspace_addr;
 };
 
+// Keep layout consistent with aclshmem_device_host_state_t in shmem_jxy.
+constexpr int PTO_ACLSHMEM_MAX_PES = 16384;
+constexpr int PTO_ACLSHMEM_MAX_TEAMS = 2048;
+
+using pto_aclshmem_team_t = int;
+using pto_aclshmemx_team_uniqueid_t = uint64_t;
+
+typedef struct {
+    int32_t version;
+    int32_t num_contexts;
+    pto_aclshmemx_team_uniqueid_t uniqueid;
+    char padding[48];
+} pto_aclshmem_team_config_t;
+
+typedef struct {
+    int mype;
+    int start;
+    int stride;
+    int size;
+    int team_idx;
+    pto_aclshmem_team_config_t config;
+    int32_t pe_mapping[2 * PTO_ACLSHMEM_MAX_PES];
+} pto_aclshmemx_team_t;
+
+typedef struct {
+    int64_t aclshmem_ub;
+    uint32_t ub_size;
+    uint32_t event_id;
+} pto_aclshmem_mte_config_t;
+
 struct pto_comm_global_state_t {
+    int version;
+    int mype;
+    int npes;
+    void *heap_base;
+    void *host_heap_base;
+
+    void **p2p_device_heap_base;
+    void **rdma_device_heap_base;
+    void **sdma_device_heap_base;
+
+    void **p2p_host_heap_base;
+    void **rdma_host_heap_base;
+    void **sdma_host_heap_base;
+
+    uint8_t topo_list[PTO_ACLSHMEM_MAX_PES];
+    size_t heap_size;
+
+    pto_aclshmemx_team_t *team_pools[PTO_ACLSHMEM_MAX_TEAMS];
+
+    uint64_t sync_pool;
+    uint64_t sync_counter;
+    uint64_t core_sync_pool;
+    uint64_t core_sync_counter;
+
+    bool is_aclshmem_initialized;
+    bool is_aclshmem_created;
+
+    pto_aclshmem_mte_config_t mte_config;
+    uint64_t qp_info;
+
     uint64_t sdma_workspace_addr;
-    uint64_t sdma_flag_addr;
-    uint64_t sdma_op_res_info_addr;
 };
 
 PTO_INTERNAL __gm__ void* pto_comm_get_extra_context_addr(uint32_t shmemId)
@@ -84,15 +143,6 @@ PTO_INTERNAL __gm__ pto_comm_global_state_t* pto_comm_get_state()
     return reinterpret_cast<__gm__ pto_comm_global_state_t*>(pto_comm_get_extra_context_addr(0));
 }
 
-PTO_INTERNAL __gm__ pto_sdma_op_res_info_t* pto_comm_get_sdma_op_res_info()
-{
-    __gm__ pto_comm_global_state_t* state = pto_comm_get_state();
-    if (state == nullptr || state->sdma_op_res_info_addr == 0) {
-        return nullptr;
-    }
-    return reinterpret_cast<__gm__ pto_sdma_op_res_info_t*>(state->sdma_op_res_info_addr);
-}
-
 PTO_INTERNAL uint64_t pto_comm_get_sdma_workspace_addr()
 {
     __gm__ pto_comm_global_state_t* state = pto_comm_get_state();
@@ -100,15 +150,6 @@ PTO_INTERNAL uint64_t pto_comm_get_sdma_workspace_addr()
         return 0;
     }
     return state->sdma_workspace_addr;
-}
-
-PTO_INTERNAL uint64_t pto_comm_get_sdma_flag_addr()
-{
-    __gm__ pto_comm_global_state_t* state = pto_comm_get_state();
-    if (state == nullptr) {
-        return 0;
-    }
-    return state->sdma_flag_addr;
 }
 
 PTO_INTERNAL uint32_t pto_comm_select_sdma_channel(uint32_t block_idx, uint32_t num_channels = 40)
@@ -149,6 +190,26 @@ PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32
     AscendC::PipeBarrier<PIPE_ALL>();
 
     AscendC::DataCopyPad(gm_dst, ub, cp_params);
+    AscendC::PipeBarrier<PIPE_ALL>();
+}
+
+template <typename T>
+AICORE inline void set_value_pto(__gm__ uint8_t* addr, T x)
+{
+    using GlobalData = pto::GlobalTensor<T,
+        pto::Shape<1, 1, 1, 1, 1>,
+        pto::Stride<1, 1, 1, 1, 1>>;
+
+    // Cols=8 保证 32B 对齐，ValidCol=1 仅写 1 个元素
+    using TileData = pto::Tile<pto::TileType::Vec, T, 1, 8,
+        pto::BLayout::RowMajor, 1, 1>;
+
+    TileData tile;
+    TASSIGN(tile, 0x0);
+    tile.SetValue(0, x);
+
+    GlobalData dst(reinterpret_cast<__gm__ T*>(addr));
+    TSTORE(dst, tile);
     AscendC::PipeBarrier<PIPE_ALL>();
 }
 
@@ -267,11 +328,9 @@ PTO_INTERNAL bool init_sdma_config(__gm__ uint8_t* context_gm,
 }
 
 PTO_INTERNAL void prepare_workspace(__gm__ uint8_t* workspace,
-                                   __gm__ uint8_t* flag_addr,
                                    const sdma_config_t& config,
                                    workspace_layout_t &layout,
                                    uint32_t block_idx,
-                                   uint32_t my_pe,
                                    TmpBuf& tmp_buf)
 {
     uint64_t per_core_workspace_size = config.queue_num * SDMA_FLAG_LENGTH;
@@ -281,10 +340,7 @@ PTO_INTERNAL void prepare_workspace(__gm__ uint8_t* workspace,
 
     layout.send_workspace = workspace;
     layout.recv_workspace = my_workspace;
-
-    layout.remote_recv_workspace = flag_addr +
-                                   my_pe * SDMA_MAX_CHAN * SDMA_FLAG_LENGTH +
-                                   block_idx * per_core_workspace_size;
+    layout.remote_recv_workspace = layout.recv_workspace;
 
     set_value<uint32_t>((__gm__ uint8_t*)layout.send_workspace, tmp_buf, config.queue_num);
 }
@@ -427,12 +483,6 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
         return;
     }
 
-    __gm__ uint8_t* flag_addr = reinterpret_cast<__gm__ uint8_t*>(
-        device_state->sdma_flag_addr);
-    if (flag_addr == nullptr) {
-        return;
-    }
-
     TmpBuf tmp_buf;
     GetTPipePtr()->InitBuffer(tmp_buf, UB_ALIGN_SIZE * 2);
 
@@ -459,10 +509,9 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
                                 sizeof(batch_write_flag_info_t) +
                                 SDMA_MAX_CHAN * sizeof(batch_write_channel_info_t);
 
-    uint32_t my_pe = block_idx;
     workspace_layout_t workspace_layout;
-    prepare_workspace(workspace, flag_addr, config, workspace_layout,
-                     block_idx, my_pe, tmp_buf);
+    prepare_workspace(workspace, config, workspace_layout,
+                     block_idx, tmp_buf);
 
     uint32_t sq_tail[64] = {0};
     init_sq_tail_array(batch_write_channel_info, config.queue_num, sq_tail, tmp_buf);
