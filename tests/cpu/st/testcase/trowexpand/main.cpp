@@ -23,8 +23,7 @@ void LaunchTROWEXPANDMUL(float *out, float *src0, float *src1, void *stream);
 template <int kRows, int kCols>
 void LaunchTROWEXPANDSUB(float *out, float *src0, float *src1, void *stream);
 
-class TROWEXPAND_Test : public testing::Test {
-};
+class TROWEXPAND_Test : public testing::Test {};
 
 static std::string GetGoldenDir()
 {
