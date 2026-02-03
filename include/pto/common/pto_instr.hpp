@@ -43,6 +43,13 @@ PTO_INST RecordEvent TADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
   return {};
 }
 
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TGET(GlobalDstData &dst, GlobalSrcData &src, TileData &stagingTileData, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TGET, dst, src, stagingTileData);
+  return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TABS(TileDataDst &dst, TileDataSrc &src, WaitEvents&... events) {
   TSYNC(events...);
