@@ -101,6 +101,54 @@ std::string GetGoldenDir() {
     return "./" + g_case_name;
 }
 
+// Helper function to write numpy .npy format (version 1.0)
+template<typename T>
+bool WriteNumpyFile(const std::string &filePath, const T *buffer, const std::vector<size_t> &shape) {
+    if (!buffer) {
+        std::cerr << "[WARN] WriteNumpyFile: buffer is nullptr" << std::endl;
+        return false;
+    }
+    std::ofstream ofs(filePath, std::ios::binary);
+    if (!ofs.is_open()) {
+        std::cerr << "[WARN] Unable to open npy file: " << filePath << std::endl;
+        return false;
+    }
+    const char *dtype = nullptr;
+    if (std::is_same<T, float>::value) dtype = "<f4";
+    else if (std::is_same<T, aclFloat16>::value) dtype = "<f2";
+    else if (std::is_same<T, double>::value) dtype = "<f8";
+    else if (std::is_same<T, int32_t>::value) dtype = "<i4";
+    else if (std::is_same<T, uint32_t>::value) dtype = "<u4";
+    if (!dtype) {
+        std::cerr << "[WARN] Unsupported dtype for numpy export" << std::endl;
+        return false;
+    }
+    std::string shape_str = "(";
+    for (size_t i = 0; i < shape.size(); ++i) {
+        shape_str += std::to_string(shape[i]);
+        if (i + 1 < shape.size()) shape_str += ", ";
+        else if (shape.size() == 1) shape_str += ",";
+    }
+    shape_str += ")";
+    std::string header = "{'descr': '" + std::string(dtype) + "', 'fortran_order': False, 'shape': " + shape_str + ", }";
+    size_t header_len = 6 + 4 + header.size();
+    size_t padding = (64 - (header_len % 64)) % 64;
+    if (padding == 0 && header_len < 64) padding = 64 - header_len;
+    header.append(padding, ' ');
+    header += '\n';
+    ofs.write("\x93NUMPY", 6);
+    uint8_t major = 1, minor = 0;
+    ofs.write(reinterpret_cast<const char*>(&major), 1);
+    ofs.write(reinterpret_cast<const char*>(&minor), 1);
+    uint16_t header_size = static_cast<uint16_t>(header.size());
+    ofs.write(reinterpret_cast<const char*>(&header_size), 2);
+    ofs.write(header.c_str(), header.size());
+    size_t total_elements = 1;
+    for (size_t dim : shape) total_elements *= dim;
+    ofs.write(reinterpret_cast<const char*>(buffer), total_elements * sizeof(T));
+    return true;
+}
+
 /*
  * Template usage:
  * - The template parameter `INTERMEDIATE_CHECK` (default false) enables
@@ -283,11 +331,15 @@ void run_tfa() {
     T *oPartsHost = nullptr;
     aclrtMallocHost((void **)(&oPartsHost), oPartsTotalSize);
     aclrtMemcpy(oPartsHost, oPartsTotalSize, oPartsDevice, oPartsTotalSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
+    uint32_t num_s1_tile = (S1/CUBE_S1);
     WriteFile(GetGoldenDir() + "/qk_out.bin", outHost, qk_fifo_bytes);
+    WriteNumpyFile(GetGoldenDir() + "/qk_out.npy", outHost, {num_s1_tile, static_cast<size_t>(S0), static_cast<size_t>(S1/num_s1_tile)});
     WriteFile(GetGoldenDir() + "/p_out.bin", xexpHost, p_fifo_bytes_half);
+    WriteNumpyFile(GetGoldenDir() + "/p_out.npy", xexpHost, {num_s1_tile, static_cast<size_t>(S0), static_cast<size_t>(S1/num_s1_tile)});
     WriteFile(GetGoldenDir() + "/exp_max_ififo.bin", tmpFloatExpHost, p_fifo_bytes_float);
+    WriteNumpyFile(GetGoldenDir() + "/exp_max_ififo.npy", tmpFloatExpHost, {static_cast<size_t>(S0)});
     WriteFile(GetGoldenDir() + "/out2.bin", out2Host, out2TotalSize);
+    WriteNumpyFile(GetGoldenDir() + "/out2.npy", out2Host, {static_cast<size_t>(S0), static_cast<size_t>(HEAD_SIZE)});
 
     if constexpr (INTERMEDIATE_CHECK) {
         const size_t qk_fifo_stride = static_cast<size_t>(kFaCvFifoSize) * static_cast<size_t>(CUBE_S0) *
@@ -305,13 +357,20 @@ void run_tfa() {
             const size_t pv_off = static_cast<size_t>(b) * pv_fifo_stride;
             WriteFile(GetGoldenDir() + "/block" + std::to_string(b) + "_qk_fifo.bin", outHost + qk_off,
                 qk_fifo_stride * sizeof(float));
+            WriteNumpyFile(GetGoldenDir() + "/block" + std::to_string(b) + "_qk_fifo.npy", outHost + qk_off, {static_cast<size_t>(CUBE_S0), static_cast<size_t>(S1/8), 8});
             WriteFile(GetGoldenDir() + "/block" + std::to_string(b) + "_p_fifo.bin",
                 reinterpret_cast<uint8_t *>(xexpHost) + p_off * sizeof(aclFloat16), p_fifo_stride * sizeof(aclFloat16));
+            WriteNumpyFile(GetGoldenDir() + "/block" + std::to_string(b) + "_p_fifo.npy", 
+                reinterpret_cast<aclFloat16 *>(reinterpret_cast<uint8_t *>(xexpHost) + p_off * sizeof(aclFloat16)), {static_cast<size_t>(CUBE_S0), static_cast<size_t>(S1/8), 8});
             WriteFile(GetGoldenDir() + "/block" + std::to_string(b) + "_p_max_fifo.bin",
                 reinterpret_cast<uint8_t *>(tmpFloatExpHost) + p_max_off * sizeof(float),
                 p_max_fifo_stride * sizeof(float));
+            WriteNumpyFile(GetGoldenDir() + "/block" + std::to_string(b) + "_p_max_fifo.npy",
+                reinterpret_cast<float *>(reinterpret_cast<uint8_t *>(tmpFloatExpHost) + p_max_off * sizeof(float)), {static_cast<size_t>(CUBE_S0)});
             WriteFile(GetGoldenDir() + "/block" + std::to_string(b) + "_pv_fifo.bin",
                 reinterpret_cast<uint8_t *>(out2Host) + pv_off * sizeof(float), pv_fifo_stride * sizeof(float));
+            WriteNumpyFile(GetGoldenDir() + "/block" + std::to_string(b) + "_pv_fifo.npy",
+                reinterpret_cast<float *>(reinterpret_cast<uint8_t *>(out2Host) + pv_off * sizeof(float)), {static_cast<size_t>(CUBE_S0), static_cast<size_t>(HEAD_SIZE)});
         }
     }
     // write per-tile global_sum parts
@@ -319,20 +378,25 @@ void run_tfa() {
         size_t partOffset = static_cast<size_t>(ti) * static_cast<size_t>(S0);
         WriteFile(GetGoldenDir() + "/global_sum_part" + std::to_string(ti) + "_out.bin", gSumHost + partOffset,
             S0 * sizeof(float));
+        WriteNumpyFile(GetGoldenDir() + "/global_sum_part" + std::to_string(ti) + "_out.npy", gSumHost + partOffset, {static_cast<size_t>(S0)});
     }
     // write per-tile exp_max parts
     for (int ti = 0; ti < num_tiles; ++ti) {
         size_t partOffset = static_cast<size_t>(ti) * static_cast<size_t>(S0);
         WriteFile(GetGoldenDir() + "/exp_max_part" + std::to_string(ti) + "_out.bin", expMaxHost + partOffset,
             S0 * sizeof(float));
+        WriteNumpyFile(GetGoldenDir() + "/exp_max_part" + std::to_string(ti) + "_out.npy", expMaxHost + partOffset, {static_cast<size_t>(S0)});
     }
     // write running output
     WriteFile(GetGoldenDir() + "/o_out.bin", oHost, oSize);
+    WriteNumpyFile(GetGoldenDir() + "/o_out.npy", oHost, {static_cast<size_t>(S0), static_cast<size_t>(HEAD_SIZE)});
     // write per-iteration running output snapshots
     for (int ti = 0; ti < num_tiles; ++ti) {
         size_t byteOffset = static_cast<size_t>(ti) * pvPartSize;
         WriteFile(GetGoldenDir() + "/o_part" + std::to_string(ti) + "_out.bin", ((uint8_t *)oPartsHost) + byteOffset,
             pvPartSize);
+        WriteNumpyFile(GetGoldenDir() + "/o_part" + std::to_string(ti) + "_out.npy", 
+            reinterpret_cast<T*>(((uint8_t *)oPartsHost) + byteOffset), {static_cast<size_t>(S0), static_cast<size_t>(HEAD_SIZE)});
     }
 
     if constexpr (INTERMEDIATE_CHECK) {
@@ -348,13 +412,19 @@ void run_tfa() {
 
         std::vector<float> golden_qk(S0 * S1);
         size_t qk_file_size = 0;
-        ReadFile(GetGoldenDir() + "/qk.bin", qk_file_size, golden_qk.data(), golden_qk.size() * sizeof(float));
+        #if ND_LAYOUT
+            ReadFile(GetGoldenDir() + "/qk.bin", qk_file_size, golden_qk.data(), golden_qk.size() * sizeof(float));
+        #else
+            ReadFile(GetGoldenDir() + "/qkt.bin", qk_file_size, golden_qk.data(), golden_qk.size() * sizeof(float));
+        #endif
 
         std::vector<aclFloat16> golden_p_half(S0 * S1);
         size_t p_file_size = 0;
-        ReadFile(
-            GetGoldenDir() + "/p.bin", p_file_size, golden_p_half.data(), golden_p_half.size() * sizeof(aclFloat16));
-
+        #if ND_LAYOUT
+            ReadFile(GetGoldenDir() + "/p.bin", p_file_size, golden_p_half.data(), golden_p_half.size() * sizeof(aclFloat16));
+        #else
+            ReadFile(GetGoldenDir() + "/pt.bin", p_file_size, golden_p_half.data(), golden_p_half.size() * sizeof(aclFloat16));
+        #endif 
         std::vector<float> golden_p(golden_p_half.size());
         for (size_t i = 0; i < golden_p_half.size(); ++i) {
             golden_p[i] = aclFloat16ToFloat(golden_p_half[i]);

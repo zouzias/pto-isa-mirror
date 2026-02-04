@@ -29,6 +29,13 @@ S0_BASE = 64
 HEAD_SIZE = 128
 TILE_S1_DEFAULT = 256
 
+
+def save_bin_and_npy(arr: np.ndarray, path: str, base_name: str):
+    bin_path = os.path.join(path, f"{base_name}.bin")
+    npy_path = os.path.join(path, f"{base_name}.npy")
+    arr.tofile(bin_path)
+    np.save(npy_path, arr)
+
 def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, is_causal=False):
     # generate inputs in FP16, compute golden in FP32
     q_fp32 = (np.random.randn(s0, head_size).astype(np.float16) * 1.5).astype(np.float32)
@@ -41,11 +48,12 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEF
     assert tile_s1 % cube_s1 == 0, "TILE_S1 must be divisible by CUBE_S1"
 
     # write FP16 inputs and FP32 golden
-    q.tofile(os.path.join(path, 'q.bin'))
-    k.tofile(os.path.join(path, 'k.bin'))
+    save_bin_and_npy(q, path, 'q')
+    save_bin_and_npy(k, path, 'k')
     kt = k.T.astype(np.float16)    
-    kt.tofile(os.path.join(path, 'kt.bin'))       
-    golden.tofile(os.path.join(path, 'qk.bin'))
+    save_bin_and_npy(kt, path, 'kt')
+    save_bin_and_npy(golden, path, 'qk')
+    save_bin_and_npy(golden.T, path, 'qk_t')
     # also produce softmax x_exp (per-row) saved as FP16 and tmp_float_exp saved as FP32
     # compute softmax in tiled fashion by TILE_S1 tiles (default 256)
     arr_f32 = golden.astype(np.float32)
@@ -98,8 +106,10 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEF
     tmp_float_exp = full_exp
     # p saved as FP16 (store raw exponentials per tile as half)
     soft = (full_exp).astype(np.float16)
-    soft.tofile(os.path.join(path, 'p.bin'))
-    tmp_float_exp.tofile(os.path.join(path, 'p_fp32.bin'))
+    save_bin_and_npy(soft, path, 'p')
+    save_bin_and_npy(soft.T, path, 'p_t')
+    save_bin_and_npy(tmp_float_exp, path, 'p_fp32')
+    save_bin_and_npy(tmp_float_exp.T, path, 'p_fp32_t')
 
     # generate random V (S1 x HEAD_SIZE) and compute y = soft (S0 x S1) dot V (S1 x HEAD_SIZE)
     v_fp32 = (np.random.randn(s1, head_size).astype(np.float16) * 1.2).astype(np.float32)
@@ -119,18 +129,18 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEF
         pv_tile_fifo_parts.append(pv_tile_fifo)
         pv += pv_tile_fifo
 
-    v.tofile(os.path.join(path, 'v.bin'))
+    save_bin_and_npy(v, path, 'v')
     vt = v.T.astype(np.float16)    
-    vt.tofile(os.path.join(path, 'vt.bin'))       
-    pv.tofile(os.path.join(path, 'pv.bin'))
+    save_bin_and_npy(vt, path, 'vt')
+    save_bin_and_npy(pv, path, 'pv')
     # write per-tile partials as pv_tile_fifo0.bin, pv_tile_fifo1.bin
     for idx, part in enumerate(pv_tile_fifo_parts):
-        part.tofile(os.path.join(path, f'pv_tile_fifo{idx}.bin'))
+        save_bin_and_npy(part, path, f'pv_tile_fifo{idx}')
     # write per-tile global_sum and exp_max parts
     for idx, g in enumerate(global_sums):
-        g.astype(np.float32).tofile(os.path.join(path, f'global_sum_part{idx}.bin'))
+        save_bin_and_npy(g.astype(np.float32), path, f'global_sum_part{idx}')
     for idx, e in enumerate(exp_max_parts):
-        e.astype(np.float32).tofile(os.path.join(path, f'exp_max_part{idx}.bin'))
+        save_bin_and_npy(e.astype(np.float32), path, f'exp_max_part{idx}')
 
     # compute running output o: use exp_max per-tile for accumulation and divide by new_global_sum on last tile
     o_running = np.zeros((s0, head_size), dtype=np.float32)
@@ -144,9 +154,9 @@ def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEF
                 new_global_sum_tile = global_sums[ti].reshape((s0, 1)).astype(np.float32)
                 o_running = o_running / new_global_sum_tile
         # write per-iteration o
-        o_running.astype(np.float32).tofile(os.path.join(path, f'o_part{ti}.bin'))
+        save_bin_and_npy(o_running.astype(np.float32), path, f'o_part{ti}')
     # write final running output
-    o_running.astype(np.float32).tofile(os.path.join(path, 'o.bin'))
+    save_bin_and_npy(o_running.astype(np.float32), path, 'o')
 
 
 if __name__ == '__main__':

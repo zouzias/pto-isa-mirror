@@ -33,17 +33,35 @@ namespace pto {
 template <typename reducedTileData, typename svTileData>
 AICORE inline void pto_macro_fa_gu(
     svTileData __out__ prev_sv_tile, svTileData __in__ est_sv_tile, reducedTileData __in__ exp_max) {
-    pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max);
-    pto::TADD(prev_sv_tile, prev_sv_tile, est_sv_tile);
+    if constexpr (reducedTileData::BFractal == BLayout::ColMajor) {
+        pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max);
+        pto::TADD(prev_sv_tile, prev_sv_tile, est_sv_tile);
+    } else {
+        using reducedTileData_Col = Tile<TileType::Vec, float, reducedTileData::Cols, 1, BLayout::ColMajor, reducedTileData::Cols, 1>;
+        reducedTileData_Col exp_max_col;
+        TRESHAPE(exp_max_col, exp_max);
+        pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max_col);
+        pto::TADD(prev_sv_tile, prev_sv_tile, est_sv_tile);
+    }
 }
 
 template <typename reducedTileData, typename svTileData>
 AICORE inline void pto_macro_fa_gu_last(svTileData __out__ prev_sv_tile, svTileData __in__ est_sv_tile,
     reducedTileData __in__ exp_max, reducedTileData __in__ new_global_sum) {
-    pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max);
-    pto::TADD(prev_sv_tile, prev_sv_tile, est_sv_tile);
-    pto::TROWEXPANDDIV(prev_sv_tile, prev_sv_tile, new_global_sum);
-    // pto::TCVT(prev_sv_nd_tile, prev_sv_tile, RoundMode::CAST_RINT);
+    if constexpr (reducedTileData::BFractal == BLayout::ColMajor) {
+        pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max);
+        pto::TADD(prev_sv_tile, prev_sv_tile, est_sv_tile);
+        pto::TROWEXPANDDIV(prev_sv_tile, prev_sv_tile, new_global_sum);
+    } else {
+        using reducedTileData_Col = Tile<TileType::Vec, float, reducedTileData::Cols, 1, BLayout::ColMajor, reducedTileData::Cols, 1>;
+        reducedTileData_Col exp_max_col;
+        TRESHAPE(exp_max_col, exp_max);
+        reducedTileData_Col new_global_sum_col;
+        TRESHAPE(new_global_sum_col, new_global_sum);
+        pto::TROWEXPANDMUL(prev_sv_tile, prev_sv_tile, exp_max_col);
+        pto::TADD(prev_sv_tile, prev_sv_tile, est_sv_tile);
+        pto::TROWEXPANDDIV(prev_sv_tile, prev_sv_tile, new_global_sum_col);
+    }
 }
 
 } // namespace pto
