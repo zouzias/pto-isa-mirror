@@ -9,11 +9,7 @@
 #include <cstring>
 
 // Shmem API headers for symmetric heap memory initialization
-#if defined(ASCEND_SHMEM)
-#include "shmem_api.h"
-#elif defined(CANN_SHMEM)
 #include "shmem.h"
-#endif
 
 #if defined(CANN_SHMEM)
 using ShmemUniqueId = aclshmemx_uniqueid_t;
@@ -60,19 +56,6 @@ inline bool LoadEnv(ShmemEnv &env)
 // ============================================================================
 inline int ShmemInit(const ShmemEnv &env)
 {
-#if defined(ASCEND_SHMEM)
-    shmem_init_attr_t *attr = nullptr;
-    const int ret = shmem_set_attr(env.rank, env.size, env.heapBytes, env.ipPort, &attr);
-    if (ret != 0) {
-        std::cerr << "[ERROR] shmem_set_attr failed with code: " << ret << std::endl;
-        return ret;
-    }
-    int initRet = shmem_init_attr(attr);
-    if (initRet != 0) {
-        std::cerr << "[ERROR] shmem_init_attr failed with code: " << initRet << std::endl;
-    }
-    return initRet;
-#elif defined(CANN_SHMEM)
     aclshmemx_init_attr_t attributes;
     
     attributes.my_pe = env.rank;
@@ -103,10 +86,6 @@ inline int ShmemInit(const ShmemEnv &env)
         std::cerr << "[ERROR] aclshmemx_init_attr failed with code: " << initRet << std::endl;
     }
     return initRet;
-#else
-    std::cerr << "[ERROR] No shmem backend defined (ASCEND_SHMEM or CANN_SHMEM)" << std::endl;
-    return -1;
-#endif
 }
 
 // ============================================================================
@@ -163,9 +142,7 @@ inline bool ShmemInitFromEnvWithUniqueId(ShmemEnv &env, const ShmemUniqueId *uid
 // ============================================================================
 inline void ShmemFinalize()
 {
-#if defined(ASCEND_SHMEM) || defined(CANN_SHMEM)
     shmem_finalize();
-#endif
 }
 
 // ============================================================================
@@ -173,11 +150,7 @@ inline void ShmemFinalize()
 // ============================================================================
 inline void* ShmemMalloc(size_t bytes)
 {
-#if defined(ASCEND_SHMEM) || defined(CANN_SHMEM)
     return shmem_malloc(bytes);
-#else
-    return nullptr;
-#endif
 }
 
 // ============================================================================
@@ -185,9 +158,7 @@ inline void* ShmemMalloc(size_t bytes)
 // ============================================================================
 inline void ShmemFree(void *ptr)
 {
-#if defined(ASCEND_SHMEM) || defined(CANN_SHMEM)
     shmem_free(ptr);
-#endif
 }
 
 // ============================================================================
@@ -195,11 +166,7 @@ inline void ShmemFree(void *ptr)
 // ============================================================================
 inline void ShmemBarrierAll()
 {
-#if defined(ASCEND_SHMEM)
-    shmem_barrier_all();
-#elif defined(CANN_SHMEM)
     aclshmem_barrier_all();
-#endif
 }
 
 // ============================================================================
@@ -208,12 +175,8 @@ inline void ShmemBarrierAll()
 // ============================================================================
 inline void ShmemQuiet()
 {
-#if defined(ASCEND_SHMEM)
-    shmem_quiet();
-#elif defined(CANN_SHMEM)
     // aclshmem_quiet() is device-only, use barrier for host synchronization
     aclshmem_barrier_all();
-#endif
 }
 
 // ============================================================================
@@ -221,11 +184,7 @@ inline void ShmemQuiet()
 // ============================================================================
 inline int ShmemMyPe()
 {
-#if defined(ASCEND_SHMEM) || defined(CANN_SHMEM)
     return shmem_my_pe();
-#else
-    return 0;
-#endif
 }
 
 // ============================================================================
@@ -233,11 +192,7 @@ inline int ShmemMyPe()
 // ============================================================================
 inline int ShmemNPes()
 {
-#if defined(ASCEND_SHMEM) || defined(CANN_SHMEM)
     return shmem_n_pes();
-#else
-    return 1;
-#endif
 }
 
 // ============================================================================
@@ -246,16 +201,12 @@ inline int ShmemNPes()
 // ============================================================================
 inline int ShmemSetConfStoreTls(bool enable, const char *tlsInfo, uint32_t tlsInfoLen)
 {
-#if defined(ASCEND_SHMEM)
+
     return shmem_set_conf_store_tls(enable, tlsInfo, tlsInfoLen);
-#elif defined(CANN_SHMEM)
-    return shmem_set_conf_store_tls(enable, tlsInfo, tlsInfoLen);
-#else
     (void)enable;
     (void)tlsInfo;
     (void)tlsInfoLen;
     return 0;
-#endif
 }
 
 // ============================================================================
@@ -274,14 +225,7 @@ inline int ShmemSetConfStoreTls(bool enable, const char *tlsInfo, uint32_t tlsIn
 template <typename T>
 AICORE inline __gm__ T* ShmemPtr(__gm__ T *localPtr, int pe)
 {
-#if defined(ASCEND_SHMEM)
-    return (__gm__ T *)shmem_ptr(localPtr, pe);
-#elif defined(CANN_SHMEM)
     return (__gm__ T *)aclshmem_ptr(localPtr, pe);
-#else
-    (void)pe;
-    return localPtr;
-#endif
 }
 
 // ============================================================================
@@ -292,11 +236,7 @@ AICORE inline __gm__ T* ShmemPtr(__gm__ T *localPtr, int pe)
 // ============================================================================
 AICORE inline void ShmemDeviceBarrierAll()
 {
-#if defined(ASCEND_SHMEM)
-    shmem_barrier_all();
-#elif defined(CANN_SHMEM)
     aclshmem_barrier_all();
-#endif
 }
 
 // ============================================================================
@@ -307,9 +247,5 @@ AICORE inline void ShmemDeviceBarrierAll()
 // ============================================================================
 AICORE inline void ShmemDeviceQuiet()
 {
-#if defined(ASCEND_SHMEM)
-    shmem_quiet();
-#elif defined(CANN_SHMEM)
     aclshmem_quiet();
-#endif
 }
