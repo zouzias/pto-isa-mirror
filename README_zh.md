@@ -236,7 +236,7 @@ source ${install-path}/cann/bin/setenv.bash
 ## 文档
 
 * ISA 指南与导航：[docs/README_zh.md](docs/README_zh.md)
-* ISA 指令索引：[docs/isa/README_zh.md](docs/isa/README_zh.md)
+* ISA 指令索引（中文）：[docs/isa_zh/README.md](docs/isa_zh/README.md)
 * 开发者文档索引：[docs/coding/README_zh.md](docs/coding/README_zh.md)
 * 入门指南（建议先 CPU，再 NPU）：[docs/getting-started.md](docs/getting-started.md)
 * 安全与披露流程：[SECURITY.md](SECURITY.md)

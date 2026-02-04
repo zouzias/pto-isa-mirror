@@ -1,0 +1,105 @@
+# TLOAD
+
+## 简介
+
+从 GlobalTensor（GM）加载到片上 Tile；传输范围由 `dst` 的有效区域（`GetValidRow/Col()`）决定。
+
+## 计算流程图
+
+![TLOAD 计算流程图](figures/TLOAD.svg)
+
+## 数学解释
+
+表示法取决于 `GlobalTensor` 形状/步幅和 `Tile` 布局。从概念上讲（2D 视图，具有基本偏移）：
+
+$$ \mathrm{dst}_{i,j} = \mathrm{src}_{r_0 + i,\; c_0 + j} $$
+
+## 汇编语法
+
+PTO-AS 形式：参见 `docs/grammar/PTO-AS.md`。
+
+同步形式：
+
+```text
+%t0 = tload %sv[%c0, %c0] : (!pto.memref<...>, index, index) -> !pto.tile<...>
+```
+## C++ Intrinsic（内建接口）
+
+在 `include/pto/common/pto_instr.hpp` 中声明：
+
+```cpp
+template <typename TileData, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TLOAD(TileData& dst, GlobalData& src, WaitEvents&... events);
+```
+
+## 约束
+
+- **实现检查 (A2A3)**：
+  - `TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、 `int64_t`、`uint64_t`、`half`、`bfloat16_t`、`float`。
+  - 目标 Tile 位置必须是 `TileType::Vec` 或 `TileType::Mat`。
+  - `sizeof(TileData::DType) == sizeof(GlobalData::DType)`。
+  - 运行时：所有 `src.GetShape(dim)` 值和 `dst.GetValidRow()/GetValidCol()` 必须为 `> 0`。
+  - `TileType::Vec` 加载仅支持匹配布局：ND->ND、DN->DN、NZ->NZ。
+  - `TileType::Mat` 加载支持：ND->ND、DN->DN、NZ->NZ，以及 ND->NZ 和 DN->ZN。
+    - 对于 ND->NZ 或 DN->ZN：`GlobalData::staticShape[0..2] == 1` 和 `TileData::SFractalSize == 512`。
+  - 对于 `int64_t/uint64_t`，仅支持 ND->ND 或 DN->DN。
+- **实现检查 (A5)**：
+  - `sizeof(TileData::DType)` 必须是 `1`、`2`、`4` 或 `8` 字节，并且必须匹配 `sizeof(GlobalData::DType)`。
+  - 对于 `int64_t/uint64_t`，`TileData::PadVal` 必须是 `PadValue::Null` 或 `PadValue::Zero`。
+  - `TileType::Vec` 加载需要以下布局对之一：
+    - ND 行主序 + `SLayout::NoneBox` (ND->ND),
+    - DN 列主序 + `SLayout::NoneBox` (DN->DN),
+    - NZ 与 `SLayout::RowMajor` (NZ->NZ)。
+  - 对于具有编译时已知形状的行主序 ND->ND，`TileData::ValidCol` 必须等于 `GlobalData::staticShape[4]`，并且 `TileData::ValidRow` 必须等于 `GlobalData::staticShape[0..3]` 的乘积。
+  - `TileType::Mat` 加载还受到 `TLoadCubeCheck` 的约束（例如，仅特定的 ND/DN/NZ 转换和 L1 大小限制）。
+  - `TileType::Mat` 加载还处理 mx 格式的加载，其中包括标量 A 的 `MX_A_ZZ/MX_A_ND/MX_A_DN` 到 ZZ 和标量 B 的 `MX_B_NN/MX_B_ND/MX_B_DN` 到 NN。
+    - 对于 `MX_A_ZZ/MX_B_NN`：`GlobalData::staticShape[3] == 16` 和 `GlobalData::staticShape[4] == 2`。
+    - 对于 `MX_A_ND/MX_ADN/MX_B_ND/MX_B_DN`：`GlobalData::staticShape[0] == 1` 和 `GlobalData::staticShape[1] == 1` 和 `GlobalData::staticShape[4] == 2`。
+    - 对于 scaleA，`dst.GetValidCol() % 2 == 0`。
+    - 对于 scaleB，`dst.GetValidRow() % 2 == 0`
+
+- **有效区域**：
+  - 该实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为传输大小。
+
+## 示例
+
+### 自动（Auto）
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+template <typename T>
+void example_auto(__gm__ T* in) {
+  using TileT = Tile<TileType::Vec, T, 16, 16>;
+  using GShape = Shape<1, 1, 1, 16, 16>;
+  using GStride = BaseShape2D<T, 16, 16, Layout::ND>;
+  using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
+
+  GTensor gin(in);
+  TileT t;
+  TLOAD(t, gin);
+}
+```
+
+### 手动（Manual）
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+template <typename T>
+void example_manual(__gm__ T* in) {
+  using TileT = Tile<TileType::Vec, T, 16, 16>;
+  using GShape = Shape<1, 1, 1, 16, 16>;
+  using GStride = BaseShape2D<T, 16, 16, Layout::ND>;
+  using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
+
+  GTensor gin(in);
+  TileT t;
+  TASSIGN(t, 0x1000);
+  TLOAD(t, gin);
+}
+```

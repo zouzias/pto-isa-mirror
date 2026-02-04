@@ -16,8 +16,8 @@
 ## 从哪里开始
 
 - ISA 总览：[`docs/PTOISA.md`](PTOISA.md)
-- 指令索引：[`docs/isa/README.md`](isa/README.md)
-- 通用约定：[`docs/isa/conventions.md`](isa/conventions.md)
+- 指令索引（中文）：[`docs/isa_zh/README.md`](isa_zh/README.md)
+- 通用约定（中文）：[`docs/isa_zh/conventions.md`](isa_zh/conventions.md)
 - PTO 汇编语法（PTO-AS）：[`docs/grammar/PTO-AS.md`](grammar/PTO-AS.md)
 - 入门指南（建议先跑 CPU 仿真）：[`docs/getting-started.md`](getting-started.md)
 - 实现与扩展说明：[`docs/coding/README.md`](coding/README.md)
@@ -26,5 +26,6 @@
 ## 文档组织
 
 - `docs/isa/`：指令参考（每条指令一页，以及分类索引）
+- `docs/isa_zh/`：指令参考（中文翻译版，含每条指令的 SVG 计算流程图）
 - `docs/grammar/`：PTO 汇编语法与规范（PTO-AS）
 - `docs/coding/`：扩展 PTO Tile Lib 的开发者说明
