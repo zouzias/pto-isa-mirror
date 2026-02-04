@@ -47,6 +47,13 @@ PTO_INST RecordEvent TADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     return {};
 }
 
+template <typename TileDataDst, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TTPREFETCH(TileDataDst &dst, GlobalData &src, WaitEvents&... events) {
+  TSYNC(events...);
+  TTPREFETCH_IMPL(dst, src);
+  return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TABS(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
