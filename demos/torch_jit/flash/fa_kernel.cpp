@@ -646,7 +646,7 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
 
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QK_PRELOAD, int CV_FIFO_SIZE,
     bool INTERMEDIATE_CHECK, bool CAUSAL_MASK, int CV_FIFO_CONS_SYNC_PERIOD>
-AICORE inline void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__ half *k, __gm__ half *v,
+__global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__ half *k, __gm__ half *v,
     __gm__ half *p_tile_fifo, __gm__ float *exp_max_ififo, __gm__ float *global_sum_out, __gm__ float *exp_max_out,
     __gm__ float *o_out, __gm__ float *o_parts_out, __gm__ float *qk_tile_fifo, __gm__ float *pv_tile_fifo,
     __gm__ uint8_t *cv_comm_buf, __gm__ uint8_t *profile_buf) {
@@ -1043,14 +1043,119 @@ __gm__ __attribute__((section(".bss"))) float g_o_parts_out[O_PARTS_ELEMS];     
 // profile/cv_comm are optional for this case (block_rows=1 -> no CV comm needed)
 } // namespace
 
-__global__ AICORE void tfa_kernel_entry(
-    __gm__ void* q,
-    __gm__ void* k,
-    __gm__ void* v,
-    __gm__ void* o_out
-) {
+// __global__ AICORE void tfa_kernel_entry(
+//     __gm__ void* q,
+//     __gm__ void* k,
+//     __gm__ void* v,
+//     __gm__ void* o_out
+// ) {
     
-    // Fixed case constants (must match the workspace above)
+//     // Fixed case constants
+//     constexpr int HEAD_SIZE = 128;
+//     constexpr int S0 = 128;
+//     constexpr int S1 = 1024;
+
+//     constexpr int CUBE_S0 = 128;
+//     constexpr int CUBE_S1 = 128;
+//     constexpr int TILE_S1 = 256;
+
+//     constexpr int QK_PRELOAD = 4;
+//     constexpr int CV_FIFO_SIZE = 8;
+
+//     constexpr bool CAUSAL_MASK = false;
+//     constexpr bool INTERMEDIATE_CHECK = false;
+//     constexpr int CV_FIFO_CONS_SYNC_PERIOD = 1;
+
+//     // FFTS base pointer value must have been written by host in call_kernel
+//     __gm__ uint64_t* ffts_addr = reinterpret_cast<__gm__ uint64_t*>(g_ffts_base_ptr);
+
+//     runTFA<
+//         S0, HEAD_SIZE, S1,
+//         CUBE_S0, CUBE_S1, TILE_S1,
+//         QK_PRELOAD, CV_FIFO_SIZE,
+//         INTERMEDIATE_CHECK, CAUSAL_MASK,
+//         CV_FIFO_CONS_SYNC_PERIOD
+//     >(
+//         ffts_addr,
+//         reinterpret_cast<__gm__ half*>(q),
+//         reinterpret_cast<__gm__ half*>(k),
+//         reinterpret_cast<__gm__ half*>(v),
+
+//         // scratch from global GM
+//         reinterpret_cast<__gm__ half*>(g_p_tile_fifo),
+//         reinterpret_cast<__gm__ float*>(g_exp_max_ififo),
+//         reinterpret_cast<__gm__ float*>(g_global_sum_out),
+//         reinterpret_cast<__gm__ float*>(g_exp_max_out),
+
+//         reinterpret_cast<__gm__ float*>(o_out),
+//         reinterpret_cast<__gm__ float*>(g_o_parts_out),
+
+//         reinterpret_cast<__gm__ float*>(g_qk_tile_fifo),
+//         reinterpret_cast<__gm__ float*>(g_pv_tile_fifo),
+
+//         // cv_comm_buf, profile_buf: safe to pass nullptr for this case (block_rows=1 => no CV comm path)
+//         reinterpret_cast<__gm__ uint8_t*>(0),
+//         reinterpret_cast<__gm__ uint8_t*>(0)
+//     );
+// }
+
+// extern "C" void call_kernel(
+//     uint32_t blockDim,
+//     void* stream,
+//     uint8_t* q,
+//     uint8_t* k,
+//     uint8_t* v,
+//     uint8_t* o_out
+// ) {
+//     // 1) Get FFTS base (host API)
+//     uint64_t ffts = 0;
+//     uint32_t fftsLen = 0;
+//     rtGetC2cCtrlAddr(&ffts, &fftsLen);
+
+//     // 2) Write device FFTS pointer value into GM global scalar
+//     // NOTE: &g_ffts_base_ptr is a device-global symbol address visible to host code in this module.
+//     // Use async memcpy on the provided stream for correctness.
+//     aclrtMemcpyAsync(
+//         (void*)&g_ffts_base_ptr, sizeof(uint64_t),
+//         (void*)&ffts, sizeof(uint64_t),
+//         ACL_MEMCPY_HOST_TO_DEVICE,
+//         (aclrtStream)stream
+//     );
+
+//     tfa_kernel_entry<<<blockDim, nullptr, stream>>>(
+//         q,
+//         k,
+//         v,
+//         o_out
+//     );
+// }
+
+
+extern "C" void call_kernel(
+    uint32_t blockDim,
+    void* stream,
+
+    // inputs
+    uint8_t* q,
+    uint8_t* k,
+    uint8_t* v,
+
+    // final output
+    uint8_t* o_out,
+
+    // -------- workspace / intermediates --------
+    float*    outDevice,        // qk_out      [S0, S1] fp32
+    uint16_t* xexpDevice,       // p_out       [S0, S1] fp16 (aclFloat16/half)
+    float*    pOutFp32Device,   // p_out_fp32  [S0, S1] fp32
+
+    float*    out2Device,       // pv_out tiles [num_tiles, S0, HEAD]
+
+    float*    gSumDevice,       // global_sum   [num_tiles, S0]
+    float*    expMaxDevice,     // exp_max      [num_tiles, S0]
+    float*    oPartsDevice       // o_parts      [num_tiles, S0, HEAD]
+) {
+
+    // Fixed case constants
     constexpr int HEAD_SIZE = 128;
     constexpr int S0 = 128;
     constexpr int S1 = 1024;
@@ -1062,12 +1167,62 @@ __global__ AICORE void tfa_kernel_entry(
     constexpr int QK_PRELOAD = 4;
     constexpr int CV_FIFO_SIZE = 8;
 
-    constexpr bool INTERMEDIATE_CHECK = false;
     constexpr bool CAUSAL_MASK = false;
+    constexpr bool INTERMEDIATE_CHECK = false;
     constexpr int CV_FIFO_CONS_SYNC_PERIOD = 1;
 
-    // FFTS base pointer value must have been written by host in call_kernel
-    __gm__ uint64_t* ffts_addr = reinterpret_cast<__gm__ uint64_t*>(g_ffts_base_ptr);
+    // size_t fullSize = S0 * S1 * sizeof(float); // Keep output as float
+    // size_t qSize = S0 * HEAD_SIZE * sizeof(aclFloat16);
+    // size_t kSize = HEAD_SIZE * S1 * sizeof(aclFloat16);
+
+    // float *outHost;
+    // aclFloat16 *qHost, *kHost;
+    // aclFloat16 *xexpHost;
+    // float *tmpFloatExpHost;
+    // aclFloat16 *vHost;
+    // float *outDevice; // qk_out
+    // aclFloat16 *xexpDevice;
+    // float *midDevice = nullptr; // not used by this test but kept for symmetry
+    // float *out2Device; // pv_out
+    // float *out2Host;
+
+    // aclrtMallocHost((void **)(&outHost), fullSize); // Allocate output buffer
+    // aclrtMallocHost((void **)(&qHost), qSize);
+    // aclrtMallocHost((void **)(&kHost), kSize);
+
+    // aclrtMalloc((void **)&outDevice, fullSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    // size_t halfSize = S0 * S1 * sizeof(aclFloat16);
+    // size_t floatSize = S0 * S1 * sizeof(float);
+    // aclrtMalloc((void **)&xexpDevice, halfSize, ACL_MEM_MALLOC_HUGE_FIRST); // p_out (half)
+    // void *pOutFp32Device = nullptr;
+    // aclrtMalloc((void **)&pOutFp32Device, floatSize, ACL_MEM_MALLOC_HUGE_FIRST); // p_out_fp32 (float)
+    // // allocate v and out2 buffers
+    // size_t vSize = S1 * HEAD_SIZE * sizeof(aclFloat16);
+    // size_t pvPartSize = S0 * HEAD_SIZE * sizeof(float);
+    // int num_tiles = S1 / 128;
+    // size_t out2TotalSize = pvPartSize * num_tiles;
+    // aclrtMalloc((void **)&out2Device, out2TotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    // // allocate global_sum buffer (per-tile S0 floats)
+    // size_t gsumTotalElems = static_cast<size_t>(S0) * static_cast<size_t>(num_tiles);
+    // size_t gsumSize = gsumTotalElems * sizeof(float);
+    // float *gSumDevice = nullptr;
+    // aclrtMalloc((void **)&gSumDevice, gsumSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    // // allocate per-tile exp_max buffer (per-tile S0 floats)
+    // float *expMaxDevice = nullptr;
+    // aclrtMalloc((void **)&expMaxDevice, gsumSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    // // allocate running output o (S0 x HEAD_SIZE)
+    // float *oDevice = nullptr;
+    // size_t oSize = pvPartSize; // S0 * HEAD_SIZE * sizeof(T)
+    // aclrtMalloc((void **)&oDevice, oSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    // // allocate per-iteration running output snapshots (num_tiles * S0 * HEAD_SIZE)
+    // float *oPartsDevice = nullptr;
+    // size_t oPartsTotalSize = pvPartSize * num_tiles;
+    // aclrtMalloc((void **)&oPartsDevice, oPartsTotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    // Debug logging setup (preserve original tqksv behavior)
+    uint64_t ffts{0};
+    uint32_t fftsLen{0};
+    rtGetC2cCtrlAddr(&ffts, &fftsLen);
 
     runTFA<
         S0, HEAD_SIZE, S1,
@@ -1075,58 +1230,29 @@ __global__ AICORE void tfa_kernel_entry(
         QK_PRELOAD, CV_FIFO_SIZE,
         INTERMEDIATE_CHECK, CAUSAL_MASK,
         CV_FIFO_CONS_SYNC_PERIOD
-    >(
-        ffts_addr,
-        reinterpret_cast<__gm__ half*>(q),
-        reinterpret_cast<__gm__ half*>(k),
-        reinterpret_cast<__gm__ half*>(v),
-
-        // scratch from global GM
-        reinterpret_cast<__gm__ half*>(g_p_tile_fifo),
-        reinterpret_cast<__gm__ float*>(g_exp_max_ififo),
-        reinterpret_cast<__gm__ float*>(g_global_sum_out),
-        reinterpret_cast<__gm__ float*>(g_exp_max_out),
-
-        reinterpret_cast<__gm__ float*>(o_out),
-        reinterpret_cast<__gm__ float*>(g_o_parts_out),
-
-        reinterpret_cast<__gm__ float*>(g_qk_tile_fifo),
-        reinterpret_cast<__gm__ float*>(g_pv_tile_fifo),
-
-        // cv_comm_buf, profile_buf: safe to pass nullptr for this case (block_rows=1 => no CV comm path)
+    ><<<1, nullptr, stream>>>(
+        (__gm__ uint64_t*)ffts,
+        (__gm__ half*)q,
+        (__gm__ half*)k,
+        (__gm__ half*)v,
+        (__gm__ half*)xexpDevice,               // p_out
+        (__gm__ float*)pOutFp32Device,     // p_out_fp32 (float)
+        (__gm__ float*)gSumDevice,         // global_sum_out (float)
+        (__gm__ float*)expMaxDevice,       // exp_max_out (float)
+        (__gm__ float*)o_out,
+        (__gm__ float*)oPartsDevice,       // o_parts_out (float)
+        (__gm__ float*)outDevice,          // qk_out (float)
+        (__gm__ float*)out2Device,          // pv_out (float)
         reinterpret_cast<__gm__ uint8_t*>(0),
         reinterpret_cast<__gm__ uint8_t*>(0)
     );
-}
 
-extern "C" void call_kernel(
-    uint32_t blockDim,
-    void* stream,
-    uint8_t* q,
-    uint8_t* k,
-    uint8_t* v,
-    uint8_t* o_out
-) {
-    // 1) Get FFTS base (host API)
-    uint64_t ffts = 0;
-    uint32_t fftsLen = 0;
-    rtGetC2cCtrlAddr(&ffts, &fftsLen);
 
-    // 2) Write device FFTS pointer value into GM global scalar
-    // NOTE: &g_ffts_base_ptr is a device-global symbol address visible to host code in this module.
-    // Use async memcpy on the provided stream for correctness.
-    aclrtMemcpyAsync(
-        (void*)&g_ffts_base_ptr, sizeof(uint64_t),
-        (void*)&ffts, sizeof(uint64_t),
-        ACL_MEMCPY_HOST_TO_DEVICE,
-        (aclrtStream)stream
-    );
-
-    // 3) Launch the kernel exactly like before
-    tfa_kernel_entry<<<blockDim, nullptr, stream>>>(
-        q,
-        k,
-        v,
-        o_out
-    );
+    // aclrtFree(outDevice);
+    // aclrtFree(oPartsDevice);
+    // aclrtFree(xexpDevice);
+    // aclrtFree(pOutFp32Device);
+    // aclrtFree(out2Device);
+    // aclrtFree(gSumDevice);
+    // aclrtFree(expMaxDevice);
 }

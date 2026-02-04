@@ -86,6 +86,13 @@ def load_flash_lib(lib_path: str, check_type: bool = True):
             ctypes.c_void_p,  # k
             ctypes.c_void_p,  # v
             ctypes.c_void_p,  # o_out
+            ctypes.c_void_p,  # qk_out fp32
+            ctypes.c_void_p,  # p_out fp16
+            ctypes.c_void_p,  # p_out fp32
+            ctypes.c_void_p,  # pv_out tiles
+            ctypes.c_void_p,  # global_sum
+            ctypes.c_void_p,  # exp_max
+            ctypes.c_void_p,  # o snapshots
         ]
         lib.call_kernel.restype = None
 
@@ -97,18 +104,32 @@ def load_flash_lib(lib_path: str, check_type: bool = True):
         k: torch.Tensor,
         v: torch.Tensor,
         o_out: torch.Tensor,
+        outDevice: torch.Tensor,
+        xexpDevice: torch.Tensor,
+        pOutFp32Device: torch.Tensor,
+        out2Device: torch.Tensor,
+        gSumDevice: torch.Tensor,
+        expMaxDevice: torch.Tensor,
+        oPartsDevice: torch.Tensor,
         block_dim: int = default_block_dim,
         stream_ptr=default_stream_ptr, 
     ):
 
         lib.call_kernel(
-            block_dim,
-            stream_ptr, 
-            torch_to_ctypes(q),
-            torch_to_ctypes(k),
-            torch_to_ctypes(v),
-            torch_to_ctypes(o_out),
-        )
+        block_dim,
+        stream_ptr,
+        torch_to_ctypes(q),
+        torch_to_ctypes(k),
+        torch_to_ctypes(v),
+        torch_to_ctypes(o_out),
+        torch_to_ctypes(outDevice),       # qk_out fp32
+        torch_to_ctypes(xexpDevice),      # p_out fp16
+        torch_to_ctypes(pOutFp32Device),  # p_out fp32
+        torch_to_ctypes(out2Device),      # pv_out tiles
+        torch_to_ctypes(gSumDevice),      # global_sum
+        torch_to_ctypes(expMaxDevice),    # exp_max
+        torch_to_ctypes(oPartsDevice),    # o snapshots
+    )
 
     return flash
 
