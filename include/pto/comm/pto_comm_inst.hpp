@@ -21,14 +21,31 @@ namespace comm {
 // ============================================================================
 // TPUT: Remote write operation - write local data to remote NPU's memory
 // Data flow: srcGlobalData (local GM) → stagingTileData (UB) → dstGlobalData (remote GM)
+// Supports atomic operations: AtomicNone (default) or AtomicAdd
 // ============================================================================
 
-template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+// TPUT with atomic operation support (compile-time specified)
+template <AtomicType atomicType = AtomicType::AtomicNone, 
+          typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, 
                           TileData &stagingTileData, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TPUT_IMPL(dstGlobalData, srcGlobalData, stagingTileData);
+    TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData, stagingTileData);
+    return {};
+}
+
+// TPUT with runtime-specified atomic operation
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, 
+                          TileData &stagingTileData, AtomicType atomicType, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    if (atomicType == AtomicType::AtomicAdd) {
+        TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, AtomicType::AtomicAdd>(dstGlobalData, srcGlobalData, stagingTileData);
+    } else {
+        TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, AtomicType::AtomicNone>(dstGlobalData, srcGlobalData, stagingTileData);
+    }
     return {};
 }
 
@@ -195,6 +212,8 @@ PTO_INST RecordEvent TREDUCE_PINGPONG(ParallelGroupT &parallelGroup, GlobalDstDa
     TREDUCE_PINGPONG_IMPL(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
     return {};
 }
+
+
 
 } // namespace comm
 } // namespace pto
