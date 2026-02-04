@@ -793,6 +793,13 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events)
     return {};
 }
 
+template <typename TileDataDst, typename GlobalData, typename... WaitEvents>
+PTO_INST RecordEvent TTPREFETCH(TileDataDst &dst, GlobalData &src, WaitEvents&... events) {
+  TSYNC(events...);
+  TTPREFETCH_IMPL(dst, src);
+  return {};
+}
+
 template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern, typename... WaitEvents>
 PTO_INST RecordEvent TGATHER(DstTileData &dst, SrcTileData &src, WaitEvents &... events)
 {
