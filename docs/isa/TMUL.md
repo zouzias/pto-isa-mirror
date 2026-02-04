@@ -19,6 +19,7 @@ Synchronous form:
 ```text
 %dst = tmul %src0, %src1 : !pto.tile<...>
 ```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
