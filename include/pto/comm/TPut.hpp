@@ -28,7 +28,7 @@ namespace comm {
 
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, 
           AtomicType atomicType = AtomicType::AtomicNone>
-__tf__ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, 
+PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, 
                             TileData &stagingTileData)
 {
     using T = typename GlobalSrcData::RawDType;
