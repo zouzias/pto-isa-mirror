@@ -38,6 +38,7 @@ find_package(Threads REQUIRED)
 
 set(ALL_TESTCASES
 tmatmul
+ttri
 tflashattn
 tci
 tadds
