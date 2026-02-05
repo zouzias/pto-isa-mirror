@@ -218,7 +218,9 @@ PTO_INTERNAL void CalcQuantizedFP8Values_Unroll2(__ubuf__ float* srcPtr,
     }
 }
 
-template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, typename TileDataMax, unsigned SrcStride>
+
+// TQuant: fp32 -> mxed fp8(e4m3) quantization ND only so far
+template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, typename TileDataMax>
 __tf__ PTO_INTERNAL void TQuant(typename TileDataSrc::TileDType __in__  src,
                                 typename TileDataExp::TileDType __out__ exp,
                                 typename TileDataOut::TileDType __out__ dst,
@@ -276,7 +278,54 @@ __tf__ PTO_INTERNAL void TQuant(typename TileDataSrc::TileDType __in__  src,
     }
 }
 
-template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, typename TileDataMax, int mode>
+// TQuant: fp32 -> s8 conversion, ND only so far
+template <typename TileDataSrc, typename TileDataOut>
+__tf__ PTO_INTERNAL void TQuant(typename TileDataSrc::TileDType __in__  src,
+                                typename TileDataOut::TileDType __out__ dst,
+                                unsigned validRows,
+                                unsigned validCols) {
+    using T = typename TileDataSrc::DType;  // fp32
+    using U = typename TileDataOut::DType;  // int8
+    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    __ubuf__ U *dstPtr = (__ubuf__ U *)__cce_get_tile_ptr(dst);
+
+    const uint32_t dstCols = TileDataOut::Cols;
+    const uint32_t srcCols = TileDataSrc::Cols;
+    __VEC_SCOPE__ {
+        uint32_t len32 = ELE_CNT_B32;
+        MaskReg preg_b32 = CreatePredicate<float>(len32);
+        FOR_ROWS
+            FOR_ELEMENTS(ELE_CNT_B16)
+                RegTensor<float> v_input_0, v_input_1;
+                RegTensor<half> v_output_odd, v_output_even, v_output;
+                RegTensor<int8_t> v_output_s8;
+                MaskReg preg_b16 = CreatePredicate<half>(sreg);
+                vlds(v_input_0, v_input_1, srcPtr, 128, DINTLV_B32, POST_UPDATE);
+                vcvt(v_output_even, v_input_0, preg_b32, ROUND_R, RS_ENABLE, PART_EVEN);
+                vcvt(v_output_odd,  v_input_1, preg_b32, ROUND_R, RS_ENABLE, PART_ODD);
+                vor(v_output, v_output_even, v_output_odd, preg_b16);
+                vcvt(v_output_s8, v_output, preg_b16, ROUND_R, RS_ENABLE, PART_EVEN);
+                vsts(v_output_s8, dstPtr, 128, PK_B16, preg_b16, POST_UPDATE);
+            END_FOR_ELEMENTS
+        END_FOR_ROWS
+    }
+}
+
+
+template <typename TileDataSrc, typename TileDataOut>
+PTO_INTERNAL void TQUANT_IMPL(TileDataSrc &src,
+                            TileDataOut &dst) {
+    using T = typename TileDataSrc::DType;
+    using U = typename TileDataOut::DType;
+    static_assert(std::is_same<T, float32_t>::value, "Fix: Input has to be float 32");
+    static_assert(std::is_same<U, int8_t>::value, "Fix: Out data type has to be int8");
+    
+    TQuant<TileDataSrc, TileDataOut>
+        (src.data(),  dst.data(), src.GetValidRow(), src.GetValidCol());
+}
+
+
+template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, typename TileDataMax>
 PTO_INTERNAL void TQUANT_IMPL(TileDataSrc &src,
                             TileDataExp &exp,
                             TileDataOut &dst,
@@ -284,8 +333,8 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataSrc &src,
                             TileDataSrc &scaling) {
     using T = typename TileDataSrc::DType;
     static_assert(std::is_same<T, float32_t>::value, "Fix: Input has to be float 32");
-
-    TQuant<TileDataSrc, TileDataExp, TileDataOut, TileDataMax, mode>
+    
+    TQuant<TileDataSrc, TileDataExp, TileDataOut, TileDataMax>
         (src.data(), exp.data(), dst.data(), max.data(), scaling.data(),
          src.GetValidRow(), src.GetValidCol());
 }
