@@ -27,10 +27,7 @@ def gen_golden_data(param):
     input_arr = np.random.uniform(low=-8, high=8, size=(rows, cols)).astype(data_type)
     divider = np.random.uniform(low=-8, high=8, size=1).astype(data_type)
     output_arr = np.zeros((dst_tile_row, dst_tile_col), dtype=data_type)
-    if data_type == np.float16 or data_type == np.float32:
-        output_arr[:rows, :cols] = np.fmod(input_arr[:rows, :cols], divider[0])
-    else:
-        output_arr[:rows, :cols] = input_arr[:rows, :cols] % divider[0]
+    output_arr[:rows, :cols] = np.fmod(input_arr[:rows, :cols], divider[0])
 
     input_arr.tofile('input.bin')
     with open("divider.bin", 'wb') as f:
@@ -38,7 +35,7 @@ def gen_golden_data(param):
     output_arr.tofile('golden.bin')
 
 
-class TremsParams:
+class TfmodsParams:
     def __init__(self, name, data_type, dst_tile_row, dst_tile_col, row, col):
         self.name = name
         self.data_type = data_type
@@ -49,12 +46,12 @@ class TremsParams:
 
 if __name__ == "__main__":
     case_params_list = [
-        TremsParams("TREMSTest.case1", np.float32, 32, 128, 32, 64),
-        TremsParams("TREMSTest.case2", np.float16, 63, 128, 63, 64),
-        TremsParams("TREMSTest.case3", np.int32, 31, 256, 31, 128),
-        TremsParams("TREMSTest.case4", np.int16, 15, 192, 15, 64 * 3),
-        TremsParams("TREMSTest.case5", np.float32, 7, 512, 7, 64 * 7),
-        TremsParams("TREMSTest.case6", np.float32, 256, 32, 256, 16)
+        TfmodsParams("TFMODSTest.case1", np.float32, 32, 128, 32, 64),
+        TfmodsParams("TFMODSTest.case2", np.float16, 63, 128, 63, 64),
+        TfmodsParams("TFMODSTest.case3", np.int32, 31, 256, 31, 128),
+        TfmodsParams("TFMODSTest.case4", np.int16, 15, 192, 15, 64 * 3),
+        TfmodsParams("TFMODSTest.case5", np.float32, 7, 512, 7, 64 * 7),
+        TfmodsParams("TFMODSTest.case6", np.float32, 256, 32, 256, 16)
     ]
 
     for _, case in enumerate(case_params_list):
