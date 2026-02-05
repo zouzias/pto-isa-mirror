@@ -192,6 +192,9 @@ set(ALL_TESTCASES
     tfmods
     tscatter
     tneg
+    tcolexpandadd
+    tcolexpandmax
+    tcolexpandmin
     tcolexpanddiv
     tcolexpandmul
     tcolexpandsub
