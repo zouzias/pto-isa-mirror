@@ -14,6 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 #include <pto/common/utils.hpp>
 
+#define VEC_CORE_ID_OFFSET 16
+
 namespace pto {
 
 // Operation types for TSync - identifies the producer/consumer operation
@@ -88,7 +90,7 @@ struct TSync_Custom {
         if constexpr (is_c2v) {
             // Cube produces, Vector consumes
             set_intra_block(PIPE_FIX, flag_id);
-            set_intra_block(PIPE_FIX, flag_id + 16);
+            set_intra_block(PIPE_FIX, flag_id + VEC_CORE_ID_OFFSET);
         } else { // is_v2c
             // Vector produces, Cube consumes
             set_intra_block(PIPE_MTE3, flag_id);
@@ -106,7 +108,7 @@ struct TSync_Custom {
         } else { // is_v2c
             // Cube waits for Vector
             wait_intra_block(PIPE_MTE2, flag_id);
-            wait_intra_block(PIPE_MTE2, flag_id + 16);
+            wait_intra_block(PIPE_MTE2, flag_id + VEC_CORE_ID_OFFSET);
         }
     }
     
@@ -120,7 +122,7 @@ struct TSync_Custom {
         if constexpr (is_c2v) {
             // Cube waits for Vector to free buffer
             wait_intra_block(PIPE_FIX, flag_id + 1);
-            wait_intra_block(PIPE_FIX, flag_id + 1 + 16);
+            wait_intra_block(PIPE_FIX, flag_id + 1 + VEC_CORE_ID_OFFSET);
         } else { // is_v2c
             // Vector waits for Cube to free buffer
             wait_intra_block(PIPE_MTE3, flag_id + 1);
@@ -138,7 +140,7 @@ struct TSync_Custom {
         } else { // is_v2c
             // Cube frees buffer for Vector
             set_intra_block(PIPE_MTE2, flag_id + 1);
-            set_intra_block(PIPE_MTE2, flag_id + 1 + 16);
+            set_intra_block(PIPE_MTE2, flag_id + 1 + VEC_CORE_ID_OFFSET);
         }
     }
 };

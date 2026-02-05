@@ -14,6 +14,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 #include <pto/common/utils.hpp>
 
+#define FFTS_MODE_BIT_START 4
+#define FFTS_FLAG_ID_BIT_START 8
+
 namespace pto {
 
 // System reserved FFTS event ids 12-15 for CV comm (control + reserved)
@@ -36,7 +39,8 @@ enum CVSyncMode : uint16_t {
 };
 
 AICORE inline uint16_t _getFFTSMsg(CVSyncMode mode, uint16_t flag_id, uint16_t base_const = 0x1) {
-    return ((base_const & 0xf) + ((mode & 0x3) << 4) + ((flag_id & 0xf) << 8));
+    return ((base_const & 0xf) + ((mode & 0x3) << FFTS_MODE_BIT_START) + 
+            ((flag_id & 0xf) << FFTS_FLAG_ID_BIT_START));
 }
 
 // Cross-core CV slot synchronization. Returns the CV comm slot for the current core/block.
