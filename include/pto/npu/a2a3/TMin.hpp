@@ -28,19 +28,19 @@ struct MinOp {
     }
 };
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride,
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride,
     unsigned src0RowStride = dstRowStride, unsigned src1RowStride = dstRowStride>
-__tf__ PTO_INTERNAL void TMin(typename TileData::TileDType __out__ dst, typename TileData::TileDType __in__ src0,
-    typename TileData::TileDType __in__ src1, unsigned validRows, unsigned validCols) {
-    using T = typename TileData::DType;
+__tf__ PTO_INTERNAL void TMin(typename TileDataDst::TileDType __out__ dst, typename TileDataSrc0::TileDType __in__ src0,
+    typename TileDataSrc1::TileDType __in__ src1, unsigned validRows, unsigned validCols) {
+    using T = typename TileDataDst::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
     if constexpr (dstRowStride == src0RowStride && dstRowStride == src1RowStride) {
-        BinaryInstr<MinOp<T>, TileData, elementsPerRepeat, blockSizeElem, dstRowStride>(
+        BinaryInstr<MinOp<T>, TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride>(
             dstPtr, src0Ptr, src1Ptr, validRows, validCols);
     } else {
-        BinaryInstr<MinOp<T>, TileData, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
+        BinaryInstr<MinOp<T>, TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
             dstPtr, src0Ptr, src1Ptr, validRows, validCols);
     }
     return;
@@ -74,14 +74,14 @@ PTO_INTERNAL void TMIN_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     // when tileshape of src0, src1 and dst are the same, validRows and validCols are also the same
     if constexpr (std::is_same_v<TileDataDst, TileDataSrc0> && std::is_same_v<TileDataDst, TileDataSrc1>) {
         constexpr unsigned dstRowStride = TileDataDst::RowStride;
-        TMin<TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride>(
+        TMin<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride>(
             dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());
     } else {
         // when tileshape of src0, src1 and dst are different, validRows and validCols are also the same
         constexpr unsigned dstRowStride = TileDataDst::RowStride;
         constexpr unsigned src0RowStride = TileDataSrc0::RowStride;
         constexpr unsigned src1RowStride = TileDataSrc1::RowStride;
-        TMin<TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
+        TMin<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
             dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());
     }
 }

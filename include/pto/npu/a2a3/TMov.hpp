@@ -35,7 +35,7 @@ __tf__ AICORE void TMovToBt(typename DstTileData::TileDType __out__ dst, typenam
     static_assert(SrcTileData::Cols * sizeof(SrcType) % BURST_LEN_UNIT == 0,
         "TMov: When TileType is Bias, col * sizeof(srcDType) must be aligned to 64");
 
-    __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)(src);
+    __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)(__cce_get_tile_ptr(src));
     uint64_t dstAddrP = (uint64_t)dst;
 
     uint16_t convControl = 0;
@@ -64,8 +64,8 @@ __tf__ AICORE void TMovToFb(typename DstTileData::TileDType __out__ dst, typenam
     static_assert(SrcTileData::Cols * sizeof(SrcType) % BURST_LEN_UNIT == 0,
         "TMov: When TileType is Scaling, col * sizeof(srcType) must be aligned to 128");
 
-    __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)(src);
-    __fbuf__ DstType *dstAddr = (__fbuf__ DstType *)(dst);
+    __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)(__cce_get_tile_ptr(src));
+    __fbuf__ DstType *dstAddr = (__fbuf__ DstType *)(__cce_get_tile_ptr(dst));
     constexpr bool isRelu = 0;
     __fbuf__ DstType *dstAddrP = (__fbuf__ DstType *)(dstAddr || (isRelu << RELU_BIT));
 

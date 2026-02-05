@@ -120,10 +120,6 @@ AICORE inline void runTMOV_UNALIGN(__gm__ T *out, __gm__ U *src0, __gm__ S *src1
     using BType = typename RightTile::DType;
     using CType = typename AccTile::DType;
 
-    __ca__ AType *a = (__ca__ AType *)(aTile.data());
-    __cb__ BType *b = (__cb__ BType *)(bTile.data());
-    __cc__ CType *c = (__cc__ CType *)(cTile.data());
-
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
@@ -258,10 +254,6 @@ AICORE inline void runTEXTRACT_UNALIGN(__gm__ T *out, __gm__ U *src0, __gm__ S *
     using AType = typename LeftTile::DType;
     using BType = typename RightTile::DType;
     using CType = typename AccTile::DType;
-
-    __ca__ AType *a = (__ca__ AType *)(aTile.data());
-    __cb__ BType *b = (__cb__ BType *)(bTile.data());
-    __cc__ CType *c = (__cc__ CType *)(cTile.data());
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -398,10 +390,6 @@ AICORE inline void runTEXTRACT_COMPACT(__gm__ T *out, __gm__ U *src0, __gm__ S *
     using AType = typename LeftTile::DType;
     using BType = typename RightTile::DType;
     using CType = typename AccTile::DType;
-
-    __ca__ AType *a = (__ca__ AType *)(aTile.data());
-    __cb__ BType *b = (__cb__ BType *)(bTile.data());
-    __cc__ CType *c = (__cc__ CType *)(cTile.data());
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
