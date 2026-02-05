@@ -14,6 +14,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
+template <typename T>
+AICORE constexpr inline T CeilAlign(T num_1, T num_2)
+{
+    if (num_2 == 0) {
+        return 0;
+    }
+    return (num_1 + num_2 - 1) / num_2 * num_2;
+}
+template <typename T>
+AICORE constexpr inline T CeilDivision(T num_1, T num_2)
+{
+    if (num_2 == 0) {
+        return 0;
+    }
+    return (num_1 + num_2 - 1) / num_2;
+}
 template <typename T, typename U, uint32_t fmapN, uint32_t fmapC1, uint32_t fmapH, uint32_t fmapW, uint32_t fmapC0,
           uint32_t filterC1, uint32_t filterH, uint32_t filterW, uint32_t filterN, uint32_t filterC0,
           uint8_t dilationH = 1, uint8_t dilationW = 1, uint8_t strideH = 1, uint8_t strideW = 1,
@@ -90,7 +106,9 @@ AICORE inline void runTIMG2COL(__gm__ T *out, __gm__ U *src0, __gm__ U *src1)
     convcfg.padList[3] = padBottom;
     convcfg.padValue = 0;
     convcfg.transpose = false;
+    convcfg.dstStride = CeilDivision<uint32_t>(M, 16);
     TSETFMATRIX<SetFmatrixMode::FMATRIX_B_MANUAL>(convcfg);
+    TLOAD3DSETREPEAT<SetFmatrixMode::FMATRIX_B_MANUAL>(convcfg);
     TIMG2COL<LeftTile, TileMatAData, SetFmatrixMode::FMATRIX_B_MANUAL>(aTile, aMatTile, 0, 0, convcfg);
     TMOV(bTile, bMatTile);
 
@@ -103,14 +121,6 @@ AICORE inline void runTIMG2COL(__gm__ T *out, __gm__ U *src0, __gm__ U *src1)
     out = dstGlobal.data();
 }
 
-template <typename T>
-AICORE constexpr inline T CeilAlign(T num_1, T num_2)
-{
-    if (num_2 == 0) {
-        return 0;
-    }
-    return (num_1 + num_2 - 1) / num_2 * num_2;
-}
 template <typename T, typename U, uint32_t fmapN, uint32_t fmapC1, uint32_t fmapH, uint32_t fmapW, uint32_t fmapC0,
           uint32_t filterC1, uint32_t filterH, uint32_t filterW, uint32_t filterN, uint32_t filterC0,
           uint8_t dilationH = 1, uint8_t dilationW = 1, uint8_t strideH = 1, uint8_t strideW = 1,
@@ -194,6 +204,7 @@ AICORE inline void runTIMG2COLSplitK(__gm__ T *out, __gm__ U *src0, __gm__ U *sr
     convcfg.padList[2] = padTop;
     convcfg.padList[3] = padBottom;
     convcfg.padValue = 0;
+    convcfg.dstStride = CeilDivision<uint32_t>(validM, 16);
     TSETFMATRIX<SetFmatrixMode::FMATRIX_B_AUTO, U>(convcfg);
     constexpr int iter = K / baseK;
     for (int i = 0; i < iter; i++) {
@@ -299,10 +310,12 @@ AICORE inline void runTIMG2COLFractalZ4D(__gm__ T *out, __gm__ U *src0, __gm__ U
     convcfg.padList[2] = padTop;
     convcfg.padList[3] = padBottom;
     convcfg.padValue = 0;
-    TSETFMATRIX<SetFmatrixMode::FMATRIX_A_MANUAL, U>(convcfg);
+    convcfg.dstStride = CeilDivision<uint32_t>(validM, 16);
+    TLOAD3DSETREPEAT(convcfg);
+    TSETFMATRIX(convcfg);
     constexpr int iter = K / baseK;
     for (int i = 0; i < iter; i++) {
-        TIMG2COL<LeftTile, TileMatAData, SetFmatrixMode::FMATRIX_A_MANUAL, U>(aTile, aMatTile, 0, i * baseK, convcfg);
+        TIMG2COL(aTile, aMatTile, 0, i * baseK, convcfg);
         TEXTRACT(bTile, bMatTile, i * baseK, 0);
         set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
