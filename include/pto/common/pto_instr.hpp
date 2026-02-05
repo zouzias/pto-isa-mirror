@@ -292,65 +292,6 @@ PTO_INST RecordEvent TSUBC(TileData &dst, TileData &src0, TileData &src1, TileDa
   return {};
 }
 
-#ifdef REGISTER_BASE
-template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
-    typename... WaitEvents>
-PTO_INST RecordEvent TGEMV_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
-    TileRightScale &bScaleMatrix, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TGEMV_MX, cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix);
-    return {};
-}
-
-template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
-    typename... WaitEvents>
-PTO_INST RecordEvent TGEMV_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
-    TileRightScale &bScaleMatrix, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TGEMV_MX_IMPL<Phase>(cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix);
-    return {};
-}
-
-template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale, typename... WaitEvents>
-PTO_INST RecordEvent TGEMV_MX(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix,
-    TileRight &bMatrix, TileRightScale &bScaleMatrix, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TGEMV_MX, cOutMatrix, cInMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix);
-    return {};
-}
-
-template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale, typename... WaitEvents>
-PTO_INST RecordEvent TGEMV_MX(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix,
-    TileRight &bMatrix, TileRightScale &bScaleMatrix, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TGEMV_MX_IMPL<Phase>(cOutMatrix, cInMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix);
-    return {};
-}
-
-template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
-    typename TileBias, typename... WaitEvents>
-PTO_INST RecordEvent TGEMV_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
-    TileRightScale &bScaleMatrix, TileBias &biasData, WaitEvents &...events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TGEMV_MX, cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix, biasData);
-    return {};
-}
-
-template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
-    typename TileBias, typename... WaitEvents>
-PTO_INST RecordEvent TGEMV_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
-    TileRightScale &bScaleMatrix, TileBias &biasData, WaitEvents &...events)
-{
-    TSYNC(events...);
-    TGEMV_MX_IMPL<Phase>(cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix, biasData);
-    return {};
-}
-
 template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
     typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_MX(
@@ -358,17 +299,6 @@ PTO_INST RecordEvent TMATMUL_MX(
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TMATMUL_MX, cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix);
-    return {};
-}
-
-// UF-aware overload enabling unit-flag selection via AccPhase while retaining the TMATMUL name.
-template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
-    typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_MX(
-    TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix, TileRightScale &bScaleMatrix, WaitEvents&... events)
-{
-    TSYNC(events...);
-    TMATMUL_MX_IMPL<Phase>(cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix);
     return {};
 }
 
@@ -382,16 +312,6 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cOutMatrix, TileRes &cInMatrix, TileLef
     return {};
 }
 
-template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
-    typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_MX(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix,
-    TileRight &bMatrix, TileRightScale &bScaleMatrix, WaitEvents&... events)
-{
-    TSYNC(events...);
-    TMATMUL_MX_IMPL<Phase>(cOutMatrix, cInMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix);
-    return {};
-}
-
 template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
     typename TileBias, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
@@ -401,18 +321,6 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
     MAP_INSTR_IMPL(TMATMUL_MX, cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix, biasData);
     return {};
 }
-
-template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
-    typename TileBias, typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
-    TileRightScale &bScaleMatrix, TileBias &biasData, WaitEvents&... events)
-{
-    TSYNC(events...);
-    TMATMUL_MX_IMPL<Phase>(cMatrix, aMatrix, aScaleMatrix, bMatrix, bScaleMatrix, biasData);
-    return {};
-}
-
-#endif
 
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
 PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents&... events) {
@@ -1186,19 +1094,27 @@ PTO_INST RecordEvent TCOLEXPANDEXPDIF(TileDataDst &dst, TileDataDst &src0, TileD
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
-PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents&... events) {
+PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataDst &tmp, WaitEvents&... events) {
   TSYNC(events...);
-  MAP_INSTR_IMPL(TREM, dst, src0, src1);
+  MAP_INSTR_IMPL(TREM, dst, src0, src1, tmp);
   return {};
 }
 
 #ifdef REGISTER_BASE
+template <typename TileDataSrc, typename TileDataOut, typename... WaitEvents>
+PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataOut &dst, WaitEvents&... events) {
+  TSYNC(events...);
+  TQUANT_IMPL<TileDataSrc, TileDataOut>(src, dst);
+  return {};
+}
+
+
 template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, 
-          typename TileDataMax, int mode, typename... WaitEvents>
+          typename TileDataMax, typename... WaitEvents>
 PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst, 
                             TileDataMax &max, TileDataSrc &scaling, WaitEvents&... events) {
   TSYNC(events...);
-  TQUANT_IMPL<TileDataSrc, TileDataExp, TileDataOut, TileDataMax, mode>(src, exp, dst, max, scaling);
+  TQUANT_IMPL<TileDataSrc, TileDataExp, TileDataOut, TileDataMax>(src, exp, dst, max, scaling);
   return {};
 }
 #endif
