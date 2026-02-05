@@ -57,7 +57,7 @@ using namespace pto;
 // -----------------------------------------------------------------------------
 
 #ifndef UB_PATH_MODE
-#define UB_PATH_MODE 1  // Default: ALL_UB_PATH (maximum performance)
+#define UB_PATH_MODE 2  // Default: QK_PV_UB_ONLY (maximum utilization)
 #endif
 
 // Mode validation
@@ -95,7 +95,7 @@ using namespace pto;
 // -----------------------------------------------------------------------------
 enum FftsBufferFlag : uint32_t {
     BUF0_QK_READY = 0,    // qk2smSync: uses flags 0, 1 (+ 16, 17 for dual core)
-    BUF1_SM_READY = 2,    // sm2pvSync: uses flags 2, 3
+    BUF1_SM_READY = 2,    // sm2pvSync: uses flags 2, 3 (+ 18, 19 for dual core)
     UPDATE_READY = 4,     // pv2guSync: uses flags 4, 5 (+ 20, 21 for dual core)
     UB_BUF_READY = 6,     // ubBufSync: uses flags 6, 7 (+ 22, 23 for dual core)
     PV_UB_BUF_READY = 8,  // pvUbBufSync: uses flags 8, 9 (+ 24, 25 for dual core)
@@ -271,7 +271,7 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     static_assert(SrcBuffers == pvVecBuffers, "src/pv buffer counts must match");
 
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-    // Mode 1 : With TMOV L0C->UB path for QK, qkVecTile data stays in UB longer
+    // Mode 1 enabled: With TMOV L0C->UB path for QK, qkVecTile data stays in UB longer
     // and can conflict with pvVecTile TLOAD.
     // Use SEPARATE allocations (not union) since A5 has 256KB UB (vs 192KB on A2/A3).
     constexpr std::size_t src_bytes = tile_buffer_total_bytes<TileDataF_T, SrcBuffers>();
@@ -1035,19 +1035,19 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     __gm__ float *qk_tile_fifo_block = qk_tile_fifo + static_cast<size_t>(comm_slot) * qk_fifo_block_stride;
     __gm__ float *pv_tile_fifo_block = pv_tile_fifo + static_cast<size_t>(comm_slot) * pv_fifo_block_stride;
 
-    constexpr TSync_Custom<SyncOpType::TSTORE_C2GM, SyncOpType::TLOAD> qk2smSync = {BUF0_QK_READY};
+    constexpr TSync_Custom<SyncOpType::TSTORE_C2GM, SyncOpType::TLOAD> qk2smSync  = {BUF0_QK_READY};
 #if USE_UB_TO_L1_PATH
     constexpr TSync_Custom<SyncOpType::TINSERT_V2L1, SyncOpType::TLOAD> sm2pvSync = {BUF1_SM_READY};
 #else
-    constexpr TSync_Custom<SyncOpType::TSTORE_V2GM, SyncOpType::TLOAD> sm2pvSync = {BUF1_SM_READY};
+    constexpr TSync_Custom<SyncOpType::TSTORE_V2GM, SyncOpType::TLOAD> sm2pvSync  = {BUF1_SM_READY};
 #endif
 #if USE_L0C_TO_UB_PV_PATH
-    constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> pv2guSync = {UPDATE_READY};
+    constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> pv2guSync    = {UPDATE_READY};
 #else
-    constexpr TSync_Custom<SyncOpType::TSTORE_C2GM, SyncOpType::TLOAD> pv2guSync = {UPDATE_READY};
+    constexpr TSync_Custom<SyncOpType::TSTORE_C2GM, SyncOpType::TLOAD> pv2guSync  = {UPDATE_READY};
 #endif
-    constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> ubBufSync = {UB_BUF_READY};
-    constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> pvUbBufSync = {PV_UB_BUF_READY};
+    constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> ubBufSync    = {UB_BUF_READY};
+    constexpr TSync_Custom<SyncOpType::TMOV_C2UB, SyncOpType::TLOAD> pvUbBufSync  = {PV_UB_BUF_READY};
 
     int num_tiles_s1 = S1 / Tile_S1;
     if constexpr (CAUSAL_MASK)
