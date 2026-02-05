@@ -619,7 +619,7 @@ PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData 
 
 template <typename TileData, typename ConvTileData,
           SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL,
-          typename T = uint64_t, typename... WaitEvents>
+          typename T = uint32_t, typename... WaitEvents>
 PTO_INST RecordEvent TIMG2COL(TileData &dst, ConvTileData &src,
                             uint16_t posM = 0, uint16_t posK = 0,
                             const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents&... events) {
@@ -628,12 +628,42 @@ PTO_INST RecordEvent TIMG2COL(TileData &dst, ConvTileData &src,
   return {};
 }
 
-template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint64_t, typename... WaitEvents>
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint32_t, typename... WaitEvents>
 PTO_INST RecordEvent TSETFMATRIX(const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents&... events) {
   TSYNC(events...);
   TSETFMATRIX_IMPL<FmatrixMode, T>(cfg);
   return {};
 }
+#ifdef MEMORY_BASE
+template <typename T = uint32_t, typename... WaitEvents>
+PTO_INST RecordEvent TSETREPEAT(const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents&... events) {
+  TSYNC(events...);
+  TSETREPEAT_IMPL<T>(cfg);
+  return {};
+}
+
+template <typename T, typename... WaitEvents>
+PTO_INST RecordEvent TSETPADDING(const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents&... events) {
+  TSYNC(events...);
+  TSETPADDING_IMPL<T>(cfg);
+  return {};
+}
+#endif
+#if defined REGISTER_BASE
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint32_t, typename... WaitEvents>
+PTO_INST RecordEvent TSETREPEAT(const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents&... events) {
+  TSYNC(events...);
+  TSETREPEAT_IMPL<FmatrixMode, T>(cfg);
+  return {};
+}
+
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T, typename... WaitEvents>
+PTO_INST RecordEvent TSETPADDING(const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents&... events) {
+  TSYNC(events...);
+  TSETPADDING_IMPL<FmatrixMode, T>(cfg);
+  return {};
+}
+#endif
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
