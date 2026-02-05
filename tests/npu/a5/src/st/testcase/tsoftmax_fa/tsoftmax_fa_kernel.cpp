@@ -107,6 +107,7 @@ __global__ AICORE void runSoftmax_dn_fusion( __gm__ aclFloat16 __out__ *x_exp,
 
     TSOFTMAX_DN_FUSION<ReduceTile_F, TileData_H, TileData_F, TileData_U8, init>(dst5Tile, src0Tile, src1Tile, dst0Tile, dst1Tile, dst2Tile, dst3Tile, dst4Tile);
     // TSOFTMAX_DN_FUSION2<ReduceTile_F, TileData_H, TileData_F, TileData_U8, init>(dst5Tile, src0Tile, src1Tile, dst0Tile, dst1Tile, dst2Tile, dst3Tile, dst4Tile);
+    // TSOFTMAX_DN_FUSION3<ReduceTile_F, TileData_H, TileData_F, TileData_U8, init>(dst5Tile, src0Tile, src1Tile, dst0Tile, dst1Tile, dst2Tile, dst3Tile, dst4Tile);
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -549,6 +550,8 @@ template void launchTSOFTMAX_dn_nofusion<256, 64, 1>(aclFloat16 *x_exp, float *i
 template void launchTSOFTMAX_dn_nofusion<256, 64, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_dn_nofusion<128, 64, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_dn_nofusion<128, 64, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_dn_nofusion<128, 128, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_dn_nofusion<128, 128, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
 template <int seq, int headSize, int init>
 void launchTSOFTMAX_nd_fusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream){

@@ -173,9 +173,9 @@ void test_softmax_dn_fusion()
     bool ret = false;
     if(init){
         ret0 = ResultCmp(golden, devFinal, 0.01f);
-        ret1 = ResultCmp(golden1, devFinal1, 0.001f);
+        ret4 = ResultCmp(golden4, devFinal4, 0.001f);
         ret5 = ResultCmp(golden5, devFinal5, 0.001f);
-        ret = ret0 && ret1 && ret5;
+        ret = ret0 && ret4 && ret5;
     }
     else {
         ret0 = ResultCmp(golden, devFinal, 0.01f);
@@ -303,19 +303,25 @@ void test_softmax_dn_no_fusion()
     ReadFile(GetGoldenDir() + "/golden_global_sum.bin", dst0FileSize, golden5.data(), dst0FileSize);
     ReadFile(GetGoldenDir() + "/output_global_sum.bin", dst0FileSize, devFinal5.data(), dst0FileSize);
 
-    bool ret0 = ResultCmp(golden, devFinal, 0.01f);
-    bool ret1 = ResultCmp(golden1, devFinal1, 0.001f);
-    bool ret2 = ResultCmp(golden2, devFinal2, 0.001f);
-    bool ret3 = ResultCmp(golden3, devFinal3, 0.001f);
-    bool ret4 = ResultCmp(golden4, devFinal4, 0.001f);
-    bool ret5 = ResultCmp(golden5, devFinal5, 0.001f);
+    bool ret0 = false;
+    bool ret1 = false;
+    bool ret2 = false;
+    bool ret3 = false;
+    bool ret4 = false;
+    bool ret5 = false;
     bool ret = false;
     if(init){
         // ret = ret0 && ret1 && ret5;
+        ret0 = ResultCmp(golden, devFinal, 0.01f);
+        ret5 = ResultCmp(golden5, devFinal5, 0.001f);
         ret = ret0 && ret5;    //dont need to check local max
     }
     else {
         // ret = ret0 && ret1 && ret2 && ret3 && ret5;
+        ret0 = ResultCmp(golden, devFinal, 0.01f);
+        ret2 = ResultCmp(golden2, devFinal2, 0.001f);
+        ret3 = ResultCmp(golden3, devFinal3, 0.001f);
+        ret5 = ResultCmp(golden5, devFinal5, 0.001f);
         ret = ret0 && ret2 && ret3 && ret5;    //dont need to check local max
     }
 
@@ -733,4 +739,24 @@ TEST_F(TSOFTMAXFATest, case28_B1_N1_S128_H128_ND_fusion_init)
 TEST_F(TSOFTMAXFATest, case29_B1_N1_S64_H128_ND_fusion_no_init)
 {
     test_softmax_nd_fusion<64, 128, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case30_B1_N1_S128_H128_DN_no_fusion_init)
+{
+    test_softmax_dn_no_fusion<128, 128, 1>();
+}
+
+TEST_F(TSOFTMAXFATest, case31_B1_N1_S128_H128_DN_fusion_init)
+{
+    test_softmax_dn_fusion<128, 128, 1>();
+}
+
+TEST_F(TSOFTMAXFATest, case32_B1_N1_S128_H128_DN_no_fusion_no_init)
+{
+    test_softmax_dn_no_fusion<128, 128, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case33_B1_N1_S128_H128_DN_fusion_no_init)
+{
+    test_softmax_dn_fusion<128, 128, 0>();
 }

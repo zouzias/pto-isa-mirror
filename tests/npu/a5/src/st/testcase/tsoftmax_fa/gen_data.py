@@ -40,7 +40,8 @@ def gen_golden_data(param):
 
             local_max_unscaled = np.max(input, axis=2)
             local_max_golden = local_max_unscaled.reshape(-1).astype(np.float32)
-            local_max_golden.tofile("golden_local_max.bin")    #can set global_max as local_max
+            local_max_golden.tofile("golden_local_max.bin")
+            local_max_golden.tofile("golden_global_max.bin")
             local_max_golden = local_max_golden * SCALE
             # local_max_golden.tofile("golden_local_max.bin")
 
@@ -225,6 +226,10 @@ if __name__ == "__main__":
         TSoftmaxFAParams("TSOFTMAXFATest.case27_B1_N1_S128_H128_ND_fusion_no_init", 1, 1, 128, 128, False, False),
         TSoftmaxFAParams("TSOFTMAXFATest.case28_B1_N1_S128_H128_ND_fusion_init", 1, 1, 128, 128, True, False),
         TSoftmaxFAParams("TSOFTMAXFATest.case29_B1_N1_S64_H128_ND_fusion_no_init", 1, 1, 64, 128, False, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case30_B1_N1_S128_H128_DN_no_fusion_init", 1, 1, 128, 128, True, True),
+        TSoftmaxFAParams("TSOFTMAXFATest.case31_B1_N1_S128_H128_DN_fusion_init", 1, 1, 128, 128, True, True),
+        TSoftmaxFAParams("TSOFTMAXFATest.case32_B1_N1_S128_H128_DN_no_fusion_no_init", 1, 1, 128, 128, False, True),
+        TSoftmaxFAParams("TSOFTMAXFATest.case33_B1_N1_S128_H128_DN_fusion_no_init", 1, 1, 128, 128, False, True),
     ]
     for case in case_params_list:
         if not os.path.exists(case.name):
