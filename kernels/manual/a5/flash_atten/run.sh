@@ -34,7 +34,7 @@ do
             QK_PRELOAD="$2"
             shift 2;;
         (-m | --mode )
-            UB_PATH_MODE="$2"
+            FIFO_MODE="$2"
             shift 2;;
         (-i | --intermediate )
             INTERMEDIATE=1
@@ -71,7 +71,7 @@ set -euo pipefail
 # default device id
 : "${NPU_ID:=0}"
 : "${QK_PRELOAD:=4}"
-: "${UB_PATH_MODE:=1}"  # 0=ALL_GM_PATH, 1=ALL_UB_PATH, 2=QK_PV_UB_ONLY
+: "${FIFO_MODE:=1}"  # 0=ALL_GM_PATH, 1=ALL_UB_PATH, 2=QK_PV_UB_ONLY
 
 GEN_CASE_ARGS=()
 # Handle missing value after -c/--case (e.g. user passed -c and then --cases)
@@ -95,7 +95,7 @@ echo "[RUN.SH] CASE_FILTER=${CASE_FILTER:-}<none>"
 echo "[RUN.SH] CASES_RAW=${CASES_RAW:-}<none>"
 echo "[RUN.SH] NPU_ID=${NPU_ID}"
 echo "[RUN.SH] QK_PRELOAD=${QK_PRELOAD}"
-echo "[RUN.SH] UB_PATH_MODE=${UB_PATH_MODE} (0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY)"
+echo "[RUN.SH] FIFO_MODE=${FIFO_MODE} (0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY)"
 echo "[RUN.SH] GEN_CASE_ARGS=${GEN_CASE_ARGS[*]:-<none>}"
 echo "[RUN.SH] INTERMEDIATE=${INTERMEDIATE:-0}"
 echo "[RUN.SH] DEBUG=${DEBUG_BUILD:-0}"
@@ -106,7 +106,7 @@ CMAKE_EXTRA=()
 if [[ -n "${DEBUG_BUILD:-}" ]]; then
     CMAKE_EXTRA+=(-DDEBUG_MODE=ON)
 fi
-CMAKE_EXTRA+=(-DUB_PATH_MODE=${UB_PATH_MODE})
+CMAKE_EXTRA+=(-DFIFO_MODE=${FIFO_MODE})
 
 cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} "${CMAKE_EXTRA[@]}" ..
 make -j16

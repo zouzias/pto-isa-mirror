@@ -36,19 +36,19 @@ using namespace pto;
 // -----------------------------------------------------------------------------
 // Three mutually exclusive modes for path selection:
 //
-// MODE 0 (UB_PATH_MODE = 0): ALL_GM_PATH
+// MODE 0 (FIFO_MODE = 0): ALL_GM_PATH
 //   - All data paths use Global Memory (GM)
 //   - QK: L0C -> GM -> UB (TSTORE/TLOAD)
 //   - P:  UB -> GM -> L1 (TSTORE/TLOAD)
 //   - PV: L0C -> GM -> UB (TSTORE/TLOAD)
 //
-// MODE 1 (UB_PATH_MODE = 1): ALL_UB_PATH
+// MODE 1 (FIFO_MODE = 1): ALL_UB_PATH
 //   - All data paths use UB/L1 direct transfers (no GM roundtrip)
 //   - QK: L0C -> UB (TMOV)
 //   - P:  UB -> L1 (TMOV ND2NZ + TINSERT)
 //   - PV: L0C -> UB (TMOV)
 //
-// MODE 2 (UB_PATH_MODE = 2): QK_PV_UB_ONLY
+// MODE 2 (FIFO_MODE = 2): QK_PV_UB_ONLY
 //   - QK and PV paths use UB (TMOV L0C->UB)
 //   - P path falls back to GM (TSTORE/TLOAD, no TMOV+TINSERT)
 //   - QK: L0C -> UB (TMOV) - UB path
@@ -56,30 +56,30 @@ using namespace pto;
 //   - PV: L0C -> UB (TMOV) - UB path
 // -----------------------------------------------------------------------------
 
-#ifndef UB_PATH_MODE
-#define UB_PATH_MODE 2  // Default: QK_PV_UB_ONLY (maximum utilization)
+#ifndef FIFO_MODE
+#define FIFO_MODE 2  // Default: QK_PV_UB_ONLY (maximum utilization)
 #endif
 
 // Mode validation
-#if (UB_PATH_MODE < 0) || (UB_PATH_MODE > 2)
-#error "UB_PATH_MODE must be 0 (ALL_GM_PATH), 1 (ALL_UB_PATH), or 2 (QK_PV_UB_ONLY)"
+#if (FIFO_MODE < 0) || (FIFO_MODE > 2)
+#error "FIFO_MODE must be 0 (ALL_GM_PATH), 1 (ALL_UB_PATH), or 2 (QK_PV_UB_ONLY)"
 #endif
 
 // UF Feature validation
-#if ((UB_PATH_MODE == 1) || (UB_PATH_MODE == 2)) && (UF_ENABLE != 0)
+#if ((FIFO_MODE == 1) || (FIFO_MODE == 2)) && (UF_ENABLE != 0)
 #error "UF_ENABLE must be 0 for mode 1 (ALL_UB_PATH), and mode 2 (QK_PV_UB_ONLY)"
 #endif
 
 // Derived flags from mode selection
-#if UB_PATH_MODE == 0  // ALL_GM_PATH
+#if FIFO_MODE == 0  // ALL_GM_PATH
 #define USE_L0C_TO_DUAL_UB_PATH_QK 0
 #define USE_L0C_TO_UB_PV_PATH 0
 #define USE_UB_TO_L1_PATH 0
-#elif UB_PATH_MODE == 1  // ALL_UB_PATH
+#elif FIFO_MODE == 1  // ALL_UB_PATH
 #define USE_L0C_TO_DUAL_UB_PATH_QK 1
 #define USE_L0C_TO_UB_PV_PATH 1
 #define USE_UB_TO_L1_PATH 1
-#else  // UB_PATH_MODE == 2 (QK_PV_UB_ONLY)
+#else  // FIFO_MODE == 2 (QK_PV_UB_ONLY)
 #define USE_L0C_TO_DUAL_UB_PATH_QK 1
 #define USE_L0C_TO_UB_PV_PATH 1
 #define USE_UB_TO_L1_PATH 0

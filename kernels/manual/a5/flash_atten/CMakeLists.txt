@@ -64,9 +64,9 @@ endif()
 # 0 = ALL_GM_PATH: All paths use GM (baseline)
 # 1 = ALL_UB_PATH: All paths use UB/L1 direct transfers
 # 2 = QK_PV_UB_ONLY: QK and PV use UB path, P uses GM path
-set(UB_PATH_MODE "1" CACHE STRING "UB Path Mode: 0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY")
-message(STATUS "UB Path Mode: ${UB_PATH_MODE} (0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY)")
-add_compile_definitions(UB_PATH_MODE=${UB_PATH_MODE})
+set(FIFO_MODE "1" CACHE STRING "UB Path Mode: 0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY")
+message(STATUS "UB Path Mode: ${FIFO_MODE} (0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY)")
+add_compile_definitions(FIFO_MODE=${FIFO_MODE})
 
 set(CMAKE_CPP_COMPILE_OPTIONS
     -xc++
