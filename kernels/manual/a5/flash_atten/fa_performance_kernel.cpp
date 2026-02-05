@@ -65,6 +65,11 @@ using namespace pto;
 #error "UB_PATH_MODE must be 0 (ALL_GM_PATH), 1 (ALL_UB_PATH), or 2 (QK_PV_UB_ONLY)"
 #endif
 
+// UF Feature validation
+#if ((UB_PATH_MODE == 1) || (UB_PATH_MODE == 2)) && (UF_ENABLE == 0)
+#error "UF_ENABLE must be 0 for mode 1 (ALL_UB_PATH), and mode 2 (QK_PV_UB_ONLY)"
+#endif
+
 // Derived flags from mode selection
 #if UB_PATH_MODE == 0  // ALL_GM_PATH
 #define USE_L0C_TO_DUAL_UB_PATH_QK 0
