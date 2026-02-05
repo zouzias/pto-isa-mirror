@@ -63,6 +63,8 @@ namespace pto {
     TTRI,
     TREM,
     TREMS,
+    TFMOD,
+    TFMODS,
     TSUBS,
     TMAXS,
     TLRELU,
