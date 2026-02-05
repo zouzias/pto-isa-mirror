@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 #include "acl/acl.h"
+#include <type_traits>
 
 using namespace pto;
 
@@ -17,6 +18,12 @@ using namespace pto;
 
 namespace TQuantTest {
 
+enum class QuantType {
+    MXFP8,
+    S8
+};
+
+// FP32 --> MXFP8
 // Quantize fp32 tile to fp8 (e4m3) and exponent-only (e8m0).
 // Pad columns to multiples of 32 using min fill to avoid reading garbage.
 template <int validRows, int validCols, int mode>
@@ -31,6 +38,7 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0,
     using DstE8Global  = GlobalTensor<uint8_t, Shape<1, 1, 1, 1, groupedCols_flattened>, pto::Stride<1, 1, 1, validCols, 1>>;
     using DstFP8Global = GlobalTensor<uint8_t, Shape<1, 1, 1, validRows, validCols>, pto::Stride<1, 1, 1, validCols, 1>>;
     
+    // define tile layout based on mode, 0 - ND, 1 - NZ
     using SrcTile     = Tile<TileType::Vec, float,   validRows, paddedCols,             BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, PadValue::Zero>;
     using DstE8Tile   = Tile<TileType::Vec, uint8_t, 1,         groupedCols_flattened,  BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, PadValue::Zero>;
     using DstFP8Tile  = Tile<TileType::Vec, uint8_t, validRows, paddedCols,             BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, PadValue::Zero>;
@@ -56,7 +64,8 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0,
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    TQUANT<SrcTile, DstE8Tile, DstFP8Tile, MaxTile, mode>(srcTile, e8Tile, fp8Tile, maxPerGpTile, scalingTile);
+    TQUANT<SrcTile, DstFP8Tile, DstE8Tile, MaxTile>(
+        srcTile, fp8Tile, &e8Tile, &maxPerGpTile, &scalingTile);
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -65,17 +74,66 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0,
     TSTORE(fp8Global, fp8Tile);
 }
 
+// FP32 --> S8
 template <int validRows, int validCols, int mode>
-void LaunchTQuant(uint8_t *out_e8m0, uint8_t *out_fp8, float *src, void *stream) {
-    runTQuant<validRows, validCols, mode><<<1, nullptr, stream>>>(out_e8m0, out_fp8, src);
+__global__ AICORE void runTQuant( __gm__ int8_t __out__ *out_s8,
+                                  __gm__ float __in__ *src) {
+    // pad each row to multiple of 32 elements
+    constexpr int paddedCols_b32 = PTO_CEIL(validCols, BLOCK_BYTE_SIZE/sizeof(float));
+    constexpr int paddedCols_b8  = PTO_CEIL(validCols, BLOCK_BYTE_SIZE/sizeof(int8_t));
+    using SrcGlobal = GlobalTensor<float,  Shape<1, 1, 1, validRows, validCols>, pto::Stride<1, 1, 1, validCols, 1>>;
+    using DstGlobal = GlobalTensor<int8_t, Shape<1, 1, 1, validRows, validCols>, pto::Stride<1, 1, 1, validCols, 1>>;
+    
+    // define tile layout based on mode, 0 - ND, 1 - NZ
+    using SrcTile     = Tile<TileType::Vec, float,  validRows, paddedCols_b32, BLayout::RowMajor, -1, -1>;
+    using DstTile     = Tile<TileType::Vec, int8_t, validRows, paddedCols_b8,  BLayout::RowMajor, -1, -1>;
+    
+    SrcTile srcTile(validRows, validCols);
+    DstTile dstS8Tile(validRows, validCols);
+
+    SrcGlobal srcGlobal(src);
+    DstGlobal dstGlobal(out_s8);
+
+    TASSIGN(srcTile,    0x0);       
+    TASSIGN(dstS8Tile,  0x30100);  
+    
+    TLOAD(srcTile, srcGlobal);
+
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+    TQUANT<SrcTile, DstTile>(srcTile, dstS8Tile);
+
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+    TSTORE(dstGlobal, dstS8Tile);
+}
+
+template <int validRows, int validCols, int mode, QuantType quantType>
+void LaunchTQuant(float *src,
+                  typename std::conditional_t<quantType == QuantType::MXFP8, uint8_t, int8_t> *dst,
+                  uint8_t *dst_exp,
+                  void *stream) {
+    if constexpr (quantType == QuantType::MXFP8) {
+        runTQuant<validRows, validCols, mode><<<1, nullptr, stream>>>(dst_exp, dst, src);
+    } else {
+        (void)dst_exp;
+        runTQuant<validRows, validCols, mode><<<1, nullptr, stream>>>(dst, src);
+    }
 }
 
 } // namespace TQuantTest
 
-template void TQuantTest::LaunchTQuant<32, 32, 0>(uint8_t *out_e8m0, uint8_t *out_fp8, float *src, void *stream);
-template void TQuantTest::LaunchTQuant<32, 64, 0>(uint8_t *out_e8m0, uint8_t *out_fp8, float *src, void *stream);
-template void TQuantTest::LaunchTQuant<64, 128, 0>(uint8_t *out_e8m0, uint8_t *out_fp8, float *src, void *stream);
-template void TQuantTest::LaunchTQuant<128, 128, 0>(uint8_t *out_e8m0, uint8_t *out_fp8, float *src, void *stream);
-template void TQuantTest::LaunchTQuant<32, 64, 1>(uint8_t *out_e8m0, uint8_t *out_fp8, float *src, void *stream);
-template void TQuantTest::LaunchTQuant<64, 128, 1>(uint8_t *out_e8m0, uint8_t *out_fp8, float *src, void *stream);
-template void TQuantTest::LaunchTQuant<128, 128, 1>(uint8_t *out_e8m0, uint8_t *out_fp8, float *src, void *stream);
+// MXFP8 cases
+template void TQuantTest::LaunchTQuant<32, 32, 0, TQuantTest::QuantType::MXFP8>(float *src, uint8_t *dst, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuant<32, 64, 0, TQuantTest::QuantType::MXFP8>(float *src, uint8_t *dst, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuant<64, 128, 0, TQuantTest::QuantType::MXFP8>(float *src, uint8_t *dst, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuant<128, 128, 0, TQuantTest::QuantType::MXFP8>(float *src, uint8_t *dst, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuant<32, 64, 1, TQuantTest::QuantType::MXFP8>(float *src, uint8_t *dst, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuant<64, 128, 1, TQuantTest::QuantType::MXFP8>(float *src, uint8_t *dst, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuant<128, 128, 1, TQuantTest::QuantType::MXFP8>(float *src, uint8_t *dst, uint8_t *dst_exp, void *stream);
+// S8 cases
+template void TQuantTest::LaunchTQuant<64,  128, 0, TQuantTest::QuantType::S8>(float *src, int8_t *dst, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuant<128, 128, 0, TQuantTest::QuantType::S8>(float *src, int8_t *dst, uint8_t *dst_exp, void *stream);
+template void TQuantTest::LaunchTQuant<256, 128, 0, TQuantTest::QuantType::S8>(float *src, int8_t *dst, uint8_t *dst_exp, void *stream);

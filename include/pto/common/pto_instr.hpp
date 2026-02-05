@@ -1193,12 +1193,13 @@ PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 }
 
 #ifdef REGISTER_BASE
-template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, 
-          typename TileDataMax, int mode, typename... WaitEvents>
-PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst, 
-                            TileDataMax &max, TileDataSrc &scaling, WaitEvents&... events) {
+template <typename TileDataSrc, typename TileDataOut, typename TileDataExp = void,
+          typename TileDataMax = void, typename... WaitEvents>
+PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataOut &dst,
+                            TileDataExp *exp = nullptr, TileDataMax *max = nullptr,
+                            TileDataSrc *scaling = nullptr, WaitEvents&... events) {
   TSYNC(events...);
-  TQUANT_IMPL<TileDataSrc, TileDataExp, TileDataOut, TileDataMax, mode>(src, exp, dst, max, scaling);
+  TQUANT_IMPL<TileDataSrc, TileDataOut, TileDataExp, TileDataMax>(src, dst, exp, max, scaling);
   return {};
 }
 #endif
