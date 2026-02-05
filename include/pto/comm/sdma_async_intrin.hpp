@@ -46,25 +46,6 @@ constexpr uint64_t PTO_SHM_DEVICE_INFO_SIZE = PTO_SHM_DEVICE_USER_CONTEXT_PRE_SI
 constexpr uint64_t PTO_SHM_DEVICE_META_ADDR = PTO_SHM_DEVICE_END_ADDR - PTO_SHM_DEVICE_INFO_SIZE;
 constexpr uint64_t PTO_SHM_DEVICE_USER_CONTEXT_ADDR = PTO_SHM_DEVICE_META_ADDR + PTO_SHM_DEVICE_META_SIZE;
 
-// ============================================================================
-// Device-side SDMA Resource Access (standalone re-implementation)
-// ============================================================================
-struct pto_host_stream_info_t {
-    uint64_t stream_;
-    int32_t dev_id;
-    int32_t stream_id;
-    uint32_t sq_id;
-    uint32_t cq_id;
-    uint32_t logic_cq_id;
-    uint64_t ctx_;
-    uint8_t reserved[12];
-};
-
-struct pto_sdma_op_res_info_t {
-    pto_host_stream_info_t streams[40];
-    uint64_t workspace_addr;
-};
-
 // Keep layout consistent with aclshmem_device_host_state_t in shmem_jxy.
 constexpr int PTO_ACLSHMEM_MAX_PES = 16384;
 constexpr int PTO_ACLSHMEM_MAX_TEAMS = 2048;
@@ -141,15 +122,6 @@ PTO_INTERNAL __gm__ void* pto_comm_get_extra_context_addr(uint32_t shmemId)
 PTO_INTERNAL __gm__ pto_comm_global_state_t* pto_comm_get_state()
 {
     return reinterpret_cast<__gm__ pto_comm_global_state_t*>(pto_comm_get_extra_context_addr(0));
-}
-
-PTO_INTERNAL uint64_t pto_comm_get_sdma_workspace_addr()
-{
-    __gm__ pto_comm_global_state_t* state = pto_comm_get_state();
-    if (state == nullptr) {
-        return 0;
-    }
-    return state->sdma_workspace_addr;
 }
 
 PTO_INTERNAL uint32_t pto_comm_select_sdma_channel(uint32_t block_idx, uint32_t num_channels = 40)
