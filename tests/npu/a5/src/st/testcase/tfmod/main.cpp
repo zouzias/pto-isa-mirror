@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-class TREMTest : public testing::Test {
+class TFMODTest : public testing::Test {
 protected:
     void SetUp() override
     {}
@@ -33,10 +33,10 @@ std::string GetGoldenDir() {
 
 
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols, bool isHalf>
-void LaunchTRem(T *out, T *src0, T *src1, void *stream);
+void LaunchTFMod(T *out, T *src0, T *src1, void *stream);
 
 template<typename T, int kTRows_, int kTCols_, int vRows, int vCols, bool isHalf>
-void test_trem() {
+void test_tfmod() {
     size_t fileSize = kTRows_ * kTCols_ * sizeof(T);
 
     aclInit(nullptr);
@@ -60,7 +60,7 @@ void test_trem() {
 
     aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, fileSize, src1Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTRem<T, kTRows_, kTCols_, vRows, vCols, isHalf>(dstDevice, src0Device, src1Device, stream);
+    LaunchTFMod<T, kTRows_, kTCols_, vRows, vCols, isHalf>(dstDevice, src0Device, src1Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -88,38 +88,38 @@ void test_trem() {
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TREMTest, case1) {
-    test_trem<uint16_t, 64, 64, 64, 64, false>();
+TEST_F(TFMODTest, case1) {
+    test_tfmod<uint16_t, 64, 64, 64, 64, false>();
 }
 
-TEST_F(TREMTest, case2) {
-    test_trem<uint16_t, 64, 64, 63, 63, false>();
+TEST_F(TFMODTest, case2) {
+    test_tfmod<uint16_t, 64, 64, 63, 63, false>();
 }
 
-TEST_F(TREMTest, case3) {
-    test_trem<uint16_t, 1, 16384, 1, 16384, false>();
+TEST_F(TFMODTest, case3) {
+    test_tfmod<uint16_t, 1, 16384, 1, 16384, false>();
 }
 
-TEST_F(TREMTest, case4) {
-    test_trem<uint16_t, 2048, 16, 2048, 16, false>();
+TEST_F(TFMODTest, case4) {
+    test_tfmod<uint16_t, 2048, 16, 2048, 16, false>();
 }
 
-TEST_F(TREMTest, case5) {
-    test_trem<float, 32, 32, 32, 32, false>();
+TEST_F(TFMODTest, case5) {
+    test_tfmod<float, 32, 32, 32, 32, false>();
 }
 
-TEST_F(TREMTest, case6) {
-    test_trem<uint32_t, 8, 8, 8, 8, false>();
+TEST_F(TFMODTest, case6) {
+    test_tfmod<uint32_t, 8, 8, 8, 8, false>();
 }
 
-TEST_F(TREMTest, case7) {
-    test_trem<aclFloat16, 32, 32, 31, 31, true>();
+TEST_F(TFMODTest, case7) {
+    test_tfmod<aclFloat16, 32, 32, 31, 31, true>();
 }
 
-TEST_F(TREMTest, case8) {
-    test_trem<int16_t, 16, 16, 16, 16, false>();
+TEST_F(TFMODTest, case8) {
+    test_tfmod<int16_t, 16, 16, 16, 16, false>();
 }
 
-TEST_F(TREMTest, case9) {
-    test_trem<int32_t, 8, 8, 8, 8, false>();
+TEST_F(TFMODTest, case9) {
+    test_tfmod<int32_t, 8, 8, 8, 8, false>();
 }
