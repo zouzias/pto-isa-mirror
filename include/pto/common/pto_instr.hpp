@@ -1111,6 +1111,18 @@ PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst
 }
 #endif
 
-} // namespace pto
-#endif // #if defined (__CPU_SIM) || defined (__CCE_AICORE__)
+#ifdef __CPU_SIM 
+
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TGET(GlobalDstData &dst, GlobalSrcData &src, TileData &stagingTileData, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TGET, dst, src, stagingTileData);
+  return {};
+}
+
+#endif
+
+} 
+
+#endif 
 #endif
