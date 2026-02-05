@@ -18,8 +18,16 @@ using namespace PtoTestCommon;
 
 namespace TQuantTest {
 
+enum class OutDType {
+    MXFP8,
+    S8
+};
+
 template <int validRows, int validCols, int mode>
 void LaunchTQuant(uint8_t *out_e8m0, uint8_t *out_fp8, float *src, void *stream);
+
+template <int validRows, int validCols, int mode>
+void LaunchTQuant(int8_t *out_s8, float *src, void *stream);
 
 class TQUANTTEST : public testing::Test {
 protected:
@@ -38,7 +46,7 @@ std::string GetGoldenDir() {
 }
 
 template <int validRows, int validCols, int mode>
-void test_tquant() {
+void test_tquant_mxfp8() {
     size_t srcFileSize = validRows * validCols * sizeof(float);
     size_t dstExpFileSize = DIV_ROUNDUP(validRows * validCols, 32) * sizeof(uint8_t);
     size_t dstFileSize = validRows * validCols * sizeof(uint8_t);
@@ -48,8 +56,7 @@ void test_tquant() {
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    uint8_t *dstHost, *dstDevice;
-    uint8_t *dstExpHost, *dstExpDevice;
+    uint8_t *dstHost, *dstDevice, *dstExpHost, *dstExpDevice;
     float *srcHost, *srcDevice;
 
     aclrtMallocHost((void **)(&dstHost), dstFileSize);
@@ -61,7 +68,6 @@ void test_tquant() {
     aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
-
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
     LaunchTQuant<validRows, validCols, mode>(dstExpDevice, dstDevice, srcDevice, stream);
@@ -73,13 +79,12 @@ void test_tquant() {
     WriteFile(GetGoldenDir() + "/output_e4m3.bin", dstHost, dstFileSize);
     WriteFile(GetGoldenDir() + "/output_e8m0.bin", dstExpHost, dstExpFileSize);
 
-    aclrtFree(dstDevice);
-    aclrtFree(dstExpDevice);
-    aclrtFree(srcDevice);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(dstExpHost);
-    aclrtFreeHost(srcHost);
+    aclrtFree((void *)dstDevice);
+    aclrtFree((void *)dstExpDevice);
+    aclrtFree((void *)srcDevice);
+    aclrtFreeHost((void *)dstHost);
+    aclrtFreeHost((void *)dstExpHost);
+    aclrtFreeHost((void *)srcHost);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
@@ -101,25 +106,87 @@ void test_tquant() {
     EXPECT_TRUE(ret_fp8);
 }
 
-TEST_F(TQUANTTEST, case_fp32_32x32_nd) {
-    test_tquant<32, 32, 0>();
+template <int validRows, int validCols, int mode>
+void test_tquant_s8() {
+    size_t srcFileSize = validRows * validCols * sizeof(float);
+    size_t dstFileSize = validRows * validCols * sizeof(int8_t);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    int8_t *dstHost, *dstDevice;
+    float *srcHost, *srcDevice;
+
+    aclrtMallocHost((void **)(&dstHost), dstFileSize);
+    aclrtMallocHost((void **)(&srcHost), srcFileSize);
+
+    aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
+    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    LaunchTQuant<validRows, validCols, mode>(dstDevice, srcDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output_s8.bin", dstHost, dstFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<int8_t> golden_s8(dstFileSize);
+    std::vector<int8_t> dev_s8(dstFileSize);
+
+    ReadFile(GetGoldenDir() + "/golden_s8.bin", dstFileSize, golden_s8.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/output_s8.bin", dstFileSize, dev_s8.data(), dstFileSize);
+
+    bool ret_s8 = ResultCmp<int8_t>(golden_s8, dev_s8, 0.0f);
+
+    EXPECT_TRUE(ret_s8);
 }
-TEST_F(TQUANTTEST, case_fp32_32x64_nd) {
-    test_tquant<32, 64, 0>();
+
+// MXFP8
+TEST_F(TQUANTTEST, case_mxfp8_fp32_32x32_nd) {
+    test_tquant_mxfp8<32, 32, 0>();
 }
-TEST_F(TQUANTTEST, case_fp32_64x128_nd) {
-    test_tquant<64, 128, 0>();
+TEST_F(TQUANTTEST, case_mxfp8_fp32_32x64_nd) {
+    test_tquant_mxfp8<32, 64, 0>();
 }
-TEST_F(TQUANTTEST, case_fp32_128x128_nd) {
-    test_tquant<128, 128, 0>();
+TEST_F(TQUANTTEST, case_mxfp8_fp32_64x128_nd) {
+    test_tquant_mxfp8<64, 128, 0>();
 }
-TEST_F(TQUANTTEST, case_fp32_32x64_nz) {
-    test_tquant<32, 64, 1>();
+TEST_F(TQUANTTEST, case_mxfp8_fp32_128x128_nd) {
+    test_tquant_mxfp8<128, 128, 0>();
 }
-TEST_F(TQUANTTEST, case_fp32_64x128_nz) {
-    test_tquant<64, 128, 1>();
+TEST_F(TQUANTTEST, case_mxfp8_fp32_32x64_nz) {
+    test_tquant_mxfp8<32, 64, 1>();
 }
-TEST_F(TQUANTTEST, case_fp32_128x128_nz) {
-    test_tquant<128, 128, 1>();
+TEST_F(TQUANTTEST, case_mxfp8_fp32_64x128_nz) {
+    test_tquant_mxfp8<64, 128, 1>();
 }
+TEST_F(TQUANTTEST, case_mxfp8_fp32_128x128_nz) {
+    test_tquant_mxfp8<128, 128, 1>();
+}
+
+//S8 cases
+TEST_F(TQUANTTEST, case_s8_fp32_64x128_nd) {
+    test_tquant_s8<64, 128, 0>();
+}
+TEST_F(TQUANTTEST, case_s8_fp32_128x128_nd) {
+    test_tquant_s8<128, 128, 0>();
+}
+TEST_F(TQUANTTEST, case_s8_fp32_256x128_nd) {
+    test_tquant_s8<256, 128, 0>();
+}
+
 } // namespace TQuantTest
