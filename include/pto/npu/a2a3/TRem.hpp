@@ -16,13 +16,13 @@ full text of the License.
 #include <pto/common/constants.hpp>
 
 namespace pto {
-// Formula: rem(a, b) = a - trunc(a/b) * b
+// Formula: remainder(a, b) = a - floor(a/b) * b
 struct RemOp {
     PTO_INTERNAL static void RemF32Instr(__ubuf__ float *dst, __ubuf__ float *src0, __ubuf__ float *src1) {
         vdiv(dst, src0, src1, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
-        vconv_f322f32z(dst, dst, 1, 1, 1, 8, 8);
+        vconv_f322f32f(dst, dst, 1, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);
         
         vmul(dst, dst, src1, 1, 1, 1, 1, 8, 8, 8);
@@ -36,7 +36,7 @@ struct RemOp {
         vdiv(dst, src0, src1, 1, 1, 1, 1, 8, 8, 8);
         pipe_barrier(PIPE_V);
 
-        vconv_f162s16z((__ubuf__ int16_t *)dst, dst, 1, 1, 1, 8, 8);
+        vconv_f162s16f((__ubuf__ int16_t *)dst, dst, 1, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);
         vconv_s162f16(dst, (__ubuf__ int16_t *)dst, 1, 1, 1, 8, 8);
         pipe_barrier(PIPE_V);

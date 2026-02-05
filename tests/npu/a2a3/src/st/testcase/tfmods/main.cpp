@@ -16,9 +16,9 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <uint32_t caseId>
-void launchTREMSTestCase(void *out, void *src, float scalar, aclrtStream stream);
+void launchTFMODSTestCase(void *out, void *src, float scalar, aclrtStream stream);
 
-class TREMSTest : public testing::Test {
+class TFMODSTest : public testing::Test {
 public:
 protected:
   void SetUp() override {}
@@ -34,7 +34,7 @@ std::string GetGoldenDir() {
 }
 
 template <uint32_t caseId, typename T, int dstTileRow, int dstTileCol, int row, int vaildRow, int col, int srcVaildCol>
-void TREMSTestFramework() {
+void TFMODSTestFramework() {
   aclInit(nullptr);
   aclrtSetDevice(0);
 
@@ -62,7 +62,7 @@ void TREMSTestFramework() {
   file.read(reinterpret_cast<char *>(&scalar), 4);
   file.close();
   aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-  launchTREMSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
+  launchTFMODSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
   aclrtSynchronizeStream(stream);
   aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -87,34 +87,34 @@ void TREMSTestFramework() {
   EXPECT_TRUE(ret);
 }
 
-TEST_F(TREMSTest, case1) { TREMSTestFramework<1, float, 32, 64, 32, 32, 64, 64>(); }
+TEST_F(TFMODSTest, case1) { TFMODSTestFramework<1, float, 32, 64, 32, 32, 64, 64>(); }
 
-TEST_F(TREMSTest, case2) { TREMSTestFramework<2, _Float16, 63, 64, 63, 63, 64, 64>(); }
+TEST_F(TFMODSTest, case2) { TFMODSTestFramework<2, _Float16, 63, 64, 63, 63, 64, 64>(); }
 
-TEST_F(TREMSTest, case3) { TREMSTestFramework<3, int32_t, 31, 128, 31, 31, 128, 128>(); }
+TEST_F(TFMODSTest, case3) { TFMODSTestFramework<3, int32_t, 31, 128, 31, 31, 128, 128>(); }
 
-TEST_F(TREMSTest, case4) { TREMSTestFramework<4, int16_t, 3, 256, 3, 3, 256, 256>(); }
+TEST_F(TFMODSTest, case4) { TFMODSTestFramework<4, int16_t, 3, 256, 3, 3, 256, 256>(); }
 
-TEST_F(TREMSTest, case5) { TREMSTestFramework<5, float, 7, 448, 7, 7, 448, 448>(); }
+TEST_F(TFMODSTest, case5) { TFMODSTestFramework<5, float, 7, 448, 7, 7, 448, 448>(); }
 
-TEST_F(TREMSTest, case6) { TREMSTestFramework<6, float, 256, 16, 256, 256, 16, 16>(); }
+TEST_F(TFMODSTest, case6) { TFMODSTestFramework<6, float, 256, 16, 256, 256, 16, 16>(); }
 
-TEST_F(TREMSTest, case7) { TREMSTestFramework<7, float, 32, 128, 32, 32, 64, 64>(); }
+TEST_F(TFMODSTest, case7) { TFMODSTestFramework<7, float, 32, 128, 32, 32, 64, 64>(); }
 
-TEST_F(TREMSTest, case8) { TREMSTestFramework<8, _Float16, 63, 128, 63, 63, 64, 64>(); }
+TEST_F(TFMODSTest, case8) { TFMODSTestFramework<8, _Float16, 63, 128, 63, 63, 64, 64>(); }
 
-TEST_F(TREMSTest, case9) { TREMSTestFramework<9, int32_t, 31, 256, 31, 31, 128, 128>(); }
+TEST_F(TFMODSTest, case9) { TFMODSTestFramework<9, int32_t, 31, 256, 31, 31, 128, 128>(); }
 
-TEST_F(TREMSTest, case10) { TREMSTestFramework<10, int16_t, 15, 192, 15, 15, 192, 192>(); }
+TEST_F(TFMODSTest, case10) { TFMODSTestFramework<10, int16_t, 15, 192, 15, 15, 192, 192>(); }
 
-TEST_F(TREMSTest, case11) { TREMSTestFramework<11, float, 7, 512, 7, 7, 448, 448>(); }
+TEST_F(TFMODSTest, case11) { TFMODSTestFramework<11, float, 7, 512, 7, 7, 448, 448>(); }
 
-TEST_F(TREMSTest, case12) { TREMSTestFramework<12, float, 256, 32, 256, 256, 16, 16>(); }
+TEST_F(TFMODSTest, case12) { TFMODSTestFramework<12, float, 256, 32, 256, 256, 16, 16>(); }
 
-TEST_F(TREMSTest, case13) { TREMSTestFramework<13, _Float16, 1, 8192, 1, 1, 8192, 8192>(); }
+TEST_F(TFMODSTest, case13) { TFMODSTestFramework<13, _Float16, 1, 8192, 1, 1, 8192, 8192>(); }
 
-TEST_F(TREMSTest, case14) { TREMSTestFramework<14, int16_t, 1, 8192, 1, 1, 8192, 8192>(); }
+TEST_F(TFMODSTest, case14) { TFMODSTestFramework<14, int16_t, 1, 8192, 1, 1, 8192, 8192>(); }
 
-TEST_F(TREMSTest, case15) { TREMSTestFramework<15, int32_t, 1, 8192, 1, 1, 8192, 8192>(); }
+TEST_F(TFMODSTest, case15) { TFMODSTestFramework<15, int32_t, 1, 8192, 1, 1, 8192, 8192>(); }
 
-TEST_F(TREMSTest, case16) { TREMSTestFramework<16, float, 1, 8192, 1, 1, 8192, 8192>(); }
+TEST_F(TFMODSTest, case16) { TFMODSTestFramework<16, float, 1, 8192, 1, 1, 8192, 8192>(); }

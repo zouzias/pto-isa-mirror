@@ -58,7 +58,7 @@ extern "C" __global__ AICORE void launchTREMSCase3(__gm__ int32_t *out, __gm__ i
 }
 extern "C" __global__ AICORE void launchTREMSCase4(__gm__ int16_t *out, __gm__ int16_t *src, int16_t scalar)
 {
-    runTREMS<int16_t, 15, 192, 15, 15, 192, 192>(out, src, scalar);
+    runTREMS<int16_t, 3, 256, 3, 3, 256, 256>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTREMSCase5(__gm__ float *out, __gm__ float *src, float scalar)
 {

@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-class TREMTest : public testing::Test {
+class TFMODTest : public testing::Test {
 protected:
     void SetUp() override {}
     void TearDown() override {}
@@ -31,11 +31,11 @@ std::string GetGoldenDir() {
 
 template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
     int vCols>
-void LaunchTREM(T *out, T *src0, T *src1, void *stream);
+void LaunchTFMOD(T *out, T *src0, T *src1, void *stream);
 
 template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
     int vCols>
-void test_trem() {
+void test_tfmod() {
     size_t dstFileSize = dstTileH * dstTileW * sizeof(T);
     size_t src0FileSize = src0TileH * src0TileW * sizeof(T);
     size_t src1FileSize = src1TileH * src1TileW * sizeof(T);
@@ -60,7 +60,7 @@ void test_trem() {
 
     aclrtMemcpy(src0Device, src0FileSize, src0Host, src0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, src1FileSize, src1Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTREM<T, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW, vRows, vCols>(
+    LaunchTFMOD<T, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW, vRows, vCols>(
         dstDevice, src0Device, src1Device, stream);
 
     aclrtSynchronizeStream(stream);
@@ -89,42 +89,42 @@ void test_trem() {
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TREMTest, case_half_16x64_16x128_16x128_16x64) {
-    test_trem<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 64>();
+TEST_F(TFMODTest, case_half_16x64_16x128_16x128_16x64) {
+    test_tfmod<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 64>();
 }
 
-TEST_F(TREMTest, case_float_16x32_16x64_16x32_16x32) {
-    test_trem<float, 16, 32, 16, 64, 16, 32, 16, 32>();
+TEST_F(TFMODTest, case_float_16x32_16x64_16x32_16x32) {
+    test_tfmod<float, 16, 32, 16, 64, 16, 32, 16, 32>();
 }
 
-TEST_F(TREMTest, case_int32_4x32_4x32_4x32_4x32) {
-    test_trem<int32_t, 4, 32, 4, 32, 4, 32, 4, 32>();
+TEST_F(TFMODTest, case_int32_4x32_4x32_4x32_4x32) {
+    test_tfmod<int32_t, 4, 32, 4, 32, 4, 32, 4, 32>();
 }
 
-TEST_F(TREMTest, case_int32_16x32_16x64_16x32_16x32) {
-    test_trem<int32_t, 16, 32, 16, 64, 16, 32, 16, 32>();
+TEST_F(TFMODTest, case_int32_16x32_16x64_16x32_16x32) {
+    test_tfmod<int32_t, 16, 32, 16, 64, 16, 32, 16, 32>();
 }
 
-TEST_F(TREMTest, case_half_16x64_16x128_16x128_16x63) {
-    test_trem<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 63>();
+TEST_F(TFMODTest, case_half_16x64_16x128_16x128_16x63) {
+    test_tfmod<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 63>();
 }
 
-TEST_F(TREMTest, case_float_2x32_2x64_2x32_2x31) {
-    test_trem<float, 2, 32, 2, 64, 2, 32, 2, 31>();
+TEST_F(TFMODTest, case_float_2x32_2x64_2x32_2x31) {
+    test_tfmod<float, 2, 32, 2, 64, 2, 32, 2, 31>();
 }
 
-TEST_F(TREMTest, case_int32_16x32_16x64_16x32_16x31) {
-    test_trem<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>();
+TEST_F(TFMODTest, case_int32_16x32_16x64_16x32_16x31) {
+    test_tfmod<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>();
 }
 
-TEST_F(TREMTest, case_int16_16x32_16x64_16x32_16x31) {
-    test_trem<int16_t, 16, 32, 16, 64, 16, 32, 16, 31>();
+TEST_F(TFMODTest, case_int16_16x32_16x64_16x32_16x31) {
+    test_tfmod<int16_t, 16, 32, 16, 64, 16, 32, 16, 31>();
 }
 
-TEST_F(TREMTest, case_int16_16x64_16x128_16x128_16x63) {
-    test_trem<int16_t, 16, 64, 16, 128, 16, 128, 16, 63>();
+TEST_F(TFMODTest, case_int16_16x64_16x128_16x128_16x63) {
+    test_tfmod<int16_t, 16, 64, 16, 128, 16, 128, 16, 63>();
 }
 
-TEST_F(TREMTest, case_half_1x8192_1x8192_1x8192_1x8192) {
-    test_trem<aclFloat16, 1, 8192, 1, 8192, 1, 8192, 1, 8192>();
+TEST_F(TFMODTest, case_half_1x8192_1x8192_1x8192_1x8192) {
+    test_tfmod<aclFloat16, 1, 8192, 1, 8192, 1, 8192, 1, 8192>();
 }
