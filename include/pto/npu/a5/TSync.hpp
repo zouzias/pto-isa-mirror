@@ -33,7 +33,7 @@ namespace pto {
     PIPE_M /* TMATMUL */, PIPE_M /* TGEMV */, PIPE_M /* TMATMUL_MX */, PIPE_MTE1 /* TEXTRACT_M2LR */, 
     PIPE_V /* TANDS */, PIPE_V /* TORS */, PIPE_V /* TSHLS */, PIPE_V /* TSHRS */, PIPE_V /* TXOR */, PIPE_V /* TXORS */,
     PIPE_FIX /* TEXTRACT_A2M */, PIPE_FIX /* TINSERT_A2M */, PIPE_S /* TSETF32MODE */, PIPE_MTE1 /* TIMG2COL */,
-    PIPE_S /* TSETFMATRIX */, PIPE_ALL /* OP_COUNT */,
+    PIPE_S /* TSETFMATRIX */, PIPE_S /* TLOAD3DSETREPEAT */, PIPE_S /* TSETPADDING */, PIPE_ALL /* OP_COUNT */,
   };
 
   template <Op OpCode>
