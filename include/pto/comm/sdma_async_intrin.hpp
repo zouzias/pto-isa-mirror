@@ -157,62 +157,6 @@ PTO_INTERNAL uint32_t pto_comm_select_sdma_channel(uint32_t block_idx, uint32_t 
     return block_idx % num_channels;
 }
 
-// ============================================================================
-// Device-side SDMA Implementation (standalone re-implementation)
-// ============================================================================
-PTO_INTERNAL void dcci_cacheline(__gm__ uint8_t* addr)
-{
-    using namespace AscendC;
-    AscendC::GlobalTensor<uint8_t> global;
-    global.SetGlobalBuffer(addr);
-
-    __asm__ __volatile__("");
-    DataCacheCleanAndInvalid<uint8_t, CacheLine::SINGLE_CACHE_LINE, DcciDst::CACHELINE_OUT>(global);
-    __asm__ __volatile__("");
-}
-
-template <typename T>
-PTO_INTERNAL void copy_gm_to_gm(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint32_t size,
-                               TmpBuf& tmp_buf)
-{
-    uint32_t copy_bytes = size * sizeof(T);
-
-    AscendC::GlobalTensor<uint8_t> gm_src;
-    AscendC::GlobalTensor<uint8_t> gm_dst;
-    gm_src.SetGlobalBuffer(src, copy_bytes);
-    gm_dst.SetGlobalBuffer(dst, copy_bytes);
-
-    AscendC::LocalTensor<uint8_t> ub = tmp_buf.Get<uint8_t>();
-    AscendC::DataCopyExtParams cp_params{1, copy_bytes, 0, 0, 0};
-    AscendC::DataCopyPadExtParams<uint8_t> pad_params{false, 0, 0, 0};
-
-    AscendC::DataCopyPad(ub, gm_src, cp_params, pad_params);
-    AscendC::PipeBarrier<PIPE_ALL>();
-
-    AscendC::DataCopyPad(gm_dst, ub, cp_params);
-    AscendC::PipeBarrier<PIPE_ALL>();
-}
-
-template <typename T>
-AICORE inline void set_value_pto(__gm__ uint8_t* addr, T x)
-{
-    using GlobalData = pto::GlobalTensor<T,
-        pto::Shape<1, 1, 1, 1, 1>,
-        pto::Stride<1, 1, 1, 1, 1>>;
-
-    // Cols=8 保证 32B 对齐，ValidCol=1 仅写 1 个元素
-    using TileData = pto::Tile<pto::TileType::Vec, T, 1, 8,
-        pto::BLayout::RowMajor, 1, 1>;
-
-    TileData tile;
-    TASSIGN(tile, 0x0);
-    tile.SetValue(0, x);
-
-    GlobalData dst(reinterpret_cast<__gm__ T*>(addr));
-    TSTORE(dst, tile);
-    AscendC::PipeBarrier<PIPE_ALL>();
-}
-
 template <typename T>
 PTO_INTERNAL void set_value(__gm__ uint8_t* addr, TmpBuf& tmp_buf, T x)
 {
@@ -229,8 +173,6 @@ PTO_INTERNAL void set_value(__gm__ uint8_t* addr, TmpBuf& tmp_buf, T x)
 template <typename T>
 PTO_INTERNAL T get_value(__gm__ uint8_t* addr, TmpBuf& tmp_buf)
 {
-    dcci_cacheline(addr);
-
     AscendC::GlobalTensor<T> gm_src;
     AscendC::LocalTensor<T> x_local = tmp_buf.Get<T>();
     gm_src.SetGlobalBuffer((__gm__ T*)addr, 1);
