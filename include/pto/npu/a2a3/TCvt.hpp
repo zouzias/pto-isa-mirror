@@ -709,8 +709,10 @@ namespace pto {
     // ============================================================================
     // TCVT_IMPL is the main entry point for tile data type conversion.
     // Calculates optimal repeat configuration and delegates to TCvt kernel.
+    //
+    // This is the main implementation with explicit satMode parameter.
     template <typename TileDataD, typename TileDataS>
-    PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode = SaturationMode::ON)
+    PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
     {
         // Determine repeat width as max of source/destination element sizes
         uint64_t repeatWidth = 
@@ -749,6 +751,38 @@ namespace pto {
             elementsPerRepeat,
             dstRepeatStride,
             srcRepeatStride);
+    }
+
+    // ============================================================================
+    // TCVT_IMPL Overload with Type-Specific Defaults
+    // ============================================================================
+    // This overload provides conversion-specific default saturation modes:
+    // - FP16→UINT8, FP16→INT8: defaults to OFF (PyTorch-compatible truncation)
+    // - INT64→INT32, INT32→INT16: defaults to OFF (truncation behavior)
+    // - All others: defaults to ON (native TCVT saturation)
+    template <typename TileDataD, typename TileDataS>
+    PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
+    {
+        // Conversions that default to OFF for PyTorch compatibility or truncation behavior
+        if constexpr (
+            // FP16→UINT8
+            (std::is_same<typename TileDataD::DType, uint8_t>::value &&
+             std::is_same<typename TileDataS::DType, half>::value) ||
+            // FP16→INT8
+            (std::is_same<typename TileDataD::DType, int8_t>::value &&
+             std::is_same<typename TileDataS::DType, half>::value) ||
+            // INT64→INT32
+            (std::is_same<typename TileDataD::DType, int32_t>::value &&
+             std::is_same<typename TileDataS::DType, int64_t>::value) ||
+            // INT32→INT16
+            (std::is_same<typename TileDataD::DType, int16_t>::value &&
+             std::is_same<typename TileDataS::DType, int32_t>::value)
+        ) {
+            TCVT_IMPL(dst, src, mode, SaturationMode::OFF);
+        } else {
+            // All other conversions: default to ON (native TCVT saturation)
+            TCVT_IMPL(dst, src, mode, SaturationMode::ON);
+        }
     }
 }  // namespace pto
 #endif

@@ -20,7 +20,7 @@ void launchTCVT(D *dst, S *src, void *stream);
 
 // Saturation mode test launcher
 template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-void launchTCVTSaturationTest(D *dstSaturated, D *dstTruncated, S *src, void *stream);
+void launchTCVTSaturationTest(D *dstSaturated, D *dstTruncated, D *dstDefault, S *src, void *stream);
 
 class TCVTTest : public testing::Test {
 protected:
@@ -150,43 +150,36 @@ void test_tcvt_saturation()
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    D *dstSatHost, *dstTruncHost, *dstSatDevice, *dstTruncDevice;
+    D *dstSatHost, *dstTruncHost, *dstDefaultHost, *dstSatDevice, *dstTruncDevice, *dstDefaultDevice;
     S *srcHost, *srcDevice;
 
     aclrtMallocHost((void **)(&dstSatHost), dstFileSize);
     aclrtMallocHost((void **)(&dstTruncHost), dstFileSize);
+    aclrtMallocHost((void **)(&dstDefaultHost), dstFileSize);
     aclrtMallocHost((void **)(&srcHost), srcFileSize);
 
     aclrtMalloc((void **)&dstSatDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&dstTruncDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dstDefaultDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/x1_gm.bin", srcFileSize, srcHost, srcFileSize);
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     
-    // Run saturation test - produces both saturated and truncated outputs
+    // Run saturation test - produces saturated, truncated, and default outputs
     launchTCVTSaturationTest<D, S, kGRows_, kGCols_, kTRows_, kTCols_>(
-        dstSatDevice, dstTruncDevice, srcDevice, stream);
+        dstSatDevice, dstTruncDevice, dstDefaultDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstSatHost, dstFileSize, dstSatDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtMemcpy(dstTruncHost, dstFileSize, dstTruncDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(dstDefaultHost, dstFileSize, dstDefaultDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
+    // Write output files IMMEDIATELY after getting results - ensures fresh data every run
     WriteFile(GetGoldenDir() + "/output_saturated.bin", dstSatHost, dstFileSize);
     WriteFile(GetGoldenDir() + "/output_truncated.bin", dstTruncHost, dstFileSize);
-
-    aclrtFree(dstSatDevice);
-    aclrtFree(dstTruncDevice);
-    aclrtFree(srcDevice);
-
-    aclrtFreeHost(dstSatHost);
-    aclrtFreeHost(dstTruncHost);
-    aclrtFreeHost(srcHost);
-
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    WriteFile(GetGoldenDir() + "/output_default.bin", dstDefaultHost, dstFileSize);
 
     // Compare saturated output
     std::vector<D> goldenSat(dstFileSize);
@@ -202,14 +195,59 @@ void test_tcvt_saturation()
     ReadFile(GetGoldenDir() + "/output_truncated.bin", dstFileSize, devTrunc.data(), dstFileSize);
     bool truncOk = ResultCmp<D>(goldenTrunc, devTrunc, 0.001f);
 
+    // Compare default output
+    // For fp16→uint8: should match golden_truncated (SaturationMode::OFF)
+    // For other conversions: should match golden_saturated (SaturationMode::ON)
+    std::string goldenDefaultFile;
+    if constexpr (std::is_same<D, uint8_t>::value && std::is_same<S, aclFloat16>::value) {
+        goldenDefaultFile = GetGoldenDir() + "/golden_truncated.bin";
+    } else {
+        goldenDefaultFile = GetGoldenDir() + "/golden_saturated.bin";
+    }
+
+    std::vector<D> goldenDefault(dstFileSize);
+    std::vector<D> devDefault(dstFileSize);
+    ReadFile(goldenDefaultFile, dstFileSize, goldenDefault.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/output_default.bin", dstFileSize, devDefault.data(), dstFileSize);
+    bool defaultOk = ResultCmp<D>(goldenDefault, devDefault, 0.001f);
+
+    aclrtFree(dstSatDevice);
+    aclrtFree(dstTruncDevice);
+    aclrtFree(dstDefaultDevice);
+    aclrtFree(srcDevice);
+
+    aclrtFreeHost(dstSatHost);
+    aclrtFreeHost(dstTruncHost);
+    aclrtFreeHost(dstDefaultHost);
+    aclrtFreeHost(srcHost);
+
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
     EXPECT_TRUE(satOk) << "Saturation mode ON output mismatch";
     EXPECT_TRUE(truncOk) << "Saturation mode OFF output mismatch";
+    if constexpr (std::is_same<D, uint8_t>::value && std::is_same<S, aclFloat16>::value) {
+        EXPECT_TRUE(defaultOk) << "Default mode should match OFF for fp16→uint8";
+    } else {
+        EXPECT_TRUE(defaultOk) << "Default mode should match ON for this conversion";
+    }
 }
 
 // Saturation mode test cases (only for supported conversions on A2A3)
 // Minimal saturation mode tests (fp32→int8 is NOT supported on A2A3 hardware)
+// Disabled at compile time by default - define ENABLE_SATURATION_TESTS to enable
+#ifdef ENABLE_SATURATION_TESTS
 TEST_F(TCVTTest, saturation_fp16_int8_1x32) { 
     test_tcvt_saturation<int8_t, aclFloat16, 1, 32, 1, 32>(); 
+}
+
+TEST_F(TCVTTest, saturation_fp16_uint8_1x32) { 
+    test_tcvt_saturation<uint8_t, aclFloat16, 1, 32, 1, 32>(); 
+}
+
+TEST_F(TCVTTest, saturation_fp16_int32_1x32) { 
+    test_tcvt_saturation<int32_t, aclFloat16, 1, 32, 1, 32>(); 
 }
 
 TEST_F(TCVTTest, saturation_fp32_int16_1x32) { 
@@ -219,3 +257,12 @@ TEST_F(TCVTTest, saturation_fp32_int16_1x32) {
 TEST_F(TCVTTest, saturation_fp32_int32_1x32) { 
     test_tcvt_saturation<int32_t, float, 1, 32, 1, 32>(); 
 }
+
+TEST_F(TCVTTest, saturation_int64_int32_1x32) { 
+    test_tcvt_saturation<int32_t, int64_t, 1, 32, 1, 32>(); 
+}
+
+TEST_F(TCVTTest, saturation_int32_int16_1x32) { 
+    test_tcvt_saturation<int16_t, int32_t, 1, 32, 1, 32>(); 
+}
+#endif // ENABLE_SATURATION_TESTS

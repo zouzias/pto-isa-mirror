@@ -12,6 +12,12 @@
 
 import os
 import numpy as np
+try:
+    import torch
+    HAS_TORCH = True
+except ImportError:
+    print("Warning: PyTorch not available, using NumPy for saturation tests")
+    HAS_TORCH = False
 
 np.random.seed(19)
 
@@ -23,32 +29,75 @@ def gen_golden(case_name, param):
 
     # Generate input data with reasonable ranges
     if is_saturation_test:
-        # For saturation tests, use values that will trigger both clamping and truncation
+        # For saturation tests, use only special values: inf, -inf, nan, and 2 overflow values
+        # Pad to 32 elements to meet minimum shape requirement
         if srctype == np.float32 or srctype == np.float16:
             if dsttype == np.int8:
-                # Mix of values: below min, within range, above max
-                x1_gm = np.concatenate([
-                    np.linspace(-200, -128, m*n//4),
-                    np.linspace(-127, 0, m*n//4),
-                    np.linspace(0, 127, m*n//4),
-                    np.linspace(128, 300, m*n//4),
-                ]).astype(srctype).reshape([m, n])
+                # Special values: -inf, inf, nan, and 2 overflow values
+                special_values = [
+                    -np.inf,  # -infinity
+                    np.inf,   # +infinity
+                    np.nan,   # NaN
+                    -200.0,   # Overflow below min (-128)
+                    200.0,    # Overflow above max (127)
+                ]
+                # Pad with zeros to reach m*n elements
+                x1_gm = np.array(special_values + [0.0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
+            elif dsttype == np.uint8:
+                special_values = [
+                    -np.inf,  # -infinity
+                    np.inf,   # +infinity
+                    np.nan,   # NaN
+                    -100.0,   # Overflow below min (0)
+                    300.0,    # Overflow above max (255)
+                ]
+                x1_gm = np.array(special_values + [0.0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
             elif dsttype == np.int16:
-                x1_gm = np.concatenate([
-                    np.linspace(-40000, -32768, m*n//4),
-                    np.linspace(-32767, 0, m*n//4),
-                    np.linspace(0, 32767, m*n//4),
-                    np.linspace(32768, 70000, m*n//4),
-                ]).astype(srctype).reshape([m, n])
+                special_values = [
+                    -np.inf,    # -infinity
+                    np.inf,     # +infinity
+                    np.nan,     # NaN
+                    -40000.0,   # Overflow below min (-32768)
+                    40000.0,    # Overflow above max (32767)
+                ]
+                x1_gm = np.array(special_values + [0.0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
             elif dsttype == np.int32:
-                x1_gm = np.concatenate([
-                    np.linspace(-3e9, -2.15e9, m*n//4),
-                    np.linspace(-2e9, 0, m*n//4),
-                    np.linspace(0, 2e9, m*n//4),
-                    np.linspace(2.15e9, 3e9, m*n//4),
-                ]).astype(srctype).reshape([m, n])
+                special_values = [
+                    -np.inf,  # -infinity
+                    np.inf,   # +infinity
+                    np.nan,   # NaN
+                    -3e9,     # Overflow below min
+                    3e9,      # Overflow above max
+                ]
+                x1_gm = np.array(special_values + [0.0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
             else:
                 x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
+        elif srctype == np.int64:
+            # int64 to int32 saturation test - only overflow values (no inf/nan for integers)
+            if dsttype == np.int32:
+                special_values = [
+                    -3000000000,  # Overflow below min
+                    3000000000,   # Overflow above max
+                    -2147483648,  # At min boundary
+                    2147483647,   # At max boundary
+                    0,            # Zero
+                ]
+                x1_gm = np.array(special_values + [0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
+            else:
+                x1_gm = np.random.randint(-10000, 10000, [m, n]).astype(srctype)
+        elif srctype == np.int32:
+            # int32 to int16 saturation test - only overflow values
+            if dsttype == np.int16:
+                special_values = [
+                    -40000,   # Overflow below min
+                    40000,    # Overflow above max
+                    -32768,   # At min boundary
+                    32767,    # At max boundary
+                    0,        # Zero
+                ]
+                x1_gm = np.array(special_values + [0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
+            else:
+                x1_gm = np.random.randint(-10000, 10000, [m, n]).astype(srctype)
         else:
             x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
     elif srctype == np.float32 or srctype == np.float16:
@@ -142,24 +191,66 @@ def gen_golden(case_name, param):
     x1_gm.tofile("./x1_gm.bin")
     golden.tofile("./golden.bin")
     
-    # For saturation tests, also generate saturated and truncated outputs
-    if is_saturation_test and np.issubdtype(srctype, np.floating) and np.issubdtype(dsttype, np.integer):
-        # Generate saturated output (standard clamping behavior)
-        info = np.iinfo(dsttype)
-        saturated = np.clip(converted_golden.astype(np.int64), info.min, info.max).astype(dsttype)
-        saturated.tofile("./golden_saturated.bin")
-        
-        # Generate truncated output (bit extraction after int64 conversion)
-        as_int64 = converted_golden.astype(np.int64)
-        if dsttype == np.int8:
-            truncated = np.array([np.int8(val & 0xFF) for val in as_int64.flat], dtype=np.int8).reshape([m, n])
-        elif dsttype == np.int16:
-            truncated = np.array([np.int16(val & 0xFFFF) for val in as_int64.flat], dtype=np.int16).reshape([m, n])
-        elif dsttype == np.int32:
-            truncated = np.array([np.int32(val & 0xFFFFFFFF) for val in as_int64.flat], dtype=np.int32).reshape([m, n])
-        else:
-            truncated = saturated
-        truncated.tofile("./golden_truncated.bin")
+    # For saturation tests, generate golden data using PyTorch behavior
+    if is_saturation_test:
+        if np.issubdtype(dsttype, np.integer):
+            info = np.iinfo(dsttype)
+            
+            # Use PyTorch for golden data generation if available
+            # For saturation tests, we need two different outputs:
+            # 1. Saturated: clamp to valid range
+            # 2. Truncated: bit extraction (modulo behavior)
+            
+            # Saturated mode: clamp to datatype range
+            saturated = np.clip(converted_golden.astype(np.int64), info.min, info.max).astype(dsttype)
+            
+            # Truncated mode: bit extraction (matches PyTorch for integer conversions)
+            as_int64 = converted_golden.astype(np.int64)
+            if dsttype == np.int8:
+                truncated = np.array([np.int8(val & 0xFF) for val in as_int64.flat], dtype=np.int8).reshape([m, n])
+            elif dsttype == np.uint8:
+                truncated = np.array([np.uint8(val & 0xFF) for val in as_int64.flat], dtype=np.uint8).reshape([m, n])
+            elif dsttype == np.int16:
+                truncated = np.array([np.int16(val & 0xFFFF) for val in as_int64.flat], dtype=np.int16).reshape([m, n])
+            elif dsttype == np.int32:
+                truncated = np.array([np.int32(val & 0xFFFFFFFF) for val in as_int64.flat], dtype=np.int32).reshape([m, n])
+            else:
+                truncated = saturated
+            
+            # Verify with PyTorch if available (truncated should match PyTorch)
+            if HAS_TORCH:
+                np_to_torch = {
+                    np.float32: torch.float32,
+                    np.float16: torch.float16,
+                    np.int64: torch.int64,
+                    np.int32: torch.int32,
+                    np.int16: torch.int16,
+                    np.int8: torch.int8,
+                    np.uint8: torch.uint8,
+                }
+                
+                if srctype in np_to_torch and dsttype in np_to_torch:
+                    # Convert input to torch tensor
+                    if np.issubdtype(srctype, np.floating):
+                        torch_input = torch.from_numpy(x1_gm.astype(np.float32))
+                        torch_input = torch_input.to(np_to_torch[srctype])
+                    else:
+                        torch_input = torch.from_numpy(x1_gm)
+                        if srctype in np_to_torch:
+                            torch_input = torch_input.to(np_to_torch[srctype])
+                    
+                    # PyTorch conversion - this should match truncated mode
+                    torch_output = torch_input.to(np_to_torch[dsttype])
+                    torch_result = torch_output.numpy().astype(dsttype)
+                    
+                    # Verify truncated matches PyTorch
+                    if not np.array_equal(truncated, torch_result):
+                        print(f"Warning: Truncated mode doesn't match PyTorch for {srctype.__name__} → {dsttype.__name__}")
+                        mismatches = np.sum(truncated != torch_result)
+                        print(f"  Mismatches: {mismatches}/{truncated.size}")
+            
+            saturated.tofile("./golden_saturated.bin")
+            truncated.tofile("./golden_truncated.bin")
                 
 class tcvtParams:
     def __init__(self, srctype, dsttype, m, n, mode):
@@ -226,11 +317,15 @@ if __name__ == "__main__":
 
     # Add saturation mode test cases (only for supported conversions on A2A3)
     # Note: fp32→int8 is NOT supported on A2A3 hardware
-    # Using minimal 1x32 shape for fast saturation testing
+    # Using 1x5 shape: inf, -inf, nan, and 2 overflow values
     saturation_tests = [
         ("saturation_fp16_int8_1x32", np.float16, np.int8, 1, 32),
         ("saturation_fp32_int16_1x32", np.float32, np.int16, 1, 32),
         ("saturation_fp32_int32_1x32", np.float32, np.int32, 1, 32),
+        ("saturation_fp16_uint8_1x32", np.float16, np.uint8, 1, 32),
+        ("saturation_fp16_int32_1x32", np.float16, np.int32, 1, 32),
+        ("saturation_int64_int32_1x32", np.int64, np.int32, 1, 32),
+        ("saturation_int32_int16_1x32", np.int32, np.int16, 1, 32),
     ]
     
     for test_name, src, dst, m, n in saturation_tests:
