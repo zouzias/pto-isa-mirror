@@ -19,9 +19,39 @@ def gen_golden(case_name, param):
     srctype = param.srctype
     dsttype = param.dsttype
     m, n = param.m, param.n
+    is_saturation_test = "saturation_" in case_name
 
     # Generate input data with reasonable ranges
-    if srctype == np.float32 or srctype == np.float16:
+    if is_saturation_test:
+        # For saturation tests, use values that will trigger both clamping and truncation
+        if srctype == np.float32 or srctype == np.float16:
+            if dsttype == np.int8:
+                # Mix of values: below min, within range, above max
+                x1_gm = np.concatenate([
+                    np.linspace(-200, -128, m*n//4),
+                    np.linspace(-127, 0, m*n//4),
+                    np.linspace(0, 127, m*n//4),
+                    np.linspace(128, 300, m*n//4),
+                ]).astype(srctype).reshape([m, n])
+            elif dsttype == np.int16:
+                x1_gm = np.concatenate([
+                    np.linspace(-40000, -32768, m*n//4),
+                    np.linspace(-32767, 0, m*n//4),
+                    np.linspace(0, 32767, m*n//4),
+                    np.linspace(32768, 70000, m*n//4),
+                ]).astype(srctype).reshape([m, n])
+            elif dsttype == np.int32:
+                x1_gm = np.concatenate([
+                    np.linspace(-3e9, -2.15e9, m*n//4),
+                    np.linspace(-2e9, 0, m*n//4),
+                    np.linspace(0, 2e9, m*n//4),
+                    np.linspace(2.15e9, 3e9, m*n//4),
+                ]).astype(srctype).reshape([m, n])
+            else:
+                x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
+        else:
+            x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
+    elif srctype == np.float32 or srctype == np.float16:
         # Floating point: range [-100, 100]
         x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
     elif srctype == np.int8:
@@ -111,6 +141,25 @@ def gen_golden(case_name, param):
             
     x1_gm.tofile("./x1_gm.bin")
     golden.tofile("./golden.bin")
+    
+    # For saturation tests, also generate saturated and truncated outputs
+    if is_saturation_test and np.issubdtype(srctype, np.floating) and np.issubdtype(dsttype, np.integer):
+        # Generate saturated output (standard clamping behavior)
+        info = np.iinfo(dsttype)
+        saturated = np.clip(converted_golden.astype(np.int64), info.min, info.max).astype(dsttype)
+        saturated.tofile("./golden_saturated.bin")
+        
+        # Generate truncated output (bit extraction after int64 conversion)
+        as_int64 = converted_golden.astype(np.int64)
+        if dsttype == np.int8:
+            truncated = np.array([np.int8(val & 0xFF) for val in as_int64.flat], dtype=np.int8).reshape([m, n])
+        elif dsttype == np.int16:
+            truncated = np.array([np.int16(val & 0xFFFF) for val in as_int64.flat], dtype=np.int16).reshape([m, n])
+        elif dsttype == np.int32:
+            truncated = np.array([np.int32(val & 0xFFFFFFFF) for val in as_int64.flat], dtype=np.int32).reshape([m, n])
+        else:
+            truncated = saturated
+        truncated.tofile("./golden_truncated.bin")
                 
 class tcvtParams:
     def __init__(self, srctype, dsttype, m, n, mode):
@@ -174,6 +223,19 @@ if __name__ == "__main__":
             case_name = f"case_{type_name}_{m}x{n}"
             case_name_list.append(f"TCVTTest.{case_name}")
             case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT"))
+
+    # Add saturation mode test cases (only for supported conversions on A2A3)
+    # Note: fp32→int8 is NOT supported on A2A3 hardware
+    # Using minimal 1x32 shape for fast saturation testing
+    saturation_tests = [
+        ("saturation_fp16_int8_1x32", np.float16, np.int8, 1, 32),
+        ("saturation_fp32_int16_1x32", np.float32, np.int16, 1, 32),
+        ("saturation_fp32_int32_1x32", np.float32, np.int32, 1, 32),
+    ]
+    
+    for test_name, src, dst, m, n in saturation_tests:
+        case_name_list.append(f"TCVTTest.{test_name}")
+        case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT"))
 
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):

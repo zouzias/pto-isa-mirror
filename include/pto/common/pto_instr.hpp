@@ -764,9 +764,9 @@ PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 }
 
 template <typename TileDataD, typename TileDataS, typename... WaitEvents>
-PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEvents&... events) {
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode = SaturationMode::ON, WaitEvents&... events) {
   TSYNC(events...);
-  MAP_INSTR_IMPL(TCVT, dst, src, mode);
+  MAP_INSTR_IMPL(TCVT, dst, src, mode, satMode);
   return {};
 }
 
