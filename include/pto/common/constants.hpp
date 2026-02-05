@@ -32,6 +32,9 @@ constexpr const int C0_SIZE_BYTE = 32;
 constexpr const int FRACTAL_NZ_ROW = 16;
 constexpr const int ACC_C0_SIZE = 16;
 constexpr const uint32_t B4_C0_SIZE = 64;
+constexpr const int MX_COL_LEN = 2;
+constexpr const int MX_ROW_LEN = 16;
+constexpr const int MX_BLOCK_SIZE = 32;
 
 enum VFImplKind : unsigned {
     VFIMPL_DEFAULT              = 0,    // 默认版本
@@ -268,6 +271,22 @@ struct PadValueMap<float4_e1m2x2_t, PadVal> {
 };
 template <PadValue PadVal>
 struct PadValueMap<float4_e2m1x2_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<float8_e8m0_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<float8_e4m3_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<float8_e5m2_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<hifloat8_t, PadVal> {
     static constexpr auto value = uint8_t(0);
 };
 #endif
