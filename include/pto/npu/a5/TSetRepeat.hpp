@@ -8,33 +8,30 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TSETFMATRIX_HPP
-#define TSETFMATRIX_HPP
+#ifndef TSETREPEAT_HPP
+#define TSETREPEAT_HPP
 
 namespace pto {
 template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint32_t>
-PTO_INTERNAL void TSETFMATRIX_IMPL(const Img2colTileConfig<T> &cfg)
+PTO_INTERNAL void TSETREPEAT_IMPL(const Img2colTileConfig<T> &cfg)
 {
     if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL || FmatrixMode == SetFmatrixMode::FMATRIX_B_MANUAL) {
-        uint64_t regFmatrix = 0;
-        regFmatrix |= uint64_t(cfg.fmapW & 0xFFFF);
-
-        constexpr uint32_t l1ShiftBit = 16;
-        regFmatrix |= uint64_t(cfg.fmapH & 0xFFFF) << l1ShiftBit;
-
-        constexpr uint32_t padNumber = 4;
-        constexpr uint32_t padListShiftBit = 8;
-        constexpr uint32_t padListShiftBase = 32;
-
-        for(uint32_t i = 0; i < padNumber; i++) {
-            regFmatrix |= uint64_t(cfg.padList[i] & 0xFF) << (padListShiftBase + i * padListShiftBit);
-        }
+        uint64_t rptConfig = 0;
+        constexpr uint32_t repeatTimeShiftBit = 16;
+        constexpr uint32_t repeatModeShiftBit = 24;
+        constexpr uint32_t dstStrideShiftBit = 32;
+        constexpr uint32_t dstMpositionShiftBit = 48;
+        rptConfig |= uint64_t(cfg.repeatStride);
+        rptConfig |= uint64_t(cfg.repeatTime) << repeatTimeShiftBit;
+        rptConfig |= uint64_t(cfg.repeatMode) << repeatModeShiftBit;
+        rptConfig |= uint64_t(cfg.dstStride) << dstStrideShiftBit;
+        rptConfig |= uint64_t(cfg.dstMposition) << dstMpositionShiftBit;
         if constexpr(FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL) {
-            set_fmatrix(regFmatrix);
+            set_l3d_rpt(rptConfig);
         } else if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_B_MANUAL) {
-            set_fmatrix_b(regFmatrix);
+            set_l3d_rpt_b(rptConfig);
         }
     }
 }
 }  // namespace pto
-#endif  // TSETFMATRIX_HPP
+#endif  // TSETREPEAT_HPP

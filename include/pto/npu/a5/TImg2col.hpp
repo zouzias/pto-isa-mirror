@@ -32,7 +32,7 @@ __tf__ PTO_INTERNAL void TImg2col(typename TileData::TileDType __out__ dst, type
                          dilationW, dilationH, highFilterW, highFilterH, transpose, fmatrixCtrl, channelSize);
 }
 
-template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_AUTO, typename T = uint64_t>
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_AUTO, typename T = uint32_t>
 PTO_INTERNAL void SetFmatrix(const Img2colTileConfig<T> &cfg)
 {
     if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
@@ -56,6 +56,53 @@ PTO_INTERNAL void SetFmatrix(const Img2colTileConfig<T> &cfg)
     }
 }
 
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_AUTO, typename T = uint32_t>
+PTO_INTERNAL void SetRepeat(const Img2colTileConfig<T> &cfg)
+{
+    if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
+        uint64_t rptConfig = 0;
+        constexpr uint32_t repeatTimeShiftBit = 16;
+        constexpr uint32_t repeatModeShiftBit = 24;
+        constexpr uint32_t dstStrideShiftBit = 32;
+        constexpr uint32_t dstMpositionShiftBit = 48;
+        rptConfig |= uint64_t(cfg.repeatStride);
+        rptConfig |= uint64_t(cfg.repeatTime) << repeatTimeShiftBit;
+        rptConfig |= uint64_t(cfg.repeatMode) << repeatModeShiftBit;
+        rptConfig |= uint64_t(cfg.dstStride) << dstStrideShiftBit;
+        rptConfig |= uint64_t(cfg.dstMposition) << dstMpositionShiftBit;
+        if constexpr(FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO) {
+            set_l3d_rpt(rptConfig);
+        } else if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
+            set_l3d_rpt_b(rptConfig);
+        }
+    }
+}
+
+template <typename T, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_AUTO>
+PTO_INTERNAL void SetPadding(const Img2colTileConfig<T> &cfg)
+{
+    if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
+        uint32_t paddingValue = 0;
+        uint64_t paddingConfig = 0;
+        constexpr uint16_t padValueShiftBit = 8;
+        constexpr uint32_t padModeShiftBit = 32;
+        if constexpr (sizeof(T) == 1) {
+            uint8_t u8Value = *reinterpret_cast<const uint8_t*>(&cfg.padValue);
+            paddingValue = (static_cast<uint16_t>(u8Value) << padValueShiftBit) | u8Value;
+        } else if constexpr (sizeof(T) == 2) {
+            paddingValue = *reinterpret_cast<const uint16_t*>(&cfg.padValue);
+        } else if constexpr (sizeof(T) == 4) {
+            paddingValue = *reinterpret_cast<const uint32_t*>(&cfg.padValue);
+        }
+        paddingConfig |= uint64_t(paddingValue) << padModeShiftBit;
+        if constexpr(FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO) {
+            set_padding(paddingConfig);
+        } else if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
+            set_padding_b(paddingConfig);
+        }
+    }
+}
+
 template <typename TileData, typename ConvTileData>
 PTO_INTERNAL void Timg2colConvTileCheck(TileData &dst, ConvTileData &src) {
     static_assert((ConvTileData::Loc == TileType::Mat), "TImg2col: Source TileType only support Mat.");
@@ -75,25 +122,20 @@ PTO_INTERNAL void Timg2colConvTileCheck(TileData &dst, ConvTileData &src) {
 }
 
 template <typename TileData, typename ConvTileData,
-          SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint64_t>
+          SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint32_t>
 AICORE void TIMG2COL_IMPL(TileData &dst, ConvTileData &src,
                           uint16_t posM, uint16_t posK, const Img2colTileConfig<T> &cfg)
 {
     Timg2colConvTileCheck<TileData, ConvTileData>(dst, src);
+
     if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
         SetFmatrix<FmatrixMode>(cfg);
+        SetRepeat<FmatrixMode>(cfg);
+        SetPadding<T, FmatrixMode>(cfg);
     }
     constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
     uint16_t stepM = dst.GetValidRow();
     uint16_t stepK = CeilAlignment(dst.GetValidCol(), c0Size);
-    uint16_t dstStride = CeilDivision(dst.GetValidRow(), FRACTAL_NZ_ROW);
-    uint64_t repeatValue = 0x1010001ULL;
-    repeatValue = (repeatValue & ~(0xFFFFULL << 32)) | (static_cast<uint64_t>(dstStride) << 32);
-    if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL) {
-        set_l3d_rpt(repeatValue);
-    } else {
-        set_l3d_rpt_b(repeatValue);
-    }
     TImg2col<TileData, ConvTileData, FmatrixMode>(dst.data(), src.data(), stepM, stepK, posM, posK, cfg.strideW, cfg.strideH,
                                      cfg.filterW, cfg.filterH, cfg.dilationW, cfg.dilationH, cfg.transpose, cfg.channelSize);
 }
