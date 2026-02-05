@@ -990,147 +990,6 @@ void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclF
         
 }   
 
-// -----------------------------
-// Fixed-case GM workspace (DEFAULT_CASES[0])
-// -----------------------------
-namespace {
-constexpr int HEAD_SIZE_W = 128;
-constexpr int S0_W = 128;
-constexpr int S1_W = 1024;
-
-constexpr int CUBE_S0_W = 128;
-constexpr int CUBE_S1_W = 128;
-constexpr int TILE_S1_W = 256;
-
-constexpr int CV_FIFO_W = 8;
-constexpr int TILE_FACTOR_W = TILE_S1_W / CUBE_S1_W; // 2
-constexpr int NUM_TILES_W = S1_W / TILE_S1_W;        // 4
-
-// Strides follow the standalone driver logic (in elements)
-constexpr size_t QK_FIFO_STRIDE_ELEMS =
-    static_cast<size_t>(CV_FIFO_W) * static_cast<size_t>(CUBE_S0_W) *
-    static_cast<size_t>(TILE_FACTOR_W) * static_cast<size_t>(CUBE_S1_W); // 262144 floats
-
-constexpr size_t P_FIFO_STRIDE_ELEMS = QK_FIFO_STRIDE_ELEMS;             // same elems, but half
-constexpr size_t P_MAX_FIFO_STRIDE_ELEMS =
-    static_cast<size_t>(CV_FIFO_W) * static_cast<size_t>(CUBE_S0_W);     // 1024 floats
-
-constexpr size_t PV_FIFO_STRIDE_ELEMS =
-    static_cast<size_t>(CV_FIFO_W) * static_cast<size_t>(CUBE_S0_W) * static_cast<size_t>(HEAD_SIZE_W); // 131072
-
-// Per-tile outputs used by the reference driver (S0 * num_tiles)
-constexpr size_t GS_ELEMS = static_cast<size_t>(S0_W) * static_cast<size_t>(NUM_TILES_W); // 512 floats
-
-// o_parts (running snapshots): num_tiles * S0 * HEAD
-constexpr size_t O_PARTS_ELEMS =
-    static_cast<size_t>(NUM_TILES_W) * static_cast<size_t>(S0_W) * static_cast<size_t>(HEAD_SIZE_W); // 65536 floats
-
-// NOTE: block_rows = S0/CUBE_S0 = 1 here, so no extra block multiplier needed.
-
-// Store the device FFTS base *value* here (written by host)
-__gm__ __attribute__((section(".bss"))) uint64_t g_ffts_base_ptr = 0;
-
-// Scratch buffers in GM
-__gm__ __attribute__((section(".bss"))) half  g_p_tile_fifo[P_FIFO_STRIDE_ELEMS];     // half FIFO layout
-__gm__ __attribute__((section(".bss"))) float g_qk_tile_fifo[QK_FIFO_STRIDE_ELEMS];   // float FIFO layout
-__gm__ __attribute__((section(".bss"))) float g_pv_tile_fifo[PV_FIFO_STRIDE_ELEMS];   // float FIFO layout
-
-__gm__ __attribute__((section(".bss"))) float g_exp_max_ififo[P_MAX_FIFO_STRIDE_ELEMS]; // exp_max fifo (float)
-__gm__ __attribute__((section(".bss"))) float g_global_sum_out[GS_ELEMS];               // per-tile S0 floats
-__gm__ __attribute__((section(".bss"))) float g_exp_max_out[GS_ELEMS];                  // per-tile S0 floats
-
-__gm__ __attribute__((section(".bss"))) float g_o_parts_out[O_PARTS_ELEMS];             // running snapshots
-// profile/cv_comm are optional for this case (block_rows=1 -> no CV comm needed)
-} // namespace
-
-// __global__ AICORE void tfa_kernel_entry(
-//     __gm__ void* q,
-//     __gm__ void* k,
-//     __gm__ void* v,
-//     __gm__ void* o_out
-// ) {
-    
-//     // Fixed case constants
-//     constexpr int HEAD_SIZE = 128;
-//     constexpr int S0 = 128;
-//     constexpr int S1 = 1024;
-
-//     constexpr int CUBE_S0 = 128;
-//     constexpr int CUBE_S1 = 128;
-//     constexpr int TILE_S1 = 256;
-
-//     constexpr int QK_PRELOAD = 4;
-//     constexpr int CV_FIFO_SIZE = 8;
-
-//     constexpr bool CAUSAL_MASK = false;
-//     constexpr bool INTERMEDIATE_CHECK = false;
-//     constexpr int CV_FIFO_CONS_SYNC_PERIOD = 1;
-
-//     // FFTS base pointer value must have been written by host in call_kernel
-//     __gm__ uint64_t* ffts_addr = reinterpret_cast<__gm__ uint64_t*>(g_ffts_base_ptr);
-
-//     runTFA<
-//         S0, HEAD_SIZE, S1,
-//         CUBE_S0, CUBE_S1, TILE_S1,
-//         QK_PRELOAD, CV_FIFO_SIZE,
-//         INTERMEDIATE_CHECK, CAUSAL_MASK,
-//         CV_FIFO_CONS_SYNC_PERIOD
-//     >(
-//         ffts_addr,
-//         reinterpret_cast<__gm__ half*>(q),
-//         reinterpret_cast<__gm__ half*>(k),
-//         reinterpret_cast<__gm__ half*>(v),
-
-//         // scratch from global GM
-//         reinterpret_cast<__gm__ half*>(g_p_tile_fifo),
-//         reinterpret_cast<__gm__ float*>(g_exp_max_ififo),
-//         reinterpret_cast<__gm__ float*>(g_global_sum_out),
-//         reinterpret_cast<__gm__ float*>(g_exp_max_out),
-
-//         reinterpret_cast<__gm__ float*>(o_out),
-//         reinterpret_cast<__gm__ float*>(g_o_parts_out),
-
-//         reinterpret_cast<__gm__ float*>(g_qk_tile_fifo),
-//         reinterpret_cast<__gm__ float*>(g_pv_tile_fifo),
-
-//         // cv_comm_buf, profile_buf: safe to pass nullptr for this case (block_rows=1 => no CV comm path)
-//         reinterpret_cast<__gm__ uint8_t*>(0),
-//         reinterpret_cast<__gm__ uint8_t*>(0)
-//     );
-// }
-
-// extern "C" void call_kernel(
-//     uint32_t blockDim,
-//     void* stream,
-//     uint8_t* q,
-//     uint8_t* k,
-//     uint8_t* v,
-//     uint8_t* o_out
-// ) {
-//     // 1) Get FFTS base (host API)
-//     uint64_t ffts = 0;
-//     uint32_t fftsLen = 0;
-//     rtGetC2cCtrlAddr(&ffts, &fftsLen);
-
-//     // 2) Write device FFTS pointer value into GM global scalar
-//     // NOTE: &g_ffts_base_ptr is a device-global symbol address visible to host code in this module.
-//     // Use async memcpy on the provided stream for correctness.
-//     aclrtMemcpyAsync(
-//         (void*)&g_ffts_base_ptr, sizeof(uint64_t),
-//         (void*)&ffts, sizeof(uint64_t),
-//         ACL_MEMCPY_HOST_TO_DEVICE,
-//         (aclrtStream)stream
-//     );
-
-//     tfa_kernel_entry<<<blockDim, nullptr, stream>>>(
-//         q,
-//         k,
-//         v,
-//         o_out
-//     );
-// }
-
-
 extern "C" void call_kernel(
     uint32_t blockDim,
     void* stream,
@@ -1157,8 +1016,8 @@ extern "C" void call_kernel(
 
     // Fixed case constants
     constexpr int HEAD_SIZE = 128;
-    constexpr int S0 = 128;
-    constexpr int S1 = 1024;
+    constexpr int S0 = 1024;
+    constexpr int S1 = 2048;
 
     constexpr int CUBE_S0 = 128;
     constexpr int CUBE_S1 = 128;
@@ -1171,55 +1030,6 @@ extern "C" void call_kernel(
     constexpr bool INTERMEDIATE_CHECK = false;
     constexpr int CV_FIFO_CONS_SYNC_PERIOD = 1;
 
-    // size_t fullSize = S0 * S1 * sizeof(float); // Keep output as float
-    // size_t qSize = S0 * HEAD_SIZE * sizeof(aclFloat16);
-    // size_t kSize = HEAD_SIZE * S1 * sizeof(aclFloat16);
-
-    // float *outHost;
-    // aclFloat16 *qHost, *kHost;
-    // aclFloat16 *xexpHost;
-    // float *tmpFloatExpHost;
-    // aclFloat16 *vHost;
-    // float *outDevice; // qk_out
-    // aclFloat16 *xexpDevice;
-    // float *midDevice = nullptr; // not used by this test but kept for symmetry
-    // float *out2Device; // pv_out
-    // float *out2Host;
-
-    // aclrtMallocHost((void **)(&outHost), fullSize); // Allocate output buffer
-    // aclrtMallocHost((void **)(&qHost), qSize);
-    // aclrtMallocHost((void **)(&kHost), kSize);
-
-    // aclrtMalloc((void **)&outDevice, fullSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    // size_t halfSize = S0 * S1 * sizeof(aclFloat16);
-    // size_t floatSize = S0 * S1 * sizeof(float);
-    // aclrtMalloc((void **)&xexpDevice, halfSize, ACL_MEM_MALLOC_HUGE_FIRST); // p_out (half)
-    // void *pOutFp32Device = nullptr;
-    // aclrtMalloc((void **)&pOutFp32Device, floatSize, ACL_MEM_MALLOC_HUGE_FIRST); // p_out_fp32 (float)
-    // // allocate v and out2 buffers
-    // size_t vSize = S1 * HEAD_SIZE * sizeof(aclFloat16);
-    // size_t pvPartSize = S0 * HEAD_SIZE * sizeof(float);
-    // int num_tiles = S1 / 128;
-    // size_t out2TotalSize = pvPartSize * num_tiles;
-    // aclrtMalloc((void **)&out2Device, out2TotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    // // allocate global_sum buffer (per-tile S0 floats)
-    // size_t gsumTotalElems = static_cast<size_t>(S0) * static_cast<size_t>(num_tiles);
-    // size_t gsumSize = gsumTotalElems * sizeof(float);
-    // float *gSumDevice = nullptr;
-    // aclrtMalloc((void **)&gSumDevice, gsumSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    // // allocate per-tile exp_max buffer (per-tile S0 floats)
-    // float *expMaxDevice = nullptr;
-    // aclrtMalloc((void **)&expMaxDevice, gsumSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    // // allocate running output o (S0 x HEAD_SIZE)
-    // float *oDevice = nullptr;
-    // size_t oSize = pvPartSize; // S0 * HEAD_SIZE * sizeof(T)
-    // aclrtMalloc((void **)&oDevice, oSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    // // allocate per-iteration running output snapshots (num_tiles * S0 * HEAD_SIZE)
-    // float *oPartsDevice = nullptr;
-    // size_t oPartsTotalSize = pvPartSize * num_tiles;
-    // aclrtMalloc((void **)&oPartsDevice, oPartsTotalSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    // Debug logging setup (preserve original tqksv behavior)
     uint64_t ffts{0};
     uint32_t fftsLen{0};
     rtGetC2cCtrlAddr(&ffts, &fftsLen);
@@ -1230,7 +1040,7 @@ extern "C" void call_kernel(
         QK_PRELOAD, CV_FIFO_SIZE,
         INTERMEDIATE_CHECK, CAUSAL_MASK,
         CV_FIFO_CONS_SYNC_PERIOD
-    ><<<1, nullptr, stream>>>(
+    ><<<S0/CUBE_S0, nullptr, stream>>>(
         (__gm__ uint64_t*)ffts,
         (__gm__ half*)q,
         (__gm__ half*)k,
@@ -1246,13 +1056,4 @@ extern "C" void call_kernel(
         reinterpret_cast<__gm__ uint8_t*>(0),
         reinterpret_cast<__gm__ uint8_t*>(0)
     );
-
-
-    // aclrtFree(outDevice);
-    // aclrtFree(oPartsDevice);
-    // aclrtFree(xexpDevice);
-    // aclrtFree(pOutFp32Device);
-    // aclrtFree(out2Device);
-    // aclrtFree(gSumDevice);
-    // aclrtFree(expMaxDevice);
 }

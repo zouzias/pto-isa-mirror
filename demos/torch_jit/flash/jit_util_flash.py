@@ -21,7 +21,7 @@ import torch
 
 ASCEND_TOOLKIT_HOME = os.environ["ASCEND_TOOLKIT_HOME"]
 PTO_LIB_PATH = os.environ["PTO_LIB_PATH"]
-BLOCK_DIM = 1 # S0 / CUBE_S0
+BLOCK_DIM = 1  # S0 / CUBE_S0
 
 
 def torch_to_ctypes(t: torch.Tensor) -> ctypes.c_void_p:
@@ -47,8 +47,8 @@ def compile_flash(kernel_cpp: str, verbose: bool = False, timeout: int = 300) ->
         f"--npu-arch={_npu_arch_flag()}",
         "-O2",
         "-std=c++17",
-        "-Wno-ignored-attributes", # suppress warnings from PTO headers
-        "-DMEMORY_BASE",  # here hardcoded for A2A3; TODO: expose this option to jit interface
+        "-Wno-ignored-attributes",
+        "-DMEMORY_BASE",
         f"-I{PTO_LIB_PATH}/include",
         f"-I{ASCEND_TOOLKIT_HOME}/include",
         f"-I{ASCEND_TOOLKIT_HOME}/aarch64-linux/pkg_inc/runtime",
@@ -81,7 +81,7 @@ def load_flash_lib(lib_path: str, check_type: bool = True):
     if check_type:
         lib.call_kernel.argtypes = [
             ctypes.c_uint32,  # blockDim
-            ctypes.c_void_p,  # stream 
+            ctypes.c_void_p,  # stream
             ctypes.c_void_p,  # q
             ctypes.c_void_p,  # k
             ctypes.c_void_p,  # v
@@ -97,7 +97,7 @@ def load_flash_lib(lib_path: str, check_type: bool = True):
         lib.call_kernel.restype = None
 
     default_block_dim = BLOCK_DIM
-    default_stream_ptr = torch.npu.current_stream()._as_parameter_ 
+    default_stream_ptr = torch.npu.current_stream()._as_parameter_
 
     def flash(
         q: torch.Tensor,
@@ -112,24 +112,24 @@ def load_flash_lib(lib_path: str, check_type: bool = True):
         expMaxDevice: torch.Tensor,
         oPartsDevice: torch.Tensor,
         block_dim: int = default_block_dim,
-        stream_ptr=default_stream_ptr, 
+        stream_ptr=default_stream_ptr,
     ):
 
         lib.call_kernel(
-        block_dim,
-        stream_ptr,
-        torch_to_ctypes(q),
-        torch_to_ctypes(k),
-        torch_to_ctypes(v),
-        torch_to_ctypes(o_out),
-        torch_to_ctypes(outDevice),       # qk_out fp32
-        torch_to_ctypes(xexpDevice),      # p_out fp16
-        torch_to_ctypes(pOutFp32Device),  # p_out fp32
-        torch_to_ctypes(out2Device),      # pv_out tiles
-        torch_to_ctypes(gSumDevice),      # global_sum
-        torch_to_ctypes(expMaxDevice),    # exp_max
-        torch_to_ctypes(oPartsDevice),    # o snapshots
-    )
+            block_dim,
+            stream_ptr,
+            torch_to_ctypes(q),
+            torch_to_ctypes(k),
+            torch_to_ctypes(v),
+            torch_to_ctypes(o_out),
+            torch_to_ctypes(outDevice),  # qk_out fp32
+            torch_to_ctypes(xexpDevice),  # p_out fp16
+            torch_to_ctypes(pOutFp32Device),  # p_out fp32
+            torch_to_ctypes(out2Device),  # pv_out tiles
+            torch_to_ctypes(gSumDevice),  # global_sum
+            torch_to_ctypes(expMaxDevice),  # exp_max
+            torch_to_ctypes(oPartsDevice),  # o snapshots
+        )
 
     return flash
 
