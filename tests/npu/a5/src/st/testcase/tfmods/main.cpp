@@ -17,9 +17,9 @@ using namespace PtoTestCommon;
 
 
 template <uint32_t caseId>
-void launchTREMSTestCase(void *out, void *src, float scalar, aclrtStream stream);
+void launchTFMODSTestCase(void *out, void *src, float scalar, aclrtStream stream);
 
-class TREMSTest : public testing::Test {
+class TFMODSTest : public testing::Test {
 public: 
 protected:
     void SetUp() override
@@ -40,7 +40,7 @@ std::string GetGoldenDir() {
 }
 
 template <uint32_t caseId, typename T, int dstTileRow, int dstTileCol, int row, int vaildRow, int col, int srcVaildCol>
-bool TRemSTestFramework()
+bool TFModSTestFramework()
 {
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -70,7 +70,7 @@ bool TRemSTestFramework()
     file.close();
 
     aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTREMSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
+    launchTFMODSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -94,38 +94,38 @@ bool TRemSTestFramework()
     return ResultCmp<T>(golden, devFinal, 0.001f);
 }
 
-TEST_F(TREMSTest, case1)
+TEST_F(TFMODSTest, case1)
 {
-    bool ret = TRemSTestFramework<1, float, 32, 128, 32, 32, 64, 64>();
+    bool ret = TFModSTestFramework<1, float, 32, 128, 32, 32, 64, 64>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TREMSTest, case2)
+TEST_F(TFMODSTest, case2)
 {
-    bool ret = TRemSTestFramework<2, aclFloat16, 63, 128, 63, 63, 64, 64>();
+    bool ret = TFModSTestFramework<2, aclFloat16, 63, 128, 63, 63, 64, 64>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TREMSTest, case3)
+TEST_F(TFMODSTest, case3)
 {
-    bool ret = TRemSTestFramework<3, int32_t, 31, 256, 31, 31, 128, 128>();
+    bool ret = TFModSTestFramework<3, int32_t, 31, 256, 31, 31, 128, 128>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TREMSTest, case4)
+TEST_F(TFMODSTest, case4)
 {
-    bool ret = TRemSTestFramework<4, int16_t, 15, 192, 15, 15, 192, 192>();
+    bool ret = TFModSTestFramework<4, int16_t, 15, 192, 15, 15, 192, 192>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TREMSTest, case5)
+TEST_F(TFMODSTest, case5)
 {
-    bool ret = TRemSTestFramework<5, float, 7, 512, 7, 7, 448, 448>();
+    bool ret = TFModSTestFramework<5, float, 7, 512, 7, 7, 448, 448>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TREMSTest, case6)
+TEST_F(TFMODSTest, case6)
 {
-    bool ret = TRemSTestFramework<6, float, 256, 32, 256, 256, 16, 16>();
+    bool ret = TFModSTestFramework<6, float, 256, 32, 256, 256, 16, 16>();
     EXPECT_TRUE(ret);
 }
