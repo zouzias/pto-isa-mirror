@@ -94,6 +94,8 @@ namespace pto {
     TSETFMATRIX,
     TSETHF32MODE,
     TSETTF32MODE,
+    TLOAD3DSETREPEAT,
+    TSETPADDING,
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
   };
 
