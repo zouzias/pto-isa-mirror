@@ -126,7 +126,10 @@ AICORE void runTFILLPAD(
     asm volatile("MOV %0, PC\n" : "+l"(pc));
     preload((void *)pc, 2);
     while (get_icache_prl_st()) {
+#if defined(__DAV_C220_CUBE__) || defined(__DAV_C220_VEC__)
+    // seems to compile for a2a3; will crash in HiIPUJumpOpt pass for A5
         asm("nop");
+#endif
     }
 
 #ifdef DEBUGLOG
