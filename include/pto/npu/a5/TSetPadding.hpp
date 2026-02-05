@@ -8,30 +8,28 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef TSETFMATRIX_HPP
-#define TSETFMATRIX_HPP
+#ifndef TSETPADDING_HPP
+#define TSETPADDING_HPP
 
 namespace pto {
 template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T>
-PTO_INTERNAL void TSETFMATRIX_IMPL(const Img2colTileConfig<T> &cfg)
+PTO_INTERNAL void TSETPADDING_IMPL(const Img2colTileConfig<T> &cfg)
 {
     if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL || FmatrixMode == SetFmatrixMode::FMATRIX_B_MANUAL) {
-        uint64_t regFmatrix = 0;
-        regFmatrix |= uint64_t(cfg.fmapW & 0xFFFF);
-        constexpr uint32_t l1ShiftBit = 16;
-        regFmatrix |= uint64_t(cfg.fmapH & 0xFFFF) << l1ShiftBit;
-
-        constexpr uint32_t padNumber = 4;
-        constexpr uint32_t padListShiftBit = 8;
-        constexpr uint32_t padListShiftBase = 32;
-
-        for(uint32_t i = 0; i < padNumber; i++) {
-            regFmatrix |= uint64_t(cfg.padList[i] & 0xFF) << (padListShiftBase + i * padListShiftBit);
+        constexpr uint16_t padValueShiftBit = 8;
+        uint32_t paddingValue = 0;
+        if constexpr (sizeof(T) == 1) {
+            uint8_t u8Value = *reinterpret_cast<const uint8_t*>(&cfg.padValue);
+            paddingValue = (static_cast<uint16_t>(u8Value) << padValueShiftBit) | u8Value;
+        } else if constexpr (sizeof(T) == 2) {
+            paddingValue = *reinterpret_cast<const uint16_t*>(&cfg.padValue);
+        } else if constexpr (sizeof(T) == 4) {
+            paddingValue = *reinterpret_cast<const uint32_t*>(&cfg.padValue);
         }
         if constexpr(FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL) {
-            set_fmatrix(regFmatrix);
+            set_padding(paddingValue);
         } else if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_B_MANUAL) {
-            set_fmatrix_b(regFmatrix);
+            set_padding_b(paddingValue);
         }
     }
 }
