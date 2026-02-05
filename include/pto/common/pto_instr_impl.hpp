@@ -63,6 +63,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TPartMin.hpp"
 #include "pto/npu/a2a3/TImg2col.hpp"
 #include "pto/npu/a2a3/TSetFmatrix.hpp"
+#include "pto/npu/a2a3/TSetRepeat.hpp"
+#include "pto/npu/a2a3/TSetPadding.hpp"
 #ifdef _DEBUG
 #include "pto/npu/a2a3/TPrint.hpp"
 #endif
@@ -160,6 +162,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TQuant.hpp"
 #include "pto/npu/a5/TImg2col.hpp"
 #include "pto/npu/a5/TSetFmatrix.hpp"
+#include "pto/npu/a5/TSetPadding.hpp"
+#include "pto/npu/a5/TSetRepeat.hpp"
 #ifdef _DEBUG
 #include "pto/npu/a5/TPrint.hpp"
 #endif
