@@ -56,6 +56,27 @@ PTO_INTERNAL void SetFmatrix(const Img2colTileConfig<T> &cfg)
     }
 }
 
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_AUTO, typename T = uint64_t>
+PTO_INTERNAL void SetLoad3DRepeat(const Img2colTileConfig<T> &cfg)
+{
+    if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
+        uint64_t rptConfig = 0;
+        constexpr uint32_t repeatTimeShiftBit = 16;
+        constexpr uint32_t repeatModeShiftBit = 24;
+        constexpr uint32_t dstStrideShiftBit = 32;
+        constexpr uint32_t dstMpositionShiftBit = 48;
+        rptConfig |= uint64_t(cfg.repeatStride);
+        rptConfig |= uint64_t(cfg.repeatTime) << repeatTimeShiftBit;
+        rptConfig |= uint64_t(cfg.repeatMode) << repeatModeShiftBit;
+        rptConfig |= uint64_t(cfg.dstStride) << dstStrideShiftBit;
+        rptConfig |= uint64_t(cfg.dstMposition) << dstMpositionShiftBit;
+        if constexpr(FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO) {
+            set_l3d_rpt(rptConfig);
+        } else if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
+            set_l3d_rpt_b(rptConfig);
+        }
+    }
+}
 template <typename TileData, typename ConvTileData>
 PTO_INTERNAL void Timg2colConvTileCheck(TileData &dst, ConvTileData &src) {
     static_assert((ConvTileData::Loc == TileType::Mat), "TImg2col: Source TileType only support Mat.");
@@ -80,20 +101,14 @@ AICORE void TIMG2COL_IMPL(TileData &dst, ConvTileData &src,
                           uint16_t posM, uint16_t posK, const Img2colTileConfig<T> &cfg)
 {
     Timg2colConvTileCheck<TileData, ConvTileData>(dst, src);
+
     if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
         SetFmatrix<FmatrixMode>(cfg);
+        SetLoad3DRepeat<FmatrixMode>(cfg);
     }
     constexpr int32_t c0Size = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
     uint16_t stepM = dst.GetValidRow();
     uint16_t stepK = CeilAlignment(dst.GetValidCol(), c0Size);
-    uint16_t dstStride = CeilDivision(dst.GetValidRow(), FRACTAL_NZ_ROW);
-    uint64_t repeatValue = 0x1010001ULL;
-    repeatValue = (repeatValue & ~(0xFFFFULL << 32)) | (static_cast<uint64_t>(dstStride) << 32);
-    if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL) {
-        set_l3d_rpt(repeatValue);
-    } else {
-        set_l3d_rpt_b(repeatValue);
-    }
     TImg2col<TileData, ConvTileData, FmatrixMode>(dst.data(), src.data(), stepM, stepK, posM, posK, cfg.strideW, cfg.strideH,
                                      cfg.filterW, cfg.filterH, cfg.dilationW, cfg.dilationH, cfg.transpose, cfg.channelSize);
 }

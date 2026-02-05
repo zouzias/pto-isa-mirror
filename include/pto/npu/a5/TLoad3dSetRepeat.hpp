@@ -1,0 +1,37 @@
+/**
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
+#ifndef TLOAD3DSETREPEAT_HPP
+#define TLOAD3DSETREPEAT_HPP
+
+namespace pto {
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint64_t>
+PTO_INTERNAL void TLOAD3DSETREPEAT_IMPL(const Img2colTileConfig<T> &cfg)
+{
+    if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL || FmatrixMode == SetFmatrixMode::FMATRIX_B_MANUAL) {
+        uint64_t rptConfig = 0;
+        constexpr uint32_t repeatTimeShiftBit = 16;
+        constexpr uint32_t repeatModeShiftBit = 24;
+        constexpr uint32_t dstStrideShiftBit = 32;
+        constexpr uint32_t dstMpositionShiftBit = 48;
+        rptConfig |= uint64_t(cfg.repeatStride);
+        rptConfig |= uint64_t(cfg.repeatTime) << repeatTimeShiftBit;
+        rptConfig |= uint64_t(cfg.repeatMode) << repeatModeShiftBit;
+        rptConfig |= uint64_t(cfg.dstStride) << dstStrideShiftBit;
+        rptConfig |= uint64_t(cfg.dstMposition) << dstMpositionShiftBit;
+        if constexpr(FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL) {
+            set_l3d_rpt(rptConfig);
+        } else if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_B_MANUAL) {
+            set_l3d_rpt_b(rptConfig);
+        }
+    }
+}
+}  // namespace pto
+#endif  // TLOAD3DSETREPEAT_HPP
