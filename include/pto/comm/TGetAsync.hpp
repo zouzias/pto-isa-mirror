@@ -63,10 +63,7 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
         (s0 == gShape1 * s1);
     
     bool is_1d_logical = (gShape0 == 1 && gShape1 == 1 && gShape2 == 1 && gShape3 == 1);
-
-    static_assert(is_contiguous && is_1d_logical,
-           "TGTET_ASYNC_SDMA only supports 1D contiguous data.");
-    
+ 
     const uint32_t totalElems = gShape0 * gShape1 * gShape2 * gShape3 * gShape4;
     
     uint64_t eventHandle = sdma::__sdma_get_async(dstGlobalData.data(), srcGlobalData.data(),

@@ -13,7 +13,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstring>
 #include <vector>
 #include <string>
+#ifndef __CCE__
 #include <iostream>
+#endif
 
 #include <acl/acl.h>
 #include "pto/comm/kernels/Pto_putAsync.hpp"
