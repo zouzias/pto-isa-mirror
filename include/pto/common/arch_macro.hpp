@@ -10,7 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Implementation of interface adaptation layer for device-side and cloud-side compatibility
 #ifndef ARCH_MACRO_HPP
 #define ARCH_MACRO_HPP
-
+// 1111111
 #ifdef PTO_NPU_ARCH_KIRIN9030
 #define __tf__
 #define __in__
