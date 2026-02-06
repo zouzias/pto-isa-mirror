@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <acl/acl.h>
 #include "pto/comm/kernels/Pto_putAsync.hpp"
+#include "../common.hpp"
 
 #define ENABLE_DEBUG_PRINT 1
 
@@ -230,6 +231,14 @@ bool RunPutAsyncAivTest(int srcDeviceId, int dstDeviceId)
         return false;
     }
 
+    // Initialize shmem TLS configuration
+    int32_t shmem_ret = ShmemSetConfStoreTls(false, nullptr, 0);
+    if (shmem_ret != 0) {
+        std::cerr << "[ERROR] Failed to init shmem tls\n";
+        aclFinalize();
+        return false;
+    }
+
     // Check and enable P2P access
     if (!pto::comm::detail::CanAccessPeer(srcDeviceId, dstDeviceId)) {
         std::cerr << "[ERROR] P2P not supported between Device " 
@@ -245,10 +254,24 @@ bool RunPutAsyncAivTest(int srcDeviceId, int dstDeviceId)
         return false;
     }
 
-    // Allocate memory on source device
-    aclrtSetDevice(srcDeviceId);
-    void* srcPtr = nullptr;
-    aclrtMalloc(&srcPtr, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST_P2P);
+    // Initialize shmem symmetric heap
+    ret = aclrtSetDevice(srcDeviceId);
+    if (ret != ACL_SUCCESS) {
+        std::cerr << "[ERROR] aclrtSetDevice(src) failed: " << ret << std::endl;
+        aclFinalize();
+        return false;
+    }
+    ShmemEnv env;
+    env.rank = 0;
+    env.size = 1;
+    env.ipPort = "tcp://127.0.0.1:8771";
+    uint64_t required_bytes = 2ULL * count * sizeof(T);
+    env.heapBytes = (required_bytes < (8ULL * 1024 * 1024)) ? (8ULL * 1024 * 1024) : required_bytes;
+    if (ShmemInitForSdma(env) != 0) {
+        std::cerr << "[ERROR] ShmemInitForSdma failed!" << std::endl;
+        aclFinalize();
+        return false;
+    }
 
     // Initialize source data (sync)
     T* srcHost = nullptr;
@@ -256,12 +279,6 @@ bool RunPutAsyncAivTest(int srcDeviceId, int dstDeviceId)
     for (size_t i = 0; i < count; ++i) {
         srcHost[i] = static_cast<T>(i + 100);  // Different pattern for AIV test
     }
-    aclrtMemcpy(srcPtr, count * sizeof(T), srcHost, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-
-    // Allocate memory on destination device
-    aclrtSetDevice(dstDeviceId);
-    void* dstPtr = nullptr;
-    aclrtMalloc(&dstPtr, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST_P2P);
 
     // Initialize destination (sync)
     T* initHost = nullptr;
@@ -269,7 +286,27 @@ bool RunPutAsyncAivTest(int srcDeviceId, int dstDeviceId)
     for (size_t i = 0; i < count; ++i) {
         initHost[i] = static_cast<T>(-1);
     }
-    aclrtMemcpy(dstPtr, count * sizeof(T), initHost, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+
+    // Allocate symmetric heap memory for shared buffer (send + recv)
+    void* shmem_ptr = ShmemMalloc(2 * count * sizeof(T));
+    if (shmem_ptr == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        aclrtFreeHost(srcHost);
+        aclrtFreeHost(initHost);
+        ShmemFinalize();
+        aclFinalize();
+        return false;
+    }
+
+    T* shmem_data = reinterpret_cast<T*>(shmem_ptr);
+    T* send_shmem = shmem_data;
+    T* recv_shmem = shmem_data + count;
+
+    aclrtMemcpy(send_shmem, count * sizeof(T), srcHost, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(recv_shmem, count * sizeof(T), initHost, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+
+    // Barrier to ensure all ranks have initialized
+    ShmemBarrierAll();
 
     // Create stream for async kernel launch
     aclrtStream stream = nullptr;
@@ -278,17 +315,20 @@ bool RunPutAsyncAivTest(int srcDeviceId, int dstDeviceId)
     // Call PTO_PUT_ASYNC with AIV path - THIS IS THE ASYNC OPERATION
     std::cout << "[INFO] Calling PTO_PUT_ASYNC<false, " << AivCores << "> (AIV path)..." << std::endl;
     ret = pto::comm::PTO_PUT_ASYNC<false, AivCores>(
-        dstPtr, count * sizeof(T),
-        srcPtr, count * sizeof(T),
+        recv_shmem, count * sizeof(T),
+        send_shmem, count * sizeof(T),
         stream
     );
 
     aclrtSynchronizeStream(stream);
 
+    // Barrier after kernel execution
+    ShmemBarrierAll();
+
     // Verify result (sync)
     T* dstHost = nullptr;
     aclrtMallocHost(reinterpret_cast<void**>(&dstHost), count * sizeof(T));
-    aclrtMemcpy(dstHost, count * sizeof(T), dstPtr, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(dstHost, count * sizeof(T), recv_shmem, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
     bool is_ok = true;
     for (size_t i = 0; i < count; ++i) {
@@ -314,8 +354,8 @@ bool RunPutAsyncAivTest(int srcDeviceId, int dstDeviceId)
     aclrtFreeHost(srcHost);
     aclrtFreeHost(dstHost);
     aclrtFreeHost(initHost);
-    aclrtFree(srcPtr);
-    aclrtFree(dstPtr);
+    ShmemFree(shmem_ptr);
+    ShmemFinalize();
     aclrtDestroyStream(stream);
     aclrtResetDevice(srcDeviceId);
     aclrtResetDevice(dstDeviceId);
