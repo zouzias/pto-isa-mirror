@@ -24,7 +24,7 @@ import torch
 import torch_npu
 from torch_npu.utils.cpp_extension import NpuExtension
 
-
+# 11111
 BUILD_PERMISSION = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 VERSION = 'op-extension'
