@@ -648,7 +648,6 @@ __tf__ PTO_INTERNAL void TLoadMxCubeAVector(__cbuf__ typename TileData::DType *d
     set_loop_size_outtol1(loop2 << 21 | loop1);
 
     TLoadCubeInstr<TileData, GlobalData>(dstAddrP, srcAddrP, 1, lenBurst, gmStride, dstStride, padCount);
-
 }
 
 template <typename TileData, typename GlobalData>
