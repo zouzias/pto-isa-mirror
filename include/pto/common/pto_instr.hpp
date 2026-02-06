@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -1354,6 +1354,18 @@ PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst
 }
 #endif
 
-} // namespace pto
-#endif // #if defined (__CPU_SIM) || defined (__CCE_AICORE__)
+#ifdef __CPU_SIM 
+
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TGET(GlobalDstData &dst, GlobalSrcData &src, TileData &stagingTileData, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TGET, dst, src, stagingTileData);
+  return {};
+}
+
+#endif
+
+} 
+
+#endif 
 #endif
