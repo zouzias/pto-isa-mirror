@@ -53,7 +53,7 @@ enum class RoundMode : uint8_t {
     CAST_TRUNC = 5, // round to zero
     CAST_ODD = 6,   // round to odd (Von Neumann rounding)
 };
-
+// round to odd
 enum class TCopyMode : uint8_t {
     SHALLOW_COPY = 0,
     DEEP_COPY = 1,
