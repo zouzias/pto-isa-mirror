@@ -17,8 +17,24 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+constexpr PTO_INTERNAL float constexpr_sqrt(float x)
+{
+    if (x <= 0.0f)
+        return 0.0f;
+    float guess = x;
+    for (int i = 0; i < 8; ++i) {
+        guess = 0.5f * (guess + x / guess);
+    }
+    return guess;
+}
+
+constexpr AICORE inline float constexpr_inv_sqrt(float x)
+{
+    return 1.0f / constexpr_sqrt(x);
+}
+
 // only for ubN=64 optimization
-template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init>
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
  __tf__ AICORE void TSOFTMAX_DN_FUSION(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
@@ -33,7 +49,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
     __ubuf__ typename TileDataD1::DType *new_global_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
     __ubuf__ typename TileDataD1::DType *exp_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(exp_max.data());
 
-    float scale = 0.8;
+    constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
     float keepProb = 1.0;
 
     unsigned ubM = TileDataD2::Cols;
@@ -202,7 +218,8 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
             vmax(max_0a, max_0a, max_2a, preg_108);
             vmax(max_0b, max_0b, max_2b, preg_108);
             vmax(max_0a, max_0a, max_0b, preg_108);
-            vsts(max_0a, (__ubuf__ float *)local_max_Ptr, 0, NORM_B16, preg_108);     //Store input max in local_max, a trick because ping-pong will change it to global max
+            // vsts(max_0a, (__ubuf__ float *)local_max_Ptr, 0, NORM_B16, preg_108);     //Store input max in local_max, a trick because ping-pong will change it to global max
+            vsts(max_0a, (__ubuf__ float *)new_global_max_Ptr, 0, NORM_B16, preg_108);
             vmuls(max_0a, max_0a, scale, preg_108);
         }
 
@@ -304,7 +321,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 }
 
 //compiler team pto-optimal version
-template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init>
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
 __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
@@ -320,7 +337,7 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, T
     __ubuf__ typename TileDataD1::DType *exp_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(exp_max.data());
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr1 = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
 
-    float scale = 0.8;
+    constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
     float keepProb = 1.0;
     unsigned ubM_ = TileDataD2::Cols;
     unsigned ubN_ = TileDataD2::Rows;
@@ -380,7 +397,7 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, T
                 RegTensor<T> v_local_max, v_global_max, v_expdif;
                 for (uint16_t i = 0; i < (uint16_t)(reduceRow); ++i) {
                     for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
-                        // ?????¨¤??ld
+                        // ?????¡§¡è??ld
                         vlds(v_local_max,  local_max_Ptr + i * ubM_, j * elementsPerRepeat, NORM);
                         vlds(v_global_max, new_global_max_Ptr + i * ubM_, j * elementsPerRepeat, NORM);
 
@@ -754,7 +771,7 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, T
 
 
 // general DN
-template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init>
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
  __tf__ AICORE void TSOFTMAX_DN_FUSION3(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
@@ -769,7 +786,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
     __ubuf__ typename TileDataD1::DType *new_global_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
     __ubuf__ typename TileDataD1::DType *exp_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(exp_max.data());
 
-    float scale = 0.8;
+    constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
     float keepProb = 1.0;
 
     unsigned ubM = TileDataD2::Rows;
@@ -852,7 +869,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 
                         vsub(vreg2, vreg0, vreg1, preg_b32_all, MODE_ZEROING);
 
-                        vmuls(vreg2, vreg2, 0.8f, preg_b32_all, MODE_ZEROING);
+                        vmuls(vreg2, vreg2, scale, preg_b32_all, MODE_ZEROING);
 
                         vexp(vreg2, vreg2, preg_b32_all, MODE_ZEROING);
 
@@ -882,8 +899,8 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
                         vsub(vreg0, vreg0, vreg1, preg_b32_all, MODE_ZEROING);
                         vsub(vreg2, vreg2, vreg3, preg_b32_all, MODE_ZEROING);
 
-                        vmuls(vreg0, vreg0, 0.8f, preg_b32_all, MODE_ZEROING);
-                        vmuls(vreg2, vreg2, 0.8f, preg_b32_all, MODE_ZEROING);
+                        vmuls(vreg0, vreg0, scale, preg_b32_all, MODE_ZEROING);
+                        vmuls(vreg2, vreg2, scale, preg_b32_all, MODE_ZEROING);
 
                         vexp(vreg0, vreg0, preg_b32_all, MODE_ZEROING);
                         vexp(vreg2, vreg2, preg_b32_all, MODE_ZEROING);
@@ -915,7 +932,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
                 vsub(vreg_exp_max, src_in1, max_1a, preg_b32_all, MODE_ZEROING);
                 vsts(max_1a, new_global_max_Ptr, j * elementsPerRepeat, NORM_B32, preg_b32_all);
 
-                vmuls(vreg_exp_max, vreg_exp_max, 0.8f, preg_b32_all, MODE_ZEROING);
+                vmuls(vreg_exp_max, vreg_exp_max, scale, preg_b32_all, MODE_ZEROING);
                 vexp(vreg_exp_max, vreg_exp_max, preg_b32_all, MODE_ZEROING);
                 vsts(vreg_exp_max, exp_max_Ptr, j * elementsPerRepeat, NORM_B32, preg_b32_all);
             }
@@ -931,7 +948,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 
                         vsub(vreg2, vreg0, vreg1, preg_b32_all, MODE_ZEROING);
 
-                        vmuls(vreg2, vreg2, 0.8f, preg_b32_all, MODE_ZEROING);
+                        vmuls(vreg2, vreg2, scale, preg_b32_all, MODE_ZEROING);
 
                         vexp(vreg2, vreg2, preg_b32_all, MODE_ZEROING);
 
@@ -958,8 +975,8 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
                         vsub(vreg0, vreg0, vreg1, preg_b32_all, MODE_ZEROING);
                         vsub(vreg2, vreg2, vreg3, preg_b32_all, MODE_ZEROING);
 
-                        vmuls(vreg0, vreg0, 0.8f, preg_b32_all, MODE_ZEROING);
-                        vmuls(vreg2, vreg2, 0.8f, preg_b32_all, MODE_ZEROING);
+                        vmuls(vreg0, vreg0, scale, preg_b32_all, MODE_ZEROING);
+                        vmuls(vreg2, vreg2, scale, preg_b32_all, MODE_ZEROING);
 
                         vexp(vreg0, vreg0, preg_b32_all, MODE_ZEROING);
                         vexp(vreg2, vreg2, preg_b32_all, MODE_ZEROING);
@@ -991,7 +1008,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 }
 
 
-template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init>
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
  __tf__ AICORE void TSOFTMAX_ND_FUSION(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
@@ -1006,7 +1023,8 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
     __ubuf__ typename TileDataD1::DType *new_global_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
     __ubuf__ typename TileDataD1::DType *exp_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(exp_max.data());
 
-    float scale = 0.8;
+    // float scale = 0.8;
+    constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
     float keepProb = 1.0;
 
     unsigned ubM = TileDataD2::Rows;    //
@@ -1086,7 +1104,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 
                         vsub(vreg2, vreg0, vreg1, preg_src, MODE_ZEROING);
 
-                        vmuls(vreg2, vreg2, 0.8f, preg_src, MODE_ZEROING);
+                        vmuls(vreg2, vreg2, scale, preg_src, MODE_ZEROING);
 
                         vexp(vreg2, vreg2, preg_src, MODE_ZEROING);
 
@@ -1118,8 +1136,8 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
                         vsub(vreg2, vreg0, vreg1, preg_src, MODE_ZEROING);
                         vsub(vreg4, vreg3, vreg1, preg_src, MODE_ZEROING);
 
-                        vmuls(vreg2, vreg2, 0.8f, preg_src, MODE_ZEROING);
-                        vmuls(vreg4, vreg4, 0.8f, preg_src, MODE_ZEROING);
+                        vmuls(vreg2, vreg2, scale, preg_src, MODE_ZEROING);
+                        vmuls(vreg4, vreg4, scale, preg_src, MODE_ZEROING);
 
                         vexp(vreg2, vreg2, preg_src, MODE_ZEROING);
                         vexp(vreg4, vreg4, preg_src, MODE_ZEROING);
@@ -1154,7 +1172,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
                 vsub(vreg_exp_max, src_in1, max_2a, preg_src, MODE_ZEROING);
                 vsts(max_2a, new_global_max_Ptr, j * elementsPerRepeat, NORM_B32, preg_src);
 
-                vmuls(vreg_exp_max, vreg_exp_max, 0.8f, preg_src, MODE_ZEROING);
+                vmuls(vreg_exp_max, vreg_exp_max, scale, preg_src, MODE_ZEROING);
                 vexp(vreg_exp_max, vreg_exp_max, preg_src, MODE_ZEROING);
                 vsts(vreg_exp_max, exp_max_Ptr, j * elementsPerRepeat, NORM_B32, preg_src);
             }
@@ -1173,7 +1191,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 
                         vsub(vreg2, vreg0, vreg1, preg_src, MODE_ZEROING);
 
-                        vmuls(vreg2, vreg2, 0.8f, preg_src, MODE_ZEROING);
+                        vmuls(vreg2, vreg2, scale, preg_src, MODE_ZEROING);
                         vexp(vreg2, vreg2, preg_src, MODE_ZEROING);
 
                         vcadd(sum_1a, vreg2, preg_src, MODE_ZEROING);
@@ -1201,8 +1219,8 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
                         vsub(vreg2, vreg0, vreg1, preg_src, MODE_ZEROING);
                         vsub(vreg4, vreg3, vreg1, preg_src, MODE_ZEROING);
 
-                        vmuls(vreg2, vreg2, 0.8f, preg_src, MODE_ZEROING);
-                        vmuls(vreg4, vreg4, 0.8f, preg_src, MODE_ZEROING);
+                        vmuls(vreg2, vreg2, scale, preg_src, MODE_ZEROING);
+                        vmuls(vreg4, vreg4, scale, preg_src, MODE_ZEROING);
                         vexp(vreg2, vreg2, preg_src, MODE_ZEROING);
                         vexp(vreg4, vreg4, preg_src, MODE_ZEROING);
 
@@ -1236,7 +1254,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 
 
 //optimized for 64*128 ND
-template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init>
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
  __tf__ AICORE void TSOFTMAX_ND_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
@@ -1251,7 +1269,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
     __ubuf__ typename TileDataD1::DType *new_global_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
     __ubuf__ typename TileDataD1::DType *exp_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(exp_max.data());
 
-    float scale = 0.8;
+    constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
     float keepProb = 1.0;
 
     unsigned ubM = TileDataD2::Rows;  //64
@@ -1443,7 +1461,7 @@ template <typename TileDataD1, typename TileDataD2, typename TileDataS1, typenam
 }
 
 
-template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typename TileDataS2, int init>
+template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
     inline AICORE void TSOFTMAX_DN_NOFUSION(TileDataD1 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, //add inline keyword to enable vf fusion
                              ReduceTileD1 &local_max, ReduceTileD1 &local_sum,
                              ReduceTileD1 &new_global_max, ReduceTileD1 &new_global_sum,
@@ -1452,14 +1470,16 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                              ReduceTileD1 &tmp1,
                              ReduceTileD1 &tmp2) {
 
+            constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
+
             if(!init){
                 /*
                 TCOLMAX(local_max, input_x);
-                TMULS(tmp2, local_max, 0.8f);
+                TMULS(tmp2, local_max, scale);
                 TMAX(tmp1, tmp2, new_global_max);
                 TSUB(tmp1, new_global_max, tmp1);
                 TEXP(exp_max, tmp1);
-                TMULS(input_x, input_x, 0.8f);
+                TMULS(input_x, input_x, scale);
                 TCOLEXPAND(tmp0, tmp2);
                 TSUB(input_x, input_x, tmp0);
                 TEXP(input_x, input_x);
@@ -1474,10 +1494,10 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 TMAX(local_max, local_max, new_global_max);
                 TSUB(exp_max, new_global_max, local_max);
                 TMULS(new_global_max, local_max, 1.0f);
-                TMULS(exp_max, exp_max, 0.8f);
+                TMULS(exp_max, exp_max, scale);
                 TEXP(exp_max, exp_max);
                 TCOLEXPANDSUB(input_x, input_x, local_max);
-                TMULS(input_x, input_x, 0.8f);
+                TMULS(input_x, input_x, scale);
                 TEXP(input_x, input_x);
                 TCOLSUM(local_sum, input_x, tmp1, false);
                 TCVT(x_exp, input_x, RoundMode::CAST_ROUND);
@@ -1489,8 +1509,8 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 TCOLMAX(local_max, input_x);
                 TCOLEXPAND(tmp0, local_max);
                 TSUB(input_x, input_x, tmp0);
-                TMULS(input_x, input_x, 0.8f);
-                // TMULS(local_max, local_max, 0.8f);
+                TMULS(input_x, input_x, scale);
+                // TMULS(local_max, local_max, scale);
                 TEXP(input_x, input_x);
                 TCOLSUM(local_sum, input_x, tmp0, false);
                 TCOLSUM(new_global_sum, input_x, tmp0, false);
@@ -1500,7 +1520,7 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
 
                 TCOLMAX(new_global_max, input_x);
                 TCOLEXPANDSUB(input_x, input_x, new_global_max);
-                TMULS(input_x, input_x, 0.8f);
+                TMULS(input_x, input_x, scale);
                 TEXP(input_x, input_x);
                 TCOLSUM(new_global_sum, input_x, tmp1, false);
                 TMULS(input_x, input_x, 1.0f);
@@ -1509,13 +1529,16 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
 
     }
 
-template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typename TileDataS2, int init>
+template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
     AICORE void TSOFTMAX_ND_NOFUSION(TileDataD1 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
                              ReduceTileD1 &local_max, ReduceTileD1 &local_sum,
                              ReduceTileD1 &new_global_max, ReduceTileD1 &new_global_sum,
                              ReduceTileD1 &exp_max,
                              TileDataS1 &tmp_float,
-                             TileDataS1 &p_tile_f32) {
+                             TileDataS1 &p_tile_f32,
+                             TileDataS1 &triu) {
+
+            constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
 
             if(!init){
                 using ReduceTileD2 = Tile<TileType::Vec, float, 1, ReduceTileD1::Rows, BLayout::RowMajor, 1, ReduceTileD1::Rows>;
@@ -1530,6 +1553,13 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 Tile1D_fp32 p_tile_f32_1d;
                 Tile1D_out x_exp_1d;
 
+                if constexpr (CAUSAL_MASK) {
+                    constexpr float negInf = -3.40282e+38;
+                    TTRI<TileDataS1, 1>(triu, 1);
+                    TMULS(triu, triu, negInf);
+                    TADD(input_x, input_x, triu);
+                }
+
                 TROWMAX(local_max, input_x, tmp_float);
                 TRESHAPE(tmp_shw_local_max, local_max);
                 TRESHAPE(tmp_shw_new_global_max, new_global_max);
@@ -1538,8 +1568,8 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 TSUB(tmp_shw_exp_max, tmp_shw_new_global_max, tmp_shw_local_max);
                 TMULS(tmp_shw_new_global_max, tmp_shw_local_max, 1.0f); // just copy
                 TROWEXPANDSUB(tmp_float, input_x, local_max);
-                TMULS(tmp_shw_exp_max, tmp_shw_exp_max, 0.8f);
-                TMULS(tmp_float, tmp_float, 0.8f);
+                TMULS(tmp_shw_exp_max, tmp_shw_exp_max, scale);
+                TMULS(tmp_float, tmp_float, scale);
                 TEXP(tmp_shw_exp_max, tmp_shw_exp_max);
                 TRESHAPE(tmp_shw_exp_max, exp_max);
                 TEXP(p_tile_f32, tmp_float);
@@ -1560,9 +1590,16 @@ template <typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typen
                 Tile1D_fp32 p_tile_f32_1d;
                 Tile1D_out x_exp_1d;
 
+                if constexpr (CAUSAL_MASK) {
+                    constexpr float negInf = -3.40282e+38;
+                    TTRI<TileDataS1, 1>(triu, 1);
+                    TMULS(triu, triu, negInf);
+                    TADD(input_x, input_x, triu);
+                }
+
                 TROWMAX(new_global_max, input_x, tmp_float);
                 TROWEXPANDSUB(tmp_float, input_x, new_global_max);
-                TMULS(tmp_float, tmp_float, 0.8f);
+                TMULS(tmp_float, tmp_float, scale);
                 TEXP(p_tile_f32, tmp_float);
                 TROWSUM(new_global_sum, input_x, tmp_float);
                 TMULS(input_x, input_x, 1.0f);

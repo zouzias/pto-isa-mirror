@@ -14,8 +14,8 @@ import math
 
 np.random.seed(2025)
 
-HEAD_SIZE = 128
-SCALE = 0.8
+# HEAD_SIZE = 128
+# SCALE = 0.8
 KEEP_PROB = 1.0
 
 def gen_golden_data(param):
@@ -25,15 +25,19 @@ def gen_golden_data(param):
     h = param.head_size
     init = param.init
     layout_DN = param.transpose
+    casual_mask = param.casual_mask
+
+    SCALE = 1/np.sqrt(param.head_size)
 
     if init:
         if layout_DN:
             qk_shape = [B, N, S, h]
             input = np.random.uniform(-10, 10, qk_shape).astype(np.float32)
             input.tofile("./input.bin")
-            if False:
-                atten_mask = np.zeros([B, N, S/2, S]).astype(np.float32)
-                input = input + atten_mask
+            #attention mask
+            if casual_mask:
+                casual_mask = np.triu((np.ones(input.shape) * float(-3.40282e+38)).astype(np.float32), 1)
+                input = input + casual_mask
             drop_mask = np.ones(qk_shape).astype(np.uint8)
             if False:
                 input = input * drop_mask
@@ -70,9 +74,9 @@ def gen_golden_data(param):
             qk_shape = [B, N, h, S]
             input = np.random.uniform(-10, 10, qk_shape).astype(np.float32)
             input.tofile("./input.bin")
-            if False:
-                atten_mask = np.zeros([B, N, S/2, S]).astype(np.float32)
-                input = input + atten_mask
+            if casual_mask:
+                casual_mask = np.triu((np.ones(input.shape) * float(-3.40282e+38)).astype(np.float32), 1)
+                input = input + casual_mask
             drop_mask = np.ones(qk_shape).astype(np.uint8)
             if False:
                 input = input * drop_mask
@@ -107,9 +111,9 @@ def gen_golden_data(param):
             qk_shape = [B, N, S, h]
             input = np.random.uniform(-10, 10, qk_shape).astype(np.float32)
             input.tofile("./input.bin")
-            if False:
-                atten_mask = np.zeros([B, N, S/2, S]).astype(np.float32)
-                input = input + atten_mask
+            if casual_mask:
+                casual_mask = np.triu((np.ones(input.shape) * float(-3.40282e+38)).astype(np.float32), 1)
+                input = input + casual_mask
             drop_mask = np.ones(qk_shape).astype(np.uint8)
             if False:
                 input = input * drop_mask
@@ -147,9 +151,9 @@ def gen_golden_data(param):
             qk_shape = [B, N, h, S]
             input = np.random.uniform(-10, 10, qk_shape).astype(np.float32)
             input.tofile("./input.bin")
-            if False:
-                atten_mask = np.zeros([B, N, S/2, S]).astype(np.float32)
-                input = input + atten_mask
+            if casual_mask:
+                casual_mask = np.triu((np.ones(input.shape) * float(-3.40282e+38)).astype(np.float32), 1)
+                input = input + casual_mask
             drop_mask = np.ones(qk_shape).astype(np.uint8)
             if False:
                 input = input * drop_mask
@@ -185,7 +189,7 @@ def gen_golden_data(param):
 
 
 class TSoftmaxFAParams:
-    def __init__(self, name, batch, num_head, seq, head_size, init=True, transpose=False):
+    def __init__(self, name, batch, num_head, seq, head_size, init=True, transpose=False, casual_mask=False):
         self.name = name
         self.batch = batch
         self.num_head = num_head
@@ -193,6 +197,7 @@ class TSoftmaxFAParams:
         self.head_size = head_size
         self.init = init
         self.transpose = transpose
+        self.casual_mask = casual_mask
         #TODO: support NZ golden
 
 if __name__ == "__main__":
@@ -230,6 +235,7 @@ if __name__ == "__main__":
         TSoftmaxFAParams("TSOFTMAXFATest.case31_B1_N1_S128_H128_DN_fusion_init", 1, 1, 128, 128, True, True),
         TSoftmaxFAParams("TSOFTMAXFATest.case32_B1_N1_S128_H128_DN_no_fusion_no_init", 1, 1, 128, 128, False, True),
         TSoftmaxFAParams("TSOFTMAXFATest.case33_B1_N1_S128_H128_DN_fusion_no_init", 1, 1, 128, 128, False, True),
+        TSoftmaxFAParams("TSOFTMAXFATest.case34_B1_N1_S128_H64_ND_no_fusion_init", 1, 1, 128, 64, True, False, True),
     ]
     for case in case_params_list:
         if not os.path.exists(case.name):

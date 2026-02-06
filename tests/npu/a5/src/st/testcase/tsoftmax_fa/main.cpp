@@ -18,16 +18,16 @@ using namespace std;
 using namespace PtoTestCommon;
 
 
-template <int seq, int headSize, int init>
+template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void launchTSOFTMAX_dn_fusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
-template <int seq, int headSize, int init>
+template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void launchTSOFTMAX_dn_nofusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
-template <int seq, int headSize, int init>
+template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void launchTSOFTMAX_nd_fusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
-template <int seq, int headSize, int init>
+template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void launchTSOFTMAX_nd_nofusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
 
@@ -45,7 +45,7 @@ std::string GetGoldenDir() {
     return fullPath;
 }
 
-template <int seq, int headSize, int init>
+template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void test_softmax_dn_fusion()
 {
     size_t src0FileSize = headSize * seq * sizeof(float);  // input_x_local_UB
@@ -100,7 +100,7 @@ void test_softmax_dn_fusion()
     aclrtMemcpy(bit_mask_Device, src1FileSize, bit_mask_Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_max_Device, dst0FileSize, new_global_max_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_sum_Device, dst0FileSize, new_global_sum_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTSOFTMAX_dn_fusion<seq, headSize, init>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
+    launchTSOFTMAX_dn_fusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(x_exp_Host, dst1FileSize, x_exp_Device, dst1FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -190,7 +190,7 @@ void test_softmax_dn_fusion()
     EXPECT_TRUE(ret);
 }
 
-template <int seq, int headSize, int init>
+template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void test_softmax_dn_no_fusion()
 {
     size_t src0FileSize = headSize * seq * sizeof(float);  // input_x_local_UB
@@ -240,7 +240,7 @@ void test_softmax_dn_no_fusion()
     aclrtMemcpy(new_global_max_Device, dst0FileSize, new_global_max_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_max_Host, dst0FileSize, new_global_max_Device, dst0FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtMemcpy(new_global_sum_Device, dst0FileSize, new_global_sum_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTSOFTMAX_dn_nofusion<seq, headSize, init>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
+    launchTSOFTMAX_dn_nofusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(x_exp_Host, dst1FileSize, x_exp_Device, dst1FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -328,7 +328,7 @@ void test_softmax_dn_no_fusion()
     EXPECT_TRUE(ret);
 }
 
-template <int seq, int headSize, int init>
+template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void test_softmax_nd_fusion()
 {
     size_t src0FileSize = headSize * seq * sizeof(float);  // input_x_local_UB
@@ -377,7 +377,7 @@ void test_softmax_nd_fusion()
     aclrtMemcpy(bit_mask_Device, src1FileSize, bit_mask_Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_max_Device, dst0FileSize, new_global_max_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_sum_Device, dst0FileSize, new_global_sum_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTSOFTMAX_nd_fusion<seq, headSize, init>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
+    launchTSOFTMAX_nd_fusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(x_exp_Host, dst1FileSize, x_exp_Device, dst1FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -466,7 +466,7 @@ void test_softmax_nd_fusion()
     EXPECT_TRUE(ret);
 }
 
-template <int seq, int headSize, int init>
+template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void test_softmax_nd_no_fusion()
 {
     size_t src0FileSize = headSize * seq * sizeof(float);  // input_x_local_UB
@@ -515,7 +515,7 @@ void test_softmax_nd_no_fusion()
     aclrtMemcpy(bit_mask_Device, src1FileSize, bit_mask_Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_max_Device, dst0FileSize, new_global_max_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_sum_Device, dst0FileSize, new_global_sum_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTSOFTMAX_nd_nofusion<seq, headSize, init>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
+    launchTSOFTMAX_nd_nofusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(x_exp_Host, dst1FileSize, x_exp_Device, dst1FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -579,17 +579,25 @@ void test_softmax_nd_no_fusion()
     ReadFile(GetGoldenDir() + "/golden_global_sum.bin", dst0FileSize, golden5.data(), dst0FileSize);
     ReadFile(GetGoldenDir() + "/output_global_sum.bin", dst0FileSize, devFinal5.data(), dst0FileSize);
 
-    bool ret0 = ResultCmp(golden, devFinal, 0.01f);
-    bool ret1 = ResultCmp(golden1, devFinal1, 0.001f);
-    bool ret2 = ResultCmp(golden2, devFinal2, 0.001f);
-    bool ret3 = ResultCmp(golden3, devFinal3, 0.001f);
-    bool ret4 = ResultCmp(golden4, devFinal4, 0.001f);
-    bool ret5 = ResultCmp(golden5, devFinal5, 0.001f);
+    bool ret0 = false;
+    bool ret1 = false;
+    bool ret2 = false;
+    bool ret3 = false;
+    bool ret4 = false;
+    bool ret5 = false;
     bool ret = false;
     if(init){
+        ret0 = ResultCmp(golden, devFinal, 0.01f);
+        ret4 = ResultCmp(golden4, devFinal4, 0.001f);
+        ret5 = ResultCmp(golden5, devFinal5, 0.001f);
         ret = ret0 && ret4 && ret5;
     }
     else {
+        ret0 = ResultCmp(golden, devFinal, 0.01f);
+        ret1 = ResultCmp(golden1, devFinal1, 0.001f);
+        ret2 = ResultCmp(golden2, devFinal2, 0.001f);
+        ret3 = ResultCmp(golden3, devFinal3, 0.001f);
+        ret5 = ResultCmp(golden5, devFinal5, 0.001f);
         ret = ret0 && ret1 && ret2 && ret3 && ret5;
     }
 
@@ -598,165 +606,170 @@ void test_softmax_nd_no_fusion()
 
 TEST_F(TSOFTMAXFATest, case1_B1_N1_S128_H64_DN_fusion_init)
 {
-    test_softmax_dn_fusion<128, 64, 1>();
+    test_softmax_dn_fusion<128, 64, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case2_B1_N1_S256_H64_DN_fusion_init)
 {
-    test_softmax_dn_fusion<256, 64, 1>();
+    test_softmax_dn_fusion<256, 64, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case3_B1_N1_S256_H64_DN_no_fusion_init)
 {
-    test_softmax_dn_no_fusion<256, 64, 1>();
+    test_softmax_dn_no_fusion<256, 64, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case4_B1_N1_S128_H64_DN_no_fusion_init)
 {
-    test_softmax_dn_no_fusion<128, 64, 1>();
+    test_softmax_dn_no_fusion<128, 64, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case5_B1_N1_S256_H64_ND_no_fusion_init)
 {
-    test_softmax_nd_no_fusion<256, 64, 1>();
+    test_softmax_nd_no_fusion<256, 64, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case6_B1_N1_S128_H64_ND_no_fusion_init)
 {
-    test_softmax_nd_no_fusion<128, 64, 1>();
+    test_softmax_nd_no_fusion<128, 64, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case7_B1_N1_S128_H64_DN_fusion_no_init)
 {
-    test_softmax_dn_fusion<128, 64, 0>();
+    test_softmax_dn_fusion<128, 64, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case8_B1_N1_S128_H64_DN_no_fusion_no_init)
 {
-    test_softmax_dn_no_fusion<128, 64, 0>();
+    test_softmax_dn_no_fusion<128, 64, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case9_B1_N1_S128_H64_ND_no_fusion_no_init)
 {
-    test_softmax_nd_no_fusion<128, 64, 0>();
+    test_softmax_nd_no_fusion<128, 64, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case10_B1_N1_S256_H64_ND_no_fusion_no_init)
 {
-    test_softmax_nd_no_fusion<256, 64, 0>();
+    test_softmax_nd_no_fusion<256, 64, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case11_B1_N1_S256_H64_DN_fusion_no_init)
 {
-    test_softmax_dn_fusion<256, 64, 0>();
+    test_softmax_dn_fusion<256, 64, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case12_B1_N1_S256_H64_DN_no_fusion_no_init)
 {
-    test_softmax_dn_no_fusion<256, 64, 0>();
+    test_softmax_dn_no_fusion<256, 64, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case13_B1_N1_S128_H64_ND_fusion_init)
 {
-    test_softmax_nd_fusion<128, 64, 1>();
+    test_softmax_nd_fusion<128, 64, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case14_B1_N1_S128_H64_ND_fusion_no_init)
 {
-    test_softmax_nd_fusion<128, 64, 0>();
+    test_softmax_nd_fusion<128, 64, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case15_B1_N1_S256_H64_ND_fusion_init)
 {
-    test_softmax_nd_fusion<256, 64, 1>();
+    test_softmax_nd_fusion<256, 64, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case16_B1_N1_S256_H64_ND_fusion_no_init)
 {
-    test_softmax_nd_fusion<256, 64, 0>();
+    test_softmax_nd_fusion<256, 64, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case17_B1_N1_S64_H64_DN_fusion_init)
 {
-    test_softmax_dn_fusion<64, 64, 1>();
+    test_softmax_dn_fusion<64, 64, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case18_B1_N1_S64_H64_DN_fusion_no_init)
 {
-    test_softmax_dn_fusion<64, 64, 0>();
+    test_softmax_dn_fusion<64, 64, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case19_B1_N1_S64_H64_ND_fusion_init)
 {
-    test_softmax_nd_fusion<64, 64, 1>();
+    test_softmax_nd_fusion<64, 64, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case20_B1_N1_S64_H64_ND_fusion_no_init)
 {
-    test_softmax_nd_fusion<64, 64, 0>();
+    test_softmax_nd_fusion<64, 64, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case21_B1_N1_S64_H128_ND_no_fusion_no_init)
 {
-    test_softmax_nd_no_fusion<64, 128, 0>();
+    test_softmax_nd_no_fusion<64, 128, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case22_B1_N1_S64_H128_ND_no_fusion_init)
 {
-    test_softmax_nd_no_fusion<64, 128, 1>();
+    test_softmax_nd_no_fusion<64, 128, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case23_B1_N1_S64_H128_ND_fusion_no_init)
 {
-    test_softmax_nd_fusion<64, 128, 0>();
+    test_softmax_nd_fusion<64, 128, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case24_B1_N1_S64_H128_ND_fusion_init)
 {
-    test_softmax_nd_fusion<64, 128, 1>();
+    test_softmax_nd_fusion<64, 128, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case25_B1_N1_S128_H128_ND_no_fusion_no_init)
 {
-    test_softmax_nd_no_fusion<128, 128, 0>();
+    test_softmax_nd_no_fusion<128, 128, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case26_B1_N1_S128_H128_ND_no_fusion_init)
 {
-    test_softmax_nd_no_fusion<128, 128, 1>();
+    test_softmax_nd_no_fusion<128, 128, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case27_B1_N1_S128_H128_ND_fusion_no_init)
 {
-    test_softmax_nd_fusion<128, 128, 0>();
+    test_softmax_nd_fusion<128, 128, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case28_B1_N1_S128_H128_ND_fusion_init)
 {
-    test_softmax_nd_fusion<128, 128, 1>();
+    test_softmax_nd_fusion<128, 128, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case29_B1_N1_S64_H128_ND_fusion_no_init)
 {
-    test_softmax_nd_fusion<64, 128, 0>();
+    test_softmax_nd_fusion<64, 128, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case30_B1_N1_S128_H128_DN_no_fusion_init)
 {
-    test_softmax_dn_no_fusion<128, 128, 1>();
+    test_softmax_dn_no_fusion<128, 128, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case31_B1_N1_S128_H128_DN_fusion_init)
 {
-    test_softmax_dn_fusion<128, 128, 1>();
+    test_softmax_dn_fusion<128, 128, 1, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case32_B1_N1_S128_H128_DN_no_fusion_no_init)
 {
-    test_softmax_dn_no_fusion<128, 128, 0>();
+    test_softmax_dn_no_fusion<128, 128, 0, 0>();
 }
 
 TEST_F(TSOFTMAXFATest, case33_B1_N1_S128_H128_DN_fusion_no_init)
 {
-    test_softmax_dn_fusion<128, 128, 0>();
+    test_softmax_dn_fusion<128, 128, 0, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case34_B1_N1_S128_H64_ND_no_fusion_init)
+{
+    test_softmax_nd_no_fusion<128, 64, 1, 1>();
 }
