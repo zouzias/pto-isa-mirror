@@ -24,10 +24,12 @@ tput %dst_remote, %src_local, %ub_tile : (!pto.memref<...>, !pto.memref<...>, !p
 
 ## C++ Intrinsic
 
-Declared in `include/pto/comm/pto_comm_inst.hpp`:
+Declared in `include/pto/comm/pto_comm_inst.hpp`
 
 ```cpp
-template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+// Compile-time atomic type (default: AtomicNone)
+template <AtomicType atomicType = AtomicType::AtomicNone,
+          typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData, WaitEvents&... events);
 ```
 
@@ -43,6 +45,8 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
   - `stagingTileData` must be pre-allocated in Unified Buffer.
 - **Valid region**:
   - Transfer size is determined by `stagingTileData.GetValidRow()` / `stagingTileData.GetValidCol()`.
+- **Atomic operation**:
+  - `atomicType` supports `AtomicNone` and `AtomicAdd`.
 
 ## Examples
 
@@ -72,5 +76,8 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
     
     // Perform remote write
     comm::TPUT(dstG, srcG, stagingTile);
+
+    // Perform atomic add on remote destination
+    comm::TPUT<AtomicType::AtomicAdd>(dstG, srcG, stagingTile);
 }
 ```

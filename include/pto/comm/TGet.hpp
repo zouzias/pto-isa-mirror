@@ -45,6 +45,9 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     
     // Store from UB to local GM
     TSTORE(dstGlobalData, stagingTileData);
+    // Ensure get is visible before subsequent operations
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 }
 
 } // namespace comm

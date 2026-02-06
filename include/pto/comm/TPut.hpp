@@ -23,9 +23,11 @@ namespace comm {
 // TPUT_IMPL: Remote write operation implementation
 // 
 // Data flow: srcGlobalData (local GM) → stagingTileData (UB) → dstGlobalData (remote GM)
+//   - atomicType: Atomic operation type (AtomicNone or AtomicAdd)
 // ============================================================================
 
-template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, 
+          AtomicType atomicType = AtomicType::AtomicNone>
 PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, 
                             TileData &stagingTileData)
 {
@@ -43,8 +45,8 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     
-    // Store from UB to remote GM
-    TSTORE(dstGlobalData, stagingTileData);
+    // Store from UB to remote GM with atomic operation support
+    TSTORE<TileData, GlobalDstData, atomicType>(dstGlobalData, stagingTileData);
     // Ensure store is visible before subsequent operations
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);

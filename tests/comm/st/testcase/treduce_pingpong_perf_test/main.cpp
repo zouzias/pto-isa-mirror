@@ -1,4 +1,4 @@
-#include "treduce_perf_test.h"
+#include "treduce_pingpong_perf_test.h"
 
 // ============================================================================
 // Command Line Argument Parser
@@ -69,11 +69,11 @@ bool RunSmallTests(const TestArgs &args, const PerfTestConfig &config) {
     bool success = true;
     
     std::cout << "[TEST] float x 64x64 elements (16 KB)" << std::endl;
-    success &= RunReducePerf<float, 64, 64, 64, 64>(
+    success &= RunReducePingPongPerf<float, 64, 64, 64, 64>(
         args.n_ranks, args.n_devices, args.first_rank_id, args.first_device_id, config);
     
     std::cout << "[TEST] float x 16x256 elements (16 KB)" << std::endl;
-    success &= RunReducePerf<float, 16, 256, 16, 256>(
+    success &= RunReducePingPongPerf<float, 16, 256, 16, 256>(
         args.n_ranks, args.n_devices, args.first_rank_id, args.first_device_id, config);
     
     return success;
@@ -87,11 +87,11 @@ bool RunLargeTests(const TestArgs &args, const PerfTestConfig &config) {
     bool success = true;
     
     std::cout << "[TEST] int32_t x 128x128 elements (64 KB)" << std::endl;
-    success &= RunReducePerf<int32_t, 128, 128, 128, 128>(
+    success &= RunReducePingPongPerf<int32_t, 128, 128, 128, 128>(
         args.n_ranks, args.n_devices, args.first_rank_id, args.first_device_id, config);
     
     std::cout << "[TEST] int32_t x 64x256 elements (64 KB)" << std::endl;
-    success &= RunReducePerf<int32_t, 64, 256, 64, 256>(
+    success &= RunReducePingPongPerf<int32_t, 64, 256, 64, 256>(
         args.n_ranks, args.n_devices, args.first_rank_id, args.first_device_id, config);
     
     return success;
@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
     
     // Print test configuration
     std::cout << "============================================================" << std::endl;
-    std::cout << "  TREDUCE Performance Test Suite" << std::endl;
+    std::cout << "  TREDUCE_PINGPONG Performance Test Suite" << std::endl;
     std::cout << "============================================================" << std::endl;
     std::cout << "  Configuration:" << std::endl;
     std::cout << "    Ranks:            " << args.n_ranks << std::endl;
