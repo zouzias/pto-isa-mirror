@@ -110,7 +110,7 @@ else()  # CANN_SHMEM
     )
 endif()
 
-set(NAME gemm_ar)
+set(NAME gemm_ar_performance)
 
 # ============================================================================
 # Kernel library (runs on AI cores with Cube architecture)

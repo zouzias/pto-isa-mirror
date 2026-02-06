@@ -11,9 +11,12 @@
 
 
 DEBUG_MODE="OFF"
+WARMUP_ITERS=5
+PERF_ITERS=20
+BENCH_MODE="--both"   # --both | --overlap-only | --no-overlap-only
 
-SHORT=r:,v:,d,
-LONG=run-mode:,soc-version:,debug,
+SHORT=r:,v:,d,w:,i:,
+LONG=run-mode:,soc-version:,debug,warmup:,iters:,no-verify,both,overlap-only,no-overlap-only,quiet,
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
 while :
@@ -27,6 +30,27 @@ do
             shift 2;;
         (-d | --debug )
             DEBUG_MODE="ON"
+            shift;;
+        (-w | --warmup )
+            WARMUP_ITERS="$2"
+            shift 2;;
+        (-i | --iters )
+            PERF_ITERS="$2"
+            shift 2;;
+        (--no-verify )
+            NO_VERIFY="--no-verify"
+            shift;;
+        (--both )
+            BENCH_MODE="--both"
+            shift;;
+        (--overlap-only )
+            BENCH_MODE="--overlap-only"
+            shift;;
+        (--no-overlap-only )
+            BENCH_MODE="--no-overlap-only"
+            shift;;
+        (--quiet )
+            QUIET="-q"
             shift;;
         (--)
             shift;
@@ -57,4 +81,10 @@ set -euo pipefail
 cmake  -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} -DDEBUG_MODE=${DEBUG_MODE} ..
 make -j16
 
-./gemm_ar
+echo "============================================================"
+echo "  Running GEMM + AllReduce Performance Benchmark"
+echo "  Warmup: ${WARMUP_ITERS}, Measure: ${PERF_ITERS}"
+echo "  Mode:   ${BENCH_MODE}"
+echo "============================================================"
+
+./gemm_ar_performance -w ${WARMUP_ITERS} -i ${PERF_ITERS} ${BENCH_MODE} ${NO_VERIFY:-} ${QUIET:-}

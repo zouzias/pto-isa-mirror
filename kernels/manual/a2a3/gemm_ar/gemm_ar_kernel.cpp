@@ -312,7 +312,6 @@ AICORE inline void RunAllReduceE2E(__gm__ uint8_t* shmem, __gm__ uint8_t* out, b
                 __gm__ T *rank_r_shmem = reinterpret_cast<__gm__ T*>(shmem_ptr(shmem, r));
                 __gm__ T *dataPtr = rank_r_shmem + total_offset;
                 tensors[r] = GlobalDataAR(dataPtr);
-                tensors[r].SetRank(r);
             }
             pto::comm::ParallelGroup<GlobalDataAR> pg(tensors, n_ranks, my_rank);
 

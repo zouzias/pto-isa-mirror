@@ -23,7 +23,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "gemm_config.h"
 
 // ============================================================================
-// External Kernel Launch Function (defined in gemm_performance_kernel.cpp)
+// External Kernel Launch Function (defined in gemm_ar_kernel.cpp)
 // ============================================================================
 template <typename T>
 void LaunchGEMME2E(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t* shmem, void *stream, bool is_overlap);
@@ -180,7 +180,7 @@ bool RunGemmKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    if(rank_id == 0){
+    if(rank_id == 1){
         PtoTestCommon::WriteFile("../output/output_z.bin", dstHost, cFileSize);
     }
     
@@ -215,7 +215,7 @@ bool RunGemmKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
         devFinal[i] = devFinal[i] / n_ranks;
     }
 
-    if(rank_id == 0){
+    if(rank_id == 1){
         if (PtoTestCommon::ResultCmp(golden, devFinal, 0.001f)) {
             printf("test success\n");
             return true;

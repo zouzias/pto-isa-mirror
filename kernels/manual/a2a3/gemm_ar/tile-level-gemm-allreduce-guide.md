@@ -2,253 +2,280 @@
 
 ## 概述
 
-本文档介绍如何使用 PTO-ISA 实现一个 tile 级通算融合的高性能 GEMM+AllReduce kernel。该方案通过以下核心技术实现计算与通信的深度重叠：
+本文档介绍 `gemm_ar` 示例如何使用 PTO-ISA 实现一个 **tile 级通算融合**的高性能 GEMM+AllReduce kernel。该方案的核心技术：
 
-1. **Cube/Vector 单元并发**：Cube 单元执行 GEMM，Vector 单元执行 AllReduce 通信
-2. **Tile 级流水线**：在 tile 粒度上实现计算与通信的 overlap
-3. **双缓冲（Double Buffering）**：L1、L0A/L0B、UB 多级缓冲实现流水线
+1. **Cube/Vector 单元并发**：同一 kernel 内，Cube 单元执行 GEMM，Vector 单元执行 AllReduce
+2. **TNOTIFY/TWAIT tile 级同步**：Cube 每完成一个 tile 就通过 shmem flag 通知 Vec，Vec 逐 tile 等待并执行 AllReduce
+3. **对称内存（Symmetric Heap）**：GEMM 结果直接写入 shmem，各 rank 的 Vec 通过 `shmem_ptr()` 远程读取其他 rank 的数据做 reduce
+4. **多级双缓冲（Double Buffering）**：L1、L0A/L0B 两级 ping-pong 实现 GEMM 流水线
+
+### 文件结构
+
+```
+gemm_ar/
+├── gemm_config.h              # 全局参数（矩阵维度、tile 尺寸、核数）
+├── gemm_ar_kernel.cpp         # Kernel 实现（Cube GEMM + Vec AllReduce）
+├── common.hpp                 # Shmem 初始化/同步工具函数
+├── main.cpp                   # Host 端：多进程启动、数据搬运、kernel launch
+├── CMakeLists.txt             # 构建配置
+├── run.sh                     # 一键编译运行脚本
+└── scripts/gen_data.py        # 生成输入数据和 golden 参考
+```
 
 ## 目录
 
 1. [硬件架构背景](#1-硬件架构背景)
-2. [高性能 GEMM 实现](#2-高性能-gemm-实现)
-3. [AllReduce 通信实现](#3-allreduce-通信实现)
-4. [Cube/Vector 并发架构](#4-cubevector-并发架构)
-5. [Tile 级通算融合实现](#5-tile-级通算融合实现)
-6. [完整示例代码](#6-完整示例代码)
-7. [性能调优指南](#7-性能调优指南)
+2. [参数配置](#2-参数配置)
+3. [高性能 GEMM 实现（Cube 路径）](#3-高性能-gemm-实现cube-路径)
+4. [AllReduce 通信实现（Vec 路径）](#4-allreduce-通信实现vec-路径)
+5. [Tile 级通算融合：TNOTIFY/TWAIT](#5-tile-级通算融合tnotifytwait)
+6. [Kernel 入口与 Host 端](#6-kernel-入口与-host-端)
+7. [构建与运行](#7-构建与运行)
+8. [性能调优指南](#8-性能调优指南)
 
 ---
 
 ## 1. 硬件架构背景
 
-### 1.1 AI Core 架构
+### 1.1 AI Core 双单元架构
 
-每个 AI Core 包含：
-- **1 个 Cube 单元**：用于矩阵计算（GEMM），执行 TMATMUL 指令
-- **2 个 Vector 单元**：用于向量计算和通信操作，执行 AllReduce 等集合通信
+每个 AI Core 包含两个可并行执行的计算单元，通过编译时宏 `__DAV_CUBE__` / `__DAV_VEC__` 区分：
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                    AI Core                          │
-├─────────────────────┬───────────────────────────────┤
-│     Cube 单元       │       Vector 单元 (x2)        │
-│   ┌─────────────┐   │   ┌─────────────────────────┐ │
-│   │             │   │   │  SubBlock 0  SubBlock 1 │ │
-│   │    GEMM     │   │   │  ┌───────┐  ┌───────┐   │ │
-│   │  (TMATMUL)  │   │   │  │AllRed │  │AllRed │   │ │
-│   │             │   │   │  │uce    │  │uce    │   │ │
-│   └─────────────┘   │   │  └───────┘  └───────┘   │ │
-│                     │   └─────────────────────────┘ │
-└─────────────────────┴───────────────────────────────┘
-         ↑                          ↑
-         │                          │
-    __DAV_CUBE__               __DAV_VEC__
-    编译时宏                    编译时宏
+┌──────────────────────────────────────────────────────┐
+│                     AI Core                          │
+├────────────────────────┬─────────────────────────────┤
+│      Cube 单元         │     Vector 单元 (×2)        │
+│   (__DAV_CUBE__)       │     (__DAV_VEC__)           │
+│  ┌──────────────────┐  │  ┌───────────────────────┐  │
+│  │     TMATMUL      │  │  │ SubBlock0  SubBlock1  │  │
+│  │   矩阵乘累加     │  │  │ ┌────────┐ ┌────────┐ │  │
+│  │                  │  │  │ │TREDUCE │ │TREDUCE │ │  │
+│  │  GEMM tile 计算  │  │  │ │PINGPONG│ │PINGPONG│ │  │
+│  └──────────────────┘  │  │ └────────┘ └────────┘ │  │
+│                        │  └───────────────────────┘  │
+└────────────────────────┴─────────────────────────────┘
 ```
+
+- **Cube**：执行 TMATMUL/TMATMUL_ACC，处理 `[baseM, baseK] × [baseK, baseN]` 的矩阵乘
+- **Vector (×2 SubBlocks)**：每个 SubBlock 处理 AllReduce 的一半行（`baseM/2 × baseN`）
 
 ### 1.2 内存层次
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    Global Memory (GM)                     │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │              Symmetric Heap (RDMA)                  │  │
-│  └────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
-                            ↓ TLOAD
-┌──────────────────────────────────────────────────────────┐
-│                     L1 Buffer (~1MB)                      │
-│  用于 GEMM 数据分块缓存 (aMatTile, bMatTile)             │
-└──────────────────────────────────────────────────────────┘
-                            ↓ TEXTRACT / TMOV
-┌───────────────────────┬──────────────────────────────────┐
-│   L0A Buffer (64KB)   │      L0B Buffer (64KB)           │
-│   存放左矩阵 tile     │      存放右矩阵 tile             │
-└───────────────────────┴──────────────────────────────────┘
-                            ↓ TMATMUL
-┌──────────────────────────────────────────────────────────┐
-│                    L0C Buffer (256KB)                     │
-│                    存放输出累加 tile                      │
-└──────────────────────────────────────────────────────────┘
-                            ↓ TSTORE
-┌──────────────────────────────────────────────────────────┐
-│              Unified Buffer (UB) (~256KB)                 │
-│           向量计算缓冲 / 通信中间结果                     │
-└──────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────┐
+│             Global Memory (GM) / Symmetric Heap       │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │  GEMM 输出区: shmem[0 .. 1<<28)                 │  │
+│  │  同步 flag 区: shmem[1<<28 ..)                   │  │
+│  └─────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────┘
+                        ↓ TLOAD (GM→L1)
+┌───────────────────────────────────────────────────────┐
+│                  L1 Buffer (~1MB)                      │
+│  aMatTile[2]: [baseM, baseK*stepKa] × 2 (ping-pong)  │
+│  bMatTile[2]: [baseK*stepKb, baseN] × 2 (ping-pong)  │
+└───────────────────────────────────────────────────────┘
+                        ↓ TEXTRACT (L1→L0)
+┌──────────────────────┬────────────────────────────────┐
+│  L0A (64KB total)    │  L0B (64KB total)              │
+│  aTile[2]: 32KB each │  bTile[2]: 32KB each           │
+│  (ping-pong)         │  (ping-pong)                   │
+└──────────────────────┴────────────────────────────────┘
+                        ↓ TMATMUL (Cube)
+┌───────────────────────────────────────────────────────┐
+│                 L0C Buffer (256KB)                     │
+│              cTile: [baseM, baseN]                     │
+└───────────────────────────────────────────────────────┘
+                        ↓ TSTORE (L0C→GM)
+                   写回 Symmetric Heap
 ```
 
 ---
 
-## 2. 高性能 GEMM 实现
+## 2. 参数配置
 
-### 2.1 核心流水线
-
-高性能 GEMM 的核心是构建四级流水线：
-
-```
-TLOAD (GM→L1) → TEXTRACT (L1→L0A/L0B) → TMATMUL (Cube计算) → TSTORE (L0C→GM)
-```
-
-### 2.2 分块策略
-
-#### 参数定义
-
-| 参数 | 含义 | 参考值 |
-|------|------|--------|
-| `baseM` | L0A tile 的 M 维度 | 128 |
-| `baseK` | L0A/L0B tile 的 K 维度 | 64 |
-| `baseN` | L0B tile 的 N 维度 | 256 |
-| `stepKa` | L1 缓存的 K 块数 (A矩阵) | 4 |
-| `stepKb` | L1 缓存的 K 块数 (B矩阵) | 4 |
-| `singleCoreM` | 单核处理的 M 维度 | 1536 |
-| `singleCoreN` | 单核处理的 N 维度 | 1024 |
-| `singleCoreK` | 单核处理的 K 维度 | 6144 |
-
-#### L0 Buffer 容量约束
-
-- L0A/L0B 使用 32KB ping-pong 分割
-- L0A tile: `baseM × baseK × sizeof(half) ≤ 32KB`
-  - 例: 128 × 64 × 2 = 16KB ✓
-- L0B tile: `baseK × baseN × sizeof(half) ≤ 32KB`
-  - 例: 64 × 256 × 2 = 32KB ✓
-
-### 2.3 Tile 类型定义
+所有参数在 `gemm_config.h` 中定义，Host 和 Kernel 共享：
 
 ```cpp
-#include <pto/pto-inst.hpp>
-using namespace pto;
+// gemm_config.h
+constexpr uint32_t GEMM_M = 6144;          // 全局 M 维度
+constexpr uint32_t GEMM_K = 6144;          // 全局 K 维度
+constexpr uint32_t GEMM_N = 6144;          // 全局 N 维度
 
-// L1 缓冲 Tile（用于 TLOAD 存储从 GM 加载的数据）
-using TileMatA = Tile<TileType::Mat, half, baseM, baseK * stepKa, 
+constexpr uint32_t SINGLE_CORE_M = 1536;   // 单核分到的 M
+constexpr uint32_t SINGLE_CORE_K = 6144;   // 单核分到的 K（不分割）
+constexpr uint32_t SINGLE_CORE_N = 1024;   // 单核分到的 N
+
+constexpr uint32_t BLOCK_DIM = 24;         // AI Core 数量
+
+constexpr uint32_t BASE_M = 128;           // tile M 维度
+constexpr uint32_t BASE_K = 64;            // tile K 维度
+constexpr uint32_t BASE_N = 256;           // tile N 维度
+
+constexpr uint32_t STEP_KA = 4;            // L1 A 矩阵一次加载的 K 块数
+constexpr uint32_t STEP_KB = 4;            // L1 B 矩阵一次加载的 K 块数
+```
+
+### 关键派生参数
+
+| 参数 | 计算公式 | 值 | 含义 |
+|------|----------|------|------|
+| `mLoop` | `SINGLE_CORE_M / BASE_M` | 12 | 每核 M 方向 tile 数 |
+| `nLoop` | `SINGLE_CORE_N / BASE_N` | 4 | 每核 N 方向 tile 数 |
+| `kLoop` | `SINGLE_CORE_K / BASE_K` | 96 | 每个 tile 的 K 迭代次数 |
+| 每核 tile 总数 | `mLoop × nLoop` | 48 | 每核需计算的 tile 总数 |
+| 核布局 | `GEMM_M / SINGLE_CORE_M × GEMM_N / SINGLE_CORE_N` | 4×6=24 | 2D 核划分 |
+
+### L0 Buffer 容量约束
+
+- L0A/L0B 各 64KB，使用 32KB ping-pong 分割
+- L0A tile: `BASE_M × BASE_K × sizeof(half) = 128 × 64 × 2 = 16KB ≤ 32KB` ✓
+- L0B tile: `BASE_K × BASE_N × sizeof(half) = 64 × 256 × 2 = 32KB ≤ 32KB` ✓
+
+### L1 Buffer 容量约束
+
+- A 双缓冲: `2 × BASE_M × BASE_K × STEP_KA × sizeof(half) = 2 × 128 × 64 × 4 × 2 = 128KB`
+- B 双缓冲: `2 × BASE_K × BASE_N × STEP_KB × sizeof(half) = 2 × 64 × 256 × 4 × 2 = 256KB`
+- 总计: 384KB ≤ 1MB ✓
+
+---
+
+## 3. 高性能 GEMM 实现（Cube 路径）
+
+整个 Cube 路径在 `#ifdef __DAV_CUBE__` 内编译。
+
+### 3.1 工作分区 — InitGMOffsets
+
+每个 core 拥有 C 矩阵的一个 `[SINGLE_CORE_M, SINGLE_CORE_N]` 块，读取对应的 A panel 和 B panel：
+
+```cpp
+// gemm_ar_kernel.cpp — InitGMOffsets
+constexpr uint32_t mIter = m / singleCoreM;       // = 4 (M方向核数)
+uint32_t mIterIdx = get_block_idx() % mIter;       // 当前核的 M 索引
+uint32_t nIterIdx = get_block_idx() / mIter;       // 当前核的 N 索引
+
+// 注意：GEMM 结果写入 shmem（对称堆），不是普通 GM
+currentDst = reinterpret_cast<__gm__ T*>(shmem) + gmOffsetC;
+currentSrc0 = src0 + gmOffsetA;   // A 矩阵在普通 GM
+currentSrc1 = src1 + gmOffsetB;   // B 矩阵在普通 GM
+```
+
+**关键设计**：`currentDst` 指向 **shmem**（对称堆），而非普通 device memory。这样 GEMM 结果直接写到对称堆中，后续 Vec 路径通过 `shmem_ptr()` 可跨 rank 远程访问。
+
+### 3.2 Tile 类型定义
+
+```cpp
+constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024;  // 32KB
+
+// L1 缓冲（双缓冲，每次加载 stepKa 个 K 块）
+using TileMatA = Tile<TileType::Mat, U, baseM, baseK * stepKa,
                       BLayout::ColMajor, baseM, baseK * stepKa, SLayout::RowMajor>;
-using TileMatB = Tile<TileType::Mat, half, baseK * stepKb, baseN, 
+using TileMatB = Tile<TileType::Mat, S, baseK * stepKb, baseN,
                       BLayout::RowMajor, baseK * stepKb, baseN, SLayout::ColMajor>;
 
-// L0A/L0B Tile（用于 TMATMUL 输入）
-using LeftTile = TileLeft<half, baseM, baseK, baseM, baseK>;
-using RightTile = TileRight<half, baseK, baseN, baseK, baseN>;
+// L0A/L0B（双缓冲，单个 K 块尺寸）
+using LeftTile  = TileLeft<U, baseM, baseK, baseM, baseK>;
+using RightTile = TileRight<S, baseK, baseN, baseK, baseN>;
 
-// L0C Tile（用于 TMATMUL 输出累加）
-using ResTile = TileAcc<float, baseM, baseN, baseM, baseN>;
-
-// 双缓冲数组
-TileMatA aMatTile[2];
-TileMatB bMatTile[2];
-LeftTile aTile[2];
-RightTile bTile[2];
-ResTile cTile;
+// L0C 累加器
+using ResTile = TileAcc<T, baseM, baseN, baseM, baseN>;
 ```
 
-### 2.4 Buffer 地址分配
+### 3.3 Buffer 地址分配
 
 ```cpp
-constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024;  // 32KB per ping-pong slot
-
-// L1 Buffer 分配
+// L1: A ping/pong + B ping/pong
 TASSIGN(aMatTile[0], 0x0);
-TASSIGN(aMatTile[1], 0x0 + baseM * baseK * stepKa * sizeof(half));
-TASSIGN(bMatTile[0], 0x0 + baseM * baseK * stepKa * 2 * sizeof(half));
-TASSIGN(bMatTile[1], 0x0 + baseM * baseK * stepKa * 2 * sizeof(half) + 
-                          baseK * baseN * stepKb * sizeof(half));
+TASSIGN(aMatTile[1], 0x0 + baseM * baseK * stepKa * sizeof(U));
+TASSIGN(bMatTile[0], 0x0 + baseM * baseK * stepKa * 2 * sizeof(U));
+TASSIGN(bMatTile[1], 0x0 + baseM * baseK * stepKa * 2 * sizeof(U)
+                          + baseK * baseN * stepKb * sizeof(U));
 
-// L0A/L0B 双缓冲分配
-TASSIGN(aTile[0], 0x0);                      // L0A ping
-TASSIGN(aTile[1], 0x0 + L0_PINGPONG_BYTES);  // L0A pong
-TASSIGN(bTile[0], 0x0);                      // L0B ping
-TASSIGN(bTile[1], 0x0 + L0_PINGPONG_BYTES);  // L0B pong
-
-// L0C 分配
+// L0A: ping(0~32KB) / pong(32KB~64KB)
+TASSIGN(aTile[0], 0x0);
+TASSIGN(aTile[1], 0x0 + L0_PINGPONG_BYTES);
+// L0B: 同理
+TASSIGN(bTile[0], 0x0);
+TASSIGN(bTile[1], 0x0 + L0_PINGPONG_BYTES);
+// L0C
 TASSIGN(cTile, 0x0);
 ```
 
-### 2.5 同步事件机制
+### 3.4 四级流水线 — ProcessKIteration
 
-PTO-ISA 使用 `set_flag` / `wait_flag` 在不同流水线阶段之间同步：
+每个 tile `(i, j)` 需要遍历 `kLoop = 96` 次 K 迭代，实现四级双缓冲流水：
 
-```cpp
-// PIPE 类型说明：
-// - PIPE_MTE2: GM → L1 数据搬运
-// - PIPE_MTE1: L1 → L0 数据搬运
-// - PIPE_M:    Cube 矩阵计算
-// - PIPE_MTE3: L0C → GM 数据回写
-// - PIPE_FIX:  定点计算（格式转换）
-
-// 同步示例：等待 TLOAD 完成后再执行 TEXTRACT
-TLOAD(aMatTile[bufIdx], gmA);
-set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-TEXTRACT(aTile[bufIdx], aMatTile[bufIdx], 0, 0);
+```
+TLOAD (GM→L1)  →  TEXTRACT (L1→L0)  →  TMATMUL (Cube)  →  TSTORE (L0C→GM)
+     ↑ 每 stepKa=4 次        ↑ 每次              ↑ 每次          ↑ K循环结束后
+     ↑ 加载一批到L1          ↑ 切片出一个baseK    ↑ 累加         ↑ 写回 shmem
 ```
 
-### 2.6 完整 GEMM 流水线核心代码
+同步事件机制使用 `SetFlag` / `WaitFlag`：
+
+| 同步点 | 含义 |
+|--------|------|
+| `PIPE_MTE2 → PIPE_MTE1` | TLOAD 完成，可以 TEXTRACT |
+| `PIPE_MTE1 → PIPE_MTE2` | TEXTRACT 完成，可以复用 L1 buffer |
+| `PIPE_MTE1 → PIPE_M` | TEXTRACT 完成，可以 TMATMUL |
+| `PIPE_M → PIPE_MTE1` | TMATMUL 完成，可以复用 L0 buffer |
+| `PIPE_M → PIPE_FIX` | TMATMUL 完成，可以 TSTORE |
+| `PIPE_FIX → PIPE_M` | TSTORE 完成，可以开始下一个 tile |
 
 ```cpp
-template <typename T, typename U, typename S>
+template <...>
 AICORE inline void ProcessKIteration(
     uint32_t kIter, uint32_t i, uint32_t j,
     __gm__ U *currentSrc0, __gm__ S *currentSrc1,
     TileMatA aMatTile[2], TileMatB bMatTile[2],
-    LeftTile aTile[2], RightTile bTile[2], 
+    LeftTile aTile[2], RightTile bTile[2],
     ResTile &cTile,
     uint8_t &mte2DBFlag, uint8_t &mte1DBFlag)
 {
     const uint32_t kModstepKa = kIter % stepKa;
 
-    // === TLOAD 阶段：GM → L1 ===
+    // ── TLOAD: 每 stepKa 次迭代加载一次 ──
     if (kModstepKa == 0) {
-        GlobalDataSrcA gmA(currentSrc0 + i * singleCoreK * baseM + kIter * baseK);
-        GlobalDataSrcB gmB(currentSrc1 + j * singleCoreK * baseN + kIter * baseK);
-
-        // 等待上一次 TEXTRACT 完成，可复用 L1 buffer
         WaitFlag<PIPE_MTE1, PIPE_MTE2>(mte2DBFlag);
         TLOAD(aMatTile[mte2DBFlag], gmA);
         SetFlag<PIPE_MTE2, PIPE_MTE1>(0);
         TLOAD(bMatTile[mte2DBFlag], gmB);
         SetFlag<PIPE_MTE2, PIPE_MTE1>(1);
-        mte2DBFlag = (mte2DBFlag == 0) ? 1 : 0;
+        mte2DBFlag ^= 1;
     }
 
-    const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0;
-    
-    // 等待 TMATMUL 完成，可复用 L0 buffer
+    // ── TEXTRACT: 从 L1 切出当前 K 块到 L0 ──
     WaitFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
-
-    // === TEXTRACT 阶段：L1 → L0A/L0B ===
     if (kModstepKa == 0) WaitFlag<PIPE_MTE2, PIPE_MTE1>(0);
-    TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModstepKa * baseK);
-
+    TEXTRACT(aTile[mte1DBFlag], aMatTile[currIdx], 0, kModstepKa * baseK);
     if (kModstepKa == 0) WaitFlag<PIPE_MTE2, PIPE_MTE1>(1);
-    TEXTRACT(bTile[mte1DBFlag], bMatTile[currMte2Idx], (kIter % stepKb) * baseK, 0);
+    TEXTRACT(bTile[mte1DBFlag], bMatTile[currIdx], (kIter % stepKb) * baseK, 0);
 
-    if ((kIter + 1) % stepKa == 0) {
-        SetFlag<PIPE_MTE1, PIPE_MTE2>(currMte2Idx);
-    }
-
-    // === TMATMUL 阶段：Cube 计算 ===
+    // ── TMATMUL: 矩阵乘累加 ──
     SetFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
     WaitFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
-    
-    if (kIter == 0) {
-        TMATMUL(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag]);
-    } else {
-        TMATMUL_ACC(cTile, cTile, aTile[mte1DBFlag], bTile[mte1DBFlag]);
-    }
-    
+    if (kIter == 0) TMATMUL(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag]);
+    else            TMATMUL_ACC(cTile, cTile, aTile[mte1DBFlag], bTile[mte1DBFlag]);
     SetFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
-    mte1DBFlag = (mte1DBFlag == 0) ? 1 : 0;
+    mte1DBFlag ^= 1;
 }
+```
 
-// === TSTORE 阶段：L0C → GM ===
-template <typename T>
+### 3.5 StoreResult — 写回 shmem
+
+K 循环完成后，将 L0C 中的 `[baseM, baseN]` tile 写回到 shmem 中对应位置：
+
+```cpp
+template <...>
 AICORE inline void StoreResult(ResTile &cTile, __gm__ T *currentDst, uint32_t i, uint32_t j)
 {
     SetFlag<PIPE_M, PIPE_FIX>(0);
     WaitFlag<PIPE_M, PIPE_FIX>(0);
-    
+
     GlobalDataOut dstGlobal(currentDst + i * baseM * n + j * baseN);
     TSTORE(dstGlobal, cTile);
-    
+
     SetFlag<PIPE_FIX, PIPE_M>(0);
     WaitFlag<PIPE_FIX, PIPE_M>(0);
 }
@@ -256,573 +283,482 @@ AICORE inline void StoreResult(ResTile &cTile, __gm__ T *currentDst, uint32_t i,
 
 ---
 
-## 3. AllReduce 通信实现
+## 4. AllReduce 通信实现（Vec 路径）
 
-### 3.1 shmem 通信模型
+整个 Vec 路径在 `#ifdef __DAV_VEC__` 内编译，由 `RunAllReduceE2E` 实现。
 
-PTO-ISA 使用 OpenSHMEM 风格的单边通信模型：
+### 4.1 AllReduce Tile 尺寸
+
+每个 AI Core 有 2 个 Vector SubBlock，每个处理 tile 的一半行：
 
 ```cpp
-// 获取当前 rank
-int my_rank = shmem_my_pe();
-int nranks = shmem_n_pes();
-
-// 获取远程 rank 的内存地址映射
-__gm__ T* remote_ptr = (__gm__ T*)shmem_ptr(local_ptr, remote_pe);
-
-// 对称内存分配（所有 rank 上地址相同）
-void* symm_buf = shmem_malloc(size);
+// AllReduce tile: [baseM/2, baseN] = [64, 256]
+// 每个 SubBlock 处理 64 行，两个 SubBlock 合并覆盖完整的 baseM=128 行
+using NDValidShapeC = TileShape2D<T, baseM / 2, baseN, Layout::ND>;
+using NDWholeShapeC = BaseShape2D<T, m, n, Layout::ND>;
+using GlobalDataAR  = GlobalTensor<T, NDValidShapeC, NDWholeShapeC, Layout::ND>;
+using TileDataAR    = Tile<TileType::Vec, T, baseM / 2, baseN, BLayout::RowMajor, -1, -1>;
 ```
 
-### 3.2 ParallelGroup 构建
+### 4.2 UB Ping-Pong 分配
+
+`TREDUCE_PINGPONG` 需要 3 个 UB tile：
 
 ```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-using namespace pto;
+TileDataAR accTile(baseM / 2, baseN);    // 累加缓冲
+TileDataAR recvTile(baseM / 2, baseN);   // 接收缓冲
+TileDataAR dstTile(baseM / 2, baseN);    // 输出缓冲
 
-template <typename T, int kRows, int kCols>
-AICORE void SetupParallelGroup(
-    __gm__ T *shmem_buffer,
-    int my_rank, int nranks)
-{
-    using ShapeDyn = Shape<1, 1, 1, kRows, kCols>;
-    using StrideDyn = Stride<1, 1, 1, kCols, 1>;
-    using Global = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
-    
-    ShapeDyn shape(1, 1, 1, kRows, kCols);
-    StrideDyn stride(1, 1, 1, kCols, 1);
-    
-    // 构建所有 rank 的 GlobalTensor 数组
-    Global tensors[16];
-    for (int i = 0; i < nranks && i < 16; ++i) {
-        __gm__ T* rank_i_ptr = (__gm__ T*)shmem_ptr(shmem_buffer, i);
-        tensors[i] = Global(rank_i_ptr, shape, stride);
-        tensors[i].SetRank(i);
-    }
-    
-    // 创建 ParallelGroup
-    pto::comm::ParallelGroup<Global> pg(tensors, nranks, my_rank);
+TASSIGN(accTile,  0x0);
+TASSIGN(recvTile, 0x0 + baseM / 2 * baseN * sizeof(T));
+TASSIGN(dstTile,  0x0 + baseM / 2 * baseN * sizeof(T) * 2);
+```
+
+### 4.3 ParallelGroup 构建与跨 rank 数据访问
+
+对于每个 tile `(i, j)`，需要构建包含所有 rank 对应位置数据的 `ParallelGroup`：
+
+```cpp
+// 当前 SubBlock 在 singleCore 区域内的偏移
+auto tile_offset = i * baseM * n + get_subblockid() * baseM / 2 * n + j * baseN;
+// 完整偏移 = core 偏移 + tile 偏移
+auto total_offset = gmOffsetC + tile_offset;
+
+// 构建跨 rank 的 ParallelGroup
+GlobalDataAR tensors[16];
+for (int r = 0; r < n_ranks && r < 16; ++r) {
+    // shmem_ptr: 获取 rank r 的对称堆基址映射
+    __gm__ T *rank_r_shmem = reinterpret_cast<__gm__ T*>(shmem_ptr(shmem, r));
+    __gm__ T *dataPtr = rank_r_shmem + total_offset;
+    tensors[r] = GlobalDataAR(dataPtr);
 }
+pto::comm::ParallelGroup<GlobalDataAR> pg(tensors, n_ranks, my_rank);
 ```
 
-### 3.3 TREDUCE_PINGPONG 实现
+**关键**：`shmem_ptr(shmem, r)` 是核心 API，它将本地 shmem 地址映射到 rank `r` 的远程地址。每个 rank 的 GEMM 结果都写在自己的 shmem 中，通过 `shmem_ptr` 可以跨 rank 读取。
 
-使用 ping-pong 双缓冲的 Reduce 操作：
+### 4.4 TREDUCE_PINGPONG
 
 ```cpp
-template <typename T, int kTRows, int kTCols>
-AICORE void RunAllReduceOnCore(
-    __gm__ T *input, 
-    __gm__ T *output, 
-    __gm__ T *shmem,
-    int core_idx,
-    int nranks, int my_rank)
-{
-    using ShapeDyn = Shape<1, 1, 1, kTRows, kTCols>;
-    using StrideDyn = Stride<1, 1, 1, kTCols, 1>;
-    using Global = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
-    using TileData = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
-
-    // 计算分区偏移
-    const int64_t row_offset = static_cast<int64_t>(core_idx) * kTRows * kTCols;
-    
-    // 分配 UB tile（三个用于 ping-pong）
-    TileData src0Tile(kTRows, kTCols);
-    TileData src1Tile(kTRows, kTCols);
-    TileData dstTile(kTRows, kTCols);
-    
-    constexpr size_t tileBytes = kTRows * kTCols * sizeof(T);
-    constexpr size_t alignedTileBytes = ((tileBytes + 31) / 32) * 32;
-    
-    TASSIGN(src0Tile, 0);
-    TASSIGN(src1Tile, alignedTileBytes);
-    TASSIGN(dstTile, alignedTileBytes * 2);
-
-    // 构建 ParallelGroup
-    ShapeDyn shape(1, 1, 1, kTRows, kTCols);
-    StrideDyn stride(1, 1, 1, kTCols, 1);
-    
-    Global tensors[16];
-    for (int i = 0; i < nranks; ++i) {
-        __gm__ T* rank_i_base = (__gm__ T*)shmem_ptr(shmem, i);
-        __gm__ T* rank_i_partition = rank_i_base + row_offset;
-        tensors[i] = Global(rank_i_partition, shape, stride);
-        tensors[i].SetRank(i);
-    }
-    
-    pto::comm::ParallelGroup<Global> pg(tensors, nranks, my_rank);
-    Global dstGlobal(output + row_offset, shape, stride);
-
-    // 全局同步：确保所有 rank 数据就绪
-    ShmemDeviceBarrierAll();
-    
-    // 执行 ping-pong Reduce Sum
-    pto::comm::TREDUCE_PINGPONG(pg, dstGlobal, src0Tile, src1Tile, dstTile, 
-                                comm::ReduceOp::Sum);
-}
+GlobalDataAR dstGlobal(out_addr + tile_offset);
+pto::comm::TREDUCE_PINGPONG(pg, dstGlobal, accTile, recvTile, dstTile, comm::ReduceOp::Sum);
 ```
 
-### 3.4 TREDUCE_PINGPONG 原理
-
-ping-pong 双缓冲实现计算与通信重叠：
+执行流程：
 
 ```
 时间 →
-┌─────┐┌─────┐┌─────┐┌─────┐┌─────┐
-│Load ││Load ││Load ││Load ││Store│
-│rank0││rank1││rank2││rank3││     │
-├─────┤├─────┤├─────┤├─────┤└─────┘
-│     ││Add  ││Add  ││Add  │
-│     ││0+1  ││+2   ││+3   │
-└─────┘└─────┘└─────┘└─────┘
+┌──────────┬──────────┬──────────┬──────────┬──────┐
+│Load rank0│Load rank1│Load rank2│Load rank3│Store │
+│→ accTile ││→ recvTile│→ recvTile│→ recvTile│→ out │
+├──────────┼──────────┼──────────┼──────────┤      │
+│          │ acc += r1│ acc += r2│ acc += r3│      │
+└──────────┴──────────┴──────────┴──────────┴──────┘
 
-使用 ping-pong 优化后：
-┌──────────┬──────────┬──────────┬──────────┐
-│Load rank0│Load rank1│Load rank2│Load rank3│  ← 预取
-├──────────┼──────────┼──────────┼──────────┤
-│          │ Add 0+1  │ Add +2   │ Add +3   │  ← 计算与下一次Load重叠
-│          │Load rank2│Load rank3│ Store    │
-└──────────┴──────────┴──────────┴──────────┘
+Ping-pong 优化：Load 与 Add 流水重叠
+┌──────────┬────────────┬────────────┬────────────┐
+│Load r0   │Load r1     │Load r2     │Load r3     │ ← recvTile
+│→accTile  │→recvTile   │→recvTile   │→recvTile   │
+│          │acc+=recv   │acc+=recv   │acc+=recv   │ ← accTile
+│          │            │            │Store acc   │ ← dstGlobal
+└──────────┴────────────┴────────────┴────────────┘
 ```
 
 ---
 
-## 4. Cube/Vector 并发架构
+## 5. Tile 级通算融合：TNOTIFY/TWAIT
 
-### 4.1 编译时条件分支
+### 5.1 核心思想
 
-使用 `--cce-aicore-arch=dav-c220` 编译选项启用混合架构：
+Cube 和 Vec 在同一个 kernel 中并行执行。Cube 每完成一个 tile 的 TSTORE，就通过 `TNOTIFY` 在 shmem flag 区设置标志；Vec 通过 `TWAIT` 轮询该标志，flag 到达后立即开始该 tile 的 AllReduce。
 
-```cmake
-target_compile_options(${NAME}_kernel PRIVATE 
-    ${CMAKE_CCE_COMPILE_OPTIONS} 
-    --cce-aicore-arch=dav-c220   # 混合 Cube/Vector 架构
-    -DMEMORY_BASE -std=c++17)
+```
+时间 →
+Cube:  ┌─Tile 0─┐ ┌─Tile 1─┐ ┌─Tile 2─┐ ┌─Tile 3─┐ ...
+       │K loop  │ │K loop  │ │K loop  │ │K loop  │
+       │TSTORE  │ │TSTORE  │ │TSTORE  │ │TSTORE  │
+       └──┬─────┘ └──┬─────┘ └──┬─────┘ └──┬─────┘
+          │TNOTIFY    │TNOTIFY   │TNOTIFY   │TNOTIFY
+          ↓           ↓          ↓          ↓
+Vec:      ┌──TWAIT──┐ ┌─TWAIT─┐ ┌──TWAIT──┐ ┌─TWAIT─┐
+          │TREDUCE  │ │TREDUCE│ │TREDUCE  │ │TREDUCE│
+          │PINGPONG │ │PING.. │ │PINGPONG │ │PING.. │
+          └─────────┘ └───────┘ └─────────┘ └───────┘
 ```
 
-在 kernel 中使用编译时宏区分执行路径：
+### 5.2 shmem Flag 布局
+
+Flag 存放在 shmem 的高地址区域 `shmem + (1UL << 28)`，256MB 偏移处：
+
+```
+shmem 布局:
+┌──────────────────────────────────────┐ offset 0
+│         GEMM 输出数据区              │
+│    M × N × sizeof(float)            │
+│    = 6144 × 6144 × 4 = 144MB        │
+├──────────────────────────────────────┤ offset 1<<28 = 256MB
+│         TNOTIFY/TWAIT flag 区        │
+│    每个 core 有 mLoop×nLoop 个 flag  │
+│    共 BLOCK_DIM × 48 × sizeof(int32) │
+└──────────────────────────────────────┘
+```
+
+Flag 索引方式（每个 flag 是一个 `int32_t`）：
 
 ```cpp
-// 检测编译时宏
+// Cube 端写 flag:
+// block_idx * mLoop * nLoop + j * mLoop + i
+__gm__ int32_t *flagPtr = shmemFlag + get_block_idx() * mLoop * nLoop + j * mLoop + i;
+```
+
+### 5.3 Cube 端 — TNOTIFY
+
+每个 tile `(i, j)` 完成 StoreResult + PipeBarrier 后，设置对应 flag：
+
+```cpp
+// gemm_ar_kernel.cpp — RunGemmE2E 内循环
+for (uint32_t i = 0; i < mLoop; i++) {
+    for (uint32_t j = 0; j < nLoop; j++) {
+        // K 循环
+        for (uint32_t kIter = 0; kIter < kLoop; kIter++) {
+            ProcessKIteration<...>(kIter, i, j, ...);
+        }
+        // 写回 shmem
+        StoreResult<...>(cTile, currentDst, i, j);
+        AscendC::PipeBarrier<PIPE_ALL>();
+
+        // ★ 通知 Vec: tile (i,j) 已就绪
+        {
+            using GSignal = GlobalTensor<int32_t, ShapeDyn, StrideDyn, Layout::ND>;
+            __gm__ int32_t *flagPtr = shmemFlag
+                + get_block_idx() * mLoop * nLoop + j * mLoop + i;
+            GSignal flagSignal(flagPtr, shape, stride);
+            comm::TNOTIFY(flagSignal, 1, comm::NotifyOp::Set);
+        }
+    }
+}
+```
+
+### 5.4 Vec 端 — TWAIT
+
+Vec 在处理每个 tile 前，先等待**所有 rank** 的对应 flag 都被设置：
+
+```cpp
+// gemm_ar_kernel.cpp — RunAllReduceE2E 内循环
+for (uint32_t i = 0; i < mLoop; i++) {
+    for (uint32_t j = 0; j < nLoop; j++) {
+        if (is_overlap) {
+            // ★ 等待所有 rank 的 Cube 完成此 tile
+            for (uint32_t r = 0; r < n_ranks; r++) {
+                __gm__ int32_t *flagPtr =
+                    reinterpret_cast<__gm__ int32_t*>(shmem_ptr(shmemFlag, r))
+                    + get_block_idx() * mLoop * nLoop + j * mLoop + i;
+                GSignal flagSignal(flagPtr, shape, stride);
+                comm::TWAIT(flagSignal, 1, comm::WaitCmp::EQ);
+            }
+        }
+
+        // AllReduce this tile
+        // ... 构建 ParallelGroup, TREDUCE_PINGPONG ...
+    }
+}
+```
+
+**同步量分析**：
+- 每个 tile 需要等 `n_ranks` 个 flag = 4 次 TWAIT
+- 每核 48 tiles → **每核 192 次 TWAIT**
+- 每次 TWAIT 轮询远程 shmem flag，有非零延迟
+
+### 5.5 Overlap 时序示例（2 rank 简化）
+
+```
+Rank 0 Cube: ┌─T0─┐ ┌─T1─┐ ┌─T2─┐ ┌─T3─┐ ...
+             └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘
+                │N      │N      │N      │N       (TNOTIFY)
+
+Rank 1 Cube: ┌─T0─┐ ┌─T1─┐ ┌─T2─┐ ┌─T3─┐ ...
+             └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘
+                │N      │N      │N      │N       (TNOTIFY)
+
+Rank 0 Vec:  ────┌W0┐┌──AR0──┐┌W1┐┌──AR1──┐ ...  (TWAIT→TREDUCE)
+Rank 1 Vec:  ────┌W0┐┌──AR0──┐┌W1┐┌──AR1──┐ ...
+
+N = TNOTIFY, W = TWAIT, AR = TREDUCE_PINGPONG
+Vec 必须同时等到 Rank0 和 Rank1 的 flag 才能开始 AR
+```
+
+---
+
+## 6. Kernel 入口与 Host 端
+
+### 6.1 GemmAllReduce Kernel
+
+单一 `__global__ AICORE` kernel 同时包含 Cube 和 Vec 路径：
+
+```cpp
+// gemm_ar_kernel.cpp
+template <typename T, uint32_t blockDim, uint32_t m, uint32_t k, uint32_t n, ...>
+__global__ AICORE void GemmAllReduce(
+    __gm__ uint8_t *out,     // AllReduce 最终输出（普通 GM）
+    __gm__ uint8_t *src0,    // A 矩阵
+    __gm__ uint8_t *src1,    // B 矩阵
+    __gm__ uint8_t *shmem,   // 对称堆基址
+    bool is_overlap)          // 是否启用 tile 级 overlap
+{
 #ifdef __DAV_CUBE__
-constexpr bool DAV_CUBE = true;
-#else
-constexpr bool DAV_CUBE = false;
+    RunGemmE2E<float, half, half, float, blockDim, m, k, n, ...>(
+        reinterpret_cast<__gm__ float*>(out),
+        reinterpret_cast<__gm__ half*>(src0),
+        reinterpret_cast<__gm__ half*>(src1),
+        shmem, is_overlap);
 #endif
 
 #ifdef __DAV_VEC__
-constexpr bool DAV_VEC = true;
-#include "pto/comm/pto_comm_inst.hpp"
-#else
-constexpr bool DAV_VEC = false;
+    RunAllReduceE2E<float, m, n, singleCoreM, singleCoreN, baseM, baseN>(
+        shmem, out, is_overlap);
 #endif
-```
-
-### 4.2 Kernel 结构
-
-```cpp
-template <typename T, uint32_t gemmBaseM, uint32_t gemmBaseK, uint32_t gemmBaseN,
-          int arRows, int arCols>
-__global__ AICORE void MatmulAllReduceConcurrentKernel(
-    // GEMM inputs/outputs
-    __gm__ half *gemmSrcA, __gm__ half *gemmSrcB, __gm__ float *gemmDstC,
-    // AllReduce inputs/outputs
-    __gm__ T *arInput, __gm__ T *arOutput, __gm__ T *arShmem,
-    // Configuration
-    int total_blocks, int gemm_blocks, int nranks, uint64_t fftsConfig)
-{
-    // 初始化 FFTS 配置（通信必需）
-    util_set_ffts_config(fftsConfig);
-    ShmemDeviceBarrierAll();
-    
-    const int block_idx = get_block_idx();
-    const int my_rank = shmem_my_pe();
-    
-    // ================================================================
-    // Cube 单元执行路径：GEMM
-    // ================================================================
-    if constexpr (DAV_CUBE) {
-        int gemm_core_idx = block_idx;
-        
-        RunGEMMOnCore<float, half, half, gemmBaseM, gemmBaseK, gemmBaseN>(
-            gemmSrcA, gemmSrcB, gemmDstC, gemm_core_idx);
-        
-        AscendC::PipeBarrier<PIPE_ALL>();
-    }
-    
-    // ================================================================
-    // Vector 单元执行路径：AllReduce
-    // ================================================================
-    if constexpr (DAV_VEC) {
-        int allreduce_core_idx = block_idx * get_subblockdim() + get_subblockid();
-        
-        // 核内同步
-        AscendC::PipeBarrier<PIPE_ALL>();
-        aclshmemi_barrier_core_soft();
-        
-        RunAllReduceOnCore<T, arRows, arCols>(
-            arInput, arOutput, arShmem, allreduce_core_idx, nranks, my_rank);
-        
-        AscendC::PipeBarrier<PIPE_ALL>();
-        aclshmemi_barrier_core_soft();
-    }
-    
-    ShmemDeviceBarrierAll();
 }
 ```
 
----
+**注意**：
+- Cube 将 GEMM 结果写入 `shmem`
+- Vec 从所有 rank 的 `shmem` 读取，reduce 后写入 `out`
+- `is_overlap=true` 时启用 TNOTIFY/TWAIT；`is_overlap=false` 时 Vec 跳过 TWAIT
 
-## 5. Tile 级通算融合实现
-
-### 5.1 Catlass/Catcoc 框架
-
-`shmem/examples/matmul_allreduce` 展示了更高级的 tile 级融合方案，基于 Catlass（类似 CUTLASS）框架：
-
-```cpp
-// 核心组件
-using BlockMmad = Catlass::Gemm::Block::BlockMmad<...>;           // GEMM 计算块
-using BlockEpilogueReduceScatter = CommEpilogue::Block::...;       // ReduceScatter 通信
-using BlockEpilogueAllGather = CommEpilogue::Block::...;           // AllGather 通信
-
-// 融合 Kernel
-using MatmulAllReduceKernel = DGemm::Kernel::MatmulAllReduce<
-    BlockMmad,
-    BlockEpilogueReduceScatter,
-    BlockEpilogueAllGather,
-    BlockMmadScheduler,
-    BlockEpilogueScheduler,
-    WORKSPACE_STAGES
->;
-```
-
-### 5.2 通信间隔（COMM_INTERVAL）
-
-控制每多少个 GEMM tile 执行一次通信：
+### 6.2 Host 端 Kernel Launch
 
 ```cpp
-constexpr uint32_t COMM_INTERVAL = 3;  // 每 3 个 GEMM tile 触发一次通信
-```
-
-### 5.3 AIC/AIV 分工
-
-MatmulAllReduce 使用模板特化分离 Cube（AIC）和 Vector（AIV）执行路径：
-
-```cpp
-// AIC (Cube) 执行 GEMM
-template <>
-CATLASS_DEVICE void operator()<AscendC::AIC>(Params &params) {
-    // GEMM 计算循环
-    for (uint32_t commIdx = 0; commIdx < commLoops; ++commIdx) {
-        uint32_t stageId = commIdx % WORKSPACE_STAGES;
-        
-        // 等待上一轮 AIV 完成
-        if (commIdx >= WORKSPACE_STAGES) {
-            Catlass::Arch::CrossCoreWaitFlag(flagAivFinishCompute[stageId]);
-        }
-        
-        // 执行多个 GEMM tile
-        for (uint32_t blockIdxInComm = ...; blockIdxInComm < blockPerComm; ...) {
-            blockMmad(gmA, layoutA, gmB, layoutB, gmSymmetric, layoutC, actualBlockShape);
-        }
-        
-        // 通知 AIV 可以开始通信
-        Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_FIX>(flagAicFinishStore[stageId]);
-    }
-}
-
-// AIV (Vector) 执行通信
-template <>
-CATLASS_DEVICE void operator()<AscendC::AIV>(Params &params) {
-    for (uint32_t commIdx = 0; commIdx < commLoops; ++commIdx) {
-        uint32_t stageId = commIdx % WORKSPACE_STAGES;
-        
-        // 等待 AIC 完成 GEMM
-        Catlass::Arch::CrossCoreWaitFlag(flagAicFinishStore[stageId]);
-        
-        // 跨 rank 同步
-        aclshmemx_barrier_all_vec();
-        
-        // ReduceScatter
-        AscendC::SetAtomicAdd<ElementD>();
-        reduceScatter(...);
-        AscendC::SetAtomicNone();
-        
-        aclshmemx_barrier_all_vec();
-        
-        // AllGather
-        allGather(...);
-        
-        aclshmemx_barrier_all_vec();
-        
-        // 通知 AIC 可以复用 workspace
-        Catlass::Arch::CrossCoreSetFlag<0x2, PIPE_MTE3>(flagAivFinishCompute[stageId]);
-    }
-}
-```
-
-### 5.4 Workspace 双缓冲
-
-使用 WORKSPACE_STAGES 实现 GEMM 与通信的流水线：
-
-```
-时间 →
-┌────────────────┬────────────────┬────────────────┐
-│  GEMM Tile 0-2 │  GEMM Tile 3-5 │  GEMM Tile 6-8 │  ← Cube 单元
-│  → Stage 0     │  → Stage 1     │  → Stage 0     │
-├────────────────┼────────────────┼────────────────┤
-│                │  ReduceScatter │  ReduceScatter │  ← Vector 单元
-│                │    Stage 0     │    Stage 1     │
-│                │  AllGather     │  AllGather     │
-│                │    Stage 0     │    Stage 1     │
-└────────────────┴────────────────┴────────────────┘
-```
-
----
-
-## 6. 完整示例代码
-
-### 6.1 简化版 GEMM + AllReduce
-
-```cpp
-#include <pto/pto-inst.hpp>
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-// ============================================================================
-// 配置参数
-// ============================================================================
-constexpr uint32_t TOTAL_BLOCK_NUM = 4;
-constexpr uint32_t GEMM_BLOCK_NUM = TOTAL_BLOCK_NUM;
-constexpr uint32_t GEMM_BASE_M = 128;
-constexpr uint32_t GEMM_BASE_K = 64;
-constexpr uint32_t GEMM_BASE_N = 128;
-constexpr int AR_ROWS = 16;
-constexpr int AR_COLS = 256;
-
-// ============================================================================
-// Cube 路径：GEMM 实现
-// ============================================================================
-#ifdef __DAV_C220_CUBE__
-
-template <typename T, typename U, typename S, 
-          uint32_t baseM, uint32_t baseK, uint32_t baseN>
-AICORE inline void RunGEMMOnCore(
-    __gm__ U *srcA, __gm__ S *srcB, __gm__ T *dstC,
-    int core_idx)
-{
-    using NDValidShapeA = TileShape2D<U, baseM, baseK>;
-    using NDsingleCoreShapeA = BaseShape2D<U, baseM, baseK>;
-    using GlobalDataSrcA = GlobalTensor<U, NDValidShapeA, NDsingleCoreShapeA>;
-
-    using NDValidShapeB = TileShape2D<U, baseK, baseN, Layout::DN>;
-    using NDsingleCoreShapeB = BaseShape2D<U, baseK, baseN, Layout::DN>;
-    using GlobalDataSrcB = GlobalTensor<U, NDValidShapeB, NDsingleCoreShapeB, Layout::DN>;
-
-    using NDValidShapeC = TileShape2D<T, baseM, baseN>;
-    using NDWholeShapeC = BaseShape2D<T, baseM, baseN>;
-    using GlobalDataOut = GlobalTensor<T, NDValidShapeC, NDWholeShapeC>;
-
-    // 计算分区偏移
-    uint64_t offsetA = static_cast<uint64_t>(core_idx) * baseM * baseK;
-    uint64_t offsetB = static_cast<uint64_t>(core_idx) * baseK * baseN;
-    uint64_t offsetC = static_cast<uint64_t>(core_idx) * baseM * baseN;
-
-    // 定义 Tile
-    using TileMatA = Tile<TileType::Mat, U, baseM, baseK, 
-                          BLayout::ColMajor, baseM, baseK, SLayout::RowMajor>;
-    using TileMatB = Tile<TileType::Mat, S, baseK, baseN, 
-                          BLayout::RowMajor, baseK, baseN, SLayout::ColMajor>;
-    using LeftTile = TileLeft<U, baseM, baseK, baseM, baseK>;
-    using RightTile = TileRight<S, baseK, baseN, baseK, baseN>;
-    using ResTile = TileAcc<T, baseM, baseN, baseM, baseN>;
-
-    TileMatA aMatTile;
-    TileMatB bMatTile;
-    LeftTile aTile;
-    RightTile bTile;
-    ResTile cTile;
-
-    // 分配 Buffer
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, 0x0 + baseM * baseK * sizeof(U));
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
-
-    // 构建 Global Tensor
-    GlobalDataSrcA gmA(srcA + offsetA);
-    GlobalDataSrcB gmB(srcB + offsetB);
-    GlobalDataOut dstGlobal(dstC + offsetC);
-
-    // TLOAD: GM → L1
-    TLOAD(aMatTile, gmA);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    TLOAD(bMatTile, gmB);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
-    
-    // TMOV: L1 → L0
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    TMOV(aTile, aMatTile);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
-    TMOV(bTile, bMatTile);
-    
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    
-    // TMATMUL: Cube 计算
-    TMATMUL(cTile, aTile, bTile);
-    
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    
-    // TSTORE: L0C → GM
-    TSTORE(dstGlobal, cTile);
-    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-}
-
-#endif  // __DAV_C220_CUBE__
-
-// ============================================================================
-// Vector 路径：AllReduce 实现
-// ============================================================================
-#ifdef __DAV_C220_VEC__
-
-template <typename T, int kTRows, int kTCols>
-AICORE inline void RunAllReduceOnCore(
-    __gm__ T *input, __gm__ T *output, __gm__ T *shmem,
-    int core_idx, int nranks, int my_rank)
-{
-    using ShapeDyn = Shape<1, 1, 1, kTRows, kTCols>;
-    using StrideDyn = Stride<1, 1, 1, kTCols, 1>;
-    using Global = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
-    using TileData = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
-
-    const int64_t row_offset = static_cast<int64_t>(core_idx) * kTRows * kTCols;
-    
-    // 分配 ping-pong Tile
-    TileData src0Tile(kTRows, kTCols);
-    TileData src1Tile(kTRows, kTCols);
-    TileData dstTile(kTRows, kTCols);
-    
-    constexpr size_t tileBytes = kTRows * kTCols * sizeof(T);
-    constexpr size_t alignedTileBytes = ((tileBytes + 31) / 32) * 32;
-    
-    TASSIGN(src0Tile, 0);
-    TASSIGN(src1Tile, alignedTileBytes);
-    TASSIGN(dstTile, alignedTileBytes * 2);
-
-    ShapeDyn shape(1, 1, 1, kTRows, kTCols);
-    StrideDyn stride(1, 1, 1, kTCols, 1);
-    
-    // 构建 ParallelGroup
-    Global tensors[16];
-    for (int i = 0; i < nranks; ++i) {
-        __gm__ T* rank_i_ptr = (__gm__ T*)shmem_ptr(shmem, i);
-        tensors[i] = Global(rank_i_ptr + row_offset, shape, stride);
-        tensors[i].SetRank(i);
-    }
-    
-    pto::comm::ParallelGroup<Global> pg(tensors, nranks, my_rank);
-    Global dstGlobal(output + row_offset, shape, stride);
-
-    ShmemDeviceBarrierAll();
-    
-    // 执行 Reduce Sum
-    pto::comm::TREDUCE_PINGPONG(pg, dstGlobal, src0Tile, src1Tile, dstTile, 
-                                comm::ReduceOp::Sum);
-}
-
-#endif  // __DAV_C220_VEC__
-
-// ============================================================================
-// 主 Kernel
-// ============================================================================
+// gemm_ar_kernel.cpp — Host 可见的 launch 函数
 template <typename T>
-__global__ AICORE void GemmAllReduceConcurrentKernel(
-    __gm__ half *gemmA, __gm__ half *gemmB, __gm__ float *gemmC,
-    __gm__ T *arInput, __gm__ T *arOutput, __gm__ T *arShmem,
-    int nranks, uint64_t fftsConfig)
+void LaunchGEMME2E(uint8_t *out, uint8_t *src0, uint8_t *src1,
+                   uint8_t *shmem, void *stream, bool is_overlap)
 {
-    util_set_ffts_config(fftsConfig);
-    ShmemDeviceBarrierAll();
-    
-    const int block_idx = get_block_idx();
-    const int my_rank = shmem_my_pe();
-    
-    // Cube 执行 GEMM
-    if constexpr (DAV_CUBE) {
-        RunGEMMOnCore<float, half, half, GEMM_BASE_M, GEMM_BASE_K, GEMM_BASE_N>(
-            gemmA, gemmB, gemmC, block_idx);
-        AscendC::PipeBarrier<PIPE_ALL>();
+    GemmAllReduce<T, BLOCK_DIM, GEMM_M, GEMM_K, GEMM_N,
+                  SINGLE_CORE_M, SINGLE_CORE_K, SINGLE_CORE_N,
+                  BASE_M, BASE_K, BASE_N,
+                  STEP_M, STEP_KA, STEP_KB, STEP_N>
+        <<<BLOCK_DIM, nullptr, stream>>>(out, src0, src1, shmem, is_overlap);
+}
+```
+
+### 6.3 多进程执行模型
+
+Host 端使用 `fork()` 为每个 rank 创建独立进程：
+
+```cpp
+// main.cpp — 多进程启动
+bool RunGemmMultiProcess(int n_ranks, int n_devices, ...) {
+    for (int r = 0; r < n_ranks; ++r) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            // 子进程：初始化 shmem → 分配内存 → launch kernel → 验证
+            bool ok = RunGemmKernel(first_rank_id + r, n_ranks, ...);
+            _exit(ok ? 0 : 1);
+        }
+        pids.push_back(pid);
     }
-    
-    // Vector 执行 AllReduce
-    if constexpr (DAV_VEC) {
-        int ar_core_idx = block_idx * get_subblockdim() + get_subblockid();
-        AscendC::PipeBarrier<PIPE_ALL>();
-        aclshmemi_barrier_core_soft();
-        
-        RunAllReduceOnCore<T, AR_ROWS, AR_COLS>(
-            arInput, arOutput, arShmem, ar_core_idx, nranks, my_rank);
-        
-        AscendC::PipeBarrier<PIPE_ALL>();
-        aclshmemi_barrier_core_soft();
-    }
-    
-    ShmemDeviceBarrierAll();
+    // 父进程等待所有子进程
+    for (pid_t p : pids) waitpid(p, &status, 0);
+}
+```
+
+### 6.4 单 Rank 执行流程
+
+```cpp
+bool RunGemmKernel(int rank_id, int n_ranks, ...) {
+    // 1. 初始化 ACL
+    shmem_set_conf_store_tls(false, nullptr, 0);
+    aclInit(nullptr);
+    aclrtSetDevice(device_id);
+    aclrtCreateStream(&stream);
+
+    // 2. 初始化 Shmem
+    ShmemEnv env{rank_id, n_ranks, "tcp://127.0.0.1:8778"};
+    ShmemInitFromEnv(env);
+
+    // 3. 分配内存
+    aclrtMalloc(&src0Device, aFileSize, ...);
+    aclrtMalloc(&src1Device, bFileSize, ...);
+    aclrtMalloc(&dstDevice,  cFileSize, ...);
+    uint8_t *shmemDevice = (uint8_t*)ShmemCalloc((1UL << 28), sizeof(uint32_t));
+
+    // 4. 加载输入数据并搬到 device
+    ReadFile("../input/x1_gm.bin", ...);
+    aclrtMemcpy(src0Device, ..., ACL_MEMCPY_HOST_TO_DEVICE);
+
+    // 5. 全局同步后 launch
+    ShmemBarrierAll();
+    LaunchGEMME2E<uint16_t>(dstDevice, src0Device, src1Device,
+                            shmemDevice, stream, /*is_overlap=*/true);
+    aclrtSynchronizeStream(stream);
+
+    // 6. 结果回传并验证
+    aclrtMemcpy(dstHost, ..., ACL_MEMCPY_DEVICE_TO_HOST);
+    // golden = A * B, result = AllReduce(A*B across ranks) = n_ranks * A*B
+    // 验证时 result / n_ranks == golden
 }
 ```
 
 ---
 
-## 7. 性能调优指南
+## 7. 构建与运行
 
-### 7.1 GEMM 性能优化要点
+### 7.1 环境要求
 
-| 优化项 | 说明 | 建议 |
-|--------|------|------|
-| **核划分** | 将 C 矩阵按 M×N 分块到多核 | 使用 2D 划分（如 4×6 = 24 核）|
-| **Base Block 选择** | 选择最大化计算密度的 tile | [128, 256, 64] 适合 FP16 |
-| **L1 缓存** | 使用 stepKa/stepKb 多加载几个 K 块 | stepKa = stepKb = 4 |
-| **双缓冲** | L1、L0A/L0B 都使用 ping-pong | 每级 2 个 buffer |
-| **同步最小化** | 只在真正的依赖点 wait_flag | 避免冗余同步 |
+```bash
+# 必须设置的环境变量
+export ASCEND_HOME_PATH=/usr/local/Ascend/ascend-toolkit/latest
+export SHMEM_HOME_PATH=<path-to-shmem>
+```
 
-### 7.2 通信性能优化要点
+### 7.2 编译选项
 
-| 优化项 | 说明 | 建议 |
-|--------|------|------|
-| **Tile 大小** | 选择合适的通信粒度 | 32×256 或更大 |
-| **COMM_INTERVAL** | 控制计算与通信比例 | 3-5 个 GEMM tile |
-| **Ping-pong** | 使用 TREDUCE_PINGPONG | 重叠通信与规约计算 |
-| **对称内存** | 使用 shmem_malloc 分配 | 避免地址转换开销 |
+`CMakeLists.txt` 中的关键编译选项：
 
-### 7.3 利用率指标解读
+```cmake
+# Kernel 编译选项
+target_compile_options(${NAME}_kernel PRIVATE
+    ${CMAKE_CCE_COMPILE_OPTIONS}
+    --cce-aicore-arch=dav-c220      # ★ 启用 Cube/Vector 混合架构
+    -DMEMORY_BASE                    # 启用 device 端 shmem_ptr 等 API
+    -std=c++17
+)
 
-| 指标 | 含义 | 优化方向 |
-|------|------|----------|
-| TMATMUL Ratio ↓ + TLOAD Ratio ↑ | 内存受限 | 增加数据复用、优化 L1 缓存 |
-| TEXTRACT Ratio ↑ | L1→L0 搬运成为瓶颈 | 增大 stepKa/stepKb |
-| TSTORE Ratio ↓ | 输出写回占比小 | 正常，GEMM 特性 |
+# Kernel 链接
+target_link_libraries(${NAME}_kernel PRIVATE shmem runtime)
+target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
-### 7.4 调试技巧
+# Host 链接
+target_link_libraries(${NAME} PRIVATE
+    ${NAME}_kernel
+    ascendcl shmem stdc++ m pthread ...
+)
+```
 
-1. **启用 cce::printf**：编译时添加 `-d` 选项
-2. **使用 GetSystemCycle()**：精确测量各阶段耗时
-3. **检查验证结果**：每个 rank 独立验证后再合并
+**关键**：`--cce-aicore-arch=dav-c220` 编译器会将 kernel 分别编译成 Cube 版本（定义 `__DAV_CUBE__`）和 Vec 版本（定义 `__DAV_VEC__`），运行时两个版本在同一个 AI Core 上并行执行。
+
+### 7.3 运行
+
+```bash
+# 基本运行
+bash run.sh -r npu -v Ascend910B4
+
+# 带 debug 输出
+bash run.sh -r npu -v Ascend910B4 -d
+```
+
+### 7.4 数据生成
+
+```bash
+cd scripts
+python gen_data.py
+# 生成：
+#   ../input/x1_gm.bin   — A 矩阵 (fp16)
+#   ../input/x2_gm.bin   — B 矩阵 (fp16)
+#   ../output/golden.bin  — 参考输出 (fp32)
+```
 
 ---
 
-## 附录：参考实现
+## 8. 性能调优指南
+
+### 8.1 GEMM 优化要点
+
+| 优化项 | 当前配置 | 说明 |
+|--------|----------|------|
+| 核划分 | 4×6 = 24 核 | C 矩阵按 M×N 2D 划分 |
+| Base tile | [128, 64, 256] | 最大化 Cube 计算密度 |
+| L1 step | stepKa=stepKb=4 | 减少 TLOAD 次数（每 4 个 K 块一次） |
+| 双缓冲 | L1 + L0A/L0B 均双缓冲 | 隐藏数据搬运延迟 |
+| TMATMUL_ACC | 首次 TMATMUL + 后续 ACC | 避免 L0C 清零开销 |
+
+### 8.2 Overlap 同步开销
+
+当前 `gemm_ar` 实现是 **per-tile** 同步 —— 每个 tile 一次 TNOTIFY + `n_ranks` 次 TWAIT：
+
+- TNOTIFY：48 次（每核 48 tiles，每 tile 一次）
+- TWAIT：48 × 4 = **192 次**（每 tile 等 4 个 rank 的 flag）
+- 每次 TWAIT 轮询远程 shmem flag，有非零延迟
+
+这是最细粒度的同步方式，提供最大的 overlap 机会，但同步开销也最大。
+
+**可能的优化方向 —— 分组同步（Grouped TNOTIFY/TWAIT）**：
+
+将多个 tile 合成一组，每组只做一次 TNOTIFY/TWAIT，减少同步次数：
+
+| 分组策略 | TNOTIFY 次数 | TWAIT 次数 | 同步减少 | 代价 |
+|----------|-------------|-----------|----------|------|
+| per-tile（当前） | 48 | 192 | — | 同步开销大 |
+| per-row (GROUP=4) | 12 | 48 | 4× | Vec 需多等 ~0.26ms |
+| per-chunk (GROUP=12) | 4 | 16 | 12× | Vec 需多等 ~0.8ms |
+| all-at-once (GROUP=48) | 1 | 4 | 48× | 无 tile 级 overlap |
+
+粒度与 overlap 的权衡：
+- 粒度越细 → Vec 越早开始（更多 overlap）→ 但同步开销越大
+- 粒度越粗 → 同步开销越小 → 但 Vec 要等更久才能开始
+- 当 GEMM 远快于 AllReduce 时（如 3ms vs 8ms），适当放粗粒度对 overlap 影响很小
+
+> **注**：目前 `gemm_ar` 和 `gemm_ar_performance` 均使用 per-tile 同步。分组同步是一个可探索的优化方向，需修改 kernel 中的 TNOTIFY/TWAIT 逻辑。
+
+### 8.3 AllReduce 开销分析
+
+AllReduce 时间 = TWAIT 等待 + TREDUCE_PINGPONG 计算
+
+- **TWAIT 开销**：每次轮询远程 shmem flag，延迟取决于互联带宽和延迟
+- **TREDUCE_PINGPONG 开销**：= 远程 TLOAD × (n_ranks-1) + 本地 Vec Add × (n_ranks-1) + TSTORE
+- Tile 大小 `[64, 256] × sizeof(float) = 64KB`，每个 tile reduce 需搬移 `64KB × 4 ranks = 256KB`
+
+### 8.4 Overlap 效率上限
+
+在 GEMM 远快于 AllReduce 时，overlap 效率受限于两者的时间比：
+
+```
+Overlap 隐藏的 AR 时间 ≤ GEMM 总时间
+
+如果 GEMM = 3ms, AR = 9ms:
+  - Non-overlap 总时间 = 3 + 9 = 12ms
+  - Overlap 理论最优 = max(3, 9) = 9ms (隐藏 3ms AR)
+  - AR 被隐藏比例 = 3/9 = 33%
+  - 加速比 = 12/9 = 1.33×
+```
+
+要提高 overlap 效率：
+1. **增大 GEMM 耗时**：增大矩阵规模或 K 维度
+2. **减小 AR 耗时**：增大 AllReduce tile 尺寸（减少 tile 数从而减少 TWAIT 次数）
+3. **减少 rank 数**：更少的 rank 意味着更少的远程读取
+
+### 8.5 调试技巧
+
+| 方法 | 说明 |
+|------|------|
+| `cce::printf` | 编译时加 `-d` 选项启用，可在 Cube/Vec 内打印 |
+| `is_overlap=false` | 跳过 TWAIT，Vec 直接做 AllReduce（需先确保 GEMM 全部完成） |
+| 分步验证 | 先验证纯 GEMM 正确性，再加 AllReduce |
+| `gemm_ar_performance` | 性能版本，支持 warmup、多次迭代、overlap vs non-overlap 对比 |
+
+---
+
+## 附录 A：shmem 通信工具（common.hpp）
+
+`common.hpp` 封装了 shmem API，支持两种后端：
+
+| 函数 | ASCEND_SHMEM | CANN_SHMEM |
+|------|-------------|------------|
+| `ShmemInit(env)` | `shmem_set_attr` + `shmem_init_attr` | `aclshmemx_init_attr` |
+| `ShmemMalloc(bytes)` | `shmem_malloc` | `shmem_malloc` |
+| `ShmemCalloc(count, size)` | `shmem_calloc` | `shmem_calloc` |
+| `ShmemBarrierAll()` | `shmem_barrier_all` | `aclshmem_barrier_all` |
+| `ShmemFinalize()` | `shmem_finalize` | `shmem_finalize` |
+| `ShmemPtr(ptr, pe)` [device] | `shmem_ptr` | `aclshmem_ptr` |
+
+通过编译宏 `ASCEND_SHMEM` 或 `CANN_SHMEM` 选择后端（CMake 自动检测）。
+
+## 附录 B：参考实现
 
 | 示例 | 路径 | 说明 |
 |------|------|------|
-| 高性能 GEMM | `kernels/manual/a2a3/gemm_performance/` | 纯 GEMM 优化 |
-| MatMul+AllReduce 并发 | `kernels/manual/a2a3/matmul_allreduce_concurrent/` | Cube/Vector 并发 |
-| Catlass MatMul+AllReduce | `shmem/examples/matmul_allreduce/` | Tile 级深度融合 |
-| 通信测试 | `tests/comm/st/testcase/treduce_perf_test/` | TREDUCE 性能基准 |
+| Tile 级融合 GEMM+AR | `kernels/manual/a2a3/gemm_ar/` | 本文档对应的实现 |
+| 性能测试版本 | `kernels/manual/a2a3/gemm_ar_performance/` | 支持 warmup、多次迭代、overlap/non-overlap 对比 |
 
 ---
 
@@ -830,4 +766,5 @@ __global__ AICORE void GemmAllReduceConcurrentKernel(
 
 | 日期 | 变更 |
 |------|------|
-| 2026-02-05 | 初始版本，整合 GEMM + AllReduce 实现指南 |
+| 2026-02-05 | 初始版本 |
+| 2026-02-06 | 根据实际 gemm_ar 代码重写，修正架构描述、同步机制、完整代码示例 |
