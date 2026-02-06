@@ -1150,12 +1150,19 @@ PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileData
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TMAXS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
-                           WaitEvents &... events)
+PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, 
+                            WaitEvents&... events)
 {
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TMAXS, dst, src, scalar);
-    return {};
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TFMODS, dst, src, scalar);
+  return {};
+}
+
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TMAXS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TMAXS, dst, src, scalar);
+  return {};
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
@@ -1340,6 +1347,13 @@ PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     TSYNC(events...);
     MAP_INSTR_IMPL(TREM, dst, src0, src1);
     return {};
+}
+
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TFMOD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TFMOD, dst, src0, src1);
+  return {};
 }
 
 #ifdef REGISTER_BASE
