@@ -10,7 +10,7 @@
 function(pto_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS}
-        --cce-aicore-arch=${CCE_AICORE_ARCH} -DREGISTER_BASE -std=c++17)
+        --cce-aicore-arch=${CCE_AICORE_ARCH} -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE 
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/

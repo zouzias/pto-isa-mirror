@@ -1127,7 +1127,7 @@ struct Tile {
     bool isKAligned_; // K-Alignedment for A3
 };
 
-#ifdef MEMORY_BASE
+#ifdef PTO_NPU_ARCH_A2A3
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft =
@@ -1139,9 +1139,7 @@ template <typename Element_, const int Rows_, const int Cols_,
 using TileLeftCompact =
     Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_,
          ColValid_, SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
-#endif
-
-#if defined (REGISTER_BASE) || defined (__CPU_SIM)
+#else
 template <typename Element_, const int Rows_, const int Cols_,
           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft =

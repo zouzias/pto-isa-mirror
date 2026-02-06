@@ -10,6 +10,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Modified from demos/baseline/add/csrc/kernel/add_custom.cpp
 
+#include "kernel_operator.h"
+
+#if __CCE_AICORE__ == 220 && defined(__DAV_C220_VEC__)
 #include <pto/pto-inst.hpp>
 using namespace pto;
 

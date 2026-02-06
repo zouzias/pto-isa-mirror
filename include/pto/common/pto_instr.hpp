@@ -11,9 +11,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_INSTR_HPP
 #define PTO_INSTR_HPP
 
-#if defined(__CPU_SIM) || defined(__CCE_AICORE__)
-
 #include "pto/common/debug.h"
+#include "pto/common/event.hpp"
 #include "pto/common/pto_instr_impl.hpp"
 
 #define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
@@ -566,7 +565,7 @@ PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &
     return {};
 }
 
-#ifdef MEMORY_BASE
+#ifdef PTO_NPU_ARCH_A2A3
 template <bool isEnable, RoundMode hf32TransMode = RoundMode::CAST_ROUND, typename... WaitEvents>
 PTO_INST RecordEvent TSETHF32MODE(WaitEvents &... events)
 {
@@ -1355,5 +1354,4 @@ PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst
 #endif
 
 } // namespace pto
-#endif // #if defined (__CPU_SIM) || defined (__CCE_AICORE__)
 #endif

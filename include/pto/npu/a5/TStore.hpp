@@ -42,13 +42,11 @@ PTO_INTERNAL constexpr QuantMode_t GetScalarPreQuantModeGm()
         } else if constexpr (std::is_same<DstType, __gm__ bfloat16_t>::value) {
             quantPre = QuantMode_t::QF322BF16_PRE;
         }
-#ifdef __CCE_AICORE__
         else if constexpr (std::is_same<DstType, __gm__ float8_e4m3_t>::value) {
             quantPre = QuantMode_t::QF322FP8_PRE;
         } else if constexpr (std::is_same<DstType, __gm__ float>::value) {
             quantPre = QuantMode_t::QF322F32_PRE;
         }
-#endif
     } else if constexpr (std::is_same<SrcType, int32_t>::value) {
         if constexpr ((std::is_same<DstType, __gm__ int8_t>::value) || (std::is_same<DstType, __gm__ uint8_t>::value)) {
             quantPre = QuantMode_t::REQ8;
@@ -75,13 +73,11 @@ PTO_INTERNAL constexpr QuantMode_t GetVectorPreQuantModeGm()
         } else if constexpr (std::is_same<DstType, __gm__ bfloat16_t>::value) {
             quantPre = QuantMode_t::VQF322BF16_PRE;
         }
-#ifdef __CCE_AICORE__
         else if constexpr (std::is_same<DstType, __gm__ float8_e4m3_t>::value) {
             quantPre = QuantMode_t::VQF322FP8_PRE;
         } else if constexpr (std::is_same<DstType, __gm__ float>::value) {
             quantPre = QuantMode_t::VQF322F32_PRE;
         }
-#endif
     } else if constexpr (std::is_same<SrcType, int32_t>::value) {
         if constexpr ((std::is_same<DstType, __gm__ int8_t>::value) || (std::is_same<DstType, __gm__ uint8_t>::value)) {
             quantPre = QuantMode_t::VREQ8;
