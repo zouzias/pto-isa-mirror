@@ -67,6 +67,8 @@ tget
 # Point-to-Point Communication (Asynchronous)
 tput_async
 tget_async
+pto_put_async
+pto_get_async
 # Signal-Based Synchronization
 tnotify
 twait
