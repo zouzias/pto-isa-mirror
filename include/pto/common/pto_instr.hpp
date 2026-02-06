@@ -1342,6 +1342,20 @@ PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     return {};
 }
 
+template <typename PipeProd, typename TileData, typename DataFifo, typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(PipeProd &prod, TileData &tile, DataFifo &fifo, WaitEvents &...events) {
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TPUSH, prod, tile, fifo);
+    return {};
+}
+
+template <typename PipeCon, typename TileData, typename DataFifo, typename... WaitEvents>
+PTO_INST RecordEvent TPOP(PipeCon &cons, TileData &tile, DataFifo &fifo, WaitEvents &...events) {
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TPOP, cons, tile, fifo);
+    return {};
+}
+
 #ifdef REGISTER_BASE
 template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, typename TileDataMax, int mode,
           typename... WaitEvents>
