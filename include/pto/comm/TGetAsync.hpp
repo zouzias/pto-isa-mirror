@@ -48,11 +48,34 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
     const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
     const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
     const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+
+    const int s0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+    const int s1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+    const int s2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+    const int s3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+    const int s4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+
+    bool is_contiguous =
+        (s4 == 1) &&
+        (s3 == gShape4) &&
+        (s2 == gShape3 * s3) &&
+        (s1 == gShape2 * s2) &&
+        (s0 == gShape1 * s1);
+    
+    bool is_1d_logical = (gShape0 == 1 && gShape1 == 1 && gShape2 == 1 && gShape3 == 1);
+
+    static_assert(is_contiguous && is_1d_logical,
+           "TGTET_ASYNC_SDMA only supports 1D contiguous data.");
     
     const uint32_t totalElems = gShape0 * gShape1 * gShape2 * gShape3 * gShape4;
     
     uint64_t eventHandle = sdma::__sdma_get_async(dstGlobalData.data(), srcGlobalData.data(),
                                                   totalElems * sizeof(T));
+
+    if (!is_contiguous || !is_1d_logical) {
+        // release 下直接退出或返回错误 event
+        return AsyncEvent(0, DmaEngine::SDMA);
+    }
     
     return AsyncEvent(eventHandle, DmaEngine::SDMA);
 }
