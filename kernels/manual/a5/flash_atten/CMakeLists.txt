@@ -1,5 +1,5 @@
 # --------------------------------------------------------------------------------
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -52,6 +52,14 @@ set(CMAKE_CCE_COMPILE_OPTIONS
     "SHELL:-mllvm -cce-aicore-record-overflow=true"
     "SHELL:-mllvm -cce-aicore-addr-transform"
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
+    "SHELL:--enable-pto-tile-fusion"
+    "SHELL:-mllvm -tile-fusion-skip-reduceop-fusion=false"
+    "SHELL:-mllvm -tile-fusion-skip-shape-inference=true"
+    "SHELL:-mllvm -tile-fusion-skip-legality-check=false"
+    "SHELL:-Rpass=tile-fusion"
+    "SHELL:-Rpass-missed=tile-fusion" 
+    "SHELL:-Rpass-analysis=tile-fusion"
+    "SHELL:-mllvm -enable-tile-fusion-detail-log=true"
 )
 
 if(DEBUG_MODE)
