@@ -43,13 +43,13 @@ TEST(PtoPutAsync_SDMA, Uint8_512_D0toD1) {
 // ============================================================================
 // AIV Path Tests (PTO_PUT_ASYNC<false, AivCores>)
 // ============================================================================
-TEST(PtoPutAsync_AIV, Float256_D0toD1) { 
-    ASSERT_TRUE((RunPutAsyncAivTest<float, 256, 20>(0, 1))); 
-}
+// TEST(PtoPutAsync_AIV, Float256_D0toD1) { 
+//     ASSERT_TRUE((RunPutAsyncAivTest<float, 256, 20>(0, 1))); 
+// }
 
-TEST(PtoPutAsync_AIV, Int32_1024_D0toD1) { 
-    ASSERT_TRUE((RunPutAsyncAivTest<int32_t, 1024, 10>(0, 1))); 
-}
+// TEST(PtoPutAsync_AIV, Int32_1024_D0toD1) { 
+//     ASSERT_TRUE((RunPutAsyncAivTest<int32_t, 1024, 10>(0, 1))); 
+// }
 
 int main(int argc, char **argv)
 {

@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <acl/acl.h>
 #include <pto/pto-inst.hpp>
 #include "pto/comm/TPutAsync.hpp"
+#include "pto/comm/pto_comm_inst.hpp"
 
 namespace pto {
 namespace comm {
@@ -69,7 +70,7 @@ inline aclError EnablePeerAccessBidirectional(int32_t deviceId1, int32_t deviceI
 #if PTO_PUT_ASYNC_DEVICE_ENABLED
 namespace detail {
 
-// Kernel body: Construct GlobalTensor and call TPUT_ASYNC_SDMA_IMPL
+// Kernel body: Construct GlobalTensor and call TPUT_ASYNC
 template <typename DType>
 PTO_INTERNAL void PtoPutAsyncKernelBody(
     __gm__ DType* dst,
@@ -87,13 +88,13 @@ PTO_INTERNAL void PtoPutAsyncKernelBody(
     GlobalTensor<DType, PutShape, PutStride> dstGlobal(dst, dyn_shape, dyn_stride);
     GlobalTensor<DType, PutShape, PutStride> srcGlobal(src, dyn_shape, dyn_stride);
     
-    // Call TPUT_ASYNC_SDMA_IMPL from TPutAsync.hpp
-    pto::comm::detail::TPUT_ASYNC_SDMA_IMPL(dstGlobal, srcGlobal);
+    // Call TPUT_ASYNC from TPutAsync.hpp
+    auto put_event = pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::SDMA>(dstGlobal, srcGlobal);
 }
 
 } // namespace detail
 
-// Generic put async kernel: perform async D2D transfer using TPUT_ASYNC_SDMA_IMPL
+// Generic put async kernel: perform async D2D transfer using TPUT_ASYNC
 __global__ AICORE PTO_AIV_ATTR void PTO_PUT_ASYNC_AIV(
     __gm__ uint8_t* dst,
     __gm__ uint8_t* src,
@@ -107,8 +108,8 @@ __global__ AICORE PTO_AIV_ATTR void PTO_PUT_ASYNC_AIV(
 // PTO_PUT_ASYNC: Host wrapper for async D2D memory copy
 //
 // Supports two execution paths:
-// - SDMA path (UseSdma=true): Host-initiated aclrtMemcpyAsync
-// - AIV path (UseSdma=false): Launch AIV kernel calling TPUT_ASYNC_SDMA_IMPL
+// - Host SDMA path (HostSdma=true): Host-initiated aclrtMemcpyAsync
+// - AIV SDMA path (HostSdma=false): Launch AIV kernel calling TPUT_ASYNC
 //
 // Requirements:
 // - Source and destination addresses must be 64-byte aligned
@@ -116,8 +117,8 @@ __global__ AICORE PTO_AIV_ATTR void PTO_PUT_ASYNC_AIV(
 // - Only supports devices within the same PCIe Switch
 // - Only supports same process, same or different threads
 //
-// @tparam UseSdma    If true, use SDMA (aclrtMemcpyAsync); if false, use AIV kernel
-// @tparam AivCores   Number of AIV cores when UseSdma=false (must be > 0)
+// @tparam HostSdma    If true, use Host SDMA (aclrtMemcpyAsync); if false, use AIV SDMA kernel
+// @tparam AivCores   Number of AIV cores when HostSdma=false (must be > 0)
 // @param dst         Destination memory address (remote Device)
 // @param dst_bytes   Destination memory size in bytes
 // @param src         Source memory address (local Device)
@@ -125,7 +126,7 @@ __global__ AICORE PTO_AIV_ATTR void PTO_PUT_ASYNC_AIV(
 // @param stream      Async stream for the operation
 // @return            aclError error code (ACL_SUCCESS on success)
 // ============================================================================
-template <bool UseSdma = true, int AivCores = -1>
+template <bool HostSdma = true, int AivCores = -1>
 aclError PTO_PUT_ASYNC(
     void* dst,
     size_t dst_bytes,
@@ -139,7 +140,7 @@ aclError PTO_PUT_ASYNC(
     
     const size_t transfer_bytes = (src_bytes < dst_bytes) ? src_bytes : dst_bytes;
     
-    if constexpr (UseSdma) {
+    if constexpr (HostSdma) {
         // SDMA path: Host-initiated aclrtMemcpyAsync
         // ACL_MEMCPY_DEVICE_TO_DEVICE: Memory copy within Device or between two Devices
         return aclrtMemcpyAsync(
@@ -151,8 +152,8 @@ aclError PTO_PUT_ASYNC(
             stream                         // stream: async stream
         );
     } else {
-        // AIV path: Launch kernel that calls TPUT_ASYNC_SDMA_IMPL
-        static_assert(AivCores > 0, "AivCores must be > 0 when UseSdma is false");
+        // AIV path: Launch kernel that calls TPUT_ASYNC
+        static_assert(AivCores > 0, "AivCores must be > 0 when HostSdma is false");
         PTO_PUT_ASYNC_AIV<<<AivCores, nullptr, stream>>>(
             (__gm__ uint8_t*)dst,
             (__gm__ uint8_t*)const_cast<void*>(src),
