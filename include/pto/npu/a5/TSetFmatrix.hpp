@@ -12,7 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TSETFMATRIX_HPP
 
 namespace pto {
-template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint64_t>
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T>
 PTO_INTERNAL void TSETFMATRIX_IMPL(const Img2colTileConfig<T> &cfg)
 {
     if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_MANUAL || FmatrixMode == SetFmatrixMode::FMATRIX_B_MANUAL) {

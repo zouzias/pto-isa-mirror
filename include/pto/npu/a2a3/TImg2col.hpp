@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_AUTO, typename T = uint64_t>
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_AUTO, typename T>
 PTO_INTERNAL void SetFmatrix(const Img2colTileConfig<T> &cfg)
 {
     if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
@@ -60,7 +60,7 @@ __tf__ PTO_INTERNAL void TImg2col(typename TileData::TileDType __out__ dst, type
 }
 
 template <typename TileData, typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL,
-          typename T = uint64_t>
+          typename T>
 AICORE void TIMG2COL_IMPL(TileData &dst, ConvTileData &src, uint16_t posM, uint16_t posK,
                           const Img2colTileConfig<T> &cfg)
 {
