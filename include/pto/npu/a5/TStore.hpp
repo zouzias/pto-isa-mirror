@@ -122,15 +122,16 @@ PTO_INTERNAL void CheckStaticAcc()
     static_assert(std::is_same_v<typename TileData::DType, int32_t> || std::is_same_v<typename TileData::DType, float>,
                   "The input data type must be restricted to int32_t/float!");
     static_assert((GlobalData::layout == pto::Layout::ND) || (GlobalData::layout == pto::Layout::NZ) ||
-                      (GlobalData::layout == pto::Layout::NHWC) || (GlobalData::layout == pto::Layout::NCHW),
-                  "TSTORE(Acc2GM) only support NZ2ND / NZ2NZ / NZ2NHWC / NZ2NCHW.");
+                      (GlobalData::layout == pto::Layout::NHWC) || (GlobalData::layout == pto::Layout::NCHW) ||
+                      (GlobalData::layout == pto::Layout::NCDHW),
+                  "TSTORE(Acc2GM) only support NZ2ND / NZ2NZ / NZ2NHWC / NZ2NCHW / NZ2NCDHW.");
     static_assert(TileData::Cols >= 1 && TileData::Cols <= 4095, "The range of Cols is [1, 4095].");
     static_assert((GlobalData::layout == pto::Layout::ND && TileData::Rows >= 1 && TileData::Rows <= 8192) ||
                       ((GlobalData::layout == pto::Layout::NZ || (GlobalData::layout == pto::Layout::NHWC) ||
-                        (GlobalData::layout == pto::Layout::NCHW)) &&
+                        (GlobalData::layout == pto::Layout::NCHW) || (GlobalData::layout == pto::Layout::NCDHW)) &&
                        TileData::Rows >= 1 && TileData::Rows <= 65535 && TileData::Cols % 16 == 0),
                   "When GlobalData is ND format, the range of Rows is [1, 8192]."
-                  "When GlobalData is NZ/NHWC/NCHW format, the range of Rows is [1, 65535] and Cols"
+                  "When GlobalData is NZ/NHWC/NCHW/NCDHW format, the range of Rows is [1, 65535] and Cols"
                   "must be an integer multiple of 16.");
     if constexpr (!isQuant) {
         static_assert(std::is_same_v<typename GlobalData::DType, __gm__ int32_t> ||
@@ -347,8 +348,14 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
                                 int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                                 int gStride3, int validRow, int validCol)
 {
-    PTO_ASSERT(validRow == gShape1 * gShape3 * gShape4,
-               "The validRow of TileData must be equal to Shape1 * Shape3 * Shape4 of NCHW shape!");
+    if constexpr (GlobalData::layout == pto::Layout::NCHW) {
+        PTO_ASSERT(validRow == gShape1 * gShape3 * gShape4,
+            "The validRow of TileData must be equal to Shape1 * Shape3 * Shape4 of NCHW shape!");
+    } else { // NDCHW
+        PTO_ASSERT(gShape1 == 1, "Shape1 must be equal to 1 of NDCHW shape!");
+        PTO_ASSERT(validRow == gShape0 * gShape3 * gShape4,
+            "The validRow of TileData must be equal to Shape0 * Shape3 * Shape4 of NDCHW shape!");
+    }
     PTO_ASSERT(validCol == gShape2, "The validCol of TileData must be equal to Shape2 of NCHW shape!");
 
     uint16_t mSize = validRow;
@@ -411,6 +418,9 @@ __tf__ AICORE void TStoreAccFp(typename GlobalData::DType __out__ *dst, typename
         TStoreAccNHWC<GlobalData, TileData, quantPre, reluPreMode>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3,
                                                                    gShape4, gStride0, gStride3, validRow, validCol);
     } else if constexpr (GlobalData::layout == pto::Layout::NCHW) {
+        TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3,
+                                                                   gShape4, gStride0, gStride3, validRow, validCol);
+    } else if constexpr (GlobalData::layout == pto::Layout::NCHW || GlobalData::layout == pto::Layout::NDCHW) {
         TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3,
                                                                    gShape4, gStride0, gStride3, validRow, validCol);
     }
