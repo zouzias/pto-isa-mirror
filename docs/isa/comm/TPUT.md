@@ -4,6 +4,8 @@
 
 Remote write operation: write local data to remote NPU's memory. Data is transferred via a UB tile as intermediate staging buffer.
 
+When the GlobalTensor exceeds the UB tile capacity, TPUT automatically performs **2D sliding** — chunking rows (DIM_3) and columns (DIM_4) to fit each chunk into the tile, iterating over all outer dimensions (DIM_0, DIM_1, DIM_2).
+
 ## Math Interpretation
 
 For each element `(i, j)` in the valid region:
@@ -26,11 +28,32 @@ tput %dst_remote, %src_local, %ub_tile : (!pto.memref<...>, !pto.memref<...>, !p
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`
 
+### Single-tile (auto-chunking)
+
 ```cpp
-// Compile-time atomic type (default: AtomicNone)
 template <AtomicType atomicType = AtomicType::AtomicNone,
           typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData, WaitEvents&... events);
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                          TileData &stagingTileData, WaitEvents&... events);
+```
+
+### Ping-pong double buffering
+
+Uses two staging tiles to overlap TLOAD and TSTORE for adjacent chunks, hiding one DMA transfer behind the other.
+
+```cpp
+template <AtomicType atomicType = AtomicType::AtomicNone,
+          typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                          TileData &pingTile, TileData &pongTile, WaitEvents&... events);
+```
+
+### Runtime atomic type
+
+```cpp
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                          TileData &stagingTileData, AtomicType atomicType, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -42,11 +65,14 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 - **Memory constraints**:
   - `dstGlobalData` must point to remote address (on target NPU).
   - `srcGlobalData` must point to local address (on current NPU).
-  - `stagingTileData` must be pre-allocated in Unified Buffer.
+  - `stagingTileData` / `pingTile` / `pongTile` must be pre-allocated in Unified Buffer.
 - **Valid region**:
-  - Transfer size is determined by `stagingTileData.GetValidRow()` / `stagingTileData.GetValidCol()`.
+  - Transfer size is determined by `GlobalTensor` shape (auto-chunked to fit tile).
 - **Atomic operation**:
   - `atomicType` supports `AtomicNone` and `AtomicAdd`.
+- **Ping-pong**:
+  - `pingTile` and `pongTile` must have the same type and dimensions.
+  - Must reside at non-overlapping UB offsets.
 
 ## Examples
 
@@ -63,21 +89,35 @@ void example_tput(__gm__ T* local_data, __gm__ T* remote_addr) {
     using TileT = Tile<TileType::Vec, T, 16, 16>;
     using GShape = Shape<1, 1, 1, 16, 16>;
     using GStride = BaseShape2D<T, 16, 16, Layout::ND>;
+    /* 
+    If the globalTensor is larger than UB Tile, TPUT will perform 2D sliding automatically. 
+    using GShape = Shape<1, 1, 1, 4096, 4096>;
+    using GStride = BaseShape2D<T, 4096, 4096, Layout::ND>;
+    */
     using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
 
-    // Local source tensor
     GTensor srcG(local_data);
-    
-    // Remote destination tensor
     GTensor dstG(remote_addr);
-    
-    // UB staging buffer
     TileT stagingTile;
-    
-    // Perform remote write
+    TASSIGN(stagingTile, 0);
+
+    // Basic remote write
     comm::TPUT(dstG, srcG, stagingTile);
 
-    // Perform atomic add on remote destination
+    // Remote write with atomic add
     comm::TPUT<AtomicType::AtomicAdd>(dstG, srcG, stagingTile);
 }
+```
+
+### Ping-pong Double Buffering
+
+```cpp
+constexpr size_t tileUBBytes = ((64 * 64 * sizeof(float) + 1023) / 1024) * 1024;
+TileT pingTile(64, 64);
+TileT pongTile(64, 64);
+TASSIGN(pingTile, 0);
+TASSIGN(pongTile, tileUBBytes);  // Non-overlapping UB region
+
+// Overlaps TLOAD[i+1] with TSTORE[i] for better pipeline utilization
+comm::TPUT(dstG, srcG, pingTile, pongTile);
 ```
