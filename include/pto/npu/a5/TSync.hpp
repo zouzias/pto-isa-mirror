@@ -44,6 +44,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TRSQRT */,
     PIPE_V /* TEXPANDS */,
     PIPE_V /* TPARTADD */,
+    PIPE_V /* TPARTMUL */,
     PIPE_V /* TPARTMAX */,
     PIPE_V /* TPARTMIN */,
     PIPE_V /* TCMPS */,
