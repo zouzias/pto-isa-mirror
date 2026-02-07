@@ -13,16 +13,17 @@
 #include <cmath>
 #include <iomanip>
 
-#define AR_BLOCK_NUM 8
+#define AR_BLOCK_NUM 32
 
 // ============================================================================
 // Performance Test Configuration
 // ============================================================================
 struct PerfTestConfig {
-    int warmup_iters = 20;       // Warmup iterations
-    int measure_iters = 20;      // Measurement iterations
-    int block_num = AR_BLOCK_NUM;           // Number of blocks
-    bool verbose = true;         // Print per-iteration results
+    int warmup_iters = 3;        // Warmup kernel launches
+    int total_rows = 131072;     // 32MB / (64 cols * 4 bytes) = 131072 rows
+    int total_cols = 64;         // Must match kTCols_ in tile (64x64)
+    int block_num = AR_BLOCK_NUM;// Number of blocks (cores)
+    bool verbose = true;         // Print detailed results
 };
 
 // ============================================================================
@@ -78,6 +79,8 @@ PerfStats CalculateStats(const std::vector<double> &latencies_us, size_t data_by
 
 
 // Forward declarations
-template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
-bool RunAllReducePerf(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                      const PerfTestConfig &config);
+// kTRows_ x kTCols_ = tile size (constrained by UB, typically max ~64KB)
+// config.total_rows x config.total_cols = full tensor size (can be much larger)
+template <typename T, int kTRows_, int kTCols_>
+bool RunReduceTilingPerf(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                         const PerfTestConfig &config);
