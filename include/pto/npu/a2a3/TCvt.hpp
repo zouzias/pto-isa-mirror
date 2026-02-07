@@ -81,6 +81,10 @@ namespace pto {
         //   significant N bits are extracted (N=8 for int8, N=16 for int16, N=32 for int32).
         //   Example: converting 300.0f to int8 yields 44 (300 & 0xFF = 0x2C = 44)
         constexpr const int SAT_MODE_BIT = 59;
+        
+        // Buffer size for temporary storage in non-saturation conversion path
+        // Sized to handle REPEAT_MAX repeats with maximum data width
+        constexpr const size_t FP16_INT8_TEMP_BUFFER_SIZE = REPEAT_MAX * 256;
     }
 
     // Converts float32 (fp32) to float16 (fp16) with various rounding modes
@@ -226,6 +230,39 @@ namespace pto {
         }
     } 
 
+    // Float32 to signed 16-bit integer conversion for non-saturation mode
+    // This version matches PyTorch behavior for inf/-inf and performs a two-step conversion:
+    // 1. fp32 -> int32
+    // 2. int32 -> int16
+    template <typename TileDataD, typename TileDataS>
+    PTO_INTERNAL void GenCastCallFp32ToInt16_NonSatTorch(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typename TileDataS::DType *src,
+        uint8_t repeatNum, RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride, uint16_t dstRepeatStride,
+        uint16_t srcRepeatStride, __ubuf__ int32_t *tempInt32Buf) {
+        switch (static_cast<RoundMode>(mode)) {
+            case RoundMode::CAST_RINT:
+                vconv_f322s32r(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_ROUND:
+                vconv_f322s32a(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_FLOOR:
+                vconv_f322s32f(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_CEIL:
+                vconv_f322s32c(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_TRUNC:
+                vconv_f322s32z(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            default:
+                vconv_f322s32z(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+        }
+
+        // Step 2: Convert int32 to int16
+        vconv_s322s16(dst, tempInt32Buf, repeatNum, dstBlockStride, dstBlockStride, dstRepeatStride, dstRepeatStride);
+    }
+
     // Float32 to bfloat16 conversion
     // Bfloat16 preserves the exponent range of float32 in a 16-bit format
     template <typename TileDataD, typename TileDataS>
@@ -310,6 +347,40 @@ namespace pto {
                 break;
         }
     }
+
+    // Float16 (half) to signed 16-bit integer conversion for non-saturation mode
+    // This version matches PyTorch behavior for inf/-inf and performs a two-step conversion:
+    // 1. fp16 -> int32
+    // 2. int32 -> int16
+    template <typename TileDataD, typename TileDataS>
+    PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typename TileDataS::DType *src,
+        uint8_t repeatNum, RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride, uint16_t dstRepeatStride,
+        uint16_t srcRepeatStride, __ubuf__ int32_t *tempInt32Buf) {
+        // Step 1: Convert fp16 to int32
+        switch (static_cast<RoundMode>(mode)) {
+            case RoundMode::CAST_RINT:
+                vconv_f162s32r(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_ROUND:
+                vconv_f162s32a(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_FLOOR:
+                vconv_f162s32f(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_CEIL:
+                vconv_f162s32c(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_TRUNC:
+                vconv_f162s32z(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            default:
+                vconv_f162s32z(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+        }
+
+        // Step 2: Convert int32 to int16
+        vconv_s322s16(dst, tempInt32Buf, repeatNum, dstBlockStride, dstBlockStride, dstRepeatStride, dstRepeatStride);
+    }
     
     // Float16 (half) to signed 8-bit integer conversion
     template <typename TileDataD, typename TileDataS>
@@ -338,6 +409,51 @@ namespace pto {
                 vconv_f162s8z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
                 break;
         }
+    }
+
+    // Float16 (half) to signed 8-bit integer conversion for non-saturation mode
+    // This version matches PyTorch behavior for inf/-inf and performs a multi-step conversion:
+    // 1. fp16 -> int16 (direct conversion)
+    // 2. bitwise AND with 255 using int16
+    // 3. int16 -> fp16
+    // 4. fp16 -> int8
+    template <typename TileDataD, typename TileDataS>
+    PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typename TileDataS::DType *src,
+        uint8_t repeatNum, RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride, uint16_t dstRepeatStride,
+        uint16_t srcRepeatStride, __ubuf__ int16_t *tempInt16Buf, __ubuf__ int16_t *tempAndBuf, __ubuf__ half *tempFp16Buf) {
+        
+        // Step 1: Convert fp16 to int16 (this will handle inf/-inf)
+        switch (static_cast<RoundMode>(mode)) {
+            case RoundMode::CAST_RINT:
+                vconv_f162s16r(tempInt16Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_ROUND:
+                vconv_f162s16a(tempInt16Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_FLOOR:
+                vconv_f162s16f(tempInt16Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_CEIL:
+                vconv_f162s16c(tempInt16Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            case RoundMode::CAST_TRUNC:
+                vconv_f162s16z(tempInt16Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+            default:
+                vconv_f162s16z(tempInt16Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                break;
+        }
+        
+        // Step 2: Bitwise AND with 255 (0xFF) using int16
+        vector_dup(tempAndBuf, static_cast<int16_t>(255), repeatNum, 1, 1, dstRepeatStride, dstRepeatStride);
+        vand(tempAndBuf, tempInt16Buf, tempAndBuf, repeatNum, dstBlockStride, dstBlockStride, dstBlockStride, 
+             dstRepeatStride, dstRepeatStride, dstRepeatStride);
+        
+        // Step 3: Convert int16 to fp16
+        vconv_s162f16(tempFp16Buf, tempAndBuf, repeatNum, dstBlockStride, dstBlockStride, dstRepeatStride, dstRepeatStride);
+        
+        // Step 4: Convert fp16 to int8
+        vconv_f162s8z(dst, tempFp16Buf, repeatNum, dstBlockStride, dstBlockStride, dstRepeatStride, dstRepeatStride);
     }
 
     // Float16 (half) to unsigned 8-bit integer conversion
@@ -543,7 +659,15 @@ namespace pto {
             GenCastCallFp32ToInt32<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
         } else if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                              std::is_same<typename TileDataS::DType, float>::value) {  // fp32 to int16
-            GenCastCallFp32ToInt16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // Select implementation based on current saturation mode (CTRL[59])
+            bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
+            if (isSatOn) {
+                GenCastCallFp32ToInt16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            } else {
+                // Allocate temporary buffer from UB workspace (last 8KB)
+                __ubuf__ int32_t *tempInt32Buf = (__ubuf__ int32_t *)(TMP_UB_OFFSET);
+                GenCastCallFp32ToInt16_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tempInt32Buf);
+            }
         } else if constexpr (std::is_same<typename TileDataD::DType, bfloat16_t>::value &&
                              std::is_same<typename TileDataS::DType, float>::value) {  // fp32 to bf16
             GenCastCallFp32ToBf16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -552,10 +676,29 @@ namespace pto {
             GenCastCallFp16ToInt32<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
         } else if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                              std::is_same<typename TileDataS::DType, half>::value) {  // half to int16
-            GenCastCallFp16ToInt16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // Select implementation based on current saturation mode (CTRL[59])
+            bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
+            if (isSatOn) {
+                GenCastCallFp16ToInt16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            } else {
+                // Allocate temporary buffer from UB workspace (last 8KB)
+                __ubuf__ int32_t *tempInt32Buf = (__ubuf__ int32_t *)(TMP_UB_OFFSET);
+                GenCastCallFp16ToInt16_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tempInt32Buf);
+            }
         } else if constexpr (std::is_same<typename TileDataD::DType, int8_t>::value &&
                              std::is_same<typename TileDataS::DType, half>::value) {  // half to int8
-            GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // Select implementation based on current saturation mode (CTRL[59])
+            bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
+            if (isSatOn) {
+                GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            } else {
+                // Allocate temporary buffers from UB workspace (last 8KB)
+                // Layout: tempInt16Buf (2KB) + tempAndBuf (2KB) + tempFp16Buf (2KB)
+                __ubuf__ int16_t *tempInt16Buf = (__ubuf__ int16_t *)(TMP_UB_OFFSET);
+                __ubuf__ int16_t *tempAndBuf   = (__ubuf__ int16_t *)(TMP_UB_OFFSET + 2048);
+                __ubuf__ half *tempFp16Buf     = (__ubuf__ half *)(TMP_UB_OFFSET + 4096);
+                GenCastCallFp16ToInt8_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tempInt16Buf, tempAndBuf, tempFp16Buf);
+            }
         } else if constexpr (std::is_same<typename TileDataD::DType, uint8_t>::value &&
                              std::is_same<typename TileDataS::DType, half>::value) {  // half to uint8
             GenCastCallFp16ToUint8<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -770,6 +913,12 @@ namespace pto {
              std::is_same<typename TileDataS::DType, half>::value) ||
             // FP16→INT8
             (std::is_same<typename TileDataD::DType, int8_t>::value &&
+             std::is_same<typename TileDataS::DType, half>::value) ||
+            // FP32→INT16
+            (std::is_same<typename TileDataD::DType, int16_t>::value &&
+             std::is_same<typename TileDataS::DType, float>::value) ||
+            // FP16→INT16
+            (std::is_same<typename TileDataD::DType, int16_t>::value &&
              std::is_same<typename TileDataS::DType, half>::value) ||
             // INT64→INT32
             (std::is_same<typename TileDataD::DType, int32_t>::value &&
