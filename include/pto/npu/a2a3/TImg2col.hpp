@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_AUTO, typename T = uint64_t>
+template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_AUTO, typename T>
 PTO_INTERNAL void SetFmatrix(const Img2colTileConfig<T> &cfg)
 {
     if constexpr (FmatrixMode == SetFmatrixMode::FMATRIX_A_AUTO || FmatrixMode == SetFmatrixMode::FMATRIX_B_AUTO) {
@@ -60,13 +60,14 @@ __tf__ PTO_INTERNAL void TImg2col(typename TileData::TileDType __out__ dst, type
 }
 
 template <typename TileData, typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL,
-          typename T = uint64_t>
+          typename T>
 AICORE void TIMG2COL_IMPL(TileData &dst, ConvTileData &src, uint16_t posM, uint16_t posK,
                           const Img2colTileConfig<T> &cfg)
 {
     static_assert((ConvTileData::Loc == TileType::Mat), "TImg2col: Source TileType only support Mat.");
     static_assert((TileData::Loc == TileType::Left), "TImg2col: Destination TileType only support Left.");
-    static_assert((ConvTileData::layout == Layout::NC1HWC0), "TImg2col: Source layout only support NC1HWC0.");
+    static_assert((ConvTileData::layout == Layout::NC1HWC0) || (ConvTileData::layout == Layout::NDC1HWC0),
+                  "TImg2col: Source layout only support NC1HWC0.");
     static_assert(TileData::SFractal == SLayout::RowMajor && TileData::isRowMajor,
                   "TImg2col: Destination layout only support SLayout is RowMajor ang BLayout is RowMajor.");
     static_assert(std::is_same_v<typename ConvTileData::DType, typename TileData::DType>,
