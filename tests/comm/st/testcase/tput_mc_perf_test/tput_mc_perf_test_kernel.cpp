@@ -347,7 +347,7 @@ bool RunPutPerfKernel(
         double per_link_data_mb =
             (fileSize / (1024.0 * 1024.0)) / peer_count;
 
-        constexpr double THEORETICAL_BW_GBPS = 392.0;
+        constexpr double THEORETICAL_BW_GBPS = 192.0;  // 910B single-direction (392 bidirectional / 2)
         double efficiency_pct = (bandwidth_gbps / THEORETICAL_BW_GBPS) * 100.0;
 
         std::cout << "\n================================================================" << std::endl;
