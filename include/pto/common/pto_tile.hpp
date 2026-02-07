@@ -35,6 +35,7 @@ enum class Layout
     NC1HWC0,
     NCHW,
     NHWC,
+    NCDHW,
     FRACTAL_Z,
     FRACTAL_Z_S16S8,
     MAX,
