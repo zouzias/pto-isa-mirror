@@ -76,6 +76,8 @@ tbroadcast
 # Performance tests
 treduce_perf_test
 treduce_pingpong_perf_test
+treduce_mc_perf_test
+tput_mc_perf_test
 # Archived / Legacy tests (not aligned with SPEC naming)
 # tallgather        # replaced by tgather
 # tallreduce        # replaced by treduce
