@@ -24,7 +24,7 @@ struct ShmemEnv {
     int rank {0};
     int size {1};
     const char *ipPort {nullptr};
-    uint64_t heapBytes {8ULL * 1024 * 1024};  // Default 8MB symmetric heap
+    uint64_t heapBytes {512ULL * 1024 * 1024};  // Default 128MB symmetric heap
 };
 
 // ============================================================================
