@@ -38,6 +38,7 @@ enum class Layout
     FRACTAL_Z,
     FRACTAL_Z_S16S8,
     MAX,
+    NDC1HWC0,
 };
 namespace GlobalTensorDim {
 constexpr int DIM_0 = 0;
