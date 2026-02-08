@@ -12,7 +12,7 @@ function(pto_comm_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-vec -DMEMORY_BASE -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../../../include
+        ${PROJECT_SOURCE_DIR}/../../../../../../include
         $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc
         $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include
         $ENV{ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api
@@ -39,8 +39,8 @@ function(pto_comm_st NAME)
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
-        ${PROJECT_SOURCE_DIR}/../../../../../include
-        ${PROJECT_SOURCE_DIR}/../../../../common
+        ${PROJECT_SOURCE_DIR}/../../../../../../include
+        ${PROJECT_SOURCE_DIR}/../../../../../common
     )
 
     target_link_directories(${NAME} PUBLIC
