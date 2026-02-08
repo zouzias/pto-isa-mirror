@@ -31,19 +31,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 __global__ AICORE void TTestTrueKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
         // Rank 0: Set rank 1's signal value to 42 using ShmemPtr for remote address
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
-        GSignal targetSignal(remote_signal, shape, stride);
+        pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, 42, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
@@ -53,7 +46,7 @@ __global__ AICORE void TTestTrueKernel(__gm__ int32_t *shmem_signal, __gm__ int3
 
     if (my_rank == 1) {
         // Rank 1: Test if local signal == 42 (should be true)
-        GSignal localSignal(shmem_signal, shape, stride);
+        pto::comm::Signal localSignal(shmem_signal);
 
         bool testResult = pto::comm::TTEST(localSignal, 42, pto::comm::WaitCmp::EQ);
         *result = testResult ? 1 : 0;
@@ -68,19 +61,12 @@ __global__ AICORE void TTestTrueKernel(__gm__ int32_t *shmem_signal, __gm__ int3
 // ============================================================================
 __global__ AICORE void TTestFalseKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
         // Rank 0: Set rank 1's signal value to 42 using ShmemPtr
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
-        GSignal targetSignal(remote_signal, shape, stride);
+        pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, 42, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
@@ -90,7 +76,7 @@ __global__ AICORE void TTestFalseKernel(__gm__ int32_t *shmem_signal, __gm__ int
 
     if (my_rank == 1) {
         // Rank 1: Test if local signal == 100 (should be false, signal is 42)
-        GSignal localSignal(shmem_signal, shape, stride);
+        pto::comm::Signal localSignal(shmem_signal);
 
         bool testResult = pto::comm::TTEST(localSignal, 100, pto::comm::WaitCmp::EQ);
         *result = testResult ? 1 : 0;
@@ -107,19 +93,12 @@ template <pto::comm::WaitCmp cmp>
 __global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result, 
                                            int32_t signalValue, int32_t cmpValue)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
         // Rank 0: Set rank 1's signal to specified value using ShmemPtr
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
-        GSignal targetSignal(remote_signal, shape, stride);
+        pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, signalValue, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
@@ -129,7 +108,7 @@ __global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ i
 
     if (my_rank == 1) {
         // Rank 1: Test with specified comparison on local signal
-        GSignal localSignal(shmem_signal, shape, stride);
+        pto::comm::Signal localSignal(shmem_signal);
 
         bool testResult = pto::comm::TTEST(localSignal, cmpValue, cmp);
         *result = testResult ? 1 : 0;
@@ -146,13 +125,6 @@ __global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, _
                                                   __gm__ int32_t *final_result, int32_t delay_iters,
                                                   int32_t max_polls, bool send_signal)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
 
     // Sync start for polling
@@ -164,7 +136,7 @@ __global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, _
             __asm__ __volatile__("");
         }
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
-        GSignal targetSignal(remote_signal, shape, stride);
+        pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, 999, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
@@ -172,7 +144,7 @@ __global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, _
 
     if (my_rank == 1) {
         // Rank 1: Poll with TTEST until signal or timeout
-        GSignal localSignal(shmem_signal, shape, stride);
+        pto::comm::Signal localSignal(shmem_signal);
 
         int32_t count = 0;
         bool found = false;
@@ -197,19 +169,12 @@ __global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, _
 // ============================================================================
 __global__ AICORE void TTestNEKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
         // Rank 0: Set rank 1's signal to 50 using ShmemPtr
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
-        GSignal targetSignal(remote_signal, shape, stride);
+        pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, 50, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
@@ -219,9 +184,49 @@ __global__ AICORE void TTestNEKernel(__gm__ int32_t *shmem_signal, __gm__ int32_
 
     if (my_rank == 1) {
         // Rank 1: Test if local signal != 0 (should be true, signal is 50)
-        GSignal localSignal(shmem_signal, shape, stride);
+        pto::comm::Signal localSignal(shmem_signal);
 
         bool testResult = pto::comm::TTEST(localSignal, 0, pto::comm::WaitCmp::NE);
+        *result = testResult ? 1 : 0;
+    }
+
+    ShmemDeviceBarrierAll();
+}
+
+// ============================================================================
+// Kernel 6: TTEST Sub-Region Test
+// Tests TTEST on a sub-region of a larger signal grid
+// Rank 0 sets some signals in rank 1's 8x16 grid
+// Rank 1 uses Signal2D<4, 8> with stride to test a sub-region
+// ============================================================================
+template <int FullCols, int SubRows, int SubCols>
+__global__ AICORE void TTestSubRegionKernel(__gm__ int32_t *shmem_matrix, __gm__ int32_t *result)
+{
+    int my_rank = shmem_my_pe();
+
+    constexpr int startRow = 2;
+    constexpr int startCol = 4;
+
+    if (my_rank == 0) {
+        // Set all sub-region elements of rank 1's grid to 1
+        __gm__ int32_t *remote_matrix = ShmemPtr(shmem_matrix, 1);
+        for (int r = 0; r < SubRows; ++r) {
+            for (int c = 0; c < SubCols; ++c) {
+                __gm__ int32_t *elem = remote_matrix + (startRow + r) * FullCols + (startCol + c);
+                pto::comm::Signal sig(elem);
+                pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::Set);
+            }
+        }
+        ShmemDeviceQuiet();
+    }
+
+    ShmemDeviceBarrierAll();
+
+    if (my_rank == 1) {
+        // Test sub-region: all elements should be 1
+        __gm__ int32_t *subPtr = shmem_matrix + startRow * FullCols + startCol;
+        pto::comm::Signal2D<SubRows, SubCols> subRegion(subPtr, FullCols);
+        bool testResult = pto::comm::TTEST(subRegion, 1, pto::comm::WaitCmp::EQ);
         *result = testResult ? 1 : 0;
     }
 
@@ -624,6 +629,86 @@ bool RunTTestNEKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     return (status == 0) && is_ok;
 }
 
+template <int FullCols, int SubRows, int SubCols>
+bool RunTTestSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
+{
+    // Initialize shmem TLS configuration
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
+    if (ret != 0) {
+        std::cerr << "[ERROR] Failed to init shmem tls\n";
+        return false;
+    }
+
+    const int32_t device_id = rank_id % n_devices + first_device_id;
+    int status = 0;
+    aclrtStream stream = nullptr;
+
+    status |= aclInit(nullptr);
+    status |= aclrtSetDevice(device_id);
+    status |= aclrtCreateStream(&stream);
+
+    // Initialize shmem symmetric heap
+    ShmemEnv env;
+    const char *ip = "tcp://127.0.0.1:8802";
+    env.rank = rank_id;
+    env.size = n_ranks;
+    env.ipPort = ip;
+    env.heapBytes = 8ULL * 1024 * 1024;
+
+    if (!ShmemInitFromEnv(env)) {
+        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
+        return false;
+    }
+
+    constexpr int FullRows = 8;
+    int32_t *shmem_matrix = (int32_t *)ShmemMalloc(FullRows * FullCols * sizeof(int32_t));
+    int32_t *result = (int32_t *)ShmemMalloc(sizeof(int32_t));
+
+    if (shmem_matrix == nullptr || result == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
+
+    // Zero-initialize matrix and result
+    std::vector<int32_t> zeros(FullRows * FullCols, 0);
+    aclrtMemcpy(shmem_matrix, FullRows * FullCols * sizeof(int32_t),
+                zeros.data(), FullRows * FullCols * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+    int32_t zero = 0;
+    aclrtMemcpy(result, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+
+    ShmemBarrierAll();
+
+    TTestSubRegionKernel<FullCols, SubRows, SubCols><<<1, nullptr, stream>>>(shmem_matrix, result);
+    status = aclrtSynchronizeStream(stream);
+
+    ShmemBarrierAll();
+
+    bool is_ok = true;
+
+    if (rank_id == 1) {
+        int32_t testResult = 0;
+        aclrtMemcpy(&testResult, sizeof(int32_t), result, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+
+        if (testResult != 1) {
+            std::cerr << "TTest SubRegion test failed! TTEST on sub-region should return true (1), Got: "
+                      << testResult << std::endl;
+            is_ok = false;
+        } else {
+            std::cout << "Rank 1: TTEST sub-region returned " << testResult << " (expected 1/true)" << std::endl;
+        }
+    }
+
+    ShmemFree(shmem_matrix);
+    ShmemFree(result);
+    ShmemFinalize();
+
+    status |= aclrtDestroyStream(stream);
+    status |= aclrtResetDevice(device_id);
+    status |= aclFinalize();
+
+    return (status == 0) && is_ok;
+}
+
 // ============================================================================
 // Multi-process Launcher Functions
 // ============================================================================
@@ -799,3 +884,30 @@ bool RunTTestCompare_LT(int n_ranks, int n_devices, int first_rank_id, int first
     return RunTTestCompare<pto::comm::WaitCmp::LT>(n_ranks, n_devices, first_rank_id, first_device_id,
                                                     signalValue, cmpValue, expectedResult);
 }
+
+template <int FullCols, int SubRows, int SubCols>
+bool RunTTestSubRegion(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    std::vector<pid_t> pids;
+    for (int r = 0; r < n_ranks; ++r) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            const bool ok = RunTTestSubRegionKernel<FullCols, SubRows, SubCols>(
+                first_rank_id + r, n_ranks, n_devices, first_device_id);
+            _exit(ok ? 0 : 1);
+        } else if (pid > 0) {
+            pids.push_back(pid);
+        } else {
+            return false;
+        }
+    }
+    bool success = true;
+    for (pid_t p : pids) {
+        int status = 0;
+        waitpid(p, &status, 0);
+        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
+    }
+    return success;
+}
+
+template bool RunTTestSubRegion<16, 4, 8>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);

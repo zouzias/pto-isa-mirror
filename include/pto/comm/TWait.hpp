@@ -22,7 +22,7 @@ namespace comm {
 // TWAIT_IMPL: Blocking wait until signal(s) meet comparison condition
 // 
 // Signal type must be int32_t.
-// For signal matrix: Shape determines the 2D region to wait on. All signals must satisfy.
+// Supports full 5-D signal tensors. All signals must satisfy the condition.
 // ============================================================================
 
 namespace detail {
@@ -49,30 +49,46 @@ PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, Wai
     static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
         "TWAIT: signal type must be 32-bit (int32_t)");
 
-    // Get signal matrix dimensions from GlobalTensor shape
-    const int rows = signalData.GetShape(GlobalTensorDim::DIM_3);
-    const int cols = signalData.GetShape(GlobalTensorDim::DIM_4);
-    const int totalSignals = rows * cols;
+    // Get full 5-D shape and stride
+    const int s0 = signalData.GetShape(GlobalTensorDim::DIM_0);
+    const int s1 = signalData.GetShape(GlobalTensorDim::DIM_1);
+    const int s2 = signalData.GetShape(GlobalTensorDim::DIM_2);
+    const int s3 = signalData.GetShape(GlobalTensorDim::DIM_3);
+    const int s4 = signalData.GetShape(GlobalTensorDim::DIM_4);
+
+    const int st0 = signalData.GetStride(GlobalTensorDim::DIM_0);
+    const int st1 = signalData.GetStride(GlobalTensorDim::DIM_1);
+    const int st2 = signalData.GetStride(GlobalTensorDim::DIM_2);
+    const int st3 = signalData.GetStride(GlobalTensorDim::DIM_3);
+    // DIM_4 stride is always 1 for dense signals
 
     volatile __gm__ int32_t *basePtr = reinterpret_cast<volatile __gm__ int32_t*>(signalData.data());
 
-    // Wait until all signals in the matrix satisfy the condition
+    // Wait until all signals satisfy the condition (full 5-D traversal)
     bool allSatisfied = false;
     uint32_t spin = 0;
     constexpr uint32_t kFenceInterval = 64;
     while (!allSatisfied) {
         allSatisfied = true;
-        for (int i = 0; i < totalSignals; ++i) {
-            __asm__ __volatile__("");
-            dcci((__gm__ void *)(basePtr + i), SINGLE_CACHE_LINE);
-            __asm__ __volatile__("");
-            if (!detail::CompareSignalRuntime(basePtr[i], cmpValue, cmp)) {
-                allSatisfied = false;
-                break;
+        for (int d0 = 0; d0 < s0 && allSatisfied; ++d0) {
+            for (int d1 = 0; d1 < s1 && allSatisfied; ++d1) {
+                for (int d2 = 0; d2 < s2 && allSatisfied; ++d2) {
+                    for (int d3 = 0; d3 < s3 && allSatisfied; ++d3) {
+                        for (int d4 = 0; d4 < s4; ++d4) {
+                            const int idx = d0 * st0 + d1 * st1 + d2 * st2 + d3 * st3 + d4;
+                            __asm__ __volatile__("");
+                            dcci((__gm__ void *)(basePtr + idx), SINGLE_CACHE_LINE);
+                            __asm__ __volatile__("");
+                            if (!detail::CompareSignalRuntime(basePtr[idx], cmpValue, cmp)) {
+                                allSatisfied = false;
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
         if (!allSatisfied) {
-            // Spin wait with periodic memory fence to reduce contention
             if ((++spin % kFenceInterval) == 0) {
                 pipe_barrier(PIPE_ALL);
             }

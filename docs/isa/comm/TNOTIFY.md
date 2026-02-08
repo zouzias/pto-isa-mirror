@@ -53,12 +53,10 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp o
 using namespace pto;
 
 void notify_set(__gm__ int32_t* remote_signal) {
-    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-
-    GSignal sigG(remote_signal);
+    comm::Signal sig(remote_signal);
     
     // Set remote signal to 1
-    comm::TNOTIFY(sigG, 1, comm::NotifyOp::Set);
+    comm::TNOTIFY(sig, 1, comm::NotifyOp::Set);
 }
 ```
 
@@ -70,12 +68,10 @@ void notify_set(__gm__ int32_t* remote_signal) {
 using namespace pto;
 
 void atomic_increment(__gm__ int32_t* remote_counter) {
-    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-
-    GSignal counterG(remote_counter);
+    comm::Signal counter(remote_counter);
     
     // Atomically add 1 to remote counter
-    comm::TNOTIFY(counterG, 1, comm::NotifyOp::AtomicAdd);
+    comm::TNOTIFY(counter, 1, comm::NotifyOp::AtomicAdd);
 }
 ```
 
@@ -88,20 +84,16 @@ using namespace pto;
 
 // Producer: notify when data is ready
 void producer(__gm__ int32_t* remote_flag) {
-    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-
     // ... produce data ...
     
-    GSignal flagG(remote_flag);
-    comm::TNOTIFY(flagG, 1, comm::NotifyOp::Set);
+    comm::Signal flag(remote_flag);
+    comm::TNOTIFY(flag, 1, comm::NotifyOp::Set);
 }
 
 // Consumer: wait for data
 void consumer(__gm__ int32_t* local_flag) {
-    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-
-    GSignal flagG(local_flag);
-    comm::TWAIT(flagG, 1, comm::WaitCmp::EQ);
+    comm::Signal flag(local_flag);
+    comm::TWAIT(flag, 1, comm::WaitCmp::EQ);
     
     // ... consume data ...
 }

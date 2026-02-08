@@ -32,19 +32,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 __global__ AICORE void TWaitBasicKernel(__gm__ int32_t *shmem_signal)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
         // Rank 0: Send signal to rank 1
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
-        GSignal targetSignal(remote_signal, shape, stride);
+        pto::comm::Signal targetSignal(remote_signal);
 
         // Set signal value to 42
         pto::comm::TNOTIFY(targetSignal, 42, pto::comm::NotifyOp::Set);
@@ -53,7 +46,7 @@ __global__ AICORE void TWaitBasicKernel(__gm__ int32_t *shmem_signal)
     } else if (my_rank == 1) {
         ShmemDeviceBarrierAll();
         // Rank 1: Wait for signal to equal 42
-        GSignal localSignal(shmem_signal, shape, stride);
+        pto::comm::Signal localSignal(shmem_signal);
 
         // Blocking wait until signal == 42
         pto::comm::TWAIT(localSignal, 42, pto::comm::WaitCmp::EQ);
@@ -69,25 +62,18 @@ __global__ AICORE void TWaitBasicKernel(__gm__ int32_t *shmem_signal)
 // ============================================================================
 __global__ AICORE void TWaitCompareKernel(__gm__ int32_t *shmem_signal, int32_t notifyValue)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
         // Rank 0: Send signal with specified value to rank 1
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
-        GSignal targetSignal(remote_signal, shape, stride);
+        pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, notifyValue, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
     } else if (my_rank == 1) {
         // Rank 1: Wait for signal >= 100
-        GSignal localSignal(shmem_signal, shape, stride);
+        pto::comm::Signal localSignal(shmem_signal);
 
         // Blocking wait until signal >= 100
         pto::comm::TWAIT(localSignal, 100, pto::comm::WaitCmp::GE);
@@ -103,17 +89,10 @@ __global__ AICORE void TWaitCompareKernel(__gm__ int32_t *shmem_signal, int32_t 
 // ============================================================================
 __global__ AICORE void TWaitAtomicKernel(__gm__ int32_t *shmem_counter, int threshold, int iters)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
 
     __gm__ int32_t *remote_counter = ShmemPtr(shmem_counter, 0);
-    GSignal counterSignal(remote_counter, shape, stride);
+    pto::comm::Signal counterSignal(remote_counter);
 
     ShmemDeviceBarrierAll();
 
@@ -126,7 +105,7 @@ __global__ AICORE void TWaitAtomicKernel(__gm__ int32_t *shmem_counter, int thre
         ShmemDeviceBarrierAll();
     } else {
         // Rank 0: Wait until counter >= threshold
-        GSignal localCounter(shmem_counter, shape, stride);
+        pto::comm::Signal localCounter(shmem_counter);
         ShmemDeviceBarrierAll();
         pto::comm::TWAIT(localCounter, threshold, pto::comm::WaitCmp::GE);
     }
@@ -142,15 +121,6 @@ __global__ AICORE void TWaitAtomicKernel(__gm__ int32_t *shmem_counter, int thre
 template <int Rows, int Cols>
 __global__ AICORE void TWaitMatrixKernel(__gm__ int32_t *shmem_matrix)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, Rows, Cols);
-    StrideDyn stride(Rows * Cols, Rows * Cols, Rows * Cols, Cols, 1);
-    ShapeDyn sigShape(1, 1, 1, 1, 1);
-    StrideDyn sigStride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
@@ -158,13 +128,48 @@ __global__ AICORE void TWaitMatrixKernel(__gm__ int32_t *shmem_matrix)
         for (int r = 0; r < Rows; ++r) {
             for (int c = 0; c < Cols; ++c) {
                 __gm__ int32_t *remote_elem = remote_matrix + r * Cols + c;
-                GSignal targetElem(remote_elem, sigShape, sigStride);
+                pto::comm::Signal targetElem(remote_elem);
                 pto::comm::TNOTIFY(targetElem, 1, pto::comm::NotifyOp::Set);
             }
         }
     } else if (my_rank == 1) {
-        GSignal localMatrix(shmem_matrix, shape, stride);
+        pto::comm::Signal2D<Rows, Cols> localMatrix(shmem_matrix);
         pto::comm::TWAIT(localMatrix, 1, pto::comm::WaitCmp::EQ);
+    }
+
+    ShmemDeviceQuiet();
+    ShmemDeviceBarrierAll();
+}
+
+// ============================================================================
+// Kernel 4b: TWAIT Sub-Region
+// Rank 0 sets signals in a sub-region of rank 1's larger grid
+// Rank 1 uses Signal2D with stride to wait on just that sub-region
+// ============================================================================
+template <int FullCols, int SubRows, int SubCols>
+__global__ AICORE void TWaitSubRegionKernel(__gm__ int32_t *shmem_matrix)
+{
+    int my_rank = shmem_my_pe();
+
+    // Sub-region starts at row=2, col=4 within the FullCols-wide grid
+    constexpr int startRow = 2;
+    constexpr int startCol = 4;
+
+    if (my_rank == 0) {
+        __gm__ int32_t *remote_matrix = ShmemPtr(shmem_matrix, 1);
+        // Set only the sub-region elements
+        for (int r = 0; r < SubRows; ++r) {
+            for (int c = 0; c < SubCols; ++c) {
+                __gm__ int32_t *elem = remote_matrix + (startRow + r) * FullCols + (startCol + c);
+                pto::comm::Signal sig(elem);
+                pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::Set);
+            }
+        }
+    } else if (my_rank == 1) {
+        // Wait on sub-region: ptr offset to (startRow, startCol), stride = FullCols
+        __gm__ int32_t *subPtr = shmem_matrix + startRow * FullCols + startCol;
+        pto::comm::Signal2D<SubRows, SubCols> subRegion(subPtr, FullCols);
+        pto::comm::TWAIT(subRegion, 1, pto::comm::WaitCmp::EQ);
     }
 
     ShmemDeviceQuiet();
@@ -177,18 +182,11 @@ __global__ AICORE void TWaitMatrixKernel(__gm__ int32_t *shmem_matrix)
 // ============================================================================
 __global__ AICORE void TWaitMultiPhaseKernel(__gm__ int32_t *shmem_signal)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
 
     if (my_rank == 0) {
         __gm__ int32_t *remote_signal = ShmemPtr(shmem_signal, 1);
-        GSignal targetSignal(remote_signal, shape, stride);
+        pto::comm::Signal targetSignal(remote_signal);
 
         pto::comm::TNOTIFY(targetSignal, 1, pto::comm::NotifyOp::Set);
         ShmemDeviceQuiet();
@@ -202,7 +200,7 @@ __global__ AICORE void TWaitMultiPhaseKernel(__gm__ int32_t *shmem_signal)
         ShmemDeviceQuiet();
         ShmemDeviceBarrierAll();
     } else if (my_rank == 1) {
-        GSignal localSignal(shmem_signal, shape, stride);
+        pto::comm::Signal localSignal(shmem_signal);
 
         ShmemDeviceBarrierAll();
         pto::comm::TWAIT(localSignal, 1, pto::comm::WaitCmp::EQ);
@@ -574,6 +572,83 @@ bool RunTWaitMultiPhaseKernel(int rank_id, int n_ranks, int n_devices, int first
     return (status == 0) && is_ok;
 }
 
+template <int FullCols, int SubRows, int SubCols>
+bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
+{
+    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
+    if (ret != 0) {
+        std::cerr << "[ERROR] Failed to init shmem tls\n";
+        return false;
+    }
+
+    const int32_t device_id = rank_id % n_devices + first_device_id;
+    int status = 0;
+    aclrtStream stream = nullptr;
+
+    status |= aclInit(nullptr);
+    status |= aclrtSetDevice(device_id);
+    status |= aclrtCreateStream(&stream);
+
+    ShmemEnv env;
+    const char *ip = "tcp://127.0.0.1:8787";
+    env.rank = rank_id;
+    env.size = n_ranks;
+    env.ipPort = ip;
+    env.heapBytes = 8ULL * 1024 * 1024;
+
+    if (!ShmemInitFromEnv(env)) {
+        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
+        return false;
+    }
+
+    constexpr size_t totalRows = 8;
+    constexpr size_t total = totalRows * FullCols;
+    int32_t *shmem_matrix = (int32_t *)ShmemMalloc(total * sizeof(int32_t));
+    if (shmem_matrix == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
+
+    std::vector<int32_t> zeros(total, 0);
+    aclrtMemcpy(shmem_matrix, total * sizeof(int32_t), zeros.data(), total * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+
+    ShmemBarrierAll();
+
+    TWaitSubRegionKernel<FullCols, SubRows, SubCols><<<1, nullptr, stream>>>(shmem_matrix);
+    status = aclrtSynchronizeStream(stream);
+
+    ShmemBarrierAll();
+
+    bool is_ok = true;
+    if (rank_id == 1) {
+        std::vector<int32_t> result(total, 0);
+        aclrtMemcpy(result.data(), total * sizeof(int32_t), shmem_matrix, total * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        constexpr int startRow = 2;
+        constexpr int startCol = 4;
+        for (int r = 0; r < SubRows; ++r) {
+            for (int c = 0; c < SubCols; ++c) {
+                int idx = (startRow + r) * FullCols + (startCol + c);
+                if (result[idx] != 1) {
+                    std::cerr << "TWait SubRegion test failed at (" << (startRow + r)
+                              << "," << (startCol + c) << ") got " << result[idx] << std::endl;
+                    is_ok = false;
+                    break;
+                }
+            }
+            if (!is_ok) break;
+        }
+    }
+
+    ShmemFree(shmem_matrix);
+    ShmemFinalize();
+
+    status |= aclrtDestroyStream(stream);
+    status |= aclrtResetDevice(device_id);
+    status |= aclFinalize();
+
+    return (status == 0) && is_ok;
+}
+
 // ============================================================================
 // Multi-process Launcher Functions
 // ============================================================================
@@ -694,5 +769,30 @@ bool RunTWaitMultiPhase(int n_ranks, int n_devices, int first_rank_id, int first
     return success;
 }
 
+template <int FullCols, int SubRows, int SubCols>
+bool RunTWaitSubRegion(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    std::vector<pid_t> pids;
+    for (int r = 0; r < n_ranks; ++r) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            const bool ok = RunTWaitSubRegionKernel<FullCols, SubRows, SubCols>(first_rank_id + r, n_ranks, n_devices, first_device_id);
+            _exit(ok ? 0 : 1);
+        } else if (pid > 0) {
+            pids.push_back(pid);
+        } else {
+            return false;
+        }
+    }
+    bool success = true;
+    for (pid_t p : pids) {
+        int status = 0;
+        waitpid(p, &status, 0);
+        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
+    }
+    return success;
+}
+
 template bool RunTWaitMatrix<4, 8>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunTWaitMatrix<7, 13>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunTWaitSubRegion<16, 4, 8>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);

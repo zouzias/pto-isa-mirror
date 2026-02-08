@@ -32,13 +32,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 __global__ AICORE void TNotifyAtomicAddKernel(__gm__ int32_t *shmem_counter, int nranks)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
     int target_rank = 0;  // All ranks notify rank 0
 
@@ -46,7 +39,7 @@ __global__ AICORE void TNotifyAtomicAddKernel(__gm__ int32_t *shmem_counter, int
     __gm__ int32_t *remote_counter = ShmemPtr(shmem_counter, target_rank);
     
     // Create GlobalTensor pointing to rank 0's counter
-    GSignal counterSignal(remote_counter, shape, stride);
+    pto::comm::Signal counterSignal(remote_counter);
 
     // Each rank performs atomic add 1 to rank 0's counter
     pto::comm::TNOTIFY(counterSignal, 1, pto::comm::NotifyOp::AtomicAdd);
@@ -64,13 +57,6 @@ __global__ AICORE void TNotifyAtomicAddKernel(__gm__ int32_t *shmem_counter, int
 // ============================================================================
 __global__ AICORE void TNotifySetKernel(__gm__ int32_t *shmem_signals, int nranks)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
     int next_rank = (my_rank + 1) % nranks;
 
@@ -78,7 +64,7 @@ __global__ AICORE void TNotifySetKernel(__gm__ int32_t *shmem_signals, int nrank
     __gm__ int32_t *remote_signal = ShmemPtr(shmem_signals, next_rank);
 
     // Create GlobalTensor pointing to next rank's signal
-    GSignal nextSignal(remote_signal, shape, stride);
+    pto::comm::Signal nextSignal(remote_signal);
 
     // Set next rank's signal to own rank_id + 100
     int32_t value = static_cast<int32_t>(my_rank + 100);
@@ -98,13 +84,6 @@ __global__ AICORE void TNotifySetKernel(__gm__ int32_t *shmem_signals, int nrank
 template <size_t numSlots>
 __global__ AICORE void TNotifyScoreboardKernel(__gm__ int32_t *shmem_scoreboard, int nranks)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
     int target_rank = 0;
 
@@ -115,7 +94,7 @@ __global__ AICORE void TNotifyScoreboardKernel(__gm__ int32_t *shmem_scoreboard,
     __gm__ int32_t *my_slot = remote_scoreboard + my_rank;
 
     // Create GlobalTensor pointing to specific slot in rank 0's scoreboard
-    GSignal slotSignal(my_slot, shape, stride);
+    pto::comm::Signal slotSignal(my_slot);
 
     // Set own slot value
     int32_t value = static_cast<int32_t>(my_rank + 1000);
@@ -133,19 +112,12 @@ __global__ AICORE void TNotifyScoreboardKernel(__gm__ int32_t *shmem_scoreboard,
 // ============================================================================
 __global__ AICORE void TNotifyRuntimeOpKernel(__gm__ int32_t *shmem_counter, int nranks)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using GSignal = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-
-    ShapeDyn shape(1, 1, 1, 1, 1);
-    StrideDyn stride(1, 1, 1, 1, 1);
-
     int my_rank = shmem_my_pe();
     int target_rank = 0;
 
     // Get remote PE's counter address
     __gm__ int32_t *remote_counter = ShmemPtr(shmem_counter, target_rank);
-    GSignal counterSignal(remote_counter, shape, stride);
+    pto::comm::Signal counterSignal(remote_counter);
 
     // Use runtime-specified NotifyOp (Set operation)
     pto::comm::TNOTIFY(counterSignal, my_rank + 1, pto::comm::NotifyOp::Set);
