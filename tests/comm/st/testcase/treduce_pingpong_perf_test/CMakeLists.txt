@@ -1,1 +1,0 @@
-pto_comm_st(treduce_pingpong_perf_test)
