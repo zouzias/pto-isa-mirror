@@ -118,6 +118,8 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
     using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+    DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
+    DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
 
     // 2D sliding: iterate outer dims, then chunk rows (dim3) and columns (dim4)
     for (int i0 = 0; i0 < gShape0; ++i0) {
@@ -158,8 +160,6 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
 
                         // Create chunk views with adjusted shape
                         DynShape chunkShape(1, 1, 1, currentRows, currentCols);
-                        DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
-                        DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
 
                         SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
                         DstViewT dstView(dstGlobalData.data() + dstOffset, chunkShape, dstChunkStride);
