@@ -47,10 +47,8 @@ def set_env_variables(run_mode, soc_version):
             raise EnvironmentError("ASCEND_HOME_PATH is not set")
 
         os.environ["LD_LIBRARY_PATH"] = f"{ascend_home}/runtime/lib64/stub:{os.environ.get('LD_LIBRARY_PATH', '')}"
-        if soc_version == "Kirin9030":
-            setenv_path = os.path.join(ascend_home, "set_env.sh")
-        else:
-            setenv_path = os.path.join(ascend_home, "bin", "setenv.bash")
+
+        setenv_path = os.path.join(ascend_home, "bin", "setenv.bash")
         if os.path.exists(setenv_path):
             print(f"run env shell: {setenv_path}")
             result = subprocess.run(
@@ -100,8 +98,8 @@ def build_project(run_mode, soc_version, testcase = "all", debug_enable = False)
             text=True
         )
 
-        make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
-        # make_cmd = ["make"]
+        # make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
+        make_cmd = ["make"]
         cpu_count = os.cpu_count() or 4
         make_cmd.extend(["-j", str(cpu_count)])
 
@@ -169,18 +167,32 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
-    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / kirin9030")
+    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 or a5")
     parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
     parser.add_argument("-d", "--debug-enable", action='store_true', help="开启debug检查")
-    parser.add_argument("-w", "--without-build", action='store_true', help="关闭编译（需要预先编译）")
 
     args = parser.parse_args()
-    default_soc_version = "Ascend910B1"
-    if args.soc_version == "a5":
-        default_soc_version = "Ascend910_9599"
-    if args.soc_version == "kirin9030":
-        default_soc_version = "Kirin9030"
+    
+    # 设置SOC版本（comm模式也需要，但可以设置默认值）
+    if args.run_mode == "comm":
+        # comm模式可以使用默认值或用户指定的值
+        if args.soc_version:
+            if args.soc_version == "a5":
+                default_soc_version = "Ascend910_9599"
+            else:
+                default_soc_version = "Ascend910B1"
+        else:
+            # comm模式默认使用a3的SOC版本
+            default_soc_version = "Ascend910B1"
+    else:
+        # npu/sim模式必须指定soc_version
+        if not args.soc_version:
+            parser.error("-v/--soc-version is required when -r is not comm")
+        default_soc_version = "Ascend910B1"
+        if args.soc_version == "a5":
+            default_soc_version = "Ascend910_9599"
+    
     default_cases = "all"
     if args.gtest_filter != None:
         default_cases = args.gtest_filter
@@ -189,32 +201,35 @@ def main():
     try:
         # 获取当前脚本（run_st.py）的绝对路径
         script_path = os.path.abspath(__file__)
-        target_dir = os.path.dirname(os.path.dirname(script_path))
+        base_dir = os.path.dirname(os.path.dirname(script_path))
 
-        if args.soc_version == "a3":
-            target_dir = target_dir + "/npu/a2a3/src/st"
-        elif args.soc_version == "kirin9030" : # kirin9030
-            target_dir = target_dir + "/npu/kirin9030/src/st"
-        else : # a5
-            target_dir = target_dir + "/npu/a5/src/st"
+        # 根据运行模式确定目标目录
+        if args.run_mode == "comm":
+            target_dir = base_dir + "/comm/st"
+        elif args.soc_version and args.soc_version == "a3":
+            target_dir = base_dir + "/npu/a2a3/src/st"
+        elif args.soc_version and args.soc_version == "a5":
+            target_dir = base_dir + "/npu/a5/src/st"
+        else:
+            # 默认情况（不应该到达这里，因为前面已经检查了）
+            parser.error("Invalid run-mode and soc-version combination")
 
         print(f"target_dir: {target_dir}")
         os.chdir(target_dir)
 
         # 设置环境变量
-        set_env_variables(args.run_mode, default_soc_version)
+        if args.run_mode == "sim":
+            set_env_variables(args.run_mode, default_soc_version)
 
         # 执行构建
-        if args.without_build:
-            subprocess.run(["rm", "-rf", "build/T*"],
-                cwd=original_dir,
-                check=True)
-        else:
-            build_project(args.run_mode, default_soc_version, args.testcase, args.debug_enable)
+        build_project(args.run_mode, default_soc_version, args.testcase, args.debug_enable)
 
-        # 生成标杆
+        # 生成标杆（仅当gen_data.py存在时）
         golden_path = "testcase/" + args.testcase + "/gen_data.py"
-        run_gen_data(golden_path)
+        if os.path.exists(golden_path):
+            run_gen_data(golden_path)
+        else:
+            print(f"gen_data.py not found at {golden_path}, skipping golden data generation")
 
         # 执行二进制文件
         run_binary(args.testcase, args.run_mode, default_cases)

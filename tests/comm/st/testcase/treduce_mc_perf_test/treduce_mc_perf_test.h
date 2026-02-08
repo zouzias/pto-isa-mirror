@@ -1,0 +1,86 @@
+
+#pragma once
+#include <cstddef>
+#include <cstdint>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <chrono>
+#include <algorithm>
+#include <numeric>
+#include <cmath>
+#include <iomanip>
+
+#define AR_BLOCK_NUM 32
+
+// ============================================================================
+// Performance Test Configuration
+// ============================================================================
+struct PerfTestConfig {
+    int warmup_iters = 3;        // Warmup kernel launches
+    int total_rows = 131072;     // 32MB / (64 cols * 4 bytes) = 131072 rows
+    int total_cols = 64;         // Must match kTCols_ in tile (64x64)
+    int block_num = AR_BLOCK_NUM;// Number of blocks (cores)
+    bool verbose = true;         // Print detailed results
+};
+
+// ============================================================================
+// Statistics Helper
+// ============================================================================
+struct PerfStats {
+    double min_us;
+    double max_us;
+    double avg_us;
+    double median_us;
+    double std_dev_us;
+    double bandwidth_gbps;   // GB/s
+    double msg_rate_mops;    // Million ops/s
+};
+
+PerfStats CalculateStats(const std::vector<double> &latencies_us, size_t data_bytes) {
+    PerfStats stats;
+    
+    if (latencies_us.empty()) {
+        return stats;
+    }
+    
+    std::vector<double> sorted = latencies_us;
+    std::sort(sorted.begin(), sorted.end());
+    
+    stats.min_us = sorted.front();
+    stats.max_us = sorted.back();
+    stats.avg_us = std::accumulate(sorted.begin(), sorted.end(), 0.0) / sorted.size();
+    
+    // Median
+    size_t mid = sorted.size() / 2;
+    stats.median_us = (sorted.size() % 2 == 0) 
+        ? (sorted[mid - 1] + sorted[mid]) / 2.0 
+        : sorted[mid];
+    
+    // Standard deviation
+    double sq_sum = 0.0;
+    for (auto v : sorted) {
+        sq_sum += (v - stats.avg_us) * (v - stats.avg_us);
+    }
+    stats.std_dev_us = std::sqrt(sq_sum / sorted.size());
+    
+    // Bandwidth: bytes / time
+    // AllReduce involves: each rank sends data_bytes, total communication ≈ data_bytes * (nranks-1) * 2
+    // For simplicity, we compute effective bandwidth as data_bytes / latency
+    stats.bandwidth_gbps = (data_bytes / (stats.avg_us * 1e-6)) / (1024.0 * 1024.0 * 1024.0);
+    
+    // Message rate
+    stats.msg_rate_mops = 1.0 / (stats.avg_us * 1e-6) / 1e6;
+    
+    return stats;
+}
+
+
+// Forward declarations
+// kTRows_ x kTCols_ = tile size (constrained by UB, typically max ~64KB)
+// config.total_rows x config.total_cols = full tensor size (can be much larger)
+template <typename T, int kTRows_, int kTCols_>
+bool RunReduceTilingPerf(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                         const PerfTestConfig &config);
