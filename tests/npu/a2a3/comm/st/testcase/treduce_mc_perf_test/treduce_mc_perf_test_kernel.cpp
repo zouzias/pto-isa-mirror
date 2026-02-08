@@ -49,10 +49,10 @@ __global__ AICORE void TReduceTilingKernelImpl(
     int actual_tiles = 0;
 
     // Tile types
-    using TileShape = Shape<1, 1, 1, kTRows_, kTCols_>;
-    using TileStride = Stride<1, 1, 1, kTCols_, 1>;
+    using TileShape = pto::Shape<1, 1, 1, kTRows_, kTCols_>;
+    using TileStride = pto::Stride<1, 1, 1, kTCols_, 1>;
     using Global = pto::GlobalTensor<T, TileShape, TileStride, pto::Layout::ND>;
-    using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TileData = pto::Tile<pto::TileType::Vec, T, kTRows_, kTCols_, pto::BLayout::RowMajor, -1, -1>;
 
     if (has_work) {
         // Allocate UB tiles

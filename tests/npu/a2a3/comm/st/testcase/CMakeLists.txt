@@ -10,7 +10,8 @@
 
 function(pto_comm_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
-    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-vec -DMEMORY_BASE -std=c++17)
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-vec -DMEMORY_BASE -std=c++17
+        -Wno-non-c-typedef-for-linkage -Wno-braced-scalar-init)
     target_include_directories(${NAME}_kernel PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../../../include
         $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc
@@ -37,7 +38,8 @@ function(pto_comm_st NAME)
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
     add_executable(${NAME} main.cpp)
-    target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
+    target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS}
+        -Wno-non-c-typedef-for-linkage -Wno-braced-scalar-init)
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../../../include
         ${PROJECT_SOURCE_DIR}/../../../../../common

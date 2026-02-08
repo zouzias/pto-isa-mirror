@@ -14,10 +14,10 @@ __global__ AICORE void TReducePerfKernelImpl(
     __gm__ int64_t *cycle_results,  // Store cycle counts
     int iteration)
 {
-    using ShapeDyn  = Shape<1, 1, 1, vRows, vCols>;
-    using StrideDyn = Stride<1, 1, 1, kTCols_, 1>;
+    using ShapeDyn  = pto::Shape<1, 1, 1, vRows, vCols>;
+    using StrideDyn = pto::Stride<1, 1, 1, kTCols_, 1>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
-    using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TileData = pto::Tile<pto::TileType::Vec, T, kTRows_, kTCols_, pto::BLayout::RowMajor, -1, -1>;
 
     TileData accTile(vRows, vCols);
     TileData recvTile(vRows, vCols);
