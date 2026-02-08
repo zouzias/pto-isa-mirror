@@ -27,7 +27,6 @@ function(pto_vec_st NAME)
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
-        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     )
 
     target_link_libraries(${NAME} PRIVATE
@@ -57,7 +56,6 @@ function(pto_cube_st NAME)
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
-        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     )
 
     target_link_libraries(${NAME} PRIVATE
@@ -134,12 +132,19 @@ set(ALL_TESTCASES
     tgather
     tcvt
     tsub
+    trem
+    tfmod
+    tprelu
     tand
     tor
     tands
     tors
     txor
     txors
+    tshl
+    tshls
+    tshr
+    tshrs
     tadd
     tpartadd
     tfillpad
@@ -149,6 +154,7 @@ set(ALL_TESTCASES
     tmov
     tmov_mx
     tmul
+    tlrelu
     tdiv
     tcmps
     tmov_acc2vec
@@ -170,6 +176,7 @@ set(ALL_TESTCASES
     tmov_vect
     texpands
     tmov_acc2mat
+    timg2col
     tassign
     tmov_ub2l1
     tcmp
@@ -181,8 +188,13 @@ set(ALL_TESTCASES
     trowexpand_trowsum
     trowsum_trowexpand
     trowexpand_tdiv
+    trems
+    tfmods
     tscatter
     tneg
+    tcolexpandadd
+    tcolexpandmax
+    tcolexpandmin
     tcolexpanddiv
     tcolexpandmul
     tcolexpandsub
@@ -192,9 +204,10 @@ set(ALL_TESTCASES
     tcolexpand
     tnot
     trelu
+    tquant
 )
 
-if(TEST_CASE IN_LIST ALL_TESTCASES)
+if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
     message(STATUS "run : ${TEST_CASE}")
 else()
     message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES}")
@@ -202,7 +215,7 @@ endif()
 
 
 foreach(TESTCASE ${ALL_TESTCASES})
-    if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE))
+    if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE) OR (TEST_CASE STREQUAL "all"))
         add_subdirectory(${TESTCASE})
     endif()
 endforeach()

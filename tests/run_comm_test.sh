@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ST_DIR="${ROOT_DIR}/tests/comm/st/testcase"
+ST_DIR="${ROOT_DIR}/tests/npu/a2a3/comm/st/testcase"
 
 if [[ ! -d "${ST_DIR}" ]]; then
   echo "[ERROR] testcase dir not found: ${ST_DIR}" >&2
@@ -27,7 +27,7 @@ for t in "${tests[@]}"; do
   echo "============================================================"
   echo "[INFO] Running testcase: ${t}"
   echo "============================================================"
-  if ! python3 "${ROOT_DIR}/tests/script/run_st.py" -r comm -v a3 -t "${t}"; then
+  if ! python3 "${ROOT_DIR}/tests/script/run_st.py" -r npu -v a3 -t "comm/${t}"; then
     echo "[ERROR] Testcase failed: ${t}" >&2
     fail_count=$((fail_count + 1))
   fi

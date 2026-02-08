@@ -17,8 +17,10 @@ namespace pto {
 constexpr int REPEAT_BYTE = 256;
 constexpr int REPEAT_MAX = 255;
 constexpr const int BLOCK_BYTE_SIZE = 32;
+constexpr const int FIXP_BURST_UNIT_LEN = 64;
 constexpr const uint32_t SHIFT_BLOCK_LEN = 4;
 constexpr const uint32_t SHIFT_BLOCK_BYTE = 5;
+constexpr const uint32_t SHIFT_FRACTAL_BYTE = 9;
 constexpr const int REPEAT_STRIDE_MAX = 255;
 constexpr const uint64_t BLOCK_MAX_PER_REPEAT = 8;
 constexpr const uint32_t TMP_UB_SIZE = 8 * 1024;
@@ -28,16 +30,23 @@ constexpr const int BLOCK_LEN = 16;
 constexpr const int CUBE_BLOCK_SIZE = 512;
 constexpr const int C0_SIZE_BYTE = 32;
 constexpr const int FRACTAL_NZ_ROW = 16;
+constexpr const int ACC_C0_SIZE = 16;
+constexpr const uint32_t B4_C0_SIZE = 64;
+constexpr const int MX_COL_LEN = 2;
+constexpr const int MX_ROW_LEN = 16;
+constexpr const int MX_BLOCK_SIZE = 32;
 
-enum VFImplKind : unsigned {
-    VFIMPL_DEFAULT              = 0,    // 默认版本
-    VFIMPL_1D_NO_POST_UPDATE    = 1,
-    VFIMPL_2D_NO_POST_UPDATE    = 2,
-    VFIMPL_1D_POST_UPDATE       = 3,
-    VFIMPL_2D_POST_UPDATE       = 4,
+enum VFImplKind : unsigned
+{
+    VFIMPL_DEFAULT = 0, // 默认版本
+    VFIMPL_1D_NO_POST_UPDATE = 1,
+    VFIMPL_2D_NO_POST_UPDATE = 2,
+    VFIMPL_1D_POST_UPDATE = 3,
+    VFIMPL_2D_POST_UPDATE = 4,
 };
 
-enum class RoundMode : uint8_t {
+enum class RoundMode : uint8_t
+{
     CAST_NONE = 0,
     CAST_RINT = 1,  // round to nearest, tie to even
     CAST_ROUND = 2, // round to nearest, tie away from zero
@@ -47,38 +56,52 @@ enum class RoundMode : uint8_t {
     CAST_ODD = 6,   // round to odd (Von Neumann rounding)
 };
 
-enum class TCopyMode : uint8_t {
+enum class TCopyMode : uint8_t
+{
     SHALLOW_COPY = 0,
     DEEP_COPY = 1,
 };
 
-enum class AccToVecMode : uint8_t {
+enum class AccToVecMode : uint8_t
+{
     SingleModeVec0 = 0,
     SingleModeVec1 = 1,
     DualModeSplitM = 2,
     DualModeSplitN = 3,
 };
 
-enum class ReluPreMode : uint8_t {
+enum class ReluPreMode : uint8_t
+{
     NoRelu = 0,
     NormalRelu = 1,
 };
 
-enum class AtomicType : uint8_t {
+enum class AtomicType : uint8_t
+{
     AtomicNone = 0,
     AtomicAdd = 1,
 };
 
-enum class PadValue {
+enum class PadValue
+{
     Null,
     Zero,
     Max,
     Min,
 };
 
-enum class CompactMode {
+enum class CompactMode
+{
     Null,
     Normal,
+};
+
+enum class SetFmatrixMode
+{
+    FMATRIX_A_AUTO,
+    FMATRIX_B_AUTO,
+    FMATRIX_A_MANUAL,
+    FMATRIX_B_MANUAL,
 };
 
 template <typename DType, PadValue PadVal>
@@ -250,13 +273,29 @@ struct PadValueMap<uint8_t, PadValue::Max> {
     static constexpr auto value = uint8_t(0xff);
 };
 
-#if defined(REGISTER_BASE)
+#if defined(REGISTER_BASE) && !defined(PTO_NPU_ARCH_KIRIN9030)
 template <PadValue PadVal>
 struct PadValueMap<float4_e1m2x2_t, PadVal> {
     static constexpr auto value = uint8_t(0);
 };
 template <PadValue PadVal>
 struct PadValueMap<float4_e2m1x2_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<float8_e8m0_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<float8_e4m3_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<float8_e5m2_t, PadVal> {
+    static constexpr auto value = uint8_t(0);
+};
+template <PadValue PadVal>
+struct PadValueMap<hifloat8_t, PadVal> {
     static constexpr auto value = uint8_t(0);
 };
 #endif
@@ -269,7 +308,8 @@ PTO_INTERNAL constexpr auto GetPadValue()
     return PadValueMap<DType, PadVal>::value;
 }
 
-enum class TileLayoutCustom : uint8_t {
+enum class TileLayoutCustom : uint8_t
+{
     ND,
     DN,
     NZ,
@@ -298,5 +338,24 @@ PTO_INTERNAL constexpr TileLayoutCustom GetTileLayoutCustom()
         return TileLayoutCustom::NONE;
     }
 }
+
+template <typename T = uint64_t>
+struct Img2colTileConfig {
+    uint8_t padList[4] = {0};
+    uint16_t fmapH = 0;
+    uint16_t fmapW = 0;
+    uint16_t filterH = 1;
+    uint16_t filterW = 1;
+    uint8_t dilationH = 1;
+    uint8_t dilationW = 1;
+    uint8_t strideH = 1;
+    uint8_t strideW = 1;
+    uint16_t channelSize = 0;
+    T padValue = 0;
+    bool transpose = false;
+    bool smallChannel = false;
+
+    AICORE Img2colTileConfig() = default;
+};
 } // namespace pto
 #endif
