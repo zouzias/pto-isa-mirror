@@ -40,7 +40,8 @@ __global__ AICORE void runCOLEXPANDMUL(__gm__ T __out__ *out, __gm__ T __in__ *s
     GlobalData src1Global(src1 + offset);
     DstGlobalData dstGlobal(out + offset);
 
-    TLOAD(dstTile, dstGlobal);
+    // causes issues in automode as the tile returned from the TLOAD tfcall appears unused and this tload may not finish before the second tload
+    // TLOAD(dstTile, dstGlobal);
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
