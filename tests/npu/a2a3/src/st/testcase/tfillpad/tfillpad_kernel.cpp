@@ -109,6 +109,7 @@ template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4
     bool expand = false>
 AICORE void runTFILLPAD(
     __gm__ T *out, __gm__ T *src, int gShape0, int gShape1, int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog) {
+#ifndef __PTO_AUTO__
     // Avoid stack dcache miss
     {
 #define INIT_STACK 8192
@@ -131,6 +132,7 @@ AICORE void runTFILLPAD(
         asm("nop");
 #endif
     }
+#endif
 
 #ifdef DEBUGLOG
     gLog += block_idx * LOGSIZE;
