@@ -224,6 +224,10 @@ if __name__ == "__main__":
         TSoftmaxFAParams("TSOFTMAXFATest.case26_B1_N1_S128_H128_ND_no_fusion_init", 1, 1, 128, 128, True, False),
         TSoftmaxFAParams("TSOFTMAXFATest.case27_B1_N1_S128_H128_ND_fusion_no_init", 1, 1, 128, 128, False, False),
         TSoftmaxFAParams("TSOFTMAXFATest.case28_B1_N1_S128_H128_ND_fusion_init", 1, 1, 128, 128, True, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case29_B1_N1_S512_H32_ND_no_fusion_init", 1, 1, 512, 32, True, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case30_B1_N1_S1024_H16_ND_no_fusion_init", 1, 1, 1024, 16, True, False),
+        TSoftmaxFAParams("TSOFTMAXFATest.case31_B1_N1_S512_H32_DN_no_fusion_init", 1, 1, 512, 32, True, True),
+        TSoftmaxFAParams("TSOFTMAXFATest.case32_B1_N1_S1024_H16_DN_no_fusion_init", 1, 1, 1024, 16, True, True),
     ]
     for case in case_params_list:
         if not os.path.exists(case.name):

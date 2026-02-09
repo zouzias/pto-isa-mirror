@@ -34,15 +34,14 @@ constexpr AICORE inline float constexpr_inv_sqrt(float x)
 }
 
 // only for ubN=64 optimization
-template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
- __tf__ AICORE void TSOFTMAX_DN_FUSION(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, int init, bool CAUSAL_MASK>
+ __tf__ AICORE void TSOFTMAX_DN_FUSION(TileDataD2 &x_exp, TileDataS1 &input_x,
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
                              TileDataD1 &exp_max) {
 
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
     __ubuf__ typename TileDataS1::DType *input_x_Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(input_x.data());
-    __ubuf__ typename TileDataS2::DType *bit_mask_Ptr = (__ubuf__ typename TileDataS2::DType *)__cce_get_tile_ptr(bit_mask.data());
     __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
     __ubuf__ typename TileDataD1::DType *local_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_sum.data());
     __ubuf__ typename TileDataD1::DType *new_global_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());
@@ -322,14 +321,13 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
 
 //compiler team pto-optimal version
 template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
-__tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
+__tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x,
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
                              TileDataD1 &exp_max) {
 
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
     __ubuf__ typename TileDataS1::DType *input_x_Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(input_x.data());
-    __ubuf__ typename TileDataS2::DType *bit_mask_Ptr = (__ubuf__ typename TileDataS2::DType *)__cce_get_tile_ptr(bit_mask.data());
     __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
     __ubuf__ typename TileDataD1::DType *local_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_sum.data());
     __ubuf__ typename TileDataD1::DType *new_global_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());
@@ -772,14 +770,13 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, T
 
 // general DN
 template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
- __tf__ AICORE void TSOFTMAX_DN_FUSION3(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
+ __tf__ AICORE void TSOFTMAX_DN_FUSION3(TileDataD2 &x_exp, TileDataS1 &input_x,
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
                              TileDataD1 &exp_max) {
 
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
     __ubuf__ typename TileDataS1::DType *input_x_Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(input_x.data());
-    __ubuf__ typename TileDataS2::DType *bit_mask_Ptr = (__ubuf__ typename TileDataS2::DType *)__cce_get_tile_ptr(bit_mask.data());
     __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
     __ubuf__ typename TileDataD1::DType *local_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_sum.data());
     __ubuf__ typename TileDataD1::DType *new_global_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());
@@ -925,7 +922,8 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
             }
         }
         else {
-            for (uint16_t j = 0; j < (uint16_t)(rowRepeat); ++j) {
+            // for (uint16_t j = 0; j < (uint16_t)(rowRepeat); ++j) {
+            for (uint16_t j = 0; j < (uint16_t)(repeatTimes); ++j) {
                 vlds(max_1a, local_max_Ptr, j * elementsPerRepeat, NORM);
                 vlds(src_in1, new_global_max_Ptr, j * elementsPerRepeat, NORM);
                 vmax(max_1a, max_1a, src_in1, preg_b32_all, MODE_ZEROING);
@@ -995,7 +993,8 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
                 }
             }
             mem_bar(VST_VLD);
-            for(uint16_t j = 0; j < (uint16_t)(rowRepeat); ++j)
+            // for(uint16_t j = 0; j < (uint16_t)(rowRepeat); ++j)
+            for(uint16_t j = 0; j < (uint16_t)(repeatTimes); ++j)
             {
                 vlds(src_in1, local_sum_Ptr, j * elementsPerRepeat, NORM);
                 vlds(src_in2, new_global_sum_Ptr, j * elementsPerRepeat, NORM);
@@ -1008,15 +1007,14 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
 }
 
 
-template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
- __tf__ AICORE void TSOFTMAX_ND_FUSION(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, int init, bool CAUSAL_MASK>
+ __tf__ AICORE void TSOFTMAX_ND_FUSION(TileDataD2 &x_exp, TileDataS1 &input_x,
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
                              TileDataD1 &exp_max) {
 
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
     __ubuf__ typename TileDataS1::DType *input_x_Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(input_x.data());
-    __ubuf__ typename TileDataS2::DType *bit_mask_Ptr = (__ubuf__ typename TileDataS2::DType *)__cce_get_tile_ptr(bit_mask.data());
     __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
     __ubuf__ typename TileDataD1::DType *local_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_sum.data());
     __ubuf__ typename TileDataD1::DType *new_global_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());
@@ -1254,15 +1252,14 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
 
 
 //optimized for 64*128 ND
-template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
- __tf__ AICORE void TSOFTMAX_ND_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, int init, bool CAUSAL_MASK>
+ __tf__ AICORE void TSOFTMAX_ND_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x,
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
                              TileDataD1 &exp_max) {
 
     __ubuf__ typename TileDataD2::DType *x_exp_Ptr = (__ubuf__ typename TileDataD2::DType *)__cce_get_tile_ptr(x_exp.data());
     __ubuf__ typename TileDataS1::DType *input_x_Ptr = (__ubuf__ typename TileDataS1::DType *)__cce_get_tile_ptr(input_x.data());
-    __ubuf__ typename TileDataS2::DType *bit_mask_Ptr = (__ubuf__ typename TileDataS2::DType *)__cce_get_tile_ptr(bit_mask.data());
     __ubuf__ typename TileDataD1::DType *local_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_max.data());
     __ubuf__ typename TileDataD1::DType *local_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(local_sum.data());
     __ubuf__ typename TileDataD1::DType *new_global_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_max.data());
@@ -1461,8 +1458,8 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
 }
 
 
-template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
-    inline AICORE void TSOFTMAX_DN_NOFUSION(TileDataD1 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, //add inline keyword to enable vf fusion
+template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD1, typename TileDataS1, int init, bool CAUSAL_MASK>
+    inline AICORE void TSOFTMAX_DN_NOFUSION(TileDataD1 &x_exp, TileDataS1 &input_x, //add inline keyword to enable vf fusion
                              ReduceTileD1 &local_max, ReduceTileD1 &local_sum,
                              ReduceTileD1 &new_global_max, ReduceTileD1 &new_global_sum,
                              ReduceTileD1 &exp_max,
@@ -1529,8 +1526,8 @@ template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD1, typename Ti
 
     }
 
-template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD1, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
-    AICORE void TSOFTMAX_ND_NOFUSION(TileDataD1 &x_exp, TileDataS1 &input_x, TileDataS2 &bit_mask, 
+template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD1, typename TileDataS1, int init, bool CAUSAL_MASK>
+    AICORE void TSOFTMAX_ND_NOFUSION(TileDataD1 &x_exp, TileDataS1 &input_x,
                              ReduceTileD1 &local_max, ReduceTileD1 &local_sum,
                              ReduceTileD1 &new_global_max, ReduceTileD1 &new_global_sum,
                              ReduceTileD1 &exp_max,

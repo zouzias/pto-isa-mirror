@@ -19,16 +19,16 @@ using namespace PtoTestCommon;
 
 
 template <int seq, int headSize, int init, bool CAUSAL_MASK>
-void launchTSOFTMAX_dn_fusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+void launchTSOFTMAX_dn_fusion(aclFloat16 *x_exp, float *input_x, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
 template <int seq, int headSize, int init, bool CAUSAL_MASK>
-void launchTSOFTMAX_dn_nofusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+void launchTSOFTMAX_dn_nofusion(aclFloat16 *x_exp, float *input_x, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
 template <int seq, int headSize, int init, bool CAUSAL_MASK>
-void launchTSOFTMAX_nd_fusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+void launchTSOFTMAX_nd_fusion(aclFloat16 *x_exp, float *input_x, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
 template <int seq, int headSize, int init, bool CAUSAL_MASK>
-void launchTSOFTMAX_nd_nofusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+void launchTSOFTMAX_nd_nofusion(aclFloat16 *x_exp, float *input_x, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
 
 class TSOFTMAXFATest : public testing::Test {
@@ -49,7 +49,6 @@ template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void test_softmax_dn_fusion()
 {
     size_t src0FileSize = headSize * seq * sizeof(float);  // input_x_local_UB
-    size_t src1FileSize = headSize * seq * sizeof(uint8_t);  // bitmask/dropmask
     size_t dst0FileSize = headSize * sizeof(float);  // local_max, local_sum, new_global_max, new_global_sum, exp_max
     size_t dst1FileSize = headSize * seq * sizeof(aclFloat16);  // x_exp
 
@@ -60,13 +59,10 @@ void test_softmax_dn_fusion()
 
     aclFloat16 *x_exp_Host;
     float *input_Host, *local_max_Host, *local_sum_Host, *new_global_max_Host, *new_global_sum_Host, *exp_max_Host;
-    uint8_t *bit_mask_Host;
     aclFloat16 *x_exp_Device;
     float *input_Device, *local_max_Device, *local_sum_Device, *new_global_max_Device, *new_global_sum_Device, *exp_max_Device;
-    uint8_t *bit_mask_Device;
 
     aclrtMallocHost((void**)(&input_Host), src0FileSize);
-    aclrtMallocHost((void**)(&bit_mask_Host), src1FileSize);
     aclrtMallocHost((void**)(&local_max_Host), dst0FileSize);
     aclrtMallocHost((void**)(&local_sum_Host), dst0FileSize);
     aclrtMallocHost((void**)(&new_global_max_Host), dst0FileSize);
@@ -76,7 +72,6 @@ void test_softmax_dn_fusion()
 
 
     aclrtMalloc((void**)&input_Device, src0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void**)&bit_mask_Device, src1FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&local_max_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&local_sum_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&new_global_max_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -86,7 +81,6 @@ void test_softmax_dn_fusion()
     
 
     ReadFile(GetGoldenDir() + "/input.bin", src0FileSize, input_Host, src0FileSize);
-    ReadFile(GetGoldenDir() + "/bitmask.bin", src1FileSize, bit_mask_Host, src1FileSize);
     ReadFile(GetGoldenDir() + "/golden_global_max_in.bin", dst0FileSize, new_global_max_Host, dst0FileSize);
     ReadFile(GetGoldenDir() + "/golden_global_sum_in.bin", dst0FileSize, new_global_sum_Host, dst0FileSize);
 
@@ -97,10 +91,9 @@ void test_softmax_dn_fusion()
     #endif
 
     aclrtMemcpy(input_Device, src0FileSize, input_Host, src0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(bit_mask_Device, src1FileSize, bit_mask_Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_max_Device, dst0FileSize, new_global_max_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_sum_Device, dst0FileSize, new_global_sum_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTSOFTMAX_dn_fusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
+    launchTSOFTMAX_dn_fusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(x_exp_Host, dst1FileSize, x_exp_Device, dst1FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -118,7 +111,6 @@ void test_softmax_dn_fusion()
     WriteFile(GetGoldenDir() + "/output_global_sum.bin", new_global_sum_Host, dst0FileSize);
 
     aclrtFree(input_Device);
-    aclrtFree(bit_mask_Device);
     aclrtFree(local_max_Device);
     aclrtFree(local_sum_Device);
     aclrtFree(new_global_max_Device);
@@ -127,7 +119,6 @@ void test_softmax_dn_fusion()
     aclrtFree(x_exp_Device);
 
     aclrtFreeHost(input_Host);
-    aclrtFreeHost(bit_mask_Host);
     aclrtFreeHost(local_max_Host);
     aclrtFreeHost(local_sum_Host);
     aclrtFreeHost(new_global_max_Host);
@@ -194,7 +185,6 @@ template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void test_softmax_dn_no_fusion()
 {
     size_t src0FileSize = headSize * seq * sizeof(float);  // input_x_local_UB
-    size_t src1FileSize = headSize * seq * sizeof(uint8_t);  // bitmask/dropmask
     size_t dst0FileSize = headSize * sizeof(float);  // local_max, local_sum, new_global_max, new_global_sum, exp_max
     size_t dst1FileSize = headSize * seq * sizeof(aclFloat16);
 
@@ -205,13 +195,10 @@ void test_softmax_dn_no_fusion()
 
     aclFloat16 *x_exp_Host;
     float *input_Host, *local_max_Host, *local_sum_Host, *new_global_max_Host, *new_global_sum_Host, *exp_max_Host;
-    uint8_t *bit_mask_Host;
     aclFloat16 *x_exp_Device;
     float *input_Device, *local_max_Device, *local_sum_Device, *new_global_max_Device, *new_global_sum_Device, *exp_max_Device;
-    uint8_t *bit_mask_Device;
 
     aclrtMallocHost((void**)(&input_Host), src0FileSize);
-    aclrtMallocHost((void**)(&bit_mask_Host), src1FileSize);
     aclrtMallocHost((void**)(&local_max_Host), dst0FileSize);
     aclrtMallocHost((void**)(&local_sum_Host), dst0FileSize);
     aclrtMallocHost((void**)(&new_global_max_Host), dst0FileSize);
@@ -221,7 +208,6 @@ void test_softmax_dn_no_fusion()
 
 
     aclrtMalloc((void**)&input_Device, src0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void**)&bit_mask_Device, src1FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&local_max_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&local_sum_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&new_global_max_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -231,16 +217,14 @@ void test_softmax_dn_no_fusion()
     
 
     ReadFile(GetGoldenDir() + "/input.bin", src0FileSize, input_Host, src0FileSize);
-    ReadFile(GetGoldenDir() + "/bitmask.bin", src1FileSize, bit_mask_Host, src1FileSize);
     ReadFile(GetGoldenDir() + "/golden_global_max_in.bin", dst0FileSize, new_global_max_Host, dst0FileSize);
     ReadFile(GetGoldenDir() + "/golden_global_sum_in.bin", dst0FileSize, new_global_sum_Host, dst0FileSize);
 
     aclrtMemcpy(input_Device, src0FileSize, input_Host, src0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(bit_mask_Device, src1FileSize, bit_mask_Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_max_Device, dst0FileSize, new_global_max_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_max_Host, dst0FileSize, new_global_max_Device, dst0FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtMemcpy(new_global_sum_Device, dst0FileSize, new_global_sum_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTSOFTMAX_dn_nofusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
+    launchTSOFTMAX_dn_nofusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(x_exp_Host, dst1FileSize, x_exp_Device, dst1FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -257,7 +241,6 @@ void test_softmax_dn_no_fusion()
     WriteFile(GetGoldenDir() + "/output_global_sum.bin", new_global_sum_Host, dst0FileSize);
 
     aclrtFree(input_Device);
-    aclrtFree(bit_mask_Device);
     aclrtFree(local_max_Device);
     aclrtFree(local_sum_Device);
     aclrtFree(new_global_max_Device);
@@ -266,7 +249,6 @@ void test_softmax_dn_no_fusion()
     aclrtFree(x_exp_Device);
 
     aclrtFreeHost(input_Host);
-    aclrtFreeHost(bit_mask_Host);
     aclrtFreeHost(local_max_Host);
     aclrtFreeHost(local_sum_Host);
     aclrtFreeHost(new_global_max_Host);
@@ -332,7 +314,6 @@ template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void test_softmax_nd_fusion()
 {
     size_t src0FileSize = headSize * seq * sizeof(float);  // input_x_local_UB
-    size_t src1FileSize = headSize * seq * sizeof(uint8_t);  // bitmask/dropmask
     size_t dst0FileSize = headSize * sizeof(float);  // local_max, local_sum, new_global_max, new_global_sum, exp_max
     size_t dst1FileSize = headSize * seq * sizeof(aclFloat16);  // x_exp
 
@@ -343,13 +324,10 @@ void test_softmax_nd_fusion()
 
     aclFloat16 *x_exp_Host;
     float *input_Host, *local_max_Host, *local_sum_Host, *new_global_max_Host, *new_global_sum_Host, *exp_max_Host;
-    uint8_t *bit_mask_Host;
     aclFloat16 *x_exp_Device;
     float *input_Device, *local_max_Device, *local_sum_Device, *new_global_max_Device, *new_global_sum_Device, *exp_max_Device;
-    uint8_t *bit_mask_Device;
 
     aclrtMallocHost((void**)(&input_Host), src0FileSize);
-    aclrtMallocHost((void**)(&bit_mask_Host), src1FileSize);
     aclrtMallocHost((void**)(&local_max_Host), dst0FileSize);
     aclrtMallocHost((void**)(&local_sum_Host), dst0FileSize);
     aclrtMallocHost((void**)(&new_global_max_Host), dst0FileSize);
@@ -359,7 +337,6 @@ void test_softmax_nd_fusion()
 
 
     aclrtMalloc((void**)&input_Device, src0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void**)&bit_mask_Device, src1FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&local_max_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&local_sum_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&new_global_max_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -369,15 +346,13 @@ void test_softmax_nd_fusion()
     
 
     ReadFile(GetGoldenDir() + "/input.bin", src0FileSize, input_Host, src0FileSize);
-    ReadFile(GetGoldenDir() + "/bitmask.bin", src1FileSize, bit_mask_Host, src1FileSize);
     ReadFile(GetGoldenDir() + "/golden_global_max_in.bin", dst0FileSize, new_global_max_Host, dst0FileSize);
     ReadFile(GetGoldenDir() + "/golden_global_sum_in.bin", dst0FileSize, new_global_sum_Host, dst0FileSize);
 
     aclrtMemcpy(input_Device, src0FileSize, input_Host, src0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(bit_mask_Device, src1FileSize, bit_mask_Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_max_Device, dst0FileSize, new_global_max_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_sum_Device, dst0FileSize, new_global_sum_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTSOFTMAX_nd_fusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
+    launchTSOFTMAX_nd_fusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(x_exp_Host, dst1FileSize, x_exp_Device, dst1FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -395,7 +370,6 @@ void test_softmax_nd_fusion()
     WriteFile(GetGoldenDir() + "/output_global_sum.bin", new_global_sum_Host, dst0FileSize);
 
     aclrtFree(input_Device);
-    aclrtFree(bit_mask_Device);
     aclrtFree(local_max_Device);
     aclrtFree(local_sum_Device);
     aclrtFree(new_global_max_Device);
@@ -404,7 +378,6 @@ void test_softmax_nd_fusion()
     aclrtFree(x_exp_Device);
 
     aclrtFreeHost(input_Host);
-    aclrtFreeHost(bit_mask_Host);
     aclrtFreeHost(local_max_Host);
     aclrtFreeHost(local_sum_Host);
     aclrtFreeHost(new_global_max_Host);
@@ -470,7 +443,6 @@ template <int seq, int headSize, int init, bool CAUSAL_MASK>
 void test_softmax_nd_no_fusion()
 {
     size_t src0FileSize = headSize * seq * sizeof(float);  // input_x_local_UB
-    size_t src1FileSize = headSize * seq * sizeof(uint8_t);  // bitmask/dropmask
     size_t dst0FileSize = headSize * sizeof(float);  // local_max, local_sum, new_global_max, new_global_sum, exp_max
     size_t dst1FileSize = headSize * seq * sizeof(aclFloat16);  // x_exp
 
@@ -481,13 +453,10 @@ void test_softmax_nd_no_fusion()
 
     aclFloat16 *x_exp_Host;
     float *input_Host, *local_max_Host, *local_sum_Host, *new_global_max_Host, *new_global_sum_Host, *exp_max_Host;
-    uint8_t *bit_mask_Host;
     aclFloat16 *x_exp_Device;
     float *input_Device, *local_max_Device, *local_sum_Device, *new_global_max_Device, *new_global_sum_Device, *exp_max_Device;
-    uint8_t *bit_mask_Device;
 
     aclrtMallocHost((void**)(&input_Host), src0FileSize);
-    aclrtMallocHost((void**)(&bit_mask_Host), src1FileSize);
     aclrtMallocHost((void**)(&local_max_Host), dst0FileSize);
     aclrtMallocHost((void**)(&local_sum_Host), dst0FileSize);
     aclrtMallocHost((void**)(&new_global_max_Host), dst0FileSize);
@@ -497,7 +466,6 @@ void test_softmax_nd_no_fusion()
 
 
     aclrtMalloc((void**)&input_Device, src0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void**)&bit_mask_Device, src1FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&local_max_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&local_sum_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void**)&new_global_max_Device, dst0FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -507,15 +475,13 @@ void test_softmax_nd_no_fusion()
     
 
     ReadFile(GetGoldenDir() + "/input.bin", src0FileSize, input_Host, src0FileSize);
-    ReadFile(GetGoldenDir() + "/bitmask.bin", src1FileSize, bit_mask_Host, src1FileSize);
     ReadFile(GetGoldenDir() + "/golden_global_max_in.bin", dst0FileSize, new_global_max_Host, dst0FileSize);
     ReadFile(GetGoldenDir() + "/golden_global_sum_in.bin", dst0FileSize, new_global_sum_Host, dst0FileSize);
 
     aclrtMemcpy(input_Device, src0FileSize, input_Host, src0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(bit_mask_Device, src1FileSize, bit_mask_Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_max_Device, dst0FileSize, new_global_max_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(new_global_sum_Device, dst0FileSize, new_global_sum_Host, dst0FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTSOFTMAX_nd_nofusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, bit_mask_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
+    launchTSOFTMAX_nd_nofusion<seq, headSize, init, CAUSAL_MASK>(x_exp_Device, input_Device, local_max_Device, local_sum_Device, new_global_max_Device, new_global_sum_Device, exp_max_Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(x_exp_Host, dst1FileSize, x_exp_Device, dst1FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -533,7 +499,6 @@ void test_softmax_nd_no_fusion()
     WriteFile(GetGoldenDir() + "/output_global_sum.bin", new_global_sum_Host, dst0FileSize);
 
     aclrtFree(input_Device);
-    aclrtFree(bit_mask_Device);
     aclrtFree(local_max_Device);
     aclrtFree(local_sum_Device);
     aclrtFree(new_global_max_Device);
@@ -542,7 +507,6 @@ void test_softmax_nd_no_fusion()
     aclrtFree(x_exp_Device);
 
     aclrtFreeHost(input_Host);
-    aclrtFreeHost(bit_mask_Host);
     aclrtFreeHost(local_max_Host);
     aclrtFreeHost(local_sum_Host);
     aclrtFreeHost(new_global_max_Host);
@@ -772,4 +736,29 @@ TEST_F(TSOFTMAXFATest, case33_B1_N1_S128_H128_DN_fusion_no_init)
 TEST_F(TSOFTMAXFATest, case34_B1_N1_S128_H64_ND_no_fusion_init)
 {
     test_softmax_nd_no_fusion<128, 64, 1, 1>();
+}
+
+TEST_F(TSOFTMAXFATest, case35_B1_N1_S512_H32_ND_no_fusion_init)
+{
+    test_softmax_nd_no_fusion<512, 32, 1, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case36_B1_N1_S1024_H16_ND_no_fusion_init)
+{
+    test_softmax_nd_no_fusion<1024, 16, 1, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case37_B1_N1_S512_H32_ND_fusion_init)
+{
+    test_softmax_nd_fusion<512, 32, 1, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case38_B1_N1_S1024_H16_ND_fusion_init)
+{
+    test_softmax_nd_fusion<1024, 16, 1, 0>();
+}
+
+TEST_F(TSOFTMAXFATest, case39_B1_N1_S512_H32_DN_fusion_init)
+{
+    test_softmax_dn_fusion<512, 32, 1, 0>();
 }
