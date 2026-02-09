@@ -87,6 +87,13 @@ namespace pto {
         constexpr const size_t FP16_INT8_TEMP_BUFFER_SIZE = REPEAT_MAX * 256;
     }
 
+    // EDGE_CASE_ALIGN_ENABLE controls PyTorch alignment for edge case values
+    // - When enabled (1): TCVT output matches PyTorch when handling edge values
+    //   like inf, -inf, nan, and overflow values. Uses NonSatTorch implementations.
+    // - When disabled (0): Uses standard TCVT conversion (higher performance)
+    // Trade-off: Enabling provides PyTorch compatibility but reduces performance
+    #define EDGE_CASE_ALIGN_ENABLE 1
+
     // Converts float32 (fp32) to float16 (fp16) with various rounding modes
     template <typename TileDataD, typename TileDataS>
     PTO_INTERNAL void GenCastCallFp32ToFp16(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typename TileDataS::DType *src,
@@ -659,15 +666,20 @@ namespace pto {
             GenCastCallFp32ToInt32<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
         } else if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                              std::is_same<typename TileDataS::DType, float>::value) {  // fp32 to int16
-            // Select implementation based on current saturation mode (CTRL[59])
+            // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
             bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
-            if (isSatOn) {
-                GenCastCallFp32ToInt16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
-            } else {
-                // Allocate temporary buffer from UB workspace (last 8KB)
+#if EDGE_CASE_ALIGN_ENABLE
+            if (!isSatOn) {
+                // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
                 __ubuf__ int32_t *tempInt32Buf = (__ubuf__ int32_t *)(TMP_UB_OFFSET);
                 GenCastCallFp32ToInt16_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tempInt32Buf);
+            } else {
+                GenCastCallFp32ToInt16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             }
+#else
+            // Use default implementation when edge case alignment is disabled
+            GenCastCallFp32ToInt16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+#endif
         } else if constexpr (std::is_same<typename TileDataD::DType, bfloat16_t>::value &&
                              std::is_same<typename TileDataS::DType, float>::value) {  // fp32 to bf16
             GenCastCallFp32ToBf16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
@@ -676,29 +688,38 @@ namespace pto {
             GenCastCallFp16ToInt32<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
         } else if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                              std::is_same<typename TileDataS::DType, half>::value) {  // half to int16
-            // Select implementation based on current saturation mode (CTRL[59])
+            // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
             bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
-            if (isSatOn) {
-                GenCastCallFp16ToInt16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
-            } else {
-                // Allocate temporary buffer from UB workspace (last 8KB)
+#if EDGE_CASE_ALIGN_ENABLE
+            if (!isSatOn) {
+                // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
                 __ubuf__ int32_t *tempInt32Buf = (__ubuf__ int32_t *)(TMP_UB_OFFSET);
                 GenCastCallFp16ToInt16_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tempInt32Buf);
+            } else {
+                GenCastCallFp16ToInt16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             }
+#else
+            // Use default implementation when edge case alignment is disabled
+            GenCastCallFp16ToInt16<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+#endif
         } else if constexpr (std::is_same<typename TileDataD::DType, int8_t>::value &&
                              std::is_same<typename TileDataS::DType, half>::value) {  // half to int8
-            // Select implementation based on current saturation mode (CTRL[59])
+            // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
             bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
-            if (isSatOn) {
-                GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
-            } else {
-                // Allocate temporary buffers from UB workspace (last 8KB)
-                // Layout: tempInt16Buf (2KB) + tempAndBuf (2KB) + tempFp16Buf (2KB)
+#if EDGE_CASE_ALIGN_ENABLE
+            if (!isSatOn) {
+                // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
                 __ubuf__ int16_t *tempInt16Buf = (__ubuf__ int16_t *)(TMP_UB_OFFSET);
                 __ubuf__ int16_t *tempAndBuf   = (__ubuf__ int16_t *)(TMP_UB_OFFSET + 2048);
                 __ubuf__ half *tempFp16Buf     = (__ubuf__ half *)(TMP_UB_OFFSET + 4096);
                 GenCastCallFp16ToInt8_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tempInt16Buf, tempAndBuf, tempFp16Buf);
+            } else {
+                GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             }
+#else
+            // Use default implementation when edge case alignment is disabled
+            GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+#endif
         } else if constexpr (std::is_same<typename TileDataD::DType, uint8_t>::value &&
                              std::is_same<typename TileDataS::DType, half>::value) {  // half to uint8
             GenCastCallFp16ToUint8<TileDataD, TileDataS>(dst,src,repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
