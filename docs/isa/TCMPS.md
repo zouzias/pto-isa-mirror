@@ -16,11 +16,18 @@ The encoding/type of `dst` is implementation-defined (often a mask-like tile).
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%dst = tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile<...> -> !pto.tile<...>
+%dst = pto.tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.tcmps ins(%src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/type.hpp`:

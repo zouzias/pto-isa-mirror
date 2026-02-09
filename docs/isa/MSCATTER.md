@@ -25,7 +25,7 @@ pto.mscatter %src, %idx, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_
 Synchronous form - Level2:
 
 ```text
-pto.mscatter ins(%src, %idx : !pto.tile<...>, !pto.tile<...>), outs(%mem : !pto.partition_tensor_view<MxNx dtype>)
+pto.mscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>), outs(%mem : !pto.partition_tensor_view<MxNx dtype>)
 ```
 
 ## C++ Intrinsic

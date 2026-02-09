@@ -16,11 +16,18 @@ where $\pi_i$ is a permutation of the indices in the row. Sort order and stabili
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%dst, %idx = tsort32 %src : !pto.tile<...> -> (!pto.tile<...>, !pto.tile<...>)
+%dst, %idx = pto.tsort32 %src : !pto.tile<...> -> (!pto.tile<...>, !pto.tile<...>)
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.tsort32 ins(%src : !pto.tile_buf<...>) outs(%dst, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

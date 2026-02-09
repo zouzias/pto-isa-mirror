@@ -22,11 +22,18 @@ $$
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%dst = tsels %src0, %src1, %selectMode : !pto.tile<...>
+%dst = pto.tsels %src0, %src1, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

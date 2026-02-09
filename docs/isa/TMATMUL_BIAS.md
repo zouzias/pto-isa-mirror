@@ -22,11 +22,18 @@ Bias broadcasting behavior is implementation-defined.
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%acc = tmatmul.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%c = pto.tmatmul.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.tmatmul.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

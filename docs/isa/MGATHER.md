@@ -14,12 +14,6 @@ $$ \mathrm{dst}_{i,j} = \mathrm{mem}[\mathrm{idx}_{i,j}] $$
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
-
-```text
-%dst = mgather %mem, %idx : !pto.memref<...>, !pto.tile<...> -> !pto.tile<...>
-```
-
 Synchronous form - Level1:
 
 ```text
@@ -30,7 +24,8 @@ Synchronous form - Level1:
 Synchronous form - Level2:
 
 ```text
-pto.mgather ins(%mem, %idx : )
+pto.mgather ins(%mem, %idx : !pto.partition_tensor_view<MxNx dtype>, !pto.tile_buf<MxNx dtype>) 
+            outs(%dst : !pto.tile_buf<MxNx dtype>)
 ```
 
 ## C++ Intrinsic

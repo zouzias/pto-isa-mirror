@@ -14,11 +14,18 @@ $$ \mathrm{dst}_{i,0} = \sum_{j=0}^{C-1} \mathrm{src}_{i,j} $$
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%dst = trowsum %src : !pto.tile<...> -> !pto.tile<...>
+%dst = pto.trowsum %src : !pto.tile<...> -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.trowsum ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
 
 ## C++ Intrinsic

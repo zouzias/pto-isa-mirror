@@ -14,11 +14,18 @@ $$ \mathrm{dst}_{i,j} = \frac{1}{\sqrt{\mathrm{src}_{i,j}}} $$
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%dst = trsqrt %src : !pto.tile<...>
+%dst = pto.trsqrt %src : !pto.tile<...> -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.trsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

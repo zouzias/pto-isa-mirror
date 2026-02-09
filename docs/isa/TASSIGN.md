@@ -14,10 +14,16 @@ PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
 `TASSIGN` is typically introduced by bufferization/lowering when mapping SSA tiles to physical storage.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-tassign %tile, %addr : !pto.tile<...>, index
+%dst = pto.tassign %src, %addr : (!pto.tile<...>, dtype)
+```
+
+Synchronous form - Level2:
+
+```text
+pto.tassign ins(%src, %addr : !pto.tile_buf<...>, dtype)
 ```
 
 ## C++ Intrinsic

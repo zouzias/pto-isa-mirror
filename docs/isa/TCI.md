@@ -27,6 +27,18 @@ Synchronous form:
 ```text
 %dst = tci %S {descending = false} : !pto.tile<...>
 ```
+Synchronous form - Level1:
+
+```text
+%dst = pto.tci %S {descending = false} : dtype -> !pto.tile<...>
+```
+
+Synchronous form - Level2:
+
+```text
+pto.tci ins(%S {descending = false} : dtype) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

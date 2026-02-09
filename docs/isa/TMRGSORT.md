@@ -14,12 +14,25 @@ $$ \mathrm{dst} = \mathrm{merge}(\mathrm{src}_0, \mathrm{src}_1, \ldots) $$
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form (conceptual):
+Synchronous form - Level1:
 
 ```text
-%dst, %executed = tmrgsort %src0, %src1 {exhausted = false}
-    : !pto.tile<...>, !pto.tile<...> -> (!pto.tile<...>, vector<4xi16>)
+%dst, %executed = pto.tmrgsort %src0, %src1, %src2, %src3 {exhausted = false}
+    : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, vector<4xi16>)
+
+%dst = pto.tmrgsort %src, %blockLen : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.tmrgsort ins(%src0, %src1, %src2, %src3 {exhausted = false}
+    : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst, %executed
+    : !pto.tile_buf<...>, vector<4xi16>)
+
+pto.tmrgsort ins(%src, %blockLen : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

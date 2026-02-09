@@ -16,11 +16,18 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{\mathrm{indexRow}+i,\; \mathrm{indexCol}+j
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%dst = textract %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
+%dst = pto.textract %src, %idxrow, %idxcol : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.textract ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

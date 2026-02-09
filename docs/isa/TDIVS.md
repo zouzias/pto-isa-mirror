@@ -20,17 +20,30 @@ For each element `(i, j)` in the valid region:
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Tile/scalar form:
+Tile/scalar form - Level1:
 
 ```text
-%dst = tdivs %src, %scalar : !pto.tile<...>, f32
+%dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
-Scalar/tile form:
+Tile/scalar form - Level2:
 
 ```text
-%dst = tdivs %scalar, %src : f32, !pto.tile<...>
+pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
+
+scalar/Tile form - Level1:
+
+```text
+%dst = pto.tdivs %scalar, %src : (dtype, !pto.tile<...>) -> !pto.tile<...>
+```
+
+scalar/Tile form - Level2:
+
+```text
+pto.tdivs ins(%scalar, %src : dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

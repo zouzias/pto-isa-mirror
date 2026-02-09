@@ -27,10 +27,16 @@ otherwise `std::numeric_limits<T>::max()/min()`).
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form (conceptual):
+Synchronous form - Level1:
 
 ```text
-%dst = tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+%dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+Synchronous form - Level2:
+
+```text
+pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic

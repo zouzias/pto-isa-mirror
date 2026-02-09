@@ -10,8 +10,16 @@ This is a *bitwise* reshape: it does not change values, it only changes how the 
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
+Synchronous form - Level1:
+
 ```text
-%dst = treshape %src : !pto.tile<...>
+%dst = pto.treshape %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+Synchronous form - Level2:
+
+```text
+pto.treshape ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic

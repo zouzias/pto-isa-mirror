@@ -14,11 +14,19 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{r_0 + i,\; c_0 + j} $$
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%t0 = tload %sv[%c0, %c0] : (!pto.memref<...>, index, index) -> !pto.tile<...>
+%dst = pto.tload %mem : !pto.partition_tensor_view<MxNx dtype> 
+                     -> !pto.tile<loc, dtype, rows, cols, blayout, slayout, fractal, pad>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.tload ins(%mem : !pto.partition_tensor_view<MxNx dtype>) outs(%dst : !pto.tile_buf<MxNx dtype>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:

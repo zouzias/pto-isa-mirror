@@ -16,11 +16,18 @@ Exact shape/layout and the transpose domain depend on the target (see Constraint
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%dst = ttrans %src : !pto.tile<...> -> !pto.tile<...>
+%dst = pto.ttrans %src : !pto.tile<...> -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.ttrans ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
 
 ## C++ Intrinsic

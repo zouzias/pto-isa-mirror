@@ -14,11 +14,18 @@ $$ \mathrm{dst}_{i,j} = (\mathrm{src}_{i,j} > 0) ? \mathrm{src}_{i,j} : (\mathrm
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
-Synchronous form:
+Synchronous form - Level1:
 
 ```text
-%dst = tlrelu %src, %slope : !pto.tile<...>, f32
+%dst = pto.tlrelu %src, %slope : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
+
+Synchronous form - Level2:
+
+```text
+pto.tlrelu ins(%src, %slope : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
