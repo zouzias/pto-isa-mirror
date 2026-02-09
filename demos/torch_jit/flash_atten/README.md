@@ -15,8 +15,8 @@ Which produces a CSV file containing one row per `(sq, sk, kernel)` configuratio
 
 - `sq`, `sk` — query and key sequence lengths  
 - `head_size` — attention head dimension (fixed at 128)  
-- `kernel` — attention implementation (`gemm_ref`, `npu_fused_attention`, `jit_flash`)  
-- `time_us` — average execution time in microseconds over 200 iterations  
+- `kernel` — attention implementation (`npu_fused_attention`, `jit_flash`)  
+- `time_us` — average execution time in microseconds over 50 iterations  
 - `tflops` — achieved throughput for the full attention forward pass  
 - `flops_total` — total operation count used to compute TFLOP/s  
 
@@ -25,8 +25,8 @@ Which produces a CSV file containing one row per `(sq, sk, kernel)` configuratio
 
 All benchmarks were run on 910B2 after:
 
-- **50 warm-up iterations**
-- **200 timed iterations (average reported)**
+- **10 warm-up iterations**
+- **50 timed iterations (average reported)**
 
 The JIT flash kernel parallelizes work across tiles of size 128 along the query dimension.
 
