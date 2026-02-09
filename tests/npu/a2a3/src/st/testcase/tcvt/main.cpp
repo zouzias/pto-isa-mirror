@@ -196,14 +196,19 @@ void test_tcvt_saturation()
     bool truncOk = ResultCmp<D>(goldenTrunc, devTrunc, 0.001f);
 
     // Compare default output
-    // For fp16→uint8: should match golden_truncated (SaturationMode::OFF)
-    // For other conversions: should match golden_saturated (SaturationMode::ON)
-    std::string goldenDefaultFile;
-    if constexpr (std::is_same<D, uint8_t>::value && std::is_same<S, aclFloat16>::value) {
-        goldenDefaultFile = GetGoldenDir() + "/golden_truncated.bin";
-    } else {
-        goldenDefaultFile = GetGoldenDir() + "/golden_saturated.bin";
-    }
+    // For conversions whose default saturation mode is OFF: match golden_truncated
+    // For other conversions: match golden_saturated
+    constexpr bool defaultSatOff =
+        (std::is_same<D, uint8_t>::value && std::is_same<S, aclFloat16>::value) ||  // fp16 -> uint8
+        (std::is_same<D, int8_t>::value && std::is_same<S, aclFloat16>::value) ||   // fp16 -> int8
+        (std::is_same<D, int16_t>::value && std::is_same<S, float>::value) ||       // fp32 -> int16
+        (std::is_same<D, int16_t>::value && std::is_same<S, aclFloat16>::value) ||  // fp16 -> int16
+        (std::is_same<D, int32_t>::value && std::is_same<S, int64_t>::value) ||     // int64 -> int32
+        (std::is_same<D, int16_t>::value && std::is_same<S, int32_t>::value);       // int32 -> int16
+
+    std::string goldenDefaultFile = defaultSatOff
+        ? GetGoldenDir() + "/golden_truncated.bin"
+        : GetGoldenDir() + "/golden_saturated.bin";
 
     std::vector<D> goldenDefault(dstFileSize);
     std::vector<D> devDefault(dstFileSize);
@@ -227,8 +232,8 @@ void test_tcvt_saturation()
 
     EXPECT_TRUE(satOk) << "Saturation mode ON output mismatch";
     EXPECT_TRUE(truncOk) << "Saturation mode OFF output mismatch";
-    if constexpr (std::is_same<D, uint8_t>::value && std::is_same<S, aclFloat16>::value) {
-        EXPECT_TRUE(defaultOk) << "Default mode should match OFF for fp16→uint8";
+    if constexpr (defaultSatOff) {
+        EXPECT_TRUE(defaultOk) << "Default mode should match OFF for this conversion";
     } else {
         EXPECT_TRUE(defaultOk) << "Default mode should match ON for this conversion";
     }

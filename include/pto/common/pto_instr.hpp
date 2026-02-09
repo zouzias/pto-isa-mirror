@@ -763,10 +763,19 @@ PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
   return {};
 }
 
+// TCVT with explicit saturation mode
 template <typename TileDataD, typename TileDataS, typename... WaitEvents>
-PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode = SaturationMode::ON, WaitEvents&... events) {
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode, WaitEvents&... events) {
   TSYNC(events...);
   MAP_INSTR_IMPL(TCVT, dst, src, mode, satMode);
+  return {};
+}
+
+// TCVT without saturation mode - uses type-based defaults from TCVT_IMPL
+template <typename TileDataD, typename TileDataS, typename... WaitEvents>
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEvents&... events) {
+  TSYNC(events...);
+  MAP_INSTR_IMPL(TCVT, dst, src, mode);
   return {};
 }
 

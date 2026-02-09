@@ -92,7 +92,7 @@ namespace pto {
     //   like inf, -inf, nan, and overflow values. Uses NonSatTorch implementations.
     // - When disabled (0): Uses standard TCVT conversion (higher performance)
     // Trade-off: Enabling provides PyTorch compatibility but reduces performance
-    #define EDGE_CASE_ALIGN_ENABLE 1
+    #define EDGE_CASE_ALIGN_ENABLE 0
 
     // Converts float32 (fp32) to float16 (fp16) with various rounding modes
     template <typename TileDataD, typename TileDataS>

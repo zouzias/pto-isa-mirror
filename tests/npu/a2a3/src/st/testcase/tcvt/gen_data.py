@@ -21,6 +21,28 @@ except ImportError:
 
 np.random.seed(19)
 
+def default_saturation_off(srctype, dsttype):
+    """Check if this conversion's default saturation mode is OFF.
+    
+    Default OFF conversions (truncation/bit-extraction behavior):
+    - fp16 → uint8
+    - fp16 → int8
+    - fp32 → int16
+    - fp16 → int16
+    - int64 → int32
+    - int32 → int16
+    
+    All other conversions default to ON (clamping).
+    """
+    return (
+        (srctype == np.float16 and dsttype == np.uint8) or
+        (srctype == np.float16 and dsttype == np.int8) or
+        (srctype == np.float32 and dsttype == np.int16) or
+        (srctype == np.float16 and dsttype == np.int16) or
+        (srctype == np.int64 and dsttype == np.int32) or
+        (srctype == np.int32 and dsttype == np.int16)
+    )
+
 def gen_golden(case_name, param):
     srctype = param.srctype
     dsttype = param.dsttype
@@ -168,20 +190,52 @@ def gen_golden(case_name, param):
         # Integer to any type conversion
         converted_golden = x1_gm
 
-    # Clamp the result to the destination type's representable range.
-    # NOTE: np.clip casts a_min/a_max to the input array dtype, so for integer->integer
-    # widening (e.g. int32 -> int64), clip() must run on a widened dtype first.
+    # Generate golden data based on default saturation mode for this conversion
     if np.issubdtype(dsttype, np.integer):
         info = np.iinfo(dsttype)
-        tmp = converted_golden
-        if np.issubdtype(tmp.dtype, np.integer):
-            if np.issubdtype(dsttype, np.signedinteger):
-                tmp = tmp.astype(np.int64, copy=False)
-            else:
-                tmp = tmp.astype(np.uint64, copy=False)
+        
+        # Determine if this conversion has default saturation OFF (truncation) or ON (clamping)
+        sat_off = default_saturation_off(srctype, dsttype)
+        
+        if sat_off:
+            # OFF (truncation): bit extraction - wrap around using modulo
+            golden_list = []
+            for val in converted_golden.flat:
+                if np.isnan(val) or np.isinf(val):
+                    int_val = 0
+                else:
+                    int_val = int(np.int64(val))
+                
+                # Extract lower N bits and interpret as signed/unsigned
+                if dsttype == np.int8:
+                    byte_val = int_val & 0xFF
+                    truncated_val = byte_val if byte_val < 128 else byte_val - 256
+                elif dsttype == np.uint8:
+                    truncated_val = int_val & 0xFF
+                elif dsttype == np.int16:
+                    word_val = int_val & 0xFFFF
+                    truncated_val = word_val if word_val < 32768 else word_val - 65536
+                elif dsttype == np.int32:
+                    dword_val = int_val & 0xFFFFFFFF
+                    truncated_val = dword_val if dword_val < 2147483648 else dword_val - 4294967296
+                else:
+                    truncated_val = int_val
+                
+                golden_list.append(truncated_val)
+            golden = np.array(golden_list, dtype=dsttype).reshape(converted_golden.shape)
         else:
-            tmp = tmp.astype(np.float64, copy=False)
-        golden = np.clip(tmp, info.min, info.max).astype(dsttype)
+            # ON (saturation): clamp to datatype range
+            # NOTE: np.clip casts a_min/a_max to the input array dtype, so for integer->integer
+            # widening (e.g. int32 -> int64), clip() must run on a widened dtype first.
+            tmp = converted_golden
+            if np.issubdtype(tmp.dtype, np.integer):
+                if np.issubdtype(dsttype, np.signedinteger):
+                    tmp = tmp.astype(np.int64, copy=False)
+                else:
+                    tmp = tmp.astype(np.uint64, copy=False)
+            else:
+                tmp = tmp.astype(np.float64, copy=False)
+            golden = np.clip(tmp, info.min, info.max).astype(dsttype)
     elif np.issubdtype(dsttype, np.floating):
         info = np.finfo(dsttype)
         golden = np.clip(converted_golden.astype(np.float64, copy=False), info.min, info.max).astype(dsttype)
@@ -196,64 +250,9 @@ def gen_golden(case_name, param):
         if np.issubdtype(dsttype, np.integer):
             info = np.iinfo(dsttype)
             
-            # Use PyTorch for golden data generation if available
-            # For saturation tests, we need two different outputs:
-            # 1. Saturated: clamp to valid range
-            # 2. Truncated: bit extraction (modulo behavior)
-            
-            # Saturated mode: clamp to datatype range, handling special FP values
-            saturated_list = []
-            for val in converted_golden.flat:
-                if np.isnan(val):
-                    # NaN saturates to min value for signed, 0 for unsigned
-                    saturated_val = info.min if np.issubdtype(dsttype, np.signedinteger) else 0
-                elif np.isinf(val):
-                    # Infinity saturates to max for positive, min for negative
-                    saturated_val = info.max if val > 0 else info.min
-                else:
-                    # Regular value: convert to int64 first, then clamp
-                    int_val = int(np.int64(val))
-                    saturated_val = max(info.min, min(info.max, int_val))
-                saturated_list.append(saturated_val)
-            saturated = np.array(saturated_list, dtype=dsttype).reshape([m, n])
-            
-            # Truncated mode: bit extraction (matches PyTorch for integer conversions)
-            # For floating-point inputs, convert to int64 first (with special handling)
-            truncated_list = []
-            for val in converted_golden.flat:
-                if np.isnan(val):
-                    # NaN becomes 0 in truncation mode
-                    int_val = 0
-                elif np.isinf(val):
-                    # Infinity becomes 0 in truncation mode
-                    int_val = 0
-                else:
-                    # Regular value: convert to int64
-                    int_val = int(np.int64(val))
-                
-                # Extract lower N bits and interpret as signed/unsigned
-                if dsttype == np.int8:
-                    byte_val = int_val & 0xFF
-                    # Interpret as signed: if bit 7 is set, it's negative
-                    truncated_val = byte_val if byte_val < 128 else byte_val - 256
-                elif dsttype == np.uint8:
-                    truncated_val = int_val & 0xFF
-                elif dsttype == np.int16:
-                    word_val = int_val & 0xFFFF
-                    # Interpret as signed: if bit 15 is set, it's negative
-                    truncated_val = word_val if word_val < 32768 else word_val - 65536
-                elif dsttype == np.int32:
-                    dword_val = int_val & 0xFFFFFFFF
-                    # Interpret as signed: if bit 31 is set, it's negative
-                    truncated_val = dword_val if dword_val < 2147483648 else dword_val - 4294967296
-                else:
-                    truncated_val = int_val
-                
-                truncated_list.append(truncated_val)
-            truncated = np.array(truncated_list, dtype=dsttype).reshape([m, n])
-            
-            # Verify with PyTorch if available (truncated should match PyTorch)
-            if HAS_TORCH:
+            # Use PyTorch for golden data generation (preferred method)
+            use_torch = HAS_TORCH
+            if use_torch:
                 np_to_torch = {
                     np.float32: torch.float32,
                     np.float16: torch.float16,
@@ -274,15 +273,84 @@ def gen_golden(case_name, param):
                         if srctype in np_to_torch:
                             torch_input = torch_input.to(np_to_torch[srctype])
                     
-                    # PyTorch conversion - this should match truncated mode
+                    # Generate truncated mode using PyTorch (default PyTorch behavior)
                     torch_output = torch_input.to(np_to_torch[dsttype])
-                    torch_result = torch_output.numpy().astype(dsttype)
+                    truncated = torch_output.numpy().astype(dsttype)
                     
-                    # Verify truncated matches PyTorch
-                    if not np.array_equal(truncated, torch_result):
-                        print(f"Warning: Truncated mode doesn't match PyTorch for {srctype.__name__} → {dsttype.__name__}")
-                        mismatches = np.sum(truncated != torch_result)
-                        print(f"  Mismatches: {mismatches}/{truncated.size}")
+                    # Generate saturated mode by handling special values
+                    if np.issubdtype(srctype, np.floating):
+                        # Create masks for special values BEFORE conversion
+                        is_nan = torch.isnan(torch_input)
+                        is_pos_inf = torch.isinf(torch_input) & (torch_input > 0)
+                        is_neg_inf = torch.isinf(torch_input) & (torch_input < 0)
+                        
+                        # Convert to integer (PyTorch clamps finite values)
+                        saturated_output = torch_input.to(np_to_torch[dsttype])
+                        
+                        # Replace special values with appropriate boundary values after conversion
+                        saturated_output = torch.where(is_nan,
+                                                      torch.tensor(info.min if np.issubdtype(dsttype, np.signedinteger) else 0, dtype=np_to_torch[dsttype]),
+                                                      saturated_output)
+                        saturated_output = torch.where(is_pos_inf,
+                                                      torch.tensor(info.max, dtype=np_to_torch[dsttype]),
+                                                      saturated_output)
+                        saturated_output = torch.where(is_neg_inf,
+                                                      torch.tensor(info.min, dtype=np_to_torch[dsttype]),
+                                                      saturated_output)
+                        saturated = saturated_output.numpy().astype(dsttype)
+                    else:
+                        # For integer to integer, clamp the input
+                        clamped_input = torch.clamp(torch_input, info.min, info.max)
+                        saturated_output = clamped_input.to(np_to_torch[dsttype])
+                        saturated = saturated_output.numpy().astype(dsttype)
+                    
+                    print(f"Generated saturation golden data using PyTorch for {srctype.__name__} → {dsttype.__name__}")
+                else:
+                    print(f"Warning: PyTorch conversion not supported for {srctype.__name__} → {dsttype.__name__}, using NumPy fallback")
+                    use_torch = False
+            
+            # NumPy fallback when PyTorch is not available or conversion not supported
+            if not use_torch:
+                # Saturated mode: clamp to datatype range, handling special FP values
+                saturated_list = []
+                for val in converted_golden.flat:
+                    if np.isnan(val):
+                        saturated_val = info.min if np.issubdtype(dsttype, np.signedinteger) else 0
+                    elif np.isinf(val):
+                        saturated_val = info.max if val > 0 else info.min
+                    else:
+                        int_val = int(np.int64(val))
+                        saturated_val = max(info.min, min(info.max, int_val))
+                    saturated_list.append(saturated_val)
+                saturated = np.array(saturated_list, dtype=dsttype).reshape([m, n])
+                
+                # Truncated mode: bit extraction (modulo behavior)
+                truncated_list = []
+                for val in converted_golden.flat:
+                    if np.isnan(val) or np.isinf(val):
+                        int_val = 0
+                    else:
+                        int_val = int(np.int64(val))
+                    
+                    # Extract lower N bits and interpret as signed/unsigned
+                    if dsttype == np.int8:
+                        byte_val = int_val & 0xFF
+                        truncated_val = byte_val if byte_val < 128 else byte_val - 256
+                    elif dsttype == np.uint8:
+                        truncated_val = int_val & 0xFF
+                    elif dsttype == np.int16:
+                        word_val = int_val & 0xFFFF
+                        truncated_val = word_val if word_val < 32768 else word_val - 65536
+                    elif dsttype == np.int32:
+                        dword_val = int_val & 0xFFFFFFFF
+                        truncated_val = dword_val if dword_val < 2147483648 else dword_val - 4294967296
+                    else:
+                        truncated_val = int_val
+                    
+                    truncated_list.append(truncated_val)
+                truncated = np.array(truncated_list, dtype=dsttype).reshape([m, n])
+                
+                print(f"Generated saturation golden data using NumPy fallback for {srctype.__name__} → {dsttype.__name__}")
             
             saturated.tofile("./golden_saturated.bin")
             truncated.tofile("./golden_truncated.bin")

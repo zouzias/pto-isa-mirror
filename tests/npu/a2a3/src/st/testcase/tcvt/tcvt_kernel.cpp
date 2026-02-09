@@ -163,8 +163,8 @@ __global__ AICORE void runTCVTSaturationTest(__gm__ T *outSaturated, __gm__ T *o
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID2);
 
     // Test 3: Default mode (no explicit saturation parameter)
-    // For fp16→uint8: should use SaturationMode::OFF
-    // For other conversions: should use SaturationMode::ON
+    // Uses type-based defaults: OFF for fp16→uint8/int8, fp32/fp16→int16, int64→int32, int32→int16
+    // All other conversions use ON
     TCVT(dstTileDefault, srcTile, RoundMode::CAST_TRUNC);
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID3);
