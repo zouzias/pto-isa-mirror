@@ -20,15 +20,19 @@ def gen_golden_data_trem(case_name, param):
 
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
+    if np.issubdtype(dtype, np.integer):
+        value_max = np.iinfo(dtype).max
+        value_min = np.iinfo(dtype).min
+    else:
+        value_max = np.finfo(dtype).max / 100
+        value_min = np.finfo(dtype).min / 100
+
     # Generate random input arrays
-    input1 = np.random.randint(1, 16383, size=h_valid * w_valid).astype(dtype)
-    input2 = np.random.randint(1, 16383, size=h_valid * w_valid).astype(dtype)
+    input1 = np.random.uniform(low=value_min, high=value_max, size=(h_valid, w_valid)).astype(dtype)
+    input2 = np.random.uniform(low=value_min, high=value_max, size=(h_valid, w_valid)).astype(dtype)
 
     # Perform the andbtraction
-    if dtype == np.float16 or dtype == np.float32:
-        golden = np.fmod(input1, input2)
-    else:
-        golden = input1 % input2
+    golden = input1 % input2
 
     # Apply valid region constraints
     output = np.zeros(h_valid * w_valid).astype(dtype)
@@ -41,7 +45,7 @@ def gen_golden_data_trem(case_name, param):
     return output, input1, input2, golden
 
 
-class TRemParams:
+class TremParams:
     def __init__(self, name, dtype, tile_row, tile_col, valid_row, valid_col):
         self.name = name
         self.dtype = dtype
@@ -60,15 +64,15 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TRemParams("TREMTest.case1", np.uint16, 64, 64, 64, 64),
-        TRemParams("TREMTest.case2", np.uint16, 64, 64, 63, 63),
-        TRemParams("TREMTest.case3", np.uint16, 1, 16384, 1, 16384),
-        TRemParams("TREMTest.case4", np.uint16, 2048, 16, 2048, 16),
-        TRemParams("TREMTest.case5", np.float32, 32, 32, 32, 32),
-        TRemParams("TREMTest.case6", np.uint32, 8, 8, 8, 8),
-        TRemParams("TREMTest.case7", np.float16, 32, 32, 31, 31),
-        TRemParams("TREMTest.case8", np.int16, 16, 16, 16, 16),
-        TRemParams("TREMTest.case9", np.int32, 8, 8, 8, 8),
+        TremParams("TREMTest.case1", np.uint16, 64, 64, 64, 64),
+        TremParams("TREMTest.case2", np.uint16, 64, 64, 63, 63),
+        TremParams("TREMTest.case3", np.uint16, 1, 16384, 1, 16384),
+        TremParams("TREMTest.case4", np.uint16, 2048, 16, 2048, 16),
+        TremParams("TREMTest.case5", np.float32, 32, 32, 32, 32),
+        TremParams("TREMTest.case6", np.uint32, 8, 8, 8, 8),
+        TremParams("TREMTest.case7", np.float16, 32, 32, 31, 31),
+        TremParams("TREMTest.case8", np.int16, 16, 16, 16, 16),
+        TremParams("TREMTest.case9", np.int32, 8, 8, 8, 8),
     ]
 
     for param in case_params_list:

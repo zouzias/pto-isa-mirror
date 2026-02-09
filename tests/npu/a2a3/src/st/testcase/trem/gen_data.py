@@ -24,15 +24,12 @@ def gen_golden_data_trem(param):
     h_valid, w_valid = param.valid_row, param.valid_col
 
     # Generate random input arrays
-    input1 = np.random.randint(1, 1000, size=[src0_tile_row, src0_tile_col]).astype(dtype)
+    input1 = np.random.randint(-1000, 1000, size=[src0_tile_row, src0_tile_col]).astype(dtype)
     input2 = np.random.randint(3, 100, size=[src1_tile_row, src1_tile_col]).astype(dtype)
 
     # Perform the operation
     golden = np.zeros([dst_tile_row, dst_tile_col]).astype(dtype)
-    if dtype in [np.float16, np.float32]:
-        golden[0:h_valid, 0:w_valid] = np.fmod(input1[0:h_valid, 0:w_valid], input2[0:h_valid, 0:w_valid]).astype(dtype)
-    else: # %
-        golden[0:h_valid, 0:w_valid] = np.mod(input1[0:h_valid, 0:w_valid], input2[0:h_valid, 0:w_valid]).astype(dtype)
+    golden[0:h_valid, 0:w_valid] = np.remainder(input1[0:h_valid, 0:w_valid], input2[0:h_valid, 0:w_valid]).astype(dtype)
 
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")

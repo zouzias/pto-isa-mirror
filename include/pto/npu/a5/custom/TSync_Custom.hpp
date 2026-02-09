@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -14,10 +14,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 #include <pto/common/utils.hpp>
 
+#define VEC_CORE_ID_OFFSET 16
+
 namespace pto {
 
 // Operation types for TSync - identifies the producer/consumer operation
-enum class SyncOpType : uint8_t {
+enum class SyncOpType : uint8_t
+{
     TSTORE_C2GM,  // Store (Cube core operation via PIPE_FIX) - GM path
     TSTORE_V2GM,  // Store (Vector core operation via PIPE_MTE3) - GM path
     TMOV_C2UB,    // TMOV from L0C to UB (Cube core operation via PIPE_FIX) - UB path
@@ -51,27 +54,27 @@ struct SyncTraits {
     static constexpr bool is_vec_to_cube_ub = (ProducerOp == SyncOpType::TINSERT_V2L1);
     // Unified Vec-to-Cube detection
     static constexpr bool is_vec_to_cube = is_vec_to_cube_gm || is_vec_to_cube_ub;
-    
+
     static_assert(ConsumerOp == SyncOpType::TLOAD, "Consumer operation must be TLOAD");
-    static_assert(is_cube_to_vec || is_vec_to_cube, 
+    static_assert(is_cube_to_vec || is_vec_to_cube,
                   "Producer must be TSTORE_C2GM, TMOV_C2UB (Cube) or TSTORE_V2GM, TINSERT_V2L1 (Vector)");
 };
 
 namespace detail {
-    template <int N>
-    struct FlagIDTag {
-        static constexpr int value = N;
-    };
-    
-    // Base counter starts at 0 (user IDs start from 0 to 12)
-    constexpr int kUserFlagIDStart = 0;
-    constexpr int kMaxFlagID = 12;
-    constexpr int kNumUserFlags = kMaxFlagID - kUserFlagIDStart + 1;  // 12 flags
-}
+template <int N>
+struct FlagIDTag {
+    static constexpr int value = N;
+};
+
+// Base counter starts at 0 (user IDs start from 0 to 12)
+constexpr int kUserFlagIDStart = 0;
+constexpr int kMaxFlagID = 12;
+constexpr int kNumUserFlags = kMaxFlagID - kUserFlagIDStart + 1; // 12 flags
+} // namespace detail
 
 // -----------------------------------------------------------------------------
 // TSync_Custom - Lightweight synchronization primitive for intra-core dependencies
-//  
+//
 // Supports both GM path (TSTORE->TLOAD) and UB path (TMOV->TLOAD, TINSERT->TLOAD)
 //
 // PIPE MAPPINGS:
@@ -89,7 +92,7 @@ namespace detail {
 //     - GM path (TSTORE->TLOAD): Cube sets PIPE_FIX, Vec waits PIPE_MTE2
 //     - UB path (TMOV->VecOps): Cube sets PIPE_FIX, Vec waits PIPE_V
 //     - Cube sets flag_id AND flag_id+16; Vec waits flag_id only
-//   
+//
 //   Vec -> Cube forward sync:
 //     - GM path (TSTORE->TLOAD): Vec sets PIPE_MTE3, Cube waits PIPE_MTE2
 //     - UB path (TINSERT->L1): Vec sets PIPE_MTE3, Cube waits PIPE_MTE1
@@ -109,38 +112,38 @@ struct TSync_Custom {
     static constexpr bool is_v2c = Traits::is_vec_to_cube;
     static constexpr bool is_v2c_gm = Traits::is_vec_to_cube_gm;
     static constexpr bool is_v2c_ub = Traits::is_vec_to_cube_ub;
-    
-    uint16_t flag_id;  // FFTS flag ID for cross-core synchronization
-    
+
+    uint16_t flag_id; // FFTS flag ID for cross-core synchronization
+
     // -----------------------------------------------------------------------------
     // Forward dependency: record (producer) and wait (consumer)
     // -----------------------------------------------------------------------------
 
     // -----------------------------------------------------------------------------
     // record - Producer signals that data is ready
-    // 
     // Cube producers: set BOTH flag_id AND flag_id + 16 (one for each Vec subblock)
     // Vec producers: set flag_id only (hardware maps to flag_id+16 for subblock 1)
     // -----------------------------------------------------------------------------
-    AICORE inline void record() const {
+    AICORE inline void record() const
+    {
         if constexpr (is_c2v) {
             // Cube -> Vec: Cube sets BOTH flags on PIPE_FIX
             set_intra_block(PIPE_FIX, flag_id);
-            set_intra_block(PIPE_FIX, flag_id + 16);
+            set_intra_block(PIPE_FIX, flag_id + VEC_CORE_ID_OFFSET);
         } else { // is_v2c (both gm and ub)
             // Vec -> Cube: Vec sets flag_id only on PIPE_MTE3
             // Each Vec subblock executes this; hardware maps subblock 1's flag to flag_id+16
             set_intra_block(PIPE_MTE3, flag_id);
         }
     }
-    
+
     // -----------------------------------------------------------------------------
     // wait - Consumer waits for data to be ready
-    // 
     // Vec consumers: wait on flag_id only (each subblock waits independently)
     // Cube consumers: wait on BOTH flag_id AND flag_id + 16
     // -----------------------------------------------------------------------------
-    AICORE inline void wait() const {
+    AICORE inline void wait() const
+    {
         if constexpr (is_c2v_gm) {
             // Cube -> Vec (GM path): Vec waits on PIPE_MTE2 (data loaded from GM)
             wait_intra_block(PIPE_MTE2, flag_id);
@@ -151,44 +154,44 @@ struct TSync_Custom {
         } else if constexpr (is_v2c_gm) {
             // Vec -> Cube (GM path): Cube waits on PIPE_MTE2, BOTH flags
             wait_intra_block(PIPE_MTE2, flag_id);
-            wait_intra_block(PIPE_MTE2, flag_id + 16);
+            wait_intra_block(PIPE_MTE2, flag_id + VEC_CORE_ID_OFFSET);
         } else { // is_v2c_ub
             // Vec -> Cube (UB path - TINSERT): Cube waits on PIPE_MTE1, BOTH flags
             wait_intra_block(PIPE_MTE1, flag_id);
-            wait_intra_block(PIPE_MTE1, flag_id + 16);
+            wait_intra_block(PIPE_MTE1, flag_id + VEC_CORE_ID_OFFSET);
         }
     }
     // -----------------------------------------------------------------------------
     // Backward dependency: allocate (producer) and free (consumer)
     // -----------------------------------------------------------------------------
-    
+
     // -----------------------------------------------------------------------------
     // allocate - Producer waits for buffer space to be available
-    //
     // Cube producers: wait on BOTH flag_id+1 AND flag_id+1+16 (Vec consumer signals)
     // Vec producers: wait on flag_id+1 only (Cube consumer signals both)
     // -----------------------------------------------------------------------------
-    AICORE inline void allocate() const {
+    AICORE inline void allocate() const
+    {
         if constexpr (is_c2v) {
             // Cube producer waits for Vec consumer to free buffer
             // Vec signals on flag_id+1 only, but Cube must wait on BOTH
             // (because Vec0 signals flag_id+1, Vec1 signals flag_id+1+16 from Cube's view)
             wait_intra_block(PIPE_FIX, flag_id + 1);
-            wait_intra_block(PIPE_FIX, flag_id + 1 + 16);
+            wait_intra_block(PIPE_FIX, flag_id + 1 + VEC_CORE_ID_OFFSET);
         } else { // is_v2c (both gm and ub)
             // Vec producer waits for Cube consumer to free buffer
             // Cube signals on BOTH, Vec waits on flag_id+1 only
             wait_intra_block(PIPE_MTE3, flag_id + 1);
         }
     }
-    
+
     // -----------------------------------------------------------------------------
     // free - Consumer signals that buffer space is available
-    //
     // Vec consumers: set flag_id+1 only (hardware maps to flag_id+1+16 for subblock 1)
     // Cube consumers: set BOTH flag_id+1 AND flag_id+1+16
     // -----------------------------------------------------------------------------
-    AICORE inline void free() const {
+    AICORE inline void free() const
+    {
         if constexpr (is_c2v_gm) {
             // Vec consumer frees buffer for Cube - signals on PIPE_MTE2, flag_id+1 only
             set_intra_block(PIPE_MTE2, flag_id + 1);
@@ -199,7 +202,7 @@ struct TSync_Custom {
         } else { // is_v2c (both gm and ub)
             // Cube consumer frees buffer for Vec - signals BOTH flags on PIPE_MTE1
             set_intra_block(PIPE_MTE1, flag_id + 1);
-            set_intra_block(PIPE_MTE1, flag_id + 1 + 16);
+            set_intra_block(PIPE_MTE1, flag_id + 1 + VEC_CORE_ID_OFFSET);
         }
     }
 };

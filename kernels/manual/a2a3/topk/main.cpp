@@ -18,7 +18,7 @@ template <typename T>
 void launchTopk(uint8_t *out, uint8_t *index, uint8_t *src, uint8_t *inIdx, void *stream);
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
-    int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4, int topk>
+          int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4, int topk>
 void Topk()
 {
     constexpr int rows = gWholeShape0 * gWholeShape1 * gWholeShape2 * gWholeShape3;
@@ -27,7 +27,7 @@ void Topk()
     using indexT = uint32_t;
     size_t inFileSize = rows * cols * sizeof(T);
     size_t inIdxSize = cols * sizeof(indexT);
-    constexpr int TYPE_COEF = sizeof(float)/sizeof(T);
+    constexpr int TYPE_COEF = sizeof(float) / sizeof(T);
     size_t outFileSize = valid_row * topk * sizeof(T);
     size_t indexFileSize = valid_row * topk * sizeof(indexT);
 
@@ -103,5 +103,10 @@ void Topk()
 
 int main()
 {
-    Topk<float, 1, 1, 1, 4800, 1024, 1, 1, 1, 4800, 1280, 1000>();
+    constexpr int gShape3 = 4800;
+    constexpr int gShape4 = 1024;
+    constexpr int gWholeShape3 = 4800;
+    constexpr int gWholeShape4 = 1280;
+    constexpr int topk = 1000;
+    Topk<float, 1, 1, 1, gShape3, gShape4, 1, 1, 1, gWholeShape3, gWholeShape4, topk>();
 }
