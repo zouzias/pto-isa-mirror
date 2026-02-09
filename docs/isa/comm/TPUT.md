@@ -21,8 +21,9 @@ PTO-AS form: see `docs/grammar/PTO-AS.md`.
 Synchronous form:
 
 ```text
-tput %dst_remote, %src_local, %ub_tile : (!pto.memref<...>, !pto.memref<...>, !pto.tile<...>)
+tput %dst_remote, %src_local : (!pto.memref<...>, !pto.memref<...>)
 ```
+Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
 
 ## C++ Intrinsic
 
@@ -120,4 +121,11 @@ TASSIGN(pongTile, tileUBBytes);  // Non-overlapping UB region
 
 // Overlaps TLOAD[i+1] with TSTORE[i] for better pipeline utilization
 comm::TPUT(dstG, srcG, pingTile, pongTile);
+```
+
+### Runtime Atomic Type
+
+```cpp
+// Select atomic type at runtime instead of compile-time template parameter
+comm::TPUT(dstG, srcG, stagingTile, AtomicType::AtomicAdd);
 ```

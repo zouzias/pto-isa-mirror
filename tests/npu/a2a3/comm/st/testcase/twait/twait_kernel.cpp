@@ -224,33 +224,8 @@ __global__ AICORE void TWaitMultiPhaseKernel(__gm__ int32_t *shmem_signal)
 
 bool RunTWaitBasicKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    // Initialize shmem TLS configuration
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    // Initialize shmem symmetric heap
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8780";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = 8ULL * 1024 * 1024;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8780", 8ULL * 1024 * 1024)) return false;
 
     // Allocate symmetric memory for signal
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -267,8 +242,8 @@ bool RunTWaitBasicKernel(int rank_id, int n_ranks, int n_devices, int first_devi
     ShmemBarrierAll();
 
     // Execute kernel
-    TWaitBasicKernel<<<1, nullptr, stream>>>(shmem_signal);
-    status = aclrtSynchronizeStream(stream);
+    TWaitBasicKernel<<<1, nullptr, ctx.stream>>>(shmem_signal);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -288,44 +263,14 @@ bool RunTWaitBasicKernel(int rank_id, int n_ranks, int n_devices, int first_devi
     }
 
     ShmemFree(shmem_signal);
-    ShmemFinalize();
 
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 bool RunTWaitCompareKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int32_t notifyValue)
 {
-    // Initialize shmem TLS configuration
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    // Initialize shmem symmetric heap
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8781";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = 8ULL * 1024 * 1024;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8781", 8ULL * 1024 * 1024)) return false;
 
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
     if (shmem_signal == nullptr) {
@@ -338,8 +283,8 @@ bool RunTWaitCompareKernel(int rank_id, int n_ranks, int n_devices, int first_de
 
     ShmemBarrierAll();
 
-    TWaitCompareKernel<<<1, nullptr, stream>>>(shmem_signal, notifyValue);
-    status = aclrtSynchronizeStream(stream);
+    TWaitCompareKernel<<<1, nullptr, ctx.stream>>>(shmem_signal, notifyValue);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -358,44 +303,14 @@ bool RunTWaitCompareKernel(int rank_id, int n_ranks, int n_devices, int first_de
     }
 
     ShmemFree(shmem_signal);
-    ShmemFinalize();
 
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 bool RunTWaitAtomicKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    // Initialize shmem TLS configuration
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    // Initialize shmem symmetric heap
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8782";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = 8ULL * 1024 * 1024;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8782", 8ULL * 1024 * 1024)) return false;
 
     int32_t *shmem_counter = (int32_t *)ShmemMalloc(sizeof(int32_t));
     if (shmem_counter == nullptr) {
@@ -410,8 +325,8 @@ bool RunTWaitAtomicKernel(int rank_id, int n_ranks, int n_devices, int first_dev
 
     constexpr int kAtomicIters = 50;
     const int threshold = (n_ranks - 1) * kAtomicIters;
-    TWaitAtomicKernel<<<1, nullptr, stream>>>(shmem_counter, threshold, kAtomicIters);
-    status = aclrtSynchronizeStream(stream);
+    TWaitAtomicKernel<<<1, nullptr, ctx.stream>>>(shmem_counter, threshold, kAtomicIters);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -430,43 +345,15 @@ bool RunTWaitAtomicKernel(int rank_id, int n_ranks, int n_devices, int first_dev
     }
 
     ShmemFree(shmem_counter);
-    ShmemFinalize();
 
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <int Rows, int Cols>
 bool RunTWaitMatrixKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8783";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = 8ULL * 1024 * 1024;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8783", 8ULL * 1024 * 1024)) return false;
 
     constexpr size_t total = Rows * Cols;
     int32_t *shmem_matrix = (int32_t *)ShmemMalloc(total * sizeof(int32_t));
@@ -480,8 +367,8 @@ bool RunTWaitMatrixKernel(int rank_id, int n_ranks, int n_devices, int first_dev
 
     ShmemBarrierAll();
 
-    TWaitMatrixKernel<Rows, Cols><<<1, nullptr, stream>>>(shmem_matrix);
-    status = aclrtSynchronizeStream(stream);
+    TWaitMatrixKernel<Rows, Cols><<<1, nullptr, ctx.stream>>>(shmem_matrix);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -499,42 +386,14 @@ bool RunTWaitMatrixKernel(int rank_id, int n_ranks, int n_devices, int first_dev
     }
 
     ShmemFree(shmem_matrix);
-    ShmemFinalize();
 
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 bool RunTWaitMultiPhaseKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8786";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = 8ULL * 1024 * 1024;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8786", 8ULL * 1024 * 1024)) return false;
 
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
     if (shmem_signal == nullptr) {
@@ -547,8 +406,8 @@ bool RunTWaitMultiPhaseKernel(int rank_id, int n_ranks, int n_devices, int first
 
     ShmemBarrierAll();
 
-    TWaitMultiPhaseKernel<<<1, nullptr, stream>>>(shmem_signal);
-    status = aclrtSynchronizeStream(stream);
+    TWaitMultiPhaseKernel<<<1, nullptr, ctx.stream>>>(shmem_signal);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -563,43 +422,15 @@ bool RunTWaitMultiPhaseKernel(int rank_id, int n_ranks, int n_devices, int first
     }
 
     ShmemFree(shmem_signal);
-    ShmemFinalize();
 
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <int FullCols, int SubRows, int SubCols>
 bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8787";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = 8ULL * 1024 * 1024;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8787", 8ULL * 1024 * 1024)) return false;
 
     constexpr size_t totalRows = 8;
     constexpr size_t total = totalRows * FullCols;
@@ -614,8 +445,8 @@ bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
 
     ShmemBarrierAll();
 
-    TWaitSubRegionKernel<FullCols, SubRows, SubCols><<<1, nullptr, stream>>>(shmem_matrix);
-    status = aclrtSynchronizeStream(stream);
+    TWaitSubRegionKernel<FullCols, SubRows, SubCols><<<1, nullptr, ctx.stream>>>(shmem_matrix);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -640,13 +471,8 @@ bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
     }
 
     ShmemFree(shmem_matrix);
-    ShmemFinalize();
 
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 // ============================================================================
@@ -655,142 +481,46 @@ bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
 
 bool RunTWaitBasic(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunTWaitBasicKernel(first_rank_id + r, n_ranks, n_devices, first_device_id);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunTWaitBasicKernel(rankId, n_ranks, n_devices, first_device_id);
+    });
 }
 
 bool RunTWaitCompare(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t notifyValue)
 {
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunTWaitCompareKernel(first_rank_id + r, n_ranks, n_devices, first_device_id, notifyValue);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunTWaitCompareKernel(rankId, n_ranks, n_devices, first_device_id, notifyValue);
+    });
 }
 
 bool RunTWaitAtomic(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunTWaitAtomicKernel(first_rank_id + r, n_ranks, n_devices, first_device_id);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunTWaitAtomicKernel(rankId, n_ranks, n_devices, first_device_id);
+    });
 }
 
 template <int Rows, int Cols>
 bool RunTWaitMatrix(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunTWaitMatrixKernel<Rows, Cols>(first_rank_id + r, n_ranks, n_devices, first_device_id);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunTWaitMatrixKernel<Rows, Cols>(rankId, n_ranks, n_devices, first_device_id);
+    });
 }
 
 bool RunTWaitMultiPhase(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunTWaitMultiPhaseKernel(first_rank_id + r, n_ranks, n_devices, first_device_id);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunTWaitMultiPhaseKernel(rankId, n_ranks, n_devices, first_device_id);
+    });
 }
 
 template <int FullCols, int SubRows, int SubCols>
 bool RunTWaitSubRegion(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunTWaitSubRegionKernel<FullCols, SubRows, SubCols>(first_rank_id + r, n_ranks, n_devices, first_device_id);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunTWaitSubRegionKernel<FullCols, SubRows, SubCols>(rankId, n_ranks, n_devices, first_device_id);
+    });
 }
 
 template bool RunTWaitMatrix<4, 8>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);

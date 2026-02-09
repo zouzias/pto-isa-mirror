@@ -168,8 +168,8 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 // Only the root needs to execute. Non-root ranks ensure source buffers are ready.
 // ============================================================================
 
-template <typename ParallelGroupT, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TGATHER(ParallelGroupT &parallelGroup, GlobalDstData &dstGlobalData, 
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, 
                              TileData &stagingTileData, WaitEvents&... events)
 {
     WaitAllEvents(events...);
@@ -178,12 +178,27 @@ PTO_INST RecordEvent TGATHER(ParallelGroupT &parallelGroup, GlobalDstData &dstGl
 }
 
 // ============================================================================
+// TGATHER (ping-pong): Gather with double buffering
+// Uses two staging tiles to overlap TLOAD (next chunk) with TSTORE (current chunk).
+// Only the root needs to execute.
+// ============================================================================
+
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, 
+                             TileData &pingTile, TileData &pongTile, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    ::pto::comm::TGATHER_IMPL(parallelGroup, dstGlobalData, pingTile, pongTile);
+    return {};
+}
+
+// ============================================================================
 // TSCATTER: Scatter operation - root distributes data to all ranks
 // Only the root needs to execute. Non-root ranks ensure destination buffers are allocated.
 // ============================================================================
 
-template <typename ParallelGroupT, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSCATTER(ParallelGroupT &parallelGroup, GlobalSrcData &srcGlobalData, 
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
                               TileData &stagingTileData, WaitEvents&... events)
 {
     WaitAllEvents(events...);
@@ -192,13 +207,28 @@ PTO_INST RecordEvent TSCATTER(ParallelGroupT &parallelGroup, GlobalSrcData &srcG
 }
 
 // ============================================================================
-// TBROADCAST: Broadcast data from current NPU (root) to all ranks
-// The calling NPU (parallelGroup.my_rank) is the root.
+// TSCATTER (ping-pong): Scatter with double buffering
+// Uses two staging tiles to overlap TLOAD (next chunk) with TSTORE (current chunk).
 // Only the root needs to execute.
 // ============================================================================
 
-template <typename ParallelGroupT, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TBROADCAST(ParallelGroupT &parallelGroup, GlobalSrcData &srcGlobalData, 
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
+                              TileData &pingTile, TileData &pongTile, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    ::pto::comm::TSCATTER_IMPL(parallelGroup, srcGlobalData, pingTile, pongTile);
+    return {};
+}
+
+// ============================================================================
+// TBROADCAST: Broadcast data from current NPU (root) to all ranks
+// The calling NPU (parallelGroup.GetRootIdx()) is the root.
+// Only the root needs to execute.
+// ============================================================================
+
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
                                 TileData &stagingTileData, WaitEvents&... events)
 {
     WaitAllEvents(events...);
@@ -207,12 +237,27 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupT &parallelGroup, GlobalSrcData &sr
 }
 
 // ============================================================================
+// TBROADCAST (ping-pong): Broadcast with double buffering
+// Uses two staging tiles to overlap TLOAD (next chunk) with TSTORE (current chunk).
+// Only the root needs to execute.
+// ============================================================================
+
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
+                                TileData &pingTile, TileData &pongTile, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    TBROADCAST_IMPL(parallelGroup, srcGlobalData, pingTile, pongTile);
+    return {};
+}
+
+// ============================================================================
 // TREDUCE: Reduce operation - root gathers and reduces data from all ranks
 // Only the root needs to execute. Non-root ranks ensure source buffers are ready.
 // ============================================================================
 
-template <typename ParallelGroupT, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREDUCE(ParallelGroupT &parallelGroup, GlobalDstData &dstGlobalData, 
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, 
                              TileData &accTileData, TileData &recvTileData, 
                              ReduceOp op, WaitEvents&... events)
 {
@@ -222,17 +267,17 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupT &parallelGroup, GlobalDstData &dstGl
 }
 
 // ============================================================================
-// TALLREDUCE: Reduce operation with ping-pong double buffering
+// TREDUCE (ping-pong): Reduce operation with ping-pong double buffering
 // Only the root needs to execute. Non-root ranks ensure source buffers are ready.
 // ============================================================================
 
-template <typename ParallelGroupT, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREDUCE_PINGPONG(ParallelGroupT &parallelGroup, GlobalDstData &dstGlobalData, 
-                                     TileData &accTileData, TileData &pingTileData, TileData &pongTileData, 
-                                     ReduceOp op, WaitEvents&... events)
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, 
+                             TileData &accTileData, TileData &pingTileData, TileData &pongTileData, 
+                             ReduceOp op, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TREDUCE_PINGPONG_IMPL(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
+    TREDUCE_IMPL(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
     return {};
 }
 

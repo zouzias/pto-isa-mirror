@@ -12,16 +12,55 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-// Declared in tscatter_kernel.cpp
+// Declared in tscatter_kernel.cpp — basic tests
 template <typename T, size_t count>
 bool RunScatter(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 
+// Declared in tscatter_kernel.cpp — large shape (chunked) tests
+bool RunScatterLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunScatterLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunScatterLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
+// Declared in tscatter_kernel.cpp — ping-pong tests
+bool RunScatterPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunScatterPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
 // ============================================================================
-// TSCATTER Tests - Root scatters data to all ranks
+// TSCATTER Tests - Basic: Root scatters data to all ranks
 // ============================================================================
 TEST(TScatter, FloatSmall) { ASSERT_TRUE((RunScatter<float, 256>(4, 4, 0, 0))); }
 TEST(TScatter, Int32Large) { ASSERT_TRUE((RunScatter<int32_t, 4096>(2, 2, 0, 0))); }
 TEST(TScatter, Uint8Small) { ASSERT_TRUE((RunScatter<uint8_t, 512>(2, 2, 0, 0))); }
+TEST(TScatter, SingleRank) { ASSERT_TRUE((RunScatter<float, 256>(1, 1, 0, 0))); }
+
+// ============================================================================
+// TSCATTER Tests - Large Shape (chunked): per-rank data > single UB tile
+// ============================================================================
+TEST(TScatterLargeShape, Int32_128x32_tile16_2ranks) {
+    ASSERT_TRUE(RunScatterLargeShape_Int32_128x32_tile16(2, 2, 0, 0));
+}
+TEST(TScatterLargeShape, Int32_128x32_tile16_4ranks) {
+    ASSERT_TRUE(RunScatterLargeShape_Int32_128x32_tile16(4, 4, 0, 0));
+}
+TEST(TScatterLargeShape, Float_256x64_tile32_2ranks) {
+    ASSERT_TRUE(RunScatterLargeShape_Float_256x64_tile32(2, 2, 0, 0));
+}
+TEST(TScatterLargeShape, Int32_512x32_tile64_2ranks) {
+    ASSERT_TRUE(RunScatterLargeShape_Int32_512x32_tile64(2, 2, 0, 0));
+}
+
+// ============================================================================
+// TSCATTER Tests - PingPong: double-buffered chunked TSCATTER
+// ============================================================================
+TEST(TScatterPingPong, Int32_128x32_tile16_2ranks) {
+    ASSERT_TRUE(RunScatterPingPong_Int32_128x32_tile16(2, 2, 0, 0));
+}
+TEST(TScatterPingPong, Int32_128x32_tile16_4ranks) {
+    ASSERT_TRUE(RunScatterPingPong_Int32_128x32_tile16(4, 4, 0, 0));
+}
+TEST(TScatterPingPong, Float_256x64_tile32_2ranks) {
+    ASSERT_TRUE(RunScatterPingPong_Float_256x64_tile32(2, 2, 0, 0));
+}
 
 int main(int argc, char **argv)
 {

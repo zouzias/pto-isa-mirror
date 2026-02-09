@@ -134,33 +134,8 @@ __global__ AICORE void TNotifyRuntimeOpKernel(__gm__ int32_t *shmem_counter, int
 
 bool RunNotifyAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    // Initialize shmem TLS configuration
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    // Initialize shmem symmetric heap
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8771";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = 8ULL * 1024 * 1024;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8785", 8ULL * 1024 * 1024)) return false;
 
     // Allocate symmetric memory as counter
     int32_t *shmem_counter = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -177,8 +152,8 @@ bool RunNotifyAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first
     ShmemBarrierAll();
 
     // Execute kernel
-    TNotifyAtomicAddKernel<<<1, nullptr, stream>>>(shmem_counter, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    TNotifyAtomicAddKernel<<<1, nullptr, ctx.stream>>>(shmem_counter, n_ranks);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Host-side global synchronization to ensure all ranks' kernels have completed
     ShmemBarrierAll();
@@ -205,44 +180,14 @@ bool RunNotifyAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first
     }
 
     ShmemFree(shmem_counter);
-    ShmemFinalize();
 
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 bool RunNotifySetKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    // Initialize shmem TLS configuration
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    // Initialize shmem symmetric heap
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8772";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = 8ULL * 1024 * 1024;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8786", 8ULL * 1024 * 1024)) return false;
 
     // Allocate symmetric memory as signal
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -259,8 +204,8 @@ bool RunNotifySetKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     ShmemBarrierAll();
 
     // Execute kernel
-    TNotifySetKernel<<<1, nullptr, stream>>>(shmem_signal, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    TNotifySetKernel<<<1, nullptr, ctx.stream>>>(shmem_signal, n_ranks);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Host-side global synchronization to ensure all ranks' kernels have completed
     ShmemBarrierAll();
@@ -288,47 +233,19 @@ bool RunNotifySetKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 #endif
 
     ShmemFree(shmem_signal);
-    ShmemFinalize();
 
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <size_t numSlots>
 bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    // Initialize shmem TLS configuration
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    // Initialize shmem symmetric heap
-    ShmemEnv env;
     // Use different ports to avoid conflicts
     char ipPort[64];
-    snprintf(ipPort, sizeof(ipPort), "tcp://127.0.0.1:%d", 8773 + static_cast<int>(numSlots));
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ipPort;
-    env.heapBytes = 8ULL * 1024 * 1024;
+    snprintf(ipPort, sizeof(ipPort), "tcp://127.0.0.1:%d", 8787 + static_cast<int>(numSlots));
 
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, ipPort, 8ULL * 1024 * 1024)) return false;
 
     // Allocate symmetric memory as scoreboard
     int32_t *shmem_scoreboard = (int32_t *)ShmemMalloc(numSlots * sizeof(int32_t));
@@ -345,8 +262,8 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
     ShmemBarrierAll();
 
     // Execute kernel
-    TNotifyScoreboardKernel<numSlots><<<1, nullptr, stream>>>(shmem_scoreboard, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    TNotifyScoreboardKernel<numSlots><<<1, nullptr, ctx.stream>>>(shmem_scoreboard, n_ranks);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Host-side global synchronization to ensure all ranks' kernels have completed
     ShmemBarrierAll();
@@ -387,44 +304,14 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
     }
 
     ShmemFree(shmem_scoreboard);
-    ShmemFinalize();
 
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 bool RunNotifyRuntimeOpKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    // Initialize shmem TLS configuration
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    // Initialize shmem symmetric heap
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8790";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = 8ULL * 1024 * 1024;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8790", 8ULL * 1024 * 1024)) return false;
 
     // Allocate symmetric memory as counter
     int32_t *shmem_counter = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -441,8 +328,8 @@ bool RunNotifyRuntimeOpKernel(int rank_id, int n_ranks, int n_devices, int first
     ShmemBarrierAll();
 
     // Execute kernel
-    TNotifyRuntimeOpKernel<<<1, nullptr, stream>>>(shmem_counter, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    TNotifyRuntimeOpKernel<<<1, nullptr, ctx.stream>>>(shmem_counter, n_ranks);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Host-side global synchronization
     ShmemBarrierAll();
@@ -472,13 +359,8 @@ bool RunNotifyRuntimeOpKernel(int rank_id, int n_ranks, int n_devices, int first
     }
 
     ShmemFree(shmem_counter);
-    ShmemFinalize();
 
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 // ============================================================================
@@ -487,95 +369,31 @@ bool RunNotifyRuntimeOpKernel(int rank_id, int n_ranks, int n_devices, int first
 
 bool RunNotifyAtomicAdd(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunNotifyAtomicAddKernel(first_rank_id + r, n_ranks, n_devices, first_device_id);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunNotifyAtomicAddKernel(rankId, n_ranks, n_devices, first_device_id);
+    });
 }
 
 bool RunNotifySet(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunNotifySetKernel(first_rank_id + r, n_ranks, n_devices, first_device_id);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunNotifySetKernel(rankId, n_ranks, n_devices, first_device_id);
+    });
 }
 
 template <size_t numSlots>
 bool RunNotifyScoreboard(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunNotifyScoreboardKernel<numSlots>(first_rank_id + r, n_ranks, n_devices, first_device_id);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunNotifyScoreboardKernel<numSlots>(rankId, n_ranks, n_devices, first_device_id);
+    });
 }
 
 bool RunNotifyRuntimeOp(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunNotifyRuntimeOpKernel(first_rank_id + r, n_ranks, n_devices, first_device_id);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunNotifyRuntimeOpKernel(rankId, n_ranks, n_devices, first_device_id);
+    });
 }
 
 // Explicit instantiations

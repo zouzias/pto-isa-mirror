@@ -21,8 +21,9 @@ PTO-AS form: see `docs/grammar/PTO-AS.md`.
 Synchronous form:
 
 ```text
-tget %dst_local, %src_remote, %ub_tile : (!pto.memref<...>, !pto.memref<...>, !pto.tile<...>)
+tget %dst_local, %src_remote : (!pto.memref<...>, !pto.memref<...>)
 ```
+Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
 
 ## C++ Intrinsic
 

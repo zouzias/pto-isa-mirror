@@ -12,15 +12,26 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-// Declared in treduce_kernel.cpp
+// Declared in treduce_kernel.cpp — basic (small tile) tests
 bool RunReduceFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 bool RunReduceInt32_4096_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 bool RunReduceInt32_512_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 bool RunReduceInt32_256_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 bool RunReduceInt32_256_Min(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 
+// Declared in treduce_kernel.cpp — large shape chunked tests
+bool RunReduceLargeShape_Int32_128x32_tile16_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunReduceLargeShape_Float_256x64_tile32_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunReduceLargeShape_Int32_128x32_tile16_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunReduceLargeShape_Int32_512x32_tile64_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
+// Declared in treduce_kernel.cpp — ping-pong tests
+bool RunReducePingPong_Int32_128x32_tile16_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunReducePingPong_Float_256x64_tile32_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunReducePingPong_Int32_128x32_tile16_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
 // ============================================================================
-// TREDUCE Tests - Reduce data from all ranks to root
+// TREDUCE Tests - Basic (data fits in single UB Tile)
 // ============================================================================
 TEST(TReduce, FloatSmall_Sum) { ASSERT_TRUE((RunReduceFloat256Sum(4, 4, 0, 0))); }
 TEST(TReduce, FloatSmall_Sum_8Ranks) { ASSERT_TRUE((RunReduceFloat256Sum(8, 8, 0, 0))); }
@@ -32,6 +43,59 @@ TEST(TReduce, Int32Small_Max) { ASSERT_TRUE((RunReduceInt32_256_Max(2, 2, 0, 0))
 TEST(TReduce, Int32Small_Max_8Ranks) { ASSERT_TRUE((RunReduceInt32_256_Max(8, 8, 0, 0))); }
 TEST(TReduce, Int32Small_Min) { ASSERT_TRUE((RunReduceInt32_256_Min(2, 2, 0, 0))); }
 TEST(TReduce, Int32Small_Min_8Ranks) { ASSERT_TRUE((RunReduceInt32_256_Min(8, 8, 0, 0))); }
+TEST(TReduce, SingleRank_Sum) { ASSERT_TRUE((RunReduceFloat256Sum(1, 1, 0, 0))); }
+
+// ============================================================================
+// TREDUCE Tests - Large Shape Chunked (GlobalTensor > UB Tile, auto-chunked)
+// ============================================================================
+// int32: 128x32, tile 16 rows → 8 chunks, Sum, 2 ranks
+TEST(TReduce, LargeShape_Int32_128x32_tile16_Sum) {
+    ASSERT_TRUE((RunReduceLargeShape_Int32_128x32_tile16_Sum(2, 2, 0, 0)));
+}
+// int32: 128x32, tile 16 rows → 8 chunks, Sum, 4 ranks
+TEST(TReduce, LargeShape_Int32_128x32_tile16_Sum_4Ranks) {
+    ASSERT_TRUE((RunReduceLargeShape_Int32_128x32_tile16_Sum(4, 4, 0, 0)));
+}
+// float: 256x64, tile 32 rows → 8 chunks, Sum, 2 ranks
+TEST(TReduce, LargeShape_Float_256x64_tile32_Sum) {
+    ASSERT_TRUE((RunReduceLargeShape_Float_256x64_tile32_Sum(2, 2, 0, 0)));
+}
+// int32: 128x32, tile 16 rows → 8 chunks, Max, 2 ranks
+TEST(TReduce, LargeShape_Int32_128x32_tile16_Max) {
+    ASSERT_TRUE((RunReduceLargeShape_Int32_128x32_tile16_Max(2, 2, 0, 0)));
+}
+// int32: 512x32, tile 64 rows → 8 chunks, Sum, 2 ranks (larger data)
+TEST(TReduce, LargeShape_Int32_512x32_tile64_Sum) {
+    ASSERT_TRUE((RunReduceLargeShape_Int32_512x32_tile64_Sum(2, 2, 0, 0)));
+}
+// int32: 512x32, tile 64 rows → 8 chunks, Sum, 8 ranks
+TEST(TReduce, LargeShape_Int32_512x32_tile64_Sum_8Ranks) {
+    ASSERT_TRUE((RunReduceLargeShape_Int32_512x32_tile64_Sum(8, 8, 0, 0)));
+}
+
+// ============================================================================
+// TREDUCE Tests - Ping-Pong Double Buffering (3 UB Tiles: acc + ping + pong)
+// ============================================================================
+// int32: 128x32, tile 16 rows → 8 chunks, Sum, 2 ranks
+TEST(TReduce, PingPong_Int32_128x32_tile16_Sum) {
+    ASSERT_TRUE((RunReducePingPong_Int32_128x32_tile16_Sum(2, 2, 0, 0)));
+}
+// int32: 128x32, tile 16 rows → 8 chunks, Sum, 4 ranks
+TEST(TReduce, PingPong_Int32_128x32_tile16_Sum_4Ranks) {
+    ASSERT_TRUE((RunReducePingPong_Int32_128x32_tile16_Sum(4, 4, 0, 0)));
+}
+// float: 256x64, tile 32 rows → 8 chunks, Sum, 2 ranks
+TEST(TReduce, PingPong_Float_256x64_tile32_Sum) {
+    ASSERT_TRUE((RunReducePingPong_Float_256x64_tile32_Sum(2, 2, 0, 0)));
+}
+// int32: 128x32, tile 16 rows → 8 chunks, Max, 2 ranks
+TEST(TReduce, PingPong_Int32_128x32_tile16_Max) {
+    ASSERT_TRUE((RunReducePingPong_Int32_128x32_tile16_Max(2, 2, 0, 0)));
+}
+// float: 256x64, tile 32 rows → 8 chunks, Sum, 8 ranks
+TEST(TReduce, PingPong_Float_256x64_tile32_Sum_8Ranks) {
+    ASSERT_TRUE((RunReducePingPong_Float_256x64_tile32_Sum(8, 8, 0, 0)));
+}
 
 int main(int argc, char **argv)
 {

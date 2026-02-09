@@ -37,13 +37,13 @@ struct ParallelGroup {
     
     GlobalData *tensors {nullptr};  // Points to external array of GlobalData objects
     int nranks {0};
-    int my_rank {-1};
+    int rootIdx {-1};
 
     constexpr ParallelGroup() = default;
     
     // Constructor: takes array of GlobalData objects
-    AICORE constexpr ParallelGroup(GlobalData *tensorArray, int size, int rank_id) 
-        : tensors(tensorArray), nranks(size), my_rank(rank_id) {}
+    AICORE constexpr ParallelGroup(GlobalData *tensorArray, int size, int rootIdx) 
+        : tensors(tensorArray), nranks(size), rootIdx(rootIdx) {}
 
     // Factory function (recommended)
     AICORE static constexpr ParallelGroup Create(GlobalData *tensorArray, int size, int rank_id) {
@@ -53,7 +53,7 @@ struct ParallelGroup {
     AICORE constexpr int size() const { return nranks; }
     AICORE constexpr bool empty() const { return nranks == 0; }
 
-    AICORE constexpr int GetRank() const { return my_rank; }
+    AICORE constexpr int GetRootIdx() const { return rootIdx; }
     AICORE constexpr int GetSize() const { return nranks; }
 
     AICORE constexpr GlobalData &operator[](int teamRank) { return tensors[teamRank]; }

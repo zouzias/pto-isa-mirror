@@ -2,35 +2,45 @@
 
 ## Introduction
 
-Scatter operation: distribute different chunks of data from the calling NPU (root) to multiple ranks in the parallel group. This is the inverse of `TGATHER` (root gather).
+Scatter operation: the calling NPU (root) distributes data to all ranks in the parallel group by splitting the local source tensor along **DIM_3** (row dimension). This is the inverse of `TGATHER`.
 
 > **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
 
 Only the root needs to execute `TSCATTER`. Non-root ranks only need to ensure their destination buffers are allocated and writable for the duration of the operation.
 
+**Large Tile Support**: When the per-rank data exceeds the UB tile capacity in rows and/or columns, the transfer is automatically chunked via 2D sliding.
+
 ## Math Interpretation
 
-After the operation, each remote NPU receives its portion:
+The local source tensor has shape $(D_0, D_1, D_2, N \times H, W)$, where $N$ is the number of ranks and each rank receives $H$ rows. After the operation:
 
-$$ \mathrm{dst}^{(r)}_{i,j} = \mathrm{src}^{\mathrm{local}}[\text{offset}(r) + i, j] \quad \forall r \in [0, N) $$
-
-where $N$ is the number of ranks and $\text{offset}(r)$ is the starting position for rank $r$'s chunk in the source data.
+$$\mathrm{dst}^{(r)}_{d_0, d_1, d_2,\; i,\; j} = \mathrm{src}^{\mathrm{local}}_{d_0, d_1, d_2,\; r \cdot H + i,\; j} \quad \forall\, r \in [0, N),\; i \in [0, H),\; j \in [0, W)$$
 
 ## Assembly Syntax
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
+Synchronous form:
+
 ```text
-tscatter %group, %src, %ub_tile
+tscatter %group, %src : (!pto.group<...>, !pto.memref<...>)
 ```
+Lowering introduces UB staging tile(s) for the GM→UB→GM data path; the C++ intrinsic requires explicit `stagingTileData` (or `pingTile` / `pongTile`) operand(s).
 
 ## C++ Intrinsic
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
+// Basic scatter (single staging tile)
 template <typename ParallelGroup, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobalData, TileData &stagingTileData, WaitEvents&... events);
+PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobalData,
+                              TileData &stagingTileData, WaitEvents&... events);
+
+// Ping-pong scatter (double buffering with two staging tiles)
+template <typename ParallelGroup, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobalData,
+                              TileData &pingTile, TileData &pongTile, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -39,15 +49,21 @@ PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGl
   - `ParallelGroup::value_type::RawDType` must equal `GlobalSrcData::RawDType`.
   - `TileData::DType` must equal `GlobalSrcData::RawDType`.
 - **Memory constraints**:
-  - `srcGlobalData` must point to local memory (current NPU) and be large enough to hold data for all ranks.
-  - `stagingTileData` must be pre-allocated in UB.
+  - `srcGlobalData` must point to local memory (current NPU) and be large enough to hold data for all ranks. Specifically, `srcGlobalData.GetShape(DIM_3)` must be $\geq N \times H$ where $H$ is each rank's `GetShape(DIM_3)`.
+  - `stagingTileData` (or `pingTile` / `pongTile`) must be pre-allocated in UB.
 - **ParallelGroup constraints**:
   - `parallelGroup.tensors[r]` must refer to rank `r`'s destination buffer (remote GM as seen by the root).
-  - `parallelGroup.my_rank` identifies the calling NPU as the scatter root.
+  - `parallelGroup.GetRootIdx()` identifies the calling NPU as the scatter root.
+  - All destination tensors are assumed to have the same shape and strides.
+- **Chunked mode constraints** (when per-rank data exceeds a single UB tile):
+  - If `TileData` has static `ValidRow`, `GetShape(DIM_3)` of each rank's destination must be divisible by `ValidRow`. Use a Tile with `DYNAMIC` ValidRow for partial row support.
+  - If `TileData` has static `ValidCol`, `GetShape(DIM_4)` must be divisible by `ValidCol`. Use a Tile with `DYNAMIC` ValidCol for partial column support.
 
 ## Examples
 
-### Basic Scatter
+### Basic Scatter (Single Row Per Rank)
+
+Root has `NRANKS` rows; each rank receives one row of `CHUNK_SIZE` elements.
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -62,7 +78,6 @@ void scatter(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
     using GSource = GlobalTensor<T, Shape<1,1,1,NRANKS,CHUNK_SIZE>, 
                                  BaseShape2D<T, NRANKS, CHUNK_SIZE, Layout::ND>, Layout::ND>;
 
-    // Stack-allocated tensors (no memory leak)
     GChunk tensors[NRANKS];
     for (int i = 0; i < NRANKS; ++i) {
         tensors[i] = GChunk(group_addrs[i]);
@@ -73,5 +88,69 @@ void scatter(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
     TileT stagingTile;
     
     comm::TSCATTER(group, srcG, stagingTile);
+}
+```
+
+### Large Tile Scatter (Multi-Row Per Rank, Auto-Chunked)
+
+Root has `NRANKS * ROWS × COLS` data. Each rank receives `ROWS × COLS`, split along DIM_3.
+The UB tile only holds `TILE_ROWS × COLS` — the implementation automatically chunks the transfer.
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+
+using namespace pto;
+
+template <typename T, int ROWS, int COLS, int TILE_ROWS, int NRANKS>
+void scatter_large(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
+    using TileT = Tile<TileType::Vec, T, TILE_ROWS, COLS, BLayout::RowMajor, -1, -1>;
+    using GPerRank = GlobalTensor<T, Shape<1,1,1,ROWS,COLS>,
+                                  BaseShape2D<T, ROWS, COLS, Layout::ND>, Layout::ND>;
+    using GSource = GlobalTensor<T, Shape<1,1,1,NRANKS*ROWS,COLS>,
+                                  BaseShape2D<T, NRANKS*ROWS, COLS, Layout::ND>, Layout::ND>;
+
+    GPerRank tensors[NRANKS];
+    for (int i = 0; i < NRANKS; ++i) {
+        tensors[i] = GPerRank(group_addrs[i]);
+    }
+
+    comm::ParallelGroup<GPerRank> group(tensors, NRANKS, my_rank);
+    GSource srcG(local_data);
+    TileT stagingTile(TILE_ROWS, COLS);
+
+    // Each rank receives ROWS rows; implementation auto-chunks in tiles of TILE_ROWS.
+    comm::TSCATTER(group, srcG, stagingTile);
+}
+```
+
+### Ping-Pong Scatter (Double Buffering)
+
+Uses two UB tiles to overlap TLOAD of the next chunk (MTE2) with TSTORE of the current chunk (MTE3).
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+
+using namespace pto;
+
+template <typename T, int ROWS, int COLS, int TILE_ROWS, int NRANKS>
+void scatter_pingpong(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
+    using TileT = Tile<TileType::Vec, T, TILE_ROWS, COLS, BLayout::RowMajor, -1, -1>;
+    using GPerRank = GlobalTensor<T, Shape<1,1,1,ROWS,COLS>,
+                                  BaseShape2D<T, ROWS, COLS, Layout::ND>, Layout::ND>;
+    using GSource = GlobalTensor<T, Shape<1,1,1,NRANKS*ROWS,COLS>,
+                                  BaseShape2D<T, NRANKS*ROWS, COLS, Layout::ND>, Layout::ND>;
+
+    GPerRank tensors[NRANKS];
+    for (int i = 0; i < NRANKS; ++i) {
+        tensors[i] = GPerRank(group_addrs[i]);
+    }
+
+    comm::ParallelGroup<GPerRank> group(tensors, NRANKS, my_rank);
+    GSource srcG(local_data);
+    TileT pingTile(TILE_ROWS, COLS);
+    TileT pongTile(TILE_ROWS, COLS);
+
+    // Ping-pong: overlaps TLOAD and TSTORE for better throughput
+    comm::TSCATTER(group, srcG, pingTile, pongTile);
 }
 ```

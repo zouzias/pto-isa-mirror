@@ -24,7 +24,6 @@ This directory contains the per-instruction reference for the PTO Communication 
 
 ## Collective Communication
 
-> **Note**: Collective communication instructions may be offloaded to dedicated collective communication hardware (e.g., CCU) in future implementations. The ISA interface remains stable regardless of the underlying execution engine.
 
 - `TGATHER`: `docs/isa/comm/TGATHER.md` - Gather data from all ranks
 - `TSCATTER`: `docs/isa/comm/TSCATTER.md` - Scatter data to all ranks
@@ -39,8 +38,8 @@ DMA engine selection for `TPUT_ASYNC` / `TGET_ASYNC`:
 
 | Value | Description |
 |-------|-------------|
-| `DmaEngine::SDMA` | System DMA, supports 2D transfer|
-| `DmaEngine::URMA` | A5 URMA using Unified Bus, supports 1D transfer|
+| `DmaEngine::SDMA` | A2/A3/A5 System DMA|
+| `DmaEngine::URMA` | A5 URMA using Unified Bus|
 
 ### NotifyOp
 
@@ -93,9 +92,9 @@ struct ParallelGroup {
     // depending on the collective instruction.
     GlobalData *tensors;
     int nranks;   // Number of ranks
-    int my_rank;  // Current NPU's rank
+    int rootIdx;  // Root NPU's rank index
     
     // Factory function (recommended): build from an existing tensor array.
-    static ParallelGroup Create(GlobalData *tensors, int nranks, int my_rank);
+    static ParallelGroup Create(GlobalData *tensors, int nranks, int rootIdx);
 };
 ```

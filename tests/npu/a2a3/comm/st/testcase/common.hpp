@@ -249,3 +249,144 @@ AICORE inline void ShmemDeviceQuiet()
 {
     aclshmem_quiet();
 }
+
+// ============================================================================
+// TestContext: RAII-style ACL + Shmem initialization / teardown helper
+//
+// Usage:
+//   TestContext ctx;
+//   if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, "tcp://...")) return false;
+//   // ... test-specific logic ...
+//   return ctx.Finalize() && is_ok;
+// ============================================================================
+struct TestContext {
+    int32_t deviceId {-1};
+    aclrtStream stream {nullptr};
+    int aclStatus {0};
+
+    /// Initialize ACL runtime + shmem symmetric heap.
+    /// @param uid  Optional ShmemUniqueId pointer (nullptr = use default).
+    bool Init(int rankId, int nRanks, int nDevices, int firstDeviceId,
+              const char *ipPort, uint64_t heapBytes = 1024ULL * 1024 * 1024,
+              const ShmemUniqueId *uid = nullptr)
+    {
+        int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
+        if (ret != 0) {
+            std::cerr << "[ERROR] Failed to init shmem tls\n";
+            return false;
+        }
+        if (nDevices <= 0 || nRanks <= 0) {
+            std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
+            return false;
+        }
+        deviceId = rankId % nDevices + firstDeviceId;
+
+        aclStatus |= aclInit(nullptr);
+        aclStatus |= aclrtSetDevice(deviceId);
+        aclStatus |= aclrtCreateStream(&stream);
+
+        ShmemEnv env;
+        env.rank = rankId;
+        env.size = nRanks;
+        env.ipPort = ipPort;
+        env.heapBytes = heapBytes;
+
+        bool shmemOk = (uid != nullptr)
+            ? ShmemInitFromEnvWithUniqueId(env, uid)
+            : ShmemInitFromEnv(env);
+        if (!shmemOk) {
+            std::cerr << "[ERROR] ShmemInit failed!" << std::endl;
+            return false;
+        }
+        return true;
+    }
+
+    /// Teardown shmem + ACL runtime.  Returns true when all ACL calls succeeded.
+    bool Finalize()
+    {
+        ShmemFinalize();
+        aclStatus |= aclrtDestroyStream(stream);
+        aclStatus |= aclrtResetDevice(deviceId);
+        aclStatus |= aclFinalize();
+        return (aclStatus == 0);
+    }
+};
+
+// ============================================================================
+// ForkAndRun: Fork one child process per rank, run perRankFn, collect results.
+//
+// perRankFn signature: bool(int rankId)
+// ============================================================================
+#include <sys/wait.h>
+#include <unistd.h>
+#include <vector>
+
+template <typename Func>
+inline bool ForkAndRun(int nRanks, int firstRankId, Func &&perRankFn)
+{
+    std::vector<pid_t> pids;
+    for (int r = 0; r < nRanks; ++r) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            const bool ok = perRankFn(firstRankId + r);
+            _exit(ok ? 0 : 1);
+        } else if (pid > 0) {
+            pids.push_back(pid);
+        } else {
+            std::cerr << "[ERROR] fork() failed for rank " << r << std::endl;
+            return false;
+        }
+    }
+    bool success = true;
+    for (pid_t p : pids) {
+        int status = 0;
+        waitpid(p, &status, 0);
+        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) {
+            success = false;
+        }
+    }
+    return success;
+}
+
+// ============================================================================
+// ForkAndRunWithUniqueId: Same as ForkAndRun but generates a ShmemUniqueId
+// before forking and passes it to each child.
+//
+// perRankFn signature: bool(int rankId, const ShmemUniqueId *uid)
+// ============================================================================
+template <typename Func>
+inline bool ForkAndRunWithUniqueId(int nRanks, int firstRankId, Func &&perRankFn)
+{
+#if defined(CANN_SHMEM)
+    ShmemUniqueId uid;
+    ShmemUniqueId *uidPtr = nullptr;
+    if (aclshmemx_get_uniqueid(&uid) == 0) {
+        uidPtr = &uid;
+    }
+#else
+    ShmemUniqueId *uidPtr = nullptr;
+#endif
+
+    std::vector<pid_t> pids;
+    for (int r = 0; r < nRanks; ++r) {
+        pid_t pid = fork();
+        if (pid == 0) {
+            const bool ok = perRankFn(firstRankId + r, uidPtr);
+            _exit(ok ? 0 : 1);
+        } else if (pid > 0) {
+            pids.push_back(pid);
+        } else {
+            std::cerr << "[ERROR] fork() failed for rank " << r << std::endl;
+            return false;
+        }
+    }
+    bool success = true;
+    for (pid_t p : pids) {
+        int status = 0;
+        waitpid(p, &status, 0);
+        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) {
+            success = false;
+        }
+    }
+    return success;
+}

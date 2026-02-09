@@ -12,16 +12,55 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-// Declared in tgather_kernel.cpp
+// Declared in tgather_kernel.cpp — basic tests
 template <typename T, size_t count>
 bool RunGather(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 
+// Declared in tgather_kernel.cpp — large shape (chunked) tests
+bool RunGatherLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunGatherLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunGatherLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
+// Declared in tgather_kernel.cpp — ping-pong tests
+bool RunGatherPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunGatherPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
 // ============================================================================
-// TGATHER Tests - Gather data from all ranks to root
+// TGATHER Tests - Basic: Gather data from all ranks to root
 // ============================================================================
 TEST(TGather, FloatSmall) { ASSERT_TRUE((RunGather<float, 256>(4, 4, 0, 0))); }
 TEST(TGather, Int32Large) { ASSERT_TRUE((RunGather<int32_t, 4096>(2, 2, 0, 0))); }
 TEST(TGather, Uint8Small) { ASSERT_TRUE((RunGather<uint8_t, 512>(2, 2, 0, 0))); }
+TEST(TGather, SingleRank) { ASSERT_TRUE((RunGather<float, 256>(1, 1, 0, 0))); }
+
+// ============================================================================
+// TGATHER Tests - Large Shape (chunked): per-rank data > single UB tile
+// ============================================================================
+TEST(TGatherLargeShape, Int32_128x32_tile16_2ranks) {
+    ASSERT_TRUE(RunGatherLargeShape_Int32_128x32_tile16(2, 2, 0, 0));
+}
+TEST(TGatherLargeShape, Int32_128x32_tile16_4ranks) {
+    ASSERT_TRUE(RunGatherLargeShape_Int32_128x32_tile16(4, 4, 0, 0));
+}
+TEST(TGatherLargeShape, Float_256x64_tile32_2ranks) {
+    ASSERT_TRUE(RunGatherLargeShape_Float_256x64_tile32(2, 2, 0, 0));
+}
+TEST(TGatherLargeShape, Int32_512x32_tile64_2ranks) {
+    ASSERT_TRUE(RunGatherLargeShape_Int32_512x32_tile64(2, 2, 0, 0));
+}
+
+// ============================================================================
+// TGATHER Tests - PingPong: double-buffered chunked TGATHER
+// ============================================================================
+TEST(TGatherPingPong, Int32_128x32_tile16_2ranks) {
+    ASSERT_TRUE(RunGatherPingPong_Int32_128x32_tile16(2, 2, 0, 0));
+}
+TEST(TGatherPingPong, Int32_128x32_tile16_4ranks) {
+    ASSERT_TRUE(RunGatherPingPong_Int32_128x32_tile16(4, 4, 0, 0));
+}
+TEST(TGatherPingPong, Float_256x64_tile32_2ranks) {
+    ASSERT_TRUE(RunGatherPingPong_Float_256x64_tile32(2, 2, 0, 0));
+}
 
 int main(int argc, char **argv)
 {

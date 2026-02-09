@@ -50,7 +50,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
   - `srcGlobalData` must point to local address (on current NPU).
   - Both addresses should be naturally aligned to element size; 32-byte alignment is recommended for best performance.
 - **DMA constraints**:
-  - SDMA: Allows 2D transfer
+  - SDMA: Supports 2D transfer
   - URMA: 1D transfer
   - DMA channel availability is limited; implementations may serialize requests when channels are exhausted.
 - **Valid region**:
@@ -60,6 +60,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
 
 After `TSYNC(event)` returns, all stores to `dstGlobalData` performed by the asynchronous transfer are complete and visible to subsequent operations on the current NPU.
 
+## Examples
 
 ### Basic Asynchronous PUT with SDMA (default)
 

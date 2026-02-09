@@ -8,6 +8,8 @@ Reduce operation: gather data from multiple remote NPUs and perform element-wise
 
 Only the root needs to execute `TREDUCE`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation.
 
+**Large Tile Support**: When the GlobalTensor exceeds the UB tile capacity in rows and/or columns, the reduction is automatically chunked via 2D sliding.
+
 ## Math Interpretation
 
 For each element `(i, j)` in the valid region:
@@ -20,19 +22,29 @@ where $N$ is the number of ranks and $\oplus$ is the reduction operation (sum, m
 
 PTO-AS form: see `docs/grammar/PTO-AS.md`.
 
+Synchronous form:
+
 ```text
-treduce %group, %dst, %acc_tile, %recv_tile {op = #pto.reduce_op<Sum>}
-treduce %group, %dst, %acc_tile, %recv_tile {op = #pto.reduce_op<Max>}
+treduce %group, %dst {op = #pto.reduce_op<Sum>} : (!pto.group<...>, !pto.memref<...>)
+treduce %group, %dst {op = #pto.reduce_op<Max>} : (!pto.group<...>, !pto.memref<...>)
 ```
+Lowering introduces internal accumulator and receive tiles for the reduce pipeline; the C++ intrinsic requires explicit `accTileData`, `recvTileData` (or `accTileData`, `pingTileData`, `pongTileData`) operand(s).
 
 ## C++ Intrinsic
 
 Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
+// Basic reduce (accumulator + receive tile)
 template <typename ParallelGroup, typename GlobalDstData, typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobalData, 
                               TileData &accTileData, TileData &recvTileData, ReduceOp op, WaitEvents&... events);
+
+// Ping-pong reduce (accumulator + ping + pong tiles for double buffering)
+template <typename ParallelGroup, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobalData,
+                              TileData &accTileData, TileData &pingTileData, TileData &pongTileData,
+                              ReduceOp op, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -42,10 +54,14 @@ PTO_INST RecordEvent TREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlo
   - `TileData::DType` must equal `GlobalDstData::RawDType`.
 - **Memory constraints**:
   - `dstGlobalData` must point to local address (on current NPU).
-  - `accTileData`, `recvTileData` must be pre-allocated UB tiles.
+  - `accTileData`, `recvTileData` (or `accTileData`, `pingTileData`, `pongTileData`) must be pre-allocated UB tiles.
 - **ParallelGroup constraints**:
   - `parallelGroup.tensors[r]` must refer to rank `r`'s source buffer (remote GM as seen by the root).
-  - `parallelGroup.my_rank` identifies the calling NPU as the reduce root.
+  - `parallelGroup.GetRootIdx()` identifies the calling NPU as the reduce root.
+  - All source tensors are assumed to have the same shape and strides.
+- **Chunked mode constraints** (when data exceeds a single UB tile):
+  - If `TileData` has static `ValidRow`, `GetShape(DIM_3)` must be divisible by `ValidRow`. Use a Tile with `DYNAMIC` ValidRow for partial row support.
+  - If `TileData` has static `ValidCol`, `GetShape(DIM_4)` must be divisible by `ValidCol`. Use a Tile with `DYNAMIC` ValidCol for partial column support.
 
 ## Examples
 

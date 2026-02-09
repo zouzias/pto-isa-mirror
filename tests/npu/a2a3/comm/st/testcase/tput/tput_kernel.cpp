@@ -10,13 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <cstddef>
 #include <cstdint>
-
-#include <sys/wait.h>
-#include <unistd.h>
-#include <vector>
-#include <string>
 #include <iostream>
-#include <algorithm>
 
 #include "pto/comm/pto_comm_inst.hpp"
 #include "pto/common/pto_tile.hpp"
@@ -98,38 +92,8 @@ __global__ AICORE void TPutKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
 
 template <typename T, size_t count>
 bool RunPutRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size){
-    
-    // Initialize shmem TLS configuration
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    if (n_devices <= 0 || n_ranks <= 0) {
-        std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
-        return false;
-    }
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    // Initialize shmem symmetric heap
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8769";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = local_mem_size;
-    
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8769", local_mem_size)) return false;
 
     void *input_ptr, *output_ptr;
     aclrtMalloc(&input_ptr, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
@@ -157,8 +121,8 @@ bool RunPutRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     // Barrier to ensure all ranks have initialized
     ShmemBarrierAll();
 
-    TPutKernelImpl<T, count><<<1, nullptr, stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    TPutKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Barrier after kernel execution
     ShmemBarrierAll();
@@ -171,7 +135,7 @@ bool RunPutRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
         T value = reinterpret_cast<T*>(output_host)[i];
         T expected = static_cast<T>(i + (rank_id + 1) % n_ranks * 10000);
         if(value != expected){
-            std::cout << "Rank " << rank_id << " Device " << device_id << " Status " << status << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
             is_ok = false;
@@ -193,43 +157,20 @@ bool RunPutRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     }
 #endif
 
-    status |= aclrtFreeHost(input_host);
-    status |= aclrtFreeHost(output_host);
-    status |= aclrtFree(input_ptr);
-    status |= aclrtFree(output_ptr);
+    ctx.aclStatus |= aclrtFreeHost(input_host);
+    ctx.aclStatus |= aclrtFreeHost(output_host);
+    ctx.aclStatus |= aclrtFree(input_ptr);
+    ctx.aclStatus |= aclrtFree(output_ptr);
     ShmemFree(shmem_ptr);
 
-    ShmemFinalize();
-
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <typename T, size_t count>
 bool RunPutRing(int n_ranks, int n_devices, int first_rank_id, int first_device_id){
-    std::vector<pid_t> pids;
-    uint64_t local_mem_size = 1024UL * 1024UL * 1024;
-    for (int r = 0; r < n_ranks; ++r){
-        pid_t pid = fork();
-        if (pid == 0) { // child
-            const bool ok = RunPutRingKernel<T, count>(first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return 1; // fork failed
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;    
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunPutRingKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, 1024ULL * 1024 * 1024);
+    });
 }
 
 // Explicit instantiations for 1D tests
@@ -293,35 +234,8 @@ __global__ AICORE void TPutAtomicAddKernelImpl(__gm__ T *dst, __gm__ T *src, __g
 template <typename T, size_t count>
 bool RunPutAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
 {
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    if (n_devices <= 0 || n_ranks <= 0) {
-        std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
-        return false;
-    }
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8769";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = local_mem_size;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8769", local_mem_size)) return false;
 
     void *input_ptr, *output_ptr;
     aclrtMalloc(&input_ptr, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
@@ -350,8 +264,8 @@ bool RunPutAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_de
 
     ShmemBarrierAll();
 
-    TPutAtomicAddKernelImpl<T, count><<<1, nullptr, stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    TPutAtomicAddKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -364,7 +278,7 @@ bool RunPutAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_de
             const int64_t expected = static_cast<int64_t>(n_ranks) * base + 10000LL * sum_ranks;
             T value = reinterpret_cast<T*>(output_host)[i];
             if (value != static_cast<T>(expected)) {
-                std::cout << "Rank " << rank_id << " Device " << device_id << " Status " << status << std::endl;
+                std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
                 std::cout << "Expected value: " << (float)expected << std::endl;
                 std::cout << "Actual value: " << (float)value << std::endl;
                 is_ok = false;
@@ -387,44 +301,21 @@ bool RunPutAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_de
     }
 #endif
 
-    status |= aclrtFreeHost(input_host);
-    status |= aclrtFreeHost(output_host);
-    status |= aclrtFree(input_ptr);
-    status |= aclrtFree(output_ptr);
+    ctx.aclStatus |= aclrtFreeHost(input_host);
+    ctx.aclStatus |= aclrtFreeHost(output_host);
+    ctx.aclStatus |= aclrtFree(input_ptr);
+    ctx.aclStatus |= aclrtFree(output_ptr);
     ShmemFree(shmem_ptr);
 
-    ShmemFinalize();
-
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <typename T, size_t count>
 bool RunPutAtomicAdd(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    uint64_t local_mem_size = 1024UL * 1024UL * 1024;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) { // child
-            const bool ok = RunPutAtomicAddKernel<T, count>(first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunPutAtomicAddKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, 1024ULL * 1024 * 1024);
+    });
 }
 
 // Explicit instantiations for AtomicAdd tests
@@ -510,38 +401,9 @@ template <typename T, size_t rows, size_t cols>
 bool RunPutRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
 {
     constexpr size_t total_count = rows * cols;
-    
-    // Initialize shmem TLS configuration
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
 
-    if (n_devices <= 0 || n_ranks <= 0) {
-        std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
-        return false;
-    }
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    // Initialize shmem symmetric heap
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8769";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = local_mem_size;
-    
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8769", local_mem_size)) return false;
 
     void *input_ptr, *output_ptr;
     aclrtMalloc(&input_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
@@ -572,8 +434,8 @@ bool RunPutRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     // Barrier to ensure all ranks have initialized
     ShmemBarrierAll();
 
-    TPutKernel2DImpl<T, rows, cols><<<1, nullptr, stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    TPutKernel2DImpl<T, rows, cols><<<1, nullptr, ctx.stream>>>((T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Barrier after kernel execution
     ShmemBarrierAll();
@@ -588,7 +450,7 @@ bool RunPutRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_devic
             T value = reinterpret_cast<T*>(output_host)[idx];
             T expected = static_cast<T>(idx + (rank_id + 1) % n_ranks * 10000);
             if (value != expected) {
-                std::cout << "Rank " << rank_id << " Device " << device_id << " Status " << status << std::endl;
+                std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
                 std::cout << "At [" << r << ", " << c << "] (idx=" << idx << "):" << std::endl;
                 std::cout << "Expected value: " << (float)expected << std::endl;
                 std::cout << "Actual value: " << (float)value << std::endl;
@@ -611,44 +473,21 @@ bool RunPutRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     }
 #endif
 
-    status |= aclrtFreeHost(input_host);
-    status |= aclrtFreeHost(output_host);
-    status |= aclrtFree(input_ptr);
-    status |= aclrtFree(output_ptr);
+    ctx.aclStatus |= aclrtFreeHost(input_host);
+    ctx.aclStatus |= aclrtFreeHost(output_host);
+    ctx.aclStatus |= aclrtFree(input_ptr);
+    ctx.aclStatus |= aclrtFree(output_ptr);
     ShmemFree(shmem_ptr);
 
-    ShmemFinalize();
-
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <typename T, size_t rows, size_t cols>
 bool RunPutRing2D(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    uint64_t local_mem_size = 1024UL * 1024UL * 1024;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) { // child
-            const bool ok = RunPutRing2DKernel<T, rows, cols>(first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false; // fork failed
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;    
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunPutRing2DKernel<T, rows, cols>(rankId, n_ranks, n_devices, first_device_id, 1024ULL * 1024 * 1024);
+    });
 }
 
 // Explicit instantiations for 2D shape tests
@@ -737,35 +576,8 @@ bool RunPutRingLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
 {
     constexpr size_t total_count = total_rows * cols;
 
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    if (n_devices <= 0 || n_ranks <= 0) {
-        std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
-        return false;
-    }
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8769";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = local_mem_size;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8769", local_mem_size)) return false;
 
     void *input_ptr, *output_ptr;
     aclrtMalloc(&input_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
@@ -790,9 +602,9 @@ bool RunPutRingLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
 
     ShmemBarrierAll();
 
-    TPutLargeShapeKernelImpl<T, total_rows, cols, tile_rows><<<1, nullptr, stream>>>(
+    TPutLargeShapeKernelImpl<T, total_rows, cols, tile_rows><<<1, nullptr, ctx.stream>>>(
         (T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -803,7 +615,7 @@ bool RunPutRingLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
         T value = reinterpret_cast<T*>(output_host)[i];
         T expected = static_cast<T>(i + (rank_id + 1) % n_ranks * 10000);
         if (value != expected) {
-            std::cout << "Rank " << rank_id << " Device " << device_id << " Status " << status << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
             std::cout << "At index " << i << ":" << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
@@ -827,45 +639,22 @@ bool RunPutRingLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
     }
 #endif
 
-    status |= aclrtFreeHost(input_host);
-    status |= aclrtFreeHost(output_host);
-    status |= aclrtFree(input_ptr);
-    status |= aclrtFree(output_ptr);
+    ctx.aclStatus |= aclrtFreeHost(input_host);
+    ctx.aclStatus |= aclrtFreeHost(output_host);
+    ctx.aclStatus |= aclrtFree(input_ptr);
+    ctx.aclStatus |= aclrtFree(output_ptr);
     ShmemFree(shmem_ptr);
 
-    ShmemFinalize();
-
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunPutRingLargeShape(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    uint64_t local_mem_size = 1024UL * 1024UL * 1024;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunPutRingLargeShapeKernel<T, total_rows, cols, tile_rows>(
-                first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunPutRingLargeShapeKernel<T, total_rows, cols, tile_rows>(
+            rankId, n_ranks, n_devices, first_device_id, 1024ULL * 1024 * 1024);
+    });
 }
 
 // Explicit instantiations for large shape tests
@@ -972,35 +761,8 @@ bool RunPutRingMultiDimKernel(int rank_id, int n_ranks, int n_devices, int first
 {
     constexpr size_t total_count = d0 * d1 * d2 * d3 * cols;
 
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    if (n_devices <= 0 || n_ranks <= 0) {
-        std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
-        return false;
-    }
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8769";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = local_mem_size;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8769", local_mem_size)) return false;
 
     void *input_ptr, *output_ptr;
     aclrtMalloc(&input_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
@@ -1025,9 +787,9 @@ bool RunPutRingMultiDimKernel(int rank_id, int n_ranks, int n_devices, int first
 
     ShmemBarrierAll();
 
-    TPutMultiDimKernelImpl<T, d0, d1, d2, d3, cols, tile_rows><<<1, nullptr, stream>>>(
+    TPutMultiDimKernelImpl<T, d0, d1, d2, d3, cols, tile_rows><<<1, nullptr, ctx.stream>>>(
         (T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -1038,7 +800,7 @@ bool RunPutRingMultiDimKernel(int rank_id, int n_ranks, int n_devices, int first
         T value = reinterpret_cast<T*>(output_host)[i];
         T expected = static_cast<T>(i + (rank_id + 1) % n_ranks * 10000);
         if (value != expected) {
-            std::cout << "Rank " << rank_id << " Device " << device_id << " Status " << status << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
             std::cout << "At index " << i << ":" << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
@@ -1062,45 +824,22 @@ bool RunPutRingMultiDimKernel(int rank_id, int n_ranks, int n_devices, int first
     }
 #endif
 
-    status |= aclrtFreeHost(input_host);
-    status |= aclrtFreeHost(output_host);
-    status |= aclrtFree(input_ptr);
-    status |= aclrtFree(output_ptr);
+    ctx.aclStatus |= aclrtFreeHost(input_host);
+    ctx.aclStatus |= aclrtFreeHost(output_host);
+    ctx.aclStatus |= aclrtFree(input_ptr);
+    ctx.aclStatus |= aclrtFree(output_ptr);
     ShmemFree(shmem_ptr);
 
-    ShmemFinalize();
-
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <typename T, size_t d0, size_t d1, size_t d2, size_t d3, size_t cols, size_t tile_rows>
 bool RunPutRingMultiDim(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    uint64_t local_mem_size = 1024UL * 1024UL * 1024;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunPutRingMultiDimKernel<T, d0, d1, d2, d3, cols, tile_rows>(
-                first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunPutRingMultiDimKernel<T, d0, d1, d2, d3, cols, tile_rows>(
+            rankId, n_ranks, n_devices, first_device_id, 1024ULL * 1024 * 1024);
+    });
 }
 
 // Explicit instantiations for multi-dim tests
@@ -1207,35 +946,8 @@ bool RunPutRingIrregularShapeKernel(int rank_id, int n_ranks, int n_devices, int
 {
     constexpr size_t total_count = total_rows * cols;
 
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    if (n_devices <= 0 || n_ranks <= 0) {
-        std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
-        return false;
-    }
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8769";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = local_mem_size;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8769", local_mem_size)) return false;
 
     void *input_ptr, *output_ptr;
     aclrtMalloc(&input_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
@@ -1260,9 +972,9 @@ bool RunPutRingIrregularShapeKernel(int rank_id, int n_ranks, int n_devices, int
 
     ShmemBarrierAll();
 
-    TPutIrregularShapeKernelImpl<T, total_rows, cols, tile_rows><<<1, nullptr, stream>>>(
+    TPutIrregularShapeKernelImpl<T, total_rows, cols, tile_rows><<<1, nullptr, ctx.stream>>>(
         (T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -1273,7 +985,7 @@ bool RunPutRingIrregularShapeKernel(int rank_id, int n_ranks, int n_devices, int
         T value = reinterpret_cast<T*>(output_host)[i];
         T expected = static_cast<T>(i + (rank_id + 1) % n_ranks * 10000);
         if (value != expected) {
-            std::cout << "Rank " << rank_id << " Device " << device_id << " Status " << status << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
             std::cout << "At index " << i << " (row=" << (i / cols) << ", col=" << (i % cols) << "):" << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
@@ -1305,45 +1017,22 @@ bool RunPutRingIrregularShapeKernel(int rank_id, int n_ranks, int n_devices, int
     }
 #endif
 
-    status |= aclrtFreeHost(input_host);
-    status |= aclrtFreeHost(output_host);
-    status |= aclrtFree(input_ptr);
-    status |= aclrtFree(output_ptr);
+    ctx.aclStatus |= aclrtFreeHost(input_host);
+    ctx.aclStatus |= aclrtFreeHost(output_host);
+    ctx.aclStatus |= aclrtFree(input_ptr);
+    ctx.aclStatus |= aclrtFree(output_ptr);
     ShmemFree(shmem_ptr);
 
-    ShmemFinalize();
-
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunPutRingIrregularShape(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    uint64_t local_mem_size = 1024UL * 1024UL * 1024;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunPutRingIrregularShapeKernel<T, total_rows, cols, tile_rows>(
-                first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunPutRingIrregularShapeKernel<T, total_rows, cols, tile_rows>(
+            rankId, n_ranks, n_devices, first_device_id, 1024ULL * 1024 * 1024);
+    });
 }
 
 // Explicit instantiations for irregular shape tests
@@ -1461,35 +1150,8 @@ bool RunPutRing2DSlidingKernel(int rank_id, int n_ranks, int n_devices, int firs
 {
     constexpr size_t total_count = total_rows * total_cols;
 
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    if (n_devices <= 0 || n_ranks <= 0) {
-        std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
-        return false;
-    }
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8769";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = local_mem_size;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8769", local_mem_size)) return false;
 
     void *input_ptr, *output_ptr;
     aclrtMalloc(&input_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
@@ -1514,9 +1176,9 @@ bool RunPutRing2DSlidingKernel(int rank_id, int n_ranks, int n_devices, int firs
 
     ShmemBarrierAll();
 
-    TPut2DSlidingKernelImpl<T, total_rows, total_cols, tile_rows, tile_cols><<<1, nullptr, stream>>>(
+    TPut2DSlidingKernelImpl<T, total_rows, total_cols, tile_rows, tile_cols><<<1, nullptr, ctx.stream>>>(
         (T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -1529,7 +1191,7 @@ bool RunPutRing2DSlidingKernel(int rank_id, int n_ranks, int n_devices, int firs
         if (value != expected) {
             size_t row = i / total_cols;
             size_t col = i % total_cols;
-            std::cout << "Rank " << rank_id << " Device " << device_id << " Status " << status << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
             std::cout << "At [" << row << ", " << col << "] (idx=" << i << "):" << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
@@ -1562,45 +1224,22 @@ bool RunPutRing2DSlidingKernel(int rank_id, int n_ranks, int n_devices, int firs
     }
 #endif
 
-    status |= aclrtFreeHost(input_host);
-    status |= aclrtFreeHost(output_host);
-    status |= aclrtFree(input_ptr);
-    status |= aclrtFree(output_ptr);
+    ctx.aclStatus |= aclrtFreeHost(input_host);
+    ctx.aclStatus |= aclrtFreeHost(output_host);
+    ctx.aclStatus |= aclrtFree(input_ptr);
+    ctx.aclStatus |= aclrtFree(output_ptr);
     ShmemFree(shmem_ptr);
 
-    ShmemFinalize();
-
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 bool RunPutRing2DSliding(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    uint64_t local_mem_size = 1024UL * 1024UL * 1024;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunPutRing2DSlidingKernel<T, total_rows, total_cols, tile_rows, tile_cols>(
-                first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunPutRing2DSlidingKernel<T, total_rows, total_cols, tile_rows, tile_cols>(
+            rankId, n_ranks, n_devices, first_device_id, 1024ULL * 1024 * 1024);
+    });
 }
 
 // Explicit instantiations for 2D sliding tests
@@ -1732,35 +1371,8 @@ bool RunPutRingPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
 {
     constexpr size_t total_count = total_rows * total_cols;
 
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Failed to init shmem tls\n";
-        return false;
-    }
-
-    if (n_devices <= 0 || n_ranks <= 0) {
-        std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
-        return false;
-    }
-    const int32_t device_id = rank_id % n_devices + first_device_id;
-    int status = 0;
-    aclrtStream stream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
-    status |= aclrtCreateStream(&stream);
-
-    ShmemEnv env;
-    const char *ip = "tcp://127.0.0.1:8769";
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = ip;
-    env.heapBytes = local_mem_size;
-
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] ShmemInitFromEnv failed!" << std::endl;
-        return false;
-    }
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8769", local_mem_size)) return false;
 
     void *input_ptr, *output_ptr;
     aclrtMalloc(&input_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
@@ -1785,9 +1397,9 @@ bool RunPutRingPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
 
     ShmemBarrierAll();
 
-    TPutPingPongKernelImpl<T, total_rows, total_cols, tile_rows, tile_cols><<<1, nullptr, stream>>>(
+    TPutPingPongKernelImpl<T, total_rows, total_cols, tile_rows, tile_cols><<<1, nullptr, ctx.stream>>>(
         (T*)output_ptr, (T*)input_ptr, (T*)shmem_ptr, n_ranks);
-    status = aclrtSynchronizeStream(stream);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
@@ -1800,7 +1412,7 @@ bool RunPutRingPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
         if (value != expected) {
             size_t row = i / total_cols;
             size_t col = i % total_cols;
-            std::cout << "Rank " << rank_id << " Device " << device_id << " Status " << status << std::endl;
+            std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus << std::endl;
             std::cout << "At [" << row << ", " << col << "] (idx=" << i << "):" << std::endl;
             std::cout << "Expected value: " << (float)expected << std::endl;
             std::cout << "Actual value: " << (float)value << std::endl;
@@ -1828,45 +1440,22 @@ bool RunPutRingPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
     }
 #endif
 
-    status |= aclrtFreeHost(input_host);
-    status |= aclrtFreeHost(output_host);
-    status |= aclrtFree(input_ptr);
-    status |= aclrtFree(output_ptr);
+    ctx.aclStatus |= aclrtFreeHost(input_host);
+    ctx.aclStatus |= aclrtFreeHost(output_host);
+    ctx.aclStatus |= aclrtFree(input_ptr);
+    ctx.aclStatus |= aclrtFree(output_ptr);
     ShmemFree(shmem_ptr);
 
-    ShmemFinalize();
-
-    status |= aclrtDestroyStream(stream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
-
-    return (status == 0) && is_ok;
+    return ctx.Finalize() && is_ok;
 }
 
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 bool RunPutRingPingPong(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    std::vector<pid_t> pids;
-    uint64_t local_mem_size = 1024UL * 1024UL * 1024;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            const bool ok = RunPutRingPingPongKernel<T, total_rows, total_cols, tile_rows, tile_cols>(
-                first_rank_id + r, n_ranks, n_devices, first_device_id, local_mem_size);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            return false;
-        }
-    }
-    bool success = true;
-    for (pid_t p : pids) {
-        int status = 0;
-        waitpid(p, &status, 0);
-        if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0)) success = false;
-    }
-    return success;
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunPutRingPingPongKernel<T, total_rows, total_cols, tile_rows, tile_cols>(
+            rankId, n_ranks, n_devices, first_device_id, 1024ULL * 1024 * 1024);
+    });
 }
 
 // Explicit instantiations for ping-pong tests
