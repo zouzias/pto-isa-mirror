@@ -263,7 +263,7 @@ Before using this project, make sure the following basic dependencies and the NP
 
    The driver and firmware are required to run operators. If you only need to build, you can skip this step.
    For installation guidance, see:
-   [NPU Driver and Firmware Installation Guide](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850alpha002/softwareinst/instg/instg_0005.html?Mode=VmIns&OS=Ubuntu&Software=cannToolKit).
+   [NPU Driver and Firmware Installation Guide](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850alpha002/softwareinst/instg/instg_0001.html?Mode=VmIns&OS=Ubuntu&Software=cannToolKit).
 
 ## Install Software Packages
 
@@ -271,7 +271,9 @@ This project supports building from source. Before building, prepare the environ
 
 1. **Install the community edition CANN toolkit**
 
-    Download the appropriate `Ascend-cann-toolkit_${cann_version}_linux-${arch}.run` installer for your environment.
+    Download the appropriate `Ascend-cann-toolkit_${cann_version}_linux-${arch}.run` installer for your environment.[download](https://www.hiascend.com/developer/download/community/result?module=cann).
+   
+    The version of CANN we required is 8.5.0 or later.
     
     ```bash
     # Ensure the installer is executable

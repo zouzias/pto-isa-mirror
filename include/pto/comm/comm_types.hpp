@@ -127,6 +127,51 @@ enum class ReduceOp : uint8_t {
     Min = 2,  // Element-wise minimum
 };
 
+// ============================================================================
+// Signal: Scalar signal (1 element, fully static)
+//
+// Equivalent to:
+//   GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>
+//
+// Usage:
+//   comm::Signal sig(ptr);
+// ============================================================================
+
+using Signal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
+// GlobalSignal: alias for GlobalTensor, used by signal-related instructions
+template <typename Element_, typename Shape_, typename Stride_, Layout Layout_ = Layout::ND>
+using GlobalSignal = GlobalTensor<Element_, Shape_, Stride_, Layout_>;
+// ============================================================================
+// Signal2D: 2D signal matrix with compile-time shape
+//
+// Dense case:     stride auto-derived from shape (DIM_3 stride = Cols).
+// Sub-region:     pass a custom stride for views into a larger signal grid.
+//
+// Usage:
+//   // Dense 4x8 grid (stride auto = 8)
+//   comm::Signal2D<4, 8> grid(ptr);
+//
+//   // Sub-region 4x8 from a 128-col grid (stride = 128)
+//   comm::Signal2D<4, 8> sub(ptr + offset, 128);
+// ============================================================================
+
+template <int Rows, int Cols>
+struct Signal2D : public GlobalTensor<int32_t,
+    Shape<1, 1, 1, Rows, Cols>, Stride<1, 1, 1, DYNAMIC, 1>, Layout::ND> {
+private:
+    using Base = GlobalTensor<int32_t,
+        Shape<1, 1, 1, Rows, Cols>, Stride<1, 1, 1, DYNAMIC, 1>, Layout::ND>;
+
+public:
+    // Dense constructor: stride = Cols (contiguous layout)
+    PTO_INTERNAL Signal2D(typename Base::DType *ptr)
+        : Base(ptr, typename Base::Shape{}, typename Base::Stride{Cols}) {}
+
+    // Strided constructor: custom DIM_3 stride for sub-region views
+    PTO_INTERNAL Signal2D(typename Base::DType *ptr, int stride)
+        : Base(ptr, typename Base::Shape{}, typename Base::Stride{stride}) {}
+};
+
 } // namespace comm
 } // namespace pto
 

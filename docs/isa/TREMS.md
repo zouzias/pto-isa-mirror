@@ -2,19 +2,13 @@
 
 ## Introduction
 
-Elementwise remainder with a scalar: `fmod(src, scalar)` (or `%` for integers).
+Elementwise remainder with a scalar: `%`.
 
 ## Math Interpretation
 
 For each element `(i, j)` in the valid region:
 
-- Integer types:
-
 $$\mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \bmod \mathrm{scalar}$$
-
-- Floating types:
-
-$$\mathrm{dst}_{i,j} = \mathrm{fmod}(\mathrm{src}_{i,j}, \mathrm{scalar})$$
 
 ## Assembly Syntax
 
@@ -30,8 +24,9 @@ Synchronous form:
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREMS(TileData& dst, TileData& src0, typename TileData::DType scalar, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
+                           WaitEvents &... events);
 ```
 
 ## Constraints

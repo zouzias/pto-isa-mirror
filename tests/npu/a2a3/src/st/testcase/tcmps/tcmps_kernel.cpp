@@ -15,7 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, CmpMode cmpMode>
-__global__ AICORE void runTCmps( __gm__ uint8_t __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1) {
+__global__ AICORE void runTCmps(__gm__ uint8_t __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+{
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = pto::Stride<1, 1, 1, kGCols_, 1>;
     using GlobalData_src0 = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
@@ -23,7 +24,7 @@ __global__ AICORE void runTCmps( __gm__ uint8_t __out__ *out, __gm__ T __in__ *s
     using TileData_src0 = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using TileData_dst = Tile<TileType::Vec, uint8_t, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     TileData_src0 src0Tile(kTRows_, kTCols_);
-    TileData_dst dstTile(kTRows_, kTCols_);
+    TileData_dst dstTile(kTRows_, kTCols_ / 8);
     TASSIGN(src0Tile, 0x0 + 0x400 * block_idx);
     TASSIGN(dstTile, 0x20000 + 0x400 * block_idx);
 
@@ -44,15 +45,15 @@ template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int cm
 void LaunchTCmps(uint8_t *out, T *src0, T *src1, void *stream)
 {
     constexpr CmpMode modeValue = static_cast<CmpMode>(cmpMode);
-    if constexpr (std::is_same_v<T, aclFloat16> )
-        runTCmps<half, kGRows_, kGCols_, kTRows_, kTCols_, modeValue><<<1, nullptr, stream>>>((out),
-                                                                                  (half*)(src0),
-                                                                                  (half*)(src1));
-    else 
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTCmps<half, kGRows_, kGCols_, kTRows_, kTCols_, modeValue>
+            <<<1, nullptr, stream>>>((out), (half *)(src0), (half *)(src1));
+    else
         runTCmps<T, kGRows_, kGCols_, kTRows_, kTCols_, modeValue><<<1, nullptr, stream>>>(out, src0, src1);
 }
 
-template void LaunchTCmps<aclFloat16, 32, 32, 32, 32, 5>(uint8_t *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);
+template void LaunchTCmps<aclFloat16, 32, 32, 32, 32, 5>(uint8_t *out, aclFloat16 *src0, aclFloat16 *src1,
+                                                         void *stream);
 template void LaunchTCmps<float, 1, 64, 1, 64, 0>(uint8_t *out, float *src0, float *src1, void *stream);
 template void LaunchTCmps<float, 8, 64, 8, 64, 4>(uint8_t *out, float *src0, float *src1, void *stream);
 template void LaunchTCmps<float, 4, 64, 4, 64, 1>(uint8_t *out, float *src0, float *src1, void *stream);

@@ -88,9 +88,8 @@ PTO_INTERNAL void PtoGetAsyncKernelBody(
     GlobalTensor<DType, GetShape, GetStride> dstGlobal(dst, dyn_shape, dyn_stride);
     GlobalTensor<DType, GetShape, GetStride> srcGlobal(src, dyn_shape, dyn_stride);
     
-    // Call public TGET_ASYNC (SDMA engine) for async GM-to-GM transfer
+    // Call TGET_ASYNC from TGetAsync.hpp
     auto get_event = pto::comm::TGET_ASYNC<pto::comm::DmaEngine::SDMA>(dstGlobal, srcGlobal);
-    (void)get_event;
 }
 
 } // namespace detail
@@ -112,8 +111,8 @@ __global__ AICORE PTO_AIV_ATTR void PTO_GET_ASYNC_AIV(
 // Data flow: remoteSrc (remote Device) → localDst (local Device)
 //
 // Supports two execution paths:
-// - SDMA path (HostSdma=true): Host-initiated aclrtMemcpyAsync
-// - AIV path (HostSdma=false): Launch AIV kernel calling TGET_ASYNC
+// - Host SDMA path (HostSdma=true): Host-initiated aclrtMemcpyAsync
+// - AIV SDAM path (HostSdma=false): Launch AIV kernel calling TGET_ASYNC_SDMA_IMPL
 //
 // Requirements:
 // - Source and destination addresses must be 64-byte aligned
@@ -121,7 +120,7 @@ __global__ AICORE PTO_AIV_ATTR void PTO_GET_ASYNC_AIV(
 // - Only supports devices within the same PCIe Switch
 // - Only supports same process, same or different threads
 //
-// @tparam HostSdma   If true, use SDMA (aclrtMemcpyAsync); if false, use AIV kernel
+// @tparam HostSdma    If true, use Host SDMA (aclrtMemcpyAsync); if false, use AIV SDMA kernel
 // @tparam AivCores   Number of AIV cores when HostSdma=false (must be > 0)
 // @param dst         Destination memory address (local Device)
 // @param dst_bytes   Destination memory size in bytes

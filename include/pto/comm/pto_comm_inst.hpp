@@ -49,6 +49,18 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
     return {};
 }
 
+// TPUT with ping-pong double buffering (compile-time atomic type)
+// Uses two staging tiles to overlap TLOAD and TSTORE for adjacent chunks
+template <AtomicType atomicType = AtomicType::AtomicNone,
+          typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                          TileData &pingTile, TileData &pongTile, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData, pingTile, pongTile);
+    return {};
+}
+
 // ============================================================================
 // TGET: Remote read operation - read remote NPU's data to local memory
 // Data flow: srcGlobalData (remote GM) → stagingTileData (UB) → dstGlobalData (local GM)
@@ -60,6 +72,17 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 {
     WaitAllEvents(events...);
     TGET_IMPL(dstGlobalData, srcGlobalData, stagingTileData);
+    return {};
+}
+
+// TGET with ping-pong double buffering
+// Uses two staging tiles to overlap TLOAD and TSTORE for adjacent chunks
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                          TileData &pingTile, TileData &pongTile, WaitEvents&... events)
+{
+    WaitAllEvents(events...);
+    TGET_IMPL(dstGlobalData, srcGlobalData, pingTile, pongTile);
     return {};
 }
 

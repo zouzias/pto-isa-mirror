@@ -104,6 +104,7 @@ trowsum
 trowmax
 trowmin
 textract
+timg2col
 tmov
 tload
 ttrans
@@ -128,13 +129,23 @@ tcvt
 tmul
 tadd
 taddplus
+tprelu
 tand
 tor
+tshl
+tshr
 tpartadd
 tpartmin
 tpartmax
 tsel
 tsub
+tsubs
+trem
+trems
+tfmod
+tfmods
+tlrelu
+tmaxs
 tmins
 tmin
 tmax
@@ -160,7 +171,6 @@ tcmp
 tassign
 tstore_mat2gm
 tscatter
-tfa
 tcolexpand
 ttri
 tnot
@@ -171,9 +181,17 @@ tshls
 tshrs
 txor
 txors
+trowexpandexpdif
+tcolexpandadd
+tcolexpandmax
+tcolexpandmin
+tcolexpanddiv
+tcolexpandexpdif
+tcolexpandmul
+tcolexpandsub
 )
 
-if(TEST_CASE IN_LIST ALL_TESTCASES)
+if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
 message(STATUS "run : ${TEST_CASE}")
 else()
 message(FATAL_ERROR "not found TEST_CASE: ${TEST_CASE}, support case is : ${ALL_TESTCASES}")
@@ -181,7 +199,7 @@ endif()
 
 
 foreach(TESTCASE ${ALL_TESTCASES})
-if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE))
+if((DEFINED TEST_CASE AND TEST_CASE STREQUAL TESTCASE) OR (NOT DEFINED TEST_CASE) OR (TEST_CASE STREQUAL "all"))
     add_subdirectory(${TESTCASE})
 endif()
 endforeach()

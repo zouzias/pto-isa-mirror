@@ -23,7 +23,7 @@ namespace comm {
 // 
 // Returns true if condition is satisfied, false otherwise.
 // Signal type must be int32_t.
-// For signal matrix: Returns true only if ALL signals satisfy the condition.
+// Supports full 5-D signal tensors. Returns true only if ALL signals satisfy.
 // ============================================================================
 
 namespace detail {
@@ -50,20 +50,36 @@ PTO_INTERNAL bool TTEST_IMPL(GlobalSignalData &signalData, int32_t cmpValue, Wai
     static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
         "TTEST: signal type must be 32-bit (int32_t)");
 
-    // Get signal matrix dimensions from GlobalTensor shape
-    const int rows = signalData.GetShape(GlobalTensorDim::DIM_3);
-    const int cols = signalData.GetShape(GlobalTensorDim::DIM_4);
-    const int totalSignals = rows * cols;
+    // Get full 5-D shape and stride
+    const int s0 = signalData.GetShape(GlobalTensorDim::DIM_0);
+    const int s1 = signalData.GetShape(GlobalTensorDim::DIM_1);
+    const int s2 = signalData.GetShape(GlobalTensorDim::DIM_2);
+    const int s3 = signalData.GetShape(GlobalTensorDim::DIM_3);
+    const int s4 = signalData.GetShape(GlobalTensorDim::DIM_4);
+
+    const int st0 = signalData.GetStride(GlobalTensorDim::DIM_0);
+    const int st1 = signalData.GetStride(GlobalTensorDim::DIM_1);
+    const int st2 = signalData.GetStride(GlobalTensorDim::DIM_2);
+    const int st3 = signalData.GetStride(GlobalTensorDim::DIM_3);
 
     volatile __gm__ int32_t *basePtr = (volatile __gm__ int32_t *)signalData.data();
 
-    // Test if all signals in the matrix satisfy the condition
-    for (int i = 0; i < totalSignals; ++i) {
-        __asm__ __volatile__("");
-        dcci((__gm__ void *)(basePtr + i), SINGLE_CACHE_LINE);
-        __asm__ __volatile__("");
-        if (!detail::TestCompareSignal(basePtr[i], cmpValue, cmp)) {
-            return false;
+    // Test if all signals satisfy the condition (full 5-D traversal)
+    for (int d0 = 0; d0 < s0; ++d0) {
+        for (int d1 = 0; d1 < s1; ++d1) {
+            for (int d2 = 0; d2 < s2; ++d2) {
+                for (int d3 = 0; d3 < s3; ++d3) {
+                    for (int d4 = 0; d4 < s4; ++d4) {
+                        const int idx = d0 * st0 + d1 * st1 + d2 * st2 + d3 * st3 + d4;
+                        __asm__ __volatile__("");
+                        dcci((__gm__ void *)(basePtr + idx), SINGLE_CACHE_LINE);
+                        __asm__ __volatile__("");
+                        if (!detail::TestCompareSignal(basePtr[idx], cmpValue, cmp)) {
+                            return false;
+                        }
+                    }
+                }
+            }
         }
     }
     return true;

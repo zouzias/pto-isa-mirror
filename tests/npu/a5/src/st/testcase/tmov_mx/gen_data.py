@@ -11,7 +11,6 @@
 # --------------------------------------------------------------------------------
 
 import os
-import math
 import numpy as np
 import ml_dtypes
 import en_dtypes
@@ -92,16 +91,16 @@ def gen_golden_data(case_name, param):
     base_m, base_k, base_n = param.base_m, param.base_k, param.base_n
 
     if a_type == fp4_e2m1x2:
-        x1_gm = np.random.randint(-7, 7, [m, k]).astype(a_type)
+        x1_gm = np.random.randint(-6, 6, [m, k]).astype(a_type)
     elif a_type == fp4_e1m2x2:
-        x1_gm = np.random.randint(-2, 2, [m, k]).astype(a_type)
+        x1_gm = np.random.randint(-1, 2, [m, k]).astype(a_type)
     else:
         x1_gm = np.random.randint(-10, 10, [m, k]).astype(a_type)
 
     if b_type == fp4_e2m1x2:
-        x2_gm = np.random.randint(-7, 7, [k, n]).astype(b_type)
+        x2_gm = np.random.randint(-6, 6, [k, n]).astype(b_type)
     elif b_type == fp4_e1m2x2:
-        x2_gm = np.random.randint(-2, 2, [k, n]).astype(b_type)
+        x2_gm = np.random.randint(-1, 2, [k, n]).astype(b_type)
     else:
         x2_gm = np.random.randint(-10, 10, [k, n]).astype(b_type)
 
@@ -239,7 +238,7 @@ if __name__ == "__main__":
         TMovmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 95, 12, 90, 'dndn'),
         TMovmxParams(fp8_e4m3fn, fp8_e5m2, np.float32, 4, 30, 8, 'dndn'),
         # startIdx != 0
-        TMovmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 128, 31, 64, 'zznn', 64, 0, 32),
+        TMovmxParams(fp8_e4m3fn, fp8_e4m3fn, np.float32, 128, 32, 64, 'zznn', 64, 0, 32),
         TMovmxParams(fp4_e2m1x2, fp4_e2m1x2, np.float32, 128, 98, 64, 'zznn', 32, 64, 0),
 
         TMovmxParams(fp4_e1m2x2, fp4_e1m2x2, np.float32, 128, 60, 254, 'ndnd', 16, 0, 64),

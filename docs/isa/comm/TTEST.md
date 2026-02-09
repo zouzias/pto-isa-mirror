@@ -70,12 +70,10 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 using namespace pto;
 
 bool check_ready(__gm__ int32_t* local_signal) {
-    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-
-    GSignal sigG(local_signal);
+    comm::Signal sig(local_signal);
     
     // Check if signal == 1
-    return comm::TTEST(sigG, 1, comm::WaitCmp::EQ);
+    return comm::TTEST(sig, 1, comm::WaitCmp::EQ);
 }
 ```
 
@@ -86,17 +84,12 @@ bool check_ready(__gm__ int32_t* local_signal) {
 
 using namespace pto;
 
-// Test if all signals from a 4x8 grid of workers are ready
+// Test if all signals from a 4x8 dense grid of workers are ready
 bool check_worker_grid(__gm__ int32_t* signal_matrix) {
-    constexpr int ROWS = 4;
-    constexpr int COLS = 8;
-    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,ROWS,COLS>, 
-                                 Stride<ROWS*COLS,ROWS*COLS,ROWS*COLS,COLS,1>, Layout::ND>;
-
-    GSignal sigMatrix(signal_matrix);
+    comm::Signal2D<4, 8> grid(signal_matrix);
     
     // Returns true only if all 32 signals == 1
-    return comm::TTEST(sigMatrix, 1, comm::WaitCmp::EQ);
+    return comm::TTEST(grid, 1, comm::WaitCmp::EQ);
 }
 ```
 
@@ -108,12 +101,10 @@ bool check_worker_grid(__gm__ int32_t* signal_matrix) {
 using namespace pto;
 
 bool poll_with_timeout(__gm__ int32_t* local_signal, int max_iterations) {
-    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-
-    GSignal sigG(local_signal);
+    comm::Signal sig(local_signal);
     
     for (int i = 0; i < max_iterations; ++i) {
-        if (comm::TTEST(sigG, 1, comm::WaitCmp::EQ)) {
+        if (comm::TTEST(sig, 1, comm::WaitCmp::EQ)) {
             return true;  // Signal received
         }
         // Could do other work here between polls
@@ -130,11 +121,9 @@ bool poll_with_timeout(__gm__ int32_t* local_signal, int max_iterations) {
 using namespace pto;
 
 void process_with_progress(__gm__ int32_t* local_counter, int expected_count) {
-    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-
-    GSignal counterG(local_counter);
+    comm::Signal counter(local_counter);
     
-    while (!comm::TTEST(counterG, expected_count, comm::WaitCmp::GE)) {
+    while (!comm::TTEST(counter, expected_count, comm::WaitCmp::GE)) {
         // Do some useful work while waiting
         // ...
     }
@@ -150,13 +139,12 @@ void process_with_progress(__gm__ int32_t* local_counter, int expected_count) {
 using namespace pto;
 
 void compare_wait_test(__gm__ int32_t* local_signal) {
-    using GSignal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
-    GSignal sigG(local_signal);
+    comm::Signal sig(local_signal);
 
     // Blocking: spins until signal == 1
-    comm::TWAIT(sigG, 1, comm::WaitCmp::EQ);
+    comm::TWAIT(sig, 1, comm::WaitCmp::EQ);
 
     // Non-blocking: returns immediately with result
-    bool ready = comm::TTEST(sigG, 1, comm::WaitCmp::EQ);
+    bool ready = comm::TTEST(sig, 1, comm::WaitCmp::EQ);
 }
 ```
