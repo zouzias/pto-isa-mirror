@@ -11,7 +11,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 PTO_INST RecordEvent TIMG2COL(TileData &dst, ConvTileData &src,
                             uint16_t posM = 0, uint16_t posK = 0,
-                            const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents&... events);
+                            WaitEvents&... events);
 ```
 
 ## Constraints
