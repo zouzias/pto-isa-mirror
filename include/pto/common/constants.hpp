@@ -326,8 +326,23 @@ PTO_INTERNAL constexpr TileLayoutCustom GetTileLayoutCustom()
     }
 }
 
-template<typename T = uint64_t>
-struct Img2colTileConfig{
+template <typename T = uint64_t>
+struct Img2colTileConfig {
+#ifdef __PTO_AUTO__
+    uint8_t padList[4];
+    uint16_t fmapH;
+    uint16_t fmapW;
+    uint16_t filterH;
+    uint16_t filterW;
+    uint8_t dilationH;
+    uint8_t dilationW;
+    uint8_t strideH;
+    uint8_t strideW;
+    uint16_t channelSize;
+    T padValue;
+    bool transpose;
+    bool smallChannel;
+#else
     uint8_t padList[4] = {0};
     uint16_t fmapH = 0;
     uint16_t fmapW = 0;
@@ -341,7 +356,7 @@ struct Img2colTileConfig{
     T padValue = 0;
     bool transpose = false;
     bool smallChannel = false;
-
+#endif
     AICORE Img2colTileConfig() = default;
 };
 } // namespace pto

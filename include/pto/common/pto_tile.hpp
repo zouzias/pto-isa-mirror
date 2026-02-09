@@ -867,17 +867,28 @@ public:
         ShapeType::staticShape[1], ShapeType::staticShape[2], ShapeType::staticShape[3], ShapeType::staticShape[4],
         ShapeType::staticShape[5]};
     static constexpr int dynamicDimCount = ShapeType::dynamicDimCount;
-    static constexpr bool isDynamicDim[ConvTileDetail::MAX_CONVTILE_DIM] = {ShapeType::staticShape[0] == DYNAMIC,
-        ShapeType::staticShape[1] == DYNAMIC, ShapeType::staticShape[2] == DYNAMIC,
-        ShapeType::staticShape[3] == DYNAMIC, ShapeType::staticShape[4] == DYNAMIC,
-        ShapeType::staticShape[5] == DYNAMIC};
+    static constexpr bool isDynamicDim[ConvTileDetail::MAX_CONVTILE_DIM] = {
+        ShapeType::staticShape[0] == DYNAMIC, ShapeType::staticShape[1] == DYNAMIC,
+        ShapeType::staticShape[2] == DYNAMIC, ShapeType::staticShape[3] == DYNAMIC,
+        ShapeType::staticShape[4] == DYNAMIC, ShapeType::staticShape[5] == DYNAMIC};
+#ifdef __PTO_AUTO__
+    // auto mode only supports static shapes
+    int shape[ConvTileDetail::MAX_CONVTILE_DIM];
+#else
     int shape[ConvTileDetail::MAX_CONVTILE_DIM] = {1};
+#endif
 
     PTO_INTERNAL constexpr int GetShape(int dim) const {
         if (dim < 0 || dim >= totalDimCount) {
             return -1;
         }
+
+#ifdef __PTO_AUTO__
+        // auto mode only supports static shapes
+        return staticShape[dim];
+#else
         return isDynamicDim[dim] ? shape[dim] : staticShape[dim];
+#endif
     }
 
     PTO_INTERNAL ConvTile() = default;
