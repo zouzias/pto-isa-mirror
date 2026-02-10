@@ -135,6 +135,7 @@ tor
 tshl
 tshr
 tpartadd
+tpartmul
 tpartmin
 tpartmax
 tsel
@@ -142,6 +143,8 @@ tsub
 tsubs
 trem
 trems
+tfmod
+tfmods
 tlrelu
 tmaxs
 tmins

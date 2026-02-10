@@ -19,65 +19,61 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <typename T> struct RemSOp {
+template <typename T>
+struct RemSOp {
     PTO_INTERNAL static void BinSInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, T scalar, MaskReg &preg)
     {
+        RegTensor<T> reg_src1;
+        vdup(reg_src1, scalar, preg, MODE_ZEROING);
         if constexpr (std::is_same<T, float>::value) {
-            RegTensor<T> reg_src1;
-            RegTensor<int32_t> reg_tmp;
-            vdup(reg_src1, scalar, preg, MODE_ZEROING);
             vdiv(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
-            vcvt(reg_tmp, reg_dst, preg, ROUND_Z, RS_ENABLE);
-            vcvt(reg_dst, reg_tmp, preg, ROUND_R);
+            vtrc(reg_dst, reg_dst, ROUND_F, preg);
             vmuls(reg_dst, reg_dst, scalar, preg, MODE_ZEROING);
             vsub(reg_dst, reg_src0, reg_dst, preg, MODE_ZEROING);
         } else if constexpr (std::is_same<T, half>::value) {
-            RegTensor<T> reg_src1, reg_dst_even, reg_dst_odd;
-            RegTensor<int32_t> reg_s32_even, reg_s32_odd;
-            RegTensor<float> reg_src0_even, reg_src0_odd, reg_src1_even, reg_src1_odd, reg_even, reg_odd;
-            vdup(reg_src1, scalar, preg, MODE_ZEROING);
+            RegTensor<float> reg_src0_even, reg_src1_even, reg_even, reg_src0_odd, reg_src1_odd, reg_odd;
+            RegTensor<T> reg_dst_even, reg_dst_odd;
             vcvt(reg_src0_even, reg_src0, preg, PART_EVEN);
             vcvt(reg_src1_even, reg_src1, preg, PART_EVEN);
-            vdiv(reg_even, reg_src0_even, reg_src1_even, preg, MODE_ZEROING);
-            vcvt(reg_s32_even, reg_even, preg, ROUND_Z, RS_ENABLE);
-            vcvt(reg_even, reg_s32_even, preg, ROUND_R);
-            vmuls(reg_even, reg_even, (float)scalar, preg, MODE_ZEROING);
-            vsub(reg_even, reg_src0_even, reg_even, preg, MODE_ZEROING);
-            vcvt(reg_dst_even, reg_even, preg, ROUND_Z, RS_ENABLE, PART_EVEN);
-
             vcvt(reg_src0_odd, reg_src0, preg, PART_ODD);
             vcvt(reg_src1_odd, reg_src1, preg, PART_ODD);
+
+            vdiv(reg_even, reg_src0_even, reg_src1_even, preg, MODE_ZEROING);
             vdiv(reg_odd, reg_src0_odd, reg_src1_odd, preg, MODE_ZEROING);
-            vcvt(reg_s32_odd, reg_odd, preg, ROUND_Z, RS_ENABLE);
-            vcvt(reg_odd, reg_s32_odd, preg, ROUND_R);
+
+            vtrc(reg_even, reg_even, ROUND_F, preg);
+            vtrc(reg_odd, reg_odd, ROUND_F, preg);
+
+            vmuls(reg_even, reg_even, (float)scalar, preg, MODE_ZEROING);
             vmuls(reg_odd, reg_odd, (float)scalar, preg, MODE_ZEROING);
+
+            vsub(reg_even, reg_src0_even, reg_even, preg, MODE_ZEROING);
             vsub(reg_odd, reg_src0_odd, reg_odd, preg, MODE_ZEROING);
+
+            vcvt(reg_dst_even, reg_even, preg, ROUND_Z, RS_ENABLE, PART_EVEN);
             vcvt(reg_dst_odd, reg_odd, preg, ROUND_Z, RS_ENABLE, PART_ODD);
 
             vor(reg_dst, reg_dst_even, reg_dst_odd, preg);
         } else {
-            RegTensor<T> reg_src1;
-            vdup(reg_src1, scalar, preg, MODE_ZEROING);
             vmod(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
         }
     }
 };
 
 template <typename TileDataDst, typename TileDataSrc, unsigned dstRowStride, unsigned srcRowStride>
-__tf__ PTO_INTERNAL OP_NAME(TREMS) OP_TYPE(element_wise)
-void TRemS(typename TileDataDst::TileDType __out__ dst, 
-           typename TileDataSrc::TileDType __in__ src, 
-           typename TileDataSrc::DType scalar,
-           unsigned kValidRows,
-           unsigned kValidCols,
-           VFImplKind version = VFImplKind::VFIMPL_DEFAULT) {
+__tf__ PTO_INTERNAL OP_NAME(TREMS)
+    OP_TYPE(element_wise) void TRemS(typename TileDataDst::TileDType __out__ dst,
+                                     typename TileDataSrc::TileDType __in__ src, typename TileDataSrc::DType scalar,
+                                     unsigned kValidRows, unsigned kValidCols,
+                                     VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
+{
     using T = typename TileDataDst::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-    BinaryInstr<RemSOp<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>
-        (dstPtr, srcPtr, scalar, kValidRows, kValidCols, version);
+    BinaryInstr<RemSOp<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
+        dstPtr, srcPtr, scalar, kValidRows, kValidCols, version);
 }
 
 template <typename TileDataDst, typename TileDataSrc>
@@ -89,7 +85,7 @@ PTO_INTERNAL void TRemSCheck(unsigned srcValidRow, unsigned srcValidCol, unsigne
     static_assert((TileDataDst::Loc == TileType::Vec) && (TileDataSrc::Loc == TileType::Vec),
                   "TileType of dst and src tiles must be TileType::Vec.");
     static_assert((TileDataDst::ValidCol <= TileDataDst::Cols) && (TileDataDst::ValidRow <= TileDataDst::Rows) &&
-                  (TileDataSrc::ValidCol <= TileDataSrc::Cols) && (TileDataSrc::ValidRow <= TileDataSrc::Rows),
+                      (TileDataSrc::ValidCol <= TileDataSrc::Cols) && (TileDataSrc::ValidRow <= TileDataSrc::Rows),
                   "Number of valid columns and rows must not be greater than number of tile columns and rows.");
 }
 
@@ -103,10 +99,10 @@ PTO_INTERNAL void TREMS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
     constexpr unsigned srcRowStride = TileDataSrc::RowStride;
 
     PTO_ASSERT((src.GetValidCol() == validCol) && (src.GetValidRow() == validRow),
-                "Number of validColumns and validRows of src and dst must be the same.");
+               "Number of validColumns and validRows of src and dst must be the same.");
 
     TRemSCheck<TileDataDst, TileDataSrc>(src.GetValidRow(), src.GetValidCol(), validRow, validCol);
     TRemS<TileDataDst, TileDataSrc, dstRowStride, srcRowStride>(dst.data(), src.data(), scalar, validRow, validCol);
 }
-}  // namespace pto
+} // namespace pto
 #endif

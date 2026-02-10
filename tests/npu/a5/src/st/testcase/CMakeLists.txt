@@ -133,6 +133,7 @@ set(ALL_TESTCASES
     tcvt
     tsub
     trem
+    tfmod
     tprelu
     tand
     tor
@@ -146,6 +147,7 @@ set(ALL_TESTCASES
     tshrs
     tadd
     tpartadd
+    tpartmul
     tfillpad
     tmin
     tmax
@@ -188,6 +190,7 @@ set(ALL_TESTCASES
     trowsum_trowexpand
     trowexpand_tdiv
     trems
+    tfmods
     tscatter
     tneg
     tcolexpandadd
