@@ -35,6 +35,7 @@ enum class Layout
     NC1HWC0,
     NCHW,
     NHWC,
+    NDC1HWC0,
     FRACTAL_Z,
     FRACTAL_Z_S16S8,
     MAX,
@@ -50,10 +51,10 @@ constexpr int TOTAL_DIM = 5;
 
 constexpr int DYNAMIC = -1;
 
-template <int N1 = DYNAMIC, int N2 = DYNAMIC, int N3 = DYNAMIC, int N4 = DYNAMIC, int N5 = DYNAMIC>
+template <int64_t N1 = DYNAMIC, int64_t N2 = DYNAMIC, int64_t N3 = DYNAMIC, int64_t N4 = DYNAMIC, int64_t N5 = DYNAMIC>
 struct Shape {
-    static constexpr int staticShape[5] = {N1, N2, N3, N4, N5};
-    PTO_INTERNAL Shape(int n1, int n2, int n3, int n4, int n5)
+    static constexpr int64_t staticShape[5] = {N1, N2, N3, N4, N5};
+    PTO_INTERNAL Shape(int64_t n1, int64_t n2, int64_t n3, int64_t n4, int64_t n5)
     {
         if constexpr (N1 == DYNAMIC)
             shape[GlobalTensorDim::DIM_0] = n1;
@@ -81,7 +82,7 @@ struct Shape {
             shape[GlobalTensorDim::DIM_4] = 1;
     }
 
-    PTO_INTERNAL Shape(int n)
+    PTO_INTERNAL Shape(int64_t n)
     {
         static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
                           GlobalTensorDim::DIM_1,
@@ -98,14 +99,14 @@ struct Shape {
             shape[GlobalTensorDim::DIM_4] = n;
     }
 
-    PTO_INTERNAL Shape(int n1, int n2)
+    PTO_INTERNAL Shape(int64_t n1, int64_t n2)
     {
         static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
                           GlobalTensorDim::DIM_2,
                       "2-parameter constructors is only applicable to Stride with 2 dynamic dimension.");
 
         int idx = 0;
-        const int vals[] = {n1, n2};
+        const int64_t vals[] = {n1, n2};
         if constexpr (N1 == DYNAMIC)
             shape[GlobalTensorDim::DIM_0] = vals[idx++];
         if constexpr (N2 == DYNAMIC)
@@ -118,13 +119,13 @@ struct Shape {
             shape[GlobalTensorDim::DIM_4] = vals[idx++];
     }
 
-    PTO_INTERNAL Shape(int n1, int n2, int n3)
+    PTO_INTERNAL Shape(int64_t n1, int64_t n2, int64_t n3)
     {
         static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
                           GlobalTensorDim::DIM_3,
                       "3-parameter constructors is only applicable to Stride with 3 dynamic dimension.");
         int idx = 0;
-        const int vals[] = {n1, n2, n3};
+        const int64_t vals[] = {n1, n2, n3};
         if constexpr (N1 == DYNAMIC)
             shape[GlobalTensorDim::DIM_0] = vals[idx++];
         if constexpr (N2 == DYNAMIC)
@@ -137,13 +138,13 @@ struct Shape {
             shape[GlobalTensorDim::DIM_4] = vals[idx++];
     }
 
-    PTO_INTERNAL Shape(int n1, int n2, int n3, int n4)
+    PTO_INTERNAL Shape(int64_t n1, int64_t n2, int64_t n3, int64_t n4)
     {
         static_assert((N1 == DYNAMIC) + (N2 == DYNAMIC) + (N3 == DYNAMIC) + (N4 == DYNAMIC) + (N5 == DYNAMIC) ==
                           GlobalTensorDim::DIM_4,
                       "4-parameter constructors is only applicable to Stride with 4 dynamic dimension.");
         int idx = 0;
-        const int vals[] = {n1, n2, n3, n4};
+        const int64_t vals[] = {n1, n2, n3, n4};
         if constexpr (N1 == DYNAMIC)
             shape[GlobalTensorDim::DIM_0] = vals[idx++];
         if constexpr (N2 == DYNAMIC)
@@ -157,13 +158,14 @@ struct Shape {
     }
 
 public:
-    int shape[GlobalTensorDim::TOTAL_DIM] = {1};
+    int64_t shape[GlobalTensorDim::TOTAL_DIM] = {1};
 };
 
-template <int SN1 = DYNAMIC, int SN2 = DYNAMIC, int SN3 = DYNAMIC, int SN4 = DYNAMIC, int SN5 = DYNAMIC>
+template <int64_t SN1 = DYNAMIC, int64_t SN2 = DYNAMIC, int64_t SN3 = DYNAMIC, int64_t SN4 = DYNAMIC,
+          int64_t SN5 = DYNAMIC>
 struct Stride {
-    static constexpr int staticStride[GlobalTensorDim::TOTAL_DIM] = {SN1, SN2, SN3, SN4, SN5};
-    PTO_INTERNAL Stride(int n1, int n2, int n3, int n4, int n5)
+    static constexpr int64_t staticStride[GlobalTensorDim::TOTAL_DIM] = {SN1, SN2, SN3, SN4, SN5};
+    PTO_INTERNAL Stride(int64_t n1, int64_t n2, int64_t n3, int64_t n4, int64_t n5)
     {
         if constexpr (SN1 == DYNAMIC)
             stride[GlobalTensorDim::DIM_0] = n1;
@@ -191,7 +193,7 @@ struct Stride {
             stride[GlobalTensorDim::DIM_4] = 1;
     }
 
-    PTO_INTERNAL Stride(int n)
+    PTO_INTERNAL Stride(int64_t n)
     {
         static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
                           GlobalTensorDim::DIM_1,
@@ -209,13 +211,13 @@ struct Stride {
             stride[GlobalTensorDim::DIM_4] = n;
     }
 
-    PTO_INTERNAL Stride(int n1, int n2)
+    PTO_INTERNAL Stride(int64_t n1, int64_t n2)
     {
         static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
                           GlobalTensorDim::DIM_2,
                       "2-parameter constructors is only applicable to Stride with 2 dynamic dimension.");
         int idx = 0;
-        const int vals[] = {n1, n2};
+        const int64_t vals[] = {n1, n2};
         if constexpr (SN1 == DYNAMIC)
             stride[GlobalTensorDim::DIM_0] = vals[idx++];
         if constexpr (SN2 == DYNAMIC)
@@ -228,13 +230,13 @@ struct Stride {
             stride[GlobalTensorDim::DIM_4] = vals[idx++];
     }
 
-    PTO_INTERNAL Stride(int n1, int n2, int n3)
+    PTO_INTERNAL Stride(int64_t n1, int64_t n2, int64_t n3)
     {
         static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
                           GlobalTensorDim::DIM_3,
                       "3-parameter constructors is only applicable to Stride with 3 dynamic dimension.");
         int idx = 0;
-        const int vals[] = {n1, n2, n3};
+        const int64_t vals[] = {n1, n2, n3};
         if constexpr (SN1 == DYNAMIC)
             stride[GlobalTensorDim::DIM_0] = vals[idx++];
         if constexpr (SN2 == DYNAMIC)
@@ -247,13 +249,13 @@ struct Stride {
             stride[GlobalTensorDim::DIM_4] = vals[idx++];
     }
 
-    PTO_INTERNAL Stride(int n1, int n2, int n3, int n4)
+    PTO_INTERNAL Stride(int64_t n1, int64_t n2, int64_t n3, int64_t n4)
     {
         static_assert((SN1 == DYNAMIC) + (SN2 == DYNAMIC) + (SN3 == DYNAMIC) + (SN4 == DYNAMIC) + (SN5 == DYNAMIC) ==
                           GlobalTensorDim::DIM_4,
                       "4-parameter constructors is only applicable to Stride with 4 dynamic dimension.");
         int idx = 0;
-        const int vals[] = {n1, n2, n3, n4};
+        const int64_t vals[] = {n1, n2, n3, n4};
         if constexpr (SN1 == DYNAMIC)
             stride[GlobalTensorDim::DIM_0] = vals[idx++];
         if constexpr (SN2 == DYNAMIC)
@@ -267,7 +269,7 @@ struct Stride {
     }
 
 public:
-    int stride[GlobalTensorDim::TOTAL_DIM] = {1};
+    int64_t stride[GlobalTensorDim::TOTAL_DIM] = {1};
 };
 
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_ = Layout::ND>
@@ -281,11 +283,11 @@ struct GlobalTensor {
     static const Shape defaultShape;
     static const Stride defaultStride;
 
-    static constexpr int staticShape[GlobalTensorDim::TOTAL_DIM] = {
+    static constexpr int64_t staticShape[GlobalTensorDim::TOTAL_DIM] = {
         Shape::staticShape[GlobalTensorDim::DIM_0], Shape::staticShape[GlobalTensorDim::DIM_1],
         Shape::staticShape[GlobalTensorDim::DIM_2], Shape::staticShape[GlobalTensorDim::DIM_3],
         Shape::staticShape[GlobalTensorDim::DIM_4]};
-    static constexpr int staticStride[GlobalTensorDim::TOTAL_DIM] = {
+    static constexpr int64_t staticStride[GlobalTensorDim::TOTAL_DIM] = {
         Stride::staticStride[GlobalTensorDim::DIM_0], Stride::staticStride[GlobalTensorDim::DIM_1],
         Stride::staticStride[GlobalTensorDim::DIM_2], Stride::staticStride[GlobalTensorDim::DIM_3],
         Stride::staticStride[GlobalTensorDim::DIM_4]};
@@ -327,7 +329,7 @@ struct GlobalTensor {
     }
     PTO_INTERNAL GlobalTensor() : data_(nullptr) {}
 
-    PTO_INTERNAL int GetShape(const int dim)
+    PTO_INTERNAL int64_t GetShape(const int dim)
     {
         switch (dim) {
             case GlobalTensorDim::DIM_0:
@@ -345,7 +347,7 @@ struct GlobalTensor {
         }
     }
 
-    PTO_INTERNAL int GetStride(const int dim)
+    PTO_INTERNAL int64_t GetStride(const int dim)
     {
         switch (dim) {
             case GlobalTensorDim::DIM_0:
@@ -364,7 +366,7 @@ struct GlobalTensor {
     }
 
     template <int dim>
-    AICORE static constexpr int GetShape()
+    AICORE static constexpr int64_t GetShape()
     {
         static_assert(dim >= GlobalTensorDim::DIM_0 && dim < GlobalTensorDim::TOTAL_DIM, "only support get dim(0-4)");
         if constexpr (dim == GlobalTensorDim::DIM_0) {
@@ -396,7 +398,7 @@ struct GlobalTensor {
     }
 
     template <int dim>
-    AICORE static constexpr int GetStride()
+    AICORE static constexpr int64_t GetStride()
     {
         static_assert(dim >= GlobalTensorDim::DIM_0 && dim < GlobalTensorDim::TOTAL_DIM, "only support get dim(0-4)");
         if constexpr (dim == GlobalTensorDim::DIM_0) {
@@ -436,8 +438,8 @@ struct GlobalTensor {
     }
 
 private:
-    template <int StaticShape>
-    PTO_INTERNAL int GetShapeSize(const int dim)
+    template <int64_t StaticShape>
+    PTO_INTERNAL int64_t GetShapeSize(const int dim)
     {
         if constexpr (StaticShape == DYNAMIC) {
             return shape_.shape[dim];
@@ -446,8 +448,8 @@ private:
         }
     }
 
-    template <int StaticStride>
-    PTO_INTERNAL int GetStrideSize(const int dim)
+    template <int64_t StaticStride>
+    PTO_INTERNAL int64_t GetStrideSize(const int dim)
     {
         if constexpr (StaticStride == DYNAMIC) {
             return stride_.stride[dim];
@@ -474,30 +476,30 @@ template <typename Element_, typename Shape_, typename Stride_, Layout Layout_>
 const typename GlobalTensor<Element_, Shape_, Stride_, Layout_>::Stride
     GlobalTensor<Element_, Shape_, Stride_, Layout_>::defaultStride{1, 1, 1, 1, 1};
 
-template <typename T, int rows = DYNAMIC, int cols = DYNAMIC, Layout Layout_ = Layout::ND>
+template <typename T, int64_t rows = DYNAMIC, int64_t cols = DYNAMIC, Layout Layout_ = Layout::ND>
 struct TileShape2D;
 
-template <typename T, int cols>
-constexpr int GetTileShape2DNZCols()
+template <typename T, int64_t cols>
+constexpr int64_t GetTileShape2DNZCols()
 {
     if constexpr (cols == DYNAMIC) {
         return DYNAMIC;
     } else {
-        return static_cast<int>(cols / (C0_SIZE_BYTE / sizeof(T)));
+        return static_cast<int64_t>(cols / (C0_SIZE_BYTE / sizeof(T)));
     }
 }
 
-template <typename T, int rows>
-constexpr int GetTileShape2DNZRows()
+template <typename T, int64_t rows>
+constexpr int64_t GetTileShape2DNZRows()
 {
     if constexpr (rows == DYNAMIC) {
         return DYNAMIC;
     } else {
-        return static_cast<int>(rows / FRACTAL_NZ_ROW);
+        return static_cast<int64_t>(rows / FRACTAL_NZ_ROW);
     }
 }
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct TileShape2D<T, rows, cols, Layout::NZ>
     : public Shape<1, GetTileShape2DNZCols<T, cols>(), GetTileShape2DNZRows<T, rows>(), FRACTAL_NZ_ROW,
                    C0_SIZE_BYTE / sizeof(T)> {
@@ -510,14 +512,14 @@ struct TileShape2D<T, rows, cols, Layout::NZ>
     PTO_INTERNAL TileShape2D() : Parent()
     {}
 
-    PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL TileShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(1, dynamicCols / C0Size, dynamicRows / FRACTAL_NZ_ROW, FRACTAL_NZ_ROW, C0Size)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int cols>
-constexpr int GetShape2DCols()
+template <typename T, int64_t cols>
+constexpr int64_t GetShape2DCols()
 {
     if constexpr (cols == DYNAMIC) {
         return DYNAMIC;
@@ -525,8 +527,8 @@ constexpr int GetShape2DCols()
         return cols;
     }
 }
-template <typename T, int rows>
-constexpr int GetShape2DRows()
+template <typename T, int64_t rows>
+constexpr int64_t GetShape2DRows()
 {
     if constexpr (rows == DYNAMIC) {
         return DYNAMIC;
@@ -534,7 +536,7 @@ constexpr int GetShape2DRows()
         return rows;
     }
 }
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct TileShape2D<T, rows, cols, Layout::ND>
     : public Shape<1, 1, 1, GetShape2DRows<T, rows>(), GetShape2DCols<T, cols>()> {
     using Parent = Shape<1, 1, 1, GetShape2DRows<T, rows>(), GetShape2DCols<T, cols>()>;
@@ -542,11 +544,11 @@ struct TileShape2D<T, rows, cols, Layout::ND>
     PTO_INTERNAL TileShape2D() : Parent()
     {}
 
-    PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols) : Parent(1, 1, 1, dynamicRows, dynamicCols)
+    PTO_INTERNAL TileShape2D(int64_t dynamicRows, int64_t dynamicCols) : Parent(1, 1, 1, dynamicRows, dynamicCols)
     {}
     using Parent::Parent;
 };
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct TileShape2D<T, rows, cols, Layout::DN>
     : public Shape<1, 1, 1, GetShape2DRows<T, rows>(), GetShape2DCols<T, cols>()> {
     using Parent = Shape<1, 1, 1, GetShape2DRows<T, rows>(), GetShape2DCols<T, cols>()>;
@@ -554,43 +556,43 @@ struct TileShape2D<T, rows, cols, Layout::DN>
     PTO_INTERNAL TileShape2D() : Parent()
     {}
 
-    PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols) : Parent(1, 1, 1, dynamicRows, dynamicCols)
+    PTO_INTERNAL TileShape2D(int64_t dynamicRows, int64_t dynamicCols) : Parent(1, 1, 1, dynamicRows, dynamicCols)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows = DYNAMIC, int cols = DYNAMIC, Layout Layout_ = Layout::ND>
+template <typename T, int64_t rows = DYNAMIC, int64_t cols = DYNAMIC, Layout Layout_ = Layout::ND>
 struct BaseShape2D;
 
-template <typename T, int cols>
-constexpr int GetBaseShape2DNZCols()
+template <typename T, int64_t cols>
+constexpr int64_t GetBaseShape2DNZCols()
 {
     if constexpr (cols == DYNAMIC) {
         return DYNAMIC;
     } else {
-        return static_cast<int>(cols / (C0_SIZE_BYTE / sizeof(T)));
+        return static_cast<int64_t>(cols / (C0_SIZE_BYTE / sizeof(T)));
     }
 }
 
-template <typename T, int rows, int cols>
-constexpr int GetBaseShape2DStride0()
+template <typename T, int64_t rows, int64_t cols>
+constexpr int64_t GetBaseShape2DStride0()
 {
     if constexpr (cols == DYNAMIC || rows == DYNAMIC) {
         return DYNAMIC;
     } else {
-        return static_cast<int>(cols * rows);
+        return static_cast<int64_t>(cols * rows);
     }
 }
-template <typename T, int rows>
-constexpr int GetBaseShape2DStride1()
+template <typename T, int64_t rows>
+constexpr int64_t GetBaseShape2DStride1()
 {
     if constexpr (rows == DYNAMIC) {
         return DYNAMIC;
     } else {
-        return static_cast<int>(rows * (C0_SIZE_BYTE / sizeof(T)));
+        return static_cast<int64_t>(rows * (C0_SIZE_BYTE / sizeof(T)));
     }
 }
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct BaseShape2D<T, rows, cols, Layout::NZ>
     : public Stride<GetBaseShape2DStride0<T, rows, cols>(), GetBaseShape2DStride1<T, rows>(),
                     FRACTAL_NZ_ROW *(C0_SIZE_BYTE / sizeof(T)), C0_SIZE_BYTE / sizeof(T), 1> {
@@ -604,12 +606,12 @@ struct BaseShape2D<T, rows, cols, Layout::NZ>
     PTO_INTERNAL BaseShape2D() : Parent()
     {}
 
-    PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL BaseShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(dynamicCols * dynamicRows, dynamicRows * C0Size, FractalNZSize, C0Size, 1)
     {}
     using Parent::Parent;
 };
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct BaseShape2D<T, rows, cols, Layout::ND>
     : public Stride<GetBaseShape2DStride0<T, rows, cols>(), GetBaseShape2DStride0<T, rows, cols>(),
                     GetBaseShape2DStride0<T, rows, cols>(), GetShape2DCols<T, cols>(), 1> {
@@ -619,12 +621,12 @@ struct BaseShape2D<T, rows, cols, Layout::ND>
     PTO_INTERNAL BaseShape2D() : Parent()
     {}
 
-    PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL BaseShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(dynamicRows * dynamicCols, dynamicRows * dynamicCols, dynamicRows * dynamicCols, dynamicCols, 1)
     {}
     using Parent::Parent;
 };
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct BaseShape2D<T, rows, cols, Layout::DN>
     : public Stride<GetBaseShape2DStride0<T, rows, cols>(), GetBaseShape2DStride0<T, rows, cols>(),
                     GetBaseShape2DStride0<T, rows, cols>(), 1, GetShape2DRows<T, rows>()> {
@@ -634,13 +636,13 @@ struct BaseShape2D<T, rows, cols, Layout::DN>
     PTO_INTERNAL BaseShape2D() : Parent()
     {}
 
-    PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL BaseShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(dynamicRows * dynamicCols, dynamicRows * dynamicCols, dynamicRows * dynamicCols, 1, dynamicRows)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct BaseShape2D<T, rows, cols, Layout::MX_A_ZZ>
     : public Stride<GetBaseShape2DStride0<T, rows, cols>(), (cols == DYNAMIC) ? DYNAMIC : cols * MX_ROW_LEN,
                     MX_BLOCK_SIZE, MX_COL_LEN, 1> {
@@ -650,13 +652,13 @@ struct BaseShape2D<T, rows, cols, Layout::MX_A_ZZ>
     PTO_INTERNAL BaseShape2D() : Parent()
     {}
 
-    PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL BaseShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(dynamicCols * dynamicRows, dynamicCols * MX_ROW_LEN, MX_BLOCK_SIZE, MX_COL_LEN, 1)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct TileShape2D<T, rows, cols, Layout::MX_A_ZZ>
     : public Shape<1, rows == DYNAMIC ? DYNAMIC : rows / MX_ROW_LEN, cols == DYNAMIC ? DYNAMIC : cols / MX_COL_LEN,
                    MX_ROW_LEN, MX_COL_LEN> {
@@ -666,13 +668,13 @@ struct TileShape2D<T, rows, cols, Layout::MX_A_ZZ>
     static_assert((cols == DYNAMIC) || (cols % C0Size == 0), "cols must be divisible by C0Size for Layout::MX_A_ZZ");
     PTO_INTERNAL TileShape2D() : Parent()
     {}
-    PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL TileShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(1, dynamicRows / MX_ROW_LEN, dynamicCols / MX_COL_LEN, MX_ROW_LEN, MX_COL_LEN)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct BaseShape2D<T, rows, cols, Layout::MX_A_ND>
     : public Stride<GetBaseShape2DStride0<T, rows, cols>(), GetBaseShape2DStride0<T, rows, cols>(), cols, MX_COL_LEN,
                     1> {
@@ -681,13 +683,13 @@ struct BaseShape2D<T, rows, cols, Layout::MX_A_ND>
 
     PTO_INTERNAL BaseShape2D() : Parent()
     {}
-    PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL BaseShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(dynamicCols * dynamicRows, dynamicCols * dynamicRows, dynamicCols, MX_COL_LEN, 1)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct TileShape2D<T, rows, cols, Layout::MX_A_ND>
     : public Shape<1, 1, rows == DYNAMIC ? DYNAMIC : rows, cols == DYNAMIC ? DYNAMIC : cols / MX_COL_LEN, MX_COL_LEN> {
     using Parent =
@@ -697,13 +699,13 @@ struct TileShape2D<T, rows, cols, Layout::MX_A_ND>
 
     PTO_INTERNAL TileShape2D() : Parent()
     {}
-    PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL TileShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(1, 1, dynamicRows, dynamicCols / MX_COL_LEN, MX_COL_LEN)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct BaseShape2D<T, rows, cols, Layout::MX_A_DN>
     : public Stride<GetBaseShape2DStride0<T, rows, cols>(), GetBaseShape2DStride0<T, rows, cols>(),
                     rows == DYNAMIC ? DYNAMIC : rows * MX_COL_LEN, MX_COL_LEN, 1> {
@@ -712,13 +714,13 @@ struct BaseShape2D<T, rows, cols, Layout::MX_A_DN>
 
     PTO_INTERNAL BaseShape2D() : Parent()
     {}
-    PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL BaseShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(dynamicCols * dynamicRows, dynamicCols * dynamicRows, dynamicRows * MX_COL_LEN, MX_COL_LEN, 1)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct TileShape2D<T, rows, cols, Layout::MX_A_DN>
     : public Shape<1, 1, cols == DYNAMIC ? DYNAMIC : cols / MX_COL_LEN, rows == DYNAMIC ? DYNAMIC : rows, MX_COL_LEN> {
     using Parent =
@@ -728,13 +730,13 @@ struct TileShape2D<T, rows, cols, Layout::MX_A_DN>
 
     PTO_INTERNAL TileShape2D() : Parent()
     {}
-    PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL TileShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(1, 1, dynamicCols / MX_COL_LEN, dynamicRows, MX_COL_LEN)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct BaseShape2D<T, rows, cols, Layout::MX_B_NN>
     : public Stride<GetBaseShape2DStride0<T, rows, cols>(), (rows == DYNAMIC) ? DYNAMIC : rows * MX_ROW_LEN,
                     MX_BLOCK_SIZE, MX_COL_LEN, 1> {
@@ -743,13 +745,13 @@ struct BaseShape2D<T, rows, cols, Layout::MX_B_NN>
 
     PTO_INTERNAL BaseShape2D() : Parent()
     {}
-    PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL BaseShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(dynamicCols * dynamicRows, dynamicRows * MX_ROW_LEN, MX_BLOCK_SIZE, MX_COL_LEN, 1)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct TileShape2D<T, rows, cols, Layout::MX_B_NN>
     : public Shape<1, cols == DYNAMIC ? DYNAMIC : cols / MX_ROW_LEN, rows == DYNAMIC ? DYNAMIC : rows / MX_COL_LEN,
                    MX_ROW_LEN, MX_COL_LEN> {
@@ -760,13 +762,13 @@ struct TileShape2D<T, rows, cols, Layout::MX_B_NN>
 
     PTO_INTERNAL TileShape2D() : Parent()
     {}
-    PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL TileShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(1, dynamicCols / MX_ROW_LEN, dynamicRows / MX_COL_LEN, MX_ROW_LEN, MX_COL_LEN)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct BaseShape2D<T, rows, cols, Layout::MX_B_ND>
     : public Stride<GetBaseShape2DStride0<T, rows, cols>(), GetBaseShape2DStride0<T, rows, cols>(),
                     cols == DYNAMIC ? DYNAMIC : cols * MX_COL_LEN, MX_COL_LEN, 1> {
@@ -775,13 +777,13 @@ struct BaseShape2D<T, rows, cols, Layout::MX_B_ND>
 
     PTO_INTERNAL BaseShape2D() : Parent()
     {}
-    PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL BaseShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(dynamicCols * dynamicRows, dynamicCols * dynamicRows, dynamicCols * MX_COL_LEN, MX_COL_LEN, 1)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct TileShape2D<T, rows, cols, Layout::MX_B_ND>
     : public Shape<1, 1, rows == DYNAMIC ? DYNAMIC : rows / MX_COL_LEN, cols == DYNAMIC ? DYNAMIC : cols, MX_COL_LEN> {
     using Parent =
@@ -791,13 +793,13 @@ struct TileShape2D<T, rows, cols, Layout::MX_B_ND>
 
     PTO_INTERNAL TileShape2D() : Parent()
     {}
-    PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL TileShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(1, 1, dynamicRows / MX_COL_LEN, dynamicCols, MX_COL_LEN)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct BaseShape2D<T, rows, cols, Layout::MX_B_DN>
     : public Stride<GetBaseShape2DStride0<T, rows, cols>(), GetBaseShape2DStride0<T, rows, cols>(),
                     rows == DYNAMIC ? DYNAMIC : rows, MX_COL_LEN, 1> {
@@ -806,13 +808,13 @@ struct BaseShape2D<T, rows, cols, Layout::MX_B_DN>
 
     PTO_INTERNAL BaseShape2D() : Parent()
     {}
-    PTO_INTERNAL BaseShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL BaseShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(dynamicCols * dynamicRows, dynamicCols * dynamicRows, dynamicRows, MX_COL_LEN, 1)
     {}
     using Parent::Parent;
 };
 
-template <typename T, int rows, int cols>
+template <typename T, int64_t rows, int64_t cols>
 struct TileShape2D<T, rows, cols, Layout::MX_B_DN>
     : public Shape<1, 1, cols == DYNAMIC ? DYNAMIC : cols, rows == DYNAMIC ? DYNAMIC : rows / MX_COL_LEN, MX_COL_LEN> {
     using Parent =
@@ -822,7 +824,7 @@ struct TileShape2D<T, rows, cols, Layout::MX_B_DN>
 
     PTO_INTERNAL TileShape2D() : Parent()
     {}
-    PTO_INTERNAL TileShape2D(int dynamicRows, int dynamicCols)
+    PTO_INTERNAL TileShape2D(int64_t dynamicRows, int64_t dynamicCols)
         : Parent(1, 1, dynamicCols, dynamicRows / MX_COL_LEN, MX_COL_LEN)
     {}
     using Parent::Parent;
@@ -1044,12 +1046,183 @@ public:
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
+    PTO_INTERNAL uint16_t GetFmapH() const
+    {
+        return fmapH_;
+    }
+    PTO_INTERNAL void SetFmapH(uint16_t fmapH)
+    {
+        fmapH_ = fmapH;
+    }
+    PTO_INTERNAL uint16_t GetFmapW() const
+    {
+        return fmapW_;
+    }
+    PTO_INTERNAL void SetFmapW(uint16_t fmapW)
+    {
+        fmapW_ = fmapW;
+    }
+    PTO_INTERNAL uint8_t GetPadList(uint8_t index) const
+    { // PTO_Assert
+        return padList_[index];
+    }
+    PTO_INTERNAL void SetPadList(uint8_t index, uint8_t value)
+    {
+        padList_[index] = value;
+    }
+    PTO_INTERNAL const uint8_t *GetPadListArray() const
+    {
+        return padList_;
+    }
+    PTO_INTERNAL void SetPadListArray(const uint8_t values[4])
+    {
+        // PTO_Assert
+        for (int i = 0; i < 4; i++) {
+            padList_[i] = values[i];
+        }
+    }
+    PTO_INTERNAL uint16_t GetFilterH() const
+    {
+        return filterH_;
+    }
+    PTO_INTERNAL void SetFilterH(uint16_t filterH)
+    {
+        filterH_ = filterH;
+    }
+    PTO_INTERNAL uint16_t GetFilterW() const
+    {
+        return filterW_;
+    }
+    PTO_INTERNAL void SetFilterW(uint16_t filterW)
+    {
+        filterW_ = filterW;
+    }
+    PTO_INTERNAL uint8_t GetDilationH() const
+    {
+        return dilationH_;
+    }
+    PTO_INTERNAL void SetDilationH(uint8_t dilationH)
+    {
+        dilationH_ = dilationH;
+    }
+    PTO_INTERNAL uint8_t GetDilationW() const
+    {
+        return dilationW_;
+    }
+    PTO_INTERNAL void SetDilationW(uint8_t dilationW)
+    {
+        dilationW_ = dilationW;
+    }
+    PTO_INTERNAL uint8_t GetStrideH() const
+    {
+        return strideH_;
+    }
+    PTO_INTERNAL void SetStrideH(uint8_t strideH)
+    {
+        strideH_ = strideH;
+    }
+    PTO_INTERNAL uint8_t GetStrideW() const
+    {
+        return strideW_;
+    }
+    PTO_INTERNAL void SetStrideW(uint8_t strideW)
+    {
+        strideW_ = strideW;
+    }
+    PTO_INTERNAL DType GetPadValue() const
+    {
+        return padValue_;
+    }
+    PTO_INTERNAL void SetPadValue(DType padValue)
+    {
+        padValue_ = padValue;
+    }
+    PTO_INTERNAL uint16_t GetChannelSize() const
+    {
+        return channelSize_;
+    }
+    PTO_INTERNAL void SetChannelSize(uint16_t channelSize)
+    {
+        channelSize_ = channelSize;
+    }
+    PTO_INTERNAL uint16_t GetRepeatStride() const
+    {
+        return repeatStride_;
+    }
+    PTO_INTERNAL void SetRepeatStride(uint16_t repeatStride)
+    {
+        repeatStride_ = repeatStride;
+    }
+    PTO_INTERNAL uint16_t GetRepeatTime() const
+    {
+        return repeatTime_;
+    }
+    PTO_INTERNAL void SetRepeatTime(uint8_t repeatTime)
+    {
+        repeatTime_ = repeatTime;
+    }
+    PTO_INTERNAL uint16_t GetRepeatMode() const
+    {
+        return repeatMode_;
+    }
+    PTO_INTERNAL void SetRepeatMode(uint8_t repeatMode)
+    {
+        repeatMode_ = repeatMode;
+    }
+    PTO_INTERNAL bool GetTranspose() const
+    {
+        return transpose_;
+    }
+    PTO_INTERNAL void SetTranspose(bool transpose)
+    {
+        transpose_ = transpose;
+    }
+#if defined REGISTER_BASE
+    PTO_INTERNAL void SetDstStride(uint16_t dstStride)
+    {
+        dstStride_ = dstStride;
+    }
+    PTO_INTERNAL uint16_t GetDstStride() const
+    {
+        return dstStride_;
+    }
+    PTO_INTERNAL void SetDstMposition(uint16_t dstMposition)
+    {
+        dstMposition_ = dstMposition;
+    }
+    PTO_INTERNAL uint16_t GetDstMposition() const
+    {
+        return dstMposition_;
+    }
+#endif
 private:
     AICORE void assignData(TileDType data)
     {
         data_ = data;
     }
     TileDType data_;
+    uint8_t padList_[4] = {0};
+    uint16_t fmapH_ = 0;
+    uint16_t fmapW_ = 0;
+
+    uint16_t filterH_ = 1;
+    uint16_t filterW_ = 1;
+    uint16_t dilationH_ = 1;
+    uint16_t dilationW_ = 1;
+    uint16_t strideH_ = 1;
+    uint16_t strideW_ = 1;
+
+    DType padValue_ = 0;
+    uint16_t channelSize_ = 0;
+    uint16_t repeatStride_ = 0;
+    uint8_t repeatTime_ = 1;
+    uint8_t repeatMode_ = 0;
+#if defined REGISTER_BASE
+    uint16_t dstStride_ = 0;
+    uint16_t dstMposition_ = 0;
+#endif
+    bool smallChannel_ = false;
+    bool transpose_ = false;
 };
 
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,

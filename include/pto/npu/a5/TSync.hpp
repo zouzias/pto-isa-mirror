@@ -44,6 +44,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TRSQRT */,
     PIPE_V /* TEXPANDS */,
     PIPE_V /* TPARTADD */,
+    PIPE_V /* TPARTMUL */,
     PIPE_V /* TPARTMAX */,
     PIPE_V /* TPARTMIN */,
     PIPE_V /* TCMPS */,
@@ -96,6 +97,8 @@ constexpr pipe_t opPipeList[] = {
     PIPE_S /* TSETF32MODE */,
     PIPE_MTE1 /* TIMG2COL */,
     PIPE_S /* TSETFMATRIX */,
+    PIPE_S /* TSET_IMG2COL_RPT */,
+    PIPE_S /* TSET_IMG2COL_PADDING */,
     PIPE_ALL /* OP_COUNT */,
 };
 
