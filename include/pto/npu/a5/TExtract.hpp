@@ -410,9 +410,9 @@ __tf__ AICORE void TExtractAccToMat(typename DstTileData::TileDType __out__ dst,
 {
     using dstType = typename DstTileData::DType;
     using srcType = typename SrcTileData::DType;
-    constexpr bool channelSplitEnable =
-        (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
-        (std::is_same_v<dstType, float>)&&(DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
+    constexpr bool channelSplitEnable = (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
+                                        (std::is_same_v<dstType, float>) &&
+                                        (DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
     constexpr int32_t c0Size = (!channelSplitEnable) && (DstTileData::SFractalSize == 2 * CUBE_BLOCK_SIZE) ?
                                    2 * C0_SIZE_BYTE / sizeof(dstType) :
                                    C0_SIZE_BYTE / sizeof(dstType);
@@ -567,7 +567,8 @@ PTO_INTERNAL void TextractConvTileCheck(DstTileData &dst, SrcTileData &src)
     static_assert(sizeof(typename DstTileData::DType) == sizeof(typename SrcTileData::DType),
                   "Fix: Source dtype must be same with dst dtype!");
 
-    static_assert((SrcTileData::layout == Layout::FRACTAL_Z), "TExtract: Source layout only support FRACTAL_Z.");
+    static_assert((SrcTileData::layout == Layout::FRACTAL_Z) || (SrcTileData::layout == Layout::FRACTAL_Z_3D),
+                  "TExtract: Source layout only support FRACTAL_Z or FRACTAL_Z_3D.");
     static_assert(DstTileData::SFractal == SLayout::ColMajor && DstTileData::isRowMajor,
                   "TExtract: Destination layout only support SLayout is ColMajor ang BLayout is RowMajor.");
 }
