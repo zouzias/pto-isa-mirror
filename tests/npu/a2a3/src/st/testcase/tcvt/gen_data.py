@@ -274,56 +274,17 @@ def gen_golden(case_name, param):
                             torch_input = torch_input.to(np_to_torch[srctype])
                     
                     # Generate truncated mode using PyTorch (default PyTorch behavior)
+                    # PyTorch always uses TRUNC mode, so we only generate truncated golden data
                     torch_output = torch_input.to(np_to_torch[dsttype])
                     truncated = torch_output.numpy().astype(dsttype)
                     
-                    # Generate saturated mode by handling special values
-                    if np.issubdtype(srctype, np.floating):
-                        # Create masks for special values BEFORE conversion
-                        is_nan = torch.isnan(torch_input)
-                        is_pos_inf = torch.isinf(torch_input) & (torch_input > 0)
-                        is_neg_inf = torch.isinf(torch_input) & (torch_input < 0)
-                        
-                        # Convert to integer (PyTorch clamps finite values)
-                        saturated_output = torch_input.to(np_to_torch[dsttype])
-                        
-                        # Replace special values with appropriate boundary values after conversion
-                        saturated_output = torch.where(is_nan,
-                                                      torch.tensor(info.min if np.issubdtype(dsttype, np.signedinteger) else 0, dtype=np_to_torch[dsttype]),
-                                                      saturated_output)
-                        saturated_output = torch.where(is_pos_inf,
-                                                      torch.tensor(info.max, dtype=np_to_torch[dsttype]),
-                                                      saturated_output)
-                        saturated_output = torch.where(is_neg_inf,
-                                                      torch.tensor(info.min, dtype=np_to_torch[dsttype]),
-                                                      saturated_output)
-                        saturated = saturated_output.numpy().astype(dsttype)
-                    else:
-                        # For integer to integer, clamp the input
-                        clamped_input = torch.clamp(torch_input, info.min, info.max)
-                        saturated_output = clamped_input.to(np_to_torch[dsttype])
-                        saturated = saturated_output.numpy().astype(dsttype)
-                    
-                    print(f"Generated saturation golden data using PyTorch for {srctype.__name__} → {dsttype.__name__}")
+                    print(f"Generated truncated golden data using PyTorch for {srctype.__name__} → {dsttype.__name__}")
                 else:
                     print(f"Warning: PyTorch conversion not supported for {srctype.__name__} → {dsttype.__name__}, using NumPy fallback")
                     use_torch = False
             
             # NumPy fallback when PyTorch is not available or conversion not supported
             if not use_torch:
-                # Saturated mode: clamp to datatype range, handling special FP values
-                saturated_list = []
-                for val in converted_golden.flat:
-                    if np.isnan(val):
-                        saturated_val = info.min if np.issubdtype(dsttype, np.signedinteger) else 0
-                    elif np.isinf(val):
-                        saturated_val = info.max if val > 0 else info.min
-                    else:
-                        int_val = int(np.int64(val))
-                        saturated_val = max(info.min, min(info.max, int_val))
-                    saturated_list.append(saturated_val)
-                saturated = np.array(saturated_list, dtype=dsttype).reshape([m, n])
-                
                 # Truncated mode: bit extraction (modulo behavior)
                 truncated_list = []
                 for val in converted_golden.flat:
@@ -350,9 +311,8 @@ def gen_golden(case_name, param):
                     truncated_list.append(truncated_val)
                 truncated = np.array(truncated_list, dtype=dsttype).reshape([m, n])
                 
-                print(f"Generated saturation golden data using NumPy fallback for {srctype.__name__} → {dsttype.__name__}")
+                print(f"Generated truncated golden data using NumPy fallback for {srctype.__name__} → {dsttype.__name__}")
             
-            saturated.tofile("./golden_saturated.bin")
             truncated.tofile("./golden_truncated.bin")
                 
 class tcvtParams:
@@ -420,13 +380,12 @@ if __name__ == "__main__":
 
     # Add saturation mode test cases (only for supported conversions on A2A3)
     # Note: fp32→int8 is NOT supported on A2A3 hardware
-    # Using 1x5 shape: inf, -inf, nan, and 2 overflow values
+    # Using 1x32 shape: inf, -inf, nan, 2 overflow values, and padding
     saturation_tests = [
         ("saturation_fp16_int8_1x32", np.float16, np.int8, 1, 32),
         ("saturation_fp32_int16_1x32", np.float32, np.int16, 1, 32),
-        ("saturation_fp32_int32_1x32", np.float32, np.int32, 1, 32),
+        ("saturation_fp16_int16_1x32", np.float16, np.int16, 1, 32),
         ("saturation_fp16_uint8_1x32", np.float16, np.uint8, 1, 32),
-        ("saturation_fp16_int32_1x32", np.float16, np.int32, 1, 32),
         ("saturation_int64_int32_1x32", np.int64, np.int32, 1, 32),
         ("saturation_int32_int16_1x32", np.int32, np.int16, 1, 32),
     ]

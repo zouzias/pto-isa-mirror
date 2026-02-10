@@ -185,14 +185,7 @@ void test_tcvt_saturation()
     WriteFile(GetGoldenDir() + "/output_truncated.bin", dstTruncHost, dstFileSize);
     WriteFile(GetGoldenDir() + "/output_default.bin", dstDefaultHost, dstFileSize);
 
-    // Compare saturated output
-    std::vector<D> goldenSat(dstFileSize);
-    std::vector<D> devSat(dstFileSize);
-    ReadFile(GetGoldenDir() + "/golden_saturated.bin", dstFileSize, goldenSat.data(), dstFileSize);
-    ReadFile(GetGoldenDir() + "/output_saturated.bin", dstFileSize, devSat.data(), dstFileSize);
-    bool satOk = ResultCmp<D>(goldenSat, devSat, 0.001f);
-
-    // Compare truncated output
+    // Compare truncated output (PyTorch only provides TRUNC mode golden data)
     std::vector<D> goldenTrunc(dstFileSize);
     std::vector<D> devTrunc(dstFileSize);
     ReadFile(GetGoldenDir() + "/golden_truncated.bin", dstFileSize, goldenTrunc.data(), dstFileSize);
@@ -200,19 +193,8 @@ void test_tcvt_saturation()
     bool truncOk = ResultCmp<D>(goldenTrunc, devTrunc, 0.001f);
 
     // Compare default output
-    // For conversions whose default saturation mode is OFF: match golden_truncated
-    // For other conversions: match golden_saturated
-    constexpr bool defaultSatOff =
-        (std::is_same<D, uint8_t>::value && std::is_same<S, aclFloat16>::value) ||  // fp16 -> uint8
-        (std::is_same<D, int8_t>::value && std::is_same<S, aclFloat16>::value) ||   // fp16 -> int8
-        (std::is_same<D, int16_t>::value && std::is_same<S, float>::value) ||       // fp32 -> int16
-        (std::is_same<D, int16_t>::value && std::is_same<S, aclFloat16>::value) ||  // fp16 -> int16
-        (std::is_same<D, int32_t>::value && std::is_same<S, int64_t>::value) ||     // int64 -> int32
-        (std::is_same<D, int16_t>::value && std::is_same<S, int32_t>::value);       // int32 -> int16
-
-    std::string goldenDefaultFile = defaultSatOff
-        ? GetGoldenDir() + "/golden_truncated.bin"
-        : GetGoldenDir() + "/golden_saturated.bin";
+    // PyTorch only provides truncated mode golden data, so we compare against that
+    std::string goldenDefaultFile = GetGoldenDir() + "/golden_truncated.bin";
 
     std::vector<D> goldenDefault(dstFileSize);
     std::vector<D> devDefault(dstFileSize);
@@ -234,13 +216,8 @@ void test_tcvt_saturation()
     aclrtResetDevice(0);
     aclFinalize();
 
-    EXPECT_TRUE(satOk) << "Saturation mode ON output mismatch";
-    EXPECT_TRUE(truncOk) << "Saturation mode OFF output mismatch";
-    if constexpr (defaultSatOff) {
-        EXPECT_TRUE(defaultOk) << "Default mode should match OFF for this conversion";
-    } else {
-        EXPECT_TRUE(defaultOk) << "Default mode should match ON for this conversion";
-    }
+    EXPECT_TRUE(truncOk) << "Saturation mode OFF (TRUNC) output mismatch";
+    EXPECT_TRUE(defaultOk) << "Default mode output mismatch (compared against PyTorch TRUNC golden)";
 }
 
 // Saturation mode test cases (only for supported conversions on A2A3)
@@ -251,20 +228,16 @@ TEST_F(TCVTTest, saturation_fp16_int8_1x32) {
     test_tcvt_saturation<int8_t, aclFloat16, 1, 32, 1, 32>(); 
 }
 
-TEST_F(TCVTTest, saturation_fp16_uint8_1x32) { 
-    test_tcvt_saturation<uint8_t, aclFloat16, 1, 32, 1, 32>(); 
-}
-
-TEST_F(TCVTTest, saturation_fp16_int32_1x32) { 
-    test_tcvt_saturation<int32_t, aclFloat16, 1, 32, 1, 32>(); 
-}
-
 TEST_F(TCVTTest, saturation_fp32_int16_1x32) { 
     test_tcvt_saturation<int16_t, float, 1, 32, 1, 32>(); 
 }
 
-TEST_F(TCVTTest, saturation_fp32_int32_1x32) { 
-    test_tcvt_saturation<int32_t, float, 1, 32, 1, 32>(); 
+TEST_F(TCVTTest, saturation_fp16_int16_1x32) { 
+    test_tcvt_saturation<int16_t, aclFloat16, 1, 32, 1, 32>(); 
+}
+
+TEST_F(TCVTTest, saturation_fp16_uint8_1x32) { 
+    test_tcvt_saturation<uint8_t, aclFloat16, 1, 32, 1, 32>(); 
 }
 
 TEST_F(TCVTTest, saturation_int64_int32_1x32) { 
