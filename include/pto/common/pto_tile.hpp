@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/memory.hpp"
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
+#include "pto/common/debug.h"
 #ifdef __CPU_SIM
 #include <iomanip>
 #endif
@@ -1229,6 +1230,10 @@ template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,
           const SLayout SFractal_ = SLayout::NoneBox, const int SFractalSize_ = TileConfig::fractalABSize,
           const PadValue PadVal_ = PadValue::Null, const CompactMode Compact_ = CompactMode::Null>
 struct Tile {
+    static constexpr int HF32_MODE_BIT = 46;
+    static constexpr int HF32_TRANS_MODE_BIT = 47;
+    static constexpr int TF32_MODE_BIT = 46;
+    static constexpr int TF32_TRANS_MODE_BIT = 47;
 public:
     using DType = Element_;
 
@@ -1396,6 +1401,8 @@ public:
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
+#if defined(__DAV_CUBE__)
+#ifdef MEMORY_BASE
     PTO_INTERNAL bool GetKAligned() const
     {
         return isKAligned_;
@@ -1404,14 +1411,69 @@ public:
     {
         isKAligned_ = isKAligned;
     }
-
+    PTO_INTERNAL bool GetHF32Mode() const
+    {
+        return isHF32_;
+    }
+    PTO_INTERNAL void SetHF32Mode(RoundMode hf32TransMode = RoundMode::CAST_ROUND)
+    {
+        isHF32_ = true;
+        hf32TransMode_ = hf32TransMode;
+        PTO_ASSERT(hf32TransMode_ == RoundMode::CAST_ROUND || hf32TransMode_ == RoundMode::CAST_RINT,
+                   "Unsupported RoundMode for HF32.");
+        set_ctrl(sbitset1(get_ctrl(), HF32_MODE_BIT));
+        if (hf32TransMode_ == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), HF32_TRANS_MODE_BIT));
+        } else if (hf32TransMode_ == RoundMode::CAST_RINT) {
+            set_ctrl(sbitset0(get_ctrl(), HF32_TRANS_MODE_BIT));
+        }
+    }
+    PTO_INTERNAL void DisableHF32Mode()
+    {
+        isHF32_ = false;
+        set_ctrl(sbitset0(get_ctrl(), HF32_MODE_BIT));
+    }
+#endif
+#ifdef REGISTER_BASE
+    PTO_INTERNAL bool GetTF32Mode() const
+    {
+        return isTF32_;
+    }
+    PTO_INTERNAL void SetTF32Mode(RoundMode tf32TransMode = RoundMode::CAST_ROUND)
+    {
+        isTF32_ = true;
+        tf32TransMode_ = tf32TransMode;
+        PTO_ASSERT(tf32TransMode_ == RoundMode::CAST_ROUND || tf32TransMode_ == RoundMode::CAST_RINT,
+                   "Unsupported RoundMode for TF32.");
+        set_ctrl(sbitset1(get_ctrl(), TF32_MODE_BIT));
+        if (tf32TransMode_ == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), TF32_TRANS_MODE_BIT));
+        } else if (tf32TransMode_ == RoundMode::CAST_RINT) {
+            set_ctrl(sbitset0(get_ctrl(), TF32_TRANS_MODE_BIT));
+        }
+    }
+    PTO_INTERNAL void DisableTF32Mode()
+    {
+        isTF32_ = false;
+        set_ctrl(sbitset0(get_ctrl(), TF32_MODE_BIT));
+    }
+#endif
+#endif
 private:
     AICORE void assignData(TileDType data)
     {
         data_ = data;
     }
     TileDType data_;
+#ifdef MEMORY_BASE
     bool isKAligned_; // K-Alignedment for A3
+    bool isHF32_;
+    RoundMode hf32TransMode_;
+#endif
+#ifdef REGISTER_BASE
+    bool isTF32_;
+    RoundMode tf32TransMode_;
+#endif
 };
 
 #ifdef MEMORY_BASE
