@@ -15,6 +15,13 @@ import numpy as np
 import ml_dtypes
 import en_dtypes
 
+try:
+    import torch
+    HAS_TORCH = True
+except ImportError:
+    print("Warning: PyTorch not available, using NumPy for saturation tests")
+    HAS_TORCH = False
+
 bfloat16 = np.float16  # Using float16 to simulate bfloat16 for data generation
 fp8_e5m2 = ml_dtypes.float8_e5m2
 fp8_e4m3 = ml_dtypes.float8_e4m3fn
@@ -114,6 +121,86 @@ def gen_golden(case_name, param):
             
     x1_gm.tofile("./x1_gm.bin")
     golden.tofile("./golden.bin")
+
+def gen_saturation_golden(case_name, param):
+    """Generate test data for saturation mode testing with out-of-range values"""
+    srctype = param.srctype
+    dsttype = param.dsttype
+    m, n = param.m, param.n
+
+    # Generate input with values that will overflow/underflow the destination type
+    if np.issubdtype(dsttype, np.integer):
+        dst_info = np.iinfo(dsttype)
+        dst_min, dst_max = dst_info.min, dst_info.max
+        
+        # Create array with values both in-range and out-of-range
+        # Use a pattern: [below_min, at_min, in_range, at_max, above_max, ...]
+        total_elements = m * n
+        x1_gm = np.zeros(total_elements, dtype=srctype)
+        
+        # Pattern of test values (scaled to source type range)
+        for i in range(total_elements):
+            mod = i % 5
+            if mod == 0:  # Below min
+                x1_gm[i] = srctype(dst_min - 100)
+            elif mod == 1:  # At min
+                x1_gm[i] = srctype(dst_min)
+            elif mod == 2:  # In range (middle)
+                x1_gm[i] = srctype((dst_min + dst_max) / 2)
+            elif mod == 3:  # At max
+                x1_gm[i] = srctype(dst_max)
+            else:  # Above max
+                x1_gm[i] = srctype(dst_max + 100)
+        
+        x1_gm = x1_gm.reshape([m, n])
+    else:
+        # For float destinations, use normal range
+        if srctype == np.float32 or srctype == np.float16:
+            x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
+        else:
+            x1_gm = np.random.randint(-100, 100, [m, n]).astype(srctype)
+    
+    # Generate golden data using PyTorch's truncation mode (TRUNC)
+    # Convert to PyTorch tensor
+    if HAS_TORCH:
+        if srctype == np.float16:
+            x_torch = torch.from_numpy(x1_gm.astype(np.float32)).half()
+        else:
+            x_torch = torch.from_numpy(x1_gm)
+        
+        # Map numpy dtypes to torch dtypes for conversion
+        dtype_map = {
+            np.int8: torch.int8,
+            np.uint8: torch.uint8,
+            np.int16: torch.int16,
+            np.int32: torch.int32,
+            np.int64: torch.int64,
+            np.float16: torch.float16,
+            np.float32: torch.float32,
+        }
+        
+        torch_dtype = dtype_map.get(dsttype, torch.float32)
+        
+        # PyTorch uses truncation mode by default for float->int conversions
+        golden_torch = x_torch.to(torch_dtype)
+        golden_truncated = golden_torch.cpu().numpy().astype(dsttype)
+    else:
+        # Fallback to NumPy when PyTorch not available
+        # Simulate truncation mode: trunc then clamp
+        if np.issubdtype(srctype, np.floating) and np.issubdtype(dsttype, np.integer):
+            converted = np.trunc(x1_gm)
+        else:
+            converted = x1_gm
+        
+        # Clamp to destination range
+        if np.issubdtype(dsttype, np.integer):
+            info = np.iinfo(dsttype)
+            golden_truncated = np.clip(converted, info.min, info.max).astype(dsttype)
+        else:
+            golden_truncated = converted.astype(dsttype)
+    
+    x1_gm.tofile("./x1_gm.bin")
+    golden_truncated.tofile("./golden_truncated.bin")
                 
 class tcvtParams:
     def __init__(self, srctype, dsttype, m, n, mode, valid_m=None, valid_n=None):
@@ -240,5 +327,30 @@ if __name__ == "__main__":
         os.chdir(case_name)
 
         gen_golden(case_name, case_params_list[i])
+
+        os.chdir(original_dir)
+
+    # ============================================================================
+    # Saturation Mode Test Cases
+    # ============================================================================
+    # Generate test data for saturation mode tests (matching the test cases in main.cpp)
+    # These tests use 1x32 shape and focus on conversions where saturation matters
+    
+    saturation_test_cases = [
+        ("TCVTTest.saturation_fp16_int8_1x32", tcvtParams(np.float16, np.int8, 1, 32, "RoundMode::CAST_RINT")),
+        ("TCVTTest.saturation_fp32_int16_1x32", tcvtParams(np.float32, np.int16, 1, 32, "RoundMode::CAST_RINT")),
+        ("TCVTTest.saturation_fp16_int16_1x32", tcvtParams(np.float16, np.int16, 1, 32, "RoundMode::CAST_RINT")),
+        ("TCVTTest.saturation_fp16_uint8_1x32", tcvtParams(np.float16, np.uint8, 1, 32, "RoundMode::CAST_RINT")),
+        ("TCVTTest.saturation_int64_int32_1x32", tcvtParams(np.int64, np.int32, 1, 32, "RoundMode::CAST_RINT")),
+        ("TCVTTest.saturation_int32_int16_1x32", tcvtParams(np.int32, np.int16, 1, 32, "RoundMode::CAST_RINT")),
+    ]
+    
+    for case_name, param in saturation_test_cases:
+        if not os.path.exists(case_name):
+            os.makedirs(case_name)
+        original_dir = os.getcwd()
+        os.chdir(case_name)
+
+        gen_saturation_golden(case_name, param)
 
         os.chdir(original_dir)
