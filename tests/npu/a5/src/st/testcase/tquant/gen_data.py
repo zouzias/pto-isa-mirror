@@ -107,11 +107,47 @@ def quant_fp32_to_e4m3(src, mode="nd"):
     data_fp8.tofile("golden_fp8.bin")
     return e8m0, scaling, data_fp8, group_max
 
+
+def fp32_to_int8_sym(valid_rows, valid_cols, mode):
+    src_fp32 = np.random.uniform(low=-2, high=2, size=(valid_rows, valid_cols)).astype(np.float32)
+    src_fp32.tofile("input.bin")
+    offset = np.zeros((valid_rows, 1), dtype=np.float32)
+    scale  = np.max(np.abs(src_fp32), axis=1, keepdims=True) / 127.0
+    scale = scale.astype(np.float32)
+    inv_scale = np.where(scale != 0, 1.0 / scale, 0.0).astype(np.float32)
+    inv_scale.tofile("inv_scale_fp32.bin")
+    offset.tofile("offset_fp32.bin")
+    src_fp32_scaled = src_fp32 * inv_scale
+    src_fp16 = src_fp32_scaled.astype(np.float16)
+    src_s8 = np.clip(np.round(src_fp16), -128, 127).astype(np.int8)
+    src_s8.tofile("golden_s8.bin")
+    ## if mode == nz, use nd to nz for fp8 layout conversion
+    return src_fp32, src_s8
+
+
+def fp32_to_int8_asym(valid_rows, valid_cols, mode):
+    src_fp32 = np.random.uniform(low=-2, high=2, size=(valid_rows, valid_cols)).astype(np.float32)
+    src_fp32.tofile("input.bin")
+    src_fp32_rowmin = np.min(src_fp32, axis=1, keepdims=True)
+    src_fp32_rowmax = np.max(src_fp32, axis=1, keepdims=True)
+    scale = (src_fp32_rowmax - src_fp32_rowmin) / 255.0
+    scale = scale.astype(np.float32)
+    inv_scale = np.where(scale != 0, 1.0 / scale, 0.0).astype(np.float32)
+    inv_scale.tofile("inv_scale_fp32.bin")
+    zero_point = np.clip(np.round(-src_fp32_rowmin / scale), 0, 255).astype(np.uint8)
+    zero_point.tofile("offset_u8.bin")
+    # Multiply in fp32, convert to fp16, then to uint8
+    src_fp32_scaled = src_fp32 * inv_scale
+    src_fp16 = src_fp32_scaled.astype(np.float16)
+    intermediate_u8 = np.clip(np.round(src_fp16), 0, 255).astype(np.uint8)
+    # Add offset in uint8 (matching hardware b8 addition)
+    src_u8 = (intermediate_u8 + zero_point).astype(np.uint8)
+    src_u8.tofile("golden_u8.bin")
+    ## if mode == nz, use nd to nz for fp8 layout conversion
+    return src_fp32, src_u8
+
     
-def gen_golden_data_tquant(case_name, param):
-    dtype = param.dtype
-    valid_rows, valid_cols = [param.valid_rows, param.valid_cols]
-    mode = param.mode
+def fp32_to_mxfp8(valid_rows, valid_cols, mode):
     padded_cols = ((valid_cols + 31) // 32) * 32
 
     #generating data with large variance using lognormal distribution for better debugging
@@ -122,32 +158,51 @@ def gen_golden_data_tquant(case_name, param):
     src_fp32.tofile("input.bin")
     
     pad_value = np.float32(-np.inf)
-    padded_src = np.full((valid_rows, padded_cols), pad_value, dtype=dtype)
+    padded_src = np.full((valid_rows, padded_cols), pad_value, dtype=np.float32)
     padded_src[:, :valid_cols] = src_fp32
     
     # fp8 quantization, golden is saved in quant function
     e8m0, scaling, data_fp8, group_max = quant_fp32_to_e4m3(padded_src, mode=mode)
     
-    return src_fp32, data_fp8, e8m0
+    return
+
+
+def gen_golden_data_tquant(case_name, param):
+    dtype = param.dtype
+    valid_rows, valid_cols = [param.valid_rows, param.valid_cols]
+    mode = param.mode
+    out_dtype_str = param.out_dtype_str
+    if (out_dtype_str == "int8_sym"):
+        fp32_to_int8_sym(valid_rows, valid_cols, mode)
+    elif (out_dtype_str == "int8_asym"):
+        fp32_to_int8_asym(valid_rows, valid_cols, mode)
+    else:
+        fp32_to_mxfp8(valid_rows, valid_cols, mode)
+    return
 
 
 class TQuantParams:
-    def __init__(self, valid_rows, valid_cols, mode="nd"):
+    def __init__(self, out_dtype_str, valid_rows, valid_cols, mode="nd"):
         self.valid_rows = valid_rows
         self.valid_cols = valid_cols
         self.dtype = np.float32
         self.mode = mode
-    
+        self.out_dtype_str = {
+            's8':    'int8_sym',
+            'mxfp8': 'mxfp8',
+            'u8':    'int8_asym'
+        }[out_dtype_str]
+        
     ## convert dtype to string for case name to match that in main.cpp
         self.dtype_str = {
             np.float32: 'fp32',
             bfloat16: 'bf16',
         }[self.dtype]
-
+        
 
 def generate_case_name(param):
-    return (f"TQUANTTEST.case_{param.dtype_str}_{param.valid_rows}x{param.valid_cols}_{param.mode}")
-
+    return (f"TQUANTTEST.case_{param.out_dtype_str}_{param.dtype_str}"
+            f"_{param.valid_rows}x{param.valid_cols}_{param.mode}")
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -159,13 +214,19 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TQuantParams(32, 32, mode="nd"),
-        TQuantParams(32, 64, mode="nd"),
-        TQuantParams(64, 128, mode="nd"),
-        TQuantParams(128, 128, mode="nd"),
-        TQuantParams(32, 64, mode="nz"),
-        TQuantParams(64, 128, mode="nz"),
-        TQuantParams(128, 128, mode="nz"),
+        TQuantParams("mxfp8", 32, 32, mode="nd"),
+        TQuantParams("mxfp8", 32, 64, mode="nd"),
+        TQuantParams("mxfp8", 64, 128, mode="nd"),
+        TQuantParams("mxfp8", 128, 128, mode="nd"),
+        TQuantParams("mxfp8", 32, 64, mode="nz"),
+        TQuantParams("mxfp8", 64, 128, mode="nz"),
+        TQuantParams("mxfp8", 128, 128, mode="nz"),
+        TQuantParams("s8", 64, 128, mode="nd"),
+        TQuantParams("s8", 128, 128, mode="nd"),
+        TQuantParams("s8", 256, 128, mode="nd"),
+        TQuantParams("u8", 64, 128, mode="nd"),
+        TQuantParams("u8", 128, 128, mode="nd"),
+        TQuantParams("u8", 256, 128, mode="nd"),
     ]
 
     for param in case_params_list:
