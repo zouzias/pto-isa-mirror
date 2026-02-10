@@ -368,27 +368,28 @@ namespace pto {
         // Step 1: Convert fp16 to int32
         switch (static_cast<RoundMode>(mode)) {
             case RoundMode::CAST_RINT:
-                vconv_f162s32r(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                vconv_f162s32r(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride, srcRepeatStride);
                 break;
             case RoundMode::CAST_ROUND:
-                vconv_f162s32a(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                vconv_f162s32a(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride, srcRepeatStride);
                 break;
             case RoundMode::CAST_FLOOR:
-                vconv_f162s32f(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                vconv_f162s32f(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride, srcRepeatStride);
                 break;
             case RoundMode::CAST_CEIL:
-                vconv_f162s32c(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                vconv_f162s32c(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride, srcRepeatStride);
                 break;
             case RoundMode::CAST_TRUNC:
-                vconv_f162s32z(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                vconv_f162s32z(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride, srcRepeatStride);
                 break;
             default:
-                vconv_f162s32z(tempInt32Buf, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+                vconv_f162s32z(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride, srcRepeatStride);
                 break;
         }
 
-        // Step 2: Convert int32 to int16
-        vconv_s322s16(dst, tempInt32Buf, repeatNum, dstBlockStride, dstBlockStride, dstRepeatStride, dstRepeatStride);
+        pipe_barrier(PIPE_V);
+
+        vconv_s322s16(dst, tempInt32Buf, 2 * repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     }
     
     // Float16 (half) to signed 8-bit integer conversion
