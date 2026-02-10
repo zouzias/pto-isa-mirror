@@ -6,7 +6,7 @@ Gather operation: the calling NPU (root) collects data from all ranks in the par
 
 > **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
 
-Only the root needs to execute `TGATHER`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation.
+Only the root needs to execute `TGATHER`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation. Calling `TGATHER` on non-root ranks is undefined behavior.
 
 **Large Tile Support**: When the GlobalTensor exceeds the UB tile capacity in rows and/or columns, the transfer is automatically chunked via 2D sliding — the same mechanism used by other PTO-COMM instructions.
 
@@ -52,11 +52,12 @@ PTO_INST RecordEvent TGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlo
   - `TileData::DType` must equal `GlobalDstData::RawDType`.
 - **Memory constraints**:
   - `dstGlobalData` must point to local memory (current NPU) and be large enough to hold the concatenated result from all ranks. Specifically, `dstGlobalData.GetShape(DIM_3)` must be $\geq N \times H$ where $H$ is each rank's `GetShape(DIM_3)`.
+  - If `dstGlobalData.GetShape(DIM_3) > N × H`, only the first `N × H` rows are written; remaining rows are left unchanged.
   - `stagingTileData` (or `pingTile` / `pongTile`) must be pre-allocated in UB.
 - **ParallelGroup constraints**:
   - `parallelGroup.tensors[r]` must refer to rank `r`'s source buffer (remote GM as seen by the root).
   - `parallelGroup.GetRootIdx()` identifies the calling NPU as the gather root.
-  - All source tensors are assumed to have the same shape and strides.
+  - All source tensors are assumed to have the same shape and strides; behavior is undefined if they differ.
 - **Chunked mode constraints** (when source data exceeds a single UB tile):
   - If `TileData` has static `ValidRow`, `GetShape(DIM_3)` of each rank's source must be divisible by `ValidRow`. Use a Tile with `DYNAMIC` ValidRow for partial row support.
   - If `TileData` has static `ValidCol`, `GetShape(DIM_4)` must be divisible by `ValidCol`. Use a Tile with `DYNAMIC` ValidCol for partial column support.

@@ -41,6 +41,10 @@ bool RunTTestPollingTimeoutMiss(int n_ranks, int n_devices, int first_rank_id, i
 // TTEST NE: Test not-equal comparison
 bool RunTTestNE(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 
+// TTEST SubRegion: Test sub-region signal matrix
+template <int FullCols, int SubRows, int SubCols>
+bool RunTTestSubRegion(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
 // ============================================================================
 // TTEST Basic Tests
 // ============================================================================
@@ -101,6 +105,9 @@ TEST(TTest, LT_False) {
 TEST(TTest, PollingTimeout) { ASSERT_TRUE(RunTTestPollingTimeout(2, 2, 0, 0)); }
 // Test polling loop timeout when signal is delayed too long
 TEST(TTest, PollingTimeoutMiss) { ASSERT_TRUE(RunTTestPollingTimeoutMiss(2, 2, 0, 0)); }
+
+// Test sub-region of signal matrix
+TEST(TTest, SubRegion_4x8_of_16) { ASSERT_TRUE((RunTTestSubRegion<16, 4, 8>(2, 2, 0, 0))); }
 
 int main(int argc, char **argv)
 {

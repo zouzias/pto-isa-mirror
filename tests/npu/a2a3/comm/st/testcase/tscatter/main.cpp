@@ -15,6 +15,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Declared in tscatter_kernel.cpp — basic tests
 template <typename T, size_t count>
 bool RunScatter(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template <typename T, size_t count>
+bool RunScatterWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+template <typename T, size_t count>
+bool RunScatterEmpty(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
 
 // Declared in tscatter_kernel.cpp — large shape (chunked) tests
 bool RunScatterLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
@@ -32,6 +36,8 @@ TEST(TScatter, FloatSmall) { ASSERT_TRUE((RunScatter<float, 256>(4, 4, 0, 0))); 
 TEST(TScatter, Int32Large) { ASSERT_TRUE((RunScatter<int32_t, 4096>(2, 2, 0, 0))); }
 TEST(TScatter, Uint8Small) { ASSERT_TRUE((RunScatter<uint8_t, 512>(2, 2, 0, 0))); }
 TEST(TScatter, SingleRank) { ASSERT_TRUE((RunScatter<float, 256>(1, 1, 0, 0))); }
+TEST(TScatter, Root1_FloatSmall) { ASSERT_TRUE((RunScatterWithRoot<float, 256>(2, 2, 0, 0, 1))); }
+TEST(TScatter, EmptyRows_FloatSmall) { ASSERT_TRUE((RunScatterEmpty<float, 256>(2, 2, 0, 0, 0))); }
 
 // ============================================================================
 // TSCATTER Tests - Large Shape (chunked): per-rank data > single UB tile

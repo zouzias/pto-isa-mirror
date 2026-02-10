@@ -6,7 +6,7 @@ Reduce operation: gather data from multiple remote NPUs and perform element-wise
 
 > **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
 
-Only the root needs to execute `TREDUCE`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation.
+Only the root needs to execute `TREDUCE`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation. Calling `TREDUCE` on non-root ranks is undefined behavior.
 
 **Large Tile Support**: When the GlobalTensor exceeds the UB tile capacity in rows and/or columns, the reduction is automatically chunked via 2D sliding.
 

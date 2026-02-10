@@ -30,7 +30,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Tests the TSCATTER collective - root scatters data to all ranks
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TScatterKernelImpl(__gm__ T *src, __gm__ T *dst, int nranks)
+__global__ AICORE void TScatterKernelImpl(__gm__ T *src, __gm__ T *dst, int nranks, int root)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -58,14 +58,14 @@ __global__ AICORE void TScatterKernelImpl(__gm__ T *src, __gm__ T *dst, int nran
         tensors[i] = Global(remoteDst, dstShape, dstStride);
     }
     
-    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, my_rank);
+    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, root);
     
     // Allocate UB tile for staging data
     TileData ubTile(1, count);
     TASSIGN(ubTile, 0x0);
     
-    // Only root (rank 0) executes TSCATTER
-    if (my_rank == 0) {
+    // Only root executes TSCATTER
+    if (my_rank == root) {
         pto::comm::TSCATTER(pg, srcG, ubTile);
     }
     
@@ -74,7 +74,8 @@ __global__ AICORE void TScatterKernelImpl(__gm__ T *src, __gm__ T *dst, int nran
 }
 
 template <typename T, size_t count>
-bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t /*local_mem_size*/)
+bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root,
+                      uint64_t /*local_mem_size*/)
 {
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8771")) return false;
@@ -93,7 +94,7 @@ bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     aclrtMallocHost(reinterpret_cast<void**>(&src_host), src_size);
     aclrtMallocHost(reinterpret_cast<void**>(&dst_host), dst_size);
 
-    if (rank_id == 0) {
+    if (rank_id == root) {
         for (int r = 0; r < n_ranks; ++r) {
             for (size_t i = 0; i < count; ++i) {
                 src_host[r * count + i] = static_cast<T>(i + r * 10000);
@@ -109,7 +110,7 @@ bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_
 
     ShmemBarrierAll();
 
-    TScatterKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)src_ptr, (T*)dst_ptr, n_ranks);
+    TScatterKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)src_ptr, (T*)dst_ptr, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -129,9 +130,9 @@ bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     }
 
 #if ENABLE_DEBUG_PRINT
-    if (is_ok && rank_id == 0) {
+    if (is_ok && rank_id == root) {
         std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] Rank 0: TSCATTER SUCCESSFUL!" << std::endl;
+        std::cout << "[DEBUG] Rank " << root << ": TSCATTER SUCCESSFUL!" << std::endl;
         std::cout << "Summary: Scattered " << n_ranks << " segments, each with " << count << " elements." << std::endl;
         std::cout << "================================================================\n" << std::endl;
     }
@@ -149,7 +150,15 @@ template <typename T, size_t count>
 bool RunScatter(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunScatterKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, 0);
+        return RunScatterKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, 0, 0);
+    });
+}
+
+template <typename T, size_t count>
+bool RunScatterWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
+{
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunScatterKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, root, 0);
     });
 }
 
@@ -157,6 +166,115 @@ bool RunScatter(int n_ranks, int n_devices, int first_rank_id, int first_device_
 template bool RunScatter<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunScatter<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunScatter<uint8_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunScatterWithRoot<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+
+// ============================================================================
+// Empty Rows Test Kernel
+// Tests TSCATTER with zero rows (empty data)
+// ============================================================================
+template <typename T, size_t count>
+__global__ AICORE void TScatterEmptyKernelImpl(__gm__ T *src, __gm__ T *dst, int nranks, int root)
+{
+    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
+    using TileData = pto::Tile<pto::TileType::Vec, T, 1, count, pto::BLayout::RowMajor, -1, -1>;
+
+    int my_rank = shmem_my_pe();
+
+    // Empty rows: DIM_3 = 0
+    ShapeDyn srcShape(1, 1, 1, 0, count);
+    StrideDyn srcStride(count, count, count, count, 1);
+    Global srcG(src, srcShape, srcStride);
+
+    ShapeDyn dstShape(1, 1, 1, 0, count);
+    StrideDyn dstStride(count, count, count, count, 1);
+
+    Global tensors[16];
+    int actual_nranks = (nranks > 16) ? 16 : nranks;
+    for (int i = 0; i < actual_nranks; ++i) {
+        __gm__ T *remoteDst = ShmemPtr(dst, i);
+        tensors[i] = Global(remoteDst, dstShape, dstStride);
+    }
+
+    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, root);
+
+    TileData ubTile(1, count);
+    TASSIGN(ubTile, 0x0);
+
+    if (my_rank == root) {
+        pto::comm::TSCATTER(pg, srcG, ubTile);
+    }
+    ShmemDeviceQuiet();
+    ShmemDeviceBarrierAll();
+}
+
+template <typename T, size_t count>
+bool RunScatterEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root,
+                           uint64_t /*local_mem_size*/)
+{
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8771")) return false;
+
+    size_t dst_size = count * sizeof(T);
+    size_t src_size = n_ranks * count * sizeof(T);
+    void* src_ptr = ShmemMalloc(src_size);
+    void* dst_ptr = ShmemMalloc(dst_size);
+
+    if (src_ptr == nullptr || dst_ptr == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
+
+    T *src_host, *dst_host;
+    aclrtMallocHost(reinterpret_cast<void**>(&src_host), src_size);
+    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), dst_size);
+
+    for (size_t i = 0; i < n_ranks * count; ++i) {
+        src_host[i] = static_cast<T>(i);
+    }
+    if (rank_id == root) {
+        aclrtMemcpy(src_ptr, src_size, src_host, src_size, ACL_MEMCPY_HOST_TO_DEVICE);
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        dst_host[i] = static_cast<T>(-1);
+    }
+    aclrtMemcpy(dst_ptr, dst_size, dst_host, dst_size, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    ShmemBarrierAll();
+
+    TScatterEmptyKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)src_ptr, (T*)dst_ptr, n_ranks, root);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+
+    ShmemBarrierAll();
+
+    aclrtMemcpy(dst_host, dst_size, dst_ptr, dst_size, ACL_MEMCPY_DEVICE_TO_HOST);
+    bool is_ok = true;
+    for (size_t i = 0; i < count; ++i) {
+        if (dst_host[i] != static_cast<T>(-1)) {
+            is_ok = false;
+            break;
+        }
+    }
+
+    aclrtFreeHost(src_host);
+    aclrtFreeHost(dst_host);
+    ShmemFree(src_ptr);
+    ShmemFree(dst_ptr);
+
+    return ctx.Finalize() && is_ok;
+}
+
+template <typename T, size_t count>
+bool RunScatterEmpty(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
+{
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunScatterEmptyKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, root, 0);
+    });
+}
+
+template bool RunScatterEmpty<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
 
 // ============================================================================
 // Large Shape Chunked Test Kernel

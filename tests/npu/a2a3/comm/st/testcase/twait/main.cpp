@@ -27,6 +27,10 @@ bool RunTWaitAtomic(int n_ranks, int n_devices, int first_rank_id, int first_dev
 template <int Rows, int Cols>
 bool RunTWaitMatrix(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 
+// TWAIT SubRegion: Wait on a sub-region of 2D signal matrix
+template <int FullCols, int SubRows, int SubCols>
+bool RunTWaitSubRegion(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
 // TWAIT Multi-Phase: rank 0 updates signal in phases, rank 1 waits in phases
 bool RunTWaitMultiPhase(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 
@@ -50,3 +54,6 @@ TEST(TWait, Matrix2D_2Ranks_Large) { ASSERT_TRUE((RunTWaitMatrix<7, 13>(2, 2, 0,
 
 // TWAIT multi-phase update
 TEST(TWait, MultiPhase_2Ranks) { ASSERT_TRUE(RunTWaitMultiPhase(2, 2, 0, 0)); }
+
+// TWAIT sub-region of signal matrix
+TEST(TWait, SubRegion_4x8_of_16) { ASSERT_TRUE((RunTWaitSubRegion<16, 4, 8>(2, 2, 0, 0))); }

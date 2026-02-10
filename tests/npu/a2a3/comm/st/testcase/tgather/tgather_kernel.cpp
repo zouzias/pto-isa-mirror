@@ -30,7 +30,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Tests the TGATHER collective - root gathers data from all ranks
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TGatherKernelImpl(__gm__ T *dst, __gm__ T *src, int nranks)
+__global__ AICORE void TGatherKernelImpl(__gm__ T *dst, __gm__ T *src, int nranks, int root)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -58,14 +58,14 @@ __global__ AICORE void TGatherKernelImpl(__gm__ T *dst, __gm__ T *src, int nrank
         tensors[i] = Global(remoteSrc, srcShape, srcStride);
     }
     
-    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, my_rank);
+    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, root);
     
     // Allocate UB tile for staging data
     TileData ubTile(1, count);
     TASSIGN(ubTile, 0x0);
     
-    // Only root (rank 0) executes TGATHER
-    if (my_rank == 0) {
+    // Only root executes TGATHER
+    if (my_rank == root) {
         pto::comm::TGATHER(pg, dstG, ubTile);
     }
     
@@ -74,7 +74,8 @@ __global__ AICORE void TGatherKernelImpl(__gm__ T *dst, __gm__ T *src, int nrank
 }
 
 template <typename T, size_t count>
-bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t /*local_mem_size*/)
+bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root,
+                     uint64_t /*local_mem_size*/)
 {
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8773")) return false;
@@ -103,19 +104,19 @@ bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
     }
 
     aclrtMemcpy(src_ptr, src_size, src_host, src_size, ACL_MEMCPY_HOST_TO_DEVICE);
-    if (rank_id == 0) {
+    if (rank_id == root) {
         aclrtMemcpy(dst_ptr, dst_size, dst_host, dst_size, ACL_MEMCPY_HOST_TO_DEVICE);
     }
 
     ShmemBarrierAll();
 
-    TGatherKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)dst_ptr, (T*)src_ptr, n_ranks);
+    TGatherKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)dst_ptr, (T*)src_ptr, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
     bool is_ok = true;
-    if (rank_id == 0) {
+    if (rank_id == root) {
         aclrtMemcpy(dst_host, dst_size, dst_ptr, dst_size, ACL_MEMCPY_DEVICE_TO_HOST);
 
         for (int r = 0; r < n_ranks; ++r) {
@@ -135,7 +136,7 @@ bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
             std::cout << "\n================================================================" << std::endl;
-            std::cout << "[DEBUG] Rank 0: TGATHER SUCCESSFUL!" << std::endl;
+            std::cout << "[DEBUG] Rank " << root << ": TGATHER SUCCESSFUL!" << std::endl;
             std::cout << "Summary: Gathered " << n_ranks << " segments, each with " << count << " elements." << std::endl;
             std::cout << "Detailed View (First 5 elements of each rank's contribution):" << std::endl;
             for (int r = 0; r < n_ranks; ++r) {
@@ -163,7 +164,15 @@ template <typename T, size_t count>
 bool RunGather(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunGatherKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, 0);
+        return RunGatherKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, 0, 0);
+    });
+}
+
+template <typename T, size_t count>
+bool RunGatherWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
+{
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunGatherKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, root, 0);
     });
 }
 
@@ -171,6 +180,117 @@ bool RunGather(int n_ranks, int n_devices, int first_rank_id, int first_device_i
 template bool RunGather<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunGather<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunGather<uint8_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunGatherWithRoot<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+
+// ============================================================================
+// Empty Rows Test Kernel
+// Tests TGATHER with zero rows (empty data)
+// ============================================================================
+template <typename T, size_t count>
+__global__ AICORE void TGatherEmptyKernelImpl(__gm__ T *dst, __gm__ T *src, int nranks, int root)
+{
+    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
+    using TileData = pto::Tile<pto::TileType::Vec, T, 1, count, pto::BLayout::RowMajor, -1, -1>;
+
+    int my_rank = shmem_my_pe();
+
+    // Empty rows: DIM_3 = 0
+    ShapeDyn srcShape(1, 1, 1, 0, count);
+    StrideDyn srcStride(count, count, count, count, 1);
+    ShapeDyn dstShape(1, 1, 1, 0, count);
+    StrideDyn dstStride(count, count, count, count, 1);
+
+    Global dstG(dst, dstShape, dstStride);
+
+    Global tensors[16];
+    int actual_nranks = (nranks > 16) ? 16 : nranks;
+    for (int i = 0; i < actual_nranks; ++i) {
+        __gm__ T *remoteSrc = ShmemPtr(src, i);
+        tensors[i] = Global(remoteSrc, srcShape, srcStride);
+    }
+
+    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, root);
+
+    TileData ubTile(1, count);
+    TASSIGN(ubTile, 0x0);
+
+    if (my_rank == root) {
+        pto::comm::TGATHER(pg, dstG, ubTile);
+    }
+    ShmemDeviceQuiet();
+    ShmemDeviceBarrierAll();
+}
+
+template <typename T, size_t count>
+bool RunGatherEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root,
+                          uint64_t /*local_mem_size*/)
+{
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8773")) return false;
+
+    size_t src_size = count * sizeof(T);
+    size_t dst_size = n_ranks * count * sizeof(T);
+    void* src_ptr = ShmemMalloc(src_size);
+    void* dst_ptr = ShmemMalloc(dst_size);
+
+    if (src_ptr == nullptr || dst_ptr == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
+
+    T *src_host, *dst_host;
+    aclrtMallocHost(reinterpret_cast<void**>(&src_host), src_size);
+    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), dst_size);
+
+    for (size_t i = 0; i < count; ++i) {
+        src_host[i] = static_cast<T>(i + rank_id * 10000);
+    }
+    for (size_t i = 0; i < n_ranks * count; ++i) {
+        dst_host[i] = static_cast<T>(-1);
+    }
+
+    aclrtMemcpy(src_ptr, src_size, src_host, src_size, ACL_MEMCPY_HOST_TO_DEVICE);
+    if (rank_id == root) {
+        aclrtMemcpy(dst_ptr, dst_size, dst_host, dst_size, ACL_MEMCPY_HOST_TO_DEVICE);
+    }
+
+    ShmemBarrierAll();
+
+    TGatherEmptyKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)dst_ptr, (T*)src_ptr, n_ranks, root);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+
+    ShmemBarrierAll();
+
+    bool is_ok = true;
+    if (rank_id == root) {
+        aclrtMemcpy(dst_host, dst_size, dst_ptr, dst_size, ACL_MEMCPY_DEVICE_TO_HOST);
+        for (size_t i = 0; i < n_ranks * count; ++i) {
+            if (dst_host[i] != static_cast<T>(-1)) {
+                is_ok = false;
+                break;
+            }
+        }
+    }
+
+    aclrtFreeHost(src_host);
+    aclrtFreeHost(dst_host);
+    ShmemFree(src_ptr);
+    ShmemFree(dst_ptr);
+
+    return ctx.Finalize() && is_ok;
+}
+
+template <typename T, size_t count>
+bool RunGatherEmpty(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
+{
+    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
+        return RunGatherEmptyKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, root, 0);
+    });
+}
+
+template bool RunGatherEmpty<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
 
 // ============================================================================
 // Large Shape Chunked Test Kernel

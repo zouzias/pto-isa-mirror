@@ -24,7 +24,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Tests the TREDUCE collective - root gathers and reduces data from all ranks
 // ============================================================================
 template <typename T, size_t count, pto::comm::ReduceOp op>
-__global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int nranks)
+__global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int nranks, int root)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -48,7 +48,7 @@ __global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int 
         tensors[i] = Global(remoteInput, shape, stride);
     }
     
-    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, my_rank);
+    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, root);
     
     // Allocate UB tiles for accumulation and receiving
     TileData accTile(1, count);
@@ -57,8 +57,8 @@ __global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int 
     TASSIGN(accTile, 0x0);
     TASSIGN(recvTile, 0x10000);
     
-    // Only root (rank 0) executes TREDUCE
-    if (my_rank == 0) {
+    // Only root executes TREDUCE
+    if (my_rank == root) {
         pto::comm::TREDUCE(pg, outputG, accTile, recvTile, op);
     }
     
@@ -88,8 +88,8 @@ T ReduceExpected(T base, int n_ranks, pto::comm::ReduceOp op)
 }
 
 template <typename T, size_t count, pto::comm::ReduceOp op>
-bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size,
-                     const ShmemUniqueId *uid)
+bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root,
+                     uint64_t local_mem_size, const ShmemUniqueId *uid)
 {
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id,
@@ -123,7 +123,7 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
     // Barrier to ensure all ranks have initialized their data
     ShmemBarrierAll();
 
-    TReduceKernelImpl<T, count, op><<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks);
+    TReduceKernelImpl<T, count, op><<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Barrier after kernel execution
@@ -131,7 +131,7 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
 
     // Only root verifies result
     bool is_ok = true;
-    if (rank_id == 0) {
+    if (rank_id == root) {
         aclrtMemcpy(output_host, count * sizeof(T), output_device, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
 
         // Verify expected result based on ReduceOp
@@ -149,7 +149,7 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
             std::cout << "\n================================================================" << std::endl;
-            std::cout << "[DEBUG] Rank 0: TREDUCE SUCCESSFUL!" << std::endl;
+            std::cout << "[DEBUG] Rank " << root << ": TREDUCE SUCCESSFUL!" << std::endl;
             std::cout << "Summary: Reduced " << n_ranks << " segments, result size " << count << " elements." << std::endl;
             std::cout << "Sample Result (First 5 elements): [ ";
             for (size_t i = 0; i < (count > 5 ? 5 : count); ++i) {
@@ -176,7 +176,18 @@ bool RunReduce(int n_ranks, int n_devices, int first_rank_id, int first_device_i
     return ForkAndRunWithUniqueId(n_ranks, first_rank_id,
         [&](int rankId, const ShmemUniqueId *uid) {
             return RunReduceKernel<T, count, op>(
-                rankId, n_ranks, n_devices, first_device_id,
+                rankId, n_ranks, n_devices, first_device_id, 0,
+                1024ULL * 1024 * 1024, uid);
+        });
+}
+
+template <typename T, size_t count, pto::comm::ReduceOp op>
+bool RunReduceWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
+{
+    return ForkAndRunWithUniqueId(n_ranks, first_rank_id,
+        [&](int rankId, const ShmemUniqueId *uid) {
+            return RunReduceKernel<T, count, op>(
+                rankId, n_ranks, n_devices, first_device_id, root,
                 1024ULL * 1024 * 1024, uid);
         });
 }
@@ -187,10 +198,134 @@ template bool RunReduce<int32_t, 4096, pto::comm::ReduceOp::Sum>(int n_ranks, in
 template bool RunReduce<int32_t, 512, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunReduce<int32_t, 256, pto::comm::ReduceOp::Max>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunReduce<int32_t, 256, pto::comm::ReduceOp::Min>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template bool RunReduceWithRoot<float, 256, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+
+// ============================================================================
+// Empty Rows Test Kernel
+// Tests TREDUCE with zero rows (empty data)
+// ============================================================================
+template <typename T, size_t count, pto::comm::ReduceOp op>
+__global__ AICORE void TReduceEmptyKernelImpl(__gm__ T *input, __gm__ T *output, int nranks, int root)
+{
+    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
+    using TileData = pto::Tile<pto::TileType::Vec, T, 1, count, pto::BLayout::RowMajor, -1, -1>;
+
+    int my_rank = shmem_my_pe();
+
+    ShapeDyn shape(1, 1, 1, 0, count);
+    StrideDyn stride(count, count, count, count, 1);
+
+    Global outputG(output, shape, stride);
+
+    Global tensors[16];
+    int actual_nranks = (nranks > 16) ? 16 : nranks;
+    for (int i = 0; i < actual_nranks; ++i) {
+        __gm__ T *remoteInput = ShmemPtr(input, i);
+        tensors[i] = Global(remoteInput, shape, stride);
+    }
+
+    pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, root);
+
+    TileData accTile(1, count);
+    TileData recvTile(1, count);
+    TASSIGN(accTile, 0x0);
+    TASSIGN(recvTile, 0x0);
+
+    if (my_rank == root) {
+        pto::comm::TREDUCE(pg, outputG, accTile, recvTile, op);
+    }
+
+    ShmemDeviceQuiet();
+    ShmemDeviceBarrierAll();
+}
+
+template <typename T, size_t count, pto::comm::ReduceOp op>
+bool RunReduceEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root,
+                          uint64_t local_mem_size, const ShmemUniqueId *uid)
+{
+    TestContext ctx;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id,
+                  "tcp://127.0.0.1:8772", local_mem_size, uid)) {
+        return false;
+    }
+
+    void *input_ptr = ShmemMalloc(count * sizeof(T));
+    if (input_ptr == nullptr) {
+        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
+        return false;
+    }
+
+    T *input_host;
+    aclrtMallocHost(reinterpret_cast<void**>(&input_host), count * sizeof(T));
+
+    T *output_host;
+    aclrtMallocHost(reinterpret_cast<void**>(&output_host), count * sizeof(T));
+
+    T *output_device;
+    aclrtMalloc(reinterpret_cast<void**>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+
+    for (size_t i = 0; i < count; ++i) {
+        input_host[i] = static_cast<T>(i + rank_id * 100);
+        output_host[i] = static_cast<T>(-1);
+    }
+
+    aclrtMemcpy(input_ptr, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    if (rank_id == root) {
+        aclrtMemcpy(output_device, count * sizeof(T), output_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    }
+
+    ShmemBarrierAll();
+
+    TReduceEmptyKernelImpl<T, count, op><<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, root);
+    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+
+    ShmemBarrierAll();
+
+    bool is_ok = true;
+    if (rank_id == root) {
+        aclrtMemcpy(output_host, count * sizeof(T), output_device, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+        for (size_t i = 0; i < count; ++i) {
+            if (output_host[i] != static_cast<T>(-1)) {
+                is_ok = false;
+                break;
+            }
+        }
+    }
+
+    aclrtFreeHost(input_host);
+    aclrtFreeHost(output_host);
+    aclrtFree(output_device);
+    ShmemFree(input_ptr);
+
+    return ctx.Finalize() && is_ok;
+}
+
+template <typename T, size_t count, pto::comm::ReduceOp op>
+bool RunReduceEmpty(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
+{
+    return ForkAndRunWithUniqueId(n_ranks, first_rank_id,
+        [&](int rankId, const ShmemUniqueId *uid) {
+            return RunReduceEmptyKernel<T, count, op>(
+                rankId, n_ranks, n_devices, first_device_id, root,
+                1024ULL * 1024 * 1024, uid);
+        });
+}
+
+template bool RunReduceEmpty<float, 256, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
 
 // Non-template wrappers for test main.cpp
 bool RunReduceFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
     return RunReduce<float, 256, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id);
+}
+
+bool RunReduceFloat256SumWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root) {
+    return RunReduceWithRoot<float, 256, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id, root);
+}
+
+bool RunReduceEmptyFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root) {
+    return RunReduceEmpty<float, 256, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id, root);
 }
 
 bool RunReduceInt32_4096_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {

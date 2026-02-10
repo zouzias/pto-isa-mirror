@@ -50,7 +50,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
   - `srcGlobalData` must point to local address (on current NPU).
   - Both addresses should be naturally aligned to element size; 32-byte alignment is recommended for best performance.
 - **DMA constraints**:
-  - SDMA: Supports 2D transfer
+  - SDMA: 1D transfer
   - URMA: 1D transfer
   - DMA channel availability is limited; implementations may serialize requests when channels are exhausted.
 - **Valid region**:
@@ -70,10 +70,10 @@ After `TSYNC(event)` returns, all stores to `dstGlobalData` performed by the asy
 
 using namespace pto;
 
-template <typename T>
+template <typename T, int SIZE>
 void example_tput_async(__gm__ T* local_data, __gm__ T* remote_addr) {
-    using GShape = Shape<1, 1, 1, 64, 256>;
-    using GStride = BaseShape2D<T, 64, 256, Layout::ND>;
+    using GShape = Shape<1, 1, 1, 1, SIZE>;
+    using GStride = Stride<SIZE, SIZE, SIZE, SIZE, 1>;
     using GTensor = GlobalTensor<T, GShape, GStride, Layout::ND>;
 
     // Local source tensor
@@ -153,10 +153,10 @@ void overlap_comm_compute(__gm__ T* send_buf, __gm__ T* remote_recv_addr,
 
 using namespace pto;
 
-template <typename T>
+template <typename T, int SIZE>
 void pipelined_transfer(__gm__ T* local_buffers[], __gm__ T* remote_buffers[], 
                         int num_buffers) {
-    using GTensor = GlobalTensor<T, Shape<1,1,1,64,64>, Stride<4096,4096,4096,64,1>, Layout::ND>;
+    using GTensor = GlobalTensor<T, Shape<1,1,1,1,SIZE>, Stride<SIZE,SIZE,SIZE,SIZE,1>, Layout::ND>;
     
     comm::AsyncEvent events[num_buffers];
     

@@ -57,6 +57,7 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
         "TGATHER: TileData element type must match GlobalData element type");
 
     const int nranks = parallelGroup.GetSize();
+    const int rootIdx = parallelGroup.GetRootIdx();
 
     PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
     PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
@@ -72,6 +73,10 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
     const int tileValidRow = stagingTileData.GetValidRow();
     const int tileValidCol = stagingTileData.GetValidCol();
+
+    if (totalRows == 0 || gShape4 == 0) {
+        return;
+    }
 
     // ---- Simple path: per-rank data fits in UB tile ----
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
@@ -247,6 +252,7 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
         "TGATHER: TileData element type must match GlobalData element type");
 
     const int nranks = parallelGroup.GetSize();
+    const int rootIdx = parallelGroup.GetRootIdx();
 
     PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
     PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
@@ -262,6 +268,10 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
     const int tileValidRow = pingTile.GetValidRow();
     const int tileValidCol = pingTile.GetValidCol();
+
+    if (totalRows == 0 || gShape4 == 0) {
+        return;
+    }
 
     // ---- Simple path: per-rank data fits in UB tile, no ping-pong benefit ----
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {

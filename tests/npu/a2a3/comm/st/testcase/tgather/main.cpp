@@ -15,6 +15,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Declared in tgather_kernel.cpp — basic tests
 template <typename T, size_t count>
 bool RunGather(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+template <typename T, size_t count>
+bool RunGatherWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+template <typename T, size_t count>
+bool RunGatherEmpty(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
 
 // Declared in tgather_kernel.cpp — large shape (chunked) tests
 bool RunGatherLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
@@ -32,6 +36,8 @@ TEST(TGather, FloatSmall) { ASSERT_TRUE((RunGather<float, 256>(4, 4, 0, 0))); }
 TEST(TGather, Int32Large) { ASSERT_TRUE((RunGather<int32_t, 4096>(2, 2, 0, 0))); }
 TEST(TGather, Uint8Small) { ASSERT_TRUE((RunGather<uint8_t, 512>(2, 2, 0, 0))); }
 TEST(TGather, SingleRank) { ASSERT_TRUE((RunGather<float, 256>(1, 1, 0, 0))); }
+TEST(TGather, Root1_FloatSmall) { ASSERT_TRUE((RunGatherWithRoot<float, 256>(2, 2, 0, 0, 1))); }
+TEST(TGather, EmptyRows_FloatSmall) { ASSERT_TRUE((RunGatherEmpty<float, 256>(2, 2, 0, 0, 0))); }
 
 // ============================================================================
 // TGATHER Tests - Large Shape (chunked): per-rank data > single UB tile

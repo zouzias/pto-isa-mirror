@@ -67,6 +67,11 @@ PTO_INTERNAL void ReduceTiles(TileData &acc, TileData &recv, ReduceOp op)
     }
 }
 
+PTO_INTERNAL int GetRemoteRank(int rootIdx, int remoteOrdinal)
+{
+    return (remoteOrdinal < rootIdx) ? remoteOrdinal : (remoteOrdinal + 1);
+}
+
 } // namespace detail
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
@@ -100,6 +105,10 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
     const int tileValidRow = accTileData.GetValidRow();
     const int tileValidCol = accTileData.GetValidCol();
+
+    if (totalRows == 0 || gShape4 == 0) {
+        return;
+    }
 
     // ---- Simple path: data fits in UB tile in both dimensions ----
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
@@ -330,15 +339,12 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     const int tileValidRow = accTileData.GetValidRow();
     const int tileValidCol = accTileData.GetValidCol();
 
-    // Build list of remote rank indices (skip root), reused across all chunks
-    PTO_ASSERT(nranks <= 17, "Ping-pong TREDUCE supports at most 17 ranks (16 remote + 1 root)!");
-    int remoteIdx[16];
-    int numRemote = 0;
-    for (int i = 0; i < nranks && numRemote < 16; ++i) {
-        if (i != rootIdx) {
-            remoteIdx[numRemote++] = i;
-        }
+    if (totalRows == 0 || gShape4 == 0) {
+        return;
     }
+
+    // Remote ranks are all ranks except root; map by ordinal to concrete rank index.
+    const int numRemote = nranks - 1;
 
     // ---- Simple path: data fits in UB tile in both dimensions ----
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
@@ -356,7 +362,7 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
         // Step 2: Start prefetching first remote data into pingTile
-        TLOAD(pingTile, parallelGroup[remoteIdx[0]]);
+        TLOAD(pingTile, parallelGroup[detail::GetRemoteRank(rootIdx, 0)]);
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
 
         // Wait for root data ready
@@ -374,7 +380,7 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
             // Start prefetch of next remote data (overlapped with current reduction)
             if (hasNext) {
-                TLOAD(nextTile, parallelGroup[remoteIdx[i + 1]]);
+                TLOAD(nextTile, parallelGroup[detail::GetRemoteRank(rootIdx, i + 1)]);
                 set_flag(PIPE_MTE2, PIPE_V, nextEvent);
             }
 
@@ -501,7 +507,7 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
                             // Prefetch first remote chunk into pingTile
                             SrcViewT firstRemoteView(
-                                parallelGroup[remoteIdx[0]].data() + srcOffset,
+                                parallelGroup[detail::GetRemoteRank(rootIdx, 0)].data() + srcOffset,
                                 chunkShape, srcChunkStride);
                             TLOAD(pingTile, firstRemoteView);
                             set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
@@ -522,7 +528,7 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
                                 // Start prefetch of next remote chunk (overlapped with reduction)
                                 if (hasNext) {
                                     SrcViewT nextRemoteView(
-                                        parallelGroup[remoteIdx[i + 1]].data() + srcOffset,
+                                        parallelGroup[detail::GetRemoteRank(rootIdx, i + 1)].data() + srcOffset,
                                         chunkShape, srcChunkStride);
                                     TLOAD(nextTile, nextRemoteView);
                                     set_flag(PIPE_MTE2, PIPE_V, nextEvent);

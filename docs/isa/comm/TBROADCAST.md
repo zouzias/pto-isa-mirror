@@ -4,7 +4,7 @@
 
 Broadcast data from current NPU to all ranks in the parallel group. The calling NPU is the root and its data is copied to all other NPUs.
 
-Only the root needs to execute `TBROADCAST`. Non-root ranks only need to ensure their destination buffers are allocated and writable for the duration of the operation.
+Only the root needs to execute `TBROADCAST`. Non-root ranks only need to ensure their destination buffers are allocated and writable for the duration of the operation. Calling `TBROADCAST` on non-root ranks is undefined behavior.
 
 **Large Tile Support**: When the GlobalTensor exceeds the UB (Unified Buffer) tile capacity in rows and/or columns, the transfer is automatically chunked via 2D sliding.
 

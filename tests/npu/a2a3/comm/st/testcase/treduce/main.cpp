@@ -14,6 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Declared in treduce_kernel.cpp — basic (small tile) tests
 bool RunReduceFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunReduceFloat256SumWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+bool RunReduceEmptyFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
 bool RunReduceInt32_4096_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 bool RunReduceInt32_512_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 bool RunReduceInt32_256_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
@@ -44,6 +46,8 @@ TEST(TReduce, Int32Small_Max_8Ranks) { ASSERT_TRUE((RunReduceInt32_256_Max(8, 8,
 TEST(TReduce, Int32Small_Min) { ASSERT_TRUE((RunReduceInt32_256_Min(2, 2, 0, 0))); }
 TEST(TReduce, Int32Small_Min_8Ranks) { ASSERT_TRUE((RunReduceInt32_256_Min(8, 8, 0, 0))); }
 TEST(TReduce, SingleRank_Sum) { ASSERT_TRUE((RunReduceFloat256Sum(1, 1, 0, 0))); }
+TEST(TReduce, Root1_FloatSmall_Sum) { ASSERT_TRUE((RunReduceFloat256SumWithRoot(2, 2, 0, 0, 1))); }
+TEST(TReduce, EmptyRows_FloatSmall_Sum) { ASSERT_TRUE((RunReduceEmptyFloat256Sum(2, 2, 0, 0, 0))); }
 
 // ============================================================================
 // TREDUCE Tests - Large Shape Chunked (GlobalTensor > UB Tile, auto-chunked)
