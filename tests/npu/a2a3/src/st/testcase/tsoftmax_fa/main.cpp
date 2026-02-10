@@ -734,3 +734,8 @@ TEST_F(TSOFTMAXFATest, case32_B1_N1_S1024_H16_DN_no_fusion_init)
 {
     test_softmax_dn_no_fusion<1024, 16, 1>();
 }
+
+TEST_F(TSOFTMAXFATest, case33_B1_N1_S128_H128_DN_no_fusion_init)
+{
+    test_softmax_dn_no_fusion<128, 128, 1>();
+}

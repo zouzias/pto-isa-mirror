@@ -320,7 +320,7 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
 }
 
 //compiler team pto-optimal version
-template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, int init, bool CAUSAL_MASK>
 __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x,
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
@@ -769,7 +769,7 @@ __tf__ AICORE void TSOFTMAX_DN_FUSION2(TileDataD2 &x_exp, TileDataS1 &input_x,
 
 
 // general DN
-template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, typename TileDataS2, int init, bool CAUSAL_MASK>
+template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename TileDataS1, int init, bool CAUSAL_MASK>
  __tf__ AICORE void TSOFTMAX_DN_FUSION3(TileDataD2 &x_exp, TileDataS1 &input_x,
                              TileDataD1 &local_max, TileDataD1 &local_sum,
                              TileDataD1 &new_global_max, TileDataD1 &new_global_sum,
@@ -1021,15 +1021,14 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
     __ubuf__ typename TileDataD1::DType *new_global_sum_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(new_global_sum.data());
     __ubuf__ typename TileDataD1::DType *exp_max_Ptr = (__ubuf__ typename TileDataD1::DType *)__cce_get_tile_ptr(exp_max.data());
 
-    // float scale = 0.8;
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
     float keepProb = 1.0;
 
-    unsigned ubM = TileDataD2::Rows;    //
-    unsigned ubN = TileDataD2::Cols;    //128
+    unsigned ubM = TileDataD2::Rows;
+    unsigned ubN = TileDataD2::Cols;
     unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileDataS1::DType);
 
-    uint16_t repeatTimes = CeilDivision(ubN, elementsPerRepeat);    //2
+    uint16_t repeatTimes = CeilDivision(ubN, elementsPerRepeat);
     uint16_t rowRepeat = CeilDivision(ubM, elementsPerRepeat);
 
     __VEC_SCOPE__{
@@ -1269,8 +1268,8 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
     float keepProb = 1.0;
 
-    unsigned ubM = TileDataD2::Rows;  //64
-    unsigned ubN = TileDataD2::Cols;  //128
+    unsigned ubM = TileDataD2::Rows;
+    unsigned ubN = TileDataD2::Cols;
     unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileDataS1::DType);
 
     uint16_t repeatTimes = CeilDivision(ubN, elementsPerRepeat);
@@ -1331,6 +1330,7 @@ template <int HEAD_SIZE, typename TileDataD1, typename TileDataD2, typename Tile
                 vexpdif(vreg1, vreg1, vb32_max_0, preg_b32_all, PART_EVEN); // 1 3 5 7 9 11
                 vexpdif(vreg2, vreg2, vb32_max_1, preg_b32_all, PART_EVEN); // 64 66 68 70 72 
                 vexpdif(vreg3, vreg3, vb32_max_1, preg_b32_all, PART_EVEN); // 65 67 69 71 73
+                //TODO: do the muls after expand+sub
                 vadd(vb32_add0, vreg0, vreg1, preg_b32_all, MODE_ZEROING); 
                 vadd(vb32_add1, vreg2, vreg3, preg_b32_all, MODE_ZEROING);
 
@@ -1465,7 +1465,8 @@ template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD1, typename Ti
                              ReduceTileD1 &exp_max,
                              TileDataS1 &tmp0,
                              ReduceTileD1 &tmp1,
-                             ReduceTileD1 &tmp2) {
+                             ReduceTileD1 &tmp2,
+                             TileDataS1 &triu) {
 
             constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
 
@@ -1486,6 +1487,13 @@ template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD1, typename Ti
                 TMUL(new_global_sum, exp_max, new_global_sum);
                 TADD(new_global_sum, new_global_sum, local_sum);
                 */
+
+                if constexpr (CAUSAL_MASK) {
+                    constexpr float negInf = -3.40282e+38;
+                    TTRI<TileDataS1, 1>(triu, 1);
+                    TMULS(triu, triu, negInf);
+                    TADD(input_x, input_x, triu);
+                }
 
                 TCOLMAX(local_max, input_x);
                 TMAX(local_max, local_max, new_global_max);
@@ -1514,6 +1522,13 @@ template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD1, typename Ti
                 TMULS(input_x, input_x, 1.0f);  //KeepProb, compiler cannot optimize
                 TCVT(x_exp, input_x, RoundMode::CAST_ROUND);
                 */
+
+                if constexpr (CAUSAL_MASK) {
+                    constexpr float negInf = -3.40282e+38;
+                    TTRI<TileDataS1, 1>(triu, 1);
+                    TMULS(triu, triu, negInf);
+                    TADD(input_x, input_x, triu);
+                }
 
                 TCOLMAX(new_global_max, input_x);
                 TCOLEXPANDSUB(input_x, input_x, new_global_max);

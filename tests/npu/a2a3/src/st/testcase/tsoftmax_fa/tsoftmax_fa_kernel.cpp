@@ -544,6 +544,8 @@ template void launchTSOFTMAX_dn_nofusion<256, 64, 1>(aclFloat16 *x_exp, float *i
 template void launchTSOFTMAX_dn_nofusion<256, 64, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_dn_nofusion<128, 64, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 template void launchTSOFTMAX_dn_nofusion<128, 64, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_dn_nofusion<128, 128, 1>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
+template void launchTSOFTMAX_dn_nofusion<128, 128, 0>(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream);
 
 template <int seq, int headSize, int init>
 void launchTSOFTMAX_nd_fusion(aclFloat16 *x_exp, float *input_x, uint8_t *bit_mask, float *local_max, float *local_sum, float *new_global_max, float *new_global_sum, float *exp_max, aclrtStream stream){
