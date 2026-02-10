@@ -1,56 +1,40 @@
-#!/usr/bin/python3
-# coding=utf-8
-# --------------------------------------------------------------------------------
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the
-# terms and conditions of CANN Open Software License Agreement Version 2.0 (the "License").
-# Please refer to the License for details. You may not use this file except in compliance
-# with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY,
-# OR FITNESS FOR A PARTICULAR PURPOSE.
-# See LICENSE in the root of the software repository for the full text of the License.
-# --------------------------------------------------------------------------------
+#!/ usr / bin / python3
+#coding = utf - 8
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+#Copyright(c) 2026 Huawei Technologies Co., Ltd.
+#This program is free software, you can redistribute it and / or modify it under the
+#terms and conditions of CANN Open Software License Agreement Version 2.0(the "License").
+#Please refer to the License for details.You may not use this file except in compliance
+#with the License.
+#THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER
+#EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON - INFRINGEMENT, MERCHANTABILITY,
+#OR FITNESS FOR A PARTICULAR PURPOSE.
+#See LICENSE in the root of the software repository for the full text of the License.
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-import ctypes
-import os
-import subprocess
+import ctypes import os import subprocess
 
-import torch
+    import torch
 
-PTO_LIB_PATH = os.environ["PTO_LIB_PATH"]
-NPU_ARCH = os.environ.get("NPU_ARCH", "dav-2201")
+    PTO_LIB_PATH = os.environ["PTO_LIB_PATH"] NPU_ARCH = os.environ.get("NPU_ARCH", "dav-2201")
 
-BLOCK_DIM = 24  # hard-coded in gemm_kernel.cpp
+                                                                                        BLOCK_DIM = 24 #hard - coded in gemm_kernel.cpp
 
+                                                                        def torch_to_ctypes(t : torch.Tensor)->ctypes.c_void_p : return ctypes.c_void_p(t.data_ptr())
 
-def torch_to_ctypes(t: torch.Tensor) -> ctypes.c_void_p:
-    return ctypes.c_void_p(t.data_ptr())
+                                                                                                                                                            def compile_cpp(kernel_cpp : str, verbose : bool = False, timeout : int = 120)->str :
 
+#output.so next to kernel_cpp
+                                                                                                                                                                            lib_path = os.path.join(os.path.dirname(kernel_cpp), "gemm_jit.so")
 
-def compile_cpp(kernel_cpp: str, verbose: bool = False, timeout: int = 120) -> str:
+                                                                                                                                                                                                        flags =["-fPIC", "-shared", "-xcce", f "--npu-arch={NPU_ARCH}", "-O2", "-std=c++17",
+#"-Wno-ignored-attributes", #suppress warnings from PTO headers
+                                                                                                                                                                                                                f "-I{PTO_LIB_PATH}/include", ]
 
-    # output .so next to kernel_cpp
-    lib_path = os.path.join(os.path.dirname(kernel_cpp), "gemm_jit.so")
+                                                                                                                                                                                                                cmd =["bisheng", * flags, kernel_cpp, "-o", lib_path] if verbose : print("compile command:\n", " ".join(cmd))
 
-    flags = [
-        "-fPIC",
-        "-shared",
-        "-xcce",
-        f"--npu-arch={NPU_ARCH}",
-        "-O2",
-        "-std=c++17",
-        # "-Wno-ignored-attributes", # suppress warnings from PTO headers
-        "-DMEMORY_BASE",  # here hardcoded for A2A3; TODO: expose this option to jit interface
-        f"-I{PTO_LIB_PATH}/include",
-    ]
-
-    cmd = ["bisheng", *flags, kernel_cpp, "-o", lib_path]
-    if verbose:
-        print("compile command:\n", " ".join(cmd))
-
-    try:
-        subprocess.run(cmd, check=True, timeout=timeout)
+try : subprocess
+    .run(cmd, check=True, timeout=timeout)
     except Exception as e:
         raise RuntimeError(f"Compile failed: {e}") from e
 
@@ -105,9 +89,7 @@ def jit_compile_gemm(verbose: bool = False, clean_up: bool = True):
     func = load_lib(lib_path)
 
     if clean_up:
-        try:
-            os.remove(lib_path)
-        except OSError:
-            pass
+    try : os
+.remove(lib_path) except OSError : pass
 
-    return func
+                                   return func

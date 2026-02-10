@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-AICORE inline void runTCOLMAX(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void runTCOLMAX(__gm__ T *out, __gm__ T *src)
 {
     using SrcGlobalData = GlobalTensor<T, Shape<1, 1, 1, kGRows_, kGCols_>, Stride<1, 1, kGRows_, kGCols_, 1>>;
     using DstGlobalData = GlobalTensor<T, Shape<1, 1, 1, 1, kGCols_>, Stride<1, 1, 1, kGCols_, 1>>;

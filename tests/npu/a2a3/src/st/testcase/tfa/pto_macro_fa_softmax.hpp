@@ -32,11 +32,10 @@ constexpr PTO_INTERNAL float constexpr_inv_sqrt(float x)
 }
 
 template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD2, typename TileDataS1>
-PTO_INTERNAL void softmax_opt_fa_init_impl(TileDataD2 __out__ x_exp, TileDataS1 __in__ input_x,
-                                           ReduceTileD1 __out__ local_max, ReduceTileD1 __out__ local_sum,
-                                           ReduceTileD1 __out__ new_global_max, ReduceTileD1 __out__ new_global_sum,
-                                           ReduceTileD1 __out__ exp_max, TileDataS1 __out__ tmp_float,
-                                           TileDataS1 __out__ p_tile_f32)
+PTO_INTERNAL void softmax_opt_fa_init_impl(TileDataD2 x_exp, TileDataS1 input_x, ReduceTileD1 local_max,
+                                           ReduceTileD1 local_sum, ReduceTileD1 new_global_max,
+                                           ReduceTileD1 new_global_sum, ReduceTileD1 exp_max, TileDataS1 tmp_float,
+                                           TileDataS1 p_tile_f32)
 {
     (void)local_max;
     (void)exp_max;
@@ -65,11 +64,10 @@ PTO_INTERNAL void softmax_opt_fa_init_impl(TileDataD2 __out__ x_exp, TileDataS1 
 }
 
 template <int HEAD_SIZE, typename ReduceTileD1, typename TileDataD2, typename TileDataS1>
-PTO_INTERNAL void softmax_opt_fa_not_init_impl(TileDataD2 __out__ x_exp, TileDataS1 __in__ input_x,
-                                               ReduceTileD1 __out__ local_max, ReduceTileD1 __out__ local_sum,
-                                               ReduceTileD1 __out__ new_global_max, ReduceTileD1 __out__ new_global_sum,
-                                               ReduceTileD1 __out__ exp_max, TileDataS1 __out__ tmp_float,
-                                               TileDataS1 __out__ p_tile_f32)
+PTO_INTERNAL void softmax_opt_fa_not_init_impl(TileDataD2 x_exp, TileDataS1 input_x, ReduceTileD1 local_max,
+                                               ReduceTileD1 local_sum, ReduceTileD1 new_global_max,
+                                               ReduceTileD1 new_global_sum, ReduceTileD1 exp_max, TileDataS1 tmp_float,
+                                               TileDataS1 p_tile_f32)
 {
     constexpr float scale = constexpr_inv_sqrt(HEAD_SIZE);
 
@@ -121,11 +119,9 @@ PTO_INTERNAL void softmax_opt_fa_not_init_impl(TileDataD2 __out__ x_exp, TileDat
 }
 
 template <bool init = false, int HEAD_SIZE, typename ReduceTileD1, typename TileDataD2, typename TileDataS1>
-PTO_INTERNAL void pto_macro_fa_softmax(TileDataD2 __out__ x_exp, TileDataS1 __in__ input_x,
-                                       ReduceTileD1 __out__ local_max, ReduceTileD1 __out__ local_sum,
-                                       ReduceTileD1 __in__ new_global_max, ReduceTileD1 __out__ new_global_sum,
-                                       ReduceTileD1 __out__ exp_max, TileDataS1 __out__ input_reduce_tmp,
-                                       TileDataS1 __out__ p_tile_fp32)
+PTO_INTERNAL void pto_macro_fa_softmax(TileDataD2 x_exp, TileDataS1 input_x, ReduceTileD1 local_max,
+                                       ReduceTileD1 local_sum, ReduceTileD1 new_global_max, ReduceTileD1 new_global_sum,
+                                       ReduceTileD1 exp_max, TileDataS1 input_reduce_tmp, TileDataS1 p_tile_fp32)
 {
     if constexpr (init) {
         softmax_opt_fa_init_impl<HEAD_SIZE, ReduceTileD1, TileDataD2, TileDataS1>(

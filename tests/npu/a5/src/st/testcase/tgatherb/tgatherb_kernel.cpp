@@ -16,7 +16,7 @@ using namespace pto;
 
 template <typename T, uint64_t dstS1, uint64_t dstS0, uint64_t offsetS1, uint64_t offsetS0, uint64_t srcS1,
           uint64_t srcS0>
-__global__ AICORE void runTGATHERB(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ uint32_t __in__ *offset)
+__global__ AICORE void runTGATHERB(__gm__ T *out, __gm__ T *src, __gm__ uint32_t *offset)
 {
     using GlobalDataDst = GlobalTensor<T, pto::Shape<1, 1, 1, dstS1, dstS0>, pto::Stride<1, 1, 1, dstS0, 1>>;
 

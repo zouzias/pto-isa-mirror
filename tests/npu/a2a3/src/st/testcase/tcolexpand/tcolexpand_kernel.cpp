@@ -17,7 +17,7 @@ using namespace pto;
 
 template <typename T, int src_row, int src_col, int src_validCol, int dst_row, int dst_col, int dst_validRow,
           int dst_validCol>
-__global__ AICORE void runTCOLEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src)
+__global__ AICORE void runTCOLEXPAND(__gm__ T *out, __gm__ T *src)
 {
     using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
     using DynDim2Stride = pto::Stride<1, 1, -1, -1, 1>;

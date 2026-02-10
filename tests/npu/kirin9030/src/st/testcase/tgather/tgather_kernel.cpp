@@ -22,7 +22,7 @@ template <int rows, int cols>
 using StrideDim2 = pto::Stride<rows * cols, rows * cols, rows * cols, cols, 1>;
 template <typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_,
           int kTCols_>
-inline AICORE void runTGather(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *src0, __gm__ Tsrc1 __in__ *src1)
+inline AICORE void runTGather(__gm__ Tsrc0 *out, __gm__ Tsrc0 *src0, __gm__ Tsrc1 *src1)
 {
     using DynShapeDim5_src0 = pto::Shape<1, 1, 1, kGRows0_, kGCols0_>;
     using DynStridDim5_src0 = StrideDim2<kGRows0_, kGCols0_>;
@@ -116,7 +116,7 @@ void launchTGATHER_demo_int16(int16_t *out, int16_t *src0, int16_t *src1, aclrtS
 }
 
 template <typename srcT, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, MaskPattern maskPattern>
-__global__ AICORE void runTGATHER(__gm__ dstT __out__ *out, __gm__ srcT __in__ *src)
+__global__ AICORE void runTGATHER(__gm__ dstT *out, __gm__ srcT *src)
 {
     using DynShapeDim5 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = pto::Stride<1, 1, 1, kGCols_, 1>;

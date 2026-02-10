@@ -18,7 +18,7 @@ using namespace std;
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int descending>
-inline AICORE void runTCI(__gm__ T __out__ *out, T start)
+inline AICORE void runTCI(__gm__ T *out, T start)
 {
     using DynShapeDim5_dst = Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5_dst = Stride<1, 1, 1, kGCols_, 1>;

@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int validRow, int validCol, int Row, int Col, bool src0eqdst>
-__global__ AICORE void runTRowExpandExpdif(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+__global__ AICORE void runTRowExpandExpdif(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 {
     constexpr uint16_t src1Row = ((validRow * sizeof(T) + 31) / 32) * (32 / sizeof(T));
     using GlobalDataDst = GlobalTensor<T, Shape<1, 1, 1, Row, Col>, Stride<1, 1, 1, Col, 1>>;
@@ -52,7 +52,7 @@ __global__ AICORE void runTRowExpandExpdif(__gm__ T __out__ *out, __gm__ T __in_
 }
 
 template <typename T, int validRow, int validCol, int Row, int Col, bool src0eqdst>
-__global__ AICORE void runTRowExpandExpdif2(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+__global__ AICORE void runTRowExpandExpdif2(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 {
     constexpr uint16_t src1Row = ((validRow * sizeof(T) + 31) / 32) * (32 / sizeof(T));
     constexpr uint16_t src1Col = 32 / sizeof(T);

@@ -1,66 +1,41 @@
-#!/usr/bin/python3
-# coding=utf-8
-# --------------------------------------------------------------------------------
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
-# This program is free software, you can redistribute it and/or modify it under the
-# terms and conditions of CANN Open Software License Agreement Version 2.0 (the "License").
-# Please refer to the License for details. You may not use this file except in compliance
-# with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY,
-# OR FITNESS FOR A PARTICULAR PURPOSE.
-# See LICENSE in the root of the software repository for the full text of the License.
-# --------------------------------------------------------------------------------
+#!/ usr / bin / python3
+#coding = utf - 8
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+#Copyright(c) 2026 Huawei Technologies Co., Ltd.
+#This program is free software, you can redistribute it and / or modify it under the
+#terms and conditions of CANN Open Software License Agreement Version 2.0(the "License").
+#Please refer to the License for details.You may not use this file except in compliance
+#with the License.
+#THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER
+#EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON - INFRINGEMENT, MERCHANTABILITY,
+#OR FITNESS FOR A PARTICULAR PURPOSE.
+#See LICENSE in the root of the software repository for the full text of the License.
+#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
 
-import ctypes
-import os
-import subprocess
+import ctypes import os import subprocess
 
-import torch
+    import torch
 
-ASCEND_TOOLKIT_HOME = os.environ["ASCEND_TOOLKIT_HOME"]
-PTO_LIB_PATH = os.environ["PTO_LIB_PATH"]
+    ASCEND_TOOLKIT_HOME = os.environ["ASCEND_TOOLKIT_HOME"] PTO_LIB_PATH = os.environ["PTO_LIB_PATH"]
 
+                                     def torch_to_ctypes(t : torch.Tensor)->ctypes.c_void_p : return ctypes.c_void_p(t.data_ptr())
 
-def torch_to_ctypes(t: torch.Tensor) -> ctypes.c_void_p:
-    return ctypes.c_void_p(t.data_ptr())
+                                                                                                                         def _npu_arch_flag()->str : return os.environ.get("NPU_ARCH", "dav-2201").strip()
 
+                                                                                                                                                                                           def compile_flash(kernel_cpp : str, verbose : bool = False, timeout : int = 300)->str : ""
+                                                                                                                                                                                                                                                                                   "
+                                                                                                                                                                                                             Compile a FlashAttention / TFA kernel cpp into a shared library with a call_kernel symbol.
 
-def _npu_arch_flag() -> str:
-    return os.environ.get("NPU_ARCH", "dav-2201").strip()
+                                                                                                                                                                                                             Output library is placed next to kernel_cpp, named : flash_jit.so ""
+                                                                                                                                                                                                                                                                               "
+                                                                                                                                                                                                                                                          lib_path = os.path.join(os.path.dirname(kernel_cpp), "flash_jit.so")
 
+                                                                                                                                                                                                                                                                                      flags =["-fPIC", "-shared", "-xcce", f "--npu-arch={_npu_arch_flag()}", "-O2", "-std=c++17", "-Wno-ignored-attributes", f "-I{PTO_LIB_PATH}/include", f "-I{PTO_LIB_PATH}/kernels/manual/a2a3/flash_atten", f "-I{ASCEND_TOOLKIT_HOME}/include", f "-I{ASCEND_TOOLKIT_HOME}/pkg_inc/runtime", f "-I{ASCEND_TOOLKIT_HOME}/pkg_inc", f "-I{ASCEND_TOOLKIT_HOME}/pkg_inc/profiling", ]
 
-def compile_flash(kernel_cpp: str, verbose: bool = False, timeout: int = 300) -> str:
-    """
-    Compile a FlashAttention/TFA kernel cpp into a shared library with a call_kernel symbol.
+                                                                                                                                                                                                                                                                                              cmd =["bisheng", * flags, kernel_cpp, "-o", lib_path] if verbose : print("compile command:\n", " ".join(cmd))
 
-    Output library is placed next to kernel_cpp, named: flash_jit.so
-    """
-    lib_path = os.path.join(os.path.dirname(kernel_cpp), "flash_jit.so")
-
-    flags = [
-        "-fPIC",
-        "-shared",
-        "-xcce",
-        f"--npu-arch={_npu_arch_flag()}",
-        "-O2",
-        "-std=c++17",
-        "-Wno-ignored-attributes",
-        "-DMEMORY_BASE",
-        f"-I{PTO_LIB_PATH}/include",
-        f"-I{PTO_LIB_PATH}/kernels/manual/a2a3/flash_atten",
-        f"-I{ASCEND_TOOLKIT_HOME}/include",
-        f"-I{ASCEND_TOOLKIT_HOME}/pkg_inc/runtime",
-        f"-I{ASCEND_TOOLKIT_HOME}/pkg_inc",
-        f"-I{ASCEND_TOOLKIT_HOME}/pkg_inc/profiling",
-    ]
-
-    cmd = ["bisheng", *flags, kernel_cpp, "-o", lib_path]
-    if verbose:
-        print("compile command:\n", " ".join(cmd))
-
-    try:
-        subprocess.run(cmd, check=True, timeout=timeout)
+try : subprocess
+    .run(cmd, check=True, timeout=timeout)
     except Exception as e:
         raise RuntimeError(f"Compile failed: {e}") from e
 
@@ -151,9 +126,7 @@ def jit_compile_flash(
     func = load_flash_lib(lib_path)
 
     if clean_up:
-        try:
-            os.remove(lib_path)
-        except OSError:
-            pass
+    try : os
+.remove(lib_path) except OSError : pass
 
-    return func
+                                   return func

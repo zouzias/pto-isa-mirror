@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T0, typename T1, int kGRows, int kGCols, int kTRows, int kTCols, int validRow, int validCol>
-__global__ AICORE void runTSort32(__gm__ T0 __out__ *out, __gm__ T0 __in__ *src, __gm__ T1 __in__ *idx)
+__global__ AICORE void runTSort32(__gm__ T0 *out, __gm__ T0 *src, __gm__ T1 *idx)
 {
     const int totalByte = 8;
     const int totalNum = totalByte / sizeof(T0);

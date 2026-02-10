@@ -56,7 +56,7 @@ AICORE inline void TSTORE_MAT2GM(GlobalData &dst, TileData &src)
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTLoadND2ND(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTLoadND2ND(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
@@ -88,7 +88,7 @@ AICORE inline void RunTLoadND2ND(__gm__ T __out__ *out, __gm__ T __in__ *src)
 }
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTLoadDN2DN(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTLoadDN2DN(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, 1,
@@ -122,7 +122,7 @@ AICORE inline void RunTLoadDN2DN(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTLoadNZ2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTLoadNZ2NZ(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
@@ -153,7 +153,7 @@ AICORE inline void RunTLoadNZ2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTLoadND2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTLoadND2NZ(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
@@ -185,7 +185,7 @@ AICORE inline void RunTLoadND2NZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTLoadDN2ZN(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTLoadDN2ZN(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, 1,
@@ -217,7 +217,7 @@ AICORE inline void RunTLoadDN2ZN(__gm__ T __out__ *out, __gm__ T __in__ *src)
 
 template <typename T, int dstN, int dstC1, int dstH, int dstW, int dstC0, int gWholeShape0, int gWholeShape1,
           int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTLoad5HD(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTLoad5HD(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
@@ -254,7 +254,7 @@ AICORE inline void RunTLoad5HD(__gm__ T __out__ *out, __gm__ T __in__ *src)
 // C1HWNC0
 template <typename T, int dstC1, int dstH, int dstW, int dstN, int dstC0, int gWholeShape0, int gWholeShape1,
           int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTLoadFractalZ5D(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTLoadFractalZ5D(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
@@ -290,7 +290,7 @@ AICORE inline void RunTLoadFractalZ5D(__gm__ T __out__ *out, __gm__ T __in__ *sr
 // [C1HW, N/16, 16, C0]
 template <typename T, int dstShape0, int dstC1HW, int dstShape2, int dstShape3, int dstC0, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTLoadFractalZ4D(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTLoadFractalZ4D(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,

@@ -19,7 +19,7 @@ constexpr int kTileCols = 16;
 } // namespace
 
 template <int descending, int kCols>
-AICORE void runTCI(__gm__ int32_t __out__ *out, int32_t start)
+AICORE void runTCI(__gm__ int32_t *out, int32_t start)
 {
     using DynShapeDim5 = Shape<1, 1, 1, 1, kCols>;
     using DynStridDim5 = Stride<1, 1, 1, kCols, 1>;

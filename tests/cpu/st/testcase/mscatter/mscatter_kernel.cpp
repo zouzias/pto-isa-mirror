@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <int kTileRows, int kTileCols, int kDstLen>
-AICORE void runMScatter(__gm__ float __out__ *dst, __gm__ float __in__ *srcTile, __gm__ uint32_t __in__ *idx)
+AICORE void runMScatter(__gm__ float *dst, __gm__ float *srcTile, __gm__ uint32_t *idx)
 {
     using TileT = Tile<TileType::Vec, float, kTileRows, kTileCols, BLayout::RowMajor, -1, -1>;
     using IdxT = Tile<TileType::Vec, uint32_t, kTileRows, kTileCols, BLayout::RowMajor, -1, -1>;

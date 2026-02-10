@@ -16,7 +16,7 @@ using namespace pto;
 namespace TRowExpandAddTest {
 
 template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool src0eqdst>
-__global__ AICORE void runROWEXPANDADD(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+__global__ AICORE void runROWEXPANDADD(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 {
     using DynShapeDim5 = Shape<1, 1, 1, src1Row, src1Col>;
     using DynStridDim5 = pto::Stride<1, 1, 1, src1Col, 1>;
@@ -57,7 +57,7 @@ __global__ AICORE void runROWEXPANDADD(__gm__ T __out__ *out, __gm__ T __in__ *s
 }
 
 template <typename T, uint32_t dstRow, uint32_t dstCol, uint32_t src1Row, uint32_t src1Col, bool src0eqdst>
-__global__ AICORE void runROWEXPANDADD2(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+__global__ AICORE void runROWEXPANDADD2(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 {
     using DynShapeDim5 = Shape<1, 1, 1, src1Row, src1Col>;
     using DynStridDim5 = pto::Stride<1, 1, 1, src1Col, 1>;
