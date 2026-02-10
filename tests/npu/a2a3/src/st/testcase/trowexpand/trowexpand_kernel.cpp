@@ -17,7 +17,7 @@ using namespace std;
 using namespace pto;
 
 template <typename T, int rows, int src_col, int src_validCol, int dst_col, int dst_validCol>
-__global__ AICORE void runTROWEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src)
+__global__ AICORE void runTROWEXPAND(__gm__ T *out, __gm__ T *src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, rows, -1>;
     using DynStridDim5 = Stride<1, 1, rows, -1, 1>;
@@ -43,7 +43,7 @@ __global__ AICORE void runTROWEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src
 }
 
 template <typename T, int rows, int src_col, int dst_col>
-__global__ AICORE void runTROWBRCB(__gm__ T __out__ *out, __gm__ T __in__ *src)
+__global__ AICORE void runTROWBRCB(__gm__ T *out, __gm__ T *src)
 {
     constexpr bool isRowMajor = (rows == 1);
     constexpr BLayout tileLayout = isRowMajor ? BLayout::RowMajor : BLayout::ColMajor;

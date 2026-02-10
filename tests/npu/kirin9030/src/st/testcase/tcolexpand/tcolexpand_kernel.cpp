@@ -16,7 +16,7 @@ using namespace pto;
 namespace TColExpandTest {
 
 template <typename T, uint32_t srcRows, uint32_t dstRows, uint32_t cols, uint32_t validCols>
-__global__ AICORE void runCOLEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src)
+__global__ AICORE void runCOLEXPAND(__gm__ T *out, __gm__ T *src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, srcRows, cols>;
     using DynStridDim5 = pto::Stride<1, 1, 1, cols, 1>;

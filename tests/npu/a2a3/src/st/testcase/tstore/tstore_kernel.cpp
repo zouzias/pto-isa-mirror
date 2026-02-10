@@ -18,7 +18,7 @@ using namespace pto;
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTStoreRowMajor(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTStoreRowMajor(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
@@ -52,7 +52,7 @@ AICORE inline void RunTStoreRowMajor(__gm__ T __out__ *out, __gm__ T __in__ *src
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTStoreColMajor(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTStoreColMajor(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, 1,
@@ -86,7 +86,7 @@ AICORE inline void RunTStoreColMajor(__gm__ T __out__ *out, __gm__ T __in__ *src
 
 template <typename T, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void RunTStoreNZ(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void RunTStoreNZ(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,

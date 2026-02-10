@@ -35,7 +35,7 @@ struct TileDataSelector<T, TRows, TCols, vRows, vCols, PAD_VALUE_MIN> {
 
 template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, int src1TileH, int src1TileW, int vRows,
           int vCols, int padValueType>
-__global__ AICORE void runTMins(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+__global__ AICORE void runTMins(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 {
     using DynShape = pto::Shape<-1, -1, -1, -1, -1>;
     using DynStride = pto::Stride<-1, -1, -1, -1, -1>;

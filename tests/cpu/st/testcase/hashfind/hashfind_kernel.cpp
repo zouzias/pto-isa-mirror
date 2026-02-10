@@ -21,8 +21,8 @@ constexpr int32_t kNotFound = -1;
 } // namespace
 
 template <int kTileRows, int kTileCols, int kCap, int kMaxProbe>
-AICORE void runHashFind(__gm__ int32_t __out__ *out, __gm__ int32_t __in__ *table_keys,
-                        __gm__ int32_t __in__ *table_vals, __gm__ int32_t __in__ *queries)
+AICORE void runHashFind(__gm__ int32_t *out, __gm__ int32_t *table_keys, __gm__ int32_t *table_vals,
+                        __gm__ int32_t *queries)
 {
     static_assert((kCap & (kCap - 1)) == 0, "hashfind: capacity must be power-of-two");
 

@@ -16,7 +16,7 @@ using namespace std;
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-inline AICORE void runTTRANS(__gm__ T __out__ *out, __gm__ T __in__ *src)
+inline AICORE void runTTRANS(__gm__ T *out, __gm__ T *src)
 {
     using DynShapeDim4 = pto::Shape<-1, -1, -1, -1, -1>;
     using DynStridDim4 = pto::Stride<-1, -1, -1, -1, -1>;

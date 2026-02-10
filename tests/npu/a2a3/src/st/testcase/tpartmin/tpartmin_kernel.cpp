@@ -17,7 +17,7 @@ using namespace pto;
 
 template <typename T, int kGRowsD_, int kGColsD_, int kGRowsS0_, int kGColsS0_, int kGRowsS1_, int kGColsS1_,
           int kTRowsD_, int kTColsD_, int kTRowsS0_, int kTColsS0_, int kTRowsS1_, int kTColsS1_>
-__global__ AICORE void runTPartMin(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+__global__ AICORE void runTPartMin(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 {
     using DynShapeDim4 = pto::Shape<-1, -1, -1, -1, -1>;
     using DynStridDim4 = pto::Stride<-1, -1, -1, -1, -1>;

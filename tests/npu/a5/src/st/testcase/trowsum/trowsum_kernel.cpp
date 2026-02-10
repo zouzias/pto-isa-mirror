@@ -18,7 +18,7 @@ using namespace pto;
 
 namespace TRowSumTest {
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-__global__ AICORE void runTRowsum(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ T __in__ *tmp)
+__global__ AICORE void runTRowsum(__gm__ T *out, __gm__ T *src, __gm__ T *tmp)
 {
     using DynShapeDim4 = pto::Shape<-1, -1, -1, -1, -1>;
     using DynStridDim4 = pto::Stride<-1, -1, -1, -1, -1>;

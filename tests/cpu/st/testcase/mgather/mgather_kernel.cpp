@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <int kTileRows, int kTileCols, int kSrcLen>
-AICORE void runMGather(__gm__ float __out__ *out, __gm__ float __in__ *src, __gm__ uint32_t __in__ *idx)
+AICORE void runMGather(__gm__ float *out, __gm__ float *src, __gm__ uint32_t *idx)
 {
     using TileT = Tile<TileType::Vec, float, kTileRows, kTileCols, BLayout::RowMajor, -1, -1>;
     using IdxT = Tile<TileType::Vec, uint32_t, kTileRows, kTileCols, BLayout::RowMajor, -1, -1>;

@@ -40,7 +40,7 @@ struct GenericDataSelector<T, kGRows_, kGCols_, kTRows_, kTCols_, PAD_VALUE_MAX>
 };
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kPadValue_>
-__global__ AICORE void runTSELS(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1, uint8_t selectMode)
+__global__ AICORE void runTSELS(__gm__ T *out, __gm__ T *src0, __gm__ T *src1, uint8_t selectMode)
 {
     using GDS = GenericDataSelector<T, kGRows_, kGCols_, kTRows_, kTCols_, kPadValue_>;
     using GlobalData = typename GDS::GlobalType;
