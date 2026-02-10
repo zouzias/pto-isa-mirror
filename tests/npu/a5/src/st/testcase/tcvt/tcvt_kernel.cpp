@@ -195,10 +195,11 @@ __global__ AICORE void runTCVTSaturationTest(__gm__ T *outSaturated, __gm__ T *o
     TileDataDst dstTileTrunc;
     TileDataDst dstTileDefault;
 
+    // UB assignments - keep well within 256KB UB limit (0x40000)
     TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTileSat, 0x20000);
-    TASSIGN(dstTileTrunc, 0x40000);
-    TASSIGN(dstTileDefault, 0x60000);
+    TASSIGN(dstTileSat, 0x1000);      // 4KB offset
+    TASSIGN(dstTileTrunc, 0x2000);    // 8KB offset
+    TASSIGN(dstTileDefault, 0x3000);  // 12KB offset
 
     GlobalData_src srcGlobal(src);
     GlobalData_dst dstGlobalSat(outSaturated);

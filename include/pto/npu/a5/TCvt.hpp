@@ -77,11 +77,11 @@ using __cce_simd::RoundOType;
 enum class CastMode {
     EXPAND,          // vcvt(..., PART_EVEN) - Type expansion only, no conversion
     ROUND,           // vcvt(..., R()) - Conversion with rounding only
-    ROUND_SAT,       // vcvt(..., R(), RS_ENABLE) - Conversion with rounding and saturation
+    ROUND_SAT,       // vcvt(..., R(), RS_DISABLE) - Conversion with rounding and saturation
     ROUND_PART,      // vcvt(..., R(), PART_EVEN) - Conversion with rounding and part operation
-    ROUND_SAT_PART,  // vcvt(..., R(), RS_ENABLE, PART_EVEN) - Rounding, saturation, and part
-    SAT_PART,        // vcvt(..., RS_ENABLE, PART_EVEN) - Saturation and part (no rounding)
-    SAT_ROUND        // vcvt(..., RS_ENABLE, R()) - Saturation then rounding (reversed order)
+    ROUND_SAT_PART,  // vcvt(..., R(), RS_DISABLE, PART_EVEN) - Rounding, saturation, and part
+    SAT_PART,        // vcvt(..., RS_DISABLE, PART_EVEN) - Saturation and part (no rounding)
+    SAT_ROUND        // vcvt(..., RS_DISABLE, R()) - Saturation then rounding (reversed order)
 };
 
 #define FOR_ROWS \
@@ -113,7 +113,7 @@ enum class CastMode {
  * Handles: s64 -> s32 #sat #part, s64 -> f32 #rnd #part
  */
 template <typename R, typename DST, typename SRC>
-inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     vector_s64 v_input_0;
     const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
     uint32_t totalElements = validRows * validCols;
@@ -131,12 +131,12 @@ inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *
         if constexpr (std::is_same<R, void>::value) {
             // For type expansion without rounding, saturation mode is controllable
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
-            } else {
                 vcvt(v_output, v_input_0, preg_b64, RS_DISABLE, PART_EVEN);
+            } else {
+                vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
             }
         } else {
-            // For conversions with rounding mode, RS_ENABLE/DISABLE not supported
+            // For conversions with rounding mode, RS_DISABLE/DISABLE not supported
             vcvt(v_output, v_input_0, preg_b64, R(), PART_EVEN);
         }
         vsts(v_output, dst, i * ELE_CNT_B64, PK_B64, preg_b32);
@@ -148,7 +148,7 @@ inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *
  * Cast 32-bit to 16-bit types - 1D version
  */
 template <typename R, typename DST, typename SRC>
-inline AICORE void cast32to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast32to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
     uint32_t sReg = totalElements;
@@ -163,15 +163,15 @@ inline AICORE void cast32to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
         vlds(v_input_0, src, i * ELE_CNT_B32, NORM);
         if (satMode == SaturationMode::ON) {
             if constexpr (std::is_same<R, void>::value) {
-                vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);
-            } else {
-                vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
-            }
-        } else {
-            if constexpr (std::is_same<R, void>::value) {
                 vcvt(v_output_even, v_input_0, preg_b32, RS_DISABLE, PART_EVEN);
             } else {
                 vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
+            }
+        } else {
+            if constexpr (std::is_same<R, void>::value) {
+                vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);
+            } else {
+                vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
             }
         }
         vsts(v_output_even, dst, i * ELE_CNT_B32, PK_B32, preg_b32_st);
@@ -184,7 +184,7 @@ inline AICORE void cast32to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
  * Handles: f32 -> s32 #rnd #sat, s32 -> f32 #rnd, f32 -> f32 #rnd (same-type rounding)
  */
 template <typename R, CastMode MODE, typename DST, typename SRC>
-inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
     uint32_t sReg = totalElements;
@@ -202,9 +202,9 @@ inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vtrc(v_output, v_input_0, R(), preg_b32_st);
         } else if constexpr (MODE == CastMode::ROUND_SAT) {
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE);
-            } else {
                 vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE);
+            } else {
+                vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE);
             }
         } else {
             vcvt(v_output, v_input_0, preg_b32, R());
@@ -218,7 +218,7 @@ inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
  * Cast 32-bit to 64-bit signed integer - 1D version
  */
 template <typename R, typename SRC>
-inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B64);
@@ -239,9 +239,9 @@ inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ S
         } else {
             // For conversions with rounding (e.g., f32->s64), saturation mode is controllable
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
-            } else {
                 vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
+            } else {
+                vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
             }
         }
         vsts(v_output, dst, i * ELE_CNT_B64, NORM_B32, preg_b64);
@@ -253,7 +253,7 @@ inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ S
  * Cast between 16-bit types - 1D version
  */
 template <typename R, CastMode MODE, typename DST, typename SRC>
-inline AICORE void cast16to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast16to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B16);
     uint32_t sReg = totalElements;
@@ -268,15 +268,15 @@ inline AICORE void cast16to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
         vlds(v_input_0, src, i * ELE_CNT_B16, NORM);
         if constexpr (MODE == CastMode::ROUND_SAT) {
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE);
-            } else {
                 vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE);
+            } else {
+                vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE);
             }
         } else if constexpr (MODE == CastMode::SAT_ROUND) {
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b16, RS_ENABLE, R());
-            } else {
                 vcvt(v_output, v_input_0, preg_b16, RS_DISABLE, R());
+            } else {
+                vcvt(v_output, v_input_0, preg_b16, RS_ENABLE, R());
             }
         } else {
             vcvt(v_output, v_input_0, preg_b16, R());
@@ -290,7 +290,7 @@ inline AICORE void cast16to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
  * Cast 16-bit to 32-bit types - 1D version
  */
 template <typename R, CastMode MODE, typename DST, typename SRC>
-inline AICORE void cast16to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast16to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
     uint32_t sReg = totalElements;
@@ -307,9 +307,9 @@ inline AICORE void cast16to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vcvt(v_output, v_input_0, preg_b16, PART_EVEN);
         } else if constexpr (MODE == CastMode::ROUND_SAT_PART) {
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
-            } else {
                 vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
+            } else {
+                vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
             }
         } else {
             vcvt(v_output, v_input_0, preg_b16, R(), PART_EVEN);
@@ -323,7 +323,7 @@ inline AICORE void cast16to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
  * Cast 16-bit to 8-bit types - 1D version
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
-inline AICORE void cast16to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast16to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B16);
     uint32_t sReg = totalElements;
@@ -358,7 +358,7 @@ inline AICORE void cast16to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
  * Cast 8-bit to 16-bit types - 1D version
  */
 template <typename SRC_VEC, typename DST, typename SRC>
-inline AICORE void cast8to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+inline AICORE void cast8to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B16);
     uint32_t sReg = totalElements;
@@ -381,7 +381,7 @@ inline AICORE void cast8to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
  * Cast 8-bit to 32-bit types - 1D version
  */
 template <typename SRC_VEC, typename DST, typename SRC>
-inline AICORE void cast8to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+inline AICORE void cast8to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B16);
     uint32_t sReg = totalElements;
@@ -419,7 +419,7 @@ inline AICORE void cast8to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
  *   2. vselr: Gather bytes using index vector for proper byte packing
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
-inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
     uint32_t sReg = totalElements;
@@ -440,15 +440,15 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         
         if (satMode == SaturationMode::ON) {
             if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-                vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
-            } else {
-                vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
-            }
-        } else {
-            if constexpr (MODE == CastMode::ROUND_SAT_PART) {
                 vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
             } else {
                 vcvt(v_output_p0, v_input, preg_b32, RS_DISABLE, PART_P0);
+            }
+        } else {
+            if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
+            } else {
+                vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
             }
         }
         
@@ -466,7 +466,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
  * This is a hardware requirement specific to the hifloat8 format.
  */
 template <typename R>
-inline AICORE void cast32toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast32toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
     uint32_t sReg = totalElements;
@@ -485,9 +485,9 @@ inline AICORE void cast32toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
 
         vlds(v_input, src, i * ELE_CNT_B32, NORM);
         if (satMode == SaturationMode::ON) {
-            vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
-        } else {
             vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_DISABLE, PART_P0);
+        } else {
+            vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
         }
         vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
         vsts((RegTensor<uint8_t> &)v_output, (__ubuf__ uint8_t *)dst, i * ELE_CNT_B32, NORM_B8, preg_b8);
@@ -500,7 +500,7 @@ inline AICORE void cast32toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
  * Special version for H8 that uses ROUND_A instead of template parameter
  */
 template <typename R>
-inline AICORE void cast16toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+inline AICORE void cast16toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B16);
     uint32_t sReg = totalElements;
@@ -513,7 +513,7 @@ inline AICORE void cast16toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
         MaskReg preg_b16_st = CreatePredicate<half>(sReg);
 
         vlds(v_input_0, src, i * ELE_CNT_B16, NORM);
-        vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_ENABLE, PART_EVEN);
+        vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_DISABLE, PART_EVEN);
         vsts((RegTensor<uint8_t> &)v_output_even, (__ubuf__ uint8_t *)dst, i * ELE_CNT_B16, PK_B16, preg_b16_st);
         // sReg is decremented by CreatePredicate with POST_UPDATE
     }
@@ -527,11 +527,11 @@ inline AICORE void cast16toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
  * Cast 64-bit integer to 32-bit (signed/float) - 2D version
  * Handles: s64 -> s32 #sat #part, s64 -> f32 #rnd #part
  * Intrinsics:
- *   vcvt(output, input, preg, RS_ENABLE, PART_EVEN)  // s64 -> s32 with saturation
+ *   vcvt(output, input, preg, RS_DISABLE, PART_EVEN)  // s64 -> s32 with saturation
  *   vcvt(output, input, preg, R(), PART_EVEN)        // s64 -> f32 with rounding
  */
 template <typename R, typename DST, typename SRC>
-inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     vector_s64 v_input_0;
 
     const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
@@ -549,9 +549,9 @@ inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t va
             if constexpr (std::is_same<R, void>::value) {
                 // For type expansion (s64->s32/f32), saturation mode is controllable
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
-                } else {
                     vcvt(v_output, v_input_0, preg_b64, RS_DISABLE, PART_EVEN);
+                } else {
+                    vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
                 }
             } else {
                 vcvt(v_output, v_input_0, preg_b64, R(), PART_EVEN);
@@ -565,11 +565,11 @@ inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t va
  * Cast 32-bit to 16-bit types
  * Handles: f32 -> f16 #rnd #sat #part, f32 -> bf16 #rnd #sat #part, f32 -> s16 #rnd #sat #part
  * Intrinsics:
- *   vcvt(out_odd, in_1, preg, RS_ENABLE, PART_ODD/EVEN)       // No rounding mode (saturation only)
- *   vcvt(out_odd, in_1, preg, R(), RS_ENABLE, PART_ODD/EVEN)  // With rounding mode
+ *   vcvt(out_odd, in_1, preg, RS_DISABLE, PART_ODD/EVEN)       // No rounding mode (saturation only)
+ *   vcvt(out_odd, in_1, preg, R(), RS_DISABLE, PART_ODD/EVEN)  // With rounding mode
  */
 template <typename R, typename DST, typename SRC>
-inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
@@ -583,19 +583,19 @@ inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
             vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B32);
             if (satMode == SaturationMode::ON) {
                 if constexpr (std::is_same<R, void>::value) {
-                    vcvt(v_output_odd, v_input_1, preg_b32, RS_ENABLE, PART_ODD);
-                    vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);    
-                } else {
-                    vcvt(v_output_odd, v_input_1, preg_b32, R(), RS_ENABLE, PART_ODD);
-                    vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
-                }
-            } else {
-                if constexpr (std::is_same<R, void>::value) {
                     vcvt(v_output_odd, v_input_1, preg_b32, RS_DISABLE, PART_ODD);
                     vcvt(v_output_even, v_input_0, preg_b32, RS_DISABLE, PART_EVEN);    
                 } else {
                     vcvt(v_output_odd, v_input_1, preg_b32, R(), RS_DISABLE, PART_ODD);
                     vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
+                }
+            } else {
+                if constexpr (std::is_same<R, void>::value) {
+                    vcvt(v_output_odd, v_input_1, preg_b32, RS_ENABLE, PART_ODD);
+                    vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);    
+                } else {
+                    vcvt(v_output_odd, v_input_1, preg_b32, R(), RS_ENABLE, PART_ODD);
+                    vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
                 }
             }
             vor(v_output, v_output_even, v_output_odd, preg_b16);
@@ -608,11 +608,11 @@ inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
  * Cast 32-bit to 16-bit types 2D without interleave version for better fusion
  * Handles: f32 -> f16 #rnd #sat #part, f32 -> bf16 #rnd #sat #part, f32 -> s16 #rnd #sat #part
  * Intrinsics:
- *   vcvt(out_odd, in_1, preg, RS_ENABLE, PART_ODD/EVEN)       // No rounding mode (saturation only)
- *   vcvt(out_odd, in_1, preg, R(), RS_ENABLE, PART_ODD/EVEN)  // With rounding mode
+ *   vcvt(out_odd, in_1, preg, RS_DISABLE, PART_ODD/EVEN)       // No rounding mode (saturation only)
+ *   vcvt(out_odd, in_1, preg, R(), RS_DISABLE, PART_ODD/EVEN)  // With rounding mode
  */
 template <typename R, typename DST, typename SRC>
-inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
@@ -626,15 +626,15 @@ inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vlds(v_input_0, src, srcOffset, NORM);
             if (satMode == SaturationMode::ON) {
                 if constexpr (std::is_same<R, void>::value) {
-                    vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);    
-                } else {
-                    vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
-                }
-            } else {
-                if constexpr (std::is_same<R, void>::value) {
                     vcvt(v_output_even, v_input_0, preg_b32, RS_DISABLE, PART_EVEN);    
                 } else {
                     vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
+                }
+            } else {
+                if constexpr (std::is_same<R, void>::value) {
+                    vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);    
+                } else {
+                    vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
                 }
             }
             vsts(v_output_even, dst, dstOffset, PK_B32, preg_b32_st);
@@ -645,11 +645,11 @@ inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
 /**
  * Cast between 32-bit types (float <-> int)
  * Modes:
- *   ROUND_SAT: f32 -> s32 #rnd #sat → vcvt(output, input, preg, R(), RS_ENABLE)
+ *   ROUND_SAT: f32 -> s32 #rnd #sat → vcvt(output, input, preg, R(), RS_DISABLE)
  *   ROUND:     s32 -> f32 #rnd     → vcvt(output, input, preg, R())
  */
 template <typename R, CastMode MODE, typename DST, typename SRC>
-inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
 
     FOR_ROWS
         FOR_ELEMENTS(ELE_CNT_B32)
@@ -660,9 +660,9 @@ inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
             vlds(v_input_0, src, srcOffset, NORM);
             if constexpr (MODE == CastMode::ROUND_SAT) {
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE);
-                } else {
                     vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE);
+                } else {
+                    vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE);
                 }
             } else {
                 vcvt(v_output, v_input_0, preg_b32, R());
@@ -677,10 +677,10 @@ inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
  * Handles: s32 -> s64 #part, f32 -> s64 #rnd #sat #part
  * Intrinsics:
  *   vcvt(output, input, preg, PART_EVEN)                    // s32 -> s64 (type expansion)
- *   vcvt(output, input, preg, R(), RS_ENABLE, PART_EVEN)    // f32 -> s64 (with rounding and saturation)
+ *   vcvt(output, input, preg, R(), RS_DISABLE, PART_EVEN)    // f32 -> s64 (with rounding and saturation)
  */
 template <typename R, typename SRC>
-inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
 
     const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
     uint32_t len32 = ELE_CNT_B32;
@@ -699,9 +699,9 @@ inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_
             } else {
                 // For conversions with rounding (e.g., f32->s64), saturation mode is controllable
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
-                } else {
                     vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
+                } else {
+                    vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
                 }
             }
             vsts(v_output, dst, dstOffset, NORM_B32, preg_b64);
@@ -712,12 +712,12 @@ inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_
 /**
  * Cast between 16-bit types
  * Modes:
- *   ROUND_SAT:  f16 -> s16 #rnd #sat → vcvt(output, input, preg, R(), RS_ENABLE)
- *   SAT_ROUND:  bf16 -> f16 #sat #rnd → vcvt(output, input, preg, RS_ENABLE, R()) [reversed order]
+ *   ROUND_SAT:  f16 -> s16 #rnd #sat → vcvt(output, input, preg, R(), RS_DISABLE)
+ *   SAT_ROUND:  bf16 -> f16 #sat #rnd → vcvt(output, input, preg, RS_DISABLE, R()) [reversed order]
  *   ROUND:      s16 -> f16 #rnd      → vcvt(output, input, preg, R())
  */
 template <typename R, CastMode MODE, typename DST, typename SRC >
-inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
 
     FOR_ROWS
         FOR_ELEMENTS(ELE_CNT_B16)
@@ -728,15 +728,15 @@ inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
             vlds(v_input_0, src, srcOffset, NORM);
             if constexpr (MODE == CastMode::ROUND_SAT) {
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE);
-                } else {
                     vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE);
+                } else {
+                    vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE);
                 }
             } else if constexpr (MODE == CastMode::SAT_ROUND) {
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b16, RS_ENABLE, R());
-                } else {
                     vcvt(v_output, v_input_0, preg_b16, RS_DISABLE, R());
+                } else {
+                    vcvt(v_output, v_input_0, preg_b16, RS_ENABLE, R());
                 }
             } else {
                 vcvt(v_output, v_input_0, preg_b16, R());
@@ -751,10 +751,10 @@ inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
  * Modes:
  *   EXPAND:          Type expansion (f16/bf16/s16 -> f32/u32/s32 #part) → vcvt(output, input, preg, PART_EVEN)
  *   ROUND_PART:      f16 -> s32 #rnd #part                             → vcvt(output, input, preg, R(), PART_EVEN)
- *   ROUND_SAT_PART:  bf16 -> s32 #rnd #sat #part                       → vcvt(output, input, preg, R(), RS_ENABLE, PART_EVEN)
+ *   ROUND_SAT_PART:  bf16 -> s32 #rnd #sat #part                       → vcvt(output, input, preg, R(), RS_DISABLE, PART_EVEN)
  */
 template <typename R, CastMode MODE, typename DST, typename SRC >
-inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
 
     uint32_t len16 = ELE_CNT_B16;
     MaskReg preg_b16 = CreatePredicate<half>(len16);
@@ -770,9 +770,9 @@ inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
                 vcvt(v_output, v_input_0, preg_b16, PART_EVEN);
             } else if constexpr (MODE == CastMode::ROUND_SAT_PART) {
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
-                } else {
                     vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
+                } else {
+                    vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
                 }
             } else {
                 vcvt(v_output, v_input_0, preg_b16, R(), PART_EVEN);
@@ -785,11 +785,11 @@ inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
 /**
  * Cast 16-bit to 8-bit types
  * Modes:
- *   ROUND_SAT_PART: f16 -> s8/u8 #rnd #sat #part → vcvt(..., R(), RS_ENABLE, PART_*)
- *   SAT_PART:       s16 -> u8 #sat #part         → vcvt(..., RS_ENABLE, PART_*)
+ *   ROUND_SAT_PART: f16 -> s8/u8 #rnd #sat #part → vcvt(..., R(), RS_DISABLE, PART_*)
+ *   SAT_PART:       s16 -> u8 #sat #part         → vcvt(..., RS_DISABLE, PART_*)
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
-inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
    
     uint32_t len16 = ELE_CNT_B16;
     MaskReg preg_b16 = CreatePredicate<half>(len16);
@@ -829,11 +829,11 @@ inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
 /**
  * Cast 16-bit to 8-bit types 2D without interleave version for better fusion
  * Modes:
- *   ROUND_SAT_PART: f16 -> s8/u8 #rnd #sat #part → vcvt(..., R(), RS_ENABLE, PART_EVEN)
- *   SAT_PART:       s16 -> u8 #sat #part         → vcvt(..., RS_ENABLE, PART_EVEN)
+ *   ROUND_SAT_PART: f16 -> s8/u8 #rnd #sat #part → vcvt(..., R(), RS_DISABLE, PART_EVEN)
+ *   SAT_PART:       s16 -> u8 #sat #part         → vcvt(..., RS_DISABLE, PART_EVEN)
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
-inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
    
     uint32_t len16 = ELE_CNT_B16;
     MaskReg preg_b16 = CreatePredicate<half>(len16);
@@ -847,17 +847,17 @@ inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
             vlds(v_input_0, src, srcOffset, NORM);
             if (satMode == SaturationMode::ON) {
                 if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-                    vcvt(v_output_even, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
-                } else {
-                    // SAT_PART mode: s16 -> u8 without rounding
-                    vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
-                }
-            } else {
-                if constexpr (MODE == CastMode::ROUND_SAT_PART) {
                     vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
                 } else {
                     // SAT_PART mode: s16 -> u8 without rounding
                     vcvt(v_output_even, v_input_0, preg_b16, RS_DISABLE, PART_EVEN);
+                }
+            } else {
+                if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                    vcvt(v_output_even, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
+                } else {
+                    // SAT_PART mode: s16 -> u8 without rounding
+                    vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
                 }
             }
             vsts(v_output_even, dst, dstOffset, PK_B16, preg_b16_st);
@@ -871,7 +871,7 @@ inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
  * Intrinsic: vcvt(output, input, preg, PART_EVEN)
  */
 template <typename SRC_VEC, typename DST, typename SRC>
-inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
    
     uint32_t len8 = ELE_CNT_B8;
     MaskReg preg_b8 = CreatePredicate<uint8_t>(len8);
@@ -895,7 +895,7 @@ inline AICORE void cast8to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
  * Intrinsic: vcvt(output, input, preg, PART_*)
  */
 template <typename SRC_VEC, typename DST, typename SRC>
-inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
    
     uint32_t len8 = ELE_CNT_B8;
     MaskReg preg_b8 = CreatePredicate<uint8_t>(len8);
@@ -932,11 +932,11 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
  *   - f32 -> e4m3/e5m2/h8 #rnd #sat #part (ROUND_SAT_PART mode)
  *   - u32/s32 -> u8/s8 #sat #part (SAT_PART mode)
  * Intrinsics:
- *   vcvt(..., R(), RS_ENABLE, PART_P0) for floating point with rounding
- *   vcvt(..., RS_ENABLE, PART_P0) for integer without rounding
+ *   vcvt(..., R(), RS_DISABLE, PART_P0) for floating point with rounding
+ *   vcvt(..., RS_DISABLE, PART_P0) for integer without rounding
  */
 template <typename R, CastMode MODE, typename DST_VEC, typename DST, typename SRC>
-inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
 
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
@@ -961,15 +961,15 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
             // Convert with or without rounding based on mode
             if (satMode == SaturationMode::ON) {
                 if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-                    vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
-                } else {
-                    vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
-                }
-            } else {
-                if constexpr (MODE == CastMode::ROUND_SAT_PART) {
                     vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
                 } else {
                     vcvt(v_output_p0, v_input, preg_b32, RS_DISABLE, PART_P0);
+                }
+            } else {
+                if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                    vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
+                } else {
+                    vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
                 }
             }
             
@@ -1002,7 +1002,7 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
  * to existing data without changing the underlying type (e.g., rounding to nearest even).
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     FOR_ROWS
         FOR_ELEMENTS(ELE_CNT_B32)
             vector_f32 v_input_0, v_output;
@@ -1016,7 +1016,7 @@ inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float *src, uint32_t v
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     FOR_ROWS
         FOR_ELEMENTS(ELE_CNT_B32)
             vector_f32 v_input_0, v_output;
@@ -1035,12 +1035,12 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float 
  * Uses cast32to16 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ float16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ float16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16_2D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1051,12 +1051,12 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float16_t *dst, __ubuf__ fl
  * Uses cast32to16 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ bfloat16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ bfloat16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ bfloat16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ bfloat16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16_2D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1066,27 +1066,27 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ bfloat16_t *dst, __ubuf__ f
  * Uses cast32to16 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16_2D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /**
  * FP32 to I32
  * Conversion: f32 -> s32 #rnd #sat
- * Intrinsic: vcvt(output, input, preg, R(), RS_ENABLE)
+ * Intrinsic: vcvt(output, input, preg, R(), RS_DISABLE)
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to32<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to32<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1096,12 +1096,12 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ floa
  * Uses cast32toS64 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32toS64<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32toS64<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1111,12 +1111,12 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ floa
  * Uses cast32to8 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1126,12 +1126,12 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf_
  * Uses cast32to8 helper
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to8<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1141,7 +1141,7 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf_
  * Note: H8 conversion requires ROUND_A mode
  */
 template <typename R>
-inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
@@ -1163,9 +1163,9 @@ inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint3
             
             vlds(v_input, src, srcOffset, NORM);
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
-            } else {
                 vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_DISABLE, PART_P0);
+            } else {
+                vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
             }
             
             // Select every 4th byte to compact the result
@@ -1176,7 +1176,7 @@ inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint3
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     // Same complex logic as castData - just reuse it
     castData<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
@@ -1187,63 +1187,63 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ f
 
 /** FP16 -> FP32 #part (type expansion) → vcvt(output, input, preg, PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** FP16 -> I32 #rnd #part → vcvt(output, input, preg, R(), PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32<R, CastMode::ROUND_PART>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32<R, CastMode::ROUND_PART>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
-/** FP16 -> I16 #rnd #sat → vcvt(output, input, preg, R(), RS_ENABLE) */
+/** FP16 -> I16 #rnd #sat → vcvt(output, input, preg, R(), RS_DISABLE) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to16<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to16<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** FP16 -> I8 #rnd #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to8<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** FP16 -> U8 #rnd #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to8<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 
 /** FP16 -> H8 #rnd #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     // FP16->H8 conversion only supports ROUND_A or ROUND_H modes
     // static_assert(std::is_same<R, RoundAType>::value || std::is_same<R, RoundCType>::value,
     //               "Fix: FP16 to HIFLOAT8 conversion only supports ROUND_A (CAST_ROUND) or ROUND_H (CAST_CEIL) rounding modes");
@@ -1258,11 +1258,11 @@ inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32
 
             vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output_odd, v_input_1, preg_b16, ROUND_A, RS_ENABLE, PART_ODD);
-                vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_ENABLE, PART_EVEN);
-            } else {
                 vcvt(v_output_odd, v_input_1, preg_b16, ROUND_A, RS_DISABLE, PART_ODD);
                 vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_DISABLE, PART_EVEN);
+            } else {
+                vcvt(v_output_odd, v_input_1, preg_b16, ROUND_A, RS_ENABLE, PART_ODD);
+                vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_ENABLE, PART_EVEN);
             }
             vor((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_even, (RegTensor<uint8_t> &) v_output_odd, preg_b8);
             vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
@@ -1271,7 +1271,7 @@ inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     // Same complex logic as castData - just reuse it
     castData<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
@@ -1282,34 +1282,34 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ h
 
 /** BF16 -> FP32 #part (type expansion) → vcvt(output, input, preg, PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
-/** BF16 -> I32 #rnd #sat #part → vcvt(output, input, preg, R(), RS_ENABLE, PART_EVEN) */
+/** BF16 -> I32 #rnd #sat #part → vcvt(output, input, preg, R(), RS_DISABLE, PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32<R, CastMode::ROUND_SAT_PART>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32<R, CastMode::ROUND_SAT_PART>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
-/** BF16 -> F16 #sat #rnd → vcvt(output, input, preg, RS_ENABLE, R()) [reversed order] */
+/** BF16 -> F16 #sat #rnd → vcvt(output, input, preg, RS_DISABLE, R()) [reversed order] */
 template <typename R>
-inline AICORE void castData(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to16<R, CastMode::SAT_ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to16<R, CastMode::SAT_ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1320,57 +1320,57 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ bfloat1
 
 /** U8 -> FP16 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ half *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ half *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** U8 -> U16 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I8 -> FP16 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ half *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ half *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I8 -> I16 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I8 -> I32 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 //---------------------------------------------------------------------------------------------
@@ -1379,57 +1379,57 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int8
 
 /** I16 -> U8 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to8<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to8<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I16 -> FP16 #rnd → vcvt(output, input, preg, R()) */
 template <typename R>
-inline AICORE void castData(__ubuf__ half *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ half *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to16<R, CastMode::ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to16<R, CastMode::ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I16 -> FP32 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I16 -> U32 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ uint32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I16 -> I32 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16to32<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 //---------------------------------------------------------------------------------------------
@@ -1438,57 +1438,57 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int1
 
 /** I32 -> FP32 #rnd → vcvt(output, input, preg, R()) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to32<R, CastMode::ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to32<R, CastMode::ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I32 -> I16 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to16<void>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to16<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to16_2D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to16_2D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I32 -> U16 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to16<void>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to16<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to16_2D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to16_2D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I32 -> I64 #part (type expansion) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32toS64<void>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32toS64<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32toS64<void>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32toS64<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** I32 -> U8 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 //---------------------------------------------------------------------------------------------
@@ -1497,35 +1497,35 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int3
 
 /** U32 -> U8 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to8<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** U32 -> U16 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to16<void>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ uint16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to16<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to16_2D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to16_2D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** U32 -> I16 #sat #part */
 template <typename R>
-inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to16<void>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to16<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast32to16_2D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast32to16_2D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 //---------------------------------------------------------------------------------------------
@@ -1534,23 +1534,23 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint
 
 /** I64 -> FP32 #rnd #part → vcvt(output, input, preg, R(), PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     castS64to32<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     castS64to32<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
-/** I64 -> I32 #sat #part → vcvt(output, input, preg, RS_ENABLE, PART_EVEN) */
+/** I64 -> I32 #sat #part → vcvt(output, input, preg, RS_DISABLE, PART_EVEN) */
 template <typename R>
-inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     castS64to32<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     castS64to32<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1564,35 +1564,35 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int6
 
 /** E4M3 -> FP32 #part (type expansion) → vcvt(output, input, preg, PART_P0) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32<vector_f8e4m3>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32<vector_f8e4m3>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32<vector_f8e4m3>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32<vector_f8e4m3>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** E5M2 -> FP32 #part (type expansion) → vcvt(output, input, preg, PART_P0) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32<vector_f8e5m2>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32<vector_f8e5m2>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32<vector_f8e5m2>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32<vector_f8e5m2>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 /** H8 -> FP32 #part (type expansion) → vcvt(output, input, preg, PART_P0) */
 template <typename R>
-inline AICORE void castData(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32<vector_hif8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32<vector_hif8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32<vector_hif8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32<vector_hif8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 //=============================================================================================
@@ -1607,47 +1607,47 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ hifloa
 
 // Source: U8 (unsigned 8-bit integer)
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16_1D_NoPostUpdate<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16_1D_NoPostUpdate<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16_1D_NoPostUpdate<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16_1D_NoPostUpdate<vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 // Source: I8 (signed 8-bit integer)
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16_1D_NoPostUpdate<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16_1D_NoPostUpdate<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to16_1D_NoPostUpdate<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to16_1D_NoPostUpdate<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32_1D_NoPostUpdate<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32_1D_NoPostUpdate<vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 // Source: FP8_E4M3
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32_1D_NoPostUpdate<vector_f8e4m3>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e4m3_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32_1D_NoPostUpdate<vector_f8e4m3>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 // Source: FP8_E5M2
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32_1D_NoPostUpdate<vector_f8e5m2>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float8_e5m2_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32_1D_NoPostUpdate<vector_f8e5m2>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 // Source: Hifloat8
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast8to32_1D_NoPostUpdate<vector_hif8>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ hifloat8_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast8to32_1D_NoPostUpdate<vector_hif8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 //---------------------------------------------------------------------------------------------
@@ -1660,27 +1660,27 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ hifloa
 
 // Source: FP16 (half)
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32_1D_NoPostUpdate<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32_1D_NoPostUpdate<R, CastMode::ROUND_PART>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to16_1D_NoPostUpdate<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to8_1D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to8_1D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1688,50 +1688,50 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ half
 // Only FP16 -> Hifloat8 (H8) conversion is supported
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
-    cast16toH8_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols);
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+    cast16toH8_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 // Source: BFloat16
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32_1D_NoPostUpdate<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32_1D_NoPostUpdate<R, CastMode::ROUND_SAT_PART>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ bfloat16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to16_1D_NoPostUpdate<R, CastMode::SAT_ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 
 // Source: I16 (signed 16-bit integer)
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to8_1D_NoPostUpdate<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to16_1D_NoPostUpdate<R, CastMode::ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32_1D_NoPostUpdate<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32_1D_NoPostUpdate<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int16_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast16to32_1D_NoPostUpdate<void, CastMode::EXPAND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1742,89 +1742,89 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int1
 
 // Source: FP32 (float)
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to32_1D_NoPostUpdate<R, CastMode::ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ bfloat16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ bfloat16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to32_1D_NoPostUpdate<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32toS64_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float8_e4m3_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to8_1D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_f8e4m3>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float8_e5m2_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to8_1D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_f8e5m2>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32toH8_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 // Source: I32 (signed 32-bit integer)
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to32_1D_NoPostUpdate<R, CastMode::ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16_1D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16_1D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32toS64_1D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to8_1D_NoPostUpdate<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 // Source: U32 (unsigned 32-bit integer)
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to8_1D_NoPostUpdate<void, CastMode::SAT_PART, vector_u8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16_1D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32to16_1D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1834,12 +1834,12 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint
 
 // Source: I64 (signed 64-bit integer)
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     castS64to32_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode = SaturationMode::ON) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     castS64to32_1D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
@@ -1853,7 +1853,7 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int6
  * Iterates over rows and calls appropriate castData specialization
  * 
  * @param satMode: Saturation mode for float-to-int conversions (A5-specific):
- *                 Note: In A5, saturation is controlled by RS_ENABLE/RS_DISABLE in vcvt intrinsics.
+ *                 Note: In A5, saturation is controlled by RS_DISABLE/RS_ENABLE in vcvt intrinsics.
  *                 The satMode parameter is currently not used in A5 as saturation behavior
  *                 is determined by the CastMode template at compile-time.
  */
@@ -1863,7 +1863,7 @@ void implTCVT(typename TileDataD::TileDType __out__ dst,
               typename TileDataS::TileDType __in__ src, 
     unsigned validRows, unsigned validCols, SaturationMode satMode, VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
-    // In A5, saturation is controlled by RS_ENABLE/RS_DISABLE in vcvt instructions,
+    // In A5, saturation is controlled by RS_DISABLE/RS_ENABLE in vcvt instructions,
     // not by CTRL register bits. CTRL[60] should remain at 0.
     // The satMode parameter is provided for API compatibility but saturation behavior
     // is determined by the CastMode used in castData template instantiations.
@@ -1881,7 +1881,7 @@ void implTCVT(typename TileDataD::TileDType __out__ dst,
             // Use 1D path: faster bulk processing without row iteration overhead
             switch (version) {
                 case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
-                    castData_2D_NoPostUpdate<R>(dstPtr, srcPtr, validRows, validCols, TileDataD::Cols, TileDataS::Cols);
+                    castData_2D_NoPostUpdate<R>(dstPtr, srcPtr, validRows, validCols, TileDataD::Cols, TileDataS::Cols, satMode);
                     break;
                 case VFImplKind::VFIMPL_DEFAULT:
                 case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
