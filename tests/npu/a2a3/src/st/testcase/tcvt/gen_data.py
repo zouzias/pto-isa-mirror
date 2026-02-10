@@ -21,6 +21,14 @@ except ImportError:
 
 np.random.seed(19)
 
+# Flag to control PyTorch behavior for infinity handling
+# GPU behavior (USE_PYTORCH_GPU_BEHAVIOR = True):
+#   - Signed integers (int8, int16, int32): +inf → -1, -inf → 0
+#   - Unsigned integers (uint8): +inf → max_value (255), -inf → 0
+# CPU behavior (USE_PYTORCH_GPU_BEHAVIOR = False):
+#   - All integer types: +inf → 0, -inf → 0
+USE_PYTORCH_GPU_BEHAVIOR = True  # Set to False to use CPU behavior
+
 def default_saturation_off(srctype, dsttype):
     """Check if this conversion's default saturation mode is OFF.
     
@@ -278,7 +286,22 @@ def gen_golden(case_name, param):
                     torch_output = torch_input.to(np_to_torch[dsttype])
                     truncated = torch_output.numpy().astype(dsttype)
                     
-                    print(f"Generated truncated golden data using PyTorch for {srctype.__name__} → {dsttype.__name__}")
+                    # Handle GPU vs CPU behavior for infinity
+                    # For signed integers: GPU: +inf → -1, -inf → 0 | CPU: +inf → 0, -inf → 0
+                    # For unsigned integers: GPU: +inf → max, -inf → 0 | CPU: +inf → 0, -inf → 0
+                    if USE_PYTORCH_GPU_BEHAVIOR and np.issubdtype(srctype, np.floating):
+                        if np.issubdtype(dsttype, np.signedinteger):
+                            # Apply GPU behavior: +inf becomes -1 for signed integers
+                            is_pos_inf = np.isinf(x1_gm) & (x1_gm > 0)
+                            truncated[is_pos_inf] = -1
+                        elif np.issubdtype(dsttype, np.unsignedinteger):
+                            # Apply GPU behavior: +inf becomes max value for unsigned integers
+                            is_pos_inf = np.isinf(x1_gm) & (x1_gm > 0)
+                            info = np.iinfo(dsttype)
+                            truncated[is_pos_inf] = info.max
+                    
+                    behavior = "GPU" if USE_PYTORCH_GPU_BEHAVIOR else "CPU"
+                    print(f"Generated truncated golden data using PyTorch ({behavior} behavior) for {srctype.__name__} → {dsttype.__name__}")
                 else:
                     print(f"Warning: PyTorch conversion not supported for {srctype.__name__} → {dsttype.__name__}, using NumPy fallback")
                     use_torch = False
@@ -289,7 +312,20 @@ def gen_golden(case_name, param):
                 truncated_list = []
                 for val in converted_golden.flat:
                     if np.isnan(val) or np.isinf(val):
-                        int_val = 0
+                        # Handle infinity based on GPU/CPU behavior flag
+                        if USE_PYTORCH_GPU_BEHAVIOR and np.isinf(val) and val > 0:
+                            if np.issubdtype(dsttype, np.signedinteger):
+                                # GPU behavior: +inf → -1 for signed integers
+                                int_val = -1
+                            elif np.issubdtype(dsttype, np.unsignedinteger):
+                                # GPU behavior: +inf → max value for unsigned integers
+                                info = np.iinfo(dsttype)
+                                int_val = info.max
+                            else:
+                                int_val = 0
+                        else:
+                            # CPU behavior: all special values → 0
+                            int_val = 0
                     else:
                         int_val = int(np.int64(val))
                     
@@ -311,7 +347,8 @@ def gen_golden(case_name, param):
                     truncated_list.append(truncated_val)
                 truncated = np.array(truncated_list, dtype=dsttype).reshape([m, n])
                 
-                print(f"Generated truncated golden data using NumPy fallback for {srctype.__name__} → {dsttype.__name__}")
+                behavior = "GPU" if USE_PYTORCH_GPU_BEHAVIOR else "CPU"
+                print(f"Generated truncated golden data using NumPy fallback ({behavior} behavior) for {srctype.__name__} → {dsttype.__name__}")
             
             truncated.tofile("./golden_truncated.bin")
                 
