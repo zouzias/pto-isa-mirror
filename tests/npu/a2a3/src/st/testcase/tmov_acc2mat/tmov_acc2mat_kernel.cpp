@@ -27,7 +27,7 @@ template <typename T>
 using CType = typename std::conditional<std::is_same<T, int8_t>::value, int32_t, float>::type;
 
 template <typename aType, typename bType, int M, int K, int N, int validM, int validK, int validN>
-AICORE inline void runMATMUL(__gm__ aType *src0, __gm__ bType *src1)
+AICORE inline void runMATMUL(__gm__ aType *src0, __gm__ bType *src1, TileAcc<CType<aType>, M, N, -1, -1> &cTile)
 {
     using GlobalDataSrc0 = GlobalTensor<aType,
         pto::Shape<1, 1, 1, M, K>,
@@ -50,7 +50,7 @@ AICORE inline void runMATMUL(__gm__ aType *src0, __gm__ bType *src1)
     using AccTile = TileAcc<CType<aType>, M, N, validM, validN>;
     LeftTile aTile;
     RightTile bTile;
-    AccTile cTile;
+    // AccTile cTile;
     TASSIGN(aTile, 0x0);
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
@@ -76,7 +76,8 @@ AICORE inline void runMATMUL(__gm__ aType *src0, __gm__ bType *src1)
 }
 
 template <typename aType, typename bType, typename fbType, int M, int K, int N, int validM, int validK, int validN>
-AICORE inline void runMATMULFB(__gm__ aType *src0, __gm__ bType *src1, __gm__ fbType *src2)
+AICORE inline void runMATMULFB(__gm__ aType *src0, __gm__ bType *src1, __gm__ fbType *src2, TileAcc<CType<aType>, M, N, -1, -1> &cTile, 
+                               Tile<TileType::Mat, fbType, 1, N, BLayout::RowMajor, 1, validN, SLayout::NoneBox> &fbMatTile)
 {
     using GlobalDataSrc0 = GlobalTensor<aType,
         pto::Shape<1, 1, 1, M, K>,
@@ -96,7 +97,7 @@ AICORE inline void runMATMULFB(__gm__ aType *src0, __gm__ bType *src1, __gm__ fb
     using TileMatFbData = Tile<TileType::Mat, fbType, 1, N, BLayout::RowMajor, 1, N, SLayout::NoneBox>;
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    TileMatFbData fbMatTile;
+    // TileMatFbData fbMatTile;
     TASSIGN(aMatTile, 0x0);
     TASSIGN(bMatTile, 0x10000);
     TASSIGN(fbMatTile, 0x20000);
@@ -106,7 +107,7 @@ AICORE inline void runMATMULFB(__gm__ aType *src0, __gm__ bType *src1, __gm__ fb
     using AccTile = TileAcc<CType<aType>, M, N, validM, validN>;
     LeftTile aTile;
     RightTile bTile;
-    AccTile cTile;
+    // AccTile cTile;
     TASSIGN(aTile, 0x0);
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
@@ -150,11 +151,11 @@ __global__ AICORE void runTMOV_nz2nz(__gm__ outType *out, __gm__ aType *src0, __
     using GlobalDataOut = GlobalTensor<outType, DynShapeDim5, DynStridDim5, Layout::NZ>;
     GlobalDataOut dstGlobal(out);
 
-    runMATMUL<aType, bType, M, K, N, validM, validK, validN>(src0, src1);
-
     using AccTile = TileAcc<CType<aType>, M, N, -1, -1>;
     AccTile cTile(validM, validN);
     TASSIGN(cTile, 0x0);
+
+    runMATMUL<aType, bType, M, K, N, validM, validK, validN>(src0, src1, cTile);
 
     constexpr int staticRow = isInsert ? dstRow : (M - indexRow);
     constexpr int staticCol = isInsert ? dstCol : (N - indexCol);
@@ -211,11 +212,12 @@ __global__ AICORE void runVectorQuantTMOV_nz2nz(__gm__ outType *out, __gm__ aTyp
     TileMatFbData fbMatTile;
     TASSIGN(fbMatTile, 0x20000);
 
-    runMATMULFB<aType, bType, fbType, M, K, N, validM, validK, validN>(src0, src1, src2);
-
     using AccTile = TileAcc<CType<aType>, M, N, -1, -1>;
     AccTile cTile(validM, validN);
     TASSIGN(cTile, 0x0);
+
+    runMATMULFB<aType, bType, fbType, M, K, N, validM, validK, validN>(src0, src1, src2, cTile, fbMatTile);
+
     using FbTile = Tile<TileType::Scaling, fbType, 1, N, BLayout::RowMajor, 1, validN, SLayout::NoneBox>;
     FbTile fbTile;
     TASSIGN(fbTile, 0x0);
@@ -271,11 +273,11 @@ __global__ AICORE void runScalarQuantTMOV_nz2nz(__gm__ outType *out, __gm__ aTyp
     using GlobalDataOut = GlobalTensor<outType, DynShapeDim5, DynStridDim5, Layout::NZ>;
     GlobalDataOut dstGlobal(out);
 
-    runMATMUL<aType, bType, M, K, N, validM, validK, validN>(src0, src1);
-
     using AccTile = TileAcc<CType<aType>, M, N, -1, -1>;
     AccTile cTile(validM, validN);
     TASSIGN(cTile, 0x0);
+
+    runMATMUL<aType, bType, M, K, N, validM, validK, validN>(src0, src1, cTile);
 
     constexpr int staticRow = isInsert ? dstRow : (M - indexRow);
     constexpr int staticCol = isInsert ? dstCol : (N - indexCol);
