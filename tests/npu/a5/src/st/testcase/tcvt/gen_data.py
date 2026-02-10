@@ -106,7 +106,10 @@ def gen_golden(case_name, param):
     # Clamp the result to the destination type's representable range
     if np.issubdtype(dsttype, np.integer):
         info = np.iinfo(dsttype)
-        golden = np.clip(converted_golden, info.min, info.max).astype(dsttype)
+        # Convert to float64 first to avoid overflow during clipping
+        converted_float = converted_golden.astype(np.float64)
+        clipped = np.clip(converted_float, info.min, info.max)
+        golden = clipped.astype(dsttype)
     elif np.issubdtype(dsttype, np.floating):
         info = np.finfo(dsttype)
         golden = np.clip(converted_golden, info.min, info.max).astype(dsttype)
