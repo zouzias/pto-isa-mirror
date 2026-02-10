@@ -19,6 +19,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 namespace pto {
+#ifdef __PTO_AUTO__
+    template <typename TileData>
+    __tf__ PTO_INTERNAL void TInit(typename TileData::TileDType __out__ tile) {
+        return;
+    }
+#endif
 
 enum class Layout {
     ND, // ND RowMajor
@@ -1003,7 +1009,11 @@ struct Tile {
         return *(ptr + offset);
     }
     // constructor for static shape
-    AICORE Tile() {};
+    AICORE Tile() {
+#ifdef __PTO_AUTO__
+        TInit<std::remove_reference_t<decltype(*this)>>(data_);
+#endif
+    };
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
