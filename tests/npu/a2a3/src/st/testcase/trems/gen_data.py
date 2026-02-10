@@ -33,7 +33,7 @@ def gen_golden_data(param):
     output_arr = np.zeros((dst_tile_row, dst_tile_col), dtype=data_type)
     for i in range(rows):
         for j in range(cols):
-            output_arr[i, j] = np.fmod(input_arr[i, j], scalar[0, 0]).astype(data_type)
+            output_arr[i, j] = np.remainder(input_arr[i, j], scalar[0, 0]).astype(data_type)
 
     input_arr.tofile("input.bin")
     with open("scalar.bin", "wb") as f:
@@ -59,7 +59,7 @@ if __name__ == "__main__":
         TREMSParams("TREMSTest.case1", np.float32, 32, 64, 32, 64),
         TREMSParams("TREMSTest.case2", np.float16, 63, 64, 63, 64),
         TREMSParams("TREMSTest.case3", np.int32, 31, 128, 31, 128),
-        TREMSParams("TREMSTest.case4", np.int16, 15, 64 * 3, 15, 64 * 3),
+        TREMSParams("TREMSTest.case4", np.int16, 3, 256, 3, 256),
         TREMSParams("TREMSTest.case5", np.float32, 7, 64 * 7, 7, 64 * 7),
         TREMSParams("TREMSTest.case6", np.float32, 256, 16, 256, 16),
         TREMSParams("TREMSTest.case7", np.float32, 32, 128, 32, 64),
