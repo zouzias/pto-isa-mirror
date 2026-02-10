@@ -8,6 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+#define ENABLE_DEBUG_PRINT 1
+
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -231,7 +233,7 @@ __global__ AICORE void TReduceEmptyKernelImpl(__gm__ T *input, __gm__ T *output,
     TileData accTile(1, count);
     TileData recvTile(1, count);
     TASSIGN(accTile, 0x0);
-    TASSIGN(recvTile, 0x0);
+    TASSIGN(recvTile, 0x10000);
 
     if (my_rank == root) {
         pto::comm::TREDUCE(pg, outputG, accTile, recvTile, op);

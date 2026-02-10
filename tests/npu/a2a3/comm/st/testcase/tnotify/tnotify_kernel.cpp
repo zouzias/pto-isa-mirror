@@ -187,7 +187,7 @@ bool RunNotifyAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first
 bool RunNotifySetKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8786", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8856", 8ULL * 1024 * 1024)) return false;
 
     // Allocate symmetric memory as signal
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -242,7 +242,7 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
 {
     // Use different ports to avoid conflicts
     char ipPort[64];
-    snprintf(ipPort, sizeof(ipPort), "tcp://127.0.0.1:%d", 8787 + static_cast<int>(numSlots));
+    snprintf(ipPort, sizeof(ipPort), "tcp://127.0.0.1:%d", 8857 + static_cast<int>(numSlots));
 
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, ipPort, 8ULL * 1024 * 1024)) return false;
@@ -311,7 +311,7 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
 bool RunNotifyRuntimeOpKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8790", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8860", 8ULL * 1024 * 1024)) return false;
 
     // Allocate symmetric memory as counter
     int32_t *shmem_counter = (int32_t *)ShmemMalloc(sizeof(int32_t));

@@ -31,7 +31,7 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
                           TileData &stagingTileData, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData, stagingTileData);
+    ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData, stagingTileData);
     return {};
 }
 
@@ -42,9 +42,9 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 {
     WaitAllEvents(events...);
     if (atomicType == AtomicType::AtomicAdd) {
-        TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, AtomicType::AtomicAdd>(dstGlobalData, srcGlobalData, stagingTileData);
+        ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, AtomicType::AtomicAdd>(dstGlobalData, srcGlobalData, stagingTileData);
     } else {
-        TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, AtomicType::AtomicNone>(dstGlobalData, srcGlobalData, stagingTileData);
+        ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, AtomicType::AtomicNone>(dstGlobalData, srcGlobalData, stagingTileData);
     }
     return {};
 }
@@ -57,7 +57,7 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
                           TileData &pingTile, TileData &pongTile, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData, pingTile, pongTile);
+    ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData, pingTile, pongTile);
     return {};
 }
 
@@ -71,7 +71,7 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
                           TileData &stagingTileData, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TGET_IMPL(dstGlobalData, srcGlobalData, stagingTileData);
+    ::pto::comm::TGET_IMPL(dstGlobalData, srcGlobalData, stagingTileData);
     return {};
 }
 
@@ -82,44 +82,8 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
                           TileData &pingTile, TileData &pongTile, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TGET_IMPL(dstGlobalData, srcGlobalData, pingTile, pongTile);
+    ::pto::comm::TGET_IMPL(dstGlobalData, srcGlobalData, pingTile, pongTile);
     return {};
-}
-
-// ============================================================================
-// TPUT_ASYNC: Asynchronous remote write - direct GM to GM transfer
-// Data flow: srcGlobalData (local GM) → DMA Engine → dstGlobalData (remote GM)
-// 
-// Template Parameters:
-//   - engine: DmaEngine::SDMA (default) - System DMA, supports 2D transfer
-//             DmaEngine::URMA - A5 URMA, supports 1D transfer
-//
-// Returns: AsyncEvent for synchronization with TSYNC
-// ============================================================================
-
-template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
-PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, WaitEvents&... events)
-{
-    WaitAllEvents(events...);
-    return TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData);
-}
-
-// ============================================================================
-// TGET_ASYNC: Asynchronous remote read - direct GM to GM transfer
-// Data flow: srcGlobalData (remote GM) → DMA Engine → dstGlobalData (local GM)
-// 
-// Template Parameters:
-//   - engine: DmaEngine::SDMA (default) - System DMA, supports 2D transfer
-//             DmaEngine::URMA - A5 URMA, supports 1D transfer
-//
-// Returns: AsyncEvent for synchronization with TSYNC
-// ============================================================================
-
-template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
-PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, WaitEvents&... events)
-{
-    WaitAllEvents(events...);
-    return TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData);
 }
 
 // ============================================================================
@@ -131,7 +95,7 @@ template <typename GlobalSignalData, typename... WaitEvents>
 PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp op, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TNOTIFY_IMPL(dstSignalData, value, op);
+    ::pto::comm::TNOTIFY_IMPL(dstSignalData, value, op);
 }
 
 // ============================================================================
@@ -146,7 +110,7 @@ template <typename GlobalSignalData, typename... WaitEvents>
 PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TWAIT_IMPL(signalData, cmpValue, cmp);
+    ::pto::comm::TWAIT_IMPL(signalData, cmpValue, cmp);
 }
 
 // ============================================================================
@@ -160,7 +124,7 @@ template <typename GlobalSignalData, typename... WaitEvents>
 PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    return TTEST_IMPL(signalData, cmpValue, cmp);
+    return ::pto::comm::TTEST_IMPL(signalData, cmpValue, cmp);
 }
 
 // ============================================================================
@@ -232,7 +196,7 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
                                 TileData &stagingTileData, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TBROADCAST_IMPL(parallelGroup, srcGlobalData, stagingTileData);
+    ::pto::comm::TBROADCAST_IMPL(parallelGroup, srcGlobalData, stagingTileData);
     return {};
 }
 
@@ -247,7 +211,7 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
                                 TileData &pingTile, TileData &pongTile, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TBROADCAST_IMPL(parallelGroup, srcGlobalData, pingTile, pongTile);
+    ::pto::comm::TBROADCAST_IMPL(parallelGroup, srcGlobalData, pingTile, pongTile);
     return {};
 }
 
@@ -262,7 +226,7 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
                              ReduceOp op, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TREDUCE_IMPL(parallelGroup, dstGlobalData, accTileData, recvTileData, op);
+    ::pto::comm::TREDUCE_IMPL(parallelGroup, dstGlobalData, accTileData, recvTileData, op);
     return {};
 }
 
@@ -277,7 +241,7 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
                              ReduceOp op, WaitEvents&... events)
 {
     WaitAllEvents(events...);
-    TREDUCE_IMPL(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
+    ::pto::comm::TREDUCE_IMPL(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
     return {};
 }
 

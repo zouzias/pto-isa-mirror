@@ -102,7 +102,7 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     const int gShape3 = refTensor.GetShape(GlobalTensorDim::DIM_3);
     const int gShape4 = refTensor.GetShape(GlobalTensorDim::DIM_4);
 
-    const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
+    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = accTileData.GetValidRow();
     const int tileValidCol = accTileData.GetValidCol();
 
@@ -118,6 +118,8 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
             set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
             TSTORE(dstGlobalData, accTileData);
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);  // Wait for TSTORE completion
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             return;
         }
 
@@ -335,7 +337,7 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     const int gShape3 = refTensor.GetShape(GlobalTensorDim::DIM_3);
     const int gShape4 = refTensor.GetShape(GlobalTensorDim::DIM_4);
 
-    const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
+    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = accTileData.GetValidRow();
     const int tileValidCol = accTileData.GetValidCol();
 
@@ -354,6 +356,8 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
             set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
             TSTORE(dstGlobalData, accTileData);
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);  // Wait for TSTORE completion
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             return;
         }
 

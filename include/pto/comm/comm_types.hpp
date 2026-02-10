@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <type_traits>
 
+#include "pto/common/debug.h"
 #include "pto/common/type.hpp"
 #include "pto/common/pto_tile.hpp"
 
@@ -42,22 +43,26 @@ struct ParallelGroup {
     constexpr ParallelGroup() = default;
     
     // Constructor: takes array of GlobalData objects
-    AICORE constexpr ParallelGroup(GlobalData *tensorArray, int size, int rootIdx) 
-        : tensors(tensorArray), nranks(size), rootIdx(rootIdx) {}
+    AICORE constexpr ParallelGroup(GlobalData *tensorArray, int size, int root) 
+        : tensors(tensorArray), nranks(size), rootIdx(root) {}
 
     // Factory function (recommended)
     AICORE static constexpr ParallelGroup Create(GlobalData *tensorArray, int size, int rank_id) {
         return ParallelGroup(tensorArray, size, rank_id);
     }
 
-    AICORE constexpr int size() const { return nranks; }
-    AICORE constexpr bool empty() const { return nranks == 0; }
-
     AICORE constexpr int GetRootIdx() const { return rootIdx; }
     AICORE constexpr int GetSize() const { return nranks; }
+    AICORE constexpr bool empty() const { return nranks == 0; }
 
-    AICORE constexpr GlobalData &operator[](int teamRank) { return tensors[teamRank]; }
-    AICORE constexpr const GlobalData &operator[](int teamRank) const { return tensors[teamRank]; }
+    AICORE constexpr GlobalData &operator[](int teamRank) {
+        PTO_ASSERT(teamRank >= 0 && teamRank < nranks, "ParallelGroup: teamRank out of bounds");
+        return tensors[teamRank];
+    }
+    AICORE constexpr const GlobalData &operator[](int teamRank) const {
+        PTO_ASSERT(teamRank >= 0 && teamRank < nranks, "ParallelGroup: teamRank out of bounds");
+        return tensors[teamRank];
+    }
 };
 
 // Type traits: Extract GlobalData type from ParallelGroup<GlobalData>
@@ -70,28 +75,6 @@ struct ParallelGroupTraits {
 template <typename GlobalData>
 struct ParallelGroupTraits<ParallelGroup<GlobalData>> {
     using GlobalDataType = GlobalData;
-};
-
-// ============================================================================
-// DmaEngine: DMA engine type for asynchronous data transfer
-// ============================================================================
-
-enum class DmaEngine : uint8_t {
-    SDMA = 0,  // System DMA - high bandwidth, for large transfers
-    URMA = 1,  // User-space RMA - low latency, for small transfers
-};
-
-// ============================================================================
-// AsyncEvent: Event handle for asynchronous operations
-// ============================================================================
-
-struct AsyncEvent {
-    uint64_t handle {0};
-    DmaEngine engine {DmaEngine::SDMA};
-    
-    constexpr AsyncEvent() = default;
-    AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e) : handle(h), engine(e) {}
-    AICORE constexpr bool valid() const { return handle != 0; }
 };
 
 // ============================================================================
@@ -137,9 +120,11 @@ enum class ReduceOp : uint8_t {
 // ============================================================================
 
 using Signal = GlobalTensor<int32_t, Shape<1,1,1,1,1>, Stride<1,1,1,1,1>, Layout::ND>;
+
 // GlobalSignal: alias for GlobalTensor, used by signal-related instructions
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_ = Layout::ND>
 using GlobalSignal = GlobalTensor<Element_, Shape_, Stride_, Layout_>;
+
 // ============================================================================
 // Signal2D: 2D signal matrix with compile-time shape
 //

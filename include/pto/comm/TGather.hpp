@@ -55,6 +55,8 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
         "TGATHER: GlobalData type mismatch!");
     static_assert(std::is_same_v<T, typename TileData::DType>,
         "TGATHER: TileData element type must match GlobalData element type");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout,
+        "TGATHER: src/dst layout mismatch");
 
     const int nranks = parallelGroup.GetSize();
     const int rootIdx = parallelGroup.GetRootIdx();
@@ -70,7 +72,7 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     const int gShape4 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_4);  // W
 
     const int perRankRows = gShape3;
-    const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
+    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = stagingTileData.GetValidRow();
     const int tileValidCol = stagingTileData.GetValidCol();
 
@@ -86,6 +88,8 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
             set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
             TSTORE(dstGlobalData, stagingTileData);
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             return;
         }
 
@@ -112,11 +116,8 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
             int64_t dstOffset = static_cast<int64_t>(r) * perRankRows * dstStride3;
             DstViewT dstView(dstGlobalData.data() + dstOffset, perRankShape, dstViewStride);
             TSTORE(dstView, stagingTileData);
-
-            if (r < nranks - 1) {
-                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-            }
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
         return;
     }
@@ -250,6 +251,8 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
         "TGATHER: GlobalData type mismatch!");
     static_assert(std::is_same_v<T, typename TileData::DType>,
         "TGATHER: TileData element type must match GlobalData element type");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout,
+        "TGATHER: src/dst layout mismatch");
 
     const int nranks = parallelGroup.GetSize();
     const int rootIdx = parallelGroup.GetRootIdx();
@@ -265,7 +268,7 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     const int gShape4 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_4);
 
     const int perRankRows = gShape3;
-    const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
+    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = pingTile.GetValidRow();
     const int tileValidCol = pingTile.GetValidCol();
 
@@ -280,6 +283,8 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
             set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
             TSTORE(dstGlobalData, pingTile);
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             return;
         }
 
@@ -305,11 +310,8 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
             int64_t dstOffset = static_cast<int64_t>(r) * perRankRows * dstStride3;
             DstViewT dstView(dstGlobalData.data() + dstOffset, perRankShape, dstViewStride);
             TSTORE(dstView, pingTile);
-
-            if (r < nranks - 1) {
-                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-            }
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
         return;
     }

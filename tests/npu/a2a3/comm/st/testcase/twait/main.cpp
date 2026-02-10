@@ -14,12 +14,6 @@ bool RunTWaitBasic(int n_ranks, int n_devices, int first_rank_id, int first_devi
 // TWAIT Compare: Test different comparison operators (GE, LE, etc.)
 bool RunTWaitCompare(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t notifyValue);
 
-// TTEST Basic: Non-blocking signal test
-bool RunTTestBasic(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// TTEST Polling: Polling loop with TTEST until condition met
-bool RunTTestPolling(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
 // TWAIT Atomic: Wait for atomic counter to reach threshold
 bool RunTWaitAtomic(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 

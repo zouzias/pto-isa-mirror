@@ -37,8 +37,8 @@ PTO_INTERNAL void DcciSignal(__gm__ int32_t *ptr)
 template <typename GlobalSignalData>
 PTO_INTERNAL void TNOTIFY_IMPL(GlobalSignalData &dstSignalData, int32_t value, NotifyOp op)
 {
-    static_assert(sizeof(typename GlobalSignalData::DType) == sizeof(int32_t),
-        "TNOTIFY: signal type must be 32-bit (int32_t)");
+    static_assert(std::is_same_v<typename GlobalSignalData::RawDType, int32_t>,
+        "TNOTIFY: signal type must be int32_t");
 
     volatile __gm__ int32_t *sigPtr = (volatile __gm__ int32_t *)dstSignalData.data();
 
@@ -51,6 +51,8 @@ PTO_INTERNAL void TNOTIFY_IMPL(GlobalSignalData &dstSignalData, int32_t value, N
         dsb(DSB_DDR);
     } else {
         // Set operation - direct store to remote memory
+        // Invalidate cache first to prevent stale cached data from overwriting the new value
+        detail::DcciSignal((__gm__ int32_t *)sigPtr);
         *sigPtr = value;
         detail::DcciSignal((__gm__ int32_t *)sigPtr);
         dsb(DSB_DDR);

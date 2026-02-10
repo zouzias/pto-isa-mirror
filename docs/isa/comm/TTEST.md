@@ -4,7 +4,7 @@
 
 Non-blocking test if signal(s) meet comparison condition. Returns `true` if condition is satisfied, `false` otherwise. Used for polling-based synchronization with timeout or interleaved work.
 
-Supports single signal or 2D signal matrix (shape derived from GlobalTensor). For matrix, returns `true` only if ALL signals meet the condition.
+Supports single signal or multi-dimensional signal tensor (up to 5-D, shape derived from GlobalTensor). For tensor, returns `true` only if ALL signals meet the condition.
 
 ## Math Interpretation
 
@@ -14,9 +14,9 @@ Single signal:
 
 $$ \mathrm{result} = (\mathrm{signal} \;\mathtt{cmp}\; \mathrm{cmpValue}) $$
 
-Signal matrix (all must satisfy):
+Signal tensor (all must satisfy):
 
-$$ \mathrm{result} = \bigwedge_{i,j} (\mathrm{signal}_{i,j} \;\mathtt{cmp}\; \mathrm{cmpValue}) $$
+$$ \mathrm{result} = \bigwedge_{d_0, d_1, d_2, d_3, d_4} (\mathrm{signal}_{d_0, d_1, d_2, d_3, d_4} \;\mathtt{cmp}\; \mathrm{cmpValue}) $$
 
 where `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
 
@@ -46,10 +46,10 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
   - `signalData` must point to local address (on current NPU).
 - **Return value**:
   - Returns `true` if condition is satisfied, `false` otherwise.
-  - For signal matrix, returns `true` only if ALL signals satisfy the condition.
+  - For signal tensor, returns `true` only if ALL signals satisfy the condition.
 - **Shape semantics**:
   - For single signal: Shape is `<1,1,1,1,1>`.
-  - For signal matrix: Shape determines the 2D region to test.
+  - For signal tensor: Shape determines the multi-dimensional region (up to 5-D) to test.
 - **Comparison operators** (WaitCmp):
   | Value | Condition |
   |-------|-----------|

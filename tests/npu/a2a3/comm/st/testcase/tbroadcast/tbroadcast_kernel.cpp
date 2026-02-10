@@ -221,7 +221,7 @@ bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int f
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8780", 1024ULL * 1024 * 1024, uid))
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8810", 1024ULL * 1024 * 1024, uid))
         return false;
 
     void *input_ptr = ShmemMalloc(total_count * sizeof(T));
@@ -396,7 +396,7 @@ bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int fir
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8780", 1024ULL * 1024 * 1024, uid))
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8811", 1024ULL * 1024 * 1024, uid))
         return false;
 
     void *input_ptr = ShmemMalloc(total_count * sizeof(T));

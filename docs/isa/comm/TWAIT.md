@@ -4,9 +4,8 @@
 
 Blocking wait until signal(s) meet comparison condition. Used in conjunction with `TNOTIFY` for flag-based synchronization.
 
-Supports single signal or 2D signal matrix (shape derived from GlobalTensor).
+Supports single signal or multi-dimensional signal tensor (up to 5-D, shape derived from GlobalTensor).
 
-> **Note**: For waiting on `AsyncEvent` (from `TPUT_ASYNC`/`TGET_ASYNC`), use `TSYNC` instead.
 
 ## Math Interpretation
 
@@ -16,9 +15,9 @@ Single signal:
 
 $$ \mathrm{signal} \;\mathtt{cmp}\; \mathrm{cmpValue} $$
 
-Signal matrix (all must satisfy):
+Signal tensor (all elements must satisfy):
 
-$$ \forall i,j: \mathrm{signal}_{i,j} \;\mathtt{cmp}\; \mathrm{cmpValue} $$
+$$ \forall d_0, d_1, d_2, d_3, d_4: \mathrm{signal}_{d_0, d_1, d_2, d_3, d_4} \;\mathtt{cmp}\; \mathrm{cmpValue} $$
 
 where `cmp` ∈ {`EQ`, `NE`, `GT`, `GE`, `LT`, `LE`}
 
@@ -48,7 +47,7 @@ PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
   - `signalData` must point to local address (on current NPU).
 - **Shape semantics**:
   - For single signal: Shape is `<1,1,1,1,1>`.
-  - For signal matrix: Shape determines the 2D region to wait on. All signals must satisfy the condition.
+  - For signal tensor: Shape determines the multi-dimensional region (up to 5-D) to wait on. All signals in the tensor must satisfy the condition.
 - **Comparison operators** (WaitCmp):
   | Value | Condition |
   |-------|-----------|

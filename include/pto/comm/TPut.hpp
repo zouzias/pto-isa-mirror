@@ -11,11 +11,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_COMM_TPUT_HPP
 #define PTO_COMM_TPUT_HPP
 
+#include <type_traits>
+
 #include "pto/common/debug.h"
 #include "pto/common/type.hpp"
 #include "pto/common/constants.hpp"
-#include "pto/comm/comm_types.hpp"
 #include "pto/common/pto_instr.hpp"
+#include "pto/comm/comm_types.hpp"
 
 namespace pto {
 namespace comm {
@@ -60,9 +62,13 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
     const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
 
-    const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
+    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = stagingTileData.GetValidRow();
     const int tileValidCol = stagingTileData.GetValidCol();
+
+    if (totalRows == 0 || gShape4 == 0) {
+        return;
+    }
 
     // ---- Simple path: data fits in UB tile in both dimensions ----
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
@@ -217,9 +223,13 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
     const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
 
-    const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
+    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = pingTile.GetValidRow();
     const int tileValidCol = pingTile.GetValidCol();
+
+    if (totalRows == 0 || gShape4 == 0) {
+        return;
+    }
 
     // ---- Simple path: single chunk, no ping-pong benefit ----
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {

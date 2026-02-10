@@ -24,7 +24,7 @@ struct ShmemEnv {
     int rank {0};
     int size {1};
     const char *ipPort {nullptr};
-    uint64_t heapBytes {512ULL * 1024 * 1024};  // Default 128MB symmetric heap
+    uint64_t heapBytes {512ULL * 1024 * 1024};  // Default 512MB symmetric heap
 };
 
 // ============================================================================
@@ -201,12 +201,7 @@ inline int ShmemNPes()
 // ============================================================================
 inline int ShmemSetConfStoreTls(bool enable, const char *tlsInfo, uint32_t tlsInfoLen)
 {
-
     return shmem_set_conf_store_tls(enable, tlsInfo, tlsInfoLen);
-    (void)enable;
-    (void)tlsInfo;
-    (void)tlsInfoLen;
-    return 0;
 }
 
 // ============================================================================

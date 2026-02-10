@@ -33,13 +33,13 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 // Basic broadcast (single staging tile)
-template <typename ParallelGroup, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobalData,
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
                                 TileData &stagingTileData, WaitEvents&... events);
 
 // Ping-pong broadcast (double buffering with two staging tiles)
-template <typename ParallelGroup, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TBROADCAST(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobalData,
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
                                 TileData &pingTile, TileData &pongTile, WaitEvents&... events);
 ```
 
@@ -72,9 +72,6 @@ template <typename T, int ROWS, int COLS, int TILE_ROWS, int TILE_COLS, int NRAN
 void broadcast(__gm__ T* group_addrs[NRANKS], __gm__ T* my_data, int my_rank) {
     // Tile dimensions can differ from tensor dimensions.
     // The 2D sliding chunked path automatically tiles both row and column.
-    // Best practice: set TILE_COLS == COLS (full row width) to maximise
-    // contiguous DMA bursts; only reduce TILE_COLS when a single row
-    // exceeds UB capacity.
     using TileT = Tile<TileType::Vec, T, TILE_ROWS, TILE_COLS, BLayout::RowMajor, -1, -1>;
     using GTensor = GlobalTensor<T, Shape<1,1,1,ROWS,COLS>,
                                  BaseShape2D<T, ROWS, COLS, Layout::ND>, Layout::ND>;
@@ -104,8 +101,7 @@ using namespace pto;
 
 template <typename T, int ROWS, int COLS, int TILE_ROWS, int TILE_COLS, int NRANKS>
 void broadcast_pingpong(__gm__ T* group_addrs[NRANKS], __gm__ T* my_data, int my_rank) {
-    // TILE_ROWS and TILE_COLS are independent of ROWS and COLS.
-    // Typically TILE_COLS == COLS for best performance (see Basic example).
+
     using TileT = Tile<TileType::Vec, T, TILE_ROWS, TILE_COLS, BLayout::RowMajor, -1, -1>;
     using GPerRank = GlobalTensor<T, Shape<1,1,1,ROWS,COLS>,
                                   BaseShape2D<T, ROWS, COLS, Layout::ND>, Layout::ND>;

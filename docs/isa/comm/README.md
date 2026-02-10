@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />
-</p>
-
 # PTO Communication ISA Reference
 
 This directory contains the per-instruction reference for the PTO Communication ISA.
@@ -13,10 +9,6 @@ This directory contains the per-instruction reference for the PTO Communication 
 - `TPUT`: `docs/isa/comm/TPUT.md` - Remote write (GM → UB → GM)
 - `TGET`: `docs/isa/comm/TGET.md` - Remote read (GM → UB → GM)
 
-## Point-to-Point Communication (Asynchronous)
-- `TPUT_ASYNC`: `docs/isa/comm/TPUT_ASYNC.md` - Async remote write (GM → GM direct)
-- `TGET_ASYNC`: `docs/isa/comm/TGET_ASYNC.md` - Async remote read (GM → GM direct)
-
 ## Signal-Based Synchronization
 - `TNOTIFY`: `docs/isa/comm/TNOTIFY.md` - Send notification to remote NPU
 - `TWAIT`: `docs/isa/comm/TWAIT.md` - Blocking wait for signal condition
@@ -24,22 +16,12 @@ This directory contains the per-instruction reference for the PTO Communication 
 
 ## Collective Communication
 
-
 - `TGATHER`: `docs/isa/comm/TGATHER.md` - Gather data from all ranks
 - `TSCATTER`: `docs/isa/comm/TSCATTER.md` - Scatter data to all ranks
 - `TREDUCE`: `docs/isa/comm/TREDUCE.md` - Reduce data from all ranks to local
 - `TBROADCAST`: `docs/isa/comm/TBROADCAST.md` - Broadcast from current NPU to all ranks
 
 ## Type Definitions
-
-### DmaEngine
-
-DMA engine selection for `TPUT_ASYNC` / `TGET_ASYNC`:
-
-| Value | Description |
-|-------|-------------|
-| `DmaEngine::SDMA` | A2/A3/A5 System DMA|
-| `DmaEngine::URMA` | A5 URMA using Unified Bus|
 
 ### NotifyOp
 
@@ -80,6 +62,15 @@ Reduction operators for `TREDUCE`:
 | `ReduceOp::Max` | Element-wise maximum |
 | `ReduceOp::Min` | Element-wise minimum |
 
+### AtomicType
+
+Atomic operation type for `TPUT` (defined in `include/pto/common/constants.hpp`):
+
+| Value | Description |
+|-------|-------------|
+| `AtomicType::AtomicNone` | No atomic operation (default) |
+| `AtomicType::AtomicAdd` | Atomic add operation |
+
 ### ParallelGroup
 
 Wrapper for collective communication across multiple NPUs:
@@ -95,6 +86,6 @@ struct ParallelGroup {
     int rootIdx;  // Root NPU's rank index
     
     // Factory function (recommended): build from an existing tensor array.
-    static ParallelGroup Create(GlobalData *tensors, int nranks, int rootIdx);
+    static ParallelGroup Create(GlobalData *tensorArray, int size, int rank_id);
 };
 ```

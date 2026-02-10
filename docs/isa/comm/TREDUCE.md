@@ -4,7 +4,6 @@
 
 Reduce operation: gather data from multiple remote NPUs and perform element-wise reduction locally. 
 
-> **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
 
 Only the root needs to execute `TREDUCE`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation. Calling `TREDUCE` on non-root ranks is undefined behavior.
 
@@ -36,13 +35,13 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 // Basic reduce (accumulator + receive tile)
-template <typename ParallelGroup, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobalData, 
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, 
                               TileData &accTileData, TileData &recvTileData, ReduceOp op, WaitEvents&... events);
 
 // Ping-pong reduce (accumulator + ping + pong tiles for double buffering)
-template <typename ParallelGroup, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREDUCE(ParallelGroup &parallelGroup, GlobalDstData &dstGlobalData,
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
                               TileData &accTileData, TileData &pingTileData, TileData &pongTileData,
                               ReduceOp op, WaitEvents&... events);
 ```

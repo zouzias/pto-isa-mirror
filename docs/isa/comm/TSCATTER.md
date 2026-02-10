@@ -4,7 +4,6 @@
 
 Scatter operation: the calling NPU (root) distributes data to all ranks in the parallel group by splitting the local source tensor along **DIM_3** (row dimension). This is the inverse of `TGATHER`.
 
-> **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
 
 Only the root needs to execute `TSCATTER`. Non-root ranks only need to ensure their destination buffers are allocated and writable for the duration of the operation. Calling `TSCATTER` on non-root ranks is undefined behavior.
 
@@ -33,13 +32,13 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 // Basic scatter (single staging tile)
-template <typename ParallelGroup, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobalData,
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
                               TileData &stagingTileData, WaitEvents&... events);
 
 // Ping-pong scatter (double buffering with two staging tiles)
-template <typename ParallelGroup, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGlobalData,
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
                               TileData &pingTile, TileData &pongTile, WaitEvents&... events);
 ```
 
@@ -62,49 +61,19 @@ PTO_INST RecordEvent TSCATTER(ParallelGroup &parallelGroup, GlobalSrcData &srcGl
 
 ## Examples
 
-### Basic Scatter (Single Row Per Rank)
+### Basic Scatter (Single Staging Tile)
 
-Root has `NRANKS` rows; each rank receives one row of `CHUNK_SIZE` elements.
+Root has `NRANKS * ROWS` rows of width `COLS`. Each rank receives `ROWS × COLS`, split along DIM_3.
+The tile size (`TILE_ROWS × TILE_COLS`) can be smaller than the per-rank data — when it is, the implementation automatically chunks the transfer along both DIM_3 and DIM_4 via 2D sliding.
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
 
 using namespace pto;
 
-template <typename T, int CHUNK_SIZE, int NRANKS>
+template <typename T, int ROWS, int COLS, int TILE_ROWS, int TILE_COLS, int NRANKS>
 void scatter(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
-    using TileT = Tile<TileType::Vec, T, 1, CHUNK_SIZE>;
-    using GChunk = GlobalTensor<T, Shape<1,1,1,1,CHUNK_SIZE>, 
-                                BaseShape2D<T, 1, CHUNK_SIZE, Layout::ND>, Layout::ND>;
-    using GSource = GlobalTensor<T, Shape<1,1,1,NRANKS,CHUNK_SIZE>, 
-                                 BaseShape2D<T, NRANKS, CHUNK_SIZE, Layout::ND>, Layout::ND>;
-
-    GChunk tensors[NRANKS];
-    for (int i = 0; i < NRANKS; ++i) {
-        tensors[i] = GChunk(group_addrs[i]);
-    }
-    
-    comm::ParallelGroup<GChunk> group(tensors, NRANKS, my_rank);
-    GSource srcG(local_data);
-    TileT stagingTile;
-    
-    comm::TSCATTER(group, srcG, stagingTile);
-}
-```
-
-### Large Tile Scatter (Multi-Row Per Rank, Auto-Chunked)
-
-Root has `NRANKS * ROWS × COLS` data. Each rank receives `ROWS × COLS`, split along DIM_3.
-The UB tile only holds `TILE_ROWS × COLS` — the implementation automatically chunks the transfer.
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-template <typename T, int ROWS, int COLS, int TILE_ROWS, int NRANKS>
-void scatter_large(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
-    using TileT = Tile<TileType::Vec, T, TILE_ROWS, COLS, BLayout::RowMajor, -1, -1>;
+    using TileT = Tile<TileType::Vec, T, TILE_ROWS, TILE_COLS, BLayout::RowMajor, -1, -1>;
     using GPerRank = GlobalTensor<T, Shape<1,1,1,ROWS,COLS>,
                                   BaseShape2D<T, ROWS, COLS, Layout::ND>, Layout::ND>;
     using GSource = GlobalTensor<T, Shape<1,1,1,NRANKS*ROWS,COLS>,
@@ -117,9 +86,8 @@ void scatter_large(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_r
 
     comm::ParallelGroup<GPerRank> group(tensors, NRANKS, my_rank);
     GSource srcG(local_data);
-    TileT stagingTile(TILE_ROWS, COLS);
+    TileT stagingTile(TILE_ROWS, TILE_COLS);
 
-    // Each rank receives ROWS rows; implementation auto-chunks in tiles of TILE_ROWS.
     comm::TSCATTER(group, srcG, stagingTile);
 }
 ```
@@ -133,9 +101,10 @@ Uses two UB tiles to overlap TLOAD of the next chunk (MTE2) with TSTORE of the c
 
 using namespace pto;
 
-template <typename T, int ROWS, int COLS, int TILE_ROWS, int NRANKS>
+template <typename T, int ROWS, int COLS, int TILE_ROWS, int TILE_COLS, int NRANKS>
 void scatter_pingpong(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int my_rank) {
-    using TileT = Tile<TileType::Vec, T, TILE_ROWS, COLS, BLayout::RowMajor, -1, -1>;
+    // Tile can be smaller than the data in both dimensions
+    using TileT = Tile<TileType::Vec, T, TILE_ROWS, TILE_COLS, BLayout::RowMajor, -1, -1>;
     using GPerRank = GlobalTensor<T, Shape<1,1,1,ROWS,COLS>,
                                   BaseShape2D<T, ROWS, COLS, Layout::ND>, Layout::ND>;
     using GSource = GlobalTensor<T, Shape<1,1,1,NRANKS*ROWS,COLS>,
@@ -148,8 +117,8 @@ void scatter_pingpong(__gm__ T* local_data, __gm__ T* group_addrs[NRANKS], int m
 
     comm::ParallelGroup<GPerRank> group(tensors, NRANKS, my_rank);
     GSource srcG(local_data);
-    TileT pingTile(TILE_ROWS, COLS);
-    TileT pongTile(TILE_ROWS, COLS);
+    TileT pingTile(TILE_ROWS, TILE_COLS);
+    TileT pongTile(TILE_ROWS, TILE_COLS);
 
     // Ping-pong: overlaps TLOAD and TSTORE for better throughput
     comm::TSCATTER(group, srcG, pingTile, pongTile);

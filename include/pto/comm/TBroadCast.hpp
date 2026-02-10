@@ -49,6 +49,10 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
 
     static_assert(std::is_same_v<T, typename TileData::DType>,
         "TBROADCAST: TileData element type must match GlobalData element type");
+    static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>,
+        "TBROADCAST: ParallelGroup element type must match source element type");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout,
+        "TBROADCAST: src/dst layout mismatch");
 
     const int nranks = parallelGroup.GetSize();
     const int rootIdx = parallelGroup.GetRootIdx();
@@ -63,9 +67,13 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
     const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
 
-    const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
+    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = stagingTileData.GetValidRow();
     const int tileValidCol = stagingTileData.GetValidCol();
+
+    if (totalRows == 0 || gShape4 == 0) {
+        return;
+    }
 
     // ---- Single rank: copy src to dst[0] ----
     if (nranks == 1) {
@@ -73,6 +81,8 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
         set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
         TSTORE(parallelGroup[rootIdx], stagingTileData);
+        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         return;
     }
 
@@ -86,10 +96,8 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
         // Broadcast to all ranks
         for (int r = 0; r < nranks; ++r) {
             TSTORE(parallelGroup[r], stagingTileData);
-            if (r < nranks - 1) {
-                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-            }
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
         return;
     }
@@ -181,14 +189,11 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
                         wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
 
                         // TSTORE to all ranks
+                        // MTE3 guarantees in-order execution, so no inter-TSTORE sync needed.
                         for (int r = 0; r < nranks; ++r) {
                             DstViewT dstView(parallelGroup[r].data() + dstOffset,
                                              chunkShape, dstChunkStride);
                             TSTORE(dstView, stagingTileData);
-                            if (r < nranks - 1) {
-                                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                            }
                         }
 
                         // Sync before next chunk's TLOAD
@@ -225,6 +230,10 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
 
     static_assert(std::is_same_v<T, typename TileData::DType>,
         "TBROADCAST: TileData element type must match GlobalData element type");
+    static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>,
+        "TBROADCAST: ParallelGroup element type must match source element type");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout,
+        "TBROADCAST: src/dst layout mismatch");
 
     const int nranks = parallelGroup.GetSize();
     const int rootIdx = parallelGroup.GetRootIdx();
@@ -239,9 +248,13 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
     const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
 
-    const int totalRows = gShape0 * gShape1 * gShape2 * gShape3;
+    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = pingTile.GetValidRow();
     const int tileValidCol = pingTile.GetValidCol();
+
+    if (totalRows == 0 || gShape4 == 0) {
+        return;
+    }
 
     // ---- Single rank: copy src to dst[0] ----
     if (nranks == 1) {
@@ -249,6 +262,8 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
         set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
         TSTORE(parallelGroup[rootIdx], pingTile);
+        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         return;
     }
 
@@ -260,10 +275,8 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
 
         for (int r = 0; r < nranks; ++r) {
             TSTORE(parallelGroup[r], pingTile);
-            if (r < nranks - 1) {
-                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-            }
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
         return;
     }

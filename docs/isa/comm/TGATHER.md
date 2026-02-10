@@ -4,7 +4,6 @@
 
 Gather operation: the calling NPU (root) collects data from all ranks in the parallel group and concatenates the results along **DIM_3** (row dimension) into a local output buffer.
 
-> **Hardware Note**: This instruction may be offloaded to dedicated collective communication hardware.
 
 Only the root needs to execute `TGATHER`. Non-root ranks only need to ensure their source buffers are ready and remain valid for the duration of the operation. Calling `TGATHER` on non-root ranks is undefined behavior.
 
@@ -35,13 +34,13 @@ Declared in `include/pto/comm/pto_comm_inst.hpp`:
 
 ```cpp
 // Basic gather (single staging tile)
-template <typename ParallelGroup, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlobalData,
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
                              TileData &stagingTileData, WaitEvents&... events);
 
 // Ping-pong gather (double buffering with two staging tiles)
-template <typename ParallelGroup, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlobalData,
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
                              TileData &pingTile, TileData &pongTile, WaitEvents&... events);
 ```
 
@@ -64,50 +63,19 @@ PTO_INST RecordEvent TGATHER(ParallelGroup &parallelGroup, GlobalDstData &dstGlo
 
 ## Examples
 
-### Basic Gather (Single Row Per Rank)
+### Basic Gather (Single Staging Tile)
 
-Each rank contributes one row of `CHUNK_SIZE` elements. The root collects them into `NRANKS` rows.
+Each rank contributes `ROWS × COLS` data. The root collects them into `NRANKS * ROWS` rows.
+The tile size (`TILE_ROWS × TILE_COLS`) can be smaller than the per-rank data — when it is, the implementation automatically chunks the transfer along both DIM_3 and DIM_4 via 2D sliding.
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
 
 using namespace pto;
 
-template <typename T, int CHUNK_SIZE, int NRANKS>
+template <typename T, int ROWS, int COLS, int TILE_ROWS, int TILE_COLS, int NRANKS>
 void gather(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
-    using TileT = Tile<TileType::Vec, T, 1, CHUNK_SIZE>;
-    using GChunk = GlobalTensor<T, Shape<1,1,1,1,CHUNK_SIZE>, 
-                                BaseShape2D<T, 1, CHUNK_SIZE, Layout::ND>, Layout::ND>;
-    using GResult = GlobalTensor<T, Shape<1,1,1,NRANKS,CHUNK_SIZE>, 
-                                 BaseShape2D<T, NRANKS, CHUNK_SIZE, Layout::ND>, Layout::ND>;
-
-    GChunk tensors[NRANKS];
-    for (int i = 0; i < NRANKS; ++i) {
-        tensors[i] = GChunk(group_addrs[i]);
-    }
-    
-    comm::ParallelGroup<GChunk> group(tensors, NRANKS, my_rank);
-    GResult dstG(result);
-    TileT stagingTile;
-    
-    // Root gathers data from all ranks into `result`.
-    comm::TGATHER(group, dstG, stagingTile);
-}
-```
-
-### Large Tile Gather (Multi-Row Per Rank, Auto-Chunked)
-
-Each rank has `ROWS × COLS` data. The result is `NRANKS * ROWS × COLS`, concatenated along DIM_3.
-The UB tile only holds `TILE_ROWS × COLS` — the implementation automatically chunks the transfer.
-
-```cpp
-#include <pto/comm/pto_comm_inst.hpp>
-
-using namespace pto;
-
-template <typename T, int ROWS, int COLS, int TILE_ROWS, int NRANKS>
-void gather_large(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
-    using TileT = Tile<TileType::Vec, T, TILE_ROWS, COLS, BLayout::RowMajor, -1, -1>;
+    using TileT = Tile<TileType::Vec, T, TILE_ROWS, TILE_COLS, BLayout::RowMajor, -1, -1>;
     using GPerRank = GlobalTensor<T, Shape<1,1,1,ROWS,COLS>,
                                   BaseShape2D<T, ROWS, COLS, Layout::ND>, Layout::ND>;
     using GResult = GlobalTensor<T, Shape<1,1,1,NRANKS*ROWS,COLS>,
@@ -120,9 +88,8 @@ void gather_large(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) 
 
     comm::ParallelGroup<GPerRank> group(tensors, NRANKS, my_rank);
     GResult dstG(result);
-    TileT stagingTile(TILE_ROWS, COLS);
+    TileT stagingTile(TILE_ROWS, TILE_COLS);
 
-    // Each rank contributes ROWS rows; implementation auto-chunks in tiles of TILE_ROWS.
     comm::TGATHER(group, dstG, stagingTile);
 }
 ```
@@ -136,9 +103,10 @@ Uses two UB tiles to overlap TLOAD of the next chunk (MTE2) with TSTORE of the c
 
 using namespace pto;
 
-template <typename T, int ROWS, int COLS, int TILE_ROWS, int NRANKS>
+template <typename T, int ROWS, int COLS, int TILE_ROWS, int TILE_COLS, int NRANKS>
 void gather_pingpong(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_rank) {
-    using TileT = Tile<TileType::Vec, T, TILE_ROWS, COLS, BLayout::RowMajor, -1, -1>;
+    // Tile can be smaller than the data in both dimensions
+    using TileT = Tile<TileType::Vec, T, TILE_ROWS, TILE_COLS, BLayout::RowMajor, -1, -1>;
     using GPerRank = GlobalTensor<T, Shape<1,1,1,ROWS,COLS>,
                                   BaseShape2D<T, ROWS, COLS, Layout::ND>, Layout::ND>;
     using GResult = GlobalTensor<T, Shape<1,1,1,NRANKS*ROWS,COLS>,
@@ -151,8 +119,8 @@ void gather_pingpong(__gm__ T* group_addrs[NRANKS], __gm__ T* result, int my_ran
 
     comm::ParallelGroup<GPerRank> group(tensors, NRANKS, my_rank);
     GResult dstG(result);
-    TileT pingTile(TILE_ROWS, COLS);
-    TileT pongTile(TILE_ROWS, COLS);
+    TileT pingTile(TILE_ROWS, TILE_COLS);
+    TileT pongTile(TILE_ROWS, TILE_COLS);
 
     // Ping-pong: overlaps TLOAD and TSTORE for better throughput
     comm::TGATHER(group, dstG, pingTile, pongTile);
