@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/memory.hpp"
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
+#include "pto/common/debug.h"
 #ifdef __CPU_SIM
 #include <iomanip>
 #endif
@@ -1229,10 +1230,10 @@ template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,
           const SLayout SFractal_ = SLayout::NoneBox, const int SFractalSize_ = TileConfig::fractalABSize,
           const PadValue PadVal_ = PadValue::Null, const CompactMode Compact_ = CompactMode::Null>
 struct Tile {
-    static constexpr const int HF32_MODE_BIT = 46;
-    static constexpr const int HF32_TRANS_MODE_BIT = 47;
-    static constexpr const int TF32_MODE_BIT = 46;
-    static constexpr const int TF32_TRANS_MODE_BIT = 47;
+    static constexpr int HF32_MODE_BIT = 46;
+    static constexpr int HF32_TRANS_MODE_BIT = 47;
+    static constexpr int TF32_MODE_BIT = 46;
+    static constexpr int TF32_TRANS_MODE_BIT = 47;
 public:
     using DType = Element_;
 
@@ -1400,6 +1401,8 @@ public:
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
+#if defined(__DAV_CUBE__)
+#ifdef MEMORY_BASE
     PTO_INTERNAL bool GetKAligned() const
     {
         return isKAligned_;
@@ -1408,29 +1411,27 @@ public:
     {
         isKAligned_ = isKAligned;
     }
-#if defined(__DAV_CUBE__)
-#ifdef MEMORY_BASE
     PTO_INTERNAL bool GetHF32Mode() const
     {
         return isHF32_;
     }
-    template <bool isHF32, RoundMode hf32TransMode = RoundMode::CAST_ROUND>
-    PTO_INTERNAL void SetHF32Mode()
+    PTO_INTERNAL void SetHF32Mode(RoundMode hf32TransMode = RoundMode::CAST_ROUND)
     {
-        isHF32_ = isHF32;
+        isHF32_ = true;
         hf32TransMode_ = hf32TransMode;
-        if constexpr (isHF32_) {
-        static_assert(hf32TransMode_ == RoundMode::CAST_ROUND || hf32TransMode_ == RoundMode::CAST_RINT,
-                      "Unsupported RoundMode for HF32.");
+        PTO_ASSERT(hf32TransMode_ == RoundMode::CAST_ROUND || hf32TransMode_ == RoundMode::CAST_RINT,
+                   "Unsupported RoundMode for HF32.");
         set_ctrl(sbitset1(get_ctrl(), HF32_MODE_BIT));
-        if constexpr (hf32TransMode_ == RoundMode::CAST_ROUND) {
+        if (hf32TransMode_ == RoundMode::CAST_ROUND) {
             set_ctrl(sbitset1(get_ctrl(), HF32_TRANS_MODE_BIT));
-        } else if constexpr (hf32TransMode_ == RoundMode::CAST_RINT) {
+        } else if (hf32TransMode_ == RoundMode::CAST_RINT) {
             set_ctrl(sbitset0(get_ctrl(), HF32_TRANS_MODE_BIT));
         }
-        } else {
-            set_ctrl(sbitset0(get_ctrl(), HF32_MODE_BIT));
-        }
+    }
+    PTO_INTERNAL void DisableHF32Mode()
+    {
+        isHF32_ = false;
+        set_ctrl(sbitset0(get_ctrl(), HF32_MODE_BIT));
     }
 #endif
 #ifdef REGISTER_BASE
@@ -1438,25 +1439,24 @@ public:
     {
         return isTF32_;
     }
-    template <bool isTF32, RoundMode tf32TransMode = RoundMode::CAST_ROUND>
-    PTO_INTERNAL void SetTF32Mode()
+    PTO_INTERNAL void SetTF32Mode(RoundMode tf32TransMode = RoundMode::CAST_ROUND)
     {
-        isTF32_ = isTF32;
+        isTF32_ = true;
         tf32TransMode_ = tf32TransMode;
-        if constexpr (isTF32_) {
-        static_assert(tf32TransMode_ == RoundMode::CAST_ROUND || tf32TransMode_ == RoundMode::CAST_RINT,
-                      "Unsupported RoundMode for TF32.");
+        PTO_ASSERT(tf32TransMode_ == RoundMode::CAST_ROUND || tf32TransMode_ == RoundMode::CAST_RINT,
+                   "Unsupported RoundMode for TF32.");
         set_ctrl(sbitset1(get_ctrl(), TF32_MODE_BIT));
-        if constexpr (tf32TransMode_ == RoundMode::CAST_ROUND) {
+        if (tf32TransMode_ == RoundMode::CAST_ROUND) {
             set_ctrl(sbitset1(get_ctrl(), TF32_TRANS_MODE_BIT));
-        } else if constexpr (tf32TransMode_ == RoundMode::CAST_RINT) {
+        } else if (tf32TransMode_ == RoundMode::CAST_RINT) {
             set_ctrl(sbitset0(get_ctrl(), TF32_TRANS_MODE_BIT));
         }
-        } else {
-            set_ctrl(sbitset0(get_ctrl(), TF32_MODE_BIT));
-        }
     }
-
+    PTO_INTERNAL void DisableTF32Mode()
+    {
+        isTF32_ = false;
+        set_ctrl(sbitset0(get_ctrl(), TF32_MODE_BIT));
+    }
 #endif
 #endif
 private:
@@ -1530,16 +1530,14 @@ using TileAccCompact = Tile<TileType::Acc, Element_, Rows_, Cols_, BLayout::ColM
                             SLayout::RowMajor, TileConfig::fractalCSize, PadValue::Null, CompactMode::Normal>;
 
 template <typename T>
-struct is_global : std::false_type {
-};
+struct is_global : std::false_type {};
 template <typename T>
 struct is_tile : std::false_type {
     static constexpr SLayout layout_enum = SLayout::NoneBox;
 };
 
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_>
-struct is_global<GlobalTensor<Element_, Shape_, Stride_, Layout_>> : std::true_type {
-};
+struct is_global<GlobalTensor<Element_, Shape_, Stride_, Layout_>> : std::true_type {};
 
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_, const BLayout BFractal_,
           const int RowValid_, const int ColValid_, const SLayout SFractal_, const int SFractalSize_,
@@ -1554,11 +1552,9 @@ template <typename T>
 constexpr bool is_boxed_tile = is_tile<T>::value && (is_tile<T>::layout_enum != SLayout::NoneBox);
 
 template <typename T>
-struct is_conv_tile : std::false_type {
-};
+struct is_conv_tile : std::false_type {};
 template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
-struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {
-};
+struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {};
 
 template <typename tile_shape>
 struct is_Nz_layout {

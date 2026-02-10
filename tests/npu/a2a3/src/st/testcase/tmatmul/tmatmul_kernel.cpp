@@ -420,7 +420,7 @@ __global__ AICORE void RunTMATMUL_HF32(__gm__ T *out, __gm__ U *src0, __gm__ S *
     TASSIGN(bMatTile, 0x20000);
 
     LeftTile aTile;
-    aTile.template EnableHF32Mode<hf32TransMode>();
+    aTile.SetHF32Mode(hf32TransMode);
     RightTile bTile;
     AccTile cTile;
     TASSIGN(aTile, 0x0);
@@ -440,16 +440,13 @@ __global__ AICORE void RunTMATMUL_HF32(__gm__ T *out, __gm__ U *src0, __gm__ S *
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-
-    // TSETHF32MODE<true, hf32TransMode>();
     TMATMUL(cTile, aTile, bTile);
-    // TSETHF32MODE<false>();
-
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
     /********************************TSTORE****************************/
     TSTORE(dstGlobal, cTile);
+    aTile.DisableHF32Mode();
     out = dstGlobal.data();
 }
 
