@@ -1229,6 +1229,10 @@ template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,
           const SLayout SFractal_ = SLayout::NoneBox, const int SFractalSize_ = TileConfig::fractalABSize,
           const PadValue PadVal_ = PadValue::Null, const CompactMode Compact_ = CompactMode::Null>
 struct Tile {
+    static constexpr const int HF32_MODE_BIT = 46;
+    static constexpr const int HF32_TRANS_MODE_BIT = 47;
+    static constexpr const int TF32_MODE_BIT = 46;
+    static constexpr const int TF32_TRANS_MODE_BIT = 47;
 public:
     using DType = Element_;
 
@@ -1404,14 +1408,72 @@ public:
     {
         isKAligned_ = isKAligned;
     }
+#if defined(__DAV_CUBE__)
+#ifdef MEMORY_BASE
+    PTO_INTERNAL bool GetHF32Mode() const
+    {
+        return isHF32_;
+    }
+    template <bool isHF32, RoundMode hf32TransMode = RoundMode::CAST_ROUND>
+    PTO_INTERNAL void SetHF32Mode()
+    {
+        isHF32_ = isHF32;
+        hf32TransMode_ = hf32TransMode;
+        if constexpr (isHF32_) {
+        static_assert(hf32TransMode_ == RoundMode::CAST_ROUND || hf32TransMode_ == RoundMode::CAST_RINT,
+                      "Unsupported RoundMode for HF32.");
+        set_ctrl(sbitset1(get_ctrl(), HF32_MODE_BIT));
+        if constexpr (hf32TransMode_ == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), HF32_TRANS_MODE_BIT));
+        } else if constexpr (hf32TransMode_ == RoundMode::CAST_RINT) {
+            set_ctrl(sbitset0(get_ctrl(), HF32_TRANS_MODE_BIT));
+        }
+        } else {
+            set_ctrl(sbitset0(get_ctrl(), HF32_MODE_BIT));
+        }
+    }
+#endif
+#ifdef REGISTER_BASE
+    PTO_INTERNAL bool GetTF32Mode() const
+    {
+        return isTF32_;
+    }
+    template <bool isTF32, RoundMode tf32TransMode = RoundMode::CAST_ROUND>
+    PTO_INTERNAL void SetTF32Mode()
+    {
+        isTF32_ = isTF32;
+        tf32TransMode_ = tf32TransMode;
+        if constexpr (isTF32_) {
+        static_assert(tf32TransMode_ == RoundMode::CAST_ROUND || tf32TransMode_ == RoundMode::CAST_RINT,
+                      "Unsupported RoundMode for TF32.");
+        set_ctrl(sbitset1(get_ctrl(), TF32_MODE_BIT));
+        if constexpr (tf32TransMode_ == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), TF32_TRANS_MODE_BIT));
+        } else if constexpr (tf32TransMode_ == RoundMode::CAST_RINT) {
+            set_ctrl(sbitset0(get_ctrl(), TF32_TRANS_MODE_BIT));
+        }
+        } else {
+            set_ctrl(sbitset0(get_ctrl(), TF32_MODE_BIT));
+        }
+    }
 
+#endif
+#endif
 private:
     AICORE void assignData(TileDType data)
     {
         data_ = data;
     }
     TileDType data_;
+#ifdef MEMORY_BASE
     bool isKAligned_; // K-Alignedment for A3
+    bool isHF32_;
+    RoundMode hf32TransMode_;
+#endif
+#ifdef REGISTER_BASE
+    bool isTF32_;
+    RoundMode tf32TransMode_;
+#endif
 };
 
 #ifdef MEMORY_BASE
