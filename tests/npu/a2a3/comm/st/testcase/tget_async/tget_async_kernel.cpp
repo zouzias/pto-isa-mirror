@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <iostream>
 
 #include "pto/comm/pto_comm_inst.hpp"
+#include "pto/comm/sdma_types.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "../common.hpp"
 
@@ -49,6 +50,9 @@ __global__ AICORE void TGetAsyncKernelImpl(__gm__ T *shmem, int nranks, int root
     ShmemDeviceBarrierAll();
 
     if (my_rank == root_rank) {
+        constexpr int kEventSlots = pto::comm::sdma::SDMA_EVENT_SLOT_COUNT;
+        pto::comm::AsyncEvent events[kEventSlots];
+        int issued = 0;
         for (int target_rank = 0; target_rank < nranks; ++target_rank) {
             if (target_rank == root_rank) {
                 continue;
@@ -57,8 +61,15 @@ __global__ AICORE void TGetAsyncKernelImpl(__gm__ T *shmem, int nranks, int root
             __gm__ T *local_recv_shmem = recv_shmem + target_rank * count;
             Global remoteSendG(remote_send_shmem, shape, stride);
             Global localRecvG(local_recv_shmem, shape, stride);
-            auto get_event = pto::comm::TGET_ASYNC(localRecvG, remoteSendG);
-            (void)get_event;
+            if (issued >= kEventSlots) {
+                events[issued % kEventSlots].Wait();
+            }
+            events[issued % kEventSlots] = pto::comm::TGET_ASYNC(localRecvG, remoteSendG);
+            issued++;
+        }
+        const int pending = (issued < kEventSlots) ? issued : kEventSlots;
+        for (int i = 0; i < pending; ++i) {
+            events[i].Wait();
         }
         ShmemDeviceQuiet();
     }

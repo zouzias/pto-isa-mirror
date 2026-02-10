@@ -28,6 +28,8 @@ namespace detail {
 // ============================================================================
 using TmpBuf = AscendC::TBuf<AscendC::TPosition::VECOUT>;
 
+static_assert(SDMA_EVENT_SLOT_COUNT > 0, "SDMA_EVENT_SLOT_COUNT must be >= 1");
+
 // ============================================================================
 // Device Memory Address Constants (same as aclshmem)
 // ============================================================================
@@ -157,6 +159,17 @@ PTO_INTERNAL T get_value(__gm__ uint8_t* addr, TmpBuf& tmp_buf)
     return x_local.GetValue(0);
 }
 
+PTO_INTERNAL __gm__ sdma_event_record_t* get_event_record(__gm__ uint8_t* recv_workspace,
+                                                         uint32_t slot_idx)
+{
+    return reinterpret_cast<__gm__ sdma_event_record_t*>(recv_workspace) + slot_idx;
+}
+
+PTO_INTERNAL uint32_t select_event_slot(uint32_t sq_tail)
+{
+    return sq_tail % SDMA_EVENT_SLOT_COUNT;
+}
+
 PTO_INTERNAL void add_one_memcpy_sqe(__gm__ batch_write_channel_info_t* channel_info,
                                     __gm__ uint8_t* src,
                                     __gm__ uint8_t* dst,
@@ -249,6 +262,10 @@ PTO_INTERNAL void prepare_workspace(__gm__ uint8_t* workspace,
 {
     uint64_t per_core_workspace_size = config.queue_num * SDMA_FLAG_LENGTH;
 
+    // Layout (multi-flag model):
+    // [send_workspace: 64B global flag value]
+    // [recv_workspace per block: queue_num * 64B]
+    //   - event slots (sdma_event_record_t[])
     __gm__ uint8_t* my_workspace = workspace + SDMA_FLAG_LENGTH +
                                    (block_idx * per_core_workspace_size);
 
@@ -304,26 +321,42 @@ PTO_INTERNAL void submit_data_transfer_sqes(
     }
 }
 
-PTO_INTERNAL void submit_flag_transfer_sqes(
+PTO_INTERNAL uint64_t submit_flag_transfer_sqes(
     __gm__ batch_write_channel_info_t* batch_write_channel_info,
     const workspace_layout_t &layout,
     const sdma_config_t& config,
     uint32_t* sq_tail,
     TmpBuf& tmp_buf)
 {
+    uint64_t event_handle = 0;
     for (uint32_t queue_id = 0U; queue_id < config.queue_num; ++queue_id) {
         __gm__ batch_write_channel_info_t* channel_info =
             batch_write_channel_info + queue_id;
 
+        uint32_t slot_idx = select_event_slot(sq_tail[queue_id]);
+        __gm__ sdma_event_record_t* record =
+            get_event_record(layout.recv_workspace, slot_idx);
+
+        set_value<uint32_t>((__gm__ uint8_t*)&record->flag, tmp_buf, 0U);
+        set_value<uint32_t>((__gm__ uint8_t*)&record->sq_tail, tmp_buf,
+                            (sq_tail[queue_id] + 1) % SQ_DEPTH);
+        set_value<uint64_t>((__gm__ uint8_t*)&record->channel_info, tmp_buf,
+                            reinterpret_cast<uint64_t>(channel_info));
+
         add_one_memcpy_sqe(channel_info,
                            layout.send_workspace,
-                           layout.recv_workspace,
-                           0, 8, sq_tail[queue_id],
+                           (__gm__ uint8_t*)&record->flag,
+                           0, sizeof(uint32_t), sq_tail[queue_id],
                            sq_tail[queue_id] - channel_info->sq_head);
 
         sq_tail[queue_id] = (sq_tail[queue_id] + 1) % SQ_DEPTH;
         AscendC::PipeBarrier<PIPE_ALL>();
+
+        if (queue_id == 0U) {
+            event_handle = reinterpret_cast<uint64_t>(record);
+        }
     }
+    return event_handle;
 }
 
 PTO_INTERNAL void flush_cache_and_ring_doorbell(
@@ -347,52 +380,91 @@ PTO_INTERNAL void flush_cache_and_ring_doorbell(
     }
 }
 
-PTO_INTERNAL bool poll_for_completion(
+PTO_INTERNAL void update_sq_tail_state(
     __gm__ batch_write_channel_info_t* batch_write_channel_info,
-    const workspace_layout_t &layout,
     const sdma_config_t& config,
     uint32_t* sq_tail,
     TmpBuf& tmp_buf)
 {
-    const uint32_t max_times = 1000000;
     for (uint8_t queue_id = 0; queue_id < config.queue_num; queue_id++) {
         __gm__ batch_write_channel_info_t* channel_info =
             batch_write_channel_info + queue_id;
+        set_value<uint32_t>((__gm__ uint8_t*)channel_info + 4, tmp_buf, sq_tail[queue_id]);
+    }
+}
 
-        uint32_t send_value = 0;
-        uint32_t times = 0;
-
-        while (send_value == 0 && times < max_times) {
-            send_value = get_value<uint32_t>(layout.recv_workspace, tmp_buf);
-            times++;
-        }
-
-        if (send_value == 0) {
-            return false;
-        }
-
-        set_value<uint32_t>(layout.recv_workspace, tmp_buf, 0);
-
-        set_value<uint32_t>(((__gm__ uint8_t*)channel_info) + 4, tmp_buf, sq_tail[queue_id]);
+PTO_INTERNAL bool sdma_test_event(uint64_t event_handle)
+{
+    if (event_handle == 0) {
+        return true;
     }
 
+    AscendC::TPipe localPipe;
+    TmpBuf tmp_buf;
+    localPipe.InitBuffer(tmp_buf, UB_ALIGN_SIZE * 2);
+
+    __gm__ sdma_event_record_t* record =
+        reinterpret_cast<__gm__ sdma_event_record_t*>(event_handle);
+    uint32_t send_value = get_value<uint32_t>((__gm__ uint8_t*)&record->flag, tmp_buf);
+
+    localPipe.Destroy();
+    return send_value != 0;
+}
+
+PTO_INTERNAL bool sdma_wait_event(uint64_t event_handle)
+{
+    if (event_handle == 0) {
+        return true;
+    }
+
+    AscendC::TPipe localPipe;
+    TmpBuf tmp_buf;
+    localPipe.InitBuffer(tmp_buf, UB_ALIGN_SIZE * 2);
+
+    __gm__ sdma_event_record_t* record =
+        reinterpret_cast<__gm__ sdma_event_record_t*>(event_handle);
+
+    const uint32_t max_times = 1000000;
+    uint32_t send_value = 0;
+    uint32_t times = 0;
+
+    while (send_value == 0 && times < max_times) {
+        send_value = get_value<uint32_t>((__gm__ uint8_t*)&record->flag, tmp_buf);
+        times++;
+    }
+
+    if (send_value == 0) {
+        localPipe.Destroy();
+        return false;
+    }
+
+    set_value<uint32_t>((__gm__ uint8_t*)&record->flag, tmp_buf, 0U);
+
+    uint32_t sq_tail = get_value<uint32_t>((__gm__ uint8_t*)&record->sq_tail, tmp_buf);
+    uint64_t channel_info_addr = get_value<uint64_t>((__gm__ uint8_t*)&record->channel_info, tmp_buf);
+    if (channel_info_addr != 0) {
+        __gm__ uint8_t* channel_info = reinterpret_cast<__gm__ uint8_t*>(channel_info_addr);
+        set_value<uint32_t>(channel_info + 4, tmp_buf, sq_tail);
+    }
+
+    localPipe.Destroy();
     return true;
 }
 
-PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
-                                 __gm__ uint8_t* send_buffer,
-                                 uint64_t opcode,
-                                 uint64_t message_len)
+PTO_INTERNAL uint64_t sdma_post_send_async(__gm__ uint8_t* recv_buffer,
+                                           __gm__ uint8_t* send_buffer,
+                                           uint64_t opcode,
+                                           uint64_t message_len)
 {
     __gm__ detail::pto_comm_global_state_t* device_state = detail::pto_comm_get_state();
     if (device_state == nullptr) {
-        return;
+        return 0;
     }
 
     __gm__ uint8_t* context_gm = reinterpret_cast<__gm__ uint8_t*>(
         device_state->sdma_workspace_addr);
     if (context_gm == nullptr) {
-        return;
+        return 0;
     }
 
     AscendC::TPipe localPipe;
@@ -407,11 +479,11 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
                           config, tmp_buf)) {
         AscendC::PipeBarrier<PIPE_ALL>();
         localPipe.Destroy();
-        return;
+        return 0;
     }
     if (config.iter_num == 0) {
         localPipe.Destroy();
-        return;
+        return 0;
     }
 
     __gm__ batch_write_channel_info_t* batch_write_channel_base =
@@ -434,26 +506,30 @@ PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
     submit_data_transfer_sqes(batch_write_channel_info, send_buffer, recv_buffer,
                               static_cast<uint32_t>(opcode), config, sq_tail, tmp_buf);
 
-    submit_flag_transfer_sqes(batch_write_channel_info, workspace_layout, config,
-                              sq_tail, tmp_buf);
+    uint64_t event_handle = submit_flag_transfer_sqes(batch_write_channel_info, workspace_layout, config,
+                                                      sq_tail, tmp_buf);
 
     flush_cache_and_ring_doorbell(batch_write_channel_info, config, sq_tail, tmp_buf);
-
-    if (!poll_for_completion(batch_write_channel_info, workspace_layout, config,
-                             sq_tail, tmp_buf)) {
-        AscendC::PipeBarrier<PIPE_ALL>();
-        localPipe.Destroy();
-        return;
-    }
+    update_sq_tail_state(batch_write_channel_info, config, sq_tail, tmp_buf);
 
     AscendC::PipeBarrier<PIPE_ALL>();
     localPipe.Destroy();
+    return event_handle;
+}
+
+PTO_INTERNAL void sdma_post_send(__gm__ uint8_t* recv_buffer,
+                                 __gm__ uint8_t* send_buffer,
+                                 uint64_t opcode,
+                                 uint64_t message_len)
+{
+    uint64_t event_handle = sdma_post_send_async(recv_buffer, send_buffer, opcode, message_len);
+    (void)sdma_wait_event(event_handle);
 }
 
 template <typename T>
-PTO_INTERNAL void sdma_write(__gm__ T* dst, __gm__ T* src, uint64_t messageLen)
+PTO_INTERNAL uint64_t sdma_write(__gm__ T* dst, __gm__ T* src, uint64_t messageLen)
 {
-    sdma_post_send((__gm__ uint8_t*)dst, (__gm__ uint8_t*)src, 0, messageLen);
+    return sdma_post_send_async((__gm__ uint8_t*)dst, (__gm__ uint8_t*)src, 0, messageLen);
 }
 
 } // namespace detail
@@ -467,11 +543,7 @@ PTO_INTERNAL uint64_t __sdma_put_async(__gm__ T* dst, __gm__ T* src, uint64_t tr
     if (transfer_size == 0) {
         return 0;
     }
-    detail::sdma_write(dst, src, transfer_size);
-    uint32_t channel_idx = detail::pto_comm_select_sdma_channel(
-        static_cast<uint32_t>(reinterpret_cast<uint64_t>(src) % SDMA_MAX_CHAN));
-    return (static_cast<uint64_t>(channel_idx) << 32) |
-           (reinterpret_cast<uint64_t>(src) & 0xFFFFFFFF);
+    return detail::sdma_write(dst, src, transfer_size);
 }
 
 template <typename T>
@@ -480,11 +552,7 @@ PTO_INTERNAL uint64_t __sdma_get_async(__gm__ T* dst, __gm__ T* src, uint64_t tr
     if (transfer_size == 0) {
         return 0;
     }
-    detail::sdma_write(dst, src, transfer_size);
-    uint32_t channel_idx = detail::pto_comm_select_sdma_channel(
-        static_cast<uint32_t>(reinterpret_cast<uint64_t>(dst) % SDMA_MAX_CHAN));
-    return (static_cast<uint64_t>(channel_idx) << 32) |
-           (reinterpret_cast<uint64_t>(dst) & 0xFFFFFFFF);
+    return detail::sdma_write(dst, src, transfer_size);
 }
 
 } // namespace sdma

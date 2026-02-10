@@ -19,6 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <algorithm>
 
 #include "pto/comm/pto_comm_inst.hpp"
+#include "pto/comm/sdma_types.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "../common.hpp"
 
@@ -49,14 +50,24 @@ __global__ AICORE void TPutAsyncKernelImpl(__gm__ T *shmem, int nranks, int root
     Global sendG(send_shmem, shape, stride);
 
     if (my_rank == root_rank) {
+        constexpr int kEventSlots = pto::comm::sdma::SDMA_EVENT_SLOT_COUNT;
+        pto::comm::AsyncEvent events[kEventSlots];
+        int issued = 0;
         for (int target_rank = 0; target_rank < nranks; ++target_rank) {
             if (target_rank == root_rank) {
                 continue;
             }
             __gm__ T *remote_recv_shmem = ShmemPtr(recv_shmem, target_rank);
             Global remoteRecvG(remote_recv_shmem, shape, stride);
-            auto put_event = pto::comm::TPUT_ASYNC(remoteRecvG, sendG);
-            (void)put_event;
+            if (issued >= kEventSlots) {
+                events[issued % kEventSlots].Wait();
+            }
+            events[issued % kEventSlots] = pto::comm::TPUT_ASYNC(remoteRecvG, sendG);
+            issued++;
+        }
+        const int pending = (issued < kEventSlots) ? issued : kEventSlots;
+        for (int i = 0; i < pending; ++i) {
+            events[i].Wait();
         }
         ShmemDeviceQuiet();
     }

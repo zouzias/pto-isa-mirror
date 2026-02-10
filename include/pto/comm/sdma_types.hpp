@@ -21,9 +21,12 @@ namespace sdma {
 constexpr uint64_t RT_STARS_SQE_TYPE_SDMA = 11ULL;
 constexpr uint64_t K_CREDIT_TIME_DEFAULT = 240ULL;
 constexpr uint32_t SQ_DEPTH = 2048U;
-constexpr uint32_t SDMA_FLAG_LENGTH = 64U;
+constexpr uint32_t SDMA_FLAG_LENGTH = 128U;
 constexpr uint32_t UB_ALIGN_SIZE = 256U;
 constexpr uint32_t SDMA_MAX_CHAN = 40U;
+constexpr uint32_t SDMA_EVENT_RECORD_BYTES = 16U;
+constexpr uint32_t SDMA_EVENT_SLOT_COUNT =
+    SDMA_FLAG_LENGTH / SDMA_EVENT_RECORD_BYTES;
 
 // ============================================================================
 // SDMA Configuration Structure
@@ -114,6 +117,15 @@ struct batch_write_item_t {
     uint8_t linkType;
     uint8_t reserved[3];
     uint32_t reslast[3];
+};
+
+// ============================================================================
+// SDMA Async Event Record (single slot)
+// ============================================================================
+struct sdma_event_record_t {
+    uint32_t flag;          // Set by flag SQE (non-zero indicates completion)
+    uint32_t sq_tail;       // Tail value to commit on completion
+    uint64_t channel_info;  // __gm__ batch_write_channel_info_t* (stored as uint64_t)
 };
 
 } // namespace sdma
