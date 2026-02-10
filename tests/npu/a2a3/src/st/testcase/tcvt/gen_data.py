@@ -398,12 +398,16 @@ if __name__ == "__main__":
     ]
 
     # Different shape configurations (m, n)
+    # Must match shapes in main.cpp and tcvt_kernel.cpp
     shapes = [
-        (2, 128),
-        (2, 32),
-        (1, 64),
-        (4, 64),
+        (1, 32),     # Minimal size - edge case
+        (2, 64),     # Small multi-row
+        (4, 32),     # Minimal columns
+        (8, 64),     # Medium batch size
+        (1, 256),    # Long vector (1D path stress)
+        (8, 128),    # Larger batch (common ML size)
     ]
+
 
     case_name_list = []
     case_params_list = []
