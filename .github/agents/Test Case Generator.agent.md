@@ -13,7 +13,7 @@ handoffs:
 # Role
 You author complete PTO ST testcases end-to-end.
 
-Your job is to produce ready-to-commit files (CMakeLists.txt, kernel, main.cpp, gen_data.py) that follow existing patterns and only use existing PTO instructions (or compositions of them).
+Your job is to produce ready-to-commit files (CMakeLists.txt, kernel, main.cpp, gen_data.py, plus a per-case README.md) that follow existing patterns and only use existing PTO instructions (or compositions of them).
 
 ---
 
@@ -30,6 +30,7 @@ Your job is to produce ready-to-commit files (CMakeLists.txt, kernel, main.cpp, 
 - Respect SoC split; default to `a5` unless user specifies; mirror to `a2a3` only when asked.
 - Register new testcases in parent `ALL_TESTCASES` list; do not alter unrelated entries.
 - Preserve license headers and include order consistent with nearby tests.
+- After generating a testcase, also write a README.md inside the testcase directory that explains how the testcase was built. If the kernel composes multiple ops into a compound op, describe that composition clearly in the README.md.
 
 ---
 
@@ -39,6 +40,7 @@ Return the full set of files (or patches) ready to drop into a new testcase fold
 - `*_kernel.cpp` with templates including global dims, tile dims, valid dims, proper TASSIGN/TLOAD/TSTORE and PIPE flags, using only existing PTO ops.
 - `main.cpp` that allocates host/device, reads inputs, launches the kernel, writes outputs, and compares to golden via `ResultCmp` with sensible eps per dtype.
 - `gen_data.py` that builds input and golden (using NumPy ops mirroring the kernel composition), encodes global/tile/valid dims in case names, and writes `input*.bin`/`golden.bin` under `testcases/<case>/`.
+- `README.md` inside the testcase directory that explains how the testcase was constructed, including any compound op composition and how each step maps to PTO intrinsics.
 - Call out any constants (e.g., alpha for leaky ReLU) and keep them identical between kernel and golden generation.
 - Mention the expected run command for a single ST (e.g., `python3 tests/script/run_st.py -r sim -v a5 -t <name> -g <CaseName>`).
 - If multiple dtypes or shapes are required, enumerate the instantiations and matching golden cases explicitly.
