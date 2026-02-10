@@ -131,9 +131,9 @@ inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *
         if constexpr (std::is_same<R, void>::value) {
             // For type expansion without rounding, saturation mode is controllable
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b64, RS_DISABLE, PART_EVEN);
+                vcvt(v_output, v_input_0, preg_b64, RS_ENABLE , PART_EVEN);
             } else {
-                vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
+                vcvt(v_output, v_input_0, preg_b64, RS_DISABLE, PART_EVEN);
             }
         } else {
             // For conversions with rounding mode, RS_DISABLE/DISABLE not supported
@@ -163,15 +163,15 @@ inline AICORE void cast32to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
         vlds(v_input_0, src, i * ELE_CNT_B32, NORM);
         if (satMode == SaturationMode::ON) {
             if constexpr (std::is_same<R, void>::value) {
-                vcvt(v_output_even, v_input_0, preg_b32, RS_DISABLE, PART_EVEN);
-            } else {
-                vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
-            }
-        } else {
-            if constexpr (std::is_same<R, void>::value) {
                 vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);
             } else {
                 vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
+            }
+        } else {
+            if constexpr (std::is_same<R, void>::value) {
+                vcvt(v_output_even, v_input_0, preg_b32, RS_DISABLE, PART_EVEN);
+            } else {
+                vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
             }
         }
         vsts(v_output_even, dst, i * ELE_CNT_B32, PK_B32, preg_b32_st);
@@ -202,9 +202,9 @@ inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vtrc(v_output, v_input_0, R(), preg_b32_st);
         } else if constexpr (MODE == CastMode::ROUND_SAT) {
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE);
-            } else {
                 vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE);
+            } else {
+                vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE);
             }
         } else {
             vcvt(v_output, v_input_0, preg_b32, R());
@@ -239,9 +239,9 @@ inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ S
         } else {
             // For conversions with rounding (e.g., f32->s64), saturation mode is controllable
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
-            } else {
                 vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
+            } else {
+                vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
             }
         }
         vsts(v_output, dst, i * ELE_CNT_B64, NORM_B32, preg_b64);
@@ -268,15 +268,15 @@ inline AICORE void cast16to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
         vlds(v_input_0, src, i * ELE_CNT_B16, NORM);
         if constexpr (MODE == CastMode::ROUND_SAT) {
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE);
-            } else {
                 vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE);
+            } else {
+                vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE);
             }
         } else if constexpr (MODE == CastMode::SAT_ROUND) {
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b16, RS_DISABLE, R());
-            } else {
                 vcvt(v_output, v_input_0, preg_b16, RS_ENABLE, R());
+            } else {
+                vcvt(v_output, v_input_0, preg_b16, RS_DISABLE, R());
             }
         } else {
             vcvt(v_output, v_input_0, preg_b16, R());
@@ -307,9 +307,9 @@ inline AICORE void cast16to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vcvt(v_output, v_input_0, preg_b16, PART_EVEN);
         } else if constexpr (MODE == CastMode::ROUND_SAT_PART) {
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
-            } else {
                 vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
+            } else {
+                vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
             }
         } else {
             vcvt(v_output, v_input_0, preg_b16, R(), PART_EVEN);
@@ -338,11 +338,14 @@ inline AICORE void cast16to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         vlds(v_input_0, src, i * ELE_CNT_B16, NORM);
         if constexpr (MODE == CastMode::ROUND_SAT_PART) {
             if (satMode == SaturationMode::ON) {
+                // Saturation ON: Use rounding + saturation
                 vcvt(v_output_even, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
             } else {
+                // Saturation OFF: Use rounding without saturation
                 vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
             }
         } else {
+            // SAT_PART mode for int-to-int
             if (satMode == SaturationMode::ON) {
                 vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
             } else {
@@ -440,15 +443,15 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         
         if (satMode == SaturationMode::ON) {
             if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-                vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
-            } else {
-                vcvt(v_output_p0, v_input, preg_b32, RS_DISABLE, PART_P0);
-            }
-        } else {
-            if constexpr (MODE == CastMode::ROUND_SAT_PART) {
                 vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
             } else {
                 vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
+            }
+        } else {
+            if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
+            } else {
+                vcvt(v_output_p0, v_input, preg_b32, RS_DISABLE, PART_P0);
             }
         }
         
@@ -485,9 +488,9 @@ inline AICORE void cast32toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
 
         vlds(v_input, src, i * ELE_CNT_B32, NORM);
         if (satMode == SaturationMode::ON) {
-            vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_DISABLE, PART_P0);
-        } else {
             vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
+        } else {
+            vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_DISABLE, PART_P0);
         }
         vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
         vsts((RegTensor<uint8_t> &)v_output, (__ubuf__ uint8_t *)dst, i * ELE_CNT_B32, NORM_B8, preg_b8);
@@ -549,9 +552,9 @@ inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t va
             if constexpr (std::is_same<R, void>::value) {
                 // For type expansion (s64->s32/f32), saturation mode is controllable
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b64, RS_DISABLE, PART_EVEN);
-                } else {
                     vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
+                } else {
+                    vcvt(v_output, v_input_0, preg_b64, RS_DISABLE, PART_EVEN);
                 }
             } else {
                 vcvt(v_output, v_input_0, preg_b64, R(), PART_EVEN);
@@ -583,19 +586,19 @@ inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
             vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B32);
             if (satMode == SaturationMode::ON) {
                 if constexpr (std::is_same<R, void>::value) {
-                    vcvt(v_output_odd, v_input_1, preg_b32, RS_DISABLE, PART_ODD);
-                    vcvt(v_output_even, v_input_0, preg_b32, RS_DISABLE, PART_EVEN);    
-                } else {
-                    vcvt(v_output_odd, v_input_1, preg_b32, R(), RS_DISABLE, PART_ODD);
-                    vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
-                }
-            } else {
-                if constexpr (std::is_same<R, void>::value) {
                     vcvt(v_output_odd, v_input_1, preg_b32, RS_ENABLE, PART_ODD);
                     vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);    
                 } else {
                     vcvt(v_output_odd, v_input_1, preg_b32, R(), RS_ENABLE, PART_ODD);
                     vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
+                }
+            } else {
+                if constexpr (std::is_same<R, void>::value) {
+                    vcvt(v_output_odd, v_input_1, preg_b32, RS_DISABLE, PART_ODD);
+                    vcvt(v_output_even, v_input_0, preg_b32, RS_DISABLE, PART_EVEN);    
+                } else {
+                    vcvt(v_output_odd, v_input_1, preg_b32, R(), RS_DISABLE, PART_ODD);
+                    vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
                 }
             }
             vor(v_output, v_output_even, v_output_odd, preg_b16);
@@ -626,15 +629,15 @@ inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vlds(v_input_0, src, srcOffset, NORM);
             if (satMode == SaturationMode::ON) {
                 if constexpr (std::is_same<R, void>::value) {
-                    vcvt(v_output_even, v_input_0, preg_b32, RS_DISABLE, PART_EVEN);    
-                } else {
-                    vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
-                }
-            } else {
-                if constexpr (std::is_same<R, void>::value) {
                     vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);    
                 } else {
                     vcvt(v_output_even, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
+                }
+            } else {
+                if constexpr (std::is_same<R, void>::value) {
+                    vcvt(v_output_even, v_input_0, preg_b32, RS_DISABLE, PART_EVEN);    
+                } else {
+                    vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
                 }
             }
             vsts(v_output_even, dst, dstOffset, PK_B32, preg_b32_st);
@@ -660,9 +663,9 @@ inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
             vlds(v_input_0, src, srcOffset, NORM);
             if constexpr (MODE == CastMode::ROUND_SAT) {
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE);
-                } else {
                     vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE);
+                } else {
+                    vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE);
                 }
             } else {
                 vcvt(v_output, v_input_0, preg_b32, R());
@@ -699,9 +702,9 @@ inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_
             } else {
                 // For conversions with rounding (e.g., f32->s64), saturation mode is controllable
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
-                } else {
                     vcvt(v_output, v_input_0, preg_b32, R(), RS_ENABLE, PART_EVEN);
+                } else {
+                    vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
                 }
             }
             vsts(v_output, dst, dstOffset, NORM_B32, preg_b64);
@@ -728,15 +731,15 @@ inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
             vlds(v_input_0, src, srcOffset, NORM);
             if constexpr (MODE == CastMode::ROUND_SAT) {
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE);
-                } else {
                     vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE);
+                } else {
+                    vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE);
                 }
             } else if constexpr (MODE == CastMode::SAT_ROUND) {
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b16, RS_DISABLE, R());
-                } else {
                     vcvt(v_output, v_input_0, preg_b16, RS_ENABLE, R());
+                } else {
+                    vcvt(v_output, v_input_0, preg_b16, RS_DISABLE, R());
                 }
             } else {
                 vcvt(v_output, v_input_0, preg_b16, R());
@@ -770,9 +773,9 @@ inline AICORE void cast16to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
                 vcvt(v_output, v_input_0, preg_b16, PART_EVEN);
             } else if constexpr (MODE == CastMode::ROUND_SAT_PART) {
                 if (satMode == SaturationMode::ON) {
-                    vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
-                } else {
                     vcvt(v_output, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
+                } else {
+                    vcvt(v_output, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
                 }
             } else {
                 vcvt(v_output, v_input_0, preg_b16, R(), PART_EVEN);
@@ -803,19 +806,21 @@ inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
             vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);
             if (satMode == SaturationMode::ON) {
                 if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                    // Saturation ON: Use rounding + saturation
                     vcvt(v_output_odd, v_input_1, preg_b16, R(), RS_ENABLE, PART_ODD);
                     vcvt(v_output_even, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
                 } else {
-                    // SAT_PART mode: s16 -> u8 without rounding
+                    // SAT_PART mode: saturation without rounding (integer->integer)
                     vcvt(v_output_odd, v_input_1, preg_b16, RS_ENABLE, PART_ODD);
                     vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
                 }
             } else {
                 if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                    // Saturation OFF: Use rounding without saturation
                     vcvt(v_output_odd, v_input_1, preg_b16, R(), RS_DISABLE, PART_ODD);
                     vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
                 } else {
-                    // SAT_PART mode: s16 -> u8 without rounding
+                    // SAT_PART mode: no saturation (integer->integer)
                     vcvt(v_output_odd, v_input_1, preg_b16, RS_DISABLE, PART_ODD);
                     vcvt(v_output_even, v_input_0, preg_b16, RS_DISABLE, PART_EVEN);
                 }
@@ -847,17 +852,17 @@ inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
             vlds(v_input_0, src, srcOffset, NORM);
             if (satMode == SaturationMode::ON) {
                 if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-                    vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
-                } else {
-                    // SAT_PART mode: s16 -> u8 without rounding
-                    vcvt(v_output_even, v_input_0, preg_b16, RS_DISABLE, PART_EVEN);
-                }
-            } else {
-                if constexpr (MODE == CastMode::ROUND_SAT_PART) {
                     vcvt(v_output_even, v_input_0, preg_b16, R(), RS_ENABLE, PART_EVEN);
                 } else {
                     // SAT_PART mode: s16 -> u8 without rounding
                     vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
+                }
+            } else {
+                if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                    vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
+                } else {
+                    // SAT_PART mode: s16 -> u8 without saturation
+                    vcvt(v_output_even, v_input_0, preg_b16, RS_DISABLE, PART_EVEN);
                 }
             }
             vsts(v_output_even, dst, dstOffset, PK_B16, preg_b16_st);
@@ -961,15 +966,15 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
             // Convert with or without rounding based on mode
             if (satMode == SaturationMode::ON) {
                 if constexpr (MODE == CastMode::ROUND_SAT_PART) {
-                    vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
-                } else {
-                    vcvt(v_output_p0, v_input, preg_b32, RS_DISABLE, PART_P0);
-                }
-            } else {
-                if constexpr (MODE == CastMode::ROUND_SAT_PART) {
                     vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_ENABLE, PART_P0);
                 } else {
                     vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
+                }
+            } else {
+                if constexpr (MODE == CastMode::ROUND_SAT_PART) {
+                    vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
+                } else {
+                    vcvt(v_output_p0, v_input, preg_b32, RS_DISABLE, PART_P0);
                 }
             }
             
@@ -1163,9 +1168,9 @@ inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ float *src, uint3
             
             vlds(v_input, src, srcOffset, NORM);
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_DISABLE, PART_P0);
-            } else {
                 vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_ENABLE, PART_P0);
+            } else {
+                vcvt(v_output_p0, v_input, preg_b32, ROUND_A, RS_DISABLE, PART_P0);
             }
             
             // Select every 4th byte to compact the result
@@ -1258,11 +1263,11 @@ inline AICORE void castData(__ubuf__ hifloat8_t *dst, __ubuf__ half *src, uint32
 
             vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B16);
             if (satMode == SaturationMode::ON) {
-                vcvt(v_output_odd, v_input_1, preg_b16, ROUND_A, RS_DISABLE, PART_ODD);
-                vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_DISABLE, PART_EVEN);
-            } else {
                 vcvt(v_output_odd, v_input_1, preg_b16, ROUND_A, RS_ENABLE, PART_ODD);
                 vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_ENABLE, PART_EVEN);
+            } else {
+                vcvt(v_output_odd, v_input_1, preg_b16, ROUND_A, RS_DISABLE, PART_ODD);
+                vcvt(v_output_even, v_input_0, preg_b16, ROUND_A, RS_DISABLE, PART_EVEN);
             }
             vor((RegTensor<uint8_t> &) v_output, (RegTensor<uint8_t> &) v_output_even, (RegTensor<uint8_t> &) v_output_odd, preg_b8);
             vsts((RegTensor<uint8_t> &) v_output, (__ubuf__ uint8_t *) dst, dstOffset, NORM_B8, preg_b8);
