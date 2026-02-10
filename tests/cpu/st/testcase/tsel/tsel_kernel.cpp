@@ -17,8 +17,7 @@ using namespace pto;
 #define PTO_CEIL(x, y) ((((x) + (y)-1) / (y)) * (y))
 
 template <typename T, int Rows, int Cols, int ValidRows, int ValidCols>
-__global__ AICORE void runTSEL(__gm__ T __out__ *out, __gm__ uint8_t __in__ *mask, __gm__ T __in__ *src0,
-                               __gm__ T __in__ *src1)
+__global__ AICORE void runTSEL(__gm__ T *out, __gm__ uint8_t *mask, __gm__ T *src0, __gm__ T *src1)
 {
     using DynShapeDim5 = pto::Shape<1, 1, 1, Rows, Cols>;
     using DynStridDim5 = pto::Stride<1, 1, 1, Cols, 1>;

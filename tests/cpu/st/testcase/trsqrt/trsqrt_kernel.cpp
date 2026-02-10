@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <int kRows, int kCols>
-AICORE void runTRSQRT(__gm__ float __out__ *out, __gm__ float __in__ *src)
+AICORE void runTRSQRT(__gm__ float *out, __gm__ float *src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kRows, kCols>;
     using DynStridDim5 = Stride<1, 1, 1, kCols, 1>;

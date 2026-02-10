@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <int kTRows_, int kTCols_>
-AICORE void runTScatter(__gm__ float __out__ *out, __gm__ float __in__ *src, __gm__ uint16_t __in__ *idx)
+AICORE void runTScatter(__gm__ float *out, __gm__ float *src, __gm__ uint16_t *idx)
 {
     using TileT = Tile<TileType::Vec, float, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using IdxT = Tile<TileType::Vec, uint16_t, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;

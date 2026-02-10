@@ -300,7 +300,7 @@ AICORE inline void runTLOAD_MIX_DN2ZN(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 // NC1HWC0 or C1HWNC0
 template <typename T, Layout layout, int dstShape0, int dstShape1, int dstShape2, int dstShape3, int dstC0,
           int gWholeShape0, int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void runTLOAD_MIX_5HD(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void runTLOAD_MIX_5HD(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
@@ -345,7 +345,7 @@ AICORE inline void runTLOAD_MIX_5HD(__gm__ T __out__ *out, __gm__ T __in__ *src)
 // [C1HW, N/16, 16, C0]
 template <typename T, int dstShape0, int dstC1HW, int dstShape2, int dstShape3, int dstC0, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void runTLOAD_MIX_FractalZ4D(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void runTLOAD_MIX_FractalZ4D(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
@@ -390,7 +390,7 @@ AICORE inline void runTLOAD_MIX_FractalZ4D(__gm__ T __out__ *out, __gm__ T __in_
 // [N,H,W,C]->[N,C1,H,W,C0]
 template <typename T, int dstShape0, int dstC1, int dstShape2, int dstShape3, int dstC0, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void runTLOAD_MIX_NHWC(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void runTLOAD_MIX_NHWC(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
@@ -436,7 +436,7 @@ AICORE inline void runTLOAD_MIX_NHWC(__gm__ T __out__ *out, __gm__ T __in__ *src
 // [N,C,H,W]->[N,C1,H,W,C0]
 template <typename T, int dstShape0, int dstC1, int dstShape2, int dstShape3, int dstC0, int gWholeShape0,
           int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
-AICORE inline void runTLOAD_MIX_NCHW(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void runTLOAD_MIX_NCHW(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
                                 gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4,
@@ -483,7 +483,7 @@ AICORE inline void runTLOAD_MIX_NCHW(__gm__ T __out__ *out, __gm__ T __in__ *src
 // [N,C,H,W]->[C1HW,N/16,16,C0] [C1HW,N/16,16,C0,srcN,srcC,srcH,srcW,N,C,H,W]
 template <typename T, int dstC1HW, int dstN16, int dstShape2, int dstShape3, int srcN, int srcC, int srcH, int srcW,
           int N, int C, int H, int W>
-AICORE inline void runTLOAD_MIX_NCHW2FZ4D(__gm__ T __out__ *out, __gm__ T __in__ *src)
+AICORE inline void runTLOAD_MIX_NCHW2FZ4D(__gm__ T *out, __gm__ T *src)
 {
     constexpr int gStride[5] = {N * C * H * W, C * H * W, H * W, W, 1};
     constexpr int blockSize = BLOCK_BYTE_SIZE / sizeof(T);

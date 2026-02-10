@@ -22,7 +22,7 @@ constexpr int kValidCols1 = 32;
 } // namespace
 
 template <int kRows, int kCols, int kValidRows1, int kValidCols1>
-AICORE void runTPARTMIN(__gm__ float __out__ *out, __gm__ float __in__ *src0, __gm__ float __in__ *src1)
+AICORE void runTPARTMIN(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kRows, kCols>;
     using DynStridDim5 = Stride<1, 1, 1, kCols, 1>;

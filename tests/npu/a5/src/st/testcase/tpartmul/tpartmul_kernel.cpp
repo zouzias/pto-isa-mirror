@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int dstVR, int dstVC, int src0VR, int src0VC, int src1VR, int src1VC>
-__global__ AICORE void runTPartMul(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+__global__ AICORE void runTPartMul(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 {
     constexpr uint16_t alignedSrc0VC = ((src0VC * sizeof(T) + 31) / 32) * (32 / sizeof(T));
     constexpr uint16_t alignedSrc1VC = ((src1VC * sizeof(T) + 31) / 32) * (32 / sizeof(T));

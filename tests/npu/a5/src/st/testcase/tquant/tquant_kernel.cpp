@@ -20,8 +20,7 @@ namespace TQuantTest {
 // Quantize fp32 tile to fp8 (e4m3) and exponent-only (e8m0).
 // Pad columns to multiples of 32 using min fill to avoid reading garbage.
 template <int validRows, int validCols, int mode>
-__global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_t __out__ *out_fp8,
-                                 __gm__ float __in__ *src)
+__global__ AICORE void runTQuant(__gm__ uint8_t *out_e8m0, __gm__ uint8_t *out_fp8, __gm__ float *src)
 {
     // pad each row to multiple of 32 elements
     constexpr int paddedCols = PTO_CEIL(validCols, 32);

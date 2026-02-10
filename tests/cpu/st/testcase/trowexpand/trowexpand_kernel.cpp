@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <int kRows, int kCols>
-AICORE void runTROWEXPAND(__gm__ float __out__ *out, __gm__ float __in__ *src)
+AICORE void runTROWEXPAND(__gm__ float *out, __gm__ float *src)
 {
     using ShapeMat = Shape<1, 1, 1, kRows, kCols>;
     using StrideMat = Stride<1, 1, 1, kCols, 1>;
@@ -33,7 +33,7 @@ AICORE void runTROWEXPAND(__gm__ float __out__ *out, __gm__ float __in__ *src)
 }
 
 template <int kRows, int kCols>
-AICORE void runTROWEXPANDDIV(__gm__ float __out__ *out, __gm__ float __in__ *src0, __gm__ float __in__ *src1)
+AICORE void runTROWEXPANDDIV(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
 {
     using ShapeMat = Shape<1, 1, 1, kRows, kCols>;
     using StrideMat = Stride<1, 1, 1, kCols, 1>;
@@ -61,7 +61,7 @@ AICORE void runTROWEXPANDDIV(__gm__ float __out__ *out, __gm__ float __in__ *src
 }
 
 template <int kRows, int kCols>
-AICORE void runTROWEXPANDMUL(__gm__ float __out__ *out, __gm__ float __in__ *src0, __gm__ float __in__ *src1)
+AICORE void runTROWEXPANDMUL(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
 {
     using ShapeMat = Shape<1, 1, 1, kRows, kCols>;
     using StrideMat = Stride<1, 1, 1, kCols, 1>;
@@ -89,7 +89,7 @@ AICORE void runTROWEXPANDMUL(__gm__ float __out__ *out, __gm__ float __in__ *src
 }
 
 template <int kRows, int kCols>
-AICORE void runTROWEXPANDSUB(__gm__ float __out__ *out, __gm__ float __in__ *src0, __gm__ float __in__ *src1)
+AICORE void runTROWEXPANDSUB(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
 {
     using ShapeMat = Shape<1, 1, 1, kRows, kCols>;
     using StrideMat = Stride<1, 1, 1, kCols, 1>;

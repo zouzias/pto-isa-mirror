@@ -18,7 +18,7 @@ namespace TRowExpandTest {
 template <int rows, int cols>
 using StrideDim2 = pto::Stride<rows * cols, rows * cols, rows * cols, cols, 1>;
 template <typename T, uint32_t rows, uint32_t srcCols, uint32_t dstValidCols, uint32_t dstCols>
-__global__ AICORE void runROWEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src)
+__global__ AICORE void runROWEXPAND(__gm__ T *out, __gm__ T *src)
 {
     using SrcShapeDim5 = Shape<1, 1, 1, rows, 1>;
     using DstShapeDim5 = Shape<1, 1, 1, rows, dstValidCols>;
