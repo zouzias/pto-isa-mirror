@@ -39,9 +39,9 @@ __global__ AICORE void TBroadCastKernelImpl(__gm__ T *input, __gm__ T *output, i
 
     ShapeDyn shape(1, 1, 1, 1, count);
     StrideDyn stride(count, count, count, count, 1);
-    
+
     Global srcG(input, shape, stride);
-    
+
     // Create ParallelGroup: each tensor is the destination buffer on that rank
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
@@ -49,26 +49,26 @@ __global__ AICORE void TBroadCastKernelImpl(__gm__ T *input, __gm__ T *output, i
         __gm__ T *remoteDst = ShmemPtr(output, i);
         tensors[i] = Global(remoteDst, shape, stride);
     }
-    
+
     // TBROADCAST: root is the calling rank (my_rank)
     pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, my_rank);
-    
+
     // Allocate UB tile for staging data
     TileData ubTile(1, count);
     TASSIGN(ubTile, 0x0);
-    
+
     // Only root executes TBROADCAST
     if (my_rank == root) {
         pto::comm::TBROADCAST(pg, srcG, ubTile);
     }
-    
+
     ShmemDeviceQuiet();
     ShmemDeviceBarrierAll();
 }
 
 template <typename T, size_t count>
-bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root){
-    
+bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root)
+{
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8768", 8ULL * 1024 * 1024))
         return false;
@@ -82,10 +82,10 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     }
 
     T *input_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&input_host), count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T));
 
-    T* output_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&output_host), count * sizeof(T));
+    T *output_host;
+    aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T));
 
     // Initialize input data: Rank root has data i + root * 100, others have 0
     for (size_t i = 0; i < count; ++i) {
@@ -103,7 +103,8 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 #if ENABLE_DEBUG_PRINT
     if (rank_id == root) {
         std::cout << "[DEBUG] Rank " << rank_id << " (Root) input: ";
-        for (int i = 0; i < 5 && i < count; ++i) std::cout << (float)input_host[i] << " ";
+        for (int i = 0; i < 5 && i < count; ++i)
+            std::cout << (float)input_host[i] << " ";
         std::cout << std::endl;
     }
 #endif
@@ -111,7 +112,7 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     // Barrier to ensure all ranks have initialized their data
     ShmemBarrierAll();
 
-    TBroadCastKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_ptr, n_ranks, root);
+    TBroadCastKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_ptr, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Barrier after kernel execution
@@ -125,8 +126,8 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         T expected = static_cast<T>(i + root * 100);
         T actual = output_host[i];
         if (actual != expected) {
-            std::cout << "Rank " << rank_id << " validation failed at index " << i 
-                      << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
+            std::cout << "Rank " << rank_id << " validation failed at index " << i << ": expected " << (float)expected
+                      << ", got " << (float)actual << std::endl;
             is_ok = false;
             break;
         }
@@ -140,7 +141,8 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         for (size_t i = 0; i < (count > 5 ? 5 : count); ++i) {
             std::cout << (float)output_host[i] << " ";
         }
-        if (count > 5) std::cout << "... ";
+        if (count > 5)
+            std::cout << "... ";
         std::cout << "]" << std::endl;
         std::cout << "================================================================\n" << std::endl;
     }
@@ -155,7 +157,8 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 }
 
 template <typename T, size_t count>
-bool RunBroadCast(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root){
+bool RunBroadCast(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
+{
     return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
         return RunBroadCastKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, root);
     });
@@ -233,10 +236,10 @@ bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int f
     }
 
     T *input_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&input_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T));
 
     T *output_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&output_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T));
 
     // Initialize input data: root has data i + root * 100, others have 0
     for (size_t i = 0; i < total_count; ++i) {
@@ -254,7 +257,8 @@ bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int f
 #if ENABLE_DEBUG_PRINT
     if (rank_id == root) {
         std::cout << "[DEBUG] Rank " << rank_id << " (Root) input: ";
-        for (size_t i = 0; i < 5 && i < total_count; ++i) std::cout << (float)input_host[i] << " ";
+        for (size_t i = 0; i < 5 && i < total_count; ++i)
+            std::cout << (float)input_host[i] << " ";
         std::cout << std::endl;
     }
 #endif
@@ -262,8 +266,8 @@ bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int f
     // Barrier to ensure all ranks have initialized their data
     ShmemBarrierAll();
 
-    TBroadCastLargeShapeKernelImpl<T, total_rows, cols, tile_rows><<<1, nullptr, ctx.stream>>>(
-        (T*)input_ptr, (T*)output_ptr, n_ranks, root);
+    TBroadCastLargeShapeKernelImpl<T, total_rows, cols, tile_rows>
+        <<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_ptr, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Barrier after kernel execution
@@ -277,8 +281,8 @@ bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int f
         T expected = static_cast<T>(i + root * 100);
         T actual = output_host[i];
         if (actual != expected) {
-            std::cout << "Rank " << rank_id << " validation failed at index " << i
-                      << " (row=" << (i / cols) << ", col=" << (i % cols) << ")"
+            std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
+                      << ", col=" << (i % cols) << ")"
                       << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
             is_ok = false;
             break;
@@ -288,14 +292,15 @@ bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int f
 #if ENABLE_DEBUG_PRINT
     if (is_ok && rank_id == (root + 1) % n_ranks) {
         std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] Rank " << rank_id << ": TBROADCAST LargeShape SUCCESSFUL! ("
-                  << total_rows << "x" << cols << ", tile=" << tile_rows << "x" << cols
-                  << ", chunks=" << (total_rows / tile_rows) << ")" << std::endl;
+        std::cout << "[DEBUG] Rank " << rank_id << ": TBROADCAST LargeShape SUCCESSFUL! (" << total_rows << "x" << cols
+                  << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows) << ")"
+                  << std::endl;
         std::cout << "Sample Result (First 5 elements): [ ";
         for (size_t i = 0; i < (total_count > 5 ? 5 : total_count); ++i) {
             std::cout << (float)output_host[i] << " ";
         }
-        if (total_count > 5) std::cout << "... ";
+        if (total_count > 5)
+            std::cout << "... ";
         std::cout << "]" << std::endl;
         std::cout << "================================================================\n" << std::endl;
     }
@@ -313,8 +318,8 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunBroadCastLargeShape(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
 {
     return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunBroadCastLargeShapeKernel<T, total_rows, cols, tile_rows>(
-            rankId, n_ranks, n_devices, first_device_id, uid, root);
+        return RunBroadCastLargeShapeKernel<T, total_rows, cols, tile_rows>(rankId, n_ranks, n_devices, first_device_id,
+                                                                            uid, root);
     });
 }
 
@@ -327,13 +332,19 @@ template bool RunBroadCastLargeShape<float, 256, 64, 32>(int, int, int, int, int
 template bool RunBroadCastLargeShape<int32_t, 512, 32, 64>(int, int, int, int, int);
 
 // Non-template wrappers for large shape tests
-bool RunBroadCastLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root) {
+bool RunBroadCastLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                                int root)
+{
     return RunBroadCastLargeShape<int32_t, 128, 32, 16>(n_ranks, n_devices, first_rank_id, first_device_id, root);
 }
-bool RunBroadCastLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root) {
+bool RunBroadCastLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                                int root)
+{
     return RunBroadCastLargeShape<float, 256, 64, 32>(n_ranks, n_devices, first_rank_id, first_device_id, root);
 }
-bool RunBroadCastLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root) {
+bool RunBroadCastLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                                int root)
+{
     return RunBroadCastLargeShape<int32_t, 512, 32, 64>(n_ranks, n_devices, first_rank_id, first_device_id, root);
 }
 
@@ -390,8 +401,8 @@ __global__ AICORE void TBroadCastPingPongKernelImpl(__gm__ T *input, __gm__ T *o
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
-bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                                const ShmemUniqueId *uid, int root)
+bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const ShmemUniqueId *uid,
+                                int root)
 {
     constexpr size_t total_count = total_rows * cols;
 
@@ -408,10 +419,10 @@ bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int fir
     }
 
     T *input_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&input_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T));
 
     T *output_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&output_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T));
 
     // Initialize input data: root has data i + root * 100, others have 0
     for (size_t i = 0; i < total_count; ++i) {
@@ -428,8 +439,8 @@ bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int fir
 
     ShmemBarrierAll();
 
-    TBroadCastPingPongKernelImpl<T, total_rows, cols, tile_rows><<<1, nullptr, ctx.stream>>>(
-        (T*)input_ptr, (T*)output_ptr, n_ranks, root);
+    TBroadCastPingPongKernelImpl<T, total_rows, cols, tile_rows>
+        <<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_ptr, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -442,8 +453,8 @@ bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int fir
         T expected = static_cast<T>(i + root * 100);
         T actual = output_host[i];
         if (actual != expected) {
-            std::cout << "Rank " << rank_id << " validation failed at index " << i
-                      << " (row=" << (i / cols) << ", col=" << (i % cols) << ")"
+            std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
+                      << ", col=" << (i % cols) << ")"
                       << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
             is_ok = false;
             break;
@@ -453,14 +464,15 @@ bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int fir
 #if ENABLE_DEBUG_PRINT
     if (is_ok && rank_id == (root + 1) % n_ranks) {
         std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] Rank " << rank_id << ": TBROADCAST PingPong SUCCESSFUL! ("
-                  << total_rows << "x" << cols << ", tile=" << tile_rows << "x" << cols
-                  << ", chunks=" << (total_rows / tile_rows) << ")" << std::endl;
+        std::cout << "[DEBUG] Rank " << rank_id << ": TBROADCAST PingPong SUCCESSFUL! (" << total_rows << "x" << cols
+                  << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows) << ")"
+                  << std::endl;
         std::cout << "Sample Result (First 5 elements): [ ";
         for (size_t i = 0; i < (total_count > 5 ? 5 : total_count); ++i) {
             std::cout << (float)output_host[i] << " ";
         }
-        if (total_count > 5) std::cout << "... ";
+        if (total_count > 5)
+            std::cout << "... ";
         std::cout << "]" << std::endl;
         std::cout << "================================================================\n" << std::endl;
     }
@@ -478,8 +490,8 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunBroadCastPingPong(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
 {
     return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunBroadCastPingPongKernel<T, total_rows, cols, tile_rows>(
-            rankId, n_ranks, n_devices, first_device_id, uid, root);
+        return RunBroadCastPingPongKernel<T, total_rows, cols, tile_rows>(rankId, n_ranks, n_devices, first_device_id,
+                                                                          uid, root);
     });
 }
 
@@ -490,9 +502,13 @@ template bool RunBroadCastPingPong<int32_t, 128, 32, 16>(int, int, int, int, int
 template bool RunBroadCastPingPong<float, 256, 64, 32>(int, int, int, int, int);
 
 // Non-template wrappers for ping-pong tests
-bool RunBroadCastPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root) {
+bool RunBroadCastPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                              int root)
+{
     return RunBroadCastPingPong<int32_t, 128, 32, 16>(n_ranks, n_devices, first_rank_id, first_device_id, root);
 }
-bool RunBroadCastPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root) {
+bool RunBroadCastPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                              int root)
+{
     return RunBroadCastPingPong<float, 256, 64, 32>(n_ranks, n_devices, first_rank_id, first_device_id, root);
 }

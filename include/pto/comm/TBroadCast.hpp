@@ -41,18 +41,17 @@ namespace comm {
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
-PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
+PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
                                   TileData &stagingTileData)
 {
     using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
     using T = typename GlobalSrcData::RawDType;
 
     static_assert(std::is_same_v<T, typename TileData::DType>,
-        "TBROADCAST: TileData element type must match GlobalData element type");
+                  "TBROADCAST: TileData element type must match GlobalData element type");
     static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>,
-        "TBROADCAST: ParallelGroup element type must match source element type");
-    static_assert(GlobalSrcData::layout == GlobalDstData::layout,
-        "TBROADCAST: src/dst layout mismatch");
+                  "TBROADCAST: ParallelGroup element type must match source element type");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TBROADCAST: src/dst layout mismatch");
 
     const int nranks = parallelGroup.GetSize();
     const int rootIdx = parallelGroup.GetRootIdx();
@@ -112,13 +111,13 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
 
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(gShape3 % tileValidRow == 0,
-            "TBROADCAST chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
-            "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
+                   "TBROADCAST chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(gShape4 % tileValidCol == 0,
-            "TBROADCAST chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
-            "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+                   "TBROADCAST chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
     // Source strides
@@ -147,43 +146,34 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     for (int i0 = 0; i0 < gShape0; ++i0) {
         for (int i1 = 0; i1 < gShape1; ++i1) {
             for (int i2 = 0; i2 < gShape2; ++i2) {
-                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0
-                                + static_cast<int64_t>(i1) * srcStride1
-                                + static_cast<int64_t>(i2) * srcStride2;
-                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0
-                                + static_cast<int64_t>(i1) * dstStride1
-                                + static_cast<int64_t>(i2) * dstStride2;
+                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
+                                  static_cast<int64_t>(i2) * srcStride2;
+                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+                                  static_cast<int64_t>(i2) * dstStride2;
 
                 for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
-                    int currentRows = (rowOff + tileValidRow <= gShape3)
-                                      ? tileValidRow
-                                      : (gShape3 - rowOff);
+                    int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
 
                     if constexpr (isDynamicRow) {
                         stagingTileData.RowMaskInternal = currentRows;
                     }
 
                     for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
-                        int currentCols = (colOff + tileValidCol <= gShape4)
-                                          ? tileValidCol
-                                          : (gShape4 - colOff);
+                        int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
 
                         if constexpr (isDynamicCol) {
                             stagingTileData.ColMaskInternal = currentCols;
                         }
 
-                        int64_t srcOffset = srcBase
-                                          + static_cast<int64_t>(rowOff) * srcStride3
-                                          + static_cast<int64_t>(colOff) * srcStride4;
-                        int64_t dstOffset = dstBase
-                                          + static_cast<int64_t>(rowOff) * dstStride3
-                                          + static_cast<int64_t>(colOff) * dstStride4;
+                        int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+                                            static_cast<int64_t>(colOff) * srcStride4;
+                        int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+                                            static_cast<int64_t>(colOff) * dstStride4;
 
                         DynShape chunkShape(1, 1, 1, currentRows, currentCols);
 
                         // TLOAD source chunk into UB
-                        SrcViewT srcView(srcGlobalData.data() + srcOffset,
-                                         chunkShape, srcChunkStride);
+                        SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
                         TLOAD(stagingTileData, srcView);
                         set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
                         wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
@@ -191,8 +181,7 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
                         // TSTORE to all ranks
                         // MTE3 guarantees in-order execution, so no inter-TSTORE sync needed.
                         for (int r = 0; r < nranks; ++r) {
-                            DstViewT dstView(parallelGroup[r].data() + dstOffset,
-                                             chunkShape, dstChunkStride);
+                            DstViewT dstView(parallelGroup[r].data() + dstOffset, chunkShape, dstChunkStride);
                             TSTORE(dstView, stagingTileData);
                         }
 
@@ -222,18 +211,17 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
-PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
-                                  TileData &pingTile, TileData &pongTile)
+PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+                                  TileData &pongTile)
 {
     using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
     using T = typename GlobalSrcData::RawDType;
 
     static_assert(std::is_same_v<T, typename TileData::DType>,
-        "TBROADCAST: TileData element type must match GlobalData element type");
+                  "TBROADCAST: TileData element type must match GlobalData element type");
     static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>,
-        "TBROADCAST: ParallelGroup element type must match source element type");
-    static_assert(GlobalSrcData::layout == GlobalDstData::layout,
-        "TBROADCAST: src/dst layout mismatch");
+                  "TBROADCAST: ParallelGroup element type must match source element type");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TBROADCAST: src/dst layout mismatch");
 
     const int nranks = parallelGroup.GetSize();
     const int rootIdx = parallelGroup.GetRootIdx();
@@ -288,13 +276,13 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
 
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(gShape3 % tileValidRow == 0,
-            "TBROADCAST chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
-            "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
+                   "TBROADCAST chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(gShape4 % tileValidCol == 0,
-            "TBROADCAST chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
-            "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+                   "TBROADCAST chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
     const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
@@ -326,39 +314,34 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     for (int i0 = 0; i0 < gShape0; ++i0) {
         for (int i1 = 0; i1 < gShape1; ++i1) {
             for (int i2 = 0; i2 < gShape2; ++i2) {
-                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0
-                                + static_cast<int64_t>(i1) * srcStride1
-                                + static_cast<int64_t>(i2) * srcStride2;
-                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0
-                                + static_cast<int64_t>(i1) * dstStride1
-                                + static_cast<int64_t>(i2) * dstStride2;
+                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
+                                  static_cast<int64_t>(i2) * srcStride2;
+                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+                                  static_cast<int64_t>(i2) * dstStride2;
 
                 for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
-                    int currentRows = (rowOff + tileValidRow <= gShape3)
-                                      ? tileValidRow : (gShape3 - rowOff);
+                    int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
 
                     for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
-                        int currentCols = (colOff + tileValidCol <= gShape4)
-                                          ? tileValidCol : (gShape4 - colOff);
+                        int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
 
-                        int64_t srcOffset = srcBase
-                                          + static_cast<int64_t>(rowOff) * srcStride3
-                                          + static_cast<int64_t>(colOff) * srcStride4;
-                        int64_t dstOffset = dstBase
-                                          + static_cast<int64_t>(rowOff) * dstStride3
-                                          + static_cast<int64_t>(colOff) * dstStride4;
+                        int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+                                            static_cast<int64_t>(colOff) * srcStride4;
+                        int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+                                            static_cast<int64_t>(colOff) * dstStride4;
 
                         // Select load tile for this iteration
                         TileData &loadTile = usePing ? pingTile : pongTile;
                         event_t curEvent = usePing ? EVENT_ID0 : EVENT_ID1;
 
                         // Configure masks on the load tile
-                        if constexpr (isDynamicRow) loadTile.RowMaskInternal = currentRows;
-                        if constexpr (isDynamicCol) loadTile.ColMaskInternal = currentCols;
+                        if constexpr (isDynamicRow)
+                            loadTile.RowMaskInternal = currentRows;
+                        if constexpr (isDynamicCol)
+                            loadTile.ColMaskInternal = currentCols;
 
                         DynShape chunkShape(1, 1, 1, currentRows, currentCols);
-                        SrcViewT srcView(srcGlobalData.data() + srcOffset,
-                                         chunkShape, srcChunkStride);
+                        SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
 
                         if (hasPending) {
                             // The other tile holds data from the previous TLOAD
@@ -374,14 +357,13 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
                             // Issue N TSTOREs + TLOAD concurrently (MTE3 and MTE2 in parallel).
                             // MTE3 guarantees in-order execution, so no inter-TSTORE sync needed.
                             for (int r = 0; r < nranks; ++r) {
-                                DstViewT dstView(parallelGroup[r].data() + pendingDstOffset,
-                                                 pendShape, dstChunkStride);
+                                DstViewT dstView(parallelGroup[r].data() + pendingDstOffset, pendShape, dstChunkStride);
                                 TSTORE(dstView, storeTile);
                             }
                             TLOAD(loadTile, srcView);
 
-                            set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);  // all stores done
-                            set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);   // load done
+                            set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent); // all stores done
+                            set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);  // load done
 
                             // Ensure storeTile UB is safe before it can be overwritten
                             wait_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
@@ -415,8 +397,7 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
         // MTE3 guarantees that consecutive TSTOREs on the same pipe are executed
         // in order, so no additional inter-TSTORE synchronization is needed here.
         for (int r = 0; r < nranks; ++r) {
-            DstViewT dstView(parallelGroup[r].data() + pendingDstOffset,
-                             lastShape, dstChunkStride);
+            DstViewT dstView(parallelGroup[r].data() + pendingDstOffset, lastShape, dstChunkStride);
             TSTORE(dstView, lastTile);
         }
 

@@ -90,8 +90,8 @@ __global__ AICORE void TTestFalseKernel(__gm__ int32_t *shmem_signal, __gm__ int
 // Tests GE (>=), GT (>), LE (<=), LT (<), NE (!=) operators
 // ============================================================================
 template <pto::comm::WaitCmp cmp>
-__global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result, 
-                                           int32_t signalValue, int32_t cmpValue)
+__global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *result, int32_t signalValue,
+                                          int32_t cmpValue)
 {
     int my_rank = shmem_my_pe();
 
@@ -122,8 +122,8 @@ __global__ AICORE void TTestCompareKernel(__gm__ int32_t *shmem_signal, __gm__ i
 // Demonstrates polling pattern: check, do work, check again
 // ============================================================================
 __global__ AICORE void TTestPollingTimeoutKernel(__gm__ int32_t *shmem_signal, __gm__ int32_t *poll_count,
-                                                  __gm__ int32_t *final_result, int32_t delay_iters,
-                                                  int32_t max_polls, bool send_signal)
+                                                 __gm__ int32_t *final_result, int32_t delay_iters, int32_t max_polls,
+                                                 bool send_signal)
 {
     int my_rank = shmem_my_pe();
 
@@ -240,7 +240,8 @@ __global__ AICORE void TTestSubRegionKernel(__gm__ int32_t *shmem_matrix, __gm__
 bool RunTTestTrueKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8790", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8790", 8ULL * 1024 * 1024))
+        return false;
 
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
     int32_t *result = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -268,7 +269,8 @@ bool RunTTestTrueKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         aclrtMemcpy(&testResult, sizeof(int32_t), result, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
 
         if (testResult != 1) {
-            std::cerr << "TTest True test failed! TTEST(EQ, 42) should return true (1), Got: " << testResult << std::endl;
+            std::cerr << "TTest True test failed! TTEST(EQ, 42) should return true (1), Got: " << testResult
+                      << std::endl;
             is_ok = false;
         } else {
             std::cout << "Rank 1: TTEST(EQ, 42) returned " << testResult << " (expected 1/true)" << std::endl;
@@ -284,7 +286,8 @@ bool RunTTestTrueKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 bool RunTTestFalseKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8791", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8791", 8ULL * 1024 * 1024))
+        return false;
 
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
     int32_t *result = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -296,7 +299,7 @@ bool RunTTestFalseKernel(int rank_id, int n_ranks, int n_devices, int first_devi
 
     int32_t zero = 0;
     aclrtMemcpy(shmem_signal, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
-    int32_t one = 1;  // Initialize to 1 so we can detect if TTEST correctly returns 0
+    int32_t one = 1; // Initialize to 1 so we can detect if TTEST correctly returns 0
     aclrtMemcpy(result, sizeof(int32_t), &one, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
     ShmemBarrierAll();
@@ -313,10 +316,12 @@ bool RunTTestFalseKernel(int rank_id, int n_ranks, int n_devices, int first_devi
         aclrtMemcpy(&testResult, sizeof(int32_t), result, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
 
         if (testResult != 0) {
-            std::cerr << "TTest False test failed! TTEST(EQ, 100) when signal=42 should return false (0), Got: " << testResult << std::endl;
+            std::cerr << "TTest False test failed! TTEST(EQ, 100) when signal=42 should return false (0), Got: "
+                      << testResult << std::endl;
             is_ok = false;
         } else {
-            std::cout << "Rank 1: TTEST(EQ, 100) when signal=42 returned " << testResult << " (expected 0/false)" << std::endl;
+            std::cout << "Rank 1: TTEST(EQ, 100) when signal=42 returned " << testResult << " (expected 0/false)"
+                      << std::endl;
         }
     }
 
@@ -327,14 +332,15 @@ bool RunTTestFalseKernel(int rank_id, int n_ranks, int n_devices, int first_devi
 }
 
 template <pto::comm::WaitCmp cmp>
-bool RunTTestCompareKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                            int32_t signalValue, int32_t cmpValue, bool expectedResult)
+bool RunTTestCompareKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int32_t signalValue,
+                           int32_t cmpValue, bool expectedResult)
 {
     char ipPort[64];
     snprintf(ipPort, sizeof(ipPort), "tcp://127.0.0.1:%d", 8792 + static_cast<int>(cmp));
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, ipPort, 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, ipPort, 8ULL * 1024 * 1024))
+        return false;
 
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
     int32_t *result = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -363,13 +369,12 @@ bool RunTTestCompareKernel(int rank_id, int n_ranks, int n_devices, int first_de
 
         int32_t expectedInt = expectedResult ? 1 : 0;
         if (testResult != expectedInt) {
-            std::cerr << "TTest Compare test failed! signal=" << signalValue 
-                      << ", cmpValue=" << cmpValue << ", expected " << expectedInt 
-                      << ", Got: " << testResult << std::endl;
+            std::cerr << "TTest Compare test failed! signal=" << signalValue << ", cmpValue=" << cmpValue
+                      << ", expected " << expectedInt << ", Got: " << testResult << std::endl;
             is_ok = false;
         } else {
-            std::cout << "Rank 1: TTEST compare (signal=" << signalValue << ", cmpValue=" << cmpValue 
-                      << ") returned " << testResult << " (expected " << expectedInt << ")" << std::endl;
+            std::cout << "Rank 1: TTEST compare (signal=" << signalValue << ", cmpValue=" << cmpValue << ") returned "
+                      << testResult << " (expected " << expectedInt << ")" << std::endl;
         }
     }
 
@@ -379,11 +384,12 @@ bool RunTTestCompareKernel(int rank_id, int n_ranks, int n_devices, int first_de
     return ctx.Finalize() && is_ok;
 }
 
-bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                                  int32_t delay_iters, int32_t max_polls, bool expected_found, bool send_signal)
+bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int32_t delay_iters,
+                                  int32_t max_polls, bool expected_found, bool send_signal)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8800", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8800", 8ULL * 1024 * 1024))
+        return false;
 
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
     int32_t *poll_count = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -401,8 +407,8 @@ bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int f
 
     ShmemBarrierAll();
 
-    TTestPollingTimeoutKernel<<<1, nullptr, ctx.stream>>>(shmem_signal, poll_count, final_result,
-                                                      delay_iters, max_polls, send_signal);
+    TTestPollingTimeoutKernel<<<1, nullptr, ctx.stream>>>(shmem_signal, poll_count, final_result, delay_iters,
+                                                          max_polls, send_signal);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -417,8 +423,7 @@ bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int f
 
         const int32_t expected = expected_found ? 1 : 0;
         if (found != expected) {
-            std::cerr << "TTest Polling Timeout test failed! expected=" << expected
-                      << ", found=" << found << std::endl;
+            std::cerr << "TTest Polling Timeout test failed! expected=" << expected << ", found=" << found << std::endl;
             is_ok = false;
         } else if (count < 0 || count > max_polls) {
             std::cerr << "TTest Polling Timeout test failed! Poll count out of range: " << count << std::endl;
@@ -440,7 +445,8 @@ bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int f
 bool RunTTestNEKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8801", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8801", 8ULL * 1024 * 1024))
+        return false;
 
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
     int32_t *result = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -468,10 +474,12 @@ bool RunTTestNEKernel(int rank_id, int n_ranks, int n_devices, int first_device_
         aclrtMemcpy(&testResult, sizeof(int32_t), result, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
 
         if (testResult != 1) {
-            std::cerr << "TTest NE test failed! TTEST(NE, 0) when signal=50 should return true (1), Got: " << testResult << std::endl;
+            std::cerr << "TTest NE test failed! TTEST(NE, 0) when signal=50 should return true (1), Got: " << testResult
+                      << std::endl;
             is_ok = false;
         } else {
-            std::cout << "Rank 1: TTEST(NE, 0) when signal=50 returned " << testResult << " (expected 1/true)" << std::endl;
+            std::cout << "Rank 1: TTEST(NE, 0) when signal=50 returned " << testResult << " (expected 1/true)"
+                      << std::endl;
         }
     }
 
@@ -485,7 +493,8 @@ template <int FullCols, int SubRows, int SubCols>
 bool RunTTestSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8802", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8802", 8ULL * 1024 * 1024))
+        return false;
 
     constexpr int FullRows = 8;
     int32_t *shmem_matrix = (int32_t *)ShmemMalloc(FullRows * FullCols * sizeof(int32_t));
@@ -498,8 +507,8 @@ bool RunTTestSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
 
     // Zero-initialize matrix and result
     std::vector<int32_t> zeros(FullRows * FullCols, 0);
-    aclrtMemcpy(shmem_matrix, FullRows * FullCols * sizeof(int32_t),
-                zeros.data(), FullRows * FullCols * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(shmem_matrix, FullRows * FullCols * sizeof(int32_t), zeros.data(),
+                FullRows * FullCols * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
     int32_t zero = 0;
     aclrtMemcpy(result, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
@@ -517,8 +526,8 @@ bool RunTTestSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
         aclrtMemcpy(&testResult, sizeof(int32_t), result, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
 
         if (testResult != 1) {
-            std::cerr << "TTest SubRegion test failed! TTEST on sub-region should return true (1), Got: "
-                      << testResult << std::endl;
+            std::cerr << "TTest SubRegion test failed! TTEST on sub-region should return true (1), Got: " << testResult
+                      << std::endl;
             is_ok = false;
         } else {
             std::cout << "Rank 1: TTEST sub-region returned " << testResult << " (expected 1/true)" << std::endl;
@@ -537,78 +546,73 @@ bool RunTTestSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
 
 bool RunTTestTrue(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunTTestTrueKernel(rankId, n_ranks, n_devices, first_device_id);
-    });
+    return ForkAndRun(n_ranks, first_rank_id,
+                      [&](int rankId) { return RunTTestTrueKernel(rankId, n_ranks, n_devices, first_device_id); });
 }
 
 bool RunTTestFalse(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunTTestFalseKernel(rankId, n_ranks, n_devices, first_device_id);
-    });
+    return ForkAndRun(n_ranks, first_rank_id,
+                      [&](int rankId) { return RunTTestFalseKernel(rankId, n_ranks, n_devices, first_device_id); });
 }
 
 template <pto::comm::WaitCmp cmp>
-bool RunTTestCompare(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                     int32_t signalValue, int32_t cmpValue, bool expectedResult)
+bool RunTTestCompare(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t signalValue,
+                     int32_t cmpValue, bool expectedResult)
 {
     return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunTTestCompareKernel<cmp>(rankId, n_ranks, n_devices, first_device_id,
-                                          signalValue, cmpValue, expectedResult);
+        return RunTTestCompareKernel<cmp>(rankId, n_ranks, n_devices, first_device_id, signalValue, cmpValue,
+                                          expectedResult);
     });
 }
 
 bool RunTTestPollingTimeout(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunTTestPollingTimeoutKernel(rankId, n_ranks, n_devices, first_device_id,
-                                            50000, 200000, true, true);
+        return RunTTestPollingTimeoutKernel(rankId, n_ranks, n_devices, first_device_id, 50000, 200000, true, true);
     });
 }
 
 bool RunTTestPollingTimeoutMiss(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunTTestPollingTimeoutKernel(rankId, n_ranks, n_devices, first_device_id,
-                                            0, 50000, false, false);
+        return RunTTestPollingTimeoutKernel(rankId, n_ranks, n_devices, first_device_id, 0, 50000, false, false);
     });
 }
 
 bool RunTTestNE(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunTTestNEKernel(rankId, n_ranks, n_devices, first_device_id);
-    });
+    return ForkAndRun(n_ranks, first_rank_id,
+                      [&](int rankId) { return RunTTestNEKernel(rankId, n_ranks, n_devices, first_device_id); });
 }
 
 // Non-template wrapper functions for host-side linkage (avoid including comm_types.hpp in main.cpp)
-bool RunTTestCompare_GE(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                        int32_t signalValue, int32_t cmpValue, bool expectedResult)
+bool RunTTestCompare_GE(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t signalValue,
+                        int32_t cmpValue, bool expectedResult)
 {
-    return RunTTestCompare<pto::comm::WaitCmp::GE>(n_ranks, n_devices, first_rank_id, first_device_id,
-                                                    signalValue, cmpValue, expectedResult);
+    return RunTTestCompare<pto::comm::WaitCmp::GE>(n_ranks, n_devices, first_rank_id, first_device_id, signalValue,
+                                                   cmpValue, expectedResult);
 }
 
-bool RunTTestCompare_GT(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                        int32_t signalValue, int32_t cmpValue, bool expectedResult)
+bool RunTTestCompare_GT(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t signalValue,
+                        int32_t cmpValue, bool expectedResult)
 {
-    return RunTTestCompare<pto::comm::WaitCmp::GT>(n_ranks, n_devices, first_rank_id, first_device_id,
-                                                    signalValue, cmpValue, expectedResult);
+    return RunTTestCompare<pto::comm::WaitCmp::GT>(n_ranks, n_devices, first_rank_id, first_device_id, signalValue,
+                                                   cmpValue, expectedResult);
 }
 
-bool RunTTestCompare_LE(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                        int32_t signalValue, int32_t cmpValue, bool expectedResult)
+bool RunTTestCompare_LE(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t signalValue,
+                        int32_t cmpValue, bool expectedResult)
 {
-    return RunTTestCompare<pto::comm::WaitCmp::LE>(n_ranks, n_devices, first_rank_id, first_device_id,
-                                                    signalValue, cmpValue, expectedResult);
+    return RunTTestCompare<pto::comm::WaitCmp::LE>(n_ranks, n_devices, first_rank_id, first_device_id, signalValue,
+                                                   cmpValue, expectedResult);
 }
 
-bool RunTTestCompare_LT(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                        int32_t signalValue, int32_t cmpValue, bool expectedResult)
+bool RunTTestCompare_LT(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t signalValue,
+                        int32_t cmpValue, bool expectedResult)
 {
-    return RunTTestCompare<pto::comm::WaitCmp::LT>(n_ranks, n_devices, first_rank_id, first_device_id,
-                                                    signalValue, cmpValue, expectedResult);
+    return RunTTestCompare<pto::comm::WaitCmp::LT>(n_ranks, n_devices, first_rank_id, first_device_id, signalValue,
+                                                   cmpValue, expectedResult);
 }
 
 template <int FullCols, int SubRows, int SubCols>

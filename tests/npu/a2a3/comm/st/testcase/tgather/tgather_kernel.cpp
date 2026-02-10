@@ -57,18 +57,18 @@ __global__ AICORE void TGatherKernelImpl(__gm__ T *dst, __gm__ T *src, int nrank
         __gm__ T *remoteSrc = ShmemPtr(src, i);
         tensors[i] = Global(remoteSrc, srcShape, srcStride);
     }
-    
+
     pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, root);
-    
+
     // Allocate UB tile for staging data
     TileData ubTile(1, count);
     TASSIGN(ubTile, 0x0);
-    
+
     // Only root executes TGATHER
     if (my_rank == root) {
         pto::comm::TGATHER(pg, dstG, ubTile);
     }
-    
+
     ShmemDeviceQuiet();
     ShmemDeviceBarrierAll();
 }
@@ -78,13 +78,14 @@ bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
                      uint64_t /*local_mem_size*/)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8773")) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8773"))
+        return false;
 
     // Allocate symmetric heap memory (all ranks must allocate same sizes for shmem symmetry)
     size_t src_size = count * sizeof(T);
     size_t dst_size = n_ranks * count * sizeof(T);
-    void* src_ptr = ShmemMalloc(src_size);
-    void* dst_ptr = ShmemMalloc(dst_size);
+    void *src_ptr = ShmemMalloc(src_size);
+    void *dst_ptr = ShmemMalloc(dst_size);
 
     if (src_ptr == nullptr || dst_ptr == nullptr) {
         std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
@@ -92,8 +93,8 @@ bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
     }
 
     T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&src_host), src_size);
-    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), dst_size);
+    aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size);
+    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size);
 
     // Initialize source data: each rank has its unique range
     for (size_t i = 0; i < count; ++i) {
@@ -110,7 +111,7 @@ bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
 
     ShmemBarrierAll();
 
-    TGatherKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)dst_ptr, (T*)src_ptr, n_ranks, root);
+    TGatherKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T *)dst_ptr, (T *)src_ptr, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -124,27 +125,30 @@ bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
                 T expected = static_cast<T>(i + r * 10000);
                 T actual = dst_host[r * count + i];
                 if (actual != expected) {
-                    std::cout << "Rank " << rank_id << " validation failed at rank " << r << " index " << i 
+                    std::cout << "Rank " << rank_id << " validation failed at rank " << r << " index " << i
                               << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
                     is_ok = false;
                     break;
                 }
             }
-            if (!is_ok) break;
+            if (!is_ok)
+                break;
         }
 
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
             std::cout << "\n================================================================" << std::endl;
             std::cout << "[DEBUG] Rank " << root << ": TGATHER SUCCESSFUL!" << std::endl;
-            std::cout << "Summary: Gathered " << n_ranks << " segments, each with " << count << " elements." << std::endl;
+            std::cout << "Summary: Gathered " << n_ranks << " segments, each with " << count << " elements."
+                      << std::endl;
             std::cout << "Detailed View (First 5 elements of each rank's contribution):" << std::endl;
             for (int r = 0; r < n_ranks; ++r) {
                 std::cout << "  - Segment from Rank " << r << ": [ ";
                 for (size_t i = 0; i < (count > 5 ? 5 : count); ++i) {
                     std::cout << (float)dst_host[r * count + i] << " ";
                 }
-                if (count > 5) std::cout << "... ";
+                if (count > 5)
+                    std::cout << "... ";
                 std::cout << "]" << std::endl;
             }
             std::cout << "================================================================\n" << std::endl;
@@ -180,7 +184,8 @@ bool RunGatherWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_
 template bool RunGather<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunGather<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunGather<uint8_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunGatherWithRoot<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+template bool RunGatherWithRoot<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                            int root);
 
 // ============================================================================
 // Empty Rows Test Kernel
@@ -228,12 +233,13 @@ bool RunGatherEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
                           uint64_t /*local_mem_size*/)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8773")) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8773"))
+        return false;
 
     size_t src_size = count * sizeof(T);
     size_t dst_size = n_ranks * count * sizeof(T);
-    void* src_ptr = ShmemMalloc(src_size);
-    void* dst_ptr = ShmemMalloc(dst_size);
+    void *src_ptr = ShmemMalloc(src_size);
+    void *dst_ptr = ShmemMalloc(dst_size);
 
     if (src_ptr == nullptr || dst_ptr == nullptr) {
         std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
@@ -241,8 +247,8 @@ bool RunGatherEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
     }
 
     T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&src_host), src_size);
-    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), dst_size);
+    aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size);
+    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size);
 
     for (size_t i = 0; i < count; ++i) {
         src_host[i] = static_cast<T>(i + rank_id * 10000);
@@ -258,7 +264,7 @@ bool RunGatherEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
 
     ShmemBarrierAll();
 
-    TGatherEmptyKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)dst_ptr, (T*)src_ptr, n_ranks, root);
+    TGatherEmptyKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T *)dst_ptr, (T *)src_ptr, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -349,8 +355,8 @@ bool RunGatherLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id,
-                  "tcp://127.0.0.1:8775", 1024ULL * 1024 * 1024, uid)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8775", 1024ULL * 1024 * 1024, uid))
+        return false;
 
     void *src_ptr = ShmemMalloc(total_count * sizeof(T));
     void *dst_ptr = ShmemMalloc(n_ranks * total_count * sizeof(T));
@@ -361,8 +367,8 @@ bool RunGatherLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
     }
 
     T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&src_host), total_count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), n_ranks * total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&src_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), n_ranks * total_count * sizeof(T));
 
     for (size_t i = 0; i < total_count; ++i) {
         src_host[i] = static_cast<T>(i + rank_id * 100);
@@ -372,42 +378,44 @@ bool RunGatherLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
     }
 
     aclrtMemcpy(src_ptr, total_count * sizeof(T), src_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(dst_ptr, n_ranks * total_count * sizeof(T), dst_host, n_ranks * total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(dst_ptr, n_ranks * total_count * sizeof(T), dst_host, n_ranks * total_count * sizeof(T),
+                ACL_MEMCPY_HOST_TO_DEVICE);
 
     ShmemBarrierAll();
 
-    TGatherLargeShapeKernelImpl<T, total_rows, cols, tile_rows><<<1, nullptr, ctx.stream>>>(
-        (T*)dst_ptr, (T*)src_ptr, n_ranks);
+    TGatherLargeShapeKernelImpl<T, total_rows, cols, tile_rows>
+        <<<1, nullptr, ctx.stream>>>((T *)dst_ptr, (T *)src_ptr, n_ranks);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
     bool is_ok = true;
     if (rank_id == 0) {
-        aclrtMemcpy(dst_host, n_ranks * total_count * sizeof(T),
-                     dst_ptr, n_ranks * total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(dst_host, n_ranks * total_count * sizeof(T), dst_ptr, n_ranks * total_count * sizeof(T),
+                    ACL_MEMCPY_DEVICE_TO_HOST);
 
         for (int r = 0; r < n_ranks; ++r) {
             for (size_t i = 0; i < total_count; ++i) {
                 T expected = static_cast<T>(i + r * 100);
                 T actual = dst_host[r * total_count + i];
                 if (actual != expected) {
-                    std::cout << "Rank 0 validation failed: rank " << r
-                              << " index " << i << " (row=" << (i / cols) << ", col=" << (i % cols) << ")"
+                    std::cout << "Rank 0 validation failed: rank " << r << " index " << i << " (row=" << (i / cols)
+                              << ", col=" << (i % cols) << ")"
                               << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
                     is_ok = false;
                     break;
                 }
             }
-            if (!is_ok) break;
+            if (!is_ok)
+                break;
         }
 
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
             std::cout << "\n================================================================" << std::endl;
-            std::cout << "[DEBUG] Rank 0: TGATHER LargeShape SUCCESSFUL! ("
-                      << total_rows << "x" << cols << ", tile=" << tile_rows << "x" << cols
-                      << ", chunks=" << (total_rows / tile_rows) << ", ranks=" << n_ranks << ")" << std::endl;
+            std::cout << "[DEBUG] Rank 0: TGATHER LargeShape SUCCESSFUL! (" << total_rows << "x" << cols
+                      << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows)
+                      << ", ranks=" << n_ranks << ")" << std::endl;
             std::cout << "================================================================\n" << std::endl;
         }
 #endif
@@ -425,8 +433,8 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunGatherLargeShape(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunGatherLargeShapeKernel<T, total_rows, cols, tile_rows>(
-            rankId, n_ranks, n_devices, first_device_id, 0, uid);
+        return RunGatherLargeShapeKernel<T, total_rows, cols, tile_rows>(rankId, n_ranks, n_devices, first_device_id, 0,
+                                                                         uid);
     });
 }
 
@@ -436,13 +444,16 @@ template bool RunGatherLargeShape<float, 256, 64, 32>(int, int, int, int);
 template bool RunGatherLargeShape<int32_t, 512, 32, 64>(int, int, int, int);
 
 // Non-template wrappers
-bool RunGatherLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunGatherLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunGatherLargeShape<int32_t, 128, 32, 16>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
-bool RunGatherLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunGatherLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunGatherLargeShape<float, 256, 64, 32>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
-bool RunGatherLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunGatherLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunGatherLargeShape<int32_t, 512, 32, 64>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
 
@@ -497,14 +508,14 @@ __global__ AICORE void TGatherPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, i
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
-bool RunGatherPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                             uint64_t /*local_mem_size*/, const ShmemUniqueId *uid)
+bool RunGatherPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t /*local_mem_size*/,
+                             const ShmemUniqueId *uid)
 {
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id,
-                  "tcp://127.0.0.1:8775", 1024ULL * 1024 * 1024, uid)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8775", 1024ULL * 1024 * 1024, uid))
+        return false;
 
     void *src_ptr = ShmemMalloc(total_count * sizeof(T));
     void *dst_ptr = ShmemMalloc(n_ranks * total_count * sizeof(T));
@@ -515,8 +526,8 @@ bool RunGatherPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
     }
 
     T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&src_host), total_count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), n_ranks * total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&src_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), n_ranks * total_count * sizeof(T));
 
     for (size_t i = 0; i < total_count; ++i) {
         src_host[i] = static_cast<T>(i + rank_id * 100);
@@ -526,42 +537,44 @@ bool RunGatherPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
     }
 
     aclrtMemcpy(src_ptr, total_count * sizeof(T), src_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(dst_ptr, n_ranks * total_count * sizeof(T), dst_host, n_ranks * total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(dst_ptr, n_ranks * total_count * sizeof(T), dst_host, n_ranks * total_count * sizeof(T),
+                ACL_MEMCPY_HOST_TO_DEVICE);
 
     ShmemBarrierAll();
 
-    TGatherPingPongKernelImpl<T, total_rows, cols, tile_rows><<<1, nullptr, ctx.stream>>>(
-        (T*)dst_ptr, (T*)src_ptr, n_ranks);
+    TGatherPingPongKernelImpl<T, total_rows, cols, tile_rows>
+        <<<1, nullptr, ctx.stream>>>((T *)dst_ptr, (T *)src_ptr, n_ranks);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
     bool is_ok = true;
     if (rank_id == 0) {
-        aclrtMemcpy(dst_host, n_ranks * total_count * sizeof(T),
-                     dst_ptr, n_ranks * total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(dst_host, n_ranks * total_count * sizeof(T), dst_ptr, n_ranks * total_count * sizeof(T),
+                    ACL_MEMCPY_DEVICE_TO_HOST);
 
         for (int r = 0; r < n_ranks; ++r) {
             for (size_t i = 0; i < total_count; ++i) {
                 T expected = static_cast<T>(i + r * 100);
                 T actual = dst_host[r * total_count + i];
                 if (actual != expected) {
-                    std::cout << "Rank 0 validation failed: rank " << r
-                              << " index " << i << " (row=" << (i / cols) << ", col=" << (i % cols) << ")"
+                    std::cout << "Rank 0 validation failed: rank " << r << " index " << i << " (row=" << (i / cols)
+                              << ", col=" << (i % cols) << ")"
                               << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
                     is_ok = false;
                     break;
                 }
             }
-            if (!is_ok) break;
+            if (!is_ok)
+                break;
         }
 
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
             std::cout << "\n================================================================" << std::endl;
-            std::cout << "[DEBUG] Rank 0: TGATHER PingPong SUCCESSFUL! ("
-                      << total_rows << "x" << cols << ", tile=" << tile_rows << "x" << cols
-                      << ", chunks=" << (total_rows / tile_rows) << ", ranks=" << n_ranks << ")" << std::endl;
+            std::cout << "[DEBUG] Rank 0: TGATHER PingPong SUCCESSFUL! (" << total_rows << "x" << cols
+                      << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows)
+                      << ", ranks=" << n_ranks << ")" << std::endl;
             std::cout << "================================================================\n" << std::endl;
         }
 #endif
@@ -579,8 +592,8 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunGatherPingPong(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunGatherPingPongKernel<T, total_rows, cols, tile_rows>(
-            rankId, n_ranks, n_devices, first_device_id, 0, uid);
+        return RunGatherPingPongKernel<T, total_rows, cols, tile_rows>(rankId, n_ranks, n_devices, first_device_id, 0,
+                                                                       uid);
     });
 }
 
@@ -589,9 +602,11 @@ template bool RunGatherPingPong<int32_t, 128, 32, 16>(int, int, int, int);
 template bool RunGatherPingPong<float, 256, 64, 32>(int, int, int, int);
 
 // Non-template wrappers
-bool RunGatherPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunGatherPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunGatherPingPong<int32_t, 128, 32, 16>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
-bool RunGatherPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunGatherPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunGatherPingPong<float, 256, 64, 32>(n_ranks, n_devices, first_rank_id, first_device_id);
 }

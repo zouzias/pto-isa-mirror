@@ -29,7 +29,7 @@ PTO_INTERNAL void DcciSignal(__gm__ int32_t *ptr)
 
 // ============================================================================
 // TNOTIFY_IMPL: Send flag notification to remote NPU
-// 
+//
 // Signal type must be int32_t.
 // dstSignalData should be 4-byte aligned.
 // ============================================================================
@@ -37,8 +37,7 @@ PTO_INTERNAL void DcciSignal(__gm__ int32_t *ptr)
 template <typename GlobalSignalData>
 PTO_INTERNAL void TNOTIFY_IMPL(GlobalSignalData &dstSignalData, int32_t value, NotifyOp op)
 {
-    static_assert(std::is_same_v<typename GlobalSignalData::RawDType, int32_t>,
-        "TNOTIFY: signal type must be int32_t");
+    static_assert(std::is_same_v<typename GlobalSignalData::RawDType, int32_t>, "TNOTIFY: signal type must be int32_t");
 
     volatile __gm__ int32_t *sigPtr = (volatile __gm__ int32_t *)dstSignalData.data();
 
@@ -57,7 +56,7 @@ PTO_INTERNAL void TNOTIFY_IMPL(GlobalSignalData &dstSignalData, int32_t value, N
         detail::DcciSignal((__gm__ int32_t *)sigPtr);
         dsb(DSB_DDR);
     }
-    
+
     pipe_barrier(PIPE_ALL);
 }
 

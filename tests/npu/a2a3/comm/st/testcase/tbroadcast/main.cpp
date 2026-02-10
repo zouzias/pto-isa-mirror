@@ -17,25 +17,33 @@ template <typename T, size_t count>
 bool RunBroadCast(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
 
 // Declared in tbroadcast_kernel.cpp — large shape chunked tests
-bool RunBroadCastLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-bool RunBroadCastLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-bool RunBroadCastLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+bool RunBroadCastLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                                int root);
+bool RunBroadCastLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                                int root);
+bool RunBroadCastLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                                int root);
 
 // Declared in tbroadcast_kernel.cpp — ping-pong tests
-bool RunBroadCastPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-bool RunBroadCastPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+bool RunBroadCastPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                              int root);
+bool RunBroadCastPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                              int root);
 
 // ============================================================================
 // TBROADCAST Tests - Basic (data fits in single UB Tile)
 // ============================================================================
-TEST(TBroadCast, FloatSmallRoot0) {
+TEST(TBroadCast, FloatSmallRoot0)
+{
     EXPECT_TRUE((RunBroadCast<float, 256>(4, 4, 0, 0, 0)));
 }
 
-TEST(TBroadCast, Int32LargeRoot1) {
+TEST(TBroadCast, Int32LargeRoot1)
+{
     EXPECT_TRUE((RunBroadCast<int32_t, 4096>(2, 2, 0, 0, 1)));
 }
-TEST(TBroadCast, SingleRank) {
+TEST(TBroadCast, SingleRank)
+{
     EXPECT_TRUE((RunBroadCast<float, 256>(1, 1, 0, 0, 0)));
 }
 
@@ -43,27 +51,33 @@ TEST(TBroadCast, SingleRank) {
 // TBROADCAST Tests - Large Shape Chunked (GlobalTensor > UB Tile, auto-chunked)
 // ============================================================================
 // int32: 128x32, tile 16 rows → 8 chunks, root=0, 2 ranks
-TEST(TBroadCast, LargeShape_Int32_128x32_tile16_Root0) {
+TEST(TBroadCast, LargeShape_Int32_128x32_tile16_Root0)
+{
     ASSERT_TRUE((RunBroadCastLargeShape_Int32_128x32_tile16(2, 2, 0, 0, 0)));
 }
 // int32: 128x32, tile 16 rows → 8 chunks, root=0, 4 ranks
-TEST(TBroadCast, LargeShape_Int32_128x32_tile16_Root0_4Ranks) {
+TEST(TBroadCast, LargeShape_Int32_128x32_tile16_Root0_4Ranks)
+{
     ASSERT_TRUE((RunBroadCastLargeShape_Int32_128x32_tile16(4, 4, 0, 0, 0)));
 }
 // float: 256x64, tile 32 rows → 8 chunks, root=0, 2 ranks
-TEST(TBroadCast, LargeShape_Float_256x64_tile32_Root0) {
+TEST(TBroadCast, LargeShape_Float_256x64_tile32_Root0)
+{
     ASSERT_TRUE((RunBroadCastLargeShape_Float_256x64_tile32(2, 2, 0, 0, 0)));
 }
 // int32: 512x32, tile 64 rows → 8 chunks, root=0, 2 ranks (larger data)
-TEST(TBroadCast, LargeShape_Int32_512x32_tile64_Root0) {
+TEST(TBroadCast, LargeShape_Int32_512x32_tile64_Root0)
+{
     ASSERT_TRUE((RunBroadCastLargeShape_Int32_512x32_tile64(2, 2, 0, 0, 0)));
 }
 // int32: 512x32, tile 64 rows → 8 chunks, root=0, 8 ranks
-TEST(TBroadCast, LargeShape_Int32_512x32_tile64_Root0_8Ranks) {
+TEST(TBroadCast, LargeShape_Int32_512x32_tile64_Root0_8Ranks)
+{
     ASSERT_TRUE((RunBroadCastLargeShape_Int32_512x32_tile64(8, 8, 0, 0, 0)));
 }
 // int32: 128x32, tile 16 rows → 8 chunks, root=1, 2 ranks (non-zero root)
-TEST(TBroadCast, LargeShape_Int32_128x32_tile16_Root1) {
+TEST(TBroadCast, LargeShape_Int32_128x32_tile16_Root1)
+{
     ASSERT_TRUE((RunBroadCastLargeShape_Int32_128x32_tile16(2, 2, 0, 0, 1)));
 }
 
@@ -71,23 +85,28 @@ TEST(TBroadCast, LargeShape_Int32_128x32_tile16_Root1) {
 // TBROADCAST Tests - Ping-Pong Double Buffering (2 UB Tiles: ping + pong)
 // ============================================================================
 // int32: 128x32, tile 16 rows → 8 chunks, root=0, 2 ranks
-TEST(TBroadCast, PingPong_Int32_128x32_tile16_Root0) {
+TEST(TBroadCast, PingPong_Int32_128x32_tile16_Root0)
+{
     ASSERT_TRUE((RunBroadCastPingPong_Int32_128x32_tile16(2, 2, 0, 0, 0)));
 }
 // int32: 128x32, tile 16 rows → 8 chunks, root=0, 4 ranks
-TEST(TBroadCast, PingPong_Int32_128x32_tile16_Root0_4Ranks) {
+TEST(TBroadCast, PingPong_Int32_128x32_tile16_Root0_4Ranks)
+{
     ASSERT_TRUE((RunBroadCastPingPong_Int32_128x32_tile16(4, 4, 0, 0, 0)));
 }
 // float: 256x64, tile 32 rows → 8 chunks, root=0, 2 ranks
-TEST(TBroadCast, PingPong_Float_256x64_tile32_Root0) {
+TEST(TBroadCast, PingPong_Float_256x64_tile32_Root0)
+{
     ASSERT_TRUE((RunBroadCastPingPong_Float_256x64_tile32(2, 2, 0, 0, 0)));
 }
 // int32: 128x32, tile 16 rows → 8 chunks, root=1, 2 ranks (non-zero root)
-TEST(TBroadCast, PingPong_Int32_128x32_tile16_Root1) {
+TEST(TBroadCast, PingPong_Int32_128x32_tile16_Root1)
+{
     ASSERT_TRUE((RunBroadCastPingPong_Int32_128x32_tile16(2, 2, 0, 0, 1)));
 }
 // float: 256x64, tile 32 rows → 8 chunks, root=0, 8 ranks
-TEST(TBroadCast, PingPong_Float_256x64_tile32_Root0_8Ranks) {
+TEST(TBroadCast, PingPong_Float_256x64_tile32_Root0_8Ranks)
+{
     ASSERT_TRUE((RunBroadCastPingPong_Float_256x64_tile32(8, 8, 0, 0, 0)));
 }
 

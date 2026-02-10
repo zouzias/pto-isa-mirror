@@ -14,17 +14,19 @@
 #if defined(CANN_SHMEM)
 using ShmemUniqueId = aclshmemx_uniqueid_t;
 #else
-struct ShmemUniqueId { uint8_t _unused[1]; };
+struct ShmemUniqueId {
+    uint8_t _unused[1];
+};
 #endif
 
 // ============================================================================
 // ShmemEnv: Environment configuration for shmem initialization
 // ============================================================================
 struct ShmemEnv {
-    int rank {0};
-    int size {1};
-    const char *ipPort {nullptr};
-    uint64_t heapBytes {512ULL * 1024 * 1024};  // Default 512MB symmetric heap
+    int rank{0};
+    int size{1};
+    const char *ipPort{nullptr};
+    uint64_t heapBytes{512ULL * 1024 * 1024}; // Default 512MB symmetric heap
 };
 
 // ============================================================================
@@ -34,7 +36,7 @@ inline bool LoadEnv(ShmemEnv &env)
 {
     const char *rankEnv = std::getenv("SHMEM_RANK");
     const char *sizeEnv = std::getenv("SHMEM_SIZE");
-    const char *ipEnv   = std::getenv("SHMEM_IP_PORT");
+    const char *ipEnv = std::getenv("SHMEM_IP_PORT");
     const char *heapEnv = std::getenv("SHMEM_HEAP_BYTES");
 
     if (rankEnv == nullptr || sizeEnv == nullptr || ipEnv == nullptr) {
@@ -57,11 +59,11 @@ inline bool LoadEnv(ShmemEnv &env)
 inline int ShmemInit(const ShmemEnv &env)
 {
     aclshmemx_init_attr_t attributes;
-    
+
     attributes.my_pe = env.rank;
     attributes.n_pes = env.size;
     attributes.local_mem_size = env.heapBytes;
-    
+
     // Copy IP:port string
     size_t ipLen = 0;
     if (env.ipPort != nullptr) {
@@ -70,17 +72,16 @@ inline int ShmemInit(const ShmemEnv &env)
         }
     }
     attributes.ip_port[ipLen] = '\0';
-    
+
     // Set option attributes
     constexpr int attrVersion = (1 << 16) + sizeof(aclshmemx_init_attr_t);
-    constexpr int DEFAULT_TIMEOUT = 120;  // seconds
-    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE, 
-                              DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
-    
+    constexpr int DEFAULT_TIMEOUT = 120; // seconds
+    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
+
     // Use default unique ID
     aclshmemx_uniqueid_t defaultUid = ACLSHMEM_UNIQUEID_INITIALIZER;
     attributes.comm_args = reinterpret_cast<void *>(&defaultUid);
-    
+
     int initRet = aclshmemx_init_attr(ACLSHMEMX_INIT_WITH_DEFAULT, &attributes);
     if (initRet != 0) {
         std::cerr << "[ERROR] aclshmemx_init_attr failed with code: " << initRet << std::endl;
@@ -121,9 +122,8 @@ inline bool ShmemInitFromEnvWithUniqueId(ShmemEnv &env, const ShmemUniqueId *uid
     attributes.ip_port[ipLen] = '\0';
 
     constexpr int attrVersion = (1 << 16) + sizeof(aclshmemx_init_attr_t);
-    constexpr int DEFAULT_TIMEOUT = 120;  // seconds
-    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE,
-                              DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
+    constexpr int DEFAULT_TIMEOUT = 120; // seconds
+    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
 
     attributes.comm_args = reinterpret_cast<void *>(const_cast<ShmemUniqueId *>(uid));
     int initRet = aclshmemx_init_attr(ACLSHMEMX_INIT_WITH_DEFAULT, &attributes);
@@ -148,7 +148,7 @@ inline void ShmemFinalize()
 // ============================================================================
 // ShmemMalloc: Allocate symmetric heap memory
 // ============================================================================
-inline void* ShmemMalloc(size_t bytes)
+inline void *ShmemMalloc(size_t bytes)
 {
     return shmem_malloc(bytes);
 }
@@ -218,7 +218,7 @@ inline int ShmemSetConfStoreTls(bool enable, const char *tlsInfo, uint32_t tlsIn
 // Returns: Mapped address for accessing memory on remote PE
 // ============================================================================
 template <typename T>
-AICORE inline __gm__ T* ShmemPtr(__gm__ T *localPtr, int pe)
+AICORE inline __gm__ T *ShmemPtr(__gm__ T *localPtr, int pe)
 {
     return (__gm__ T *)aclshmem_ptr(localPtr, pe);
 }
@@ -255,15 +255,14 @@ AICORE inline void ShmemDeviceQuiet()
 //   return ctx.Finalize() && is_ok;
 // ============================================================================
 struct TestContext {
-    int32_t deviceId {-1};
-    aclrtStream stream {nullptr};
-    int aclStatus {0};
+    int32_t deviceId{-1};
+    aclrtStream stream{nullptr};
+    int aclStatus{0};
 
     /// Initialize ACL runtime + shmem symmetric heap.
     /// @param uid  Optional ShmemUniqueId pointer (nullptr = use default).
-    bool Init(int rankId, int nRanks, int nDevices, int firstDeviceId,
-              const char *ipPort, uint64_t heapBytes = 1024ULL * 1024 * 1024,
-              const ShmemUniqueId *uid = nullptr)
+    bool Init(int rankId, int nRanks, int nDevices, int firstDeviceId, const char *ipPort,
+              uint64_t heapBytes = 1024ULL * 1024 * 1024, const ShmemUniqueId *uid = nullptr)
     {
         int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
         if (ret != 0) {
@@ -286,9 +285,7 @@ struct TestContext {
         env.ipPort = ipPort;
         env.heapBytes = heapBytes;
 
-        bool shmemOk = (uid != nullptr)
-            ? ShmemInitFromEnvWithUniqueId(env, uid)
-            : ShmemInitFromEnv(env);
+        bool shmemOk = (uid != nullptr) ? ShmemInitFromEnvWithUniqueId(env, uid) : ShmemInitFromEnv(env);
         if (!shmemOk) {
             std::cerr << "[ERROR] ShmemInit failed!" << std::endl;
             return false;

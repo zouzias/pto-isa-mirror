@@ -35,24 +35,36 @@ bool RunNotifyRuntimeOp(int n_ranks, int n_devices, int first_rank_id, int first
 // All ranks perform atomic add 1 to rank 0's counter
 // Expected result: counter = n_ranks
 // ============================================================================
-TEST(TNotify, AtomicAdd_2Ranks) { ASSERT_TRUE(RunNotifyAtomicAdd(2, 2, 0, 0)); }
+TEST(TNotify, AtomicAdd_2Ranks)
+{
+    ASSERT_TRUE(RunNotifyAtomicAdd(2, 2, 0, 0));
+}
 
 // ============================================================================
 // Set Tests (Ring pattern)
 // Each rank sets next rank's signal to its own rank_id + 100
 // ============================================================================
-TEST(TNotify, Set_2Ranks) { ASSERT_TRUE(RunNotifySet(2, 2, 0, 0)); }
+TEST(TNotify, Set_2Ranks)
+{
+    ASSERT_TRUE(RunNotifySet(2, 2, 0, 0));
+}
 
 // ============================================================================
 // Scoreboard Tests
 // Each rank notifies its slot in rank 0's scoreboard
 // ============================================================================
-TEST(TNotify, Scoreboard_2Ranks) { ASSERT_TRUE((RunNotifyScoreboard<4>(2, 2, 0, 0))); }
+TEST(TNotify, Scoreboard_2Ranks)
+{
+    ASSERT_TRUE((RunNotifyScoreboard<4>(2, 2, 0, 0)));
+}
 
 // ============================================================================
 // Runtime NotifyOp Tests (Set operation)
 // ============================================================================
-TEST(TNotify, RuntimeOp_Set) { ASSERT_TRUE(RunNotifyRuntimeOp(2, 2, 0, 0)); }
+TEST(TNotify, RuntimeOp_Set)
+{
+    ASSERT_TRUE(RunNotifyRuntimeOp(2, 2, 0, 0));
+}
 
 int main(int argc, char **argv)
 {

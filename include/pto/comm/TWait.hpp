@@ -20,7 +20,7 @@ namespace comm {
 
 // ============================================================================
 // TWAIT_IMPL: Blocking wait until signal(s) meet comparison condition
-// 
+//
 // Signal type must be int32_t.
 // Supports full 5-D signal tensors. All signals must satisfy the condition.
 // ============================================================================
@@ -31,13 +31,20 @@ namespace detail {
 PTO_INTERNAL bool CompareSignalRuntime(int32_t sigVal, int32_t cmpVal, WaitCmp cmp)
 {
     switch (cmp) {
-        case WaitCmp::EQ: return sigVal == cmpVal;
-        case WaitCmp::NE: return sigVal != cmpVal;
-        case WaitCmp::GT: return sigVal > cmpVal;
-        case WaitCmp::GE: return sigVal >= cmpVal;
-        case WaitCmp::LT: return sigVal < cmpVal;
-        case WaitCmp::LE: return sigVal <= cmpVal;
-        default: return false;
+        case WaitCmp::EQ:
+            return sigVal == cmpVal;
+        case WaitCmp::NE:
+            return sigVal != cmpVal;
+        case WaitCmp::GT:
+            return sigVal > cmpVal;
+        case WaitCmp::GE:
+            return sigVal >= cmpVal;
+        case WaitCmp::LT:
+            return sigVal < cmpVal;
+        case WaitCmp::LE:
+            return sigVal <= cmpVal;
+        default:
+            return false;
     }
 }
 
@@ -46,8 +53,7 @@ PTO_INTERNAL bool CompareSignalRuntime(int32_t sigVal, int32_t cmpVal, WaitCmp c
 template <typename GlobalSignalData>
 PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp)
 {
-    static_assert(std::is_same_v<typename GlobalSignalData::RawDType, int32_t>,
-        "TWAIT: signal type must be int32_t");
+    static_assert(std::is_same_v<typename GlobalSignalData::RawDType, int32_t>, "TWAIT: signal type must be int32_t");
 
     // Get full 5-D shape and stride
     const int s0 = signalData.GetShape(GlobalTensorDim::DIM_0);
@@ -62,7 +68,7 @@ PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, Wai
     const int64_t st3 = signalData.GetStride(GlobalTensorDim::DIM_3);
     const int64_t st4 = signalData.GetStride(GlobalTensorDim::DIM_4);
 
-    volatile __gm__ int32_t *basePtr = reinterpret_cast<volatile __gm__ int32_t*>(signalData.data());
+    volatile __gm__ int32_t *basePtr = reinterpret_cast<volatile __gm__ int32_t *>(signalData.data());
 
     // Wait until all signals satisfy the condition (full 5-D traversal)
     bool allSatisfied = false;

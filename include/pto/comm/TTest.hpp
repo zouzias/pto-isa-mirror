@@ -20,7 +20,7 @@ namespace comm {
 
 // ============================================================================
 // TTEST_IMPL: Non-blocking test if signal(s) meet comparison condition
-// 
+//
 // Returns true if condition is satisfied, false otherwise.
 // Signal type must be int32_t.
 // Supports full 5-D signal tensors. Returns true only if ALL signals satisfy.
@@ -32,13 +32,20 @@ namespace detail {
 PTO_INTERNAL bool TestCompareSignal(int32_t sigVal, int32_t cmpVal, WaitCmp cmp)
 {
     switch (cmp) {
-        case WaitCmp::EQ: return sigVal == cmpVal;
-        case WaitCmp::NE: return sigVal != cmpVal;
-        case WaitCmp::GT: return sigVal > cmpVal;
-        case WaitCmp::GE: return sigVal >= cmpVal;
-        case WaitCmp::LT: return sigVal < cmpVal;
-        case WaitCmp::LE: return sigVal <= cmpVal;
-        default: return false;
+        case WaitCmp::EQ:
+            return sigVal == cmpVal;
+        case WaitCmp::NE:
+            return sigVal != cmpVal;
+        case WaitCmp::GT:
+            return sigVal > cmpVal;
+        case WaitCmp::GE:
+            return sigVal >= cmpVal;
+        case WaitCmp::LT:
+            return sigVal < cmpVal;
+        case WaitCmp::LE:
+            return sigVal <= cmpVal;
+        default:
+            return false;
     }
 }
 
@@ -47,8 +54,7 @@ PTO_INTERNAL bool TestCompareSignal(int32_t sigVal, int32_t cmpVal, WaitCmp cmp)
 template <typename GlobalSignalData>
 PTO_INTERNAL bool TTEST_IMPL(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp)
 {
-    static_assert(std::is_same_v<typename GlobalSignalData::RawDType, int32_t>,
-        "TTEST: signal type must be int32_t");
+    static_assert(std::is_same_v<typename GlobalSignalData::RawDType, int32_t>, "TTEST: signal type must be int32_t");
 
     // Get full 5-D shape and stride
     const int s0 = signalData.GetShape(GlobalTensorDim::DIM_0);

@@ -57,18 +57,18 @@ __global__ AICORE void TScatterKernelImpl(__gm__ T *src, __gm__ T *dst, int nran
         __gm__ T *remoteDst = ShmemPtr(dst, i);
         tensors[i] = Global(remoteDst, dstShape, dstStride);
     }
-    
+
     pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, root);
-    
+
     // Allocate UB tile for staging data
     TileData ubTile(1, count);
     TASSIGN(ubTile, 0x0);
-    
+
     // Only root executes TSCATTER
     if (my_rank == root) {
         pto::comm::TSCATTER(pg, srcG, ubTile);
     }
-    
+
     ShmemDeviceQuiet();
     ShmemDeviceBarrierAll();
 }
@@ -78,12 +78,13 @@ bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_
                       uint64_t /*local_mem_size*/)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8771")) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8771"))
+        return false;
 
     size_t dst_size = count * sizeof(T);
     size_t src_size = n_ranks * count * sizeof(T);
-    void* src_ptr = ShmemMalloc(src_size);
-    void* dst_ptr = ShmemMalloc(dst_size);
+    void *src_ptr = ShmemMalloc(src_size);
+    void *dst_ptr = ShmemMalloc(dst_size);
 
     if (src_ptr == nullptr || dst_ptr == nullptr) {
         std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
@@ -91,8 +92,8 @@ bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     }
 
     T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&src_host), src_size);
-    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), dst_size);
+    aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size);
+    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size);
 
     if (rank_id == root) {
         for (int r = 0; r < n_ranks; ++r) {
@@ -110,7 +111,7 @@ bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_
 
     ShmemBarrierAll();
 
-    TScatterKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)src_ptr, (T*)dst_ptr, n_ranks, root);
+    TScatterKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T *)src_ptr, (T *)dst_ptr, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -122,8 +123,8 @@ bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_
         T expected = static_cast<T>(i + rank_id * 10000);
         T actual = dst_host[i];
         if (actual != expected) {
-            std::cout << "Rank " << rank_id << " validation failed at index " << i 
-                      << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
+            std::cout << "Rank " << rank_id << " validation failed at index " << i << ": expected " << (float)expected
+                      << ", got " << (float)actual << std::endl;
             is_ok = false;
             break;
         }
@@ -166,7 +167,8 @@ bool RunScatterWithRoot(int n_ranks, int n_devices, int first_rank_id, int first
 template bool RunScatter<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunScatter<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunScatter<uint8_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunScatterWithRoot<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+template bool RunScatterWithRoot<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                             int root);
 
 // ============================================================================
 // Empty Rows Test Kernel
@@ -214,12 +216,13 @@ bool RunScatterEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_de
                            uint64_t /*local_mem_size*/)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8771")) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8771"))
+        return false;
 
     size_t dst_size = count * sizeof(T);
     size_t src_size = n_ranks * count * sizeof(T);
-    void* src_ptr = ShmemMalloc(src_size);
-    void* dst_ptr = ShmemMalloc(dst_size);
+    void *src_ptr = ShmemMalloc(src_size);
+    void *dst_ptr = ShmemMalloc(dst_size);
 
     if (src_ptr == nullptr || dst_ptr == nullptr) {
         std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
@@ -227,8 +230,8 @@ bool RunScatterEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_de
     }
 
     T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&src_host), src_size);
-    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), dst_size);
+    aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size);
+    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size);
 
     for (size_t i = 0; i < n_ranks * count; ++i) {
         src_host[i] = static_cast<T>(i);
@@ -244,7 +247,7 @@ bool RunScatterEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_de
 
     ShmemBarrierAll();
 
-    TScatterEmptyKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T*)src_ptr, (T*)dst_ptr, n_ranks, root);
+    TScatterEmptyKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T *)src_ptr, (T *)dst_ptr, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -333,8 +336,8 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id,
-                  "tcp://127.0.0.1:8776", 1024ULL * 1024 * 1024, uid)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8776", 1024ULL * 1024 * 1024, uid))
+        return false;
 
     void *src_ptr = ShmemMalloc(n_ranks * total_count * sizeof(T));
     void *dst_ptr = ShmemMalloc(total_count * sizeof(T));
@@ -345,8 +348,8 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
     }
 
     T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&src_host), n_ranks * total_count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&src_host), n_ranks * total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), total_count * sizeof(T));
 
     if (rank_id == 0) {
         for (int r = 0; r < n_ranks; ++r) {
@@ -354,8 +357,8 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
                 src_host[r * total_count + i] = static_cast<T>(i + r * 100);
             }
         }
-        aclrtMemcpy(src_ptr, n_ranks * total_count * sizeof(T),
-                     src_host, n_ranks * total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+        aclrtMemcpy(src_ptr, n_ranks * total_count * sizeof(T), src_host, n_ranks * total_count * sizeof(T),
+                    ACL_MEMCPY_HOST_TO_DEVICE);
     }
 
     for (size_t i = 0; i < total_count; ++i) {
@@ -365,8 +368,8 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
 
     ShmemBarrierAll();
 
-    TScatterLargeShapeKernelImpl<T, total_rows, cols, tile_rows><<<1, nullptr, ctx.stream>>>(
-        (T*)src_ptr, (T*)dst_ptr, n_ranks);
+    TScatterLargeShapeKernelImpl<T, total_rows, cols, tile_rows>
+        <<<1, nullptr, ctx.stream>>>((T *)src_ptr, (T *)dst_ptr, n_ranks);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -378,8 +381,8 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
         T expected = static_cast<T>(i + rank_id * 100);
         T actual = dst_host[i];
         if (actual != expected) {
-            std::cout << "Rank " << rank_id << " validation failed at index " << i
-                      << " (row=" << (i / cols) << ", col=" << (i % cols) << ")"
+            std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
+                      << ", col=" << (i % cols) << ")"
                       << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
             is_ok = false;
             break;
@@ -389,9 +392,9 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
 #if ENABLE_DEBUG_PRINT
     if (is_ok && rank_id == 0) {
         std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] Rank 0: TSCATTER LargeShape SUCCESSFUL! ("
-                  << total_rows << "x" << cols << ", tile=" << tile_rows << "x" << cols
-                  << ", chunks=" << (total_rows / tile_rows) << ", ranks=" << n_ranks << ")" << std::endl;
+        std::cout << "[DEBUG] Rank 0: TSCATTER LargeShape SUCCESSFUL! (" << total_rows << "x" << cols
+                  << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows)
+                  << ", ranks=" << n_ranks << ")" << std::endl;
         std::cout << "================================================================\n" << std::endl;
     }
 #endif
@@ -408,8 +411,8 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunScatterLargeShape(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunScatterLargeShapeKernel<T, total_rows, cols, tile_rows>(
-            rankId, n_ranks, n_devices, first_device_id, 0, uid);
+        return RunScatterLargeShapeKernel<T, total_rows, cols, tile_rows>(rankId, n_ranks, n_devices, first_device_id,
+                                                                          0, uid);
     });
 }
 
@@ -419,13 +422,16 @@ template bool RunScatterLargeShape<float, 256, 64, 32>(int, int, int, int);
 template bool RunScatterLargeShape<int32_t, 512, 32, 64>(int, int, int, int);
 
 // Non-template wrappers
-bool RunScatterLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunScatterLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunScatterLargeShape<int32_t, 128, 32, 16>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
-bool RunScatterLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunScatterLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunScatterLargeShape<float, 256, 64, 32>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
-bool RunScatterLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunScatterLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunScatterLargeShape<int32_t, 512, 32, 64>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
 
@@ -480,14 +486,14 @@ __global__ AICORE void TScatterPingPongKernelImpl(__gm__ T *src, __gm__ T *dst, 
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
-bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                              uint64_t /*local_mem_size*/, const ShmemUniqueId *uid)
+bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t /*local_mem_size*/,
+                              const ShmemUniqueId *uid)
 {
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id,
-                  "tcp://127.0.0.1:8776", 1024ULL * 1024 * 1024, uid)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8776", 1024ULL * 1024 * 1024, uid))
+        return false;
 
     void *src_ptr = ShmemMalloc(n_ranks * total_count * sizeof(T));
     void *dst_ptr = ShmemMalloc(total_count * sizeof(T));
@@ -498,8 +504,8 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
     }
 
     T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&src_host), n_ranks * total_count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void**>(&dst_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&src_host), n_ranks * total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), total_count * sizeof(T));
 
     if (rank_id == 0) {
         for (int r = 0; r < n_ranks; ++r) {
@@ -507,8 +513,8 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
                 src_host[r * total_count + i] = static_cast<T>(i + r * 100);
             }
         }
-        aclrtMemcpy(src_ptr, n_ranks * total_count * sizeof(T),
-                     src_host, n_ranks * total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+        aclrtMemcpy(src_ptr, n_ranks * total_count * sizeof(T), src_host, n_ranks * total_count * sizeof(T),
+                    ACL_MEMCPY_HOST_TO_DEVICE);
     }
 
     for (size_t i = 0; i < total_count; ++i) {
@@ -518,8 +524,8 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
 
     ShmemBarrierAll();
 
-    TScatterPingPongKernelImpl<T, total_rows, cols, tile_rows><<<1, nullptr, ctx.stream>>>(
-        (T*)src_ptr, (T*)dst_ptr, n_ranks);
+    TScatterPingPongKernelImpl<T, total_rows, cols, tile_rows>
+        <<<1, nullptr, ctx.stream>>>((T *)src_ptr, (T *)dst_ptr, n_ranks);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -531,8 +537,8 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
         T expected = static_cast<T>(i + rank_id * 100);
         T actual = dst_host[i];
         if (actual != expected) {
-            std::cout << "Rank " << rank_id << " validation failed at index " << i
-                      << " (row=" << (i / cols) << ", col=" << (i % cols) << ")"
+            std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
+                      << ", col=" << (i % cols) << ")"
                       << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
             is_ok = false;
             break;
@@ -542,9 +548,9 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
 #if ENABLE_DEBUG_PRINT
     if (is_ok && rank_id == 0) {
         std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] Rank 0: TSCATTER PingPong SUCCESSFUL! ("
-                  << total_rows << "x" << cols << ", tile=" << tile_rows << "x" << cols
-                  << ", chunks=" << (total_rows / tile_rows) << ", ranks=" << n_ranks << ")" << std::endl;
+        std::cout << "[DEBUG] Rank 0: TSCATTER PingPong SUCCESSFUL! (" << total_rows << "x" << cols
+                  << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows)
+                  << ", ranks=" << n_ranks << ")" << std::endl;
         std::cout << "================================================================\n" << std::endl;
     }
 #endif
@@ -561,8 +567,8 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunScatterPingPong(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunScatterPingPongKernel<T, total_rows, cols, tile_rows>(
-            rankId, n_ranks, n_devices, first_device_id, 0, uid);
+        return RunScatterPingPongKernel<T, total_rows, cols, tile_rows>(rankId, n_ranks, n_devices, first_device_id, 0,
+                                                                        uid);
     });
 }
 
@@ -571,9 +577,11 @@ template bool RunScatterPingPong<int32_t, 128, 32, 16>(int, int, int, int);
 template bool RunScatterPingPong<float, 256, 64, 32>(int, int, int, int);
 
 // Non-template wrappers
-bool RunScatterPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunScatterPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunScatterPingPong<int32_t, 128, 32, 16>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
-bool RunScatterPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunScatterPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunScatterPingPong<float, 256, 64, 32>(n_ranks, n_devices, first_rank_id, first_device_id);
 }

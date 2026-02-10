@@ -225,7 +225,8 @@ __global__ AICORE void TWaitMultiPhaseKernel(__gm__ int32_t *shmem_signal)
 bool RunTWaitBasicKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8780", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8780", 8ULL * 1024 * 1024))
+        return false;
 
     // Allocate symmetric memory for signal
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -270,7 +271,8 @@ bool RunTWaitBasicKernel(int rank_id, int n_ranks, int n_devices, int first_devi
 bool RunTWaitCompareKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int32_t notifyValue)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8781", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8781", 8ULL * 1024 * 1024))
+        return false;
 
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
     if (shmem_signal == nullptr) {
@@ -310,7 +312,8 @@ bool RunTWaitCompareKernel(int rank_id, int n_ranks, int n_devices, int first_de
 bool RunTWaitAtomicKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8782", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8782", 8ULL * 1024 * 1024))
+        return false;
 
     int32_t *shmem_counter = (int32_t *)ShmemMalloc(sizeof(int32_t));
     if (shmem_counter == nullptr) {
@@ -340,7 +343,8 @@ bool RunTWaitAtomicKernel(int rank_id, int n_ranks, int n_devices, int first_dev
             std::cerr << "TWait Atomic test failed! Expected: " << threshold << ", Got: " << result << std::endl;
             is_ok = false;
         } else {
-            std::cout << "Rank 0: TWait (GE) atomic counter = " << result << " (expected >= " << threshold << ")" << std::endl;
+            std::cout << "Rank 0: TWait (GE) atomic counter = " << result << " (expected >= " << threshold << ")"
+                      << std::endl;
         }
     }
 
@@ -353,7 +357,8 @@ template <int Rows, int Cols>
 bool RunTWaitMatrixKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8783", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8783", 8ULL * 1024 * 1024))
+        return false;
 
     constexpr size_t total = Rows * Cols;
     int32_t *shmem_matrix = (int32_t *)ShmemMalloc(total * sizeof(int32_t));
@@ -363,7 +368,8 @@ bool RunTWaitMatrixKernel(int rank_id, int n_ranks, int n_devices, int first_dev
     }
 
     std::vector<int32_t> zeros(total, 0);
-    aclrtMemcpy(shmem_matrix, total * sizeof(int32_t), zeros.data(), total * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(shmem_matrix, total * sizeof(int32_t), zeros.data(), total * sizeof(int32_t),
+                ACL_MEMCPY_HOST_TO_DEVICE);
 
     ShmemBarrierAll();
 
@@ -375,7 +381,8 @@ bool RunTWaitMatrixKernel(int rank_id, int n_ranks, int n_devices, int first_dev
     bool is_ok = true;
     if (rank_id == 1) {
         std::vector<int32_t> result(total, 0);
-        aclrtMemcpy(result.data(), total * sizeof(int32_t), shmem_matrix, total * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(result.data(), total * sizeof(int32_t), shmem_matrix, total * sizeof(int32_t),
+                    ACL_MEMCPY_DEVICE_TO_HOST);
         for (size_t i = 0; i < total; ++i) {
             if (result[i] != 1) {
                 std::cerr << "TWait Matrix test failed at " << i << " got " << result[i] << std::endl;
@@ -393,7 +400,8 @@ bool RunTWaitMatrixKernel(int rank_id, int n_ranks, int n_devices, int first_dev
 bool RunTWaitMultiPhaseKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8786", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8786", 8ULL * 1024 * 1024))
+        return false;
 
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
     if (shmem_signal == nullptr) {
@@ -430,7 +438,8 @@ template <int FullCols, int SubRows, int SubCols>
 bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8787", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8787", 8ULL * 1024 * 1024))
+        return false;
 
     constexpr size_t totalRows = 8;
     constexpr size_t total = totalRows * FullCols;
@@ -441,7 +450,8 @@ bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
     }
 
     std::vector<int32_t> zeros(total, 0);
-    aclrtMemcpy(shmem_matrix, total * sizeof(int32_t), zeros.data(), total * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(shmem_matrix, total * sizeof(int32_t), zeros.data(), total * sizeof(int32_t),
+                ACL_MEMCPY_HOST_TO_DEVICE);
 
     ShmemBarrierAll();
 
@@ -453,20 +463,22 @@ bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
     bool is_ok = true;
     if (rank_id == 1) {
         std::vector<int32_t> result(total, 0);
-        aclrtMemcpy(result.data(), total * sizeof(int32_t), shmem_matrix, total * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(result.data(), total * sizeof(int32_t), shmem_matrix, total * sizeof(int32_t),
+                    ACL_MEMCPY_DEVICE_TO_HOST);
         constexpr int startRow = 2;
         constexpr int startCol = 4;
         for (int r = 0; r < SubRows; ++r) {
             for (int c = 0; c < SubCols; ++c) {
                 int idx = (startRow + r) * FullCols + (startCol + c);
                 if (result[idx] != 1) {
-                    std::cerr << "TWait SubRegion test failed at (" << (startRow + r)
-                              << "," << (startCol + c) << ") got " << result[idx] << std::endl;
+                    std::cerr << "TWait SubRegion test failed at (" << (startRow + r) << "," << (startCol + c)
+                              << ") got " << result[idx] << std::endl;
                     is_ok = false;
                     break;
                 }
             }
-            if (!is_ok) break;
+            if (!is_ok)
+                break;
         }
     }
 
@@ -481,9 +493,8 @@ bool RunTWaitSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
 
 bool RunTWaitBasic(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunTWaitBasicKernel(rankId, n_ranks, n_devices, first_device_id);
-    });
+    return ForkAndRun(n_ranks, first_rank_id,
+                      [&](int rankId) { return RunTWaitBasicKernel(rankId, n_ranks, n_devices, first_device_id); });
 }
 
 bool RunTWaitCompare(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t notifyValue)
@@ -495,9 +506,8 @@ bool RunTWaitCompare(int n_ranks, int n_devices, int first_rank_id, int first_de
 
 bool RunTWaitAtomic(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunTWaitAtomicKernel(rankId, n_ranks, n_devices, first_device_id);
-    });
+    return ForkAndRun(n_ranks, first_rank_id,
+                      [&](int rankId) { return RunTWaitAtomicKernel(rankId, n_ranks, n_devices, first_device_id); });
 }
 
 template <int Rows, int Cols>

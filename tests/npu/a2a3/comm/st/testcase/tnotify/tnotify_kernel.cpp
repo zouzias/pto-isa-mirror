@@ -33,11 +33,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 __global__ AICORE void TNotifyAtomicAddKernel(__gm__ int32_t *shmem_counter, int nranks)
 {
     int my_rank = shmem_my_pe();
-    int target_rank = 0;  // All ranks notify rank 0
+    int target_rank = 0; // All ranks notify rank 0
 
     // Get remote PE's counter address using ShmemPtr
     __gm__ int32_t *remote_counter = ShmemPtr(shmem_counter, target_rank);
-    
+
     // Create GlobalTensor pointing to rank 0's counter
     pto::comm::Signal counterSignal(remote_counter);
 
@@ -89,7 +89,7 @@ __global__ AICORE void TNotifyScoreboardKernel(__gm__ int32_t *shmem_scoreboard,
 
     // Get remote PE's scoreboard base address
     __gm__ int32_t *remote_scoreboard = ShmemPtr(shmem_scoreboard, target_rank);
-    
+
     // Calculate own slot offset in scoreboard
     __gm__ int32_t *my_slot = remote_scoreboard + my_rank;
 
@@ -135,7 +135,8 @@ __global__ AICORE void TNotifyRuntimeOpKernel(__gm__ int32_t *shmem_counter, int
 bool RunNotifyAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8785", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8785", 8ULL * 1024 * 1024))
+        return false;
 
     // Allocate symmetric memory as counter
     int32_t *shmem_counter = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -187,7 +188,8 @@ bool RunNotifyAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first
 bool RunNotifySetKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8856", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8856", 8ULL * 1024 * 1024))
+        return false;
 
     // Allocate symmetric memory as signal
     int32_t *shmem_signal = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -220,7 +222,8 @@ bool RunNotifySetKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     aclrtMemcpy(&result, sizeof(int32_t), shmem_signal, sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
 
     if (result != expected) {
-        std::cerr << "Rank " << rank_id << ": Set test failed! Expected: " << expected << ", Got: " << result << std::endl;
+        std::cerr << "Rank " << rank_id << ": Set test failed! Expected: " << expected << ", Got: " << result
+                  << std::endl;
         is_ok = false;
     }
 #if ENABLE_DEBUG_PRINT
@@ -245,7 +248,8 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
     snprintf(ipPort, sizeof(ipPort), "tcp://127.0.0.1:%d", 8857 + static_cast<int>(numSlots));
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, ipPort, 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, ipPort, 8ULL * 1024 * 1024))
+        return false;
 
     // Allocate symmetric memory as scoreboard
     int32_t *shmem_scoreboard = (int32_t *)ShmemMalloc(numSlots * sizeof(int32_t));
@@ -256,7 +260,8 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
 
     // Initialize scoreboard to 0
     std::vector<int32_t> zeros(numSlots, 0);
-    aclrtMemcpy(shmem_scoreboard, numSlots * sizeof(int32_t), zeros.data(), numSlots * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(shmem_scoreboard, numSlots * sizeof(int32_t), zeros.data(), numSlots * sizeof(int32_t),
+                ACL_MEMCPY_HOST_TO_DEVICE);
 
     // Wait for all ranks to complete initialization
     ShmemBarrierAll();
@@ -273,18 +278,20 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
     // Only rank 0 verifies scoreboard
     if (rank_id == 0) {
         std::vector<int32_t> results(numSlots);
-        aclrtMemcpy(results.data(), numSlots * sizeof(int32_t), shmem_scoreboard, numSlots * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(results.data(), numSlots * sizeof(int32_t), shmem_scoreboard, numSlots * sizeof(int32_t),
+                    ACL_MEMCPY_DEVICE_TO_HOST);
 
         std::cout << "[DEBUG] Scoreboard results: [ ";
         for (int i = 0; i < static_cast<int>(numSlots); ++i) {
             std::cout << results[i] << " ";
         }
         std::cout << "]" << std::endl;
-        
+
         for (int i = 0; i < n_ranks && i < static_cast<int>(numSlots); ++i) {
             int32_t expected = static_cast<int32_t>(i + 1000);
             if (results[i] != expected) {
-                std::cerr << "Scoreboard slot " << i << " failed! Expected: " << expected << ", Got: " << results[i] << std::endl;
+                std::cerr << "Scoreboard slot " << i << " failed! Expected: " << expected << ", Got: " << results[i]
+                          << std::endl;
                 is_ok = false;
             }
         }
@@ -311,7 +318,8 @@ bool RunNotifyScoreboardKernel(int rank_id, int n_ranks, int n_devices, int firs
 bool RunNotifyRuntimeOpKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8860", 8ULL * 1024 * 1024)) return false;
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8860", 8ULL * 1024 * 1024))
+        return false;
 
     // Allocate symmetric memory as counter
     int32_t *shmem_counter = (int32_t *)ShmemMalloc(sizeof(int32_t));
@@ -376,9 +384,8 @@ bool RunNotifyAtomicAdd(int n_ranks, int n_devices, int first_rank_id, int first
 
 bool RunNotifySet(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRun(n_ranks, first_rank_id, [&](int rankId) {
-        return RunNotifySetKernel(rankId, n_ranks, n_devices, first_device_id);
-    });
+    return ForkAndRun(n_ranks, first_rank_id,
+                      [&](int rankId) { return RunNotifySetKernel(rankId, n_ranks, n_devices, first_device_id); });
 }
 
 template <size_t numSlots>

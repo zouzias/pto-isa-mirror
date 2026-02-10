@@ -33,21 +33,45 @@ bool RunTWaitMultiPhase(int n_ranks, int n_devices, int first_rank_id, int first
 // ============================================================================
 
 // Basic TWAIT test: wait for signal == expected value
-TEST(TWait, Basic_2Ranks) { ASSERT_TRUE(RunTWaitBasic(2, 2, 0, 0)); }
+TEST(TWait, Basic_2Ranks)
+{
+    ASSERT_TRUE(RunTWaitBasic(2, 2, 0, 0));
+}
 
 // TWAIT with GE comparison: wait for signal >= 100
-TEST(TWait, Compare_GE_2Ranks) { ASSERT_TRUE(RunTWaitCompare(2, 2, 0, 0, 150)); }
+TEST(TWait, Compare_GE_2Ranks)
+{
+    ASSERT_TRUE(RunTWaitCompare(2, 2, 0, 0, 150));
+}
 
 // TWAIT with atomic add: multiple ranks contribute, one waits for threshold
-TEST(TWait, Atomic_2Ranks) { ASSERT_TRUE(RunTWaitAtomic(2, 2, 0, 0)); }
-TEST(TWait, Atomic_4Ranks) { ASSERT_TRUE(RunTWaitAtomic(4, 4, 0, 0)); }
+TEST(TWait, Atomic_2Ranks)
+{
+    ASSERT_TRUE(RunTWaitAtomic(2, 2, 0, 0));
+}
+TEST(TWait, Atomic_4Ranks)
+{
+    ASSERT_TRUE(RunTWaitAtomic(4, 4, 0, 0));
+}
 
 // TWAIT 2D signal matrix
-TEST(TWait, Matrix2D_2Ranks) { ASSERT_TRUE((RunTWaitMatrix<4, 8>(2, 2, 0, 0))); }
-TEST(TWait, Matrix2D_2Ranks_Large) { ASSERT_TRUE((RunTWaitMatrix<7, 13>(2, 2, 0, 0))); }
+TEST(TWait, Matrix2D_2Ranks)
+{
+    ASSERT_TRUE((RunTWaitMatrix<4, 8>(2, 2, 0, 0)));
+}
+TEST(TWait, Matrix2D_2Ranks_Large)
+{
+    ASSERT_TRUE((RunTWaitMatrix<7, 13>(2, 2, 0, 0)));
+}
 
 // TWAIT multi-phase update
-TEST(TWait, MultiPhase_2Ranks) { ASSERT_TRUE(RunTWaitMultiPhase(2, 2, 0, 0)); }
+TEST(TWait, MultiPhase_2Ranks)
+{
+    ASSERT_TRUE(RunTWaitMultiPhase(2, 2, 0, 0));
+}
 
 // TWAIT sub-region of signal matrix
-TEST(TWait, SubRegion_4x8_of_16) { ASSERT_TRUE((RunTWaitSubRegion<16, 4, 8>(2, 2, 0, 0))); }
+TEST(TWait, SubRegion_4x8_of_16)
+{
+    ASSERT_TRUE((RunTWaitSubRegion<16, 4, 8>(2, 2, 0, 0)));
+}

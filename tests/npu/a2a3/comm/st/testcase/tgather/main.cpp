@@ -32,39 +32,64 @@ bool RunGatherPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first
 // ============================================================================
 // TGATHER Tests - Basic: Gather data from all ranks to root
 // ============================================================================
-TEST(TGather, FloatSmall) { ASSERT_TRUE((RunGather<float, 256>(4, 4, 0, 0))); }
-TEST(TGather, Int32Large) { ASSERT_TRUE((RunGather<int32_t, 4096>(2, 2, 0, 0))); }
-TEST(TGather, Uint8Small) { ASSERT_TRUE((RunGather<uint8_t, 512>(2, 2, 0, 0))); }
-TEST(TGather, SingleRank) { ASSERT_TRUE((RunGather<float, 256>(1, 1, 0, 0))); }
-TEST(TGather, Root1_FloatSmall) { ASSERT_TRUE((RunGatherWithRoot<float, 256>(2, 2, 0, 0, 1))); }
-TEST(TGather, EmptyRows_FloatSmall) { ASSERT_TRUE((RunGatherEmpty<float, 256>(2, 2, 0, 0, 0))); }
+TEST(TGather, FloatSmall)
+{
+    ASSERT_TRUE((RunGather<float, 256>(4, 4, 0, 0)));
+}
+TEST(TGather, Int32Large)
+{
+    ASSERT_TRUE((RunGather<int32_t, 4096>(2, 2, 0, 0)));
+}
+TEST(TGather, Uint8Small)
+{
+    ASSERT_TRUE((RunGather<uint8_t, 512>(2, 2, 0, 0)));
+}
+TEST(TGather, SingleRank)
+{
+    ASSERT_TRUE((RunGather<float, 256>(1, 1, 0, 0)));
+}
+TEST(TGather, Root1_FloatSmall)
+{
+    ASSERT_TRUE((RunGatherWithRoot<float, 256>(2, 2, 0, 0, 1)));
+}
+TEST(TGather, EmptyRows_FloatSmall)
+{
+    ASSERT_TRUE((RunGatherEmpty<float, 256>(2, 2, 0, 0, 0)));
+}
 
 // ============================================================================
 // TGATHER Tests - Large Shape (chunked): per-rank data > single UB tile
 // ============================================================================
-TEST(TGatherLargeShape, Int32_128x32_tile16_2ranks) {
+TEST(TGatherLargeShape, Int32_128x32_tile16_2ranks)
+{
     ASSERT_TRUE(RunGatherLargeShape_Int32_128x32_tile16(2, 2, 0, 0));
 }
-TEST(TGatherLargeShape, Int32_128x32_tile16_4ranks) {
+TEST(TGatherLargeShape, Int32_128x32_tile16_4ranks)
+{
     ASSERT_TRUE(RunGatherLargeShape_Int32_128x32_tile16(4, 4, 0, 0));
 }
-TEST(TGatherLargeShape, Float_256x64_tile32_2ranks) {
+TEST(TGatherLargeShape, Float_256x64_tile32_2ranks)
+{
     ASSERT_TRUE(RunGatherLargeShape_Float_256x64_tile32(2, 2, 0, 0));
 }
-TEST(TGatherLargeShape, Int32_512x32_tile64_2ranks) {
+TEST(TGatherLargeShape, Int32_512x32_tile64_2ranks)
+{
     ASSERT_TRUE(RunGatherLargeShape_Int32_512x32_tile64(2, 2, 0, 0));
 }
 
 // ============================================================================
 // TGATHER Tests - PingPong: double-buffered chunked TGATHER
 // ============================================================================
-TEST(TGatherPingPong, Int32_128x32_tile16_2ranks) {
+TEST(TGatherPingPong, Int32_128x32_tile16_2ranks)
+{
     ASSERT_TRUE(RunGatherPingPong_Int32_128x32_tile16(2, 2, 0, 0));
 }
-TEST(TGatherPingPong, Int32_128x32_tile16_4ranks) {
+TEST(TGatherPingPong, Int32_128x32_tile16_4ranks)
+{
     ASSERT_TRUE(RunGatherPingPong_Int32_128x32_tile16(4, 4, 0, 0));
 }
-TEST(TGatherPingPong, Float_256x64_tile32_2ranks) {
+TEST(TGatherPingPong, Float_256x64_tile32_2ranks)
+{
     ASSERT_TRUE(RunGatherPingPong_Float_256x64_tile32(2, 2, 0, 0));
 }
 

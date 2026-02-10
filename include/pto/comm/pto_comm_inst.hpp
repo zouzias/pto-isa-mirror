@@ -25,39 +25,43 @@ namespace comm {
 // ============================================================================
 
 // TPUT with atomic operation support (compile-time specified)
-template <AtomicType atomicType = AtomicType::AtomicNone, 
-          typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, 
-                          TileData &stagingTileData, WaitEvents&... events)
+template <AtomicType atomicType = AtomicType::AtomicNone, typename GlobalDstData, typename GlobalSrcData,
+          typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData,
+                          WaitEvents &...events)
 {
     WaitAllEvents(events...);
-    ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData, stagingTileData);
+    ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData,
+                                                                               stagingTileData);
     return {};
 }
 
 // TPUT with runtime-specified atomic operation
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, 
-                          TileData &stagingTileData, AtomicType atomicType, WaitEvents&... events)
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData,
+                          AtomicType atomicType, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     if (atomicType == AtomicType::AtomicAdd) {
-        ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, AtomicType::AtomicAdd>(dstGlobalData, srcGlobalData, stagingTileData);
+        ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, AtomicType::AtomicAdd>(
+            dstGlobalData, srcGlobalData, stagingTileData);
     } else {
-        ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, AtomicType::AtomicNone>(dstGlobalData, srcGlobalData, stagingTileData);
+        ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, AtomicType::AtomicNone>(
+            dstGlobalData, srcGlobalData, stagingTileData);
     }
     return {};
 }
 
 // TPUT with ping-pong double buffering (compile-time atomic type)
 // Uses two staging tiles to overlap TLOAD and TSTORE for adjacent chunks
-template <AtomicType atomicType = AtomicType::AtomicNone,
-          typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                          TileData &pingTile, TileData &pongTile, WaitEvents&... events)
+template <AtomicType atomicType = AtomicType::AtomicNone, typename GlobalDstData, typename GlobalSrcData,
+          typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
+                          TileData &pongTile, WaitEvents &...events)
 {
     WaitAllEvents(events...);
-    ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData, pingTile, pongTile);
+    ::pto::comm::TPUT_IMPL<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData, pingTile,
+                                                                               pongTile);
     return {};
 }
 
@@ -67,8 +71,8 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 // ============================================================================
 
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, 
-                          TileData &stagingTileData, WaitEvents&... events)
+PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData,
+                          WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TGET_IMPL(dstGlobalData, srcGlobalData, stagingTileData);
@@ -78,8 +82,8 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 // TGET with ping-pong double buffering
 // Uses two staging tiles to overlap TLOAD and TSTORE for adjacent chunks
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                          TileData &pingTile, TileData &pongTile, WaitEvents&... events)
+PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
+                          TileData &pongTile, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TGET_IMPL(dstGlobalData, srcGlobalData, pingTile, pongTile);
@@ -92,7 +96,7 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 // ============================================================================
 
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp op, WaitEvents&... events)
+PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp op, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TNOTIFY_IMPL(dstSignalData, value, op);
@@ -102,12 +106,12 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp o
 // TWAIT: Blocking wait until signal(s) meet comparison condition
 // Used in conjunction with TNOTIFY for flag-based synchronization
 // Signal type must be int32_t
-// 
+//
 // For signal matrix: Shape determines the 2D region to wait on. All signals must satisfy.
 // ============================================================================
 
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events)
+PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TWAIT_IMPL(signalData, cmpValue, cmp);
@@ -116,12 +120,12 @@ PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 // ============================================================================
 // TTEST: Non-blocking test if signal(s) meet comparison condition
 // Returns true if condition is satisfied, false otherwise
-// 
+//
 // For signal matrix: Returns true only if ALL signals satisfy the condition.
 // ============================================================================
 
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents&... events)
+PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     return ::pto::comm::TTEST_IMPL(signalData, cmpValue, cmp);
@@ -133,8 +137,8 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, 
-                             TileData &stagingTileData, WaitEvents&... events)
+PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &stagingTileData,
+                             WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TGATHER_IMPL(parallelGroup, dstGlobalData, stagingTileData);
@@ -148,8 +152,8 @@ PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &ds
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, 
-                             TileData &pingTile, TileData &pongTile, WaitEvents&... events)
+PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &pingTile,
+                             TileData &pongTile, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TGATHER_IMPL(parallelGroup, dstGlobalData, pingTile, pongTile);
@@ -162,8 +166,8 @@ PTO_INST RecordEvent TGATHER(ParallelGroupType &parallelGroup, GlobalDstData &ds
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
-                              TileData &stagingTileData, WaitEvents&... events)
+PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &stagingTileData,
+                              WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TSCATTER_IMPL(parallelGroup, srcGlobalData, stagingTileData);
@@ -177,8 +181,8 @@ PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &s
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
-                              TileData &pingTile, TileData &pongTile, WaitEvents&... events)
+PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+                              TileData &pongTile, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TSCATTER_IMPL(parallelGroup, srcGlobalData, pingTile, pongTile);
@@ -192,8 +196,8 @@ PTO_INST RecordEvent TSCATTER(ParallelGroupType &parallelGroup, GlobalSrcData &s
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
-                                TileData &stagingTileData, WaitEvents&... events)
+PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
+                                TileData &stagingTileData, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TBROADCAST_IMPL(parallelGroup, srcGlobalData, stagingTileData);
@@ -207,8 +211,8 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, 
-                                TileData &pingTile, TileData &pongTile, WaitEvents&... events)
+PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+                                TileData &pongTile, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TBROADCAST_IMPL(parallelGroup, srcGlobalData, pingTile, pongTile);
@@ -221,9 +225,8 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, 
-                             TileData &accTileData, TileData &recvTileData, 
-                             ReduceOp op, WaitEvents&... events)
+PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+                             TileData &recvTileData, ReduceOp op, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TREDUCE_IMPL(parallelGroup, dstGlobalData, accTileData, recvTileData, op);
@@ -236,16 +239,13 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, 
-                             TileData &accTileData, TileData &pingTileData, TileData &pongTileData, 
-                             ReduceOp op, WaitEvents&... events)
+PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+                             TileData &pingTileData, TileData &pongTileData, ReduceOp op, WaitEvents &...events)
 {
     WaitAllEvents(events...);
     ::pto::comm::TREDUCE_IMPL(parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
     return {};
 }
-
-
 
 } // namespace comm
 } // namespace pto

@@ -20,7 +20,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/pto-inst.hpp>
 
-
 // ============================================================================
 // TREDUCE Test Kernel
 // Tests the TREDUCE collective - root gathers and reduces data from all ranks
@@ -39,7 +38,7 @@ __global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int 
 
     ShapeDyn shape(1, 1, 1, 1, count);
     StrideDyn stride(count, count, count, count, 1);
-    
+
     Global outputG(output, shape, stride);
 
     // Create ParallelGroup: each tensor in the group is the input buffer on that rank
@@ -49,21 +48,21 @@ __global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int 
         __gm__ T *remoteInput = ShmemPtr(input, i);
         tensors[i] = Global(remoteInput, shape, stride);
     }
-    
+
     pto::comm::ParallelGroup<Global> pg(tensors, actual_nranks, root);
-    
+
     // Allocate UB tiles for accumulation and receiving
     TileData accTile(1, count);
     TileData recvTile(1, count);
-    
+
     TASSIGN(accTile, 0x0);
     TASSIGN(recvTile, 0x10000);
-    
+
     // Only root executes TREDUCE
     if (my_rank == root) {
         pto::comm::TREDUCE(pg, outputG, accTile, recvTile, op);
     }
-    
+
     ShmemDeviceQuiet();
     ShmemDeviceBarrierAll();
 }
@@ -90,12 +89,11 @@ T ReduceExpected(T base, int n_ranks, pto::comm::ReduceOp op)
 }
 
 template <typename T, size_t count, pto::comm::ReduceOp op>
-bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root,
-                     uint64_t local_mem_size, const ShmemUniqueId *uid)
+bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root, uint64_t local_mem_size,
+                     const ShmemUniqueId *uid)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id,
-                  "tcp://127.0.0.1:8772", local_mem_size, uid)) {
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8772", local_mem_size, uid)) {
         return false;
     }
 
@@ -107,14 +105,14 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
     }
 
     T *input_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&input_host), count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T));
 
-    T* output_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&output_host), count * sizeof(T));
+    T *output_host;
+    aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T));
 
-    T* output_device;
-    aclrtMalloc(reinterpret_cast<void**>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
-    
+    T *output_device;
+    aclrtMalloc(reinterpret_cast<void **>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+
     // Initialize input data: Rank R has data i + R * 100
     for (size_t i = 0; i < count; ++i) {
         input_host[i] = static_cast<T>(i + rank_id * 100);
@@ -125,7 +123,7 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
     // Barrier to ensure all ranks have initialized their data
     ShmemBarrierAll();
 
-    TReduceKernelImpl<T, count, op><<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, root);
+    TReduceKernelImpl<T, count, op><<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Barrier after kernel execution
@@ -141,8 +139,8 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
             const T expected = ReduceExpected(static_cast<T>(i), n_ranks, op);
             T actual = output_host[i];
             if (actual != expected) {
-                std::cout << "Rank " << rank_id << " validation failed at index " << i 
-                          << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
+                std::cout << "Rank " << rank_id << " validation failed at index " << i << ": expected "
+                          << (float)expected << ", got " << (float)actual << std::endl;
                 is_ok = false;
                 break;
             }
@@ -152,12 +150,14 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
         if (is_ok) {
             std::cout << "\n================================================================" << std::endl;
             std::cout << "[DEBUG] Rank " << root << ": TREDUCE SUCCESSFUL!" << std::endl;
-            std::cout << "Summary: Reduced " << n_ranks << " segments, result size " << count << " elements." << std::endl;
+            std::cout << "Summary: Reduced " << n_ranks << " segments, result size " << count << " elements."
+                      << std::endl;
             std::cout << "Sample Result (First 5 elements): [ ";
             for (size_t i = 0; i < (count > 5 ? 5 : count); ++i) {
                 std::cout << (float)output_host[i] << " ";
             }
-            if (count > 5) std::cout << "... ";
+            if (count > 5)
+                std::cout << "... ";
             std::cout << "]" << std::endl;
             std::cout << "================================================================\n" << std::endl;
         }
@@ -175,32 +175,34 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
 template <typename T, size_t count, pto::comm::ReduceOp op>
 bool RunReduce(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRunWithUniqueId(n_ranks, first_rank_id,
-        [&](int rankId, const ShmemUniqueId *uid) {
-            return RunReduceKernel<T, count, op>(
-                rankId, n_ranks, n_devices, first_device_id, 0,
-                1024ULL * 1024 * 1024, uid);
-        });
+    return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
+        return RunReduceKernel<T, count, op>(rankId, n_ranks, n_devices, first_device_id, 0, 1024ULL * 1024 * 1024,
+                                             uid);
+    });
 }
 
 template <typename T, size_t count, pto::comm::ReduceOp op>
 bool RunReduceWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
 {
-    return ForkAndRunWithUniqueId(n_ranks, first_rank_id,
-        [&](int rankId, const ShmemUniqueId *uid) {
-            return RunReduceKernel<T, count, op>(
-                rankId, n_ranks, n_devices, first_device_id, root,
-                1024ULL * 1024 * 1024, uid);
-        });
+    return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
+        return RunReduceKernel<T, count, op>(rankId, n_ranks, n_devices, first_device_id, root, 1024ULL * 1024 * 1024,
+                                             uid);
+    });
 }
 
 // Explicit instantiations
-template bool RunReduce<float, 256, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunReduce<int32_t, 4096, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunReduce<int32_t, 512, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunReduce<int32_t, 256, pto::comm::ReduceOp::Max>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunReduce<int32_t, 256, pto::comm::ReduceOp::Min>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template bool RunReduceWithRoot<float, 256, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+template bool RunReduce<float, 256, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id,
+                                                              int first_device_id);
+template bool RunReduce<int32_t, 4096, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id,
+                                                                 int first_device_id);
+template bool RunReduce<int32_t, 512, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id,
+                                                                int first_device_id);
+template bool RunReduce<int32_t, 256, pto::comm::ReduceOp::Max>(int n_ranks, int n_devices, int first_rank_id,
+                                                                int first_device_id);
+template bool RunReduce<int32_t, 256, pto::comm::ReduceOp::Min>(int n_ranks, int n_devices, int first_rank_id,
+                                                                int first_device_id);
+template bool RunReduceWithRoot<float, 256, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id,
+                                                                      int first_device_id, int root);
 
 // ============================================================================
 // Empty Rows Test Kernel
@@ -248,8 +250,7 @@ bool RunReduceEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
                           uint64_t local_mem_size, const ShmemUniqueId *uid)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id,
-                  "tcp://127.0.0.1:8772", local_mem_size, uid)) {
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8772", local_mem_size, uid)) {
         return false;
     }
 
@@ -260,13 +261,13 @@ bool RunReduceEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
     }
 
     T *input_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&input_host), count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T));
 
     T *output_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&output_host), count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T));
 
     T *output_device;
-    aclrtMalloc(reinterpret_cast<void**>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc(reinterpret_cast<void **>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
 
     for (size_t i = 0; i < count; ++i) {
         input_host[i] = static_cast<T>(i + rank_id * 100);
@@ -280,7 +281,7 @@ bool RunReduceEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
 
     ShmemBarrierAll();
 
-    TReduceEmptyKernelImpl<T, count, op><<<1, nullptr, ctx.stream>>>((T*)input_ptr, (T*)output_device, n_ranks, root);
+    TReduceEmptyKernelImpl<T, count, op><<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks, root);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -307,42 +308,50 @@ bool RunReduceEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
 template <typename T, size_t count, pto::comm::ReduceOp op>
 bool RunReduceEmpty(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
 {
-    return ForkAndRunWithUniqueId(n_ranks, first_rank_id,
-        [&](int rankId, const ShmemUniqueId *uid) {
-            return RunReduceEmptyKernel<T, count, op>(
-                rankId, n_ranks, n_devices, first_device_id, root,
-                1024ULL * 1024 * 1024, uid);
-        });
+    return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
+        return RunReduceEmptyKernel<T, count, op>(rankId, n_ranks, n_devices, first_device_id, root,
+                                                  1024ULL * 1024 * 1024, uid);
+    });
 }
 
-template bool RunReduceEmpty<float, 256, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
+template bool RunReduceEmpty<float, 256, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id,
+                                                                   int first_device_id, int root);
 
 // Non-template wrappers for test main.cpp
-bool RunReduceFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunReduceFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunReduce<float, 256, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
 
-bool RunReduceFloat256SumWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root) {
-    return RunReduceWithRoot<float, 256, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id, root);
+bool RunReduceFloat256SumWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
+{
+    return RunReduceWithRoot<float, 256, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id,
+                                                                   root);
 }
 
-bool RunReduceEmptyFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root) {
-    return RunReduceEmpty<float, 256, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id, root);
+bool RunReduceEmptyFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
+{
+    return RunReduceEmpty<float, 256, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id,
+                                                                root);
 }
 
-bool RunReduceInt32_4096_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunReduceInt32_4096_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunReduce<int32_t, 4096, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
 
-bool RunReduceInt32_512_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunReduceInt32_512_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunReduce<int32_t, 512, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
 
-bool RunReduceInt32_256_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunReduceInt32_256_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunReduce<int32_t, 256, pto::comm::ReduceOp::Max>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
 
-bool RunReduceInt32_256_Min(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
+bool RunReduceInt32_256_Min(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
     return RunReduce<int32_t, 256, pto::comm::ReduceOp::Min>(n_ranks, n_devices, first_rank_id, first_device_id);
 }
 
@@ -405,8 +414,7 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id,
-                  "tcp://127.0.0.1:8772", local_mem_size, uid)) {
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8772", local_mem_size, uid)) {
         return false;
     }
 
@@ -418,13 +426,13 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
     }
 
     T *input_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&input_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T));
 
     T *output_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&output_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T));
 
     T *output_device;
-    aclrtMalloc(reinterpret_cast<void**>(&output_device), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc(reinterpret_cast<void **>(&output_device), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
 
     // Initialize input data: Rank R has data i + R * 100
     for (size_t i = 0; i < total_count; ++i) {
@@ -435,8 +443,8 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
 
     ShmemBarrierAll();
 
-    TReduceLargeShapeKernelImpl<T, total_rows, cols, tile_rows, op><<<1, nullptr, ctx.stream>>>(
-        (T*)input_ptr, (T*)output_device, n_ranks);
+    TReduceLargeShapeKernelImpl<T, total_rows, cols, tile_rows, op>
+        <<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
@@ -444,14 +452,15 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
     // Only root verifies result
     bool is_ok = true;
     if (rank_id == 0) {
-        aclrtMemcpy(output_host, total_count * sizeof(T), output_device, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(output_host, total_count * sizeof(T), output_device, total_count * sizeof(T),
+                    ACL_MEMCPY_DEVICE_TO_HOST);
 
         for (size_t i = 0; i < total_count; ++i) {
             const T expected = ReduceExpected(static_cast<T>(i), n_ranks, op);
             T actual = output_host[i];
             if (actual != expected) {
-                std::cout << "Rank " << rank_id << " validation failed at index " << i
-                          << " (row=" << (i / cols) << ", col=" << (i % cols) << ")"
+                std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
+                          << ", col=" << (i % cols) << ")"
                           << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
                 is_ok = false;
                 break;
@@ -461,14 +470,15 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
             std::cout << "\n================================================================" << std::endl;
-            std::cout << "[DEBUG] Rank 0: TREDUCE LargeShape SUCCESSFUL! ("
-                      << total_rows << "x" << cols << ", tile=" << tile_rows << "x" << cols
-                      << ", chunks=" << (total_rows / tile_rows) << ")" << std::endl;
+            std::cout << "[DEBUG] Rank 0: TREDUCE LargeShape SUCCESSFUL! (" << total_rows << "x" << cols
+                      << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows) << ")"
+                      << std::endl;
             std::cout << "Sample Result (First 5 elements): [ ";
             for (size_t i = 0; i < (total_count > 5 ? 5 : total_count); ++i) {
                 std::cout << (float)output_host[i] << " ";
             }
-            if (total_count > 5) std::cout << "... ";
+            if (total_count > 5)
+                std::cout << "... ";
             std::cout << "]" << std::endl;
             std::cout << "================================================================\n" << std::endl;
         }
@@ -486,12 +496,10 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
 bool RunReduceLargeShape(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRunWithUniqueId(n_ranks, first_rank_id,
-        [&](int rankId, const ShmemUniqueId *uid) {
-            return RunReduceLargeShapeKernel<T, total_rows, cols, tile_rows, op>(
-                rankId, n_ranks, n_devices, first_device_id,
-                1024ULL * 1024 * 1024, uid);
-        });
+    return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
+        return RunReduceLargeShapeKernel<T, total_rows, cols, tile_rows, op>(
+            rankId, n_ranks, n_devices, first_device_id, 1024ULL * 1024 * 1024, uid);
+    });
 }
 
 // Explicit instantiations for large shape tests
@@ -505,17 +513,25 @@ template bool RunReduceLargeShape<int32_t, 128, 32, 16, pto::comm::ReduceOp::Max
 template bool RunReduceLargeShape<int32_t, 512, 32, 64, pto::comm::ReduceOp::Sum>(int, int, int, int);
 
 // Non-template wrappers for large shape tests
-bool RunReduceLargeShape_Int32_128x32_tile16_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
-    return RunReduceLargeShape<int32_t, 128, 32, 16, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id);
+bool RunReduceLargeShape_Int32_128x32_tile16_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    return RunReduceLargeShape<int32_t, 128, 32, 16, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id,
+                                                                               first_device_id);
 }
-bool RunReduceLargeShape_Float_256x64_tile32_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
-    return RunReduceLargeShape<float, 256, 64, 32, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id);
+bool RunReduceLargeShape_Float_256x64_tile32_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    return RunReduceLargeShape<float, 256, 64, 32, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id,
+                                                                             first_device_id);
 }
-bool RunReduceLargeShape_Int32_128x32_tile16_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
-    return RunReduceLargeShape<int32_t, 128, 32, 16, pto::comm::ReduceOp::Max>(n_ranks, n_devices, first_rank_id, first_device_id);
+bool RunReduceLargeShape_Int32_128x32_tile16_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    return RunReduceLargeShape<int32_t, 128, 32, 16, pto::comm::ReduceOp::Max>(n_ranks, n_devices, first_rank_id,
+                                                                               first_device_id);
 }
-bool RunReduceLargeShape_Int32_512x32_tile64_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
-    return RunReduceLargeShape<int32_t, 512, 32, 64, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id);
+bool RunReduceLargeShape_Int32_512x32_tile64_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    return RunReduceLargeShape<int32_t, 512, 32, 64, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id,
+                                                                               first_device_id);
 }
 
 // ============================================================================
@@ -579,8 +595,7 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id,
-                  "tcp://127.0.0.1:8772", local_mem_size, uid)) {
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8772", local_mem_size, uid)) {
         return false;
     }
 
@@ -591,13 +606,13 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
     }
 
     T *input_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&input_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T));
 
     T *output_host;
-    aclrtMallocHost(reinterpret_cast<void**>(&output_host), total_count * sizeof(T));
+    aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T));
 
     T *output_device;
-    aclrtMalloc(reinterpret_cast<void**>(&output_device), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc(reinterpret_cast<void **>(&output_device), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
 
     // Initialize input data: Rank R has data i + R * 100
     for (size_t i = 0; i < total_count; ++i) {
@@ -608,22 +623,23 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
 
     ShmemBarrierAll();
 
-    TReducePingPongKernelImpl<T, total_rows, cols, tile_rows, op><<<1, nullptr, ctx.stream>>>(
-        (T*)input_ptr, (T*)output_device, n_ranks);
+    TReducePingPongKernelImpl<T, total_rows, cols, tile_rows, op>
+        <<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     ShmemBarrierAll();
 
     bool is_ok = true;
     if (rank_id == 0) {
-        aclrtMemcpy(output_host, total_count * sizeof(T), output_device, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(output_host, total_count * sizeof(T), output_device, total_count * sizeof(T),
+                    ACL_MEMCPY_DEVICE_TO_HOST);
 
         for (size_t i = 0; i < total_count; ++i) {
             const T expected = ReduceExpected(static_cast<T>(i), n_ranks, op);
             T actual = output_host[i];
             if (actual != expected) {
-                std::cout << "Rank " << rank_id << " validation failed at index " << i
-                          << " (row=" << (i / cols) << ", col=" << (i % cols) << ")"
+                std::cout << "Rank " << rank_id << " validation failed at index " << i << " (row=" << (i / cols)
+                          << ", col=" << (i % cols) << ")"
                           << ": expected " << (float)expected << ", got " << (float)actual << std::endl;
                 is_ok = false;
                 break;
@@ -633,14 +649,15 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
 #if ENABLE_DEBUG_PRINT
         if (is_ok) {
             std::cout << "\n================================================================" << std::endl;
-            std::cout << "[DEBUG] Rank 0: TREDUCE PingPong SUCCESSFUL! ("
-                      << total_rows << "x" << cols << ", tile=" << tile_rows << "x" << cols
-                      << ", chunks=" << (total_rows / tile_rows) << ")" << std::endl;
+            std::cout << "[DEBUG] Rank 0: TREDUCE PingPong SUCCESSFUL! (" << total_rows << "x" << cols
+                      << ", tile=" << tile_rows << "x" << cols << ", chunks=" << (total_rows / tile_rows) << ")"
+                      << std::endl;
             std::cout << "Sample Result (First 5 elements): [ ";
             for (size_t i = 0; i < (total_count > 5 ? 5 : total_count); ++i) {
                 std::cout << (float)output_host[i] << " ";
             }
-            if (total_count > 5) std::cout << "... ";
+            if (total_count > 5)
+                std::cout << "... ";
             std::cout << "]" << std::endl;
             std::cout << "================================================================\n" << std::endl;
         }
@@ -658,12 +675,10 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
 bool RunReducePingPong(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRunWithUniqueId(n_ranks, first_rank_id,
-        [&](int rankId, const ShmemUniqueId *uid) {
-            return RunReducePingPongKernel<T, total_rows, cols, tile_rows, op>(
-                rankId, n_ranks, n_devices, first_device_id,
-                1024ULL * 1024 * 1024, uid);
-        });
+    return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
+        return RunReducePingPongKernel<T, total_rows, cols, tile_rows, op>(rankId, n_ranks, n_devices, first_device_id,
+                                                                           1024ULL * 1024 * 1024, uid);
+    });
 }
 
 // Explicit instantiations for ping-pong tests
@@ -675,12 +690,18 @@ template bool RunReducePingPong<float, 256, 64, 32, pto::comm::ReduceOp::Sum>(in
 template bool RunReducePingPong<int32_t, 128, 32, 16, pto::comm::ReduceOp::Max>(int, int, int, int);
 
 // Non-template wrappers for ping-pong tests
-bool RunReducePingPong_Int32_128x32_tile16_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
-    return RunReducePingPong<int32_t, 128, 32, 16, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id);
+bool RunReducePingPong_Int32_128x32_tile16_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    return RunReducePingPong<int32_t, 128, 32, 16, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id,
+                                                                             first_device_id);
 }
-bool RunReducePingPong_Float_256x64_tile32_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
-    return RunReducePingPong<float, 256, 64, 32, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id, first_device_id);
+bool RunReducePingPong_Float_256x64_tile32_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    return RunReducePingPong<float, 256, 64, 32, pto::comm::ReduceOp::Sum>(n_ranks, n_devices, first_rank_id,
+                                                                           first_device_id);
 }
-bool RunReducePingPong_Int32_128x32_tile16_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id) {
-    return RunReducePingPong<int32_t, 128, 32, 16, pto::comm::ReduceOp::Max>(n_ranks, n_devices, first_rank_id, first_device_id);
+bool RunReducePingPong_Int32_128x32_tile16_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+{
+    return RunReducePingPong<int32_t, 128, 32, 16, pto::comm::ReduceOp::Max>(n_ranks, n_devices, first_rank_id,
+                                                                             first_device_id);
 }

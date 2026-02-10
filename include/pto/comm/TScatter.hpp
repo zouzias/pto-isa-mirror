@@ -46,17 +46,15 @@ namespace comm {
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
 PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
-                                 TileData &stagingTileData)
+                                TileData &stagingTileData)
 {
     using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
     using T = typename GlobalSrcData::RawDType;
 
-    static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>,
-        "TSCATTER: GlobalData type mismatch!");
+    static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TSCATTER: GlobalData type mismatch!");
     static_assert(std::is_same_v<T, typename TileData::DType>,
-        "TSCATTER: TileData element type must match GlobalData element type");
-    static_assert(GlobalSrcData::layout == GlobalDstData::layout,
-        "TSCATTER: src/dst layout mismatch");
+                  "TSCATTER: TileData element type must match GlobalData element type");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TSCATTER: src/dst layout mismatch");
 
     const int nranks = parallelGroup.GetSize();
     const int rootIdx = parallelGroup.GetRootIdx();
@@ -68,8 +66,8 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
     const int gShape0 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_0);
     const int gShape1 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_1);
     const int gShape2 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_2);
-    const int gShape3 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_3);  // H (per-rank rows)
-    const int gShape4 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_4);  // W
+    const int gShape3 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_3); // H (per-rank rows)
+    const int gShape4 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_4); // W
 
     const int perRankRows = gShape3;
     const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
@@ -101,12 +99,10 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
         using SrcViewT = GlobalTensor<T, DynShape5D, DynStride, GlobalSrcData::layout>;
 
         DynShape5D perRankShape(gShape0, gShape1, gShape2, gShape3, gShape4);
-        DynStride srcViewStride(
-            srcGlobalData.GetStride(GlobalTensorDim::DIM_0),
-            srcGlobalData.GetStride(GlobalTensorDim::DIM_1),
-            srcGlobalData.GetStride(GlobalTensorDim::DIM_2),
-            srcStride3,
-            srcGlobalData.GetStride(GlobalTensorDim::DIM_4));
+        DynStride srcViewStride(srcGlobalData.GetStride(GlobalTensorDim::DIM_0),
+                                srcGlobalData.GetStride(GlobalTensorDim::DIM_1),
+                                srcGlobalData.GetStride(GlobalTensorDim::DIM_2), srcStride3,
+                                srcGlobalData.GetStride(GlobalTensorDim::DIM_4));
 
         for (int r = 0; r < nranks; ++r) {
             int64_t srcOffset = static_cast<int64_t>(r) * perRankRows * srcStride3;
@@ -134,13 +130,13 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
 
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(gShape3 % tileValidRow == 0,
-            "TSCATTER chunked: per-rank DIM_3 must be divisible by tile ValidRow when static. "
-            "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
+                   "TSCATTER chunked: per-rank DIM_3 must be divisible by tile ValidRow when static. "
+                   "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(gShape4 % tileValidCol == 0,
-            "TSCATTER chunked: DIM_4 must be divisible by tile ValidCol when static. "
-            "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+                   "TSCATTER chunked: DIM_4 must be divisible by tile ValidCol when static. "
+                   "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
     // Source strides (from srcGlobalData)
@@ -170,49 +166,40 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
         for (int i0 = 0; i0 < gShape0; ++i0) {
             for (int i1 = 0; i1 < gShape1; ++i1) {
                 for (int i2 = 0; i2 < gShape2; ++i2) {
-                    int64_t srcBase = rankSrcBase
-                                    + static_cast<int64_t>(i0) * srcStride0
-                                    + static_cast<int64_t>(i1) * srcStride1
-                                    + static_cast<int64_t>(i2) * srcStride2;
-                    int64_t dstBase = static_cast<int64_t>(i0) * dstStride0
-                                    + static_cast<int64_t>(i1) * dstStride1
-                                    + static_cast<int64_t>(i2) * dstStride2;
+                    int64_t srcBase = rankSrcBase + static_cast<int64_t>(i0) * srcStride0 +
+                                      static_cast<int64_t>(i1) * srcStride1 + static_cast<int64_t>(i2) * srcStride2;
+                    int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+                                      static_cast<int64_t>(i2) * dstStride2;
 
                     for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
-                        int currentRows = (rowOff + tileValidRow <= gShape3)
-                                          ? tileValidRow : (gShape3 - rowOff);
+                        int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
 
                         if constexpr (isDynamicRow) {
                             stagingTileData.RowMaskInternal = currentRows;
                         }
 
                         for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
-                            int currentCols = (colOff + tileValidCol <= gShape4)
-                                              ? tileValidCol : (gShape4 - colOff);
+                            int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
 
                             if constexpr (isDynamicCol) {
                                 stagingTileData.ColMaskInternal = currentCols;
                             }
 
-                            int64_t srcOffset = srcBase
-                                              + static_cast<int64_t>(rowOff) * srcStride3
-                                              + static_cast<int64_t>(colOff) * srcStride4;
-                            int64_t dstOffset = dstBase
-                                              + static_cast<int64_t>(rowOff) * dstStride3
-                                              + static_cast<int64_t>(colOff) * dstStride4;
+                            int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+                                                static_cast<int64_t>(colOff) * srcStride4;
+                            int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+                                                static_cast<int64_t>(colOff) * dstStride4;
 
                             DynShape chunkShape(1, 1, 1, currentRows, currentCols);
 
                             // TLOAD from local source at rank + chunk position
-                            SrcViewT srcView(srcGlobalData.data() + srcOffset,
-                                             chunkShape, srcChunkStride);
+                            SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
                             TLOAD(stagingTileData, srcView);
                             set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
                             wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
 
                             // TSTORE to rank r's destination at chunk position
-                            DstViewT dstView(parallelGroup[r].data() + dstOffset,
-                                             chunkShape, dstChunkStride);
+                            DstViewT dstView(parallelGroup[r].data() + dstOffset, chunkShape, dstChunkStride);
                             TSTORE(dstView, stagingTileData);
 
                             // Sync before next chunk's TLOAD
@@ -242,18 +229,16 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
 // ============================================================================
 
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
-PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
-                                 TileData &pingTile, TileData &pongTile)
+PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+                                TileData &pongTile)
 {
     using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
     using T = typename GlobalSrcData::RawDType;
 
-    static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>,
-        "TSCATTER: GlobalData type mismatch!");
+    static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TSCATTER: GlobalData type mismatch!");
     static_assert(std::is_same_v<T, typename TileData::DType>,
-        "TSCATTER: TileData element type must match GlobalData element type");
-    static_assert(GlobalSrcData::layout == GlobalDstData::layout,
-        "TSCATTER: src/dst layout mismatch");
+                  "TSCATTER: TileData element type must match GlobalData element type");
+    static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TSCATTER: src/dst layout mismatch");
 
     const int nranks = parallelGroup.GetSize();
     const int rootIdx = parallelGroup.GetRootIdx();
@@ -296,12 +281,10 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
         using SrcViewT = GlobalTensor<T, DynShape5D, DynStride, GlobalSrcData::layout>;
 
         DynShape5D perRankShape(gShape0, gShape1, gShape2, gShape3, gShape4);
-        DynStride srcViewStride(
-            srcGlobalData.GetStride(GlobalTensorDim::DIM_0),
-            srcGlobalData.GetStride(GlobalTensorDim::DIM_1),
-            srcGlobalData.GetStride(GlobalTensorDim::DIM_2),
-            srcStride3,
-            srcGlobalData.GetStride(GlobalTensorDim::DIM_4));
+        DynStride srcViewStride(srcGlobalData.GetStride(GlobalTensorDim::DIM_0),
+                                srcGlobalData.GetStride(GlobalTensorDim::DIM_1),
+                                srcGlobalData.GetStride(GlobalTensorDim::DIM_2), srcStride3,
+                                srcGlobalData.GetStride(GlobalTensorDim::DIM_4));
 
         for (int r = 0; r < nranks; ++r) {
             int64_t srcOffset = static_cast<int64_t>(r) * perRankRows * srcStride3;
@@ -325,11 +308,11 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
 
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(gShape3 % tileValidRow == 0,
-            "TSCATTER chunked: per-rank DIM_3 must be divisible by tile ValidRow when static.");
+                   "TSCATTER chunked: per-rank DIM_3 must be divisible by tile ValidRow when static.");
     }
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(gShape4 % tileValidCol == 0,
-            "TSCATTER chunked: DIM_4 must be divisible by tile ValidCol when static.");
+                   "TSCATTER chunked: DIM_4 must be divisible by tile ValidCol when static.");
     }
 
     const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
@@ -365,39 +348,33 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
         for (int i0 = 0; i0 < gShape0; ++i0) {
             for (int i1 = 0; i1 < gShape1; ++i1) {
                 for (int i2 = 0; i2 < gShape2; ++i2) {
-                    int64_t srcBase = rankSrcBase
-                                    + static_cast<int64_t>(i0) * srcStride0
-                                    + static_cast<int64_t>(i1) * srcStride1
-                                    + static_cast<int64_t>(i2) * srcStride2;
-                    int64_t dstBase = static_cast<int64_t>(i0) * dstStride0
-                                    + static_cast<int64_t>(i1) * dstStride1
-                                    + static_cast<int64_t>(i2) * dstStride2;
+                    int64_t srcBase = rankSrcBase + static_cast<int64_t>(i0) * srcStride0 +
+                                      static_cast<int64_t>(i1) * srcStride1 + static_cast<int64_t>(i2) * srcStride2;
+                    int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+                                      static_cast<int64_t>(i2) * dstStride2;
 
                     for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
-                        int currentRows = (rowOff + tileValidRow <= gShape3)
-                                          ? tileValidRow : (gShape3 - rowOff);
+                        int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
 
                         for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
-                            int currentCols = (colOff + tileValidCol <= gShape4)
-                                              ? tileValidCol : (gShape4 - colOff);
+                            int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
 
-                            int64_t srcOffset = srcBase
-                                              + static_cast<int64_t>(rowOff) * srcStride3
-                                              + static_cast<int64_t>(colOff) * srcStride4;
-                            int64_t dstOffset = dstBase
-                                              + static_cast<int64_t>(rowOff) * dstStride3
-                                              + static_cast<int64_t>(colOff) * dstStride4;
+                            int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+                                                static_cast<int64_t>(colOff) * srcStride4;
+                            int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+                                                static_cast<int64_t>(colOff) * dstStride4;
 
                             // Select load tile
                             TileData &loadTile = usePing ? pingTile : pongTile;
                             event_t curEvent = usePing ? EVENT_ID0 : EVENT_ID1;
 
-                            if constexpr (isDynamicRow) loadTile.RowMaskInternal = currentRows;
-                            if constexpr (isDynamicCol) loadTile.ColMaskInternal = currentCols;
+                            if constexpr (isDynamicRow)
+                                loadTile.RowMaskInternal = currentRows;
+                            if constexpr (isDynamicCol)
+                                loadTile.ColMaskInternal = currentCols;
 
                             DynShape chunkShape(1, 1, 1, currentRows, currentCols);
-                            SrcViewT srcView(srcGlobalData.data() + srcOffset,
-                                             chunkShape, srcChunkStride);
+                            SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
 
                             if (hasPending) {
                                 TileData &storeTile = usePing ? pongTile : pingTile;
@@ -407,15 +384,15 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
                                 wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
 
                                 DynShape pendShape(1, 1, 1, pendingRows, pendingCols);
-                                DstViewT dstView(parallelGroup[pendingRank].data() + pendingDstOffset,
-                                                 pendShape, dstChunkStride);
+                                DstViewT dstView(parallelGroup[pendingRank].data() + pendingDstOffset, pendShape,
+                                                 dstChunkStride);
 
                                 // Issue TSTORE + TLOAD concurrently (MTE3 and MTE2 in parallel)
                                 TSTORE(dstView, storeTile);
                                 TLOAD(loadTile, srcView);
 
-                                set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);  // store done
-                                set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);   // load done
+                                set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent); // store done
+                                set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);  // load done
 
                                 // Ensure storeTile UB is safe before overwrite
                                 wait_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
@@ -446,8 +423,7 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
         wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
 
         DynShape lastShape(1, 1, 1, pendingRows, pendingCols);
-        DstViewT dstView(parallelGroup[pendingRank].data() + pendingDstOffset,
-                         lastShape, dstChunkStride);
+        DstViewT dstView(parallelGroup[pendingRank].data() + pendingDstOffset, lastShape, dstChunkStride);
         TSTORE(dstView, lastTile);
 
         set_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
