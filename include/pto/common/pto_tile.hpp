@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/memory.hpp"
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
+#include "pto/common/debug.h"
 #ifdef __CPU_SIM
 #include <iomanip>
 #endif
@@ -35,6 +36,8 @@ enum class Layout
     NC1HWC0,
     NCHW,
     NHWC,
+    NDC1HWC0,
+    NCDHW,
     FRACTAL_Z,
     FRACTAL_Z_S16S8,
     MAX,
@@ -1044,12 +1047,183 @@ public:
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
+    PTO_INTERNAL uint16_t GetFmapH() const
+    {
+        return fmapH_;
+    }
+    PTO_INTERNAL void SetFmapH(uint16_t fmapH)
+    {
+        fmapH_ = fmapH;
+    }
+    PTO_INTERNAL uint16_t GetFmapW() const
+    {
+        return fmapW_;
+    }
+    PTO_INTERNAL void SetFmapW(uint16_t fmapW)
+    {
+        fmapW_ = fmapW;
+    }
+    PTO_INTERNAL uint8_t GetPadList(uint8_t index) const
+    { // PTO_Assert
+        return padList_[index];
+    }
+    PTO_INTERNAL void SetPadList(uint8_t index, uint8_t value)
+    {
+        padList_[index] = value;
+    }
+    PTO_INTERNAL const uint8_t *GetPadListArray() const
+    {
+        return padList_;
+    }
+    PTO_INTERNAL void SetPadListArray(const uint8_t values[4])
+    {
+        // PTO_Assert
+        for (int i = 0; i < 4; i++) {
+            padList_[i] = values[i];
+        }
+    }
+    PTO_INTERNAL uint16_t GetFilterH() const
+    {
+        return filterH_;
+    }
+    PTO_INTERNAL void SetFilterH(uint16_t filterH)
+    {
+        filterH_ = filterH;
+    }
+    PTO_INTERNAL uint16_t GetFilterW() const
+    {
+        return filterW_;
+    }
+    PTO_INTERNAL void SetFilterW(uint16_t filterW)
+    {
+        filterW_ = filterW;
+    }
+    PTO_INTERNAL uint8_t GetDilationH() const
+    {
+        return dilationH_;
+    }
+    PTO_INTERNAL void SetDilationH(uint8_t dilationH)
+    {
+        dilationH_ = dilationH;
+    }
+    PTO_INTERNAL uint8_t GetDilationW() const
+    {
+        return dilationW_;
+    }
+    PTO_INTERNAL void SetDilationW(uint8_t dilationW)
+    {
+        dilationW_ = dilationW;
+    }
+    PTO_INTERNAL uint8_t GetStrideH() const
+    {
+        return strideH_;
+    }
+    PTO_INTERNAL void SetStrideH(uint8_t strideH)
+    {
+        strideH_ = strideH;
+    }
+    PTO_INTERNAL uint8_t GetStrideW() const
+    {
+        return strideW_;
+    }
+    PTO_INTERNAL void SetStrideW(uint8_t strideW)
+    {
+        strideW_ = strideW;
+    }
+    PTO_INTERNAL DType GetPadValue() const
+    {
+        return padValue_;
+    }
+    PTO_INTERNAL void SetPadValue(DType padValue)
+    {
+        padValue_ = padValue;
+    }
+    PTO_INTERNAL uint16_t GetChannelSize() const
+    {
+        return channelSize_;
+    }
+    PTO_INTERNAL void SetChannelSize(uint16_t channelSize)
+    {
+        channelSize_ = channelSize;
+    }
+    PTO_INTERNAL uint16_t GetRepeatStride() const
+    {
+        return repeatStride_;
+    }
+    PTO_INTERNAL void SetRepeatStride(uint16_t repeatStride)
+    {
+        repeatStride_ = repeatStride;
+    }
+    PTO_INTERNAL uint16_t GetRepeatTime() const
+    {
+        return repeatTime_;
+    }
+    PTO_INTERNAL void SetRepeatTime(uint8_t repeatTime)
+    {
+        repeatTime_ = repeatTime;
+    }
+    PTO_INTERNAL uint16_t GetRepeatMode() const
+    {
+        return repeatMode_;
+    }
+    PTO_INTERNAL void SetRepeatMode(uint8_t repeatMode)
+    {
+        repeatMode_ = repeatMode;
+    }
+    PTO_INTERNAL bool GetTranspose() const
+    {
+        return transpose_;
+    }
+    PTO_INTERNAL void SetTranspose(bool transpose)
+    {
+        transpose_ = transpose;
+    }
+#if defined REGISTER_BASE
+    PTO_INTERNAL void SetDstStride(uint16_t dstStride)
+    {
+        dstStride_ = dstStride;
+    }
+    PTO_INTERNAL uint16_t GetDstStride() const
+    {
+        return dstStride_;
+    }
+    PTO_INTERNAL void SetDstMposition(uint16_t dstMposition)
+    {
+        dstMposition_ = dstMposition;
+    }
+    PTO_INTERNAL uint16_t GetDstMposition() const
+    {
+        return dstMposition_;
+    }
+#endif
 private:
     AICORE void assignData(TileDType data)
     {
         data_ = data;
     }
     TileDType data_;
+    uint8_t padList_[4] = {0};
+    uint16_t fmapH_ = 0;
+    uint16_t fmapW_ = 0;
+
+    uint16_t filterH_ = 1;
+    uint16_t filterW_ = 1;
+    uint16_t dilationH_ = 1;
+    uint16_t dilationW_ = 1;
+    uint16_t strideH_ = 1;
+    uint16_t strideW_ = 1;
+
+    DType padValue_ = 0;
+    uint16_t channelSize_ = 0;
+    uint16_t repeatStride_ = 0;
+    uint8_t repeatTime_ = 1;
+    uint8_t repeatMode_ = 0;
+#if defined REGISTER_BASE
+    uint16_t dstStride_ = 0;
+    uint16_t dstMposition_ = 0;
+#endif
+    bool smallChannel_ = false;
+    bool transpose_ = false;
 };
 
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,
@@ -1224,6 +1398,8 @@ public:
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
+#if defined(__DAV_CUBE__)
+#ifdef MEMORY_BASE
     PTO_INTERNAL bool GetKAligned() const
     {
         return isKAligned_;
@@ -1232,14 +1408,45 @@ public:
     {
         isKAligned_ = isKAligned;
     }
-
+    PTO_INTERNAL void SetMadHF32Mode(RoundMode hf32TransMode = RoundMode::CAST_ROUND)
+    {
+        PTO_ASSERT(hf32TransMode == RoundMode::CAST_ROUND || hf32TransMode == RoundMode::CAST_RINT,
+                   "Unsupported RoundMode for HF32.");
+        set_ctrl(sbitset1(get_ctrl(), MAD_MODE_BIT));
+        if (hf32TransMode == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), MAD_ROUND_MODE_BIT));
+        } else if (hf32TransMode == RoundMode::CAST_RINT) {
+            set_ctrl(sbitset0(get_ctrl(), MAD_ROUND_MODE_BIT));
+        }
+    }
+#endif
+#ifdef REGISTER_BASE
+    PTO_INTERNAL void SetMadTF32Mode(RoundMode tf32TransMode = RoundMode::CAST_ROUND)
+    {
+        PTO_ASSERT(tf32TransMode == RoundMode::CAST_ROUND || tf32TransMode == RoundMode::CAST_RINT,
+                   "Unsupported RoundMode for TF32.");
+        set_ctrl(sbitset1(get_ctrl(), MAD_MODE_BIT));
+        if (tf32TransMode == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), MAD_ROUND_MODE_BIT));
+        } else if (tf32TransMode == RoundMode::CAST_RINT) {
+            set_ctrl(sbitset0(get_ctrl(), MAD_ROUND_MODE_BIT));
+        }
+    }
+#endif
+    PTO_INTERNAL void ResetMadMode()
+    {
+        set_ctrl(sbitset0(get_ctrl(), MAD_MODE_BIT));
+    }
+#endif
 private:
     AICORE void assignData(TileDType data)
     {
         data_ = data;
     }
     TileDType data_;
+#ifdef MEMORY_BASE
     bool isKAligned_; // K-Alignedment for A3
+#endif
 };
 
 #ifdef MEMORY_BASE

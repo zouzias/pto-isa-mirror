@@ -36,6 +36,8 @@ constexpr const int MX_COL_LEN = 2;
 constexpr const int MX_ROW_LEN = 16;
 constexpr const int MX_BLOCK_SIZE = 32;
 constexpr const int B8_DATA_TYPE_OFFSET = 8;
+constexpr const int MAD_MODE_BIT = 46;
+constexpr const int MAD_ROUND_MODE_BIT = 47;
 
 enum VFImplKind : unsigned
 {
@@ -339,24 +341,5 @@ PTO_INTERNAL constexpr TileLayoutCustom GetTileLayoutCustom()
         return TileLayoutCustom::NONE;
     }
 }
-
-template <typename T = uint64_t>
-struct Img2colTileConfig {
-    uint8_t padList[4] = {0};
-    uint16_t fmapH = 0;
-    uint16_t fmapW = 0;
-    uint16_t filterH = 1;
-    uint16_t filterW = 1;
-    uint8_t dilationH = 1;
-    uint8_t dilationW = 1;
-    uint8_t strideH = 1;
-    uint8_t strideW = 1;
-    uint16_t channelSize = 0;
-    T padValue = 0;
-    bool transpose = false;
-    bool smallChannel = false;
-
-    AICORE Img2colTileConfig() = default;
-};
 } // namespace pto
 #endif

@@ -48,6 +48,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/build_st.py -r $RUN_TYPE -v a3 -t all
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolexpand -g TCOLEXPANDTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolsum -g TCOLSUMTest.case1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolprod -g TCOLPRODTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmax -g TCOLMAXTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmin -g TCOLMINTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trem -g TREMTest.case_half_16x64_16x128_16x128_16x64
@@ -84,8 +85,8 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolexpandmin -g TColExpandMinTest.case_fp16_4_256_1_256
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tgather -g TGATHERTest.case1_float_P0101
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t ttrans -g TTRANSTest.case1_float_16_8_16_8
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsels -g TSELSTest.case_float_64x64_64x64_64x64
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsels -g TSELSTest.case_half_16x256_16x256_16x256
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsels -g TSELSTest.case_uint16_uint8_2x16_2x32_2x16_2x16
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsels -g TSELSTest.case_float_uint16_2x8_2x16_2x8_2x8
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tsort32 -g TSort32Test.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tadd -g TADDTest.case_float_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tand -g TANDTest.case1
@@ -128,6 +129,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/build_st.py -r $RUN_TYPE -v a3 -t all
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolexpand
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolsum
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolprod
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmax
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmin
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trem
@@ -224,6 +226,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolmax -g TCOLMAXTest.case01
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolmin -g TCOLMINTest.case01
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolsum -g TCOLSUMTest.case01
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolprod -g TCOLPRODTest.case01
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcvt -g TCVTTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdivs -g TDIVSTest.case4
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdivs -g TDIVSTest.case5
@@ -268,7 +271,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trowsum -g TROWSUMTest.test1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trsqrt -g TRSQRTTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsel -g TSELTest.case1
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsels -g TSELSTest.case_float_16x200_20x224_16x200
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsels -g TSELSTest.case_uint8_uint8_2x32_2x32_2x32_2x32
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsels -g TSELSTest.case_float_uint16_2x8_2x16_2x8_2x8
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tshl -g TSHLTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tshr -g TSHRTest.case2
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsort32 -g TSort32Test.case1
@@ -321,6 +325,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolmax
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolmin
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolsum
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolprod
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcvt
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdivs
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t texp

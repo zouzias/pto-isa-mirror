@@ -25,13 +25,11 @@ PTO_INST void TASSIGN(T &obj, AddrType addr)
     MAP_INSTR_IMPL(TASSIGN, obj, addr);
 }
 
-#ifndef __CPU_SIM
 template <Op OpCode>
 PTO_INST void TSYNC()
 {
     TSYNC_IMPL<OpCode>();
 }
-#endif
 
 template <typename... WaitEvents>
 PTO_INST void TSYNC(WaitEvents &... events)
@@ -566,26 +564,6 @@ PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &
     return {};
 }
 
-#ifdef MEMORY_BASE
-template <bool isEnable, RoundMode hf32TransMode = RoundMode::CAST_ROUND, typename... WaitEvents>
-PTO_INST RecordEvent TSETHF32MODE(WaitEvents &... events)
-{
-    TSYNC(events...);
-    TSETHF32MODE_IMPL<isEnable, hf32TransMode>();
-    return {};
-}
-#endif
-
-#ifdef REGISTER_BASE
-template <bool isEnable, RoundMode tf32TransMode = RoundMode::CAST_ROUND, typename... WaitEvents>
-PTO_INST RecordEvent TSETTF32MODE(WaitEvents &... events)
-{
-    TSYNC(events...);
-    TSETTF32MODE_IMPL<isEnable, tf32TransMode>();
-    return {};
-}
-#endif
-
 template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData,
           typename Src2TileData, typename Src3TileData, bool exhausted, typename... WaitEvents>
 PTO_INST RecordEvent TMRGSORT(DstTileData &dst, MrgSortExecutedNumList &executedNumList, TmpTileData &tmp,
@@ -667,22 +645,57 @@ PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData 
 }
 
 template <typename TileData, typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL,
-          typename T = uint64_t, typename... WaitEvents>
+          typename... WaitEvents>
 PTO_INST RecordEvent TIMG2COL(TileData &dst, ConvTileData &src, uint16_t posM = 0, uint16_t posK = 0,
-                              const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents &... events)
+                              WaitEvents &... events)
 {
     TSYNC(events...);
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode, T>(dst, src, posM, posK, cfg);
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
     return {};
 }
 
-template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint64_t, typename... WaitEvents>
-PTO_INST RecordEvent TSETFMATRIX(const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents &... events)
+template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
+PTO_INST RecordEvent TSETFMATRIX(ConvTileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    TSETFMATRIX_IMPL<FmatrixMode, T>(cfg);
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
     return {};
 }
+
+#ifdef MEMORY_BASE
+template <typename ConvTileData, typename... WaitEvents>
+PTO_INST RecordEvent TSET_IMG2COL_RPT(ConvTileData &src, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TSET_IMG2COL_RPT_IMPL<ConvTileData>(src);
+    return {};
+}
+
+template <typename ConvTileData, typename... WaitEvents>
+PTO_INST RecordEvent TSET_IMG2COL_PADDING(ConvTileData &src, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TSET_IMG2COL_PADDING_IMPL<ConvTileData>(src);
+    return {};
+}
+#endif
+#if defined REGISTER_BASE
+template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
+PTO_INST RecordEvent TSET_IMG2COL_RPT(ConvTileData &src, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TSET_IMG2COL_RPT_IMPL<ConvTileData, FmatrixMode>(src);
+    return {};
+}
+
+template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
+PTO_INST RecordEvent TSET_IMG2COL_PADDING(ConvTileData &src, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TSET_IMG2COL_PADDING_IMPL<ConvTileData, FmatrixMode>(src);
+    return {};
+}
+#endif
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol,
@@ -927,6 +940,14 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 }
 
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
+PTO_INST RecordEvent TCOLPROD(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TCOLPROD, dst, src);
+    return {};
+}
+
+template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
 PTO_INST RecordEvent TCOLMAX(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -958,11 +979,12 @@ PTO_INST RecordEvent TROWMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
     return {};
 }
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSELS(TileData &dst, TileData &src0, TileData &src1, uint8_t selectMode, WaitEvents &... events)
+template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, typename TileDataSrc::DType scalar,
+                           WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TSELS, dst, src0, src1, selectMode);
+    MAP_INSTR_IMPL(TSELS, dst, mask, src, scalar);
     return {};
 }
 
@@ -1368,13 +1390,23 @@ PTO_INST RecordEvent TFMOD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &s
 }
 
 #ifdef REGISTER_BASE
-template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, typename TileDataMax, int mode,
+template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
           typename... WaitEvents>
-PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst, TileDataMax &max,
-                            TileDataSrc &scaling, WaitEvents &... events)
+PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max,
+                            TileDataSrc *scaling, WaitEvents &... events)
 {
     TSYNC(events...);
-    TQUANT_IMPL<TileDataSrc, TileDataExp, TileDataOut, TileDataMax, mode>(src, exp, dst, max, scaling);
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataExp, TileDataMax>(dst, src, exp, max, scaling);
+    return {};
+}
+
+template <QuantType quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataPara,
+          typename TileDataOffset = TileDataPara, typename... WaitEvents>
+PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &scale, TileDataOffset *offset = nullptr,
+                            WaitEvents &... events)
+{
+    TSYNC(events...);
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara, TileDataOffset>(dst, src, scale, offset);
     return {};
 }
 #endif

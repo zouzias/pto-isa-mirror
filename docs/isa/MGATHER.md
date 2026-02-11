@@ -1,5 +1,10 @@
 # MGATHER
 
+
+## Tile Operation Diagram
+
+![MGATHER tile operation](../figures/isa/MGATHER.svg)
+
 ## Introduction
 
 Gather data from a GlobalTensor (GM) into a Tile using per-row or per-element indices. This custom instruction performs indexed memory access from global memory, supporting both row-level block transfers (e.g., embedding table lookups) and element-level indexed transfers (e.g., sparse access patterns).

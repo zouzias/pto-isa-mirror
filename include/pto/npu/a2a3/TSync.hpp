@@ -66,6 +66,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TROWMIN */,
     PIPE_V /* TROWEXPAND */,
     PIPE_V /* TCOLSUM */,
+    PIPE_V /* TCOLPROD */,
     PIPE_V /* TCOLMAX */,
     PIPE_V /* TCOLMIN */,
     PIPE_V /* TTRANS */,
@@ -102,7 +103,8 @@ constexpr pipe_t opPipeList[] = {
     PIPE_FIX /* TINSERT_A2M */,
     PIPE_MTE1 /* TIMG2COL */,
     PIPE_S /* TSETFMATRIX */,
-    PIPE_S /* TSETHF32MODE */,
+    PIPE_S /* TSET_IMG2COL_RPT */,
+    PIPE_S /* TSET_IMG2COL_PADDING */,
 };
 
 template <Op OpCode>

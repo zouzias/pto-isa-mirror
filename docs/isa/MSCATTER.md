@@ -1,5 +1,10 @@
 # MSCATTER
 
+
+## Tile Operation Diagram
+
+![MSCATTER tile operation](../figures/isa/MSCATTER.svg)
+
 ## Introduction
 
 Scatter data from a Tile into a GlobalTensor (GM) using per-row or per-element indices. This custom instruction performs indexed memory writes to global memory, supporting both row-level block transfers (e.g., expert weight updates) and element-level indexed transfers (e.g., sparse gradient accumulation).
