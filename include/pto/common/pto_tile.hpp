@@ -1011,7 +1011,8 @@ struct Tile {
     // constructor for static shape
     AICORE Tile() {
 #ifdef __PTO_AUTO__
-        TInit<std::remove_reference_t<decltype(*this)>>(data_);
+        if constexpr (Loc != TileType::Bias)
+            TInit<std::remove_reference_t<decltype(*this)>>(data_);
 #endif
     };
 
