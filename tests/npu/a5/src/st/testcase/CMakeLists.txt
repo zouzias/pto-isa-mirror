@@ -131,6 +131,8 @@ set(ALL_TESTCASES
     trowexpandsub
     trowexpandexpdif
     tgather
+    mgather
+    mscatter
     tcvt
     tsub
     trem
