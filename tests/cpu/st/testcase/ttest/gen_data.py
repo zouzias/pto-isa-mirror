@@ -21,14 +21,14 @@ def gen_golden_data(case_name, param):
     row_valid, col_valid = [param.valid_row, param.valid_col]
 
     #Generate random input arrays
-    input = np.random.randint(1, 3, size=[row, col]).astype(dtype)
+    input_arr = np.random.randint(1, 3, size=[row, col]).astype(dtype)
     cmp_value = np.random.randint(0, 6, size=(1, 1)).astype(dtype)
     with open("./cmp_file.bin", 'wb') as f:
         f.write(struct.pack('i', cmp_value[0, 0]))
-    valid = np.all(input <= cmp_value[0, 0])
+    valid = np.all(input_arr <= cmp_value[0, 0])
 
     #Save the input and golden data to binary files
-    input.tofile("input.bin") 
+    input_arr.tofile("input.bin") 
     
     with open("./golden.bin", 'wb') as f:
         f.write(struct.pack('?', valid))
