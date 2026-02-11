@@ -1,14 +1,14 @@
-#!/ usr / bin / python3
-#coding = utf - 8
-#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
-#Copyright(c) 2026 Huawei Technologies Co., Ltd.
-#This program is free software, you can redistribute it and / or modify it under the terms and conditions of
-#CANN Open Software License Agreement Version 2.0(the "License").
-#Please refer to the License for details.You may not use this file except in compliance with the License.
-#THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-#INCLUDING BUT NOT LIMITED TO NON - INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-#See LICENSE in the root of the software repository for the full text of the License.
-#-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+#!/usr/bin/python3
+# coding=utf-8
+# --------------------------------------------------------------------------------
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# --------------------------------------------------------------------------------
 
 import os 
 import numpy as np 
@@ -21,7 +21,7 @@ def gen_golden_data(case_name, param):
     row_valid, col_valid = [param.valid_row, param.valid_col]
 
     #Generate random input arrays
-    input = np.random.randint(1, 3, size =[row, col]).astype(dtype)
+    input = np.random.randint(1, 3, size=[row, col]).astype(dtype)
     cmp_value = np.random.randint(0, 6, size=(1, 1)).astype(dtype)
     with open("./cmp_file.bin", 'wb') as f:
         f.write(struct.pack('i', cmp_value[0, 0]))
@@ -45,7 +45,7 @@ class TTestParams:
         self.valid_col = valid_col
         self.cmp = cmp
 
-if __name__ == "__main__" :
+if __name__ == "__main__":
     #Get the absolute path of the script
     script_dir = os.path.dirname(os.path.abspath(__file__)) 
     testcases_dir = os.path.join(script_dir, "testcases")
@@ -60,7 +60,7 @@ if __name__ == "__main__" :
         "TTESTTest.case3",
         "TTESTTest.case4",
     ]
-    case_params_list =[
+    case_params_list = [
         TTestParams(np.int32, 64, 64, 64, 64, 64, 64, 'LE'), 
         TTestParams(np.int32, 64, 64, 64, 64, 64, 64, 'LE'), 
         TTestParams(np.int32, 64, 64, 64, 64, 64, 64, 'LE'), 
