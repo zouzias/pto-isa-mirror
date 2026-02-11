@@ -135,11 +135,7 @@ def load_flash_lib(lib_path: str, check_type: bool = True):
     return flash
 
 
-def jit_compile_flash(
-    verbose: bool = False,
-    clean_up: bool = True,
-    kernel_cpp: str = "fa_kernel.cpp",
-):
+def jit_compile_flash(verbose: bool = False, clean_up: bool = True, kernel_cpp: str = "fa_kernel.cpp"):
     """
     Builds the Flash/TFA kernel cpp into flash_jit.so,
     loads call_kernel, and returns flash(...) wrapper.

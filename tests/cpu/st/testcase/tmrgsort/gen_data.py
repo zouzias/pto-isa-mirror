@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -25,7 +26,7 @@ def find_and_zero(arr, tar):
         raise ValueError("The input must be a list of numbers.")
     if not isinstance(tar, (np.floating)):
         return -1
-    
+
     n = len(arr)
     for i in range(n - 1, -1, -1):
         if arr[i] == tar:
@@ -39,7 +40,7 @@ def zero_after_index(arr, i):
     # Check if the index is valid
     if i < 0 or i >= len(arr):
         return
-    
+
     # Set the elements after position i to 0
     for j in range(i + 1, len(arr)):
         arr[j] = 0
@@ -58,13 +59,8 @@ def gen_golden_data(param):
     input_num = param.input_num
     case_name = param.case_name
     block_len = param.block_len // 2
-    src_cols = [
-        param.src0_col // 2,
-        param.src1_col // 2,
-        param.src2_col // 2,
-        param.src3_col // 2
-    ]
-    
+    src_cols = [param.src0_col // 2, param.src1_col // 2, param.src2_col // 2, param.src3_col // 2]
+
     # reshape to 32 cols (every sorted list)
     if input_num == 1:
         list_col = block_len
@@ -79,14 +75,14 @@ def gen_golden_data(param):
     else:
         flat_input_group = np.concatenate(output_arr).flatten()
         flat_idx_group = np.concatenate(output_idx).flatten()
-        sorted_indices_global = np.argsort(-flat_input_group, kind='stable',)
+        sorted_indices_global = np.argsort(-flat_input_group, kind="stable")
         sorted_output_global = flat_input_group[sorted_indices_global]
         sorted_idx_global = flat_idx_group[sorted_indices_global]
         zeros_output = np.zeros(input_num * cols - topk, dtype=sorted_output_global.dtype)
         zeros_index = np.zeros(input_num * cols - topk, dtype=np.uint32)
         topk_sorted_output_global = np.concatenate((sorted_output_global[:topk], zeros_output))
         topk_sorted_idx_global = np.concatenate((sorted_idx_global[:topk], zeros_index))
-        
+
         if case_name.startswith("TMRGSORTTest.case_exhausted"):
             handle_exhausted_list(input_num, topk_sorted_output_global, topk_sorted_idx_global, last_data)
         sorted_pairs_global = zip(topk_sorted_output_global, topk_sorted_idx_global)
@@ -95,11 +91,11 @@ def gen_golden_data(param):
 
 def gen_single_output(list_col, cols, src_type, output_arr, output_idx):
     block_lens = list_col * 4
-    input_group = output_arr.flatten()[:cols // block_lens * block_lens]
-    idx_group = output_idx.flatten()[:cols // block_lens * block_lens]
+    input_group = output_arr.flatten()[: cols // block_lens * block_lens]
+    idx_group = output_idx.flatten()[: cols // block_lens * block_lens]
     single_output_reshape = input_group.reshape(-1, block_lens)
     single_idx_reshape = idx_group.reshape(-1, block_lens)
-    single_sorted_indices = np.argsort(-single_output_reshape, kind='stable', axis=1)
+    single_sorted_indices = np.argsort(-single_output_reshape, kind="stable", axis=1)
     sorted_output_global = np.take_along_axis(single_output_reshape, single_sorted_indices, axis=1).flatten()
     sorted_idx_global = np.take_along_axis(single_idx_reshape, single_sorted_indices, axis=1).flatten()
     if cols % block_lens != 0:
@@ -122,7 +118,7 @@ def gen_input_data(input_num, cols, src_type, list_col, src_cols):
     input_reshaped = input_arr.reshape(-1, list_col)
     idx_reshaped = idx.reshape(-1, list_col)
     # Sort each group of 32 elements based on input values in descending order
-    sorted_indices = np.argsort(-input_reshaped, kind='stable', axis=1)  # argsort() return idx
+    sorted_indices = np.argsort(-input_reshaped, kind="stable", axis=1)  # argsort() return idx
     sorted_input = np.take_along_axis(input_reshaped, sorted_indices, axis=1)
     sorted_idx = np.take_along_axis(idx_reshaped, sorted_indices, axis=1)
 
@@ -135,12 +131,12 @@ def gen_input_data(input_num, cols, src_type, list_col, src_cols):
         flat_idx = sorted_idx.flatten()
         # Create pairs of (value, index)
         sorted_pairs = zip(flat_input, flat_idx)
-        with open("input0.bin", 'wb') as f:
+        with open("input0.bin", "wb") as f:
             write_file(src_type, sorted_pairs, f)
     else:
         for i in range(input_num):
             col_i = src_cols[i]
-            flat_input_i = sorted_input[i, :cols].flatten()    
+            flat_input_i = sorted_input[i, :cols].flatten()
             flat_idx_i = sorted_idx[i, :cols].flatten()
 
             # Create data and index pair
@@ -154,23 +150,23 @@ def gen_input_data(input_num, cols, src_type, list_col, src_cols):
 
             filename = f"input{i}.bin"
 
-            with open(filename, 'wb') as f:
+            with open(filename, "wb") as f:
                 write_file(src_type, sorted_pairs_i, f)
     return output_arr, output_idx, last_data
 
 
 def write_output(sorted_pairs_global, src_type):
-    with open("golden.bin", 'wb') as f:
+    with open("golden.bin", "wb") as f:
         write_file(src_type, sorted_pairs_global, f)
 
 
 def write_file(src_type, sorted_pairs_global, f):
     for value, index in sorted_pairs_global:
         if src_type == np.float32:
-            packed_data = struct.pack('fI', float(value), ctypes.c_uint32(index).value)
+            packed_data = struct.pack("fI", float(value), ctypes.c_uint32(index).value)
             f.write(packed_data)
         elif src_type == np.float16:
-            packed_data = struct.pack('e2xI', value, ctypes.c_uint32(index).value)
+            packed_data = struct.pack("e2xI", value, ctypes.c_uint32(index).value)
             f.write(packed_data)
 
 
@@ -194,7 +190,6 @@ if __name__ == "__main__":
         # TMRGSORTTest.case_multi
         TmrgsortParams("TMRGSORTTest.case_multi1", np.float32, 1, 128, 128, 128, 128, 4, 512, 0),
         TmrgsortParams("TMRGSORTTest.case_multi2", np.float16, 1, 128, 128, 128, 128, 4, 512, 0),
-
         # TMRGSORTTest.case_exhausted
         TmrgsortParams("TMRGSORTTest.case_exhausted1", np.float32, 1, 64, 64, 0, 0, 2, 128, 0),
         TmrgsortParams("TMRGSORTTest.case_exhausted2", np.float16, 1, 256, 256, 256, 0, 3, 768, 0),
@@ -204,7 +199,6 @@ if __name__ == "__main__":
         TmrgsortParams("TMRGSORTTest.case_single5", np.float16, 1, 256, 0, 0, 0, 1, 0, 64),
         TmrgsortParams("TMRGSORTTest.case_single7", np.float16, 1, 512, 0, 0, 0, 1, 0, 64),
         TmrgsortParams("TMRGSORTTest.case_single8", np.float16, 1, 1024, 0, 0, 0, 1, 0, 256),
-
         # TMRGSORTTest.case_topk
         TmrgsortParams("TMRGSORTTest.case_topk2", np.float32, 1, 2048, 0, 0, 0, 1, 2048, 64),
         TmrgsortParams("TMRGSORTTest.case_topk5", np.float16, 1, 2048, 0, 0, 0, 1, 2048, 64),

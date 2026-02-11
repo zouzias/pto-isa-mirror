@@ -12,7 +12,9 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
+
 
 def gen_golden_data_tgatherb(case_name, param):
     dtype = param.dtype
@@ -25,7 +27,7 @@ def gen_golden_data_tgatherb(case_name, param):
         data_size = 1
     else:
         ValueError(f"{dtype} unsupported data type!!")
-    blockSizeElem = int(32/data_size)
+    blockSizeElem = int(32 / data_size)
 
     src_shape = [param.src_s1, param.src_s0]
     dst_shape = [param.dst_s1, param.dst_s0]
@@ -45,7 +47,7 @@ def gen_golden_data_tgatherb(case_name, param):
     output = np.zeros(dst_elt_num).astype(dtype)
     count = 0
     for i in range(offset_elt_num):
-        for j in range(int(32/data_size)):
+        for j in range(int(32 / data_size)):
             golden[count] = src[int(offset[i] / data_size + j)]
             count += 1
     golden.reshape((dst_elt_num)).astype(np.uint32)
@@ -71,17 +73,20 @@ class TGatherBParams:
 
 def generate_case_name(param):
     dtype_str = {
-        np.float32: 'float',
-        np.int32: 'int32',
-        np.uint32: 'uint32',
-        np.int16: 'int16',
-        np.uint16: 'uint16',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.uint8: 'uint8',
+        np.float32: "float",
+        np.int32: "int32",
+        np.uint32: "uint32",
+        np.int16: "int16",
+        np.uint16: "uint16",
+        np.float16: "half",
+        np.int8: "int8",
+        np.uint8: "uint8",
     }[param.dtype]
-    return (f"TGATHERBTest.case_{dtype_str}_{param.dst_s1}x{param.dst_s0}_{param.offset_s1}x"
-            f"{param.offset_s0}_{param.src_s1}x{param.src_s0}")
+    return (
+        f"TGATHERBTest.case_{dtype_str}_{param.dst_s1}x{param.dst_s0}_{param.offset_s1}x"
+        f"{param.offset_s0}_{param.src_s1}x{param.src_s0}"
+    )
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -91,7 +96,7 @@ if __name__ == "__main__":
     # Ensure the testcases directory exists
     if not os.path.exists(testcases_dir):
         os.makedirs(testcases_dir)
-    
+
     case_params_list = [
         TGatherBParams(np.float32, 2, 128, 2, 16, 2, 128),
         TGatherBParams(np.int32, 2, 128, 2, 16, 2, 128),

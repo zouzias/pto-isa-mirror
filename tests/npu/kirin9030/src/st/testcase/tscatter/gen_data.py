@@ -13,6 +13,7 @@
 import os
 import numpy as np
 import ml_dtypes
+
 bfloat16 = ml_dtypes.bfloat16
 np.random.seed(23)
 
@@ -61,9 +62,9 @@ def gen_golden_data(param: TScatterParams):
 
     golden = scatter(src_data, indices)
 
-    src_data.tofile('input.bin')
-    indices.tofile('indexes.bin')
-    golden.tofile('golden.bin')
+    src_data.tofile("input.bin")
+    indices.tofile("indexes.bin")
+    golden.tofile("golden.bin")
     os.chdir(original_dir)
 
 
@@ -76,7 +77,7 @@ if __name__ == "__main__":
         TScatterParams("TSCATTERTest.case5", np.float32, np.int32, 7, 64 * 7, 7, 448),
         TScatterParams("TSCATTERTest.case6", np.int8, np.uint16, 256, 32, 256, 32),
         TScatterParams("TSCATTERTest.case7", np.float32, np.uint32, 32, 64, 32, 64),
-        TScatterParams("TSCATTERTest.case8", bfloat16, np.int16, 32, 64, 32, 64)
+        TScatterParams("TSCATTERTest.case8", bfloat16, np.int16, 32, 64, 32, 64),
     ]
 
     for case in case_params_list:

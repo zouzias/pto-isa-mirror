@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -32,10 +33,10 @@ def gen_golden_data(param):
     else:
         output_arr[:rows, :cols] = input_arr[:rows, :cols] % divider[0]
 
-    input_arr.tofile('input.bin')
-    with open("divider.bin", 'wb') as f:
-        f.write(struct.pack('f', divider[0]))
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    with open("divider.bin", "wb") as f:
+        f.write(struct.pack("f", divider[0]))
+    output_arr.tofile("golden.bin")
 
 
 class TremsParams:
@@ -47,6 +48,7 @@ class TremsParams:
         self.row = row
         self.col = col
 
+
 if __name__ == "__main__":
     case_params_list = [
         TremsParams("TREMSTest.case1", np.float32, 32, 128, 32, 64),
@@ -54,7 +56,7 @@ if __name__ == "__main__":
         TremsParams("TREMSTest.case3", np.int32, 31, 256, 31, 128),
         TremsParams("TREMSTest.case4", np.int16, 15, 192, 15, 64 * 3),
         TremsParams("TREMSTest.case5", np.float32, 7, 512, 7, 64 * 7),
-        TremsParams("TREMSTest.case6", np.float32, 256, 32, 256, 16)
+        TremsParams("TREMSTest.case6", np.float32, 256, 32, 256, 16),
     ]
 
     for _, case in enumerate(case_params_list):

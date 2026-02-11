@@ -83,13 +83,7 @@ def load_lib(lib_path: str, check_type: bool = True):
         block_dim: int = default_block_dim,
         stream_ptr=default_stream_ptr,
     ):
-        lib.call_kernel(
-            block_dim,
-            stream_ptr,
-            torch_to_ctypes(c),
-            torch_to_ctypes(a),
-            torch_to_ctypes(b),
-        )
+        lib.call_kernel(block_dim, stream_ptr, torch_to_ctypes(c), torch_to_ctypes(a), torch_to_ctypes(b))
 
     return gemm
 

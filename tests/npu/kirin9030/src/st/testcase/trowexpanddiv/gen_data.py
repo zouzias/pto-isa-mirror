@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+
 np.random.seed(2025)
 
 
@@ -22,23 +23,23 @@ def gen_golden_data(params):
     [dst_row, dst_col] = [param.dst_row, param.dst_col]
     [src0_row, src0_col] = [param.src0_row, param.src0_col]
     [src1_row, src1_col] = [param.src1_row, param.src1_col]
-    
+
     if param.src0eqdst:
         src0 = np.random.uniform(low=-10, high=10, size=(src0_row, src0_col)).astype(dtype)
         src0.tofile("input0.bin")
         src1 = np.random.uniform(low=1, high=10, size=(src1_row, src1_col)).astype(dtype)
         src1.tofile("input1.bin")
-    
+
         reps = (dst_col + src1_col - 1) // src1_col
         src1_expand = np.tile(src1, (1, reps))[:, :dst_col]
-    
+
         golden = src0 / src1_expand
     else:
         src0 = np.random.uniform(low=-10, high=10, size=(src1_row, src1_col)).astype(dtype)
         src0.tofile("input0.bin")
         src1 = np.random.uniform(low=1, high=10, size=(src0_row, src0_col)).astype(dtype)
         src1.tofile("input1.bin")
-    
+
         reps = (dst_col + src0_col - 1) // src0_col
         src1_expand = np.tile(src1, (1, reps))[:, :dst_col]
 
@@ -64,11 +65,9 @@ class TrowexpandParams:
 
 
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'fp32',
-        np.float16: 'fp16',
-    }[param.dtype]
+    dtype_str = {np.float32: "fp32", np.float16: "fp16"}[param.dtype]
     return f"TRowExpandDivTest.case_{dtype_str}_{param.dst_row}_{param.dst_col}"
+
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -87,7 +86,7 @@ if __name__ == "__main__":
         TrowexpandParams(np.float32, 16, 128, 16, 1, 16, 128, False, False),
         TrowexpandParams(np.float16, 32, 64, 32, 1, 32, 64, False, False),
         TrowexpandParams(np.float32, 20, 64, 20, 8, 20, 64, False, True),
-        TrowexpandParams(np.float16, 16, 64, 16, 16, 16, 64, False, True)
+        TrowexpandParams(np.float16, 16, 64, 16, 16, 16, 64, False, True),
     ]
 
     for _, param in enumerate(case_params_list):

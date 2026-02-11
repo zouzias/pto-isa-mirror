@@ -13,6 +13,7 @@
 import os
 import struct
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -32,16 +33,7 @@ def gen_golden_data(case_name, param):
 
 
 class TestParams:
-    def __init__(
-        self, 
-        dtype, 
-        global_row, 
-        global_col, 
-        tile_row, 
-        tile_col, 
-        valid_row, 
-        valid_col
-    ):
+    def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
         self.global_row = global_row
         self.global_col = global_col
@@ -50,19 +42,16 @@ class TestParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
 
+
 def generate_case_name(param):
-    dtype_str = {
-        np.int16: 'int16',
-        np.uint16: 'uint16',
-        np.int8: 'int8',
-        np.uint8: 'uint8'
-    }[param.dtype]
+    dtype_str = {np.int16: "int16", np.uint16: "uint16", np.int8: "int8", np.uint8: "uint8"}[param.dtype]
     return (
         f"TNOTTest.case_{dtype_str}_"
         f"{param.global_row}x{param.global_col}_"
         f"{param.tile_row}x{param.tile_col}_"
         f"{param.valid_row}x{param.valid_col}"
     )
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -77,7 +66,7 @@ if __name__ == "__main__":
         TestParams(np.int16, 64, 64, 64, 64, 64, 64),
         TestParams(np.uint16, 60, 60, 64, 64, 60, 60),
         TestParams(np.int8, 64, 64, 64, 64, 64, 64),
-        TestParams(np.uint8, 60, 60, 64, 64, 60, 60)
+        TestParams(np.uint8, 60, 60, 64, 64, 60, 60),
     ]
 
     for i, param in enumerate(case_params_list):

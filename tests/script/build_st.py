@@ -15,24 +15,18 @@ import subprocess
 import shutil
 import argparse
 
+
 def run_command(command, cwd=None, check=True):
     try:
         print(f"run command: {' '.join(command)}")
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            check=check,
-            stdout=None,
-            stderr=None,
-            text=True
-        )
+        result = subprocess.run(command, cwd=cwd, check=check, stdout=None, stderr=None, text=True)
         return ""
     except subprocess.CalledProcessError as e:
         print(f"run command failed with return code {e.returncode}")
         raise
 
 
-def build_project(run_mode, soc_version, testcase = "all"):
+def build_project(run_mode, soc_version, testcase="all"):
     original_dir = os.getcwd()
     # 清理并创建build目录
     build_dir = "build"
@@ -42,21 +36,10 @@ def build_project(run_mode, soc_version, testcase = "all"):
     os.makedirs(build_dir, exist_ok=True)
 
     try:
-        cmake_cmd = [
-            "cmake",
-            f"-DRUN_MODE={run_mode}",
-            f"-DSOC_VERSION={soc_version}",
-            f"-DTEST_CASE={testcase}",
-            ".."
-        ]
+        cmake_cmd = ["cmake", f"-DRUN_MODE={run_mode}", f"-DSOC_VERSION={soc_version}", f"-DTEST_CASE={testcase}", ".."]
 
         subprocess.run(
-            cmake_cmd,
-            cwd=build_dir,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
+            cmake_cmd, cwd=build_dir, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
 
         # make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
@@ -64,13 +47,7 @@ def build_project(run_mode, soc_version, testcase = "all"):
         cpu_count = os.cpu_count() or 4
         make_cmd.extend(["-j", str(cpu_count)])
 
-        result = subprocess.Popen(
-            make_cmd,
-            cwd=build_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
-        )
+        result = subprocess.Popen(make_cmd, cwd=build_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         while result.poll() is None:
             line = result.stdout.readline()
             line.strip()
@@ -89,6 +66,7 @@ def build_project(run_mode, soc_version, testcase = "all"):
         raise
     finally:
         os.chdir(original_dir)
+
 
 def main():
     # 解析命令行参数
@@ -114,7 +92,7 @@ def main():
         if args.soc_version == "a3":
             target_dir = os.path.dirname(os.path.dirname(script_path))
             target_dir = target_dir + "/npu/a2a3/src/st"
-        else : # a5
+        else:  # a5
             target_dir = os.path.dirname(os.path.dirname(script_path))
             target_dir = target_dir + "/npu/a5/src/st"
 
@@ -128,6 +106,7 @@ def main():
         print(f"run failed: {str(e)}", file=sys.stderr)
         sys.exit(1)
     os.chdir(original_dir)
+
 
 if __name__ == "__main__":
     main()

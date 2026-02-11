@@ -43,20 +43,9 @@ SKIP_PREFIXES = (
     ".vscode/",
 )
 
-SKIP_CONTAINS = (
-    "/__pycache__/",
-    "/CMakeFiles/",
-)
+SKIP_CONTAINS = ("/__pycache__/", "/CMakeFiles/")
 
-ASSET_EXTS = {
-    ".svg",
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".webp",
-    ".bnf",
-}
+ASSET_EXTS = {".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bnf"}
 
 
 def _should_skip(rel_posix: str) -> bool:

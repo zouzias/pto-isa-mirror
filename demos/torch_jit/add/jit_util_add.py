@@ -75,14 +75,7 @@ def load_lib(lib_path, check_type=True):
     def add_func(x, y, z, block_dim=default_block_dim, stream_ptr=default_stream_ptr):
         N = x.numel()
         # TODO: customize call args according to cpp `void call_kernel` signature
-        lib.call_kernel(
-            block_dim,
-            stream_ptr,
-            torch_to_ctypes(x),
-            torch_to_ctypes(y),
-            torch_to_ctypes(z),
-            N,
-        )
+        lib.call_kernel(block_dim, stream_ptr, torch_to_ctypes(x), torch_to_ctypes(y), torch_to_ctypes(z), N)
 
     return add_func
 

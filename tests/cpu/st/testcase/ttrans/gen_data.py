@@ -13,6 +13,7 @@
 import os
 
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -33,14 +34,11 @@ class TTransParams:
         self.m = m
         self.n = n
 
-if __name__ == "__main__":
-    case_name_list = [
-        "TTRANSTest.case1",
-    ]
 
-    case_params_list = [
-        TTransParams(np.float32, 128 , 128),
-    ]
+if __name__ == "__main__":
+    case_name_list = ["TTRANSTest.case1"]
+
+    case_params_list = [TTransParams(np.float32, 128, 128)]
 
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):
@@ -51,5 +49,3 @@ if __name__ == "__main__":
         gen_golden(case_name, case_params_list[i])
 
         os.chdir(original_dir)
-
-

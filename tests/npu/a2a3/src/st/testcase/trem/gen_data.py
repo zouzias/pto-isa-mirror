@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -29,7 +30,9 @@ def gen_golden_data_trem(param):
 
     # Perform the operation
     golden = np.zeros([dst_tile_row, dst_tile_col]).astype(dtype)
-    golden[0:h_valid, 0:w_valid] = np.remainder(input1[0:h_valid, 0:w_valid], input2[0:h_valid, 0:w_valid]).astype(dtype)
+    golden[0:h_valid, 0:w_valid] = np.remainder(input1[0:h_valid, 0:w_valid], input2[0:h_valid, 0:w_valid]).astype(
+        dtype
+    )
 
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
@@ -40,28 +43,28 @@ def gen_golden_data_trem(param):
 
 
 class TremParams:
-    def __init__(self, dtype, dst_tileR, dst_tileC, src0_tileR, src0_tileC, src1_tileR, src1_tileC, valid_row, valid_col):
+    def __init__(
+        self, dtype, dst_tileR, dst_tileC, src0_tileR, src0_tileC, src1_tileR, src1_tileC, valid_row, valid_col
+    ):
         self.dtype = dtype
         self.dst_tile_row = dst_tileR
         self.dst_tile_col = dst_tileC
         self.src0_tile_row = src0_tileR
         self.src0_tile_col = src0_tileC
         self.src1_tile_row = src1_tileR
-        self.src1_tile_col = src1_tileC 
+        self.src1_tile_col = src1_tileC
         self.valid_row = valid_row
         self.valid_col = valid_col
 
 
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int32: 'int32',
-        np.int16: 'int16',
-    }[param.dtype]
-    tileStr = f"{param.dst_tile_row}x{param.dst_tile_col}_{param.src0_tile_row}x{param.src0_tile_col}_" \
-              f"{param.src1_tile_row}x{param.src1_tile_col}_{param.valid_row}x{param.valid_col}"
+    dtype_str = {np.float32: "float", np.float16: "half", np.int32: "int32", np.int16: "int16"}[param.dtype]
+    tileStr = (
+        f"{param.dst_tile_row}x{param.dst_tile_col}_{param.src0_tile_row}x{param.src0_tile_col}_"
+        f"{param.src1_tile_row}x{param.src1_tile_col}_{param.valid_row}x{param.valid_col}"
+    )
     return f"TREMTest.case_{dtype_str}_{tileStr}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

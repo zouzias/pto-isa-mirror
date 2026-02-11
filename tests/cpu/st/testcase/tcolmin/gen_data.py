@@ -69,4 +69,3 @@ if __name__ == "__main__":
         os.chdir(case_name)
         gen_golden_data_tcolmin(param)
         os.chdir(original_dir)
-

@@ -13,6 +13,7 @@
 import os
 
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -117,12 +118,12 @@ def gen_golden_data(param: TGatherParamsBase):
             res = x1_gm[:, 3::4]
         elif pattern == P1111:
             res = x1_gm[:, :]
-        
+
         golden = res.flatten()
 
         golden.tofile("./golden.bin")
         x1_gm.tofile("./x1_gm.bin")
-        os.chdir(original_dir) 
+        os.chdir(original_dir)
 
 
 class TGatherParamsNorm(TGatherParamsBase):
@@ -135,14 +136,13 @@ class TGatherParamsNorm(TGatherParamsBase):
         self.src1_row = src1_row
         self.src1_col = src1_col
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     case_params_list = [
         TGatherParamsNorm("TGATHERTest.case1_float", np.float32, np.int32, 32, 1024, 16, 64),
         TGatherParamsNorm("TGATHERTest.case2_int32", np.int32, np.int32, 32, 512, 16, 256),
         TGatherParamsNorm("TGATHERTest.case3_half", np.half, np.int16, 16, 1024, 16, 128),
         TGatherParamsNorm("TGATHERTest.case4_int16", np.int16, np.int16, 32, 256, 32, 64),
-
         ParamMasked("TGATHERTest.case1_float_P0101", np.float32, np.float32, FLOAT_P0101_ROW, FLOAT_P0101_COL, P0101),
         ParamMasked("TGATHERTest.case1_float_P1010", np.float32, np.float32, FLOAT_P1010_ROW, FLOAT_P1010_COL, P1010),
         ParamMasked("TGATHERTest.case1_float_P0001", np.float32, np.float32, FLOAT_P0001_ROW, FLOAT_P0001_COL, P0001),
@@ -151,7 +151,6 @@ if __name__ == "__main__":
         ParamMasked("TGATHERTest.case1_float_P1000", np.float32, np.float32, FLOAT_P1000_ROW, FLOAT_P1000_COL, P1000),
         ParamMasked("TGATHERTest.case1_float_P1111", np.float32, np.float32, FLOAT_P1111_ROW, FLOAT_P1111_COL, P1111),
         ParamMasked("TGATHERTest.case1_float_int_P1010", np.float32, np.int32, FLOAT_P1010_ROW, FLOAT_P1010_COL, P1010),
-
         ParamMasked("TGATHERTest.case1_half_P0101", np.half, np.half, HALF_P0101_ROW, HALF_P0101_COL, P0101),
         ParamMasked("TGATHERTest.case1_half_P1010", np.half, np.half, HALF_P1010_ROW, HALF_P1010_COL, P1010),
         ParamMasked("TGATHERTest.case1_half_P0001", np.half, np.half, HALF_P0001_ROW, HALF_P0001_COL, P0001),
@@ -159,7 +158,6 @@ if __name__ == "__main__":
         ParamMasked("TGATHERTest.case1_half_P0100", np.half, np.half, HALF_P0100_ROW, HALF_P0100_COL, P0100),
         ParamMasked("TGATHERTest.case1_half_P1000", np.half, np.half, HALF_P1000_ROW, HALF_P1000_COL, P1000),
         ParamMasked("TGATHERTest.case1_half_P1111", np.half, np.half, HALF_P1111_ROW, HALF_P1111_COL, P1111),
-
         ParamMasked("TGATHERTest.case1_U16_P0101", np.uint16, np.uint16, HALF_P0101_ROW, HALF_P0101_COL, P0101),
         ParamMasked("TGATHERTest.case1_U16_P1010", np.uint16, np.uint16, HALF_P1010_ROW, HALF_P1010_COL, P1010),
         ParamMasked("TGATHERTest.case1_I16_P0001", np.int16, np.int16, HALF_P0001_ROW, HALF_P0001_COL, P0001),
@@ -167,7 +165,6 @@ if __name__ == "__main__":
         ParamMasked("TGATHERTest.case1_U32_P0100", np.uint32, np.uint32, FLOAT_P0100_ROW, FLOAT_P0100_COL, P0100),
         ParamMasked("TGATHERTest.case1_I32_P1000", np.int32, np.int32, FLOAT_P1000_ROW, FLOAT_P1000_COL, P1000),
         ParamMasked("TGATHERTest.case1_I32_P1111", np.int32, np.int32, FLOAT_P1111_ROW, FLOAT_P1111_COL, P1111),
-
         ParamMasked("TGATHERTest.case1_b8_P0101", np.int8, np.int8, HALF_P0101_ROW, HALF_P0101_COL, P0101),
         ParamMasked("TGATHERTest.case1_b8_P1010", np.uint8, np.uint8, HALF_P1010_ROW, HALF_P1010_COL, P1010),
         ParamMasked("TGATHERTest.case1_b8_P0001", np.int8, np.int8, HALF_P0001_ROW, HALF_P0001_COL, P0001),

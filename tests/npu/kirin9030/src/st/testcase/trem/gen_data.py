@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -49,6 +50,7 @@ class TRemParams:
         self.tile_col = tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

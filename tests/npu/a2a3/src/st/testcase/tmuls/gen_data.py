@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -30,10 +31,10 @@ def gen_golden_data(param):
     for i in range(rows):
         for j in range(cols):
             output_arr[i, j] = input_arr[i, j] * divider[0, 0]
-    input_arr.tofile('input.bin')
-    with open("divider.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(divider[0, 0])))
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    with open("divider.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(divider[0, 0])))
+    output_arr.tofile("golden.bin")
 
 
 class TMulsParams:
@@ -59,7 +60,7 @@ if __name__ == "__main__":
         TMulsParams("TMULSTest.case9", np.int32, 31, 256, 31, 128),
         TMulsParams("TMULSTest.case10", np.int16, 15, 192, 15, 64 * 3),
         TMulsParams("TMULSTest.case11", np.float32, 7, 512, 7, 64 * 7),
-        TMulsParams("TMULSTest.case12", np.float32, 256, 32, 256, 16)
+        TMulsParams("TMULSTest.case12", np.float32, 256, 32, 256, 16),
     ]
 
     for case in case_params_list:

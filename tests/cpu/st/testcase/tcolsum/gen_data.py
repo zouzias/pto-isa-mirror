@@ -12,7 +12,9 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
+
 
 def gen_golden_data_tcolsum(case_name, param):
     dtype = param.dtype
@@ -35,6 +37,7 @@ def gen_golden_data_tcolsum(case_name, param):
 
     return input1, golden
 
+
 class TColsumParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
@@ -45,21 +48,19 @@ class TColsumParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
 
+
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
+    dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int32: "int32", np.int16: "int16"}[
+        param.dtype
+    ]
 
     name = f"TCOLSUMTest.case_{dtype_str}"
     name += f"_{param.global_row}x{param.global_col}"
     name += f"_{param.tile_row}x{param.tile_col}"
     name += f"_{param.valid_row}x{param.valid_col}"
-    
+
     return name
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

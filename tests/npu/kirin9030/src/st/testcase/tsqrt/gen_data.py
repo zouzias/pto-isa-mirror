@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -30,6 +31,7 @@ def gen_golden_data(param):
     # Save the input and golden data to binary files
     input_arr.tofile("input.bin")
     golden.tofile("golden.bin")
+
 
 class tunaryParams:
     def __init__(self, name, dtype, dst_row, dst_col, src_row, src_col, valid_row, valid_col, in_place=False):

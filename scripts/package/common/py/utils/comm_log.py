@@ -15,18 +15,19 @@ import time
 import inspect
 import logging
 
-logging.basicConfig(format='[%(asctime)s] [%(levelname)s] [%(pathname)s] [line:%(lineno)d] %(message)s',
-                    level=logging.INFO)
+logging.basicConfig(
+    format="[%(asctime)s] [%(levelname)s] [%(pathname)s] [line:%(lineno)d] %(message)s", level=logging.INFO
+)
 
 
 class CommLog:
     @staticmethod
     def cilog_get_timestamp():
-        return time.strftime("%Y-%m-%d %H:%M:%S",time.localtime())
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
     @staticmethod
     def cilog_print_element(cilog_element):
-        print("["+cilog_element+"]", end=' ')
+        print("[" + cilog_element + "]", end=" ")
         return
 
     @staticmethod

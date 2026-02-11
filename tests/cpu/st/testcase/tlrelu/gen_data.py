@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -52,22 +53,18 @@ class TLreluParams:
 
 
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
-    
+    dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int32: "int32", np.int16: "int16"}[
+        param.dtype
+    ]
+
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
-    name = f"TLRELUTest.case_{dtype_str}" 
+
+    name = f"TLRELUTest.case_{dtype_str}"
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
-    
+
     return name
 
 
@@ -84,7 +81,7 @@ if __name__ == "__main__":
         TLreluParams(np.float32, 64, 64, 64, 64, 64, 64),
         TLreluParams(np.int32, 64, 64, 64, 64, 64, 64),
         TLreluParams(np.int16, 64, 64, 64, 64, 64, 64),
-        TLreluParams(np.float16, 16, 256, 16, 256, 16, 256)
+        TLreluParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]
 
     for i, param in enumerate(case_params_list):

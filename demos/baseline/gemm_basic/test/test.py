@@ -18,11 +18,10 @@ import op_extension
 
 
 class TestPtoGemmBasic(TestCase):
-
     def test_pto_gemm_basic(self):
         m, k, n = 512, 2048, 1536
-        a = torch.rand((m, k), device='cpu', dtype=torch.float16)
-        b = torch.rand((k, n), device='cpu', dtype=torch.float16)
+        a = torch.rand((m, k), device="cpu", dtype=torch.float16)
+        b = torch.rand((k, n), device="cpu", dtype=torch.float16)
         b_dn = b.t().contiguous()
 
         a_npu = a.npu()
@@ -35,4 +34,3 @@ class TestPtoGemmBasic(TestCase):
 
 if __name__ == "__main__":
     run_tests()
-

@@ -28,8 +28,8 @@ def gen_golden_data(case_name, param):
     input_arr = input_arr.astype(data_type)
     golden = np.zeros((1, cols), dtype=data_type)
     golden[0] = np.max(input_arr, axis=0)
-    input_arr.tofile('input.bin')
-    golden.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    golden.tofile("golden.bin")
 
 
 class TColMax:
@@ -39,8 +39,8 @@ class TColMax:
         self.src_row = src_row
         self.src_valid_row = src_valid_row
 
+
 if __name__ == "__main__":
-    
     case_name_list = [
         "TCOLMAXTest.case1",
         "TCOLMAXTest.case2",
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         "TCOLMAXTest.case12",
         "TCOLMAXTest.case13",
     ]
-    
+
     case_params_list = [
         TColMax(np.int16, 16, 16, 8),
         TColMax(np.int32, 16, 16, 8),

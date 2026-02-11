@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -19,9 +20,9 @@ def gen_golden_data(param):
     input_arr = np.random.uniform(low=-16, high=16, size=(param.row, param.col)).astype(param.data_type)
     output_arr = np.full((param.valid_row), np.finfo(param.data_type).max).astype(param.data_type)
     for i in range(param.valid_row):
-        output_arr[i] = np.min(input_arr[i][:param.valid_col])
-    input_arr.tofile('input.bin')
-    output_arr.tofile('golden.bin')
+        output_arr[i] = np.min(input_arr[i][: param.valid_col])
+    input_arr.tofile("input.bin")
+    output_arr.tofile("golden.bin")
 
 
 class TRowMinParams:
@@ -53,7 +54,7 @@ if __name__ == "__main__":
         TRowMinParams("TROWMINTest.case15", np.float32, 64, 64, 128, 128),
         TRowMinParams("TROWMINTest.case16", np.float32, 32, 32, 256, 256),
         TRowMinParams("TROWMINTest.case17", np.float32, 16, 16, 512, 512),
-        TRowMinParams("TROWMINTest.case18", np.float32, 8, 8, 1024, 1024)
+        TRowMinParams("TROWMINTest.case18", np.float32, 8, 8, 1024, 1024),
     ]
 
     for _, case in enumerate(case_params_list):

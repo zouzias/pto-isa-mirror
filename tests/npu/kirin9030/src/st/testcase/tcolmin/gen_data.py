@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -37,8 +38,8 @@ def gen_golden_data(param):
 
     # 先计算, 再强转类型, 保证结果精度不裂化
     output_arr = output_arr.astype(data_type)
-    output_arr.tofile('golden.bin')
-    input_arr.tofile('input.bin')
+    output_arr.tofile("golden.bin")
+    input_arr.tofile("input.bin")
 
 
 class TColMinParam:
@@ -49,6 +50,7 @@ class TColMinParam:
         self.col = col
         self.valid_row = valid_row
         self.valid_col = valid_col
+
 
 if __name__ == "__main__":
     case_params_list = [

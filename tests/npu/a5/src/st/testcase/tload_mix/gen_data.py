@@ -13,8 +13,10 @@
 import os
 import numpy as np
 from enum import Enum
+
 np.random.seed(19)
 np.set_printoptions(threshold=np.inf)
+
 
 class DataFormat(Enum):
     ND2NZ = 1
@@ -132,73 +134,74 @@ def gen_golden_data(case_name, param):
     x1_gm = np.random.randint(1, 5, [M, K]).astype(src_type)
     golden = np.zeros([BASEM, BASEK]).astype(src_type)
 
-    if param.load_type == DataFormat['ND2NZ'].value:
-        x1_gm = np.random.randint(
-            1, 5, [whole_shape3, whole_shape4]).astype(src_type)
+    if param.load_type == DataFormat["ND2NZ"].value:
+        x1_gm = np.random.randint(1, 5, [whole_shape3, whole_shape4]).astype(src_type)
         golden = np.zeros([BASEM, BASEK]).astype(src_type)  # L1中Tile大小
         min_m = min(M, golden.shape[0])
         min_k = min(K, golden.shape[1])
         golden[:min_m, :min_k] = x1_gm[:min_m, :min_k]
-    elif param.load_type == DataFormat['DN2NZ'].value:
-        x1_gm = np.random.randint(
-            1, 5, [whole_shape4, whole_shape3]).astype(src_type)
+    elif param.load_type == DataFormat["DN2NZ"].value:
+        x1_gm = np.random.randint(1, 5, [whole_shape4, whole_shape3]).astype(src_type)
         golden = np.zeros([BASEK, BASEM]).astype(src_type)  # L1中Tile大小
         min_k = min(K, golden.shape[0])
         min_m = min(M, golden.shape[1])
         golden[:min_k, :min_m] = x1_gm[:min_k, :min_m]
-    elif param.load_type == DataFormat['DN2ZN'].value:
-        x1_gm = np.random.randint(
-            1, 5, [whole_shape4, whole_shape3]).astype(src_type)
+    elif param.load_type == DataFormat["DN2ZN"].value:
+        x1_gm = np.random.randint(1, 5, [whole_shape4, whole_shape3]).astype(src_type)
         golden = np.zeros([BASEK, BASEM]).astype(src_type)  # L1中Tile大小
         min_k = min(K, golden.shape[0])
         min_m = min(M, golden.shape[1])
         golden[:min_k, :min_m] = x1_gm[:min_k, :min_m]
-    elif param.load_type == DataFormat['ND2ND'].value:
-        x1_gm = np.random.randint(
-            1, 5, [whole_shape0, whole_shape1, whole_shape2, whole_shape3, whole_shape4]).astype(src_type)
+    elif param.load_type == DataFormat["ND2ND"].value:
+        x1_gm = np.random.randint(1, 5, [whole_shape0, whole_shape1, whole_shape2, whole_shape3, whole_shape4]).astype(
+            src_type
+        )
         golden = np.zeros([BASEM, BASEK]).astype(src_type)  # L1中Tile大小
 
         submatrix = x1_gm[
-            0:shape0,          # d0: 截取第shape0个元素（对应 shape[0]=1）
-            0:shape1,          # d1: 截取前shape1个元素（对应目标 d1=2）
-            0:shape2,          # d2: 截取前shape2个元素（对应目标 d2=3）
-            0:M,         # d3: 截取前M个元素（对应目标 d3=64）
-            0:K         # d4: 截取K个元素（对应目标 d4=128）
+            0:shape0,  # d0: 截取第shape0个元素（对应 shape[0]=1）
+            0:shape1,  # d1: 截取前shape1个元素（对应目标 d1=2）
+            0:shape2,  # d2: 截取前shape2个元素（对应目标 d2=3）
+            0:M,  # d3: 截取前M个元素（对应目标 d3=64）
+            0:K,  # d4: 截取K个元素（对应目标 d4=128）
         ]
         flattened_submatrix = submatrix.reshape(BASEM, K)
         min_m = min(flattened_submatrix.shape[0], golden.shape[0])
         min_k = min(flattened_submatrix.shape[1], golden.shape[1])
         golden[:min_m, :min_k] = flattened_submatrix[:min_m, :min_k]
-    elif param.load_type == DataFormat['DN2DN'].value:
-        x1_gm = np.random.randint(
-            1, 5, [whole_shape0, whole_shape1, whole_shape2, whole_shape4, whole_shape3]).astype(src_type)
+    elif param.load_type == DataFormat["DN2DN"].value:
+        x1_gm = np.random.randint(1, 5, [whole_shape0, whole_shape1, whole_shape2, whole_shape4, whole_shape3]).astype(
+            src_type
+        )
         golden = np.zeros([BASEK, BASEM]).astype(src_type)
 
         submatrix = x1_gm[
-            0:shape0,          # d0: 截取第shape0个元素（对应 shape[0]=1）
-            0:shape1,          # d1: 截取前shape1个元素（对应目标 d1=2）
-            0:shape2,          # d2: 截取前shape2个元素（对应目标 d2=3）
-            0:K,         # d3: 截取前M个元素（对应目标 d3=64）
-            0:M         # d4: 截取K个元素（对应目标 d4=128）
+            0:shape0,  # d0: 截取第shape0个元素（对应 shape[0]=1）
+            0:shape1,  # d1: 截取前shape1个元素（对应目标 d1=2）
+            0:shape2,  # d2: 截取前shape2个元素（对应目标 d2=3）
+            0:K,  # d3: 截取前M个元素（对应目标 d3=64）
+            0:M,  # d4: 截取K个元素（对应目标 d4=128）
         ]
 
         flattened_submatrix = submatrix.reshape(BASEK, M)
         min_k = min(flattened_submatrix.shape[0], golden.shape[0])
         min_m = min(flattened_submatrix.shape[1], golden.shape[1])
         golden[:min_k, :min_m] = flattened_submatrix[:min_k, :min_m]
-    elif param.load_type == DataFormat['NZ2NZ'].value:
-        x1_gm = np.random.randint(
-            1, 5, [whole_shape0, whole_shape1, whole_shape2, whole_shape3, whole_shape4]).astype(src_type)
+    elif param.load_type == DataFormat["NZ2NZ"].value:
+        x1_gm = np.random.randint(1, 5, [whole_shape0, whole_shape1, whole_shape2, whole_shape3, whole_shape4]).astype(
+            src_type
+        )
 
         submatrix = x1_gm[
-            0:shape0,          # d0: 截取第shape0个元素（对应 shape[0]=1）
-            0:shape1,          # d1: 截取前shape1个元素（对应目标 d1=2）
-            0:shape2,          # d2: 截取前shape2个元素（对应目标 d2=4）
-            0:M,         # d3: 截取前M个元素（对应目标 d3=16）
-            0:K         # d4: 截取K个元素（对应目标 d4=8）
+            0:shape0,  # d0: 截取第shape0个元素（对应 shape[0]=1）
+            0:shape1,  # d1: 截取前shape1个元素（对应目标 d1=2）
+            0:shape2,  # d2: 截取前shape2个元素（对应目标 d2=4）
+            0:M,  # d3: 截取前M个元素（对应目标 d3=16）
+            0:K,  # d4: 截取K个元素（对应目标 d4=8）
         ]
         new_submatrix = submatrix.reshape(
-            submatrix.shape[0] * submatrix.shape[1], submatrix.shape[2], submatrix.shape[3], submatrix.shape[4])
+            submatrix.shape[0] * submatrix.shape[1], submatrix.shape[2], submatrix.shape[3], submatrix.shape[4]
+        )
 
         golden = np.zeros([BASEM, BASEK]).astype(src_type)  # L1中Tile大小 [80,48]
         c0Size = 16
@@ -208,29 +211,30 @@ def gen_golden_data(case_name, param):
             c0Size = 32
         assert (BASEK % c0Size) == 0, "BASEK should be c0Size aligned when matrix is NZ format"
         assert (BASEM % 16) == 0, "BASEM should be 16 aligned when matrix is NZ format"
-        golden = golden.reshape((int(BASEM / 16), 16, int(BASEK / c0Size), c0Size)
-                                ).transpose(2, 0, 1, 3).astype(src_type)  # [80,48] -> [6,5,16,8]
+        golden = (
+            golden.reshape((int(BASEM / 16), 16, int(BASEK / c0Size), c0Size)).transpose(2, 0, 1, 3).astype(src_type)
+        )  # [80,48] -> [6,5,16,8]
 
-        golden[:new_submatrix.shape[0], :new_submatrix.shape[1],
-               :new_submatrix.shape[2], :new_submatrix.shape[3]] = new_submatrix
+        golden[
+            : new_submatrix.shape[0], : new_submatrix.shape[1], : new_submatrix.shape[2], : new_submatrix.shape[3]
+        ] = new_submatrix
     elif param.load_type in convtile_formats:
-        x1_gm = np.random.randint(-5, 5, size=(whole_shape0, whole_shape1,
-                                    whole_shape2, whole_shape3, whole_shape4)).astype(src_type)
+        x1_gm = np.random.randint(
+            -5, 5, size=(whole_shape0, whole_shape1, whole_shape2, whole_shape3, whole_shape4)
+        ).astype(src_type)
         golden = np.zeros(shape=(shape0, shape1, shape2, shape3, shape4), dtype=src_type)
         golden = x1_gm[0:shape0, 0:shape1, 0:shape2, 0:shape3, 0:shape4]
-    elif param.load_type == DataFormat['NHWC2NC1HWC0'].value:
-        x1_gm = np.random.randint(1, 5, size=(whole_shape1,
-                                    whole_shape2, whole_shape3, whole_shape4)).astype(src_type)
+    elif param.load_type == DataFormat["NHWC2NC1HWC0"].value:
+        x1_gm = np.random.randint(1, 5, size=(whole_shape1, whole_shape2, whole_shape3, whole_shape4)).astype(src_type)
         golden_nhwc = np.zeros(shape=(shape0, shape2, shape3, shape1 * shape4), dtype=src_type)
-        golden_nhwc = x1_gm[0:shape0, 0:shape2, 0:shape3, 0:shape1 * shape4]
+        golden_nhwc = x1_gm[0:shape0, 0:shape2, 0:shape3, 0 : shape1 * shape4]
         golden = nhwc_to_nc1hwc0(golden_nhwc, c0=c0_size)
-    elif param.load_type == DataFormat['NCHW2NC1HWC0'].value:
-        x1_gm = np.random.randint(1, 5, size=(whole_shape1,
-                                    whole_shape2, whole_shape3, whole_shape4)).astype(src_type)
+    elif param.load_type == DataFormat["NCHW2NC1HWC0"].value:
+        x1_gm = np.random.randint(1, 5, size=(whole_shape1, whole_shape2, whole_shape3, whole_shape4)).astype(src_type)
         golden_nchw = np.zeros(shape=(shape0, shape1 * shape4, shape2, shape3), dtype=src_type)
-        golden_nchw = x1_gm[0:shape0, 0:shape1 * shape4, 0:shape2, 0:shape3]
+        golden_nchw = x1_gm[0:shape0, 0 : shape1 * shape4, 0:shape2, 0:shape3]
         golden = nchw_to_nc1hwc0(golden_nchw, c0=c0_size)
-    elif param.load_type == DataFormat['NCHW2FZ4D'].value:
+    elif param.load_type == DataFormat["NCHW2FZ4D"].value:
         # [C1HW,N/16,16,C0,src_n,src_c,src_h,src_w,N,C,H,W]
         c1_h_w = shape0
         n_16 = shape1
@@ -249,24 +253,26 @@ def gen_golden_data(case_name, param):
         golden_nchw = x1_gm[0:src_n, 0:src_c, 0:src_h, 0:src_w]
         golden = nchw_to_c1hw_n16_16_c0(golden_nchw, c0=c0_size)
 
-
     x2_gm = np.random.randint(1, 5, [M, K]).astype(src_type)
-    if param.load_type == DataFormat['ND2NZ'].value:
+    if param.load_type == DataFormat["ND2NZ"].value:
         assert (BASEM % 16) == 0, "BASEM should be 16 aligned when matrix A is NZ format"
         assert (BASEK % c0_size) == 0, "BASEK should be c0_size aligned when matrix A is NZ format"
-        golden = golden.reshape(
-            (int(BASEM / 16), 16, int(BASEK / c0_size), c0_size)).transpose(2, 0, 1, 3).astype(src_type)
-    elif param.load_type == DataFormat['DN2NZ'].value:
+        golden = (
+            golden.reshape((int(BASEM / 16), 16, int(BASEK / c0_size), c0_size)).transpose(2, 0, 1, 3).astype(src_type)
+        )
+    elif param.load_type == DataFormat["DN2NZ"].value:
         golden = golden.transpose()
         assert (BASEK % 16) == 0, "BASEK should be 16 aligned when matrix A is NZ format"
         assert (BASEM % c0_size) == 0, "BASEM should be c0_size aligned when matrix A is NZ format"
-        golden = golden.reshape(
-            (int(BASEM / 16), 16, int(BASEK / c0_size), c0_size)).transpose(2, 0, 1, 3).astype(src_type)
-    elif param.load_type == DataFormat['DN2ZN'].value:
+        golden = (
+            golden.reshape((int(BASEM / 16), 16, int(BASEK / c0_size), c0_size)).transpose(2, 0, 1, 3).astype(src_type)
+        )
+    elif param.load_type == DataFormat["DN2ZN"].value:
         assert (BASEK % 16) == 0, "BASEK should be 16 aligned when matrix A is NZ format"
         assert (BASEM % c0_size) == 0, "BASEM should be c0_size aligned when matrix A is NZ format"
-        golden = golden.reshape(
-            (int(BASEK / 16), 16, int(BASEM / c0_size), c0_size)).transpose(2, 0, 1, 3).astype(src_type)
+        golden = (
+            golden.reshape((int(BASEK / 16), 16, int(BASEM / c0_size), c0_size)).transpose(2, 0, 1, 3).astype(src_type)
+        )
 
     x1_gm.tofile("./x1_gm.bin")
     x2_gm.tofile("./x2_gm.bin")
@@ -304,34 +310,26 @@ if __name__ == "__main__":
         "TLOADMIXTest.1_1_1_128_128_float_ND2ND",
         "TLOADMIXTest.1_1_1_37_126_int8_t_ND2ND",
         "TLOADMIXTest.1_2_3_64_128_1_3_4_128_128_384_128_half_ND2ND",
-
         "TLOADMIXTest.1_2_3_33_99_1_2_3_33_99_int8_t_ND2ND",
         "TLOADMIXTest.1_1_1_33_99_1_1_1_64_128_48_112_half_ND2NZ",
         "TLOADMIXTest.1_1_1_59_119_1_1_1_64_128_64_128_int8_t_ND2NZ",
-
         "TLOADMIXTest.1_1_1_51_123_1_1_1_64_128_64_128_float_DN2NZ",
         "TLOADMIXTest.1_1_1_63_127_1_1_1_63_127_64_128_half_DN2NZ",
-
         "TLOADMIXTest.1_1_1_128_128_1_1_1_128_128_128_128_float_DN2DN",
         "TLOADMIXTest.1_1_1_37_126_1_1_1_37_126_64_126_int8_t_DN2DN",
         "TLOADMIXTest.1_2_3_64_128_1_3_4_96_128_64_768_half_DN2DN",
-
         "TLOADMIXTest.2_2_4_16_8_2_2_4_16_8_80_48_float_NZ2NZ",
         "TLOADMIXTest.1_10_8_16_16_1_11_9_16_16_128_160_half_NZ2NZ",
         "TLOADMIXTest.1_8_4_16_32_1_9_4_16_32_80_256_int8_t_NZ2NZ",
-
         "TLOADMIXTest.1_1_1_59_119_1_1_1_59_124_59_120_int64_t_ND2ND",
         "TLOADMIXTest.1_2_1_64_128_1_3_4_128_128_128_128_uint64_t_ND2ND",
-
         "TLOADMIXTest.1_2_1_64_128_1_3_4_128_128_128_128_fp4x2_e1m2_t_ND2ND",
         "TLOADMIXTest.1_1_1_59_119_1_1_1_64_128_64_128_fp4x2_e2m1_t_ND2NZ",
         "TLOADMIXTest.1_8_4_16_32_1_9_4_16_32_80_256_fp4x2_e1m2_t_NZ2NZ",
         "TLOADMIXTest.1_1_1_37_126_1_1_1_37_126_64_126_fp4x2_e1m2_t_DN2DN",
-
         "TLOADMIXTest.1_1_1_33_99_1_1_1_64_128_48_112_half_DN2ZN",
         "TLOADMIXTest.1_1_1_59_119_1_1_1_64_128_64_128_int8_t_DN2ZN",
         "TLOADMIXTest.1_1_1_59_119_1_1_1_64_128_64_128_fp4x2_e1m2_t_DN2ZN",
-
         "TLOADMIXTest.NC1HWC02NC1HWC0_int8_t_1_3_16_128_32_3_4_1024_1024_32",  # cut N H
         "TLOADMIXTest.NC1HWC02NC1HWC0_int8_t_3_2_128_8_32_3_2_128_128_32",  # cut W
         "TLOADMIXTest.NC1HWC02NC1HWC0_int8_t_3_2_8_128_32_3_8_8_128_32",  # cut C1
@@ -339,36 +337,31 @@ if __name__ == "__main__":
         "TLOADMIXTest.NC1HWC02NC1HWC0_bfloat16_10_16_16_2_16_256_16_100_16_16",  # cut N C1 W
         "TLOADMIXTest.NC1HWC02NC1HWC0_bfloat16_1_1_1_8192_16_8_16_16_8192_16",  # cut N C1 H
         "TLOADMIXTest.NC1HWC02NC1HWC0_float_1_1_56_112_8_2_3_224_224_8",  # cut N C1 H W
-
         "TLOADMIXTest.FZ2FZ_bfloat16_1_7_7_20_16_3_7_7_100_16",  # cut N C1
         "TLOADMIXTest.FZ2FZ_bfloat16_64_7_7_2_16_256_7_7_16_16",  # cut N C1
         "TLOADMIXTest.FZ2FZ_bfloat16_96_3_3_8_16_256_3_3_8_16",  # cut C1
         "TLOADMIXTest.FZ2FZ_int8_t_1_3_3_64_32_3_3_3_128_32",  # cut N C1
         "TLOADMIXTest.FZ2FZ_int8_t_8_5_5_32_32_8_5_5_128_32",  # cut N
         "TLOADMIXTest.FZ2FZ_float_70_7_7_2_8_256_7_7_256_8",  # cut C1 N
-
         "TLOADMIXTest.FZ4D2FZ4D_bfloat16_1_49_7_16_16_1_980_32_16_16",  # cut C1HW N
         "TLOADMIXTest.FZ4D2FZ4D_bfloat16_1_81_3_16_16_1_90_3_16_16",  # cut C1HW
         "TLOADMIXTest.FZ4D2FZ4D_int8_t_1_63_3_16_32_1_63_9_16_32",  # cut N
         "TLOADMIXTest.FZ4D2FZ4D_int8_t_1_125_3_16_32_1_250_5_16_32",  # cut C1HW N
         "TLOADMIXTest.FZ4D2FZ4D_float_1_126_3_16_8_1_4704_7_16_8",  # cut C1HW N
-
         "TLOADMIXTest.NHWC2NC1HWC0_int8_t_1_3_11_109_32_1_3_1023_1000_111",
         "TLOADMIXTest.NHWC2NC1HWC0_int8_t_3_2_121_9_32_1_3_128_127_65",
         "TLOADMIXTest.NHWC2NC1HWC0_bfloat16_1_6_10_100_16_1_1_100_100_96",
         "TLOADMIXTest.NHWC2NC1HWC0_bfloat16_10_16_16_2_16_1_256_100_16_255",
         "TLOADMIXTest.NHWC2NC1HWC0_float_1_1_56_112_8_1_2_224_224_25",
         "TLOADMIXTest.NHWC2NC1HWC0_float_2_1_56_43_8_1_3_333_188_19",
-
         "TLOADMIXTest.NCHW2NC1HWC0_int8_t_1_3_11_109_32_1_3_111_1023_1000",
         "TLOADMIXTest.NCHW2NC1HWC0_int8_t_3_2_121_9_32_1_3_65_128_127",
         "TLOADMIXTest.NCHW2NC1HWC0_bfloat16_1_6_10_100_16_1_1_96_100_100",
         "TLOADMIXTest.NCHW2NC1HWC0_bfloat16_10_16_16_2_16_1_256_255_100_16",
         "TLOADMIXTest.NCHW2NC1HWC0_float_1_1_56_112_8_1_2_25_224_224",
         "TLOADMIXTest.NCHW2NC1HWC0_float_2_1_56_43_8_1_3_19_333_188",
-
-        "TLOADMIXTest.NCHW2FZ4D_int8_t_75_3_16_32_48_95_5_5_50_111_5_5", # [C1HW,N/16,16,C0,src_n,src_c,src_h,src_w,N,C,H,W]
-        "TLOADMIXTest.NCHW2FZ4D_int8_t_98_4_16_32_64_58_7_7_121_127_7_7", # src_c <= C1*C0
+        "TLOADMIXTest.NCHW2FZ4D_int8_t_75_3_16_32_48_95_5_5_50_111_5_5",  # [C1HW,N/16,16,C0,src_n,src_c,src_h,src_w,N,C,H,W]
+        "TLOADMIXTest.NCHW2FZ4D_int8_t_98_4_16_32_64_58_7_7_121_127_7_7",  # src_c <= C1*C0
         "TLOADMIXTest.NCHW2FZ4D_bfloat16_63_6_16_16_96_111_3_3_220_96_3_3",
         "TLOADMIXTest.NCHW2FZ4D_bfloat16_75_4_16_16_64_48_5_5_100_50_5_5",
         "TLOADMIXTest.NCHW2FZ4D_float_50_3_16_8_48_14_5_5_224_224_5_5",

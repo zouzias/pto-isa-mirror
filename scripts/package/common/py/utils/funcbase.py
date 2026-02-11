@@ -17,11 +17,12 @@ import operator
 from typing import Callable, Iterator, TypeVar
 
 
-A = TypeVar('A')
+A = TypeVar("A")
 
 
 def constant(value: A) -> Callable[..., A]:
     """常量值。"""
+
     def constant_inner(*_args, **_kwargs) -> A:
         return value
 
@@ -30,6 +31,7 @@ def constant(value: A) -> Callable[..., A]:
 
 def dispatch(*funcs):
     """分派应用。"""
+
     def dispatch_inner(*args, **kwargs) -> Iterator:
         return (func(*args, **kwargs) for func in funcs)
 
@@ -38,6 +40,7 @@ def dispatch(*funcs):
 
 def pipe(*funcs):
     """串联多个函数。"""
+
     def pipe_func(*args, **k_args):
         result = funcs[0](*args, **k_args)
         for func in funcs[1:]:
@@ -59,6 +62,7 @@ def invoke(func, *args, **kwargs):
 
 def side_effect(*funcs):
     """调用函数，产生副作用，但不影响管道结果。"""
+
     def side_effect_func(arg):
         for func in funcs:
             # 不保留结果
@@ -70,6 +74,7 @@ def side_effect(*funcs):
 
 def star_apply(func):
     """列表展开再应用。"""
+
     def star_apply_func(arg):
         return func(*arg)
 
@@ -79,10 +84,7 @@ def star_apply(func):
 def any_(*funcs) -> Callable:
     """高阶any。
     注意，any有短路效果。"""
-    return pipe(
-        dispatch(*funcs),
-        any,
-    )
+    return pipe(dispatch(*funcs), any)
 
 
 def not_(func) -> Callable:

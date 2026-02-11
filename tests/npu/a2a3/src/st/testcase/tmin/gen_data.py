@@ -12,11 +12,13 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 PAD_VALUE_NULL = "PAD_VALUE_NULL"
 PAD_VALUE_MAX = "PAD_VALUE_MAX"
 PAD_VALUE_MIN = "PAD_VALUE_MIN"
+
 
 def gen_golden_data(case_name, param):
     dtype = param.dtype
@@ -48,7 +50,7 @@ def gen_golden_data(case_name, param):
                 golden[h][w] = output[h][w]
                 input1[h][w] = output[h][w]
                 input2[h][w] = output[h][w]
-    
+
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
     input2.tofile("input2.bin")
@@ -56,8 +58,11 @@ def gen_golden_data(case_name, param):
 
     return output, input1, input2, golden
 
+
 class testParams:
-    def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, pad_value_type=PAD_VALUE_NULL):
+    def __init__(
+        self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, pad_value_type=PAD_VALUE_NULL
+    ):
         self.dtype = dtype
         self.global_row = global_row
         self.global_col = global_col
@@ -67,15 +72,13 @@ class testParams:
         self.valid_col = valid_col
         self.pad_value_type = pad_value_type
 
+
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
+    dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int32: "int32", np.int16: "int16"}[
+        param.dtype
+    ]
     return f"TMINTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_{param.pad_value_type}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -91,10 +94,8 @@ if __name__ == "__main__":
         testParams(np.int32, 64, 64, 64, 64, 64, 64),
         testParams(np.int16, 64, 64, 64, 64, 64, 64),
         testParams(np.float16, 64, 64, 64, 64, 64, 64),
-
         testParams(np.float32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MIN),
         testParams(np.int32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MIN),
-
         testParams(np.float16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MIN),
         testParams(np.int16, 16, 200, 20, 512, 16, 200, PAD_VALUE_MIN),
     ]

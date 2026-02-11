@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -37,7 +38,6 @@ def gen_golden_data_tsubc(case_name, param):
     golden.tofile("golden.bin")
 
 
-
 class TSubcParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
@@ -50,22 +50,18 @@ class TSubcParams:
 
 
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
-    
+    dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int32: "int32", np.int16: "int16"}[
+        param.dtype
+    ]
+
     def substring(a, b) -> str:
         return f"_{a}x{b}"
-        
-    name = f"TSUBCTest.case_{dtype_str}" 
+
+    name = f"TSUBCTest.case_{dtype_str}"
     name += substring(param.global_row, param.global_col)
     name += substring(param.tile_row, param.tile_col)
     name += substring(param.valid_row, param.valid_col)
-    
+
     return name
 
 
@@ -82,7 +78,7 @@ if __name__ == "__main__":
         TSubcParams(np.float32, 64, 64, 64, 64, 64, 64),
         TSubcParams(np.int32, 64, 64, 64, 64, 64, 64),
         TSubcParams(np.int16, 64, 64, 64, 64, 64, 64),
-        TSubcParams(np.float16, 16, 256, 16, 256, 16, 256)
+        TSubcParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]
 
     for i, param in enumerate(case_params_list):
