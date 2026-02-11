@@ -105,6 +105,13 @@ enum class CastMode {
     SAT_ROUND        // vcvt(..., RS_DISABLE, R()) - Saturation then rounding (reversed order)
 };
 
+// EDGE_CASE_ALIGN_ENABLE controls PyTorch alignment for edge case values
+// - When enabled (1): TCVT output matches PyTorch when handling edge values
+//   like inf, -inf, nan, and overflow values. Uses NonSatTorch implementations.
+// - When disabled (0): Uses standard TCVT conversion (higher performance)
+// Trade-off: Enabling provides PyTorch compatibility but reduces performance
+#define EDGE_CASE_ALIGN_ENABLE 1
+
 #define FOR_ROWS \
     for (uint16_t row = 0; row < validRows; row++) {\
         int32_t dstOffset = row * dstCols;\
@@ -162,6 +169,36 @@ inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *
         }
         vsts(v_output, dst, i * ELE_CNT_B64, PK_B64, preg_b32);
         // sReg is decremented by CreatePredicate with POST_UPDATE
+    }
+}
+
+// Float32 to signed 16-bit integer conversion for non-saturation mode (PyTorch-aligned)
+// This version matches PyTorch behavior for inf/-inf and performs a two-step conversion:
+// 1. fp32 -> int32
+// 2. int32 -> int16
+// Uses register-based conversion (no UB temp buffers needed for A5 architecture)
+template <typename R>
+inline AICORE void cast32to16_NonSatTorch_1D(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+    uint32_t totalElements = validRows * validCols;
+    uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
+    uint32_t sReg = totalElements;
+    uint32_t len32 = ELE_CNT_B32;
+    MaskReg preg_b32 = CreatePredicate<float>(len32);
+    
+    // Perform two-step conversion using registers (fp32 -> int32 -> int16)
+    for (uint16_t i = 0; i < repeatTimes; ++i) {
+        RegTensor<float> v_input_fp32;
+        RegTensor<int32_t> v_temp_int32;
+        RegTensor<int16_t> v_output_int16;
+        MaskReg preg_b32_st = CreatePredicate<float>(sReg);
+        
+        // Step 1: Load fp32 and convert to int32 (stays in register)
+        vlds(v_input_fp32, src, i * ELE_CNT_B32, NORM);
+        vcvt(v_temp_int32, v_input_fp32, preg_b32, R(), RS_DISABLE);
+        
+        // Step 2: Convert int32 to int16 with saturation and store
+        vcvt(v_output_int16, v_temp_int32, preg_b32, RS_ENABLE, PART_EVEN);
+        vsts(v_output_int16, dst, i * ELE_CNT_B32, PK_B32, preg_b32_st);
     }
 }
 
@@ -270,6 +307,38 @@ inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ S
     }
 }
 
+// Float16 (half) to signed 16-bit integer conversion for non-saturation mode (PyTorch-aligned)
+// This version matches PyTorch behavior for inf/-inf and performs a two-step conversion:
+// 1. fp16 -> int32
+// 2. int32 -> int16
+// Uses register-based conversion (no UB temp buffers needed for A5 architecture)
+template <typename R>
+inline AICORE void cast16to16_NonSatTorch_1D(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+    uint32_t totalElements = validRows * validCols;
+    uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
+    uint32_t sReg = totalElements;
+    uint32_t len16 = ELE_CNT_B16;
+    uint32_t len32 = ELE_CNT_B32;
+    MaskReg preg_b16 = CreatePredicate<half>(len16);
+    MaskReg preg_b32 = CreatePredicate<float>(len32);
+    
+    // Perform two-step conversion using registers (fp16 -> int32 -> int16)
+    for (uint16_t i = 0; i < repeatTimes; ++i) {
+        RegTensor<half> v_input_fp16;
+        RegTensor<int32_t> v_temp_int32;
+        RegTensor<int16_t> v_output_int16;
+        MaskReg preg_b32_st = CreatePredicate<float>(sReg);
+        
+        // Step 1: Load fp16 and convert to int32 (stays in register)
+        vlds(v_input_fp16, src, i * ELE_CNT_B32, UNPK_B16);
+        vcvt(v_temp_int32, v_input_fp16, preg_b16, R(), PART_EVEN);
+        
+        // Step 2: Convert int32 to int16 with saturation and store
+        vcvt(v_output_int16, v_temp_int32, preg_b32, RS_ENABLE, PART_EVEN);
+        vsts(v_output_int16, dst, i * ELE_CNT_B32, PK_B32, preg_b32_st);
+    }
+}
+
 /**
  * Cast between 16-bit types - 1D version
  */
@@ -337,6 +406,46 @@ inline AICORE void cast16to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
         }
         vsts(v_output, dst, i * ELE_CNT_B32, NORM_B32, preg_b32_st);
         // sReg is decremented by CreatePredicate with POST_UPDATE
+    }
+}
+
+// Float16 (half) to signed 8-bit integer conversion for non-saturation mode (PyTorch-aligned)
+// This version matches PyTorch behavior for inf/-inf and performs a multi-step conversion:
+// 1. fp16 -> int16 (direct conversion)
+// 2. bitwise AND with 255 using int16
+// 3. int16 -> fp16
+// 4. fp16 -> int8
+// Uses register-based conversion (no UB temp buffers needed for A5 architecture)
+template <typename R>
+inline AICORE void cast16to8_NonSatTorch_1D(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+    uint32_t totalElements = validRows * validCols;
+    uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B16);
+    uint32_t sReg = totalElements;
+    uint32_t len16 = ELE_CNT_B16;
+    MaskReg preg_b16 = CreatePredicate<half>(len16);
+    MaskReg pg = pset_b16(PAT_ALL);
+    
+    // Perform four-step conversion using registers (fp16 -> int16 -> AND -> fp16 -> int8)
+    for (uint16_t i = 0; i < repeatTimes; ++i) {
+        RegTensor<half> v_input_fp16, v_temp_fp16;
+        RegTensor<int16_t> v_temp_int16, v_temp_and, v_mask;
+        vector_s8 v_output_int8;
+        MaskReg preg_b16_st = CreatePredicate<half>(sReg);
+        
+        // Step 1: Load fp16 and convert to int16 (stays in register)
+        vlds(v_input_fp16, src, i * ELE_CNT_B16, NORM);
+        vcvt(v_temp_int16, v_input_fp16, preg_b16, R(), RS_DISABLE);
+        
+        // Step 2: Bitwise AND with 255 (stays in register)
+        vdup(v_mask, static_cast<int16_t>(255), pg, MODE_ZEROING);
+        vand(v_temp_and, v_temp_int16, v_mask, preg_b16_st);
+        
+        // Step 3: Convert int16 back to fp16 (stays in register)
+        vcvt(v_temp_fp16, v_temp_and, preg_b16, R());
+        
+        // Step 4: Convert fp16 to int8 (no saturation) and store
+        vcvt(v_output_int8, v_temp_fp16, preg_b16, R(), RS_DISABLE, PART_EVEN);
+        vsts(v_output_int8, dst, i * ELE_CNT_B16, PK_B16, preg_b16_st);
     }
 }
 
@@ -666,6 +775,35 @@ inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
     END_FOR_ROWS
 }
 
+// Float32 to signed 16-bit integer conversion for non-saturation mode (PyTorch-aligned) - 2D version
+// This version matches PyTorch behavior for inf/-inf and performs a two-step conversion:
+// 1. fp32 -> int32
+// 2. int32 -> int16
+// Uses register-based conversion (no UB temp buffers needed for A5 architecture)
+template <typename R>
+inline AICORE void cast32to16_NonSatTorch_2D(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+    uint32_t len32 = ELE_CNT_B32;
+    MaskReg preg_b32 = CreatePredicate<float>(len32);
+    
+    // Perform two-step conversion using registers (fp32 -> int32 -> int16)
+    FOR_ROWS
+        FOR_ELEMENTS(ELE_CNT_B32)
+            RegTensor<float> v_input_fp32;
+            RegTensor<int32_t> v_temp_int32;
+            RegTensor<int16_t> v_output_int16;
+            MaskReg preg_b32_st = CreatePredicate<float>(sreg);
+            
+            // Step 1: Load fp32 and convert to int32 (stays in register)
+            vlds(v_input_fp32, src, srcOffset, NORM);
+            vcvt(v_temp_int32, v_input_fp32, preg_b32, R(), RS_DISABLE);
+            
+            // Step 2: Convert int32 to int16 with saturation and store
+            vcvt(v_output_int16, v_temp_int32, preg_b32, RS_ENABLE, PART_EVEN);
+            vsts(v_output_int16, dst, dstOffset, PK_B32, preg_b32_st);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
+}
+
 /**
  * Cast between 32-bit types (float <-> int)
  * Modes:
@@ -766,6 +904,37 @@ inline AICORE void cast16to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
                 vcvt(v_output, v_input_0, preg_b16, R());
             }
             vsts(v_output, dst, dstOffset, NORM_B16, preg_b16);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
+}
+
+// Float16 (half) to signed 16-bit integer conversion for non-saturation mode (PyTorch-aligned) - 2D version
+// This version matches PyTorch behavior for inf/-inf and performs a two-step conversion:
+// 1. fp16 -> int32
+// 2. int32 -> int16
+// Uses register-based conversion (no UB temp buffers needed for A5 architecture)
+template <typename R>
+inline AICORE void cast16to16_NonSatTorch_2D(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+    uint32_t len16 = ELE_CNT_B16;
+    uint32_t len32 = ELE_CNT_B32;
+    MaskReg preg_b16 = CreatePredicate<half>(len16);
+    MaskReg preg_b32 = CreatePredicate<float>(len32);
+    
+    // Perform two-step conversion using registers (fp16 -> int32 -> int16)
+    FOR_ROWS
+        FOR_ELEMENTS(ELE_CNT_B32)
+            RegTensor<half> v_input_fp16;
+            RegTensor<int32_t> v_temp_int32;
+            RegTensor<int16_t> v_output_int16;
+            MaskReg preg_b32_st = CreatePredicate<float>(sreg);
+            
+            // Step 1: Load fp16 and convert to int32 (stays in register)
+            vlds(v_input_fp16, src, srcOffset, UNPK_B16);
+            vcvt(v_temp_int32, v_input_fp16, preg_b16, R(), PART_EVEN);
+            
+            // Step 2: Convert int32 to int16 with saturation and store
+            vcvt(v_output_int16, v_temp_int32, preg_b32, RS_ENABLE, PART_EVEN);
+            vsts(v_output_int16, dst, dstOffset, PK_B32, preg_b32_st);
         END_FOR_ELEMENTS
     END_FOR_ROWS
 }
@@ -887,6 +1056,45 @@ inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
                 }
             }
             vsts(v_output_even, dst, dstOffset, PK_B16, preg_b16_st);
+        END_FOR_ELEMENTS
+    END_FOR_ROWS
+}
+
+// Float16 (half) to signed 8-bit integer conversion for non-saturation mode (PyTorch-aligned) - 2D version
+// This version matches PyTorch behavior for inf/-inf and performs a multi-step conversion:
+// 1. fp16 -> int16 (direct conversion)
+// 2. bitwise AND with 255 using int16
+// 3. int16 -> fp16
+// 4. fp16 -> int8
+// Uses register-based conversion (no UB temp buffers needed for A5 architecture)
+template <typename R>
+inline AICORE void cast16to8_NonSatTorch_2D(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+    uint32_t len16 = ELE_CNT_B16;
+    MaskReg preg_b16 = CreatePredicate<half>(len16);
+    MaskReg pg = pset_b16(PAT_ALL);
+    
+    // Perform four-step conversion using registers (fp16 -> int16 -> AND -> fp16 -> int8)
+    FOR_ROWS
+        FOR_ELEMENTS(ELE_CNT_B16)
+            RegTensor<half> v_input_fp16, v_temp_fp16;
+            RegTensor<int16_t> v_temp_int16, v_temp_and, v_mask;
+            vector_s8 v_output_int8;
+            MaskReg preg_b16_st = CreatePredicate<half>(sreg);
+            
+            // Step 1: Load fp16 and convert to int16 (stays in register)
+            vlds(v_input_fp16, src, srcOffset, NORM);
+            vcvt(v_temp_int16, v_input_fp16, preg_b16, R(), RS_DISABLE);
+            
+            // Step 2: Bitwise AND with 255 (stays in register)
+            vdup(v_mask, static_cast<int16_t>(255), pg, MODE_ZEROING);
+            vand(v_temp_and, v_temp_int16, v_mask, preg_b16_st);
+            
+            // Step 3: Convert int16 back to fp16 (stays in register)
+            vcvt(v_temp_fp16, v_temp_and, preg_b16, R());
+            
+            // Step 4: Convert fp16 to int8 (no saturation) and store
+            vcvt(v_output_int8, v_temp_fp16, preg_b16, R(), RS_DISABLE, PART_EVEN);
+            vsts(v_output_int8, dst, dstOffset, PK_B16, preg_b16_st);
         END_FOR_ELEMENTS
     END_FOR_ROWS
 }
@@ -1098,7 +1306,17 @@ inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t
 
 template <typename R>
 inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+#if EDGE_CASE_ALIGN_ENABLE
+    if (satMode == SaturationMode::OFF) {
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        cast32to16_NonSatTorch_2D<R>(dst, src, validRows, validCols, dstCols, srcCols);
+    } else {
+        cast32to16_2D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+    }
+#else
+    // Use default implementation when edge case alignment is disabled
     cast32to16_2D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+#endif
 }
 
 /**
@@ -1241,7 +1459,17 @@ inline AICORE void castData(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t 
 
 template <typename R>
 inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+#if EDGE_CASE_ALIGN_ENABLE
+    if (satMode == SaturationMode::OFF) {
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        cast16to16_NonSatTorch_2D<R>(dst, src, validRows, validCols, dstCols, srcCols);
+    } else {
+        cast16to16<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+    }
+#else
+    // Use default implementation when edge case alignment is disabled
     cast16to16<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+#endif
 }
 
 /** FP16 -> I8 #rnd #sat #part */
@@ -1252,7 +1480,17 @@ inline AICORE void castData(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t v
 
 template <typename R>
 inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+#if EDGE_CASE_ALIGN_ENABLE
+    if (satMode == SaturationMode::OFF) {
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        cast16to8_NonSatTorch_2D<R>(dst, src, validRows, validCols, dstCols, srcCols);
+    } else {
+        cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+    }
+#else
+    // Use default implementation when edge case alignment is disabled
     cast16to8_2D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+#endif
 }
 
 /** FP16 -> U8 #rnd #sat #part */
@@ -1697,12 +1935,32 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ half
 
 template <typename R>
 inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+#if EDGE_CASE_ALIGN_ENABLE
+    if (satMode == SaturationMode::OFF) {
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        cast16to16_NonSatTorch_1D<R>(dst, src, validRows, validCols, dstCols, srcCols);
+    } else {
+        cast16to16_1D_NoPostUpdate<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+    }
+#else
+    // Use default implementation when edge case alignment is disabled
     cast16to16_1D_NoPostUpdate<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+#endif
 }
 
 template <typename R>
 inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int8_t *dst, __ubuf__ half *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+#if EDGE_CASE_ALIGN_ENABLE
+    if (satMode == SaturationMode::OFF) {
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        cast16to8_NonSatTorch_1D<R>(dst, src, validRows, validCols, dstCols, srcCols);
+    } else {
+        cast16to8_1D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+    }
+#else
+    // Use default implementation when edge case alignment is disabled
     cast16to8_1D_NoPostUpdate<R, CastMode::ROUND_SAT_PART, vector_s8>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+#endif
 }
 
 template <typename R>
@@ -1784,7 +2042,17 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ bfloat16_t *dst, __ubuf__ f
 
 template <typename R>
 inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
+#if EDGE_CASE_ALIGN_ENABLE
+    if (satMode == SaturationMode::OFF) {
+        // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
+        cast32to16_NonSatTorch_1D<R>(dst, src, validRows, validCols, dstCols, srcCols);
+    } else {
+        cast32to16_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+    }
+#else
+    // Use default implementation when edge case alignment is disabled
     cast32to16_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+#endif
 }
 
 template <typename R>
