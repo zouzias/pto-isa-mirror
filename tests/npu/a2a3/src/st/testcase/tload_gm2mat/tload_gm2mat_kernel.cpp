@@ -229,7 +229,8 @@ AICORE inline void RunTLoad5HD(__gm__ T __out__ *out, __gm__ T __in__ *src)
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
         gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4, 1};
     constexpr int blockSize = 32 / sizeof(T);
-    constexpr int bufferSize = dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T);
+    // for auto mode, bufferSize is a misleading variable name in convTile, it shouldn't be number of bytes it should be the number of elements
+    constexpr int bufferSize = dstN * dstC1 * dstH * dstW * dstC0; // * sizeof(T);
     constexpr int validRow = dstN * dstC1 * dstH * dstW;
     constexpr int validCol = dstC0;
     constexpr int Rows = dstN * dstC1 * dstH * dstW;
@@ -265,7 +266,8 @@ AICORE inline void RunTLoadFractalZ5D(__gm__ T __out__ *out, __gm__ T __in__ *sr
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
         gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4, 1};
     constexpr int blockSize = 32 / sizeof(T);
-    constexpr int bufferSize = dstN * dstC1 * dstH * dstW * dstC0 * sizeof(T);
+    // for auto mode, bufferSize is a misleading variable name in convTile, it shouldn't be number of bytes it should be the number of elements
+    constexpr int bufferSize = dstN * dstC1 * dstH * dstW * dstC0; // * sizeof(T);
     constexpr int validRow = dstN * dstC1 * dstH * dstW;
     constexpr int validCol = dstC0;
     constexpr int Rows = dstN * dstC1 * dstH * dstW;
@@ -300,7 +302,8 @@ AICORE inline void RunTLoadFractalZ4D(__gm__ T __out__ *out, __gm__ T __in__ *sr
     constexpr int gStride[5] = {gWholeShape1 * gWholeShape2 * gWholeShape3 * gWholeShape4,
         gWholeShape2 * gWholeShape3 * gWholeShape4, gWholeShape3 * gWholeShape4, gWholeShape4, 1};
     constexpr int blockSize = 32 / sizeof(T);
-    constexpr int bufferSize = dstC1HW * dstShape2 * dstShape3 * dstC0 * sizeof(T);
+    // for auto mode, bufferSize is a misleading variable name in convTile, it shouldn't be number of bytes it should be the number of elements
+    constexpr int bufferSize = dstC1HW * dstShape2 * dstShape3 * dstC0; // * sizeof(T);
     constexpr int validRow = dstC1HW * dstShape2 * dstShape3;
     constexpr int validCol = dstC0;
     constexpr int Rows = dstC1HW * dstShape2 * dstShape3;
