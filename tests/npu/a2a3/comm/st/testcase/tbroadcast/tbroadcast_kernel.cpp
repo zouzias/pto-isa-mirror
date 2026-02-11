@@ -69,6 +69,7 @@ __global__ AICORE void TBroadCastKernelImpl(__gm__ T *input, __gm__ T *output, i
 template <typename T, size_t count>
 bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root)
 {
+    if (n_ranks <= 0) return false;
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8768", 8ULL * 1024 * 1024))
         return false;
@@ -81,11 +82,17 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         return false;
     }
 
-    T *input_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T));
+    T *input_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
-    T *output_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T));
+    T *output_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     // Initialize input data: Rank root has data i + root * 100, others have 0
     for (size_t i = 0; i < count; ++i) {
@@ -221,6 +228,7 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
                                   const ShmemUniqueId *uid, int root)
 {
+    if (n_ranks <= 0) return false;
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
@@ -235,11 +243,17 @@ bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int f
         return false;
     }
 
-    T *input_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T));
+    T *input_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
-    T *output_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T));
+    T *output_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     // Initialize input data: root has data i + root * 100, others have 0
     for (size_t i = 0; i < total_count; ++i) {
@@ -404,6 +418,7 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const ShmemUniqueId *uid,
                                 int root)
 {
+    if (n_ranks <= 0) return false;
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
@@ -418,11 +433,17 @@ bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int fir
         return false;
     }
 
-    T *input_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T));
+    T *input_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
-    T *output_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T));
+    T *output_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     // Initialize input data: root has data i + root * 100, others have 0
     for (size_t i = 0; i < total_count; ++i) {

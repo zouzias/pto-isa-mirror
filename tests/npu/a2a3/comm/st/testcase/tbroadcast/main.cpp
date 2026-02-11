@@ -12,23 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-// Declared in tbroadcast_kernel.cpp — basic (small tile) tests
-template <typename T, size_t count>
-bool RunBroadCast(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-
-// Declared in tbroadcast_kernel.cpp — large shape chunked tests
-bool RunBroadCastLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                                                int root);
-bool RunBroadCastLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                                                int root);
-bool RunBroadCastLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                                                int root);
-
-// Declared in tbroadcast_kernel.cpp — ping-pong tests
-bool RunBroadCastPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                                              int root);
-bool RunBroadCastPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                                              int root);
+#include "tbroadcast_kernel.h"
 
 // ============================================================================
 // TBROADCAST Tests - Basic (data fits in single UB Tile)

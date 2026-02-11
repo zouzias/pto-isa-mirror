@@ -27,6 +27,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 template <typename T, size_t count>
 __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
+    if (nranks <= 0) return;
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
@@ -95,17 +96,26 @@ __global__ AICORE void TGetKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *sh
 template <typename T, size_t count>
 bool RunGetRingKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
 {
+    if (n_ranks <= 0) return false;
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8770", local_mem_size))
         return false;
 
-    void *input_ptr, *output_ptr;
-    aclrtMalloc(&input_ptr, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc(&output_ptr, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    void *input_ptr = nullptr;
+    void *output_ptr = nullptr;
+    if (aclrtMalloc(&input_ptr, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST) != 0 ||
+        aclrtMalloc(&output_ptr, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST) != 0) {
+        std::cerr << "[ERROR] aclrtMalloc failed!" << std::endl;
+        return false;
+    }
 
-    uint8_t *input_host, *output_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T));
+    uint8_t *input_host = nullptr;
+    uint8_t *output_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     // Initialize Input/Output Host
     for (size_t i = 0; i < count; ++i) {
@@ -193,6 +203,7 @@ template bool RunGetRing<uint8_t, 512>(int n_ranks, int n_devices, int first_ran
 template <typename T, size_t rows, size_t cols>
 __global__ AICORE void TGetKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
+    if (nranks <= 0) return;
     constexpr size_t total_count = rows * cols;
 
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -264,19 +275,28 @@ __global__ AICORE void TGetKernel2DImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *
 template <typename T, size_t rows, size_t cols>
 bool RunGetRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
 {
+    if (n_ranks <= 0) return false;
     constexpr size_t total_count = rows * cols;
 
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8770", local_mem_size))
         return false;
 
-    void *input_ptr, *output_ptr;
-    aclrtMalloc(&input_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc(&output_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    void *input_ptr = nullptr;
+    void *output_ptr = nullptr;
+    if (aclrtMalloc(&input_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST) != 0 ||
+        aclrtMalloc(&output_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST) != 0) {
+        std::cerr << "[ERROR] aclrtMalloc failed!" << std::endl;
+        return false;
+    }
 
-    uint8_t *input_host, *output_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T));
+    uint8_t *input_host = nullptr;
+    uint8_t *output_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     // Initialize Input/Output Host - 2D data in row-major order
     for (size_t r = 0; r < rows; ++r) {
@@ -373,6 +393,7 @@ template bool RunGetRing2D<int32_t, 4, 64>(int n_ranks, int n_devices, int first
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TGetLargeShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
+    if (nranks <= 0) return;
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunking");
     static_assert(total_rows % tile_rows == 0, "total_rows must be divisible by tile_rows for static tile");
@@ -446,19 +467,28 @@ __global__ AICORE void TGetLargeShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunGetRingLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
 {
+    if (n_ranks <= 0) return false;
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8770", local_mem_size))
         return false;
 
-    void *input_ptr, *output_ptr;
-    aclrtMalloc(&input_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc(&output_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    void *input_ptr = nullptr;
+    void *output_ptr = nullptr;
+    if (aclrtMalloc(&input_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST) != 0 ||
+        aclrtMalloc(&output_ptr, total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST) != 0) {
+        std::cerr << "[ERROR] aclrtMalloc failed!" << std::endl;
+        return false;
+    }
 
-    uint8_t *input_host, *output_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T));
+    uint8_t *input_host = nullptr;
+    uint8_t *output_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     for (size_t i = 0; i < total_count; ++i) {
         reinterpret_cast<T *>(input_host)[i] = static_cast<T>(i + rank_id * 10000);
@@ -564,6 +594,7 @@ template bool RunGetRingLargeShape<int32_t, 4096, 64, 128>(int n_ranks, int n_de
 template <typename T, size_t d0, size_t d1, size_t d2, size_t d3, size_t cols, size_t tile_rows>
 __global__ AICORE void TGetMultiDimKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
+    if (nranks <= 0) return;
     constexpr size_t total_count = d0 * d1 * d2 * d3 * cols;
     static_assert(d0 * d1 * d2 * d3 > tile_rows, "total rows must exceed tile_rows to test chunking");
     static_assert(d3 % tile_rows == 0, "d3 must be divisible by tile_rows for static tile");
@@ -644,6 +675,7 @@ __global__ AICORE void TGetMultiDimKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
 template <typename T, size_t d0, size_t d1, size_t d2, size_t d3, size_t cols, size_t tile_rows>
 bool RunGetRingMultiDimKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
 {
+    if (n_ranks <= 0) return false;
     constexpr size_t total_count = d0 * d1 * d2 * d3 * cols;
 
     TestContext ctx;
@@ -746,6 +778,7 @@ template bool RunGetRingMultiDim<int32_t, 4, 1, 1, 32, 64, 16>(int n_ranks, int 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 __global__ AICORE void TGetIrregularShapeKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
+    if (nranks <= 0) return;
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunking");
     // Note: total_rows % tile_rows may NOT be 0 — this is intentional for testing partial chunks!
@@ -837,6 +870,7 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunGetRingIrregularShapeKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
                                     uint64_t local_mem_size)
 {
+    if (n_ranks <= 0) return false;
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
@@ -953,6 +987,7 @@ template bool RunGetRingIrregularShape<float, 4095, 32, 128>(int n_ranks, int n_
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 __global__ AICORE void TGet2DSlidingKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
+    if (nranks <= 0) return;
     constexpr size_t total_count = total_rows * total_cols;
     static_assert(total_rows > tile_rows || total_cols > tile_cols,
                   "At least one dimension must exceed tile size to test 2D sliding");
@@ -1049,6 +1084,7 @@ __global__ AICORE void TGet2DSlidingKernelImpl(__gm__ T *dst, __gm__ T *src, __g
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 bool RunGetRing2DSlidingKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
 {
+    if (n_ranks <= 0) return false;
     constexpr size_t total_count = total_rows * total_cols;
 
     TestContext ctx;
@@ -1177,6 +1213,7 @@ template bool RunGetRing2DSliding<float, 65, 104, 16, 32>(int n_ranks, int n_dev
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 __global__ AICORE void TGetPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm__ T *shmem, int nranks)
 {
+    if (nranks <= 0) return;
     constexpr size_t total_count = total_rows * total_cols;
     static_assert(total_rows > tile_rows || total_cols > tile_cols,
                   "At least one dimension must exceed tile size to test ping-pong chunking");
@@ -1280,6 +1317,7 @@ __global__ AICORE void TGetPingPongKernelImpl(__gm__ T *dst, __gm__ T *src, __gm
 template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
 bool RunGetRingPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size)
 {
+    if (n_ranks <= 0) return false;
     constexpr size_t total_count = total_rows * total_cols;
 
     TestContext ctx;

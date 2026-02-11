@@ -15,33 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-// Declaration of 1D test functions implemented in tget_kernel.cpp
-template <typename T, size_t count>
-bool RunGetRing(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Declaration of 2D test functions implemented in tget_kernel.cpp
-template <typename T, size_t rows, size_t cols>
-bool RunGetRing2D(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Declaration of large shape chunked test functions
-template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
-bool RunGetRingLargeShape(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Declaration of multi-dimensional chunked test functions
-template <typename T, size_t d0, size_t d1, size_t d2, size_t d3, size_t cols, size_t tile_rows>
-bool RunGetRingMultiDim(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Declaration of irregular shape chunked test functions
-template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
-bool RunGetRingIrregularShape(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// 2D Sliding tests (both rows and cols exceed tile, auto 2D chunking)
-template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
-bool RunGetRing2DSliding(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Ping-Pong tests (double buffering: TGET with two staging tiles)
-template <typename T, size_t total_rows, size_t total_cols, size_t tile_rows, size_t tile_cols>
-bool RunGetRingPingPong(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+#include "tget_kernel.h"
 
 // ============================================================================
 // 1D Vector Tile Tests

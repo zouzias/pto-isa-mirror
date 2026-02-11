@@ -12,22 +12,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-// Declared in tscatter_kernel.cpp — basic tests
-template <typename T, size_t count>
-bool RunScatter(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template <typename T, size_t count>
-bool RunScatterWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-template <typename T, size_t count>
-bool RunScatterEmpty(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-
-// Declared in tscatter_kernel.cpp — large shape (chunked) tests
-bool RunScatterLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunScatterLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunScatterLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Declared in tscatter_kernel.cpp — ping-pong tests
-bool RunScatterPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunScatterPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+// G.EXP.05-CPP: Include shared header instead of forward declarations
+#include "tscatter_kernel.h"
 
 // ============================================================================
 // TSCATTER Tests - Basic: Root scatters data to all ranks

@@ -61,6 +61,9 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     const int tileValidRow = stagingTileData.GetValidRow();
     const int tileValidCol = stagingTileData.GetValidCol();
 
+    PTO_ASSERT(tileValidRow > 0, "TGET: tileValidRow must be greater than 0");
+    PTO_ASSERT(tileValidCol > 0, "TGET: tileValidCol must be greater than 0");
+
     if (totalRows == 0 || gShape4 == 0) {
         return;
     }
@@ -85,6 +88,9 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     //   - For each chunk, create a view: shape = (1, 1, 1, curRows, curCols),
     //     preserving the original strides for correct GM addressing.
     //   - TLOAD the chunk view into UB, then TSTORE from UB to local GM.
+
+    PTO_ASSERT(tileValidRow > 0, "TGET: tile ValidRow must be greater than 0 for chunked transfer");
+    PTO_ASSERT(tileValidCol > 0, "TGET: tile ValidCol must be greater than 0 for chunked transfer");
 
     constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
@@ -209,6 +215,9 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = pingTile.GetValidRow();
     const int tileValidCol = pingTile.GetValidCol();
+
+    PTO_ASSERT(tileValidRow > 0, "TGET: tileValidRow must be greater than 0");
+    PTO_ASSERT(tileValidCol > 0, "TGET: tileValidCol must be greater than 0");
 
     if (totalRows == 0 || gShape4 == 0) {
         return;

@@ -12,22 +12,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-// Declared in tgather_kernel.cpp — basic tests
-template <typename T, size_t count>
-bool RunGather(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-template <typename T, size_t count>
-bool RunGatherWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-template <typename T, size_t count>
-bool RunGatherEmpty(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-
-// Declared in tgather_kernel.cpp — large shape (chunked) tests
-bool RunGatherLargeShape_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunGatherLargeShape_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunGatherLargeShape_Int32_512x32_tile64(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Declared in tgather_kernel.cpp — ping-pong tests
-bool RunGatherPingPong_Int32_128x32_tile16(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunGatherPingPong_Float_256x64_tile32(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+// G.EXP.05-CPP: Include shared header instead of forward declarations
+#include "tgather_kernel.h"
 
 // ============================================================================
 // TGATHER Tests - Basic: Gather data from all ranks to root

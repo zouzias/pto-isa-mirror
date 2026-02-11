@@ -74,6 +74,9 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
     const int tileValidRow = stagingTileData.GetValidRow();
     const int tileValidCol = stagingTileData.GetValidCol();
 
+    PTO_ASSERT(tileValidRow > 0, "TSCATTER: tileValidRow must be greater than 0");
+    PTO_ASSERT(tileValidCol > 0, "TSCATTER: tileValidCol must be greater than 0");
+
     if (totalRows == 0 || gShape4 == 0) {
         return;
     }
@@ -124,6 +127,9 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
     // For each rank r, iterate outer dims and chunk rows/cols.
     // Source: srcGlobalData at (rank base + chunk offset)
     // Destination: parallelGroup[r] at chunk offset
+
+    PTO_ASSERT(tileValidRow > 0, "TSCATTER: tile ValidRow must be greater than 0 for chunked transfer");
+    PTO_ASSERT(tileValidCol > 0, "TSCATTER: tile ValidCol must be greater than 0 for chunked transfer");
 
     constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
@@ -257,6 +263,9 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
     const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = pingTile.GetValidRow();
     const int tileValidCol = pingTile.GetValidCol();
+
+    PTO_ASSERT(tileValidRow > 0, "TSCATTER: tileValidRow must be greater than 0");
+    PTO_ASSERT(tileValidCol > 0, "TSCATTER: tileValidCol must be greater than 0");
 
     if (totalRows == 0 || gShape4 == 0) {
         return;

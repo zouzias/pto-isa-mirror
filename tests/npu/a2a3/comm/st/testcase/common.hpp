@@ -1,5 +1,12 @@
-// Copyright (c) 2025 Huawei Technologies Co., Ltd.
-// Licensed under CANN Open Software License Agreement Version 2.0.
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
 
 #pragma once
 
@@ -19,6 +26,7 @@ struct ShmemUniqueId {
 };
 #endif
 
+
 // ============================================================================
 // ShmemEnv: Environment configuration for shmem initialization
 // ============================================================================
@@ -27,7 +35,9 @@ struct ShmemEnv {
     int size{1};
     const char *ipPort{nullptr};
     uint64_t heapBytes{512ULL * 1024 * 1024}; // Default 512MB symmetric heap
+    char ipPortBuf_[256]{};  // G.STD.18: Internal buffer for copied getenv() result
 };
+
 
 // ============================================================================
 // LoadEnv: Load shmem environment from environment variables
@@ -43,9 +53,16 @@ inline bool LoadEnv(ShmemEnv &env)
         std::cerr << "[ERROR] SHMEM_RANK/SHMEM_SIZE/SHMEM_IP_PORT must be set.\n";
         return false;
     }
-    env.rank = std::atoi(rankEnv);
-    env.size = std::atoi(sizeEnv);
-    env.ipPort = ipEnv;
+    env.rank = static_cast<int>(std::strtol(rankEnv, nullptr, 10));
+    env.size = static_cast<int>(std::strtol(sizeEnv, nullptr, 10));
+    // G.STD.18: Copy getenv() result to internal buffer to avoid dangling pointer from non-reentrant function
+    size_t ipLen = std::strlen(ipEnv);
+    if (ipLen >= sizeof(env.ipPortBuf_)) {
+        std::cerr << "[ERROR] SHMEM_IP_PORT string too long.\n";
+        return false;
+    }
+    std::memcpy(env.ipPortBuf_, ipEnv, ipLen + 1);
+    env.ipPort = env.ipPortBuf_;
     if (heapEnv != nullptr) {
         env.heapBytes = std::strtoull(heapEnv, nullptr, 10);
     }
@@ -53,13 +70,10 @@ inline bool LoadEnv(ShmemEnv &env)
 }
 
 // ============================================================================
-// ShmemInit: Initialize shmem symmetric heap with given options
-// Adapted from ShmemBackend::Init in shmem_backend.hpp
+// FillShmemAttr: Fill common fields of aclshmemx_init_attr_t from ShmemEnv.
 // ============================================================================
-inline int ShmemInit(const ShmemEnv &env)
+inline void FillShmemAttr(aclshmemx_init_attr_t &attributes, const ShmemEnv &env)
 {
-    aclshmemx_init_attr_t attributes;
-
     attributes.my_pe = env.rank;
     attributes.n_pes = env.size;
     attributes.local_mem_size = env.heapBytes;
@@ -77,6 +91,17 @@ inline int ShmemInit(const ShmemEnv &env)
     constexpr int attrVersion = (1 << 16) + sizeof(aclshmemx_init_attr_t);
     constexpr int DEFAULT_TIMEOUT = 120; // seconds
     attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
+}
+
+
+// ============================================================================
+// ShmemInit: Initialize shmem symmetric heap with given options
+// Adapted from ShmemBackend::Init in shmem_backend.hpp
+// ============================================================================
+inline int ShmemInit(const ShmemEnv &env)
+{
+    aclshmemx_init_attr_t attributes;
+    FillShmemAttr(attributes, env);
 
     // Use default unique ID
     aclshmemx_uniqueid_t defaultUid = ACLSHMEM_UNIQUEID_INITIALIZER;
@@ -109,21 +134,7 @@ inline bool ShmemInitFromEnvWithUniqueId(ShmemEnv &env, const ShmemUniqueId *uid
     }
 
     aclshmemx_init_attr_t attributes;
-    attributes.my_pe = env.rank;
-    attributes.n_pes = env.size;
-    attributes.local_mem_size = env.heapBytes;
-
-    size_t ipLen = 0;
-    if (env.ipPort != nullptr) {
-        for (; ipLen < ACLSHMEM_MAX_IP_PORT_LEN - 1 && env.ipPort[ipLen] != '\0'; ++ipLen) {
-            attributes.ip_port[ipLen] = env.ipPort[ipLen];
-        }
-    }
-    attributes.ip_port[ipLen] = '\0';
-
-    constexpr int attrVersion = (1 << 16) + sizeof(aclshmemx_init_attr_t);
-    constexpr int DEFAULT_TIMEOUT = 120; // seconds
-    attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
+    FillShmemAttr(attributes, env);
 
     attributes.comm_args = reinterpret_cast<void *>(const_cast<ShmemUniqueId *>(uid));
     int initRet = aclshmemx_init_attr(ACLSHMEMX_INIT_WITH_DEFAULT, &attributes);
@@ -246,13 +257,8 @@ AICORE inline void ShmemDeviceQuiet()
 }
 
 // ============================================================================
-// TestContext: RAII-style ACL + Shmem initialization / teardown helper
-//
-// Usage:
-//   TestContext ctx;
-//   if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, "tcp://...")) return false;
-//   // ... test-specific logic ...
-//   return ctx.Finalize() && is_ok;
+// TestContext: RAII-style ACL + Shmem initialization / teardown helper.
+// Call Init() to set up ACL runtime and shmem, then Finalize() to tear down.
 // ============================================================================
 struct TestContext {
     int32_t deviceId{-1};
@@ -264,13 +270,13 @@ struct TestContext {
     bool Init(int rankId, int nRanks, int nDevices, int firstDeviceId, const char *ipPort,
               uint64_t heapBytes = 1024ULL * 1024 * 1024, const ShmemUniqueId *uid = nullptr)
     {
+        if (nDevices <= 0 || nRanks <= 0) {
+            std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
+            return false;
+        }
         int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
         if (ret != 0) {
             std::cerr << "[ERROR] Failed to init shmem tls\n";
-            return false;
-        }
-        if (nDevices <= 0 || nRanks <= 0) {
-            std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
             return false;
         }
         deviceId = rankId % nDevices + firstDeviceId;
@@ -303,6 +309,7 @@ struct TestContext {
         return (aclStatus == 0);
     }
 };
+
 
 // ============================================================================
 // ForkAndRun: Fork one child process per rank, run perRankFn, collect results.

@@ -70,6 +70,9 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     const int tileValidRow = stagingTileData.GetValidRow();
     const int tileValidCol = stagingTileData.GetValidCol();
 
+    PTO_ASSERT(tileValidRow > 0, "TBROADCAST: tileValidRow must be greater than 0");
+    PTO_ASSERT(tileValidCol > 0, "TBROADCAST: tileValidCol must be greater than 0");
+
     if (totalRows == 0 || gShape4 == 0) {
         return;
     }
@@ -105,6 +108,9 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     //
     // Strategy: for each chunk, TLOAD from srcGlobalData into UB tile,
     // then TSTORE to every rank's destination at the corresponding offset.
+
+    PTO_ASSERT(tileValidRow > 0, "TBROADCAST: tile ValidRow must be greater than 0 for chunked transfer");
+    PTO_ASSERT(tileValidCol > 0, "TBROADCAST: tile ValidCol must be greater than 0 for chunked transfer");
 
     constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
@@ -239,6 +245,9 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = pingTile.GetValidRow();
     const int tileValidCol = pingTile.GetValidCol();
+
+    PTO_ASSERT(tileValidRow > 0, "TBROADCAST: tileValidRow must be greater than 0");
+    PTO_ASSERT(tileValidCol > 0, "TBROADCAST: tileValidCol must be greater than 0");
 
     if (totalRows == 0 || gShape4 == 0) {
         return;

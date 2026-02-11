@@ -15,35 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-// Function declarations implemented in ttest_kernel.cpp
-
-// TTEST True: Test returns true when condition is met
-bool RunTTestTrue(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// TTEST False: Test returns false when condition is not met
-bool RunTTestFalse(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// TTEST Compare: Test with different comparison operators (explicit instantiations)
-bool RunTTestCompare_GE(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t signalValue,
-                        int32_t cmpValue, bool expectedResult);
-bool RunTTestCompare_GT(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t signalValue,
-                        int32_t cmpValue, bool expectedResult);
-bool RunTTestCompare_LE(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t signalValue,
-                        int32_t cmpValue, bool expectedResult);
-bool RunTTestCompare_LT(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int32_t signalValue,
-                        int32_t cmpValue, bool expectedResult);
-
-// TTEST Polling with Timeout: Polling loop pattern
-bool RunTTestPollingTimeout(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-// TTEST Polling with Timeout (miss): should time out without finding signal
-bool RunTTestPollingTimeoutMiss(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// TTEST NE: Test not-equal comparison
-bool RunTTestNE(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// TTEST SubRegion: Test sub-region signal matrix
-template <int FullCols, int SubRows, int SubCols>
-bool RunTTestSubRegion(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+// G.EXP.05-CPP: Include shared header instead of forward declarations
+#include "ttest_kernel.h"
 
 // ============================================================================
 // TTEST Basic Tests

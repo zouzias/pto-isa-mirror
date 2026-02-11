@@ -12,25 +12,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-// Declared in treduce_kernel.cpp — basic (small tile) tests
-bool RunReduceFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunReduceFloat256SumWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-bool RunReduceEmptyFloat256Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root);
-bool RunReduceInt32_4096_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunReduceInt32_512_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunReduceInt32_256_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunReduceInt32_256_Min(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Declared in treduce_kernel.cpp — large shape chunked tests
-bool RunReduceLargeShape_Int32_128x32_tile16_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunReduceLargeShape_Float_256x64_tile32_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunReduceLargeShape_Int32_128x32_tile16_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunReduceLargeShape_Int32_512x32_tile64_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Declared in treduce_kernel.cpp — ping-pong tests
-bool RunReducePingPong_Int32_128x32_tile16_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunReducePingPong_Float_256x64_tile32_Sum(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-bool RunReducePingPong_Int32_128x32_tile16_Max(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+// G.EXP.05-CPP: Include shared header instead of forward declarations
+#include "treduce_kernel.h"
 
 // ============================================================================
 // TREDUCE Tests - Basic (data fits in single UB Tile)

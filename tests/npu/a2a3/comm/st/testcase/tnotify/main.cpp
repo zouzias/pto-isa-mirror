@@ -15,20 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-// Declaration of test functions implemented in tnotify_kernel.cpp
-
-// Test AtomicAdd mode: multiple ranks perform atomic add to same counter
-bool RunNotifyAtomicAdd(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Test Set mode: set remote signal value (ring pattern)
-bool RunNotifySet(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Test Scoreboard mode: each rank notifies its slot in rank 0's scoreboard
-template <size_t numSlots>
-bool RunNotifyScoreboard(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
-
-// Test runtime-specified NotifyOp (Set operation)
-bool RunNotifyRuntimeOp(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+#include "tnotify_kernel.h"
 
 // ============================================================================
 // AtomicAdd Tests

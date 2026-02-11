@@ -64,6 +64,9 @@ PTO_INTERNAL void ReduceTiles(TileData &acc, TileData &recv, ReduceOp op)
         case ReduceOp::Min:
             TMIN(acc, acc, recv);
             break;
+        default:
+            PTO_ASSERT(false, "TREDUCE: unknown ReduceOp");
+            break;
     }
 }
 
@@ -104,6 +107,9 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = accTileData.GetValidRow();
     const int tileValidCol = accTileData.GetValidCol();
+
+    PTO_ASSERT(tileValidRow > 0, "TREDUCE: tileValidRow must be greater than 0");
+    PTO_ASSERT(tileValidCol > 0, "TREDUCE: tileValidCol must be greater than 0");
 
     if (totalRows == 0 || gShape4 == 0) {
         return;
@@ -328,6 +334,9 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
     const int tileValidRow = accTileData.GetValidRow();
     const int tileValidCol = accTileData.GetValidCol();
+
+    PTO_ASSERT(tileValidRow > 0, "TREDUCE: tileValidRow must be greater than 0");
+    PTO_ASSERT(tileValidCol > 0, "TREDUCE: tileValidCol must be greater than 0");
 
     if (totalRows == 0 || gShape4 == 0) {
         return;

@@ -74,6 +74,7 @@ PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, Wai
     bool allSatisfied = false;
     uint32_t spin = 0;
     constexpr uint32_t kFenceInterval = 64;
+    constexpr uint32_t kMaxSpinCount = 100000000; // Deadlock detection threshold
     while (!allSatisfied) {
         allSatisfied = true;
         for (int d0 = 0; d0 < s0 && allSatisfied; ++d0) {
@@ -95,6 +96,8 @@ PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, Wai
             }
         }
         if (!allSatisfied) {
+            PTO_ASSERT(spin < kMaxSpinCount,
+                       "TWAIT: possible deadlock detected, spin count exceeded maximum limit");
             if ((++spin % kFenceInterval) == 0) {
                 pipe_barrier(PIPE_ALL);
             }
