@@ -173,12 +173,12 @@ def gen_golden(case_name, param):
             # ON (saturation): clamp to datatype range
             # NOTE: np.clip casts a_min/a_max to the input array dtype, so for integer->integer
             # widening (e.g. int32 -> int64), clip() must run on a widened dtype first.
+            # IMPORTANT: Always widen integers to SIGNED int64, even when destination is unsigned.
+            # This ensures negative values clip to 0, not wrap to large unsigned values.
             tmp = converted_golden
             if np.issubdtype(tmp.dtype, np.integer):
-                if np.issubdtype(dsttype, np.signedinteger):
-                    tmp = tmp.astype(np.int64, copy=False)
-                else:
-                    tmp = tmp.astype(np.uint64, copy=False)
+                # Always use int64 to preserve sign for correct clipping
+                tmp = tmp.astype(np.int64, copy=False)
             else:
                 tmp = tmp.astype(np.float64, copy=False)
             golden = np.clip(tmp, info.min, info.max).astype(dsttype)
