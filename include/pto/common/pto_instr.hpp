@@ -1402,11 +1402,10 @@ PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst
 #endif
 
 template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST RecordEvent TTEST(GlobalSignalData &signalData, int32_t cmpValue, CmpMode cmp, WaitEvents &... events)
+PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, CmpMode cmp, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TTEST, signalData, cmpValue, cmp);
-    return {};
+    return MAP_INSTR_IMPL(TTEST, signalData, cmpValue, cmp);
 }
 
 } // namespace pto
