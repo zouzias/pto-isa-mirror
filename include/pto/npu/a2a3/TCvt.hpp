@@ -91,7 +91,7 @@ constexpr const size_t FP16_INT8_TEMP_BUFFER_SIZE = REPEAT_MAX * 256;
 //   like inf, -inf, nan, and overflow values. Uses NonSatTorch implementations.
 // - When disabled (0): Uses standard TCVT conversion (higher performance)
 // Trade-off: Enabling provides PyTorch compatibility but reduces performance
-#define EDGE_CASE_ALIGN_ENABLE 0
+#define EDGE_CASE_ALIGN_ENABLE 1
 
 // Converts float32 (fp32) to float16 (fp16) with various rounding modes
 template <typename TileDataD, typename TileDataS>
@@ -392,37 +392,45 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
                                                      uint16_t dstRepeatStride, uint16_t srcRepeatStride,
                                                      __ubuf__ int32_t *tempInt32Buf)
 {
+    // INT32 is 2x larger than FP16, so strides need to be adjusted
+    // srcBlockStride and srcRepeatStride are for FP16 (2 bytes)
+    // For INT32 (4 bytes), we need to double the strides
+    uint16_t int32BlockStride = srcBlockStride * 2;
+    uint16_t int32RepeatStride = srcRepeatStride * 2;
+
     // Step 1: Convert fp16 to int32
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            vconv_f162s32r(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            vconv_f162s32r(tempInt32Buf, src, repeatNum, int32BlockStride, srcBlockStride, int32RepeatStride,
                            srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            vconv_f162s32a(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            vconv_f162s32a(tempInt32Buf, src, repeatNum, int32BlockStride, srcBlockStride, int32RepeatStride,
                            srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            vconv_f162s32f(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            vconv_f162s32f(tempInt32Buf, src, repeatNum, int32BlockStride, srcBlockStride, int32RepeatStride,
                            srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            vconv_f162s32c(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            vconv_f162s32c(tempInt32Buf, src, repeatNum, int32BlockStride, srcBlockStride, int32RepeatStride,
                            srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            vconv_f162s32z(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            vconv_f162s32z(tempInt32Buf, src, repeatNum, int32BlockStride, srcBlockStride, int32RepeatStride,
                            srcRepeatStride);
             break;
         default:
-            vconv_f162s32z(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            vconv_f162s32z(tempInt32Buf, src, repeatNum, int32BlockStride, srcBlockStride, int32RepeatStride,
                            srcRepeatStride);
             break;
     }
 
     pipe_barrier(PIPE_V);
 
-    vconv_s322s16(dst, tempInt32Buf, 2 * repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+    // Step 2: Convert int32 to int16 using INT32 strides for the source
+    vconv_s322s16(dst, tempInt32Buf, 2 * repeatNum, dstBlockStride, int32BlockStride, dstRepeatStride,
+                  int32RepeatStride);
 }
 
 // Float16 (half) to signed 8-bit integer conversion
