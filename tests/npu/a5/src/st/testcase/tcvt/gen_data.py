@@ -28,6 +28,14 @@ fp8_e4m3 = ml_dtypes.float8_e4m3fn
 hifloat8 = en_dtypes.hifloat8 
 np.random.seed(19)
 
+# Flag to control PyTorch behavior for infinity handling
+# GPU behavior (USE_PYTORCH_GPU_BEHAVIOR = True):
+#   - Signed integers (int8, int16, int32): +inf → -1, -inf → 0
+#   - Unsigned integers (uint8): +inf → max_value (255), -inf → 0
+# CPU behavior (USE_PYTORCH_GPU_BEHAVIOR = False):
+#   - All integer types: +inf → 0, -inf → 0
+USE_PYTORCH_GPU_BEHAVIOR = True  # Set to False to use CPU behavior
+
 def gen_golden(case_name, param):
     srctype = param.srctype
     dsttype = param.dsttype
@@ -231,20 +239,66 @@ def gen_saturation_golden(case_name, param):
         # PyTorch uses truncation mode by default for float->int conversions
         golden_torch = x_torch.to(torch_dtype)
         golden_truncated = golden_torch.cpu().numpy().astype(dsttype)
+        
+        # Handle GPU vs CPU behavior for infinity
+        # For signed integers: GPU: +inf → -1, -inf → 0 | CPU: +inf → 0, -inf → 0
+        # For unsigned integers: GPU: +inf → max, -inf → 0 | CPU: +inf → 0, -inf → 0
+        if USE_PYTORCH_GPU_BEHAVIOR and np.issubdtype(srctype, np.floating):
+            if np.issubdtype(dsttype, np.signedinteger):
+                # Apply GPU behavior: +inf becomes -1 for signed integers
+                is_pos_inf = np.isinf(x1_gm) & (x1_gm > 0)
+                golden_truncated[is_pos_inf] = -1
+            elif np.issubdtype(dsttype, np.unsignedinteger):
+                # Apply GPU behavior: +inf becomes max value for unsigned integers
+                is_pos_inf = np.isinf(x1_gm) & (x1_gm > 0)
+                info = np.iinfo(dsttype)
+                golden_truncated[is_pos_inf] = info.max
+        
+        behavior = "GPU" if USE_PYTORCH_GPU_BEHAVIOR else "CPU"
+        print(f"Generated truncated golden data using PyTorch ({behavior} behavior) for {srctype.__name__} → {dsttype.__name__}")
     else:
         # Fallback to NumPy when PyTorch not available
-        # Simulate truncation mode: trunc then clamp
+        # Simulate truncation mode: trunc then handle special values
         if np.issubdtype(srctype, np.floating) and np.issubdtype(dsttype, np.integer):
-            converted = np.trunc(x1_gm)
-        else:
-            converted = x1_gm
-        
-        # Clamp to destination range
-        if np.issubdtype(dsttype, np.integer):
+            # Handle special values (inf, nan) with truncation behavior
+            truncated_list = []
             info = np.iinfo(dsttype)
-            golden_truncated = np.clip(converted, info.min, info.max).astype(dsttype)
+            
+            for val in x1_gm.flat:
+                if np.isnan(val) or np.isinf(val):
+                    # Handle infinity based on GPU/CPU behavior flag
+                    if USE_PYTORCH_GPU_BEHAVIOR and np.isinf(val) and val > 0:
+                        if np.issubdtype(dsttype, np.signedinteger):
+                            # GPU behavior: +inf → -1 for signed integers
+                            int_val = -1
+                        elif np.issubdtype(dsttype, np.unsignedinteger):
+                            # GPU behavior: +inf → max value for unsigned integers
+                            int_val = info.max
+                        else:
+                            int_val = 0
+                    else:
+                        # CPU behavior: all special values → 0
+                        int_val = 0
+                else:
+                    # Truncate normal values
+                    int_val = int(np.trunc(val))
+                
+                # Clamp to destination range
+                clamped_val = max(info.min, min(info.max, int_val))
+                truncated_list.append(clamped_val)
+            
+            golden_truncated = np.array(truncated_list, dtype=dsttype).reshape(x1_gm.shape)
         else:
-            golden_truncated = converted.astype(dsttype)
+            # For non-floating to integer conversions
+            converted = x1_gm
+            if np.issubdtype(dsttype, np.integer):
+                info = np.iinfo(dsttype)
+                golden_truncated = np.clip(converted, info.min, info.max).astype(dsttype)
+            else:
+                golden_truncated = converted.astype(dsttype)
+        
+        behavior = "GPU" if USE_PYTORCH_GPU_BEHAVIOR else "CPU"
+        print(f"Generated truncated golden data using NumPy fallback ({behavior} behavior) for {srctype.__name__} → {dsttype.__name__}")
     
     x1_gm.tofile("./x1_gm.bin")
     golden_truncated.tofile("./golden_truncated.bin")
