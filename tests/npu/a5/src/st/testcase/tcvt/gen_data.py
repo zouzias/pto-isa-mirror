@@ -283,19 +283,18 @@ def gen_saturation_golden(case_name, param):
                     # Truncate normal values
                     int_val = int(np.trunc(val))
                 
-                # Clamp to destination range
-                clamped_val = max(info.min, min(info.max, int_val))
-                truncated_list.append(clamped_val)
+                # Use wrapping behavior (like PyTorch) instead of clamping
+                # This matches torch's behavior: e.g., 300 -> uint8 = 44 (not 255)
+                truncated_list.append(int_val)
             
-            golden_truncated = np.array(truncated_list, dtype=dsttype).reshape(x1_gm.shape)
+            # Use astype() for wrapping behavior with overflow values
+            golden_truncated = np.array(truncated_list, dtype=np.int64).astype(dsttype).reshape(x1_gm.shape)
         else:
             # For non-floating to integer conversions
             converted = x1_gm
-            if np.issubdtype(dsttype, np.integer):
-                info = np.iinfo(dsttype)
-                golden_truncated = np.clip(converted, info.min, info.max).astype(dsttype)
-            else:
-                golden_truncated = converted.astype(dsttype)
+            # Use wrapping behavior (like PyTorch) instead of clamping
+            # This matches torch's behavior for overflow values
+            golden_truncated = converted.astype(dsttype)
         
         behavior = "GPU" if USE_PYTORCH_GPU_BEHAVIOR else "CPU"
         print(f"Generated truncated golden data using NumPy fallback ({behavior} behavior) for {srctype.__name__} → {dsttype.__name__}")

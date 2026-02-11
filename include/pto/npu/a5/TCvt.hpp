@@ -110,7 +110,7 @@ enum class CastMode {
 //   like inf, -inf, nan, and overflow values. Uses NonSatTorch implementations.
 // - When disabled (0): Uses standard TCVT conversion (higher performance)
 // Trade-off: Enabling provides PyTorch compatibility but reduces performance
-#define EDGE_CASE_ALIGN_ENABLE 1
+#define EDGE_CASE_ALIGN_ENABLE 0
 
 #define FOR_ROWS \
     for (uint16_t row = 0; row < validRows; row++) {\
@@ -196,8 +196,8 @@ inline AICORE void cast32to16_NonSatTorch_1D(__ubuf__ int16_t *dst, __ubuf__ flo
         vlds(v_input_fp32, src, i * ELE_CNT_B32, NORM);
         vcvt(v_temp_int32, v_input_fp32, preg_b32, R(), RS_DISABLE);
         
-        // Step 2: Convert int32 to int16 with saturation and store
-        vcvt(v_output_int16, v_temp_int32, preg_b32, RS_ENABLE, PART_EVEN);
+        // Step 2: Convert int32 to int16 with non-saturation and store
+        vcvt(v_output_int16, v_temp_int32, preg_b32, RS_DISABLE, PART_EVEN);
         vsts(v_output_int16, dst, i * ELE_CNT_B32, PK_B32, preg_b32_st);
     }
 }
@@ -333,8 +333,8 @@ inline AICORE void cast16to16_NonSatTorch_1D(__ubuf__ int16_t *dst, __ubuf__ hal
         vlds(v_input_fp16, src, i * ELE_CNT_B32, UNPK_B16);
         vcvt(v_temp_int32, v_input_fp16, preg_b16, R(), PART_EVEN);
         
-        // Step 2: Convert int32 to int16 with saturation and store
-        vcvt(v_output_int16, v_temp_int32, preg_b32, RS_ENABLE, PART_EVEN);
+        // Step 2: Convert int32 to int16 with non-saturation and store
+        vcvt(v_output_int16, v_temp_int32, preg_b32, RS_DISABLE, PART_EVEN);
         vsts(v_output_int16, dst, i * ELE_CNT_B32, PK_B32, preg_b32_st);
     }
 }
@@ -797,8 +797,8 @@ inline AICORE void cast32to16_NonSatTorch_2D(__ubuf__ int16_t *dst, __ubuf__ flo
             vlds(v_input_fp32, src, srcOffset, NORM);
             vcvt(v_temp_int32, v_input_fp32, preg_b32, R(), RS_DISABLE);
             
-            // Step 2: Convert int32 to int16 with saturation and store
-            vcvt(v_output_int16, v_temp_int32, preg_b32, RS_ENABLE, PART_EVEN);
+            // Step 2: Convert int32 to int16 with non-saturation and store
+            vcvt(v_output_int16, v_temp_int32, preg_b32, RS_DISABLE, PART_EVEN);
             vsts(v_output_int16, dst, dstOffset, PK_B32, preg_b32_st);
         END_FOR_ELEMENTS
     END_FOR_ROWS
@@ -932,8 +932,8 @@ inline AICORE void cast16to16_NonSatTorch_2D(__ubuf__ int16_t *dst, __ubuf__ hal
             vlds(v_input_fp16, src, srcOffset, UNPK_B16);
             vcvt(v_temp_int32, v_input_fp16, preg_b16, R(), PART_EVEN);
             
-            // Step 2: Convert int32 to int16 with saturation and store
-            vcvt(v_output_int16, v_temp_int32, preg_b32, RS_ENABLE, PART_EVEN);
+            // Step 2: Convert int32 to int16 with non-saturation and store
+            vcvt(v_output_int16, v_temp_int32, preg_b32, RS_DISABLE, PART_EVEN);
             vsts(v_output_int16, dst, dstOffset, PK_B32, preg_b32_st);
         END_FOR_ELEMENTS
     END_FOR_ROWS
