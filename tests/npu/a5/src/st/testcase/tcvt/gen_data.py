@@ -126,38 +126,82 @@ def gen_golden(case_name, param):
     golden.tofile("./golden.bin")
 
 def gen_saturation_golden(case_name, param):
-    """Generate test data for saturation mode testing with out-of-range values"""
+    """Generate test data for saturation mode testing with special values (inf, nan, overflow)"""
     srctype = param.srctype
     dsttype = param.dsttype
     m, n = param.m, param.n
 
-    # Generate input with values that will overflow/underflow the destination type
-    if np.issubdtype(dsttype, np.integer):
-        dst_info = np.iinfo(dsttype)
-        dst_min, dst_max = dst_info.min, dst_info.max
-        
-        # Create array with values both in-range and out-of-range
-        # Use a pattern: [below_min, at_min, in_range, at_max, above_max, ...]
-        total_elements = m * n
-        x1_gm = np.zeros(total_elements, dtype=srctype)
-        
-        # Pattern of test values (scaled to source type range)
-        for i in range(total_elements):
-            mod = i % 5
-            if mod == 0:  # Below min
-                x1_gm[i] = srctype(dst_min - 100)
-            elif mod == 1:  # At min
-                x1_gm[i] = srctype(dst_min)
-            elif mod == 2:  # In range (middle)
-                x1_gm[i] = srctype((dst_min + dst_max) / 2)
-            elif mod == 3:  # At max
-                x1_gm[i] = srctype(dst_max)
-            else:  # Above max
-                x1_gm[i] = srctype(dst_max + 100)
-        
-        x1_gm = x1_gm.reshape([m, n])
+    # Generate input with special values: inf, -inf, nan, and overflow values
+    # Pattern matches A2/A3: special values first, then padding with zeros
+    if srctype == np.float32 or srctype == np.float16:
+        if dsttype == np.int8:
+            # Special values: -inf, inf, nan, and 2 overflow values
+            special_values = [
+                -np.inf,  # -infinity
+                np.inf,   # +infinity
+                np.nan,   # NaN
+                -200.0,   # Overflow below min (-128)
+                200.0,    # Overflow above max (127)
+            ]
+            # Pad with zeros to reach m*n elements
+            x1_gm = np.array(special_values + [0.0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
+        elif dsttype == np.uint8:
+            special_values = [
+                -np.inf,  # -infinity
+                np.inf,   # +infinity
+                np.nan,   # NaN
+                -100.0,   # Overflow below min (0)
+                300.0,    # Overflow above max (255)
+            ]
+            x1_gm = np.array(special_values + [0.0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
+        elif dsttype == np.int16:
+            special_values = [
+                -np.inf,    # -infinity
+                np.inf,     # +infinity
+                np.nan,     # NaN
+                -40000.0,   # Overflow below min (-32768)
+                40000.0,    # Overflow above max (32767)
+            ]
+            x1_gm = np.array(special_values + [0.0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
+        elif dsttype == np.int32:
+            special_values = [
+                -np.inf,  # -infinity
+                np.inf,   # +infinity
+                np.nan,   # NaN
+                -3e9,     # Overflow below min
+                3e9,      # Overflow above max
+            ]
+            x1_gm = np.array(special_values + [0.0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
+        else:
+            x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
+    elif srctype == np.int64:
+        # int64 to int32 saturation test - only overflow values (no inf/nan for integers)
+        if dsttype == np.int32:
+            special_values = [
+                -3000000000,  # Overflow below min
+                3000000000,   # Overflow above max
+                -2147483648,  # At min boundary
+                2147483647,   # At max boundary
+                0,            # Zero
+            ]
+            x1_gm = np.array(special_values + [0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
+        else:
+            x1_gm = np.random.randint(-10000, 10000, [m, n]).astype(srctype)
+    elif srctype == np.int32:
+        # int32 to int16 saturation test - only overflow values
+        if dsttype == np.int16:
+            special_values = [
+                -40000,   # Overflow below min
+                40000,    # Overflow above max
+                -32768,   # At min boundary
+                32767,    # At max boundary
+                32769,        # Zero
+            ]
+            x1_gm = np.array(special_values + [0] * (m*n - len(special_values))).astype(srctype).reshape([m, n])
+        else:
+            x1_gm = np.random.randint(-10000, 10000, [m, n]).astype(srctype)
     else:
-        # For float destinations, use normal range
+        # For other types, use normal range
         if srctype == np.float32 or srctype == np.float16:
             x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
         else:

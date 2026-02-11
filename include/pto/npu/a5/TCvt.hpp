@@ -70,6 +70,27 @@ using __cce_simd::RoundCType;
 using __cce_simd::RoundZType;
 using __cce_simd::RoundOType;
 
+// ============================================================================
+// CTRL Register Bit Definitions for Saturation Mode Control
+// ============================================================================
+/**
+ * CTRL[60]: Hardware control bit for saturation operations
+ * - Must be set to 0 when using RS_ENABLE in vcvt intrinsics
+ * - Used for: float→integer, integer→integer, float→float (wider→narrower, dst≠fp32)
+ * - Actual saturation behavior is controlled by RS_ENABLE/RS_DISABLE in vcvt
+ */
+constexpr const int SAT_MODE_BIT_60 = 60;
+
+/**
+ * CTRL[48]: Saturation control bit for narrower→wider float conversions
+ * - Used for: float→float (narrower→wider, dst≠fp32)
+ * - CTRL[48]=1: Non-saturation mode
+ * - CTRL[48]=0: Saturation mode
+ * - Note: Inverted logic compared to RS_ENABLE/RS_DISABLE
+ */
+constexpr const int SAT_MODE_BIT_48 = 48;
+
+
 /**
  * Unified enum for all type conversion modes
  * Describes the vcvt intrinsic parameter pattern used for conversion
@@ -1857,10 +1878,17 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int6
  * Converts tile data from source type to destination type using specified rounding mode
  * Iterates over rows and calls appropriate castData specialization
  * 
- * @param satMode: Saturation mode for float-to-int conversions (A5-specific):
- *                 Note: In A5, saturation is controlled by RS_DISABLE/RS_ENABLE in vcvt intrinsics.
- *                 The satMode parameter is currently not used in A5 as saturation behavior
- *                 is determined by the CastMode template at compile-time.
+ * @param satMode: Saturation mode control (A5-specific):
+ *                 In A5, saturation is controlled by both:
+ *                 1. CTRL register bits [60] and [48] - set by TCVT_IMPL based on conversion type
+ *                 2. RS_DISABLE/RS_ENABLE parameters in vcvt intrinsics
+ *                 
+ *                 The satMode parameter works in conjunction with CTRL bits:
+ *                 - CTRL[60]: Used for float→int, int→int, float→float (wider→narrower, dst≠fp32)
+ *                 - CTRL[48]: Used for float→float (narrower→wider, dst≠fp32), VTRC.fp16/bf16
+ *                 
+ *                 The actual saturation behavior is determined by both the CTRL bit setting
+ *                 and the CastMode used in castData template instantiations.
  */
 template <typename TileDataD, typename TileDataS, typename R>
 __tf__ PTO_INTERNAL OP_NAME(TCVT) OP_TYPE(element_wise)
@@ -1868,10 +1896,11 @@ void implTCVT(typename TileDataD::TileDType __out__ dst,
               typename TileDataS::TileDType __in__ src, 
     unsigned validRows, unsigned validCols, SaturationMode satMode, VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
-    // In A5, saturation is controlled by RS_DISABLE/RS_ENABLE in vcvt instructions,
-    // not by CTRL register bits. CTRL[60] should remain at 0.
-    // The satMode parameter is provided for API compatibility but saturation behavior
-    // is determined by the CastMode used in castData template instantiations.
+    // Saturation is controlled by:
+    // 1. CTRL[60]/CTRL[48] register bits (set by caller TCVT_IMPL based on conversion type)
+    // 2. RS_DISABLE/RS_ENABLE in vcvt intrinsics (determined by CastMode in castData templates)
+    // The satMode parameter is passed through to castData functions which use it to select
+    // between RS_ENABLE and RS_DISABLE in the vcvt intrinsic calls.
     
     using T1 = typename TileDataD::DType;
     using T2 = typename TileDataS::DType;
@@ -1919,9 +1948,117 @@ void implTCVT(typename TileDataD::TileDType __out__ dst,
 // ============================================================================
 // High-Level Tile Conversion Interface with explicit SaturationMode
 // ============================================================================
+/**
+ * SATURATION MODE RULES:
+ * ======================
+ * 
+ * Hardware Setup:
+ * - CTRL[60] must always be set to 0 when using RS_ENABLE/RS_DISABLE
+ * - CTRL[48] value determines saturation for narrower→wider float conversions
+ * 
+ * 1. FLOAT → INTEGER or INTEGER → INTEGER conversions:
+ *    - Set CTRL[60]=0 (required for proper operation)
+ *    - Use RS_ENABLE for saturation mode
+ *    - Use RS_DISABLE for non-saturation mode
+ * 
+ * 2. NARROWER → WIDER dynamic range conversions (integer):
+ *    - No overflow possible, saturation not applicable
+ *    - CTRL bits are neglected
+ * 
+ * 3. FLOAT → FLOAT conversions:
+ *    a) WIDER → NARROWER range (dst ≠ fp32):
+ *       - Set CTRL[60]=0 (required for proper operation)
+ *       - Use RS_ENABLE for saturation mode
+ *       - Use RS_DISABLE for non-saturation mode
+ *    
+ *    b) NARROWER → WIDER range (dst ≠ fp32):
+ *       - Set CTRL[48]=1 for non-saturation mode
+ *       - Set CTRL[48]=0 for saturation mode
+ *       - Note: CTRL[48] directly controls saturation (inverted logic)
+ *    
+ *    c) Where dst = fp32:
+ *       - Only non-saturation supported (RS_DISABLE)
+ *       - CTRL[48]/[60] are neglected
+ *       - Note: vtrc (fp32→fp32) falls into this category
+ */
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
 {
+    using SrcType = typename TileDataS::DType;
+    using DstType = typename TileDataD::DType;
+
+    uint64_t originalCtrl = get_ctrl();
+    
+    // Save original states of both CTRL bits
+    bool originalSatMode60 = (originalCtrl & (1ULL << SAT_MODE_BIT_60)) != 0;
+    bool originalSatMode48 = (originalCtrl & (1ULL << SAT_MODE_BIT_48)) != 0;
+    
+    // Determine which CTRL bit to use based on conversion type
+    bool useCtrl60 = false;
+    bool useCtrl48 = false;
+    bool setCtrl48to1 = false;  // For CTRL[48]: true=1 (non-sat), false=0 (sat)
+    
+    // Check if destination is fp32 (saturation not supported, CTRL neglected)
+    constexpr bool dstIsFp32 = std::is_same<DstType, float>::value;
+    
+    // Determine which CTRL bit to use based on conversion type
+    if constexpr (!dstIsFp32) {
+        // Float to float conversions (dst ≠ fp32)
+        if constexpr ((std::is_same<SrcType, half>::value || std::is_same<SrcType, bfloat16_t>::value) &&
+                      std::is_same<DstType, float>::value) {
+            // This is actually dst=fp32, shouldn't reach here due to outer if check
+            // But added for clarity
+        } else if constexpr (std::is_same<SrcType, float>::value && 
+                            (std::is_same<DstType, half>::value || std::is_same<DstType, bfloat16_t>::value)) {
+            // WIDER → NARROWER (fp32 → fp16/bf16): Set CTRL[60]=0, use RS_ENABLE/DISABLE
+            useCtrl60 = true;
+        } else if constexpr ((std::is_same<SrcType, half>::value || std::is_same<SrcType, bfloat16_t>::value) &&
+                            (std::is_same<DstType, half>::value || std::is_same<DstType, bfloat16_t>::value)) {
+            // fp16/bf16 conversions (narrower→wider): Use CTRL[48] to control saturation
+            // CTRL[48]=1 for non-saturation, CTRL[48]=0 for saturation
+            useCtrl48 = true;
+            setCtrl48to1 = (satMode == SaturationMode::OFF);
+        } else if constexpr ((std::is_floating_point<SrcType>::value || std::is_same<SrcType, half>::value || 
+                             std::is_same<SrcType, bfloat16_t>::value) && 
+                            std::is_integral<DstType>::value) {
+            // FLOAT → INTEGER: Set CTRL[60]=0, use RS_ENABLE/DISABLE
+            useCtrl60 = true;
+        } else if constexpr (std::is_integral<SrcType>::value && std::is_integral<DstType>::value) {
+            // INTEGER → INTEGER: Set CTRL[60]=0, use RS_ENABLE/DISABLE
+            // Check if narrower to wider (no overflow, CTRL neglected)
+            if constexpr (sizeof(SrcType) < sizeof(DstType)) {
+                // Narrower → wider: CTRL neglected, don't set any bit
+            } else {
+                // Wider → narrower or same size: Set CTRL[60]=0
+                useCtrl60 = true;
+            }
+        } else if constexpr (std::is_integral<SrcType>::value && 
+                            (std::is_same<DstType, half>::value || std::is_same<DstType, bfloat16_t>::value || 
+                             std::is_same<DstType, float>::value)) {
+            // INTEGER → FLOAT: Typically narrower to wider, CTRL may be neglected
+            // But if needed, set CTRL[60]=0
+            if constexpr (sizeof(SrcType) >= sizeof(DstType)) {
+                useCtrl60 = true;
+            }
+        }
+    }
+    
+    // Set CTRL bits based on conversion type
+    // CTRL[60]: Always set to 0 when used (required for RS_ENABLE/RS_DISABLE)
+    // CTRL[48]: Set to 0 or 1 to control saturation for narrower→wider float conversions
+    if (useCtrl60) {
+        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_60));  // Always set CTRL[60]=0
+    }
+    if (useCtrl48) {
+        if (setCtrl48to1) {
+            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_48));  // CTRL[48]=1 for non-saturation
+        } else {
+            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_48));  // CTRL[48]=0 for saturation
+        }
+    }
+    // Otherwise, CTRL bits are neglected (e.g., dst=fp32, integer narrower→wider)
+
+    // Execute the conversion with appropriate rounding mode
     switch (mode) {
         case RoundMode::CAST_RINT:
             implTCVT<TileDataD,TileDataS,RoundRType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), satMode);
@@ -1948,6 +2085,22 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
             implTCVT<TileDataD,TileDataS,RoundRType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), satMode);
             break;
     }
+
+    // Restore original CTRL bit states
+    if (useCtrl60) {
+        if (originalSatMode60) {
+            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_60));
+        } else {
+            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_60));
+        }
+    }
+    if (useCtrl48) {
+        if (originalSatMode48) {
+            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_48));
+        } else {
+            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_48));
+        }
+    }
 }
 
 // ============================================================================
@@ -1963,22 +2116,22 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
     // Conversions that default to OFF for PyTorch compatibility or truncation behavior
     if constexpr (
-        // FP16→UINT8
+        // FP16→UINT8 (float→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, uint8_t>::value &&
          std::is_same<typename TileDataS::DType, half>::value) ||
-        // FP16→INT8
+        // FP16→INT8 (float→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, int8_t>::value &&
          std::is_same<typename TileDataS::DType, half>::value) ||
-        // FP32→INT16
+        // FP32→INT16 (float→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, int16_t>::value &&
          std::is_same<typename TileDataS::DType, float>::value) ||
-        // FP16→INT16
+        // FP16→INT16 (float→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, int16_t>::value &&
          std::is_same<typename TileDataS::DType, half>::value) ||
-        // INT64→INT32
+        // INT64→INT32 (int→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, int32_t>::value &&
          std::is_same<typename TileDataS::DType, int64_t>::value) ||
-        // INT32→INT16
+        // INT32→INT16 (int→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, int16_t>::value &&
          std::is_same<typename TileDataS::DType, int32_t>::value)
     ) {
