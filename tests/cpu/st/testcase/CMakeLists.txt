@@ -104,6 +104,8 @@ mgather
 mscatter
 hashfind
 setgetval
+tget
+tput
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
