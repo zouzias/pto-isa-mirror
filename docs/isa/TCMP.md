@@ -19,13 +19,13 @@ PTO-AS form: see `docs/grammar/PTO-AS.md`.
 Synchronous form - Level1:
 
 ```text
-%dst = pto.tcmp %src0, %src1 {cmpMode = #pto.cmp<EQ>} : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.tcmp %src0, %src1 {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 Synchronous form - Level2:
 
 ```text
-pto.tcmp ins(%src0, %src1 {cmpMode = #pto.cmp<EQ>} : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.tcmp ins(%src0, %src1 {cmpMode = #pto<cmp xx>} : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ Intrinsic

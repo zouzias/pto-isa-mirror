@@ -17,13 +17,13 @@ PTO-AS form: see `docs/grammar/PTO-AS.md`.
 Synchronous form - Level1:
 
 ```text
-%dst = pto.trowmax %src : !pto.tile<...> -> !pto.tile<...>
+%dst = pto.trowmax %src, %tem : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 Synchronous form - Level2:
 
 ```text
-pto.trowmax ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.trowmax ins(%src, %tem : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
