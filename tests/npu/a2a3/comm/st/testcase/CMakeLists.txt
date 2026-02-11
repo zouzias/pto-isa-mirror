@@ -12,16 +12,33 @@ function(pto_comm_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-vec -DMEMORY_BASE -std=c++17
         -Wno-non-c-typedef-for-linkage -Wno-braced-scalar-init)
+    # Host-arch aware include root: x86_64 first, fallback to aarch64.
+    set(PTO_TOOLKIT_DIR "${ASCEND_HOME_PATH}/x86_64-linux")
+    if(NOT EXISTS "${PTO_TOOLKIT_DIR}")
+        set(PTO_TOOLKIT_DIR "${ASCEND_HOME_PATH}/aarch64-linux")
+    endif()
+
+    # Newer CANN may place AscendC kernel headers under tikcpp.
+    set(PTO_ASCENDC_KERNEL_INCLUDE "")
+    if(EXISTS "${ASCEND_HOME_PATH}/tools/tikcpp/ascendc_kernel/include")
+        set(PTO_ASCENDC_KERNEL_INCLUDE "${ASCEND_HOME_PATH}/tools/tikcpp/ascendc_kernel/include")
+    elseif(EXISTS "${ASCEND_HOME_PATH}/compiler/tikcpp/ascendc_kernel/include")
+        set(PTO_ASCENDC_KERNEL_INCLUDE "${ASCEND_HOME_PATH}/compiler/tikcpp/ascendc_kernel/include")
+    endif()
+
     target_include_directories(${NAME}_kernel PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../../../include
-        $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc
-        $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include
-        $ENV{ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api
-        $ENV{ASCEND_HOME_PATH}/aarch64-linux/include/ascendc/basic_api
-        $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/impl/basic_api
-        $ENV{ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api/impl
-        $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include/interface
-        $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include/utils
+        ${PTO_TOOLKIT_DIR}/asc
+        ${PTO_TOOLKIT_DIR}/asc/include
+        ${PTO_TOOLKIT_DIR}/ascendc/include
+        ${PTO_TOOLKIT_DIR}/ascendc/include/basic_api
+        ${PTO_TOOLKIT_DIR}/include/ascendc
+        ${PTO_TOOLKIT_DIR}/include/ascendc/basic_api
+        ${PTO_TOOLKIT_DIR}/asc/impl/basic_api
+        ${PTO_TOOLKIT_DIR}/ascendc/include/basic_api/impl
+        ${PTO_TOOLKIT_DIR}/asc/include/interface
+        ${PTO_TOOLKIT_DIR}/asc/include/utils
+        ${PTO_ASCENDC_KERNEL_INCLUDE}
         # $ENV{ASCEND_HOME_PATH}/pkg_inc/
         # $ENV{ASCEND_HOME_PATH}/pkg_inc/profiling/
         # $ENV{ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
