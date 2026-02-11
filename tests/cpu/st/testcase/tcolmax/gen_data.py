@@ -12,7 +12,9 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
+
 
 def gen_golden_data_tcolmax(case_name, param):
     dtype = param.dtype
@@ -27,7 +29,7 @@ def gen_golden_data_tcolmax(case_name, param):
     # Perform the addbtraction
     golden = np.zeros([dstRow, dstCols]).astype(dtype)
     for j in range(dstCols):
-        golden[0][j] = np.max(input1[ :, j])
+        golden[0][j] = np.max(input1[:, j])
 
     # Apply valid region constraints
     output = np.zeros([dstRow, dstCols]).astype(dtype)
@@ -42,6 +44,7 @@ def gen_golden_data_tcolmax(case_name, param):
 
     return output, input1, golden
 
+
 class tcolmaxParams:
     def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col):
         self.dtype = dtype
@@ -52,21 +55,19 @@ class tcolmaxParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
 
+
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
+    dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int32: "int32", np.int16: "int16"}[
+        param.dtype
+    ]
 
     name = f"TCOLMAXTest.case_{dtype_str}"
     name += f"_{param.global_row}x{param.global_col}"
     name += f"_{param.tile_row}x{param.tile_col}"
     name += f"_{param.valid_row}x{param.valid_col}"
-    
+
     return name
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

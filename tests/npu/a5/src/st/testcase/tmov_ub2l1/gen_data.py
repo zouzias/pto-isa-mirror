@@ -30,8 +30,11 @@ def gen_golden_data(param):
         c0_size = 32
     elif test_type == np.float32:
         c0_size = 8
-    output_arr = input_arr.reshape(int(param.valid_rows / nz_block_row), nz_block_row,
-        int(param.valid_cols / c0_size), c0_size).transpose(2, 0, 1, 3).astype(test_type)
+    output_arr = (
+        input_arr.reshape(int(param.valid_rows / nz_block_row), nz_block_row, int(param.valid_cols / c0_size), c0_size)
+        .transpose(2, 0, 1, 3)
+        .astype(test_type)
+    )
     output_arr.tofile("golden_output.bin")
 
 
@@ -44,6 +47,7 @@ class TmovUb2L1Params:
         self.valid_cols = valid_cols
         self.index_rows = index_rows
         self.index_cols = index_cols
+
 
 if __name__ == "__main__":
     case_name_list = [

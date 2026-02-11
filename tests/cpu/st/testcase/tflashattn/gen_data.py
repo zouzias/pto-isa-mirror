@@ -57,10 +57,7 @@ if __name__ == "__main__":
     seed = 20251220
     init_scale = 0.02
 
-    cases = [
-        "TFLASHATTNTest.case1",
-    ]
+    cases = ["TFLASHATTNTest.case1"]
 
     for case in cases:
         gen_case(case, seq_len=seq_len, head_dim=head_dim, seed=seed, init_scale=init_scale)
-

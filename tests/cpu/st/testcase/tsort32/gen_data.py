@@ -25,7 +25,7 @@ def gen_golden_data(param):
         stride = 4
     else:
         stride = 2
-    
+
     # 生成随机数据
     total_elements = row * col
     input_arr = np.random.rand(row, col) * 10
@@ -55,9 +55,9 @@ def gen_golden_data(param):
                     output_arr[i, k * stride + 1] = sorted_index[m]
                 m = m + 1
     # 保存输入文件
-    input_arr.tofile('input0.bin')
-    index_arr.tofile('input1.bin')
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input0.bin")
+    index_arr.tofile("input1.bin")
+    output_arr.tofile("golden.bin")
 
 
 class TestParams:
@@ -70,10 +70,10 @@ class TestParams:
 
 if __name__ == "__main__":
     case_params_list = [
-        TestParams('TSORT32Test.test0', np.int16, 16, 16),
-        TestParams('TSORT32Test.test1', np.float32, 8, 32),
-        TestParams('TSORT32Test.test2', np.int32, 7, 32),
-        TestParams('TSORT32Test.test3', np.float16, 32, 16),
+        TestParams("TSORT32Test.test0", np.int16, 16, 16),
+        TestParams("TSORT32Test.test1", np.float32, 8, 32),
+        TestParams("TSORT32Test.test2", np.int32, 7, 32),
+        TestParams("TSORT32Test.test3", np.float16, 32, 16),
     ]
 
     for case in case_params_list:

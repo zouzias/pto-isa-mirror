@@ -64,4 +64,3 @@ if __name__ == "__main__":
         os.chdir(case_name)
         gen_golden_data_tcolexpand(param)
         os.chdir(original_dir)
-

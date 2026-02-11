@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -38,7 +39,7 @@ def gen_golden_data_tcmp(case_name, param):
         golden = np.greater_equal(input1, input2).astype(dtype)
     elif param.cmp_mode == "LE":
         golden = np.less_equal(input1, input2).astype(dtype)
-    else: # default EQ
+    else:  # default EQ
         golden = np.equal(input1, input2).astype(dtype)
 
     # Apply valid region constraints
@@ -69,15 +70,13 @@ class TCmpParams:
 
 
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
-    return f"TCMPTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_" + \
-           f"{param.valid_row}x{param.valid_col}_{param.cmp_mode}"
+    dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int32: "int32", np.int16: "int16"}[
+        param.dtype
+    ]
+    return (
+        f"TCMPTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_"
+        + f"{param.valid_row}x{param.valid_col}_{param.cmp_mode}"
+    )
 
 
 if __name__ == "__main__":

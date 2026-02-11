@@ -13,6 +13,7 @@
 import os
 
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -45,6 +46,7 @@ class TCvtParams:
         self.n = n
         self.mode = mode
 
+
 if __name__ == "__main__":
     case_name_list = [
         "TCVTTest.case1",
@@ -55,7 +57,7 @@ if __name__ == "__main__":
         "TCVTTest.case6",
         "TCVTTest.case7",
         "TCVTTest.case8",
-        "TCVTTest.case9"
+        "TCVTTest.case9",
     ]
 
     case_params_list = [
@@ -67,7 +69,7 @@ if __name__ == "__main__":
         TCvtParams(np.float32, np.int32, 4, 4096, "RoundMode::CAST_RINT"),
         TCvtParams(np.int16, np.float32, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(np.float32, np.float16, 64, 64, "RoundMode::CAST_RINT"),
-        TCvtParams(np.float16, np.uint8, 64, 64, "RoundMode::CAST_RINT")
+        TCvtParams(np.float16, np.uint8, 64, 64, "RoundMode::CAST_RINT"),
     ]
 
     for i, case_name in enumerate(case_name_list):

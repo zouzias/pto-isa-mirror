@@ -86,9 +86,17 @@ EXPECTED_MANUAL_ZH = [
 EXPECTED_HEADINGS: Dict[str, List[str]] = {
     "index.md": ["# PTO Virtual Instruction Set Architecture Manual", "## 0.1 Scope", "## 0.4 Conformance language"],
     "index_zh.md": ["# PTO 虚拟指令集架构手册", "## 0.1 范围", "## 0.4 规范性术语"],
-    "11-memory-ordering-and-consistency.md": ["# 11. Memory Ordering and Consistency", "## 11.1 Scope", "## 11.4 Ordering guarantees"],
+    "11-memory-ordering-and-consistency.md": [
+        "# 11. Memory Ordering and Consistency",
+        "## 11.1 Scope",
+        "## 11.4 Ordering guarantees",
+    ],
     "11-memory-ordering-and-consistency_zh.md": ["# 11. 内存顺序与一致性", "## 11.1 范围", "## 11.4 顺序保证"],
-    "12-backend-profiles-and-conformance.md": ["# 12. Backend Profiles and Conformance", "## 12.1 Scope", "## 12.5 Conformance levels"],
+    "12-backend-profiles-and-conformance.md": [
+        "# 12. Backend Profiles and Conformance",
+        "## 12.1 Scope",
+        "## 12.5 Conformance levels",
+    ],
     "12-backend-profiles-and-conformance_zh.md": ["# 12. 后端画像与一致性", "## 12.1 范围", "## 12.5 一致性等级"],
 }
 
@@ -222,17 +230,9 @@ def check_nav_order(errors: List[str]) -> None:
     nav_zh = extract_nav_manual_paths(text, zh=True)
 
     if nav_en != EXPECTED_NAV_EN:
-        errors.append(
-            "manual nav order mismatch (EN):\n"
-            + f"expected: {EXPECTED_NAV_EN}\n"
-            + f"actual:   {nav_en}"
-        )
+        errors.append("manual nav order mismatch (EN):\n" + f"expected: {EXPECTED_NAV_EN}\n" + f"actual:   {nav_en}")
     if nav_zh != EXPECTED_NAV_ZH:
-        errors.append(
-            "manual nav order mismatch (ZH):\n"
-            + f"expected: {EXPECTED_NAV_ZH}\n"
-            + f"actual:   {nav_zh}"
-        )
+        errors.append("manual nav order mismatch (ZH):\n" + f"expected: {EXPECTED_NAV_ZH}\n" + f"actual:   {nav_zh}")
 
 
 def check_standalone_language_policy(errors: List[str]) -> None:

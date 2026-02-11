@@ -16,9 +16,11 @@ import numpy as np
 import ml_dtypes
 import copy
 import struct
+
 np.random.seed(19)
 
 bfloat16 = ml_dtypes.bfloat16
+
 
 def extract_quant_params(quant_gm):
     """
@@ -32,8 +34,8 @@ def extract_quant_params(quant_gm):
     """
     quant_gm = int(quant_gm)
     m1_bits = (quant_gm >> 13) & 0x7FFFF  # Extract m1=quant_gm[31:13]; 0x7FFFF is the 19-bit mask.
-    offset = (quant_gm >> 37) & 0x1FF     # Extract offset=quant_gm[45:37]，0x1FF is the 9-bit mask.
-    sign = (quant_gm >> 46) & 0x1         # Extract sign=quant_gm[46]，0x1 is the 1-bit mask.
+    offset = (quant_gm >> 37) & 0x1FF  # Extract offset=quant_gm[45:37]，0x1FF is the 9-bit mask.
+    sign = (quant_gm >> 46) & 0x1  # Extract sign=quant_gm[46]，0x1 is the 1-bit mask.
 
     # Parse M1 into a floating-point number in (1,8,10) format.
     sign_bit = (m1_bits >> 18) & 0x1
@@ -44,12 +46,14 @@ def extract_quant_params(quant_gm):
 
     return m1, offset, sign
 
+
 def saturation(value, min_val, max_val, target_type):
     """
     Perform saturation processing on the input floating-point number and convert it to the target type.
     """
     x_clamped = np.clip(value, min_val, max_val)
     return np.round(x_clamped).astype(target_type)
+
 
 def qf2b8_pre(data, quant_gm):
     """
@@ -63,6 +67,7 @@ def qf2b8_pre(data, quant_gm):
     else:
         return saturation(tmp1, 0, 255, np.uint8)
 
+
 def qf2f16_pre(data, quant_gm):
     """
     float32 -> float16
@@ -70,12 +75,14 @@ def qf2f16_pre(data, quant_gm):
     m1, offset, sign = extract_quant_params(quant_gm)
     return saturation(data.astype(np.float32) * m1, np.finfo(np.float16).min, np.finfo(np.float16).max, np.float16)
 
+
 def qf2bf16_pre(data, quant_gm):
     """
     float32 -> bfloat16
     """
     m1, offset, sign = extract_quant_params(quant_gm)
     return saturation(data.astype(np.float32) * m1, 0x0080, 0x7F80, bfloat16)
+
 
 def gen_golden_data(case_name, param):
     src_type = param.atype
@@ -88,7 +95,7 @@ def gen_golden_data(case_name, param):
 
     x1_gm = np.random.randint(-1, 10, [m, k]).astype(src_type)
     x2_gm = np.random.randint(-1, 10, [k, n]).astype(src_type)
-    bias_gm = np.random.randint(1, 10, [n, ]).astype(bias_type)
+    bias_gm = np.random.randint(1, 10, [n]).astype(bias_type)
 
     if is_bias:
         golden = np.matmul(x1_gm.astype(l0c_type), x2_gm.astype(l0c_type)).astype(l0c_type) + bias_gm.astype(l0c_type)
@@ -99,11 +106,11 @@ def gen_golden_data(case_name, param):
     temp_quant_tensor = np.random.randint(1, 5, n).astype(np.float32)
     temp_quant_tensor_api = copy.deepcopy(temp_quant_tensor).astype(np.uint64)
     for i, _ in enumerate(temp_quant_tensor_api):
-        temp_quant_tensor_api[i] = struct.unpack('!I', struct.pack('!f', temp_quant_tensor_api[i]))[0]
+        temp_quant_tensor_api[i] = struct.unpack("!I", struct.pack("!f", temp_quant_tensor_api[i]))[0]
         temp_quant_tensor_api[i] = temp_quant_tensor_api[i] | np.uint64(0x400000000000)
     quant_tensor = np.frombuffer(temp_quant_tensor_api, np.uint64)
     quant_tensor = quant_tensor.astype(quant_type)
-    quant_golden = np.zeros((m, n), dtype = dst_type)
+    quant_golden = np.zeros((m, n), dtype=dst_type)
     if is_quant:
         for i in range(m):
             for j in range(n):
@@ -130,7 +137,7 @@ def gen_golden_data(case_name, param):
 
 
 class tmovParams:
-    def __init__(self, atype, btype, ctype, bias_type, dst_type, quant_type, m, n, k, is_bias = 0, is_quant = 0):
+    def __init__(self, atype, btype, ctype, bias_type, dst_type, quant_type, m, n, k, is_bias=0, is_quant=0):
         self.atype = atype
         self.btype = btype
         self.ctype = ctype
@@ -143,6 +150,7 @@ class tmovParams:
         self.is_bias = is_bias
         self.is_quant = is_quant
 
+
 if __name__ == "__main__":
     case_name_list = [
         "TMOVTest.case_bias1",
@@ -153,7 +161,6 @@ if __name__ == "__main__":
         "TMOVTest.case_bias_dynamic6",
         "TMOVTest.case_bias_dynamic7",
         "TMOVTest.case_bias_dynamic8",
-
         "TMOVTest.case_fixpipe1",
         "TMOVTest.case_fixpipe2",
         "TMOVTest.case_fixpipe3",
@@ -172,14 +179,13 @@ if __name__ == "__main__":
         # int32 -> int32
         tmovParams(np.int8, np.int8, np.int32, np.int32, np.int32, np.uint64, 128, 64, 96, 1, 0),
         # Non-aligned, int32 -> int32
-        tmovParams(np.int8, np.int8, np.int32, np.int32, np.int32, np.uint64, 31, 63, 32, 1, 0),  
-        # dynamic tile, float32 -> float32    
+        tmovParams(np.int8, np.int8, np.int32, np.int32, np.int32, np.uint64, 31, 63, 32, 1, 0),
+        # dynamic tile, float32 -> float32
         tmovParams(np.float16, np.float16, np.float32, np.float16, np.float32, np.uint64, 64, 32, 80, 1, 0),
         # dynamic tile, bfloat16 -> float32
         tmovParams(np.float32, np.float32, np.float32, bfloat16, np.float32, np.uint64, 112, 48, 96, 1, 0),
         # dynamic tile, Non-aligned, bfloat16 -> float32
         tmovParams(np.float32, np.float32, np.float32, bfloat16, np.float32, np.uint64, 15, 63, 96, 1, 0),
-
         # L1_TO_FB: quant
         # int32 -> int8
         tmovParams(np.int8, np.int8, np.int32, np.int32, np.int8, np.uint64, 32, 128, 32, 0, 1),

@@ -12,11 +12,13 @@
 
 import os
 import numpy as np
+
 np.random.seed(19)
 
 PAD_VALUE_NULL = "PAD_VALUE_NULL"
 PAD_VALUE_MAX = "PAD_VALUE_MAX"
 PAD_VALUE_MIN = "PAD_VALUE_MIN"
+
 
 def gen_golden_data(case_name, param):
     dtype = param.dtype
@@ -62,29 +64,37 @@ def gen_golden_data(case_name, param):
 
 
 class TMinsParams:
-    def __init__(self, dtype, dst_tile_row, dst_tile_col, src0_tile_row, src0_tile_col, src1_tile_row, src1_tile_col, 
-                 valid_row, valid_col, pad_value_type=PAD_VALUE_NULL):
+    def __init__(
+        self,
+        dtype,
+        dst_tile_row,
+        dst_tile_col,
+        src0_tile_row,
+        src0_tile_col,
+        src1_tile_row,
+        src1_tile_col,
+        valid_row,
+        valid_col,
+        pad_value_type=PAD_VALUE_NULL,
+    ):
         self.dtype = dtype
         self.dst_tile_row = dst_tile_row
         self.dst_tile_col = dst_tile_col
         self.src0_tile_row = src0_tile_row
         self.src0_tile_col = src0_tile_col
         self.src1_tile_row = src1_tile_row
-        self.src1_tile_col = src1_tile_col 
+        self.src1_tile_col = src1_tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
         self.pad_value_type = pad_value_type
 
 
 def generate_case_name(param):
-    dtype_str = {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    }[param.dtype]
+    dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int32: "int32", np.int16: "int16"}[
+        param.dtype
+    ]
     return f"TMINSTest.case_{dtype_str}_{param.valid_row}x{param.valid_col}_{param.pad_value_type}"
+
 
 if __name__ == "__main__":
     # Get the absolute path of the script

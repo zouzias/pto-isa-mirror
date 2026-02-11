@@ -15,6 +15,7 @@ import numpy as np
 
 np.random.seed(19)
 
+
 def gen_golden(case_name, param):
     srctype = param.srctype
     dsttype = param.dsttype
@@ -51,7 +52,7 @@ def gen_golden(case_name, param):
 
     # Apply rounding mode for conversions
     mode = param.mode
-    
+
     # Perform conversion first
     if np.issubdtype(srctype, np.floating):
         if np.issubdtype(dsttype, np.integer):
@@ -108,10 +109,11 @@ def gen_golden(case_name, param):
         golden = np.clip(converted_golden.astype(np.float64, copy=False), info.min, info.max).astype(dsttype)
     else:
         golden = converted_golden.astype(dsttype)
-            
+
     x1_gm.tofile("./x1_gm.bin")
     golden.tofile("./golden.bin")
-                
+
+
 class tcvtParams:
     def __init__(self, srctype, dsttype, m, n, mode):
         self.srctype = srctype
@@ -119,6 +121,7 @@ class tcvtParams:
         self.m = m
         self.n = n
         self.mode = mode
+
 
 if __name__ == "__main__":
     # Type conversion pairs: (name_suffix, source_type, destination_type)
@@ -129,41 +132,30 @@ if __name__ == "__main__":
         ("fp32_int32", np.float32, np.int32),
         ("fp32_int16", np.float32, np.int16),
         ("fp32_int64", np.float32, np.int64),
-        
         # FP16 Source
         ("fp16_fp32", np.float16, np.float32),
         ("fp16_int32", np.float16, np.int32),
         ("fp16_int16", np.float16, np.int16),
         ("fp16_int8", np.float16, np.int8),
         ("fp16_uint8", np.float16, np.uint8),
-
         # INT32 Source
         ("int32_fp32", np.int32, np.float32),
         ("int32_int16", np.int32, np.int16),
         ("int32_int64", np.int32, np.int64),
-
         # INT16 Source
         ("int16_fp16", np.int16, np.float16),
         ("int16_fp32", np.int16, np.float32),
-
         # INT8 Source
         ("int8_fp16", np.int8, np.float16),
-
         # UINT8 Source
         ("uint8_fp16", np.uint8, np.float16),
-
         # INT64 Source
         ("int64_fp32", np.int64, np.float32),
         ("int64_int32", np.int64, np.int32),
     ]
 
     # Different shape configurations (m, n)
-    shapes = [
-        (2, 128),
-        (2, 32),
-        (1, 64),
-        (4, 64),
-    ]
+    shapes = [(2, 128), (2, 32), (1, 64), (4, 64)]
 
     case_name_list = []
     case_params_list = []

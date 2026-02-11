@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -30,27 +31,46 @@ def gen_golden_data(case_name, gInfo):
     gWholeShape3 = gInfo.gWholeShape3
     gWholeShape4 = gInfo.gWholeShape4
     if gInfo.format == "ND" or gInfo.format == "NZ":
-        input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
-                                    gWholeShape2, gWholeShape3, gWholeShape4)).astype(data_type)
-        output_arr = np.zeros(shape=(gWholeShape0, gWholeShape1,
-                            gWholeShape2, gWholeShape3, gWholeShape4), dtype=data_type)
-        output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4] \
-                    = input_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4]
+        input_arr = np.random.randint(
+            -5, 5, size=(gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4)
+        ).astype(data_type)
+        output_arr = np.zeros(
+            shape=(gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4), dtype=data_type
+        )
+        output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4] = input_arr[
+            0:gShape0, 0:gShape1, 0:gShape2, 0:gShape3, 0:gShape4
+        ]
     elif gInfo.format == "DN":
-        input_arr = np.random.randint(-5, 5, size=(gWholeShape0, gWholeShape1,
-                            gWholeShape2, gWholeShape4, gWholeShape3)).astype(data_type)
-        output_arr = np.zeros(shape=(gWholeShape0, gWholeShape1,
-                            gWholeShape2, gWholeShape4, gWholeShape3), dtype=data_type)
-        output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4, 0:gShape3] \
-                    = input_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4, 0:gShape3]
+        input_arr = np.random.randint(
+            -5, 5, size=(gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape4, gWholeShape3)
+        ).astype(data_type)
+        output_arr = np.zeros(
+            shape=(gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape4, gWholeShape3), dtype=data_type
+        )
+        output_arr[0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4, 0:gShape3] = input_arr[
+            0:gShape0, 0:gShape1, 0:gShape2, 0:gShape4, 0:gShape3
+        ]
 
     input_arr.tofile("./input.bin")
     output_arr.tofile("./golden.bin")
 
 
 class GlobalTensorInfo:
-    def __init__(self, datatype, format, gShape0, gShape1, gShape2, gShape3, gShape4,
-                gWholeShape0, gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4):
+    def __init__(
+        self,
+        datatype,
+        format,
+        gShape0,
+        gShape1,
+        gShape2,
+        gShape3,
+        gShape4,
+        gWholeShape0,
+        gWholeShape1,
+        gWholeShape2,
+        gWholeShape3,
+        gWholeShape4,
+    ):
         self.datatype = datatype
         self.format = format
         self.gShape0 = gShape0
@@ -63,7 +83,7 @@ class GlobalTensorInfo:
         self.gWholeShape2 = gWholeShape2
         self.gWholeShape3 = gWholeShape3
         self.gWholeShape4 = gWholeShape4
-        
+
 
 if __name__ == "__main__":
     # 用例名称

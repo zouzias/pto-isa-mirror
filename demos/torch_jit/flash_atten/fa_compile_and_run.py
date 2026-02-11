@@ -102,14 +102,10 @@ def test_flash():
     xexp_device = torch.empty((s0, s1), device=device, dtype=torch.float16)
     pout_fp32_device = torch.empty((s0, s1), device=device, dtype=torch.float32)
 
-    out_2d_device = torch.empty(
-        (num_tiles, s0, head), device=device, dtype=torch.float32
-    )
+    out_2d_device = torch.empty((num_tiles, s0, head), device=device, dtype=torch.float32)
     g_sum_device = torch.empty((num_tiles, s0), device=device, dtype=torch.float32)
     exp_max_device = torch.empty((num_tiles, s0), device=device, dtype=torch.float32)
-    o_parts_device = torch.empty(
-        (num_tiles, s0, head), device=device, dtype=torch.float32
-    )
+    o_parts_device = torch.empty((num_tiles, s0, head), device=device, dtype=torch.float32)
 
     # ==========================
     # Compile flash ONCE

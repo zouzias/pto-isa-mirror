@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+
 np.random.seed(2025)
 
 
@@ -38,14 +39,11 @@ class TColExpandParam:
         self.valid_col = valid_col
 
     def __str__(self):
-        dtype_str = {
-            np.float32: 'float',
-            np.float16: 'half',
-            np.int8: 'int8',
-            np.int16: 'int16',
-            np.int32: 'int32'
-        }[self.datatype]
+        dtype_str = {np.float32: "float", np.float16: "half", np.int8: "int8", np.int16: "int16", np.int32: "int32"}[
+            self.datatype
+        ]
         return f"TCOLEXPANDTest.case_{dtype_str}_{self.src_row}_{self.dst_row}_{self.col}_{self.valid_col}"
+
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))

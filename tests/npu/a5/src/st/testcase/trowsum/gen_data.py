@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+
 np.random.seed(19)
 
 
@@ -28,8 +29,8 @@ def gen_golden_data(param):
     output_arr = np.zeros((rows, cols), dtype=dst_type)
     for i in range(cols):
         output_arr[i, 0] = result_arr[i, 0]
-    input_arr.tofile('input0.bin')
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input0.bin")
+    output_arr.tofile("golden.bin")
 
 
 class TrowsumParams:
@@ -39,11 +40,12 @@ class TrowsumParams:
         self.row = row
         self.col = col
 
+
 if __name__ == "__main__":
     case_list = [
         TrowsumParams("TROWSUMTest.test1", np.float32, 16, 16),
         TrowsumParams("TROWSUMTest.test2", np.float16, 16, 16),
-        TrowsumParams("TROWSUMTest.test3", np.float32, 666, 666)
+        TrowsumParams("TROWSUMTest.test3", np.float32, 666, 666),
     ]
 
     for case in case_list:

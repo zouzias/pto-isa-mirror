@@ -56,12 +56,7 @@ def attn_flops_matmul_softmax_scale(
     softmax_ops += rows * s_k  # normalize (div or mul)
 
     total = flops_matmul + flops_scale + softmax_ops
-    return {
-        "total": total,
-        "matmul": flops_matmul,
-        "scale": flops_scale,
-        "softmax": softmax_ops,
-    }
+    return {"total": total, "matmul": flops_matmul, "scale": flops_scale, "softmax": softmax_ops}
 
 
 def tflops(flops, ms):
@@ -89,9 +84,7 @@ def time_npu(fn, iters=NUM_ITERATIONS, warmup=WARMUP):
 # 2) Fused attention
 # ---------------------------
 def fused_reference(q_bsh, k_bsh, v_bsh):
-    o, _ = torch_npu.npu_fused_infer_attention_score(
-        q_bsh, k_bsh, v_bsh, input_layout="BSH"
-    )
+    o, _ = torch_npu.npu_fused_infer_attention_score(q_bsh, k_bsh, v_bsh, input_layout="BSH")
     return o
 
 
@@ -124,13 +117,7 @@ def bench(
             v = torch.rand((sk, head_size), device=device, dtype=dtype)
 
             # FLOPs: matmul + softmax (+scale)
-            flops_dict = attn_flops_matmul_softmax_scale(
-                batch_size,
-                sq,
-                sk,
-                head_size,
-                include_scale=scale,
-            )
+            flops_dict = attn_flops_matmul_softmax_scale(batch_size, sq, sk, head_size, include_scale=scale)
             flops_total = flops_dict["total"]
 
             # Fused inputs (BSH)
@@ -147,18 +134,10 @@ def bench(
             xexp_device = torch.empty((sq, sk), device=device, dtype=torch.float16)
             pout_fp32_device = torch.empty((sq, sk), device=device, dtype=torch.float32)
 
-            out_2d_device = torch.empty(
-                (num_tiles, sq, head_size), device=device, dtype=torch.float32
-            )
-            g_sum_device = torch.empty(
-                (num_tiles, sq), device=device, dtype=torch.float32
-            )
-            exp_max_device = torch.empty(
-                (num_tiles, sq), device=device, dtype=torch.float32
-            )
-            o_parts_device = torch.empty(
-                (num_tiles, sq, head_size), device=device, dtype=torch.float32
-            )
+            out_2d_device = torch.empty((num_tiles, sq, head_size), device=device, dtype=torch.float32)
+            g_sum_device = torch.empty((num_tiles, sq), device=device, dtype=torch.float32)
+            exp_max_device = torch.empty((num_tiles, sq), device=device, dtype=torch.float32)
+            o_parts_device = torch.empty((num_tiles, sq, head_size), device=device, dtype=torch.float32)
 
             ms_fused = time_npu(lambda: fused_reference(q_bsh, k_bsh, v_bsh))
 
@@ -181,33 +160,21 @@ def bench(
             # Correctness check: fused vs flash (run once per shape, not timed)
             if check:
                 # Reference: fused (1, sq, head) -> (sq, head) fp32
-                fused_out = (
-                    fused_reference(q_bsh, k_bsh, v_bsh).squeeze(0).to(torch.float32)
-                )
+                fused_out = fused_reference(q_bsh, k_bsh, v_bsh).squeeze(0).to(torch.float32)
                 torch.testing.assert_close(o_out, fused_out, rtol=rtol, atol=atol)
 
             def add_row(kernel_name, ms):
                 time_us = ms * 1000.0
                 perf = tflops(flops_total, ms)
-                rows_out.append(
-                    [
-                        sq,
-                        sk,
-                        head_size,
-                        kernel_name,
-                        f"{time_us:.3f}",
-                        f"{perf:.6f}",
-                        int(flops_total),
-                    ]
-                )
+                rows_out.append([sq, sk, head_size, kernel_name, f"{time_us:.3f}", f"{perf:.6f}", int(flops_total)])
 
             add_row("npu_fused_attention", ms_fused)
             add_row("jit_flash", ms_jit)
 
             print(
                 f"done sq={sq}, sk={sk} | "
-                f"fused {ms_fused*1000:.2f}us  "
-                f"jit {ms_jit*1000:.2f}us" + ("" if not check else "  (checked)")
+                f"fused {ms_fused * 1000:.2f}us  "
+                f"jit {ms_jit * 1000:.2f}us" + ("" if not check else "  (checked)")
             )
 
     # Write benchmark results

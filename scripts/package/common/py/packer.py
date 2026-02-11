@@ -21,25 +21,22 @@ from .utils.comm_log import CommLog
 class PackageName:
     """包名。"""
 
-    def __init__(self,
-                 package_attr,
-                 args: Namespace,
-                 version: str):
-        self.product_name = package_attr.get('product_name')
-        self.chip_name = args.chip_name or package_attr.get('chip_name')
-        self.suffix = args.suffix or package_attr.get('suffix')
+    def __init__(self, package_attr, args: Namespace, version: str):
+        self.product_name = package_attr.get("product_name")
+        self.chip_name = args.chip_name or package_attr.get("chip_name")
+        self.suffix = args.suffix or package_attr.get("suffix")
         self.func_name = get_func_name(args.func_name, package_attr)
-        self.chip_plat = package_attr.get('chip_plat')
-        self.deploy_type = package_attr.get('deploy_type')
+        self.chip_plat = package_attr.get("chip_plat")
+        self.deploy_type = package_attr.get("deploy_type")
         self.version = version.lower()
         self.not_in_name_list = args.not_in_name.split(",")
         self.os_arch = args.os_arch
         self.package_suffix = args.package_suffix
         self.ext_name = args.ext_name
-        if args.pkg_name_style == 'underline':
-            self.name_sep = '_'
+        if args.pkg_name_style == "underline":
+            self.name_sep = "_"
         else:
-            self.name_sep = '-'
+            self.name_sep = "-"
 
     def get_attribute(self, name: str) -> Optional[str]:
         """获取属性。"""
@@ -48,14 +45,14 @@ class PackageName:
         return getattr(self, name)
 
     def getvalue(self) -> str:
-        product_name = self.get_attribute('product_name')
-        chip_name = self.get_attribute('chip_name')
-        func_name = self.get_attribute('func_name')
-        version = self.get_attribute('version')
-        os_arch = self.get_attribute('os_arch')
-        chip_plat = self.get_attribute('chip_plat')
-        deploy_type = self.get_attribute('deploy_type')
-        ext_name = self.get_attribute('ext_name')
+        product_name = self.get_attribute("product_name")
+        chip_name = self.get_attribute("chip_name")
+        func_name = self.get_attribute("func_name")
+        version = self.get_attribute("version")
+        os_arch = self.get_attribute("os_arch")
+        chip_plat = self.get_attribute("chip_plat")
+        deploy_type = self.get_attribute("deploy_type")
+        ext_name = self.get_attribute("ext_name")
         package_suffix = "debug" if self.package_suffix == "debug" else None
 
         region1 = "-".join(filter(None, [product_name, remove_ascend(chip_name), func_name]))
@@ -68,6 +65,7 @@ class PackageName:
 
 class MakeselfPkgParams(NamedTuple):
     """run包打包参数。"""
+
     package_name: str
     comments: str
     cleanup: Optional[str] = None
@@ -84,7 +82,7 @@ def remove_ascend(text):
 
 def get_func_name(func_name: str, package_attr) -> str:
     """获取包func_name。"""
-    return func_name or package_attr.get('func_name')
+    return func_name or package_attr.get("func_name")
 
 
 def get_compress_tool() -> str:
@@ -93,8 +91,11 @@ def get_compress_tool() -> str:
         path = shutil.which(tool)
         if path:
             return "--" + tool
-    CommLog.cilog_error("The system does not come with a compression tool pre-installed."
-                        "Please ensure at least one of the folllowing compression tools is available: %s", tools)
+    CommLog.cilog_error(
+        "The system does not come with a compression tool pre-installed."
+        "Please ensure at least one of the folllowing compression tools is available: %s",
+        tools,
+    )
     return ""
 
 
@@ -111,46 +112,48 @@ def compose_makeself_command(params: MakeselfPkgParams) -> str:
 
     def get_cleanup_commands() -> List[str]:
         if params.cleanup:
-            return ['--cleanup', params.cleanup]
+            return ["--cleanup", params.cleanup]
         return []
-    
+
     compress_tool = get_compress_tool()
     tar_format = get_compress_format()
     commands = chain(
         [
-            compress_tool, '--complevel', '4',
-            '--nomd5', '--sha256', '--nooverwrite', '--chown', '--tar-format', tar_format,
-            '--tar-extra', '--numeric-owner', '--tar-quietly'
+            compress_tool,
+            "--complevel",
+            "4",
+            "--nomd5",
+            "--sha256",
+            "--nooverwrite",
+            "--chown",
+            "--tar-format",
+            tar_format,
+            "--tar-extra",
+            "--numeric-owner",
+            "--tar-quietly",
         ],
         get_cleanup_commands(),
-        [params.package_name, params.comments]
+        [params.package_name, params.comments],
     )
-    
-    command = ' '.join(commands)
+
+    command = " ".join(commands)
     return command
 
 
-def create_makeself_pkg_params_factory(package_name: str,
-                                       comments: str
-                                       ) -> Callable[[Dict], MakeselfPkgParams]:
+def create_makeself_pkg_params_factory(package_name: str, comments: str) -> Callable[[Dict], MakeselfPkgParams]:
     """创建Makeself打包参数工厂。"""
 
     def create_makeself_pkg_params(package_attr: Dict) -> MakeselfPkgParams:
         """创建Makeself打包参数。"""
-        cleanup = package_attr.get('cleanup')
-        params = MakeselfPkgParams(
-            package_name=package_name,
-            comments=comments,
-            cleanup=cleanup,
-        )
+        cleanup = package_attr.get("cleanup")
+        params = MakeselfPkgParams(package_name=package_name, comments=comments, cleanup=cleanup)
 
         return params
 
     return create_makeself_pkg_params
 
 
-def create_run_package_command(params: MakeselfPkgParams
-                               ) -> Tuple[Optional[str], Optional[str]]:
+def create_run_package_command(params: MakeselfPkgParams) -> Tuple[Optional[str], Optional[str]]:
     """
     功能描述: 组装打run包命令
     返回值: command

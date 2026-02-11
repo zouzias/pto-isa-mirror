@@ -14,6 +14,7 @@ import os
 import struct
 import ctypes
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -31,10 +32,10 @@ def gen_golden_data(param):
         for j in range(cols):
             output_arr[i, j] = input_arr[i, j] / divider[0, 0]
 
-    input_arr.tofile('input.bin')
-    with open("divider.bin", 'wb') as f:
-        f.write(struct.pack('f', np.float32(divider[0, 0])))
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    with open("divider.bin", "wb") as f:
+        f.write(struct.pack("f", np.float32(divider[0, 0])))
+    output_arr.tofile("golden.bin")
 
 
 class TDivsParams:
@@ -46,6 +47,7 @@ class TDivsParams:
         self.row = row
         self.col = col
 
+
 if __name__ == "__main__":
     case_params_list = [
         TDivsParams("TDIVSTest.case1", np.float32, 32, 128, 32, 64),
@@ -53,7 +55,7 @@ if __name__ == "__main__":
         TDivsParams("TDIVSTest.case3", np.int32, 31, 256, 31, 128),
         TDivsParams("TDIVSTest.case4", np.int16, 15, 192, 15, 64 * 3),
         TDivsParams("TDIVSTest.case5", np.float32, 7, 512, 7, 64 * 7),
-        TDivsParams("TDIVSTest.case6", np.float32, 256, 32, 256, 16)
+        TDivsParams("TDIVSTest.case6", np.float32, 256, 32, 256, 16),
     ]
 
     for _, case in enumerate(case_params_list):

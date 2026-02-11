@@ -14,7 +14,9 @@ import os
 import struct
 import math
 import numpy as np
+
 np.random.seed(19)
+
 
 def matmul_reference(a, b, out_dtype):
     """
@@ -30,6 +32,7 @@ def matmul_reference(a, b, out_dtype):
     # (m, k, 1) * (1, k, n) -> (m, k, n) -> sum over k
     return (a[:, :, None] * b[None, :, :]).sum(axis=1, dtype=out_dtype)
 
+
 def gen_golden_data(case_name, param):
     src_type = param.atype
     dst_type = param.ctype
@@ -39,8 +42,8 @@ def gen_golden_data(case_name, param):
 
     x1_gm = np.random.randint(1, 5, [repeats, m, k]).astype(src_type)
     x2_gm = np.random.randint(1, 5, [repeats, k, n]).astype(src_type)
-    bias_gm = np.random.randint(1, 10, [n, ]).astype(param.bias_type)
-    golden=np.zeros([m,n], dst_type)
+    bias_gm = np.random.randint(1, 10, [n]).astype(param.bias_type)
+    golden = np.zeros([m, n], dst_type)
 
     for i in range(repeats):
         golden = golden + matmul_reference(x1_gm[i], x2_gm[i], dst_type).astype(dst_type)
@@ -60,16 +63,16 @@ def gen_golden_data(case_name, param):
 
 
 class tmatmulParams:
-    def __init__(self, atype, btype, ctype, m, k, n, is_bias, bias_type = None, repeats=1):
+    def __init__(self, atype, btype, ctype, m, k, n, is_bias, bias_type=None, repeats=1):
         self.atype = atype
         self.btype = btype
         self.ctype = ctype
         self.m = m
         self.k = k
-        self.n = n 
+        self.n = n
         self.repeats = repeats
         self.is_bias = is_bias
-        if (bias_type):
+        if bias_type:
             self.bias_type = bias_type
         else:
             self.bias_type = ctype
@@ -82,7 +85,6 @@ if __name__ == "__main__":
         "TMATMULTest.case2",
         "TMATMULTest.case3",
         "TMATMULTest.case4",
-
         "TMATMULTest.case_bias_1",
         "TMATMULTest.case_bias_2",
         "TMATMULTest.case_bias_5",
@@ -91,10 +93,9 @@ if __name__ == "__main__":
     case_params_list = [
         tmatmulParams(np.float16, np.float16, np.float32, 40, 50, 60, False),
         tmatmulParams(np.int8, np.int8, np.int32, 6, 7, 8, False),
-        tmatmulParams(np.float16, np.float16, np.float32, 128, 128, 64, False,repeats=5),
+        tmatmulParams(np.float16, np.float16, np.float32, 128, 128, 64, False, repeats=5),
         tmatmulParams(np.float32, np.float32, np.float32, 120, 110, 50, False),
-
-        tmatmulParams(np.int8, np.int8, np.int32, 8, 7, 6, True,np.int32),
+        tmatmulParams(np.int8, np.int8, np.int32, 8, 7, 6, True, np.int32),
         tmatmulParams(np.float16, np.float16, np.float32, 16, 15, 16, True, np.float32),
         tmatmulParams(np.float32, np.float32, np.float32, 127, 128, 63, True, np.float32),
     ]

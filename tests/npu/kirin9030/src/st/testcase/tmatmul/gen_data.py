@@ -22,14 +22,7 @@ def gen_golden_data(case_name, param):
     dst_type = param.ctype
     bias_type = param.bias_type
 
-    m, k, n, is_bias, is_atrans, is_btrans = (
-        param.m,
-        param.k,
-        param.n,
-        param.is_bias,
-        False,
-        False,
-    )
+    m, k, n, is_bias, is_atrans, is_btrans = (param.m, param.k, param.n, param.is_bias, False, False)
 
     x1_gm = np.random.randint(-10, 10, [m, k]).astype(a_type)
     x2_gm = np.random.randint(-10, 10, [k, n]).astype(b_type)
@@ -44,13 +37,9 @@ def gen_golden_data(case_name, param):
     x2_gm.tofile("./x2_gm.bin")
 
     if is_bias:
-        golden = np.matmul(x1_gm.astype(dst_type), x2_gm.astype(dst_type)).astype(
-            dst_type
-        ) + bias_gm.astype(dst_type)
+        golden = np.matmul(x1_gm.astype(dst_type), x2_gm.astype(dst_type)).astype(dst_type) + bias_gm.astype(dst_type)
     else:
-        golden = np.matmul(x1_gm.astype(dst_type), x2_gm.astype(dst_type)).astype(
-            dst_type
-        )
+        golden = np.matmul(x1_gm.astype(dst_type), x2_gm.astype(dst_type)).astype(dst_type)
 
     bias_gm.tofile("./bias_gm.bin")
     golden.tofile("./golden.bin")
@@ -79,7 +68,6 @@ if __name__ == "__main__":
         "TMATMULTest.case_norm_3",
         "TMATMULTest.case_norm_4",
         "TMATMULTest.case_norm_5",
-
         "TMATMULTest.case_bias_1",
         "TMATMULTest.case_bias_2",
         "TMATMULTest.case_bias_3",
@@ -93,8 +81,6 @@ if __name__ == "__main__":
         tmatmulParams(np.float16, np.float16, np.float16, 1, 16, 1026, False),
         tmatmulParams(np.int8, np.int8, np.int32, 26, 15, 27, False),
         tmatmulParams(np.int8, np.int8, np.int32, 101, 1, 99, False),
-
-
         tmatmulParams(np.int8, np.int8, np.int32, 8, 7, 6, True),
         tmatmulParams(np.float16, np.float16, np.float16, 16, 15, 16, True, np.float16),
         tmatmulParams(np.int8, np.int8, np.int32, 66, 11, 1, True),

@@ -39,9 +39,9 @@ def gen_golden_data(param):
     with open("scalar.bin", "wb") as f:
         f.write(struct.pack("f", np.float32(scalar[0, 0])))
     output_arr.tofile("golden.bin")
-    print(case.name, case.data_type.__name__, ':', scalar[0, 0])
+    print(case.name, case.data_type.__name__, ":", scalar[0, 0])
     print(input_arr[0][:10])
-    print(output_arr[0][:10], end='\n\n')
+    print(output_arr[0][:10], end="\n\n")
 
 
 class TREMSParams:

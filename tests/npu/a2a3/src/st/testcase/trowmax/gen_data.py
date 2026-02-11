@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+
 np.random.seed(23)
 
 
@@ -29,8 +30,8 @@ def gen_golden_data(param):
 
     # 先计算, 再强转类型, 保证结果精度不裂化
     output_arr = output_arr.astype(data_type)
-    input_arr.tofile('input.bin')
-    output_arr.tofile('golden.bin')
+    input_arr.tofile("input.bin")
+    output_arr.tofile("golden.bin")
 
 
 class TRowMaxParams:
@@ -62,7 +63,7 @@ if __name__ == "__main__":
         TRowMaxParams("TROWMAXTest.case15", np.float32, 64, 64, 128, 128),
         TRowMaxParams("TROWMAXTest.case16", np.float32, 32, 32, 256, 256),
         TRowMaxParams("TROWMAXTest.case17", np.float32, 16, 16, 512, 512),
-        TRowMaxParams("TROWMAXTest.case18", np.float32, 8, 8, 1024, 1024)
+        TRowMaxParams("TROWMAXTest.case18", np.float32, 8, 8, 1024, 1024),
     ]
 
     for _, case in enumerate(case_params_list):

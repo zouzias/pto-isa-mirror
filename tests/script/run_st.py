@@ -15,31 +15,23 @@ import subprocess
 import shutil
 import argparse
 
+
 def run_command(command, cwd=None, check=True):
     try:
         print(f"run command: {' '.join(command)}")
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            check=check,
-            stdout=None,
-            stderr=None,
-            text=True
-        )
+        result = subprocess.run(command, cwd=cwd, check=check, stdout=None, stderr=None, text=True)
         return ""
     except subprocess.CalledProcessError as e:
         print(f"run command failed with return code {e.returncode}")
         raise
 
+
 def set_env_variables(run_mode, soc_version):
     if run_mode == "sim":
         ld_lib_path = os.environ.get("LD_LIBRARY_PATH", "")
         if ld_lib_path:
-            filtered_paths = [
-                path for path in ld_lib_path.split(':')
-                if '/runtime/lib64' not in path
-            ]
-            new_ld_lib = ':'.join(filtered_paths)
+            filtered_paths = [path for path in ld_lib_path.split(":") if "/runtime/lib64" not in path]
+            new_ld_lib = ":".join(filtered_paths)
             os.environ["LD_LIBRARY_PATH"] = new_ld_lib
 
         ascend_home = os.environ.get("ASCEND_HOME_PATH")
@@ -59,11 +51,11 @@ def set_env_variables(run_mode, soc_version):
                 executable=shutil.which("bash") or "bash",
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
             for line in result.stdout.splitlines():
-                if '=' in line:
-                    key, value = line.split('=', 1)
+                if "=" in line:
+                    key, value = line.split("=", 1)
                     os.environ[key] = value
         else:
             print(f"warning: not found {setenv_path}")
@@ -71,7 +63,8 @@ def set_env_variables(run_mode, soc_version):
         simulator_lib_path = os.path.join(ascend_home, "tools", "simulator", soc_version, "lib")
         os.environ["LD_LIBRARY_PATH"] = f"{simulator_lib_path}:{os.environ.get('LD_LIBRARY_PATH', '')}"
 
-def build_project(run_mode, soc_version, testcase = "all", debug_enable = False):
+
+def build_project(run_mode, soc_version, testcase="all", debug_enable=False):
     original_dir = os.getcwd()
     # 清理并创建build目录
     build_dir = "build"
@@ -81,37 +74,21 @@ def build_project(run_mode, soc_version, testcase = "all", debug_enable = False)
     os.makedirs(build_dir, exist_ok=True)
 
     try:
-        cmake_cmd = [
-            "cmake",
-            f"-DRUN_MODE={run_mode}",
-            f"-DSOC_VERSION={soc_version}",
-            f"-DTEST_CASE={testcase}",
-            ".."
-        ]
-        if debug_enable :
+        cmake_cmd = ["cmake", f"-DRUN_MODE={run_mode}", f"-DSOC_VERSION={soc_version}", f"-DTEST_CASE={testcase}", ".."]
+        if debug_enable:
             cmake_cmd.append("-DDEBUG_MODE=ON")
 
         subprocess.run(
-            cmake_cmd,
-            cwd=build_dir,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
+            cmake_cmd, cwd=build_dir, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
 
-        make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
+        make_cmd = ["make", "VERBOSE=1"]  # print compile log for debug
         # make_cmd = ["make"]
         cpu_count = os.cpu_count() or 4
         make_cmd.extend(["-j", str(cpu_count)])
 
         result = subprocess.run(
-            make_cmd,
-            cwd=build_dir,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
+            make_cmd, cwd=build_dir, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
         )
         print("compile process:\n", result.stdout)
 
@@ -120,6 +97,7 @@ def build_project(run_mode, soc_version, testcase = "all", debug_enable = False)
         raise
     finally:
         os.chdir(original_dir)
+
 
 def run_gen_data(golden_path):
     original_dir = os.getcwd()
@@ -139,6 +117,7 @@ def run_gen_data(golden_path):
     finally:
         os.chdir(original_dir)
 
+
 def run_binary(testcase, run_mode, args="all"):
     original_dir = os.getcwd()
     try:
@@ -153,7 +132,7 @@ def run_binary(testcase, run_mode, args="all"):
             print(f"run single testcase : {args}")
             output = run_command(cmd)
             print(output)
-        else : # all
+        else:  # all
             cmd = ["./" + testcase]
             print(f"run testcase : {testcase}")
             output = run_command(cmd)
@@ -165,6 +144,7 @@ def run_binary(testcase, run_mode, args="all"):
     finally:
         os.chdir(original_dir)
 
+
 def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
@@ -172,8 +152,8 @@ def main():
     parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / kirin9030")
     parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
-    parser.add_argument("-d", "--debug-enable", action='store_true', help="开启debug检查")
-    parser.add_argument("-w", "--without-build", action='store_true', help="关闭编译（需要预先编译）")
+    parser.add_argument("-d", "--debug-enable", action="store_true", help="开启debug检查")
+    parser.add_argument("-w", "--without-build", action="store_true", help="关闭编译（需要预先编译）")
 
     args = parser.parse_args()
     default_soc_version = "Ascend910B1"
@@ -193,9 +173,9 @@ def main():
 
         if args.soc_version == "a3":
             target_dir = target_dir + "/npu/a2a3/src/st"
-        elif args.soc_version == "kirin9030" : # kirin9030
+        elif args.soc_version == "kirin9030":  # kirin9030
             target_dir = target_dir + "/npu/kirin9030/src/st"
-        else : # a5
+        else:  # a5
             target_dir = target_dir + "/npu/a5/src/st"
 
         print(f"target_dir: {target_dir}")
@@ -206,9 +186,7 @@ def main():
 
         # 执行构建
         if args.without_build:
-            subprocess.run(["rm", "-rf", "build/T*"],
-                cwd=original_dir,
-                check=True)
+            subprocess.run(["rm", "-rf", "build/T*"], cwd=original_dir, check=True)
         else:
             build_project(args.run_mode, default_soc_version, args.testcase, args.debug_enable)
 
@@ -223,6 +201,7 @@ def main():
         print(f"run failed: {str(e)}", file=sys.stderr)
         sys.exit(1)
     os.chdir(original_dir)
+
 
 if __name__ == "__main__":
     main()
