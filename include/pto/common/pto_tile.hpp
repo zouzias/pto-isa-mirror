@@ -1449,7 +1449,7 @@ private:
 #endif
 };
 
-#ifdef MEMORY_BASE
+#ifdef PTO_NPU_ARCH_A2A3
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;
