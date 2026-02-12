@@ -1076,9 +1076,13 @@ struct Tile {
     using TileDType = Tile::DType[Rows*Cols];
 #else
     #ifdef __PTO_AUTO__
-        using TileDType = std::conditional_t<Loc == TileType::Bias,
-            typename MemoryQualifier<Loc, DType>::type, // special handling for Bias Tile
-            typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols)>;
+        #if defined(__DAV_C220_CUBE__) || defined(__DAV_C220_VEC__)
+            using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols);
+        #else
+            using TileDType = std::conditional_t<Loc == TileType::Bias,
+                typename MemoryQualifier<Loc, DType>::type, // special handling for Bias Tile
+                typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols)>;
+        #endif
     #else
         using TileDType = typename MemoryQualifier<Loc, DType>::type;
     #endif

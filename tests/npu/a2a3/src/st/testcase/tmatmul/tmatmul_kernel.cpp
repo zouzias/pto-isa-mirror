@@ -76,8 +76,11 @@ __global__ AICORE void RunTMATMUL_GEMV_CLOSE(__gm__ T *out, __gm__ U *src0, __gm
 
     /******************************TLOAD*****************************/
     TLOAD(aMatTile, src0Global);
+
+#ifndef __PTO_AUTO__
     // clear l1 buffer which exceed the valid shape
     TFILLPAD(aMatTile, aMatTile);
+#endif
 
     TLOAD(bMatTile, src1Global);
 

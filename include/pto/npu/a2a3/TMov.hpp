@@ -36,7 +36,7 @@ __tf__ AICORE void TMovToBt(typename DstTileData::TileDType __out__ dst, typenam
         "TMov: When TileType is Bias, col * sizeof(srcDType) must be aligned to 64");
 
     __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)(__cce_get_tile_ptr(src));
-    uint64_t dstAddrP = (uint64_t)dst;
+    __biasbuf__ DstType *dstAddrP = (__biasbuf__ DstType *)(__cce_get_tile_ptr(dst));
 
     uint16_t convControl = 0;
     constexpr uint16_t burstLen = srcRow * srcCol * sizeof(SrcType) / BURST_LEN_UNIT;
