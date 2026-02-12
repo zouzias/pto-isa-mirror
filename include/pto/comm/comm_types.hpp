@@ -78,19 +78,16 @@ struct ParallelGroup {
     }
 };
 
-
 // Type traits: Extract GlobalData type from ParallelGroup<GlobalData>
 template <typename T>
 struct ParallelGroupTraits {
     static_assert(std::is_same_v<T, void>, "ParallelGroupTraits: T must be ParallelGroup<GlobalData>");
 };
 
-
 template <typename GlobalData>
 struct ParallelGroupTraits<ParallelGroup<GlobalData>> {
     using GlobalDataType = GlobalData;
 };
-
 
 // ============================================================================
 // NotifyOp: Notification operation type for TNOTIFY
@@ -101,7 +98,6 @@ enum class NotifyOp : uint8_t
     AtomicAdd = 0, // Atomic add operation
     Set = 1,       // Direct set operation
 };
-
 
 // ============================================================================
 // WaitCmp: Comparison operators for signal wait/test operations
@@ -117,7 +113,6 @@ enum class WaitCmp : uint8_t
     LE = 5, // Less than or equal to
 };
 
-
 // ============================================================================
 // ReduceOp: Reduction operators for TREDUCE
 // ============================================================================
@@ -128,7 +123,6 @@ enum class ReduceOp : uint8_t
     Max = 1, // Element-wise maximum
     Min = 2, // Element-wise minimum
 };
-
 
 // ============================================================================
 // Signal: Scalar signal (1 element, fully static)

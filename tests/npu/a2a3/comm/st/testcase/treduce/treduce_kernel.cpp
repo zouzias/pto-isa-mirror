@@ -104,14 +104,15 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
         return false;
     }
 
-    T *input_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T));
-
-    T *output_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T));
-
-    T *output_device;
-    aclrtMalloc(reinterpret_cast<void **>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    T *input_host = nullptr;
+    T *output_host = nullptr;
+    T *output_device = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T)) != 0 ||
+        aclrtMalloc(reinterpret_cast<void **>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost/aclrtMalloc failed!" << std::endl;
+        return false;
+    }
 
     // Initialize input data: Rank R has data i + R * 100
     for (size_t i = 0; i < count; ++i) {
@@ -260,14 +261,15 @@ bool RunReduceEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
         return false;
     }
 
-    T *input_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T));
-
-    T *output_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T));
-
-    T *output_device;
-    aclrtMalloc(reinterpret_cast<void **>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    T *input_host = nullptr;
+    T *output_host = nullptr;
+    T *output_device = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T)) != 0 ||
+        aclrtMalloc(reinterpret_cast<void **>(&output_device), count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost/aclrtMalloc failed!" << std::endl;
+        return false;
+    }
 
     for (size_t i = 0; i < count; ++i) {
         input_host[i] = static_cast<T>(i + rank_id * 100);
@@ -425,14 +427,16 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
         return false;
     }
 
-    T *input_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T));
-
-    T *output_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T));
-
-    T *output_device;
-    aclrtMalloc(reinterpret_cast<void **>(&output_device), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    T *input_host = nullptr;
+    T *output_host = nullptr;
+    T *output_device = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T)) != 0 ||
+        aclrtMalloc(reinterpret_cast<void **>(&output_device), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST) !=
+            0) {
+        std::cerr << "[ERROR] aclrtMallocHost/aclrtMalloc failed!" << std::endl;
+        return false;
+    }
 
     // Initialize input data: Rank R has data i + R * 100
     for (size_t i = 0; i < total_count; ++i) {
@@ -605,14 +609,16 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
         return false;
     }
 
-    T *input_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T));
-
-    T *output_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T));
-
-    T *output_device;
-    aclrtMalloc(reinterpret_cast<void **>(&output_device), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+    T *input_host = nullptr;
+    T *output_host = nullptr;
+    T *output_device = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), total_count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&output_host), total_count * sizeof(T)) != 0 ||
+        aclrtMalloc(reinterpret_cast<void **>(&output_device), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST) !=
+            0) {
+        std::cerr << "[ERROR] aclrtMallocHost/aclrtMalloc failed!" << std::endl;
+        return false;
+    }
 
     // Initialize input data: Rank R has data i + R * 100
     for (size_t i = 0; i < total_count; ++i) {

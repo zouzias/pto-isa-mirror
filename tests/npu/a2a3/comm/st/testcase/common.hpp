@@ -26,7 +26,6 @@ struct ShmemUniqueId {
 };
 #endif
 
-
 // ============================================================================
 // ShmemEnv: Environment configuration for shmem initialization
 // ============================================================================
@@ -35,9 +34,8 @@ struct ShmemEnv {
     int size{1};
     const char *ipPort{nullptr};
     uint64_t heapBytes{512ULL * 1024 * 1024}; // Default 512MB symmetric heap
-    char ipPortBuf_[256]{};  // G.STD.18: Internal buffer for copied getenv() result
+    char ipPortBuf_[256]{};                   // G.STD.18: Internal buffer for copied getenv() result
 };
-
 
 // ============================================================================
 // LoadEnv: Load shmem environment from environment variables
@@ -92,7 +90,6 @@ inline void FillShmemAttr(aclshmemx_init_attr_t &attributes, const ShmemEnv &env
     constexpr int DEFAULT_TIMEOUT = 120; // seconds
     attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
 }
-
 
 // ============================================================================
 // ShmemInit: Initialize shmem symmetric heap with given options
@@ -279,6 +276,11 @@ struct TestContext {
             std::cerr << "[ERROR] Failed to init shmem tls\n";
             return false;
         }
+        if (nDevices < 1) {
+            std::cerr << "[ERROR] n_devices must be >= 1\n";
+            return false;
+        }
+
         deviceId = rankId % nDevices + firstDeviceId;
 
         aclStatus |= aclInit(nullptr);
@@ -309,7 +311,6 @@ struct TestContext {
         return (aclStatus == 0);
     }
 };
-
 
 // ============================================================================
 // ForkAndRun: Fork one child process per rank, run perRankFn, collect results.

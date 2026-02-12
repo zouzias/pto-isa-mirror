@@ -69,7 +69,8 @@ __global__ AICORE void TBroadCastKernelImpl(__gm__ T *input, __gm__ T *output, i
 template <typename T, size_t count>
 bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root)
 {
-    if (n_ranks <= 0) return false;
+    if (n_ranks <= 0)
+        return false;
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8768", 8ULL * 1024 * 1024))
         return false;
@@ -141,6 +142,11 @@ bool RunBroadCastKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     }
 
 #if ENABLE_DEBUG_PRINT
+    if (n_ranks < 2) {
+        std::cout << "[DEBUG] I can't run this test with less than 2 ranks" << std::endl;
+        return false;
+    }
+
     if (is_ok && rank_id == (root + 1) % n_ranks) { // Print from one non-root rank if possible
         std::cout << "\n================================================================" << std::endl;
         std::cout << "[DEBUG] Rank " << rank_id << ": TBROADCAST SUCCESSFUL!" << std::endl;
@@ -228,7 +234,8 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
                                   const ShmemUniqueId *uid, int root)
 {
-    if (n_ranks <= 0) return false;
+    if (n_ranks <= 0)
+        return false;
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
@@ -304,6 +311,15 @@ bool RunBroadCastLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int f
     }
 
 #if ENABLE_DEBUG_PRINT
+    if (n_ranks < 2) {
+        std::cout << "[DEBUG] Rank " << rank_id << ": TBROADCAST LargeShape SUCCESSFUL!" << std::endl;
+        std::cout << "Sample Result (First 5 elements): [ ";
+        for (size_t i = 0; i < (total_count > 5 ? 5 : total_count); ++i) {
+            std::cout << (float)output_host[i] << " ";
+        }
+        std::cout << "]" << std::endl;
+        return false;
+    }
     if (is_ok && rank_id == (root + 1) % n_ranks) {
         std::cout << "\n================================================================" << std::endl;
         std::cout << "[DEBUG] Rank " << rank_id << ": TBROADCAST LargeShape SUCCESSFUL! (" << total_rows << "x" << cols
@@ -418,7 +434,8 @@ template <typename T, size_t total_rows, size_t cols, size_t tile_rows>
 bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const ShmemUniqueId *uid,
                                 int root)
 {
-    if (n_ranks <= 0) return false;
+    if (n_ranks <= 0)
+        return false;
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
@@ -483,6 +500,15 @@ bool RunBroadCastPingPongKernel(int rank_id, int n_ranks, int n_devices, int fir
     }
 
 #if ENABLE_DEBUG_PRINT
+    if (n_ranks < 2) {
+        std::cout << "[DEBUG] Rank " << rank_id << ": TBROADCAST PingPong SUCCESSFUL!" << std::endl;
+        std::cout << "Sample Result (First 5 elements): [ ";
+        for (size_t i = 0; i < (total_count > 5 ? 5 : total_count); ++i) {
+            std::cout << (float)output_host[i] << " ";
+        }
+        std::cout << "]" << std::endl;
+        return false;
+    }
     if (is_ok && rank_id == (root + 1) % n_ranks) {
         std::cout << "\n================================================================" << std::endl;
         std::cout << "[DEBUG] Rank " << rank_id << ": TBROADCAST PingPong SUCCESSFUL! (" << total_rows << "x" << cols

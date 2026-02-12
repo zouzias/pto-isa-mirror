@@ -57,7 +57,8 @@ __global__ AICORE void TNotifyAtomicAddKernel(__gm__ int32_t *shmem_counter, int
 // ============================================================================
 __global__ AICORE void TNotifySetKernel(__gm__ int32_t *shmem_signals, int nranks)
 {
-    if (nranks <= 0) return;
+    if (nranks <= 0)
+        return;
     int my_rank = shmem_my_pe();
     int next_rank = (my_rank + 1) % nranks;
 
@@ -188,7 +189,8 @@ bool RunNotifyAtomicAddKernel(int rank_id, int n_ranks, int n_devices, int first
 
 bool RunNotifySetKernel(int rank_id, int n_ranks, int n_devices, int first_device_id)
 {
-    if (n_ranks <= 0) return false;
+    if (n_ranks <= 0)
+        return false;
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8856", 8ULL * 1024 * 1024))
         return false;
@@ -217,6 +219,10 @@ bool RunNotifySetKernel(int rank_id, int n_ranks, int n_devices, int first_devic
     bool is_ok = true;
 
     // Verify: each rank's signal should equal previous rank's id + 100
+    if (n_ranks < 2) {
+        std::cout << "[DEBUG] I can't run this test with less than 2 ranks" << std::endl;
+        return false;
+    }
     int prev_rank = (rank_id + n_ranks - 1) % n_ranks;
     int32_t expected = static_cast<int32_t>(prev_rank + 100);
 

@@ -92,9 +92,13 @@ bool RunGatherKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
         return false;
     }
 
-    T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size);
-    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size);
+    T *src_host = nullptr;
+    T *dst_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     // Initialize source data: each rank has its unique range
     for (size_t i = 0; i < count; ++i) {
@@ -246,9 +250,13 @@ bool RunGatherEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
         return false;
     }
 
-    T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size);
-    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size);
+    T *src_host = nullptr;
+    T *dst_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     for (size_t i = 0; i < count; ++i) {
         src_host[i] = static_cast<T>(i + rank_id * 10000);
@@ -366,9 +374,13 @@ bool RunGatherLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
         return false;
     }
 
-    T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&src_host), total_count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), n_ranks * total_count * sizeof(T));
+    T *src_host = nullptr;
+    T *dst_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&src_host), total_count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&dst_host), n_ranks * total_count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     for (size_t i = 0; i < total_count; ++i) {
         src_host[i] = static_cast<T>(i + rank_id * 100);
@@ -525,9 +537,13 @@ bool RunGatherPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
         return false;
     }
 
-    T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&src_host), total_count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), n_ranks * total_count * sizeof(T));
+    T *src_host = nullptr;
+    T *dst_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&src_host), total_count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&dst_host), n_ranks * total_count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     for (size_t i = 0; i < total_count; ++i) {
         src_host[i] = static_cast<T>(i + rank_id * 100);

@@ -91,9 +91,13 @@ bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_
         return false;
     }
 
-    T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size);
-    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size);
+    T *src_host = nullptr;
+    T *dst_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     if (rank_id == root) {
         for (int r = 0; r < n_ranks; ++r) {
@@ -229,9 +233,13 @@ bool RunScatterEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_de
         return false;
     }
 
-    T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size);
-    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size);
+    T *src_host = nullptr;
+    T *dst_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&src_host), src_size) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&dst_host), dst_size) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     for (size_t i = 0; i < n_ranks * count; ++i) {
         src_host[i] = static_cast<T>(i);
@@ -347,9 +355,13 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
         return false;
     }
 
-    T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&src_host), n_ranks * total_count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), total_count * sizeof(T));
+    T *src_host = nullptr;
+    T *dst_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&src_host), n_ranks * total_count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&dst_host), total_count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     if (rank_id == 0) {
         for (int r = 0; r < n_ranks; ++r) {
@@ -503,9 +515,13 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
         return false;
     }
 
-    T *src_host, *dst_host;
-    aclrtMallocHost(reinterpret_cast<void **>(&src_host), n_ranks * total_count * sizeof(T));
-    aclrtMallocHost(reinterpret_cast<void **>(&dst_host), total_count * sizeof(T));
+    T *src_host = nullptr;
+    T *dst_host = nullptr;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&src_host), n_ranks * total_count * sizeof(T)) != 0 ||
+        aclrtMallocHost(reinterpret_cast<void **>(&dst_host), total_count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+        return false;
+    }
 
     if (rank_id == 0) {
         for (int r = 0; r < n_ranks; ++r) {
