@@ -105,11 +105,8 @@ enum class CastMode
     SAT_ROUND       // vcvt(..., RS_DISABLE, R()) - Saturation then rounding (reversed order)
 };
 
-// EDGE_CASE_ALIGN_ENABLE controls PyTorch alignment for edge case values
-// - When enabled (1): TCVT output matches PyTorch when handling edge values
-//   like inf, -inf, nan, and overflow values. Uses NonSatTorch implementations.
-// - When disabled (0): Uses standard TCVT conversion (higher performance)
-// Trade-off: Enabling provides PyTorch compatibility but reduces performance
+// PyTorch alignment for edge cases (inf, -inf, nan, overflow)
+// 1 = PyTorch-compatible (uses NonSatTorch), 0 = standard (faster)
 #define EDGE_CASE_ALIGN_ENABLE 0
 
 #define FOR_ROWS                                     \
@@ -162,14 +159,12 @@ inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *
 
         vlds(v_input_0, src, i * ELE_CNT_B64, NORM);
         if constexpr (std::is_same<R, void>::value) {
-            // For type expansion without rounding, saturation mode is controllable
             if (satMode == SaturationMode::ON) {
                 vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
             } else {
                 vcvt(v_output, v_input_0, preg_b64, RS_DISABLE, PART_EVEN);
             }
         } else {
-            // For conversions with rounding mode, RS_DISABLE/DISABLE not supported
             vcvt(v_output, v_input_0, preg_b64, R(), PART_EVEN);
         }
         vsts(v_output, dst, i * ELE_CNT_B64, PK_B64, preg_b32);
@@ -177,11 +172,8 @@ inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *
     }
 }
 
-// Float32 to signed 16-bit integer conversion for non-saturation mode (PyTorch-aligned)
-// This version matches PyTorch behavior for inf/-inf and performs a two-step conversion:
-// 1. fp32 -> int32
-// 2. int32 -> int16
-// Uses register-based conversion (no UB temp buffers needed for A5 architecture)
+// FP32 -> INT16 (PyTorch-compatible for inf/-inf)
+// Two-step: fp32 -> int32 -> int16 (uses registers, no UB temp)
 template <typename R>
 inline AICORE void cast32to16_NonSatTorch_1D(__ubuf__ int16_t *dst, __ubuf__ float *src, uint32_t validRows,
                                              uint32_t validCols, uint32_t dstCols, uint32_t srcCols)
@@ -192,26 +184,20 @@ inline AICORE void cast32to16_NonSatTorch_1D(__ubuf__ int16_t *dst, __ubuf__ flo
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
 
-    // Perform two-step conversion using registers (fp32 -> int32 -> int16)
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<float> v_input_fp32;
         RegTensor<int32_t> v_temp_int32;
         RegTensor<int16_t> v_output_int16;
         MaskReg preg_b32_st = CreatePredicate<float>(sReg);
 
-        // Step 1: Load fp32 and convert to int32 (stays in register)
         vlds(v_input_fp32, src, i * ELE_CNT_B32, NORM);
         vcvt(v_temp_int32, v_input_fp32, preg_b32, R(), RS_DISABLE);
-
-        // Step 2: Convert int32 to int16 with non-saturation and store
         vcvt(v_output_int16, v_temp_int32, preg_b32, RS_DISABLE, PART_EVEN);
         vsts(v_output_int16, dst, i * ELE_CNT_B32, PK_B32, preg_b32_st);
     }
 }
 
-/**
- * Cast 32-bit to 16-bit types - 1D version
- */
+// Cast 32-bit -> 16-bit (1D)
 template <typename R, typename DST, typename SRC>
 inline AICORE void cast32to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows,
                                               uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
@@ -269,7 +255,6 @@ inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
 
         vlds(v_input_0, src, i * ELE_CNT_B32, NORM);
         if constexpr (std::is_same<DST, SRC>::value) {
-            // Same type: use vtrc (truncate/round) instead of vcvt
             vtrc(v_output, v_input_0, R(), preg_b32_st);
         } else if constexpr (MODE == CastMode::ROUND_SAT) {
             if (satMode == SaturationMode::ON) {
@@ -285,9 +270,7 @@ inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
     }
 }
 
-/**
- * Cast 32-bit to 64-bit signed integer - 1D version
- */
+// Cast 32-bit -> s64 (1D)
 template <typename R, typename SRC>
 inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_t validRows,
                                                uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
