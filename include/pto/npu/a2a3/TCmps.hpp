@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 constexpr const uint64_t NUM_BITS_IN_BYTE = 8;
+constexpr const uint8_t TCMPS_REPEAT_MAX = 240;
 
 template <typename TileDataDst, typename TileDataSrc, typename T>
 AICORE void GenCmpCall(__ubuf__ typename TileDataDst::DType *dst, __ubuf__ typename TileDataSrc::DType *src0, T src1,
@@ -25,30 +26,64 @@ AICORE void GenCmpCall(__ubuf__ typename TileDataDst::DType *dst, __ubuf__ typen
 {
     if constexpr (std::is_same<typename TileDataSrc::DType, int32_t>::value) {
         vcmpvs_eq(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
-    } else {
-        switch (static_cast<CmpMode>(cmpMode)) {
-            case CmpMode::EQ:
-                vcmpvs_eq(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
-                break;
-            case CmpMode::NE:
-                vcmpvs_ne(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
-                break;
-            case CmpMode::LT:
-                vcmpvs_lt(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
-                break;
-            case CmpMode::GT:
-                vcmpvs_gt(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
-                break;
-            case CmpMode::GE:
-                vcmpvs_ge(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
-                break;
-            case CmpMode::LE:
-                vcmpvs_le(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
-                break;
-            default:
-                vcmpvs_eq(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
-                break;
+    }
+    else {
+        if(sizeof(typename TileDataSrc::DType) == 4) {
+            switch (static_cast<CmpMode>(cmpMode)) {
+                case CmpMode::EQ:
+                    vcmpvs_eq(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                case CmpMode::NE:
+                    vcmpvs_ne(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                case CmpMode::LT:
+                    vcmpvs_lt(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                case CmpMode::GT:
+                    vcmpvs_gt(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                case CmpMode::GE:
+                    vcmpvs_ge(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                case CmpMode::LE:
+                    vcmpvs_le(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                default:
+                    vcmpvs_eq(dst, src0, src1, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+            }
+        } else {
+            half scalar;
+            if constexpr (std::is_same<T, uint16_t>::value || std::is_same<T, int16_t>::value) {
+                scalar = *reinterpret_cast<half*>(&src1);
+            } else {
+                scalar = src1;
+            }
+            switch (static_cast<CmpMode>(cmpMode)) {
+                case CmpMode::EQ:
+                    vcmpvs_eq(dst, (__ubuf__ half *) src0, scalar, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                case CmpMode::NE:
+                    vcmpvs_ne(dst, (__ubuf__ half *) src0, scalar, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                case CmpMode::LT:
+                    vcmpvs_lt(dst, (__ubuf__ half *) src0, scalar, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                case CmpMode::GT:
+                    vcmpvs_gt(dst, (__ubuf__ half *) src0, scalar, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                case CmpMode::GE:
+                    vcmpvs_ge(dst, (__ubuf__ half *) src0, scalar, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                case CmpMode::LE:
+                    vcmpvs_le(dst, (__ubuf__ half *) src0, scalar, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+                default:
+                    vcmpvs_eq(dst, (__ubuf__ half *) src0, scalar, repeat, dstblockstride, srcblockstride, dstrepeatstride, srcrepeatstride);
+                    break;
+            }
         }
+        
     }
 }
 
@@ -59,25 +94,25 @@ __tf__ AICORE void TCmps(typename TileDataDst::TileDType __out__ dst, typename T
     __ubuf__ typename TileDataDst::DType *dstPtr = (__ubuf__ typename TileDataDst::DType *)__cce_get_tile_ptr(dst);
     __ubuf__ typename TileDataSrc::DType *srcPtr = (__ubuf__ typename TileDataSrc::DType *)__cce_get_tile_ptr(src0);
 
-    size_t numLoop = numRepeatPerLine / REPEAT_MAX;
-    int numRemainPerLine = numRepeatPerLine % REPEAT_MAX;
+    size_t numLoop = numRepeatPerLine / TCMPS_REPEAT_MAX;
+    int numRemainPerLine = numRepeatPerLine % TCMPS_REPEAT_MAX;
     constexpr int srcAlignCols = TileDataSrc::Cols;
     constexpr int dstAlignCols = TileDataDst::Cols;
-    constexpr int srcOffset = REPEAT_MAX * REPEAT_BYTE / sizeof(T);
-    constexpr int dstOffset = REPEAT_MAX * REPEAT_BYTE / sizeof(T) / NUM_BITS_IN_BYTE;
+    constexpr int srcOffset = TCMPS_REPEAT_MAX * REPEAT_BYTE / sizeof(T);
+    constexpr int dstOffset = TCMPS_REPEAT_MAX * REPEAT_BYTE / sizeof(T) / NUM_BITS_IN_BYTE;
 
     set_mask_norm();
     set_vector_mask(-1, -1);
     for (size_t i = 0; i < validRow; i++) {
         for (size_t j = 0; j < numLoop; j++) {
-            GenCmpCall<TileDataDst, TileDataSrc>(dstPtr + i * dstAlignCols + j * dstOffset,
-                                                 srcPtr + i * srcAlignCols + j * srcOffset, src1, mode, REPEAT_MAX, 1,
+            GenCmpCall<TileDataDst, TileDataSrc, T>(dstPtr + i * dstAlignCols + j * dstOffset,
+                                                 srcPtr + i * srcAlignCols + j * srcOffset, src1, mode, TCMPS_REPEAT_MAX, 1,
                                                  1, 8, 8);
         }
         if (numRemainPerLine) {
-            GenCmpCall<TileDataDst, TileDataSrc>(dstPtr + i * dstAlignCols + numLoop * dstOffset,
+            GenCmpCall<TileDataDst, TileDataSrc, T>(dstPtr + i * dstAlignCols + numLoop * dstOffset,
                                                  srcPtr + i * srcAlignCols + numLoop * srcOffset, src1, mode,
-                                                 REPEAT_MAX, 1, 1, 8, 8);
+                                                 numRemainPerLine, 1, 1, 8, 8);
         }
     }
 }
@@ -87,7 +122,9 @@ PTO_INTERNAL void TCMPS_IMPL(TileDataDst &dst, TileDataSrc0 &src0, T src1, CmpMo
 {
     static_assert(std::is_same<typename TileDataSrc0::DType, int32_t>::value ||
                       std::is_same<typename TileDataSrc0::DType, float>::value ||
-                      std::is_same<typename TileDataSrc0::DType, half>::value,
+                      std::is_same<typename TileDataSrc0::DType, half>::value ||
+                      std::is_same<typename TileDataSrc0::DType, uint16_t>::value ||
+                      std::is_same<typename TileDataSrc0::DType, int16_t>::value,
                   "TCMPS: Invalid data type.");
     static_assert(TileDataDst::isRowMajor, "TCMPS: not supported Layout type");
 
