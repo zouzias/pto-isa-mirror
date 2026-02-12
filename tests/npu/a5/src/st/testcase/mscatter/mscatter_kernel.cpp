@@ -55,72 +55,86 @@ inline AICORE void runMSCATTER(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_half_8x32_1024(__gm__ half *out, __gm__ half *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_half_8x32_1024(__gm__ half *out, __gm__ half *src,
+                                                             __gm__ int32_t *indices)
 {
     runMSCATTER<half, int32_t, 8, 32, 1024>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_half_16x64_2048(__gm__ half *out, __gm__ half *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_half_16x64_2048(__gm__ half *out, __gm__ half *src,
+                                                              __gm__ int32_t *indices)
 {
     runMSCATTER<half, int32_t, 16, 64, 2048>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_half_16x128_4096(__gm__ half *out, __gm__ half *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_half_16x128_4096(__gm__ half *out, __gm__ half *src,
+                                                               __gm__ int32_t *indices)
 {
     runMSCATTER<half, int32_t, 16, 128, 4096>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_half_32x64_2048(__gm__ half *out, __gm__ half *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_half_32x64_2048(__gm__ half *out, __gm__ half *src,
+                                                              __gm__ int32_t *indices)
 {
     runMSCATTER<half, int32_t, 32, 64, 2048>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_half_64x64_4096(__gm__ half *out, __gm__ half *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_half_64x64_4096(__gm__ half *out, __gm__ half *src,
+                                                              __gm__ int32_t *indices)
 {
     runMSCATTER<half, int32_t, 64, 64, 4096>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_float_8x32_512(__gm__ float *out, __gm__ float *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_float_8x32_512(__gm__ float *out, __gm__ float *src,
+                                                             __gm__ int32_t *indices)
 {
     runMSCATTER<float, int32_t, 8, 32, 512>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_float_16x32_1024(__gm__ float *out, __gm__ float *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_float_16x32_1024(__gm__ float *out, __gm__ float *src,
+                                                               __gm__ int32_t *indices)
 {
     runMSCATTER<float, int32_t, 16, 32, 1024>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_float_16x64_2048(__gm__ float *out, __gm__ float *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_float_16x64_2048(__gm__ float *out, __gm__ float *src,
+                                                               __gm__ int32_t *indices)
 {
     runMSCATTER<float, int32_t, 16, 64, 2048>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_float_8x8_128(__gm__ float *out, __gm__ float *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_float_8x8_128(__gm__ float *out, __gm__ float *src,
+                                                            __gm__ int32_t *indices)
 {
     runMSCATTER<float, int32_t, 8, 8, 128>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_int32_8x16_256(__gm__ int32_t *out, __gm__ int32_t *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_int32_8x16_256(__gm__ int32_t *out, __gm__ int32_t *src,
+                                                             __gm__ int32_t *indices)
 {
     runMSCATTER<int32_t, int32_t, 8, 16, 256>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_int32_16x32_1024(__gm__ int32_t *out, __gm__ int32_t *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_int32_16x32_1024(__gm__ int32_t *out, __gm__ int32_t *src,
+                                                               __gm__ int32_t *indices)
 {
     runMSCATTER<int32_t, int32_t, 16, 32, 1024>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_int32_16x16_512(__gm__ int32_t *out, __gm__ int32_t *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_int32_16x16_512(__gm__ int32_t *out, __gm__ int32_t *src,
+                                                              __gm__ int32_t *indices)
 {
     runMSCATTER<int32_t, int32_t, 16, 16, 512>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_uint8_16x32_1024(__gm__ uint8_t *out, __gm__ uint8_t *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_uint8_16x32_1024(__gm__ uint8_t *out, __gm__ uint8_t *src,
+                                                               __gm__ int32_t *indices)
 {
     runMSCATTER<uint8_t, int32_t, 16, 32, 1024>(out, src, indices);
 }
 
-extern "C" __global__ AICORE void runMSCATTER_uint8_16x64_2048(__gm__ uint8_t *out, __gm__ uint8_t *src, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMSCATTER_uint8_16x64_2048(__gm__ uint8_t *out, __gm__ uint8_t *src,
+                                                               __gm__ int32_t *indices)
 {
     runMSCATTER<uint8_t, int32_t, 16, 64, 2048>(out, src, indices);
 }

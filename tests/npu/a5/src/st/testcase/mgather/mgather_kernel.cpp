@@ -56,72 +56,86 @@ inline AICORE void runMGATHER(__gm__ T __out__ *out, __gm__ T __in__ *table, __g
     TSTORE(outGlobal, outTile);
 }
 
-extern "C" __global__ AICORE void runMGATHER_half_16x64_8x32(__gm__ half *out, __gm__ half *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_half_16x64_8x32(__gm__ half *out, __gm__ half *table,
+                                                             __gm__ int32_t *indices)
 {
     runMGATHER<half, int32_t, 16, 64, 8, 32>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_half_16x128_8x64(__gm__ half *out, __gm__ half *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_half_16x128_8x64(__gm__ half *out, __gm__ half *table,
+                                                              __gm__ int32_t *indices)
 {
     runMGATHER<half, int32_t, 16, 128, 8, 64>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_half_32x128_16x64(__gm__ half *out, __gm__ half *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_half_32x128_16x64(__gm__ half *out, __gm__ half *table,
+                                                               __gm__ int32_t *indices)
 {
     runMGATHER<half, int32_t, 32, 128, 16, 64>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_half_16x256_8x128(__gm__ half *out, __gm__ half *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_half_16x256_8x128(__gm__ half *out, __gm__ half *table,
+                                                               __gm__ int32_t *indices)
 {
     runMGATHER<half, int32_t, 16, 256, 8, 128>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_half_64x64_32x32(__gm__ half *out, __gm__ half *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_half_64x64_32x32(__gm__ half *out, __gm__ half *table,
+                                                              __gm__ int32_t *indices)
 {
     runMGATHER<half, int32_t, 64, 64, 32, 32>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_float_8x64_4x32(__gm__ float *out, __gm__ float *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_float_8x64_4x32(__gm__ float *out, __gm__ float *table,
+                                                             __gm__ int32_t *indices)
 {
     runMGATHER<float, int32_t, 8, 64, 4, 32>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_float_16x64_8x32(__gm__ float *out, __gm__ float *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_float_16x64_8x32(__gm__ float *out, __gm__ float *table,
+                                                              __gm__ int32_t *indices)
 {
     runMGATHER<float, int32_t, 16, 64, 8, 32>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_float_32x64_16x32(__gm__ float *out, __gm__ float *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_float_32x64_16x32(__gm__ float *out, __gm__ float *table,
+                                                               __gm__ int32_t *indices)
 {
     runMGATHER<float, int32_t, 32, 64, 16, 32>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_float_16x16_8x8(__gm__ float *out, __gm__ float *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_float_16x16_8x8(__gm__ float *out, __gm__ float *table,
+                                                             __gm__ int32_t *indices)
 {
     runMGATHER<float, int32_t, 16, 16, 8, 8>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_int32_8x32_4x16(__gm__ int32_t *out, __gm__ int32_t *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_int32_8x32_4x16(__gm__ int32_t *out, __gm__ int32_t *table,
+                                                             __gm__ int32_t *indices)
 {
     runMGATHER<int32_t, int32_t, 8, 32, 4, 16>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_int32_16x64_8x32(__gm__ int32_t *out, __gm__ int32_t *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_int32_16x64_8x32(__gm__ int32_t *out, __gm__ int32_t *table,
+                                                              __gm__ int32_t *indices)
 {
     runMGATHER<int32_t, int32_t, 16, 64, 8, 32>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_int32_32x32_16x16(__gm__ int32_t *out, __gm__ int32_t *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_int32_32x32_16x16(__gm__ int32_t *out, __gm__ int32_t *table,
+                                                               __gm__ int32_t *indices)
 {
     runMGATHER<int32_t, int32_t, 32, 32, 16, 16>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_uint8_16x64_8x32(__gm__ uint8_t *out, __gm__ uint8_t *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_uint8_16x64_8x32(__gm__ uint8_t *out, __gm__ uint8_t *table,
+                                                              __gm__ int32_t *indices)
 {
     runMGATHER<uint8_t, int32_t, 16, 64, 8, 32>(out, table, indices);
 }
 
-extern "C" __global__ AICORE void runMGATHER_uint8_32x64_16x32(__gm__ uint8_t *out, __gm__ uint8_t *table, __gm__ int32_t *indices)
+extern "C" __global__ AICORE void runMGATHER_uint8_32x64_16x32(__gm__ uint8_t *out, __gm__ uint8_t *table,
+                                                               __gm__ int32_t *indices)
 {
     runMGATHER<uint8_t, int32_t, 32, 64, 16, 32>(out, table, indices);
 }

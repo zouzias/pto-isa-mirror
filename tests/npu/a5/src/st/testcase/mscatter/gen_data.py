@@ -15,6 +15,7 @@ import numpy as np
 
 np.random.seed(42)
 
+
 class MScatterParams:
     def __init__(self, name, dtype, src_rows, src_cols, out_size):
         self.name = name
@@ -23,20 +24,21 @@ class MScatterParams:
         self.src_cols = src_cols
         self.out_size = out_size
 
+
 def gen_golden_data(param: MScatterParams):
     dtype = param.dtype
     src_rows = param.src_rows
     src_cols = param.src_cols
     out_size = param.out_size
-    
+
     src_size = src_rows * src_cols
 
     # Generate 1D source data - use integers first, then convert
     src = ((np.arange(1, src_size + 1) % 256) + 1).astype(dtype)
-    
+
     # Generate 1D indices (each index points to a valid position in output)
     indices = (np.arange(0, src_size) % out_size).astype(np.int32)
-    
+
     # Compute golden output: out[indices[i]] = src[i]
     golden = np.zeros(out_size, dtype=dtype)
     for i in range(src_size):
@@ -45,6 +47,7 @@ def gen_golden_data(param: MScatterParams):
     src.tofile("src.bin")
     indices.tofile("indices.bin")
     golden.tofile("golden.bin")
+
 
 if __name__ == "__main__":
     case_params_list = [

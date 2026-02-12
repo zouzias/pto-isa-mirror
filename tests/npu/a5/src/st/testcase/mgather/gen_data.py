@@ -15,6 +15,7 @@ import numpy as np
 
 np.random.seed(42)
 
+
 class MGatherParams:
     def __init__(self, name, dtype, table_rows, table_cols, out_rows, out_cols):
         self.name = name
@@ -24,28 +25,30 @@ class MGatherParams:
         self.out_rows = out_rows
         self.out_cols = out_cols
 
+
 def gen_golden_data(param: MGatherParams):
     dtype = param.dtype
     table_rows = param.table_rows
     table_cols = param.table_cols
     out_rows = param.out_rows
     out_cols = param.out_cols
-    
+
     table_size = table_rows * table_cols
     out_size = out_rows * out_cols
 
     # Generate 1D table data - use integers first, then convert
     table = ((np.arange(1, table_size + 1) % 256) + 1).astype(dtype)
-    
+
     # Generate 1D indices (each index points to a valid position in table)
     indices = (np.arange(0, out_size) % table_size).astype(np.int32)
-    
+
     # Compute golden output: out[i] = table[indices[i]]
     golden = table[indices]
 
     table.tofile("table.bin")
     indices.tofile("indices.bin")
     golden.tofile("golden.bin")
+
 
 if __name__ == "__main__":
     case_params_list = [

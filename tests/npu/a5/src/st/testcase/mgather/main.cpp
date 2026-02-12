@@ -18,8 +18,10 @@ using namespace PtoTestCommon;
 
 class MGATHERTest : public testing::Test {
 protected:
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override
+    {}
+    void TearDown() override
+    {}
 };
 
 //#define DEBUG_PRINT
@@ -36,7 +38,8 @@ void PrintFirst20(const char *name, const T *data, size_t count)
         } else {
             std::cout << std::setw(10) << static_cast<float>(data[i]);
         }
-        if ((i + 1) % 10 == 0) std::cout << std::endl;
+        if ((i + 1) % 10 == 0)
+            std::cout << std::endl;
     }
     std::cout << std::endl;
 }
@@ -89,11 +92,9 @@ void test_mgather()
     aclrtMemcpy(idxDevice, idxByteSize, idxHost, idxByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
     if constexpr (std::is_same<T, aclFloat16>::value) {
-        LaunchMGATHERHalf<kTableRows, kTableCols, kOutRows, kOutCols>(
-            outDevice, tableDevice, idxDevice, stream);
+        LaunchMGATHERHalf<kTableRows, kTableCols, kOutRows, kOutCols>(outDevice, tableDevice, idxDevice, stream);
     } else {
-        LaunchMGATHER<T, TIdx, kTableRows, kTableCols, kOutRows, kOutCols>(
-            outDevice, tableDevice, idxDevice, stream);
+        LaunchMGATHER<T, TIdx, kTableRows, kTableCols, kOutRows, kOutCols>(outDevice, tableDevice, idxDevice, stream);
     }
 
     aclrtSynchronizeStream(stream);

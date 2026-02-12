@@ -18,8 +18,10 @@ using namespace PtoTestCommon;
 
 class MSCATTERTest : public testing::Test {
 protected:
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override
+    {}
+    void TearDown() override
+    {}
 };
 
 //#define DEBUG_PRINT
@@ -36,7 +38,8 @@ void PrintFirst20(const char *name, const T *data, size_t count)
         } else {
             std::cout << std::setw(10) << static_cast<float>(data[i]);
         }
-        if ((i + 1) % 10 == 0) std::cout << std::endl;
+        if ((i + 1) % 10 == 0)
+            std::cout << std::endl;
     }
     std::cout << std::endl;
 }
@@ -87,15 +90,13 @@ void test_mscatter()
 
     aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(idxDevice, idxByteSize, idxHost, idxByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    
+
     aclrtMemset(outDevice, outByteSize, 0, outByteSize);
 
     if constexpr (std::is_same<T, aclFloat16>::value) {
-        LaunchMSCATTERHalf<kSrcRows, kSrcCols, kOutSize>(
-            outDevice, srcDevice, idxDevice, stream);
+        LaunchMSCATTERHalf<kSrcRows, kSrcCols, kOutSize>(outDevice, srcDevice, idxDevice, stream);
     } else {
-        LaunchMSCATTER<T, TIdx, kSrcRows, kSrcCols, kOutSize>(
-            outDevice, srcDevice, idxDevice, stream);
+        LaunchMSCATTER<T, TIdx, kSrcRows, kSrcCols, kOutSize>(outDevice, srcDevice, idxDevice, stream);
     }
 
     aclrtSynchronizeStream(stream);
