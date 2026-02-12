@@ -91,7 +91,7 @@ constexpr const size_t FP16_INT8_TEMP_BUFFER_SIZE = REPEAT_MAX * 256;
 //   like inf, -inf, nan, and overflow values. Uses NonSatTorch implementations.
 // - When disabled (0): Uses standard TCVT conversion (higher performance)
 // Trade-off: Enabling provides PyTorch compatibility but reduces performance
-#define EDGE_CASE_ALIGN_ENABLE 1
+#define EDGE_CASE_ALIGN_ENABLE 0
 
 // Converts float32 (fp32) to float16 (fp16) with various rounding modes
 template <typename TileDataD, typename TileDataS>
@@ -392,13 +392,22 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
                                                      uint16_t dstRepeatStride, uint16_t srcRepeatStride,
                                                      __ubuf__ int32_t *tempInt32Buf)
 {
-    // INT32 is 2x larger than FP16, so strides need to be adjusted
-    // srcBlockStride and srcRepeatStride are for FP16 (2 bytes)
-    // For INT32 (4 bytes), we need to double the strides
-    uint16_t int32BlockStride = srcBlockStride * 2;
-    uint16_t int32RepeatStride = srcRepeatStride * 2;
-
     // Step 1: Convert fp16 to int32
+    // Different stride handling for HEAD vs REMAINDER paths:
+    // - HEAD path: Output is 2x larger (INT32 vs FP16), need 2x the repeat stride
+    //   Each FP16 repeat (128 elem) → 128 INT32 (16 blocks), so dstRepeatStride=16
+    // - REMAINDER path: Use contiguous output (1) and doubled row stride
+    uint16_t int32BlockStride, int32RepeatStride;
+    if (srcRepeatStride == BLOCK_MAX_PER_REPEAT) {
+        // HEAD path: contiguous blocks, doubled repeat stride
+        int32BlockStride = 1;
+        int32RepeatStride = BLOCK_MAX_PER_REPEAT * 2; // 16 blocks to fit 128 INT32
+    } else {
+        // REMAINDER path: contiguous output, doubled stride
+        int32BlockStride = 1;
+        int32RepeatStride = srcRepeatStride * 2;
+    }
+
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
             vconv_f162s32r(tempInt32Buf, src, repeatNum, int32BlockStride, srcBlockStride, int32RepeatStride,
@@ -428,9 +437,10 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
 
     pipe_barrier(PIPE_V);
 
-    // Step 2: Convert int32 to int16 using INT32 strides for the source
-    vconv_s322s16(dst, tempInt32Buf, 2 * repeatNum, dstBlockStride, int32BlockStride, dstRepeatStride,
-                  int32RepeatStride);
+    // Step 2: Convert int32 to int16
+    // CRITICAL: Each FP16 repeat (128 elem) → 2 INT32 repeats (64 elem each)
+    //  So we must use 2*repeatNum to process all the INT32 data
+    vconv_s322s16(dst, tempInt32Buf, 2 * repeatNum, dstBlockStride, 1, dstRepeatStride, int32RepeatStride);
 }
 
 // Float16 (half) to signed 8-bit integer conversion
