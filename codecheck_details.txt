@@ -1,0 +1,3740 @@
+门禁检查 /代码检查结果
+pto-isa
+创建人：zhezhou 源分支：master 目标分支：master 合入请求：17工具：CodeCheck 执行时间： 2026-02-10 16:37:02
+概览
+代码问题
+99+
+敏感词问题
+过滤器
+清除选项
+问题级别
+致命
+3
+严重
+19
+一般
+264
+提示
+0
+问题状态
+未解决
+255
+已解决
+0
+已忽略
+31
+审核中
+0
+已失效
+0
+规则
+搜索规则
+重复代码[C++]
+173
+超大函数[C++]
+50
+G.EXP.22-CPP 确保除法和余数运算不会导致除零错误(被零除)
+19
+超大深度函数[C++]
+14
+G.FMT.03 合理安排空行--类间空2行
+9
+超大圈复杂度[C++]
+7
+OAT.3 许可证头
+4
+超大头文件[C++]
+2
+不安全函数[C++]
+2
+冗余代码[C++]
+2
+显示更多
+
+文件目录
+搜索文件目录
+include/pto/comm
+92
+tests/npu/a2a3/comm/st/testcase/tput
+80
+tests/npu/a2a3/comm/st/testcase/tget
+33
+tests/npu/a2a3/comm/st/testcase/treduce
+18
+tests/npu/a2a3/comm/st/testcase/tbroadcast
+14
+tests/npu/a2a3/comm/st/testcase/tgather
+13
+tests/npu/a2a3/comm/st/testcase/tscatter
+11
+tests/npu/a2a3/comm/st/testcase
+6
+tests/npu/a2a3/comm/st/testcase/twait
+5
+tests/npu/a2a3/comm/st/testcase/ttest
+5
+tests/npu/a2a3/comm/st/testcase/tnotify
+5
+include/pto/common
+2
+tests/script
+1
+tests
+1
+文件
+搜索文件名称
+tests/npu/a2a3/comm/st/testcase/tput/tput_kernel.cpp
+78
+tests/npu/a2a3/comm/st/testcase/tget/tget_kernel.cpp
+32
+include/pto/comm/TScatter.hpp
+27
+include/pto/comm/TPut.hpp
+21
+tests/npu/a2a3/comm/st/testcase/treduce/treduce_kernel.cpp
+17
+include/pto/comm/TReduce.hpp
+17
+tests/npu/a2a3/comm/st/testcase/tbroadcast/tbroadcast_kernel.cpp
+13
+tests/npu/a2a3/comm/st/testcase/tgather/tgather_kernel.cpp
+12
+tests/npu/a2a3/comm/st/testcase/tscatter/tscatter_kernel.cpp
+10
+include/pto/comm/TGather.hpp
+9
+显示更多
+
+全部问题
+
+我的申请
+
+待我审批
+
+审批历史
+
+撤销历史
+
+1、文件路径:include/pto/comm/TWait.hpp:32
+问题描述：duplicate lines: 20 file path: include/pto/comm/TTest.hpp duplication block: (33, 54) file path: include/pto/comm/TWait.hpp duplication block: (32, 53)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+32
+{
+33
+switch (cmp) {
+34
+case WaitCmp::EQ:
+35
+return sigVal == cmpVal;
+36
+case WaitCmp::NE:
+37
+return sigVal != cmpVal;
+38
+case WaitCmp::GT:
+39
+return sigVal > cmpVal;
+40
+case WaitCmp::GE:
+41
+return sigVal >= cmpVal;
+42
+case WaitCmp::LT:
+43
+return sigVal < cmpVal;
+44
+case WaitCmp::LE:
+45
+return sigVal <= cmpVal;
+46
+default:
+47
+return false;
+48
+}
+49
+}
+50
+51
+} // namespace detail
+52
+53
+template <typename GlobalSignalData>
+2、文件路径:include/pto/comm/TBroadCast.hpp:44
+问题描述：the depth of the method {TBROADCAST_IMPL()} is 7, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+39
+// - If TileData has static ValidCol, shape4 must be divisible by ValidCol.
+40
+// - All ranks in the ParallelGroup are assumed to have the same shape/strides.
+41
+// ============================================================================
+42
+43
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
+44
+PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
+45
+TileData &stagingTileData)
+46
+{
+47
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+48
+using T = typename GlobalSrcData::RawDType;
+3、文件路径:include/pto/comm/TGet.hpp:44
+问题描述：the depth of the method {TGET_IMPL()} is 7, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+39
+// - If TileData has static ValidCol, shape4 must be divisible by ValidCol.
+40
+// Use DYNAMIC ValidCol for partial column chunk support.
+41
+// ============================================================================
+42
+43
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+44
+PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData)
+45
+{
+46
+using T = typename GlobalSrcData::RawDType;
+47
+48
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TGET: src/dst element type mismatch");
+49
+static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TGET: src/dst layout mismatch");
+4、文件路径:include/pto/comm/TBroadCast.hpp:44
+问题描述：the nbnc line of the method {TBROADCAST_IMPL()} is 109, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+39
+// - If TileData has static ValidCol, shape4 must be divisible by ValidCol.
+40
+// - All ranks in the ParallelGroup are assumed to have the same shape/strides.
+41
+// ============================================================================
+42
+43
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
+44
+PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
+45
+TileData &stagingTileData)
+46
+{
+47
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+48
+using T = typename GlobalSrcData::RawDType;
+5、文件路径:include/pto/comm/TGet.hpp:44
+问题描述：the nbnc line of the method {TGET_IMPL()} is 90, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+39
+// - If TileData has static ValidCol, shape4 must be divisible by ValidCol.
+40
+// Use DYNAMIC ValidCol for partial column chunk support.
+41
+// ============================================================================
+42
+43
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+44
+PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData)
+45
+{
+46
+using T = typename GlobalSrcData::RawDType;
+47
+48
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TGET: src/dst element type mismatch");
+49
+static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TGET: src/dst layout mismatch");
+6、文件路径:include/pto/comm/TPut.hpp:46
+问题描述：the depth of the method {TPUT_IMPL()} is 7, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+41
+// Use DYNAMIC ValidCol for partial column chunk support.
+42
+// ============================================================================
+43
+44
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData,
+45
+AtomicType atomicType = AtomicType::AtomicNone>
+46
+PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData)
+47
+{
+48
+using T = typename GlobalSrcData::RawDType;
+49
+50
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TPUT: src/dst element type mismatch");
+51
+static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TPUT: src/dst layout mismatch");
+7、文件路径:include/pto/comm/TPut.hpp:46
+问题描述：the nbnc line of the method {TPUT_IMPL()} is 90, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+41
+// Use DYNAMIC ValidCol for partial column chunk support.
+42
+// ============================================================================
+43
+44
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData,
+45
+AtomicType atomicType = AtomicType::AtomicNone>
+46
+PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData)
+47
+{
+48
+using T = typename GlobalSrcData::RawDType;
+49
+50
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TPUT: src/dst element type mismatch");
+51
+static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TPUT: src/dst layout mismatch");
+8、文件路径:include/pto/comm/TGather.hpp:48
+问题描述：the depth of the method {TGATHER_IMPL()} is 8, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+43
+// - If TileData has static ValidCol, DIM_4 must be divisible by ValidCol.
+44
+// - All source tensors in the ParallelGroup are assumed to have the same shape/strides.
+45
+// ============================================================================
+46
+47
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+48
+PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
+49
+TileData &stagingTileData)
+50
+{
+51
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+52
+using T = typename GlobalSrcData::RawDType;
+9、文件路径:include/pto/comm/TScatter.hpp:48
+问题描述：the depth of the method {TSCATTER_IMPL()} is 8, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+43
+// - If TileData has static ValidCol, DIM_4 must be divisible by ValidCol.
+44
+// - All destination tensors in the ParallelGroup are assumed to have the same shape/strides.
+45
+// ============================================================================
+46
+47
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
+48
+PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
+49
+TileData &stagingTileData)
+50
+{
+51
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+52
+using T = typename GlobalSrcData::RawDType;
+10、文件路径:include/pto/comm/TGather.hpp:48
+问题描述：the nbnc line of the method {TGATHER_IMPL()} is 121, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+43
+// - If TileData has static ValidCol, DIM_4 must be divisible by ValidCol.
+44
+// - All source tensors in the ParallelGroup are assumed to have the same shape/strides.
+45
+// ============================================================================
+46
+47
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+48
+PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData,
+49
+TileData &stagingTileData)
+50
+{
+51
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+52
+using T = typename GlobalSrcData::RawDType;
+11、文件路径:include/pto/comm/TScatter.hpp:48
+问题描述：the nbnc line of the method {TSCATTER_IMPL()} is 121, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+43
+// - If TileData has static ValidCol, DIM_4 must be divisible by ValidCol.
+44
+// - All destination tensors in the ParallelGroup are assumed to have the same shape/strides.
+45
+// ============================================================================
+46
+47
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
+48
+PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
+49
+TileData &stagingTileData)
+50
+{
+51
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+52
+using T = typename GlobalSrcData::RawDType;
+12、文件路径:include/pto/comm/TWait.hpp:54
+问题描述：the depth of the method {TWAIT_IMPL()} is 8, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+49
+}
+50
+51
+} // namespace detail
+52
+53
+template <typename GlobalSignalData>
+54
+PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp)
+55
+{
+56
+static_assert(std::is_same_v<typename GlobalSignalData::RawDType, int32_t>, "TWAIT: signal type must be int32_t");
+57
+58
+// Get full 5-D shape and stride
+59
+const int s0 = signalData.GetShape(GlobalTensorDim::DIM_0);
+13、文件路径:include/pto/comm/TTest.hpp:55
+问题描述：the depth of the method {TTEST_IMPL()} is 7, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+50
+}
+51
+52
+} // namespace detail
+53
+54
+template <typename GlobalSignalData>
+55
+PTO_INTERNAL bool TTEST_IMPL(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp)
+56
+{
+57
+static_assert(std::is_same_v<typename GlobalSignalData::RawDType, int32_t>, "TTEST: signal type must be int32_t");
+58
+59
+// Get full 5-D shape and stride
+60
+const int s0 = signalData.GetShape(GlobalTensorDim::DIM_0);
+14、文件路径:include/pto/comm/TPut.hpp:56
+问题描述：duplicate lines: 11 file path: include/pto/comm/TBroadCast.hpp duplication block: (63, 75) file path: include/pto/comm/TGet.hpp duplication block: (54, 66) file path: include/pto/comm/TPut.hpp duplication block: (56, 68)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+56
+const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
+57
+const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
+58
+const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+59
+const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+60
+const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+61
+62
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+63
+const int tileValidRow = stagingTileData.GetValidRow();
+64
+const int tileValidCol = stagingTileData.GetValidCol();
+65
+66
+if (totalRows == 0 || gShape4 == 0) {
+67
+return;
+68
+}
+15、文件路径:include/pto/comm/TPut.hpp:58
+问题描述：duplicate lines: 13 file path: include/pto/comm/TGet.hpp duplication block: (56, 72) file path: include/pto/comm/TPut.hpp duplication block: (58, 74)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+58
+const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+59
+const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+60
+const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+61
+62
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+63
+const int tileValidRow = stagingTileData.GetValidRow();
+64
+const int tileValidCol = stagingTileData.GetValidCol();
+65
+66
+if (totalRows == 0 || gShape4 == 0) {
+67
+return;
+68
+}
+69
+70
+// ---- Simple path: data fits in UB tile in both dimensions ----
+71
+if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
+72
+TLOAD(stagingTileData, srcGlobalData);
+73
+set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+74
+wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+16、文件路径:include/pto/comm/TWait.hpp:59
+问题描述：duplicate lines: 10 file path: include/pto/comm/TTest.hpp duplication block: (60, 70) file path: include/pto/comm/TWait.hpp duplication block: (59, 69)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+59
+const int s0 = signalData.GetShape(GlobalTensorDim::DIM_0);
+60
+const int s1 = signalData.GetShape(GlobalTensorDim::DIM_1);
+61
+const int s2 = signalData.GetShape(GlobalTensorDim::DIM_2);
+62
+const int s3 = signalData.GetShape(GlobalTensorDim::DIM_3);
+63
+const int s4 = signalData.GetShape(GlobalTensorDim::DIM_4);
+64
+65
+const int64_t st0 = signalData.GetStride(GlobalTensorDim::DIM_0);
+66
+const int64_t st1 = signalData.GetStride(GlobalTensorDim::DIM_1);
+67
+const int64_t st2 = signalData.GetStride(GlobalTensorDim::DIM_2);
+68
+const int64_t st3 = signalData.GetStride(GlobalTensorDim::DIM_3);
+69
+const int64_t st4 = signalData.GetStride(GlobalTensorDim::DIM_4);
+17、文件路径:include/pto/comm/TScatter.hpp:62
+问题描述：duplicate lines: 16 file path: include/pto/comm/TGather.hpp duplication block: (62, 83) file path: include/pto/comm/TScatter.hpp duplication block: (62, 83)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+62
+PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
+63
+PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
+64
+65
+// Get per-rank dimensions (from first rank's destination, all assumed same)
+66
+const int gShape0 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_0);
+67
+const int gShape1 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_1);
+68
+const int gShape2 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_2);
+69
+const int gShape3 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_3); // H (per-rank rows)
+70
+const int gShape4 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_4); // W
+71
+72
+const int perRankRows = gShape3;
+73
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+74
+const int tileValidRow = stagingTileData.GetValidRow();
+75
+const int tileValidCol = stagingTileData.GetValidCol();
+76
+77
+if (totalRows == 0 || gShape4 == 0) {
+78
+return;
+79
+}
+80
+81
+// ---- Simple path: per-rank data fits in UB tile ----
+82
+if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
+83
+if (nranks == 1) {
+18、文件路径:include/pto/comm/TReduce.hpp:78
+问题描述：the cyclomatic complexity of the method {TREDUCE_IMPL()} is 23, it is over 20
+规则：超大圈复杂度[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+73
+}
+74
+75
+} // namespace detail
+76
+77
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+78
+PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+79
+TileData &recvTileData, ReduceOp op)
+80
+{
+81
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+82
+using T = typename GlobalSrcData::RawDType;
+19、文件路径:include/pto/comm/TReduce.hpp:78
+问题描述：the depth of the method {TREDUCE_IMPL()} is 9, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+73
+}
+74
+75
+} // namespace detail
+76
+77
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+78
+PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+79
+TileData &recvTileData, ReduceOp op)
+80
+{
+81
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+82
+using T = typename GlobalSrcData::RawDType;
+20、文件路径:include/pto/comm/TReduce.hpp:78
+问题描述：the nbnc line of the method {TREDUCE_IMPL()} is 137, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+73
+}
+74
+75
+} // namespace detail
+76
+77
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+78
+PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+79
+TileData &recvTileData, ReduceOp op)
+80
+{
+81
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+82
+using T = typename GlobalSrcData::RawDType;
+21、文件路径:include/pto/comm/TScatter.hpp:115
+问题描述：duplicate lines: 10 file path: include/pto/comm/TBroadCast.hpp duplication block: (97, 113) file path: include/pto/comm/TScatter.hpp duplication block: (115, 132)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+115
+TSTORE(parallelGroup[r], stagingTileData);
+116
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+117
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+118
+}
+119
+return;
+120
+}
+121
+122
+// ---- 2D sliding chunked path ----
+123
+//
+124
+// For each rank r, iterate outer dims and chunk rows/cols.
+125
+// Source: srcGlobalData at (rank base + chunk offset)
+126
+// Destination: parallelGroup[r] at chunk offset
+127
+128
+constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+129
+constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+130
+131
+if constexpr (!isDynamicRow) {
+132
+PTO_ASSERT(gShape3 % tileValidRow == 0,
+22、文件路径:include/pto/comm/TPut.hpp:130
+问题描述：duplicate lines: 13 file path: include/pto/comm/TBroadCast.hpp duplication block: (147, 162) file path: include/pto/comm/TGet.hpp duplication block: (127, 142) file path: include/pto/comm/TPut.hpp duplication block: (130, 145)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+130
+for (int i1 = 0; i1 < gShape1; ++i1) {
+131
+for (int i2 = 0; i2 < gShape2; ++i2) {
+132
+int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
+133
+static_cast<int64_t>(i2) * srcStride2;
+134
+int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+135
+static_cast<int64_t>(i2) * dstStride2;
+136
+137
+for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+138
+int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+139
+140
+if constexpr (isDynamicRow) {
+141
+stagingTileData.RowMaskInternal = currentRows;
+142
+}
+143
+144
+for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
+145
+int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
+23、文件路径:include/pto/comm/TScatter.hpp:139
+问题描述：duplicate lines: 10 file path: include/pto/comm/TBroadCast.hpp duplication block: (120, 133), (285, 296) file path: include/pto/comm/TScatter.hpp duplication block: (139, 152)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+139
+"Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+140
+}
+141
+142
+// Source strides (from srcGlobalData)
+143
+const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+144
+const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+145
+const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+146
+const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+147
+const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+148
+149
+// Destination strides (from first rank, all assumed same)
+150
+const int dstStride0 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_0);
+151
+const int dstStride1 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_1);
+152
+const int dstStride2 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_2);
+24、文件路径:include/pto/comm/TPut.hpp:147
+问题描述：duplicate lines: 13 file path: include/pto/comm/TGet.hpp duplication block: (144, 163) file path: include/pto/comm/TPut.hpp duplication block: (147, 166)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+147
+if constexpr (isDynamicCol) {
+148
+stagingTileData.ColMaskInternal = currentCols;
+149
+}
+150
+151
+// Compute element offsets
+152
+int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+153
+static_cast<int64_t>(colOff) * srcStride4;
+154
+int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+155
+static_cast<int64_t>(colOff) * dstStride4;
+156
+157
+// Create chunk views with adjusted shape
+158
+DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+159
+160
+SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
+161
+DstViewT dstView(dstGlobalData.data() + dstOffset, chunkShape, dstChunkStride);
+162
+163
+// Transfer: local GM → UB → remote GM
+164
+TLOAD(stagingTileData, srcView);
+165
+set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+166
+wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+25、文件路径:include/pto/comm/TScatter.hpp:171
+问题描述：duplicate lines: 11 file path: include/pto/comm/TBroadCast.hpp duplication block: (151, 165) file path: include/pto/comm/TGet.hpp duplication block: (131, 145) file path: include/pto/comm/TPut.hpp duplication block: (134, 148) file path: include/pto/comm/TScatter.hpp duplication block: (171, 185)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+171
+int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+172
+static_cast<int64_t>(i2) * dstStride2;
+173
+174
+for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+175
+int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+176
+177
+if constexpr (isDynamicRow) {
+178
+stagingTileData.RowMaskInternal = currentRows;
+179
+}
+180
+181
+for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
+182
+int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
+183
+184
+if constexpr (isDynamicCol) {
+185
+stagingTileData.ColMaskInternal = currentCols;
+26、文件路径:include/pto/comm/TScatter.hpp:174
+问题描述：duplicate lines: 15 file path: include/pto/comm/TBroadCast.hpp duplication block: (154, 173) file path: include/pto/comm/TGather.hpp duplication block: (173, 192) file path: include/pto/comm/TGet.hpp duplication block: (134, 155) file path: include/pto/comm/TPut.hpp duplication block: (137, 158) file path: include/pto/comm/TScatter.hpp duplication block: (174, 193)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+174
+for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+175
+int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+176
+177
+if constexpr (isDynamicRow) {
+178
+stagingTileData.RowMaskInternal = currentRows;
+179
+}
+180
+181
+for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
+182
+int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
+183
+184
+if constexpr (isDynamicCol) {
+185
+stagingTileData.ColMaskInternal = currentCols;
+186
+}
+187
+188
+int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+189
+static_cast<int64_t>(colOff) * srcStride4;
+190
+int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+191
+static_cast<int64_t>(colOff) * dstStride4;
+192
+193
+DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+27、文件路径:include/pto/comm/TScatter.hpp:182
+问题描述：duplicate lines: 10 file path: include/pto/comm/TBroadCast.hpp duplication block: (162, 176) file path: include/pto/comm/TGet.hpp duplication block: (142, 157) file path: include/pto/comm/TPut.hpp duplication block: (145, 160) file path: include/pto/comm/TScatter.hpp duplication block: (182, 196)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+182
+int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
+183
+184
+if constexpr (isDynamicCol) {
+185
+stagingTileData.ColMaskInternal = currentCols;
+186
+}
+187
+188
+int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+189
+static_cast<int64_t>(colOff) * srcStride4;
+190
+int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+191
+static_cast<int64_t>(colOff) * dstStride4;
+192
+193
+DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+194
+195
+// TLOAD from local source at rank + chunk position
+196
+SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
+28、文件路径:include/pto/comm/TScatter.hpp:184
+问题描述：duplicate lines: 12 file path: include/pto/comm/TBroadCast.hpp duplication block: (164, 179) file path: include/pto/comm/TScatter.hpp duplication block: (184, 199)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+184
+if constexpr (isDynamicCol) {
+185
+stagingTileData.ColMaskInternal = currentCols;
+186
+}
+187
+188
+int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+189
+static_cast<int64_t>(colOff) * srcStride4;
+190
+int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+191
+static_cast<int64_t>(colOff) * dstStride4;
+192
+193
+DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+194
+195
+// TLOAD from local source at rank + chunk position
+196
+SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
+197
+TLOAD(stagingTileData, srcView);
+198
+set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+199
+wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+29、文件路径:include/pto/comm/TGet.hpp:193
+问题描述：the cyclomatic complexity of the method {TGET_IMPL()} is 25, it is over 20
+规则：超大圈复杂度[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+188
+// - pingTile and pongTile must have the same type and dimensions.
+189
+// - Uses EVENT_ID0 (pingTile) and EVENT_ID1 (pongTile) for synchronization.
+190
+// ============================================================================
+191
+192
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+193
+PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
+194
+TileData &pongTile)
+195
+{
+196
+using T = typename GlobalSrcData::RawDType;
+197
+198
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TGET: src/dst element type mismatch");
+30、文件路径:include/pto/comm/TGet.hpp:193
+问题描述：the depth of the method {TGET_IMPL()} is 7, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+188
+// - pingTile and pongTile must have the same type and dimensions.
+189
+// - Uses EVENT_ID0 (pingTile) and EVENT_ID1 (pongTile) for synchronization.
+190
+// ============================================================================
+191
+192
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+193
+PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
+194
+TileData &pongTile)
+195
+{
+196
+using T = typename GlobalSrcData::RawDType;
+197
+198
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TGET: src/dst element type mismatch");
+31、文件路径:include/pto/comm/TGet.hpp:193
+问题描述：the nbnc line of the method {TGET_IMPL()} is 118, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+188
+// - pingTile and pongTile must have the same type and dimensions.
+189
+// - Uses EVENT_ID0 (pingTile) and EVENT_ID1 (pongTile) for synchronization.
+190
+// ============================================================================
+191
+192
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+193
+PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
+194
+TileData &pongTile)
+195
+{
+196
+using T = typename GlobalSrcData::RawDType;
+197
+198
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TGET: src/dst element type mismatch");
+32、文件路径:include/pto/comm/TGet.hpp:195
+问题描述：duplicate lines: 12 file path: include/pto/comm/TGet.hpp duplication block: (45, 60), (195, 209)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+195
+{
+196
+using T = typename GlobalSrcData::RawDType;
+197
+198
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TGET: src/dst element type mismatch");
+199
+static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TGET: src/dst layout mismatch");
+200
+static_assert(std::is_same_v<T, typename TileData::DType>,
+201
+"TGET: TileData element type must match GlobalData element type");
+202
+203
+const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
+204
+const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
+205
+const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+206
+const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+207
+const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+208
+209
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+33、文件路径:include/pto/comm/TPut.hpp:197
+问题描述：the cyclomatic complexity of the method {TPUT_IMPL()} is 25, it is over 20
+规则：超大圈复杂度[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+192
+// - Uses EVENT_ID0 (pingTile) and EVENT_ID1 (pongTile) for synchronization.
+193
+// ============================================================================
+194
+195
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData,
+196
+AtomicType atomicType = AtomicType::AtomicNone>
+197
+PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
+198
+TileData &pongTile)
+199
+{
+200
+using T = typename GlobalSrcData::RawDType;
+201
+202
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TPUT: src/dst element type mismatch");
+34、文件路径:include/pto/comm/TPut.hpp:197
+问题描述：the depth of the method {TPUT_IMPL()} is 7, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+192
+// - Uses EVENT_ID0 (pingTile) and EVENT_ID1 (pongTile) for synchronization.
+193
+// ============================================================================
+194
+195
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData,
+196
+AtomicType atomicType = AtomicType::AtomicNone>
+197
+PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
+198
+TileData &pongTile)
+199
+{
+200
+using T = typename GlobalSrcData::RawDType;
+201
+202
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TPUT: src/dst element type mismatch");
+35、文件路径:include/pto/comm/TPut.hpp:197
+问题描述：the nbnc line of the method {TPUT_IMPL()} is 118, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+192
+// - Uses EVENT_ID0 (pingTile) and EVENT_ID1 (pongTile) for synchronization.
+193
+// ============================================================================
+194
+195
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData,
+196
+AtomicType atomicType = AtomicType::AtomicNone>
+197
+PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
+198
+TileData &pongTile)
+199
+{
+200
+using T = typename GlobalSrcData::RawDType;
+201
+202
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TPUT: src/dst element type mismatch");
+36、文件路径:include/pto/comm/TPut.hpp:199
+问题描述：duplicate lines: 12 file path: include/pto/comm/TPut.hpp duplication block: (47, 62), (199, 213)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+199
+{
+200
+using T = typename GlobalSrcData::RawDType;
+201
+202
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TPUT: src/dst element type mismatch");
+203
+static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TPUT: src/dst layout mismatch");
+204
+static_assert(std::is_same_v<T, typename TileData::DType>,
+205
+"TPUT: TileData element type must match GlobalData element type");
+206
+207
+const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
+208
+const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
+209
+const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+210
+const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+211
+const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+212
+213
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+37、文件路径:include/pto/comm/TScatter.hpp:203
+问题描述：duplicate lines: 10 file path: include/pto/comm/TGather.hpp duplication block: (202, 213) file path: include/pto/comm/TScatter.hpp duplication block: (203, 214)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+203
+TSTORE(dstView, stagingTileData);
+204
+205
+// Sync before next chunk's TLOAD
+206
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+207
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+208
+}
+209
+}
+210
+}
+211
+}
+212
+}
+213
+}
+214
+}
+38、文件路径:include/pto/comm/TPut.hpp:207
+问题描述：duplicate lines: 11 file path: include/pto/comm/TBroadCast.hpp duplication block: (233, 245) file path: include/pto/comm/TGet.hpp duplication block: (203, 215) file path: include/pto/comm/TPut.hpp duplication block: (207, 219)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+207
+const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
+208
+const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
+209
+const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+210
+const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+211
+const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+212
+213
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+214
+const int tileValidRow = pingTile.GetValidRow();
+215
+const int tileValidCol = pingTile.GetValidCol();
+216
+217
+if (totalRows == 0 || gShape4 == 0) {
+218
+return;
+219
+}
+39、文件路径:include/pto/comm/TPut.hpp:209
+问题描述：duplicate lines: 13 file path: include/pto/comm/TGet.hpp duplication block: (205, 221) file path: include/pto/comm/TPut.hpp duplication block: (209, 225)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+209
+const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+210
+const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+211
+const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+212
+213
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+214
+const int tileValidRow = pingTile.GetValidRow();
+215
+const int tileValidCol = pingTile.GetValidCol();
+216
+217
+if (totalRows == 0 || gShape4 == 0) {
+218
+return;
+219
+}
+220
+221
+// ---- Simple path: single chunk, no ping-pong benefit ----
+222
+if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
+223
+TLOAD(pingTile, srcGlobalData);
+224
+set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+225
+wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+40、文件路径:include/pto/comm/TBroadCast.hpp:214
+问题描述：the cyclomatic complexity of the method {TBROADCAST_IMPL()} is 29, it is over 20
+规则：超大圈复杂度[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+209
+//
+210
+// Constraints: same as TBROADCAST_IMPL for chunked mode.
+211
+// ============================================================================
+212
+213
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
+214
+PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+215
+TileData &pongTile)
+216
+{
+217
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+218
+using T = typename GlobalSrcData::RawDType;
+41、文件路径:include/pto/comm/TBroadCast.hpp:214
+问题描述：the depth of the method {TBROADCAST_IMPL()} is 8, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+209
+//
+210
+// Constraints: same as TBROADCAST_IMPL for chunked mode.
+211
+// ============================================================================
+212
+213
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
+214
+PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+215
+TileData &pongTile)
+216
+{
+217
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+218
+using T = typename GlobalSrcData::RawDType;
+42、文件路径:include/pto/comm/TBroadCast.hpp:214
+问题描述：the nbnc line of the method {TBROADCAST_IMPL()} is 139, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+209
+//
+210
+// Constraints: same as TBROADCAST_IMPL for chunked mode.
+211
+// ============================================================================
+212
+213
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
+214
+PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+215
+TileData &pongTile)
+216
+{
+217
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+218
+using T = typename GlobalSrcData::RawDType;
+43、文件路径:include/pto/comm/TBroadCast.hpp:216
+问题描述：duplicate lines: 18 file path: include/pto/comm/TBroadCast.hpp duplication block: (46, 69), (216, 239)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+216
+{
+217
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+218
+using T = typename GlobalSrcData::RawDType;
+219
+220
+static_assert(std::is_same_v<T, typename TileData::DType>,
+221
+"TBROADCAST: TileData element type must match GlobalData element type");
+222
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>,
+223
+"TBROADCAST: ParallelGroup element type must match source element type");
+224
+static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TBROADCAST: src/dst layout mismatch");
+225
+226
+const int nranks = parallelGroup.GetSize();
+227
+const int rootIdx = parallelGroup.GetRootIdx();
+228
+229
+PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
+230
+PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
+231
+232
+// Get GlobalTensor dimensions from source
+233
+const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
+234
+const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
+235
+const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+236
+const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+237
+const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+238
+239
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+44、文件路径:include/pto/comm/TGet.hpp:223
+问题描述：duplicate lines: 23 file path: include/pto/comm/TGet.hpp duplication block: (74, 112), (223, 249)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+223
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+224
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+225
+return;
+226
+}
+227
+228
+// ---- 2D sliding chunked path with ping-pong double buffering ----
+229
+constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+230
+constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+231
+232
+if constexpr (!isDynamicRow) {
+233
+PTO_ASSERT(gShape3 % tileValidRow == 0,
+234
+"TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+235
+"Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
+236
+}
+237
+if constexpr (!isDynamicCol) {
+238
+PTO_ASSERT(gShape4 % tileValidCol == 0,
+239
+"TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+240
+"Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+241
+}
+242
+243
+const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+244
+const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+245
+const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+246
+const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+247
+const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+248
+const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
+249
+const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
+45、文件路径:include/pto/comm/TPut.hpp:227
+问题描述：duplicate lines: 23 file path: include/pto/comm/TPut.hpp duplication block: (76, 115), (227, 254)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+227
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+228
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+229
+return;
+230
+}
+231
+232
+// ---- 2D sliding chunked path with ping-pong double buffering ----
+233
+constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+234
+constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+235
+236
+if constexpr (!isDynamicRow) {
+237
+PTO_ASSERT(gShape3 % tileValidRow == 0,
+238
+"TPUT chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+239
+"Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
+240
+}
+241
+if constexpr (!isDynamicCol) {
+242
+PTO_ASSERT(gShape4 % tileValidCol == 0,
+243
+"TPUT chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+244
+"Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+245
+}
+246
+247
+const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+248
+const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+249
+const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+250
+const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+251
+const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+252
+253
+const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
+254
+const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
+46、文件路径:include/pto/comm/TGather.hpp:231
+问题描述：the cyclomatic complexity of the method {TGATHER_IMPL()} is 28, it is over 20
+规则：超大圈复杂度[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+226
+//
+227
+// Constraints: same as TGATHER_IMPL for chunked mode.
+228
+// ============================================================================
+229
+230
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+231
+PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &pingTile,
+232
+TileData &pongTile)
+233
+{
+234
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+235
+using T = typename GlobalSrcData::RawDType;
+47、文件路径:include/pto/comm/TGather.hpp:231
+问题描述：the depth of the method {TGATHER_IMPL()} is 8, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+226
+//
+227
+// Constraints: same as TGATHER_IMPL for chunked mode.
+228
+// ============================================================================
+229
+230
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+231
+PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &pingTile,
+232
+TileData &pongTile)
+233
+{
+234
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+235
+using T = typename GlobalSrcData::RawDType;
+48、文件路径:include/pto/comm/TGather.hpp:231
+问题描述：the nbnc line of the method {TGATHER_IMPL()} is 147, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+226
+//
+227
+// Constraints: same as TGATHER_IMPL for chunked mode.
+228
+// ============================================================================
+229
+230
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+231
+PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &pingTile,
+232
+TileData &pongTile)
+233
+{
+234
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+235
+using T = typename GlobalSrcData::RawDType;
+49、文件路径:include/pto/comm/TScatter.hpp:232
+问题描述：the cyclomatic complexity of the method {TSCATTER_IMPL()} is 28, it is over 20
+规则：超大圈复杂度[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+227
+//
+228
+// Constraints: same as TSCATTER_IMPL for chunked mode.
+229
+// ============================================================================
+230
+231
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
+232
+PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+233
+TileData &pongTile)
+234
+{
+235
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+236
+using T = typename GlobalSrcData::RawDType;
+50、文件路径:include/pto/comm/TScatter.hpp:232
+问题描述：the depth of the method {TSCATTER_IMPL()} is 8, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+227
+//
+228
+// Constraints: same as TSCATTER_IMPL for chunked mode.
+229
+// ============================================================================
+230
+231
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
+232
+PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+233
+TileData &pongTile)
+234
+{
+235
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+236
+using T = typename GlobalSrcData::RawDType;
+51、文件路径:include/pto/comm/TScatter.hpp:232
+问题描述：the nbnc line of the method {TSCATTER_IMPL()} is 150, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+227
+//
+228
+// Constraints: same as TSCATTER_IMPL for chunked mode.
+229
+// ============================================================================
+230
+231
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
+232
+PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+233
+TileData &pongTile)
+234
+{
+235
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+236
+using T = typename GlobalSrcData::RawDType;
+52、文件路径:include/pto/comm/TGather.hpp:233
+问题描述：duplicate lines: 16 file path: include/pto/comm/TGather.hpp duplication block: (50, 70), (233, 253)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+233
+{
+234
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+235
+using T = typename GlobalSrcData::RawDType;
+236
+237
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TGATHER: GlobalData type mismatch!");
+238
+static_assert(std::is_same_v<T, typename TileData::DType>,
+239
+"TGATHER: TileData element type must match GlobalData element type");
+240
+static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TGATHER: src/dst layout mismatch");
+241
+242
+const int nranks = parallelGroup.GetSize();
+243
+const int rootIdx = parallelGroup.GetRootIdx();
+244
+245
+PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
+246
+PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
+247
+248
+// Get per-rank dimensions
+249
+const int gShape0 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_0);
+250
+const int gShape1 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_1);
+251
+const int gShape2 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_2);
+252
+const int gShape3 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_3);
+253
+const int gShape4 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_4);
+53、文件路径:include/pto/comm/TScatter.hpp:234
+问题描述：duplicate lines: 16 file path: include/pto/comm/TScatter.hpp duplication block: (50, 70), (234, 254)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+234
+{
+235
+using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+236
+using T = typename GlobalSrcData::RawDType;
+237
+238
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TSCATTER: GlobalData type mismatch!");
+239
+static_assert(std::is_same_v<T, typename TileData::DType>,
+240
+"TSCATTER: TileData element type must match GlobalData element type");
+241
+static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TSCATTER: src/dst layout mismatch");
+242
+243
+const int nranks = parallelGroup.GetSize();
+244
+const int rootIdx = parallelGroup.GetRootIdx();
+245
+246
+PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
+247
+PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
+248
+249
+// Get per-rank dimensions
+250
+const int gShape0 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_0);
+251
+const int gShape1 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_1);
+252
+const int gShape2 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_2);
+253
+const int gShape3 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_3);
+254
+const int gShape4 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_4);
+54、文件路径:include/pto/comm/TScatter.hpp:243
+问题描述：duplicate lines: 11 file path: include/pto/comm/TGather.hpp duplication block: (59, 73), (242, 256) file path: include/pto/comm/TScatter.hpp duplication block: (59, 73), (243, 257)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+243
+const int nranks = parallelGroup.GetSize();
+244
+const int rootIdx = parallelGroup.GetRootIdx();
+245
+246
+PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
+247
+PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
+248
+249
+// Get per-rank dimensions
+250
+const int gShape0 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_0);
+251
+const int gShape1 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_1);
+252
+const int gShape2 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_2);
+253
+const int gShape3 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_3);
+254
+const int gShape4 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_4);
+255
+256
+const int perRankRows = gShape3;
+257
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+55、文件路径:include/pto/comm/TPut.hpp:244
+问题描述：duplicate lines: 16 file path: include/pto/comm/TGet.hpp duplication block: (102, 121), (240, 257) file path: include/pto/comm/TPut.hpp duplication block: (104, 124), (244, 262)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+244
+"Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+245
+}
+246
+247
+const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+248
+const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+249
+const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+250
+const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+251
+const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+252
+253
+const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
+254
+const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
+255
+const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
+256
+const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+257
+const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
+258
+259
+using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+260
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+261
+using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+262
+using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+56、文件路径:include/pto/comm/TScatter.hpp:246
+问题描述：duplicate lines: 16 file path: include/pto/comm/TGather.hpp duplication block: (245, 266) file path: include/pto/comm/TScatter.hpp duplication block: (246, 267)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+246
+PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
+247
+PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
+248
+249
+// Get per-rank dimensions
+250
+const int gShape0 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_0);
+251
+const int gShape1 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_1);
+252
+const int gShape2 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_2);
+253
+const int gShape3 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_3);
+254
+const int gShape4 = parallelGroup[0].GetShape(GlobalTensorDim::DIM_4);
+255
+256
+const int perRankRows = gShape3;
+257
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+258
+const int tileValidRow = pingTile.GetValidRow();
+259
+const int tileValidCol = pingTile.GetValidCol();
+260
+261
+if (totalRows == 0 || gShape4 == 0) {
+262
+return;
+263
+}
+264
+265
+// ---- Simple path: per-rank data fits in UB tile, no ping-pong benefit ----
+266
+if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
+267
+if (nranks == 1) {
+57、文件路径:include/pto/comm/TPut.hpp:255
+问题描述：duplicate lines: 12 file path: include/pto/comm/TGather.hpp duplication block: (324, 338) file path: include/pto/comm/TGet.hpp duplication block: (250, 267) file path: include/pto/comm/TPut.hpp duplication block: (255, 286)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+255
+const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
+256
+const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+257
+const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
+258
+259
+using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+260
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+261
+using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+262
+using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+263
+264
+// Precompute strides (identical for all chunk views)
+265
+DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
+266
+DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+267
+268
+// Ping-pong state: tracks the deferred TSTORE from the previous iteration
+269
+// usePing: true → next TLOAD goes into pingTile (EVENT_ID0)
+270
+// false → next TLOAD goes into pongTile (EVENT_ID1)
+271
+// hasPending: whether there is a deferred TSTORE waiting to be issued
+272
+//
+273
+// Pipeline overlap: TSTORE and TLOAD are dispatched to separate HW engines
+274
+// (MTE3 and MTE2). Within each iteration, they run concurrently. The
+275
+// wait_flag at the end ensures storeTile's UB is safe to reuse before
+276
+// the NEXT iteration's TLOAD can overwrite it.
+277
+//
+278
+// MTE2 queue: [..., TLOAD(loadTile), set_flag(curEvent), wait_flag(prevEvent), ...]
+279
+// MTE3 queue: [..., wait_flag(prevEvent), TSTORE(storeTile), set_flag(prevEvent), ...]
+280
+//
+281
+// The TLOAD and TSTORE in the same iteration execute in parallel on their
+282
+// respective engines. The wait_flag(MTE3→MTE2) is AFTER the TLOAD in MTE2's
+283
+// queue, so it doesn't block the current TLOAD — only the NEXT one.
+284
+bool usePing = true;
+285
+bool hasPending = false;
+286
+int64_t pendingDstOffset = 0;
+58、文件路径:include/pto/comm/TPut.hpp:259
+问题描述：duplicate lines: 11 file path: include/pto/comm/TBroadCast.hpp duplication block: (300, 312) file path: include/pto/comm/TGather.hpp duplication block: (328, 340) file path: include/pto/comm/TGet.hpp duplication block: (254, 269) file path: include/pto/comm/TPut.hpp duplication block: (259, 288)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+259
+using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+260
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+261
+using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+262
+using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+263
+264
+// Precompute strides (identical for all chunk views)
+265
+DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
+266
+DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+267
+268
+// Ping-pong state: tracks the deferred TSTORE from the previous iteration
+269
+// usePing: true → next TLOAD goes into pingTile (EVENT_ID0)
+270
+// false → next TLOAD goes into pongTile (EVENT_ID1)
+271
+// hasPending: whether there is a deferred TSTORE waiting to be issued
+272
+//
+273
+// Pipeline overlap: TSTORE and TLOAD are dispatched to separate HW engines
+274
+// (MTE3 and MTE2). Within each iteration, they run concurrently. The
+275
+// wait_flag at the end ensures storeTile's UB is safe to reuse before
+276
+// the NEXT iteration's TLOAD can overwrite it.
+277
+//
+278
+// MTE2 queue: [..., TLOAD(loadTile), set_flag(curEvent), wait_flag(prevEvent), ...]
+279
+// MTE3 queue: [..., wait_flag(prevEvent), TSTORE(storeTile), set_flag(prevEvent), ...]
+280
+//
+281
+// The TLOAD and TSTORE in the same iteration execute in parallel on their
+282
+// respective engines. The wait_flag(MTE3→MTE2) is AFTER the TLOAD in MTE2's
+283
+// queue, so it doesn't block the current TLOAD — only the NEXT one.
+284
+bool usePing = true;
+285
+bool hasPending = false;
+286
+int64_t pendingDstOffset = 0;
+287
+int pendingRows = 0;
+288
+int pendingCols = 0;
+59、文件路径:include/pto/comm/TPut.hpp:261
+问题描述：duplicate lines: 23 file path: include/pto/comm/TBroadCast.hpp duplication block: (302, 330) file path: include/pto/comm/TGet.hpp duplication block: (256, 287) file path: include/pto/comm/TPut.hpp duplication block: (261, 306)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+261
+using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+262
+using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+263
+264
+// Precompute strides (identical for all chunk views)
+265
+DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
+266
+DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+267
+268
+// Ping-pong state: tracks the deferred TSTORE from the previous iteration
+269
+// usePing: true → next TLOAD goes into pingTile (EVENT_ID0)
+270
+// false → next TLOAD goes into pongTile (EVENT_ID1)
+271
+// hasPending: whether there is a deferred TSTORE waiting to be issued
+272
+//
+273
+// Pipeline overlap: TSTORE and TLOAD are dispatched to separate HW engines
+274
+// (MTE3 and MTE2). Within each iteration, they run concurrently. The
+275
+// wait_flag at the end ensures storeTile's UB is safe to reuse before
+276
+// the NEXT iteration's TLOAD can overwrite it.
+277
+//
+278
+// MTE2 queue: [..., TLOAD(loadTile), set_flag(curEvent), wait_flag(prevEvent), ...]
+279
+// MTE3 queue: [..., wait_flag(prevEvent), TSTORE(storeTile), set_flag(prevEvent), ...]
+280
+//
+281
+// The TLOAD and TSTORE in the same iteration execute in parallel on their
+282
+// respective engines. The wait_flag(MTE3→MTE2) is AFTER the TLOAD in MTE2's
+283
+// queue, so it doesn't block the current TLOAD — only the NEXT one.
+284
+bool usePing = true;
+285
+bool hasPending = false;
+286
+int64_t pendingDstOffset = 0;
+287
+int pendingRows = 0;
+288
+int pendingCols = 0;
+289
+290
+for (int i0 = 0; i0 < gShape0; ++i0) {
+291
+for (int i1 = 0; i1 < gShape1; ++i1) {
+292
+for (int i2 = 0; i2 < gShape2; ++i2) {
+293
+int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
+294
+static_cast<int64_t>(i2) * srcStride2;
+295
+int64_t dstBase = static_cast<int64_t>(i0)
+60、文件路径:include/pto/comm/TBroadCast.hpp:266
+问题描述：duplicate lines: 24 file path: include/pto/comm/TBroadCast.hpp duplication block: (98, 132), (266, 295)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+266
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+267
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+268
+}
+269
+return;
+270
+}
+271
+272
+// ---- 2D sliding chunked path with ping-pong double buffering ----
+273
+274
+constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+275
+constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+276
+277
+if constexpr (!isDynamicRow) {
+278
+PTO_ASSERT(gShape3 % tileValidRow == 0,
+279
+"TBROADCAST chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+280
+"Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
+281
+}
+282
+if constexpr (!isDynamicCol) {
+283
+PTO_ASSERT(gShape4 % tileValidCol == 0,
+284
+"TBROADCAST chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+285
+"Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+286
+}
+287
+288
+const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+289
+const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+290
+const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+291
+const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+292
+const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+293
+294
+const int dstStride0 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_0);
+295
+const int dstStride1 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_1);
+61、文件路径:include/pto/comm/TGather.hpp:271
+问题描述：duplicate lines: 14 file path: include/pto/comm/TGather.hpp duplication block: (89, 107), (271, 288)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+271
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+272
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+273
+return;
+274
+}
+275
+276
+const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+277
+278
+using DynShape5D = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+279
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+280
+using DstViewT = GlobalTensor<T, DynShape5D, DynStride, GlobalDstData::layout>;
+281
+282
+DynShape5D perRankShape(gShape0, gShape1, gShape2, gShape3, gShape4);
+283
+DynStride dstViewStride(dstGlobalData.GetStride(GlobalTensorDim::DIM_0),
+284
+dstGlobalData.GetStride(GlobalTensorDim::DIM_1),
+285
+dstGlobalData.GetStride(GlobalTensorDim::DIM_2), dstStride3,
+286
+dstGlobalData.GetStride(GlobalTensorDim::DIM_4));
+287
+288
+for (int r = 0; r < nranks; ++r) {
+62、文件路径:include/pto/comm/TScatter.hpp:272
+问题描述：duplicate lines: 16 file path: include/pto/comm/TScatter.hpp duplication block: (89, 109), (272, 291)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+272
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+273
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+274
+return;
+275
+}
+276
+277
+const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+278
+279
+using DynShape5D = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+280
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+281
+using SrcViewT = GlobalTensor<T, DynShape5D, DynStride, GlobalSrcData::layout>;
+282
+283
+DynShape5D perRankShape(gShape0, gShape1, gShape2, gShape3, gShape4);
+284
+DynStride srcViewStride(srcGlobalData.GetStride(GlobalTensorDim::DIM_0),
+285
+srcGlobalData.GetStride(GlobalTensorDim::DIM_1),
+286
+srcGlobalData.GetStride(GlobalTensorDim::DIM_2), srcStride3,
+287
+srcGlobalData.GetStride(GlobalTensorDim::DIM_4));
+288
+289
+for (int r = 0; r < nranks; ++r) {
+290
+int64_t srcOffset = static_cast<int64_t>(r) * perRankRows * srcStride3;
+291
+SrcViewT srcView(srcGlobalData.data() + srcOffset, perRankShape, srcViewStride);
+63、文件路径:include/pto/comm/TScatter.hpp:297
+问题描述：duplicate lines: 10 file path: include/pto/comm/TBroadCast.hpp duplication block: (265, 278) file path: include/pto/comm/TScatter.hpp duplication block: (297, 310)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+297
+TSTORE(parallelGroup[r], pingTile);
+298
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+299
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+300
+}
+301
+return;
+302
+}
+303
+304
+// ---- 2D sliding chunked path with ping-pong double buffering ----
+305
+306
+constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+307
+constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+308
+309
+if constexpr (!isDynamicRow) {
+310
+PTO_ASSERT(gShape3 % tileValidRow == 0,
+64、文件路径:include/pto/comm/TReduce.hpp:302
+问题描述：the cyclomatic complexity of the method {TREDUCE_IMPL()} is 35, it is over 20
+规则：超大圈复杂度[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+297
+// [TLOAD remote0] -> [Reduce remote0 | TLOAD remote1] -> [Reduce remote1 | TLOAD remote2] -> ...
+298
+//
+299
+// Constraints: same as TREDUCE_IMPL for chunked mode.
+300
+// ============================================================================
+301
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+302
+PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+303
+TileData &pingTile, TileData &pongTile, ReduceOp op)
+304
+{
+305
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+306
+using T = typename GlobalSrcData::RawDType;
+65、文件路径:include/pto/comm/TReduce.hpp:302
+问题描述：the depth of the method {TREDUCE_IMPL()} is 9, it is over 5
+规则：超大深度函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+297
+// [TLOAD remote0] -> [Reduce remote0 | TLOAD remote1] -> [Reduce remote1 | TLOAD remote2] -> ...
+298
+//
+299
+// Constraints: same as TREDUCE_IMPL for chunked mode.
+300
+// ============================================================================
+301
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+302
+PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+303
+TileData &pingTile, TileData &pongTile, ReduceOp op)
+304
+{
+305
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+306
+using T = typename GlobalSrcData::RawDType;
+66、文件路径:include/pto/comm/TReduce.hpp:302
+问题描述：the nbnc line of the method {TREDUCE_IMPL()} is 166, it is over 50
+规则：超大函数[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+297
+// [TLOAD remote0] -> [Reduce remote0 | TLOAD remote1] -> [Reduce remote1 | TLOAD remote2] -> ...
+298
+//
+299
+// Constraints: same as TREDUCE_IMPL for chunked mode.
+300
+// ============================================================================
+301
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData>
+302
+PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+303
+TileData &pingTile, TileData &pongTile, ReduceOp op)
+304
+{
+305
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+306
+using T = typename GlobalSrcData::RawDType;
+67、文件路径:include/pto/comm/TReduce.hpp:304
+问题描述：duplicate lines: 22 file path: include/pto/comm/TReduce.hpp duplication block: (80, 110), (304, 334)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+304
+{
+305
+using GlobalSrcData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
+306
+using T = typename GlobalSrcData::RawDType;
+307
+308
+// Type checks
+309
+static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TREDUCE: GlobalData type mismatch!");
+310
+static_assert(std::is_same_v<T, typename TileData::DType>,
+311
+"TREDUCE: TileData element type must match GlobalData element type");
+312
+313
+const int rootIdx = parallelGroup.GetRootIdx();
+314
+const int nranks = parallelGroup.GetSize();
+315
+316
+// Check PG size
+317
+PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
+318
+PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
+319
+320
+// Get GlobalTensor dimensions from root's source tensor
+321
+GlobalSrcData &refTensor = parallelGroup[rootIdx];
+322
+const int gShape0 = refTensor.GetShape(GlobalTensorDim::DIM_0);
+323
+const int gShape1 = refTensor.GetShape(GlobalTensorDim::DIM_1);
+324
+const int gShape2 = refTensor.GetShape(GlobalTensorDim::DIM_2);
+325
+const int gShape3 = refTensor.GetShape(GlobalTensorDim::DIM_3);
+326
+const int gShape4 = refTensor.GetShape(GlobalTensorDim::DIM_4);
+327
+328
+const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
+329
+const int tileValidRow = accTileData.GetValidRow();
+330
+const int tileValidCol = accTileData.GetValidCol();
+331
+332
+if (totalRows == 0 || gShape4 == 0) {
+333
+return;
+334
+}
+68、文件路径:include/pto/comm/TGather.hpp:314
+问题描述：duplicate lines: 15 file path: include/pto/comm/TGather.hpp duplication block: (139, 158), (314, 331)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+314
+}
+315
+316
+const int srcStride0 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_0);
+317
+const int srcStride1 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_1);
+318
+const int srcStride2 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_2);
+319
+const int srcStride3 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_3);
+320
+const int srcStride4 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_4);
+321
+322
+const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
+323
+const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
+324
+const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
+325
+const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+326
+const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
+327
+328
+using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+329
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+330
+using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+331
+using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+69、文件路径:include/pto/comm/TPut.hpp:316
+问题描述：duplicate lines: 10 file path: include/pto/comm/TGet.hpp duplication block: (295, 309) file path: include/pto/comm/TPut.hpp duplication block: (316, 332)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+316
+if constexpr (isDynamicCol)
+317
+loadTile.ColMaskInternal = currentCols;
+318
+319
+DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+320
+SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
+321
+322
+if (hasPending) {
+323
+// The other tile holds data from the previous TLOAD
+324
+TileData &storeTile = usePing ? pongTile : pingTile;
+325
+event_t prevEvent = usePing ? EVENT_ID1 : EVENT_ID0;
+326
+327
+// Wait for previous TLOAD to finish (data in storeTile is ready)
+328
+wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
+329
+330
+// Build view for the deferred TSTORE
+331
+DynShape pendShape(1, 1, 1, pendingRows, pendingCols);
+332
+DstViewT pendView(dstGlobalData.data() + pendingDstOffset, pendShape, dstChunkStride);
+70、文件路径:include/pto/comm/TScatter.hpp:316
+问题描述：duplicate lines: 17 file path: include/pto/comm/TBroadCast.hpp duplication block: (121, 143), (286, 305) file path: include/pto/comm/TScatter.hpp duplication block: (140, 161), (316, 335)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+316
+}
+317
+318
+const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+319
+const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+320
+const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+321
+const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+322
+const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+323
+324
+const int dstStride0 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_0);
+325
+const int dstStride1 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_1);
+326
+const int dstStride2 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_2);
+327
+const int dstStride3 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_3);
+328
+const int dstStride4 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_4);
+329
+330
+using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+331
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+332
+using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+333
+using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+334
+DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
+335
+DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+71、文件路径:include/pto/comm/TScatter.hpp:326
+问题描述：duplicate lines: 12 file path: include/pto/comm/TBroadCast.hpp duplication block: (296, 310) file path: include/pto/comm/TScatter.hpp duplication block: (326, 340)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+326
+const int dstStride2 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_2);
+327
+const int dstStride3 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_3);
+328
+const int dstStride4 = parallelGroup[0].GetStride(GlobalTensorDim::DIM_4);
+329
+330
+using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+331
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+332
+using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+333
+using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+334
+DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
+335
+DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+336
+337
+// Ping-pong state
+338
+bool usePing = true;
+339
+bool hasPending = false;
+340
+int64_t pendingDstOffset = 0;
+72、文件路径:include/pto/comm/TPut.hpp:336
+问题描述：duplicate lines: 18 file path: include/pto/comm/TBroadCast.hpp duplication block: (363, 386) file path: include/pto/comm/TGather.hpp duplication block: (388, 410) file path: include/pto/comm/TGet.hpp duplication block: (313, 334) file path: include/pto/comm/TPut.hpp duplication block: (336, 362)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+336
+TLOAD(loadTile, srcView);
+337
+338
+set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent); // storeTile TSTORE done
+339
+set_flag(PIPE_MTE2, PIPE_MTE3, curEvent); // loadTile TLOAD done
+340
+341
+// Ensure storeTile's UB has been fully read by MTE3 before
+342
+// it can be overwritten by a future TLOAD.
+343
+// Note: this wait is AFTER the TLOAD in MTE2's queue, so the
+344
+// current TLOAD already runs in parallel with TSTORE.
+345
+wait_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
+346
+} else {
+347
+// First chunk: just issue TLOAD (no pending TSTORE yet)
+348
+TLOAD(loadTile, srcView);
+349
+set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
+350
+}
+351
+352
+// Record this chunk as pending for the next iteration
+353
+pendingDstOffset = dstOffset;
+354
+pendingRows = currentRows;
+355
+pendingCols = currentCols;
+356
+hasPending = true;
+357
+usePing = !usePing;
+358
+}
+359
+}
+360
+}
+361
+}
+362
+}
+73、文件路径:include/pto/comm/TReduce.hpp:340
+问题描述：duplicate lines: 12 file path: include/pto/comm/TReduce.hpp duplication block: (113, 127), (340, 354)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+340
+if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
+341
+// Single rank case: just copy local data to output
+342
+if (nranks == 1) {
+343
+TLOAD(accTileData, parallelGroup[rootIdx]);
+344
+set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+345
+wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+346
+TSTORE(dstGlobalData, accTileData);
+347
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0); // Wait for TSTORE completion
+348
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+349
+return;
+350
+}
+351
+352
+// Step 1: Load root data into accumulator
+353
+TLOAD(accTileData, parallelGroup[rootIdx]);
+354
+set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+74、文件路径:include/pto/comm/TGather.hpp:342
+问题描述：duplicate lines: 11 file path: include/pto/comm/TGather.hpp duplication block: (162, 174), (342, 354)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+342
+for (int r = 0; r < nranks; ++r) {
+343
+int64_t rankDstBase = static_cast<int64_t>(r) * perRankRows * dstStride3;
+344
+345
+for (int i0 = 0; i0 < gShape0; ++i0) {
+346
+for (int i1 = 0; i1 < gShape1; ++i1) {
+347
+for (int i2 = 0; i2 < gShape2; ++i2) {
+348
+int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
+349
+static_cast<int64_t>(i2) * srcStride2;
+350
+int64_t dstBase = rankDstBase + static_cast<int64_t>(i0) * dstStride0 +
+351
+static_cast<int64_t>(i1) * dstStride1 + static_cast<int64_t>(i2) * dstStride2;
+352
+353
+for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+354
+int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+75、文件路径:include/pto/comm/TScatter.hpp:345
+问题描述：duplicate lines: 11 file path: include/pto/comm/TScatter.hpp duplication block: (163, 175), (345, 357)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+345
+for (int r = 0; r < nranks; ++r) {
+346
+int64_t rankSrcBase = static_cast<int64_t>(r) * perRankRows * srcStride3;
+347
+348
+for (int i0 = 0; i0 < gShape0; ++i0) {
+349
+for (int i1 = 0; i1 < gShape1; ++i1) {
+350
+for (int i2 = 0; i2 < gShape2; ++i2) {
+351
+int64_t srcBase = rankSrcBase + static_cast<int64_t>(i0) * srcStride0 +
+352
+static_cast<int64_t>(i1) * srcStride1 + static_cast<int64_t>(i2) * srcStride2;
+353
+int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+354
+static_cast<int64_t>(i2) * dstStride2;
+355
+356
+for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+357
+int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+76、文件路径:include/pto/comm/TScatter.hpp:353
+问题描述：duplicate lines: 11 file path: include/pto/comm/TBroadCast.hpp duplication block: (319, 334) file path: include/pto/comm/TGet.hpp duplication block: (276, 290) file path: include/pto/comm/TPut.hpp duplication block: (295, 310) file path: include/pto/comm/TScatter.hpp duplication block: (353, 368)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+353
+int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+354
+static_cast<int64_t>(i2) * dstStride2;
+355
+356
+for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+357
+int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+358
+359
+for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
+360
+int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
+361
+362
+int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+363
+static_cast<int64_t>(colOff) * srcStride4;
+364
+int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+365
+static_cast<int64_t>(colOff) * dstStride4;
+366
+367
+// Select load tile
+368
+TileData &loadTile = usePing ? pingTile : pongTile;
+77、文件路径:include/pto/comm/TPut.hpp:354
+问题描述：duplicate lines: 13 file path: include/pto/comm/TBroadCast.hpp duplication block: (378, 393) file path: include/pto/comm/TGet.hpp duplication block: (326, 341) file path: include/pto/comm/TPut.hpp duplication block: (354, 370)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+354
+pendingRows = currentRows;
+355
+pendingCols = currentCols;
+356
+hasPending = true;
+357
+usePing = !usePing;
+358
+}
+359
+}
+360
+}
+361
+}
+362
+}
+363
+364
+// Epilogue: drain the last pending TSTORE
+365
+if (hasPending) {
+366
+// After the last flip, the tile holding the final data is the opposite of usePing
+367
+TileData &lastTile = usePing ? pongTile : pingTile;
+368
+event_t lastEvent = usePing ? EVENT_ID1 : EVENT_ID0;
+369
+370
+wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
+78、文件路径:include/pto/comm/TScatter.hpp:356
+问题描述：duplicate lines: 15 file path: include/pto/comm/TBroadCast.hpp duplication block: (322, 343) file path: include/pto/comm/TGather.hpp duplication block: (353, 373) file path: include/pto/comm/TGet.hpp duplication block: (279, 298) file path: include/pto/comm/TPut.hpp duplication block: (298, 319) file path: include/pto/comm/TScatter.hpp duplication block: (356, 376)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+356
+for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+357
+int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+358
+359
+for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
+360
+int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
+361
+362
+int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+363
+static_cast<int64_t>(colOff) * srcStride4;
+364
+int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+365
+static_cast<int64_t>(colOff) * dstStride4;
+366
+367
+// Select load tile
+368
+TileData &loadTile = usePing ? pingTile : pongTile;
+369
+event_t curEvent = usePing ? EVENT_ID0 : EVENT_ID1;
+370
+371
+if constexpr (isDynamicRow)
+372
+loadTile.RowMaskInternal = currentRows;
+373
+if constexpr (isDynamicCol)
+374
+loadTile.ColMaskInternal = currentCols;
+375
+376
+DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+79、文件路径:include/pto/comm/TPut.hpp:359
+问题描述：duplicate lines: 10 file path: include/pto/comm/TGet.hpp duplication block: (331, 344) file path: include/pto/comm/TPut.hpp duplication block: (359, 373)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+359
+}
+360
+}
+361
+}
+362
+}
+363
+364
+// Epilogue: drain the last pending TSTORE
+365
+if (hasPending) {
+366
+// After the last flip, the tile holding the final data is the opposite of usePing
+367
+TileData &lastTile = usePing ? pongTile : pingTile;
+368
+event_t lastEvent = usePing ? EVENT_ID1 : EVENT_ID0;
+369
+370
+wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
+371
+372
+DynShape lastShape(1, 1, 1, pendingRows, pendingCols);
+373
+DstViewT lastView(dstGlobalData.data() + pendingDstOffset, lastShape, dstChunkStride);
+80、文件路径:include/pto/comm/TScatter.hpp:364
+问题描述：duplicate lines: 15 file path: include/pto/comm/TBroadCast.hpp duplication block: (330, 355) file path: include/pto/comm/TGet.hpp duplication block: (287, 308) file path: include/pto/comm/TPut.hpp duplication block: (306, 331) file path: include/pto/comm/TScatter.hpp duplication block: (364, 386)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+364
+int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+365
+static_cast<int64_t>(colOff) * dstStride4;
+366
+367
+// Select load tile
+368
+TileData &loadTile = usePing ? pingTile : pongTile;
+369
+event_t curEvent = usePing ? EVENT_ID0 : EVENT_ID1;
+370
+371
+if constexpr (isDynamicRow)
+372
+loadTile.RowMaskInternal = currentRows;
+373
+if constexpr (isDynamicCol)
+374
+loadTile.ColMaskInternal = currentCols;
+375
+376
+DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+377
+SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
+378
+379
+if (hasPending) {
+380
+TileData &storeTile = usePing ? pongTile : pingTile;
+381
+event_t prevEvent = usePing ? EVENT_ID1 : EVENT_ID0;
+382
+383
+// Wait for previous TLOAD to finish
+384
+wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
+385
+386
+DynShape pendShape(1, 1, 1, pendingRows, pendingCols);
+81、文件路径:include/pto/comm/TScatter.hpp:391
+问题描述：duplicate lines: 10 file path: include/pto/comm/TGather.hpp duplication block: (387, 401) file path: include/pto/comm/TScatter.hpp duplication block: (391, 405)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+391
+TSTORE(dstView, storeTile);
+392
+TLOAD(loadTile, srcView);
+393
+394
+set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent); // store done
+395
+set_flag(PIPE_MTE2, PIPE_MTE3, curEvent); // load done
+396
+397
+// Ensure storeTile UB is safe before overwrite
+398
+wait_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
+399
+} else {
+400
+// First chunk: just issue TLOAD
+401
+TLOAD(loadTile, srcView);
+402
+set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
+403
+}
+404
+405
+pendingDstOffset = dstOffset;
+82、文件路径:include/pto/comm/TReduce.hpp:397
+问题描述：duplicate lines: 31 file path: include/pto/comm/TReduce.hpp duplication block: (151, 200), (397, 440)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+397
+TSTORE(dstGlobalData, accTileData);
+398
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+399
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+400
+return;
+401
+}
+402
+403
+// ---- 2D sliding chunked path ----
+404
+//
+405
+// Strategy: same 2D sliding as TREDUCE_IMPL, but within each chunk the
+406
+// remote-rank reduction uses ping-pong double buffering.
+407
+408
+constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+409
+constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+410
+411
+if constexpr (!isDynamicRow) {
+412
+PTO_ASSERT(gShape3 % tileValidRow == 0,
+413
+"TREDUCE chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+414
+"Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
+415
+}
+416
+if constexpr (!isDynamicCol) {
+417
+PTO_ASSERT(gShape4 % tileValidCol == 0,
+418
+"TREDUCE chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+419
+"Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+420
+}
+421
+422
+// Source strides (from root's tensor, assumed same for all ranks)
+423
+const int srcStride0 = refTensor.GetStride(GlobalTensorDim::DIM_0);
+424
+const int srcStride1 = refTensor.GetStride(GlobalTensorDim::DIM_1);
+425
+const int srcStride2 = refTensor.GetStride(GlobalTensorDim::DIM_2);
+426
+const int srcStride3 = refTensor.GetStride(GlobalTensorDim::DIM_3);
+427
+const int srcStride4 = refTensor.GetStride(GlobalTensorDim::DIM_4);
+428
+429
+// Destination strides
+430
+const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
+431
+const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
+432
+const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
+433
+const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+434
+const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
+435
+436
+// View types with fully dynamic shape/stride
+83、文件路径:include/pto/comm/TScatter.hpp:407
+问题描述：duplicate lines: 14 file path: include/pto/comm/TGather.hpp duplication block: (402, 418) file path: include/pto/comm/TScatter.hpp duplication block: (407, 423)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+407
+pendingRows = currentRows;
+408
+pendingCols = currentCols;
+409
+hasPending = true;
+410
+usePing = !usePing;
+411
+}
+412
+}
+413
+}
+414
+}
+415
+}
+416
+}
+417
+418
+// Epilogue: drain the last pending chunk
+419
+if (hasPending) {
+420
+TileData &lastTile = usePing ? pongTile : pingTile;
+421
+event_t lastEvent = usePing ? EVENT_ID1 : EVENT_ID0;
+422
+423
+wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
+84、文件路径:include/pto/comm/TScatter.hpp:412
+问题描述：duplicate lines: 10 file path: include/pto/comm/TBroadCast.hpp duplication block: (382, 395) file path: include/pto/comm/TGather.hpp duplication block: (407, 420) file path: include/pto/comm/TGet.hpp duplication block: (330, 343) file path: include/pto/comm/TPut.hpp duplication block: (358, 372) file path: include/pto/comm/TScatter.hpp duplication block: (412, 425)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+412
+}
+413
+}
+414
+}
+415
+}
+416
+}
+417
+418
+// Epilogue: drain the last pending chunk
+419
+if (hasPending) {
+420
+TileData &lastTile = usePing ? pongTile : pingTile;
+421
+event_t lastEvent = usePing ? EVENT_ID1 : EVENT_ID0;
+422
+423
+wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
+424
+425
+DynShape lastShape(1, 1, 1, pendingRows, pendingCols);
+85、文件路径:include/pto/comm/TReduce.hpp:430
+问题描述：duplicate lines: 11 file path: include/pto/comm/TGather.hpp duplication block: (149, 160), (322, 333) file path: include/pto/comm/TGet.hpp duplication block: (111, 123), (248, 261) file path: include/pto/comm/TPut.hpp duplication block: (114, 126), (253, 266) file path: include/pto/comm/TReduce.hpp duplication block: (190, 202), (430, 442)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+430
+const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
+431
+const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
+432
+const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
+433
+const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+434
+const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
+435
+436
+// View types with fully dynamic shape/stride for chunk GlobalTensors
+437
+using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+438
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+439
+using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+440
+using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+441
+DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
+442
+DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+86、文件路径:include/pto/comm/TReduce.hpp:432
+问题描述：duplicate lines: 12 file path: include/pto/comm/TGet.hpp duplication block: (113, 128) file path: include/pto/comm/TPut.hpp duplication block: (116, 131) file path: include/pto/comm/TReduce.hpp duplication block: (192, 207), (432, 447)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+432
+const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
+433
+const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+434
+const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
+435
+436
+// View types with fully dynamic shape/stride for chunk GlobalTensors
+437
+using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+438
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+439
+using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+440
+using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+441
+DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
+442
+DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+443
+444
+// 2D sliding: iterate outer dims, then chunk rows (dim3) and columns (dim4)
+445
+for (int i0 = 0; i0 < gShape0; ++i0) {
+446
+for (int i1 = 0; i1 < gShape1; ++i1) {
+447
+for (int i2 = 0; i2 < gShape2; ++i2) {
+87、文件路径:include/pto/comm/TReduce.hpp:437
+问题描述：duplicate lines: 16 file path: include/pto/comm/TBroadCast.hpp duplication block: (138, 157) file path: include/pto/comm/TGet.hpp duplication block: (118, 137) file path: include/pto/comm/TPut.hpp duplication block: (121, 140) file path: include/pto/comm/TReduce.hpp duplication block: (197, 216), (437, 456)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+437
+using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+438
+using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+439
+using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+440
+using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+441
+DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
+442
+DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+443
+444
+// 2D sliding: iterate outer dims, then chunk rows (dim3) and columns (dim4)
+445
+for (int i0 = 0; i0 < gShape0; ++i0) {
+446
+for (int i1 = 0; i1 < gShape1; ++i1) {
+447
+for (int i2 = 0; i2 < gShape2; ++i2) {
+448
+int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
+449
+static_cast<int64_t>(i2) * srcStride2;
+450
+int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+451
+static_cast<int64_t>(i2) * dstStride2;
+452
+453
+for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+454
+int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+455
+456
+if constexpr (isDynamicRow) {
+88、文件路径:include/pto/comm/TReduce.hpp:446
+问题描述：duplicate lines: 10 file path: include/pto/comm/TReduce.hpp duplication block: (206, 217), (446, 457)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+446
+for (int i1 = 0; i1 < gShape1; ++i1) {
+447
+for (int i2 = 0; i2 < gShape2; ++i2) {
+448
+int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
+449
+static_cast<int64_t>(i2) * srcStride2;
+450
+int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+451
+static_cast<int64_t>(i2) * dstStride2;
+452
+453
+for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+454
+int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+455
+456
+if constexpr (isDynamicRow) {
+457
+accTileData.RowMaskInternal = currentRows;
+89、文件路径:include/pto/comm/TReduce.hpp:469
+问题描述：duplicate lines: 13 file path: include/pto/comm/TReduce.hpp duplication block: (227, 247), (469, 489)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+469
+}
+470
+471
+// Compute element offsets for this chunk
+472
+int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+473
+static_cast<int64_t>(colOff) * srcStride4;
+474
+int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+475
+static_cast<int64_t>(colOff) * dstStride4;
+476
+477
+DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+478
+479
+// Load root's chunk into accumulator
+480
+SrcViewT rootView(parallelGroup[rootIdx].data() + srcOffset, chunkShape, srcChunkStride);
+481
+TLOAD(accTileData, rootView);
+482
+483
+if (nranks == 1) {
+484
+// Single rank: just copy chunk
+485
+set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+486
+wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+487
+} else {
+488
+// Multi-rank: ping-pong reduce chunk from all remote ranks
+489
+set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+90、文件路径:include/pto/comm/TReduce.hpp:496
+问题描述：duplicate lines: 10 file path: include/pto/comm/TReduce.hpp duplication block: (358, 374), (496, 512)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+496
+set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
+497
+498
+// Wait for root data ready
+499
+wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+500
+501
+// Ping-pong reduce over remote ranks
+502
+for (int i = 0; i < numRemote; ++i) {
+503
+const bool hasNext = (i + 1 < numRemote);
+504
+const bool usePing = (i % 2 == 0);
+505
+506
+TileData &currentTile = usePing ? pingTile : pongTile;
+507
+TileData &nextTile = usePing ? pongTile : pingTile;
+508
+const auto currentEvent = usePing ? EVENT_ID1 : EVENT_ID2;
+509
+const auto nextEvent = usePing ? EVENT_ID2 : EVENT_ID1;
+510
+511
+// Start prefetch of next remote chunk (overlapped with reduction)
+512
+if (hasNext) {
+91、文件路径:include/pto/comm/TReduce.hpp:517
+问题描述：duplicate lines: 12 file path: include/pto/comm/TReduce.hpp duplication block: (376, 394), (517, 535)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+517
+set_flag(PIPE_MTE2, PIPE_V, nextEvent);
+518
+}
+519
+520
+// Wait for current remote data ready
+521
+wait_flag(PIPE_MTE2, PIPE_V, currentEvent);
+522
+523
+// Perform reduction with current remote data
+524
+detail::ReduceTiles(accTileData, currentTile, op);
+525
+526
+// Sync based on next operation
+527
+if (hasNext) {
+528
+set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+529
+wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+530
+} else {
+531
+// Last iteration: prepare for TSTORE
+532
+set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+533
+wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+534
+}
+535
+}
+92、文件路径:include/pto/comm/TReduce.hpp:536
+问题描述：duplicate lines: 11 file path: include/pto/comm/TReduce.hpp duplication block: (268, 280), (536, 548)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+536
+}
+537
+538
+// Store reduced chunk to destination
+539
+DstViewT dstView(dstGlobalData.data() + dstOffset, chunkShape, dstChunkStride);
+540
+TSTORE(dstView, accTileData);
+541
+set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+542
+wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+543
+}
+544
+}
+545
+}
+546
+}
+547
+}
+548
+}
+93、文件路径:include/pto/common/pto_tile.hpp:0
+问题描述：the nbnc line of the header file is 1378, it is over 500 (degraded: 1376->1378)
+规则：超大头文件[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+0
+94、文件路径:include/pto/common/pto_tile.hpp:0
+问题描述：the nbnc line of the header file is 1378, it is over 500 (degraded: 1376->1378)
+规则：超大头文件[C++]
+级别：
+一般
+状态：
+已忽略
+修改建议
+0
+95、文件路径:tests/run_comm_test.sh:0
+问题描述：License Header Invalid: NoLicenseHeader
+规则：OAT.3 许可证头
+级别：
+一般
+状态：
+未解决
+修改建议
+0
+96、文件路径:tests/npu/a2a3/comm/st/testcase/common.hpp:0
+问题描述：License Header Invalid: InvalidLicense
+规则：OAT.3 许可证头
+级别：
+致命
+状态：
+未解决
+修改建议
+0
+97、文件路径:tests/npu/a2a3/comm/st/testcase/common.hpp:111
+问题描述：duplicate lines: 14 file path: tests/npu/a2a3/comm/st/testcase/common.hpp duplication block: (61, 79), (111, 126)
+规则：重复代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+111
+aclshmemx_init_attr_t attributes;
+112
+attributes.my_pe = env.rank;
+113
+attributes.n_pes = env.size;
+114
+attributes.local_mem_size = env.heapBytes;
+115
+116
+size_t ipLen = 0;
+117
+if (env.ipPort != nullptr) {
+118
+for (; ipLen < ACLSHMEM_MAX_IP_PORT_LEN - 1 && env.ipPort[ipLen] != '\0'; ++ipLen) {
+119
+attributes.ip_port[ipLen] = env.ipPort[ipLen];
+120
+}
+121
+}
+122
+attributes.ip_port[ipLen] = '\0';
+123
+124
+constexpr int attrVersion = (1 << 16) + sizeof(aclshmemx_init_attr_t);
+125
+constexpr int DEFAULT_TIMEOUT = 120; // seconds
+126
+attributes.option_attr = {attrVersion, ACLSHMEM_DATA_OP_MTE, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, DEFAULT_TIMEOUT, -1};
+98、文件路径:tests/npu/a2a3/comm/st/testcase/common.hpp:253
+问题描述：redundant code, please delete it
+规则：冗余代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+248
+// ============================================================================
+249
+// TestContext: RAII-style ACL + Shmem initialization / teardown helper
+250
+//
+251
+// Usage:
+252
+// TestContext ctx;
+253
+// if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, "tcp://...")) return false;
+254
+// // ... test-specific logic ...
+255
+// return ctx.Finalize() && is_ok;
+256
+// ============================================================================
+257
+struct TestContext {
+258
+int32_t deviceId{-1};
+99、文件路径:tests/npu/a2a3/comm/st/testcase/common.hpp:255
+问题描述：redundant code, please delete it
+规则：冗余代码[C++]
+级别：
+一般
+状态：
+未解决
+修改建议
+250
+//
+251
+// Usage:
+252
+// TestContext ctx;
+253
+// if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, "tcp://...")) return false;
+254
+// // ... test-specific logic ...
+255
+// return ctx.Finalize() && is_ok;
+256
+// ============================================================================
+257
+struct TestContext {
+258
+int32_t deviceId{-1};
+259
+aclrtStream stream{nullptr};
+260
+int aclStatus{0};
+100、文件路径:tests/npu/a2a3/comm/st/testcase/common.hpp:276
+问题描述：Divisor nDevices may be 0, please check it.
+规则：G.EXP.22-CPP 确保除法和余数运算不会导致除零错误(被零除)
+级别：
+严重
+状态：
+未解决
+修改建议
+266
+{
+267
+int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
+268
+if (ret != 0) {
+269
+std::cerr << "[ERROR] Failed to init shmem tls\n";
+270
+return false;
+271
+}
+272
+if (nDevices <= 0 || nRanks <= 0) {
+273
+std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
+274
+return false;
+275
+}
+276
+deviceId = rankId % nDevices + firstDeviceId;
+277
+278
+aclStatus |= aclInit(nullptr);
+279
+aclStatus |= aclrtSetDevice(deviceId);
+280
+aclStatus |= aclrtCreateStream(&stream);
+281
+282
+ShmemEnv env;
+283
+env.rank = rankId;
+284
+env.size = nRanks;
+285
+env.ipPort = ipPort;
+共 286 条
+
+
+前往
+1
+页
