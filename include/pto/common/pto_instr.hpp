@@ -1398,6 +1398,15 @@ PTO_INST RecordEvent TFMOD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &s
     return {};
 }
 
+template <typename TileDataDst, typename TileDataSrc, typename TileDataPara, typename... WaitEvents>
+PTO_INST RecordEvent TDEQUANT(TileDataDst &dst, TileDataSrc &src, TileDataPara &scale, TileDataPara &offset,
+                              WaitEvents &...events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TDEQUANT, dst, src, scale, offset);
+    return {};
+}
+
 #ifdef PTO_NPU_ARCH_A5
 template <auto quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
           typename... WaitEvents>
