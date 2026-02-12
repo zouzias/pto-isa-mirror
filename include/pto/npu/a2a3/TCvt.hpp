@@ -363,7 +363,7 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
                                                      __ubuf__ int32_t *tempInt32Buf)
 {
     bool isHead = (dstRepeatStride == BLOCK_MAX_PER_REPEAT);
-    
+
     // Stride calculations for two-step conversion
     uint8_t step1Repeat = isHead ? static_cast<uint8_t>(2 * repeatNum) : repeatNum;
     uint16_t step1DstRepeatStride = isHead ? BLOCK_MAX_PER_REPEAT : static_cast<uint16_t>(srcRepeatStride * 2);
@@ -374,24 +374,30 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
     // Step 1: fp16 -> int32
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            vconv_f162s32r(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride, step1SrcRepeatStride);
+            vconv_f162s32r(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
+                           step1SrcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            vconv_f162s32a(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride, step1SrcRepeatStride);
+            vconv_f162s32a(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
+                           step1SrcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            vconv_f162s32f(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride, step1SrcRepeatStride);
+            vconv_f162s32f(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
+                           step1SrcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            vconv_f162s32c(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride, step1SrcRepeatStride);
+            vconv_f162s32c(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
+                           step1SrcRepeatStride);
             break;
         default:
-            vconv_f162s32z(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride, step1SrcRepeatStride);
+            vconv_f162s32z(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
+                           step1SrcRepeatStride);
     }
     pipe_barrier(PIPE_V);
-    
+
     // Step 2: int32 -> int16
-    vconv_s322s16(dst, tempInt32Buf, static_cast<uint8_t>(2 * repeatNum), dstBlockStride, 1, step2DstRepeatStride, step2SrcRepeatStride);
+    vconv_s322s16(dst, tempInt32Buf, static_cast<uint8_t>(2 * repeatNum), dstBlockStride, 1, step2DstRepeatStride,
+                  step2SrcRepeatStride);
 }
 
 // FP16 -> INT8 conversion

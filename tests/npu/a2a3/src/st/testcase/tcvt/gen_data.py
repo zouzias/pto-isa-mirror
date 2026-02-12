@@ -16,6 +16,7 @@ import numpy as np
 # Try to import PyTorch for golden data generation
 try:
     import torch
+
     HAS_TORCH = True
 except Exception:
     HAS_TORCH = False
@@ -242,12 +243,12 @@ def gen_golden(case_name, param):
             tmp = converted_golden
             is_int_type = np.issubdtype(tmp.dtype, np.integer)
             is_dst_signed = np.issubdtype(dsttype, np.signedinteger)
-            
+
             if is_int_type:
                 temp_dtype = np.int64 if is_dst_signed else np.uint64
             else:
                 temp_dtype = np.float64
-            
+
             tmp = tmp.astype(temp_dtype, copy=False)
             golden = np.clip(tmp, info.min, info.max).astype(dsttype)
     elif np.issubdtype(dsttype, np.floating):
@@ -300,7 +301,7 @@ def gen_golden(case_name, param):
                         is_pos_inf = np.isinf(x1_gm) & (x1_gm > 0)
                         is_signed_int = np.issubdtype(dsttype, np.signedinteger)
                         is_unsigned_int = np.issubdtype(dsttype, np.unsignedinteger)
-                        
+
                         if is_signed_int:
                             # Apply GPU behavior: +inf becomes -1 for signed integers
                             truncated[is_pos_inf] = -1
@@ -331,7 +332,7 @@ def gen_golden(case_name, param):
                         is_pos_inf_with_gpu = USE_PYTORCH_GPU_BEHAVIOR and np.isinf(val) and val > 0
                         is_signed_int = np.issubdtype(dsttype, np.signedinteger)
                         is_unsigned_int = np.issubdtype(dsttype, np.unsignedinteger)
-                        
+
                         if is_pos_inf_with_gpu:
                             if is_signed_int:
                                 # GPU behavior: +inf → -1 for signed integers

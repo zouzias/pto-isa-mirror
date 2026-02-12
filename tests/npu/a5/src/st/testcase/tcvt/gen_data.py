@@ -16,6 +16,7 @@ import numpy as np
 # Try to import optional type libraries
 try:
     import ml_dtypes
+
     HAS_ML_DTYPES = True
 except Exception:
     HAS_ML_DTYPES = False
@@ -23,6 +24,7 @@ except Exception:
 
 try:
     import en_dtypes
+
     HAS_EN_DTYPES = True
 except Exception:
     HAS_EN_DTYPES = False
@@ -31,6 +33,7 @@ except Exception:
 # Try to import PyTorch for golden data generation
 try:
     import torch
+
     HAS_TORCH = True
 except Exception:
     HAS_TORCH = False
@@ -306,22 +309,22 @@ if __name__ == "__main__":
         ("int64_fp32", np.int64, np.float32),
         ("int64_int32", np.int64, np.int32),
     ]
-    
+
     # Add FP8 and HiFloat8 conversions if available
     if HAS_ML_DTYPES:
-        type_pairs.extend([
-            ("fp32_fp8_e4m3", np.float32, fp8_e4m3),
-            ("fp32_fp8_e5m2", np.float32, fp8_e5m2),
-            ("fp8_e4m3_fp32", fp8_e4m3, np.float32),
-            ("fp8_e5m2_fp32", fp8_e5m2, np.float32),
-        ])
-    
+        type_pairs.extend(
+            [
+                ("fp32_fp8_e4m3", np.float32, fp8_e4m3),
+                ("fp32_fp8_e5m2", np.float32, fp8_e5m2),
+                ("fp8_e4m3_fp32", fp8_e4m3, np.float32),
+                ("fp8_e5m2_fp32", fp8_e5m2, np.float32),
+            ]
+        )
+
     if HAS_EN_DTYPES:
-        type_pairs.extend([
-            ("fp32_h8", np.float32, hifloat8),
-            ("fp16_h8", np.float16, hifloat8),
-            ("h8_fp32", hifloat8, np.float32),
-        ])
+        type_pairs.extend(
+            [("fp32_h8", np.float32, hifloat8), ("fp16_h8", np.float16, hifloat8), ("h8_fp32", hifloat8, np.float32)]
+        )
 
     # Shape configurations (32-byte aligned: Cols >= 32 for 8-bit types)
     shapes = [
