@@ -497,6 +497,10 @@ bool RunPutRing2DKernel(int rank_id, int n_ranks, int n_devices, int first_devic
         for (size_t c = 0; c < cols && is_ok; ++c) {
             size_t idx = r * cols + c;
             T value = reinterpret_cast<T *>(output_host)[idx];
+            if (n_ranks < 2) {
+                std::cout << "[DEBUG] I can't run this test with less than 2 ranks" << std::endl;
+                return false;
+            }
             T expected = static_cast<T>(idx + (rank_id + 1) % n_ranks * 10000);
             if (value != expected) {
                 std::cout << "Rank " << rank_id << " Device " << ctx.deviceId << " Status " << ctx.aclStatus
