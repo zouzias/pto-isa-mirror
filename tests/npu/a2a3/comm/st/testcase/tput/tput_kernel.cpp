@@ -1320,6 +1320,10 @@ bool RunPutRing2DSlidingKernel(int rank_id, int n_ranks, int n_devices, int firs
     bool is_ok = true;
     for (size_t i = 0; i < total_count && is_ok; ++i) {
         T value = reinterpret_cast<T *>(output_host)[i];
+        if (n_ranks < 2) {
+            std::cout << "[DEBUG] I can't run this test with less than 2 ranks" << std::endl;
+            return false;
+        }
         T expected = static_cast<T>(i + (rank_id + 1) % n_ranks * 10000);
         if (value != expected) {
             size_t row = i / total_cols;
