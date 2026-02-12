@@ -15,13 +15,8 @@ import numpy as np
 import ml_dtypes
 import en_dtypes
 
-try:
-    import torch
-
-    HAS_TORCH = True
-except ImportError:
-    print("Warning: PyTorch not available, using NumPy for saturation tests")
-    HAS_TORCH = False
+print("Warning: PyTorch not available, using NumPy for saturation tests")
+HAS_TORCH = False
 
 bfloat16 = np.float16  # Using float16 to simulate bfloat16 for data generation
 fp8_e5m2 = ml_dtypes.float8_e5m2

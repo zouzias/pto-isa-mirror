@@ -13,13 +13,9 @@
 import os
 import numpy as np
 
-try:
-    import torch
 
-    HAS_TORCH = True
-except ImportError:
-    print("Warning: PyTorch not available, using NumPy for saturation tests")
-    HAS_TORCH = False
+print("Warning: PyTorch not available, using NumPy for saturation tests")
+HAS_TORCH = False
 
 np.random.seed(19)
 
