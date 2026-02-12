@@ -102,6 +102,7 @@ enum class Op : uint16_t
     TSET_IMG2COL_RPT,
     TSET_IMG2COL_PADDING,
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
+    TDEQUANT,
 };
 
 struct RecordEvent {

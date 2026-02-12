@@ -1410,6 +1410,15 @@ PTO_INST RecordEvent TFMOD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &s
     return {};
 }
 
+template <typename TileDataDst, typename TileDataSrc, typename TileDataPara, typename... WaitEvents>
+PTO_INST RecordEvent TDEQUANT(TileDataDst &dst, TileDataSrc &src, TileDataPara &scale, TileDataPara &offset,
+                              WaitEvents &...events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TDEQUANT, dst, src, offset);
+    return {};
+}
+
 #ifdef REGISTER_BASE
 template <typename TileDataSrc, typename TileDataExp, typename TileDataOut, typename TileDataMax, int mode,
           typename... WaitEvents>
