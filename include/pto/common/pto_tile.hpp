@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/memory.hpp"
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
+#include "pto/common/debug.h"
 #ifdef __CPU_SIM
 #include <iomanip>
 #endif
@@ -1177,7 +1178,7 @@ public:
     {
         transpose_ = transpose;
     }
-#if defined REGISTER_BASE
+#ifndef PTO_NPU_ARCH_A2A3
     PTO_INTERNAL void SetDstStride(uint16_t dstStride)
     {
         dstStride_ = dstStride;
@@ -1217,7 +1218,7 @@ private:
     uint16_t repeatStride_ = 0;
     uint8_t repeatTime_ = 1;
     uint8_t repeatMode_ = 0;
-#if defined REGISTER_BASE
+#ifndef PTO_NPU_ARCH_A2A3
     uint16_t dstStride_ = 0;
     uint16_t dstMposition_ = 0;
 #endif
@@ -1397,6 +1398,8 @@ public:
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
+#if defined(__DAV_CUBE__)
+#ifdef PTO_NPU_ARCH_A2A3
     PTO_INTERNAL bool GetKAligned() const
     {
         return isKAligned_;
@@ -1405,17 +1408,47 @@ public:
     {
         isKAligned_ = isKAligned;
     }
-
+    PTO_INTERNAL void SetMadHF32Mode(RoundMode hf32TransMode = RoundMode::CAST_ROUND)
+    {
+        PTO_ASSERT(hf32TransMode == RoundMode::CAST_ROUND || hf32TransMode == RoundMode::CAST_RINT,
+                   "Unsupported RoundMode for HF32.");
+        set_ctrl(sbitset1(get_ctrl(), MAD_MODE_BIT));
+        if (hf32TransMode == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), MAD_ROUND_MODE_BIT));
+        } else if (hf32TransMode == RoundMode::CAST_RINT) {
+            set_ctrl(sbitset0(get_ctrl(), MAD_ROUND_MODE_BIT));
+        }
+    }
+#else
+    PTO_INTERNAL void SetMadTF32Mode(RoundMode tf32TransMode = RoundMode::CAST_ROUND)
+    {
+        PTO_ASSERT(tf32TransMode == RoundMode::CAST_ROUND || tf32TransMode == RoundMode::CAST_RINT,
+                   "Unsupported RoundMode for TF32.");
+        set_ctrl(sbitset1(get_ctrl(), MAD_MODE_BIT));
+        if (tf32TransMode == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), MAD_ROUND_MODE_BIT));
+        } else if (tf32TransMode == RoundMode::CAST_RINT) {
+            set_ctrl(sbitset0(get_ctrl(), MAD_ROUND_MODE_BIT));
+        }
+    }
+#endif
+    PTO_INTERNAL void ResetMadMode()
+    {
+        set_ctrl(sbitset0(get_ctrl(), MAD_MODE_BIT));
+    }
+#endif
 private:
     AICORE void assignData(TileDType data)
     {
         data_ = data;
     }
     TileDType data_;
+#ifdef PTO_NPU_ARCH_A2A3
     bool isKAligned_; // K-Alignedment for A3
+#endif
 };
 
-#ifdef MEMORY_BASE
+#ifdef PTO_NPU_ARCH_A2A3
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;
@@ -1425,7 +1458,7 @@ using TileLeftCompact = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::Ro
                              SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
 #endif
 
-#if defined(REGISTER_BASE) || defined(__CPU_SIM)
+#if !defined(PTO_NPU_ARCH_A2A3) || defined(__CPU_SIM)
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;

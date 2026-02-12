@@ -15,8 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
 
-#ifdef __CCE_AICORE__
-#ifdef MEMORY_BASE
+#ifdef PTO_NPU_ARCH_A2A3
 #include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/a2a3/TSync.hpp"
 #include "pto/npu/a2a3/TAdd.hpp"
@@ -104,8 +103,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TColExpandExpdif.hpp"
 #endif
 
-#ifdef REGISTER_BASE
-#if __NPU_ARCH__ != 3113
+#ifdef PTO_NPU_ARCH_A5
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/TAdd.hpp"
@@ -187,6 +185,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TDiv.hpp"
 #include "pto/npu/a5/TMul.hpp"
 #include "pto/npu/a5/TScatter.hpp"
+#include "pto/npu/a5/MGather.hpp"
+#include "pto/npu/a5/MScatter.hpp"
 #include "pto/npu/a5/TColExpandDiv.hpp"
 #include "pto/npu/a5/TColExpandMul.hpp"
 #include "pto/npu/a5/TColExpandSub.hpp"
@@ -197,10 +197,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TTri.hpp"
 #include "pto/npu/a5/TPrefetch.hpp"
 #include "pto/npu/a5/TInsert.hpp"
-#else
+#endif
+
+#ifdef PTO_NPU_ARCH_KIRIN9030
 #include "pto/npu/kirin9030/header.hpp"
-#endif
-#endif
 #endif
 
 #ifdef __CPU_SIM
@@ -245,12 +245,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TPartMin.hpp"
 #include "pto/cpu/TRowExpand.hpp"
 #include "pto/cpu/TRSqrt.hpp"
+#include "pto/cpu/TPrefetch.hpp"
 #include "pto/cpu/TCvt.hpp"
 #include "pto/cpu/TColMin.hpp"
 #include "pto/cpu/TColExpand.hpp"
 #include "pto/cpu/TScatter.hpp"
+#include "pto/cpu/TTRI.hpp"
 #include "pto/cpu/TSort32.hpp"
 #include "pto/cpu/MGatherScatter.hpp"
+#include "pto/cpu/TSync.hpp"
+#include "pto/cpu/TTest.hpp"
 #endif
 
 #endif
