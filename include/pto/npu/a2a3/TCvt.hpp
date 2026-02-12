@@ -354,8 +354,7 @@ PTO_INTERNAL void GenCastCallFp16ToInt16(__ubuf__ typename TileDataD::DType *dst
     }
 }
 
-// FP16 -> INT16 conversion (PyTorch-compatible for inf/-inf)
-// Two-step: fp16 -> int32 -> int16
+// FP16 -> INT16 conversion (PyTorch-compatible for inf/-inf): fp16 -> int32 -> int16
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD::DType *dst,
                                                      __ubuf__ typename TileDataS::DType *src, uint8_t repeatNum,
@@ -363,67 +362,36 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
                                                      uint16_t dstRepeatStride, uint16_t srcRepeatStride,
                                                      __ubuf__ int32_t *tempInt32Buf)
 {
-    uint8_t step1Repeat, step2Repeat;
-    uint16_t step1DstBlockStride, step1SrcBlockStride, step1DstRepeatStride, step1SrcRepeatStride;
-    uint16_t step2DstBlockStride, step2SrcBlockStride, step2DstRepeatStride, step2SrcRepeatStride;
+    bool isHead = (dstRepeatStride == BLOCK_MAX_PER_REPEAT);
+    
+    // Stride calculations for two-step conversion
+    uint8_t step1Repeat = isHead ? static_cast<uint8_t>(2 * repeatNum) : repeatNum;
+    uint16_t step1DstRepeatStride = isHead ? BLOCK_MAX_PER_REPEAT : static_cast<uint16_t>(srcRepeatStride * 2);
+    uint16_t step1SrcRepeatStride = isHead ? static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2) : srcRepeatStride;
+    uint16_t step2DstRepeatStride = isHead ? static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2) : dstRepeatStride;
+    uint16_t step2SrcRepeatStride = isHead ? BLOCK_MAX_PER_REPEAT : static_cast<uint16_t>(srcRepeatStride * 2);
 
-    if (dstRepeatStride == BLOCK_MAX_PER_REPEAT) {
-        // HEAD path: 64-element chunks (fp16: 4 blocks, int32: 8 blocks)
-        step1Repeat = static_cast<uint8_t>(2 * repeatNum);
-        step1DstBlockStride = 1;
-        step1SrcBlockStride = srcBlockStride;
-        step1DstRepeatStride = static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT);
-        step1SrcRepeatStride = static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2);
-        step2Repeat = step1Repeat;
-        step2DstBlockStride = dstBlockStride;
-        step2SrcBlockStride = 1;
-        step2DstRepeatStride = static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2);
-        step2SrcRepeatStride = static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT);
-    } else {
-        // REMAINDER path: contiguous output, doubled stride
-        step1Repeat = repeatNum;
-        step1DstBlockStride = 1;
-        step1SrcBlockStride = srcBlockStride;
-        step1DstRepeatStride = srcRepeatStride * 2;
-        step1SrcRepeatStride = srcRepeatStride;
-
-        step2Repeat = static_cast<uint8_t>(2 * repeatNum);
-        step2DstBlockStride = dstBlockStride;
-        step2SrcBlockStride = 1;
-        step2DstRepeatStride = dstRepeatStride;
-        step2SrcRepeatStride = step1DstRepeatStride;
-    }
-
+    // Step 1: fp16 -> int32
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            vconv_f162s32r(tempInt32Buf, src, step1Repeat, step1DstBlockStride, step1SrcBlockStride,
-                           step1DstRepeatStride, step1SrcRepeatStride);
+            vconv_f162s32r(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride, step1SrcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            vconv_f162s32a(tempInt32Buf, src, step1Repeat, step1DstBlockStride, step1SrcBlockStride,
-                           step1DstRepeatStride, step1SrcRepeatStride);
+            vconv_f162s32a(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride, step1SrcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            vconv_f162s32f(tempInt32Buf, src, step1Repeat, step1DstBlockStride, step1SrcBlockStride,
-                           step1DstRepeatStride, step1SrcRepeatStride);
+            vconv_f162s32f(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride, step1SrcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            vconv_f162s32c(tempInt32Buf, src, step1Repeat, step1DstBlockStride, step1SrcBlockStride,
-                           step1DstRepeatStride, step1SrcRepeatStride);
-            break;
-        case RoundMode::CAST_TRUNC:
-            vconv_f162s32z(tempInt32Buf, src, step1Repeat, step1DstBlockStride, step1SrcBlockStride,
-                           step1DstRepeatStride, step1SrcRepeatStride);
+            vconv_f162s32c(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride, step1SrcRepeatStride);
             break;
         default:
-            vconv_f162s32z(tempInt32Buf, src, step1Repeat, step1DstBlockStride, step1SrcBlockStride,
-                           step1DstRepeatStride, step1SrcRepeatStride);
-            break;
+            vconv_f162s32z(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride, step1SrcRepeatStride);
     }
-
     pipe_barrier(PIPE_V);
-    vconv_s322s16(dst, tempInt32Buf, step2Repeat, step2DstBlockStride, step2SrcBlockStride, step2DstRepeatStride,
-                  step2SrcRepeatStride);
+    
+    // Step 2: int32 -> int16
+    vconv_s322s16(dst, tempInt32Buf, static_cast<uint8_t>(2 * repeatNum), dstBlockStride, 1, step2DstRepeatStride, step2SrcRepeatStride);
 }
 
 // FP16 -> INT8 conversion

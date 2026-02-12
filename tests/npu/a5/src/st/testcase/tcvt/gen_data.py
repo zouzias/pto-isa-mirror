@@ -12,16 +12,34 @@
 
 import os
 import numpy as np
-import ml_dtypes
-import en_dtypes
 
-print("Warning: PyTorch not available, using NumPy for saturation tests")
-HAS_TORCH = False
+# Try to import optional type libraries
+try:
+    import ml_dtypes
+    HAS_ML_DTYPES = True
+except Exception:
+    HAS_ML_DTYPES = False
+    print("Warning: ml_dtypes not available, skipping FP8 tests")
+
+try:
+    import en_dtypes
+    HAS_EN_DTYPES = True
+except Exception:
+    HAS_EN_DTYPES = False
+    print("Warning: en_dtypes not available, skipping HiFloat8 tests")
+
+# Try to import PyTorch for golden data generation
+try:
+    import torch
+    HAS_TORCH = True
+except Exception:
+    HAS_TORCH = False
+    print("Warning: PyTorch not available or initialization failed, using NumPy for saturation tests")
 
 bfloat16 = np.float16  # Using float16 to simulate bfloat16 for data generation
-fp8_e5m2 = ml_dtypes.float8_e5m2
-fp8_e4m3 = ml_dtypes.float8_e4m3fn
-hifloat8 = en_dtypes.hifloat8
+fp8_e5m2 = ml_dtypes.float8_e5m2 if HAS_ML_DTYPES else None
+fp8_e4m3 = ml_dtypes.float8_e4m3fn if HAS_ML_DTYPES else None
+hifloat8 = en_dtypes.hifloat8 if HAS_EN_DTYPES else None
 np.random.seed(19)
 
 # PyTorch infinity handling: GPU (True) vs CPU (False)
@@ -51,10 +69,14 @@ def gen_golden(case_name, param):
     m, n = param.m, param.n
     valid_m, valid_n = param.valid_m, param.valid_n
 
+    # Build type tuples dynamically to exclude None types
+    float_types = tuple(t for t in (np.float32, np.float16, bfloat16) if t is not None)
+    int8_like_types = tuple(t for t in (np.int8, fp8_e5m2, fp8_e4m3, hifloat8) if t is not None)
+
     # Generate input data
-    if srctype in (np.float32, np.float16, bfloat16):
+    if srctype in float_types:
         x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
-    elif srctype in (np.int8, fp8_e5m2, fp8_e4m3, hifloat8):
+    elif srctype in int8_like_types:
         x1_gm = np.random.randint(-128, 128, [m, n]).astype(srctype)
     elif srctype == np.uint8:
         x1_gm = np.random.randint(0, 256, [m, n]).astype(srctype)
@@ -79,9 +101,12 @@ def gen_golden(case_name, param):
         "RoundMode::CAST_TRUNC": np.trunc,
     }
 
-    if np.issubdtype(srctype, np.floating) and (
-        np.issubdtype(dsttype, np.integer) or (srctype == np.float32 and dsttype == np.float32)
-    ):
+    is_float_src = np.issubdtype(srctype, np.floating)
+    is_int_dst = np.issubdtype(dsttype, np.integer)
+    is_f32_to_f32 = srctype == np.float32 and dsttype == np.float32
+    needs_rounding = is_float_src and (is_int_dst or is_f32_to_f32)
+
+    if needs_rounding:
         converted_golden = rounding_funcs.get(mode, lambda x: x)(x1_gm)
     else:
         converted_golden = x1_gm
@@ -116,9 +141,9 @@ def gen_golden(case_name, param):
             golden = np.array(golden_list, dtype=dsttype).reshape(converted_golden.shape)
         else:
             # Saturation ON: clamp to range (widen to int64/float64 to preserve sign)
-            widened = converted_golden.astype(
-                np.int64 if np.issubdtype(converted_golden.dtype, np.integer) else np.float64, copy=False
-            )
+            is_int_type = np.issubdtype(converted_golden.dtype, np.integer)
+            temp_dtype = np.int64 if is_int_type else np.float64
+            widened = converted_golden.astype(temp_dtype, copy=False)
             golden = np.clip(widened, info.min, info.max).astype(dsttype)
     elif np.issubdtype(dsttype, np.floating):
         info = np.finfo(dsttype)
@@ -200,13 +225,17 @@ def gen_saturation_golden(case_name, param):
         print(f"PyTorch ({behavior}): {srctype.__name__} → {dsttype.__name__}")
     else:
         # NumPy fallback
-        if np.issubdtype(srctype, np.floating) and np.issubdtype(dsttype, np.integer):
+        is_float_to_int = np.issubdtype(srctype, np.floating) and np.issubdtype(dsttype, np.integer)
+        if is_float_to_int:
             truncated_list = []
             info = np.iinfo(dsttype)
             for val in x1_gm.flat:
-                if np.isnan(val) or np.isinf(val):
-                    if USE_PYTORCH_GPU_BEHAVIOR and np.isinf(val) and val > 0:
-                        int_val = -1 if np.issubdtype(dsttype, np.signedinteger) else info.max
+                is_nan_or_inf = np.isnan(val) or np.isinf(val)
+                if is_nan_or_inf:
+                    is_pos_inf_with_gpu = USE_PYTORCH_GPU_BEHAVIOR and np.isinf(val) and val > 0
+                    is_signed_type = np.issubdtype(dsttype, np.signedinteger)
+                    if is_pos_inf_with_gpu:
+                        int_val = -1 if is_signed_type else info.max
                     else:
                         int_val = 0
                 else:
@@ -243,9 +272,6 @@ if __name__ == "__main__":
         ("fp32_int16", np.float32, np.int16),
         ("fp32_int32", np.float32, np.int32),
         ("fp32_int64", np.float32, np.int64),
-        ("fp32_fp8_e4m3", np.float32, fp8_e4m3),
-        ("fp32_fp8_e5m2", np.float32, fp8_e5m2),
-        ("fp32_h8", np.float32, hifloat8),
         ("fp32_fp32", np.float32, np.float32),
         # FP16 conversions
         ("fp16_fp32", np.float16, np.float32),
@@ -253,7 +279,6 @@ if __name__ == "__main__":
         ("fp16_int16", np.float16, np.int16),
         ("fp16_int8", np.float16, np.int8),
         ("fp16_uint8", np.float16, np.uint8),
-        ("fp16_h8", np.float16, hifloat8),
         # BF16 conversions
         ("bf16_fp32", bfloat16, np.float32),
         ("bf16_int32", bfloat16, np.int32),
@@ -280,11 +305,23 @@ if __name__ == "__main__":
         # I64 conversions
         ("int64_fp32", np.int64, np.float32),
         ("int64_int32", np.int64, np.int32),
-        # FP8 conversions
-        ("fp8_e4m3_fp32", fp8_e4m3, np.float32),
-        ("fp8_e5m2_fp32", fp8_e5m2, np.float32),
-        ("h8_fp32", hifloat8, np.float32),
     ]
+    
+    # Add FP8 and HiFloat8 conversions if available
+    if HAS_ML_DTYPES:
+        type_pairs.extend([
+            ("fp32_fp8_e4m3", np.float32, fp8_e4m3),
+            ("fp32_fp8_e5m2", np.float32, fp8_e5m2),
+            ("fp8_e4m3_fp32", fp8_e4m3, np.float32),
+            ("fp8_e5m2_fp32", fp8_e5m2, np.float32),
+        ])
+    
+    if HAS_EN_DTYPES:
+        type_pairs.extend([
+            ("fp32_h8", np.float32, hifloat8),
+            ("fp16_h8", np.float16, hifloat8),
+            ("h8_fp32", hifloat8, np.float32),
+        ])
 
     # Shape configurations (32-byte aligned: Cols >= 32 for 8-bit types)
     shapes = [
