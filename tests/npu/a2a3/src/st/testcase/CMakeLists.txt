@@ -125,6 +125,7 @@ trowexpandmax
 trowexpandmin
 trowexpandmul
 trowexpandsub
+trowcolexpandsub_subtile
 tcvt
 tmul
 tadd

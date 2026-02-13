@@ -19,15 +19,17 @@ namespace pto {
 
 // Subtile TSub: 1D uses counter mode; 2D uses mask + hw repeat
 
+template <typename T>
 PTO_INTERNAL inline void TSub_1D_vsub(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1)
 {
-    vsub(dst, src0, src1, 0, 1, 1, 1, 8, 8, 8)
+    vsub(dst, src0, src1, 0, 1, 1, 1, 8, 8, 8);
 }
 
+template <typename T>
 PTO_INTERNAL inline void TSub_2D_vsub(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1,
                                            uint8_t repeats, uint8_t repeatStride)
 {
-    vsub(dst, src0, src1, repeats, 1, 1, 1, repeatStride, repeatStride, repeatStride)
+    vsub(dst, src0, src1, repeats, 1, 1, 1, repeatStride, repeatStride, repeatStride);
 }
 
 template <typename T>
