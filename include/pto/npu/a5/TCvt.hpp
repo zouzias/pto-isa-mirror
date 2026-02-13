@@ -116,7 +116,7 @@ enum class CastMode
 
 // PyTorch alignment for edge cases (inf, -inf, nan, overflow)
 // 1 = PyTorch-compatible (uses NonSatTorch), 0 = standard (faster)
-#define EDGE_CASE_ALIGN_ENABLE 1
+#define EDGE_CASE_ALIGN_ENABLE 0
 
 #define FOR_ROWS                                     \
     for (uint16_t row = 0; row < validRows; row++) { \
