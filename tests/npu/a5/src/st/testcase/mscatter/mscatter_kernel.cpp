@@ -38,7 +38,10 @@ inline AICORE void runMSCATTER(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm
     TileData_idx idxTile(kSrcRows, kSrcCols);
 
     TASSIGN(srcTile, 0x0);
-    TASSIGN(idxTile, kSrcRows * kSrcCols * sizeof(T));
+    // Align indices offset to 32 bytes for proper hardware operation
+    constexpr int srcBytes = kSrcRows * kSrcCols * sizeof(T);
+    constexpr int idxOffset = ((srcBytes + 31) / 32) * 32;
+    TASSIGN(idxTile, idxOffset);
 
     GlobalData_src srcGlobal(src);
     GlobalData_idx idxGlobal(indices);
