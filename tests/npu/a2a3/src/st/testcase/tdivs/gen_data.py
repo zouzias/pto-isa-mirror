@@ -18,6 +18,11 @@ import numpy as np
 np.random.seed(23)
 
 
+def divide(dividend, divisor, dtype):
+    if dtype ==  np.float16 or dtype == np.float32:
+        return dividend / divisor 
+    return dividend // divisor
+
 def gen_golden_data(param):
     data_type = param.data_type
     rows = param.row
@@ -33,9 +38,10 @@ def gen_golden_data(param):
         for j in range(cols):
             match = re.search(r'(\d+)$', param.name)
             if int(match.group(1)) < 10:
-                output_arr[i, j] = input_arr[i, j] / divider[0, 0]
+                output_arr[i, j] = divide(input_arr[i, j], divider[0, 0], data_type)
             else:
-                output_arr[i, j] = divider[0, 0] / input_arr[i, j]
+                output_arr[i, j] = divide(divider[0, 0], input_arr[i, j], data_type)
+    
     input_arr.tofile('input.bin')
     with open("divider.bin", 'wb') as f:
         f.write(struct.pack('f', np.float32(divider[0, 0])))
