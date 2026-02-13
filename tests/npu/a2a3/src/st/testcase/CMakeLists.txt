@@ -128,6 +128,7 @@ trowexpandsub
 tcvt
 tmul
 tadd
+tadd_subtile
 taddplus
 tprelu
 tand
@@ -135,6 +136,7 @@ tor
 tshl
 tshr
 tpartadd
+tadd_subtile
 tpartmul
 tpartmin
 tpartmax
