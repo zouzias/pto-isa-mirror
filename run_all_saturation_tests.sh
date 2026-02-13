@@ -76,7 +76,7 @@ for test_name in "${SATURATION_TESTS[@]}"; do
     
     # Analyze the results
     echo -e "${CYAN}📊 Analyzing results...${NC}"
-    ./analyze_tcvt.sh "$test_name" > /tmp/analyze_output_$$.log 2>&1
+    ./analyze_tcvt.sh "$test_name" "$VERSION" > /tmp/analyze_output_$$.log 2>&1
     ANALYZE_EXIT_CODE=$?
     
     if [ $ANALYZE_EXIT_CODE -ne 0 ]; then
