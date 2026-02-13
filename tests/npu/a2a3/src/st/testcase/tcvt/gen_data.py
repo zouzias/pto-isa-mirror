@@ -400,6 +400,7 @@ if __name__ == "__main__":
         ("fp16_uint8", np.float16, np.uint8),
         # INT32 Source
         ("int32_fp32", np.int32, np.float32),
+        ("int32_fp16", np.int32, np.float16),
         ("int32_int16", np.int32, np.int16),
         ("int32_int64", np.int32, np.int64),
         # INT16 Source
