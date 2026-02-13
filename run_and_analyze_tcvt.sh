@@ -92,7 +92,7 @@ TEST_EXIT_CODE=$?
 if [ $TEST_EXIT_CODE -ne 0 ]; then
     echo ""
     echo -e "${RED}❌ Test execution failed with exit code $TEST_EXIT_CODE${NC}"
-    exit $TEST_EXIT_CODE
+    echo -e "${YELLOW}⚠️  Proceeding with analysis for debugging...${NC}"
 fi
 
 echo ""
@@ -105,19 +105,26 @@ echo ""
 sleep 1
 
 # Run the analysis
-./analyze_tcvt.sh "$TEST_NAME"
+./analyze_tcvt.sh "$TEST_NAME" "$VERSION"
 ANALYZE_EXIT_CODE=$?
 
-if [ $ANALYZE_EXIT_CODE -ne 0 ]; then
+echo ""
+if [ $TEST_EXIT_CODE -ne 0 ]; then
+    echo -e "${RED}════════════════════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${RED}  ❌ TEST FAILED (exit code $TEST_EXIT_CODE) - Analysis completed for debugging${NC}"
+    echo -e "${RED}════════════════════════════════════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "${RED}❌ Analysis failed with exit code $ANALYZE_EXIT_CODE${NC}"
+    exit $TEST_EXIT_CODE
+elif [ $ANALYZE_EXIT_CODE -ne 0 ]; then
+    echo -e "${RED}════════════════════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${RED}  ❌ Analysis failed with exit code $ANALYZE_EXIT_CODE${NC}"
+    echo -e "${RED}════════════════════════════════════════════════════════════════════════════════${NC}"
+    echo ""
     exit $ANALYZE_EXIT_CODE
+else
+    echo -e "${GREEN}════════════════════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}  ✅ COMPLETE: Test executed and analyzed successfully${NC}"
+    echo -e "${GREEN}════════════════════════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    exit 0
 fi
-
-echo ""
-echo -e "${GREEN}═══════════════════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  ✅ COMPLETE: Test executed and analyzed successfully${NC}"
-echo -e "${GREEN}═══════════════════════════════════════════════════════════════════════════════${NC}"
-echo ""
-
-exit 0

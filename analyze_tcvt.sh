@@ -1,6 +1,6 @@
 #!/bin/bash
 # Quick analyzer for TCVT saturation tests
-# Usage: ./analyze_tcvt.sh TCVTTest.saturation_int32_int16_1x32
+# Usage: ./analyze_tcvt.sh <test_case_name> [version]
 
 # ANSI color codes
 GREEN='\033[0;32m'
@@ -8,8 +8,20 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Find the build directory
-BUILD_DIR="tests/npu/a5/src/st/build"
+# Default version
+VERSION="${2:-a5}"
+
+# Map version to directory (a2/a3 share the same directory)
+if [ "$VERSION" = "a2" ] || [ "$VERSION" = "a3" ]; then
+    NPU_DIR="a2a3"
+else
+    NPU_DIR="$VERSION"
+fi
+
+# Find the build directory (version-specific)
+BUILD_DIR="tests/npu/$NPU_DIR/src/st/build"
+
+# Analysis script is always in a5 directory (shared script)
 SCRIPT_PATH="tests/npu/a5/src/st/testcase/tcvt/analyze_saturation.py"
 
 # Check if script exists
@@ -31,14 +43,18 @@ if [ $# -eq 0 ]; then
     echo -e "${GREEN}════════════════════════════════════════════════════════════════════════════════${NC}"
     echo ""
     echo -e "${YELLOW}📖 Usage:${NC}"
-    echo "  ./analyze_tcvt.sh <test_case_name>"
+    echo "  ./analyze_tcvt.sh <test_case_name> [version]"
     echo ""
-    echo -e "${YELLOW}💡 Example:${NC}"
+    echo -e "${YELLOW}💡 Examples:${NC}"
     echo "  ./analyze_tcvt.sh TCVTTest.saturation_int32_int16_1x32"
+    echo "  ./analyze_tcvt.sh TCVTTest.saturation_int32_int16_1x32 a3"
+    echo "  ./analyze_tcvt.sh TCVTTest.saturation_int32_int16_1x32 a5"
+    echo ""
+    echo -e "${YELLOW}📝 Default version: a5${NC}"
     echo ""
     echo -e "${YELLOW}🔗 Full workflow:${NC}"
     echo "  1. Run test:  python3 tests/script/run_st.py -r sim -v a5 -t tcvt -g TCVTTest.saturation_int32_int16_1x32"
-    echo "  2. Analyze:   ./analyze_tcvt.sh TCVTTest.saturation_int32_int16_1x32"
+    echo "  2. Analyze:   ./analyze_tcvt.sh TCVTTest.saturation_int32_int16_1x32 a5"
     echo ""
     
     # List available test cases in build directory
@@ -81,6 +97,7 @@ fi
 # Run the analysis
 echo -e "${GREEN}🔍 Analyzing test case: ${TEST_CASE}${NC}"
 echo -e "${GREEN}   Build directory: ${BUILD_DIR}${NC}"
+echo -e "${GREEN}   Version: ${VERSION} (NPU dir: ${NPU_DIR})${NC}"
 echo ""
 
 # Get absolute paths
