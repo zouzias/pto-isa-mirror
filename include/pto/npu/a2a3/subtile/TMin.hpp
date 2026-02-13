@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -13,36 +13,53 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/common/utils.hpp>
+#include "pto/npu/a2a3/subtile/subtile_tile.hpp"
 
 namespace pto {
 
-// Subtile 1:1 version of TMin: one subtile -> one vmin
-// Assumes full VL (no tail) and row-major contiguous layout.
+// Subtile TMin: 1D uses counter mode; 2D uses mask + hw repeat
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
-PTO_INTERNAL void TMIN_SUBTILE_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
+PTO_INTERNAL inline void TMin_1D_vmin(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1)
 {
-    using T = typename TileDataDst::DType;
-    static_assert(std::is_same_v<T, typename TileDataSrc0::DType> && std::is_same_v<T, typename TileDataSrc1::DType>,
-                  "Subtile TMin: dst/src0/src1 dtype must match.");
-    static_assert(TileDataDst::isRowMajor && TileDataSrc0::isRowMajor && TileDataSrc1::isRowMajor,
-                  "Subtile TMin: only supports row-major layout.");
+    vmin(dst, src0, src1, 0, 1, 1, 1, 8, 8, 8)
+}
 
+PTO_INTERNAL inline void TMin_2D_vmin(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1,
+                                           uint8_t repeats, uint8_t repeatStride)
+{
+    vmin(dst, src0, src1, repeats, 1, 1, 1, repeatStride, repeatStride, repeatStride)
+}
+
+template <typename T>
+PTO_INTERNAL void TMIN_SUBTILE_IMPL_1D(Subtile1D<T> &dst, Subtile1D<T> &src0, Subtile1D<T> &src1)
+{
+    PTO_ASSERT(dst.length() == src0.length() && dst.length() == src1.length(),
+               "Subtile 1D: length mismatch.");
+    set_mask_count();
+    SetVectorCount(dst.length());
+    TMin_1D_vmin((__ubuf__ T *)dst.data(), (__ubuf__ T *)src0.data(), (__ubuf__ T *)src1.data());
+    set_mask_norm();
+    SetFullVecMaskByDType<T>();
+}
+
+template <typename T>
+PTO_INTERNAL void TMIN_SUBTILE_IMPL_2D(Subtile2D<T> &dst, Subtile2D<T> &src0, Subtile2D<T> &src1)
+{
+    PTO_ASSERT(dst.getRows() == src0.getRows() && dst.getRows() == src1.getRows(),
+               "Subtile 2D: rows mismatch.");
+    PTO_ASSERT(dst.getCols() == src0.getCols() && dst.getCols() == src1.getCols(),
+               "Subtile 2D: cols mismatch.");
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-    static_assert(TileDataDst::Rows * TileDataDst::Cols == elementsPerRepeat,
-                  "Subtile TMin: tile must match exactly one VL (Rows*Cols == VL).");
+    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
+    PTO_ASSERT(dst.getCols() <= elementsPerRepeat, "Subtile 2D: cols must be <= VL.");
+    PTO_ASSERT(dst.getRows() <= REPEAT_MAX, "Subtile 2D: rows must be <= REPEAT_MAX.");
+    uint8_t repeatStride = dst.getRowStride() / blockSizeElem;
+    PTO_ASSERT(repeatStride <= REPEAT_STRIDE_MAX, "Subtile 2D: repeat stride too large.");
 
-    unsigned validRows = dst.GetValidRow();
-    unsigned validCols = dst.GetValidCol();
-    PTO_ASSERT(validRows == TileDataDst::Rows && validCols == TileDataDst::Cols,
-               "Subtile TMin: valid shape must equal full tile shape.");
-
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst.data());
-    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0.data());
-    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1.data());
-
-    // One intrinsic, no loops, no tail handling
-    vmin(dstPtr, src0Ptr, src1Ptr, /*repeats=*/1, 1, 1, 1, 8, 8, 8);
+    SetContMaskByDType<T>(dst.getCols());
+    TMin_2D_vmin((__ubuf__ T *)dst.data(), (__ubuf__ T *)src0.data(), (__ubuf__ T *)src1.data(),
+                      (uint8_t)dst.getRows(), repeatStride);
+    SetFullVecMaskByDType<T>();
 }
 
 } // namespace pto

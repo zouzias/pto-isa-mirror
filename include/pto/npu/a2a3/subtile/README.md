@@ -1,15 +1,20 @@
-# A2A3 Subtile (1:1) Simplified ISA
+# A2A3 Subtile (1D/2D) Simplified ISA
 
-This folder contains **minimal, subtile 1:1** versions of A2/A3 PTO ISA ops.
+This folder contains **minimal, subtile** versions of A2/A3 PTO ISA ops with a **new API**.
 
-Design goals:
-- **No row/col loops**
-- **No tail/mask handling** (assume full VL)
-- **Single vxxx intrinsic per subtile**
+## Subtile API
+- `Subtile1D<T>`: runtime length, **counter mode**, length can be > VL
+- `Subtile2D<T>`: runtime rows/cols, **mask + hw repeat**, constraints:
+  - `cols <= VL`
+  - `rows <= REPEAT_MAX` (<= 255)
 
-Assumptions:
-- `validRows == TileData::Rows` and `validCols == TileData::Cols`
-- `TileData::Rows * TileData::Cols == REPEAT_BYTE / sizeof(T)` (exact VL)
-- Row-major layout only
+## Design goals
+- **No row/col loops** in op code
+- **Single-instruction path** (counter mode for 1D, repeat+mask for 2D)
+
+## Assumptions
+- Row-major only
+- For 2D, `rowStride` is in elements
+- 2D uses `SetContMaskByDType(cols)` + repeat
 
 Use this for algorithm prototyping or teaching, **not** for general tiling.
