@@ -15,23 +15,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-
 template <uint32_t caseId>
 void launchTADDSTestCase(void *out, void *src, float scalar, aclrtStream stream);
 
 class TADDSTest : public testing::Test {
-public: 
+public:
 protected:
     void SetUp() override
-    { 
-    }
+    {}
 
     void TearDown() override
-    {
-    }
+    {}
 };
 
-std::string GetGoldenDir() {
+std::string GetGoldenDir()
+{
     const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
     const std::string caseName = testInfo->name();
     std::string suiteName = testInfo->test_suite_name();
@@ -39,16 +37,16 @@ std::string GetGoldenDir() {
     return fullPath;
 }
 
-template <uint32_t caseId, typename T, int row, int vaildRow, int col, int srcVaildCol>
+template <uint32_t caseId, typename T, int dstTileRow, int dstTileCol, int row, int vaildRow, int col, int srcVaildCol>
 bool TAddSTestFramework()
 {
     aclInit(nullptr);
     aclrtSetDevice(0);
-    
+
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    size_t dstByteSize = row * col * sizeof(T);
+    size_t dstByteSize = dstTileRow * dstTileCol * sizeof(T);
     size_t srcByteSize = row * col * sizeof(T);
     T *dstHost;
     T *srcHost;
@@ -65,8 +63,8 @@ bool TAddSTestFramework()
     ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
     std::string scalar_file = GetGoldenDir() + "/divider.bin";
     std::ifstream file(scalar_file, std::ios::binary);
-    
-    file.read(reinterpret_cast<char*>(&scalar), 4);
+
+    file.read(reinterpret_cast<char *>(&scalar), 4);
     file.close();
     aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
     launchTADDSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
@@ -95,37 +93,72 @@ bool TAddSTestFramework()
 
 TEST_F(TADDSTest, case1)
 {
-    bool ret = TAddSTestFramework<1, float, 32, 32, 64, 64>();
+    bool ret = TAddSTestFramework<1, float, 32, 64, 32, 32, 64, 64>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TADDSTest, case2)
 {
-    bool ret = TAddSTestFramework<2, aclFloat16, 63, 63, 64, 64>();
+    bool ret = TAddSTestFramework<2, aclFloat16, 63, 64, 63, 63, 64, 64>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TADDSTest, case3)
 {
-    bool ret = TAddSTestFramework<3, int32_t, 31, 31, 128, 128>();
+    bool ret = TAddSTestFramework<3, int32_t, 31, 128, 31, 31, 128, 128>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TADDSTest, case4)
 {
-    bool ret = TAddSTestFramework<4, int16_t, 15, 15, 192, 192>();
+    bool ret = TAddSTestFramework<4, int16_t, 15, 192, 15, 15, 192, 192>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TADDSTest, case5)
 {
-    bool ret = TAddSTestFramework<5, float, 7, 7, 448, 448>();
+    bool ret = TAddSTestFramework<5, float, 7, 448, 7, 7, 448, 448>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TADDSTest, case6)
 {
-    bool ret = TAddSTestFramework<6, float, 256, 256, 16, 16>();
+    bool ret = TAddSTestFramework<6, float, 256, 16, 256, 256, 16, 16>();
     EXPECT_TRUE(ret);
 }
 
+TEST_F(TADDSTest, case7)
+{
+    bool ret = TAddSTestFramework<7, float, 32, 128, 32, 32, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDSTest, case8)
+{
+    bool ret = TAddSTestFramework<8, aclFloat16, 63, 128, 63, 63, 64, 64>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDSTest, case9)
+{
+    bool ret = TAddSTestFramework<9, int32_t, 31, 256, 31, 31, 128, 128>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDSTest, case10)
+{
+    bool ret = TAddSTestFramework<10, int16_t, 15, 192, 15, 15, 192, 192>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDSTest, case11)
+{
+    bool ret = TAddSTestFramework<11, float, 7, 512, 7, 7, 448, 448>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TADDSTest, case12)
+{
+    bool ret = TAddSTestFramework<12, float, 256, 32, 256, 256, 16, 16>();
+    EXPECT_TRUE(ret);
+}

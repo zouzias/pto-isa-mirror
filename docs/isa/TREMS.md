@@ -1,15 +1,19 @@
 # TREMS
 
+
+## Tile Operation Diagram
+
+![TREMS tile operation](../figures/isa/TREMS.svg)
+
 ## Introduction
 
-Elementwise remainder with a scalar: `fmod(src, scalar)` (or `%` for integers).
+Elementwise remainder with a scalar: `%`.
 
 ## Math Interpretation
 
 For each element `(i, j)` in the valid region:
 
-- Integer types: $$\mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \bmod \mathrm{scalar}$$
-- Floating types: $$\mathrm{dst}_{i,j} = \mathrm{fmod}(\mathrm{src}_{i,j}, \mathrm{scalar})$$
+$$\mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \bmod \mathrm{scalar}$$
 
 ## Assembly Syntax
 
@@ -20,13 +24,26 @@ Synchronous form:
 ```text
 %dst = trems %src, %scalar : !pto.tile<...>, f32
 ```
+
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREMS(TileData& dst, TileData& src0, typename TileData::DType scalar, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
+                           WaitEvents &... events);
 ```
 
 ## Constraints
@@ -46,5 +63,32 @@ void example() {
   TileT x, out;
   TREMS(out, x, 3.0f);
 }
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = trems %src, %scalar : !pto.tile<...>, f32
+# IR Level 2 (DPS)
+pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 

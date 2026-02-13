@@ -1,5 +1,10 @@
 # TMATMUL_MX
 
+
+## Tile Operation Diagram
+
+![TMATMUL_MX tile operation](../figures/isa/TMATMUL_MX.svg)
+
 ## Introduction
 
 Matrix multiply (GEMM) with additional scaling tiles for mixed-precision / quantized matmul on supported targets.
@@ -32,6 +37,27 @@ Synchronous forms (conceptual):
 %c = tmatmul.mx.bias %a, %a_scale, %b, %b_scale, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
+### IR Level 1 (SSA)
+
+```text
+%c = pto.tmatmul.mx %a, %a_scale, %b, %b_scale : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>)
+-> !pto.tile<...>
+%c_out = pto.tmatmul.mx.acc %c_in, %a, %a_scale, %b, %b_scale : (!pto.tile<...>, !pto.tile<...>,
+!pto.tile<...>, !pto.tile<...>, !pto.tile<...>)  -> !pto.tile<...>
+%c = pto.tmatmul.mx.bias %a, %a_scale, %b, %b_scale, %bias : (!pto.tile<...>, !pto.tile<...>,
+!pto.tile<...>, !pto.tile<...>, !pto.tile<...>)  -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.tmatmul.mx ins(%a, %a_scale, %b, %b_scale : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>)
+outs(%c :  !pto.tile_buf<...>)
+pto.tmatmul.mx.acc ins(%c_in, %a, %a_scale, %b, %b_scale : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>,
+!pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c_out : !pto.tile_buf<...>)
+pto.tmatmul.mx.bias ins(%a, %a_scale, %b, %b_scale, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>,
+!pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -63,13 +89,84 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
 
 ## Examples
 
+### Auto
+
 ```cpp
 #include <pto/pto-inst.hpp>
 
 using namespace pto;
 
-void example() {
-  // Exact tile types depend on the target’s MX matmul ABI; this is a schematic example.
+void example_auto() {
+  using A = TileLeft<float8_e5m2_t, 16, 64>;
+  using B = TileRight<float8_e5m2_t, 64, 32>;
+  using ScaleA = TileLeftScale<float8_e8m0_t, 16, 2>;
+  using ScaleB = TileRightScale<float8_e8m0_t, 2, 32>;
+  using Bias = Tile<TileType::Bias, float, 1, 32>;
+  using C = TileAcc<float, 16, 32>;
+  A a;
+  B b;
+  ScaleA scaleA;
+  ScaleB scaleB;
+  Bias bias;
+  C c;
+  TMATMUL_MX(c, a, scaleA, b, scaleB, bias);
 }
+```
+
+### Manual
+
+```cpp
+#include <pto/pto-inst.hpp>
+
+using namespace pto;
+
+void example_manual() {
+  using A = TileLeft<float8_e5m2_t, 16, 64>;
+  using B = TileRight<float8_e5m2_t, 64, 32>;
+  using ScaleA = TileLeftScale<float8_e8m0_t, 16, 2>;
+  using ScaleB = TileRightScale<float8_e8m0_t, 2, 32>;
+  using Bias = Tile<TileType::Bias, float, 1, 32>;
+  using C = TileAcc<float, 16, 32>;
+  A a;
+  B b;
+  ScaleA scaleA;
+  ScaleB scaleB;
+  Bias bias;
+  C c;
+  TASSIGN(a, 0x1000);
+  TASSIGN(b, 0x2000);
+  TASSIGN(scaleA, GetScaleAddr(a.data()));
+  TASSIGN(scaleB, GetScaleAddr(b.data()));
+  TASSIGN(bias, 0x3000);
+  TASSIGN(c, 0x4000);
+  TMATMUL_MX(c, a, scaleA, b, scaleB, bias);
+}
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%c = pto.tmatmul.mx %a, %a_scale, %b, %b_scale : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>)
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%c = pto.tmatmul.mx %a, %a_scale, %b, %b_scale : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>)
+```
+
+### PTO Assembly Form
+
+```text
+%c = pto.tmatmul.mx %a, %a_scale, %b, %b_scale : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>)
+# IR Level 2 (DPS)
+pto.tmatmul.mx ins(%a, %a_scale, %b, %b_scale : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
 

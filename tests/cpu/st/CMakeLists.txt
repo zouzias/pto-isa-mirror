@@ -11,7 +11,12 @@
 cmake_minimum_required(VERSION 3.16)
 project(pto_test_cpu_sim)
 
-set(CMAKE_CXX_STANDARD 23)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 14.0)
+    set(CMAKE_CXX_STANDARD 23)
+else()
+    set(CMAKE_CXX_STANDARD 20)
+endif()
+
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -41,9 +46,36 @@ if (NOT GTest_FOUND)
     endif()
 endif()
 
+set(PTO_GLIBCXX_USE_CXX11_ABI "auto" CACHE STRING "Force _GLIBCXX_USE_CXX11_ABI (auto/0/1) for linking with system libs such as GTest.")
+set_property(CACHE PTO_GLIBCXX_USE_CXX11_ABI PROPERTY STRINGS auto 0 1)
+if (PTO_GLIBCXX_USE_CXX11_ABI STREQUAL "auto")
+    if (UNIX AND NOT APPLE AND TARGET GTest::gtest AND (CMAKE_NM OR EXISTS "/usr/bin/nm"))
+        get_target_property(_pto_gtest_loc GTest::gtest IMPORTED_LOCATION)
+        if (NOT _pto_gtest_loc)
+            get_target_property(_pto_gtest_loc GTest::gtest LOCATION)
+        endif()
+        if (_pto_gtest_loc AND EXISTS "${_pto_gtest_loc}")
+            execute_process(
+                COMMAND bash -lc "nm -C \"${_pto_gtest_loc}\" 2>/dev/null | grep -q 'GetBoolAssertionFailureMessage\\[abi:cxx11\\]'"
+                RESULT_VARIABLE _pto_gtest_is_abi1
+            )
+            if (NOT _pto_gtest_is_abi1 EQUAL 0)
+                set(PTO_GLIBCXX_USE_CXX11_ABI "0" CACHE STRING "" FORCE)
+            endif()
+        endif()
+        unset(_pto_gtest_loc)
+        unset(_pto_gtest_is_abi1)
+    endif()
+endif()
+if (PTO_GLIBCXX_USE_CXX11_ABI STREQUAL "0")
+    add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+endif()
+
+message("-- COMPILER: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}; Using standard C++${CMAKE_CXX_STANDARD}")
+
 add_compile_options(
     -D_FORTIFY_SOURCE=2
-    -std=c++23
+    -std=c++${CMAKE_CXX_STANDARD}
     -Wno-macro-redefined -Wno-ignored-attributes
     -fstack-protector-strong
 )

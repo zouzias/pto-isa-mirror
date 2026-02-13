@@ -1,5 +1,10 @@
 # TCMPS
 
+
+## Tile Operation Diagram
+
+![TCMPS tile operation](../figures/isa/TCMPS.svg)
+
 ## Introduction
 
 Compare a tile against a scalar and write per-element comparison results.
@@ -20,6 +25,18 @@ Synchronous form:
 
 ```text
 %dst = tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile<...> -> !pto.tile<...>
+```
+
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -53,9 +70,9 @@ using namespace pto;
 
 void example_auto() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using DstT = Tile<TileType::Vec, uint8_t, 16, 16>;
+  using DstT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
   SrcT src;
-  DstT dst;
+  DstT dst(16, 2);
   TCMPS(dst, src, 0.0f, CmpMode::GT);
 }
 ```
@@ -69,11 +86,39 @@ using namespace pto;
 
 void example_manual() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using DstT = Tile<TileType::Vec, uint8_t, 16, 16>;
+  using DstT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
   SrcT src;
-  DstT dst;
+  DstT dst(16, 2);
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);
   TCMPS(dst, src, 0.0f, CmpMode::GT);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile<...> -> !pto.tile<...>
+# IR Level 2 (DPS)
+pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```
+

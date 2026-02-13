@@ -1,5 +1,10 @@
 # TPRELU
 
+
+## Tile Operation Diagram
+
+![TPRELU tile operation](../figures/isa/TPRELU.svg)
+
 ## Introduction
 
 Elementwise PReLU (parametric ReLU) with a per-element slope tile.
@@ -19,6 +24,18 @@ Synchronous form:
 ```text
 %dst = tprelu %src0, %src1 : !pto.tile<...>
 ```
+
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.tprelu %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.tprelu ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -31,6 +48,8 @@ PTO_INST RecordEvent TPRELU(TileData& dst, TileData& src0, TileData& src1, WaitE
 ## Constraints
 
 - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+- Temporary space is required by A3 for calculation, while not used by A5.
+- For A3, 2 source Tile, destination Tile, temporary space must in different memory range without overlapping.
 
 ## Examples
 
@@ -41,8 +60,35 @@ using namespace pto;
 
 void example() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT x, slope, out;
-  TPRELU(out, x, slope);
+  TileT x, slope, out, tmp;
+  TPRELU(out, x, slope, tmp);
 }
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tprelu %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tprelu %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tprelu %src0, %src1 : !pto.tile<...>
+# IR Level 2 (DPS)
+pto.tprelu ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

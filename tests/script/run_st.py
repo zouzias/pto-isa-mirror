@@ -47,8 +47,10 @@ def set_env_variables(run_mode, soc_version):
             raise EnvironmentError("ASCEND_HOME_PATH is not set")
 
         os.environ["LD_LIBRARY_PATH"] = f"{ascend_home}/runtime/lib64/stub:{os.environ.get('LD_LIBRARY_PATH', '')}"
-
-        setenv_path = os.path.join(ascend_home, "bin", "setenv.bash")
+        if soc_version == "Kirin9030":
+            setenv_path = os.path.join(ascend_home, "set_env.sh")
+        else:
+            setenv_path = os.path.join(ascend_home, "bin", "setenv.bash")
         if os.path.exists(setenv_path):
             print(f"run env shell: {setenv_path}")
             result = subprocess.run(
@@ -98,8 +100,8 @@ def build_project(run_mode, soc_version, testcase = "all", debug_enable = False)
             text=True
         )
 
-        # make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
-        make_cmd = ["make"]
+        make_cmd = ["make", "VERBOSE=1"] # print compile log for debug
+        # make_cmd = ["make"]
         cpu_count = os.cpu_count() or 4
         make_cmd.extend(["-j", str(cpu_count)])
 
@@ -167,29 +169,43 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
-    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 or a5")
+    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / kirin9030")
     parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
     parser.add_argument("-d", "--debug-enable", action='store_true', help="开启debug检查")
+    parser.add_argument("-w", "--without-build", action='store_true', help="关闭编译（需要预先编译）")
 
     args = parser.parse_args()
     default_soc_version = "Ascend910B1"
     if args.soc_version == "a5":
         default_soc_version = "Ascend910_9599"
+    if args.soc_version == "kirin9030":
+        default_soc_version = "Kirin9030"
     default_cases = "all"
     if args.gtest_filter != None:
         default_cases = args.gtest_filter
+    testcase = args.testcase
+    is_comm = testcase.startswith("comm/")
+    if is_comm:
+        testcase = testcase[len("comm/"):]
+        if not testcase:
+            raise ValueError("comm/ 后必须指定用例名")
 
     original_dir = os.getcwd()
     try:
         # 获取当前脚本（run_st.py）的绝对路径
         script_path = os.path.abspath(__file__)
+        target_dir = os.path.dirname(os.path.dirname(script_path))
 
-        if args.soc_version == "a3":
-            target_dir = os.path.dirname(os.path.dirname(script_path))
+        if is_comm:
+            if args.soc_version != "a3":
+                raise ValueError("comm 暂时仅支持 a3")
+            target_dir = target_dir + "/npu/a2a3/comm/st"
+        elif args.soc_version == "a3":
             target_dir = target_dir + "/npu/a2a3/src/st"
+        elif args.soc_version == "kirin9030" : # kirin9030
+            target_dir = target_dir + "/npu/kirin9030/src/st"
         else : # a5
-            target_dir = os.path.dirname(os.path.dirname(script_path))
             target_dir = target_dir + "/npu/a5/src/st"
 
         print(f"target_dir: {target_dir}")
@@ -199,14 +215,19 @@ def main():
         set_env_variables(args.run_mode, default_soc_version)
 
         # 执行构建
-        build_project(args.run_mode, default_soc_version, args.testcase, args.debug_enable)
+        if args.without_build:
+            subprocess.run(["rm", "-rf", "build/T*"],
+                cwd=original_dir,
+                check=True)
+        else:
+            build_project(args.run_mode, default_soc_version, testcase, args.debug_enable)
 
         # 生成标杆
-        golden_path = "testcase/" + args.testcase + "/gen_data.py"
+        golden_path = "testcase/" + testcase + "/gen_data.py"
         run_gen_data(golden_path)
 
         # 执行二进制文件
-        run_binary(args.testcase, args.run_mode, default_cases)
+        run_binary(testcase, args.run_mode, default_cases)
 
     except Exception as e:
         print(f"run failed: {str(e)}", file=sys.stderr)

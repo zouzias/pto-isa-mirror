@@ -13,8 +13,8 @@ This guide covers prerequisites and setup on **macOS / Linux / Windows**, and sh
 - Git
 - Python `>= 3.8` (3.10+ recommended)
 - CMake `>= 3.16`
-- A C++ compiler with C++23 support:
-  - Linux: GCC 14+ or Clang 16+
+- A C++ compiler with C++20 support:
+  - Linux: GCC 13+ or Clang 15+ (bfloat16 support will be enabled only for GCC>=14)
   - macOS: Xcode/AppleClang (or Homebrew LLVM)
   - Windows: Visual Studio 2022 Build Tools (MSVC)
 - Python packages: `numpy` (the CPU test data generators use it)
@@ -216,6 +216,13 @@ Set environment variables according to [Environment_Variables](./getting-started
   chmod +x build.sh
   ./build.sh --pkg
   ```
+- Set environment
+
+  Note: if you have not installed toolkit,you should download toolkit package first.
+  ```bash
+  chmod +x ./scripts/install_pto.sh
+  ./scripts/install_pto.sh <toolkit_install_path> [toolkit_package_path]
+  ```
 
 # Environment Setup (Ascend 910B/910C, Linux)
 
@@ -256,7 +263,7 @@ Before using this project, make sure the following basic dependencies and the NP
 
    The driver and firmware are required to run operators. If you only need to build, you can skip this step.
    For installation guidance, see:
-   [NPU Driver and Firmware Installation Guide](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850alpha002/softwareinst/instg/instg_0005.html?Mode=VmIns&OS=Ubuntu&Software=cannToolKit).
+   [NPU Driver and Firmware Installation Guide](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850alpha002/softwareinst/instg/instg_0001.html?Mode=VmIns&OS=Ubuntu&Software=cannToolKit).
 
 ## Install Software Packages
 
@@ -264,7 +271,9 @@ This project supports building from source. Before building, prepare the environ
 
 1. **Install the community edition CANN toolkit**
 
-    Download the appropriate `Ascend-cann-toolkit_${cann_version}_linux-${arch}.run` installer for your environment.
+    Download the appropriate `Ascend-cann-toolkit_${cann_version}_linux-${arch}.run` installer for your environment.[download](https://www.hiascend.com/developer/download/community/result?module=cann).
+   
+    The version of CANN we required is 8.5.0 or later.
     
     ```bash
     # Ensure the installer is executable

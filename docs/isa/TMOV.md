@@ -1,5 +1,10 @@
 # TMOV
 
+
+## Tile Operation Diagram
+
+![TMOV tile operation](../figures/isa/TMOV.svg)
+
 ## Introduction
 
 Move/copy between tiles, optionally applying implementation-defined conversion modes selected by template parameters and overloads.
@@ -7,7 +12,7 @@ Move/copy between tiles, optionally applying implementation-defined conversion m
 `TMOV` is used for:
 
 - Vec -> Vec moves
-- Mat -> Left/Right/Bias/Scale moves (target-dependent)
+- Mat -> Left/Right/Bias/Scaling/Scale(Microscaling) moves (target-dependent)
 - Acc -> Vec moves (target-dependent)
 
 ## Math Interpretation
@@ -31,6 +36,18 @@ The PTO IR design recommends splitting `TMOV` into a family of ops:
 %scale = tmov.m2s %mat  : !pto.tile<...> -> !pto.tile<...>
 %vec   = tmov.a2v %acc  : !pto.tile<...> -> !pto.tile<...>
 %v1    = tmov.v2v %v0   : !pto.tile<...> -> !pto.tile<...>
+```
+
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -76,11 +93,12 @@ PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, FpTileData& fp, Wa
 - **Implementation checks (A5)**:
   - For `Mat -> *`, shapes must match; for some `Vec` moves, the effective copy size is the min of src/dst valid rows/cols.
   - Supported location pairs include (target-dependent):
-    - `Mat -> Left/Right/Bias/Scaling`
+    - `Mat -> Left/Right/Bias/Scaling/Scale`
     - `Vec -> Vec` and `Vec -> Mat`
     - `Acc -> Vec` and `Acc -> Mat` (including optional pre-quant / relu / fp variants via overloads)
   - For `Mat -> Left/Right`, additional fractal and dtype constraints are enforced via `CommonCheck` (source fractal must be compatible and element types must match).
   - For `Acc -> Vec/Mat`, additional fractal/type/alignment constraints are enforced via `CheckTMovAccValid`.
+  - For `Mat -> Scale`, additional fractal and dtype constraints are enforced via `CommonCheckMX` (source fractal must be compatible and element types must match).
 
 ## Examples
 
@@ -115,3 +133,31 @@ void example_manual() {
   TMOV(left, mat);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
+# IR Level 2 (DPS)
+pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
