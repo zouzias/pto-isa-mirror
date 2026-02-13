@@ -1288,7 +1288,7 @@ public:
         return *(ptr + offset);
     }
     // constructor for static shape
-    AICORE Tile(){};
+    AICORE Tile() {};
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
@@ -1393,8 +1393,6 @@ public:
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
-#if defined(__DAV_CUBE__)
-#ifdef PTO_NPU_ARCH_A2A3
     PTO_INTERNAL bool GetKAligned() const
     {
         return isKAligned_;
@@ -1403,6 +1401,8 @@ public:
     {
         isKAligned_ = isKAligned;
     }
+#if defined(__DAV_CUBE__)
+#ifdef PTO_NPU_ARCH_A2A3
     PTO_INTERNAL void SetMadHF32Mode(RoundMode hf32TransMode = RoundMode::CAST_ROUND)
     {
         PTO_ASSERT(hf32TransMode == RoundMode::CAST_ROUND || hf32TransMode == RoundMode::CAST_RINT,
@@ -1438,9 +1438,7 @@ private:
         data_ = data;
     }
     TileDType data_;
-#ifdef PTO_NPU_ARCH_A2A3
     bool isKAligned_; // K-Alignedment for A3
-#endif
 };
 
 #ifdef PTO_NPU_ARCH_A2A3
@@ -1497,16 +1495,14 @@ using TileAccCompact = Tile<TileType::Acc, Element_, Rows_, Cols_, BLayout::ColM
                             SLayout::RowMajor, TileConfig::fractalCSize, PadValue::Null, CompactMode::Normal>;
 
 template <typename T>
-struct is_global : std::false_type {
-};
+struct is_global : std::false_type {};
 template <typename T>
 struct is_tile : std::false_type {
     static constexpr SLayout layout_enum = SLayout::NoneBox;
 };
 
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_>
-struct is_global<GlobalTensor<Element_, Shape_, Stride_, Layout_>> : std::true_type {
-};
+struct is_global<GlobalTensor<Element_, Shape_, Stride_, Layout_>> : std::true_type {};
 
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_, const BLayout BFractal_,
           const int RowValid_, const int ColValid_, const SLayout SFractal_, const int SFractalSize_,
@@ -1521,11 +1517,9 @@ template <typename T>
 constexpr bool is_boxed_tile = is_tile<T>::value && (is_tile<T>::layout_enum != SLayout::NoneBox);
 
 template <typename T>
-struct is_conv_tile : std::false_type {
-};
+struct is_conv_tile : std::false_type {};
 template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
-struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {
-};
+struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {};
 
 template <typename tile_shape>
 struct is_Nz_layout {
