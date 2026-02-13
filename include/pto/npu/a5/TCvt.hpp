@@ -2530,7 +2530,7 @@ PTO_INTERNAL SaturationCtrlConfig determineSaturationCtrlBits(SaturationMode sat
     if constexpr (is_any_float<SrcType>::value && std::is_integral<DstType>::value) {
         config.useCtrl60 = true;
         config.useCtrl59 = true;
-        config.setCtrl60to1 = true; // Always set CTRL[60] = 1
+        config.setCtrl60to1 = true;                             // Always set CTRL[60] = 1
         config.setCtrl59to1 = (satMode == SaturationMode::OFF); // CTRL[59] = 0 for ON, 1 for OFF (inverted!)
         return config;
     }
@@ -2544,7 +2544,7 @@ PTO_INTERNAL SaturationCtrlConfig determineSaturationCtrlBits(SaturationMode sat
         // Wider → narrower: Use CTRL[60] and CTRL[59] to control saturation
         config.useCtrl60 = true;
         config.useCtrl59 = true;
-        config.setCtrl60to1 = true; // Always set CTRL[60] = 1
+        config.setCtrl60to1 = true;                             // Always set CTRL[60] = 1
         config.setCtrl59to1 = (satMode == SaturationMode::OFF); // CTRL[59] = 0 for ON, 1 for OFF (inverted!)
         return config;
     }
@@ -2554,7 +2554,7 @@ PTO_INTERNAL SaturationCtrlConfig determineSaturationCtrlBits(SaturationMode sat
     if constexpr (std::is_same<SrcType, float>::value && is_fp16_or_bf16<DstType>::value) {
         config.useCtrl60 = true;
         config.useCtrl59 = true;
-        config.setCtrl60to1 = true; // Always set CTRL[60] = 1
+        config.setCtrl60to1 = true;                             // Always set CTRL[60] = 1
         config.setCtrl59to1 = (satMode == SaturationMode::OFF); // CTRL[59] = 0 for ON, 1 for OFF (inverted!)
         return config;
     }
@@ -2573,7 +2573,7 @@ PTO_INTERNAL SaturationCtrlConfig determineSaturationCtrlBits(SaturationMode sat
         if constexpr (sizeof(SrcType) >= sizeof(DstType)) {
             config.useCtrl60 = true;
             config.useCtrl59 = true;
-            config.setCtrl60to1 = true; // Always set CTRL[60] = 1
+            config.setCtrl60to1 = true;                             // Always set CTRL[60] = 1
             config.setCtrl59to1 = (satMode == SaturationMode::OFF); // CTRL[59] = 0 for ON, 1 for OFF (inverted!)
         }
         return config;
