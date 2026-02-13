@@ -19,17 +19,6 @@ namespace pto {
 
 // Subtile TAdd: 1D uses counter mode; 2D uses mask + hw repeat
 
-PTO_INTERNAL inline void TAdd_1D_vadd(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1)
-{
-    vadd(dst, src0, src1, 0, 1, 1, 1, 8, 8, 8)
-}
-
-PTO_INTERNAL inline void TAdd_2D_vadd(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1,
-                                           uint8_t repeats, uint8_t repeatStride)
-{
-    vadd(dst, src0, src1, repeats, 1, 1, 1, repeatStride, repeatStride, repeatStride)
-}
-
 template <typename T>
 PTO_INTERNAL void TADD_SUBTILE_IMPL_1D(Subtile1D<T> &dst, Subtile1D<T> &src0, Subtile1D<T> &src1)
 {
@@ -37,7 +26,7 @@ PTO_INTERNAL void TADD_SUBTILE_IMPL_1D(Subtile1D<T> &dst, Subtile1D<T> &src0, Su
                "Subtile 1D: length mismatch.");
     set_mask_count();
     SetVectorCount(dst.length());
-    TAdd_1D_vadd((__ubuf__ T *)dst.data(), (__ubuf__ T *)src0.data(), (__ubuf__ T *)src1.data());
+    vadd(dst.data(), src0.data(), src1.data(), 0, 1, 1, 1, 8, 8, 8);
     set_mask_norm();
     SetFullVecMaskByDType<T>();
 }
@@ -57,8 +46,8 @@ PTO_INTERNAL void TADD_SUBTILE_IMPL_2D(Subtile2D<T> &dst, Subtile2D<T> &src0, Su
     PTO_ASSERT(repeatStride <= REPEAT_STRIDE_MAX, "Subtile 2D: repeat stride too large.");
 
     SetContMaskByDType<T>(dst.getCols());
-    TAdd_2D_vadd((__ubuf__ T *)dst.data(), (__ubuf__ T *)src0.data(), (__ubuf__ T *)src1.data(),
-                      (uint8_t)dst.getRows(), repeatStride);
+    vadd(dst.data(), src0.data(), src1.data(), (uint8_t)dst.getRows(), 1, 1, 1, repeatStride, repeatStride,
+         repeatStride);
     SetFullVecMaskByDType<T>();
 }
 

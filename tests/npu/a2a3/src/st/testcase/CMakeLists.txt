@@ -136,7 +136,6 @@ tor
 tshl
 tshr
 tpartadd
-tadd_subtile
 tpartmul
 tpartmin
 tpartmax

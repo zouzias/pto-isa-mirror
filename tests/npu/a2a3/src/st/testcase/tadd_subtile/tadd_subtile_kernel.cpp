@@ -15,6 +15,26 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
+template <typename TileData, typename T, int vRows, int vCols, bool Is1D>
+__tf__ AICORE void DoTAddSubtile(TileData &dstTile, TileData &src0Tile, TileData &src1Tile)
+{
+    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dstTile.data());
+    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0Tile.data());
+    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1Tile.data());
+
+    if constexpr (Is1D) {
+        Subtile1D<T> dstS(dstPtr, vRows * vCols);
+        Subtile1D<T> src0S(src0Ptr, vRows * vCols);
+        Subtile1D<T> src1S(src1Ptr, vRows * vCols);
+        TADD_SUBTILE_IMPL_1D(dstS, src0S, src1S);
+    } else {
+        Subtile2D<T> dstS(dstPtr, vRows, vCols, TileData::RowStride);
+        Subtile2D<T> src0S(src0Ptr, vRows, vCols, TileData::RowStride);
+        Subtile2D<T> src1S(src1Ptr, vRows, vCols, TileData::RowStride);
+        TADD_SUBTILE_IMPL_2D(dstS, src0S, src1S);
+    }
+}
+
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols, bool Is1D>
 __global__ AICORE void runTAddSubtile(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
 {
@@ -37,21 +57,7 @@ __global__ AICORE void runTAddSubtile(__gm__ T __out__ *out, __gm__ T __in__ *sr
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
 
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dstTile.data());
-    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0Tile.data());
-    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1Tile.data());
-
-    if constexpr (Is1D) {
-        Subtile1D<T> dstS(dstPtr, vRows * vCols);
-        Subtile1D<T> src0S(src0Ptr, vRows * vCols);
-        Subtile1D<T> src1S(src1Ptr, vRows * vCols);
-        TADD_SUBTILE_IMPL_1D(dstS, src0S, src1S);
-    } else {
-        Subtile2D<T> dstS(dstPtr, vRows, vCols, TileData::RowStride);
-        Subtile2D<T> src0S(src0Ptr, vRows, vCols, TileData::RowStride);
-        Subtile2D<T> src1S(src1Ptr, vRows, vCols, TileData::RowStride);
-        TADD_SUBTILE_IMPL_2D(dstS, src0S, src1S);
-    }
+    DoTAddSubtile<TileData, T, vRows, vCols, Is1D>(dstTile, src0Tile, src1Tile);
 
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
