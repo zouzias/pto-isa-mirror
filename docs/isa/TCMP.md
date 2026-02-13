@@ -1,5 +1,10 @@
 # TCMP
 
+
+## Tile Operation Diagram
+
+![TCMP tile operation](../figures/isa/TCMP.svg)
+
 ## Introduction
 
 Compare two tiles and write a packed predicate mask.
@@ -20,6 +25,18 @@ Synchronous form:
 
 ```text
 %dst = tcmp %src0, %src1 {cmpMode = #pto.cmp<EQ>} : !pto.tile<...> -> !pto.tile<...>
+```
+
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.tcmp %src0, %src1{cmpMode = #pto<cmp xx>}: (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -60,9 +77,9 @@ using namespace pto;
 
 void example_auto() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using MaskT = Tile<TileType::Vec, uint8_t, 16, 16>;
+  using MaskT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
   SrcT src0, src1;
-  MaskT mask;
+  MaskT mask(16, 2);
   TCMP(mask, src0, src1, CmpMode::GT);
 }
 ```
@@ -76,12 +93,40 @@ using namespace pto;
 
 void example_manual() {
   using SrcT = Tile<TileType::Vec, float, 16, 16>;
-  using MaskT = Tile<TileType::Vec, uint8_t, 16, 16>;
+  using MaskT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
   SrcT src0, src1;
-  MaskT mask;
+  MaskT mask(16, 2);
   TASSIGN(src0, 0x1000);
   TASSIGN(src1, 0x2000);
   TASSIGN(mask, 0x3000);
   TCMP(mask, src0, src1, CmpMode::GT);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tcmp %src0, %src1{cmpMode = #pto<cmp xx>}: (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tcmp %src0, %src1{cmpMode = #pto<cmp xx>}: (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tcmp %src0, %src1 {cmpMode = #pto.cmp<EQ>} : !pto.tile<...> -> !pto.tile<...>
+# IR Level 2 (DPS)
+pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+

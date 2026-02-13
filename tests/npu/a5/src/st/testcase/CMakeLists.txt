@@ -27,7 +27,6 @@ function(pto_vec_st NAME)
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
-        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     )
 
     target_link_libraries(${NAME} PRIVATE
@@ -57,7 +56,6 @@ function(pto_cube_st NAME)
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
-        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     )
 
     target_link_libraries(${NAME} PRIVATE
@@ -120,6 +118,7 @@ set(ALL_TESTCASES
     trowmax
     trowmin
     tcolsum
+    tcolprod
     tcolmax
     tcolmin
     tsort32
@@ -135,6 +134,7 @@ set(ALL_TESTCASES
     tcvt
     tsub
     trem
+    tfmod
     tprelu
     tand
     tor
@@ -148,6 +148,7 @@ set(ALL_TESTCASES
     tshrs
     tadd
     tpartadd
+    tpartmul
     tfillpad
     tmin
     tmax
@@ -177,6 +178,7 @@ set(ALL_TESTCASES
     tmov_vect
     texpands
     tmov_acc2mat
+    timg2col
     tassign
     tmov_ub2l1
     tcmp
@@ -189,8 +191,12 @@ set(ALL_TESTCASES
     trowsum_trowexpand
     trowexpand_tdiv
     trems
+    tfmods
     tscatter
     tneg
+    tcolexpandadd
+    tcolexpandmax
+    tcolexpandmin
     tcolexpanddiv
     tcolexpandmul
     tcolexpandsub
@@ -200,6 +206,9 @@ set(ALL_TESTCASES
     tcolexpand
     tnot
     trelu
+    tquant
+    mgather
+    mscatter
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

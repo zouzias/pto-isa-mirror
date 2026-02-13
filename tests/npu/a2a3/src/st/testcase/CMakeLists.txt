@@ -104,6 +104,7 @@ trowsum
 trowmax
 trowmin
 textract
+timg2col
 tmov
 tload
 ttrans
@@ -134,6 +135,7 @@ tor
 tshl
 tshr
 tpartadd
+tpartmul
 tpartmin
 tpartmax
 tsel
@@ -141,6 +143,8 @@ tsub
 tsubs
 trem
 trems
+tfmod
+tfmods
 tlrelu
 tmaxs
 tmins
@@ -164,6 +168,7 @@ tcolmax
 tcolmin
 texpands
 tcolsum
+tcolprod
 tcmp
 tassign
 tstore_mat2gm
@@ -178,6 +183,10 @@ tshls
 tshrs
 txor
 txors
+trowexpandexpdif
+tcolexpandadd
+tcolexpandmax
+tcolexpandmin
 tcolexpanddiv
 tcolexpandexpdif
 tcolexpandmul
