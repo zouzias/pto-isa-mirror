@@ -4,7 +4,8 @@ This folder contains **minimal, subtile** versions of A2/A3 PTO ISA ops with a *
 
 ## Subtile API
 - `Subtile1D<T>`: runtime length, **counter mode**, length can be > VL
-- `Subtile2D<T>`: runtime rows/cols, **mask + hw repeat**, constraints:
+- `Subtile2D<T>`: runtime rows/cols, **mask + hw repeat**; rowStride can be 0 to infer cols.
+  constraints:
   - `cols <= VL`
   - `rows <= REPEAT_MAX` (<= 255)
 
@@ -22,7 +23,7 @@ Use this for algorithm prototyping or teaching, **not** for general tiling.
 ## SubtileBrcb (32B block broadcast)
 - API: `SubtileBrcb(Subtile2D<T> dst, Subtile1D<T> src)`
 - Constraints:
-  - `dst.cols == 32B/sizeof(T)` and `dst.rowStride == dst.cols` (contiguous rows)
+  - `dst.cols == 32B/sizeof(T)` and `dst.rowStride == dst.cols` (contiguous rows; pass 0 to infer)
   - `src.length == dst.rows`
   - `src.length` must be **multiple of 8** (vbrcb repeats)
   - src/dst **32B aligned**

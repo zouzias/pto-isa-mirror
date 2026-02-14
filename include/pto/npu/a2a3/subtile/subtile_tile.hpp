@@ -43,7 +43,7 @@ struct Subtile2D {
     uint16_t rowStride = 0; // in elements
 
     PTO_INTERNAL Subtile2D(__ubuf__ T *p, uint16_t r, uint16_t c, uint16_t stride)
-        : ptr(p), rows(r), cols(c), rowStride(stride) {}
+        : ptr(p), rows(r), cols(c), rowStride(stride ? stride : c) {}
 
     PTO_INTERNAL __ubuf__ T *data() const { return ptr; }
     PTO_INTERNAL uint16_t getRows() const { return rows; }
