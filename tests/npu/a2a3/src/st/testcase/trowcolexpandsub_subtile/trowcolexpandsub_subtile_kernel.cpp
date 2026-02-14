@@ -17,6 +17,41 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
+// __tf__ helpers (tile ptr access must be in __tf__)
+
+template <typename TileData, typename TileDataSrc1, typename T, int vRows, int vCols>
+__tf__ AICORE void DoRowExpandSubSubtile(TileData &dstTile, TileData &src0Tile, TileData &tmpTile, TileDataSrc1 &src1Tile)
+{
+    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0Tile.data());
+    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dstTile.data());
+    __ubuf__ T *tmpPtr = (__ubuf__ T *)__cce_get_tile_ptr(tmpTile.data());
+    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1Tile.data());
+
+    // rowStride=0 -> infer contiguous (cols)
+    Subtile2D<T> dstS(dstPtr, vRows, vCols, 0);
+    Subtile2D<T> src0S(src0Ptr, vRows, vCols, 0);
+    Subtile2D<T> tmpS(tmpPtr, vRows, vCols, 0);
+    Subtile1D<T> src1S(src1Ptr, vRows);
+
+    SubtileBrcb(tmpS, src1S);
+    TSUB_SUBTILE_IMPL_2D(dstS, src0S, tmpS);
+}
+
+template <typename TileData, typename TileDataSrc1, typename T, int vRows, int vCols>
+__tf__ AICORE void DoColExpandSubSubtile(TileData &dstTile, TileData &src0Tile, TileDataSrc1 &src1Tile)
+{
+    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0Tile.data());
+    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dstTile.data());
+    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1Tile.data());
+
+    for (int r = 0; r < vRows; ++r) {
+        Subtile1D<T> dstRow(dstPtr + r * TileData::RowStride, vCols);
+        Subtile1D<T> src0Row(src0Ptr + r * TileData::RowStride, vCols);
+        Subtile1D<T> src1Row(src1Ptr, vCols);
+        TSUB_SUBTILE_IMPL_1D(dstRow, src0Row, src1Row);
+    }
+}
+
 // Row-expand subtract using SubtileBrcb + Subtile2D
 
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
@@ -46,19 +81,9 @@ __global__ AICORE void runTRowExpandSubSubtile(__gm__ T __out__ *out, __gm__ T _
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
 
-    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0Tile.data());
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dstTile.data());
-    __ubuf__ T *tmpPtr = (__ubuf__ T *)__cce_get_tile_ptr(tmpTile.data());
-    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1Tile.data());
-
-    // rowStride=0 -> infer contiguous (cols)
-    Subtile2D<T> dstS(dstPtr, vRows, vCols, 0);
-    Subtile2D<T> src0S(src0Ptr, vRows, vCols, 0);
-    Subtile2D<T> tmpS(tmpPtr, vRows, vCols, 0);
-    Subtile1D<T> src1S(src1Ptr, vRows);
-
-    SubtileBrcb(tmpS, src1S);
-    TSUB_SUBTILE_IMPL_2D(dstS, src0S, tmpS);
+    pipe_barrier(PIPE_ALL);
+    DoRowExpandSubSubtile<TileData, TileDataSrc1, T, vRows, vCols>(dstTile, src0Tile, tmpTile, src1Tile);
+    pipe_barrier(PIPE_ALL);
 
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
@@ -91,16 +116,9 @@ __global__ AICORE void runTColExpandSubSubtile(__gm__ T __out__ *out, __gm__ T _
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
 
-    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0Tile.data());
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dstTile.data());
-    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1Tile.data());
-
-    for (int r = 0; r < vRows; ++r) {
-        Subtile1D<T> dstRow(dstPtr + r * TileData::RowStride, vCols);
-        Subtile1D<T> src0Row(src0Ptr + r * TileData::RowStride, vCols);
-        Subtile1D<T> src1Row(src1Ptr, vCols);
-        TSUB_SUBTILE_IMPL_1D(dstRow, src0Row, src1Row);
-    }
+    pipe_barrier(PIPE_ALL);
+    DoColExpandSubSubtile<TileData, TileDataSrc1, T, vRows, vCols>(dstTile, src0Tile, src1Tile);
+    pipe_barrier(PIPE_ALL);
 
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
@@ -109,21 +127,13 @@ __global__ AICORE void runTColExpandSubSubtile(__gm__ T __out__ *out, __gm__ T _
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
 void LaunchTRowExpandSubSubtile(T *out, T *src0, T *src1, void *stream)
 {
-    if constexpr (std::is_same_v<T, aclFloat16>)
-        runTRowExpandSubSubtile<half, kTRows_, kTCols_, vRows, vCols>
-            <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1));
-    else
-        runTRowExpandSubSubtile<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(out, src0, src1);
+    runTRowExpandSubSubtile<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(out, src0, src1);
 }
 
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
 void LaunchTColExpandSubSubtile(T *out, T *src0, T *src1, void *stream)
 {
-    if constexpr (std::is_same_v<T, aclFloat16>)
-        runTColExpandSubSubtile<half, kTRows_, kTCols_, vRows, vCols>
-            <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1));
-    else
-        runTColExpandSubSubtile<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(out, src0, src1);
+    runTColExpandSubSubtile<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(out, src0, src1);
 }
 
 // Row-expand: rows multiple of 8, cols == 32B/sizeof(float) == 8
