@@ -51,9 +51,10 @@ __global__ AICORE void runTRowExpandSubSubtile(__gm__ T __out__ *out, __gm__ T _
     __ubuf__ T *tmpPtr = (__ubuf__ T *)__cce_get_tile_ptr(tmpTile.data());
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1Tile.data());
 
-    Subtile2D<T> dstS(dstPtr, vRows, vCols, TileData::RowStride);
-    Subtile2D<T> src0S(src0Ptr, vRows, vCols, TileData::RowStride);
-    Subtile2D<T> tmpS(tmpPtr, vRows, vCols, TileData::RowStride);
+    // rowStride=0 -> infer contiguous (cols)
+    Subtile2D<T> dstS(dstPtr, vRows, vCols, 0);
+    Subtile2D<T> src0S(src0Ptr, vRows, vCols, 0);
+    Subtile2D<T> tmpS(tmpPtr, vRows, vCols, 0);
     Subtile1D<T> src1S(src1Ptr, vRows);
 
     SubtileBrcb(tmpS, src1S);
