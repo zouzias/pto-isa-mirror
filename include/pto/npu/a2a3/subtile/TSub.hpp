@@ -64,6 +64,22 @@ PTO_INTERNAL void TSUB_SUBTILE_IMPL_2D(Subtile2D<T> &dst, Subtile2D<T> &src0, Su
     SetFullVecMaskByDType<T>();
 }
 
+
+
+// Overloads for Subtile ops (short name)
+
+template <typename T>
+PTO_INTERNAL inline void TSUB(Subtile1D<T> &dst, Subtile1D<T> &src0, Subtile1D<T> &src1)
+{
+    TSUB_SUBTILE_IMPL_1D(dst, src0, src1);
+}
+
+template <typename T>
+PTO_INTERNAL inline void TSUB(Subtile2D<T> &dst, Subtile2D<T> &src0, Subtile2D<T> &src1)
+{
+    TSUB_SUBTILE_IMPL_2D(dst, src0, src1);
+}
+
 } // namespace pto
 
 #endif // TSUB_SUBTILE_HPP

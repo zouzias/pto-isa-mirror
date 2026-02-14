@@ -15,42 +15,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/subtile/TSub.hpp>
 #include "acl/acl.h"
 
+#ifdef TSUB
+#undef TSUB
+#endif
+
 using namespace pto;
-
-// __tf__ helpers (tile ptr access must be in __tf__)
-
-template <typename TileData, typename TileDataSrc1, typename T, int vRows, int vCols>
-__tf__ AICORE void DoRowExpandSubSubtile(TileData &dstTile, TileData &src0Tile, TileData &tmpTile, TileDataSrc1 &src1Tile)
-{
-    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0Tile.data());
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dstTile.data());
-    __ubuf__ T *tmpPtr = (__ubuf__ T *)__cce_get_tile_ptr(tmpTile.data());
-    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1Tile.data());
-
-    // rowStride=0 -> infer contiguous (cols)
-    Subtile2D<T> dstS(dstPtr, vRows, vCols, 0);
-    Subtile2D<T> src0S(src0Ptr, vRows, vCols, 0);
-    Subtile2D<T> tmpS(tmpPtr, vRows, vCols, 0);
-    Subtile1D<T> src1S(src1Ptr, vRows);
-
-    SubtileBrcb(tmpS, src1S);
-    TSUB_SUBTILE_IMPL_2D(dstS, src0S, tmpS);
-}
-
-template <typename TileData, typename TileDataSrc1, typename T, int vRows, int vCols>
-__tf__ AICORE void DoColExpandSubSubtile(TileData &dstTile, TileData &src0Tile, TileDataSrc1 &src1Tile)
-{
-    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0Tile.data());
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dstTile.data());
-    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1Tile.data());
-
-    for (int r = 0; r < vRows; ++r) {
-        Subtile1D<T> dstRow(dstPtr + r * TileData::RowStride, vCols);
-        Subtile1D<T> src0Row(src0Ptr + r * TileData::RowStride, vCols);
-        Subtile1D<T> src1Row(src1Ptr, vCols);
-        TSUB_SUBTILE_IMPL_1D(dstRow, src0Row, src1Row);
-    }
-}
 
 // Row-expand subtract using SubtileBrcb + Subtile2D
 
@@ -69,6 +38,17 @@ __global__ AICORE void runTRowExpandSubSubtile(__gm__ T __out__ *out, __gm__ T _
     TileData tmpTile(vRows, vCols);
     TileDataSrc1 src1Tile(vRows, 1);
 
+    __ubuf__ T *src0Ptr = (__ubuf__ T *)src0Tile.data();
+    __ubuf__ T *dstPtr = (__ubuf__ T *)dstTile.data();
+    __ubuf__ T *tmpPtr = (__ubuf__ T *)tmpTile.data();
+    __ubuf__ T *src1Ptr = (__ubuf__ T *)src1Tile.data();
+
+    // rowStride=0 -> infer contiguous (cols)
+    Subtile2D<T> dstS(dstPtr, vRows, vCols, 0);
+    Subtile2D<T> src0S(src0Ptr, vRows, vCols, 0);
+    Subtile2D<T> tmpS(tmpPtr, vRows, vCols, 0);
+    Subtile1D<T> src1S(src1Ptr, vRows);
+
     TASSIGN(src0Tile, 0x0);
     TASSIGN(dstTile, 0x10000);
     TASSIGN(tmpTile, 0x20000);
@@ -82,7 +62,8 @@ __global__ AICORE void runTRowExpandSubSubtile(__gm__ T __out__ *out, __gm__ T _
     TLOAD(src1Tile, src1Global);
 
     pipe_barrier(PIPE_ALL);
-    DoRowExpandSubSubtile<TileData, TileDataSrc1, T, vRows, vCols>(dstTile, src0Tile, tmpTile, src1Tile);
+    SubtileBrcb(tmpS, src1S);
+    TSUB(dstS, src0S, tmpS);
     pipe_barrier(PIPE_ALL);
 
     TSTORE(dstGlobal, dstTile);
@@ -105,6 +86,10 @@ __global__ AICORE void runTColExpandSubSubtile(__gm__ T __out__ *out, __gm__ T _
     TileData dstTile(vRows, vCols);
     TileDataSrc1 src1Tile(1, vCols);
 
+    __ubuf__ T *src0Ptr = (__ubuf__ T *)src0Tile.data();
+    __ubuf__ T *dstPtr = (__ubuf__ T *)dstTile.data();
+    __ubuf__ T *src1Ptr = (__ubuf__ T *)src1Tile.data();
+
     TASSIGN(src0Tile, 0x0);
     TASSIGN(dstTile, 0x10000);
     TASSIGN(src1Tile, 0x20000);
@@ -117,7 +102,12 @@ __global__ AICORE void runTColExpandSubSubtile(__gm__ T __out__ *out, __gm__ T _
     TLOAD(src1Tile, src1Global);
 
     pipe_barrier(PIPE_ALL);
-    DoColExpandSubSubtile<TileData, TileDataSrc1, T, vRows, vCols>(dstTile, src0Tile, src1Tile);
+    for (int r = 0; r < vRows; ++r) {
+        Subtile1D<T> dstRow(dstPtr + r * TileData::RowStride, vCols);
+        Subtile1D<T> src0Row(src0Ptr + r * TileData::RowStride, vCols);
+        Subtile1D<T> src1Row(src1Ptr, vCols);
+        TSUB(dstRow, src0Row, src1Row);
+    }
     pipe_barrier(PIPE_ALL);
 
     TSTORE(dstGlobal, dstTile);
