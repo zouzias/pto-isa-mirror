@@ -49,13 +49,11 @@ PTO_INST void ConvertForDequant(__ubuf__ DstDType *dstPtr, __ubuf__ SrcDType *sr
     unsigned srcRepeatStride = repeatWidth == sizeof(SrcDType) ?
                                    BLOCK_MAX_PER_REPEAT :
                                    (BLOCK_MAX_PER_REPEAT / sizeof(DstDType) * sizeof(SrcDType));
-
     unsigned elementsPerRepeat = REPEAT_BYTE / repeatWidth;
     unsigned numRepeatPerLine = dstValidCols / elementsPerRepeat; // Complete repeats
     unsigned numRemainPerLine = dstValidCols % elementsPerRepeat; // Remainder elements
     constexpr unsigned dstNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(DstDType);
     constexpr unsigned srcNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(SrcDType);
-
     if (numRepeatPerLine > 0) {
         unsigned numLoop = numRepeatPerLine / REPEAT_MAX;
         unsigned remainAfterLoop = numRepeatPerLine % REPEAT_MAX;
@@ -76,12 +74,8 @@ PTO_INST void ConvertForDequant(__ubuf__ DstDType *dstPtr, __ubuf__ SrcDType *sr
             }
         }
     }
-
-    // Advance pointers to unaligned remainder region
     dstPtr += numRepeatPerLine * elementsPerRepeat;
     srcPtr += numRepeatPerLine * elementsPerRepeat;
-
-    // Process remainder region with partial repeats (requires vector masking)
     if (numRemainPerLine > 0) {
         unsigned numLoop = dstValidRows / REPEAT_MAX;
         unsigned remainAfterLoop = dstValidRows % REPEAT_MAX;
@@ -111,10 +105,8 @@ __tf__ PTO_INTERNAL void TDequant(typename TileDataDst::TileDType __out__ dst /*
                                   typename TileDataPara::TileDType __in__ offset, unsigned dstValidRows,
                                   unsigned dstValidCols)
 {
-    // cast int to float
     __ubuf__ typename TileDataDst::DType *dstPtr = (__ubuf__ typename TileDataDst::DType *)__cce_get_tile_ptr(dst);
     __ubuf__ typename TileDataSrc::DType *srcPtr = (__ubuf__ typename TileDataSrc::DType *)__cce_get_tile_ptr(src);
-
     if constexpr (std::is_same_v<typename TileDataDst::DType, float> &&
                   std::is_same_v<typename TileDataSrc::DType, int16_t>) {
         ConvertForDequant<float, int16_t, dstRowStride, srcRowStride>(dstPtr, srcPtr, dstValidRows, dstValidCols);
@@ -126,23 +118,15 @@ __tf__ PTO_INTERNAL void TDequant(typename TileDataDst::TileDType __out__ dst /*
         ConvertForDequant<float, half, dstRowStride, srcRowStride * 2>(dstPtr, tempDstHalfPtr, dstValidRows,
                                                                        dstValidCols);
     }
-
     using T = typename TileDataPara::DType;
     __ubuf__ T *scalePtr = (__ubuf__ T *)__cce_get_tile_ptr(scale);
     __ubuf__ T *offsetPtr = (__ubuf__ T *)__cce_get_tile_ptr(offset);
-
     constexpr unsigned elementsPerRepeat = pto::REPEAT_BYTE / sizeof(T);
-    constexpr unsigned blockSizeElem = pto::BLOCK_BYTE_SIZE / sizeof(T);
-    constexpr unsigned dstStride = TileDataDst::RowStride;
-    constexpr unsigned dstRepeatStride = dstStride / blockSizeElem;
-    unsigned numLoop = dstValidCols / elementsPerRepeat;
-
     unsigned headRepeats = dstValidCols / elementsPerRepeat;
     if (headRepeats) {
         for (int i = 0; i < dstValidRows; i++) {
             PtoSetWaitFlag<PIPE_V, PIPE_S>();
             unsigned dstOffset = i * dstRowStride;
-            unsigned srcOffset = i * srcRowStride;
             T offsetValue = *(offsetPtr + i * scaleRowStride);
             T scaleValue = *(scalePtr + i * scaleRowStride);
             PtoSetWaitFlag<PIPE_S, PIPE_V>();
@@ -156,7 +140,6 @@ __tf__ PTO_INTERNAL void TDequant(typename TileDataDst::TileDType __out__ dst /*
             SetFullVecMaskByDType<T>();
         }
     }
-
     unsigned tailElements = dstValidCols % elementsPerRepeat;
     if (tailElements) {
         dstPtr += headRepeats * elementsPerRepeat;
@@ -164,7 +147,6 @@ __tf__ PTO_INTERNAL void TDequant(typename TileDataDst::TileDType __out__ dst /*
         for (int i = 0; i < dstValidRows; i++) {
             PtoSetWaitFlag<PIPE_V, PIPE_S>();
             unsigned dstOffset = i * dstRowStride;
-            unsigned srcOffset = i * srcRowStride;
             T offsetValue = *(offsetPtr + i * scaleRowStride);
             T scaleValue = *(scalePtr + i * scaleRowStride);
             PtoSetWaitFlag<PIPE_S, PIPE_V>();
@@ -189,7 +171,7 @@ PTO_INTERNAL void TDEQUANT_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataPara
                   std::is_same<typename TileDataPara::DType, float32_t>::value,
                   "Fix: TDEQUANT input tile src and dst currently supports float data types.");
     static_assert(std::is_same<typename TileDataSrc::DType, int8_t>::value ||
-                  std::is_same<typename TileDataSrc::DType, int16_t>::value,
+                      std::is_same<typename TileDataSrc::DType, int16_t>::value,
                   "Fix: TDEQUANT input tile scale and offset currently supports int8_t and int16_t data types.");
     static_assert(TileDataDst::isRowMajor && TileDataSrc::isRowMajor && TileDataPara::isRowMajor,
                   "Fix: TDEQUANT only support row major layout.");

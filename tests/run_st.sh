@@ -45,8 +45,7 @@ fi
 
 if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tdequant -g TDEQUANTTest.case1
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tdequant -g TDEQUANTTest.case2
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tdequant
     # python3 tests/script/build_st.py -r $RUN_TYPE -v a3 -t all
     # python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolexpand -g TCOLEXPANDTest.case1
     # python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolsum -g TCOLSUMTest.case1
