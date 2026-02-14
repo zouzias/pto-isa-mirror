@@ -43,13 +43,10 @@ PTO_INST void ConvertForDequant(__ubuf__ DstDType *dstPtr, __ubuf__ SrcDType *sr
                                 unsigned dstValidCols)
 {
     uint64_t repeatWidth = static_cast<uint64_t>(max(sizeof(DstDType), sizeof(SrcDType)));
-    unsigned dstRepeatStride = repeatWidth == sizeof(DstDType) ?
-                                   BLOCK_MAX_PER_REPEAT :
+    unsigned dstRepeatStride = repeatWidth == sizeof(DstDType) ? BLOCK_MAX_PER_REPEAT :
                                    (BLOCK_MAX_PER_REPEAT / sizeof(SrcDType) * sizeof(DstDType));
-    unsigned srcRepeatStride = repeatWidth == sizeof(SrcDType) ?
-                                   BLOCK_MAX_PER_REPEAT :
+    unsigned srcRepeatStride = repeatWidth == sizeof(SrcDType) ? BLOCK_MAX_PER_REPEAT :
                                    (BLOCK_MAX_PER_REPEAT / sizeof(DstDType) * sizeof(SrcDType));
-
     unsigned elementsPerRepeat = REPEAT_BYTE / repeatWidth;
     unsigned numRepeatPerLine = dstValidCols / elementsPerRepeat; // Complete repeats
     unsigned numRemainPerLine = dstValidCols % elementsPerRepeat; // Remainder elements
@@ -76,11 +73,9 @@ PTO_INST void ConvertForDequant(__ubuf__ DstDType *dstPtr, __ubuf__ SrcDType *sr
             }
         }
     }
-
     // Advance pointers to unaligned remainder region
     dstPtr += numRepeatPerLine * elementsPerRepeat;
     srcPtr += numRepeatPerLine * elementsPerRepeat;
-
     // Process remainder region with partial repeats (requires vector masking)
     if (numRemainPerLine > 0) {
         unsigned numLoop = dstValidRows / REPEAT_MAX;
@@ -108,35 +103,24 @@ template <typename TileDataDst, typename TileDataSrc, typename TileDataPara, uns
 __tf__ PTO_INTERNAL void TDequant(typename TileDataDst::TileDType __out__ dst /*fp32*/,
                                   typename TileDataSrc::TileDType __in__ src /*int8_16*/,
                                   typename TileDataPara::TileDType __in__ scale /*fp32*/,
-                                  typename TileDataPara::TileDType __in__ offset, unsigned dstValidRows,
-                                  unsigned dstValidCols)
+                                  typename TileDataPara::TileDType __in__ offset, unsigned dstValidRows, unsigned dstValidCols)
 {
-    // cast int to float
     __ubuf__ typename TileDataDst::DType *dstPtr = (__ubuf__ typename TileDataDst::DType *)__cce_get_tile_ptr(dst);
     __ubuf__ typename TileDataSrc::DType *srcPtr = (__ubuf__ typename TileDataSrc::DType *)__cce_get_tile_ptr(src);
-
-    if constexpr (std::is_same_v<typename TileDataDst::DType, float> &&
-                  std::is_same_v<typename TileDataSrc::DType, int16_t>) {
+    if constexpr (std::is_same_v<typename TileDataDst::DType, float> && std::is_same_v<typename TileDataSrc::DType, int16_t>) {
         ConvertForDequant<float, int16_t, dstRowStride, srcRowStride>(dstPtr, srcPtr, dstValidRows, dstValidCols);
-    } else if constexpr (std::is_same_v<typename TileDataDst::DType, float> &&
-                         std::is_same_v<typename TileDataSrc::DType, int8_t>) {
+    } else if constexpr (std::is_same_v<typename TileDataDst::DType, float> && std::is_same_v<typename TileDataSrc::DType, int8_t>) {
         __ubuf__ half *tempDstHalfPtr = (__ubuf__ half *)(dstPtr) + dstValidCols;
-        ConvertForDequant<half, int8_t, dstRowStride * 2, srcRowStride>(tempDstHalfPtr, srcPtr, dstValidRows,
-                                                                        dstValidCols);
-        ConvertForDequant<float, half, dstRowStride, srcRowStride * 2>(dstPtr, tempDstHalfPtr, dstValidRows,
-                                                                       dstValidCols);
+        ConvertForDequant<half, int8_t, dstRowStride * 2, srcRowStride>(tempDstHalfPtr, srcPtr, dstValidRows, dstValidCols);
+        ConvertForDequant<float, half, dstRowStride, srcRowStride * 2>(dstPtr, tempDstHalfPtr, dstValidRows, dstValidCols);
     }
-
     using T = typename TileDataPara::DType;
     __ubuf__ T *scalePtr = (__ubuf__ T *)__cce_get_tile_ptr(scale);
     __ubuf__ T *offsetPtr = (__ubuf__ T *)__cce_get_tile_ptr(offset);
-
     constexpr unsigned elementsPerRepeat = pto::REPEAT_BYTE / sizeof(T);
     constexpr unsigned blockSizeElem = pto::BLOCK_BYTE_SIZE / sizeof(T);
-    constexpr unsigned dstStride = TileDataDst::RowStride;
-    constexpr unsigned dstRepeatStride = dstStride / blockSizeElem;
+    constexpr unsigned dstRepeatStride = dstRowStride / blockSizeElem;
     unsigned numLoop = dstValidCols / elementsPerRepeat;
-
     unsigned headRepeats = dstValidCols / elementsPerRepeat;
     if (headRepeats) {
         for (int i = 0; i < dstValidRows; i++) {
@@ -156,7 +140,6 @@ __tf__ PTO_INTERNAL void TDequant(typename TileDataDst::TileDType __out__ dst /*
             SetFullVecMaskByDType<T>();
         }
     }
-
     unsigned tailElements = dstValidCols % elementsPerRepeat;
     if (tailElements) {
         dstPtr += headRepeats * elementsPerRepeat;
