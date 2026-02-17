@@ -1201,7 +1201,26 @@ PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst
   TQUANT_IMPL<TileDataSrc, TileDataExp, TileDataOut, TileDataMax, mode>(src, exp, dst, max, scaling);
   return {};
 }
+
 #endif
+
+
+template <typename TileDataDst, typename TileDataSrc>
+__tf__ PTO_INTERNAL OP_NAME(TGET_SCALE_ADDR)
+    OP_TYPE(element_wise) void TGetScaleAddr(typename TileDataDst::TileDType __out__ dst,
+                                    typename TileDataSrc::TileDType __in__ src)
+{
+  ;
+}
+
+
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TGET_SCALE_ADDR(TileDataDst &dst, TileDataSrc &src)
+{
+    TGetScaleAddr<TileDataDst, TileDataSrc>(
+        dst.data(), src.data());
+}
+
 
 } // namespace pto
 #endif // #if defined (__CPU_SIM) || defined (__CCE_AICORE__)

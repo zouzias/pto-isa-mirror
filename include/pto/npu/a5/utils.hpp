@@ -83,7 +83,8 @@ namespace pto{
         uintptr_t addr = reinterpret_cast<uintptr_t>(dst);
         return addr >> SHIFT_MX_ADDR;
     }
-
 } // end pto
+
+>>>>>>> Stashed changes
 
 #endif
