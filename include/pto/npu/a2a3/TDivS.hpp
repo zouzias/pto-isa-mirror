@@ -13,7 +13,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include "pto/npu/a2a3/TBinSOp.hpp"
-#include "pto/npu/a2a3/TPrint.hpp"
 
 namespace pto {
 PTO_INTERNAL static void prepare_s32_data(__ubuf__ int32_t *dst, __ubuf__ int32_t *src0, int32_t src1, uint8_t repeats,
@@ -212,12 +211,6 @@ PTO_INTERNAL void TDIVS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
     if ((dstValidRow != 0 && dstValidCol != 0) &&
         (dstValidRow == src.GetValidRow() && dstValidCol == src.GetValidCol())) {
         TDivS<T, TileDataDst, TileDataSrc>(dst.data(), src.data(), scalar, dstValidRow, dstValidCol);
-        // Print divider, destination and source for debugging
-        cce::printf("=== [TDIVS] Divider: ");
-        pto::PrintValue<T>(scalar, 0);
-        cce::printf("\n");
-        pto::TPRINT_IMPL(dst);
-        pto::TPRINT_IMPL(src);
     } else {
         PTO_ASSERT(false, "TDIVS: dstTile validRow/validCol must be consistent with of src.");
     }
@@ -271,12 +264,6 @@ PTO_INTERNAL void TDIVS_IMPL(TileDataDst &dst, typename TileDataDst::DType scala
     if ((dstValidRow != 0 && dstValidCol != 0) &&
         (dstValidRow == src.GetValidRow() && dstValidCol == src.GetValidCol())) {
         TSDiv<T, TileDataDst, TileDataSrc>(dst.data(), src.data(), scalar, dstValidRow, dstValidCol);
-        // Print divider, destination and source for debugging
-        cce::printf("=== [TSDiv] Divider: ");
-        pto::PrintValue<T>(scalar, 0);
-        cce::printf("\n");
-        pto::TPRINT_IMPL(dst);
-        pto::TPRINT_IMPL(src);
     } else {
         PTO_ASSERT(false, "TDIVS: dstTile validRow/validCol must be consistent with of src.");
     }
