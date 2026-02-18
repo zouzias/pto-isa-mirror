@@ -453,14 +453,9 @@ __tf__ PTO_INTERNAL void TLoadCube(typename TileData::TileDType __out__ dst, typ
     int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0, int gStride1, int gStride2,
     int gStride3, int gStride4, int validRow, int validCol) {
 #if defined(__DAV_CUBE__)
-<<<<<<< Updated upstream
-    using L1Type = __cbuf__ typename TileData::DType *;
-    L1Type dstAddr = (L1Type)__cce_get_tile_ptr(dst);
-=======
     using L1Type = typename TileData::TileDType;
     // L1Type dstAddr = (L1Type)__cce_get_tile_ptr(dst);
     __cbuf__ typename TileData::DType *dstAddr = (__cbuf__ typename TileData::DType *) __cce_get_tile_ptr(dst);
->>>>>>> Stashed changes
 
     // ND2NZ or DN2NZ
     if constexpr ((GlobalData::layout == pto::Layout::ND || GlobalData::layout == pto::Layout::DN) &&

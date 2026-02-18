@@ -85,6 +85,4 @@ namespace pto{
     }
 } // end pto
 
->>>>>>> Stashed changes
-
 #endif
