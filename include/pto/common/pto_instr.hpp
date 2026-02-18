@@ -1469,6 +1469,13 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dst, GlobalSrcData &src, TileData &ping
     MAP_INSTR_IMPL(TPUT, dst, src, pingTile, pongTile);
     return {};
 }
+template <typename GlobalSignalData>
+PTO_INST RecordEvent TWAIT(GlobalSignalData &signalData, int32_t cmpValue, comm::WaitCmp cmp, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TWAIT, signalData);
+    return {};
+}
 #endif
 
 } // namespace pto
