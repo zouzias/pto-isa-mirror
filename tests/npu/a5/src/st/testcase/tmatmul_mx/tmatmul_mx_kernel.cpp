@@ -396,13 +396,13 @@ __global__ AICORE void RunTGEMVMX(
     RightScaleTile bScaleTile;
     AccTile cTile;
 
-    // TASSIGN(aTile, 0x0);
-    // TASSIGN(bTile, 0x0);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
     // uint64_t scaleAAddr = GetScaleAddr(aTile.data());
     // uint64_t scaleBAddr = GetScaleAddr(bTile.data());
 
-    TASSIGN(aScaleTile, scaleAAddr);
-    TASSIGN(bScaleTile, scaleBAddr);
+    // TASSIGN(aScaleTile, scaleAAddr);
+    // TASSIGN(bScaleTile, scaleBAddr);
     TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
