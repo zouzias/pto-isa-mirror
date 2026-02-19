@@ -132,8 +132,8 @@ __global__ AICORE void RunTMOVMX(
     TLOAD<TileScaleAData, GlobalDataSrc2>(aScaleMatTile, src2Global);
     TLOAD<TileScaleBData, GlobalDataSrc3>(bScaleMatTile, src3Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    // set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    // wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
     /**********************************TMOV && TEXTRACT**********************************/
 
@@ -146,15 +146,15 @@ __global__ AICORE void RunTMOVMX(
     TGET_SCALE_ADDR(aScaleTile, aTile);
     TGET_SCALE_ADDR(bScaleTile, bTile);
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    // set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    // wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 
     /**********************************TMATMUL**********************************/
 
     TMATMUL_MX(cTile, aTile, aScaleTile, bTile, bScaleTile);
 
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    // set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    // wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
     /**********************************TSTORE**********************************/
     TSTORE(dstGlobal, cTile);
@@ -247,8 +247,8 @@ __global__ AICORE void RunTEXTRACTMX(
     TLOAD<TileScaleAData, GlobalDataSrc2>(aScaleMatTile, src2Global);
     TLOAD<TileScaleBData, GlobalDataSrc3>(bScaleMatTile, src3Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    // set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    // wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
     /**********************************TMOV && TEXTRACT**********************************/
     TEXTRACT(aTile, aMatTile, indexM, indexK);
@@ -260,15 +260,15 @@ __global__ AICORE void RunTEXTRACTMX(
     TGET_SCALE_ADDR(aScaleTile, aTile);
     TGET_SCALE_ADDR(bScaleTile, bTile);
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    // set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    // wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 
     /**********************************TMATMUL**********************************/
 
     TMATMUL_MX(cTile, aTile, aScaleTile, bTile, bScaleTile);
 
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    // set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    // wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
     /**********************************TSTORE**********************************/
     TSTORE(dstGlobal, cTile);
@@ -353,8 +353,8 @@ __global__ AICORE void RunTEXTRACTMX_COMPACT(
     TLOAD<TileScaleAData, GlobalDataSrc2>(aScaleMatTile, src2Global);
     TLOAD<TileScaleBData, GlobalDataSrc3>(bScaleMatTile, src3Global);
 
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    // set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    // wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
     /**********************************TMOV && TEXTRACT**********************************/
     TEXTRACT(aTile, aMatTile, indexM, indexK);
@@ -366,15 +366,15 @@ __global__ AICORE void RunTEXTRACTMX_COMPACT(
     TGET_SCALE_ADDR(aScaleTile, aTile);
     TGET_SCALE_ADDR(bScaleTile, bTile);
 
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    // set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    // wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 
     /**********************************TMATMUL**********************************/
 
     TMATMUL_MX(cTile, aTile, aScaleTile, bTile, bScaleTile);
 
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    // set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    // wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
     /**********************************TSTORE**********************************/
     TSTORE(dstGlobal, cTile);
