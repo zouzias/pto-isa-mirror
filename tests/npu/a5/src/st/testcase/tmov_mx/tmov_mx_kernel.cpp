@@ -113,11 +113,11 @@ __global__ AICORE void RunTMOVMX(
 
     TASSIGN(aTile, 0x0);
     TASSIGN(bTile, 0x0);
-    uint64_t scaleAAddr = GetScaleAddr(aTile.data());
-    uint64_t scaleBAddr = GetScaleAddr(bTile.data());
+    // uint64_t scaleAAddr = GetScaleAddr(aTile.data());
+    // uint64_t scaleBAddr = GetScaleAddr(bTile.data());
 
-    TASSIGN(aScaleTile, scaleAAddr);
-    TASSIGN(bScaleTile, scaleBAddr);
+    // TASSIGN(aScaleTile, scaleAAddr);
+    // TASSIGN(bScaleTile, scaleBAddr);
     TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
@@ -142,6 +142,9 @@ __global__ AICORE void RunTMOVMX(
 
     TMOV(aScaleTile, aScaleMatTile);
     TMOV(bScaleTile, bScaleMatTile);
+    
+    TGET_SCALE_ADDR(aScaleTile, aTile);
+    TGET_SCALE_ADDR(bScaleTile, bTile);
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
@@ -226,10 +229,10 @@ __global__ AICORE void RunTEXTRACTMX(
 
     TASSIGN(aTile, 0x0);
     TASSIGN(bTile, 0x0);
-    uint64_t scaleAAddr = GetScaleAddr(aTile.data());
-    uint64_t scaleBAddr = GetScaleAddr(bTile.data());
-    TASSIGN(aScaleTile, scaleAAddr);
-    TASSIGN(bScaleTile, scaleBAddr);
+    // uint64_t scaleAAddr = GetScaleAddr(aTile.data());
+    // uint64_t scaleBAddr = GetScaleAddr(bTile.data());
+    // TASSIGN(aScaleTile, scaleAAddr);
+    // TASSIGN(bScaleTile, scaleBAddr);
     TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
@@ -253,6 +256,9 @@ __global__ AICORE void RunTEXTRACTMX(
 
     TEXTRACT(aScaleTile, aScaleMatTile, indexM, indexK / 32);
     TEXTRACT(bScaleTile, bScaleMatTile, indexK / 32, indexN);
+
+    TGET_SCALE_ADDR(aScaleTile, aTile);
+    TGET_SCALE_ADDR(bScaleTile, bTile);
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
@@ -334,10 +340,10 @@ __global__ AICORE void RunTEXTRACTMX_COMPACT(
 
     TASSIGN(aTile, 0x0);
     TASSIGN(bTile, 0x0);
-    uint64_t scaleAAddr = GetScaleAddr(aTile.data());
-    uint64_t scaleBAddr = GetScaleAddr(bTile.data());
-    TASSIGN(aScaleTile, scaleAAddr);
-    TASSIGN(bScaleTile, scaleBAddr);
+    // uint64_t scaleAAddr = GetScaleAddr(aTile.data());
+    // uint64_t scaleBAddr = GetScaleAddr(bTile.data());
+    // TASSIGN(aScaleTile, scaleAAddr);
+    // TASSIGN(bScaleTile, scaleBAddr);
     TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
@@ -356,6 +362,9 @@ __global__ AICORE void RunTEXTRACTMX_COMPACT(
 
     TEXTRACT(aScaleTile, aScaleMatTile, indexM, indexK / 32);
     TEXTRACT(bScaleTile, bScaleMatTile, indexK / 32, indexN);
+
+    TGET_SCALE_ADDR(aScaleTile, aTile);
+    TGET_SCALE_ADDR(bScaleTile, bTile);
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
