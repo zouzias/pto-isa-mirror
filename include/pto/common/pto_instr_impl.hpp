@@ -249,6 +249,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TCvt.hpp"
 #include "pto/cpu/TColMin.hpp"
 #include "pto/cpu/TColExpand.hpp"
+#include "pto/cpu/TColExpandOp.hpp"
 #include "pto/cpu/TScatter.hpp"
 #include "pto/cpu/TTRI.hpp"
 #include "pto/cpu/TSort32.hpp"
