@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="900" viewBox="0 0 1400 900">
+  <rect width="1400" height="900" fill="#ffffff"/>
+  <text x="60" y="70" fill="#0f172a" font-size="40" font-family="Arial">TMEM Layout vs A5 Memory/Layout Constraints</text>
+
+  <rect x="80" y="120" width="580" height="700" rx="16" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="110" y="170" fill="#111827" font-size="30" font-family="Arial">GPU CUTE (Typical)</text>
+  <rect x="120" y="210" width="500" height="110" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="150" y="275" fill="#1e3a8a" font-size="26" font-family="Arial">Register / MMA Accumulator (O, C fragment)</text>
+  <rect x="120" y="350" width="500" height="110" rx="10" fill="#dcfce7" stroke="#86efac"/>
+  <text x="150" y="415" fill="#14532d" font-size="26" font-family="Arial">SMEM / TMEM Tile Staging</text>
+  <rect x="120" y="490" width="500" height="110" rx="10" fill="#fef3c7" stroke="#fcd34d"/>
+  <text x="150" y="555" fill="#854d0e" font-size="26" font-family="Arial">Asynchronous Pipeline Overlap</text>
+  <text x="120" y="660" fill="#334155" font-size="22" font-family="Arial">Key: matrix C accumulation is natural in MMA path</text>
+
+  <rect x="740" y="120" width="580" height="700" rx="16" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="770" y="170" fill="#111827" font-size="30" font-family="Arial">A5 NPU (Current PTO Path)</text>
+  <rect x="780" y="210" width="500" height="110" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="810" y="275" fill="#1e3a8a" font-size="26" font-family="Arial">L0C / UB / L1 / GM Explicit Movement</text>
+  <rect x="780" y="350" width="500" height="110" rx="10" fill="#dcfce7" stroke="#86efac"/>
+  <text x="810" y="415" fill="#14532d" font-size="26" font-family="Arial">TSync / SET_FLAG / WAIT_FLAG Protocol</text>
+  <rect x="780" y="490" width="500" height="110" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+  <text x="810" y="555" fill="#991b1b" font-size="24" font-family="Arial">MMAD bias path exposed as row-bias (1xN)</text>
+  <text x="780" y="660" fill="#334155" font-size="22" font-family="Arial">Key: optimize around stage bottleneck and legal dataflow</text>
+
+  <line x1="620" y1="265" x2="780" y2="265" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="620" y1="405" x2="780" y2="405" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="620" y1="545" x2="780" y2="545" stroke="#94a3b8" stroke-width="3" marker-end="url(#arrow)"/>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+    </marker>
+  </defs>
+</svg>

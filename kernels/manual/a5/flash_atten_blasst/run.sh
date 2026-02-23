@@ -60,28 +60,9 @@ if [[ ! "$SOC_VERSION" =~ $pattern ]]; then
     exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_LINK_PATH="${SCRIPT_DIR}/build"
-DEFAULT_BUILD_ROOT="/hddata/${USER}/pto-isa/flash_atten_fa4"
-if [[ -n "${FA4_BUILD_ROOT_DIR:-}" ]]; then
-    BUILD_ROOT_DIR="${FA4_BUILD_ROOT_DIR}"
-elif [[ -d "/hddata" && -w "/hddata" ]]; then
-    BUILD_ROOT_DIR="${DEFAULT_BUILD_ROOT}"
-else
-    # Fallback for environments without /hddata mount.
-    BUILD_ROOT_DIR="${SCRIPT_DIR}"
-fi
-BUILD_REAL_PATH="${BUILD_ROOT_DIR}/build"
-
-mkdir -p "${BUILD_ROOT_DIR}"
-chmod 755 "${BUILD_ROOT_DIR}" || true
-
-rm -rf "${BUILD_LINK_PATH}"
-rm -rf "${BUILD_REAL_PATH}"
-mkdir -p "${BUILD_REAL_PATH}"
-chmod 755 "${BUILD_REAL_PATH}" || true
-ln -s "${BUILD_REAL_PATH}" "${BUILD_LINK_PATH}"
-cd "${BUILD_REAL_PATH}"
+rm -rf build
+mkdir build
+cd build
 
 #export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:$LD_LIBRARY_PATH
 if [[ -d "${ASCEND_HOME_PATH}/runtime/lib64/stub/x86_64" ]]; then
@@ -117,8 +98,6 @@ fi
 
 echo "[RUN.SH] CASE_FILTER=${CASE_FILTER:-}<none>"
 echo "[RUN.SH] CASES_RAW=${CASES_RAW:-}<none>"
-echo "[RUN.SH] BUILD_REAL_PATH=${BUILD_REAL_PATH}"
-echo "[RUN.SH] BUILD_LINK_PATH=${BUILD_LINK_PATH}"
 echo "[RUN.SH] NPU_ID=${NPU_ID}"
 echo "[RUN.SH] QK_PRELOAD=${QK_PRELOAD}"
 echo "[RUN.SH] FIFO_MODE=${FIFO_MODE} (0=ALL_GM, 1=ALL_UB, 2=QK_PV_UB_ONLY)"
@@ -126,34 +105,46 @@ echo "[RUN.SH] GEN_CASE_ARGS=${GEN_CASE_ARGS[*]:-<none>}"
 echo "[RUN.SH] INTERMEDIATE=${INTERMEDIATE:-0}"
 echo "[RUN.SH] CAUSAL_MASK=${CAUSAL_MASK:-0}"
 echo "[RUN.SH] DEBUG=${DEBUG_BUILD:-0}"
-if [[ -n "${FA4_SKIP_RESCALE_ENABLE:-}" ]]; then
-    echo "[RUN.SH] FA4_SKIP_RESCALE_ENABLE=${FA4_SKIP_RESCALE_ENABLE}"
+if [[ -n "${BLASST_SKIP_SOFTMAX_ENABLE:-}" ]]; then
+    echo "[RUN.SH] BLASST_SKIP_SOFTMAX_ENABLE=${BLASST_SKIP_SOFTMAX_ENABLE}"
 fi
-if [[ -n "${FA4_SKIP_RESCALE_EPS:-}" ]]; then
-    echo "[RUN.SH] FA4_SKIP_RESCALE_EPS=${FA4_SKIP_RESCALE_EPS}"
+if [[ -n "${BLASST_SKIP_SOFTMAX_FORCE:-}" ]]; then
+    echo "[RUN.SH] BLASST_SKIP_SOFTMAX_FORCE=${BLASST_SKIP_SOFTMAX_FORCE}"
 fi
-if [[ -n "${FA4_SKIP_RESCALE_FORCE:-}" ]]; then
-    echo "[RUN.SH] FA4_SKIP_RESCALE_FORCE=${FA4_SKIP_RESCALE_FORCE}"
+if [[ -n "${BLASST_SKIP_SOFTMAX_DELTA:-}" ]]; then
+    echo "[RUN.SH] BLASST_SKIP_SOFTMAX_DELTA=${BLASST_SKIP_SOFTMAX_DELTA}"
+fi
+if [[ -n "${BLASST_SKIP_SOFTMAX_FORCE_RATIO:-}" ]]; then
+    echo "[RUN.SH] BLASST_SKIP_SOFTMAX_FORCE_RATIO=${BLASST_SKIP_SOFTMAX_FORCE_RATIO}"
+fi
+if [[ -n "${BLASST_SKIP_VLOAD_ENABLE:-}" ]]; then
+    echo "[RUN.SH] BLASST_SKIP_VLOAD_ENABLE=${BLASST_SKIP_VLOAD_ENABLE}"
 fi
 
-python3 "${SCRIPT_DIR}/scripts/generate_cases.py" --qk-preload "${QK_PRELOAD}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
+python3 ../scripts/generate_cases.py --qk-preload "${QK_PRELOAD}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
 
 CMAKE_EXTRA=()
 if [[ -n "${DEBUG_BUILD:-}" ]]; then
     CMAKE_EXTRA+=(-DDEBUG_MODE=ON)
 fi
 CMAKE_EXTRA+=(-DFIFO_MODE=${FIFO_MODE})
-if [[ -n "${FA4_SKIP_RESCALE_ENABLE:-}" ]]; then
-    CMAKE_EXTRA+=(-DFA4_SKIP_RESCALE_ENABLE=${FA4_SKIP_RESCALE_ENABLE})
+if [[ -n "${BLASST_SKIP_SOFTMAX_ENABLE:-}" ]]; then
+    CMAKE_EXTRA+=(-DBLASST_SKIP_SOFTMAX_ENABLE=${BLASST_SKIP_SOFTMAX_ENABLE})
 fi
-if [[ -n "${FA4_SKIP_RESCALE_EPS:-}" ]]; then
-    CMAKE_EXTRA+=(-DFA4_SKIP_RESCALE_EPS=${FA4_SKIP_RESCALE_EPS})
+if [[ -n "${BLASST_SKIP_SOFTMAX_FORCE:-}" ]]; then
+    CMAKE_EXTRA+=(-DBLASST_SKIP_SOFTMAX_FORCE=${BLASST_SKIP_SOFTMAX_FORCE})
 fi
-if [[ -n "${FA4_SKIP_RESCALE_FORCE:-}" ]]; then
-    CMAKE_EXTRA+=(-DFA4_SKIP_RESCALE_FORCE=${FA4_SKIP_RESCALE_FORCE})
+if [[ -n "${BLASST_SKIP_SOFTMAX_DELTA:-}" ]]; then
+    CMAKE_EXTRA+=(-DBLASST_SKIP_SOFTMAX_DELTA=${BLASST_SKIP_SOFTMAX_DELTA})
+fi
+if [[ -n "${BLASST_SKIP_SOFTMAX_FORCE_RATIO:-}" ]]; then
+    CMAKE_EXTRA+=(-DBLASST_SKIP_SOFTMAX_FORCE_RATIO=${BLASST_SKIP_SOFTMAX_FORCE_RATIO})
+fi
+if [[ -n "${BLASST_SKIP_VLOAD_ENABLE:-}" ]]; then
+    CMAKE_EXTRA+=(-DBLASST_SKIP_VLOAD_ENABLE=${BLASST_SKIP_VLOAD_ENABLE})
 fi
 
-cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} "${CMAKE_EXTRA[@]}" "${SCRIPT_DIR}"
+cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} "${CMAKE_EXTRA[@]}" ..
 make -j16
 
 EXTRA_BIN_ARGS=()
@@ -163,12 +154,12 @@ fi
 EXTRA_BIN_ARGS+=(--sys_cnt_multiple=1.0)
 
 if [[ -n "${CASE_FILTER:-}" ]]; then
-    python3 "${SCRIPT_DIR}/scripts/gen_data.py" --case="${CASE_FILTER}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
+    python3 ../scripts/gen_data.py --case="${CASE_FILTER}" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
     time ./fa_performance --npu="${NPU_ID}" --case="${CASE_FILTER}" "${EXTRA_BIN_ARGS[@]}"
 elif [[ -n "${CASES_RAW:-}" ]]; then
-    python3 "${SCRIPT_DIR}/scripts/gen_data.py" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
+    python3 ../scripts/gen_data.py "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
     time ./fa_performance --npu="${NPU_ID}" --cases="${CASES_RAW}" "${EXTRA_BIN_ARGS[@]}"
 else
-    python3 "${SCRIPT_DIR}/scripts/gen_data.py" "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
+    python3 ../scripts/gen_data.py "${GEN_CASE_ARGS[@]}" --causal-mask "${CAUSAL_MASK:-0}"
     time ./fa_performance --npu="${NPU_ID}" "${EXTRA_BIN_ARGS[@]}"
 fi

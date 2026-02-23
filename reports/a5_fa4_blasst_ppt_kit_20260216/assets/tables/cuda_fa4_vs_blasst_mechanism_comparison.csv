@@ -1,0 +1,12 @@
+dimension,FA4 CUDA (skip-rescale),BLASST CUDA (skip-softmax)
+optimization_stage,Online update of O in output accumulation path,Softmax tile processing in warp-specialized compute path
+core_idea,Skip near-identity rescale when exp(m_old-m_new) ~ 1,Skip whole tile when exp(local_max-global_max) is below threshold
+decision_granularity,row/tile update condition,tile-level decision (block-level sparse behavior)
+decision_signal,rescale factor close to 1,upper-bound contribution to normalized softmax is negligible
+execution_model_dependency,relies on MMA accumulator update path for O,relies on warp-group producer/consumer scheduling and voting
+sync_collaboration,mainly follows existing FA4 pipeline dependencies,warp all-reduce + cross-warp atomic vote + named barrier
+skipped_work_scope,primarily one rescale multiply step in O update path,exp/sum continuation + V load + SxV MMA can be skipped
+expected_gain_profile,moderate gain when GU/update-related cost is notable,potentially large gain when many low-contribution tiles exist
+sensitivity_to_workload,sensitive to how often rescale is near-identity,highly sensitive to logit distribution and threshold setting
+numerical_consideration,usually lower risk under conservative skip conditions,threshold too aggressive may hurt accuracy; profiling required
+engineering_complexity_cuda,relatively localized optimization,higher: requires decision-consensus-early-return coordination

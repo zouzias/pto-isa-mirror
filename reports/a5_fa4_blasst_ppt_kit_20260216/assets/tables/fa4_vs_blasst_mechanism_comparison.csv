@@ -1,0 +1,11 @@
+dimension,FA4 skip-rescale,BLASST skip-softmax
+optimization_target,GU stage rescale multiply (O_old * exp_max),P stage softmax tile and optional PV V-load
+decision_granularity,tile-level but acts on row-expand rescale op,tile-level skip decision (non-init tiles)
+decision_signal,exp_max close to 1 (or force),local_max - global_max threshold (or force/ratio-force)
+main_skipped_ops,TROWEXPANDMUL only,exp/sum path; and optionally skip TLOAD(V)
+ops_kept,TADD and TROWEXPANDDIV remain,pipeline handshake remains; MMAD/sync path kept safe
+primary_benefit,reduce GU vector compute,reduce P vector compute; reduce useless V-load bandwidth
+bottleneck_sensitivity,benefit limited if GU is not bottleneck,benefit higher when P/vector or memory traffic dominates
+numerical_risk,relatively low (near-identity rescale skip),threshold sensitive; requires profiling for stability/accuracy
+npu_migration_complexity,lower (localized change),higher (decision + semantics + cross-stage consistency)
+typical_knobs,FA4_SKIP_RESCALE_ENABLE/EPS/FORCE,BLASST_SKIP_SOFTMAX_ENABLE/DELTA/FORCE/FORCE_RATIO + SKIP_VLOAD_ENABLE

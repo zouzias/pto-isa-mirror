@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="860" viewBox="0 0 1600 860">
+  <rect width="1600" height="860" fill="#ffffff"/>
+  <text x="60" y="70" fill="#0f172a" font-size="38" font-family="Arial" font-weight="bold">A5 Baseline vs A5 + BLASST Implementation</text>
+  <text x="60" y="108" fill="#475569" font-size="20" font-family="Arial">Compare original A5 path and BLASST-enabled A5 path under the same pipeline protocol</text>
+
+  <!-- headers -->
+  <rect x="70" y="150" width="700" height="62" rx="10" fill="#e2e8f0"/>
+  <text x="105" y="191" fill="#0f172a" font-size="28" font-family="Arial" font-weight="bold">Original A5 Implementation</text>
+  <rect x="830" y="150" width="700" height="62" rx="10" fill="#fef3c7"/>
+  <text x="865" y="191" fill="#78350f" font-size="28" font-family="Arial" font-weight="bold">A5 + BLASST Implementation</text>
+
+  <!-- left column -->
+  <rect x="70" y="230" width="700" height="520" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="100" y="285" fill="#111827" font-size="24" font-family="Arial" font-weight="bold">P stage</text>
+  <text x="100" y="320" fill="#334155" font-size="20" font-family="Arial">- Normal softmax path (max / exp / sum)</text>
+  <text x="100" y="370" fill="#111827" font-size="24" font-family="Arial" font-weight="bold">PV stage</text>
+  <text x="100" y="405" fill="#334155" font-size="20" font-family="Arial">- Always TLOAD(V) + MMAD</text>
+  <text x="100" y="455" fill="#111827" font-size="24" font-family="Arial" font-weight="bold">GU stage</text>
+  <text x="100" y="490" fill="#334155" font-size="20" font-family="Arial">- Standard update and output path</text>
+  <text x="100" y="560" fill="#0f172a" font-size="24" font-family="Arial" font-weight="bold">Behavior</text>
+  <text x="100" y="595" fill="#334155" font-size="20" font-family="Arial">- Full compute and full load on every tile</text>
+  <text x="100" y="655" fill="#0f172a" font-size="24" font-family="Arial" font-weight="bold">Cost profile</text>
+  <text x="100" y="690" fill="#334155" font-size="20" font-family="Arial">- Higher P compute and PV load bandwidth</text>
+
+  <!-- right column -->
+  <rect x="830" y="230" width="700" height="520" rx="12" fill="#fffdf5" stroke="#f59e0b" stroke-width="2"/>
+  <text x="860" y="285" fill="#92400e" font-size="24" font-family="Arial" font-weight="bold">P stage</text>
+  <text x="860" y="320" fill="#92400e" font-size="20" font-family="Arial">- Tile-level skip-softmax decision</text>
+  <text x="860" y="355" fill="#92400e" font-size="20" font-family="Arial">- Skipped tile emits: x_exp=0, local_sum=0, exp_max=1</text>
+  <text x="860" y="405" fill="#92400e" font-size="24" font-family="Arial" font-weight="bold">PV stage</text>
+  <text x="860" y="440" fill="#92400e" font-size="20" font-family="Arial">- Skip TLOAD(V) on skipped tiles (final optimization)</text>
+  <text x="860" y="475" fill="#334155" font-size="20" font-family="Arial">- Keep MMAD and sync protocol safe</text>
+  <text x="860" y="525" fill="#92400e" font-size="24" font-family="Arial" font-weight="bold">GU + host observability</text>
+  <text x="860" y="560" fill="#334155" font-size="20" font-family="Arial">- Same stage handshake as baseline</text>
+  <text x="860" y="595" fill="#334155" font-size="20" font-family="Arial">- p_total_cnt / p_skip_cnt for profiling</text>
+  <text x="860" y="655" fill="#0f172a" font-size="24" font-family="Arial" font-weight="bold">Cost profile</text>
+  <text x="860" y="690" fill="#334155" font-size="20" font-family="Arial">- Lower useless compute and lower useless V-load</text>
+
+  <rect x="70" y="770" width="1460" height="58" rx="10" fill="#ecfeff" stroke="#67e8f9"/>
+  <text x="105" y="806" fill="#155e75" font-size="22" font-family="Arial">Invariant: fixed QK-P-PV-GU handshake and sync protocol remain unchanged in both implementations.</text>
+</svg>

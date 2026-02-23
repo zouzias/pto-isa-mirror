@@ -1,0 +1,7 @@
+family,config,total_kernel_ticks,total_system_ticks,vec_compute_icyc,cube_kernel_ticks,cube_mte2_busy,vec0_kernel_ticks,vec1_kernel_ticks,vec0_rvec_busy,vec1_rvec_busy,gain_total_kernel_pct_vs_family_off,gain_total_system_pct_vs_family_off,gain_vec_compute_pct_vs_family_off,gain_cube_kernel_pct_vs_family_off,gain_cube_mte2_busy_pct_vs_family_off,gain_vec0_kernel_pct_vs_family_off,gain_vec1_kernel_pct_vs_family_off,gain_vec0_rvec_busy_pct_vs_family_off,gain_vec1_rvec_busy_pct_vs_family_off
+FA4,off,33048,33263,340396,32418,12313,33048,33047,26375,26375,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000
+FA4,force_rescale,31198,31414,309154,30599,12264,31198,31197,22996,22996,-5.598,-5.559,-9.178,-5.611,-0.398,-5.598,-5.598,-12.811,-12.811
+BLASST,off,32990,33205,340396,32391,12283,32990,32889,26389,26389,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000
+BLASST,ratio50_softmax,26076,26292,238578,25277,8973,26076,26075,19332,19326,-20.958,-20.819,-29.912,-21.963,-26.948,-20.958,-20.718,-26.742,-26.765
+BLASST,force_softmax,20492,20707,161850,19784,11042,20492,20377,14015,14015,-37.884,-37.639,-52.452,-38.921,-10.103,-37.884,-38.043,-46.891,-46.891
+BLASST,force_softmax_skip_vload,20437,20654,161850,19811,7086,20338,20437,14015,14015,-38.051,-37.799,-52.452,-38.838,-42.311,-38.351,-37.861,-46.891,-46.891

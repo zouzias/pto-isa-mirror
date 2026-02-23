@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="900" viewBox="0 0 1500 900">
+  <rect width="1500" height="900" fill="#f8fafc"/>
+  <text x="60" y="70" fill="#0f172a" font-size="40" font-family="Arial">BLASST CUDA Principle: Decide - Vote - Early Return</text>
+  <text x="60" y="108" fill="#475569" font-size="22" font-family="Arial">Hopper warp-specialized FMHA skip-softmax mechanism (tile-level)</text>
+
+  <!-- Main pipeline -->
+  <rect x="60" y="160" width="1380" height="180" rx="14" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="2"/>
+  <rect x="100" y="210" width="250" height="80" rx="10" fill="#1d4ed8"/>
+  <text x="150" y="258" fill="#ffffff" font-size="28" font-family="Arial">QK logits</text>
+  <rect x="400" y="210" width="290" height="80" rx="10" fill="#0ea5e9"/>
+  <text x="435" y="258" fill="#ffffff" font-size="28" font-family="Arial">Online Softmax</text>
+  <rect x="740" y="210" width="250" height="80" rx="10" fill="#06b6d4"/>
+  <text x="808" y="258" fill="#ffffff" font-size="28" font-family="Arial">V load</text>
+  <rect x="1040" y="210" width="330" height="80" rx="10" fill="#14b8a6"/>
+  <text x="1095" y="258" fill="#ffffff" font-size="28" font-family="Arial">S x V MMA update</text>
+
+  <line x1="350" y1="250" x2="400" y2="250" stroke="#334155" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="690" y1="250" x2="740" y2="250" stroke="#334155" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="990" y1="250" x2="1040" y2="250" stroke="#334155" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <!-- Decision block -->
+  <rect x="120" y="390" width="600" height="420" rx="14" fill="#dcfce7" stroke="#86efac" stroke-width="2"/>
+  <text x="150" y="445" fill="#14532d" font-size="30" font-family="Arial">1) Tile-level Skip Decision</text>
+  <text x="150" y="495" fill="#14532d" font-size="24" font-family="Arial">Condition:</text>
+  <text x="280" y="495" fill="#14532d" font-size="24" font-family="Arial">exp(local_max - global_max) &lt; threshold</text>
+  <text x="150" y="545" fill="#14532d" font-size="22" font-family="Arial">- local_max from current tile rows</text>
+  <text x="150" y="585" fill="#14532d" font-size="22" font-family="Arial">- global_max from running online softmax state</text>
+  <text x="150" y="625" fill="#14532d" font-size="22" font-family="Arial">- threshold scales with kv sequence length</text>
+  <text x="150" y="695" fill="#166534" font-size="24" font-family="Arial">Meaning: current tile contribution is numerically negligible</text>
+
+  <!-- Vote block -->
+  <rect x="780" y="390" width="600" height="180" rx="14" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+  <text x="810" y="445" fill="#1e3a8a" font-size="30" font-family="Arial">2) Warp / Warp-Group Consensus</text>
+  <text x="810" y="495" fill="#1e3a8a" font-size="22" font-family="Arial">- __all_sync: warp-local boolean reduction</text>
+  <text x="810" y="530" fill="#1e3a8a" font-size="22" font-family="Arial">- atomicAnd(skip_vote): cross-warp-group voting</text>
+  <text x="810" y="565" fill="#1e3a8a" font-size="22" font-family="Arial">- named_barrier_wait: global decision synchronization</text>
+
+  <!-- Early return block -->
+  <rect x="780" y="600" width="600" height="210" rx="14" fill="#fee2e2" stroke="#fca5a5" stroke-width="2"/>
+  <text x="810" y="655" fill="#991b1b" font-size="30" font-family="Arial">3) Early Return on Skip</text>
+  <text x="810" y="705" fill="#991b1b" font-size="22" font-family="Arial">- Skip exp/sum continuation in softmax path</text>
+  <text x="810" y="740" fill="#991b1b" font-size="22" font-family="Arial">- Skip V load</text>
+  <text x="810" y="775" fill="#991b1b" font-size="22" font-family="Arial">- Skip S x V MMA compute</text>
+
+  <!-- Connectors -->
+  <line x1="690" y1="250" x2="810" y2="390" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="720" y1="620" x2="780" y2="620" stroke="#64748b" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Footer -->
+  <rect x="60" y="840" width="1380" height="40" rx="8" fill="#ecfeff" stroke="#67e8f9"/>
+  <text x="80" y="868" fill="#155e75" font-size="20" font-family="Arial">Key difference from A5 migration: CUDA path can early-return and skip both compute and memory aggressively within warp-specialized scheduling.</text>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155"/>
+    </marker>
+  </defs>
+</svg>
