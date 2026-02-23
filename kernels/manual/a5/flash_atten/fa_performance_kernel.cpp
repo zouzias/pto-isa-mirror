@@ -625,19 +625,12 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
                 pvUbBufSync.allocate();
             }
 
-            #if ND_LAYOUT
-                if (tile_id == 0) {
-                    TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(runningOTile, pvAccTile);
-                } else {
-                    TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(pvVecTile[pv_ub_buf_idx], pvAccTile);
-                }
-            #else
-                if (tile_id == 0) {
-                    TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitN>(runningOTile, pvAccTile);
-                } else {
-                    TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitN>(pvVecTile[pv_ub_buf_idx], pvAccTile);
-                }
-            #endif
+            
+            if (tile_id == 0) {
+                TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(runningOTile, pvAccTile);
+            } else {
+                TMOV<TileOutT, TilePVData, AccToVecMode::DualModeSplitM>(pvVecTile[pv_ub_buf_idx], pvAccTile);
+            }
             pvUbBufSync.record();
 
             if constexpr (INTERMEDIATE_CHECK) {
@@ -1135,11 +1128,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     TileDataH_NZ_T nzConvBuffer;
 
     using TileOutGuT = Tile<TileType::Vec, float, VecGuRows, HEAD_SIZE, BLayout::RowMajor, VecGuRows, HEAD_SIZE>;
-    // #if ND_LAYOUT
-    //     using TileOutGuT = Tile<TileType::Vec, float, VecGuRows, HEAD_SIZE, BLayout::RowMajor, VecGuRows, HEAD_SIZE>;
-    // #else
-    //     using TileOutGuT = Tile<TileType::Vec, float, HEAD_SIZE, VecGuRows, BLayout::RowMajor, HEAD_SIZE, VecGuRows>;    //TLOAD fail?
-    // #endif
     TileOutGuT pvVecTile[outOTileNBuffers];
     TileOutGuT runningOTile;
     allocate_vec_tile_buffers<TileDataF_T, ReduceTileF_T, TileDataH_T, TileOutGuT, srcVecTNBuffers, xexpVecTNBuffers,
