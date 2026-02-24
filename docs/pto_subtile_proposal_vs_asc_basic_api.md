@@ -189,21 +189,50 @@ TCOLSUM(dstTile, srcTile, tmpTile, /*isBinary=*/false);
 TSTORE(dstGlobal, dstTile);
 ```
 
-**AscendC Basic (tile‑level)**
+**AscendC Basic (tile‑level, Add stride mode)**
 ```cpp
 AscendC::DataCopy(srcLocal, srcGlobal, vRows * kTCols);
-// Example: sum columns manually (scalar loop shown for clarity)
-for (int c = 0; c < vCols; ++c) {
-    float acc = 0;
-    for (int r = 0; r < vRows; ++r) {
-        acc += srcLocal[r * kTCols + c];
-    }
-    dstLocal[c] = acc;
-}
+
+// init dstLocal with first row
+AscendC::DataCopy(dstLocal, srcLocal, vCols);
+
+// accumulate remaining rows using Add stride mode
+SetMaskNorm();
+SetVectorMask(0, vCols);
+AscendC::Add(dstLocal, dstLocal, srcLocal + kTCols,
+             /*repeat=*/vRows - 1,
+             /*dstRep=*/1, /*src0Rep=*/1, /*src1Rep=*/1,
+             /*dstStride=*/0, /*src0Stride=*/0, /*src1Stride=*/kTCols / 8);
+
 AscendC::DataCopy(dstGlobal, dstLocal, vCols);
 ```
 
 > Note: AscendC Basic can also use vector reduction ops, but still requires manual stride + buffer management.
+
+---
+
+### 4) Reduce (rowsum)
+
+**PTO SubTile (tile‑level)**
+```cpp
+TLOAD(srcTile, srcGlobal);
+TROWSUM(dstTile, srcTile, tmpTile, /*isBinary=*/false);
+TSTORE(dstGlobal, dstTile);
+```
+
+**AscendC Basic (tile‑level)**
+```cpp
+AscendC::DataCopy(srcLocal, srcGlobal, vRows * kTCols);
+// Example using row-wise reduce with vector reduction (conceptual)
+SetMaskNorm();
+SetVectorMask(0, vCols);
+AscendC::WholeReduceSum(dstLocal, srcLocal,
+                        /*repeat=*/vRows - 1,
+                        /*dstRep=*/1, /*srcRep=*/1,
+                        /*dstStride=*/1, /*srcStride=*/kTCols / 8);
+AscendC::DataCopy(dstGlobal, dstLocal, vRows);
+```
+
 
 ## Why SubTile can be “single‑intrinsic, no internal loops” (and its limitation)
 
