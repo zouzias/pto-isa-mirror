@@ -68,3 +68,68 @@ private:
 ```
 
 **Summary:** PTO is shorter because it encapsulates **(a) pipeline sync**, **(b) UB buffer management**, and **(c) shape/stride bookkeeping** into `Tile + GlobalTensor + Events + TLOAD/TADD/TSTORE`.
+
+## PTO tadd ST — kernel + what it encapsulates
+
+### PTO kernel (ST)
+From `tests/npu/a2a3/src/st/testcase/tadd/tadd_kernel.cpp`:
+
+```cpp
+template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
+__global__ AICORE void runTAdd(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+{
+    using DynShapeDim5 = Shape<1, 1, 1, vRows, vCols>;
+    using DynStridDim5 = Stride<1, 1, 1, kTCols_, 1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+    TileData src0Tile(vRows, vCols);
+    TileData src1Tile(vRows, vCols);
+    TileData dstTile(vRows, vCols);
+    TASSIGN(src0Tile, 0x0);
+    TASSIGN(src1Tile, 0x10000);
+    TASSIGN(dstTile, 0x20000);
+
+    GlobalData src0Global(src0);
+    GlobalData src1Global(src1);
+    GlobalData dstGlobal(out);
+
+    Event<Op::TLOAD, Op::TADD> event0;
+    Event<Op::TADD, Op::TSTORE_VEC> event1;
+
+    TLOAD(src0Tile, src0Global);
+    event0 = TLOAD(src1Tile, src1Global);
+    event1 = TADD(dstTile, src0Tile, src1Tile, event0);
+    TSTORE(dstGlobal, dstTile, event1);
+    out = dstGlobal.data();
+}
+```
+
+### PTO encapsulates what (mapping to AscendC stages)
+
+**CopyIn (MTE2 → UB)**
+- Encapsulated by: `TLOAD(src0Tile, src0Global)` and `TLOAD(src1Tile, src1Global)`
+- PTO hides: queue allocation, buffer size, and `DataCopy` length/stride.
+
+**Compute (VEC)**
+- Encapsulated by: `TADD(dstTile, src0Tile, src1Tile, event0)`
+- PTO hides: enqueue/dequeue, local tensor lifetime, and vector op scheduling.
+
+**CopyOut (MTE3 → GM)**
+- Encapsulated by: `TSTORE(dstGlobal, dstTile, event1)`
+- PTO hides: enqueue/dequeue and `DataCopy` back to GM.
+
+**Sync/ordering**
+- Encapsulated by: `Event<Op::TLOAD, Op::TADD>` + `Event<Op::TADD, Op::TSTORE_VEC>`
+- PTO hides: explicit pipeline fences between MTE2/VEC/MTE3.
+
+### PTO Tile / GlobalTensor encapsulation
+
+**Tile (TileData)**
+- Encapsulates UB allocation + address binding (`TASSIGN`).
+- Encodes tile shape and layout (rows/cols, row-major).
+- Carries type info for opcode selection (e.g., F16/FP32).
+
+**GlobalTensor (GlobalData)**
+- Encapsulates GM pointer + shape/stride.
+- Provides implicit stride handling for `TLOAD/TSTORE`.
+- Shields kernel code from explicit `DataCopy` parameters.
