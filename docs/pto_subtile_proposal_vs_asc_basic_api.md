@@ -177,34 +177,35 @@ TSTORE(dstGlobal, dstBig);
 
 **AscendC Basic (tile‑level)**
 ```cpp
-// inside user outer loop over tiles
-AscendC::TPipe pipe;
-AscendC::TQue<AscendC::TPosition::VECIN, 1> inQueue0, inQueue1;
-AscendC::TQue<AscendC::TPosition::VECOUT, 1> outQueue;
+// Case A (large cols): use 1D subtile per row, stride on row axis
+AscendC::DataCopy(srcLocal, src0Global, vRows * kTCols);
+AscendC::DataCopy(srcLocal1, src1Global, vRows * kTCols);
 
-int dataSize = vRows * kTCols;
-pipe.InitBuffer(inQueue0, 1, dataSize * sizeof(T));
-pipe.InitBuffer(inQueue1, 1, dataSize * sizeof(T));
-pipe.InitBuffer(outQueue, 1, dataSize * sizeof(T));
+// Add with row repeat (vCols <= VL), stride = kTCols/8
+SetMaskNorm();
+SetVectorMask(0, kTCols);
+AscendC::Add(dstLocal, srcLocal, srcLocal1,
+             /*repeat=*/vRows - 1,
+             /*dstRep=*/1, /*src0Rep=*/1, /*src1Rep=*/1,
+             /*dstStride=*/kTCols/8, /*src0Stride=*/kTCols/8, /*src1Stride=*/kTCols/8);
 
-auto s0 = inQueue0.AllocTensor<T>();
-auto s1 = inQueue1.AllocTensor<T>();
-AscendC::DataCopy(s0, src0Global, dataSize);
-AscendC::DataCopy(s1, src1Global, dataSize);
-inQueue0.EnQue(s0); inQueue1.EnQue(s1);
+AscendC::DataCopy(dstGlobal, dstLocal, vRows * kTCols);
 
-auto a0 = inQueue0.DeQue<T>();
-auto a1 = inQueue1.DeQue<T>();
-auto d  = outQueue.AllocTensor<T>();
-AscendC::Add(d, a0, a1, dataSize);
-outQueue.EnQue(d);
-inQueue0.FreeTensor(a0); inQueue1.FreeTensor(a1);
+// Case B (FP32, small cols): vCols=64, row stride=128, loop on col blocks
+for (int c0 = 0; c0 < totalCols; c0 += 64) {
+    AscendC::DataCopy(srcLocal,  src0Global + c0, vRows * 128);
+    AscendC::DataCopy(srcLocal1, src1Global + c0, vRows * 128);
 
-auto out = outQueue.DeQue<T>();
-AscendC::DataCopy(dstGlobal, out, dataSize);
-outQueue.FreeTensor(out);
+    SetMaskNorm();
+    SetVectorMask(0, 64);
+    AscendC::Add(dstLocal, srcLocal, srcLocal1,
+                 /*repeat=*/vRows - 1,
+                 /*dstRep=*/1, /*src0Rep=*/1, /*src1Rep=*/1,
+                 /*dstStride=*/128/8, /*src0Stride=*/128/8, /*src1Stride=*/128/8);
+
+    AscendC::DataCopy(dstGlobal + c0, dstLocal, vRows * 128);
+}
 ```
-
 ---
 
 ### 2) Broadcast (row expand)
