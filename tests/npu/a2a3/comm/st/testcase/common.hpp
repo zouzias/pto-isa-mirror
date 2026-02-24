@@ -197,6 +197,17 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     constexpr int kBootstrapPollUs = 1000;
     constexpr int kBootstrapTimeoutMs = 30000;
 
+    // Query available device count before forking; skip early if insufficient.
+    aclInit(nullptr);
+    uint32_t deviceCount = 0;
+    aclrtGetDeviceCount(&deviceCount);
+    int maxDeviceId = firstDeviceId + (nRanks > 0 ? (nRanks - 1) : 0);
+    if (static_cast<uint32_t>(maxDeviceId) >= deviceCount) {
+        std::cerr << "[SKIP] Need devices [" << firstDeviceId << ".." << maxDeviceId
+                  << "] but only " << deviceCount << " available, skipping.\n";
+        return true;
+    }
+
     struct SharedBootstrap {
         HcclRootInfo rootInfo;
         // 0: initializing, 1: ready, -1: failed
