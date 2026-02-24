@@ -106,23 +106,59 @@ Scope: elementwise / broadcast / reduce examples.
 
 ## ST example snippets (SubTile vs AscendC Basic)
 
-### 1) Elementwise Add (tile‑level)
+### 1) Elementwise Add (large 2D tensor)
 
-**PTO SubTile (tile‑level, no internal loop)**
+#### Case A: **Large columns** → use **1D SubTile** + user loop on rows
 ```cpp
-// inside user outer loop over tiles
-using TileData = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
-TileData src0Tile(vRows, vCols);
-TileData src1Tile(vRows, vCols);
-TileData dstTile(vRows, vCols);
-TASSIGN(src0Tile, 0x0);
-TASSIGN(src1Tile, 0x10000);
-TASSIGN(dstTile, 0x20000);
+// Treat each row as a 1D subtile (no internal loop)
+using Tile1D = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
 
-TLOAD(src0Tile, src0Global);
-TLOAD(src1Tile, src1Global);
-TADD(dstTile, src0Tile, src1Tile);
-TSTORE(dstGlobal, dstTile);
+for (int r = 0; r < totalRows; ++r) {
+    Tile1D src0Tile(1, kTCols);
+    Tile1D src1Tile(1, kTCols);
+    Tile1D dstTile(1, kTCols);
+
+    // Move UB window per row
+    TASSIGN(src0Tile, 0x0);
+    TASSIGN(src1Tile, 0x10000);
+    TASSIGN(dstTile, 0x20000);
+
+    // Update GlobalTensor view for this row (stride stays kTCols)
+    GlobalData src0Row(src0 + r * kTCols);
+    GlobalData src1Row(src1 + r * kTCols);
+    GlobalData dstRow(out  + r * kTCols);
+
+    TLOAD(src0Tile, src0Row);
+    TLOAD(src1Tile, src1Row);
+    TADD(dstTile, src0Tile, src1Tile);
+    TSTORE(dstRow, dstTile);
+}
+```
+
+#### Case B: **Small cols (e.g., 128 = 64×2) + many rows** → use **2D SubTile** + loop on rows
+```cpp
+using Tile2D = Tile<TileType::Vec, T, kTRows, 128, BLayout::RowMajor, -1, -1>;
+
+for (int r0 = 0; r0 < totalRows; r0 += kTRows) {
+    int vRows = min(kTRows, totalRows - r0);
+    Tile2D src0Tile(vRows, 128);
+    Tile2D src1Tile(vRows, 128);
+    Tile2D dstTile(vRows, 128);
+
+    // Move UB window per subtile iteration
+    TASSIGN(src0Tile, 0x0);
+    TASSIGN(src1Tile, 0x10000);
+    TASSIGN(dstTile, 0x20000);
+
+    GlobalData src0Blk(src0 + r0 * 128);
+    GlobalData src1Blk(src1 + r0 * 128);
+    GlobalData dstBlk(out  + r0 * 128);
+
+    TLOAD(src0Tile, src0Blk);
+    TLOAD(src1Tile, src1Blk);
+    TADD(dstTile, src0Tile, src1Tile);
+    TSTORE(dstBlk, dstTile);
+}
 ```
 
 **AscendC Basic (tile‑level)**
