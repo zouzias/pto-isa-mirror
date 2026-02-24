@@ -141,32 +141,38 @@ for (int r = 0; r < vRows; ++r) {
 TSTORE(dstGlobal, dstBig);
 ```
 
-#### Case B: **Small cols (e.g., 128 = 64×2) + many rows** → 2D subtile, loop on cols
+#### Case B: **Small cols (e.g., 128 = 64×2) + many rows** → big tile load/store, loop on column subtiles
 ```cpp
-// Fix cols = 128, slide along columns with subtile window
-using Tile2D = Tile<TileType::Vec, T, kTRows, 128, BLayout::RowMajor, -1, -1>;
+// Big tile in UB (entire block)
+using BigTile = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+BigTile src0Big(vRows, kTCols);
+BigTile src1Big(vRows, kTCols);
+BigTile dstBig(vRows, kTCols);
+TASSIGN(src0Big, 0x0);
+TASSIGN(src1Big, 0x10000);
+TASSIGN(dstBig, 0x20000);
 
+TLOAD(src0Big, src0Global);
+TLOAD(src1Big, src1Global);
+
+// Column subtiles (width <= VL, e.g., 128)
+using Tile2D = Tile<TileType::Vec, T, kTRows, 128, BLayout::RowMajor, -1, -1>;
 for (int c0 = 0; c0 < totalCols; c0 += 128) {
     int vCols = min(128, totalCols - c0);
-    Tile2D src0Tile(vRows, vCols);
-    Tile2D src1Tile(vRows, vCols);
-    Tile2D dstTile(vRows, vCols);
+    Tile2D src0Sub(vRows, vCols);
+    Tile2D src1Sub(vRows, vCols);
+    Tile2D dstSub(vRows, vCols);
 
     // Move UB window per column block
     uint32_t off = c0 * sizeof(T);
-    TASSIGN(src0Tile, 0x0 + off);
-    TASSIGN(src1Tile, 0x10000 + off);
-    TASSIGN(dstTile, 0x20000 + off);
+    TASSIGN(src0Sub, 0x0 + off);
+    TASSIGN(src1Sub, 0x10000 + off);
+    TASSIGN(dstSub, 0x20000 + off);
 
-    GlobalData src0Blk(src0 + c0);
-    GlobalData src1Blk(src1 + c0);
-    GlobalData dstBlk(out  + c0);
-
-    TLOAD(src0Tile, src0Blk);
-    TLOAD(src1Tile, src1Blk);
-    TADD(dstTile, src0Tile, src1Tile);
-    TSTORE(dstBlk, dstTile);
+    TADD(dstSub, src0Sub, src1Sub);
 }
+
+TSTORE(dstGlobal, dstBig);
 ```
 
 **AscendC Basic (tile‑level)**
