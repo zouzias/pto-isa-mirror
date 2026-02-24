@@ -245,3 +245,20 @@ AscendC::DataCopy(dstGlobal, dstLocal, vRows);
 
 **Example limitation (why loop would be needed):**
 - Suppose each row has a different stride or only every k‑th element is valid. A single `TADD` assumes a uniform stride across all rows; it cannot encode “skip every 3 elements” without a loop. AscendC can implement this with manual address arithmetic.
+
+## Additional restrictions for “no loop” SubTile
+
+To avoid internal loops, the SubTile path relies on **counter/repeat mode** for **continuous/1D layout**. This imposes limits:
+
+1) **Continuous / 1D layout requirement**
+   - The tile must be representable as a **contiguous 1D stream** (counter mode).
+   - If the layout is irregular (gaps, packing, non‑uniform stride), a single intrinsic cannot cover it.
+
+2) **2D repeat (row axis) limit**
+   - For **2D tiles using repeat on the row axis**, the maximum repeat count is **255**.
+   - This matters when `vCols <= VL` (e.g., 256B vector length) and you rely on `repeat` to cover rows.
+
+3) **Vector length constraint**
+   - `vCols` must fit within a vector length (e.g., **VL = 256B**), otherwise you need multiple vector ops (loop or additional slicing).
+
+**Implication:** The “no loop” SubTile implementation is only valid for **contiguous, regular tiles** with **repeat ≤ 255** and **vCols ≤ VL**. Outside these conditions, you must add loops or use AscendC Basic API for explicit stride/address control.
