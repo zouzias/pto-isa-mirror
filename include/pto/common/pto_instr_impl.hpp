@@ -171,6 +171,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TPartMax.hpp"
 #include "pto/npu/a5/TPartMin.hpp"
 #include "pto/npu/a5/TQuant.hpp"
+#include "pto/npu/a5/TDeQuant.hpp"
 #include "pto/npu/a5/TImg2col.hpp"
 #include "pto/npu/a5/TSetFmatrix.hpp"
 #include "pto/npu/a5/TSetImg2colRpt.hpp"
