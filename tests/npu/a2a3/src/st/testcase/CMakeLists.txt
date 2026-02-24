@@ -129,6 +129,7 @@ trowcolexpandsub_subtile
 trowcolreduce_subtile
 tcvt
 tmul
+tadd
 tadd_asc
 tadd_subtile
 taddplus
