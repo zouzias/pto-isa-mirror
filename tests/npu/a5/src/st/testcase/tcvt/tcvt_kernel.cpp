@@ -174,12 +174,13 @@ INSTANTIATE_TCVT(float, int16_t)
 INSTANTIATE_TCVT(uint32_t, int16_t)
 INSTANTIATE_TCVT(int32_t, int16_t)
 
-// I32 Source → float, int16, uint16, int64, uint8
+// I32 Source → float, int16, uint16, int64, uint8, half
 INSTANTIATE_TCVT(float, int32_t)
 INSTANTIATE_TCVT(int16_t, int32_t)
 // INSTANTIATE_TCVT(uint16_t, int32_t)
 INSTANTIATE_TCVT(int64_t, int32_t)
 INSTANTIATE_TCVT(uint8_t, int32_t)
+INSTANTIATE_TCVT(aclFloat16, int32_t)
 
 // U32 Source → uint8, uint16, int16
 INSTANTIATE_TCVT(uint8_t, uint32_t)
