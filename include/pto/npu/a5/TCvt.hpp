@@ -1949,12 +1949,12 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int3
 
 /** I32 -> FP16 via two-step conversion: I32 -> FP32 -> FP16 */
 template <typename R>
-inline AICORE void castData(__ubuf__ half *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+inline AICORE void castData(__ubuf__ half *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32I32to16FP16<R>(dst, src, validRows, validCols, dstCols, srcCols);
 }
 
 template <typename R>
-inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32I32to16FP16_2D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols);
 }
 
@@ -2464,7 +2464,7 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint8_t *dst, __ubuf__ int3
 }
 
 template <typename R>
-inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols) {
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols, uint32_t dstCols, uint32_t srcCols, SaturationMode satMode) {
     cast32I32to16FP16_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols);
 }
 
