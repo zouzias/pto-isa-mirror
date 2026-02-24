@@ -135,3 +135,42 @@ __global__ AICORE void runTAdd(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
 - Encapsulates GM pointer + shape/stride.
 - Provides implicit stride handling for `TLOAD/TSTORE`.
 - Shields kernel code from explicit `DataCopy` parameters.
+
+## SCALAR ISA count (veccore0 instr log)
+
+Same test case: `case_half_16x256_16x256`
+
+- **PTO tadd** SCALAR count: **62**
+- **AscendC tadd_asc (TPipe/TQue)** SCALAR count: **366**
+
+### Top SCALAR opcodes (PTO tadd)
+```
+MOV_XD_IMM  14
+MOVK        12
+MOV_XD_SPR  6
+LD_XD_XN_IMM 5
+AND         5
+ST_XD_XN_IMM 3
+ADD_IMM     3
+ADD         3
+SIGNEXT     2
+MOVX8_XD_IMM 2
+```
+
+### Top SCALAR opcodes (AscendC tadd_asc)
+```
+LD_XD_XN_IMM 74
+ST_XD_XN_IMM 42
+MOV_XD_IMM  29
+STI_XN_IMM  25
+SUB_IMM     24
+ADD_IMM     19
+SIGNEXT     16
+CMP_IMM     16
+MOVK        15
+ZEROEXT     13
+```
+
+> Source logs:
+> - PTO tadd: `tests/npu/a2a3/src/st/build/TADDTest.case_half_16x256_16x256/core0.veccore0.instr_log.dump`
+> - AscendC tadd_asc: `tests/npu/a2a3/src/st/build/TADDASCTest.case_half_16x256_16x256/core0.veccore0.instr_log.dump`
