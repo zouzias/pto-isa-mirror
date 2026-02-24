@@ -377,7 +377,7 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
                      (((quantPre >> SHIFT_BLOCK_BYTE) & 0x1) << 29) |
                      (static_cast<uint64_t>(quantPre & 0x1f) << 34) | // Xt[29], Xt[38:34] pre-stage quantization mode
                      ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) | //  Xt[41:39] relu pre mode
-                     (static_cast<uint64_t>(nz2dnEn & 0x1) << 63);        //  Xt[63] nz2dn control bit
+                     (static_cast<uint64_t>(nz2dnEn & 0x1) << 62);        //  Xt[62] nz2dn control bit
     uint64_t loop3Config = loop3Num |                                     // LOOP3_PARA[15:0] the number of source nd
                            (static_cast<uint64_t>(loop3SrcStirde & 0xffff)
                             << 16) | // LOOP3_PARA[31:16] the source stride of loop3 in uint of C0_SIZE
