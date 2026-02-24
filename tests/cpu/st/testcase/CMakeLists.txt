@@ -109,6 +109,7 @@ setgetval
 ttest
 tget
 tput
+tloadconv
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
