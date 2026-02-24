@@ -118,6 +118,7 @@ set(ALL_TESTCASES
     trowmax
     trowmin
     tcolsum
+    tcolprod
     tcolmax
     tcolmin
     tsort32
@@ -206,6 +207,9 @@ set(ALL_TESTCASES
     tnot
     trelu
     tquant
+    tdequant
+    mgather
+    mscatter
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

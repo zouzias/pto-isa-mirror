@@ -76,13 +76,18 @@ template <typename DType, ElementOp op>
 struct ElementOpCal {
     static void apply(DType &dst, DType &src0, DType &src1, size_t)
     {
-        static_assert(false, "Unsupport element op.");
+        assert(false && "Unsupport element op.");
     }
 };
 
 template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_ADD> {
     static void apply(DType &dst, DType &src0, DType &src1, size_t)
+    {
+        dst = src0 + src1;
+    }
+
+    static void apply(DType &dst, const DType &src0, const DType &src1)
     {
         dst = src0 + src1;
     }
@@ -94,6 +99,11 @@ struct ElementOpCal<DType, ElementOp::OP_SUB> {
     {
         dst = src0 - src1;
     }
+
+    static void apply(DType &dst, const DType &src0, const DType &src1)
+    {
+        dst = src0 - src1;
+    }
 };
 
 template <typename DType>
@@ -102,11 +112,25 @@ struct ElementOpCal<DType, ElementOp::OP_MUL> {
     {
         dst = src0 * src1;
     }
+
+    static void apply(DType &dst, const DType &src0, const DType &src1)
+    {
+        dst = src0 * src1;
+    }
 };
 
 template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_DIV> {
     static void apply(DType &dst, DType &src0, DType &src1, size_t)
+    {
+        if (src1 != static_cast<DType>(0)) {
+            dst = src0 / src1;
+        } else {
+            PTO_ASSERT(false, "illegal src is zero");
+        }
+    }
+
+    static void apply(DType &dst, const DType &src0, const DType &src1)
     {
         if (src1 != static_cast<DType>(0)) {
             dst = src0 / src1;
@@ -450,7 +474,7 @@ struct ElementOpCal<DType, ElementOp::OP_CMPS> {
                 dst = (src <= scalar);
                 break;
             default:
-                static_assert(false, "Unsupport CMP_MODE.");
+                assert(false && "Unsupport CMP_MODE.");
                 break;
         }
     }

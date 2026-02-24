@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -15,8 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
 
-#ifdef __CCE_AICORE__
-#ifdef MEMORY_BASE
+#ifdef PTO_NPU_ARCH_A2A3
 #include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/a2a3/TSync.hpp"
 #include "pto/npu/a2a3/TAdd.hpp"
@@ -82,6 +81,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TCI.hpp"
 #include "pto/npu/a2a3/TMaxS.hpp"
 #include "pto/npu/a2a3/TColSum.hpp"
+#include "pto/npu/a2a3/TColProd.hpp"
 #include "pto/npu/a2a3/TUnaryOp.hpp"
 #include "pto/npu/a2a3/TBitwiseSOp.hpp"
 #include "pto/npu/a2a3/TGatherB.hpp"
@@ -101,10 +101,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TColExpandMul.hpp"
 #include "pto/npu/a2a3/TColExpandDiv.hpp"
 #include "pto/npu/a2a3/TColExpandExpdif.hpp"
+#include "pto/npu/a2a3/TQuant.hpp"
 #endif
 
-#ifdef REGISTER_BASE
-#if __NPU_ARCH__ != 3113
+#ifdef PTO_NPU_ARCH_A5
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/TAdd.hpp"
@@ -140,6 +140,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TCmps.hpp"
 #include "pto/npu/a5/TCmp.hpp"
 #include "pto/npu/a5/TColSum.hpp"
+#include "pto/npu/a5/TColProd.hpp"
 #include "pto/npu/a5/TColMax.hpp"
 #include "pto/npu/a5/TColMin.hpp"
 #include "pto/npu/a5/TColExpand.hpp"
@@ -170,6 +171,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TPartMax.hpp"
 #include "pto/npu/a5/TPartMin.hpp"
 #include "pto/npu/a5/TQuant.hpp"
+#include "pto/npu/a5/TDeQuant.hpp"
 #include "pto/npu/a5/TImg2col.hpp"
 #include "pto/npu/a5/TSetFmatrix.hpp"
 #include "pto/npu/a5/TSetImg2colRpt.hpp"
@@ -185,6 +187,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TDiv.hpp"
 #include "pto/npu/a5/TMul.hpp"
 #include "pto/npu/a5/TScatter.hpp"
+#include "pto/npu/a5/MGather.hpp"
+#include "pto/npu/a5/MScatter.hpp"
 #include "pto/npu/a5/TColExpandDiv.hpp"
 #include "pto/npu/a5/TColExpandMul.hpp"
 #include "pto/npu/a5/TColExpandSub.hpp"
@@ -195,10 +199,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TTri.hpp"
 #include "pto/npu/a5/TPrefetch.hpp"
 #include "pto/npu/a5/TInsert.hpp"
-#else
+#endif
+
+#ifdef PTO_NPU_ARCH_KIRIN9030
 #include "pto/npu/kirin9030/header.hpp"
-#endif
-#endif
 #endif
 
 #ifdef __CPU_SIM
@@ -243,12 +247,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TPartMin.hpp"
 #include "pto/cpu/TRowExpand.hpp"
 #include "pto/cpu/TRSqrt.hpp"
+#include "pto/cpu/TPrefetch.hpp"
 #include "pto/cpu/TCvt.hpp"
 #include "pto/cpu/TColMin.hpp"
 #include "pto/cpu/TColExpand.hpp"
 #include "pto/cpu/TScatter.hpp"
+#include "pto/cpu/TTRI.hpp"
 #include "pto/cpu/TSort32.hpp"
 #include "pto/cpu/MGatherScatter.hpp"
+#include "pto/cpu/TSync.hpp"
+#include "pto/cpu/TTest.hpp"
+#include "pto/cpu/TGet.hpp"
 #endif
 
 #endif

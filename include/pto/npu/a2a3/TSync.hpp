@@ -21,7 +21,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define FFTS_EVENT_ID_WIDTH 0xf
 #define FFTS_EVENT_ID_OFFSET 8
 namespace pto {
-#ifdef __CCE_AICORE__
 // opPipeList maps each operation in Op enum to its corresponding pipeline type.
 // This array is used to determine which hardware pipeline should be used for each operation.
 constexpr pipe_t opPipeList[] = {
@@ -66,6 +65,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TROWMIN */,
     PIPE_V /* TROWEXPAND */,
     PIPE_V /* TCOLSUM */,
+    PIPE_V /* TCOLPROD */,
     PIPE_V /* TCOLMAX */,
     PIPE_V /* TCOLMIN */,
     PIPE_V /* TTRANS */,
@@ -102,7 +102,6 @@ constexpr pipe_t opPipeList[] = {
     PIPE_FIX /* TINSERT_A2M */,
     PIPE_MTE1 /* TIMG2COL */,
     PIPE_S /* TSETFMATRIX */,
-    PIPE_S /* TSETHF32MODE */,
     PIPE_S /* TSET_IMG2COL_RPT */,
     PIPE_S /* TSET_IMG2COL_PADDING */,
 };
@@ -223,6 +222,5 @@ struct Event {
         return Init();
     }
 };
-#endif
 } // namespace pto
 #endif

@@ -14,7 +14,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/event.hpp>
 
 namespace pto {
-#ifdef __CCE_AICORE__
 // opPipeList maps each operation in Op enum to its corresponding pipeline type.
 // This array is used to determine which hardware pipeline should be used for each operation.
 constexpr pipe_t opPipeList[] = {
@@ -59,6 +58,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TROWMIN */,
     PIPE_V /* TROWEXPAND */,
     PIPE_V /* TCOLSUM */,
+    PIPE_V /* TCOLPROD */,
     PIPE_V /* TCOLMAX */,
     PIPE_V /* TCOLMIN */,
     PIPE_V /* TTRANS */,
@@ -94,7 +94,6 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TXORS */,
     PIPE_FIX /* TEXTRACT_A2M */,
     PIPE_FIX /* TINSERT_A2M */,
-    PIPE_S /* TSETF32MODE */,
     PIPE_MTE1 /* TIMG2COL */,
     PIPE_S /* TSETFMATRIX */,
     PIPE_S /* TSET_IMG2COL_RPT */,
@@ -209,6 +208,5 @@ struct Event {
         return Init<CrossCoreId>();
     }
 };
-#endif
 } // namespace pto
 #endif
