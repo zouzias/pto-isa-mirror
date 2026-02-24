@@ -1,210 +1,85 @@
 # PTO SubTile proposal vs AscendC Basic API
 
 ## Context
-We compare a **SubTile‑based PTO style** (2D subtile abstraction, no internal loops in PTO kernel; user owns loop) versus **AscendC Basic API** (raw buffers + manual stride + pipeline queues).
-Scope: elementwise / broadcast / reduce examples.
+We compare a **SubTile‑based PTO style** (2D subtile abstraction, no internal loops in PTO kernel; user owns loop) versus **AscendC Basic (tile‑level)**
 
-## PTO SubTile (2D) — idea
-- PTO kernel only defines a **2D subtile** (e.g., `Tile<TileType::Vec, T, kTRows, kTCols>`)
-- PTO does **not** generate internal loops across tiles
-- User implements the **outer loops** across N‑D tensor tiles
-
-### Advantages
-1) **Still smaller code for N‑D loops**
-   - You keep explicit control of outer loops, but inner math stays short (`TLOAD/TADD/TSTORE` etc.)
-   - Looping over N‑D shapes is written once by the user; inside each iteration, the PTO tile code is minimal.
-
-2) **Consistent 2D “tile math” semantics**
-   - Elementwise, broadcast, reduce can be expressed on the same 2D subtile interface
-   - Easy to reason about *what happens inside one tile*, while leaving iteration to the caller
-
-3) **Better correctness ergonomics than raw AscendC**
-   - PTO still encapsulates sync between MTE2/VEC/MTE3
-   - Tile + GlobalTensor capture shape/stride for that subtile so you avoid re‑deriving every stride in the kernel body
-
-4) **Incremental path from PTO → AscendC**
-   - You can start with SubTile for correctness and later replace the tile body with AscendC for perf tuning
-
-### Limitations (vs AscendC Basic API)
-1) **Less flexible stride/layout control**
-   - AscendC lets you express arbitrary raw stride patterns (including non‑contiguous, exotic packing)
-   - SubTile assumes a 2D view with fixed row‑major semantics inside tile (even if outer loop visits ND)
-
-2) **Boundary/masked tails still need care**
-   - SubTile helps structure; tails still need mask handling in tile (rows/cols less than tile size)
-
-3) **Lower ceiling for micro‑optimizations**
-   - AscendC allows manual pipeline scheduling, queue depth tuning, and direct UB layout choices
-   - SubTile hides these details, so peak perf may be lower in hand‑tuned cases
-
-4) **Limited support for unusual data formats**
-   - AscendC can target special formats/strides (e.g., interleaved channels, block‑sparse layouts)
-   - SubTile’s 2D abstraction is best for dense row‑major tensors
-
-## Examples: how SubTile helps vs AscendC
-
-### Elementwise (Add)
-- **SubTile:**
-  - Per‑tile code: `TLOAD(src0Tile); TLOAD(src1Tile); TADD(dstTile, src0Tile, src1Tile); TSTORE(dstTile);`
-  - Outer loop across tiles handled by user
-- **AscendC Basic:**
-  - Must manage `TPipe/TQue`, `DataCopy` lengths/strides, and pipeline sync explicitly for every kernel
-
-### Broadcast (Row/Col expand)
-- **SubTile:**
-  - Represent 2D tile and broadcast inside tile; outer loops handle ND
-  - Cleaner broadcast logic, less boilerplate
-- **AscendC Basic:**
-  - Must compute explicit src/dst address jumps and stride conversions manually
-
-### Reduce (Row/Col sum)
-- **SubTile:**
-  - Tile reduce primitive (`TCOLSUM`, `TROWSUM`) on 2D tile
-  - Outer loop handles reduction across tiles/blocks
-- **AscendC Basic:**
-  - Must manually express reduction loop, mask, and partial sum buffering
-
-## Summary
-**PTO SubTile** keeps the kernel body short and safe (tile‑level correctness, built‑in sync), while allowing the user to own ND loops. This strikes a balance: **more structure than raw AscendC**, but still flexible enough to integrate with custom tiling strategies.
-
-**AscendC Basic API** remains more powerful for exotic strides/layouts and extreme optimization, but has **much higher boilerplate** and **manual pipeline management** overhead.
-
-**Recommendation:** use SubTile for readability + correctness + common dense cases; fall back to AscendC when you need raw stride freedom or deep performance tuning.
-
-## Detailed limitations by case (SubTile‑only, no internal loop)
-
-### Elementwise (eltwise)
-**What SubTile can’t cover well:**
-- **Non‑contiguous or irregular strides inside a tile** (e.g., gather‑style layout, NHWC with channel gaps, block‑sparse rows).
-- **Interleaved / packed formats** where one “row” in memory does not map to a logical row (e.g., special vector‑packed formats).
-
-**AscendC basic API can:**
-- Express arbitrary `DataCopy` strides and offsets, even when the inner rows are discontiguous or interleaved.
-- Manually compute element addresses and load/store with custom stride logic.
-
-### Broadcast (row/col expand)
-**What SubTile can’t cover well:**
-- **Unequal or irregular broadcast patterns** (e.g., broadcast every k columns with gaps, or scatter‑style broadcast).
-- **ND broadcast with format‑dependent stride** (e.g., broadcasting across blocked channels in a packed layout).
-
-**AscendC basic API can:**
-- Implement custom address arithmetic for irregular broadcast patterns.
-- Handle blocked/packed layouts by explicitly computing destination offsets.
-
-### Reduce (row/col sum/min/max)
-**What SubTile can’t cover well:**
-- **Reductions over non‑contiguous axes inside a tile** (e.g., reduce over a strided dimension or a packed format).
-- **Multi‑stage reductions with custom partial accumulation** (e.g., reduce over K with intermediate buffering in UB using non‑standard layouts).
-
-**AscendC basic API can:**
-- Build custom reduction loops with manual stride, masking, and partial sum buffering.
-- Reduce along any axis by explicit address stepping, even when data is not row‑major.
-
-### General pattern (root cause)
-- SubTile assumes **2D row‑major dense tiles** and hides the pipeline/sync for that case.
-- AscendC basic API exposes **raw stride and address control**, so it can cover irregular/packed/non‑contiguous layouts that SubTile cannot.
-
-## ST example snippets (SubTile vs AscendC Basic)
-
-### 1) Elementwise Add (large 2D tensor)
-
-#### Case A: **Large columns** → load big tile once, then 1D subtile loop per row
+##### Case A (large cols) — load big tile, enqueue/dequeue, then per‑row Add only
 ```cpp
-// Big tile in UB (entire block)
-using BigTile = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
-BigTile src0Big(vRows, kTCols);
-BigTile src1Big(vRows, kTCols);
-BigTile dstBig(vRows, kTCols);
-TASSIGN(src0Big, 0x0);
-TASSIGN(src1Big, 0x10000);
-TASSIGN(dstBig, 0x20000);
+// setup queues once
+AscendC::TPipe pipe;
+AscendC::TQue<AscendC::TPosition::VECIN, 1> inQueue0, inQueue1;
+AscendC::TQue<AscendC::TPosition::VECOUT, 1> outQueue;
+int dataSize = vRows * kTCols;
+pipe.InitBuffer(inQueue0, 1, dataSize * sizeof(T));
+pipe.InitBuffer(inQueue1, 1, dataSize * sizeof(T));
+pipe.InitBuffer(outQueue, 1, dataSize * sizeof(T));
 
-TLOAD(src0Big, src0Global);
-TLOAD(src1Big, src1Global);
+// CopyIn
+auto s0 = inQueue0.AllocTensor<T>();
+auto s1 = inQueue1.AllocTensor<T>();
+AscendC::DataCopy(s0, src0Global, dataSize);
+AscendC::DataCopy(s1, src1Global, dataSize);
+inQueue0.EnQue(s0); inQueue1.EnQue(s1);
 
-// 1D subtile per row (just TASSIGN + TADD)
-using Tile1D = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
-for (int r = 0; r < vRows; ++r) {
-    Tile1D src0Sub(1, kTCols);
-    Tile1D src1Sub(1, kTCols);
-    Tile1D dstSub(1, kTCols);
-
-    // Move UB window to row r (offset by row stride)
-    uint32_t off = r * kTCols * sizeof(T);
-    TASSIGN(src0Sub, 0x0 + off);
-    TASSIGN(src1Sub, 0x10000 + off);
-    TASSIGN(dstSub, 0x20000 + off);
-
-    TADD(dstSub, src0Sub, src1Sub);
-}
-
-TSTORE(dstGlobal, dstBig);
-```
-
-#### Case B: **Small cols (e.g., 128 = 64×2) + many rows** → big tile load/store, loop on column subtiles
-```cpp
-// Big tile in UB (entire block)
-using BigTile = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
-BigTile src0Big(vRows, kTCols);
-BigTile src1Big(vRows, kTCols);
-BigTile dstBig(vRows, kTCols);
-TASSIGN(src0Big, 0x0);
-TASSIGN(src1Big, 0x10000);
-TASSIGN(dstBig, 0x20000);
-
-TLOAD(src0Big, src0Global);
-TLOAD(src1Big, src1Global);
-
-// Column subtiles (FP32: VL=256B => vCols=64, row stride=128)
-using Tile2D = Tile<TileType::Vec, T, kTRows, 128, BLayout::RowMajor, -1, -1>;
-for (int c0 = 0; c0 < totalCols; c0 += 64) {
-    int vCols = min(64, totalCols - c0);
-    Tile2D src0Sub(vRows, vCols);
-    Tile2D src1Sub(vRows, vCols);
-    Tile2D dstSub(vRows, vCols);
-
-    // Move UB window per column block
-    uint32_t off = c0 * sizeof(T);
-    TASSIGN(src0Sub, 0x0 + off);
-    TASSIGN(src1Sub, 0x10000 + off);
-    TASSIGN(dstSub, 0x20000 + off);
-
-    TADD(dstSub, src0Sub, src1Sub);
-}
-
-TSTORE(dstGlobal, dstBig);
-```
-
-**AscendC Basic (tile‑level)**
-```cpp
-// Case A (large cols): use 1D subtile per row, stride on row axis
-AscendC::DataCopy(srcLocal, src0Global, vRows * kTCols);
-AscendC::DataCopy(srcLocal1, src1Global, vRows * kTCols);
-
-// Add with row repeat (vCols <= VL), stride = kTCols/8
+// Compute: per‑row Add only (no extra DataCopy)
+auto a0 = inQueue0.DeQue<T>();
+auto a1 = inQueue1.DeQue<T>();
+auto d  = outQueue.AllocTensor<T>();
 SetMaskNorm();
 SetVectorMask(0, kTCols);
-AscendC::Add(dstLocal, srcLocal, srcLocal1,
+AscendC::Add(d, a0, a1,
              /*repeat=*/vRows - 1,
              /*dstRep=*/1, /*src0Rep=*/1, /*src1Rep=*/1,
              /*dstStride=*/kTCols/8, /*src0Stride=*/kTCols/8, /*src1Stride=*/kTCols/8);
 
-AscendC::DataCopy(dstGlobal, dstLocal, vRows * kTCols);
+outQueue.EnQue(d);
+inQueue0.FreeTensor(a0); inQueue1.FreeTensor(a1);
 
-// Case B (FP32, small cols): vCols=64, row stride=128, loop on col blocks
+// CopyOut
+auto out = outQueue.DeQue<T>();
+AscendC::DataCopy(dstGlobal, out, dataSize);
+outQueue.FreeTensor(out);
+```
+
+##### Case B (short cols, FP32 vCols=64, row stride=128) — load big tile, then col‑block Add only
+```cpp
+// setup queues once
+AscendC::TPipe pipe;
+AscendC::TQue<AscendC::TPosition::VECIN, 1> inQueue0, inQueue1;
+AscendC::TQue<AscendC::TPosition::VECOUT, 1> outQueue;
+int dataSize = vRows * kTCols;
+pipe.InitBuffer(inQueue0, 1, dataSize * sizeof(T));
+pipe.InitBuffer(inQueue1, 1, dataSize * sizeof(T));
+pipe.InitBuffer(outQueue, 1, dataSize * sizeof(T));
+
+// CopyIn
+auto s0 = inQueue0.AllocTensor<T>();
+auto s1 = inQueue1.AllocTensor<T>();
+AscendC::DataCopy(s0, src0Global, dataSize);
+AscendC::DataCopy(s1, src1Global, dataSize);
+inQueue0.EnQue(s0); inQueue1.EnQue(s1);
+
+// Compute: col blocks (width=64) with Add only
+auto a0 = inQueue0.DeQue<T>();
+auto a1 = inQueue1.DeQue<T>();
+auto d  = outQueue.AllocTensor<T>();
+
 for (int c0 = 0; c0 < totalCols; c0 += 64) {
-    AscendC::DataCopy(srcLocal,  src0Global + c0, vRows * 128);
-    AscendC::DataCopy(srcLocal1, src1Global + c0, vRows * 128);
-
     SetMaskNorm();
     SetVectorMask(0, 64);
-    AscendC::Add(dstLocal, srcLocal, srcLocal1,
+    AscendC::Add(d + c0, a0 + c0, a1 + c0,
                  /*repeat=*/vRows - 1,
                  /*dstRep=*/1, /*src0Rep=*/1, /*src1Rep=*/1,
                  /*dstStride=*/128/8, /*src0Stride=*/128/8, /*src1Stride=*/128/8);
-
-    AscendC::DataCopy(dstGlobal + c0, dstLocal, vRows * 128);
 }
+
+outQueue.EnQue(d);
+inQueue0.FreeTensor(a0); inQueue1.FreeTensor(a1);
+
+// CopyOut
+auto out = outQueue.DeQue<T>();
+AscendC::DataCopy(dstGlobal, out, dataSize);
+outQueue.FreeTensor(out);
 ```
 ---
 
