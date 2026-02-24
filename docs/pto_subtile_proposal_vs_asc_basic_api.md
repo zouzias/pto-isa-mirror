@@ -70,3 +70,36 @@ Scope: elementwise / broadcast / reduce examples.
 **AscendC Basic API** remains more powerful for exotic strides/layouts and extreme optimization, but has **much higher boilerplate** and **manual pipeline management** overhead.
 
 **Recommendation:** use SubTile for readability + correctness + common dense cases; fall back to AscendC when you need raw stride freedom or deep performance tuning.
+
+## Detailed limitations by case (SubTile‑only, no internal loop)
+
+### Elementwise (eltwise)
+**What SubTile can’t cover well:**
+- **Non‑contiguous or irregular strides inside a tile** (e.g., gather‑style layout, NHWC with channel gaps, block‑sparse rows).
+- **Interleaved / packed formats** where one “row” in memory does not map to a logical row (e.g., special vector‑packed formats).
+
+**AscendC basic API can:**
+- Express arbitrary `DataCopy` strides and offsets, even when the inner rows are discontiguous or interleaved.
+- Manually compute element addresses and load/store with custom stride logic.
+
+### Broadcast (row/col expand)
+**What SubTile can’t cover well:**
+- **Unequal or irregular broadcast patterns** (e.g., broadcast every k columns with gaps, or scatter‑style broadcast).
+- **ND broadcast with format‑dependent stride** (e.g., broadcasting across blocked channels in a packed layout).
+
+**AscendC basic API can:**
+- Implement custom address arithmetic for irregular broadcast patterns.
+- Handle blocked/packed layouts by explicitly computing destination offsets.
+
+### Reduce (row/col sum/min/max)
+**What SubTile can’t cover well:**
+- **Reductions over non‑contiguous axes inside a tile** (e.g., reduce over a strided dimension or a packed format).
+- **Multi‑stage reductions with custom partial accumulation** (e.g., reduce over K with intermediate buffering in UB using non‑standard layouts).
+
+**AscendC basic API can:**
+- Build custom reduction loops with manual stride, masking, and partial sum buffering.
+- Reduce along any axis by explicit address stepping, even when data is not row‑major.
+
+### General pattern (root cause)
+- SubTile assumes **2D row‑major dense tiles** and hides the pipeline/sync for that case.
+- AscendC basic API exposes **raw stride and address control**, so it can cover irregular/packed/non‑contiguous layouts that SubTile cannot.
