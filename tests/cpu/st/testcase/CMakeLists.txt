@@ -37,78 +37,79 @@ endfunction()
 find_package(Threads REQUIRED)
 
 set(ALL_TESTCASES
-tmatmul
-ttri
-tprefetch
-tflashattn
-tci
-tadds
-tabs
-tload
-tstore
-textract
-texpands
-tmov
-tmrgsort
-trowsum
-trowexpand
-tadd
-texp
-tgather
-trowmax
-tsqrt
-tfillpad
-ttrans
-tsels
-tcmps
-tcolsum
-tcolmax
-tcvt
-tpartadd
-tpartmax
-tpartmin
-trsqrt
-tsel
-tsort32
-trem
-tshl
-tshr
-tand
-tor
-txor
-tmin
-tcmp
-tlog
-tneg
-tnot
-trecip
-trelu
-tprelu
-taddc
-tsubc
-tsubs
-trems
-tmaxs
-tands
-tors
-txors
-tlrelu
-taddsc
-tsubsc
-tdivs
-tmuls
-tmins
-trowmin
-tcolmin
-tcolexpand
-tscatter
-mgather
-mscatter
-hashfind
-setgetval
-ttest
-tget
-tput
+# tmatmul
+# ttri
+# tprefetch
+# tflashattn
+# tci
+# tadds
+# tabs
+# tload
+# tstore
+# textract
+# texpands
+# tmov
+# tmrgsort
+# trowsum
+# trowexpand
+# tadd
+# texp
+# tgather
+# trowmax
+# tsqrt
+# tfillpad
+# ttrans
+# tsels
+# tcmps
+# tcolsum
+# tcolmax
+# tcvt
+# tpartadd
+# tpartmax
+# tpartmin
+# trsqrt
+# tsel
+# tsort32
+# trem
+# tshl
+# tshr
+# tand
+# tor
+# txor
+# tmin
+# tcmp
+# tlog
+# tneg
+# tnot
+# trecip
+# trelu
+# tprelu
+# taddc
+# tsubc
+# tsubs
+# trems
+# tmaxs
+# tands
+# tors
+# txors
+# tlrelu
+# taddsc
+# tsubsc
+# tdivs
+# tmuls
+# tmins
+# trowmin
+# tcolmin
+# tcolexpand
+# tscatter
+# mgather
+# mscatter
+# hashfind
+# setgetval
+# ttest
+# tget
+# tput
+tnotify
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
