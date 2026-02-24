@@ -29,6 +29,8 @@ public:
         dstGlobal.SetGlobalBuffer(dst);
         totalRows = rows; totalCols = cols; stride = rowStride;
         int dataSize = rows * rowStride;
+        // NOTE: dataSize = totalRows * stride == vRows * kTCols_ from
+        // Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>
         pipe.InitBuffer(inQueue0, 1, dataSize * sizeof(float));
         pipe.InitBuffer(inQueue1, 1, dataSize * sizeof(float));
         pipe.InitBuffer(outQueue, 1, dataSize * sizeof(float));
