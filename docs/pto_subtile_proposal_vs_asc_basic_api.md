@@ -155,10 +155,10 @@ TASSIGN(dstBig, 0x20000);
 TLOAD(src0Big, src0Global);
 TLOAD(src1Big, src1Global);
 
-// Column subtiles (width <= VL, e.g., 128)
+// Column subtiles (FP32: VL=256B => vCols=64, row stride=128)
 using Tile2D = Tile<TileType::Vec, T, kTRows, 128, BLayout::RowMajor, -1, -1>;
-for (int c0 = 0; c0 < totalCols; c0 += 128) {
-    int vCols = min(128, totalCols - c0);
+for (int c0 = 0; c0 < totalCols; c0 += 64) {
+    int vCols = min(64, totalCols - c0);
     Tile2D src0Sub(vRows, vCols);
     Tile2D src1Sub(vRows, vCols);
     Tile2D dstSub(vRows, vCols);
