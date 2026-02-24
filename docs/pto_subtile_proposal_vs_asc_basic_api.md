@@ -204,3 +204,15 @@ AscendC::DataCopy(dstGlobal, dstLocal, vCols);
 ```
 
 > Note: AscendC Basic can also use vector reduction ops, but still requires manual stride + buffer management.
+
+## Why SubTile can be “single‑intrinsic, no internal loops” (and its limitation)
+
+**Key assumption:** SubTile is a **fixed 2D dense row‑major tile**, and the operation is defined to act on exactly that tile shape. This lets a **single intrinsic** handle the whole tile (e.g., `TADD`, `TROWEXPAND`, `TCOLSUM`) without an internal loop.
+
+**Limitation of this design:**
+- The tile must be **contiguous and regular** in memory (row‑major, fixed stride).
+- The tile operation must match a **single intrinsic’s semantics** (no irregular stride, no per‑row variance, no gather/scatter).
+- If the logical operation requires **irregular access inside the tile** (packed formats, strided sub‑rows, sparse patterns), then a single intrinsic is insufficient and you need **explicit loops** or AscendC Basic API.
+
+**Example limitation (why loop would be needed):**
+- Suppose each row has a different stride or only every k‑th element is valid. A single `TADD` assumes a uniform stride across all rows; it cannot encode “skip every 3 elements” without a loop. AscendC can implement this with manual address arithmetic.
