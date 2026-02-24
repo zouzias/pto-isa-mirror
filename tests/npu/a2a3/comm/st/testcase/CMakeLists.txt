@@ -27,13 +27,10 @@ function(pto_comm_st NAME)
         # $ENV{ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
     )
     target_link_directories(${NAME}_kernel PRIVATE
-        ${SHMEM_HOME_PATH}/shmem/lib
-        ${SHMEM_HOME_PATH}/memfabric_hybrid/lib
         ${ASCEND_HOME_PATH}/lib64
     )
     target_link_libraries(${NAME}_kernel PRIVATE
-        shmem
-        runtime
+        hccl hcomm runtime
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
@@ -55,7 +52,7 @@ function(pto_comm_st NAME)
         ${NAME}_kernel
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
-        stdc++ ascendcl m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
+        stdc++ ascendcl hccl hcomm m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
     )
 endfunction()
 

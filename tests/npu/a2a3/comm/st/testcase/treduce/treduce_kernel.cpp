@@ -25,7 +25,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Tests the TREDUCE collective - root gathers and reduces data from all ranks
 // ============================================================================
 template <typename T, size_t count, pto::comm::ReduceOp op>
-__global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int nranks, int root)
+__global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int nranks, int root,
+                                         __gm__ HcclDeviceContext *hcclCtx)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -34,7 +35,7 @@ __global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int 
     // UB Tile definition
     using TileData = pto::Tile<pto::TileType::Vec, T, 1, count, pto::BLayout::RowMajor, -1, -1>;
 
-    int my_rank = shmem_my_pe();
+    int my_rank = static_cast<int>(hcclCtx->rankId);
 
     ShapeDyn shape(1, 1, 1, 1, count);
     StrideDyn stride(count, count, count, count, 1);
@@ -45,7 +46,7 @@ __global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int 
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteInput = ShmemPtr(input, i);
+        __gm__ T *remoteInput = HcclRemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, shape, stride);
     }
 
@@ -63,8 +64,7 @@ __global__ AICORE void TReduceKernelImpl(__gm__ T *input, __gm__ T *output, int 
         pto::comm::TREDUCE(pg, outputG, accTile, recvTile, op);
     }
 
-    ShmemDeviceQuiet();
-    ShmemDeviceBarrierAll();
+    pipe_barrier(PIPE_ALL);
 }
 
 template <typename T>
@@ -89,20 +89,18 @@ T ReduceExpected(T base, int n_ranks, pto::comm::ReduceOp op)
 }
 
 template <typename T, size_t count, pto::comm::ReduceOp op>
-bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root, uint64_t local_mem_size,
-                     const ShmemUniqueId *uid)
+bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root,
+                     const HcclRootInfo *rootInfo)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8772", local_mem_size, uid)) {
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
         return false;
     }
 
-    // Allocate symmetric heap memory for input (shared across ranks)
-    void *input_ptr = ShmemMalloc(count * sizeof(T));
-    if (input_ptr == nullptr) {
-        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
-        return false;
-    }
+    // Allocate window memory for input (shared across ranks)
+    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
+    size_t winOffset = 0;
+    void *input_ptr = WindowAlloc(localWinBase, winOffset, count * sizeof(T));
 
     T *input_host = nullptr;
     T *output_host = nullptr;
@@ -122,13 +120,14 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
     aclrtMemcpy(input_ptr, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
     // Barrier to ensure all ranks have initialized their data
-    ShmemBarrierAll();
+    HcclHostBarrier(ctx.comm, ctx.stream);
 
-    TReduceKernelImpl<T, count, op><<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks, root);
+    TReduceKernelImpl<T, count, op>
+        <<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks, root, ctx.deviceCtx);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     // Barrier after kernel execution
-    ShmemBarrierAll();
+    HcclHostBarrier(ctx.comm, ctx.stream);
 
     // Only root verifies result
     bool is_ok = true;
@@ -168,7 +167,6 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
     aclrtFree(output_device);
-    ShmemFree(input_ptr);
 
     return ctx.Finalize() && is_ok;
 }
@@ -176,19 +174,19 @@ bool RunReduceKernel(int rank_id, int n_ranks, int n_devices, int first_device_i
 template <typename T, size_t count, pto::comm::ReduceOp op>
 bool RunReduce(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunReduceKernel<T, count, op>(rankId, n_ranks, n_devices, first_device_id, 0, 1024ULL * 1024 * 1024,
-                                             uid);
-    });
+    return ForkAndRunWithHcclRootInfo(
+        n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
+            return RunReduceKernel<T, count, op>(rankId, n_ranks, n_devices, first_device_id, 0, rootInfo);
+        });
 }
 
 template <typename T, size_t count, pto::comm::ReduceOp op>
 bool RunReduceWithRoot(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
 {
-    return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunReduceKernel<T, count, op>(rankId, n_ranks, n_devices, first_device_id, root, 1024ULL * 1024 * 1024,
-                                             uid);
-    });
+    return ForkAndRunWithHcclRootInfo(
+        n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
+            return RunReduceKernel<T, count, op>(rankId, n_ranks, n_devices, first_device_id, root, rootInfo);
+        });
 }
 
 // Explicit instantiations
@@ -210,14 +208,15 @@ template bool RunReduceWithRoot<float, 256, pto::comm::ReduceOp::Sum>(int n_rank
 // Tests TREDUCE with zero rows (empty data)
 // ============================================================================
 template <typename T, size_t count, pto::comm::ReduceOp op>
-__global__ AICORE void TReduceEmptyKernelImpl(__gm__ T *input, __gm__ T *output, int nranks, int root)
+__global__ AICORE void TReduceEmptyKernelImpl(__gm__ T *input, __gm__ T *output, int nranks, int root,
+                                              __gm__ HcclDeviceContext *hcclCtx)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
     using TileData = pto::Tile<pto::TileType::Vec, T, 1, count, pto::BLayout::RowMajor, -1, -1>;
 
-    int my_rank = shmem_my_pe();
+    int my_rank = static_cast<int>(hcclCtx->rankId);
 
     ShapeDyn shape(1, 1, 1, 0, count);
     StrideDyn stride(count, count, count, count, 1);
@@ -227,7 +226,7 @@ __global__ AICORE void TReduceEmptyKernelImpl(__gm__ T *input, __gm__ T *output,
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteInput = ShmemPtr(input, i);
+        __gm__ T *remoteInput = HcclRemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, shape, stride);
     }
 
@@ -242,24 +241,21 @@ __global__ AICORE void TReduceEmptyKernelImpl(__gm__ T *input, __gm__ T *output,
         pto::comm::TREDUCE(pg, outputG, accTile, recvTile, op);
     }
 
-    ShmemDeviceQuiet();
-    ShmemDeviceBarrierAll();
+    pipe_barrier(PIPE_ALL);
 }
 
 template <typename T, size_t count, pto::comm::ReduceOp op>
 bool RunReduceEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root,
-                          uint64_t local_mem_size, const ShmemUniqueId *uid)
+                          const HcclRootInfo *rootInfo)
 {
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8772", local_mem_size, uid)) {
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
         return false;
     }
 
-    void *input_ptr = ShmemMalloc(count * sizeof(T));
-    if (input_ptr == nullptr) {
-        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
-        return false;
-    }
+    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
+    size_t winOffset = 0;
+    void *input_ptr = WindowAlloc(localWinBase, winOffset, count * sizeof(T));
 
     T *input_host = nullptr;
     T *output_host = nullptr;
@@ -281,12 +277,13 @@ bool RunReduceEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
         aclrtMemcpy(output_device, count * sizeof(T), output_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
     }
 
-    ShmemBarrierAll();
+    HcclHostBarrier(ctx.comm, ctx.stream);
 
-    TReduceEmptyKernelImpl<T, count, op><<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks, root);
+    TReduceEmptyKernelImpl<T, count, op>
+        <<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks, root, ctx.deviceCtx);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
-    ShmemBarrierAll();
+    HcclHostBarrier(ctx.comm, ctx.stream);
 
     bool is_ok = true;
     if (rank_id == root) {
@@ -302,7 +299,6 @@ bool RunReduceEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
     aclrtFree(output_device);
-    ShmemFree(input_ptr);
 
     return ctx.Finalize() && is_ok;
 }
@@ -310,10 +306,10 @@ bool RunReduceEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_dev
 template <typename T, size_t count, pto::comm::ReduceOp op>
 bool RunReduceEmpty(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int root)
 {
-    return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunReduceEmptyKernel<T, count, op>(rankId, n_ranks, n_devices, first_device_id, root,
-                                                  1024ULL * 1024 * 1024, uid);
-    });
+    return ForkAndRunWithHcclRootInfo(
+        n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
+            return RunReduceEmptyKernel<T, count, op>(rankId, n_ranks, n_devices, first_device_id, root, rootInfo);
+        });
 }
 
 template bool RunReduceEmpty<float, 256, pto::comm::ReduceOp::Sum>(int n_ranks, int n_devices, int first_rank_id,
@@ -364,7 +360,8 @@ bool RunReduceInt32_256_Min(int n_ranks, int n_devices, int first_rank_id, int f
 // where total_rows > tile_rows, triggering automatic chunking in TREDUCE_IMPL
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
-__global__ AICORE void TReduceLargeShapeKernelImpl(__gm__ T *input, __gm__ T *output, int nranks)
+__global__ AICORE void TReduceLargeShapeKernelImpl(__gm__ T *input, __gm__ T *output, int nranks,
+                                                   __gm__ HcclDeviceContext *hcclCtx)
 {
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunking");
@@ -375,7 +372,7 @@ __global__ AICORE void TReduceLargeShapeKernelImpl(__gm__ T *input, __gm__ T *ou
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
     using TileData = pto::Tile<pto::TileType::Vec, T, tile_rows, cols, pto::BLayout::RowMajor, -1, -1>;
 
-    int my_rank = shmem_my_pe();
+    int my_rank = static_cast<int>(hcclCtx->rankId);
 
     // Full shape for the large GlobalTensor
     ShapeDyn fullShape(1, 1, 1, total_rows, cols);
@@ -387,7 +384,7 @@ __global__ AICORE void TReduceLargeShapeKernelImpl(__gm__ T *input, __gm__ T *ou
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteInput = ShmemPtr(input, i);
+        __gm__ T *remoteInput = HcclRemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, fullShape, fullStride);
     }
 
@@ -405,27 +402,24 @@ __global__ AICORE void TReduceLargeShapeKernelImpl(__gm__ T *input, __gm__ T *ou
         pto::comm::TREDUCE(pg, outputG, accTile, recvTile, op);
     }
 
-    ShmemDeviceQuiet();
-    ShmemDeviceBarrierAll();
+    pipe_barrier(PIPE_ALL);
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
-bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size,
-                               const ShmemUniqueId *uid)
+bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
+                               const HcclRootInfo *rootInfo)
 {
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8772", local_mem_size, uid)) {
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
         return false;
     }
 
-    // Allocate symmetric heap memory for input (shared across ranks)
-    void *input_ptr = ShmemMalloc(total_count * sizeof(T));
-    if (input_ptr == nullptr) {
-        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
-        return false;
-    }
+    // Allocate window memory for input (shared across ranks)
+    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
+    size_t winOffset = 0;
+    void *input_ptr = WindowAlloc(localWinBase, winOffset, total_count * sizeof(T));
 
     T *input_host = nullptr;
     T *output_host = nullptr;
@@ -445,13 +439,13 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
 
     aclrtMemcpy(input_ptr, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    ShmemBarrierAll();
+    HcclHostBarrier(ctx.comm, ctx.stream);
 
     TReduceLargeShapeKernelImpl<T, total_rows, cols, tile_rows, op>
-        <<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks);
+        <<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks, ctx.deviceCtx);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
-    ShmemBarrierAll();
+    HcclHostBarrier(ctx.comm, ctx.stream);
 
     // Only root verifies result
     bool is_ok = true;
@@ -492,7 +486,6 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
     aclrtFree(output_device);
-    ShmemFree(input_ptr);
 
     return ctx.Finalize() && is_ok;
 }
@@ -500,10 +493,11 @@ bool RunReduceLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
 bool RunReduceLargeShape(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunReduceLargeShapeKernel<T, total_rows, cols, tile_rows, op>(
-            rankId, n_ranks, n_devices, first_device_id, 1024ULL * 1024 * 1024, uid);
-    });
+    return ForkAndRunWithHcclRootInfo(n_ranks, first_rank_id, first_device_id,
+                                      [&](int rankId, const HcclRootInfo *rootInfo) {
+                                          return RunReduceLargeShapeKernel<T, total_rows, cols, tile_rows, op>(
+                                              rankId, n_ranks, n_devices, first_device_id, rootInfo);
+                                      });
 }
 
 // Explicit instantiations for large shape tests
@@ -545,7 +539,8 @@ bool RunReduceLargeShape_Int32_512x32_tile64_Sum(int n_ranks, int n_devices, int
 // Uses the 6-parameter TREDUCE(pg, dst, acc, ping, pong, op) overload.
 // ============================================================================
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
-__global__ AICORE void TReducePingPongKernelImpl(__gm__ T *input, __gm__ T *output, int nranks)
+__global__ AICORE void TReducePingPongKernelImpl(__gm__ T *input, __gm__ T *output, int nranks,
+                                                 __gm__ HcclDeviceContext *hcclCtx)
 {
     constexpr size_t total_count = total_rows * cols;
     static_assert(total_rows > tile_rows, "total_rows must exceed tile_rows to test chunked ping-pong");
@@ -556,7 +551,7 @@ __global__ AICORE void TReducePingPongKernelImpl(__gm__ T *input, __gm__ T *outp
     using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
     using TileData = pto::Tile<pto::TileType::Vec, T, tile_rows, cols, pto::BLayout::RowMajor, -1, -1>;
 
-    int my_rank = shmem_my_pe();
+    int my_rank = static_cast<int>(hcclCtx->rankId);
 
     ShapeDyn fullShape(1, 1, 1, total_rows, cols);
     StrideDyn fullStride(total_count, total_count, total_count, cols, 1);
@@ -567,7 +562,7 @@ __global__ AICORE void TReducePingPongKernelImpl(__gm__ T *input, __gm__ T *outp
     Global tensors[16];
     int actual_nranks = (nranks > 16) ? 16 : nranks;
     for (int i = 0; i < actual_nranks; ++i) {
-        __gm__ T *remoteInput = ShmemPtr(input, i);
+        __gm__ T *remoteInput = HcclRemotePtr(hcclCtx, input, i);
         tensors[i] = Global(remoteInput, fullShape, fullStride);
     }
 
@@ -588,26 +583,22 @@ __global__ AICORE void TReducePingPongKernelImpl(__gm__ T *input, __gm__ T *outp
         pto::comm::TREDUCE(pg, outputG, accTile, pingTile, pongTile, op);
     }
 
-    ShmemDeviceQuiet();
-    ShmemDeviceBarrierAll();
+    pipe_barrier(PIPE_ALL);
 }
 
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
-bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, uint64_t local_mem_size,
-                             const ShmemUniqueId *uid)
+bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo *rootInfo)
 {
     constexpr size_t total_count = total_rows * cols;
 
     TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, "tcp://127.0.0.1:8772", local_mem_size, uid)) {
+    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
         return false;
     }
 
-    void *input_ptr = ShmemMalloc(total_count * sizeof(T));
-    if (input_ptr == nullptr) {
-        std::cerr << "[ERROR] ShmemMalloc failed!" << std::endl;
-        return false;
-    }
+    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
+    size_t winOffset = 0;
+    void *input_ptr = WindowAlloc(localWinBase, winOffset, total_count * sizeof(T));
 
     T *input_host = nullptr;
     T *output_host = nullptr;
@@ -627,13 +618,13 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
 
     aclrtMemcpy(input_ptr, total_count * sizeof(T), input_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
-    ShmemBarrierAll();
+    HcclHostBarrier(ctx.comm, ctx.stream);
 
     TReducePingPongKernelImpl<T, total_rows, cols, tile_rows, op>
-        <<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks);
+        <<<1, nullptr, ctx.stream>>>((T *)input_ptr, (T *)output_device, n_ranks, ctx.deviceCtx);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
-    ShmemBarrierAll();
+    HcclHostBarrier(ctx.comm, ctx.stream);
 
     bool is_ok = true;
     if (rank_id == 0) {
@@ -673,7 +664,6 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
     aclrtFree(output_device);
-    ShmemFree(input_ptr);
 
     return ctx.Finalize() && is_ok;
 }
@@ -681,10 +671,11 @@ bool RunReducePingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
 template <typename T, size_t total_rows, size_t cols, size_t tile_rows, pto::comm::ReduceOp op>
 bool RunReducePingPong(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
-    return ForkAndRunWithUniqueId(n_ranks, first_rank_id, [&](int rankId, const ShmemUniqueId *uid) {
-        return RunReducePingPongKernel<T, total_rows, cols, tile_rows, op>(rankId, n_ranks, n_devices, first_device_id,
-                                                                           1024ULL * 1024 * 1024, uid);
-    });
+    return ForkAndRunWithHcclRootInfo(n_ranks, first_rank_id, first_device_id,
+                                      [&](int rankId, const HcclRootInfo *rootInfo) {
+                                          return RunReducePingPongKernel<T, total_rows, cols, tile_rows, op>(
+                                              rankId, n_ranks, n_devices, first_device_id, rootInfo);
+                                      });
 }
 
 // Explicit instantiations for ping-pong tests
