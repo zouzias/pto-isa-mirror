@@ -103,3 +103,104 @@ Scope: elementwise / broadcast / reduce examples.
 ### General pattern (root cause)
 - SubTile assumes **2D row‑major dense tiles** and hides the pipeline/sync for that case.
 - AscendC basic API exposes **raw stride and address control**, so it can cover irregular/packed/non‑contiguous layouts that SubTile cannot.
+
+## ST example snippets (SubTile vs AscendC Basic)
+
+### 1) Elementwise Add (tile‑level)
+
+**PTO SubTile (tile‑level, no internal loop)**
+```cpp
+// inside user outer loop over tiles
+using TileData = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+TileData src0Tile(vRows, vCols);
+TileData src1Tile(vRows, vCols);
+TileData dstTile(vRows, vCols);
+TASSIGN(src0Tile, 0x0);
+TASSIGN(src1Tile, 0x10000);
+TASSIGN(dstTile, 0x20000);
+
+TLOAD(src0Tile, src0Global);
+TLOAD(src1Tile, src1Global);
+TADD(dstTile, src0Tile, src1Tile);
+TSTORE(dstGlobal, dstTile);
+```
+
+**AscendC Basic (tile‑level)**
+```cpp
+// inside user outer loop over tiles
+AscendC::TPipe pipe;
+AscendC::TQue<AscendC::TPosition::VECIN, 1> inQueue0, inQueue1;
+AscendC::TQue<AscendC::TPosition::VECOUT, 1> outQueue;
+
+int dataSize = vRows * kTCols;
+pipe.InitBuffer(inQueue0, 1, dataSize * sizeof(T));
+pipe.InitBuffer(inQueue1, 1, dataSize * sizeof(T));
+pipe.InitBuffer(outQueue, 1, dataSize * sizeof(T));
+
+auto s0 = inQueue0.AllocTensor<T>();
+auto s1 = inQueue1.AllocTensor<T>();
+AscendC::DataCopy(s0, src0Global, dataSize);
+AscendC::DataCopy(s1, src1Global, dataSize);
+inQueue0.EnQue(s0); inQueue1.EnQue(s1);
+
+auto a0 = inQueue0.DeQue<T>();
+auto a1 = inQueue1.DeQue<T>();
+auto d  = outQueue.AllocTensor<T>();
+AscendC::Add(d, a0, a1, dataSize);
+outQueue.EnQue(d);
+inQueue0.FreeTensor(a0); inQueue1.FreeTensor(a1);
+
+auto out = outQueue.DeQue<T>();
+AscendC::DataCopy(dstGlobal, out, dataSize);
+outQueue.FreeTensor(out);
+```
+
+---
+
+### 2) Broadcast (row expand)
+
+**PTO SubTile (tile‑level)**
+```cpp
+// src is 1 x vCols, dst is vRows x vCols
+TLOAD(srcTile, srcGlobal);
+TROWEXPAND(dstTile, srcTile);  // broadcast row to tile height
+TSTORE(dstGlobal, dstTile);
+```
+
+**AscendC Basic (tile‑level)**
+```cpp
+// Copy one row into UB
+AscendC::DataCopy(srcLocal, srcGlobal, vCols);
+// Repeat into dstLocal with manual loop or vector broadcast primitive
+for (int r = 0; r < vRows; ++r) {
+    AscendC::DataCopy(dstLocal + r * kTCols, srcLocal, vCols);
+}
+AscendC::DataCopy(dstGlobal, dstLocal, vRows * kTCols);
+```
+
+---
+
+### 3) Reduce (colsum)
+
+**PTO SubTile (tile‑level)**
+```cpp
+TLOAD(srcTile, srcGlobal);
+TCOLSUM(dstTile, srcTile, tmpTile, /*isBinary=*/false);
+TSTORE(dstGlobal, dstTile);
+```
+
+**AscendC Basic (tile‑level)**
+```cpp
+AscendC::DataCopy(srcLocal, srcGlobal, vRows * kTCols);
+// Example: sum columns manually (scalar loop shown for clarity)
+for (int c = 0; c < vCols; ++c) {
+    float acc = 0;
+    for (int r = 0; r < vRows; ++r) {
+        acc += srcLocal[r * kTCols + c];
+    }
+    dstLocal[c] = acc;
+}
+AscendC::DataCopy(dstGlobal, dstLocal, vCols);
+```
+
+> Note: AscendC Basic can also use vector reduction ops, but still requires manual stride + buffer management.
