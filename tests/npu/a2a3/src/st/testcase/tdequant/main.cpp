@@ -114,3 +114,13 @@ TEST_F(TDEQUANTTest, case2)
 {
     test_tdequant<float, int16_t, 32, 32, 32, 32, 32, 32, 32, 32>();
 }
+
+TEST_F(TDEQUANTTest, case3)
+{
+    test_tdequant<float, int8_t, 64, 64, 32, 128, 32, 32, 48, 32>();
+}
+
+TEST_F(TDEQUANTTest, case4)
+{
+    test_tdequant<float, int16_t, 32, 32, 16, 64, 16, 16, 24, 16>();
+}
