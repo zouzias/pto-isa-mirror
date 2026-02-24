@@ -108,51 +108,59 @@ Scope: elementwise / broadcast / reduce examples.
 
 ### 1) Elementwise Add (large 2D tensor)
 
-#### Case A: **Large columns** → use **1D SubTile** + user loop on rows
+#### Case A: **Large columns** → load big tile once, then 1D subtile loop per row
 ```cpp
-// Treat each row as a 1D subtile (no internal loop)
+// Big tile in UB (entire block)
+using BigTile = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+BigTile src0Big(vRows, kTCols);
+BigTile src1Big(vRows, kTCols);
+BigTile dstBig(vRows, kTCols);
+TASSIGN(src0Big, 0x0);
+TASSIGN(src1Big, 0x10000);
+TASSIGN(dstBig, 0x20000);
+
+TLOAD(src0Big, src0Global);
+TLOAD(src1Big, src1Global);
+
+// 1D subtile per row (just TASSIGN + TADD)
 using Tile1D = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
+for (int r = 0; r < vRows; ++r) {
+    Tile1D src0Sub(1, kTCols);
+    Tile1D src1Sub(1, kTCols);
+    Tile1D dstSub(1, kTCols);
 
-for (int r = 0; r < totalRows; ++r) {
-    Tile1D src0Tile(1, kTCols);
-    Tile1D src1Tile(1, kTCols);
-    Tile1D dstTile(1, kTCols);
+    // Move UB window to row r (offset by row stride)
+    uint32_t off = r * kTCols * sizeof(T);
+    TASSIGN(src0Sub, 0x0 + off);
+    TASSIGN(src1Sub, 0x10000 + off);
+    TASSIGN(dstSub, 0x20000 + off);
 
-    // Move UB window per row
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x10000);
-    TASSIGN(dstTile, 0x20000);
-
-    // Update GlobalTensor view for this row (stride stays kTCols)
-    GlobalData src0Row(src0 + r * kTCols);
-    GlobalData src1Row(src1 + r * kTCols);
-    GlobalData dstRow(out  + r * kTCols);
-
-    TLOAD(src0Tile, src0Row);
-    TLOAD(src1Tile, src1Row);
-    TADD(dstTile, src0Tile, src1Tile);
-    TSTORE(dstRow, dstTile);
+    TADD(dstSub, src0Sub, src1Sub);
 }
+
+TSTORE(dstGlobal, dstBig);
 ```
 
-#### Case B: **Small cols (e.g., 128 = 64×2) + many rows** → use **2D SubTile** + loop on rows
+#### Case B: **Small cols (e.g., 128 = 64×2) + many rows** → 2D subtile, loop on cols
 ```cpp
+// Fix cols = 128, slide along columns with subtile window
 using Tile2D = Tile<TileType::Vec, T, kTRows, 128, BLayout::RowMajor, -1, -1>;
 
-for (int r0 = 0; r0 < totalRows; r0 += kTRows) {
-    int vRows = min(kTRows, totalRows - r0);
-    Tile2D src0Tile(vRows, 128);
-    Tile2D src1Tile(vRows, 128);
-    Tile2D dstTile(vRows, 128);
+for (int c0 = 0; c0 < totalCols; c0 += 128) {
+    int vCols = min(128, totalCols - c0);
+    Tile2D src0Tile(vRows, vCols);
+    Tile2D src1Tile(vRows, vCols);
+    Tile2D dstTile(vRows, vCols);
 
-    // Move UB window per subtile iteration
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x10000);
-    TASSIGN(dstTile, 0x20000);
+    // Move UB window per column block
+    uint32_t off = c0 * sizeof(T);
+    TASSIGN(src0Tile, 0x0 + off);
+    TASSIGN(src1Tile, 0x10000 + off);
+    TASSIGN(dstTile, 0x20000 + off);
 
-    GlobalData src0Blk(src0 + r0 * 128);
-    GlobalData src1Blk(src1 + r0 * 128);
-    GlobalData dstBlk(out  + r0 * 128);
+    GlobalData src0Blk(src0 + c0);
+    GlobalData src1Blk(src1 + c0);
+    GlobalData dstBlk(out  + c0);
 
     TLOAD(src0Tile, src0Blk);
     TLOAD(src1Tile, src1Blk);
