@@ -16,18 +16,17 @@ import numpy as np
 np.random.seed(19)
 
 
-def gen_case(case_dir: str, rows: int, cols: int, numproc: int):
+def gen_case(case_dir: str, rows: int, cols: int):
     os.makedirs(case_dir, exist_ok=True)
     os.chdir(case_dir)
 
     src = np.random.uniform(low=-4, high=4, size=[rows, cols]).astype(np.float32)
     
 
-    dst = np.zeros([rows * numproc, cols], dtype=np.float32)
-    for n in range(numproc):
-        for i in range(rows):
-            for j in range(cols):
-                dst[n * rows + i, j] = src[i, j]
+    dst = np.zeros([rows, cols], dtype=np.float32)
+    for i in range(rows):
+        for j in range(cols):
+            dst[i, j] = src[i, j]
 
     src.tofile("input.bin")
     dst.tofile("golden.bin")
@@ -35,5 +34,5 @@ def gen_case(case_dir: str, rows: int, cols: int, numproc: int):
 
 
 if __name__ == "__main__":
-    gen_case("TBROADCASTTest.case_float_16x16_16x16_16x16_2proc", 16, 16, 2)
+    gen_case("TBROADCASTTest.case_float_16x16_16x16_16x16_2proc", 16, 16)
 
