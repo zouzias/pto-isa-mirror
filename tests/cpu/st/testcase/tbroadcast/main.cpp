@@ -31,57 +31,62 @@ std::string GetGoldenDir()
     return "../" + suiteName + "." + caseName;
 }
 
-template <int kTRows_, int kTCols_, int kTNumProc_>
-void LaunchTBroadcast(float *out, float *src, void *stream);
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+void LaunchTBroadcast(T *dst0, T *dst1, T *src, void *stream);
 
-template <int kTRows_, int kTCols_, int kTNumProc_>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void test_tbroadcast()
 {
-    const size_t tileBytesSrc = kTRows_ * kTCols_ * sizeof(float);
-    const size_t tileBytesDst = kTNumProc_ * kTRows_ * kTCols_ * sizeof(float);
+    size_t tileSize = kTRows_ * kTCols_ * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    float *dstHost, *srcHost;
-    float *dstDevice, *srcDevice;
+    T *dst0Host, *dst1Host, *srcHost;
+    T *dst0Device, *dst1Device, *srcDevice;
 
-    aclrtMallocHost((void **)(&dstHost), tileBytesDst);
-    aclrtMallocHost((void **)(&srcHost), tileBytesSrc);
+    aclrtMallocHost((void **)(&dst0Host), tileSize);
+    aclrtMallocHost((void **)(&dst1Host), tileSize);
+    aclrtMallocHost((void **)(&srcHost), tileSize);
 
-    aclrtMalloc((void **)&dstDevice, tileBytesDst, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, tileBytesSrc, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dst0Device, tileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dst1Device, tileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, tileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    size_t tileSizeSrc = tileBytesSrc;
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", tileSizeSrc, srcHost, tileBytesSrc));
-    aclrtMemcpy(srcDevice, tileBytesSrc, srcHost, tileBytesSrc, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTBroadcast<kTRows_, kTCols_, kTNumProc_>(dstDevice, srcDevice, stream);
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", tileSize, srcHost, tileSize));
+    aclrtMemcpy(srcDevice, tileSize, srcHost, tileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTBroadcast<T, kGRows_, kGCols_, kTRows_, kTCols_>(dst0Device, dst1Device, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, tileBytesDst, dstDevice, tileBytesDst, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(dst0Host, tileSize, dst0Device, tileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(dst1Host, tileSize, dst1Device, tileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    WriteFile(GetGoldenDir() + "/output0.bin", dst0Host, tileSize);
+    WriteFile(GetGoldenDir() + "/output1.bin", dst1Host, tileSize);
 
-    WriteFile(GetGoldenDir() + "/output.bin", dstHost, tileBytesDst);
-
-    aclrtFree(dstDevice);
+    aclrtFree(dst0Device);
+    aclrtFree(dst1Device);
     aclrtFree(srcDevice);
 
-    aclrtFreeHost(dstHost);
+    aclrtFreeHost(dst0Host);
+    aclrtFreeHost(dst1Host);
     aclrtFreeHost(srcHost);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<float> golden(tileBytesDst / sizeof(float));
-    std::vector<float> devFinal(tileBytesDst / sizeof(float));
-    size_t tileSizeDst = tileBytesDst;
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", tileSizeDst, golden.data(), tileBytesDst));
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", tileSizeDst, devFinal.data(), tileBytesDst));
-    EXPECT_TRUE(ResultCmp<float>(golden, devFinal, 0.001f));
+    std::vector<T> golden(tileSize / sizeof(T));
+    std::vector<T> devFinal0(tileSize / sizeof(T));
+    std::vector<T> devFinal1(tileSize / sizeof(T));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", tileSize, golden.data(), tileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output0.bin", tileSize, devFinal0.data(), tileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output1.bin", tileSize, devFinal1.data(), tileSize));
+    EXPECT_TRUE(ResultCmp<T>(golden, devFinal0, 0.001f));
+    EXPECT_TRUE(ResultCmp<T>(golden, devFinal1, 0.001f));
 }
 
 TEST_F(TBROADCASTTest, case_float_16x16_16x16_16x16_2proc)
 {
-    test_tbroadcast<16, 16, 2>();
+    test_tbroadcast<float, 16, 16, 16, 16>();
 }
