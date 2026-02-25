@@ -21,13 +21,11 @@ using namespace std;
 
 namespace pto {
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB32RowWise(typename TileData::TileDType __out__ dst,
-                                          typename TileData::TileDType __in__ src)
+template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem>
+PTO_INTERNAL void TTransB32RowWise(__ubuf__ typename TileData::DType * dstPtr, __ubuf__ typename TileData::DType * srcPtr,
+                                   unsigned dstStride, unsigned srcStride)
 {
     using T = typename TileData::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint32_t> || std::is_same_v<T, int32_t> || std::is_same_v<T, float>) {
         uint16_t repeatTimes = CeilDivision(TileData::Cols, elementsPerRepeat);
@@ -56,13 +54,11 @@ __tf__ PTO_INTERNAL void TTransB32RowWise(typename TileData::TileDType __out__ d
     }
 }
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB16RowWise(typename TileData::TileDType __out__ dst,
-                                          typename TileData::TileDType __in__ src)
+template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem>
+PTO_INTERNAL void TTransB16RowWise(__ubuf__ typename TileData::DType * dstPtr, __ubuf__ typename TileData::DType * srcPtr,
+                                   unsigned dstStride, unsigned srcStride)
 {
     using T = typename TileData::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint16_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, half> ||
                   std::is_same_v<T, bfloat16_t>) {
@@ -92,13 +88,11 @@ __tf__ PTO_INTERNAL void TTransB16RowWise(typename TileData::TileDType __out__ d
     }
 }
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB8RowWise(typename TileData::TileDType __out__ dst,
-                                         typename TileData::TileDType __in__ src)
+template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem>
+PTO_INTERNAL void TTransB8RowWise(__ubuf__ typename TileData::DType * dstPtr, __ubuf__ typename TileData::DType * srcPtr,
+                                  unsigned dstStride, unsigned srcStride)
 {
     using T = typename TileData::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>) {
         constexpr uint32_t sregLower = elementsPerRepeat >> 1;
@@ -129,13 +123,11 @@ __tf__ PTO_INTERNAL void TTransB8RowWise(typename TileData::TileDType __out__ ds
     }
 }
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB32ColWise(typename TileData::TileDType __out__ dst,
-                                          typename TileData::TileDType __in__ src)
+template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem>
+PTO_INTERNAL void TTransB32ColWise(__ubuf__ typename TileData::DType * dstPtr, __ubuf__ typename TileData::DType * srcPtr,
+                                   unsigned dstStride, unsigned srcStride)
 {
     using T = typename TileData::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint32_t> || std::is_same_v<T, int32_t> || std::is_same_v<T, float>) {
         uint16_t repeatTimes = CeilDivision(TileData::Rows, elementsPerRepeat);
@@ -164,13 +156,11 @@ __tf__ PTO_INTERNAL void TTransB32ColWise(typename TileData::TileDType __out__ d
     }
 }
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB16ColWise(typename TileData::TileDType __out__ dst,
-                                          typename TileData::TileDType __in__ src)
+template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem>
+PTO_INTERNAL void TTransB16ColWise(__ubuf__ typename TileData::DType * dstPtr, __ubuf__ typename TileData::DType * srcPtr,
+                                   unsigned dstStride, unsigned srcStride)
 {
     using T = typename TileData::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint16_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, half> ||
                   std::is_same_v<T, bfloat16_t>) {
@@ -200,13 +190,11 @@ __tf__ PTO_INTERNAL void TTransB16ColWise(typename TileData::TileDType __out__ d
     }
 }
 
-template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-__tf__ PTO_INTERNAL void TTransB8ColWise(typename TileData::TileDType __out__ dst,
-                                         typename TileData::TileDType __in__ src)
+template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem>
+PTO_INTERNAL void TTransB8ColWise(__ubuf__ typename TileData::DType * dstPtr, __ubuf__ typename TileData::DType * srcPtr,
+                                  unsigned dstStride, unsigned srcStride)
 {
     using T = typename TileData::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>) {
         constexpr uint32_t sregLower = elementsPerRepeat >> 1;
@@ -237,6 +225,40 @@ __tf__ PTO_INTERNAL void TTransB8ColWise(typename TileData::TileDType __out__ ds
     }
 }
 
+template <typename TileDataSrc, typename T, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned staticRepeatTimes>
+PTO_INTERNAL void TTransOperantionImpl(__ubuf__ T* dst, __ubuf__ T* src, unsigned dstStride, unsigned srcStride) {
+    if constexpr (sizeof(T) == 4) {
+        if constexpr (staticRepeatTimes > TileDataSrc::Cols) {
+            TTransB32RowWise<TileDataSrc, elementsPerRepeat, blockSizeElem>(dst, src, dstStride, srcStride);
+        } else {
+            TTransB32ColWise<TileDataSrc, elementsPerRepeat, blockSizeElem>(dst, src, dstStride, srcStride);
+        }
+    } else if constexpr (sizeof(T) == 2) {
+        if constexpr (staticRepeatTimes > TileDataSrc::Cols) {
+            TTransB16RowWise<TileDataSrc, elementsPerRepeat, blockSizeElem>(dst, src, dstStride, srcStride);
+        } else {
+            TTransB16ColWise<TileDataSrc, elementsPerRepeat, blockSizeElem>(dst, src, dstStride, srcStride);
+        }
+    } else if constexpr (sizeof(T) == 1) {
+        if constexpr (staticRepeatTimes > TileDataSrc::Cols) {
+            TTransB8RowWise<TileDataSrc, elementsPerRepeat, blockSizeElem>(dst, src, dstStride, srcStride);
+        } else {
+            TTransB8ColWise<TileDataSrc, elementsPerRepeat, blockSizeElem>(dst, src, dstStride, srcStride);
+        }
+    } else {
+        static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "Fix: TTRANS has invalid data type.");
+    }
+}
+
+template <typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned staticRepeatTimes>
+__tf__ PTO_INTERNAL void TTransOperantion(typename TileData::TileDType __out__ dst,
+                                         typename TileData::TileDType __in__ src, unsigned dstStride, unsigned srcStride) {
+    using T = typename TileData::DType;
+    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    TTransOperantionImpl<TileData, T, elementsPerRepeat, blockSizeElem, staticRepeatTimes>(dstPtr, srcPtr, dstStride, srcStride);
+}
+
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
 PTO_INTERNAL void TTRANS_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp)
 {
@@ -259,33 +281,7 @@ PTO_INTERNAL void TTRANS_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &t
     constexpr unsigned srcStride = TileDataSrc::RowStride;
     constexpr unsigned dstStride = TileDataDst::RowStride;
     constexpr unsigned staticRepeatTimes = (TileDataSrc::Rows + elementsPerRepeat - 1) / elementsPerRepeat;
-    if constexpr (sizeof(T) == 4) {
-        if constexpr (staticRepeatTimes > TileDataSrc::Cols) {
-            TTransB32RowWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(),
-                                                                                                  src.data());
-        } else {
-            TTransB32ColWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(),
-                                                                                                  src.data());
-        }
-    } else if constexpr (sizeof(T) == 2) {
-        if constexpr (staticRepeatTimes > TileDataSrc::Cols) {
-            TTransB16RowWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(),
-                                                                                                  src.data());
-        } else {
-            TTransB16ColWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(),
-                                                                                                  src.data());
-        }
-    } else if constexpr (sizeof(T) == 1) {
-        if constexpr (staticRepeatTimes > TileDataSrc::Cols) {
-            TTransB8RowWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(),
-                                                                                                 src.data());
-        } else {
-            TTransB8ColWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(),
-                                                                                                 src.data());
-        }
-    } else {
-        static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "Fix: TTRANS has invalid data type.");
-    }
+    TTransOperantion<TileDataSrc, elementsPerRepeat, blockSizeElem, staticRepeatTimes>(dst.data(), src.data(), dstStride, srcStride);
 }
 } // namespace pto
 
