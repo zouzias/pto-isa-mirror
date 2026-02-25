@@ -115,6 +115,7 @@ tput
 tnotify
 twait
 tloadconv
+treduce
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
