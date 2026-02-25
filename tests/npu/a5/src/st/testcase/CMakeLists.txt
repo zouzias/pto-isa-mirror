@@ -11,13 +11,13 @@
 function(pto_vec_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-vec -DREGISTER_BASE -std=c++17)
-    target_include_directories(${NAME}_kernel PRIVATE 
+    target_include_directories(${NAME}_kernel PRIVATE
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
-    
+
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
@@ -40,13 +40,13 @@ endfunction()
 function(pto_cube_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-cube -DREGISTER_BASE -std=c++17)
-    target_include_directories(${NAME}_kernel PRIVATE 
+    target_include_directories(${NAME}_kernel PRIVATE
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
-    
+
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
@@ -70,7 +70,7 @@ function(pto_mix_st NAME)
     add_library(${NAME}_kernel_mix SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel_mix PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310 -DREGISTER_BASE -std=c++17)
 
-    target_include_directories(${NAME}_kernel_mix PRIVATE 
+    target_include_directories(${NAME}_kernel_mix PRIVATE
         ${ASCEND_HOME_PATH}/pkg_inc/
         ${ASCEND_HOME_PATH}/pkg_inc/profiling/
         ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
@@ -79,7 +79,7 @@ function(pto_mix_st NAME)
 
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
-    target_include_directories(${NAME} PRIVATE 
+    target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
 
@@ -99,7 +99,7 @@ endfunction()
 # 定义测试用例列表 testcase下如有新增用例目录需要在此加
 set(ALL_TESTCASES
     tsubs
-    tmaxs    
+    tmaxs
     tci
     tmatmul
     tmatmul_mx
@@ -111,6 +111,7 @@ set(ALL_TESTCASES
     tload_mx_gmtensor
     tmrgsort
     ttrans
+    ttrans_conv
     tstore
     textract
     textract_compact
