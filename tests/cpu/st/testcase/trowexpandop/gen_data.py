@@ -16,66 +16,66 @@ import numpy as np
 np.random.seed(19)
 
 
-def gen_golden_data_tcolexpandop(param, kind: str):
+def gen_golden_data_trowexpandop(param, element_op: str):
     dtype = param.dtype
     row, col = [param.tile_row, param.tile_col]
 
     input1 = np.random.uniform(low=-2, high=2, size=[row, col]).astype(dtype)
-    input2 = np.random.uniform(low=1, high=2, size=[1, col]).astype(dtype)
+    input2 = np.random.uniform(low=1, high=2, size=[row, 1]).astype(dtype)
 
-    if kind == "div":
+    if element_op == "div":
         golden = input1 / input2
-    elif kind == "mul":
+    elif element_op == "mul":
         golden = input1 * input2
-    elif kind == "sub":
+    elif element_op == "sub":
         golden = input1 - input2
-    elif kind == "add":
+    elif element_op == "add":
         golden = input1 + input2
-    elif kind == "min":
+    elif element_op == "min":
         golden = np.minimum(input1, input2)
-    elif kind == "max":
+    elif element_op == "max":
         golden = np.maximum(input1, input2)
-    elif kind == "expdif":
+    elif element_op == "expdif":
         golden = np.exp(input1 - input2)
     else:
-        raise ValueError(kind)
+        raise ValueError(element_op)
 
     input1.tofile("input1.bin")
     input2.tofile("input2.bin")
     golden.tofile("golden.bin")
 
 
-class TColExpandOpParams:
+class TRowExpandOpParams:
     def __init__(self, dtype, tile_row, tile_col):
         self.dtype = dtype
         self.tile_row = tile_row
         self.tile_col = tile_col
 
 
-def generate_case_name(param, kind: str):
+def generate_case_name(param, element_op: str):
     dtype_str = {np.float32: "float", np.float16: "half"}[param.dtype]
 
     def substring(a, b) -> str:
         return f"_{a}x{b}"
 
-    name = f"TCOLEXPANDOPTest.case_{kind}_{dtype_str}"
+    name = f"TROWEXPANDOPTest.case_{element_op}_{dtype_str}"
     name += substring(param.tile_row, param.tile_col)
     return name
 
 
 if __name__ == "__main__":
     case_params_list = [
-        TColExpandOpParams(np.float32, 64, 64),
-        TColExpandOpParams(np.float16, 16, 256),
+        TRowExpandOpParams(np.float32, 64, 64),
+        TRowExpandOpParams(np.float16, 16, 256),
     ]
-    kind_list = ["div", "mul", "sub", "add", "min", "max", "expdif"]
+    operations_list = ["div", "mul", "sub", "add", "min", "max", "expdif"]
 
-    combinations = [(param, kind) for param in case_params_list for kind in kind_list]
+    combinations = [(param, element_op) for param in case_params_list for element_op in operations_list]
 
-    for param, kind in combinations:
-        case_name = generate_case_name(param, kind)
+    for param, element_op in combinations:
+        case_name = generate_case_name(param, element_op)
         os.makedirs(case_name, exist_ok=True)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data_tcolexpandop(param, kind)
+        gen_golden_data_trowexpandop(param, element_op)
         os.chdir(original_dir)
