@@ -38,45 +38,47 @@ struct HcclDeviceContext {
 
     char hcomId[128];
 
-    struct { int32_t streamIds; uint32_t sqIds, cqIds, logicCqids; }
-        streamInfo[HCCL_MAX_RANK_NUM];
+    struct {
+        int32_t streamIds;
+        uint32_t sqIds, cqIds, logicCqids;
+    } streamInfo[HCCL_MAX_RANK_NUM];
 
     struct {
-        struct { uint64_t resId, addr; uint32_t devId, tsId, rankId, flag; }
-            noIpcNotifys[HCCL_MAX_RANK_NUM * 2],
-            ipcNotifys[HCCL_MAX_RANK_NUM * 4],
-            noIpcEvents[HCCL_MAX_RANK_NUM],
-            aicpuNotify,
-            aicpuOpNotify[2];
+        struct {
+            uint64_t resId, addr;
+            uint32_t devId, tsId, rankId, flag;
+        } noIpcNotifys[HCCL_MAX_RANK_NUM * 2], ipcNotifys[HCCL_MAX_RANK_NUM * 4], noIpcEvents[HCCL_MAX_RANK_NUM],
+            aicpuNotify, aicpuOpNotify[2];
     } signalInfo;
 
     struct {
-        uint8_t  deterministic;
-        uint8_t  retryEnable;
-        uint8_t  highPerfEnable;
-        uint8_t  _pad0[5];
-        uint8_t  linkTimeOut[8];
+        uint8_t deterministic;
+        uint8_t retryEnable;
+        uint8_t highPerfEnable;
+        uint8_t _pad0[5];
+        uint8_t linkTimeOut[8];
         uint64_t notifyWaitTime;
         uint32_t retryHoldTime;
         uint32_t retryIntervalTime;
-        bool     interXLinkDisable;
+        bool interXLinkDisable;
         // rtFloatOverflowMode_t (enum class, underlying = int32_t)
-        int32_t  floatOverflowMode;
+        int32_t floatOverflowMode;
         uint32_t multiQpThreshold;
     } config;
 
     uint64_t overFlowAddr;
-    uint8_t  onlyRead;
+    uint8_t onlyRead;
 
-    struct { uint64_t hostAddr, deviceAddr, readCacheAddr; uint32_t devMemSize, buffLen, flag; }
-        kfcControlTransferH2DParams,
-        kfcStatusTransferD2HParams;
+    struct {
+        uint64_t hostAddr, deviceAddr, readCacheAddr;
+        uint32_t devMemSize, buffLen, flag;
+    } kfcControlTransferH2DParams, kfcStatusTransferD2HParams;
 
-    uint8_t  _pad1[16];
+    uint8_t _pad1[16];
     uint64_t winExpSize;
     uint64_t windowsExp[HCCL_MAX_RANK_NUM];
 
-    uint8_t  multiServerFlag;
+    uint8_t multiServerFlag;
     uint64_t ibverbsData;
     uint64_t ibverbsDataSize;
 };
