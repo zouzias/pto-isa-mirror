@@ -23,7 +23,7 @@ def gen_case(case_dir: str, rows: int, cols: int, numproc: int):
     src = np.random.uniform(low=-4, high=4, size=[rows, cols]).astype(np.float32)
     
 
-    dst = np.zeros([rows*numproc, cols], dtype=np.float32)
+    dst = np.zeros([rows * numproc, cols], dtype=np.float32)
     for n in range(numproc):
         for i in range(rows):
             for j in range(cols):
