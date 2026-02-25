@@ -101,6 +101,7 @@ endfunction()
 set(ALL_TESTCASES
 tmatmul
 trowsum
+trowprod
 trowmax
 trowmin
 textract
