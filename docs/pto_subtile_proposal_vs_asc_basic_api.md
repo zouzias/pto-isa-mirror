@@ -90,12 +90,17 @@ auto a0 = inQueue0.DeQue<T>();
 auto a1 = inQueue1.DeQue<T>();
 auto d  = outQueue.AllocTensor<T>();
 
-// Use counter mode for vCols elements, row loop for Add
-SetMaskNorm();
-SetVectorMask(0, kTCols); // counter mode for vCols
-for (int r = 0; r < vRows; ++r) {
-    AscendC::Add(d + r * kTCols, a0 + r * kTCols, a1 + r * kTCols, kTCols);
-}
+// Use Add mask+repeat (per doc: mask in continuous mode, repeatTimes, BinaryRepeatParams)
+uint64_t mask = kTCols;   // FP32: mask∈[1,64], FP16: mask∈[1,128]
+BinaryRepeatParams rp;
+// set repeat stride to row stride in blocks
+rp.dstRepStride = kTCols / 8;
+rp.src0RepStride = kTCols / 8;
+rp.src1RepStride = kTCols / 8;
+// dataBlockStride defaults for contiguous rows
+rp.dstBlkStride = 1; rp.src0BlkStride = 1; rp.src1BlkStride = 1;
+
+AscendC::Add(d, a0, a1, mask, /*repeatTimes=*/vRows, rp);
 
 outQueue.EnQue(d);
 inQueue0.FreeTensor(a0); inQueue1.FreeTensor(a1);
@@ -124,13 +129,16 @@ inQueue0.EnQue(s0); inQueue1.EnQue(s1);
 auto a0 = inQueue0.DeQue<T>();
 auto a1 = inQueue1.DeQue<T>();
 auto d  = outQueue.AllocTensor<T>();
+
+BinaryRepeatParams rp;
+rp.dstRepStride = 128 / 8;  // row stride in blocks
+rp.src0RepStride = 128 / 8;
+rp.src1RepStride = 128 / 8;
+rp.dstBlkStride = 1; rp.src0BlkStride = 1; rp.src1BlkStride = 1;
+
 for (int c0 = 0; c0 < totalCols; c0 += 64) {
-    SetMaskNorm();
-    SetVectorMask(0, 64);
-    AscendC::Add(d + c0, a0 + c0, a1 + c0,
-                 /*repeat=*/vRows - 1,
-                 /*dstRep=*/1, /*src0Rep=*/1, /*src1Rep=*/1,
-                 /*dstStride=*/128/8, /*src0Stride=*/128/8, /*src1Stride=*/128/8);
+    uint64_t mask = 64; // FP32 continuous mask
+    AscendC::Add(d + c0, a0 + c0, a1 + c0, mask, /*repeatTimes=*/vRows, rp);
 }
 
 outQueue.EnQue(d);
@@ -140,6 +148,8 @@ auto out = outQueue.DeQue<T>();
 AscendC::DataCopy(dstGlobal, out, dataSize);
 outQueue.FreeTensor(out);
 ```
+
+
 
 ---
 
