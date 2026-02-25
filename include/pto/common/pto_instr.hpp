@@ -1303,6 +1303,14 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
     return {};
 }
 
+template <typename TileDataD, typename TileDataS, typename... WaitEvents>
+PTO_INST RecordEvent TBROADCAST(TileDataD &dst, TileDataS &src, size_t numProc, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TBROADCAST, dst, src, numProc);
+    return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
