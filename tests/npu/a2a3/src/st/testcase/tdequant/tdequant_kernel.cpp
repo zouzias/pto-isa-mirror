@@ -65,8 +65,8 @@ void LaunchTDequant(dstDType *out, srcDType *src, dstDType *scale, dstDType *off
 template void LaunchTDequant<float, int8_t, 32, 32, 32, 32, 32, 32, 32, 32>(float *out, int8_t *src, float *scale,
                                                                             float *offset, void *stream);
 template void LaunchTDequant<float, int16_t, 32, 32, 32, 32, 32, 32, 32, 32>(float *out, int16_t *src, float *scale,
-                                                                            float *offset, void *stream);
+                                                                             float *offset, void *stream);
 template void LaunchTDequant<float, int8_t, 64, 64, 32, 64, 32, 32, 48, 32>(float *out, int8_t *src, float *scale,
                                                                             float *offset, void *stream);
 template void LaunchTDequant<float, int16_t, 32, 32, 16, 32, 16, 16, 24, 16>(float *out, int16_t *src, float *scale,
-                                                                            float *offset, void *stream);
+                                                                             float *offset, void *stream);
