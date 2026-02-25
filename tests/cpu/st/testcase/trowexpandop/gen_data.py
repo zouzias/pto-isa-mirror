@@ -16,12 +16,12 @@ import numpy as np
 np.random.seed(19)
 
 
-def gen_golden_data_tcolexpandop(param, kind: str):
+def gen_golden_data_trowexpandop(param, kind: str):
     dtype = param.dtype
     row, col = [param.tile_row, param.tile_col]
 
     input1 = np.random.uniform(low=-2, high=2, size=[row, col]).astype(dtype)
-    input2 = np.random.uniform(low=1, high=2, size=[1, col]).astype(dtype)
+    input2 = np.random.uniform(low=1, high=2, size=[row, 1]).astype(dtype)
 
     if kind == "div":
         golden = input1 / input2
@@ -45,7 +45,7 @@ def gen_golden_data_tcolexpandop(param, kind: str):
     golden.tofile("golden.bin")
 
 
-class TColExpandOpParams:
+class TRowExpandOpParams:
     def __init__(self, dtype, tile_row, tile_col):
         self.dtype = dtype
         self.tile_row = tile_row
@@ -58,15 +58,15 @@ def generate_case_name(param, kind: str):
     def substring(a, b) -> str:
         return f"_{a}x{b}"
 
-    name = f"TCOLEXPANDOPTest.case_{kind}_{dtype_str}"
+    name = f"TROWEXPANDOPTest.case_{kind}_{dtype_str}"
     name += substring(param.tile_row, param.tile_col)
     return name
 
 
 if __name__ == "__main__":
     case_params_list = [
-        TColExpandOpParams(np.float32, 64, 64),
-        TColExpandOpParams(np.float16, 16, 256),
+        TRowExpandOpParams(np.float32, 64, 64),
+        TRowExpandOpParams(np.float16, 16, 256),
     ]
     kind_list = ["div", "mul", "sub", "add", "min", "max", "expdif"]
 
@@ -77,5 +77,5 @@ if __name__ == "__main__":
         os.makedirs(case_name, exist_ok=True)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data_tcolexpandop(param, kind)
+        gen_golden_data_trowexpandop(param, kind)
         os.chdir(original_dir)

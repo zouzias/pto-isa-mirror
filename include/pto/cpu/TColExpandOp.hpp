@@ -60,6 +60,24 @@ PTO_INTERNAL void TCOLEXPANDADD_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1
     TColExpand_Op<TileDst, TileSrc1, ElementOp::OP_ADD>(dst, src0, src1);
 }
 
+template <typename TileDst, typename TileSrc1>
+PTO_INTERNAL void TCOLEXPANDMAX_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1)
+{
+    TColExpand_Op<TileDst, TileSrc1, ElementOp::OP_MAX>(dst, src0, src1);
+}
+
+template <typename TileDst, typename TileSrc1>
+PTO_INTERNAL void TCOLEXPANDMIN_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1)
+{
+    TColExpand_Op<TileDst, TileSrc1, ElementOp::OP_MIN>(dst, src0, src1);
+}
+
+template <typename TileDst, typename TileSrc1>
+PTO_INTERNAL void TCOLEXPANDEXPDIF_IMPL(TileDst &dst, TileDst &src0, TileSrc1 &src1)
+{
+    TColExpand_Op<TileDst, TileSrc1, ElementOp::OP_EXPDIF>(dst, src0, src1);
+}
+
 } // namespace pto
 
 #endif

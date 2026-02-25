@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int kTRows_, int kTCols_, typename LaunchFn>
-AICORE void runTCOLEXPANDOP(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1, LaunchFn fn)
+AICORE void runTROWEXPANDOP(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1, LaunchFn fn)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kTRows_, kTCols_>;
     using DynStridDim5 = Stride<1, 1, 1, kTCols_, 1>;
@@ -42,128 +42,128 @@ AICORE void runTCOLEXPANDOP(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__
 }
 
 template <typename T, int kTRows_, int kTCols_>
-void LaunchTCOLEXPANDDIV(T *out, T *src0, T *src1, void *stream)
+void LaunchTROWEXPANDDIV(T *out, T *src0, T *src1, void *stream)
 {
     using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTROWEXPANDOP<half, kTRows_, kTCols_>(
             (half *)(out), (half *)(src0), (half *)(src1),
-            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDDIV(dst, src0, src1); });
+            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDDIV(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
-            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDDIV(dst, src0, src1); });
+        runTROWEXPANDOP<T, kTRows_, kTCols_>(
+            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDDIV(dst, src0, src1); });
     }
 }
 
 template <typename T, int kTRows_, int kTCols_>
-void LaunchTCOLEXPANDMUL(T *out, T *src0, T *src1, void *stream)
+void LaunchTROWEXPANDMUL(T *out, T *src0, T *src1, void *stream)
 {
     using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTROWEXPANDOP<half, kTRows_, kTCols_>(
             (half *)(out), (half *)(src0), (half *)(src1),
-            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMUL(dst, src0, src1); });
+            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDMUL(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
-            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMUL(dst, src0, src1); });
+        runTROWEXPANDOP<T, kTRows_, kTCols_>(
+            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDMUL(dst, src0, src1); });
     }
 }
 
 template <typename T, int kTRows_, int kTCols_>
-void LaunchTCOLEXPANDSUB(T *out, T *src0, T *src1, void *stream)
+void LaunchTROWEXPANDSUB(T *out, T *src0, T *src1, void *stream)
 {
     using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTROWEXPANDOP<half, kTRows_, kTCols_>(
             (half *)(out), (half *)(src0), (half *)(src1),
-            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDSUB(dst, src0, src1); });
+            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDSUB(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
-            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDSUB(dst, src0, src1); });
+        runTROWEXPANDOP<T, kTRows_, kTCols_>(
+            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDSUB(dst, src0, src1); });
     }
 }
 
 template <typename T, int kTRows_, int kTCols_>
-void LaunchTCOLEXPANDADD(T *out, T *src0, T *src1, void *stream)
+void LaunchTROWEXPANDADD(T *out, T *src0, T *src1, void *stream)
 {
     using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTROWEXPANDOP<half, kTRows_, kTCols_>(
             (half *)(out), (half *)(src0), (half *)(src1),
-            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDADD(dst, src0, src1); });
+            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDADD(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
-            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDADD(dst, src0, src1); });
+        runTROWEXPANDOP<T, kTRows_, kTCols_>(
+            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDADD(dst, src0, src1); });
     }
 }
 
 template <typename T, int kTRows_, int kTCols_>
-void LaunchTCOLEXPANDMAX(T *out, T *src0, T *src1, void *stream)
+void LaunchTROWEXPANDMAX(T *out, T *src0, T *src1, void *stream)
 {
     using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTROWEXPANDOP<half, kTRows_, kTCols_>(
             (half *)(out), (half *)(src0), (half *)(src1),
-            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMAX(dst, src0, src1); });
+            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDMAX(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
-            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMAX(dst, src0, src1); });
+        runTROWEXPANDOP<T, kTRows_, kTCols_>(
+            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDMAX(dst, src0, src1); });
     }
 }
 
 template <typename T, int kTRows_, int kTCols_>
-void LaunchTCOLEXPANDMIN(T *out, T *src0, T *src1, void *stream)
+void LaunchTROWEXPANDMIN(T *out, T *src0, T *src1, void *stream)
 {
     using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTROWEXPANDOP<half, kTRows_, kTCols_>(
             (half *)(out), (half *)(src0), (half *)(src1),
-            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMIN(dst, src0, src1); });
+            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDMIN(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
-            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMIN(dst, src0, src1); });
+        runTROWEXPANDOP<T, kTRows_, kTCols_>(
+            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDMIN(dst, src0, src1); });
     }
 }
 
 template <typename T, int kTRows_, int kTCols_>
-void LaunchTCOLEXPANDEXPDIF(T *out, T *src0, T *src1, void *stream)
+void LaunchTROWEXPANDEXPDIF(T *out, T *src0, T *src1, void *stream)
 {
     using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTROWEXPANDOP<half, kTRows_, kTCols_>(
             (half *)(out), (half *)(src0), (half *)(src1),
-            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDEXPDIF(dst, src0, src1); });
+            [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDEXPDIF(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
-            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDEXPDIF(dst, src0, src1); });
+        runTROWEXPANDOP<T, kTRows_, kTCols_>(
+            out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TROWEXPANDEXPDIF(dst, src0, src1); });
     }
 }
 
-template void LaunchTCOLEXPANDDIV<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTCOLEXPANDDIV<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+template void LaunchTROWEXPANDDIV<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
+template void LaunchTROWEXPANDDIV<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
                                                        void *stream);
-template void LaunchTCOLEXPANDMUL<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTCOLEXPANDMUL<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+template void LaunchTROWEXPANDMUL<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
+template void LaunchTROWEXPANDMUL<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
                                                        void *stream);
-template void LaunchTCOLEXPANDSUB<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTCOLEXPANDSUB<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+template void LaunchTROWEXPANDSUB<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
+template void LaunchTROWEXPANDSUB<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
                                                        void *stream);
-template void LaunchTCOLEXPANDADD<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTCOLEXPANDADD<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+template void LaunchTROWEXPANDADD<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
+template void LaunchTROWEXPANDADD<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
                                                        void *stream);
-template void LaunchTCOLEXPANDMAX<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTCOLEXPANDMAX<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+template void LaunchTROWEXPANDMAX<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
+template void LaunchTROWEXPANDMAX<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
                                                        void *stream);
-template void LaunchTCOLEXPANDMIN<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTCOLEXPANDMIN<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+template void LaunchTROWEXPANDMIN<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
+template void LaunchTROWEXPANDMIN<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
                                                        void *stream);
-template void LaunchTCOLEXPANDEXPDIF<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTCOLEXPANDEXPDIF<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+template void LaunchTROWEXPANDEXPDIF<float, 64, 64>(float *out, float *src0, float *src1, void *stream);
+template void LaunchTROWEXPANDEXPDIF<aclFloat16, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
                                                           void *stream);
