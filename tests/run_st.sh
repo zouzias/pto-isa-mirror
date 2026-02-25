@@ -273,6 +273,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trowmax -g TROWMAXTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trowmin -g TROWMINTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trowsum -g TROWSUMTest.test1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trowprod -g TROWPRODTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trsqrt -g TRSQRTTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsel -g TSELTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsels -g TSELSTest.case_uint8_uint8_2x32_2x32_2x32_2x32
@@ -304,6 +305,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t mgather -g MGATHERTest.case_half_16x128_8x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t mscatter -g MSCATTERTest.case_uint8_16x64_2048
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tquant -g TQUANTTest.case_mxfp8_fp32_128x128_nd
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tquant -g TQUANTTest.case_mxfp8_fp32_128x128_nz
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tquant -g TQUANTTest.case_int8_sym_fp32_128x128_nd
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tquant -g TQUANTTest.case_int8_asym_fp32_128x128_nd
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttri -g TTRITest.case_float_128x128_lower_diag_n3
@@ -374,6 +376,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trowmax
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trowmin
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trowsum
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trowprod
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t trsqrt
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsel
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsels

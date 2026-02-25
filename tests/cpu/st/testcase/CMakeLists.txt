@@ -111,6 +111,7 @@ tget
 tput
 tnotify
 twait
+tloadconv
 treduce
 )
 
