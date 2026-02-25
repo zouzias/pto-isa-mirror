@@ -116,7 +116,6 @@ struct TestContext {
             std::cerr << "[ERROR] n_devices and n_ranks must be > 0\n";
             return false;
         }
-
         deviceId = rankId % nDevices + firstDeviceId;
 
         aclInit(nullptr);
@@ -203,8 +202,8 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     aclrtGetDeviceCount(&deviceCount);
     int maxDeviceId = firstDeviceId + (nRanks > 0 ? (nRanks - 1) : 0);
     if (static_cast<uint32_t>(maxDeviceId) >= deviceCount) {
-        std::cerr << "[SKIP] Need devices [" << firstDeviceId << ".." << maxDeviceId
-                  << "] but only " << deviceCount << " available, skipping.\n";
+        std::cerr << "[SKIP] Need devices [" << firstDeviceId << ".." << maxDeviceId << "] but only " << deviceCount
+                  << " available, skipping.\n";
         return true;
     }
 
