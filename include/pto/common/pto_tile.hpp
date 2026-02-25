@@ -34,6 +34,7 @@ enum class Layout
     MX_B_DN,
     MX_B_NN,
     NC1HWC0,
+    C1HWNC0,
     NCHW,
     NHWC,
     NDC1HWC0,
