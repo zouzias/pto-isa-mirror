@@ -1480,5 +1480,23 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dst, GlobalSrcData &src, TileData &ping
 }
 #endif
 
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+                             TileData &recvTileData, ReduceOp op, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TREDUCE, parallelGroup, dstGlobalData, accTileData, recvTileData, op);
+    return {};
+}
+
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+                             TileData &pingTileData, TileData &pongTileData, ReduceOp op, WaitEvents &... events)
+{
+    WaitAllEvents(events...);
+    TSYNC(TREDUCE, parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
+    return {};
+}
+
 } // namespace pto
 #endif

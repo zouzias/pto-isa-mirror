@@ -111,6 +111,7 @@ tget
 tput
 tnotify
 twait
+treduce
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
