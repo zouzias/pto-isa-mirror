@@ -164,27 +164,65 @@ outQueue.FreeTensor(out);
 
 ---
 
-### 2) Broadcast (row expand)
+### 2) Broadcast (row/col expand)
 
-**PTO SubTile (tile‑level)**
+#### PTO SubTile — TROWEXPANDADD (row expand)
 ```cpp
-// src is 1 x vCols, dst is vRows x vCols
-TLOAD(srcTile, srcGlobal);
-TROWEXPAND(dstTile, srcTile);  // broadcast row to tile height
-TSTORE(dstGlobal, dstTile);
-```
+// Step 1: expand one row to a single block (32B => FP32 8 elems)
+TROWEXPAND(dstBlock8, srcRow); // dstBlock8 shape: 1 x 8
 
-**AscendC Basic (tile‑level)**
-```cpp
-// Copy one row into UB
-AscendC::DataCopy(srcLocal, srcGlobal, vCols);
-// Repeat into dstLocal with manual loop or vector broadcast primitive
-for (int r = 0; r < vRows; ++r) {
-    AscendC::DataCopy(dstLocal + r * kTCols, srcLocal, vCols);
+// Step 2: row-expand-add on 2D tile, vCols = 8 (one block)
+// outer loop over col blocks to cover full tile
+for (int c0 = 0; c0 < totalCols; c0 += 8) {
+    // sub‑tile with vCols=8
+    Tile2D srcSub(vRows, 8);
+    Tile2D dstSub(vRows, 8);
+    TASSIGN(srcSub, 0x0 + c0 * sizeof(T));
+    TASSIGN(dstSub, 0x20000 + c0 * sizeof(T));
+
+    TROWEXPANDADD(dstSub, srcSub, dstBlock8); // add expanded row block
 }
-AscendC::DataCopy(dstGlobal, dstLocal, vRows * kTCols);
 ```
 
+#### AscendC Basic — row expand (BRCB then Add)
+```cpp
+// brcb: broadcast one row to vector block (32B / 8 FP32)
+AscendC::Brcb(dstBlock8, srcRow, /*mask=*/8);
+
+// loop over column blocks (vCols = 8) to cover full tile
+for (int c0 = 0; c0 < totalCols; c0 += 8) {
+    AscendC::Add(dstLocal + c0, srcLocal + c0, dstBlock8,
+                 /*mask=*/8, /*repeatTimes=*/vRows, rp);
+}
+```
+
+#### PTO SubTile — TCOLEXPANDADD (col expand)
+```cpp
+// 1D tensor bounded by vCols <= VL
+using Tile1D = Tile<TileType::Vec, T, 1, VL, BLayout::RowMajor, -1, -1>;
+
+// outer loop over col blocks to cover whole tile
+for (int c0 = 0; c0 < totalCols; c0 += VL) {
+    int vCols = min(VL, totalCols - c0);
+    Tile1D srcSub(1, vCols);
+    Tile1D dstSub(1, vCols);
+
+    TASSIGN(srcSub, 0x0 + c0 * sizeof(T));
+    TASSIGN(dstSub, 0x20000 + c0 * sizeof(T));
+
+    TCOLEXPANDADD(dstSub, srcSub);
+}
+```
+
+#### AscendC Basic — col expand (1D, vCols<=VL, loop over blocks)
+```cpp
+for (int c0 = 0; c0 < totalCols; c0 += VL) {
+    int vCols = min(VL, totalCols - c0);
+    uint64_t mask = vCols;
+    AscendC::Add(dstLocal + c0, srcLocal + c0, srcLocal + c0,
+                 mask, /*repeatTimes=*/1, rp); // or use vector broadcast op
+}
+```
 ---
 
 ### 3) Reduce (colsum)
