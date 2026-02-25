@@ -25,7 +25,7 @@ PTO_INTERNAL void TBROADCAST_IMPL(TileDataDst &dst, TileDataSrc &src, size_t num
     if (validRow == 0 || validCol == 0 || numProc == 0) {
         return;
     }
-    for (unsigned n = 0; n < numProc; ++n){
+    for (unsigned n = 0; n < numProc; ++n) {
         for (unsigned i = 0; i < validRow; ++i) {
             for (unsigned j = 0; j < validCol; ++j) {
                 const size_t srcOff = GetTileElementOffset<TileDataSrc>(i, j);
@@ -35,7 +35,6 @@ PTO_INTERNAL void TBROADCAST_IMPL(TileDataDst &dst, TileDataSrc &src, size_t num
             }
         }
     }
-    
 }
 
 } // namespace pto

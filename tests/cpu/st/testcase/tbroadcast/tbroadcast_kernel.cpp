@@ -17,14 +17,13 @@ template <int kTRows_, int kTCols_, int kTNumProc_>
 AICORE void runTBroadcast(__gm__ float __out__ *out, __gm__ float __in__ *src)
 {
     using TileTSrc = Tile<TileType::Vec, float, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileTDst = Tile<TileType::Vec, float, kTNumProc_*kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TileTDst = Tile<TileType::Vec, float, kTNumProc_ * kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using SrcShape = Shape<1, 1, 1, kTRows_, kTCols_>;
     using SrcStride = Stride<1, 1, 1, kTCols_, 1>;
     using SrcGTf = GlobalTensor<float, SrcShape, SrcStride>;
-    using DstShape = Shape<1, 1, 1, kTNumProc_*kTRows_, kTCols_>;
+    using DstShape = Shape<1, 1, 1, kTNumProc_ * kTRows_, kTCols_>;
     using DstStride = Stride<1, 1, 1, kTCols_, 1>;
     using DstGTf = GlobalTensor<float, DstShape, DstStride>;
- 
 
     TileTSrc srcTile(kTRows_, kTCols_);
     TileTDst dstTile(kTNumProc_ * kTRows_, kTCols_);

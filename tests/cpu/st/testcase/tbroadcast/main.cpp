@@ -39,7 +39,6 @@ void test_tbroadcast()
 {
     const size_t tileBytesSrc = kTRows_ * kTCols_ * sizeof(float);
     const size_t tileBytesDst = kTNumProc_ * kTRows_ * kTCols_ * sizeof(float);
-    
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -49,13 +48,11 @@ void test_tbroadcast()
     float *dstHost, *srcHost;
     float *dstDevice, *srcDevice;
 
-
     aclrtMallocHost((void **)(&dstHost), tileBytesDst);
     aclrtMallocHost((void **)(&srcHost), tileBytesSrc);
 
     aclrtMalloc((void **)&dstDevice, tileBytesDst, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&srcDevice, tileBytesSrc, ACL_MEM_MALLOC_HUGE_FIRST);
-
 
     size_t tileSizeSrc = tileBytesSrc;
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/input.bin", tileSizeSrc, srcHost, tileBytesSrc));
