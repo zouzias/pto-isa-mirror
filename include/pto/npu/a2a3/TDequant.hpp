@@ -22,18 +22,18 @@ PTO_INTERNAL void ConvertToDstDtype(__ubuf__ DstDType *dst, __ubuf__ SrcDType *s
                                     uint16_t dstBlockStride, uint16_t srcBlockStride, uint16_t dstRepeatStride,
                                     uint16_t srcRepeatStride)
 {
-    if constexpr (std::is_same<DstDType, float>::value && std::is_same<SrcDType, int16_t>::value) { // int16 to float32
+    if constexpr (std::is_same<DstDType, float>::value && std::is_same<SrcDType, int16_t>::value) {
         vconv_s162f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
         pipe_barrier(PIPE_V);
     } else if constexpr (std::is_same<DstDType, half>::value &&
-                         std::is_same<SrcDType, int8_t>::value) { // int8 to float32
-        vconv_s82f16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride); // to half
+                         std::is_same<SrcDType, int8_t>::value) {
+        vconv_s82f16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
         pipe_barrier(PIPE_V);
 
     } else if constexpr (std::is_same<DstDType, float>::value &&
-                         std::is_same<SrcDType, half>::value) { // half to float32
+                         std::is_same<SrcDType, half>::value) {
         vconv_f162f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride,
-                      srcRepeatStride); // to float
+                      srcRepeatStride);
         pipe_barrier(PIPE_V);
     }
 }
@@ -77,11 +77,9 @@ PTO_INST void ConvertForDequant(__ubuf__ DstDType *dstPtr, __ubuf__ SrcDType *sr
         }
     }
 
-    // Advance pointers to unaligned remainder region
     dstPtr += numRepeatPerLine * elementsPerRepeat;
     srcPtr += numRepeatPerLine * elementsPerRepeat;
 
-    // Process remainder region with partial repeats (requires vector masking)
     if (numRemainPerLine > 0) {
         unsigned numLoop = dstValidRows / REPEAT_MAX;
         unsigned remainAfterLoop = dstValidRows % REPEAT_MAX;
@@ -111,7 +109,6 @@ __tf__ PTO_INTERNAL void TDequant(typename TileDataDst::TileDType __out__ dst /*
                                   typename TileDataPara::TileDType __in__ offset, unsigned dstValidRows,
                                   unsigned dstValidCols)
 {
-    // cast int to float
     __ubuf__ typename TileDataDst::DType *dstPtr = (__ubuf__ typename TileDataDst::DType *)__cce_get_tile_ptr(dst);
     __ubuf__ typename TileDataSrc::DType *srcPtr = (__ubuf__ typename TileDataSrc::DType *)__cce_get_tile_ptr(src);
 
