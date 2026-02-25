@@ -120,10 +120,10 @@ __tf__ PTO_INTERNAL void TDequant(typename TileDataDst::TileDType __out__ dst /*
         ConvertForDequant<float, int16_t, dstRowStride, srcRowStride>(dstPtr, srcPtr, dstValidRows, dstValidCols);
     } else if constexpr (std::is_same_v<typename TileDataDst::DType, float> &&
                          std::is_same_v<typename TileDataSrc::DType, int8_t>) {
-        __ubuf__ half *tempDstHalfPtr = (__ubuf__ half *)(dstPtr) + dstValidCols;
+        __ubuf__ half *tempDstHalfPtr = (__ubuf__ half *)(dstPtr) + dstRowStride;
         ConvertForDequant<half, int8_t, dstRowStride * 2, srcRowStride>(tempDstHalfPtr, srcPtr, dstValidRows,
                                                                         dstValidCols);
-        ConvertForDequant<float, half, dstRowStride, srcRowStride * 2>(dstPtr, tempDstHalfPtr, dstValidRows,
+        ConvertForDequant<float, half, dstRowStride, dstRowStride * 2>(dstPtr, tempDstHalfPtr, dstValidRows,
                                                                        dstValidCols);
     }
 
@@ -137,62 +137,35 @@ __tf__ PTO_INTERNAL void TDequant(typename TileDataDst::TileDType __out__ dst /*
     constexpr unsigned dstRepeatStride = dstStride / blockSizeElem;
     unsigned numLoop = dstValidCols / elementsPerRepeat;
 
-    unsigned headRepeats = dstValidCols / elementsPerRepeat;
-    if (headRepeats) {
-        for (int i = 0; i < dstValidRows; i++) {
-            PtoSetWaitFlag<PIPE_V, PIPE_S>();
-            unsigned dstOffset = i * dstRowStride;
-            unsigned srcOffset = i * srcRowStride;
-            T offsetValue = *(offsetPtr + i * scaleRowStride);
-            T scaleValue = *(scalePtr + i * scaleRowStride);
-            PtoSetWaitFlag<PIPE_S, PIPE_V>();
-            set_mask_count();
-            set_vector_mask(0, dstValidCols);
-            vadds(dstPtr + dstOffset, dstPtr + dstOffset, -offsetValue, headRepeats, 1, 1, 8, 8);
-            pipe_barrier(PIPE_V);
-            vmuls(dstPtr + dstOffset, dstPtr + dstOffset, scaleValue, headRepeats, 1, 1, 8, 8);
-            pipe_barrier(PIPE_V);
-            set_mask_norm();
-            SetFullVecMaskByDType<T>();
-        }
+    set_mask_count();
+    set_vector_mask(0, dstValidCols);
+    for (int i = 0; i < dstValidRows; ++i) {
+        __ubuf__ T *dstNext = dstPtr + i * dstRowStride;
+        PtoSetWaitFlag<PIPE_V, PIPE_S>();
+        T offsetValue = *(offsetPtr + i * TileDataPara::RowStride);
+        T scaleValue = *(scalePtr + i * TileDataPara::RowStride);
+        PtoSetWaitFlag<PIPE_S, PIPE_V>();
+        vadds(dstNext, dstNext, -offsetValue, 1, 1, 1, 8, 8);
+        pipe_barrier(PIPE_V);
+        vmuls(dstNext, dstNext, scaleValue, 1, 1, 1, 8, 8);
+        pipe_barrier(PIPE_V);
     }
-
-    unsigned tailElements = dstValidCols % elementsPerRepeat;
-    if (tailElements) {
-        dstPtr += headRepeats * elementsPerRepeat;
-        srcPtr += headRepeats * elementsPerRepeat;
-        for (int i = 0; i < dstValidRows; i++) {
-            PtoSetWaitFlag<PIPE_V, PIPE_S>();
-            unsigned dstOffset = i * dstRowStride;
-            unsigned srcOffset = i * srcRowStride;
-            T offsetValue = *(offsetPtr + i * scaleRowStride);
-            T scaleValue = *(scalePtr + i * scaleRowStride);
-            PtoSetWaitFlag<PIPE_S, PIPE_V>();
-            set_mask_count();
-            set_vector_mask(0, dstValidCols);
-            vadds(dstPtr + dstOffset, dstPtr + dstOffset, -offsetValue, 0, 1, 1, 8, 8);
-            pipe_barrier(PIPE_V);
-            vmuls(dstPtr + dstOffset, dstPtr + dstOffset, scaleValue, 0, 1, 1, 8, 8);
-            pipe_barrier(PIPE_V);
-            set_mask_norm();
-            SetFullVecMaskByDType<T>();
-        }
-    }
+    set_mask_norm();
+    set_vector_mask(-1, -1);
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataPara>
 PTO_INTERNAL void TDEQUANT_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataPara &scale, TileDataPara &offset)
 {
     static_assert(std::is_same<typename TileDataDst::DType, float>::value ||
-                  std::is_same<typename TileDataDst::DType, float32_t>::value ||
-                  std::is_same<typename TileDataPara::DType, float>::value ||
-                  std::is_same<typename TileDataPara::DType, float32_t>::value,
+                      std::is_same<typename TileDataDst::DType, float32_t>::value ||
+                      std::is_same<typename TileDataPara::DType, float>::value ||
+                      std::is_same<typename TileDataPara::DType, float32_t>::value,
                   "Fix: TDEQUANT input tile src and dst currently supports float data types.");
     static_assert(std::is_same<typename TileDataSrc::DType, int8_t>::value ||
-                  std::is_same<typename TileDataSrc::DType, int16_t>::value,
+                      std::is_same<typename TileDataSrc::DType, int16_t>::value,
                   "Fix: TDEQUANT input tile scale and offset currently supports int8_t and int16_t data types.");
-    static_assert(TileDataDst::isRowMajor && TileDataSrc::isRowMajor && TileDataPara::isRowMajor,
-                  "Fix: TDEQUANT only support row major layout.");
+    static_assert(TileDataDst::isRowMajor && TileDataSrc::isRowMajor, "Fix: TDEQUANT only support row major layout.");
     constexpr unsigned dstRowStride = TileDataDst::RowStride;
     constexpr unsigned srcRowStride = TileDataSrc::RowStride;
     constexpr unsigned scaleRowStride = TileDataPara::RowStride;
