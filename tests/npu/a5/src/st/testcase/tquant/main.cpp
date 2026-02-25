@@ -33,8 +33,7 @@ void LaunchTQuantMXFP8(uint8_t *dst, float *src, uint8_t *dst_exp, void *stream)
 
 template <int validRows, int validCols, int mode, pto::QuantType quantType>
 void LaunchTQuantInt8(std::conditional_t<quantType == pto::QuantType::INT8_SYM, int8_t, uint8_t> *dst, float *src,
-                      float *scale, void *stream,
-                      std::conditional_t<quantType == pto::QuantType::INT8_SYM, float, uint8_t> *offset = nullptr);
+                      float *scale, void *stream, float *offset = nullptr);
 
 class TQUANTTEST : public testing::Test {
 protected:
@@ -124,19 +123,16 @@ void test_tquant_int8_sym()
     size_t srcFileSize = validRows * validCols * sizeof(float);
     size_t dstFileSize = validRows * validCols * sizeof(int8_t);
     size_t scaleFileSize = validRows * sizeof(float);
+    int8_t *dstHost, *dstDevice;
+    float *srcHost, *srcDevice, *scaleHost, *scaleDevice;
 
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
-
-    int8_t *dstHost, *dstDevice;
-    float *srcHost, *srcDevice, *scaleHost, *scaleDevice;
-
     aclrtMallocHost((void **)(&dstHost), dstFileSize);
     aclrtMallocHost((void **)(&srcHost), srcFileSize);
     aclrtMallocHost((void **)(&scaleHost), scaleFileSize);
-
     aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&scaleDevice, scaleFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -152,9 +148,7 @@ void test_tquant_int8_sym()
     ASSERT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed (ret=" << syncRet
                                     << "): " << aclGetRecentErrMsg();
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
     WriteFile(GetGoldenDir() + "/output_s8.bin", dstHost, dstFileSize);
-
     aclrtFree(dstDevice);
     aclrtFree(srcDevice);
     aclrtFree(scaleDevice);
@@ -179,13 +173,13 @@ void test_tquant_int8_asym()
     size_t srcSize = validRows * validCols * sizeof(float);
     size_t dstSize = validRows * validCols * sizeof(uint8_t);
     size_t scaleSize = validRows * sizeof(float);
-    size_t offSize = validRows * sizeof(uint8_t);
+    size_t offSize = validRows * sizeof(float);
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
-    uint8_t *dstHost, *dstDev, *offHost, *offDev;
-    float *srcHost, *srcDev, *scaleHost, *scaleDev;
+    uint8_t *dstHost, *dstDev;
+    float *srcHost, *srcDev, *scaleHost, *scaleDev, *offHost, *offDev;
     aclrtMallocHost((void **)&dstHost, dstSize);
     aclrtMallocHost((void **)&srcHost, srcSize);
     aclrtMallocHost((void **)&scaleHost, scaleSize);
@@ -196,7 +190,7 @@ void test_tquant_int8_asym()
     aclrtMalloc((void **)&offDev, offSize, ACL_MEM_MALLOC_HUGE_FIRST);
     ReadFile(GetGoldenDir() + "/input.bin", srcSize, srcHost, srcSize);
     ReadFile(GetGoldenDir() + "/inv_scale_fp32.bin", scaleSize, scaleHost, scaleSize);
-    ReadFile(GetGoldenDir() + "/offset_u8.bin", offSize, offHost, offSize);
+    ReadFile(GetGoldenDir() + "/offset_fp32.bin", offSize, offHost, offSize);
     aclrtMemcpy(srcDev, srcSize, srcHost, srcSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(scaleDev, scaleSize, scaleHost, scaleSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(offDev, offSize, offHost, offSize, ACL_MEMCPY_HOST_TO_DEVICE);

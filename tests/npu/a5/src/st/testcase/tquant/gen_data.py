@@ -135,14 +135,12 @@ def fp32_to_int8_asym(valid_rows, valid_cols, mode):
     scale = scale.astype(np.float32)
     inv_scale = np.where(scale != 0, 1.0 / scale, 0.0).astype(np.float32)
     inv_scale.tofile("inv_scale_fp32.bin")
-    zero_point = np.clip(np.round(-src_fp32_rowmin / scale), 0, 255).astype(np.uint8)
-    zero_point.tofile("offset_u8.bin")
+    zero_point = np.clip(np.round(-src_fp32_rowmin / scale), 0, 255).astype(np.float32)
+    zero_point.tofile("offset_fp32.bin")
     # Multiply in fp32, convert to fp16, then to uint8
-    src_fp32_scaled = src_fp32 * inv_scale
-    src_fp16 = src_fp32_scaled.astype(np.float16)
-    intermediate_u8 = np.clip(np.round(src_fp16), 0, 255).astype(np.uint8)
-    # Add offset in uint8 (matching hardware b8 addition)
-    src_u8 = (intermediate_u8 + zero_point).astype(np.uint8)
+    src_fp32_out = src_fp32 * inv_scale + zero_point
+    src_fp16_out = src_fp32_out.astype(np.float16)
+    src_u8 = np.clip(np.round(src_fp16_out), 0, 255).astype(np.uint8)
     src_u8.tofile("golden_u8.bin")
     ## if mode == nz, use nd to nz for fp8 layout conversion
     return src_fp32, src_u8

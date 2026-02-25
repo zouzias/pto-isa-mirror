@@ -123,6 +123,8 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tshrs -g TSHRSTest.case_int16_64x64_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t txor -g TXORSTest.case_int16_64x64_64x64_64x64_64x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t txors -g TXORSTest.case_int16_64x64_64x64_64x64
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tquant -g TQUANTTest.case_int8_sym_fp32_128x128_nd
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tquant -g TQUANTTest.case_int8_asym_fp32_128x128_nd
 
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
@@ -197,12 +199,14 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tshrs
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t txor
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t txors
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tquant
   fi
 fi
 
 if [ "$ENABLE_A5" = "true" ]; then
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/build_st.py -r $RUN_TYPE -v a5 -t all
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdequant -g TDEQUANTTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfmods -g TFMODSTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfmod -g TFMODTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsubs -g TSUBSTest.case1
@@ -307,6 +311,7 @@ if [ "$ENABLE_A5" = "true" ]; then
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py -r $RUN_TYPE -v a5 -t all
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdequant
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfmod
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfmods
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tsubs
@@ -398,5 +403,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tmov_acc2mat
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t mgather
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t mscatter
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tquant
   fi
 fi
