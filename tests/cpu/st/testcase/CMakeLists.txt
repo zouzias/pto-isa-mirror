@@ -52,6 +52,7 @@ tmov
 tmrgsort
 trowsum
 trowexpand
+trowexpandop
 tadd
 texp
 tgather
