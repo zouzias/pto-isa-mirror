@@ -90,17 +90,22 @@ auto a0 = inQueue0.DeQue<T>();
 auto a1 = inQueue1.DeQue<T>();
 auto d  = outQueue.AllocTensor<T>();
 
-// Use Add mask+repeat (per doc: mask in continuous mode, repeatTimes, BinaryRepeatParams)
-uint64_t mask = kTCols;   // FP32: mask∈[1,64], FP16: mask∈[1,128]
+// Row loop + repeat across columns (repeatTimes = vCols / VL)
+// VL in elements: FP16=128, FP32=64 (256B)
 BinaryRepeatParams rp;
-// set repeat stride to row stride in blocks
-rp.dstRepStride = kTCols / 8;
-rp.src0RepStride = kTCols / 8;
-rp.src1RepStride = kTCols / 8;
-// dataBlockStride defaults for contiguous rows
+// keep same row, advance inside row by datablocks
+rp.dstRepStride = 0;
+rp.src0RepStride = 0;
+rp.src1RepStride = 0;
+// dataBlockStride: advance within row (32B blocks)
 rp.dstBlkStride = 1; rp.src0BlkStride = 1; rp.src1BlkStride = 1;
 
-AscendC::Add(d, a0, a1, mask, /*repeatTimes=*/vRows, rp);
+uint64_t mask = VL; // continuous mask (VL elements)
+int repeatTimes = vCols / VL;
+for (int r = 0; r < vRows; ++r) {
+    AscendC::Add(d + r * kTCols, a0 + r * kTCols, a1 + r * kTCols,
+                 mask, /*repeatTimes=*/repeatTimes, rp);
+}
 
 outQueue.EnQue(d);
 inQueue0.FreeTensor(a0); inQueue1.FreeTensor(a1);
