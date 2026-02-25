@@ -151,6 +151,12 @@ outQueue.FreeTensor(out);
 
 
 
+
+**Remark (elementwise add case):**
+- **AscendC** exposes mask control (`isSetMask`) and **block stride** via `BinaryRepeatParams`, so you can model small **3D block strides** (32B block, VL=8 blocks, repeat) directly.
+- You can also set **repeat stride = 0** to implement *broadcast* / *reduce‑like* patterns at the vector level.
+- **PTO SubTile** keeps the add primitive simple; for broadcast/reduce you must explicitly use higher‑level subtile intrinsics like **TROWEXPANDADD/TCOLEXPANDADD** and **TROWSUM/TCOLSUM** (see next sections).
+
 ---
 
 ### 2) Broadcast (row expand)
