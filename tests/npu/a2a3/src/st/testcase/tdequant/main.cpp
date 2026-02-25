@@ -65,7 +65,6 @@ void test_tdequant()
     aclrtMalloc((void **)&scaleDevice, paraFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&offsetDevice, paraFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    // ReadFile(GetGoldenDir() + "/input1.bin", dstFileSize, dstHost, dstFileSize);
     ReadFile(GetGoldenDir() + "/srcInput.bin", srcFileSize, srcHost, srcFileSize);
     ReadFile(GetGoldenDir() + "/scaleInput.bin", paraFileSize, scaleHost, paraFileSize);
     ReadFile(GetGoldenDir() + "/offsetInput.bin", paraFileSize, offsetHost, paraFileSize);
@@ -117,10 +116,10 @@ TEST_F(TDEQUANTTest, case2)
 
 TEST_F(TDEQUANTTest, case3)
 {
-    test_tdequant<float, int8_t, 64, 64, 32, 128, 32, 32, 48, 32>();
+    test_tdequant<float, int8_t, 64, 64, 32, 64, 32, 32, 48, 32>();
 }
 
 TEST_F(TDEQUANTTest, case4)
 {
-    test_tdequant<float, int16_t, 32, 32, 16, 64, 16, 16, 24, 16>();
+    test_tdequant<float, int16_t, 32, 32, 16, 32, 16, 16, 24, 16>();
 }

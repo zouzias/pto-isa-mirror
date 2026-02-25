@@ -90,8 +90,8 @@ if __name__ == "__main__":
     case_params_list = [
         TDequantParams("TDEQUANTTest.case1", np.float32, np.int8, 32, 32, 32, 32, 32, 32, 32, 32),
         TDequantParams("TDEQUANTTest.case2", np.float32, np.int16, 32, 32, 32, 32, 32, 32, 32, 32),
-        TDequantParams("TDEQUANTTest.case3", np.float32, np.int8, 64, 64, 32, 128, 32, 32, 48, 32),
-        TDequantParams("TDEQUANTTest.case4", np.float32, np.int16, 32, 32, 16, 64, 16, 16, 24, 16),
+        TDequantParams("TDEQUANTTest.case3", np.float32, np.int8, 64, 64, 32, 64, 32, 32, 48, 32),
+        TDequantParams("TDEQUANTTest.case4", np.float32, np.int16, 32, 32, 16, 32, 16, 16, 24, 16),
     ]
 
     for param in case_params_list:
