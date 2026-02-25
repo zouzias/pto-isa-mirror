@@ -89,12 +89,13 @@ inQueue0.EnQue(s0); inQueue1.EnQue(s1);
 auto a0 = inQueue0.DeQue<T>();
 auto a1 = inQueue1.DeQue<T>();
 auto d  = outQueue.AllocTensor<T>();
+
+// Use counter mode for vCols elements, row loop for Add
 SetMaskNorm();
-SetVectorMask(0, kTCols);
-AscendC::Add(d, a0, a1,
-             /*repeat=*/vRows - 1,
-             /*dstRep=*/1, /*src0Rep=*/1, /*src1Rep=*/1,
-             /*dstStride=*/kTCols/8, /*src0Stride=*/kTCols/8, /*src1Stride=*/kTCols/8);
+SetVectorMask(0, kTCols); // counter mode for vCols
+for (int r = 0; r < vRows; ++r) {
+    AscendC::Add(d + r * kTCols, a0 + r * kTCols, a1 + r * kTCols, kTCols);
+}
 
 outQueue.EnQue(d);
 inQueue0.FreeTensor(a0); inQueue1.FreeTensor(a1);
