@@ -9,39 +9,41 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
+#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
 
 using namespace pto;
 
-template <int kTRows_, int kTCols_, int kTNumProc_>
-AICORE void runTBroadcast(__gm__ float __out__ *out, __gm__ float __in__ *src)
-{
-    using TileTSrc = Tile<TileType::Vec, float, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileTDst = Tile<TileType::Vec, float, kTNumProc_ * kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using SrcShape = Shape<1, 1, 1, kTRows_, kTCols_>;
-    using SrcStride = Stride<1, 1, 1, kTCols_, 1>;
-    using SrcGTf = GlobalTensor<float, SrcShape, SrcStride>;
-    using DstShape = Shape<1, 1, 1, kTNumProc_ * kTRows_, kTCols_>;
-    using DstStride = Stride<1, 1, 1, kTCols_, 1>;
-    using DstGTf = GlobalTensor<float, DstShape, DstStride>;
+template <typename T, int kGRows_, int kGCols_,int kTRows_, int kTCols_>
+AICORE void runTBroadcast(__gm__ T __out__ *dst0, __gm__ T __out__ *dst1, __gm__ T __in__ *src)
+{   
+    constexpr size_t total_count = kGRows_ * kGCols_;
+    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+ 	using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+ 	using GTensor = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
+ 	using TileData = pto::Tile<pto::TileType::Vec, T, kTRows_, kTCols_, pto::BLayout::RowMajor, -1, -1>;
+    int my_rank = 0;
+ 	
+ 	ShapeDyn fullShape(1, 1, 1, kGRows_, kGCols_);
+ 	StrideDyn fullStride(total_count, total_count, total_count, kGCols_, 1);
+ 	
+ 	GTensor srcG(src, fullShape, fullStride);
 
-    TileTSrc srcTile(kTRows_, kTCols_);
-    TileTDst dstTile(kTNumProc_ * kTRows_, kTCols_);
-
-    SrcGTf srcGlobal(src);
-    DstGTf dstGlobal(out);
-
-    TLOAD(srcTile, srcGlobal);
-    TEXPANDS(dstTile, 0.0f);
-    TBROADCAST(dstTile, srcTile, kTNumProc_);
-    TSTORE(dstGlobal, dstTile);
-    out = dstGlobal.data();
+    GTensor tensors[2];
+ 	int nranks = 2;
+ 	tensors[0] = GTensor(dst0, fullShape, fullStride);
+ 	tensors[1] = GTensor(dst1, fullShape, fullStride);
+ 	 
+ 	pto::comm::ParallelGroup<GTensor> group(tensors, nranks, my_rank);
+ 	 
+    TileData stagingTile(kTRows_, kTCols_);
+    TBROADCAST(group, srcG, stagingTile);
 }
 
-template <int kTRows_, int kTCols_, int kTNumProc_>
-void LaunchTBroadcast(float *out, float *src, void *stream)
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+void LaunchTBroadcast(T *dst0, T *dst1, T *src, void *stream)
 {
-    runTBroadcast<kTRows_, kTCols_, kTNumProc_>(out, src);
+    runTBroadcast<T, kGRows_, kGCols_, kTRows_, kTCols_>(dst0, dst1, src);
 }
 
-template void LaunchTBroadcast<16, 16, 2>(float *out, float *src, void *stream);
+template void LaunchTBroadcast<float, 16, 16, 16, 16>(float *dst0, float* dst1, float *src, void *stream);
