@@ -17,11 +17,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <string>
 #include <iostream>
 
+#include <pto/pto-inst.hpp>
 #include "pto/comm/pto_comm_inst.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "../common.hpp"
-
-#include <pto/pto-inst.hpp>
 
 #define ENABLE_DEBUG_PRINT 1
 
