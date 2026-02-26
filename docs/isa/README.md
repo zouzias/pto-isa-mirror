@@ -73,6 +73,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 
 ## Axis Reduce / Expand
 - [TROWSUM](TROWSUM.md) - Reduce each row by summing across columns.
+- [TROWPROD](TROWPROD.md) - Reduce each row by multiplying across columns.
 - [TCOLSUM](TCOLSUM.md) - Reduce each column by summing across rows.
 - [TCOLPROD](TCOLPROD.md) - Reduce each column by multiplying across rows.
 - [TCOLMAX](TCOLMAX.md) - Reduce each column by taking the maximum across rows.
