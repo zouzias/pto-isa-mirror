@@ -45,6 +45,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TTrans.hpp"
 #include "pto/npu/a2a3/TReshape.hpp"
 #include "pto/npu/a2a3/TRowSum.hpp"
+#include "pto/npu/a2a3/TRowProd.hpp"
 #include "pto/npu/a2a3/TRowMax.hpp"
 #include "pto/npu/a2a3/TRowMin.hpp"
 #include "pto/npu/a2a3/TFillPad.hpp"
@@ -102,6 +103,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TColExpandDiv.hpp"
 #include "pto/npu/a2a3/TColExpandExpdif.hpp"
 #include "pto/npu/a2a3/TQuant.hpp"
+#include "pto/npu/a2a3/TDequant.hpp"
 #endif
 
 #ifdef PTO_NPU_ARCH_A5
