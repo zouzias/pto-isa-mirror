@@ -1,5 +1,5 @@
 # --------------------------------------------------------------------------------
-# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -8,14 +8,15 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
+
 cmake_minimum_required(VERSION 3.16)
-project(pto_test)
+project(pto_example)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 if(NOT DEFINED ENV{ASCEND_HOME_PATH})
@@ -24,15 +25,11 @@ else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 endif()
 
-
-
 set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
 
 set(CMAKE_COMPILER bisheng)
 set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
 set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
-
-find_package(GTest REQUIRED)
 
 add_compile_options(
     -D_FORTIFY_SOURCE=2
@@ -40,7 +37,7 @@ add_compile_options(
     -Wno-macro-redefined -Wno-ignored-attributes
     -fstack-protector-strong
 )
-# add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
+
 add_link_options(
     -s
     -Wl,-z,relro
@@ -69,19 +66,38 @@ set(CMAKE_CPP_COMPILE_OPTIONS
     "SHELL:-include stddef.h"
 )
 
-# 公共 include 路径
 include_directories(
-    ${PROJECT_SOURCE_DIR}/../../../../../include
-    ${PROJECT_SOURCE_DIR}/../../../../..
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )
 
-# hccl include paths
-include_directories(
-    ${ASCEND_HOME_PATH}/include/hccl
-)
+function(pto_example_cube NAME)
+    add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-cube -DREGISTER_BASE -std=c++17)
+    target_include_directories(${NAME}_kernel PRIVATE
+        ${PROJECT_SOURCE_DIR}/../../../../include/
+    )
+    target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
+    add_executable(${NAME} main.cpp)
+    target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
+    target_include_directories(${NAME} PRIVATE
+        ${PROJECT_SOURCE_DIR}/../../../../include/
+        ${PROJECT_SOURCE_DIR}/../../../../tests/common
+    )
 
+    target_link_directories(${NAME} PUBLIC
+        ${ASCEND_HOME_PATH}/lib64
+        ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
+        ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
+    )
 
-add_subdirectory(testcase)
+    target_link_libraries(${NAME} PRIVATE
+        ${NAME}_kernel
+        $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
+        $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
+        stdc++ ascendcl m tiling_api platform c_sec dl nnopbase pthread
+    )
+endfunction()
+
+pto_example_cube(mxmatmul_performance)
