@@ -10,11 +10,8 @@
 
 ### TADD
 
-**数学解释：**
+该指令的详细介绍请见[isa/TADD](../isa/TADD_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -30,11 +27,8 @@ pto.tadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TABS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TABS](../isa/TABS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \left|\mathrm{src}_{i,j}\right|
 
 **IR Level 1 (SSA)：**
 ```text
@@ -50,11 +44,8 @@ pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TAND
 
-**数学解释：**
+该指令的详细介绍请见[isa/TAND](../isa/TAND_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \;\&\; \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -70,11 +61,8 @@ pto.tand ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TOR
 
-**数学解释：**
+该指令的详细介绍请见[isa/TOR](../isa/TOR_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \;|\; \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -90,11 +78,8 @@ pto.tor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !
 
 ### TSUB
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSUB](../isa/TSUB_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -110,11 +95,8 @@ pto.tsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TMUL
 
-**数学解释：**
+该指令的详细介绍请见[isa/TMUL](../isa/TMUL_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -130,11 +112,8 @@ pto.tmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TMIN
 
-**数学解释：**
+该指令的详细介绍请见[isa/TMIN](../isa/TMIN_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \min(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j})
 
 **IR Level 1 (SSA)：**
 ```text
@@ -150,11 +129,8 @@ pto.tmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TMAX
 
-**数学解释：**
+该指令的详细介绍请见[isa/TMAX](../isa/TMAX_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \max(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j})
 
 **IR Level 1 (SSA)：**
 ```text
@@ -170,13 +146,8 @@ pto.tmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TCMP
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCMP](../isa/TCMP_zh.md)
 
-从概念上讲，对于有效区域中的每个元素 `(i, j)`，定义一个谓词：
-
- p_{i,j} = \left(\mathrm{src0}_{i,j}\ \mathrm{cmpMode}\ \mathrm{src1}_{i,j}\right) 
-
-谓词掩码使用实现定义的打包布局存储在 `dst` 中。
 
 **IR Level 1 (SSA)：**
 ```text
@@ -192,11 +163,8 @@ pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile
 
 ### TDIV
 
-**数学解释：**
+该指令的详细介绍请见[isa/TDIV](../isa/TDIV_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \frac{\mathrm{src0}_{i,j}}{\mathrm{src1}_{i,j}}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -212,11 +180,8 @@ pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TSHL
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSHL](../isa/TSHL_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \ll \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -232,11 +197,8 @@ pto.tshl ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TSHR
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSHR](../isa/TSHR_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \gg \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -252,11 +214,8 @@ pto.tshr ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TXOR
 
-**数学解释：**
+该指令的详细介绍请见[isa/TXOR](../isa/TXOR_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \oplus \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -272,11 +231,8 @@ pto.txor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TLOG
 
-**数学解释：**
+该指令的详细介绍请见[isa/TLOG](../isa/TLOG_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \log(\mathrm{src}_{i,j})
 
 **IR Level 1 (SSA)：**
 ```text
@@ -292,11 +248,8 @@ pto.tlog ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TRECIP
 
-**数学解释：**
+该指令的详细介绍请见[isa/TRECIP](../isa/TRECIP_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \frac{1}{\mathrm{src}_{i,j}}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -312,11 +265,8 @@ pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TPRELU
 
-**数学解释：**
+该指令的详细介绍请见[isa/TPRELU](../isa/TPRELU_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = (\mathrm{src0}_{i,j} > 0) ? \mathrm{src0}_{i,j} : (\mathrm{src0}_{i,j} \cdot \mathrm{src1}_{i,j})
 
 **IR Level 1 (SSA)：**
 ```text
@@ -332,11 +282,8 @@ pto.tprelu ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst 
 
 ### TADDC
 
-**数学解释：**
+该指令的详细介绍请见[isa/TADDC](../isa/TADDC_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + \mathrm{src1}_{i,j} + \mathrm{src2}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -352,11 +299,8 @@ pto.taddc ins(%src0, %src1, %src2 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto
 
 ### TSUBC
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSUBC](../isa/TSUBC_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{src1}_{i,j} + \mathrm{src2}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -372,13 +316,8 @@ pto.tsubc ins(%src0, %src1, %src2 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto
 
 ### TCVT
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCVT](../isa/TCVT_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{cast}_{\mathrm{rmode}}\!\left(\mathrm{src}_{i,j}\right) 
-
-其中 `rmode` 是舍入策略（参见 `pto::RoundMode`）。
 
 **IR Level 1 (SSA)：**
 ```text
@@ -394,16 +333,8 @@ pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : 
 
 ### TSEL
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSEL](../isa/TSEL_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
-
-\mathrm{dst}_{i,j} =
-\begin{cases}
-\mathrm{src0}_{i,j} & \text{如果 } \mathrm{mask}_{i,j}\ \text{为真} \\
-\mathrm{src1}_{i,j} & \text{否则}
-\end{cases}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -419,11 +350,8 @@ pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 
 ### TRSQRT
 
-**数学解释：**
+该指令的详细介绍请见[isa/TRSQRT](../isa/TRSQRT_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \frac{1}{\sqrt{\mathrm{src}_{i,j}}}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -439,11 +367,8 @@ pto.trsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TSQRT
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSQRT](../isa/TSQRT_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \sqrt{\mathrm{src}_{i,j}}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -459,11 +384,8 @@ pto.tsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TEXP
 
-**数学解释：**
+该指令的详细介绍请见[isa/TEXP](../isa/TEXP_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \exp(\mathrm{src}_{i,j})
 
 **IR Level 1 (SSA)：**
 ```text
@@ -479,11 +401,8 @@ pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TNOT
 
-**数学解释：**
+该指令的详细介绍请见[isa/TNOT](../isa/TNOT_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \sim\mathrm{src}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -499,11 +418,8 @@ pto.tnot ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TRELU
 
-**数学解释：**
+该指令的详细介绍请见[isa/TRELU](../isa/TRELU_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \max(\mathrm{src}_{i,j}, 0)
 
 **IR Level 1 (SSA)：**
 ```text
@@ -519,11 +435,8 @@ pto.trelu ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TNEG
 
-**数学解释：**
+该指令的详细介绍请见[isa/TNEG](../isa/TNEG_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = -\mathrm{src}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -539,11 +452,8 @@ pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TREM
 
-**数学解释：**
+该指令的详细介绍请见[isa/TREM](../isa/TREM_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \bmod \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -559,11 +469,8 @@ pto.trem ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TFMOD
 
-**数学解释：**
+该指令的详细介绍请见[isa/TFMOD](../isa/TFMOD_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
-\mathrm{dst}_{i,j} = \mathrm{fmod}(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j})
 
 **IR Level 1 (SSA)：**
 ```text

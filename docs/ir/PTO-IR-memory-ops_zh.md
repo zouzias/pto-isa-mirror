@@ -10,11 +10,8 @@
 
 ### TLOAD
 
-**数学解释：**
+该指令的详细介绍请见[isa/TLOAD](../isa/TLOAD_zh.md)
 
-符号取决于 `GlobalTensor` 的形状/步幅和 `Tile` 的布局。从概念上讲（2D 视图，带基础偏移）：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{r_0 + i,\; c_0 + j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -31,9 +28,8 @@ pto.tload ins(%mem : !pto.partition_tensor_view<MxNxdtype>) outs(%dst : !pto.til
 
 ### TPREFETCH
 
-**数学解释：**
+该指令的详细介绍请见[isa/TPREFETCH](../isa/TPREFETCH_zh.md)
 
-除非另有说明，语义在有效区域上定义，目标相关的行为标记为实现定义。
 
 **IR Level 1 (SSA)：**
 ```text
@@ -49,11 +45,8 @@ pto.tprefetch ins(%src : !pto.global<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TSTORE
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSTORE](../isa/TSTORE_zh.md)
 
-符号取决于 `GlobalTensor` 的形状/步幅和 `Tile` 的布局。从概念上讲（2D 视图，带基础偏移）：
-
- \mathrm{dst}_{r_0 + i,\; c_0 + j} = \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -69,11 +62,8 @@ pto.tstore ins(%src : !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view
 
 ### TSTORE_FP
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSTORE_FP](../isa/TSTORE_FP_zh.md)
 
-设 `R = src.GetValidRow()` 和 `C = src.GetValidCol()`。从概念上讲（2D 视图，带基础偏移），对于 `0 <= i < R` 和 `0 <= j < C`：
-
- \mathrm{dst}_{r_0 + i,\; c_0 + j} = \mathrm{Convert}\!\left(\mathrm{src}_{i,j};\ \mathrm{fp}\right)
 
 **IR Level 1 (SSA)：**
 ```text
@@ -89,11 +79,8 @@ pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem 
 
 ### MGATHER
 
-**数学解释：**
+该指令的详细介绍请见[isa/MGATHER](../isa/MGATHER_zh.md)
 
-对于目标有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{mem}[\mathrm{idx}_{i,j}]
 
 **IR Level 1 (SSA)：**
 ```text
@@ -110,13 +97,8 @@ pto.mgather ins(%mem, %idx : !pto.partition_tensor_view<MxNxdtype>, !pto.tile_bu
 
 ### MSCATTER
 
-**数学解释：**
+该指令的详细介绍请见[isa/MSCATTER](../isa/MSCATTER_zh.md)
 
-对于源有效区域中的每个元素 `(i, j)`：
-
- \mathrm{mem}[\mathrm{idx}_{i,j}] = \mathrm{src}_{i,j} 
-
-如果多个元素映射到同一目标位置，最终值是实现定义的（CPU 模拟器：按行主序迭代顺序的最后写入者获胜）。
 
 **IR Level 1 (SSA)：**
 ```text

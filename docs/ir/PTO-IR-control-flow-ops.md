@@ -2,7 +2,7 @@
 
 This document describes structured control flow operations from the MLIR `scf` (Structured Control Flow) dialect.
 
-**Total Operations:** 7
+**Total Operations:** 9
 
 ---
 
@@ -390,7 +390,4 @@ scf.for %i = %c0 to %M step %c1 {
 ```
 
 ---
-
-
-
 

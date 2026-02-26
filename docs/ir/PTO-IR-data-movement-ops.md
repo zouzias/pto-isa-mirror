@@ -2,7 +2,7 @@
 
 This document describes data movement and layout transformation operations.
 
-**Total Operations:** 12
+**Total Operations:** 14
 
 ---
 
@@ -10,13 +10,8 @@ This document describes data movement and layout transformation operations.
 
 ### TEXTRACT
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TEXTRACT](../isa/TEXTRACT.md)
 
-Conceptually copies a window starting at `(indexRow, indexCol)` from `src` into `dst`. Exact mapping depends on layouts.
-
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. For `0 <= i < R` and `0 <= j < C`:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{\mathrm{indexRow}+i,\; \mathrm{indexCol}+j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -32,9 +27,8 @@ pto.textract ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs
 
 ### TEXTRACT_FP
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TEXTRACT_FP](../isa/TEXTRACT_FP.md)
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -50,10 +44,6 @@ pto.textract_fp ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) o
 
 ### TIMG2COL
 
-**Math Interpretation:**
-
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
-
 **IR Level 1 (SSA):**
 ```text
 %dst = pto.timg2col %src : !pto.tile<...> -> !pto.tile<...>
@@ -68,12 +58,8 @@ pto.timg2col ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TINSERT
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TINSERT](../isa/TINSERT.md)
 
-Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. Conceptually, for `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{\mathrm{indexRow}+i,\;\mathrm{indexCol}+j} = \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -89,9 +75,8 @@ pto.tinsert ins(%src[%r0, %r1] : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<.
 
 ### TINSERT_FP
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TINSERT_FP](../isa/TINSERT_FP.md)
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -107,20 +92,8 @@ pto.tinsert_fp ins(%src, %fp, %idxrow, %idxcol : !pto.tile_buf<...>, !pto.tile_b
 
 ### TFILLPAD
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TFILLPAD](../isa/TFILLPAD.md)
 
-Let `VR = src.GetValidRow()` and `VC = src.GetValidCol()`. For each destination element `(i, j)`:
-
-
-\mathrm{dst}_{i,j} =
-\begin{cases}
-\mathrm{src}_{i,j} & \text{if } i < VR \text{ and } j < VC \\
-\mathrm{pad}       & \text{otherwise}
-\end{cases}
-
-
-`pad` is determined by `TileDataDst::PadVal` and the element type (e.g., `+inf/-inf` for floating types when available,
-otherwise `std::numeric_limits<T>::max()/min()`).
 
 **IR Level 1 (SSA):**
 ```text
@@ -136,9 +109,8 @@ pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TFILLPAD_INPLACE
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TFILLPAD_INPLACE](../isa/TFILLPAD_INPLACE.md)
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -154,9 +126,8 @@ pto.tfillpad_inplace ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<..
 
 ### TFILLPAD_EXPAND
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TFILLPAD_EXPAND](../isa/TFILLPAD_EXPAND.md)
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -172,13 +143,8 @@ pto.tfillpad_expand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...
 
 ### TMOV
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMOV](../isa/TMOV.md)
 
-Conceptually copies or transforms elements from `src` into `dst` over the valid region. Exact transformation depends on the selected mode and target.
-
-For the pure copy case:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -194,11 +160,8 @@ pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TMOV_FP
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMOV_FP](../isa/TMOV_FP.md)
 
-Conceptually converts each element using an implementation-defined quantization/dequantization configuration derived from `fp`:
-
- \mathrm{dst}_{i,j} = \mathrm{Convert}\!\left(\mathrm{src}_{i,j};\ \mathrm{fp}\right)
 
 **IR Level 1 (SSA):**
 ```text
@@ -214,9 +177,8 @@ pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TRESHAPE
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TRESHAPE](../isa/TRESHAPE.md)
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -232,13 +194,8 @@ pto.treshape ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TTRANS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TTRANS](../isa/TTRANS.md)
 
-For a 2D tile, over the effective transpose domain:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{j,i} 
-
-Exact shape/layout and the transpose domain depend on the target (see Constraints).
 
 **IR Level 1 (SSA):**
 ```text
@@ -248,6 +205,22 @@ Exact shape/layout and the transpose domain depend on the target (see Constraint
 **IR Level 2 (DPS):**
 ```text
 pto.ttrans ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+---
+
+### TIMG2COL
+
+For detailed instruction documentation, see [isa/TIMG2COL](../isa/TIMG2COL.md)
+
+**IR Level 1 (SSA):**
+```text
+%dst = pto.timg2col %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+**IR Level 2 (DPS):**
+```text
+pto.timg2col ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ---

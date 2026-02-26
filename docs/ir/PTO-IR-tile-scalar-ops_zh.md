@@ -10,11 +10,8 @@
 
 ### TEXPANDS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TEXPANDS](../isa/TEXPANDS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{scalar}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -30,13 +27,8 @@ pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 
 ### TCMPS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCMPS](../isa/TCMPS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \left(\mathrm{src}_{i,j}\ \mathrm{cmpMode}\ \mathrm{scalar}\right) 
-
-`dst` 的编码/类型是实现定义的（通常是类似掩码的 tile）。
 
 **IR Level 1 (SSA)：**
 ```text
@@ -52,16 +44,8 @@ pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) 
 
 ### TSELS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSELS](../isa/TSELS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
-
-\mathrm{dst}_{i,j} =
-\begin{cases}
-\mathrm{src0}_{i,j} & \text{如果 } \mathrm{selectMode} = 1 \\
-\mathrm{src1}_{i,j} & \text{否则}
-\end{cases}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -77,11 +61,8 @@ pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dt
 
 ### TMINS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TMINS](../isa/TMINS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \min(\mathrm{src}_{i,j}, \mathrm{scalar})
 
 **IR Level 1 (SSA)：**
 ```text
@@ -97,11 +78,8 @@ pto.tmins ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TADDS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TADDS](../isa/TADDS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} + \mathrm{scalar}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -117,11 +95,8 @@ pto.tadds ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TSUBS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSUBS](../isa/TSUBS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} - \mathrm{scalar}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -137,17 +112,8 @@ pto.tsubs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TDIVS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TDIVS](../isa/TDIVS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
-- Tile/标量：
-
-   \mathrm{dst}_{i,j} = \frac{\mathrm{src}_{i,j}}{\mathrm{scalar}} 
-
-- 标量/Tile：
-
-   \mathrm{dst}_{i,j} = \frac{\mathrm{scalar}}{\mathrm{src}_{i,j}}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -165,11 +131,8 @@ pto.tdivs ins(%scalar, %src : dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_b
 
 ### TMULS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TMULS](../isa/TMULS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \cdot \mathrm{scalar}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -185,11 +148,8 @@ pto.tmuls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TFMODS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TFMODS](../isa/TFMODS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
-\mathrm{dst}_{i,j} = \mathrm{fmod}(\mathrm{src}_{i,j}, \mathrm{scalar})
 
 **IR Level 1 (SSA)：**
 ```text
@@ -205,11 +165,8 @@ pto.tfmods ins(%src, %scalar : !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_bu
 
 ### TREMS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TREMS](../isa/TREMS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
-\mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \bmod \mathrm{scalar}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -225,11 +182,8 @@ pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TMAXS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TMAXS](../isa/TMAXS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \max(\mathrm{src}_{i,j}, \mathrm{scalar})
 
 **IR Level 1 (SSA)：**
 ```text
@@ -245,11 +199,8 @@ pto.tmaxs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TANDS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TANDS](../isa/TANDS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \;\&\; \mathrm{scalar}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -265,11 +216,8 @@ pto.tands ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TORS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TORS](../isa/TORS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \;|\; \mathrm{scalar}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -285,11 +233,8 @@ pto.tors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_bu
 
 ### TSHLS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSHLS](../isa/TSHLS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \ll \mathrm{scalar}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -305,11 +250,8 @@ pto.tshls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TSHRS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSHRS](../isa/TSHRS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \gg \mathrm{scalar}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -325,11 +267,8 @@ pto.tshrs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TXORS
 
-**数学解释：**
+该指令的详细介绍请见[isa/TXORS](../isa/TXORS_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \oplus \mathrm{scalar}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -345,11 +284,8 @@ pto.txors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TLRELU
 
-**数学解释：**
+该指令的详细介绍请见[isa/TLRELU](../isa/TLRELU_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = (\mathrm{src}_{i,j} > 0) ? \mathrm{src}_{i,j} : (\mathrm{src}_{i,j} \cdot \mathrm{slope})
 
 **IR Level 1 (SSA)：**
 ```text
@@ -365,11 +301,8 @@ pto.tlrelu ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_
 
 ### TADDSC
 
-**数学解释：**
+该指令的详细介绍请见[isa/TADDSC](../isa/TADDSC_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + \mathrm{scalar} + \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -385,11 +318,8 @@ pto.taddsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<
 
 ### TSUBSC
 
-**数学解释：**
+该指令的详细介绍请见[isa/TSUBSC](../isa/TSUBSC_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{scalar} + \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text

@@ -2,7 +2,7 @@
 
 This document describes row/column reduction and broadcast operations.
 
-**Total Operations:** 23
+**Total Operations:** 25
 
 ---
 
@@ -10,11 +10,8 @@ This document describes row/column reduction and broadcast operations.
 
 ### TROWSUM
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWSUM](../isa/TROWSUM.md)
 
-Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= i < R`:
-
- \mathrm{dst}_{i,0} = \sum_{j=0}^{C-1} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -30,13 +27,8 @@ pto.trowsum ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst :
 
 ### TCOLSUM
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLSUM](../isa/TCOLSUM.md)
 
-Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= j < C`:
-
- \mathrm{dst}_{0,j} = \sum_{i=0}^{R-1} \mathrm{src}_{i,j} 
-
-`isBinary` selects the implementation path (binary-tree accumulation vs. sequential accumulation).
 
 **IR Level 1 (SSA):**
 ```text
@@ -54,11 +46,8 @@ pto.tcolsum ins(%src, %tmp {isBinary = false} : !pto.tile_buf<...>, !pto.tile_bu
 
 ### TCOLPROD
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLPROD](../isa/TCOLPROD.md)
 
-Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= j < C`:
-
- \mathrm{dst}_{0,j} = \prod_{i=0}^{R-1} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -74,11 +63,8 @@ pto.tcolprod ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TCOLMAX
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLMAX](../isa/TCOLMAX.md)
 
-Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= j < C`:
-
- \mathrm{dst}_{0,j} = \max_{0 \le i < R} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -94,11 +80,8 @@ pto.tcolmax ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TROWMAX
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWMAX](../isa/TROWMAX.md)
 
-Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= i < R`:
-
- \mathrm{dst}_{i,0} = \max_{0 \le j < C} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -114,11 +97,8 @@ pto.trowmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst :
 
 ### TROWMIN
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWMIN](../isa/TROWMIN.md)
 
-Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= i < R`:
-
- \mathrm{dst}_{i,0} = \min_{0 \le j < C} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -134,11 +114,8 @@ pto.trowmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst :
 
 ### TROWEXPAND
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWEXPAND](../isa/TROWEXPAND.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. For `0 <= i < R` and `0 <= j < C`:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,0}
 
 **IR Level 1 (SSA):**
 ```text
@@ -154,11 +131,8 @@ pto.trowexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TROWEXPANDDIV
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWEXPANDDIV](../isa/TROWEXPANDDIV.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \frac{\mathrm{src0}_{i,j}}{\mathrm{src1}_{0,i}}
 
 **IR Level 1 (SSA):**
 ```text
@@ -174,11 +148,8 @@ pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDMUL
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWEXPANDMUL](../isa/TROWEXPANDMUL.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot \mathrm{src1}_{0,i}
 
 **IR Level 1 (SSA):**
 ```text
@@ -194,11 +165,8 @@ pto.tcolexpandmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDSUB
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWEXPANDSUB](../isa/TROWEXPANDSUB.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{src1}_{0,i}
 
 **IR Level 1 (SSA):**
 ```text
@@ -214,14 +182,8 @@ pto.tcolexpandsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDADD
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWEXPANDADD](../isa/TROWEXPANDADD.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_i` be the per-row scalar taken from `src1` (one value per row).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + s_i
 
 **IR Level 1 (SSA):**
 ```text
@@ -237,14 +199,8 @@ pto.trowexpandadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDMAX
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWEXPANDMAX](../isa/TROWEXPANDMAX.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_i` be the per-row scalar taken from `src1` (one value per row).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \max(\mathrm{src0}_{i,j}, s_i)
 
 **IR Level 1 (SSA):**
 ```text
@@ -260,14 +216,8 @@ pto.trowexpandmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDMIN
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWEXPANDMIN](../isa/TROWEXPANDMIN.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_i` be the per-row scalar taken from `src1` (one value per row).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \min(\mathrm{src0}_{i,j}, s_i)
 
 **IR Level 1 (SSA):**
 ```text
@@ -283,14 +233,8 @@ pto.trowexpandmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDEXPDIF
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TROWEXPANDEXPDIF](../isa/TROWEXPANDEXPDIF.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_i` be the per-row scalar taken from `src1` (one value per row).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \exp(\mathrm{src0}_{i,j} - s_i)
 
 **IR Level 1 (SSA):**
 ```text
@@ -306,11 +250,8 @@ pto.trowexpandexpdif ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) 
 
 ### TCOLMIN
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLMIN](../isa/TCOLMIN.md)
 
-Let `R = src.GetValidRow()` and `C = src.GetValidCol()`. For `0 <= j < C`:
-
- \mathrm{dst}_{0,j} = \min_{0 \le i < R} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -326,11 +267,8 @@ pto.tcolmin ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TCOLEXPAND
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLEXPAND](../isa/TCOLEXPAND.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. For `0 <= i < R` and `0 <= j < C`:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{0,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -346,14 +284,8 @@ pto.tcolexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TCOLEXPANDDIV
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLEXPANDDIV](../isa/TCOLEXPANDDIV.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_j` be the per-column scalar taken from `src1` (one value per column).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} / s_j
 
 **IR Level 1 (SSA):**
 ```text
@@ -369,14 +301,8 @@ pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDMUL
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLEXPANDMUL](../isa/TCOLEXPANDMUL.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_j` be the per-column scalar taken from `src1` (one value per column).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot s_j
 
 **IR Level 1 (SSA):**
 ```text
@@ -392,14 +318,8 @@ pto.tcolexpandmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDADD
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLEXPANDADD](../isa/TCOLEXPANDADD.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_j` be the per-column scalar taken from `src1` (one value per column).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + s_j
 
 **IR Level 1 (SSA):**
 ```text
@@ -415,14 +335,8 @@ pto.tcolexpandadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDMAX
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLEXPANDMAX](../isa/TCOLEXPANDMAX.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_j` be the per-column scalar taken from `src1` (one value per column).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \max(\mathrm{src0}_{i,j}, s_j)
 
 **IR Level 1 (SSA):**
 ```text
@@ -438,14 +352,8 @@ pto.tcolexpandmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDMIN
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLEXPANDMIN](../isa/TCOLEXPANDMIN.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_j` be the per-column scalar taken from `src1` (one value per column).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \min(\mathrm{src0}_{i,j}, s_j)
 
 **IR Level 1 (SSA):**
 ```text
@@ -461,14 +369,8 @@ pto.tcolexpandmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDSUB
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLEXPANDSUB](../isa/TCOLEXPANDSUB.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_j` be the per-column scalar taken from `src1` (one value per column).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - s_j
 
 **IR Level 1 (SSA):**
 ```text
@@ -484,14 +386,8 @@ pto.tcolexpandsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDEXPDIF
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCOLEXPANDEXPDIF](../isa/TCOLEXPANDEXPDIF.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `s_j` be the per-column scalar taken from `src1` (one value per column).
-
-For `0 <= i < R` and `0 <= j < C`:
-
-
-\mathrm{dst}_{i,j} = \exp(\mathrm{src0}_{i,j} - s_j)
 
 **IR Level 1 (SSA):**
 ```text
@@ -501,6 +397,22 @@ For `0 <= i < R` and `0 <= j < C`:
 **IR Level 2 (DPS):**
 ```text
 pto.tcolexpandexpdif ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+---
+
+### TROWPROD
+
+For detailed instruction documentation, see [isa/TROWPROD](../isa/TROWPROD.md)
+
+**IR Level 1 (SSA):**
+```text
+%dst = pto.trowprod %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+**IR Level 2 (DPS):**
+```text
+pto.trowprod ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ---

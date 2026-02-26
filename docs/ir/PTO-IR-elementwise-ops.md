@@ -10,11 +10,8 @@ This document describes element-wise operations between two tiles.
 
 ### TADD
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TADD](../isa/TADD.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -30,11 +27,8 @@ pto.tadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TABS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TABS](../isa/TABS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \left|\mathrm{src}_{i,j}\right|
 
 **IR Level 1 (SSA):**
 ```text
@@ -50,11 +44,8 @@ pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TAND
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TAND](../isa/TAND.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \;\&\; \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -70,11 +61,8 @@ pto.tand ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TOR
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TOR](../isa/TOR.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \;|\; \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -90,11 +78,8 @@ pto.tor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !
 
 ### TSUB
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSUB](../isa/TSUB.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -110,11 +95,8 @@ pto.tsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TMUL
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMUL](../isa/TMUL.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -130,11 +112,8 @@ pto.tmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TMIN
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMIN](../isa/TMIN.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \min(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j})
 
 **IR Level 1 (SSA):**
 ```text
@@ -150,11 +129,8 @@ pto.tmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TMAX
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMAX](../isa/TMAX.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \max(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j})
 
 **IR Level 1 (SSA):**
 ```text
@@ -170,13 +146,8 @@ pto.tmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TCMP
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCMP](../isa/TCMP.md)
 
-Conceptually, for each element `(i, j)` in the valid region, define a predicate:
-
- p_{i,j} = \left(\mathrm{src0}_{i,j}\ \mathrm{cmpMode}\ \mathrm{src1}_{i,j}\right) 
-
-The predicate mask is stored in `dst` using an implementation-defined packed layout.
 
 **IR Level 1 (SSA):**
 ```text
@@ -192,11 +163,8 @@ pto.tcmp ins(%src0, %src1{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, !pto.tile
 
 ### TDIV
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TDIV](../isa/TDIV.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \frac{\mathrm{src0}_{i,j}}{\mathrm{src1}_{i,j}}
 
 **IR Level 1 (SSA):**
 ```text
@@ -212,11 +180,8 @@ pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TSHL
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSHL](../isa/TSHL.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \ll \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -232,11 +197,8 @@ pto.tshl ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TSHR
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSHR](../isa/TSHR.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \gg \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -252,11 +214,8 @@ pto.tshr ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TXOR
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TXOR](../isa/TXOR.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \oplus \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -272,11 +231,8 @@ pto.txor ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TLOG
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TLOG](../isa/TLOG.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \log(\mathrm{src}_{i,j})
 
 **IR Level 1 (SSA):**
 ```text
@@ -292,11 +248,8 @@ pto.tlog ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TRECIP
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TRECIP](../isa/TRECIP.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \frac{1}{\mathrm{src}_{i,j}}
 
 **IR Level 1 (SSA):**
 ```text
@@ -312,11 +265,8 @@ pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TPRELU
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TPRELU](../isa/TPRELU.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = (\mathrm{src0}_{i,j} > 0) ? \mathrm{src0}_{i,j} : (\mathrm{src0}_{i,j} \cdot \mathrm{src1}_{i,j})
 
 **IR Level 1 (SSA):**
 ```text
@@ -332,11 +282,8 @@ pto.tprelu ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst 
 
 ### TADDC
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TADDC](../isa/TADDC.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + \mathrm{src1}_{i,j} + \mathrm{src2}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -352,11 +299,8 @@ pto.taddc ins(%src0, %src1, %src2 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto
 
 ### TSUBC
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSUBC](../isa/TSUBC.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{src1}_{i,j} + \mathrm{src2}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -372,13 +316,8 @@ pto.tsubc ins(%src0, %src1, %src2 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto
 
 ### TCVT
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCVT](../isa/TCVT.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{cast}_{\mathrm{rmode}}\!\left(\mathrm{src}_{i,j}\right) 
-
-where `rmode` is a rounding policy (see `pto::RoundMode`).
 
 **IR Level 1 (SSA):**
 ```text
@@ -394,16 +333,8 @@ pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : 
 
 ### TSEL
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSEL](../isa/TSEL.md)
 
-For each element `(i, j)` in the valid region:
-
-
-\mathrm{dst}_{i,j} =
-\begin{cases}
-\mathrm{src0}_{i,j} & \text{if } \mathrm{mask}_{i,j}\ \text{is true} \\
-\mathrm{src1}_{i,j} & \text{otherwise}
-\end{cases}
 
 **IR Level 1 (SSA):**
 ```text
@@ -419,11 +350,8 @@ pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 
 ### TRSQRT
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TRSQRT](../isa/TRSQRT.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \frac{1}{\sqrt{\mathrm{src}_{i,j}}}
 
 **IR Level 1 (SSA):**
 ```text
@@ -439,11 +367,8 @@ pto.trsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TSQRT
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSQRT](../isa/TSQRT.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \sqrt{\mathrm{src}_{i,j}}
 
 **IR Level 1 (SSA):**
 ```text
@@ -459,11 +384,8 @@ pto.tsqrt ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TEXP
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TEXP](../isa/TEXP.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \exp(\mathrm{src}_{i,j})
 
 **IR Level 1 (SSA):**
 ```text
@@ -479,11 +401,8 @@ pto.texp ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TNOT
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TNOT](../isa/TNOT.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \sim\mathrm{src}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -499,11 +418,8 @@ pto.tnot ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TRELU
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TRELU](../isa/TRELU.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \max(\mathrm{src}_{i,j}, 0)
 
 **IR Level 1 (SSA):**
 ```text
@@ -519,11 +435,8 @@ pto.trelu ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TNEG
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TNEG](../isa/TNEG.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = -\mathrm{src}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -539,11 +452,8 @@ pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TREM
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TREM](../isa/TREM.md)
 
-For each element `(i, j)` in the valid region:
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \bmod \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -559,11 +469,8 @@ pto.trem ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TFMOD
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TFMOD](../isa/TFMOD.md)
 
-For each element `(i, j)` in the valid region:
-
-\mathrm{dst}_{i,j} = \mathrm{fmod}(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j})
 
 **IR Level 1 (SSA):**
 ```text
@@ -576,5 +483,4 @@ pto.tfmod ins(%src0, %src1 : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ---
-
 
