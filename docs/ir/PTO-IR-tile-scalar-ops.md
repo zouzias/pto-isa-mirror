@@ -10,11 +10,8 @@ This document describes operations between tiles and scalar values or immediate 
 
 ### TEXPANDS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TEXPANDS](../isa/TEXPANDS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{scalar}
 
 **IR Level 1 (SSA):**
 ```text
@@ -30,13 +27,8 @@ pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 
 ### TCMPS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCMPS](../isa/TCMPS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \left(\mathrm{src}_{i,j}\ \mathrm{cmpMode}\ \mathrm{scalar}\right) 
-
-The encoding/type of `dst` is implementation-defined (often a mask-like tile).
 
 **IR Level 1 (SSA):**
 ```text
@@ -52,16 +44,8 @@ pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) 
 
 ### TSELS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSELS](../isa/TSELS.md)
 
-For each element `(i, j)` in the valid region:
-
-
-\mathrm{dst}_{i,j} =
-\begin{cases}
-\mathrm{src0}_{i,j} & \text{if } \mathrm{selectMode} = 1 \\
-\mathrm{src1}_{i,j} & \text{otherwise}
-\end{cases}
 
 **IR Level 1 (SSA):**
 ```text
@@ -77,11 +61,8 @@ pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dt
 
 ### TMINS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMINS](../isa/TMINS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \min(\mathrm{src}_{i,j}, \mathrm{scalar})
 
 **IR Level 1 (SSA):**
 ```text
@@ -97,11 +78,8 @@ pto.tmins ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TADDS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TADDS](../isa/TADDS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} + \mathrm{scalar}
 
 **IR Level 1 (SSA):**
 ```text
@@ -117,11 +95,8 @@ pto.tadds ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TSUBS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSUBS](../isa/TSUBS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} - \mathrm{scalar}
 
 **IR Level 1 (SSA):**
 ```text
@@ -137,17 +112,8 @@ pto.tsubs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TDIVS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TDIVS](../isa/TDIVS.md)
 
-For each element `(i, j)` in the valid region:
-
-- Tile/scalar:
-
-   \mathrm{dst}_{i,j} = \frac{\mathrm{src}_{i,j}}{\mathrm{scalar}} 
-
-- Scalar/tile:
-
-   \mathrm{dst}_{i,j} = \frac{\mathrm{scalar}}{\mathrm{src}_{i,j}}
 
 **IR Level 1 (SSA):**
 ```text
@@ -165,11 +131,8 @@ pto.tdivs ins(%scalar, %src : dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_b
 
 ### TMULS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMULS](../isa/TMULS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \cdot \mathrm{scalar}
 
 **IR Level 1 (SSA):**
 ```text
@@ -185,11 +148,8 @@ pto.tmuls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TFMODS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TFMODS](../isa/TFMODS.md)
 
-For each element `(i, j)` in the valid region:
-
-\mathrm{dst}_{i,j} = \mathrm{fmod}(\mathrm{src}_{i,j}, \mathrm{scalar})
 
 **IR Level 1 (SSA):**
 ```text
@@ -205,11 +165,8 @@ pto.tfmods ins(%src, %scalar : !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_bu
 
 ### TREMS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TREMS](../isa/TREMS.md)
 
-For each element `(i, j)` in the valid region:
-
-\mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \bmod \mathrm{scalar}
 
 **IR Level 1 (SSA):**
 ```text
@@ -225,11 +182,8 @@ pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TMAXS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMAXS](../isa/TMAXS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \max(\mathrm{src}_{i,j}, \mathrm{scalar})
 
 **IR Level 1 (SSA):**
 ```text
@@ -245,11 +199,8 @@ pto.tmaxs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TANDS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TANDS](../isa/TANDS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \;\&\; \mathrm{scalar}
 
 **IR Level 1 (SSA):**
 ```text
@@ -265,11 +216,8 @@ pto.tands ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TORS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TORS](../isa/TORS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \;|\; \mathrm{scalar}
 
 **IR Level 1 (SSA):**
 ```text
@@ -285,11 +233,8 @@ pto.tors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_bu
 
 ### TSHLS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSHLS](../isa/TSHLS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \ll \mathrm{scalar}
 
 **IR Level 1 (SSA):**
 ```text
@@ -305,11 +250,8 @@ pto.tshls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TSHRS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSHRS](../isa/TSHRS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \gg \mathrm{scalar}
 
 **IR Level 1 (SSA):**
 ```text
@@ -325,11 +267,8 @@ pto.tshrs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TXORS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TXORS](../isa/TXORS.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} \oplus \mathrm{scalar}
 
 **IR Level 1 (SSA):**
 ```text
@@ -345,11 +284,8 @@ pto.txors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ### TLRELU
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TLRELU](../isa/TLRELU.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = (\mathrm{src}_{i,j} > 0) ? \mathrm{src}_{i,j} : (\mathrm{src}_{i,j} \cdot \mathrm{slope})
 
 **IR Level 1 (SSA):**
 ```text
@@ -365,11 +301,8 @@ pto.tlrelu ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_
 
 ### TADDSC
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TADDSC](../isa/TADDSC.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + \mathrm{scalar} + \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -385,11 +318,8 @@ pto.taddsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<
 
 ### TSUBSC
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSUBSC](../isa/TSUBSC.md)
 
-For each element `(i, j)` in the valid region:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{scalar} + \mathrm{src1}_{i,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -402,5 +332,4 @@ pto.tsubsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<
 ```
 
 ---
-
 

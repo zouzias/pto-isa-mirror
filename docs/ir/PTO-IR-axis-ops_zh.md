@@ -10,11 +10,8 @@
 
 ### TROWSUM
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWSUM](../isa/TROWSUM_zh.md)
 
-设 `R = src.GetValidRow()` 和 `C = src.GetValidCol()`。对于 `0 <= i < R`：
-
- \mathrm{dst}_{i,0} = \sum_{j=0}^{C-1} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -30,13 +27,8 @@ pto.trowsum ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst :
 
 ### TCOLSUM
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLSUM](../isa/TCOLSUM_zh.md)
 
-设 `R = src.GetValidRow()` 和 `C = src.GetValidCol()`。对于 `0 <= j < C`：
-
- \mathrm{dst}_{0,j} = \sum_{i=0}^{R-1} \mathrm{src}_{i,j} 
-
-`isBinary` 选择实现路径（二叉树累加 vs. 顺序累加）。
 
 **IR Level 1 (SSA)：**
 ```text
@@ -54,11 +46,8 @@ pto.tcolsum ins(%src, %tmp {isBinary = false} : !pto.tile_buf<...>, !pto.tile_bu
 
 ### TCOLPROD
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLPROD](../isa/TCOLPROD_zh.md)
 
-设 `R = src.GetValidRow()` 和 `C = src.GetValidCol()`。对于 `0 <= j < C`：
-
- \mathrm{dst}_{0,j} = \prod_{i=0}^{R-1} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -74,11 +63,8 @@ pto.tcolprod ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TCOLMAX
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLMAX](../isa/TCOLMAX_zh.md)
 
-设 `R = src.GetValidRow()` 和 `C = src.GetValidCol()`。对于 `0 <= j < C`：
-
- \mathrm{dst}_{0,j} = \max_{0 \le i < R} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -94,11 +80,8 @@ pto.tcolmax ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TROWMAX
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWMAX](../isa/TROWMAX_zh.md)
 
-设 `R = src.GetValidRow()` 和 `C = src.GetValidCol()`。对于 `0 <= i < R`：
-
- \mathrm{dst}_{i,0} = \max_{0 \le j < C} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -114,11 +97,8 @@ pto.trowmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst :
 
 ### TROWMIN
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWMIN](../isa/TROWMIN_zh.md)
 
-设 `R = src.GetValidRow()` 和 `C = src.GetValidCol()`。对于 `0 <= i < R`：
-
- \mathrm{dst}_{i,0} = \min_{0 \le j < C} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -134,11 +114,8 @@ pto.trowmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst :
 
 ### TROWEXPAND
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWEXPAND](../isa/TROWEXPAND_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。对于 `0 <= i < R` 和 `0 <= j < C`：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{i,0}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -154,11 +131,8 @@ pto.trowexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TROWEXPANDDIV
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWEXPANDDIV](../isa/TROWEXPANDDIV_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \frac{\mathrm{src0}_{i,j}}{\mathrm{src1}_{0,i}}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -174,11 +148,8 @@ pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDMUL
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWEXPANDMUL](../isa/TROWEXPANDMUL_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot \mathrm{src1}_{0,i}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -194,11 +165,8 @@ pto.tcolexpandmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDSUB
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWEXPANDSUB](../isa/TROWEXPANDSUB_zh.md)
 
-对于有效区域中的每个元素 `(i, j)`：
-
- \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{src1}_{0,i}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -214,14 +182,8 @@ pto.tcolexpandsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDADD
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWEXPANDADD](../isa/TROWEXPANDADD_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_i` 为从 `src1` 获取的每行标量（每行一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + s_i
 
 **IR Level 1 (SSA)：**
 ```text
@@ -237,14 +199,8 @@ pto.trowexpandadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDMAX
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWEXPANDMAX](../isa/TROWEXPANDMAX_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_i` 为从 `src1` 获取的每行标量（每行一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \max(\mathrm{src0}_{i,j}, s_i)
 
 **IR Level 1 (SSA)：**
 ```text
@@ -260,14 +216,8 @@ pto.trowexpandmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDMIN
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWEXPANDMIN](../isa/TROWEXPANDMIN_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_i` 为从 `src1` 获取的每行标量（每行一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \min(\mathrm{src0}_{i,j}, s_i)
 
 **IR Level 1 (SSA)：**
 ```text
@@ -283,14 +233,8 @@ pto.trowexpandmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TROWEXPANDEXPDIF
 
-**数学解释：**
+该指令的详细介绍请见[isa/TROWEXPANDEXPDIF](../isa/TROWEXPANDEXPDIF_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_i` 为从 `src1` 获取的每行标量（每行一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \exp(\mathrm{src0}_{i,j} - s_i)
 
 **IR Level 1 (SSA)：**
 ```text
@@ -306,11 +250,8 @@ pto.trowexpandexpdif ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) 
 
 ### TCOLMIN
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLMIN](../isa/TCOLMIN_zh.md)
 
-设 `R = src.GetValidRow()` 和 `C = src.GetValidCol()`。对于 `0 <= j < C`：
-
- \mathrm{dst}_{0,j} = \min_{0 \le i < R} \mathrm{src}_{i,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -326,11 +267,8 @@ pto.tcolmin ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TCOLEXPAND
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLEXPAND](../isa/TCOLEXPAND_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。对于 `0 <= i < R` 和 `0 <= j < C`：
-
- \mathrm{dst}_{i,j} = \mathrm{src}_{0,j}
 
 **IR Level 1 (SSA)：**
 ```text
@@ -346,14 +284,8 @@ pto.tcolexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ### TCOLEXPANDDIV
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLEXPANDDIV](../isa/TCOLEXPANDDIV_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_j` 为从 `src1` 获取的每列标量（每列一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} / s_j
 
 **IR Level 1 (SSA)：**
 ```text
@@ -369,14 +301,8 @@ pto.tcolexpanddiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDMUL
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLEXPANDMUL](../isa/TCOLEXPANDMUL_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_j` 为从 `src1` 获取的每列标量（每列一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \cdot s_j
 
 **IR Level 1 (SSA)：**
 ```text
@@ -392,14 +318,8 @@ pto.tcolexpandmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDADD
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLEXPANDADD](../isa/TCOLEXPANDADD_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_j` 为从 `src1` 获取的每列标量（每列一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + s_j
 
 **IR Level 1 (SSA)：**
 ```text
@@ -415,14 +335,8 @@ pto.tcolexpandadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDMAX
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLEXPANDMAX](../isa/TCOLEXPANDMAX_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_j` 为从 `src1` 获取的每列标量（每列一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \max(\mathrm{src0}_{i,j}, s_j)
 
 **IR Level 1 (SSA)：**
 ```text
@@ -438,14 +352,8 @@ pto.tcolexpandmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDMIN
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLEXPANDMIN](../isa/TCOLEXPANDMIN_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_j` 为从 `src1` 获取的每列标量（每列一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \min(\mathrm{src0}_{i,j}, s_j)
 
 **IR Level 1 (SSA)：**
 ```text
@@ -461,14 +369,8 @@ pto.tcolexpandmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDSUB
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLEXPANDSUB](../isa/TCOLEXPANDSUB_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_j` 为从 `src1` 获取的每列标量（每列一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - s_j
 
 **IR Level 1 (SSA)：**
 ```text
@@ -484,14 +386,8 @@ pto.tcolexpandsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ### TCOLEXPANDEXPDIF
 
-**数学解释：**
+该指令的详细介绍请见[isa/TCOLEXPANDEXPDIF](../isa/TCOLEXPANDEXPDIF_zh.md)
 
-设 `R = dst.GetValidRow()` 和 `C = dst.GetValidCol()`。设 `s_j` 为从 `src1` 获取的每列标量（每列一个值）。
-
-对于 `0 <= i < R` 和 `0 <= j < C`：
-
-
-\mathrm{dst}_{i,j} = \exp(\mathrm{src0}_{i,j} - s_j)
 
 **IR Level 1 (SSA)：**
 ```text
@@ -502,3 +398,19 @@ pto.tcolexpandsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 ```text
 pto.tcolexpandexpdif ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
+### TROWPROD
+
+该指令的详细介绍请见[isa/TROWPROD](../isa/TROWPROD_zh.md)
+
+**IR Level 1 (SSA)：**
+```text
+%dst = pto.trowprod %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+**IR Level 2 (DPS)：**
+pto.trowprod ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+---
+
+

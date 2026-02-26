@@ -2,7 +2,7 @@
 
 This document describes complex operations including sorting, gathering, and quantization.
 
-**Total Operations:** 13
+**Total Operations:** 15
 
 ---
 
@@ -10,9 +10,8 @@ This document describes complex operations including sorting, gathering, and qua
 
 ### TPRINT
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TPRINT](../isa/TPRINT.md)
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -28,11 +27,8 @@ pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>
 
 ### TMRGSORT
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMRGSORT](../isa/TMRGSORT.md)
 
-Merges sorted input lists into `dst`. Ordering, element format (e.g., value/index pairs), and the meaning of executed counts depend on the implementation.
-
- \mathrm{dst} = \mathrm{merge}(\mathrm{src}_0, \mathrm{src}_1, \ldots)
 
 **IR Level 1 (SSA):**
 ```text
@@ -52,13 +48,7 @@ outs(%dst, %executed : !pto.tile_buf<...>, vector<4xi16>)
 
 ### TSORT32
 
-**Math Interpretation:**
-
-Sorts values from `src` into `dst` and produces an index mapping in `idx`. Conceptually, for each row `i`:
-
- \mathrm{dst}_{i,k} = \mathrm{src}_{i,\pi_i(k)} 
-
-where $\pi_i$ is a permutation of the indices in the row. Sort order and stability are target-defined.
+For detailed instruction documentation, see [isa/TSORT32](../isa/TSORT32.md)
 
 **IR Level 1 (SSA):**
 ```text
@@ -74,17 +64,8 @@ pto.tsort32 ins(%src : !pto.tile_buf<...>) outs(%dst, %idx : !pto.tile_buf<...>,
 
 ### TGATHER
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TGATHER](../isa/TGATHER.md)
 
-Index-based gather (conceptual):
-
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. For `0 <= i < R` and `0 <= j < C`:
-
- \mathrm{dst}_{i,j} = \mathrm{src0}\!\left[\mathrm{indices}_{i,j}\right] 
-
-Exact index interpretation and bounds behavior are implementation-defined.
-
-Mask-pattern gather is an implementation-defined selection/reduction controlled by `pto::MaskPattern`.
 
 **IR Level 1 (SSA):**
 ```text
@@ -102,19 +83,8 @@ pto.tgather ins(%src, {maskPattern = #pto.mask_pattern<P0101>} : !pto.tile_buf<.
 
 ### TCI
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TCI](../isa/TCI.md)
 
-For a linearized index `k` over the valid elements:
-
-- Ascending:
-
-   \mathrm{dst}_{k} = S + k 
-
-- Descending:
-
-   \mathrm{dst}_{k} = S - k 
-
-The linearization order depends on the tile layout (implementation-defined).
 
 **IR Level 1 (SSA):**
 ```text
@@ -130,20 +100,8 @@ pto.tci ins(%scalar {descending = false} : dtype) outs(%dst : !pto.tile_buf<...>
 
 ### TTRI
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TTRI](../isa/TTRI.md)
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `d = diagonal`.
-
-Lower-triangular (`isUpperOrLower=0`) conceptually produces:
-
-
-\mathrm{dst}_{i,j} = egin{cases}1 & j \le i + d \ 0 & 	ext{otherwise}\end{cases}
-
-
-Upper-triangular (`isUpperOrLower=1`) conceptually produces:
-
-
-\mathrm{dst}_{i,j} = egin{cases}0 & j < i + d \ 1 & 	ext{otherwise}\end{cases}
 
 **IR Level 1 (SSA):**
 ```text
@@ -159,17 +117,8 @@ pto.ttri ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ### TPARTADD
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TPARTADD](../isa/TPARTADD.md)
 
-For each element `(i, j)` in the destination valid region:
-
-
-\mathrm{dst}_{i,j} =
-\begin{cases}
-\mathrm{src0}_{i,j} + \mathrm{src1}_{i,j} & \text{if both inputs are defined at } (i,j) \\
-\mathrm{src0}_{i,j} & \text{if only src0 is defined at } (i,j) \\
-\mathrm{src1}_{i,j} & \text{if only src1 is defined at } (i,j)
-\end{cases}
 
 **IR Level 1 (SSA):**
 ```text
@@ -185,17 +134,8 @@ pto.tpartadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 
 ### TPARTMUL
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TPARTMUL](../isa/TPARTMUL.md)
 
-For each element `(i, j)` in the destination valid region:
-
-
-\mathrm{dst}_{i,j} =
-egin{cases}
-\mathrm{src0}_{i,j} \cdot \mathrm{src1}_{i,j} & 	ext{if both inputs are defined at } (i,j) \
-\mathrm{src0}_{i,j} & 	ext{if only src0 is defined at } (i,j) \
-\mathrm{src1}_{i,j} & 	ext{if only src1 is defined at } (i,j)
-\end{cases}
 
 **IR Level 1 (SSA):**
 ```text
@@ -211,17 +151,8 @@ pto.tpartmul ins(%src0, %src1 : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<..
 
 ### TPARTMAX
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TPARTMAX](../isa/TPARTMAX.md)
 
-For each element `(i, j)` in the destination valid region:
-
-
-\mathrm{dst}_{i,j} =
-\begin{cases}
-\max(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j}) & \text{if both inputs are defined at } (i,j) \\
-\mathrm{src0}_{i,j} & \text{if only src0 is defined at } (i,j) \\
-\mathrm{src1}_{i,j} & \text{if only src1 is defined at } (i,j)
-\end{cases}
 
 **IR Level 1 (SSA):**
 ```text
@@ -237,17 +168,8 @@ pto.tpartmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 
 ### TPARTMIN
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TPARTMIN](../isa/TPARTMIN.md)
 
-For each element `(i, j)` in the destination valid region:
-
-
-\mathrm{dst}_{i,j} =
-\begin{cases}
-\min(\mathrm{src0}_{i,j}, \mathrm{src1}_{i,j}) & \text{if both inputs are defined at } (i,j) \\
-\mathrm{src0}_{i,j} & \text{if only src0 is defined at } (i,j) \\
-\mathrm{src1}_{i,j} & \text{if only src1 is defined at } (i,j)
-\end{cases}
 
 **IR Level 1 (SSA):**
 ```text
@@ -263,13 +185,8 @@ pto.tpartmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 
 ### TGATHERB
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TGATHERB](../isa/TGATHERB.md)
 
-For each element in the valid region:
-
- \mathrm{dst}_{i,j} = *\left(\mathrm{srcBase} + \mathrm{offset}_{i,j}\right) 
-
-Exact bounds behavior is implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -285,13 +202,8 @@ pto.tgatherb ins(%src, %offsets : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%
 
 ### TSCATTER
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TSCATTER](../isa/TSCATTER.md)
 
-For each source element `(i, j)`, write:
-
- \mathrm{dst}_{\mathrm{idx}_{i,j},\ j} = \mathrm{src}_{i,j} 
-
-If multiple elements map to the same destination location, the final value is implementation-defined (last writer wins in the current implementation).
 
 **IR Level 1 (SSA):**
 ```text
@@ -307,9 +219,8 @@ pto.tscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst 
 
 ### TQUANT
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TQUANT](../isa/TQUANT.md)
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -322,5 +233,3 @@ pto.tquant ins(%src, %qp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !
 ```
 
 ---
-
-

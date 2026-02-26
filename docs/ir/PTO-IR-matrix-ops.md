@@ -10,15 +10,8 @@ This document describes matrix multiplication and matrix-vector operations.
 
 ### TGEMV_MX
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TGEMV_MX](../isa/TGEMV_MX.md)
 
-Conceptually (base GEMV path):
-
-
-\mathrm{C}_{0,j} = \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \cdot \mathrm{B}_{k,j}
-
-
-For `TGEMV_MX`, scale tiles participate in implementation-defined mixed-precision reconstruction / scaling. The architectural contract is that output corresponds to the target-defined mx GEMV semantics.
 
 **IR Level 1 (SSA):**
 ```text
@@ -34,19 +27,8 @@ pto.tgemv.mx ins(%a, %a_scale, %b, %b_scale : (!pto.tile_buf<...>, !pto.tile_buf
 
 ### TMATMUL_MX
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMATMUL_MX](../isa/TMATMUL_MX.md)
 
-Let:
-
-- `M = aMatrix.GetValidRow()`
-- `K = aMatrix.GetValidCol()`
-- `N = bMatrix.GetValidCol()`
-
-Conceptually, the result corresponds to a matrix multiply over the effective matmul domain (`0 <= i < M`, `0 <= j < N`), with the scaling tiles `aScaleMatrix` / `bScaleMatrix` configuring implementation-defined mixed-precision behavior:
-
- \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} 
-
-The exact role of `aScaleMatrix` / `bScaleMatrix` (and any dequant/quant semantics) is target-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -72,19 +54,8 @@ pto.tmatmul.mx.bias ins(%a, %a_scale, %b, %b_scale, %bias : !pto.tile_buf<...>, 
 
 ### TMATMUL
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMATMUL](../isa/TMATMUL.md)
 
-Let:
-
-- `M = aMatrix.GetValidRow()`
-- `K = aMatrix.GetValidCol()`
-- `N = bMatrix.GetValidCol()`
-
-For `0 <= i < M` and `0 <= j < N` (output elements in the effective matmul domain):
-
- \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} 
-
-Exact accumulator behavior and datatype promotion are target/implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -100,17 +71,8 @@ pto.tmatmul ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.
 
 ### TMATMUL_ACC
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMATMUL_ACC](../isa/TMATMUL_ACC.md)
 
-Let:
-
-- `M = aMatrix.GetValidRow()`
-- `K = aMatrix.GetValidCol()`
-- `N = bMatrix.GetValidCol()`
-
-For `0 <= i < M` and `0 <= j < N`:
-
- \mathrm{C1}_{i,j} = \mathrm{C0}_{i,j} + \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j}
 
 **IR Level 1 (SSA):**
 ```text
@@ -126,19 +88,8 @@ pto.tmatmul.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto
 
 ### TMATMUL_BIAS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TMATMUL_BIAS](../isa/TMATMUL_BIAS.md)
 
-Let:
-
-- `M = aMatrix.GetValidRow()`
-- `K = aMatrix.GetValidCol()`
-- `N = bMatrix.GetValidCol()`
-
-For `0 <= i < M` and `0 <= j < N`:
-
- \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} + \mathrm{Bias}_{0,j} 
-
-Bias broadcasting behavior is implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -154,13 +105,8 @@ pto.tmatmul.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pt
 
 ### TGEMV
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TGEMV](../isa/TGEMV.md)
 
-Let:
-
-- `M = 1`
-- `K = bMatrix.GetValidRow()`
-- `N = bMatrix.GetValidCol()`
 
 **IR Level 1 (SSA):**
 ```text
@@ -180,9 +126,8 @@ pto.tgemv.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 
 ### TGEMV_ACC
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TGEMV_ACC](../isa/TGEMV_ACC.md)
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -202,9 +147,8 @@ pto.tgemv.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 
 ### TGEMV_BIAS
 
-**Math Interpretation:**
+For detailed instruction documentation, see [isa/TGEMV_BIAS](../isa/TGEMV_BIAS.md)
 
-Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
 
 **IR Level 1 (SSA):**
 ```text
@@ -221,5 +165,4 @@ pto.tgemv.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 ```
 
 ---
-
 
