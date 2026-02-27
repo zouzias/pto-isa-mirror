@@ -279,6 +279,52 @@ AscendC::DataCopy(dstGlobal, dstLocal, vRows);
 ```
 
 
+## Design Suggestion: Explicit 3D Tile Configuration
+
+For vector add (and similar ops), expose a **HW-valid 3D tile configuration** that maps directly to instruction parameters:
+
+```
+SubTile_Rx8x8_4B   (FP32)
+SubTile_Rx8x16_2B  (FP16)
+```
+
+Where:
+- **R** = repeat count (dynamic, up to 255)
+- **8** = number of 32B blocks per vector (VL = 8 blocks = 256B)
+- **8 or 16** = elements per block (32B / sizeof(T))
+- **4B / 2B** = element size suffix
+
+**Example for FP32 VADD:**
+```cpp
+// SubTile_Rx8x8_4B: R repeats × 8 blocks × 8 FP32 elems (= 64 elems per repeat)
+using VAddTile = SubTile<float, /*repeat=*/vRows, /*blocks=*/8, /*blockElems=*/8>;
+VAddTile src0(vRows);
+VAddTile src1(vRows);
+VAddTile dst(vRows);
+
+TASSIGN(src0, 0x0);
+TASSIGN(src1, 0x10000);
+TASSIGN(dst, 0x20000);
+
+TADD(dst, src0, src1);
+```
+
+This maps to HW as:
+- `mask = 64` (continuous mode, 8 blocks × 8 elems)
+- `repeatTimes = vRows`
+- `repStride = 8` (blocks per row)
+- `blkStride = 1` (contiguous blocks)
+
+**Benefits:**
+1. Clear 1:1 mapping to HW instruction params
+2. No ambiguity about tile layout
+3. Easy to validate at compile time (repeat ≤ 255, blocks ≤ 8, etc.)
+4. User sees the 3D structure (repeat × VL × block) directly
+
+**For larger tiles (vCols > VL):** user adds outer loop on column blocks, each iteration uses `SubTile_Rx8x8_4B`.
+
+---
+
 ## Why SubTile can be “single‑intrinsic, no internal loops” (and its limitation)
 
 **Key assumption:** SubTile is a **fixed 2D dense row‑major tile**, and the operation is defined to act on exactly that tile shape. This lets a **single intrinsic** handle the whole tile (e.g., `TADD`, `TROWEXPAND`, `TCOLSUM`) without an internal loop.
