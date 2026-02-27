@@ -281,7 +281,6 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     static_assert(SrcBuffers == pvVecBuffers, "src/pv buffer counts must match");
 
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-// #if false
     // Mode 1 enabled: With TMOV L0C->UB path for QK, qkVecTile data stays in UB longer
     // and can conflict with pvVecTile TLOAD.
     // Use SEPARATE allocations (not union) since A5 has 256KB UB (vs 192KB on A2/A3).
@@ -437,7 +436,6 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
             qk2smSync.allocate(); // wait for SM consume data
 
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-// #if false
         if constexpr (INTERMEDIATE_CHECK) {
             using GlobalDataQK =
                 GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
@@ -467,7 +465,7 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
 
             TMOV<TileDataF_Sub, TileQKData, AccToVecMode::DualModeSplitM>(qkVecTileSubND, qkAccTile);
         #else
-            const uint64_t col_byte_offset = static_cast<uint64_t>(sub_tile_id * Cube_S1 * sizeof(float));    //seems match compute_p?
+            const uint64_t col_byte_offset = static_cast<uint64_t>(sub_tile_id * Cube_S1 * sizeof(float));
             // const uint64_t col_byte_offset = static_cast<uint64_t>(sub_tile_id * sizeof(float));
             // using TileDataF_Sub = Tile<TileType::Vec, float, Tile_S1, Vec_S0, BLayout::ColMajor, Tile_S1, Vec_S0>;
             using TileDataF_Sub = Tile<TileType::Vec, float, Tile_S1, Vec_S0, BLayout::RowMajor, Tile_S1, Vec_S0>;
@@ -561,7 +559,6 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
             sm2pvSync.wait(); // wait for softmax produce data
 
 #if USE_UB_TO_L1_PATH
-// #if false
         if (sub_tile_id == static_cast<int>(kTileFactor) - 1 && should_notify_consume)
             sm2pvSync.free();
 #else
@@ -617,7 +614,6 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, int pv_ub_buf_idx, _
                 pv2guSync.allocate();
 
 #if USE_L0C_TO_UB_PV_PATH
-// #if false
             if (tile_id >= static_cast<int>(OUT_O_TILE_NBUFFERS)) {
                 pvUbBufSync.allocate();
             }
@@ -711,7 +707,6 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
                                   static_cast<size_t>(Cube_S0) * static_cast<size_t>(Cube_S1);
 
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-// #if false
         (void)base_elems;
 #else
         #if ND_LAYOUT
@@ -793,7 +788,6 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
         }
 
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-// #if false
         if (row_slice == static_cast<int>(kTileFactor) - 1) {
             ubBufSync.free();
         }
@@ -810,15 +804,32 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             sm2pvSync.allocate();
 
 #if USE_UB_TO_L1_PATH
-        using GlobalPTileHalfSub =
-            GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
-        using TileDataH_Sub = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
-        __gm__ half *p_ptr = p_tile_fifo + base_elems + row_offset * static_cast<size_t>(Cube_S1);
+        #if ND_LAYOUT
+            using GlobalPTileHalfSub =
+                GlobalTensor<half, pto::Shape<1, 1, 1, Vec_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
+            using TileDataH_Sub = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
+            __gm__ half *p_ptr = p_tile_fifo + base_elems + row_offset * static_cast<size_t>(Cube_S1);
+        #else
+            using GlobalPTileHalfSub =
+                GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, Vec_S0>, pto::Stride<1, 1, 1, Cube_S0, 1>>;
+            using TileDataH_Sub = Tile<TileType::Vec, half, Tile_S1, Vec_S0, BLayout::RowMajor, Cube_S1, Vec_S0>;
+            __gm__ half *p_ptr = p_tile_fifo + base_elems + row_offset; // DN layout version
+        #endif
 
         for (int sub_col = 0; sub_col < static_cast<int>(kTileFactor); ++sub_col) {
-            using TileDataH_Sub_ND = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
+            // using TileDataH_Sub_ND = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
+            #if ND_LAYOUT
+                using TileDataH_Sub_ND = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
+            #else
+                using TileDataH_Sub_ND = Tile<TileType::Vec, half, Cube_S1, Vec_S0, BLayout::RowMajor, Cube_S1, Vec_S0>;
+            #endif
             TileDataH_Sub_ND xExpSubND;
-            const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
+            // const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
+            #if ND_LAYOUT
+                const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * sizeof(half));
+            #else
+                const uint64_t col_byte_offset = static_cast<uint64_t>(sub_col * Cube_S1 * Vec_S0 * sizeof(half));
+            #endif
             TASSIGN(xExpSubND, (uint64_t)x_expT.data() + col_byte_offset);
 
             if constexpr (INTERMEDIATE_CHECK) {
@@ -835,8 +846,13 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-            const uint32_t col_idx = static_cast<uint32_t>(sub_col * Cube_S1);
-            TINSERT_CUSTOM<TInsertMode::NZ_PLUS_1>(pMatTile, nzConvBuffer, static_cast<uint32_t>(row_offset), col_idx);
+            #if ND_LAYOUT
+                const uint32_t col_idx = static_cast<uint32_t>(sub_col * Cube_S1);
+                TINSERT_CUSTOM<TInsertMode::NZ_PLUS_1>(pMatTile, nzConvBuffer, static_cast<uint32_t>(row_offset), col_idx);
+            #else
+                uint64_t col_offset = Vec_S0 * static_cast<size_t>(get_subblockid());
+                TINSERT_CUSTOM<TInsertMode::NZ_PLUS_1>(pMatTile, nzConvBuffer, static_cast<uint32_t>(0), col_offset);
+            #endif
         }
         (void)global_sum_out;
         (void)exp_max_out;
@@ -848,7 +864,7 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             __gm__ half *p_ptr = p_tile_fifo + base_elems + row_offset * static_cast<size_t>(Cube_S1);
         #else
             using GlobalPTileHalfSub =
-                GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, Vec_S0>, pto::Stride<1, 1, 1, Cube_S0, 1>>;
+                GlobalTensor<half, pto::Shape<1, 1, 1, Cube_S1, Vec_S0>, pto::Stride<1, 1, 1, Cube_S0, 1>>;    //TODO:
             using TileDataH_Sub = Tile<TileType::Vec, half, Tile_S1, Vec_S0, BLayout::RowMajor, Cube_S1, Vec_S0>;
             __gm__ half *p_ptr = p_tile_fifo + base_elems + row_offset; // DN layout version
         #endif
@@ -927,7 +943,6 @@ AICORE inline void compute_gu(int tile_id, int num_tiles, __gm__ float *pv_tile_
         (void)ubBufSync;
 
 #if USE_L0C_TO_UB_PV_PATH
-// #if false
         pvUbBufSync.wait();
 
         if (tile_id > 0) {
@@ -1075,7 +1090,7 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     #else
         // DN layout version
         // For DN, P is stored in GM as (Cube_S1, Cube_S0). Consume it as P^T with shape (Cube_S0, Cube_S1)
-        // to align with Left(M¡ÁK) for TMATMUL(Cube_S0, Cube_S1, HEAD_SIZE).
+        // to align with Left(M??K) for TMATMUL(Cube_S0, Cube_S1, HEAD_SIZE).
         using TileMatPData =
             Tile<TileType::Mat, half, Cube_S0, Cube_S1, BLayout::RowMajor, Cube_S0, Cube_S1, SLayout::ColMajor, 512>;
         using TileMatVData =
@@ -1110,9 +1125,15 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         using ReduceTileF_T = Tile<TileType::Vec, float, 1, SubblockRows, BLayout::RowMajor, 1, SubblockRows>;
     #endif
 
-    constexpr uint32_t NzBufRows = Vec_S0 + 1;
-    using TileDataH_NZ_T =
-        Tile<TileType::Vec, half, NzBufRows, Cube_S1, BLayout::ColMajor, Vec_S0, Cube_S1, SLayout::RowMajor>;
+    #if ND_LAYOUT
+        constexpr uint32_t NzBufRows = Vec_S0 + 1;
+        using TileDataH_NZ_T =
+            Tile<TileType::Vec, half, NzBufRows, Cube_S1, BLayout::ColMajor, Vec_S0, Cube_S1, SLayout::RowMajor>;
+    #else
+        constexpr uint32_t NzBufRows = Cube_S1 + 1;
+        using TileDataH_NZ_T =
+            Tile<TileType::Vec, half, NzBufRows, Vec_S0, BLayout::ColMajor, Cube_S1, Vec_S0, SLayout::RowMajor>;
+    #endif
 
     TileDataF_T qkVecTile[srcVecTNBuffers];
     ReduceTileF_T m1_local_max;
@@ -1131,7 +1152,11 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
                               outOTileNBuffers>(qkVecTile, m1_local_max, input_reduce_tmp, l1_local_sum, m2_global_max,
                                                 l2_global_sum, l1_exp_max_ififo, x_expT, pvVecTile, runningOTile);
 
-    constexpr uint32_t nzBufSize = NzBufRows * Cube_S1 * sizeof(half);
+    #if ND_LAYOUT
+        constexpr uint32_t nzBufSize = NzBufRows * Cube_S1 * sizeof(half);
+    #else
+        constexpr uint32_t nzBufSize = NzBufRows * Vec_S0 * sizeof(half);
+    #endif
     constexpr uint32_t nzBufOffset = MAX_VEC_UB_BYTES - nzBufSize;
     if constexpr (DAV_VEC) {
         TASSIGN(nzConvBuffer, nzBufOffset);
@@ -1224,7 +1249,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
             for (int sub_tile = 0; sub_tile < static_cast<int>(kTileFactor); ++sub_tile) {
                 qkAccTileEvtID = assign_running_acc_tile(qkAccTile);
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-// #if false
                 const int tile_buf_idx = preload_tile % srcVecTNBuffers;
                 compute_qk<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
                            INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers>(
@@ -1244,7 +1268,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         if constexpr (DAV_VEC) {
             for (int row_slice = 0; row_slice < static_cast<int>(kTileFactor); ++row_slice) {
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-// #if false
                 const int tile_buf_idx = preload_tile % srcVecTNBuffers;
                 compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size, CV_FIFO_CONS_SYNC_PERIOD,
                           INTERMEDIATE_CHECK, CAUSAL_MASK>(
@@ -1282,7 +1305,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
             if constexpr (DAV_CUBE) {
                 if (next_qk_tile != -1) {
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-// #if false
                     const int tile_buf_idx = next_qk_tile % srcVecTNBuffers;
                     compute_qk<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
                                CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK, srcVecTNBuffers>(
@@ -1303,7 +1325,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
             if constexpr (DAV_VEC) {
                 if (next_qk_tile != -1) {
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-// #if false
                     const int tile_buf_idx = next_qk_tile % srcVecTNBuffers;
                     compute_p<S0, HEAD_SIZE, S1, CUBE_S0, CUBE_S1, Tile_S1, qkp_tile_fifo_size,
                               CV_FIFO_CONS_SYNC_PERIOD, INTERMEDIATE_CHECK, CAUSAL_MASK>(
@@ -1368,7 +1389,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         for (int i = 0; i < pending_update_consumed; ++i)
             pv2guSync.allocate();
 #if USE_L0C_TO_DUAL_UB_PATH_QK
-// #if false
         {
             const int ub_drain_count =
                 (num_tiles_s1 < static_cast<int>(srcVecTNBuffers)) ? num_tiles_s1 : static_cast<int>(srcVecTNBuffers);
@@ -1377,7 +1397,6 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
         }
 #endif
 #if USE_L0C_TO_UB_PV_PATH
-// #if false
         {
             const int pv_ub_drain_count =
                 (num_tiles_s1 < static_cast<int>(outOTileNBuffers)) ? num_tiles_s1 : static_cast<int>(outOTileNBuffers);

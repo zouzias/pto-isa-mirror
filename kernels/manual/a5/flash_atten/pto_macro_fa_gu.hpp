@@ -71,7 +71,14 @@ template <typename reducedTileData, typename svTileData>
 AICORE inline void pto_macro_fa_gu_single_and_last_tile(svTileData __out__ sv_tile,
                                                         reducedTileData __in__ new_global_sum)
 {
-    pto::TROWEXPANDDIV(sv_tile, sv_tile, new_global_sum);
+    if constexpr (reducedTileData::BFractal == BLayout::ColMajor) {
+        pto::TROWEXPANDDIV(sv_tile, sv_tile, new_global_sum);
+    } else {
+        using reducedTileData_Col = Tile<TileType::Vec, float, reducedTileData::Cols, 1, BLayout::ColMajor, reducedTileData::Cols, 1>;
+        reducedTileData_Col new_global_sum_col;
+        TRESHAPE(new_global_sum_col, new_global_sum);
+        pto::TROWEXPANDDIV(sv_tile, sv_tile, new_global_sum_col);
+    }
 }
 
 } // namespace pto
