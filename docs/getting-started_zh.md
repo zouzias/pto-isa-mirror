@@ -13,8 +13,8 @@
 - Git
 - Python `>= 3.8`（推荐 3.10+）
 - CMake `>= 3.16`
-- 支持 C++23 的 C++ 编译器：
-  - Linux: GCC 14+ 或 Clang 16+
+- 支持 C++20 的 C++ 编译器：
+  - Linux: GCC 13+ 或 Clang 15+
   - macOS: Xcode/AppleClang（或 Homebrew LLVM）
   - Windows: Visual Studio 2022 Build Tools (MSVC)
 - Python 包：`numpy`（CPU 测试数据生成器需要使用它）
@@ -220,8 +220,8 @@ python3 tests/run_cpu.py --clean --verbose
 
   注意：如果您尚未安装 toolkit，您需要先下载 toolkit 安装包。
   ```bash
-  chmod +x ./script/install_pto.sh
-  ./install_pto.sh <toolkit_install_path> [toolkit_package_path]
+  chmod +x ./scripts/install_pto.sh
+  ./scripts/install_pto.sh <toolkit_install_path> [toolkit_package_path]
   ```
 
 # 环境设置 (Ascend 910B/910C, Linux)

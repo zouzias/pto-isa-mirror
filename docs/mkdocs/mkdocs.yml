@@ -1,16 +1,17 @@
-site_name: PTO ISA Architectural Manual
+site_name: PTO Virtual ISA Architectural Manual
 
 theme:
   name: readthedocs
+  language: en
 
 docs_dir: src
 site_dir: ../../site
 
 plugins:
-  - search
   - gen-files:
       scripts:
         - gen_pages.py
+  - search
 
 markdown_extensions:
   - toc:
@@ -23,10 +24,11 @@ markdown_extensions:
 extra_javascript:
   - assets/javascripts/mathjax.js
   - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  - assets/javascripts/language-switcher.js
 
 nav:
   - Home: index.md
-  - PTO ISA Manual:
+  - PTO Virtual ISA Manual:
       - Preface: manual/index.md
       - Overview: manual/01-overview.md
       - Execution Model: manual/02-machine-model.md
@@ -35,9 +37,15 @@ nav:
       - Synchronization: manual/05-synchronization.md
       - PTO Assembly (PTO-AS): manual/06-assembly.md
       - Instruction Set (overview): manual/07-instructions.md
-      - Instruction Reference (all pages): manual/isa-reference.md
       - Programming Guide: manual/08-programming.md
+      - Virtual ISA and IR: manual/09-virtual-isa-and-ir.md
+      - Bytecode and Toolchain: manual/10-bytecode-and-toolchain.md
+      - Memory Ordering and Consistency: manual/11-memory-ordering-and-consistency.md
+      - Backend Profiles and Conformance: manual/12-backend-profiles-and-conformance.md
       - Glossary: manual/appendix-a-glossary.md
+      - Instruction Contract Template: manual/appendix-b-instruction-contract-template.md
+      - Diagnostics Taxonomy: manual/appendix-c-diagnostics-taxonomy.md
+      - Instruction Family Matrix: manual/appendix-d-instruction-family-matrix.md
   - Programming Model:
       - Overview: docs/coding/ProgrammingModel.md
       - Tile: docs/coding/Tile.md
@@ -53,6 +61,7 @@ nav:
       - Debugging: docs/coding/debug.md
   - ISA Reference:
       - ISA index: docs/isa/README.md
+      - PTO IR ops index: docs/ir/README.md
       - ISA conventions: docs/isa/conventions.md
       - PTO ISA table: docs/PTOISA.md
       - Intrinsics header: docs/reference/pto-intrinsics-header.md

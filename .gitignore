@@ -1,6 +1,7 @@
 .git
 .idea
 .vscode
+.trae
 .DS_Store
 build
 build_tests
@@ -13,3 +14,4 @@ __pycache__/
 *.log
 tests/npu/a2a3/src/st/build
 tests/npu/a5/src/st/build
+.arts

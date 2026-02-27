@@ -34,6 +34,7 @@ enum class ElementOp
     OP_MIN,
     OP_CMP, // compare mode need extra parameters
     OP_PRELU,
+    OP_EXPDIF,
     // unary operation
     OP_EXP,
     OP_ABS,
@@ -76,13 +77,18 @@ template <typename DType, ElementOp op>
 struct ElementOpCal {
     static void apply(DType &dst, DType &src0, DType &src1, size_t)
     {
-        static_assert(false, "Unsupport element op.");
+        assert(false && "Unsupport element op.");
     }
 };
 
 template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_ADD> {
     static void apply(DType &dst, DType &src0, DType &src1, size_t)
+    {
+        dst = src0 + src1;
+    }
+
+    static void apply(DType &dst, const DType &src0, const DType &src1)
     {
         dst = src0 + src1;
     }
@@ -94,6 +100,11 @@ struct ElementOpCal<DType, ElementOp::OP_SUB> {
     {
         dst = src0 - src1;
     }
+
+    static void apply(DType &dst, const DType &src0, const DType &src1)
+    {
+        dst = src0 - src1;
+    }
 };
 
 template <typename DType>
@@ -102,11 +113,25 @@ struct ElementOpCal<DType, ElementOp::OP_MUL> {
     {
         dst = src0 * src1;
     }
+
+    static void apply(DType &dst, const DType &src0, const DType &src1)
+    {
+        dst = src0 * src1;
+    }
 };
 
 template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_DIV> {
     static void apply(DType &dst, DType &src0, DType &src1, size_t)
+    {
+        if (src1 != static_cast<DType>(0)) {
+            dst = src0 / src1;
+        } else {
+            PTO_ASSERT(false, "illegal src is zero");
+        }
+    }
+
+    static void apply(DType &dst, const DType &src0, const DType &src1)
     {
         if (src1 != static_cast<DType>(0)) {
             dst = src0 / src1;
@@ -178,11 +203,21 @@ struct ElementOpCal<DType, ElementOp::OP_MAX> {
     {
         dst = std::max(src0, src1);
     }
+
+    static void apply(DType &dst, const DType &src0, const DType &src1)
+    {
+        dst = std::max(src0, src1);
+    }
 };
 
 template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_MIN> {
     static void apply(DType &dst, DType &src0, DType &src1, size_t)
+    {
+        dst = std::min(src0, src1);
+    }
+
+    static void apply(DType &dst, const DType &src0, const DType &src1)
     {
         dst = std::min(src0, src1);
     }
@@ -223,6 +258,14 @@ struct ElementOpCal<DType, ElementOp::OP_PRELU> {
     static void apply(DType &dst, DType &src0, DType &src1, size_t)
     {
         dst = ((src0 > static_cast<DType>(0)) ? src0 : (src0 * src1));
+    }
+};
+
+template <typename DType>
+struct ElementOpCal<DType, ElementOp::OP_EXPDIF> {
+    static void apply(DType &dst, const DType &src0, const DType &src1)
+    {
+        dst = static_cast<DType>(std::exp(static_cast<double>(src0 - src1)));
     }
 };
 
@@ -450,7 +493,7 @@ struct ElementOpCal<DType, ElementOp::OP_CMPS> {
                 dst = (src <= scalar);
                 break;
             default:
-                static_assert(false, "Unsupport CMP_MODE.");
+                assert(false && "Unsupport CMP_MODE.");
                 break;
         }
     }

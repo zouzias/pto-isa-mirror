@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/memory.hpp"
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
+#include "pto/common/debug.h"
 #ifdef __CPU_SIM
 #include <iomanip>
 #endif
@@ -35,18 +36,13 @@ enum class Layout
     NC1HWC0,
     NCHW,
     NHWC,
+    NDC1HWC0,
+    NCDHW,
     FRACTAL_Z,
     FRACTAL_Z_S16S8,
+    FRACTAL_Z_3D,
     MAX,
 };
-namespace GlobalTensorDim {
-constexpr int DIM_0 = 0;
-constexpr int DIM_1 = 1;
-constexpr int DIM_2 = 2;
-constexpr int DIM_3 = 3;
-constexpr int DIM_4 = 4;
-constexpr int TOTAL_DIM = 5;
-} // namespace GlobalTensorDim
 
 constexpr int DYNAMIC = -1;
 
@@ -326,6 +322,8 @@ struct GlobalTensor {
             stride_.stride[GlobalTensorDim::DIM_4] = stride.stride[GlobalTensorDim::DIM_4];
         }
     }
+    PTO_INTERNAL GlobalTensor() : data_(nullptr)
+    {}
 
     PTO_INTERNAL int64_t GetShape(const int dim)
     {
@@ -841,17 +839,17 @@ static constexpr int fractalMxSize = 32;
 
 namespace ConvTileDetail {
 constexpr int MAX_CONVTILE_DIM = 6; // max support dim of convtile
-template <int N, int... Shapes>
+template <int N, int64_t... Shapes>
 struct GetNthShape {
-    static constexpr int value = []() {
+    static constexpr int64_t value = []() {
         int idx = 0;
-        int val = 0;
+        int64_t val = 0;
         ((idx == N ? (val = Shapes, idx++) : idx++), ...);
         return val;
     }();
 };
 
-template <int... Shapes>
+template <int64_t... Shapes>
 struct CountDynamicDim {
     static constexpr int value = []() {
         int count = 0;
@@ -865,9 +863,9 @@ struct CountDynamicDim {
     }();
 };
 
-template <int DimIdx, int... Shapes>
+template <int DimIdx, int64_t... Shapes>
 struct AssignDynamicDim {
-    static void apply(int *shape, const int *vals, int &val_idx)
+    static void apply(int64_t *shape, const int *vals, int &val_idx)
     {
         if constexpr (GetNthShape<DimIdx, Shapes...>::value == DYNAMIC) {
             shape[DimIdx] = vals[val_idx++];
@@ -883,12 +881,12 @@ template <int... Shapes>
 struct ConvTileShape {
     static constexpr int totalDimCount = sizeof...(Shapes);
     static constexpr int dynamicDimCount = ConvTileDetail::CountDynamicDim<Shapes...>::value;
-    static constexpr int staticShape[static_cast<int>(ConvTileDetail::MAX_CONVTILE_DIM)] = {
+    static constexpr int64_t staticShape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)] = {
         ConvTileDetail::GetNthShape<0, Shapes...>::value, ConvTileDetail::GetNthShape<1, Shapes...>::value,
         ConvTileDetail::GetNthShape<2, Shapes...>::value, ConvTileDetail::GetNthShape<3, Shapes...>::value,
         ConvTileDetail::GetNthShape<4, Shapes...>::value, ConvTileDetail::GetNthShape<5, Shapes...>::value};
 
-    PTO_INTERNAL ConvTileShape(int n1, int n2, int n3, int n4, int n5, int n6)
+    PTO_INTERNAL ConvTileShape(int64_t n1, int64_t n2, int64_t n3, int64_t n4, int64_t n5, int64_t n6)
     {
         if constexpr (staticShape[0] == DYNAMIC)
             shape[0] = n1;
@@ -920,13 +918,13 @@ struct ConvTileShape {
             shape[5] = 1;
     }
 
-    PTO_INTERNAL ConvTileShape(int n)
+    PTO_INTERNAL ConvTileShape(int64_t n)
     {
         static_assert(dynamicDimCount == 1,
                       "1-parameter constructors is only applicable to Shape with 1 dynamic dimension.");
 
         int val_idx = 0;
-        const int vals[] = {n};
+        const int64_t vals[] = {n};
         ConvTileDetail::AssignDynamicDim<0, Shapes...>::apply(shape, vals, val_idx);
     }
 
@@ -936,41 +934,41 @@ struct ConvTileShape {
                       "2-parameter constructors is only applicable to Shape with 2 dynamic dimension.");
 
         int val_idx = 0;
-        const int vals[] = {n1, n2};
+        const int64_t vals[] = {n1, n2};
         ConvTileDetail::AssignDynamicDim<0, Shapes...>::apply(shape, vals, val_idx);
     }
 
-    PTO_INTERNAL ConvTileShape(int n1, int n2, int n3)
+    PTO_INTERNAL ConvTileShape(int64_t n1, int64_t n2, int64_t n3)
     {
         static_assert(dynamicDimCount == 3,
                       "3-parameter constructors is only applicable to Shape with 3 dynamic dimension.");
 
         int val_idx = 0;
-        const int vals[] = {n1, n2, n3};
+        const int64_t vals[] = {n1, n2, n3};
         ConvTileDetail::AssignDynamicDim<0, Shapes...>::apply(shape, vals, val_idx);
     }
 
-    PTO_INTERNAL ConvTileShape(int n1, int n2, int n3, int n4)
+    PTO_INTERNAL ConvTileShape(int64_t n1, int64_t n2, int64_t n3, int64_t n4)
     {
         static_assert(dynamicDimCount == 4,
                       "4-parameter constructors is only applicable to Shape with 4 dynamic dimension.");
 
         int val_idx = 0;
-        const int vals[] = {n1, n2, n3, n4};
+        const int64_t vals[] = {n1, n2, n3, n4};
         ConvTileDetail::AssignDynamicDim<0, Shapes...>::apply(shape, vals, val_idx);
     }
-    PTO_INTERNAL ConvTileShape(int n1, int n2, int n3, int n4, int n5)
+    PTO_INTERNAL ConvTileShape(int64_t n1, int64_t n2, int64_t n3, int64_t n4, int64_t n5)
     {
         static_assert(dynamicDimCount == 5,
                       "5-parameter constructors is only applicable to Shape with 5 dynamic dimension.");
 
         int val_idx = 0;
-        const int vals[] = {n1, n2, n3, n4, n5};
+        const int64_t vals[] = {n1, n2, n3, n4, n5};
         ConvTileDetail::AssignDynamicDim<0, Shapes...>::apply(shape, vals, val_idx);
     }
 
 public:
-    int shape[static_cast<int>(ConvTileDetail::MAX_CONVTILE_DIM)] = {1};
+    int64_t shape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)] = {1};
 };
 
 template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
@@ -985,7 +983,7 @@ public:
     static constexpr int totalDimCount = ShapeType::totalDimCount;
     static_assert(totalDimCount >= 1 && totalDimCount <= ConvTileDetail::MAX_CONVTILE_DIM,
                   "ConvTile only support 1D~6D Shapes!");
-    static constexpr int staticShape[ConvTileDetail::MAX_CONVTILE_DIM] = {
+    static constexpr int64_t staticShape[ConvTileDetail::MAX_CONVTILE_DIM] = {
         ShapeType::staticShape[0], ShapeType::staticShape[1], ShapeType::staticShape[2],
         ShapeType::staticShape[3], ShapeType::staticShape[4], ShapeType::staticShape[5]};
     static constexpr int dynamicDimCount = ShapeType::dynamicDimCount;
@@ -993,9 +991,9 @@ public:
         ShapeType::staticShape[0] == DYNAMIC, ShapeType::staticShape[1] == DYNAMIC,
         ShapeType::staticShape[2] == DYNAMIC, ShapeType::staticShape[3] == DYNAMIC,
         ShapeType::staticShape[4] == DYNAMIC, ShapeType::staticShape[5] == DYNAMIC};
-    int shape[ConvTileDetail::MAX_CONVTILE_DIM] = {1};
+    int64_t shape[ConvTileDetail::MAX_CONVTILE_DIM] = {1};
 
-    PTO_INTERNAL constexpr int GetShape(int dim) const
+    PTO_INTERNAL constexpr int64_t GetShape(int dim) const
     {
         if (dim < 0 || dim >= totalDimCount) {
             return -1;
@@ -1010,10 +1008,10 @@ public:
     {
         static_assert(sizeof...(vals) == dynamicDimCount,
                       "Number of dynamic values does not match dynamic dimension count!");
-        static_assert((std::is_same_v<Ints, int> && ...), "Dynamic values must be int type!");
+        static_assert((std::is_same_v<Ints, int64_t> && ...), "Dynamic values must be int64_t type!");
 
         int idx = 0;
-        const int dynamicVals[] = {vals...};
+        const int64_t dynamicVals[] = {vals...};
         for (int i = 0; i < ConvTileDetail::MAX_CONVTILE_DIM; ++i) {
             if (isDynamicDim[i]) {
                 shape[i] = dynamicVals[idx++];
@@ -1044,12 +1042,183 @@ public:
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
+    PTO_INTERNAL uint16_t GetFmapH() const
+    {
+        return fmapH_;
+    }
+    PTO_INTERNAL void SetFmapH(uint16_t fmapH)
+    {
+        fmapH_ = fmapH;
+    }
+    PTO_INTERNAL uint16_t GetFmapW() const
+    {
+        return fmapW_;
+    }
+    PTO_INTERNAL void SetFmapW(uint16_t fmapW)
+    {
+        fmapW_ = fmapW;
+    }
+    PTO_INTERNAL uint8_t GetPadList(uint8_t index) const
+    { // PTO_Assert
+        return padList_[index];
+    }
+    PTO_INTERNAL void SetPadList(uint8_t index, uint8_t value)
+    {
+        padList_[index] = value;
+    }
+    PTO_INTERNAL const uint8_t *GetPadListArray() const
+    {
+        return padList_;
+    }
+    PTO_INTERNAL void SetPadListArray(const uint8_t values[4])
+    {
+        // PTO_Assert
+        for (int i = 0; i < 4; i++) {
+            padList_[i] = values[i];
+        }
+    }
+    PTO_INTERNAL uint16_t GetFilterH() const
+    {
+        return filterH_;
+    }
+    PTO_INTERNAL void SetFilterH(uint16_t filterH)
+    {
+        filterH_ = filterH;
+    }
+    PTO_INTERNAL uint16_t GetFilterW() const
+    {
+        return filterW_;
+    }
+    PTO_INTERNAL void SetFilterW(uint16_t filterW)
+    {
+        filterW_ = filterW;
+    }
+    PTO_INTERNAL uint8_t GetDilationH() const
+    {
+        return dilationH_;
+    }
+    PTO_INTERNAL void SetDilationH(uint8_t dilationH)
+    {
+        dilationH_ = dilationH;
+    }
+    PTO_INTERNAL uint8_t GetDilationW() const
+    {
+        return dilationW_;
+    }
+    PTO_INTERNAL void SetDilationW(uint8_t dilationW)
+    {
+        dilationW_ = dilationW;
+    }
+    PTO_INTERNAL uint8_t GetStrideH() const
+    {
+        return strideH_;
+    }
+    PTO_INTERNAL void SetStrideH(uint8_t strideH)
+    {
+        strideH_ = strideH;
+    }
+    PTO_INTERNAL uint8_t GetStrideW() const
+    {
+        return strideW_;
+    }
+    PTO_INTERNAL void SetStrideW(uint8_t strideW)
+    {
+        strideW_ = strideW;
+    }
+    PTO_INTERNAL DType GetPadValue() const
+    {
+        return padValue_;
+    }
+    PTO_INTERNAL void SetPadValue(DType padValue)
+    {
+        padValue_ = padValue;
+    }
+    PTO_INTERNAL uint16_t GetChannelSize() const
+    {
+        return channelSize_;
+    }
+    PTO_INTERNAL void SetChannelSize(uint16_t channelSize)
+    {
+        channelSize_ = channelSize;
+    }
+    PTO_INTERNAL uint16_t GetRepeatStride() const
+    {
+        return repeatStride_;
+    }
+    PTO_INTERNAL void SetRepeatStride(uint16_t repeatStride)
+    {
+        repeatStride_ = repeatStride;
+    }
+    PTO_INTERNAL uint16_t GetRepeatTime() const
+    {
+        return repeatTime_;
+    }
+    PTO_INTERNAL void SetRepeatTime(uint8_t repeatTime)
+    {
+        repeatTime_ = repeatTime;
+    }
+    PTO_INTERNAL uint16_t GetRepeatMode() const
+    {
+        return repeatMode_;
+    }
+    PTO_INTERNAL void SetRepeatMode(uint8_t repeatMode)
+    {
+        repeatMode_ = repeatMode;
+    }
+    PTO_INTERNAL bool GetTranspose() const
+    {
+        return transpose_;
+    }
+    PTO_INTERNAL void SetTranspose(bool transpose)
+    {
+        transpose_ = transpose;
+    }
+#ifndef PTO_NPU_ARCH_A2A3
+    PTO_INTERNAL void SetDstStride(uint16_t dstStride)
+    {
+        dstStride_ = dstStride;
+    }
+    PTO_INTERNAL uint16_t GetDstStride() const
+    {
+        return dstStride_;
+    }
+    PTO_INTERNAL void SetDstMposition(uint16_t dstMposition)
+    {
+        dstMposition_ = dstMposition;
+    }
+    PTO_INTERNAL uint16_t GetDstMposition() const
+    {
+        return dstMposition_;
+    }
+#endif
 private:
     AICORE void assignData(TileDType data)
     {
         data_ = data;
     }
     TileDType data_;
+    uint8_t padList_[4] = {0};
+    uint16_t fmapH_ = 0;
+    uint16_t fmapW_ = 0;
+
+    uint16_t filterH_ = 1;
+    uint16_t filterW_ = 1;
+    uint16_t dilationH_ = 1;
+    uint16_t dilationW_ = 1;
+    uint16_t strideH_ = 1;
+    uint16_t strideW_ = 1;
+
+    DType padValue_ = 0;
+    uint16_t channelSize_ = 0;
+    uint16_t repeatStride_ = 0;
+    uint8_t repeatTime_ = 1;
+    uint8_t repeatMode_ = 0;
+#ifndef PTO_NPU_ARCH_A2A3
+    uint16_t dstStride_ = 0;
+    uint16_t dstMposition_ = 0;
+#endif
+    bool smallChannel_ = false;
+    bool transpose_ = false;
 };
 
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,
@@ -1232,7 +1401,37 @@ public:
     {
         isKAligned_ = isKAligned;
     }
-
+#if defined(__DAV_CUBE__)
+#ifdef PTO_NPU_ARCH_A2A3
+    PTO_INTERNAL void SetMadHF32Mode(RoundMode hf32TransMode = RoundMode::CAST_ROUND)
+    {
+        PTO_ASSERT(hf32TransMode == RoundMode::CAST_ROUND || hf32TransMode == RoundMode::CAST_RINT,
+                   "Unsupported RoundMode for HF32.");
+        set_ctrl(sbitset1(get_ctrl(), MAD_MODE_BIT));
+        if (hf32TransMode == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), MAD_ROUND_MODE_BIT));
+        } else if (hf32TransMode == RoundMode::CAST_RINT) {
+            set_ctrl(sbitset0(get_ctrl(), MAD_ROUND_MODE_BIT));
+        }
+    }
+#else
+    PTO_INTERNAL void SetMadTF32Mode(RoundMode tf32TransMode = RoundMode::CAST_ROUND)
+    {
+        PTO_ASSERT(tf32TransMode == RoundMode::CAST_ROUND || tf32TransMode == RoundMode::CAST_RINT,
+                   "Unsupported RoundMode for TF32.");
+        set_ctrl(sbitset1(get_ctrl(), MAD_MODE_BIT));
+        if (tf32TransMode == RoundMode::CAST_ROUND) {
+            set_ctrl(sbitset1(get_ctrl(), MAD_ROUND_MODE_BIT));
+        } else if (tf32TransMode == RoundMode::CAST_RINT) {
+            set_ctrl(sbitset0(get_ctrl(), MAD_ROUND_MODE_BIT));
+        }
+    }
+#endif
+    PTO_INTERNAL void ResetMadMode()
+    {
+        set_ctrl(sbitset0(get_ctrl(), MAD_MODE_BIT));
+    }
+#endif
 private:
     AICORE void assignData(TileDType data)
     {
@@ -1242,7 +1441,7 @@ private:
     bool isKAligned_; // K-Alignedment for A3
 };
 
-#ifdef MEMORY_BASE
+#ifdef PTO_NPU_ARCH_A2A3
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;
@@ -1252,7 +1451,7 @@ using TileLeftCompact = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::Ro
                              SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
 #endif
 
-#if defined(REGISTER_BASE) || defined(__CPU_SIM)
+#if !defined(PTO_NPU_ARCH_A2A3) || defined(__CPU_SIM)
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;

@@ -14,9 +14,11 @@
 """基础构件。"""
 
 import os 
+from functools import partial
 from itertools import chain, tee
+from operator import methodcaller
 from pathlib import Path
-from typing import Callable, Dict, Iterator, Optional, TypeVar, Set
+from typing import Callable, Dict, Iterator, List, Optional, TypeVar, Set
 
 TOP_DIR = str(Path(__file__).resolve().parents[5])
 TOP_SOURCE_DIR = TOP_DIR + '/scripts/'
@@ -89,6 +91,18 @@ class CompressError(PackageError):
     def __init__(self, package_name: Optional[str]):
         super().__init__(package_name)
         self.package_name = package_name
+
+
+class InstallScriptNotInPackageInfo(PackageError):
+    """package_info中没有配置install_script。"""
+
+
+class InstallScriptFormatError(PackageError):
+    """install_script配置格式错误。"""
+
+
+class VersionInfoNotExist(PackageError):
+    """version.info文件不存在。"""
 
 
 def flatten(list_of_lists):

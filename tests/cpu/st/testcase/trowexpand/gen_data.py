@@ -35,6 +35,14 @@ def gen_vec_op(kind: str):
         golden = x * s
     elif kind == "sub":
         golden = x - s
+    elif kind == "add":
+        golden = x + s
+    elif kind == "min":
+        golden = np.minimum(x, s)
+    elif kind == "max":
+        golden = np.maximum(x, s)
+    elif kind == "expdiff":
+        golden = np.exp(x - s)
     else:
         raise ValueError(kind)
     x.tofile("input1.bin")
@@ -48,9 +56,6 @@ if __name__ == "__main__":
 
     cases = [
         ("TROWEXPAND_Test.case_expand_float_64x64", gen_expand),
-        ("TROWEXPAND_Test.case_div_float_64x64", lambda: gen_vec_op("div")),
-        ("TROWEXPAND_Test.case_mul_float_64x64", lambda: gen_vec_op("mul")),
-        ("TROWEXPAND_Test.case_sub_float_64x64", lambda: gen_vec_op("sub")),
     ]
 
     cwd = os.getcwd()
@@ -59,4 +64,3 @@ if __name__ == "__main__":
         os.chdir(name)
         fn()
         os.chdir(cwd)
-

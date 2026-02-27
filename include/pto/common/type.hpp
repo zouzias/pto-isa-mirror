@@ -10,7 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef _PTO_INCLUDE_NPU_TYPE_H_
 #define _PTO_INCLUDE_NPU_TYPE_H_
-#if defined(MEMORY_BASE) || defined(REGISTER_BASE)
+#ifndef __CPU_SIM
 #define AICORE [aicore]
 #else
 #define AICORE
@@ -131,21 +131,117 @@ enum class AccPhase : uint8_t
     Partial = 0x2,
     Final = 0x3,
 };
+
+enum VFImplKind : unsigned
+{
+    VFIMPL_DEFAULT = 0, // 默认版本
+    VFIMPL_1D_NO_POST_UPDATE = 1,
+    VFIMPL_2D_NO_POST_UPDATE = 2,
+    VFIMPL_1D_POST_UPDATE = 3,
+    VFIMPL_2D_POST_UPDATE = 4,
+};
+
+enum class RoundMode : uint8_t
+{
+    CAST_NONE = 0,
+    CAST_RINT = 1,  // round to nearest, tie to even
+    CAST_ROUND = 2, // round to nearest, tie away from zero
+    CAST_FLOOR = 3, // round to minus infinity
+    CAST_CEIL = 4,  // round to positive infinity
+    CAST_TRUNC = 5, // round to zero
+    CAST_ODD = 6,   // round to odd (Von Neumann rounding)
+};
+
+enum class TCopyMode : uint8_t
+{
+    SHALLOW_COPY = 0,
+    DEEP_COPY = 1,
+};
+
+enum class AccToVecMode : uint8_t
+{
+    SingleModeVec0 = 0,
+    SingleModeVec1 = 1,
+    DualModeSplitM = 2,
+    DualModeSplitN = 3,
+};
+
+enum class ReluPreMode : uint8_t
+{
+    NoRelu = 0,
+    NormalRelu = 1,
+};
+
+enum class AtomicType : uint8_t
+{
+    AtomicNone = 0,
+    AtomicAdd = 1,
+};
+
+enum class PadValue
+{
+    Null,
+    Zero,
+    Max,
+    Min,
+};
+
+enum class SaturationMode : uint8_t
+{
+    // Saturation enabled (default) - CTRL bit 59 = 0
+    ON = 0,
+
+    // Saturation disabled - CTRL bit 59 = 1
+    OFF = 1,
+};
+
+enum class CompactMode
+{
+    Null,
+    Normal,
+};
+
+enum class SetFmatrixMode
+{
+    FMATRIX_A_AUTO,
+    FMATRIX_B_AUTO,
+    FMATRIX_A_MANUAL,
+    FMATRIX_B_MANUAL,
+};
+
+enum class TileLayoutCustom : uint8_t
+{
+    ND,
+    DN,
+    NZ,
+    ZN,
+    ZZ,
+    NONE,
+};
+
+namespace GlobalTensorDim {
+constexpr int DIM_0 = 0;
+constexpr int DIM_1 = 1;
+constexpr int DIM_2 = 2;
+constexpr int DIM_3 = 3;
+constexpr int DIM_4 = 4;
+constexpr int TOTAL_DIM = 5;
+} // namespace GlobalTensorDim
+
 } // namespace pto
 
 #if defined(__CPU_SIM)
-  // Note: clang version should be >=15 and gcc version should be >=14
-#if defined(__has_include) && __has_include(<stdfloat>) && !(defined(__clang__))
-#include <stdfloat>
-typedef std::float16_t half;
-typedef std::float16_t bfloat16_t;
-typedef std::float16_t aclFloat16;
-#else
-  // macOS libc++ (and some other toolchains) may not ship <stdfloat> yet.
-// For CPU simulation, a best-effort 16-bit float type is sufficient.
 typedef _Float16 half;
-typedef _Float16 bfloat16_t;
 typedef _Float16 aclFloat16;
+// Note: clang version should be >=15 and gcc version should be >=14
+#if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L
+#include <stdfloat>
+typedef std::bfloat16_t bfloat16_t;
+#define CPU_SIM_BFLOAT_ENABLED
+#else
+// macOS libc++ (and some other toolchains) may not ship <stdfloat> yet.
+// For CPU simulation, a best-effort 16-bit float type is sufficient.
+typedef _Float16 bfloat16_t;
 #endif
 #endif
 
