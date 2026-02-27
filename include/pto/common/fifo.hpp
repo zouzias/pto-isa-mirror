@@ -10,6 +10,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef PTO_FIFO_HPP
 #define PTO_FIFO_HPP
+#include <type_traits>
+
+using namespace std;
 
 namespace pto {
 
@@ -35,17 +38,11 @@ struct DataFIFO<DataType, FifoType, Depth, Period, typename std::enable_if<IsGMF
     static constexpr int fifoDepth = Depth;
     static constexpr int fifoPeriod = Period;
     static constexpr FIFOType fifoType = FifoType;
-    using DType = DataType;
 
     __gm__ DataType *fifoBase;
 
     PTO_INTERNAL DataFIFO(__gm__ DataType *ptr) : fifoBase(ptr)
     {}
-
-    __gm__ DataType *getBasePtr()
-    {
-        return fifoBase;
-    }
 };
 
 // 2. Specialization for VEC_FIFO and MAT_FIFO (both use local memory)
