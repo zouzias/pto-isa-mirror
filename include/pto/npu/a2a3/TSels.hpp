@@ -33,10 +33,11 @@ __tf__ PTO_INTERNAL void TSels(typename DstTile::TileDType __out__ dst, typename
         (__ubuf__ typename SrcTile::DType *)get_imm(TMP_UB_OFFSET); // 8KB tmpbuf addr
     *scalarPtr = scalar;
     set_mask_count();
+    set_vector_mask(0, validCol);
+    PtoSetWaitFlag<PIPE_S, PIPE_V>();
+    set_cmpmask(scalarPtr);
+    pipe_barrier(PIPE_V);
     for (unsigned i = 0; i < validRow; i++) {
-        set_cmpmask(scalarPtr);
-        pipe_barrier(PIPE_V);
-        set_vector_mask(0, validCol);
         vsel(dstPtr + i * DstTile::RowStride, srcPtr + i * SrcTile::RowStride, maskPtr + i * MaskTile::RowStride, 1, 1,
              1, 1, 8, 8, 8, SELMODE::VSEL_TENSOR_SCALAR_MODE);
     }
