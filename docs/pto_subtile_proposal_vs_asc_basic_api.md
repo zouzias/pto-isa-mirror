@@ -325,6 +325,45 @@ This maps to HW as:
 
 ---
 
+## Design Suggestion: Strong Typing for SubTile Ops
+
+To ensure correctness at compile time, SubTile intrinsics should accept **only valid HW tile configurations** via strong typing:
+
+```cpp
+// Define valid SubTile types for vector ops
+using SubTile_Rx8x8_4B  = SubTile<float,   /*blocks=*/8, /*blockElems=*/8>;   // FP32
+using SubTile_Rx8x16_2B = SubTile<half,    /*blocks=*/8, /*blockElems=*/16>;  // FP16
+using SubTile_Rx8x32_1B = SubTile<int8_t,  /*blocks=*/8, /*blockElems=*/32>;  // INT8
+
+// TADD only accepts valid SubTile types
+template<typename T>
+concept ValidVAddTile = std::same_as<T, SubTile_Rx8x8_4B>  ||
+                        std::same_as<T, SubTile_Rx8x16_2B> ||
+                        std::same_as<T, SubTile_Rx8x32_1B>;
+
+template<ValidVAddTile Tile>
+void TADD(Tile& dst, const Tile& src0, const Tile& src1);
+```
+
+**Benefits:**
+1. **Compile-time validation** — invalid tile shapes cause build errors, not runtime failures
+2. **Self-documenting** — type name shows exact HW mapping (`Rx8x8_4B` = repeat × 8 blocks × 8 elems × 4 bytes)
+3. **No ambiguity** — user cannot accidentally create unsupported configurations
+4. **Op-specific constraints** — each intrinsic declares which tile types it supports
+
+**Example: Op-Tile Compatibility Table**
+
+| Intrinsic | Supported SubTile Types |
+|-----------|------------------------|
+| `TADD` | `SubTile_Rx8x8_4B`, `SubTile_Rx8x16_2B`, `SubTile_Rx8x32_1B` |
+| `TMUL` | `SubTile_Rx8x8_4B`, `SubTile_Rx8x16_2B` |
+| `TROWEXPANDADD` | `SubTile_Rx1x8_4B` (single block width) |
+| `TCOLSUM` | `SubTile_Rx8x8_4B`, `SubTile_Rx8x16_2B` |
+
+This approach mirrors how Intel AMX uses `LDTILECFG` to set valid tile shapes before ops, but enforces it statically via the type system.
+
+---
+
 ## Why SubTile can be “single‑intrinsic, no internal loops” (and its limitation)
 
 **Key assumption:** SubTile is a **fixed 2D dense row‑major tile**, and the operation is defined to act on exactly that tile shape. This lets a **single intrinsic** handle the whole tile (e.g., `TADD`, `TROWEXPAND`, `TCOLSUM`) without an internal loop.
