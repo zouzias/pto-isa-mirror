@@ -353,3 +353,44 @@ To avoid internal loops, the SubTile path relies on **counter/repeat mode** for 
    - `vCols` must fit within a vector length (e.g., **VL = 256B**), otherwise you need multiple vector ops (loop or additional slicing).
 
 **Implication:** The “no loop” SubTile implementation is only valid for **contiguous, regular tiles** with **repeat ≤ 255** and **vCols ≤ VL**. Outside these conditions, you must add loops or use AscendC Basic API for explicit stride/address control.
+---
+
+## Production References: 2D Tile Abstractions in Industry
+
+### 1. LLVM SVE / RISC-V RVV (Scalable Vectors)
+- **Dimensionality:** 1D scalable (`<vscale x N x T>`)
+- **Abstraction:** Vector length is runtime-variable; predicate masks control elements
+- **Key point:** 1D only; 2D requires user loops
+- **Reference:** https://llvm.org/docs/RISCV/RISCVVectorExtension.html
+
+### 2. MLIR Vector Dialect
+- **Dimensionality:** N-D (`vector<4x8xf32>`)
+- **Abstraction:** Multi-dimensional vector types + ops (`vector.contract`, `vector.transfer_read`)
+- **Key point:** Provides 2D/3D tile abstraction; lowers to 1D LLVM vectors + loops
+- **Reference:** https://mlir.llvm.org/docs/Dialects/Vector/
+
+### 3. Intel AMX (Advanced Matrix Extensions)
+- **Dimensionality:** 2D tiles (up to 16 rows × 64 bytes per tile)
+- **Abstraction:** 8 tile registers; user configures shape via `LDTILECFG`
+- **Ops:** `TILELOADD`, `TILESTORED`, `TDPBF16PS` (tile matmul)
+- **Key point:** Fixed 2D tile registers; most similar to SubTile concept
+- **Reference:** https://en.wikipedia.org/wiki/Advanced_Matrix_Extensions
+
+### 4. ARM SME (Scalable Matrix Extension)
+- **Dimensionality:** 2D ZA array (scalable tiles)
+- **Abstraction:** ZA is a large 2D array register; ZA tiles are square sub-arrays
+- **Ops:** `FMOPA` (outer product), `LDR`/`STR` for ZA vectors
+- **Key point:** SVE + 2D tile; scalable matrix size
+- **Reference:** https://stackoverflow.com/questions/76305243/arm-a-profile-architecture-what-does-za-stand-for
+
+### Comparison Summary
+
+| Reference | 2D Tile? | User Controls Shape? | Ops Level | Similar to SubTile? |
+|-----------|----------|---------------------|-----------|---------------------|
+| LLVM SVE/RVV | ❌ (1D) | ✅ (vscale) | Vector element | Partially (VL abstraction) |
+| MLIR Vector | ✅ | ✅ | Vector/Tensor | Yes (2D abstraction) |
+| Intel AMX | ✅ | ✅ (TILECFG) | Matrix | **Most similar** (fixed 2D) |
+| ARM SME | ✅ | ✅ (scalable) | Matrix | Yes (2D ZA tiles) |
+| **PTO SubTile** | ✅ | ✅ (Tile<R,C>) | Vector/Tile | — |
+
+**Conclusion:** SubTile is closest to **Intel AMX** and **ARM SME** — explicit 2D tile shape with user-controlled dimensions. The `SubTile_Rx8x8_4B` naming mirrors AMXs tile config concept, while the scalable row dimension is similar to ARM SMEs approach.
