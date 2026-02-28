@@ -36,7 +36,7 @@ PTO_INTERNAL void TRowExpandBinaryNormModeTail(__ubuf__ T *dstPtr, __ubuf__ T *s
     // rowStride / blockSizeElem > 255不会进到norm mode
     constexpr uint8_t DstRepeatStride = (uint8_t)(DstRowStride / blockSizeElem);
     constexpr uint8_t SrcRepeatStride = (uint8_t)(Src0RowStride / blockSizeElem);
-    if constexpr (DstRowStride <= elementsPerRepeat || Src0RowStride <= elementsPerRepeat) {
+    if constexpr (DstRowStride < elementsPerRepeat || Src0RowStride < elementsPerRepeat) {
         SetContMaskByDType<T>(validCol);
         Op::RowExpandBinInstr(dstPtr, src0Ptr, src1Ptr, validRow, DstRepeatStride, SrcRepeatStride);
         SetFullVecMaskByDType<T>();
