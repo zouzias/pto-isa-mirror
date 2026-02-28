@@ -1303,11 +1303,21 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
     return {};
 }
 
-template <typename TileDataD, typename TileDataS, typename... WaitEvents>
-PTO_INST RecordEvent TBROADCAST(TileDataD &dst, TileDataS &src, size_t numProc, WaitEvents &... events)
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
+                                TileData &stagingTileData, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TBROADCAST, dst, src, numProc);
+    MAP_INSTR_IMPL(TBROADCAST, parallelGroup, srcGlobalData, stagingTileData);
+    return {};
+}
+
+template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
+                                TileData &pongTile, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TBROADCAST, parallelGroup, srcGlobalData, pingTile, pongTile);
     return {};
 }
 
