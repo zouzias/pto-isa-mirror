@@ -26,7 +26,6 @@ __tf__ PTO_INTERNAL void TSels_b32(typename TileDataDst::TileDType __out__ dst,
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ uint32_t *maskPtr = (__ubuf__ uint32_t *)__cce_get_tile_ptr(mask);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
-    uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
     constexpr uint32_t maskRowStride = TileDataMask::RowStride * sizeof(typename TileDataMask::DType);
     uint16_t loopTimes = CeilDivision(validCol, elementsPerRepeat) / 2;
     __VEC_SCOPE__
@@ -56,8 +55,12 @@ __tf__ PTO_INTERNAL void TSels_b32(typename TileDataDst::TileDType __out__ dst,
                 pReg = CreatePredicate<T>(sReg);
                 vsts(dreg1, dstPtr, (int32_t)(i * TileDataDst::RowStride + colOffset1), distValue, pReg);
             }
+        }
 
-            if (sReg > 0) {
+        uint32_t remain = validCol - loopTimes * elementsPerRepeat * 2;
+        if (remain > 0) {
+            for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
+                sReg = remain;
                 colOffset0 = 2 * loopTimes * elementsPerRepeat;
                 plds(tmpMask, (__ubuf__ uint32_t *)mask, i * maskRowStride + 2 * 8 * loopTimes, US);
                 punpack(selMask0, tmpMask, LOWER);
