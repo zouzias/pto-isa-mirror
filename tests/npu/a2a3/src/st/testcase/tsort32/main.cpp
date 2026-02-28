@@ -47,7 +47,7 @@ void tsort32_test(int32_t rows, int32_t cols, int32_t colsAlign)
     int typeSize = sizeof(float);
     size_t srcByteSize = shape[0] * shape[1] * typeSize;
     size_t idxByteSize = shape[0] * shape[1] * sizeof(uint32_t);
-    size_t dstByteSize = 2 * shape[0] * shape[1] * typeSize;
+    size_t dstByteSize = 2 * shape[0] * (shape[1] + 1) * typeSize;
     size_t tmpByteSize = 1 * colsAlign * typeSize;
     uint64_t *dstHost, *srcHost, *tmpHost;
     uint64_t *dstDevice, *srcDevice, *tmpDevice;
@@ -111,7 +111,7 @@ TEST_F(TSort32Test, case2)
 
 TEST_F(TSort32Test, case3)
 {
-    tsort32_test<3, float>(1, 32 * 256, 32 * 256);
+    tsort32_test<3, float>(1, 32 * 256 - 1, 32 * 256);
 }
 
 TEST_F(TSort32Test, case4)

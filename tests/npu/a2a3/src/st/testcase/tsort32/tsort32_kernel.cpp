@@ -106,9 +106,9 @@ extern "C" __global__ AICORE void launchTSORT32_3(__gm__ uint64_t *out, __gm__ u
                                                   __gm__ uint64_t *tmp)
 {
     constexpr uint32_t ROWS = 1;
-    constexpr uint32_t COLS = 256 * 32;
+    constexpr uint32_t COLS = 256 * 32 - 1;
     constexpr uint32_t VALID_R = 1;
-    constexpr uint32_t VALID_C = 256 * 32;
+    constexpr uint32_t VALID_C = 256 * 32 - 1;
     constexpr uint32_t ALIGN_C = (VALID_C + 31 - 1) / 32 * 32;
 
     runTSORT32<float, ROWS, COLS, VALID_R, VALID_C, ALIGN_C>(reinterpret_cast<__gm__ float *>(out),

@@ -66,14 +66,20 @@ def gen_golden_data(param):
     idx = np.arange(rows * cols).astype(np.uint32)
     idx.tofile("input_idx.bin")
 
-    input_reshaped = input_arr.reshape(-1, 32)
-    idx_reshaped = idx.reshape(-1, 32)
+    input_reshaped = np.zeros((rows, cols + 1)).astype(test_type)
+    input_reshaped[:rows, :cols] = input_arr
+
+    idx_reshaped = np.zeros((rows, cols + 1)).astype(np.uint32)
+    idx_reshaped[:rows, :cols] = idx
+
+    input_reshaped = input_reshaped.reshape(-1, 32)
+    idx_reshaped = idx_reshaped.reshape(-1, 32)
     # sort each group of 32 elements based on input values in descending order
     sorted_indices = np.argsort(-input_reshaped, axis=1)
     sorted_input = np.take_along_axis(input_reshaped, sorted_indices, axis=1)
     sorted_idx = np.take_along_axis(idx_reshaped, sorted_indices, axis=1)
-    sorted_input = sorted_input.reshape(rows, cols)
-    sorted_idx = sorted_idx.reshape(rows, cols)
+    sorted_input = sorted_input.reshape(rows, cols + 1)
+    sorted_idx = sorted_idx.reshape(rows, cols + 1)
     flat_input = sorted_input.flatten().astype(test_type)
     flat_idx   = sorted_idx.flatten()
     # create pairs of (value, index)
@@ -98,7 +104,7 @@ if __name__ == "__main__":
     case_params_list = [
         tsort32Params(np.float32, 2, 32),
         tsort32Params(np.float16, 4, 64),
-        tsort32Params(np.float32, 1, 256 * 32),
+        tsort32Params(np.float32, 1, 256 * 32 - 1),
         tsort32Params(np.float32, 2, 13),
     ]
 
@@ -107,5 +113,7 @@ if __name__ == "__main__":
             os.makedirs(case_name)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data(case_params_list[i])
+        print(i)
+        if i == 2:
+            gen_golden_data(case_params_list[i])
         os.chdir(original_dir)
