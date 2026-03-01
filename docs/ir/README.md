@@ -136,5 +136,5 @@ Structured control flow operations from MLIR `scf` dialect:
 
 ## Related Resources
 
-- **ISA Instruction Reference**: `../isa/README.md` - Per-instruction canonical semantics
-- **PTO-AS Grammar**: `../grammar/PTO-AS.md` - Assembly language syntax and grammar
+- [**ISA Instruction Reference**](../isa/README.md): Per-instruction canonical semantics
+- [**PTO-AS Grammar**](../grammar/PTO-AS.md): Assembly language syntax and grammar
