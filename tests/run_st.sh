@@ -314,6 +314,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tquant -g TQUANTTest.case_int8_asym_fp32_128x128_nd
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttri -g TTRITest.case_float_128x128_lower_diag_n3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_0
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t engram -g ENGRAMTest.fused_float_1024x1024_8x1024
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py -r $RUN_TYPE -v a5 -t all
@@ -411,5 +412,6 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t mgather
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t mscatter
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tquant
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t engram
   fi
 fi
