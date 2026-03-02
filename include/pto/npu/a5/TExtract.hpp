@@ -117,7 +117,7 @@ __tf__ AICORE void TExtractToA(typename DstTileData::TileDType __out__ dst, type
     constexpr int typeSize = sizeof(DataType);
     __cbuf__ DataType *srcAddr = (__cbuf__ DataType *)__cce_get_tile_ptr(src);
     __ca__ DataType *dstAddr = (__ca__ DataType *)__cce_get_tile_ptr(dst);
-    constexpr int c0Size = isFp4Type ? BLOCK_BYTE_SIZE * KHALF / typeSize : BLOCK_BYTE_SIZE / typeSize;
+    constexpr int c0Size = BLOCK_BYTE_SIZE / typeSize;
 
     if constexpr (!Transpose) {
         uint16_t mStartPosition = indexRow >> SHIFT_BLOCK_LEN;
@@ -128,8 +128,7 @@ __tf__ AICORE void TExtractToA(typename DstTileData::TileDType __out__ dst, type
         constexpr uint16_t dstStride = dstRow >> SHIFT_BLOCK_LEN;
 
         if constexpr (isFp4Type) {
-            load_cbuf_to_ca_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF,
-                               srcStride, dstStride, 0);
+            load_cbuf_to_ca_s4(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
         } else {
             load_cbuf_to_ca(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
         }
@@ -148,8 +147,7 @@ __tf__ AICORE void TExtractToA(typename DstTileData::TileDType __out__ dst, type
         constexpr uint16_t dstStride = dstRow >> SHIFT_BLOCK_LEN;
 
         if constexpr (isFp4Type) {
-            load_cbuf_to_ca_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF,
-                               srcStride, dstStride, 1);
+            load_cbuf_to_ca_s4(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
         } else {
             load_cbuf_to_ca(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
         }
@@ -163,7 +161,7 @@ __tf__ AICORE void TExtractToAVector(typename DstTileData::TileDType __out__ dst
 {
     using DataType = typename SrcTileData::DType;
     constexpr int typeSize = sizeof(DataType);
-    constexpr int32_t fractalSize = isFp4Type ? CUBE_BLOCK_SIZE * KHALF : CUBE_BLOCK_SIZE / typeSize;
+    constexpr int32_t fractalSize = CUBE_BLOCK_SIZE / typeSize;
     int32_t kAlign = (dstValidCol + fractalSize - 1) & ~(fractalSize - 1);
 
     static_assert((SrcTileData::Cols % fractalSize) == 0, "srcCol * sizeof(DataType) must be aligned to 512B");
@@ -175,7 +173,7 @@ __tf__ AICORE void TExtractToAVector(typename DstTileData::TileDType __out__ dst
     uint16_t kStartPosition = (indexCol * typeSize) >> SHIFT_FRACTAL_BYTE;
     uint8_t kStep = kAlign / fractalSize;
     if constexpr (isFp4Type) {
-        load_cbuf_to_ca_s4(dstAddr, srcAddr, 0, kStartPosition / KHALF, 1, kStep, 1, 1, 0);
+        load_cbuf_to_ca_s4(dstAddr, srcAddr, 0, kStartPosition, 1, kStep, 1, 1, 0);
     } else {
         load_cbuf_to_ca(dstAddr, srcAddr, 0, kStartPosition, 1, kStep, 1, 1, 0);
     }
@@ -190,7 +188,7 @@ __tf__ AICORE void TExtractToACompact(typename DstTileData::TileDType __out__ ds
     constexpr int typeSize = sizeof(DataType);
     __cbuf__ DataType *srcAddr = (__cbuf__ DataType *)__cce_get_tile_ptr(src);
     __ca__ DataType *dstAddr = (__ca__ DataType *)__cce_get_tile_ptr(dst);
-    constexpr int c0Size = isFp4Type ? BLOCK_BYTE_SIZE * KHALF / typeSize : BLOCK_BYTE_SIZE / typeSize;
+    constexpr int c0Size = BLOCK_BYTE_SIZE / typeSize;
     uint16_t madMAlign = CeilDivision(madM, FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW;
     uint16_t madKAlign = CeilDivision(madK, c0Size) * c0Size;
 
@@ -201,8 +199,7 @@ __tf__ AICORE void TExtractToACompact(typename DstTileData::TileDType __out__ ds
     constexpr uint16_t srcStride = SrcTileData::Rows >> SHIFT_BLOCK_LEN;
     uint16_t dstStride = madMAlign >> SHIFT_BLOCK_LEN;
     if constexpr (isFp4Type) {
-        load_cbuf_to_ca_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF, srcStride,
-                           dstStride, 0);
+        load_cbuf_to_ca_s4(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
     } else {
         load_cbuf_to_ca(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
     }
@@ -215,7 +212,7 @@ __tf__ AICORE void TExtractToATransCompact(typename DstTileData::TileDType __out
 {
     using DataType = typename SrcTileData::DType;
     constexpr int typeSize = sizeof(DataType);
-    constexpr int c0Size = isFp4Type ? BLOCK_BYTE_SIZE * KHALF / typeSize : BLOCK_BYTE_SIZE / typeSize;
+    constexpr int c0Size = BLOCK_BYTE_SIZE / typeSize;
     __cbuf__ DataType *srcAddr = (__cbuf__ DataType *)__cce_get_tile_ptr(src);
     __ca__ DataType *dstAddr = (__ca__ DataType *)__cce_get_tile_ptr(dst);
 
@@ -229,22 +226,16 @@ __tf__ AICORE void TExtractToATransCompact(typename DstTileData::TileDType __out
     uint8_t kStep = (madMAlign * typeSize) >> SHIFT_BLOCK_BYTE;
     constexpr uint16_t srcStride = SrcTileData::Cols >> SHIFT_BLOCK_LEN;
     uint16_t dstStride = madMAlign >> SHIFT_BLOCK_LEN;
-    if constexpr (isFp4Type) { // b4
-        uint16_t dstAddrStride = CeilDivision(madM, FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW * BLOCK_BYTE_SIZE;
-        uint16_t mLoop = mStep >> SHIFT_M_STEP_B4;
-        mStep = M_STEP_MIN_VAL_B4;
-        for (uint16_t idx = 0; idx < mLoop; ++idx) {
-            load_cbuf_to_ca_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF,
-                               srcStride, dstStride, 1);
-            dstAddr += dstAddrStride;
-            mStartPosition += M_STEP_MIN_VAL_B4;
-        }
-    } else if constexpr (typeSize == 1) { // b8
+    if constexpr (typeSize == 1) { // b8&b4
         uint16_t dstAddrStride = CeilDivision(madM, FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW * BLOCK_BYTE_SIZE;
         uint16_t mLoop = mStep >> SHIFT_M_STEP_B8;
         mStep = M_STEP_MIN_VAL_B8;
         for (uint16_t idx = 0; idx < mLoop; ++idx) {
-            load_cbuf_to_ca(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+            if constexpr (isFp4Type) {
+                load_cbuf_to_ca_s4(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+            } else {
+                load_cbuf_to_ca(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+            }
             dstAddr += dstAddrStride;
             mStartPosition += M_STEP_MIN_VAL_B8;
         }
@@ -265,7 +256,7 @@ __tf__ AICORE void TExtractToB(typename DstTileData::TileDType __out__ dst, type
     constexpr int32_t dstCol = DstTileData::Cols;
     __cbuf__ DataType *srcAddr = (__cbuf__ DataType *)__cce_get_tile_ptr(src);
     __cb__ DataType *dstAddr = (__cb__ DataType *)__cce_get_tile_ptr(dst);
-    constexpr int c0Size = isFp4Type ? BLOCK_BYTE_SIZE * KHALF / typeSize : BLOCK_BYTE_SIZE / typeSize;
+    constexpr int c0Size = BLOCK_BYTE_SIZE / typeSize;
 
     if constexpr (!Transpose) {
         uint16_t mStartPosition = indexCol >> SHIFT_BLOCK_LEN;
@@ -275,8 +266,7 @@ __tf__ AICORE void TExtractToB(typename DstTileData::TileDType __out__ dst, type
         constexpr uint16_t srcStride = srcCol >> SHIFT_BLOCK_LEN;
         constexpr uint16_t dstStride = dstCol >> SHIFT_BLOCK_LEN;
         if constexpr (isFp4Type) {
-            load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF,
-                               srcStride, dstStride, 0);
+            load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
         } else {
             load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
         }
@@ -294,8 +284,7 @@ __tf__ AICORE void TExtractToB(typename DstTileData::TileDType __out__ dst, type
         constexpr uint16_t srcStride = srcRow >> SHIFT_BLOCK_LEN;
         constexpr uint16_t dstStride = dstCol >> SHIFT_BLOCK_LEN;
         if constexpr (isFp4Type) {
-            load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF,
-                               srcStride, dstStride, 1);
+            load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
         } else {
             load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
         }
@@ -309,7 +298,7 @@ __tf__ AICORE void TExtractToBCompact(typename DstTileData::TileDType __out__ ds
 {
     using DataType = typename SrcTileData::DType;
     constexpr int typeSize = sizeof(DataType);
-    constexpr int c0Size = isFp4Type ? BLOCK_BYTE_SIZE * KHALF / typeSize : BLOCK_BYTE_SIZE / typeSize;
+    constexpr int c0Size = BLOCK_BYTE_SIZE / typeSize;
 
     __cbuf__ DataType *srcAddr = (__cbuf__ DataType *)__cce_get_tile_ptr(src);
     __cb__ DataType *dstAddr = (__cb__ DataType *)__cce_get_tile_ptr(dst);
@@ -323,8 +312,7 @@ __tf__ AICORE void TExtractToBCompact(typename DstTileData::TileDType __out__ ds
     constexpr uint16_t srcStride = SrcTileData::Cols >> SHIFT_BLOCK_LEN;
     uint16_t dstStride = madNAlign >> SHIFT_BLOCK_LEN;
     if constexpr (isFp4Type) {
-        load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF, srcStride,
-                           dstStride, 0);
+        load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
     } else {
         load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
     }
@@ -337,7 +325,7 @@ __tf__ AICORE void TExtractToBTransCompact(typename DstTileData::TileDType __out
 {
     using DataType = typename SrcTileData::DType;
     constexpr int typeSize = sizeof(DataType);
-    constexpr int c0Size = isFp4Type ? BLOCK_BYTE_SIZE * KHALF / typeSize : BLOCK_BYTE_SIZE / typeSize;
+    constexpr int c0Size = BLOCK_BYTE_SIZE / typeSize;
     __cbuf__ DataType *srcAddr = (__cbuf__ DataType *)__cce_get_tile_ptr(src);
     __cb__ DataType *dstAddr = (__cb__ DataType *)__cce_get_tile_ptr(dst);
 
@@ -351,22 +339,16 @@ __tf__ AICORE void TExtractToBTransCompact(typename DstTileData::TileDType __out
     uint8_t kStep = (madNAlign * typeSize) >> SHIFT_BLOCK_BYTE;
     constexpr uint16_t srcStride = SrcTileData::Rows >> SHIFT_BLOCK_LEN;
     uint16_t dstStride = madNAlign >> SHIFT_BLOCK_LEN;
-    if constexpr (isFp4Type) { // b4
-        uint16_t dstAddrStride = CeilDivision(madN, FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW * BLOCK_BYTE_SIZE;
-        uint16_t nLoop = mStep >> SHIFT_M_STEP_B4;
-        mStep = M_STEP_MIN_VAL_B4;
-        for (uint16_t idx = 0; idx < nLoop; ++idx) {
-            load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF,
-                               srcStride, dstStride, 1);
-            dstAddr += dstAddrStride;
-            mStartPosition += M_STEP_MIN_VAL_B4;
-        }
-    } else if constexpr (typeSize == 1) { // b8
+    if constexpr (typeSize == 1) { // b8&b4
         uint16_t dstAddrStride = CeilDivision(madN, FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW * BLOCK_BYTE_SIZE;
         uint16_t nLoop = mStep >> SHIFT_M_STEP_B8;
         mStep = M_STEP_MIN_VAL_B8;
         for (uint16_t idx = 0; idx < nLoop; ++idx) {
-            load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+            if constexpr (isFp4Type) {
+                load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+            } else {
+                load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+            }
             dstAddr += dstAddrStride;
             mStartPosition += M_STEP_MIN_VAL_B8;
         }
@@ -410,9 +392,9 @@ __tf__ AICORE void TExtractAccToMat(typename DstTileData::TileDType __out__ dst,
 {
     using dstType = typename DstTileData::DType;
     using srcType = typename SrcTileData::DType;
-    constexpr bool channelSplitEnable =
-        (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
-        (std::is_same_v<dstType, float>)&&(DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
+    constexpr bool channelSplitEnable = (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor)) &&
+                                        (std::is_same_v<dstType, float>) &&
+                                        (DstTileData::SFractalSize == CUBE_BLOCK_SIZE);
     constexpr int32_t c0Size = (!channelSplitEnable) && (DstTileData::SFractalSize == 2 * CUBE_BLOCK_SIZE) ?
                                    2 * C0_SIZE_BYTE / sizeof(dstType) :
                                    C0_SIZE_BYTE / sizeof(dstType);
