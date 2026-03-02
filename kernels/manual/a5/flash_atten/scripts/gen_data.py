@@ -27,7 +27,7 @@ np.random.seed(7)
 
 S0_BASE = 64
 HEAD_SIZE = 128
-TILE_S1_DEFAULT = 256
+TILE_S1_DEFAULT = 128
 
 def gen_case(path, s0, s1, head_size=HEAD_SIZE, cube_s1=128, tile_s1=TILE_S1_DEFAULT, is_causal=False):
     # generate inputs in FP16, compute golden in FP32
