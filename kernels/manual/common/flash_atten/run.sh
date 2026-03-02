@@ -8,7 +8,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # ======================================================================================================================
 
-SHORT=r:,v:,n:,c:,a:,p:,i,d,m
+SHORT=r:,v:,n:,c:,a:,p:,i,d,k
 LONG=run-mode:,soc-version:,npu:,case:,cases:,qk-preload:,intermediate,debug,mask
 OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
 eval set -- "$OPTS"
@@ -39,7 +39,7 @@ do
         (-d | --debug )
             DEBUG_BUILD=1
             shift 1;;
-        (-m | --mask )
+        (-k | --mask )
             CAUSAL_MASK=1
             shift 1;;
         (--)
@@ -51,15 +51,15 @@ do
     esac
 done
 
-pattern="^Ascend910B"
+pattern="^Ascend910B|^Ascend910_9599"
 if [[ ! "$SOC_VERSION" =~ $pattern ]]; then
-    echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}, this folder only support A2/A3."
+    echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}, this folder only support A2/A3/A5."
     exit 1
 fi
 
 pattern="^Ascend910B4-1"
 if [[ "$SOC_VERSION" =~ $pattern ]] && [ "${RUN_MODE}" == "sim" ]; then
-    echo "[ERROR] SocVersion: ${SOC_VERSION} can not support sim mode, please use Ascend910B4."
+    echo "[ERROR] SocVersion: ${SOC_VERSION} can not support sim mode, please use Ascend910B4 or Ascend910_9599."
     exit 1
 fi
 
@@ -114,6 +114,9 @@ make -j16
 EXTRA_BIN_ARGS=()
 if [[ -n "${INTERMEDIATE:-}" ]]; then
     EXTRA_BIN_ARGS+=(--intermediate)
+fi
+if [ "${SOC_VERSION}" == "Ascend910_9599" ]; then
+    EXTRA_BIN_ARGS+=(--sys_cnt_multiple=1.0)
 fi
 
 if [[ -n "${CASE_FILTER:-}" ]]; then
