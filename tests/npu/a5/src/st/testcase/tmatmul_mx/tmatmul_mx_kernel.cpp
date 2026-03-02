@@ -53,11 +53,12 @@ using GlobalDataSrc3_t = std::conditional_t<
                                     Layout::MX_B_DN>>>;
 
 template <typename OutType, typename AType, typename BType, typename ScaleType, typename BiasType, int validM,
-          int validK, int validN, bool isBias, bool isFp4>
+          int K, int validN, bool isBias, bool isFp4>
 __global__ AICORE void RunTMATMULMX(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1, __gm__ ScaleType *src2,
                                     __gm__ ScaleType *src3, __gm__ BiasType *src4)
 {
     constexpr int blockAlign = isFp4 ? 64 : 32; // need to be 32B aligned
+    constexpr int validK = isFp4 ? K / 2 : K;
 
     constexpr int M = CeilAlign<int>(validM, 16);
     constexpr int kAlign = CeilAlign<int>(validK, 64);
@@ -189,16 +190,16 @@ __global__ AICORE void RunTMATMULMX(__gm__ OutType *out, __gm__ AType *src0, __g
 }
 
 template <typename OutType, typename AType, typename BType, typename ScaleType, typename BiasType, int validM,
-          int validK, int validN, bool isBias, bool isFp4>
+          int K, int validN, bool isBias, bool isFp4>
 __global__ AICORE void RunTMATMULMX_SPLIT_K(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1,
                                             __gm__ ScaleType *src2, __gm__ ScaleType *src3, __gm__ BiasType *src4)
 {
     constexpr int blockAlign = isFp4 ? 64 : 32; // need to be 32B aligned
-
+    constexpr int validK = isFp4 ? K / 2 : K;
     constexpr int M = CeilAlign<int>(validM, 16);
-    constexpr int K = CeilAlign<int>(validK, 64);
+    constexpr int KAlign = CeilAlign<int>(validK, 64);
     constexpr int N = CeilAlign<int>(validN, blockAlign);
-    constexpr int KMX = CeilDiv(K, 32);
+    constexpr int KMX = CeilDiv(KAlign, 32);
 
     constexpr int BASEK = 64;
     constexpr int BASEKMX = CeilDiv(BASEK, 32);
@@ -273,7 +274,7 @@ __global__ AICORE void RunTMATMULMX_SPLIT_K(__gm__ OutType *out, __gm__ AType *s
     TASSIGN(aScaleTile, scaleAAddr);
     TASSIGN(bScaleTile, scaleBAddr);
 
-    constexpr int iter = K / BASEK;
+    constexpr int iter = KAlign / BASEK;
     for (int i = 0; i < iter; i++) {
         const int offsetA = (!isFp4) ? (i * BASEK) : (i * BASEK / 2);
         const int offsetB = (!isFp4) ? (validN * i * BASEK) : (validN * i * BASEK / 2);
@@ -332,13 +333,13 @@ __global__ AICORE void RunTMATMULMX_SPLIT_K(__gm__ OutType *out, __gm__ AType *s
     out = dstGlobal.data();
 }
 
-template <int format, typename OutType, typename AType, typename BType, typename ScaleType, int validM, int validK,
+template <int format, typename OutType, typename AType, typename BType, typename ScaleType, int validM, int K,
           int validN, bool isFp4>
 __global__ AICORE void RunTGEMVMX(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1, __gm__ ScaleType *src2,
                                   __gm__ ScaleType *src3)
 {
     constexpr int blockAlign = isFp4 ? 64 : 32; // need to be 32B aligned
-
+    constexpr int validK = isFp4 ? K / 2 : K;
     constexpr int M = CeilAlign<int>(validM, 16);
     constexpr int kAlign = CeilAlign<int>(validK, 64);
     constexpr int N = CeilAlign<int>(validN, blockAlign);
@@ -444,12 +445,12 @@ __global__ AICORE void RunTGEMVMX(__gm__ OutType *out, __gm__ AType *src0, __gm_
 }
 
 template <typename OutType, typename AType, typename BType, typename ScaleType, typename BiasType, int validM,
-          int validK, int validN, bool isFp4>
+          int K, int validN, bool isFp4>
 __global__ AICORE void RunTGEMVMX_SPLIT_K(__gm__ OutType *out, __gm__ AType *src0, __gm__ BType *src1,
                                           __gm__ ScaleType *src2, __gm__ ScaleType *src3, __gm__ BiasType *src4)
 {
     constexpr int blockAlign = isFp4 ? 64 : 32; // need to be 32B aligned
-
+    constexpr int validK = isFp4 ? K / 2 : K;
     constexpr int M = CeilAlign<int>(validM, 16);
     constexpr int kAlign = CeilAlign<int>(validK, 64);
     constexpr int N = CeilAlign<int>(validN, blockAlign);
