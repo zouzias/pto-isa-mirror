@@ -47,7 +47,7 @@ PTO_INTERNAL void TPOPRELEASE_IMPL(PipeCons &cons)
 {
     bool isFree = cons.getFreeStatus();
     if (isFree) {
-        cons.free();
+        cons.template free<true>();
     }
 }
 

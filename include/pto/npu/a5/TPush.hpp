@@ -21,13 +21,14 @@ namespace pto {
 // Operation types for TSync - identifies the producer/consumer operation
 enum class TSyncOpType : uint8_t
 {
-    TSTORE_C2GM,  // Store (Cube core operation via PIPE_FIX) - GM path
-    TSTORE_V2GM,  // Store (Vector core operation via PIPE_MTE3) - GM path
-    TMOV_C2UB,    // TMOV from L0C to UB (Cube core operation via PIPE_FIX) - UB path
-    TINSERT_V2L1, // TINSERT from UB to L1 (Vector core operation via PIPE_MTE3) - UB path
-                  // TINSERT uses copy_ubuf_to_cbuf which goes through MTE3 pipe
-                  // Cube consumer waits on PIPE_MTE1 (L1 side receives via MTE1)
-    TLOAD,        // Load operation (consumer operation)
+    TSTORE_C2GM_UFON,  // Store (Cube core operation via PIPE_FIX) - GM path
+    TSTORE_C2GM_UFOFF, // Store (Cube core operation via PIPE_FIX) - GM path
+    TSTORE_V2GM,       // Store (Vector core operation via PIPE_MTE3) - GM path
+    TMOV_C2UB,         // TMOV from L0C to UB (Cube core operation via PIPE_FIX) - UB path
+    TINSERT_V2L1,      // TINSERT from UB to L1 (Vector core operation via PIPE_MTE3) - UB path
+                       // TINSERT uses copy_ubuf_to_cbuf which goes through MTE3 pipe
+                       // Cube consumer waits on PIPE_MTE1 (L1 side receives via MTE1)
+    TLOAD,             // Load operation (consumer operation)
     NONE
 };
 
@@ -44,7 +45,8 @@ enum class TSyncOpType : uint8_t
 template <TSyncOpType ProducerOp, TSyncOpType ConsumerOp>
 struct TSyncTraits {
     // GM path: Cube produces via TSTORE_C2GM (PIPE_FIX) - consumer waits on PIPE_MTE2
-    static constexpr bool is_cube_to_vec_gm = (ProducerOp == TSyncOpType::TSTORE_C2GM);
+    static constexpr bool is_cube_to_vec_gm =
+        (ProducerOp == TSyncOpType::TSTORE_C2GM_UFON || ProducerOp == TSyncOpType::TSTORE_C2GM_UFOFF);
     // UB path: Cube produces via TMOV_C2UB (PIPE_FIX) - consumer waits on PIPE_V
     static constexpr bool is_cube_to_vec_ub = (ProducerOp == TSyncOpType::TMOV_C2UB);
     // Unified Cube-to-Vec detection
@@ -57,8 +59,9 @@ struct TSyncTraits {
     // Unified Vec-to-Cube detection
     static constexpr bool is_vec_to_cube = is_vec_to_cube_gm || is_vec_to_cube_ub;
 
-    static_assert(is_cube_to_vec || is_vec_to_cube,
-                  "Producer must be TSTORE_C2GM, TMOV_C2UB (Cube) or TSTORE_V2GM, TINSERT_V2L1 (Vector)");
+    static_assert(
+        is_cube_to_vec || is_vec_to_cube,
+        "Producer must be TSTORE_C2GM_UFON, TSTORE_C2GM_UFOFF, TMOV_C2UB (Cube) or TSTORE_V2GM, TINSERT_V2L1 (Vector)");
 };
 
 /**
@@ -91,17 +94,13 @@ struct TPipe {
     // Producer Interface
     // -------------------------------------------------------------------------
     struct Producer {
-        int tile_id;
-        int sub_tile_id;
-        bool isAllocate;
-        bool isRecord;
-        int entryOffset;
+        int tile_id = -1;
+        int sub_tile_id = -1;
+        bool isAllocate = false;
+        bool isRecord = false;
+        int entryOffset = 0;
 
-        PTO_INTERNAL Producer()
-        {
-            tile_id = -1;
-            sub_tile_id = -1;
-        }
+        PTO_INTERNAL Producer() = default;
 
         PTO_INTERNAL void setTileId(int t_id, int sub_t_id)
         {
@@ -150,18 +149,31 @@ struct TPipe {
          * 1. (iter >= Depth): Startup protection. Don't check flags when buffer is empty.
          * 2. (iter % Period == 0): Sparse sync. Only check flag periodically.
          */
+        template <bool IsStart = false>
         PTO_INTERNAL void allocate()
         {
             if constexpr (is_c2v) {
                 // Cube producer waits for Vec consumer to free buffer
                 // Vec signals on flag_id+1 only, but Cube must wait on BOTH
                 // (because Vec0 signals flag_id+1, Vec1 signals flag_id+1+16 from Cube's view)
-                wait_intra_block(PIPE_FIX, FlagID + 1);
-                wait_intra_block(PIPE_FIX, FlagID + 1 + VEC_CORE_ID_OFFSET);
+                uint8_t waitVec0ID = FlagID + 1;
+                uint8_t waitVec1ID = FlagID + 1 + VEC_CORE_ID_OFFSET;
+                if constexpr (!IsStart) {
+                    wait_intra_block(PIPE_FIX, waitVec0ID);
+                    wait_intra_block(PIPE_FIX, waitVec1ID);
+                } else {
+                    wait_intra_block(PIPE_FIX, waitVec0ID + 1);
+                    wait_intra_block(PIPE_FIX, waitVec1ID + 1);
+                }
             } else { // is_v2c (both gm and ub)
                 // Vec producer waits for Cube consumer to free buffer
                 // Cube signals on BOTH, Vec waits on flag_id+1 only
-                wait_intra_block(PIPE_MTE3, FlagID + 1);
+                uint8_t waitCubeID = FlagID + 1;
+                if constexpr (!IsStart) {
+                    wait_intra_block(PIPE_MTE3, waitCubeID);
+                } else {
+                    wait_intra_block(PIPE_MTE3, waitCubeID + 1);
+                }
             }
         }
 
@@ -196,8 +208,12 @@ struct TPipe {
             using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ProdM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
             GlobalData globalTensor(fifo.fifoBase + entryBase + entryOffset);
             // TODO: store tile to GM FIFO, enable unit-flag one
-            // TSTORE_IMPL<TileDataProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
-            TSTORE_IMPL(globalTensor, tile);
+
+            if constexpr (ProducerOp == TSyncOpType::TSTORE_C2GM_UFON) {
+                TSTORE_IMPL<TileDataProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
+            } else { // disable unit flag
+                TSTORE_IMPL(globalTensor, tile);
+            }
         }
 
         template <typename T, int ProdM, int ProdN, int ConsM, int ConsN, int VEC_CORES>
@@ -351,18 +367,13 @@ struct TPipe {
     // Consumer Interface
     // -------------------------------------------------------------------------
     struct Consumer {
-        int tile_id;
-        int sub_tile_id;
-        bool isWait;
-        bool isFree;
-        int entryOffset;
+        int tile_id = -1;
+        int sub_tile_id = -1;
+        bool isWait = false;
+        bool isFree = false;
+        int entryOffset = 0;
 
-        PTO_INTERNAL Consumer()
-        {
-            tile_id = -1;
-            sub_tile_id = -1;
-            entryOffset = 0;
-        }
+        PTO_INTERNAL Consumer() = default;
 
         PTO_INTERNAL void setTileId(int tid, int sub_tid)
         {
@@ -436,19 +447,37 @@ struct TPipe {
          * is still enjoying the initial free buffer space.
          * 2. (is_sync_step): Accumulate free slots and signal in batches.
          */
+        template <bool IsRelease = false>
         PTO_INTERNAL void free()
         {
             if constexpr (is_c2v_gm) {
                 // Vec consumer frees buffer for Cube - signals on PIPE_MTE2, flag_id+1 only
-                set_intra_block(PIPE_MTE2, FlagID + 1);
+                uint8_t freeCubeID = FlagID + 1;
+                if constexpr (!IsRelease) {
+                    set_intra_block(PIPE_MTE2, freeCubeID);
+                } else {
+                    set_intra_block(PIPE_MTE2, freeCubeID + 1);
+                }
             } else if constexpr (is_c2v_ub) {
                 // Vec consumer frees buffer for Cube - signals on PIPE_V, flag_id+1 only
                 // Vec signals after vector ops complete (PIPE_V)
-                set_intra_block(PIPE_V, FlagID + 1);
+                uint8_t freeCubeID = FlagID + 1;
+                if constexpr (!IsRelease) {
+                    set_intra_block(PIPE_V, freeCubeID);
+                } else {
+                    set_intra_block(PIPE_V, freeCubeID + 1);
+                }
             } else { // is_v2c (both gm and ub)
                 // Cube consumer frees buffer for Vec - signals BOTH flags on PIPE_MTE1
-                set_intra_block(PIPE_MTE1, FlagID + 1);
-                set_intra_block(PIPE_MTE1, FlagID + 1 + VEC_CORE_ID_OFFSET);
+                uint8_t freeVec0ID = FlagID + 1;
+                uint8_t freeVec1ID = FlagID + 1 + VEC_CORE_ID_OFFSET;
+                if constexpr (!IsRelease) {
+                    set_intra_block(PIPE_MTE1, freeVec0ID);
+                    set_intra_block(PIPE_MTE1, freeVec1ID);
+                } else {
+                    set_intra_block(PIPE_MTE1, freeVec0ID + 1);
+                    set_intra_block(PIPE_MTE1, freeVec1ID + 1);
+                }
             }
         }
 
@@ -545,7 +574,7 @@ PTO_INTERNAL void TPUSHSTART_IMPL(PipeProd &prod)
 {
     bool isAllocate = prod.getAllocateStatus();
     if (isAllocate) {
-        prod.allocate();
+        prod.template allocate<true>();
     }
 }
 
