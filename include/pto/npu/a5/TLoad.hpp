@@ -52,11 +52,7 @@ PTO_INTERNAL void TLoadVecND2ND(__ubuf__ typename TileData::DType *dstAddr, type
     int64_t dstStride2 = gShape3 * TileData::Cols;
     int64_t dstStride1 = gShape2 * dstStride2;
     int64_t dstStride0 = gShape1 * dstStride1;
-    if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
-                  std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
-        dstStride0 = dstStride0 >> 1; // fp4 dstAddr offset need divide 2 as use b8 to move
-        gStride0 = gStride0 >> 1;     // fp4 srcAddr offset need divide 2 as use b8 to move
-    }
+
     uint64_t loop2 = gShape1;
     uint64_t loop1 = gShape2;
     uint64_t loop2_src_stride = GetByteSize<typename TileData::DType>(gStride1);
@@ -101,11 +97,6 @@ PTO_INTERNAL void TLoadVecDN2DN(__ubuf__ typename TileData::DType *dstAddr, type
     set_loop2_stride_outtoub(loop2_dst_stride << 40 | loop2_src_stride);
     set_loop1_stride_outtoub(loop1_dst_stride << 40 | loop1_src_stride);
     set_loop_size_outtoub(loop2 << 21 | loop1);
-    if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
-                  std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
-        dstStride0 = dstStride0 >> 1; // fp4 dstAddr offset need divide 2 as use b8 to move
-        gStride0 = gStride0 >> 1;     // fp4 srcAddr offset need divide 2 as use b8 to move
-    }
 
     for (uint32_t i = 0; i < gShape0; i++) {
         int64_t dstAddr0 = i * dstStride0;
@@ -130,11 +121,7 @@ PTO_INTERNAL void TLoadVecNZ2NZ(__ubuf__ typename TileData::DType *dstAddr, type
 
     int64_t tileStride = gShape1 * TileData::Rows * gShape4;
     set_loop_size_outtoub(1ULL << 21 | 1ULL);
-    if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
-                  std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
-        tileStride = tileStride >> 1; // fp4 dstAddr offset need divide 2 as use b8 to move
-        gStride0 = gStride0 >> 1;     // fp4 srcAddr offset need divide 2 as use b8 to move
-    }
+
     for (uint32_t i = 0; i < gShape0; i++) {
         srcAddrP = srcAddr + i * gStride0;
         dstAddrP = dstAddr + i * tileStride;
@@ -306,10 +293,6 @@ PTO_INTERNAL void TLoadCubeND2NZ(__cbuf__ typename TileData::DType *dst, typenam
 {
     uint16_t nValue = gShape3;
     uint32_t dValue = validCol;
-    if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
-                  std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
-        dValue = dValue >> 1; // move fp4 as b8, need to be divided by 2
-    }
 
     uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride3);
     if constexpr (GlobalData::layout == pto::Layout::DN) {
@@ -340,11 +323,7 @@ PTO_INTERNAL void TLoadCubeNZ2NZ(__cbuf__ typename TileData::DType *dst, typenam
     uint32_t dstStride = TileData::Rows * BLOCK_BYTE_SIZE;
 
     int64_t tileStride = gShape1 * TileData::Rows * gShape4;
-    if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
-                  std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
-        gStride0 = gStride0 >> 1;     // fp4 srcAddr offset need divide 2 as use b8 to move
-        tileStride = tileStride >> 1; // fp4 dstAddr offset need divide 2 as use b8 to move
-    }
+
     set_loop_size_outtol1(1ULL << 21 | 1ULL);
     for (uint32_t i = 0; i < gShape0; i++) {
         srcAddrP = src + i * gStride0;
@@ -388,11 +367,7 @@ PTO_INTERNAL void TLoadCubeND2ND(__cbuf__ typename TileData::DType *dst, typenam
     set_loop2_stride_outtol1(loop2DstStride << 40 | loop2SrcStride);
     set_loop1_stride_outtol1(loop1DstStride << 40 | loop1SrcStride);
     set_loop_size_outtol1(loop2 << 21 | loop1);
-    if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
-                  std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
-        dstStride0 = dstStride0 >> 1; // fp4 dstAddr offset need divide 2 as use b8 to move
-        gStride0 = gStride0 >> 1;     // fp4 srcAddr offset need divide 2 as use b8 to move
-    }
+
     for (uint32_t i = 0; i < gShape0; i++) {
         int64_t dstAddr0 = i * dstStride0;
         int64_t srcAddr0 = i * gStride0;
@@ -426,11 +401,7 @@ PTO_INTERNAL void TLoadCubeDN2DN(__cbuf__ typename TileData::DType *dst, typenam
     int64_t dstStride2 = gShape4 * TileData::Rows;
     int64_t dstStride1 = gShape2 * dstStride2;
     int64_t dstStride0 = gShape1 * dstStride1;
-    if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
-                  std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
-        dstStride0 = dstStride0 >> 1; // fp4 dstAddr offset need divide 2 as use b8 to move
-        gStride0 = gStride0 >> 1;     // fp4 srcAddr offset need divide 2 as use b8 to move
-    }
+
     uint64_t loop2 = gShape1;
     uint64_t loop1 = gShape2;
     uint64_t loop2SrcStride = GetByteSize<typename TileData::DType>(gStride1);
@@ -457,10 +428,6 @@ PTO_INTERNAL void TLoadCubeDN2ZN(__cbuf__ typename TileData::DType *dst, typenam
 {
     uint16_t nValue = gShape4;
     uint32_t dValue = validRow;
-    if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
-                  std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
-        dValue = dValue >> 1; // move fp4 as b8, need to be divided by 2
-    }
 
     uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride4);
 
