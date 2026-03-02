@@ -231,6 +231,9 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     static_assert(total_bytes <= MAX_VEC_UB_BYTES, "Vec tile UB allocation exceeds 192KB");
 
     uint32_t offset = 0;
+    TASSIGN(runningOTile, offset);
+    offset += out_tile_bytes;
+
     offset = assign_tile_buffers_union(srcTiles, pvTile, offset);
 
     TASSIGN(m1_local_max, offset);
@@ -256,9 +259,6 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
 
     uint32_t tail_offset = assign_tile_buffers(x_expT, offset);
 
-    TASSIGN(runningOTile, tail_offset);
-
-    tail_offset += static_cast<uint32_t>(out_tile_bytes);
     (void)tail_offset;
 }
 
@@ -475,8 +475,8 @@ AICORE inline void compute_pv(int tile_id, int sub_tile_id, __gm__ half *p_tile_
 #endif
 
             pv2guSync.record(); // notify update produce data
-        }                       // end loop
-    }                           // end if DAV_CUBE
+        } // end loop
+    } // end if DAV_CUBE
 }
 
 template <int S0, int HEAD_SIZE, int S1, int CUBE_S0, int CUBE_S1, int TILE_S1, int QKP_CV_FIFO,
@@ -1052,22 +1052,22 @@ void LaunchTFA(uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclF
 #define INSTANTIATE_TFA(S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, CAUSAL_MASK)                           \
     template void LaunchTFA<S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, false, CAUSAL_MASK, \
                             kFaCvFifoConsSyncPeriod>(                                                               \
-        uint16_t * ffts, aclFloat16 * q, aclFloat16 * k, aclFloat16 * v, aclFloat16 * p_out, float *p_out_fp32,     \
+        uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_out, float *p_out_fp32,          \
         float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out, float *qk_out, float *pv_out,  \
         uint8_t *profile_data, aclrtStream stream, uint8_t *cv_comm_buf);                                           \
     template void LaunchTFA<S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, false, CAUSAL_MASK, \
                             kFaCvFifoConsSyncPeriod>(                                                               \
-        uint16_t * ffts, aclFloat16 * q, aclFloat16 * k, aclFloat16 * v, aclFloat16 * p_out, float *p_out_fp32,     \
+        uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_out, float *p_out_fp32,          \
         float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out, float *qk_out, float *pv_out,  \
         aclrtStream stream, uint8_t *cv_comm_buf);                                                                  \
     template void LaunchTFA<S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, true, CAUSAL_MASK,  \
                             kFaCvFifoConsSyncPeriod>(                                                               \
-        uint16_t * ffts, aclFloat16 * q, aclFloat16 * k, aclFloat16 * v, aclFloat16 * p_out, float *p_out_fp32,     \
+        uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_out, float *p_out_fp32,          \
         float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out, float *qk_out, float *pv_out,  \
         uint8_t *profile_data, aclrtStream stream, uint8_t *cv_comm_buf);                                           \
     template void LaunchTFA<S0, HEAD, S1, CUBE_S0, CUBE_S1, TILE_S1, QK_PRELOAD, kFaCvFifoSize, true, CAUSAL_MASK,  \
                             kFaCvFifoConsSyncPeriod>(                                                               \
-        uint16_t * ffts, aclFloat16 * q, aclFloat16 * k, aclFloat16 * v, aclFloat16 * p_out, float *p_out_fp32,     \
+        uint16_t *ffts, aclFloat16 *q, aclFloat16 *k, aclFloat16 *v, aclFloat16 *p_out, float *p_out_fp32,          \
         float *global_sum_out, float *exp_max_out, float *o_out, float *o_parts_out, float *qk_out, float *pv_out,  \
         aclrtStream stream, uint8_t *cv_comm_buf);
 
