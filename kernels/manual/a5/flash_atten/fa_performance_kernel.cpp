@@ -13,17 +13,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "fa_performance_kernel.h"
 #include <pto/npu/kernels/Pto_prefetch.hpp>
-#if defined(__DAV_C220_CUBE__) || defined(__DAV_C220_VEC__)
-#include <pto/npu/a2a3/custom/TSyncCVID.hpp>
-#include <pto/npu/a2a3/custom/TSync_Custom.hpp>
-#define UF_ENABLE 0
-#elif defined(__DAV_C310_CUBE__) || defined(__DAV_C310_VEC__)
 #include <pto/npu/a5/custom/TSyncCVID.hpp>
 #include <pto/npu/a5/custom/TSync_Custom.hpp>
 #include <pto/npu/a5/TMov.hpp>
 #include <pto/npu/a5/custom/TInsertCustom.hpp>
 #define UF_ENABLE 0
-#endif
 #include "pto_macro_matmul.hpp"
 #include "pto_macro_fa_softmax.hpp"
 #include "pto_macro_fa_gu.hpp"
@@ -297,6 +291,9 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     // Allocate qkVecTile (srcTiles) first
     offset = assign_tile_buffers(srcTiles, offset);
     // Allocate pvVecTile separately (no union - avoids TLOAD overwriting QK data)
+    TASSIGN(runningOTile, offset);
+    offset += out_tile_bytes;
+
     offset = assign_tile_buffers(pvTile, offset);
 #else
     // Mode 1 disabled: Legacy path uses union allocation to save UB space (192KB design)
@@ -309,6 +306,9 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     static_assert(total_bytes <= MAX_VEC_UB_BYTES, "Vec tile UB allocation exceeds 256KB");
 
     uint32_t offset = 0;
+    TASSIGN(runningOTile, offset);
+    offset += out_tile_bytes;
+
     offset = assign_tile_buffers_union(srcTiles, pvTile, offset);
 #endif
 
@@ -332,9 +332,6 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
 
     uint32_t tail_offset = assign_tile_buffers(x_expT, offset);
 
-    TASSIGN(runningOTile, tail_offset);
-
-    tail_offset += static_cast<uint32_t>(out_tile_bytes);
     (void)tail_offset;
 }
 

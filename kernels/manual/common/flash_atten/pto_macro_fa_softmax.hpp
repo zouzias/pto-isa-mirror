@@ -66,20 +66,30 @@ AICORE inline void softmax_opt_fa_init_impl(TileDataD2 __out__ x_exp, TileDataS1
         if (s0_index / TileDataS1::Cols == s1_index / TileDataS1::Cols) {
             constexpr float negInf = -3.40282e+38;
             TTRI<TileDataS1, 1>(triu, 1 + (s0_index % TileDataS1::Cols));
+#if defined(__DAV_C220_VEC__)
             pipe_barrier(PIPE_V);
+#endif
             TMULS(triu, triu, negInf);
+#if defined(__DAV_C220_VEC__)
             pipe_barrier(PIPE_V);
+#endif
             TADD(input_x, input_x, triu);
+#if defined(__DAV_C220_VEC__)
             pipe_barrier(PIPE_V);
+#endif
         }
     }
     // FA2.0 init mode
     TROWMAX(new_global_max, input_x, tmp_float);
+#if defined(__DAV_C220_VEC__)
     pipe_barrier(PIPE_V);
+#endif
     TROWEXPANDSUB(p_tile_f32, input_x, new_global_max);
     TMULS(p_tile_f32, p_tile_f32, scale);
     TEXP(p_tile_f32, p_tile_f32);
+#if defined(__DAV_C220_VEC__)
     pipe_barrier(PIPE_V);
+#endif
     TROWSUM(new_global_sum, p_tile_f32, tmp_float);
 
     TRESHAPE(p_tile_f32_1d, p_tile_f32);
@@ -115,26 +125,40 @@ AICORE inline void softmax_opt_fa_not_init_impl(TileDataD2 __out__ x_exp, TileDa
         if (s0_index / TileDataS1::Cols == s1_index / TileDataS1::Cols) {
             constexpr float negInf = -3.40282e+38;
             TTRI<TileDataS1, 1>(triu, 1 + (s0_index % TileDataS1::Cols));
+#if defined(__DAV_C220_VEC__)
             pipe_barrier(PIPE_V);
+#endif
             TMULS(triu, triu, negInf);
+#if defined(__DAV_C220_VEC__)
             pipe_barrier(PIPE_V);
+#endif
             TADD(input_x, input_x, triu);
+#if defined(__DAV_C220_VEC__)
             pipe_barrier(PIPE_V);
+#endif
         }
     }
     // FA2.0 streaming mode (not first tile): update (global_max, global_sum) and rescale old sums.
     TROWMAX(local_max, input_x, tmp_float);
+#if defined(__DAV_C220_VEC__)
     pipe_barrier(PIPE_V);
+#endif
     TRESHAPE(tmp_shw_local_max, local_max);
     TRESHAPE(tmp_shw_new_global_max, new_global_max);
     TMAX(tmp_shw_local_max, tmp_shw_local_max, tmp_shw_new_global_max);
+#if defined(__DAV_C220_VEC__)
     pipe_barrier(PIPE_V);
+#endif
     TRESHAPE(tmp_shw_exp_max, exp_max);
     TSUB(tmp_shw_exp_max, tmp_shw_new_global_max, tmp_shw_local_max);
+#if defined(__DAV_C220_VEC__)
     pipe_barrier(PIPE_V);
+#endif
 
     TMULS(tmp_shw_new_global_max, tmp_shw_local_max, 1.0f); // just copy
+#if defined(__DAV_C220_VEC__)
     pipe_barrier(PIPE_V);
+#endif
     TROWEXPANDSUB(p_tile_f32, input_x, local_max);
     TMULS(tmp_shw_exp_max, tmp_shw_exp_max, scale);
     TMULS(p_tile_f32, p_tile_f32, scale);
@@ -146,12 +170,16 @@ AICORE inline void softmax_opt_fa_not_init_impl(TileDataD2 __out__ x_exp, TileDa
     TRESHAPE(p_tile_f32_1d, p_tile_f32);
     TRESHAPE(x_exp_1d, x_exp);
     TCVT(x_exp_1d, p_tile_f32_1d, RoundMode::CAST_ROUND);
+#if defined(__DAV_C220_VEC__)
     pipe_barrier(PIPE_V);
+#endif
     TRESHAPE(tmp_shw_new_global_sum, new_global_sum);
     TMUL(tmp_shw_new_global_sum, tmp_shw_exp_max, tmp_shw_new_global_sum);
     TROWSUM(local_sum, p_tile_f32, tmp_float);
     TRESHAPE(tmp_shw_local_sum, local_sum);
+#if defined(__DAV_C220_VEC__)
     pipe_barrier(PIPE_V);
+#endif
     TADD(tmp_shw_new_global_sum, tmp_shw_new_global_sum, tmp_shw_local_sum);
 }
 
@@ -176,9 +204,13 @@ AICORE inline void pto_macro_fa_softmax(TileDataD2 __out__ x_exp, TileDataS1 __i
     } else if constexpr (CAUSAL_MASK) {
         TMULS(x_exp, x_exp, 0.0);
         TMULS(exp_max, exp_max, 0.0);
+#if defined(__DAV_C220_VEC__)
         pipe_barrier(PIPE_V);
+#endif
         TADDS(exp_max, exp_max, 1.0);
+#if defined(__DAV_C220_VEC__)
         pipe_barrier(PIPE_V);
+#endif
     }
 }
 
