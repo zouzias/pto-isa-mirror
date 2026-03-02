@@ -60,11 +60,19 @@ function(pto_comm_st NAME)
         ${PTO_TOOLKIT_DIR}/asc/include/utils
         ${PTO_ASCENDC_KERNEL_INCLUDE}
     )
+
+    # Auto-detect hccl library name (hccl_v2 in CANN 9.0+, hccl in older)
+    if(EXISTS "${PTO_TOOLKIT_DIR}/lib64/libhccl_v2.so")
+        set(PTO_HCCL_LIB "hccl_v2")
+    else()
+        set(PTO_HCCL_LIB "hccl")
+    endif()
+
     target_link_directories(${NAME}_kernel PRIVATE
         ${ASCEND_HOME_PATH}/lib64
     )
     target_link_libraries(${NAME}_kernel PRIVATE
-        hcomm runtime
+        ${PTO_HCCL_LIB} hcomm runtime
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
@@ -77,6 +85,7 @@ function(pto_comm_st NAME)
     )
 
     target_link_directories(${NAME} PUBLIC
+        ${PTO_TOOLKIT_DIR}/lib64
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
@@ -86,7 +95,7 @@ function(pto_comm_st NAME)
         ${NAME}_kernel
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
-        stdc++ ascendcl hcomm m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
+        stdc++ ascendcl ${PTO_HCCL_LIB} hcomm m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
     )
 endfunction()
 
@@ -97,6 +106,9 @@ set(ALL_TESTCASES
 # Point-to-Point Communication (Synchronous)
 tput
 tget
+# Point-to-Point Communication (Asynchronous)
+tput_async
+tget_async
 # Signal-Based Synchronization
 tnotify
 twait
