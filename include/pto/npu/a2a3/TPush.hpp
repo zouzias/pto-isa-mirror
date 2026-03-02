@@ -73,17 +73,13 @@ struct TPipe {
     // Producer Interface
     // -------------------------------------------------------------------------
     struct Producer {
-        int tile_id;
-        int sub_tile_id;
-        bool isAllocate;
-        bool isRecord;
-        int entryOffset;
+        int tile_id = -1;
+        int sub_tile_id = -1;
+        bool isAllocate = false;
+        bool isRecord = false;
+        int entryOffset = 0;
 
-        PTO_INTERNAL Producer()
-        {
-            tile_id = -1;
-            sub_tile_id = -1;
-        }
+        PTO_INTERNAL Producer() = default;
 
         PTO_INTERNAL void setTileId(int t_id, int sub_t_id)
         {
@@ -215,23 +211,19 @@ struct TPipe {
                 pushVec2GMFiFo<T, ProdM, ProdN, ConsM, ConsN>(fifo, tile);
             }
         } // end of store
-    };    // end of Producer
+    }; // end of Producer
 
     // -------------------------------------------------------------------------
     // Consumer Interface
     // -------------------------------------------------------------------------
     struct Consumer {
-        int tile_id;
-        int sub_tile_id;
-        bool isWait;
-        bool isFree;
-        int entryOffset;
+        int tile_id = -1;
+        int sub_tile_id = -1;
+        bool isWait = false;
+        bool isFree = false;
+        int entryOffset = 0;
 
-        PTO_INTERNAL Consumer()
-        {
-            tile_id = -1;
-            sub_tile_id = -1;
-        }
+        PTO_INTERNAL Consumer() = default;
 
         PTO_INTERNAL void setTileId(int tid, int sub_tid)
         {
