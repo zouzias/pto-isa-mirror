@@ -259,8 +259,14 @@ template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename Til
 PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
                                   TileRightScale &bScaleMatrix)
 {
+    constexpr bool isFp4Type = std::is_same<typename SrcTileData::DType, float4_e2m1x2_t>::value ||
+                               std::is_same<typename SrcTileData::DType, float4_e1m2x2_t>::value;
     uint16_t m = aMatrix.GetValidRow();
-    uint16_t k = aMatrix.GetValidCol();
+    if constexpr (isFp4Type) {
+        uint16_t k = aMatrix.GetValidCol() * 2;
+    } else {
+        uint16_t k = aMatrix.GetValidCol();
+    }
     uint16_t n = bMatrix.GetValidCol();
     CheckDynamicMmad(m, k, n);
 
@@ -275,8 +281,14 @@ template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename Til
 PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix,
                                   TileLeftScale &aScaleMatrix, TileRight &bMatrix, TileRightScale &bScaleMatrix)
 {
+    constexpr bool isFp4Type = std::is_same<typename SrcTileData::DType, float4_e2m1x2_t>::value ||
+                               std::is_same<typename SrcTileData::DType, float4_e1m2x2_t>::value;
     uint16_t m = aMatrix.GetValidRow();
-    uint16_t k = aMatrix.GetValidCol();
+    if constexpr (isFp4Type) {
+        uint16_t k = aMatrix.GetValidCol() * 2;
+    } else {
+        uint16_t k = aMatrix.GetValidCol();
+    }
     uint16_t n = bMatrix.GetValidCol();
     CheckDynamicMmad(m, k, n);
 
@@ -295,8 +307,14 @@ PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftS
     static_assert(std::is_same_v<typename TileBias::DType, float>, "TMatmulMX:No supported bias data type.");
     static_assert((TileBias::Loc == TileType::Bias) && (TileBias::Rows == 1), "TMatmulMX:TileBias must be single row.");
 
+    constexpr bool isFp4Type = std::is_same<typename SrcTileData::DType, float4_e2m1x2_t>::value ||
+                               std::is_same<typename SrcTileData::DType, float4_e1m2x2_t>::value;
     uint16_t m = aMatrix.GetValidRow();
-    uint16_t k = aMatrix.GetValidCol();
+    if constexpr (isFp4Type) {
+        uint16_t k = aMatrix.GetValidCol() * 2;
+    } else {
+        uint16_t k = aMatrix.GetValidCol();
+    }
     uint16_t n = bMatrix.GetValidCol();
     CheckDynamicMmad(m, k, n);
 
@@ -310,7 +328,13 @@ PTO_INTERNAL void TGEMV_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
                                 TileRightScale &bScaleMatrix)
 {
     CheckMadMxValid<TileRes, TileLeft, TileLeftScale, TileRight, TileRightScale>();
-    uint16_t k = aMatrix.GetValidCol();
+    constexpr bool isFp4Type = std::is_same<typename SrcTileData::DType, float4_e2m1x2_t>::value ||
+                               std::is_same<typename SrcTileData::DType, float4_e1m2x2_t>::value;
+    if constexpr (isFp4Type) {
+        uint16_t k = aMatrix.GetValidCol() * 2;
+    } else {
+        uint16_t k = aMatrix.GetValidCol();
+    }
     uint16_t n = bMatrix.GetValidCol();
     PTO_ASSERT(k >= 1 && k <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid aMatrixCol is [1, 4095].");
     PTO_ASSERT(n >= 1 && n <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid bMatrixCol is [1, 4095].");
@@ -325,7 +349,13 @@ PTO_INTERNAL void TGEMV_MX_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLef
                                 TileRight &bMatrix, TileRightScale &bScaleMatrix)
 {
     CheckMadMxValid<TileRes, TileLeft, TileLeftScale, TileRight, TileRightScale>();
-    uint16_t k = aMatrix.GetValidCol();
+    constexpr bool isFp4Type = std::is_same<typename SrcTileData::DType, float4_e2m1x2_t>::value ||
+                               std::is_same<typename SrcTileData::DType, float4_e1m2x2_t>::value;
+    if constexpr (isFp4Type) {
+        uint16_t k = aMatrix.GetValidCol() * 2;
+    } else {
+        uint16_t k = aMatrix.GetValidCol();
+    }
     uint16_t n = bMatrix.GetValidCol();
     PTO_ASSERT(k >= 1 && k <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid aMatrixCol is [1, 4095].");
     PTO_ASSERT(n >= 1 && n <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid bMatrixCol is [1, 4095].");
@@ -343,7 +373,13 @@ PTO_INTERNAL void TGEMV_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
     static_assert(std::is_same_v<typename TileBias::DType, float>, "TMatmulMX:No supported bias data type.");
     static_assert((TileBias::Loc == TileType::Bias) && (TileBias::Rows == 1), "TMatmulMX:TileBias must be single row.");
 
-    uint16_t k = aMatrix.GetValidCol();
+    constexpr bool isFp4Type = std::is_same<typename SrcTileData::DType, float4_e2m1x2_t>::value ||
+                               std::is_same<typename SrcTileData::DType, float4_e1m2x2_t>::value;
+    if constexpr (isFp4Type) {
+        uint16_t k = aMatrix.GetValidCol() * 2;
+    } else {
+        uint16_t k = aMatrix.GetValidCol();
+    }
     uint16_t n = bMatrix.GetValidCol();
     PTO_ASSERT(k >= 1 && k <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid aMatrixCol is [1, 4095].");
     PTO_ASSERT(n >= 1 && n <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid bMatrixCol is [1, 4095].");
