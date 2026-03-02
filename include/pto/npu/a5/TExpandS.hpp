@@ -34,20 +34,20 @@ __tf__ PTO_INTERNAL void TExpandS(typename TileDataDst::TileDType __out__ dst, t
 {
     using T = typename TileDataDst::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    BinaryInstr<ExpandSOp<T>, TileDataDst, TileDataDst, T, elementsPerRepeat, blockSizeElem, rowStride, rowStride>(
-        dstPtr, nullptr, scalar, kValidRows, kValidCols, version);
+    BinaryInstr<ExpandSOp<T>, TileDataDst, TileDataDst, T, elementsPerRepeat, blockSizeElem, rowStride, rowStride,
+                true>(dstPtr, nullptr, scalar, kValidRows, kValidCols, version);
 }
 
 template <typename TileDataDst>
 PTO_INTERNAL void TEXPANDS_IMPL(TileDataDst &dst, typename TileDataDst::DType scalar)
 {
     using T = typename TileDataDst::DType;
-    static_assert(std::is_same<T, int32_t>::value || std::is_same<T, uint32_t>::value || std::is_same<T, int>::value ||
-                      std::is_same<T, int16_t>::value || std::is_same<T, uint16_t>::value ||
-                      std::is_same<T, int8_t>::value || std::is_same<T, uint8_t>::value ||
-                      std::is_same<T, half>::value || std::is_same<T, float16_t>::value ||
-                      std::is_same<T, float>::value || std::is_same<T, float32_t>::value,
-                  "TEXPANDS: Invalid data type");
+    static_assert(
+        std::is_same<T, int32_t>::value || std::is_same<T, uint32_t>::value || std::is_same<T, int>::value ||
+            std::is_same<T, int16_t>::value || std::is_same<T, uint16_t>::value || std::is_same<T, int8_t>::value ||
+            std::is_same<T, uint8_t>::value || std::is_same<T, half>::value || std::is_same<T, float16_t>::value ||
+            std::is_same<T, float>::value || std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value,
+        "TEXPANDS: Invalid data type");
     static_assert(TileDataDst::Loc == TileType::Vec, "Location of src and dst tiles must be Location::Vec.");
     static_assert(TileDataDst::ValidCol <= TileDataDst::Cols,
                   "Number of valid columns must not be greater than number of tile columns.");
