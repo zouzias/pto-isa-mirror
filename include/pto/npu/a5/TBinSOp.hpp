@@ -17,13 +17,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
-template <typename Op, typename TileData, typename ScalarType, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned rowStride>
+template <typename Op, typename TileData, typename T, typename ScalarType, unsigned elementsPerRepeat,
+          unsigned blockSizeElem, unsigned rowStride>
 PTO_INTERNAL void TBinSOps_1D_NoPostUpdate(__ubuf__ typename TileData::DType *dstPtr,
                                            __ubuf__ typename TileData::DType *src0Ptr, ScalarType src1,
                                            unsigned kValidRows, unsigned kValidCols)
 {
-    using T = typename TileData::DType;
     uint16_t repeatTimes = CeilDivision(kValidRows * kValidCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
@@ -43,13 +42,12 @@ PTO_INTERNAL void TBinSOps_1D_NoPostUpdate(__ubuf__ typename TileData::DType *ds
     }
 }
 
-template <typename Op, typename TileData, typename ScalarType, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned rowStride>
+template <typename Op, typename TileData, typename T, typename ScalarType, unsigned elementsPerRepeat,
+          unsigned blockSizeElem, unsigned rowStride>
 PTO_INTERNAL void TBinSOps_1D_PostUpdate(__ubuf__ typename TileData::DType *dstPtr,
                                          __ubuf__ typename TileData::DType *src0Ptr, ScalarType src1,
                                          unsigned kValidRows, unsigned kValidCols)
 {
-    using T = typename TileData::DType;
     uint16_t repeatTimes_pu = CeilDivision(kValidRows * kValidCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
@@ -70,13 +68,12 @@ PTO_INTERNAL void TBinSOps_1D_PostUpdate(__ubuf__ typename TileData::DType *dstP
     }
 }
 
-template <typename Op, typename TileDataDst, typename TileDataSrc, typename ScalarType, unsigned elementsPerRepeat,
-          unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+template <typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
+          unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
 PTO_INTERNAL void TBinSOps_2D_NoPostUpdate(__ubuf__ typename TileDataDst::DType *dstPtr,
                                            __ubuf__ typename TileDataSrc::DType *src0Ptr, ScalarType src1,
                                            unsigned kValidRows, unsigned kValidCols)
 {
-    using T = typename TileDataDst::DType;
     uint16_t repeatTimes = CeilDivision(kValidCols, elementsPerRepeat);
 
     __VEC_SCOPE__
@@ -98,13 +95,12 @@ PTO_INTERNAL void TBinSOps_2D_NoPostUpdate(__ubuf__ typename TileDataDst::DType 
     }
 }
 
-template <typename Op, typename TileDataDst, typename TileDataSrc, typename ScalarType, unsigned elementsPerRepeat,
-          unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+template <typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
+          unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
 PTO_INTERNAL void TBinSOps_2D_PostUpdate(__ubuf__ typename TileDataDst::DType *dstPtr,
                                          __ubuf__ typename TileDataSrc::DType *src0Ptr, ScalarType src1,
                                          unsigned kValidRows, unsigned kValidCols)
 {
-    using T = typename TileDataDst::DType;
     uint16_t repeatTimes_pu = CeilDivision(kValidCols, elementsPerRepeat);
 
     __VEC_SCOPE__
@@ -127,59 +123,60 @@ PTO_INTERNAL void TBinSOps_2D_PostUpdate(__ubuf__ typename TileDataDst::DType *d
     }
 }
 
-template <typename Op, typename TileDataDst, typename TileDataSrc, typename ScalarType, unsigned elementsPerRepeat,
-          unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+template <typename Op, typename TileDataDst, typename TileDataSrc, typename T, typename ScalarType,
+          unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
 PTO_INTERNAL void TBinSOps_1D_selector(__ubuf__ typename TileDataDst::DType *dstPtr,
                                        __ubuf__ typename TileDataSrc::DType *src0Ptr, ScalarType src1,
                                        unsigned kValidRows, unsigned kValidCols, VFImplKind version)
 {
     switch (version) {
         case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
-            TBinSOps_1D_NoPostUpdate<Op, TileDataDst, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride>(
+            TBinSOps_1D_NoPostUpdate<Op, TileDataDst, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride>(
                 dstPtr, src0Ptr, src1, kValidRows, kValidCols);
             break;
 
         case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
-            TBinSOps_2D_NoPostUpdate<Op, TileDataDst, TileDataSrc, ScalarType, elementsPerRepeat, blockSizeElem,
+            TBinSOps_2D_NoPostUpdate<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
                                      dstRowStride, srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
             break;
         case VFImplKind::VFIMPL_2D_POST_UPDATE:
-            TBinSOps_2D_PostUpdate<Op, TileDataDst, TileDataSrc, ScalarType, elementsPerRepeat, blockSizeElem,
+            TBinSOps_2D_PostUpdate<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
                                    dstRowStride, srcRowStride>(dstPtr, src0Ptr, src1, kValidRows, kValidCols);
             break;
         case VFImplKind::VFIMPL_1D_POST_UPDATE:
         case VFImplKind::VFIMPL_DEFAULT:
         default:
-            TBinSOps_1D_PostUpdate<Op, TileDataDst, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride>(
+            TBinSOps_1D_PostUpdate<Op, TileDataDst, T, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride>(
                 dstPtr, src0Ptr, src1, kValidRows, kValidCols);
             break;
     }
 }
 
 template <typename Op, typename TileDataDst, typename TileDataSrc, typename ScalarType, unsigned elementsPerRepeat,
-          unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
+          unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride, bool convertBF16ToHalf = false>
 PTO_INTERNAL void BinaryInstr(__ubuf__ typename TileDataDst::DType *dst, __ubuf__ typename TileDataSrc::DType *src0,
                               ScalarType src1, unsigned kValidRows, unsigned kValidCols, VFImplKind version)
 {
-    using T = typename TileDataDst::DType;
+    using T = std::conditional_t<(std::is_same_v<typename TileDataDst::DType, bfloat16_t> && convertBF16ToHalf), half,
+                                 typename TileDataDst::DType>;
     if constexpr ((TileDataDst::ValidCol == TileDataDst::Cols) && (TileDataSrc::ValidCol == TileDataSrc::Cols)) {
-        TBinSOps_1D_selector<Op, TileDataDst, TileDataSrc, ScalarType, elementsPerRepeat, blockSizeElem, dstRowStride,
-                             srcRowStride>(dst, src0, src1, kValidRows, kValidCols, version);
+        TBinSOps_1D_selector<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
+                             dstRowStride, srcRowStride>(dst, src0, src1, kValidRows, kValidCols, version);
     } else {
         switch (version) {
             case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
             case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
-                TBinSOps_2D_NoPostUpdate<Op, TileDataDst, TileDataSrc, ScalarType, elementsPerRepeat, blockSizeElem,
+                TBinSOps_2D_NoPostUpdate<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
                                          dstRowStride, srcRowStride>(dst, src0, src1, kValidRows, kValidCols);
                 break;
             case VFImplKind::VFIMPL_1D_POST_UPDATE:
             case VFImplKind::VFIMPL_2D_POST_UPDATE:
-                TBinSOps_2D_PostUpdate<Op, TileDataDst, TileDataSrc, ScalarType, elementsPerRepeat, blockSizeElem,
+                TBinSOps_2D_PostUpdate<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
                                        dstRowStride, srcRowStride>(dst, src0, src1, kValidRows, kValidCols);
                 break;
             case VFImplKind::VFIMPL_DEFAULT:
             default:
-                TBinSOps_2D_PostUpdate<Op, TileDataDst, TileDataSrc, ScalarType, elementsPerRepeat, blockSizeElem,
+                TBinSOps_2D_PostUpdate<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
                                        dstRowStride, srcRowStride>(dst, src0, src1, kValidRows, kValidCols);
                 break;
         }
