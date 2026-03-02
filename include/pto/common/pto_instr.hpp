@@ -1560,7 +1560,27 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dst, GlobalSrcData &src, WaitEvent
 
 template <pto::comm::DmaEngine engine = pto::comm::DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData,
           typename... WaitEvents>
+PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dst, GlobalSrcData &src, const pto::comm::AsyncSession &,
+                               WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(pto::comm::TGET_ASYNC, dst, src);
+    return {};
+}
+
+template <pto::comm::DmaEngine engine = pto::comm::DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData,
+          typename... WaitEvents>
 PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dst, GlobalSrcData &src, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(pto::comm::TPUT_ASYNC, dst, src);
+    return {};
+}
+
+template <pto::comm::DmaEngine engine = pto::comm::DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData,
+          typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dst, GlobalSrcData &src, const pto::comm::AsyncSession &,
+                               WaitEvents &... events)
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(pto::comm::TPUT_ASYNC, dst, src);

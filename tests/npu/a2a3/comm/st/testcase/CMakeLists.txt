@@ -10,7 +10,22 @@
 
 function(pto_comm_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
-    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-vec -DMEMORY_BASE -std=c++17
+
+    # Determine aicore arch and memory model from SOC_VERSION.
+    if(NOT DEFINED CCE_AICORE_ARCH)
+        if(SOC_VERSION STREQUAL "Ascend910_9599")
+            set(CCE_AICORE_ARCH "dav-c310-vec")
+            set(CCE_MEMORY_MODEL "REGISTER_BASE")
+        else()
+            set(CCE_AICORE_ARCH "dav-c220-vec")
+            set(CCE_MEMORY_MODEL "MEMORY_BASE")
+        endif()
+    endif()
+    if(NOT DEFINED CCE_MEMORY_MODEL)
+        set(CCE_MEMORY_MODEL "MEMORY_BASE")
+    endif()
+
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${CCE_AICORE_ARCH} -D${CCE_MEMORY_MODEL} -std=c++17
         -Wno-non-c-typedef-for-linkage -Wno-braced-scalar-init)
 
     # Host-arch aware include root: x86_64 first, fallback to aarch64.
@@ -41,11 +56,19 @@ function(pto_comm_st NAME)
         ${PTO_TOOLKIT_DIR}/asc/include/utils
         ${PTO_ASCENDC_KERNEL_INCLUDE}
     )
+
+    # Auto-detect hccl library name (hccl_v2 in CANN 9.0+, hccl in older)
+    if(EXISTS "${PTO_TOOLKIT_DIR}/lib64/libhccl_v2.so")
+        set(PTO_HCCL_LIB "hccl_v2")
+    else()
+        set(PTO_HCCL_LIB "hccl")
+    endif()
+
     target_link_directories(${NAME}_kernel PRIVATE
         ${ASCEND_HOME_PATH}/lib64
     )
     target_link_libraries(${NAME}_kernel PRIVATE
-        hccl hcomm runtime
+        ${PTO_HCCL_LIB} hcomm runtime
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
@@ -58,6 +81,7 @@ function(pto_comm_st NAME)
     )
 
     target_link_directories(${NAME} PUBLIC
+        ${PTO_TOOLKIT_DIR}/lib64
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
@@ -67,7 +91,7 @@ function(pto_comm_st NAME)
         ${NAME}_kernel
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
         $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
-        stdc++ ascendcl hccl hcomm m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
+        stdc++ ascendcl ${PTO_HCCL_LIB} hcomm m tiling_api platform c_sec dl nnopbase GTest::gtest GTest::gtest_main pthread
     )
 endfunction()
 
@@ -78,6 +102,9 @@ set(ALL_TESTCASES
 # Point-to-Point Communication (Synchronous)
 tput
 tget
+# Point-to-Point Communication (Asynchronous)
+tput_async
+tget_async
 # Signal-Based Synchronization
 tnotify
 twait

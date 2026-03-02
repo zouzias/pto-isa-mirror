@@ -14,13 +14,18 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <limits>
+#include <numeric>
 #include <vector>
 
+#include <dlfcn.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+#if __has_include("hccl/hccl.h")
 #include "hccl/hccl.h"
+#endif
 #include "hccl/hccl_types.h"
 #include "hccl_context.h"
 
@@ -36,6 +41,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 extern "C" HcclResult HcclAllocComResourceByTiling(HcclComm comm, void *stream, void *mc2Tiling, void **commContext);
 extern "C" HcclResult HcomGetCommHandleByGroup(const char *group, HcclComm *commHandle);
 #endif
+
+// aclnn tensor API (from aclnn/acl_meta.h, linked via libnnopbase).
+// Forward-declared here to avoid pulling in aclnn headers that may
+// conflict with the bisheng -xcce compilation mode.
+struct aclTensor;
+struct aclOpExecutor;
+extern "C" aclTensor *aclCreateTensor(const int64_t *viewDims, uint64_t viewDimsNum, aclDataType dataType,
+                                      const int64_t *stride, int64_t offset, aclFormat format,
+                                      const int64_t *storageDims, uint64_t storageDimsNum, void *tensorData);
+extern "C" int32_t aclDestroyTensor(const aclTensor *tensor);
 
 // Mc2 tiling structures passed to HcclAllocComResourceByTiling.
 // Binary layout must match the HCCL internal expectation.
@@ -280,3 +295,7 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     munmap(shared, sizeof(SharedBootstrap));
     return success;
 }
+
+// SdmaWorkspaceManager moved to pto/comm/async/sdma/sdma_workspace_manager.hpp
+#include "pto/comm/async/sdma/sdma_workspace_manager.hpp"
+using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;
