@@ -60,6 +60,14 @@ if(DEBUG_MODE)
     set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-enable-print")
 endif()
 
+if(${SOC_VERSION} STREQUAL "Ascend910B1")
+    set(CCE_AICORE_ARCH "dav-c220")
+elseif(${SOC_VERSION} STREQUAL "Ascend910_9599")
+    set(CCE_AICORE_ARCH "dav-c310")
+else()
+    message(FATAL_ERROR "Unsupported SOC_VERSION: ${SOC_VERSION}")
+endif()
+
 set(CMAKE_CPP_COMPILE_OPTIONS
     -xc++
     "SHELL:-include stdint.h"
@@ -77,7 +85,7 @@ include_directories(
 
 function(pto_example_mixed NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
-    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220 -std=c++17)
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${CCE_AICORE_ARCH} -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE
         ${PROJECT_BINARY_DIR}
     )

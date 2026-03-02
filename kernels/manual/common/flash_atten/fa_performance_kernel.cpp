@@ -231,6 +231,9 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
     static_assert(total_bytes <= MAX_VEC_UB_BYTES, "Vec tile UB allocation exceeds 192KB");
 
     uint32_t offset = 0;
+    TASSIGN(runningOTile, offset);
+    offset += out_tile_bytes;
+
     offset = assign_tile_buffers_union(srcTiles, pvTile, offset);
 
     TASSIGN(m1_local_max, offset);
@@ -256,9 +259,6 @@ AICORE inline void allocate_vec_tile_buffers(TileDataF_T (&srcTiles)[SrcBuffers]
 
     uint32_t tail_offset = assign_tile_buffers(x_expT, offset);
 
-    TASSIGN(runningOTile, tail_offset);
-
-    tail_offset += static_cast<uint32_t>(out_tile_bytes);
     (void)tail_offset;
 }
 
