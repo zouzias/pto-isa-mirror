@@ -20,6 +20,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 namespace pto {
+#ifdef __PTO_AUTO__
+    // Not really a standand way to call tile function, but... this is a temp 
+    // hack for auto mode to allocate memory for tiles without a TLOAD,
+    // should be removed after we fix the compiler design
+    template <typename TileData>
+    __tf__ PTO_INTERNAL void TInit(typename TileData::TileDType __out__ tile) {
+        return;
+    }
+#endif
 
 constexpr int DYNAMIC = -1;
 
@@ -945,7 +954,11 @@ struct ConvTileShape {
     }
 
 public:
+#ifdef __PTO_AUTO__
+    int64_t shape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)];
+#else
     int64_t shape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)] = {1};
+#endif
 };
 
 template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
@@ -975,7 +988,13 @@ public:
         if (dim < 0 || dim >= totalDimCount) {
             return -1;
         }
+
+#ifdef __PTO_AUTO__
+        // auto mode only supports static shapes
+        return staticShape[dim];
+#else
         return isDynamicDim[dim] ? shape[dim] : staticShape[dim];
+#endif
     }
 
     PTO_INTERNAL ConvTile() = default;
@@ -1265,7 +1284,13 @@ public:
         return *(ptr + offset);
     }
     // constructor for static shape
-    AICORE Tile(){};
+    AICORE Tile() {
+#ifdef __PTO_AUTO__
+        if constexpr (Loc != TileType::Bias) {
+            TInit<std::remove_reference_t<decltype(*this)>>(data_);
+        }
+#endif
+    };
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
@@ -1325,7 +1350,13 @@ public:
     using TileDType = Tile::DType[Rows * Cols];
 #else
 #ifdef __PTO_AUTO__
-    using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows *Cols);
+#if defined(PTO_NPU_ARCH_A2A3)
+    using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols);
+#else
+    using TileDType = std::conditional_t<Loc == TileType::Bias,
+        typename MemoryQualifier<Loc, DType>::type, // special handling for Bias Tile
+        typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols)>;
+#endif
 #else
     using TileDType = typename MemoryQualifier<Loc, DType>::type;
 #endif
