@@ -80,11 +80,9 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     // ---- Single rank: copy src to dst[0] ----
     if (nranks == 1) {
         TLOAD(stagingTileData, srcGlobalData);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
         TSTORE(parallelGroup[rootIdx], stagingTileData);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         return;
     }
 
@@ -92,14 +90,12 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
         // Root loads data to UB once
         TLOAD(stagingTileData, srcGlobalData);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
 
         // Broadcast to all ranks
         for (int r = 0; r < nranks; ++r) {
             TSTORE(parallelGroup[r], stagingTileData);
-            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         }
         return;
     }
@@ -181,8 +177,7 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
                         // TLOAD source chunk into UB
                         SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
                         TLOAD(stagingTileData, srcView);
-                        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-                        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                        PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
 
                         // TSTORE to all ranks
                         // MTE3 guarantees in-order execution, so no inter-TSTORE sync needed.
@@ -192,8 +187,7 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
                         }
 
                         // Sync before next chunk's TLOAD
-                        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
                     }
                 }
             }
@@ -256,24 +250,20 @@ PTO_INTERNAL void TBROADCAST_IMPL(ParallelGroupType &parallelGroup, GlobalSrcDat
     // ---- Single rank: copy src to dst[0] ----
     if (nranks == 1) {
         TLOAD(pingTile, srcGlobalData);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
         TSTORE(parallelGroup[rootIdx], pingTile);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         return;
     }
 
     // ---- Simple path: single chunk, no ping-pong benefit ----
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
         TLOAD(pingTile, srcGlobalData);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
 
         for (int r = 0; r < nranks; ++r) {
             TSTORE(parallelGroup[r], pingTile);
-            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         }
         return;
     }

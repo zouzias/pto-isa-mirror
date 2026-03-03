@@ -73,11 +73,9 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     // ---- Simple path: data fits in UB tile in both dimensions ----
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
         TLOAD(stagingTileData, srcGlobalData);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
         TSTORE<TileData, GlobalDstData, atomicType>(dstGlobalData, stagingTileData);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         return;
     }
 
@@ -168,11 +166,9 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
 
                         // Transfer: local GM → UB → remote GM
                         TLOAD(stagingTileData, srcView);
-                        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-                        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                        PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
                         TSTORE<TileData, DstViewT, atomicType>(dstView, stagingTileData);
-                        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
                     }
                 }
             }
@@ -230,11 +226,9 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     // ---- Simple path: single chunk, no ping-pong benefit ----
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
         TLOAD(pingTile, srcGlobalData);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
         TSTORE<TileData, GlobalDstData, atomicType>(dstGlobalData, pingTile);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         return;
     }
 
