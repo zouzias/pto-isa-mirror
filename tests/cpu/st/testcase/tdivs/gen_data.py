@@ -22,8 +22,8 @@ def gen_golden_data(param):
     rows = param.row
     cols = param.col
 
-    input_arr = np.random.uniform(low=1, high=8, size=(rows, cols)).astype(data_type)
-    divider = np.random.uniform(low=1, high=8, size=(1, 1)).astype(data_type)
+    input_arr = np.random.uniform(low=1, high=10000, size=(rows, cols)).astype(data_type)
+    divider = np.random.uniform(low=1, high=1, size=(1, 1)).astype(data_type)
     output_arr = np.zeros((rows, cols), dtype=data_type)
 
     for i in range(rows):

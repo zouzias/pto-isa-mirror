@@ -88,7 +88,7 @@ bool TDivSTestFramework()
     ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
 
-    return ResultCmp<T>(golden, devFinal, 0.001f);
+    return ResultCmp<T>(golden, devFinal, 0.00f);
 }
 
 TEST_F(TDIVSTest, case1)

@@ -18,11 +18,11 @@ using namespace pto;
 template <typename T, int dstTileRow, int dstTileCol, int row, int validRow, int col, int validCol>
 PTO_INTERNAL void runTDivS(__gm__ T *out, __gm__ T *src, T scalar)
 {
-    using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
     using DynDim2Stride = pto::Stride<1, 1, -1, -1, 1>;
+    using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
     using GlobalData = GlobalTensor<T, DynDim2Shape, DynDim2Stride>;
-    GlobalData srcGlobal(src, DynDim2Shape(validRow, validCol), DynDim2Stride(row, col));
     GlobalData dstGlobal(out, DynDim2Shape(validRow, validCol), DynDim2Stride(dstTileRow, dstTileCol));
+    GlobalData srcGlobal(src, DynDim2Shape(validRow, validCol), DynDim2Stride(row, col));
 
     using srcTileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1>;
     using dstTileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1>;
