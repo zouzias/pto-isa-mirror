@@ -136,27 +136,29 @@ struct DivSOp {
         }
     }
 };
-template <typename T, unsigned Cols>
+template <typename T, unsigned DstCols, unsigned SrcCols>
 PTO_INTERNAL void TDivs_naive(__ubuf__ T *dst, __ubuf__ T *src0, T src1, unsigned validRow, unsigned validCol)
 {
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
     for (int row = 0; row < validRow; row++) {
         for (int col = 0; col < validCol; col++) {
-            int idx = row * Cols + col;
-            dst[idx] = src0[idx] / src1;
+            int dstOffset = row * DstCols + col;
+            int srcOffset = row * SrcCols + col;
+            dst[dstOffset] = src0[srcOffset] / src1;
         }
     }
     PtoSetWaitFlag<PIPE_S, PIPE_V>();
 }
 
-template <typename T, unsigned Cols>
+template <typename T, unsigned DstCols, unsigned SrcCols>
 PTO_INTERNAL void TSDiv_naive(__ubuf__ T *dst, __ubuf__ T *src0, T src1, unsigned validRow, unsigned validCol)
 {
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
     for (int row = 0; row < validRow; row++) {
         for (int col = 0; col < validCol; col++) {
-            int idx = row * Cols + col;
-            dst[idx] = src1 / src0[idx];
+            int dstOffset = row * DstCols + col;
+            int srcOffset = row * SrcCols + col;
+            dst[dstOffset] = src1 / src0[srcOffset];
         }
     }
     PtoSetWaitFlag<PIPE_S, PIPE_V>();
@@ -173,8 +175,12 @@ __tf__ PTO_INTERNAL void TDivS(typename TileDataDst::TileDType __out__ dstData,
     constexpr unsigned blockSizeElem = pto::BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned dstStride = TileDataDst::RowStride;
     constexpr unsigned srcStride = TileDataSrc::RowStride;
-    TBinSInstr<DivSOp<T>, TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(
-        dst, src, scalar, validRow, validCol);
+    if constexpr (std::is_same<T, int16_t>::value){
+        TDivs_naive<T, TileDataDst::Cols, TileDataSrc::Cols>(dst, src, scalar, validRow, validCol);
+    } else{
+        TBinSInstr<DivSOp<T>, TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(
+            dst, src, scalar, validRow, validCol);
+    }
 }
 
 template <typename TileDataDst, typename TileDataSrc>
@@ -227,8 +233,12 @@ __tf__ PTO_INTERNAL void TSDiv(typename TileDataDst::TileDType __out__ dstData,
     constexpr unsigned blockSizeElem = pto::BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned dstStride = TileDataDst::RowStride;
     constexpr unsigned srcStride = TileDataSrc::RowStride;
-    TBinSInstr<SDivOp<T>, TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(
-        dst, src, scalar, validRow, validCol);
+    if constexpr (std::is_same<T, int16_t>::value){
+        TSDiv_naive<T, TileDataDst::Cols, TileDataSrc::Cols>(dst, src, scalar, validRow, validCol);
+    } else{
+        TBinSInstr<SDivOp<T>, TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(
+            dst, src, scalar, validRow, validCol);
+    }
 }
 template <typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TDIVS_IMPL(TileDataDst &dst, typename TileDataDst::DType scalar, TileDataSrc &src)
