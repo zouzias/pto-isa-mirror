@@ -30,14 +30,16 @@ struct AsyncSession {
 };
 
 template <DmaEngine engine = DmaEngine::SDMA, typename ScratchTile>
-PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace,
-                                    AsyncSession &session, uint32_t syncId = 0,
-                                    const sdma::SdmaBaseConfig &baseConfig = {sdma::detail::kDefaultSdmaBlockBytes, 0, 1},
+PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace, AsyncSession &session,
+                                    uint32_t syncId = 0,
+                                    const sdma::SdmaBaseConfig &baseConfig = {sdma::detail::kDefaultSdmaBlockBytes, 0,
+                                                                              1},
                                     uint32_t channelGroupIdx = sdma::kAutoChannelGroupIdx)
 {
     session.engine = engine;
     if constexpr (engine == DmaEngine::SDMA) {
-        session.valid = sdma::BuildSdmaSession(scratchTile, workspace, session.sdmaSession, syncId, baseConfig, channelGroupIdx);
+        session.valid =
+            sdma::BuildSdmaSession(scratchTile, workspace, session.sdmaSession, syncId, baseConfig, channelGroupIdx);
         return session.valid;
     } else {
         static_assert(engine == DmaEngine::SDMA, "Only SDMA engine is supported currently");
