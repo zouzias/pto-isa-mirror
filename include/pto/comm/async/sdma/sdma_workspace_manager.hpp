@@ -50,13 +50,6 @@ namespace sdma {
 //
 // The resulting workspace pointer is passed to the AICORE kernel and
 // forwarded to comm::BuildAsyncSession() / BuildSdmaSession().
-//
-// Usage:
-//   SdmaWorkspaceManager sdmaMgr;
-//   if (!sdmaMgr.Init()) { /* handle error */ }
-//   void *workspace = sdmaMgr.GetWorkspaceAddr();
-//   // ... launch kernel with workspace ...
-//   // sdmaMgr.Finalize() is called automatically on destruction
 // ============================================================================
 
 namespace detail {
@@ -216,8 +209,8 @@ private:
             return false;
         }
 
-        pAclnnGetWsSize_ = reinterpret_cast<detail::AclnnGetWsSizeFn>(
-            dlsym(opapiHandle_, "aclnnShmemSdmaStarsQueryGetWorkspaceSize"));
+        pAclnnGetWsSize_ =
+            reinterpret_cast<detail::AclnnGetWsSizeFn>(dlsym(opapiHandle_, "aclnnShmemSdmaStarsQueryGetWorkspaceSize"));
         pAclnnExec_ = reinterpret_cast<detail::AclnnExecFn>(dlsym(opapiHandle_, "aclnnShmemSdmaStarsQuery"));
 
         if (!pAclnnGetWsSize_ || !pAclnnExec_) {

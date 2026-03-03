@@ -426,8 +426,9 @@ PTO_INTERNAL bool BuildSdmaSession(ScratchTile &scratchTile, __gm__ uint8_t *wor
     if (channelGroupIdx == kAutoChannelGroupIdx) {
         channelGroupIdx = static_cast<uint32_t>(get_block_idx());
     }
-    session.valid = BuildSdmaExecContext(scratchTile, channelGroupIdx, baseConfig, workspace, syncId, session.execCtx) &&
-                    BuildSdmaEventContext(scratchTile, syncId, session.eventCtx);
+    session.valid =
+        BuildSdmaExecContext(scratchTile, channelGroupIdx, baseConfig, workspace, syncId, session.execCtx) &&
+        BuildSdmaEventContext(scratchTile, syncId, session.eventCtx);
     return session.valid;
 }
 
