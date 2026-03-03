@@ -34,8 +34,8 @@ __tf__ PTO_INTERNAL void TExpandS(typename TileDataDst::TileDType __out__ dst, t
 {
     using T = typename TileDataDst::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    BinaryInstr<ExpandSOp<T>, TileDataDst, TileDataDst, T, elementsPerRepeat, blockSizeElem, rowStride, rowStride,
-                true>(dstPtr, nullptr, scalar, kValidRows, kValidCols, version);
+    BinaryInstr<ExpandSOp<T>, TileDataDst, TileDataDst, T, elementsPerRepeat, blockSizeElem, rowStride, rowStride>(
+        dstPtr, nullptr, scalar, kValidRows, kValidCols, version);
 }
 
 template <typename TileDataDst>
