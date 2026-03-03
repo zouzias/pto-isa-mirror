@@ -29,7 +29,8 @@ def fp32_to_int8_sym(valid_rows, valid_cols, mode):
     inv_scale.tofile("inv_scale_fp32.bin")
     offset.tofile("offset_fp32.bin")
     src_fp32_scaled = src_fp32 * inv_scale
-    src_fp16 = src_fp32_scaled.astype(np.float16)
+    src_fp32_rounded = np.round(src_fp32_scaled).astype(np.float32)  # pre-round at fp32 precision
+    src_fp16 = src_fp32_rounded.astype(np.float16)
     src_s8 = np.clip(np.round(src_fp16), -128, 127).astype(np.int8)
     src_s8.tofile("golden_s8.bin")
     ## if mode == nz, use nd to nz for fp8 layout conversion
@@ -49,7 +50,8 @@ def fp32_to_int8_asym(valid_rows, valid_cols, mode):
     zero_point.tofile("offset_fp32.bin")
     # Multiply in fp32, convert to fp16, then to uint8
     src_fp32_out = src_fp32 * inv_scale + zero_point
-    src_fp16_out = src_fp32_out.astype(np.float16)
+    src_fp32_rounded = np.round(src_fp32_out).astype(np.float32)  # pre-round at fp32 precision
+    src_fp16_out = src_fp32_rounded.astype(np.float16)
     src_u8 = np.clip(np.round(src_fp16_out), 0, 255).astype(np.uint8)
     src_u8.tofile("golden_u8.bin")
     ## if mode == nz, use nd to nz for fp8 layout conversion
