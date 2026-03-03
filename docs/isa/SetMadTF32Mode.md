@@ -1,15 +1,17 @@
-# TSETHF32MODE
+# TSETTF32MODE
 
 
 ## Tile Operation Diagram
 
-![TSETHF32MODE tile operation](../figures/isa/TSETHF32MODE.svg)
+![TSETTF32MODE tile operation](../figures/isa/TSETTF32MODE.svg)
 
 ## Introduction
 
-Configure HF32 transform mode (implementation-defined).
+Sets the TF32 conversion mode (implementation-defined) to configure precision mode for FP32 operands before TMatmul operations. Different precision modes are implemented on different hardware platforms:
 
-This instruction controls backend-specific HF32 transformation behavior used by supported compute paths.
+- A2/A3 platforms: HF32 mode (e8m11, 8 exponent bits, 11 mantissa bits, 1 sign bit)
+
+- A5 platforms: TF32 mode (e8m10, 8 exponent bits, 10 mantissa bits, 1 sign bit)
 
 ## Math Interpretation
 
@@ -22,27 +24,26 @@ PTO-AS form: see [docs/grammar/PTO-AS.md](../grammar/PTO-AS.md).
 Schematic form:
 
 ```text
-tsethf32mode {enable = true, mode = ...}
+SetMadTF32Mode {mode = ...}
 ```
 
-### IR Level 1 (SSA)
+### IR Level 1（SSA）
 
 ```text
-pto.tsethf32mode {enable = true, mode = ...}
+pto.SetMadTF32Mode {mode = ...}
 ```
 
-### IR Level 2 (DPS)
+### IR Level 2（DPS）
 
 ```text
-pto.tsethf32mode ins({enable = true, mode = ...}) outs()
+pto.SetMadTF32Mode ins({mode = ...}) outs()
 ```
 ## C++ Intrinsic
 
-Declared in `include/pto/common/pto_instr.hpp`:
+Declared in  `include/pto/common/pto_tile.hpp`：
 
 ```cpp
-template <bool isEnable, RoundMode hf32TransMode = RoundMode::CAST_ROUND, typename... WaitEvents>
-PTO_INST RecordEvent TSETHF32MODE(WaitEvents &... events);
+PTO_INTERNAL void SetMadTF32Mode(RoundMode tf32TransMode = RoundMode::CAST_ROUND)
 ```
 
 ## Constraints
@@ -57,8 +58,10 @@ PTO_INST RecordEvent TSETHF32MODE(WaitEvents &... events);
 #include <pto/pto-inst.hpp>
 using namespace pto;
 
-void example_enable_hf32() {
-  TSETHF32MODE<true, RoundMode::CAST_ROUND>();
+void example_enable_tf32() {
+  using LeftTile = TileLeft<U, M, K, M, K>;
+  LeftTile aTile;
+  aTile.SetMadTF32Mode(RoundMode::CAST_ROUND);
 }
 ```
 
@@ -68,7 +71,7 @@ void example_enable_hf32() {
 
 ```text
 # Auto mode: compiler/runtime-managed placement and scheduling.
-pto.tsethf32mode {enable = true, mode = ...}
+pto.SetMadTF32Mode {mode = ...}
 ```
 
 ### Manual Mode
@@ -78,14 +81,14 @@ pto.tsethf32mode {enable = true, mode = ...}
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-pto.tsethf32mode {enable = true, mode = ...}
+pto.tile.SetMadTF32Mode {mode = ...}
 ```
 
 ### PTO Assembly Form
 
 ```text
-pto.tsethf32mode {enable = true, mode = ...}
+pto.SetMadTF32Mode {mode = ...}
 # IR Level 2 (DPS)
-pto.tsethf32mode ins({enable = true, mode = ...}) outs()
+pto.SetMadTF32Mode ins({mode = ...}) outs()
 ```
 
