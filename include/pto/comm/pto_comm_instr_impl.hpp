@@ -31,11 +31,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 #ifdef __CPU_SIM
-#include "pto/cpu/TNotify.hpp"
+// Point-to-Point Communication (Synchronous)
+#include "pto/cpu/TPut.hpp"
 #include "pto/cpu/TGet.hpp"
-#include "pto/cpu/TBroadcast.hpp"
+
+// Signal-Based Synchronization
+#include "pto/cpu/TNotify.hpp"
 #include "pto/cpu/TTest.hpp"
 #include "pto/cpu/TWait.hpp"
+
+// Collective Communication
 #include "pto/cpu/TReduce.hpp"
 #include "pto/cpu/TGather.hpp"
 #include "pto/cpu/TScatter.hpp"
