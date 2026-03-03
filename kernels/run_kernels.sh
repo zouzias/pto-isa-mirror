@@ -36,7 +36,7 @@ fi
 CARD_NAME="$3"
 
 if [ "$ENABLE_A3" = "true" ]; then
-  cd kernels/manual/a2a3/flash_atten
+  cd kernels/manual/a2a3/flash_attn
   python3 scripts/gen_data.py
   bash run.sh -r $RUN_TYPE -v $CARD_NAME
   cd ../../../../
