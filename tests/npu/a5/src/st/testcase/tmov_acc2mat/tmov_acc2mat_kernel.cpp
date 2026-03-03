@@ -58,6 +58,32 @@ AICORE inline constexpr SLayout GetTileSLayout()
     }
 }
 
+template <typename DstTileData, typename SrcTileData>
+__tf__ PTO_INTERNAL void tf_copy_cbuf_to_ubuf(
+    typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src, 
+    uint16_t nBurst, uint16_t lenBurst) {
+        __ubuf__ typename DstTileData::DType *dstTileAddr = __cce_get_tile_ptr(dst);
+        __cbuf__ typename SrcTileData::DType *srcTileAddr = __cce_get_tile_ptr(src);
+
+        copy_cbuf_to_ubuf(dstTileAddr, srcTileAddr, 0, nBurst, lenBurst, 0, 0);
+}
+
+template <typename GlobalData, typename TileData>
+__tf__ PTO_INTERNAL void tf_copy_ubuf_to_gm(
+    typename GlobalData::DType __out__ *dst, typename TileData::TileDType __in__ src, int startDstAddr, int gShape0, int gStride0, uint16_t nBurst,
+    uint32_t lenBurst, uint64_t burstDstStride, uint32_t burstSrcStride, int64_t tileStride) {
+    typename GlobalData::DType *dstAddr = dst;
+    __ubuf__ typename TileData::DType *srcAddr = __cce_get_tile_ptr(src);
+    typename GlobalData::DType *dstGlobalAddr = dstAddr;
+    __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
+    for (uint32_t k = 0; k < gShape0; k++) {
+        dstGlobalAddr = dstAddr + k * gStride0;
+        srcTileAddr = srcAddr + k * tileStride + startDstAddr;
+        copy_ubuf_to_gm_align_v2(dstGlobalAddr, srcTileAddr, 0, nBurst, lenBurst, 0, burstDstStride, burstSrcStride);
+    }
+}
+
+
 template <typename AType, typename BType, typename FbType, int M, int K, int N, int validM, int validK, int validN>
 AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ FbType *src2)
 {
@@ -99,20 +125,26 @@ AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ FbTy
         TASSIGN(fbMatTile, 0x20000);
         TLOAD(fbMatTile, src2Global);
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
     /**********************************TMOV && TEXTRACT**********************************/
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
     /**********************************TMATMUL**********************************/
     TMATMUL(cTile, aTile, bTile);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
 #endif
 }
 
@@ -155,19 +187,25 @@ AICORE inline void RunMATMUL_NZUNALIGN(__gm__ AType *src0, __gm__ BType *src1, _
         TLOAD(fbMatTile, src2Global);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
     /**********************************TMOV && TEXTRACT**********************************/
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
     /**********************************TMATMUL**********************************/
     TMATMUL(cTile, aTile, bTile);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
 #endif
 }
 
@@ -186,15 +224,8 @@ AICORE inline void VecCopyOut(GlobalData &dst, TileData &src, int rows, int cols
     uint64_t burstDstStride = gStride1 * sizeof(typename TileData::DType);
     uint32_t burstSrcStride = TileData::Rows * c0Size;
     int64_t tileStride = gShape1 * TileData::Rows * gShape4;
-    typename GlobalData::DType *dstAddr = dst.data();
-    __ubuf__ typename TileData::DType *srcAddr = src.data();
-    typename GlobalData::DType *dstGlobalAddr = dstAddr;
-    __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
-    for (uint32_t k = 0; k < gShape0; k++) {
-        dstGlobalAddr = dstAddr + k * gStride0;
-        srcTileAddr = srcAddr + k * tileStride + startDstAddr;
-        copy_ubuf_to_gm_align_v2(dstGlobalAddr, srcTileAddr, 0, nBurst, lenBurst, 0, burstDstStride, burstSrcStride);
-    }
+    tf_copy_ubuf_to_gm<GlobalData, TileData>(
+                    dst.data(), src.data(), startDstAddr, gShape0, gStride0, nBurst, lenBurst, burstDstStride, burstSrcStride, tileStride);
 }
 
 template <typename OutType, typename SrcTileData, int validM, int validN, Layout layoutType = Layout::ND,
@@ -235,15 +266,10 @@ AICORE inline void RunTSTORE(__gm__ OutType *out, SrcTileData &srcTile)
 template <typename T, typename DstTileData, typename SrcTileData, int row, int col>
 AICORE inline void TMOVMat2Vec(DstTileData &dst, SrcTileData &src)
 {
-    __ubuf__ typename DstTileData::DType *dstAddr = dst.data();
-    __cbuf__ typename SrcTileData::DType *srcAddr = src.data();
-    __ubuf__ typename DstTileData::DType *dstTileAddr = dstAddr;
-    __cbuf__ typename SrcTileData::DType *srcTileAddr = srcAddr;
-
     uint16_t nBurst = 1;
     uint16_t lenBurst = row * col * sizeof(T) / 32;
-
-    copy_cbuf_to_ubuf(dstTileAddr, srcTileAddr, 0, nBurst, lenBurst, 0, 0);
+    tf_copy_cbuf_to_ubuf<DstTileData, SrcTileData>(
+                    dst.data(), src.data(), nBurst, lenBurst);
 }
 
 template <typename OutType, typename AType, typename BType, int validM, int validK, int validN, int row, int col,
@@ -300,22 +326,30 @@ __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ B
                 OutType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
                 pto::Stride<1 * copyOutM * copyOutN, 1 * copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
             GlobalDataSrc2 src2Global(src2);
+#ifndef __PTO_AUTO__
             set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
             wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+#endif
             TLOAD(srcTileData, src2Global);
+#ifndef __PTO_AUTO__
             set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
+#endif
             TINSERT(srcTileData, cTile, indexRow, indexCol);
         }
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+#endif
 
     TMOVMat2Vec<OutType, DstTileData, SrcTileData, staticRow, staticCol>(dstTileData, srcTileData);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
+#endif
     set_intra_block(PIPE_FIX, syncId);
     set_intra_block(PIPE_FIX, syncId + 16);
 #endif
@@ -395,22 +429,30 @@ __global__ AICORE void RunTMOVFBQuant(__gm__ OutType *out, __gm__ AType *src0, _
                 OutType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
                 pto::Stride<1 * copyOutM * copyOutN, 1 * copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
             GlobalDataSrc3 src3Global(src3);
+#ifndef __PTO_AUTO__
             set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
             wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+#endif
             TLOAD(srcTileData, src3Global);
+#ifndef __PTO_AUTO__
             set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
+#endif
             TINSERT_FP<SrcTileData, AccTile, FbTile>(srcTileData, cTile, fbTile, indexRow, indexCol);
         }
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+#endif
 
     TMOVMat2Vec<OutType, DstTileData, SrcTileData, staticRow, staticCol>(dstTileData, srcTileData);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
+#endif
     set_intra_block(PIPE_FIX, syncId);
     set_intra_block(PIPE_FIX, syncId + 16);
 #endif
@@ -483,22 +525,30 @@ __global__ AICORE void RunTMOVSCQuant(__gm__ OutType *out, __gm__ AType *src0, _
                 OutType, pto::Shape<1, 1, 1, copyOutM, copyOutN>,
                 pto::Stride<1 * copyOutM * copyOutN, 1 * copyOutM * copyOutN, copyOutM * copyOutN, copyOutN, 1>>;
             GlobalDataSrc2 src2Global(src2);
+#ifndef __PTO_AUTO__
             set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
             wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+#endif
             TLOAD(srcTileData, src2Global);
+#ifndef __PTO_AUTO__
             set_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_FIX, EVENT_ID0);
+#endif
             TINSERT(srcTileData, cTile, preScalar, indexRow, indexCol);
         }
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
+#endif
 
     TMOVMat2Vec<OutType, DstTileData, SrcTileData, staticRow, staticCol>(dstTileData, srcTileData);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_FIX, EVENT_ID0);
+#endif
     set_intra_block(PIPE_FIX, syncId);
     set_intra_block(PIPE_FIX, syncId + 16);
 #endif
