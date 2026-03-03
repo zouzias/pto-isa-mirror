@@ -28,7 +28,7 @@ PTO_INTERNAL void runTDivS(__gm__ T *out, __gm__ T *src, T scalar)
     srcTileData srcTile(validRow, validCol);
     dstTileData dstTile(validRow, validCol);
     TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x28000);
+    TASSIGN(dstTile, 0x10000);
 
     TLOAD(dstTile, dstGlobal);
 
