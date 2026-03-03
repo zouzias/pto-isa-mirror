@@ -20,9 +20,10 @@ namespace pto {
 // Operation types for TSync - identifies the producer/consumer operation
 enum class TSyncOpType : uint8_t
 {
-    TSTORE_C2GM, // Store (Cube core operation)
-    TSTORE_V2GM, // Store (Vector core operation)
-    TLOAD        // Load operation (consumer operation)
+    TSTORE_C2GM_UFON,  // Store (Cube core operation) and enable Uinit flag
+    TSTORE_C2GM_UFOFF, // Store (Cube core operation) and disable Unit flag
+    TSTORE_V2GM,       // Store (Vector core operation)
+    TLOAD              // Load operation (consumer operation)
 };
 
 // Compile-time direction inference based on producer/consumer ops
@@ -33,12 +34,13 @@ struct TSyncTraits {
     // Direction is inferred from producer operation:
     // TSTORE_C2GM -> Cube produces (C2V)
     // TSTORE_V2GM -> Vector produces (V2C)
-    static constexpr bool is_cube_to_vec = (ProducerOp == TSyncOpType::TSTORE_C2GM);
+    static constexpr bool is_cube_to_vec =
+        (ProducerOp == TSyncOpType::TSTORE_C2GM_UFON) || (ProducerOp == TSyncOpType::TSTORE_C2GM_UFOFF);
     static constexpr bool is_vec_to_cube = (ProducerOp == TSyncOpType::TSTORE_V2GM);
 
     static_assert(ConsumerOp == TSyncOpType::TLOAD, "Consumer operation must be TLOAD");
     static_assert(is_cube_to_vec || is_vec_to_cube,
-                  "Producer must be either TSTORE_C2GM (Cube) or TSTORE_V2GM (Vector)");
+                  "Producer must be either TSTORE_C2GM_UFON or TSTORE_C2GM_UFOFF (Cube) or TSTORE_V2GM (Vector)");
 };
 
 enum TSyncCVMode : uint8_t
@@ -73,17 +75,13 @@ struct TPipe {
     // Producer Interface
     // -------------------------------------------------------------------------
     struct Producer {
-        int tile_id;
-        int sub_tile_id;
-        bool isAllocate;
-        bool isRecord;
-        int entryOffset;
+        int tile_id = -1;
+        int sub_tile_id = -1;
+        bool isAllocate = false;
+        bool isRecord = false;
+        int entryOffset = 0;
 
-        PTO_INTERNAL Producer()
-        {
-            tile_id = -1;
-            sub_tile_id = -1;
-        }
+        PTO_INTERNAL Producer() = default;
 
         PTO_INTERNAL void setTileId(int t_id, int sub_t_id)
         {
@@ -173,7 +171,11 @@ struct TPipe {
             using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ProdM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
             GlobalData globalTensor(fifo.fifoBase + entryBase + entryOffset);
             // store tile to GM FIFO, enable unit-flag one
-            TSTORE_IMPL<TileDataProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
+            if constexpr (ProducerOp == TSyncOpType::TSTORE_C2GM_UFON) {
+                TSTORE_IMPL<TileDataProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
+            } else { // disable unit flag
+                TSTORE_IMPL(globalTensor, tile);
+            }
         }
 
         template <typename T, int ProdM, int ProdN, int ConsM, int ConsN>
@@ -221,17 +223,13 @@ struct TPipe {
     // Consumer Interface
     // -------------------------------------------------------------------------
     struct Consumer {
-        int tile_id;
-        int sub_tile_id;
-        bool isWait;
-        bool isFree;
-        int entryOffset;
+        int tile_id = -1;
+        int sub_tile_id = -1;
+        bool isWait = false;
+        bool isFree = false;
+        int entryOffset = 0;
 
-        PTO_INTERNAL Consumer()
-        {
-            tile_id = -1;
-            sub_tile_id = -1;
-        }
+        PTO_INTERNAL Consumer() = default;
 
         PTO_INTERNAL void setTileId(int tid, int sub_tid)
         {
@@ -280,13 +278,9 @@ struct TPipe {
          */
         PTO_INTERNAL void wait()
         {
-            if constexpr (is_c2v) {
-                // Vector waits for Cube
-                wait_flag_dev(FlagID);
-            } else { // is_v2c
-                // Cube waits for Vector
-                wait_flag_dev(FlagID);
-            }
+            // Vector waits for Cube
+            // Or Cube waits for Vector
+            wait_flag_dev(FlagID);
         }
 
         /**
@@ -298,13 +292,9 @@ struct TPipe {
          */
         PTO_INTERNAL void free()
         {
-            if constexpr (is_c2v) {
-                // Vector frees buffer for Cube
-                ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(TSyncCVMode::CV_CORES_SYNC, FlagID + 1));
-            } else { // is_v2c
-                // Cube frees buffer for Vector
-                ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(TSyncCVMode::CV_CORES_SYNC, FlagID + 1));
-            }
+            // Vector frees buffer for Cube
+            // Or Cube frees buffer for Vector
+            ffts_cross_core_sync(PIPE_MTE2, getFFTSMsg(TSyncCVMode::CV_CORES_SYNC, FlagID + 1));
         }
 
         template <typename T, int ProdM, int ProdN, int ConsM, int ConsN>
