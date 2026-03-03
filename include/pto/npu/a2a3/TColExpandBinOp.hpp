@@ -34,7 +34,7 @@ PTO_INTERNAL void TColExpandBinaryNormMode(__ubuf__ T *dstPtr, __ubuf__ T *src0P
                                            unsigned validRow, unsigned validCol)
 {
     constexpr uint8_t repeatStride = (uint8_t)(RowStride / BlockSizeElem);
-    if constexpr (RowStride <= ElementsPerRepeat) {
+    if constexpr (RowStride < ElementsPerRepeat) {
         SetContMaskByDType<T>(validCol);
         Op::ColExpandBinInstr(dstPtr, src0Ptr, src1Ptr, validRow, repeatStride, repeatStride, repeatStride);
         SetFullVecMaskByDType<T>();
@@ -49,8 +49,7 @@ PTO_INTERNAL void TColExpandBinaryNormMode(__ubuf__ T *dstPtr, __ubuf__ T *src0P
         }
         if (numRemainAfterLoop) {
             SetContMaskByDType<T>(numRemainAfterLoop);
-            Op::ColExpandBinInstr(dstPtr, src0Ptr, src1Ptr + numLoop * ElementsPerRepeat, validRow, repeatStride,
-                                  repeatStride, repeatStride);
+            Op::ColExpandBinInstr(dstPtr, src0Ptr, src1Ptr, validRow, repeatStride, repeatStride, repeatStride);
             SetFullVecMaskByDType<T>();
         }
     }

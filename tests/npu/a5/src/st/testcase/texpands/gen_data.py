@@ -13,45 +13,40 @@
 import os
 import struct
 import numpy as np
+import ml_dtypes
 np.random.seed(19)
+bfloat16 = ml_dtypes.bfloat16
 
 PAD_VALUE_NULL = "PAD_VALUE_NULL"
 PAD_VALUE_MAX = "PAD_VALUE_MAX"
 PAD_VALUE_MIN = "PAD_VALUE_MIN"
 
 
-def gen_golden_data(case_name, param):
+def gen_golden_data(param):
     dtype = param.dtype
 
     height, width = [param.global_row, param.global_col]
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    M = 0
+    scalar = 0
     if dtype == np.int16:
-        M = np.random.randint(-30_000, 30_000, size=[1, 1]).astype(dtype)
+        scalar = np.random.randint(-30_000, 30_000, size=1).astype(dtype)
     elif dtype == np.int32:
-        M = np.random.randint(-2_000_000_000, 2_000_000_000, size=[1, 1]).astype(dtype)
+        scalar = np.random.randint(-2_000_000_000, 2_000_000_000, size=1).astype(dtype)
     elif dtype == np.float16:
-        M = np.random.uniform(-8, 8, size=[1, 1]).astype(dtype)
+        scalar = np.random.uniform(-8, 8, size=1).astype(dtype)
+    elif dtype == bfloat16:
+        scalar = np.random.uniform(-8, 8, size=1).astype(dtype)
     elif dtype == np.float32:
-        M = np.random.uniform(-8, 8, size=[1, 1]).astype(dtype)
+        scalar = np.random.uniform(-8, 8, size=1).astype(dtype)
 
-    with open("scalar.bin", "wb") as f:
-        f.write(struct.pack('f', np.float32(M[0, 0])))
+    golden = np.full((height, width), 0).astype(dtype)
+    golden[:h_valid, :w_valid] = scalar[0]
 
-    golden = np.full((height, width), M[0, 0]).astype(dtype)
-
-    output = np.zeros([height, width]).astype(dtype)
-    for h in range(height):
-        for w in range(width):
-            if h >= h_valid or w >= w_valid:
-                golden[h][w] = output[h][w]
-    
     # Save the golden data to binary files
     golden.tofile("golden.bin")
-
-    return output, golden
+    scalar.tofile("scalar.bin")
 
 
 class TestParams:
@@ -81,6 +76,7 @@ def generate_case_name(param):
         np.float16: 'half',
         np.int8: 'int8',
         np.int32: 'int32',
+        bfloat16: 'bfloat16',
         np.int16: 'int16'
     }[param.dtype]
     return (
@@ -105,10 +101,11 @@ if __name__ == "__main__":
         TestParams(np.int32, 64, 64, 64, 64, 64, 64),
         TestParams(np.int16, 64, 64, 64, 64, 64, 64),
         TestParams(np.float16, 64, 64, 64, 64, 64, 64),
+        TestParams(bfloat16, 64, 64, 64, 64, 64, 64),
 
         TestParams(np.float32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
         TestParams(np.int32, 60, 60, 64, 64, 60, 60, PAD_VALUE_MAX),
-
+        TestParams(bfloat16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),
         TestParams(np.float16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),
         TestParams(np.int16, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX),
     ]
@@ -119,5 +116,5 @@ if __name__ == "__main__":
             os.makedirs(case_name)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data(case_name, param)
+        gen_golden_data(param)
         os.chdir(original_dir)

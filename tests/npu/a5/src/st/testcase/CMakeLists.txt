@@ -211,6 +211,8 @@ set(ALL_TESTCASES
     tdequant
     mgather
     mscatter
+    t_dhrystone
+    engram
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

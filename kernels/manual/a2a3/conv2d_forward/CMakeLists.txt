@@ -67,27 +67,23 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 )
 
 include_directories(
-    ${PROJECT_SOURCE_DIR}/../../../../include/
     ${ASCEND_HOME_PATH}/include
-    ${ASCEND_HOME_PATH}/pkg_inc/runtime
     ${ASCEND_DRIVER_PATH}/kernel/inc
-    ${ASCEND_HOME_PATH}/include/experiment/runtime
-    ${ASCEND_HOME_PATH}/include/experiment/msprof    
 )
 
-function(pto_example_mixed NAME)
+function(pto_example_cube NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
-    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220 -std=c++17)
+    target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c220-cube -std=c++17)
     target_include_directories(${NAME}_kernel PRIVATE
-        ${PROJECT_BINARY_DIR}
+        ${PROJECT_SOURCE_DIR}/../../../../include/
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
     add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
     target_include_directories(${NAME} PRIVATE
+        ${PROJECT_SOURCE_DIR}/../../../../include/
         ${PROJECT_SOURCE_DIR}/../../../../tests/common
-        ${PROJECT_BINARY_DIR}
     )
 
     target_link_directories(${NAME} PUBLIC
@@ -104,4 +100,4 @@ function(pto_example_mixed NAME)
     )
 endfunction()
 
-pto_example_mixed(fa_performance)
+pto_example_cube(conv2d_forward)
