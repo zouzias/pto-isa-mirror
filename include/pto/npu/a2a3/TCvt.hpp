@@ -443,25 +443,45 @@ PTO_INTERNAL void GenCastCallFp16ToInt8(__ubuf__ typename TileDataD::DType *dst,
 // we must split each logical repeat into multiple hardware repeats of exactly 64 elements each by using
 // hwFp16Stride = 4 (64 fp16 per hw repeat) and hwInt32Stride = 8 (64 int32 per hw repeat).
 // hwRepeatCount = repeatNum * (srcRepeatStride / 4) ensures all logical elements are covered.
+//
+// Temporary buffer layout at TMP_UB_OFFSET (6144 bytes total via reuse):
+//
+//   Step 1:  fp16 -> int32  writes to tempInt32Buf  [+0    .. +4095]  (4096 bytes)
+//   Step 2:  int32 -> int16 writes to tempAndBuf    [+4096 .. +6143]  (2048 bytes)
+//            (tempInt32Buf is now fully consumed and repurposed below)
+//   Step 3:  vector_dup 255 writes mask to           [+0    .. +2047]  (reuses tempInt32Buf as int16)
+//   Step 4:  vand tempAndBuf & mask -> tempAndBuf    [+4096 .. +6143]
+//   Step 5:  int16 -> fp16  writes to               [+0    .. +2047]  (reuses same region as fp16)
+//   Step 6:  fp16 -> int8   reads [+0..+2047], writes to dst
+//
+// Note: src cannot be reused as tempAndBuf — the saturation test kernel calls TCVT three times
+// on the same srcTile (ON, OFF, default), so the NonSatTorch path would corrupt src for later calls.
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD::DType *dst,
                                                     __ubuf__ typename TileDataS::DType *src, uint8_t repeatNum,
                                                     RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride,
-                                                    uint16_t dstRepeatStride, uint16_t srcRepeatStride,
-                                                    __ubuf__ int32_t *tempInt32Buf, __ubuf__ int16_t *tempAndBuf,
-                                                    __ubuf__ half *tempFp16Buf)
+                                                    uint16_t dstRepeatStride, uint16_t srcRepeatStride)
 {
+    // One allocation covers all phases via reuse:
+    //   Phase A (steps 1-2): tempInt32Buf [+0..+4095] holds int32 data
+    //   Phase B (steps 3-6): tempInt32Buf is reused at [+0..+2047] for mask then fp16 output
+    __ubuf__ int32_t *tempInt32Buf = (__ubuf__ int32_t *)get_imm(TMP_UB_OFFSET);
+    __ubuf__ int16_t *tempAndBuf   = (__ubuf__ int16_t *)((__ubuf__ uint8_t *)tempInt32Buf + 4096);
+    // After tempInt32Buf is consumed (post step-2 pipe_barrier), its first half is reused:
+    __ubuf__ int16_t *tempMaskBuf  = (__ubuf__ int16_t *)tempInt32Buf;  // mask at [+0..+2047]
+    __ubuf__ half    *tempFp16Buf  = (__ubuf__ half    *)tempInt32Buf;  // fp16 output at [+0..+2047]
+
     // Compute hardware-level strides for intermediate int32/int16 operations.
     // The hardware INT32 capacity per repeat is 64 (= REPEAT_BYTE / sizeof(int32) = 256 / 4).
     // When srcRepeatStride >= 4, each logical repeat has >= 64 fp16 values; we use 64-element
     // hardware repeats (hwFp16Stride = 4 blocks) and multiply the repeat count accordingly.
     // When srcRepeatStride < 4, the mask already limits the active elements; use as-is.
-    const uint16_t hwFp16Stride = (srcRepeatStride >= 4) ? (uint16_t)4 : srcRepeatStride;
-    const uint16_t factor = srcRepeatStride / hwFp16Stride;  // = 2 for S=8, = 1 for S<=4
+    const uint16_t hwFp16Stride  = (srcRepeatStride >= 4) ? (uint16_t)4 : srcRepeatStride;
+    const uint16_t factor        = srcRepeatStride / hwFp16Stride;  // = 2 for S=8, = 1 for S<=4
     const uint16_t hwRepeatCount = static_cast<uint16_t>(repeatNum) * factor;
     const uint16_t hwInt32Stride = hwFp16Stride * 2;  // int32 is 2x wider than fp16 in blocks
     const uint16_t hwInt16Stride = hwFp16Stride;       // int16 same width as fp16 in blocks
-    const uint16_t hwDstStride = hwFp16Stride / 2;     // int8 is half as wide as fp16 in blocks
+    const uint16_t hwDstStride   = hwFp16Stride / 2;   // int8 is half as wide as fp16 in blocks
 
     // Step 1: fp16 -> int32
     switch (static_cast<RoundMode>(mode)) {
@@ -492,22 +512,23 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
     }
     pipe_barrier(PIPE_V);
 
-    // Step 2: vector_dup mask of 255 (int16) into tempFp16Buf temporarily (sizeof(half)==sizeof(int16_t))
-    vector_dup((__ubuf__ int16_t *)tempFp16Buf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride,
-               srcBlockStride, hwInt16Stride, hwInt16Stride);
-    pipe_barrier(PIPE_V);
-
-    // Step 3: int32 -> int16 (narrow to low 16 bits) into tempAndBuf
+    // Step 2: int32 -> int16 (narrow to low 16 bits) into tempAndBuf
+    // After this, tempInt32Buf [+0..+4095] is fully consumed and available for reuse.
     vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
                   hwInt32Stride);
     pipe_barrier(PIPE_V);
 
-    // Step 4: vand int16 & 255 to extract low 8 bits
-    vand(tempAndBuf, tempAndBuf, (__ubuf__ int16_t *)tempFp16Buf, hwRepeatCount, srcBlockStride, srcBlockStride,
-         srcBlockStride, hwInt16Stride, hwInt16Stride, hwInt16Stride);
+    // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (reuses tempInt32Buf [+0..+2047])
+    vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
+               hwInt16Stride);
     pipe_barrier(PIPE_V);
 
-    // Step 5: int16 -> fp16
+    // Step 4: vand int16 & 255 to extract low 8 bits
+    vand(tempAndBuf, tempAndBuf, tempMaskBuf, hwRepeatCount, srcBlockStride, srcBlockStride, srcBlockStride,
+         hwInt16Stride, hwInt16Stride, hwInt16Stride);
+    pipe_barrier(PIPE_V);
+
+    // Step 5: int16 -> fp16, writing into tempFp16Buf (reuses tempInt32Buf [+0..+2047])
     vconv_s162f16(tempFp16Buf, tempAndBuf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
                   hwInt16Stride);
     pipe_barrier(PIPE_V);
@@ -780,12 +801,8 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
             // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
-            __ubuf__ int32_t *tempInt32Buf = (__ubuf__ int32_t *)(TMP_UB_OFFSET);
-            __ubuf__ int16_t *tempAndBuf = (__ubuf__ int16_t *)(TMP_UB_OFFSET + 4096);
-            __ubuf__ half *tempFp16Buf = (__ubuf__ half *)(TMP_UB_OFFSET + 6144);
             GenCastCallFp16ToInt8_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride,
-                                                                    srcBlockStride, dstRepeatStride, srcRepeatStride,
-                                                                    tempInt32Buf, tempAndBuf, tempFp16Buf);
+                                                                    srcBlockStride, dstRepeatStride, srcRepeatStride);
         } else {
             GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                         dstRepeatStride, srcRepeatStride);
