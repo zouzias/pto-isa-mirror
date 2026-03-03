@@ -153,12 +153,11 @@ PTO_INTERNAL void TBinSOps_1D_selector(__ubuf__ typename TileDataDst::DType *dst
 }
 
 template <typename Op, typename TileDataDst, typename TileDataSrc, typename ScalarType, unsigned elementsPerRepeat,
-          unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride, bool convertBF16ToHalf = false>
+          unsigned blockSizeElem, unsigned dstRowStride, unsigned srcRowStride>
 PTO_INTERNAL void BinaryInstr(__ubuf__ typename TileDataDst::DType *dst, __ubuf__ typename TileDataSrc::DType *src0,
                               ScalarType src1, unsigned kValidRows, unsigned kValidCols, VFImplKind version)
 {
-    using T = std::conditional_t<(std::is_same_v<typename TileDataDst::DType, bfloat16_t> && convertBF16ToHalf), half,
-                                 typename TileDataDst::DType>;
+    using T = typename TileDataDst::DType;
     if constexpr ((TileDataDst::ValidCol == TileDataDst::Cols) && (TileDataSrc::ValidCol == TileDataSrc::Cols)) {
         TBinSOps_1D_selector<Op, TileDataDst, TileDataSrc, T, ScalarType, elementsPerRepeat, blockSizeElem,
                              dstRowStride, srcRowStride>(dst, src0, src1, kValidRows, kValidCols, version);
