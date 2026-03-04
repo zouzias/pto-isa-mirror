@@ -1379,19 +1379,11 @@ public:
         isKAligned_ = isKAligned;
     }
 #if defined(__DAV_CUBE__)
-#ifdef PTO_NPU_ARCH_A2A3
-    PTO_INTERNAL void SetMadHF32Mode(RoundMode hf32TransMode = RoundMode::CAST_ROUND)
-    {
-        PTO_ASSERT(hf32TransMode == RoundMode::CAST_ROUND || hf32TransMode == RoundMode::CAST_RINT,
-                   "Unsupported RoundMode for HF32.");
-        set_ctrl(sbitset1(get_ctrl(), MAD_MODE_BIT));
-        if (hf32TransMode == RoundMode::CAST_ROUND) {
-            set_ctrl(sbitset1(get_ctrl(), MAD_ROUND_MODE_BIT));
-        } else if (hf32TransMode == RoundMode::CAST_RINT) {
-            set_ctrl(sbitset0(get_ctrl(), MAD_ROUND_MODE_BIT));
-        }
-    }
-#else
+    /*
+        TF32 precision implementation varies across different chips:
+        - a2/a3 : e8m11(1 sign bits, 8 exponent bits, 11 mantissa bits)
+        - a5 : e8m10(1 sign bits, 8 exponent bits, 10 mantissa bits)
+    */
     PTO_INTERNAL void SetMadTF32Mode(RoundMode tf32TransMode = RoundMode::CAST_ROUND)
     {
         PTO_ASSERT(tf32TransMode == RoundMode::CAST_ROUND || tf32TransMode == RoundMode::CAST_RINT,
@@ -1403,7 +1395,6 @@ public:
             set_ctrl(sbitset0(get_ctrl(), MAD_ROUND_MODE_BIT));
         }
     }
-#endif
     PTO_INTERNAL void ResetMadMode()
     {
         set_ctrl(sbitset0(get_ctrl(), MAD_MODE_BIT));
