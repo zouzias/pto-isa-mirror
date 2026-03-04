@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #ifdef __CPU_SIM
 #include <iomanip>
+#include <pto/cpu/TileBufferManager.hpp>
 #endif
 
 namespace pto {
@@ -1288,13 +1289,20 @@ public:
         return *(ptr + offset);
     }
     // constructor for static shape
-    AICORE Tile(){};
+    AICORE Tile() {
+#ifdef __CPU_SIM
+        data_ = TileBufferManager::Instance().Allocate<DType>(Rows * Cols);
+#endif
+    };
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VR,
                 std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VC)
     {
+#ifdef __CPU_SIM
+        data_ = TileBufferManager::Instance().Allocate<DType>(Rows * Cols);
+#endif
         RowMaskInternal = VR;
         ColMaskInternal = VC;
     }
@@ -1303,6 +1311,9 @@ public:
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), size_t> VR)
     {
+#ifdef __CPU_SIM
+        data_ = TileBufferManager::Instance().Allocate<DType>(Rows * Cols);
+#endif
         RowMaskInternal = VR;
     }
 
@@ -1310,6 +1321,9 @@ public:
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), size_t> VC)
     {
+#ifdef __CPU_SIM
+        data_ = TileBufferManager::Instance().Allocate<DType>(Rows * Cols);
+#endif
         ColMaskInternal = VC;
     }
 
@@ -1345,7 +1359,7 @@ public:
                   "SFractalSize_ illegal");
 
 #ifdef __CPU_SIM
-    using TileDType = Tile::DType[Rows * Cols];
+    using TileDType = Tile::DType*;  // Pointer for CPU sim aliasing support
 #else
 #ifdef __PTO_AUTO__
     using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows *Cols);

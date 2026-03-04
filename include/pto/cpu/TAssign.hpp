@@ -1,24 +1,33 @@
-/**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
-*/
-
 #ifndef TTILE_ASSIGN
 #define TTILE_ASSIGN
 #include <cstdint>
+#include <cstring>
 #include <pto/common/pto_tile.hpp>
+#include <pto/cpu/TileBufferManager.hpp>
 
 namespace pto {
+
 template <typename T, typename AddrType>
 PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
 {
     if constexpr (is_tile_data_v<T>) {
-        return;
+        using DType = typename T::DType;
+        constexpr std::size_t numElements = T::Rows * T::Cols;
+        std::size_t ubOffset = static_cast<std::size_t>(addr);
+        
+        // Check if this is the first TASSIGN to this offset this phase
+        bool isFirst = TileBufferManager::Instance().IsFirstAssign(ubOffset);
+        
+        // Get shared buffer
+        DType* shared = TileBufferManager::Instance().GetSharedBuffer<DType>(ubOffset, numElements);
+        
+        // Only copy data on first assign (source tile has the data we want to share)
+        if (isFirst && obj.data() != nullptr && obj.data() != shared) {
+            std::memcpy(shared, obj.data(), numElements * sizeof(DType));
+        }
+        
+        // Redirect tile to shared buffer
+        obj.data() = shared;
     } else {
         static_assert(is_global_data_v<T>, "Only Tile and GlobalTensor data types are supported.");
         static_assert(std::is_pointer_v<AddrType>, "GlobalTensor can only be assigned with address of pointer type.");
@@ -27,5 +36,11 @@ PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
         obj.SetAddr(addr);
     }
 }
+
+// Call at start of each loop iteration to reset TASSIGN first-assign tracking
+inline void TASSIGN_RESET_PHASE() {
+    TileBufferManager::Instance().ResetPhase();
+}
+
 } // namespace pto
 #endif

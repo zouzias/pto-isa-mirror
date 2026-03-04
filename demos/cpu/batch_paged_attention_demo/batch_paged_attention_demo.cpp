@@ -134,6 +134,7 @@ void batch_paged_attention_reference(const std::vector<half> &query, const std::
             float li = 0.0f;
 
             for (int bn = 0; bn < global_max_bn; ++bn) {
+            TASSIGN_RESET_PHASE();  // Reset per-iteration for tile aliasing
                 const int start = bn * kBlockSize;
                 const int valid_len = (start < ctx_len) ? std::min(kBlockSize, ctx_len - start) : 0;
 
@@ -310,6 +311,7 @@ void batch_paged_attention_pto(const std::vector<half> &query, const std::vector
         TEXPANDS(oi, 0.0f);
 
         for (int bn = 0; bn < global_max_bn; ++bn) {
+            TASSIGN_RESET_PHASE();  // Reset per-iteration for tile aliasing
             const int start = bn * kBS;
             const int valid_len = (start < ctx_len) ? std::min(kBS, ctx_len - start) : 0;
 
@@ -358,15 +360,15 @@ void batch_paged_attention_pto(const std::vector<half> &query, const std::vector
             ScoresPlain scores;
             TMOV(scores, scoresAcc);
 
-            // Mask invalid positions: TFILLPAD_INPLACE first (matching simpler order)
-            // On CPU sim, tiles have independent data buffers (TASSIGN is a no-op),
-            // so we memcpy scores into scoresDynTile before the call.
-            // On device, TASSIGN makes tiles share the same physical buffer.
+            // Mask invalid positions: TFILLPAD_INPLACE
+            // Use TASSIGN to alias tiles to same UB offset (same API as NPU)
+            constexpr std::size_t SCORES_OFF = 0x1000;
+            TASSIGN(scores, SCORES_OFF);
             ScoresDyn scoresDynTile(static_cast<std::size_t>(valid_len));
-            std::memcpy(scoresDynTile.data(), scores.data(), sizeof(float) * kH * kBS);
+            TASSIGN(scoresDynTile, SCORES_OFF);
             ScoresPad scoresPadTile;
+            TASSIGN(scoresPadTile, SCORES_OFF);
             TFILLPAD_INPLACE(scoresPadTile, scoresDynTile);
-            std::memcpy(scores.data(), scoresPadTile.data(), sizeof(float) * kH * kBS);
 
             // Apply scale after masking (matching simpler order: mask -> scale)
             TMULS(scores, scores, scale);
