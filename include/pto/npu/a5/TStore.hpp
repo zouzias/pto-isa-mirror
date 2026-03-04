@@ -339,7 +339,7 @@ PTO_INTERNAL void TStoreAccNHWC(typename GlobalData::DType *dstAddr, __cc__ type
 template <typename GlobalData, typename TileData, QuantMode_t quantPre = QuantMode_t::NoQuant,
           ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ typename TileData::DType *srcAddr,
-                                int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
+                                int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride1,
                                 int gStride2, int validRow, int validCol)
 {
     if constexpr (GlobalData::layout == pto::Layout::NCHW) {
@@ -358,10 +358,7 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
     if constexpr (CompactMode::Normal == TileData::Compact) {
         srcStride = CeilAlignment(validRow, FRACTAL_NZ_ROW);
     }
-    uint32_t dstStride = gStride2;
-    if constexpr (GlobalData::layout == pto::Layout::NCDHW) {
-        dstStride = gShape2 * gShape3 * gShape4;
-    }
+    uint32_t dstStride = (GlobalData::layout == pto::Layout::NCDHW) ? gStride1 : gStride2
     uint16_t loop3Num = 1;
     uint16_t loop3SrcStirde = 0;
     uint16_t loop3DstStirde = 0;
@@ -418,7 +415,7 @@ __tf__ AICORE void TStoreAccFp(typename GlobalData::DType __out__ *dst, typename
                                                                    gShape4, gStride0, gStride3, validRow, validCol);
     } else if constexpr (GlobalData::layout == pto::Layout::NCHW || GlobalData::layout == pto::Layout::NCDHW) {
         TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3,
-                                                                   gShape4, gStride0, gStride2, validRow, validCol);
+                                                                   gShape4, gStride1, gStride2, validRow, validCol);
     }
 }
 
@@ -444,7 +441,7 @@ __tf__ AICORE void TStoreAcc(typename GlobalData::DType __out__ *dst, typename T
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride3, validRow, validCol);
     } else if constexpr (GlobalData::layout == pto::Layout::NCHW || GlobalData::layout == pto::Layout::NCDHW) {
         TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode, Phase>(
-            dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride2, validRow, validCol);
+            dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride1, gStride2, validRow, validCol);
     }
 }
 
