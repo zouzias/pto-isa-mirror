@@ -223,7 +223,7 @@ nav:
       - Overview: kernels/README.md
       - High-Performance Kernels:
           - GEMM Performance: kernels/manual/a2a3/gemm_performance/README.md
-          - Flash Attention: kernels/manual/common/flash_atten/README.md
+          - Flash Attention: kernels/manual/a2a3/flash_atten/README.md
       - Baseline Demos:
           - Add Demo: demos/baseline/add/README.md
           - GEMM Demo: demos/baseline/gemm_basic/README.md

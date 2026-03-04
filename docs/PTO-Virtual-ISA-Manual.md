@@ -1,7 +1,7 @@
 # PTO Virtual ISA Manual
 
 This page is the stable entry point for the PTO Virtual Instruction Set Architecture manual.
-The chaptered source of truth is maintained under `mkdocs/src/manual/`.
+The chaptered source of truth is maintained under `manual/`.
 
 ## Primary entry
 
