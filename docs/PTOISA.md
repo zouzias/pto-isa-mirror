@@ -19,8 +19,6 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 |---|---|---|
 | Synchronization | [`TSYNC`](isa/TSYNC.md) | Synchronize PTO execution (wait on events or insert a per-op pipeline barrier). |
 | Manual / Resource Binding | [`TASSIGN`](isa/TASSIGN.md) | Bind a Tile object to an implementation-defined on-chip address (manual placement). |
-| Manual / Resource Binding | [`TSETHF32MODE`](isa/TSETHF32MODE.md) | Configure HF32 transform mode (implementation-defined). |
-| Manual / Resource Binding | [`TSETTF32MODE`](isa/TSETTF32MODE.md) | Configure TF32 transform mode (implementation-defined). |
 | Manual / Resource Binding | [`TSETFMATRIX`](isa/TSETFMATRIX.md) | Set FMATRIX register(s) for IMG2COL-like ops. |
 | Manual / Resource Binding | [`TSET_IMG2COL_RPT`](isa/TSET_IMG2COL_RPT.md) | Set IMG2COL repeat metadata from an IMG2COL configuration tile. |
 | Manual / Resource Binding | [`TSET_IMG2COL_PADDING`](isa/TSET_IMG2COL_PADDING.md) | Set IMG2COL padding metadata from an IMG2COL configuration tile. |

@@ -11,8 +11,6 @@
 
 - 手动/资源绑定
     - [TASSIGN](docs/isa/TASSIGN_zh.md)
-    - [TSETHF32MODE](docs/isa/TSETHF32MODE_zh.md)
-    - [TSETTF32MODE](docs/isa/TSETTF32MODE_zh.md)
     - [TSETFMATRIX](docs/isa/TSETFMATRIX_zh.md)
     - [TSET_IMG2COL_RPT](docs/isa/TSET_IMG2COL_RPT_zh.md)
     - [TSET_IMG2COL_PADDING](docs/isa/TSET_IMG2COL_PADDING_zh.md)
