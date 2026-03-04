@@ -233,10 +233,7 @@ bool RunTTestTrueKernel(int rank_id, int n_ranks, int n_devices, int first_devic
 
     uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-<<<<<<< HEAD
     WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
-=======
->>>>>>> zhouzhe/a5_pr
 
     int32_t *shmem_signal = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
     int32_t *result = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
@@ -288,24 +285,14 @@ bool RunTTestFalseKernel(int rank_id, int n_ranks, int n_devices, int first_devi
 
     uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-<<<<<<< HEAD
     WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
-=======
->>>>>>> zhouzhe/a5_pr
 
     int32_t *shmem_signal = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
     int32_t *result = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
 
-<<<<<<< HEAD
     WindowMemInit<<<1, nullptr, ctx.stream>>>(shmem_signal, 0, 1);
     WindowMemInit<<<1, nullptr, ctx.stream>>>(result, 1, 1);
     aclrtSynchronizeStream(ctx.stream);
-=======
-    int32_t zero = 0;
-    aclrtMemcpy(shmem_signal, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
-    int32_t one = 1;
-    aclrtMemcpy(result, sizeof(int32_t), &one, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
->>>>>>> zhouzhe/a5_pr
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
@@ -353,10 +340,7 @@ bool RunTTestCompareKernel(int rank_id, int n_ranks, int n_devices, int first_de
 
     uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-<<<<<<< HEAD
     WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
-=======
->>>>>>> zhouzhe/a5_pr
 
     int32_t *shmem_signal = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
     int32_t *result = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
@@ -412,10 +396,7 @@ bool RunTTestPollingTimeoutKernel(int rank_id, int n_ranks, int n_devices, int f
 
     uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-<<<<<<< HEAD
     WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
-=======
->>>>>>> zhouzhe/a5_pr
 
     int32_t *shmem_signal = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
     int32_t *poll_count = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
@@ -475,10 +456,7 @@ bool RunTTestNEKernel(int rank_id, int n_ranks, int n_devices, int first_device_
 
     uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-<<<<<<< HEAD
     WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
-=======
->>>>>>> zhouzhe/a5_pr
 
     int32_t *shmem_signal = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
     int32_t *result = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
@@ -532,16 +510,12 @@ bool RunTTestSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
 
     uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
-<<<<<<< HEAD
     WindowAlloc(localWinBase, winOffset, HCCL_WIN_SYNC_PREFIX);
-=======
->>>>>>> zhouzhe/a5_pr
 
     constexpr int FullRows = 8;
     int32_t *shmem_matrix = (int32_t *)WindowAlloc(localWinBase, winOffset, FullRows * FullCols * sizeof(int32_t));
     int32_t *result = (int32_t *)WindowAlloc(localWinBase, winOffset, sizeof(int32_t));
 
-<<<<<<< HEAD
     WindowMemInit<<<1, nullptr, ctx.stream>>>(shmem_matrix, 0, FullRows * FullCols);
     WindowMemInit<<<1, nullptr, ctx.stream>>>(result, 0, 1);
     aclrtSynchronizeStream(ctx.stream);
@@ -554,22 +528,6 @@ bool RunTTestSubRegionKernel(int rank_id, int n_ranks, int n_devices, int first_
     HcclHostBarrier(ctx.comm, ctx.stream);
 
     TTestSubRegionKernel<FullCols, SubRows, SubCols>
-=======
-    std::vector<int32_t> zeros(FullRows * FullCols, 0);
-    aclrtMemcpy(shmem_matrix, FullRows * FullCols * sizeof(int32_t), zeros.data(),
-                FullRows * FullCols * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
-    int32_t zero = 0;
-    aclrtMemcpy(result, sizeof(int32_t), &zero, sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    TTestSubRegionKernel<FullCols, SubRows, SubCols>
-        <<<1, nullptr, ctx.stream>>>(shmem_matrix, result, ctx.deviceCtx, 0);
-    aclrtSynchronizeStream(ctx.stream);
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    TTestSubRegionKernel<FullCols, SubRows, SubCols>
->>>>>>> zhouzhe/a5_pr
         <<<1, nullptr, ctx.stream>>>(shmem_matrix, result, ctx.deviceCtx, 1);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
