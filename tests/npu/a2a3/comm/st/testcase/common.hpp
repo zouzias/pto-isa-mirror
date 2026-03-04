@@ -296,6 +296,9 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     }
 
     int rankId = firstRankId + mpiRank;
+    if (nRanks <= 1) {
+        return false;
+    }
     int deviceId = rankId % nRanks + firstDeviceId;
 
     constexpr int kAclRepeatInit = 100002;
