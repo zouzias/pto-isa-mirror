@@ -347,7 +347,6 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
                    "The validRow of TileData must be equal to Shape1 * Shape3 * Shape4 of NCHW shape!");
         PTO_ASSERT(validCol == gShape2, "The validCol of TileData must be equal to Shape2 of NCHW shape!");
     } else { // NCDHW
-        PTO_ASSERT(gShape2 == 1, "Shape2 must be equal to 1 of NCDHW shape!");
         PTO_ASSERT(validRow == gShape0 * gShape3 * gShape4,
                    "The validRow of TileData must be equal to Shape0 * Shape3 * Shape4 of NCDHW shape!");
         PTO_ASSERT(validCol == gShape1, "The validCol of TileData must be equal to Shape1 of NCDHW shape!");
@@ -360,10 +359,12 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
         srcStride = CeilAlignment(validRow, FRACTAL_NZ_ROW);
     }
     uint32_t dstStride = gStride2;
-
-    uint16_t loop3Num = gShape0;
-    uint16_t loop3SrcStirde = srcStride * gShape2 / ACC_C0_SIZE;
-    uint16_t loop3DstStirde = gStride0;
+    if constexpr (GlobalData::layout == pto::Layout::NCDHW) {
+        dstStride = gShape2 * gShape3 * gShape4;
+    }
+    uint16_t loop3Num = 1;
+    uint16_t loop3SrcStirde = 0;
+    uint16_t loop3DstStirde = 0;
 
     constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
     constexpr uint8_t nz2dnEn = 1;
