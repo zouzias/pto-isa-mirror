@@ -120,18 +120,16 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
         // Single rank case: just copy local data to output
         if (nranks == 1) {
             TLOAD(accTileData, parallelGroup[rootIdx]);
-            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
             TSTORE(dstGlobalData, accTileData);
-            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0); // Wait for TSTORE completion
-            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            // Wait for TSTORE completion
+            PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
             return;
         }
 
         // Step 1: Load root data into accumulator
         TLOAD(accTileData, parallelGroup[rootIdx]);
-        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE2, PIPE_V>();
 
         // Step 2: Reduce data from all other ranks
         for (int r = 0; r < nranks; ++r) {
@@ -141,22 +139,18 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
             // Load remote data into receive buffer
             TLOAD(recvTileData, parallelGroup[r]);
-            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
-            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
+            PtoSetWaitFlag<PIPE_MTE2, PIPE_V>(EVENT_ID1, EVENT_ID1);
 
             // Perform reduction
             detail::ReduceTiles(accTileData, recvTileData, op);
 
-            set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_V, PIPE_MTE2>();
         }
 
         // Step 3: Store final result
-        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_V, PIPE_MTE3>();
         TSTORE(dstGlobalData, accTileData);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         return;
     }
 
@@ -246,12 +240,10 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
                         if (nranks == 1) {
                             // Single rank: just copy chunk
-                            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-                            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                            PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
                         } else {
                             // Multi-rank: reduce chunk from all remote ranks
-                            set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-                            wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+                            PtoSetWaitFlag<PIPE_MTE2, PIPE_V>();
 
                             for (int r = 0; r < nranks; ++r) {
                                 if (r == rootIdx)
@@ -259,25 +251,22 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
                                 SrcViewT remoteView(parallelGroup[r].data() + srcOffset, chunkShape, srcChunkStride);
                                 TLOAD(recvTileData, remoteView);
-                                set_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
-                                wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID1);
+                                PtoSetWaitFlag<PIPE_MTE2, PIPE_V>(EVENT_ID1, EVENT_ID1);
 
                                 detail::ReduceTiles(accTileData, recvTileData, op);
 
-                                set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-                                wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+                                PtoSetWaitFlag<PIPE_V, PIPE_MTE2>();
+                                PtoSetWaitFlag<PIPE_V, PIPE_MTE2>();
                             }
 
                             // Prepare for TSTORE
-                            set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-                            wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                            PtoSetWaitFlag<PIPE_V, PIPE_MTE3>();
                         }
 
                         // Store reduced chunk to destination
                         DstViewT dstView(dstGlobalData.data() + dstOffset, chunkShape, dstChunkStride);
                         TSTORE(dstView, accTileData);
-                        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
                     }
                 }
             }
@@ -350,8 +339,7 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
         // Single rank case: just copy local data to output
         if (nranks == 1) {
             TLOAD(accTileData, parallelGroup[rootIdx]);
-            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
             TSTORE(dstGlobalData, accTileData);
             set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0); // Wait for TSTORE completion
             wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
@@ -393,19 +381,16 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
             // Sync based on next operation
             if (hasNext) {
-                set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-                wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+                PtoSetWaitFlag<PIPE_V, PIPE_MTE2>();
             } else {
                 // Last iteration: prepare for TSTORE
-                set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-                wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                PtoSetWaitFlag<PIPE_V, PIPE_MTE3>();
             }
         }
 
         // Step 3: Store final result
         TSTORE(dstGlobalData, accTileData);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         return;
     }
 
@@ -491,8 +476,7 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
                         if (nranks == 1) {
                             // Single rank: just copy chunk
-                            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-                            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                            PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
                         } else {
                             // Multi-rank: ping-pong reduce chunk from all remote ranks
                             set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -534,12 +518,10 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
                                 // Sync based on next operation
                                 if (hasNext) {
-                                    set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
-                                    wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+                                    PtoSetWaitFlag<PIPE_V, PIPE_MTE2>();
                                 } else {
                                     // Last iteration: prepare for TSTORE
-                                    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-                                    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+                                    PtoSetWaitFlag<PIPE_V, PIPE_MTE3>();
                                 }
                             }
                         }
@@ -547,8 +529,7 @@ PTO_INTERNAL void TREDUCE_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
                         // Store reduced chunk to destination
                         DstViewT dstView(dstGlobalData.data() + dstOffset, chunkShape, dstChunkStride);
                         TSTORE(dstView, accTileData);
-                        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                        PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
                     }
                 }
             }

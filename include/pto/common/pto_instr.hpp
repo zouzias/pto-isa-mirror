@@ -66,9 +66,9 @@ PTO_INST RecordEvent TAND(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 // temp hack: needed by auto mode to support aliasing right now
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TALIAS(TileDataDst &original, TileDataSrc &alias, WaitEvents&... events) {
-  TSYNC(events...);
-  MAP_INSTR_IMPL(TALIAS, original, alias);
-  return {};
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TALIAS, original, alias);
+    return {};
 }
 #endif
 
@@ -90,9 +90,9 @@ PTO_INST RecordEvent TSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TSUBVIEW(TileDataDst &dst, TileDataSrc &src, uint16_t rowIdx, uint16_t colIdx, WaitEvents&... events) {
-  TSYNC(events...);
-  MAP_INSTR_IMPL(TSUBVIEW, dst, src, rowIdx, colIdx);
-  return {};
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TSUBVIEW, dst, src, rowIdx, colIdx);
+    return {};
 }
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
@@ -1546,7 +1546,7 @@ __tf__ PTO_INTERNAL OP_NAME(TGET_SCALE_ADDR)
     OP_TYPE(element_wise) void TGetScaleAddr(typename TileDataDst::TileDType __out__ dst,
                                     typename TileDataSrc::TileDType __in__ src)
 {
-  ;
+    ;
 }
 
 

@@ -86,11 +86,9 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
         if (nranks == 1) {
             // Single rank: direct copy, no offset needed
             TLOAD(stagingTileData, parallelGroup[0]);
-            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
             TSTORE(dstGlobalData, stagingTileData);
-            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
             return;
         }
 
@@ -109,14 +107,12 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
         for (int r = 0; r < nranks; ++r) {
             TLOAD(stagingTileData, parallelGroup[r]);
-            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
 
             int64_t dstOffset = static_cast<int64_t>(r) * perRankRows * dstStride3;
             DstViewT dstView(dstGlobalData.data() + dstOffset, perRankShape, dstViewStride);
             TSTORE(dstView, stagingTileData);
-            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         }
         return;
     }
@@ -200,16 +196,14 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
                             // TLOAD from rank r's source at chunk position
                             SrcViewT srcView(parallelGroup[r].data() + srcOffset, chunkShape, srcChunkStride);
                             TLOAD(stagingTileData, srcView);
-                            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-                            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                            PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
 
                             // TSTORE to local destination at rank + chunk position
                             DstViewT dstView(dstGlobalData.data() + dstOffset, chunkShape, dstChunkStride);
                             TSTORE(dstView, stagingTileData);
 
                             // Sync before next chunk's TLOAD
-                            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                            PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
                         }
                     }
                 }
@@ -274,11 +268,9 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
         if (nranks == 1) {
             TLOAD(pingTile, parallelGroup[0]);
-            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
             TSTORE(dstGlobalData, pingTile);
-            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
             return;
         }
 
@@ -296,14 +288,12 @@ PTO_INTERNAL void TGATHER_IMPL(ParallelGroupType &parallelGroup, GlobalDstData &
 
         for (int r = 0; r < nranks; ++r) {
             TLOAD(pingTile, parallelGroup[r]);
-            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE2, PIPE_MTE3>();
 
             int64_t dstOffset = static_cast<int64_t>(r) * perRankRows * dstStride3;
             DstViewT dstView(dstGlobalData.data() + dstOffset, perRankShape, dstViewStride);
             TSTORE(dstView, pingTile);
-            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            PtoSetWaitFlag<PIPE_MTE3, PIPE_MTE2>();
         }
         return;
     }

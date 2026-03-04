@@ -1286,8 +1286,9 @@ public:
     // constructor for static shape
     AICORE Tile() {
 #ifdef __PTO_AUTO__
-        if constexpr (Loc != TileType::Bias)
+        if constexpr (Loc != TileType::Bias) {
             TInit<std::remove_reference_t<decltype(*this)>>(data_);
+        }
 #endif
     };
 
@@ -1348,17 +1349,17 @@ public:
 #ifdef __CPU_SIM
     using TileDType = Tile::DType[Rows * Cols];
 #else
-    #ifdef __PTO_AUTO__
-        #if defined(__DAV_C220_CUBE__) || defined(__DAV_C220_VEC__)
-            using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols);
-        #else
-            using TileDType = std::conditional_t<Loc == TileType::Bias,
-                typename MemoryQualifier<Loc, DType>::type, // special handling for Bias Tile
-                typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols)>;
-        #endif
-    #else
-        using TileDType = typename MemoryQualifier<Loc, DType>::type;
-    #endif
+#ifdef __PTO_AUTO__
+#if defined(PTO_NPU_ARCH_A2A3)
+    using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols);
+#else
+    using TileDType = std::conditional_t<Loc == TileType::Bias,
+        typename MemoryQualifier<Loc, DType>::type, // special handling for Bias Tile
+        typename MemoryQualifier<Loc, DType>::type tile_size(Rows * Cols)>;
+#endif
+#else
+    using TileDType = typename MemoryQualifier<Loc, DType>::type;
+#endif
 #endif
 
     AICORE TileDType &data()
