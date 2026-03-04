@@ -235,6 +235,7 @@ PTO_INTERNAL void GenCastCallFp32ToInt16_NonSatTorch(__ubuf__ typename TileDataD
                                                      uint16_t dstRepeatStride, uint16_t srcRepeatStride,
                                                      __ubuf__ int32_t *tempInt32Buf)
 {
+    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion 
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
             vconv_f322s32r(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
@@ -263,6 +264,7 @@ PTO_INTERNAL void GenCastCallFp32ToInt16_NonSatTorch(__ubuf__ typename TileDataD
     }
 
     pipe_barrier(PIPE_V);
+    set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
     vconv_s322s16(dst, tempInt32Buf, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
 }
 
@@ -371,6 +373,8 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
     uint16_t step2DstRepeatStride = isHead ? static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2) : dstRepeatStride;
     uint16_t step2SrcRepeatStride = isHead ? BLOCK_MAX_PER_REPEAT : static_cast<uint16_t>(srcRepeatStride * 2);
 
+    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion 
+
     // Step 1: fp16 -> int32
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
@@ -395,6 +399,7 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
     }
     pipe_barrier(PIPE_V);
 
+    set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
     // Step 2: int32 -> int16
     vconv_s322s16(dst, tempInt32Buf, static_cast<uint8_t>(2 * repeatNum), dstBlockStride, 1, step2DstRepeatStride,
                   step2SrcRepeatStride);
@@ -483,6 +488,8 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
     const uint16_t hwInt16Stride = hwFp16Stride;       // int16 same width as fp16 in blocks
     const uint16_t hwDstStride   = hwFp16Stride / 2;   // int8 is half as wide as fp16 in blocks
 
+    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
+
     // Step 1: fp16 -> int32
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
@@ -511,6 +518,7 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
             break;
     }
     pipe_barrier(PIPE_V);
+    set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
 
     // Step 2: int32 -> int16 (narrow to low 16 bits) into tempAndBuf
     // After this, tempInt32Buf [+0..+4095] is fully consumed and available for reuse.
