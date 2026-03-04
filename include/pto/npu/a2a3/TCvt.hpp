@@ -995,8 +995,32 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
     constexpr unsigned SS = TileDataS::RowStride;
     constexpr unsigned DS = TileDataD::RowStride;
     unsigned validRow = dst.GetValidRow();
-    TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, satMode, numRepeatPerLine, numRemainPerLine,
-                                       validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
+    if constexpr (
+        // FP16→UINT8
+        (std::is_same<typename TileDataD::DType, uint8_t>::value &&
+        std::is_same<typename TileDataS::DType, half>::value) ||
+        // FP16→INT8
+        (std::is_same<typename TileDataD::DType, int8_t>::value &&
+        std::is_same<typename TileDataS::DType, half>::value) ||
+        // FP32→INT16
+        (std::is_same<typename TileDataD::DType, int16_t>::value &&
+        std::is_same<typename TileDataS::DType, float>::value) ||
+        // FP16→INT16
+        (std::is_same<typename TileDataD::DType, int16_t>::value &&
+        std::is_same<typename TileDataS::DType, half>::value) ||
+        // INT64→INT32
+        (std::is_same<typename TileDataD::DType, int32_t>::value &&
+        std::is_same<typename TileDataS::DType, int64_t>::value) ||
+        // INT32→INT16
+        (std::is_same<typename TileDataD::DType, int16_t>::value &&
+        std::is_same<typename TileDataS::DType, int32_t>::value)) {
+        TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, satMode, numRepeatPerLine, numRemainPerLine,
+                                    validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
+    } else {
+        // For all other conversions, default to saturation ON (native TCVT behavior)
+        TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, SaturationMode::ON, numRepeatPerLine, numRemainPerLine,
+                                    validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
+    }
 }
 
 // ============================================================================
