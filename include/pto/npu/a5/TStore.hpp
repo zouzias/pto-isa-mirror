@@ -340,7 +340,7 @@ template <typename GlobalData, typename TileData, QuantMode_t quantPre = QuantMo
           ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ typename TileData::DType *srcAddr,
                                 int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
-                                int gStride2, int validRow, int validCol)
+                                int gStride1, int gStride2, int validRow, int validCol)
 {
     if constexpr (GlobalData::layout == pto::Layout::NCHW) {
         PTO_ASSERT(validRow == gShape1 * gShape3 * gShape4,
@@ -360,7 +360,9 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
         srcStride = CeilAlignment(validRow, FRACTAL_NZ_ROW);
     }
     uint32_t dstStride = gStride2;
-
+    if constexpr (GlobalData::layout == pto::Layout::NCDHW) {
+        dstStride = gStride1;
+    }
     uint16_t loop3Num = gShape0;
     uint16_t loop3SrcStirde = srcStride * gShape2 / ACC_C0_SIZE;
     uint16_t loop3DstStirde = gStride0;
@@ -417,7 +419,8 @@ __tf__ AICORE void TStoreAccFp(typename GlobalData::DType __out__ *dst, typename
                                                                    gShape4, gStride0, gStride3, validRow, validCol);
     } else if constexpr (GlobalData::layout == pto::Layout::NCHW || GlobalData::layout == pto::Layout::NCDHW) {
         TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3,
-                                                                   gShape4, gStride0, gStride2, validRow, validCol);
+                                                                   gShape4, gStride0, gStride1, gStride2, validRow,
+                                                                   validCol);
     }
 }
 
@@ -442,8 +445,9 @@ __tf__ AICORE void TStoreAcc(typename GlobalData::DType __out__ *dst, typename T
         TStoreAccNHWC<GlobalData, TileData, quantPre, reluPreMode, Phase>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride3, validRow, validCol);
     } else if constexpr (GlobalData::layout == pto::Layout::NCHW || GlobalData::layout == pto::Layout::NCDHW) {
-        TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode, Phase>(
-            dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride2, validRow, validCol);
+        TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode, Phase>(dstAddr, srcAddr, gShape0, gShape1, gShape2,
+                                                                          gShape3, gShape4, gStride0, gStride1,
+                                                                          gStride2, validRow, validCol);
     }
 }
 
