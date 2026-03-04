@@ -125,7 +125,11 @@ get_gtest_filter_for_nranks() {
 # Discover testcases
 # ============================================================================
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ST_DIR="${ROOT_DIR}/tests/npu/a2a3/comm/st/testcase"
+if [[ "$SOC_VERSION" == "a5" ]]; then
+  ST_DIR="${ROOT_DIR}/tests/npu/a5/comm/st/testcase"
+else
+  ST_DIR="${ROOT_DIR}/tests/npu/a2a3/comm/st/testcase"
+fi
 
 if [[ ! -d "${ST_DIR}" ]]; then
   echo "[ERROR] testcase dir not found: ${ST_DIR}" >&2

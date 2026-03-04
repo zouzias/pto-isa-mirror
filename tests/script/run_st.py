@@ -238,7 +238,9 @@ def main():
         script_path = os.path.abspath(__file__)
         target_dir = os.path.dirname(os.path.dirname(script_path))
 
-        if is_comm:
+        if is_comm and args.soc_version == "a5":
+            target_dir = target_dir + "/npu/a5/comm/st"
+        elif is_comm:
             target_dir = target_dir + "/npu/a2a3/comm/st"
         elif args.soc_version == "a3":
             target_dir = target_dir + "/npu/a2a3/src/st"
