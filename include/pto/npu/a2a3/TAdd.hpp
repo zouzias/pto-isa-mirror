@@ -76,19 +76,12 @@ PTO_INTERNAL void TADD_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     TAddCheck<T, TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-    // when tileshape of src0, src1 and dst are the same, validRows and validCols are also the same
-    if constexpr (std::is_same_v<TileDataDst, TileDataSrc0> && std::is_same_v<TileDataDst, TileDataSrc1>) {
-        constexpr unsigned dstRowStride = TileDataDst::RowStride;
-        TAdd<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride>(dst.data(), src0.data(), src1.data(),
-                                                                          dst.GetValidRow(), dst.GetValidCol());
-    } else {
-        // when tileshape of src0, src1 and dst are different, validRows and validCols are also the same
-        constexpr unsigned dstRowStride = TileDataDst::RowStride;
-        constexpr unsigned src0RowStride = TileDataSrc0::RowStride;
-        constexpr unsigned src1RowStride = TileDataSrc1::RowStride;
-        TAdd<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
-            dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());
-    }
+
+    constexpr unsigned dstRowStride = TileDataDst::RowStride;
+    constexpr unsigned src0RowStride = TileDataSrc0::RowStride;
+    constexpr unsigned src1RowStride = TileDataSrc1::RowStride;
+    TAdd<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride,
+         src1RowStride>(dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());
 }
 } // namespace pto
 #endif
