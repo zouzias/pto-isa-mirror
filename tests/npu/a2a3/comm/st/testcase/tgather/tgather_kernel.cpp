@@ -451,8 +451,7 @@ bool RunGatherLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
     aclrtMalloc(reinterpret_cast<void **>(&dst_staging), n_ranks * total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMemcpy(dst_staging, n_ranks * total_count * sizeof(T), dst_host, n_ranks * total_count * sizeof(T),
                 ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)dst_ptr, dst_staging,
-                                                    static_cast<int>(n_ranks * total_count));
+    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)dst_ptr, dst_staging, static_cast<int>(n_ranks * total_count));
     aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
@@ -465,8 +464,8 @@ bool RunGatherLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int firs
 
     bool is_ok = true;
     if (rank_id == 0) {
-        WindowMemCopyOut<T><<<1, nullptr, ctx.stream>>>(dst_staging, (T *)dst_ptr,
-                                                         static_cast<int>(n_ranks * total_count));
+        WindowMemCopyOut<T>
+            <<<1, nullptr, ctx.stream>>>(dst_staging, (T *)dst_ptr, static_cast<int>(n_ranks * total_count));
         aclrtSynchronizeStream(ctx.stream);
         aclrtMemcpy(dst_host, n_ranks * total_count * sizeof(T), dst_staging, n_ranks * total_count * sizeof(T),
                     ACL_MEMCPY_DEVICE_TO_HOST);
@@ -630,8 +629,7 @@ bool RunGatherPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
     aclrtMalloc(reinterpret_cast<void **>(&dst_staging), n_ranks * total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMemcpy(dst_staging, n_ranks * total_count * sizeof(T), dst_host, n_ranks * total_count * sizeof(T),
                 ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)dst_ptr, dst_staging,
-                                                    static_cast<int>(n_ranks * total_count));
+    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)dst_ptr, dst_staging, static_cast<int>(n_ranks * total_count));
     aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
@@ -644,8 +642,8 @@ bool RunGatherPingPongKernel(int rank_id, int n_ranks, int n_devices, int first_
 
     bool is_ok = true;
     if (rank_id == 0) {
-        WindowMemCopyOut<T><<<1, nullptr, ctx.stream>>>(dst_staging, (T *)dst_ptr,
-                                                         static_cast<int>(n_ranks * total_count));
+        WindowMemCopyOut<T>
+            <<<1, nullptr, ctx.stream>>>(dst_staging, (T *)dst_ptr, static_cast<int>(n_ranks * total_count));
         aclrtSynchronizeStream(ctx.stream);
         aclrtMemcpy(dst_host, n_ranks * total_count * sizeof(T), dst_staging, n_ranks * total_count * sizeof(T),
                     ACL_MEMCPY_DEVICE_TO_HOST);

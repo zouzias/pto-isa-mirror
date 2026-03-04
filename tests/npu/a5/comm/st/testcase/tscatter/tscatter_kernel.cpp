@@ -413,8 +413,8 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
                     ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMemcpy(src_staging, n_ranks * total_count * sizeof(T), src_host, n_ranks * total_count * sizeof(T),
                     ACL_MEMCPY_HOST_TO_DEVICE);
-        WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)src_ptr, src_staging,
-                                                        static_cast<int>(n_ranks * total_count));
+        WindowMemCopyIn<T>
+            <<<1, nullptr, ctx.stream>>>((T *)src_ptr, src_staging, static_cast<int>(n_ranks * total_count));
         aclrtSynchronizeStream(ctx.stream);
         aclrtFree(src_staging);
     }
@@ -586,8 +586,8 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
                     ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMemcpy(src_staging, n_ranks * total_count * sizeof(T), src_host, n_ranks * total_count * sizeof(T),
                     ACL_MEMCPY_HOST_TO_DEVICE);
-        WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)src_ptr, src_staging,
-                                                        static_cast<int>(n_ranks * total_count));
+        WindowMemCopyIn<T>
+            <<<1, nullptr, ctx.stream>>>((T *)src_ptr, src_staging, static_cast<int>(n_ranks * total_count));
         aclrtSynchronizeStream(ctx.stream);
         aclrtFree(src_staging);
     }

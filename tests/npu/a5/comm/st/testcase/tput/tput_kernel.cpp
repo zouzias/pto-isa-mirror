@@ -669,7 +669,8 @@ bool RunPutRingLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
     COMM_DBG("Rank " << rank_id << " LargeShape: pre-barrier");
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    COMM_DBG("Rank " << rank_id << " LargeShape: launching Phase 0 (" << total_rows << "x" << cols << " tile=" << tile_rows << ")");
+    COMM_DBG("Rank " << rank_id << " LargeShape: launching Phase 0 (" << total_rows << "x" << cols
+                     << " tile=" << tile_rows << ")");
     TPutLargeShapeKernelImpl<T, total_rows, cols, tile_rows>
         <<<1, nullptr, ctx.stream>>>((T *)output_ptr, (T *)input_ptr, (T *)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
     COMM_DBG("Rank " << rank_id << " LargeShape: Phase 0 launched, syncing ...");
@@ -1326,7 +1327,8 @@ bool RunPutRing2DSlidingKernel(int rank_id, int n_ranks, int n_devices, int firs
     COMM_DBG("Rank " << rank_id << " 2DSliding: pre-barrier");
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    COMM_DBG("Rank " << rank_id << " 2DSliding: launching Phase 0 (" << total_rows << "x" << total_cols << " tile=" << tile_rows << "x" << tile_cols << ")");
+    COMM_DBG("Rank " << rank_id << " 2DSliding: launching Phase 0 (" << total_rows << "x" << total_cols
+                     << " tile=" << tile_rows << "x" << tile_cols << ")");
     TPut2DSlidingKernelImpl<T, total_rows, total_cols, tile_rows, tile_cols>
         <<<1, nullptr, ctx.stream>>>((T *)output_ptr, (T *)input_ptr, (T *)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
     COMM_DBG("Rank " << rank_id << " 2DSliding: Phase 0 launched, syncing ...");
@@ -1576,7 +1578,8 @@ bool RunPutRingPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
     COMM_DBG("Rank " << rank_id << " PingPong: pre-barrier");
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    COMM_DBG("Rank " << rank_id << " PingPong: launching Phase 0 (" << total_rows << "x" << total_cols << " tile=" << tile_rows << "x" << tile_cols << ")");
+    COMM_DBG("Rank " << rank_id << " PingPong: launching Phase 0 (" << total_rows << "x" << total_cols
+                     << " tile=" << tile_rows << "x" << tile_cols << ")");
     TPutPingPongKernelImpl<T, total_rows, total_cols, tile_rows, tile_cols>
         <<<1, nullptr, ctx.stream>>>((T *)output_ptr, (T *)input_ptr, (T *)shmem_ptr, n_ranks, ctx.deviceCtx, 0);
     COMM_DBG("Rank " << rank_id << " PingPong: Phase 0 launched, syncing ...");

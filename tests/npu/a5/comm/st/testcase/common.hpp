@@ -17,7 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <vector>
 #include <dlfcn.h>
 
-//#include "hccl/hccl.h"
+// #include "hccl/hccl.h"
 #include "acl/acl.h"
 
 #include "hccl/hccl_comm.h"
@@ -39,12 +39,14 @@ static inline double DbgNowMs()
     static const auto g_start = clk::now();
     return std::chrono::duration<double, std::milli>(clk::now() - g_start).count();
 }
-#define COMM_DBG(fmt, ...)                                                          \
-    do {                                                                            \
-        std::cerr << "[DBG " << std::fixed << std::setprecision(1)                  \
-                  << DbgNowMs() << "ms] " << fmt << std::endl;                     \
+#define COMM_DBG(fmt, ...)                                                                                      \
+    do {                                                                                                        \
+        std::cerr << "[DBG " << std::fixed << std::setprecision(1) << DbgNowMs() << "ms] " << fmt << std::endl; \
     } while (0)
-#define COMM_LOG(x) do { std::cerr << x << std::endl; } while(0)
+#define COMM_LOG(x)                  \
+    do {                             \
+        std::cerr << x << std::endl; \
+    } while (0)
 #else
 #define COMM_DBG(fmt, ...) ((void)0)
 #define COMM_LOG(x) ((void)0)
@@ -75,39 +77,39 @@ static constexpr uint32_t COMM_TOPO_MESH = 0b1u;
 // unlike the V1 path which only sets windowsOut[0].
 
 static constexpr uint32_t MAX_CC_TILING_NUM = 8U;
-static constexpr uint32_t GROUP_NAME_SIZE   = 128U;
-static constexpr uint32_t ALG_CONFIG_SIZE   = 128U;
+static constexpr uint32_t GROUP_NAME_SIZE = 128U;
+static constexpr uint32_t ALG_CONFIG_SIZE = 128U;
 
 struct Mc2InitTilingInner {
     uint32_t version;
     uint32_t mc2HcommCnt;
     uint32_t offset[MAX_CC_TILING_NUM];
-    uint8_t  debugMode;
-    uint8_t  preparePosition;
+    uint8_t debugMode;
+    uint8_t preparePosition;
     uint16_t queueNum;
     uint16_t commBlockNum;
-    uint8_t  devType;
-    char     reserved[17];
+    uint8_t devType;
+    char reserved[17];
 };
 
 struct Mc2cCTilingInner {
-    uint8_t  skipLocalRankCopy;
-    uint8_t  skipBufferWindowCopy;
-    uint8_t  stepSize;
-    uint8_t  version;
-    char     reserved[9];
-    uint8_t  commEngine;
-    uint8_t  srcDataType;
-    uint8_t  dstDataType;
-    char     groupName[GROUP_NAME_SIZE];
-    char     algConfig[ALG_CONFIG_SIZE];
+    uint8_t skipLocalRankCopy;
+    uint8_t skipBufferWindowCopy;
+    uint8_t stepSize;
+    uint8_t version;
+    char reserved[9];
+    uint8_t commEngine;
+    uint8_t srcDataType;
+    uint8_t dstDataType;
+    char groupName[GROUP_NAME_SIZE];
+    char algConfig[ALG_CONFIG_SIZE];
     uint32_t opType;
     uint32_t reduceType;
 };
 
 struct Mc2CommConfigV2 {
     Mc2InitTilingInner init;
-    Mc2cCTilingInner   inner;
+    Mc2cCTilingInner inner;
 };
 
 // ============================================================================
@@ -180,8 +182,7 @@ struct TestContext {
 
         char group[128] = {};
         hret = HcclGetCommName(comm, group);
-        COMM_LOG("[INIT] Rank " << rankId << ": HcclGetCommName -> " << (int)hret
-                  << " group=\"" << group << "\"");
+        COMM_LOG("[INIT] Rank " << rankId << ": HcclGetCommName -> " << (int)hret << " group=\"" << group << "\"");
         if (hret != HCCL_SUCCESS) {
             std::cerr << "[ERROR] HcclGetCommName failed: " << hret << std::endl;
             return false;
@@ -189,8 +190,8 @@ struct TestContext {
 
         CommTopo topoRet = 0;
         hret = HcomGetL0TopoTypeEx(group, &topoRet, COMM_IS_NOT_SET_DEVICE);
-        COMM_LOG("[INIT] Rank " << rankId << ": HcomGetL0TopoTypeEx -> " << (int)hret
-                  << " topo=" << topoRet << (topoRet == COMM_TOPO_MESH ? " (MESH)" : " (RING/other)"));
+        COMM_LOG("[INIT] Rank " << rankId << ": HcomGetL0TopoTypeEx -> " << (int)hret << " topo=" << topoRet
+                                << (topoRet == COMM_TOPO_MESH ? " (MESH)" : " (RING/other)"));
         if (hret != HCCL_SUCCESS) {
             std::cerr << "[ERROR] HcomGetL0TopoTypeEx failed: " << hret << std::endl;
             return false;
@@ -217,8 +218,8 @@ struct TestContext {
         tiling.init.mc2HcommCnt = 1U;
         tiling.init.commBlockNum = 48U;
         tiling.init.devType = 4U;
-        tiling.init.offset[0] = static_cast<uint32_t>(
-            reinterpret_cast<uint64_t>(&tiling.inner) - reinterpret_cast<uint64_t>(&tiling.init));
+        tiling.init.offset[0] =
+            static_cast<uint32_t>(reinterpret_cast<uint64_t>(&tiling.inner) - reinterpret_cast<uint64_t>(&tiling.init));
 
         tiling.inner.opType = 18U;
         tiling.inner.commEngine = 3U;
@@ -227,14 +228,13 @@ struct TestContext {
         strncpy(tiling.inner.algConfig, "BatchWrite=level0:fullmesh", ALG_CONFIG_SIZE - 1);
 
         COMM_LOG("[INIT] Rank " << rankId << ": tiling V2: init.version=100, inner.opType=18"
-                  << ", inner.commEngine=3, sizeof(Mc2CommConfigV2)=" << sizeof(Mc2CommConfigV2));
+                                << ", inner.commEngine=3, sizeof(Mc2CommConfigV2)=" << sizeof(Mc2CommConfigV2));
 
         void *ctxPtr = nullptr;
-        COMM_LOG("[INIT] Rank " << rankId
-                  << ": HcclAllocComResourceByTiling (V2 tiling, topo=" << topoRet << ") ...");
+        COMM_LOG("[INIT] Rank " << rankId << ": HcclAllocComResourceByTiling (V2 tiling, topo=" << topoRet << ") ...");
         hret = HcclAllocComResourceByTiling(commHandle, stream, &tiling, &ctxPtr);
         COMM_LOG("[INIT] Rank " << rankId << ": HcclAllocComResourceByTiling -> " << static_cast<int>(hret)
-                  << " ctxPtr=" << ctxPtr);
+                                << " ctxPtr=" << ctxPtr);
         if (hret != HCCL_SUCCESS || ctxPtr == nullptr) {
             std::cerr << "[ERROR] HcclAllocComResourceByTiling failed: " << hret << std::endl;
             return false;
@@ -249,12 +249,11 @@ struct TestContext {
         }
 
         COMM_LOG("[INFO] Rank " << rankId << " hccl init OK"
-                  << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
-                  << " winSize=" << hostCtx.winSize);
+                                << " rankId=" << hostCtx.rankId << " rankNum=" << hostCtx.rankNum
+                                << " winSize=" << hostCtx.winSize);
         for (uint32_t i = 0; i < hostCtx.rankNum && i < HCCL_MAX_RANK_NUM; ++i) {
-            COMM_LOG("[INFO] Rank " << rankId << ": windowsIn[" << i << "]=0x" << std::hex
-                      << hostCtx.windowsIn[i] << " windowsOut[" << i << "]=0x"
-                      << hostCtx.windowsOut[i] << std::dec);
+            COMM_LOG("[INFO] Rank " << rankId << ": windowsIn[" << i << "]=0x" << std::hex << hostCtx.windowsIn[i]
+                                    << " windowsOut[" << i << "]=0x" << hostCtx.windowsOut[i] << std::dec);
         }
         return true;
     }
