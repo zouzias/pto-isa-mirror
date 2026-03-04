@@ -12,6 +12,7 @@ full text of the License.
 
 #ifndef TSUBVIEW_A5_HPP
 #define TSUBVIEW_A5_HPP
+#include <pto/common/type.hpp>
 
 #ifdef __PTO_AUTO__
 // only needed for auto mode
@@ -26,7 +27,7 @@ __tf__ PTO_INTERNAL void TSubView(typename TileDataDst::TileDType __out__ dst,
 #endif
 
 template <typename TileDataDst, typename TileDataSrc>
-AICORE void TSUBVIEW_IMPL(TileDataDst &dst, TileDataSrc &src, uint16_t rowIdx,
+PTO_INTERNAL void TSUBVIEW_IMPL(TileDataDst &dst, TileDataSrc &src, uint16_t rowIdx,
                           uint16_t colIdx) {
 #ifndef __PTO_AUTO__
   // implement for manual mode...

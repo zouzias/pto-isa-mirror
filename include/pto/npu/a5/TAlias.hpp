@@ -17,11 +17,13 @@ full text of the License.
   * auto mode.
  */
 
-#ifndef TALIAS_A5_HPP
-#define TALIAS_A5_HPP
+#ifdef __PTO_AUTO__
+#ifndef TALIAS_HPP
+#define TALIAS_HPP
+#include <pto/common/type.hpp>
 
 template <typename TileDataDst, typename TileDataSrc>
-AICORE void checkAlias() {
+PTO_INTERNAL void checkAlias() {
   using namespace pto;
   static_assert(is_tile_data_v<TileDataSrc>, "input must be a Tile instance.");
   static_assert(is_tile_data_v<TileDataDst>, "output must be a Tile instance.");
@@ -60,9 +62,10 @@ __tf__ PTO_INTERNAL void TAlias(typename TileDataDst::TileDType __out__ original
 }
 
 template <typename TileDataDst, typename TileDataSrc>
-AICORE void TALIAS_IMPL(TileDataDst &original, TileDataSrc &alias) {
+PTO_INTERNAL void TALIAS_IMPL(TileDataDst &original, TileDataSrc &alias) {
   checkAlias<TileDataDst, TileDataSrc>();
   TAlias<TileDataDst, TileDataSrc>(original.data(), alias.data());
 }
 
-#endif
+#endif  // TALIAS_HPP
+#endif  // __PTO_AUTO__
