@@ -94,12 +94,12 @@ struct MemoryQualifier<TileType::Acc, DType> {
 };
 
 template <typename DType> struct MemoryQualifier<TileType::Bias, DType> {
-#if defined(__DAV_C220_CUBE__) || defined(__DAV_C220_VEC__)
-    #ifdef __PTO_AUTO__
-        using type = __biasbuf__ DType;
-    #else
-        using type = __biasbuf__ DType *;
-    #endif
+#if defined(PTO_NPU_ARCH_A2A3)
+#ifdef __PTO_AUTO__
+    using type = __biasbuf__ DType;
+#else
+    using type = __biasbuf__ DType *;
+#endif
 #else
     using type = uint64_t;
 #endif
