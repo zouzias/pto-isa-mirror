@@ -358,7 +358,7 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
     if constexpr (CompactMode::Normal == TileData::Compact) {
         srcStride = CeilAlignment(validRow, FRACTAL_NZ_ROW);
     }
-    uint32_t dstStride = (GlobalData::layout == pto::Layout::NCDHW) ? gStride1 : gStride2
+    uint32_t dstStride = (GlobalData::layout == pto::Layout::NCDHW) ? gStride1 : gStride2;
     uint16_t loop3Num = 1;
     uint16_t loop3SrcStirde = 0;
     uint16_t loop3DstStirde = 0;
