@@ -1596,6 +1596,114 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ bfloat1
     cast16to16<R, CastMode::SAT_ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
+/**
+ * BF16 to FP4 (packed x2) conversion helpers
+ *
+ * FP4 is 4-bit: columns are counted as nibbles, stored 2-per-byte in float4_e*x2_t.
+ * Intrinsic: vcvt(dst, src, preg, R(), PART_P0) — same 4:1 bit-ratio as FP32→FP8.
+ * Output requires vselr (select every 4th byte) to compact scattered result, and
+ * all dst byte offsets are >> 1 (nibble count → byte count).
+ */
+template <typename R, typename DST_VEC, typename DST>
+inline AICORE void castBf16toFp4(__ubuf__ DST *dst, __ubuf__ bfloat16_t *src, uint32_t validRows,
+                                  uint32_t validCols, uint32_t dstCols, uint32_t srcCols)
+{
+    uint32_t len16 = ELE_CNT_B16;
+    MaskReg preg_b16 = CreatePredicate<half>(len16);
+    MaskReg preg_idx = pset_b8(PAT_ALL);
+
+    DST_VEC v_idx;
+    vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
+    vmuls((RegTensor<int16_t> &)v_idx, (RegTensor<int16_t> &)v_idx, (int16_t)4, preg_idx);
+
+    FOR_ROWS
+    uint32_t preg_len_tail = (sreg % ELE_CNT_B16 == 0) ? ELE_CNT_B16 : (sreg % ELE_CNT_B16);
+    FOR_ELEMENTS(ELE_CNT_B16)
+    RegTensor<bfloat16_t> v_input;
+    DST_VEC v_output_p0, v_output;
+    uint32_t preg_len = (idx == repeatTimes - 1) ? preg_len_tail : ELE_CNT_B16;
+    uint32_t byte_len = preg_len >> 1; // nibbles → FP4x2 bytes
+    MaskReg preg_b8 = CreatePredicate<uint8_t>(byte_len);
+
+    vlds(v_input, src, srcOffset, NORM);
+    vcvt(v_output_p0, v_input, preg_b16, R(), PART_P0);
+    vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
+    vsts((RegTensor<uint8_t> &)v_output, (__ubuf__ uint8_t *)dst, dstOffset >> 1, NORM_B8, preg_b8);
+    END_FOR_ELEMENTS
+    END_FOR_ROWS
+}
+
+template <typename R, typename DST_VEC, typename DST>
+inline AICORE void castBf16toFp4_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ bfloat16_t *src, uint32_t validRows,
+                                                  uint32_t validCols, uint32_t dstCols, uint32_t srcCols)
+{
+    // Same pass-count as castBf16toFp4 (no interleaved dual-load variant for FP4)
+    castBf16toFp4<R, DST_VEC>(dst, src, validRows, validCols, dstCols, srcCols);
+}
+
+template <typename R, typename DST_VEC, typename DST>
+inline AICORE void castBf16toFp4_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ bfloat16_t *src, uint32_t validRows,
+                                                  uint32_t validCols, uint32_t dstCols, uint32_t srcCols)
+{
+    uint32_t totalElements = validRows * validCols; // counted in nibbles
+    uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B16);
+    uint32_t sReg = totalElements;
+    MaskReg preg_idx = pset_b8(PAT_ALL);
+
+    DST_VEC v_idx;
+    vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
+    vmuls((RegTensor<int16_t> &)v_idx, (RegTensor<int16_t> &)v_idx, (int16_t)4, preg_idx);
+
+    for (uint16_t i = 0; i < repeatTimes; ++i) {
+        RegTensor<bfloat16_t> v_input;
+        DST_VEC v_output_p0, v_output;
+        uint32_t cur_len = sReg;
+        uint32_t byte_len = cur_len >> 1; // nibbles → FP4x2 bytes
+        MaskReg preg_b16 = CreatePredicate<half>(sReg); // post-updates sReg
+        MaskReg preg_b8 = CreatePredicate<uint8_t>(byte_len);
+
+        vlds(v_input, src, i * ELE_CNT_B16, NORM);
+        vcvt(v_output_p0, v_input, preg_b16, R(), PART_P0);
+        vselr((RegTensor<uint8_t> &)v_output, (RegTensor<uint8_t> &)v_output_p0, (RegTensor<uint8_t> &)v_idx);
+        vsts((RegTensor<uint8_t> &)v_output, (__ubuf__ uint8_t *)dst, (i * ELE_CNT_B16) >> 1, NORM_B8, preg_b8);
+        // sReg is decremented by CreatePredicate<half> with POST_UPDATE
+    }
+}
+
+/** BF16 -> FP4_E1M2X2 #rnd #sat #part */
+template <typename R>
+inline AICORE void castData(__ubuf__ float4_e1m2x2_t *dst, __ubuf__ bfloat16_t *src, uint32_t validRows,
+                            uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                            SaturationMode satMode = SaturationMode::ON)
+{
+    castBf16toFp4<R, vector_f4e1m2x2>(dst, src, validRows, validCols, dstCols, srcCols);
+}
+
+template <typename R>
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float4_e1m2x2_t *dst, __ubuf__ bfloat16_t *src,
+                                            uint32_t validRows, uint32_t validCols, uint32_t dstCols,
+                                            uint32_t srcCols, SaturationMode satMode = SaturationMode::ON)
+{
+    castBf16toFp4_2D_NoPostUpdate<R, vector_f4e1m2x2>(dst, src, validRows, validCols, dstCols, srcCols);
+}
+
+/** BF16 -> FP4_E2M1X2 #rnd #sat #part */
+template <typename R>
+inline AICORE void castData(__ubuf__ float4_e2m1x2_t *dst, __ubuf__ bfloat16_t *src, uint32_t validRows,
+                            uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                            SaturationMode satMode = SaturationMode::ON)
+{
+    castBf16toFp4<R, vector_f4e2m1x2>(dst, src, validRows, validCols, dstCols, srcCols);
+}
+
+template <typename R>
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float4_e2m1x2_t *dst, __ubuf__ bfloat16_t *src,
+                                            uint32_t validRows, uint32_t validCols, uint32_t dstCols,
+                                            uint32_t srcCols, SaturationMode satMode = SaturationMode::ON)
+{
+    castBf16toFp4_2D_NoPostUpdate<R, vector_f4e2m1x2>(dst, src, validRows, validCols, dstCols, srcCols);
+}
+
 //---------------------------------------------------------------------------------------------
 // Source: U8, I8 (8-bit integers) - 2D versions
 //---------------------------------------------------------------------------------------------
@@ -2177,6 +2285,22 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ half *dst, __ubuf__ bfloat1
                                             SaturationMode satMode)
 {
     cast16to16_1D_NoPostUpdate<R, CastMode::SAT_ROUND>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
+template <typename R>
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float4_e1m2x2_t *dst, __ubuf__ bfloat16_t *src,
+                                            uint32_t validRows, uint32_t validCols, uint32_t dstCols,
+                                            uint32_t srcCols, SaturationMode satMode)
+{
+    castBf16toFp4_1D_NoPostUpdate<R, vector_f4e1m2x2>(dst, src, validRows, validCols, dstCols, srcCols);
+}
+
+template <typename R>
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float4_e2m1x2_t *dst, __ubuf__ bfloat16_t *src,
+                                            uint32_t validRows, uint32_t validCols, uint32_t dstCols,
+                                            uint32_t srcCols, SaturationMode satMode)
+{
+    castBf16toFp4_1D_NoPostUpdate<R, vector_f4e2m1x2>(dst, src, validRows, validCols, dstCols, srcCols);
 }
 
 // Source: I16 (signed 16-bit integer)
