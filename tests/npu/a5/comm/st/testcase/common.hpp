@@ -297,7 +297,7 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     }
 
     int rankId = firstRankId + mpiRank;
-    if (nRanks <= 1) {
+    if (nRanks <= 0) {
         return false;
     }
     int deviceId = rankId % nRanks + firstDeviceId;
