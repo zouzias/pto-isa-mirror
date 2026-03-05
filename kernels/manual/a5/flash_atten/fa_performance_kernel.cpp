@@ -440,13 +440,23 @@ AICORE inline void compute_qk(int tile_id, int sub_tile_id, int ub_buf_idx, __gm
 
 #if USE_L0C_TO_DUAL_UB_PATH_QK
         if constexpr (INTERMEDIATE_CHECK) {
-            using GlobalDataQK =
-                GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
+            // When ND_LAYOUT=1: matmul is (Cube_S0, HEAD, Cube_S1) → L0C is Cube_S0×Cube_S1, store ND shape.
+            // When ND_LAYOUT=0: matmul is (Cube_S1, HEAD, Cube_S0) → L0C is Cube_S1×Cube_S0, store DN shape.
+            // Using the wrong shape with a square tile still writes the same byte count but transposes the data,
+            // so we must match the actual L0C M×N dimensions.
             const uint32_t buf_idx = static_cast<uint32_t>(tile_id % QKP_CV_FIFO);
             const size_t base_elems =
                 static_cast<size_t>(buf_idx) * static_cast<size_t>(kTileFactor) * static_cast<size_t>(Cube_S0) *
                     static_cast<size_t>(Cube_S1) +
                 static_cast<size_t>(sub_tile_id) * static_cast<size_t>(Cube_S0) * static_cast<size_t>(Cube_S1);
+#if ND_LAYOUT
+            using GlobalDataQK =
+                GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S0, Cube_S1>, pto::Stride<1, 1, 1, Cube_S1, 1>>;
+#else
+            // DN matmul result is M=Cube_S1, N=Cube_S0 → use matching DN shape.
+            using GlobalDataQK =
+                GlobalTensor<float, pto::Shape<1, 1, 1, Cube_S1, Cube_S0>, pto::Stride<1, 1, 1, Cube_S0, 1>>;
+#endif
             GlobalDataQK qkGlobalTile(qk_tile_fifo + base_elems);
 #if UF_ENABLE
             TSTORE<STPhase::Final>(qkGlobalTile, qkAccTile);

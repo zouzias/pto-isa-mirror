@@ -425,31 +425,60 @@ void run_tfa()
                 size_t pv_off =
                     static_cast<size_t>(buf_idx) * static_cast<size_t>(CUBE_S0) * static_cast<size_t>(HEAD_SIZE);
 
-                // Copy qk tile
+                // Copy qk tile.
+                // ND_LAYOUT=1: device stores row-major [Cube_S0 x Cube_S1] per sub-tile.
+                // ND_LAYOUT=0: DN matmul produces a transposed result; TSTORE writes it with the DN shape
+                //              [Cube_S1 x Cube_S0] (stride Cube_S0), so element at key-col c, query-row r
+                //              is at index sub_col*Cube_S0*Cube_S1 + c*Cube_S0 + r (column-major per sub-tile).
                 for (int r = 0; r < CUBE_S0; ++r) {
                     const int global_r = b * CUBE_S0 + r;
                     const int c0 = ti * TILE_S1;
                     for (int sub_col = 0; sub_col < tile_factor; ++sub_col) {
                         const float *src = &golden_qk[static_cast<size_t>(global_r) * S1 + c0 + sub_col * CUBE_S1];
+#if ND_LAYOUT
                         float *dst = &exp_qk[qk_off +
                                              static_cast<size_t>(sub_col) * static_cast<size_t>(CUBE_S0) *
                                                  static_cast<size_t>(CUBE_S1) +
                                              static_cast<size_t>(r) * CUBE_S1];
                         std::copy_n(src, CUBE_S1, dst);
+#else
+                        // DN layout: element (query-row r, key-col c) stored at index c*CUBE_S0 + r.
+                        for (int c = 0; c < CUBE_S1; ++c) {
+                            exp_qk[qk_off +
+                                   static_cast<size_t>(sub_col) * static_cast<size_t>(CUBE_S0) *
+                                       static_cast<size_t>(CUBE_S1) +
+                                   static_cast<size_t>(c) * CUBE_S0 + static_cast<size_t>(r)] = src[c];
+                        }
+#endif
                     }
                 }
 
-                // Copy p tile (converted to float) with new layout: contiguous sub-tiles of width CUBE_S1
+                // Copy p tile (converted to float).
+                // ND_LAYOUT=1: same row-major layout as QK: [Cube_S0 x Cube_S1] per sub-tile.
+                // ND_LAYOUT=0: P is stored in DN (column-major) layout by compute_p TSTORE with
+                //              GlobalPTileHalfSub shape (Cube_S1, Vec_S0) stride (Cube_S0, 1).
+                //              Combined across both Vec subblocks the element at (query-row r, key-col c)
+                //              lands at index sub_col*Cube_S0*Cube_S1 + c*Cube_S0 + r.
                 for (int r = 0; r < CUBE_S0; ++r) {
                     const int global_r = b * CUBE_S0 + r;
                     const int c0 = ti * TILE_S1;
                     for (int sub_col = 0; sub_col < tile_factor; ++sub_col) {
                         const float *src = &golden_p[static_cast<size_t>(global_r) * S1 + c0 + sub_col * CUBE_S1];
+#if ND_LAYOUT
                         float *dst = &exp_p[p_off +
                                             static_cast<size_t>(sub_col) * static_cast<size_t>(CUBE_S0) *
                                                 static_cast<size_t>(CUBE_S1) +
                                             static_cast<size_t>(r) * CUBE_S1];
                         std::copy_n(src, CUBE_S1, dst);
+#else
+                        // DN layout: element (query-row r, key-col c) stored at index c*CUBE_S0 + r.
+                        for (int c = 0; c < CUBE_S1; ++c) {
+                            exp_p[p_off +
+                                  static_cast<size_t>(sub_col) * static_cast<size_t>(CUBE_S0) *
+                                      static_cast<size_t>(CUBE_S1) +
+                                  static_cast<size_t>(c) * CUBE_S0 + static_cast<size_t>(r)] = src[c];
+                        }
+#endif
                     }
                     exp_p_max[p_max_off + static_cast<size_t>(r)] = golden_exp_max_tiles[ti][global_r];
                 }
