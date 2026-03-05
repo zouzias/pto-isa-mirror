@@ -53,6 +53,7 @@ PTO_INTERNAL void BinS1LNormMode(__ubuf__ T *dst, __ubuf__ T *src0, T src1, unsi
             SetFullVecMaskByDType<T>();
         }
 }
+
 template <typename Op, typename T, unsigned elementsPerRepeat, unsigned dstStride, unsigned srcStride>
 PTO_INTERNAL void BinS2LNormModeColVLAlign(__ubuf__ T *dst, __ubuf__ T *src0, T src1, unsigned validRow,
                                            unsigned validCol)
