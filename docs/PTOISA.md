@@ -119,6 +119,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Data Movement / Layout | [`TMOV_FP`](isa/TMOV_FP.md) | Move/convert from an accumulator tile into a destination tile, using a scaling (`fp`) tile for vector quantization parameters. |
 | Data Movement / Layout | [`TRESHAPE`](isa/TRESHAPE.md) | Reinterpret a tile as another tile type/shape while preserving the underlying bytes. |
 | Data Movement / Layout | [`TTRANS`](isa/TTRANS.md) | Transpose with an implementation-defined temporary tile. |
+| Data Movement / Layout | [`TSUBVIEW`](isa/TSUBVIEW.md) | Reinterpret a tile as a subtile of another tile. |
 | Complex | [`TPRINT`](isa/TPRINT.md) | Debug/print elements from a tile (implementation-defined). |
 | Complex | [`TMRGSORT`](isa/TMRGSORT.md) | Merge sort for multiple sorted lists (implementation-defined element format and layout). |
 | Complex | [`TSORT32`](isa/TSORT32.md) | Sort a fixed-size 32-element block and produce an index mapping. |
