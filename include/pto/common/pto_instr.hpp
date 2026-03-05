@@ -1344,6 +1344,14 @@ PTO_INST RecordEvent TEXP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TEXPM1(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TEXPM1, dst, src);
+    return {};
+}
+
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TNOT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
     TSYNC(events...);

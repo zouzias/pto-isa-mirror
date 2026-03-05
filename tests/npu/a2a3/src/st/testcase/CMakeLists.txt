@@ -159,6 +159,7 @@ tstore_acc2gm
 trsqrt
 tsqrt
 texp
+texpm1
 tabs
 tlog
 trecip
