@@ -176,6 +176,7 @@ set(ALL_TESTCASES
     trsqrt
     tsqrt
     texp
+    texpm1
     tabs
     tlog
     trecip

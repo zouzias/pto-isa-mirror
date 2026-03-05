@@ -172,6 +172,37 @@ PTO_INTERNAL void TEXP_IMPL(DstTile &dst, SrcTile &src)
     TExp<DstTile, SrcTile>(dst.data(), src.data(), dstValidRow, dstValidCol);
 }
 
+/* TEXPM1 */
+template <typename T>
+struct ExpM1Op {
+    PTO_INTERNAL static void UnaryInstr(RegTensor<T> &dstReg, RegTensor<T> &srcReg, MaskReg &pReg)
+    {
+        vexp(dstReg, srcReg, pReg, MODE_ZEROING);
+        vadds(dstReg, dstReg, (T)-1, pReg, MODE_ZEROING);
+    }
+};
+template <typename DstTile, typename SrcTile>
+__tf__ PTO_INTERNAL OP_NAME(TEXPM1)
+    OP_TYPE(element_wise) void TExpM1(typename DstTile::TileDType __out__ dstData,
+                                    typename SrcTile::TileDType __in__ srcData, unsigned validRow, unsigned validCol,
+                                    VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
+{
+    using T = typename DstTile::DType;
+    __ubuf__ T *dst = (__ubuf__ T *)__cce_get_tile_ptr(dstData);
+    __ubuf__ T *src = (__ubuf__ T *)__cce_get_tile_ptr(srcData);
+    TUnaryOp<DstTile, SrcTile, ExpM1Op<T>>(dst, src, validRow, validCol, version);
+}
+template <typename DstTile, typename SrcTile>
+PTO_INTERNAL void TEXPM1_IMPL(DstTile &dst, SrcTile &src)
+{
+    TUnaryCheck<DstTile, SrcTile>();
+    unsigned dstValidRow = dst.GetValidRow();
+    unsigned dstValidCol = dst.GetValidCol();
+    PTO_ASSERT(dstValidCol == src.GetValidCol(), "TEXPM1: Number of columns of src and dst must be the same.");
+    PTO_ASSERT(dstValidRow == src.GetValidRow(), "TEXPM1: Number of rows of src and dst must be the same.");
+    TExpM1<DstTile, SrcTile>(dst.data(), src.data(), dstValidRow, dstValidCol);
+}
+
 /* TNOT */
 template <typename T>
 struct NotOp {
