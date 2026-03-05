@@ -68,6 +68,7 @@ PTO_INST void TSYNC(WaitEvents&... events);
   - `TSYNC_IMPL<Op>()` only supports vector-pipeline ops (`static_assert(pipe == PIPE_V)` in `include/pto/common/event.hpp`).
 - **`TSYNC(events...)` semantics**:
   - `TSYNC(events...)` calls `WaitAllEvents(events...)`, which invokes `events.Wait()` on each event token.
+  - In auto mode, TSYNC becomes a no-op.
 
 ## Examples
 
