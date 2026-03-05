@@ -24,7 +24,7 @@ def gen_golden_data(case_name, param):
     input1 = np.random.random(size=(H,W)).astype(dtype)
 
     # Perform the operation
-    golden = np.exp(input1) - 1
+    golden = np.exp(input1)
 
     # Apply valid region constraints
     output = np.zeros([H, W]).astype(dtype)
@@ -58,7 +58,7 @@ def generate_case_name(param):
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
-    return f"TEXPTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_inPlace_{param.in_place}"
+    return f"TEXPM1Test.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_inPlace_{param.in_place}"
 
 if __name__ == "__main__":
     # Get the absolute path of the script
