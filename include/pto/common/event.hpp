@@ -39,6 +39,7 @@ enum class Op : uint16_t
     TSHL,
     TSHR,
     TEXP,
+    TEXPM1,
     TSELS,
     TSQRT,
     TRSQRT,
