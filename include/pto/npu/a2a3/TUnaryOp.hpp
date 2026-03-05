@@ -340,6 +340,24 @@ PTO_INTERNAL void TSQRT_IMPL(DstTile &dst, SrcTile &src)
     TUNARY_IMPL<SqrtOp<typename DstTile::DType>>(dst, src);
 }
 
+/* EXPM1 */
+template <typename T>
+struct ExpM1Op {
+    PTO_INTERNAL static void UnaryInstr(__ubuf__ T *dst, __ubuf__ T *src, uint8_t repeat,
+                                        uint8_t dstStride = BLOCK_MAX_PER_REPEAT,
+                                        uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
+    {
+        vexp(dst, src, repeat, 1, 1, dstStride, srcStride);
+        pipe_barrier(PIPE_V);
+        vadds(dst, dst, (T)-1, repeat, 1, 1, dstStride, dstStride);
+    }
+};
+template <typename DstTile, typename SrcTile>
+PTO_INTERNAL void TEXPM1_IMPL(DstTile &dst, SrcTile &src)
+{
+    TUNARY_IMPL<ExpM1Op<typename DstTile::DType>>(dst, src);
+}
+
 /* EXP */
 template <typename T>
 struct ExpOp {
