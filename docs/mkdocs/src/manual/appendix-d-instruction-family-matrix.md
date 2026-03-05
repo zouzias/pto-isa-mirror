@@ -130,6 +130,7 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Data Movement / Layout | `TMOV_FP` | `reshape_move` | `dst, src` | `docs/isa/TMOV_FP.md` |
 | Data Movement / Layout | `TRESHAPE` | `reshape_move` | `dst, src` | `docs/isa/TRESHAPE.md` |
 | Data Movement / Layout | `TTRANS` | `reshape_move` | `dst, src` | `docs/isa/TTRANS.md` |
+| Data Movement / Layout | `TSUBVIEW` | `reshape_move` | `dst, src` | `docs/isa/TSUBVIEW.md` |
 | Complex | `TPRINT` | `complex` | `dst, src0, src1` | `docs/isa/TPRINT.md` |
 | Complex | `TMRGSORT` | `complex` | `dst, src0, src1` | `docs/isa/TMRGSORT.md` |
 | Complex | `TSORT32` | `complex` | `dst, src0, src1` | `docs/isa/TSORT32.md` |
