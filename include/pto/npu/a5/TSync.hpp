@@ -38,6 +38,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TSHL */,
     PIPE_V /* TSHR */,
     PIPE_V /* TEXP */,
+    PIPE_V /* TEXPM1 */,
     PIPE_V /* TSELS */,
     PIPE_V /* TSQRT */,
     PIPE_V /* TRSQRT */,
