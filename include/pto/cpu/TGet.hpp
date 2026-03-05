@@ -56,34 +56,10 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dst, GlobalSrcData &src, TileData &pi
     Copy_Data(dst, src);
 }
 
-template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
-PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dst, GlobalSrcData &src, TileData &src1)
-{
-    Copy_Data(src, dst);
-}
-
-template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
-PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dst, GlobalSrcData &src, TileData &src1, AtomicType &atomicType)
-{
-    Copy_Data(src, dst);
-}
-
-template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
-PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dst, GlobalSrcData &src, TileData &ping, TileData &pong)
-{
-    Copy_Data(src, dst);
-}
-
 template <typename GlobalDstData, typename GlobalSrcData>
 PTO_INTERNAL void TGET_ASYNC_IMPL(GlobalDstData &dst, GlobalSrcData &src)
 {
     Copy_Data(dst, src);
-}
-
-template <typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL void TPUT_ASYNC_IMPL(GlobalDstData &dst, GlobalSrcData &src)
-{
-    Copy_Data(src, dst);
 }
 
 } // namespace comm
