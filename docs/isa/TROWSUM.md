@@ -1,4 +1,9 @@
-# TROWSUM
+﻿# TROWSUM
+
+
+## Tile Operation Diagram
+
+![TROWSUM tile operation](../figures/isa/TROWSUM.svg)
 
 ## Introduction
 
@@ -12,7 +17,7 @@ $$ \mathrm{dst}_{i,0} = \sum_{j=0}^{C-1} \mathrm{src}_{i,j} $$
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
@@ -21,6 +26,17 @@ Synchronous form:
 ```
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
 
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.trowsum %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.trowsum ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -90,3 +106,31 @@ void example_manual() {
   TROWSUM(dst, src, tmp);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.trowsum %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.trowsum %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = trowsum %src : !pto.tile<...> -> !pto.tile<...>
+# IR Level 2 (DPS)
+pto.trowsum ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+

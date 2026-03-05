@@ -1,4 +1,9 @@
-# TADDS
+﻿# TADDS
+
+
+## Tile Operation Diagram
+
+![TADDS tile operation](../figures/isa/TADDS.svg)
 
 ## Introduction
 
@@ -12,12 +17,24 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,j} + \mathrm{scalar} $$
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
 %dst = tadds %src, %scalar : !pto.tile<...>, f32
+```
+
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.tadds %src, %scalar : (!pto.tile<...>,dtype) -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.tadds ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -76,3 +93,31 @@ void example_manual() {
   TADDS(dst, src, 1.0f);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tadds %src, %scalar : (!pto.tile<...>,dtype) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tadds %src, %scalar : (!pto.tile<...>,dtype) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tadds %src, %scalar : !pto.tile<...>, f32
+# IR Level 2 (DPS)
+pto.tadds ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```
+

@@ -101,6 +101,7 @@ endfunction()
 set(ALL_TESTCASES
 tmatmul
 trowsum
+trowprod
 trowmax
 trowmin
 textract
@@ -168,6 +169,7 @@ tcolmax
 tcolmin
 texpands
 tcolsum
+tcolprod
 tcmp
 tassign
 tstore_mat2gm
@@ -190,6 +192,9 @@ tcolexpanddiv
 tcolexpandexpdif
 tcolexpandmul
 tcolexpandsub
+tquant
+tdequant
+t_dhrystone
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

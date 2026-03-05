@@ -1,4 +1,9 @@
-# TSTORE_FP
+﻿# TSTORE_FP
+
+
+## Tile Operation Diagram
+
+![TSTORE_FP tile operation](../figures/isa/TSTORE_FP.svg)
 
 ## Introduction
 
@@ -14,12 +19,24 @@ $$ \mathrm{dst}_{r_0 + i,\; c_0 + j} = \mathrm{Convert}\!\left(\mathrm{src}_{i,j
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
 tstore.fp %src, %fp, %sv_out[%c0, %c0]
+```
+
+### IR Level 1 (SSA)
+
+```text
+pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```
 ## C++ Intrinsic
 
@@ -89,3 +106,31 @@ void example_manual(__gm__ int8_t* out) {
   TSTORE_FP(gout, acc, fp);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+```
+
+### PTO Assembly Form
+
+```text
+tstore.fp %src, %fp, %sv_out[%c0, %c0]
+# IR Level 2 (DPS)
+pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
+```
+

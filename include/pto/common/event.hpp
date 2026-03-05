@@ -55,10 +55,12 @@ enum class Op : uint16_t
     TGATHERB,
     TCVT,
     TROWSUM,
+    TROWPROD,
     TROWMAX,
     TROWMIN,
     TROWEXPAND,
     TCOLSUM,
+    TCOLPROD,
     TCOLMAX,
     TCOLMIN,
     TTRANS,
@@ -94,10 +96,11 @@ enum class Op : uint16_t
     TXORS,
     TEXTRACT_A2M, /* Acc to Mat */
     TINSERT_A2M,
-    TIMG2COl,
+    TIMG2COL,
     TSETFMATRIX,
-    TSETHF32MODE,
-    TSETTF32MODE,
+    TSET_IMG2COL_RPT,
+    TSET_IMG2COL_PADDING,
+    TDEQUANT,
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
 };
 

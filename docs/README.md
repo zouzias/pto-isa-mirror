@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="figures/pto_logo.svg" alt="PTO Tile Lib" width="200" />
+  <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="200" />
 </p>
 
 # PTO ISA Guide
@@ -15,19 +15,26 @@ This directory documents the PTO ISA (Instruction Set Architecture) used by PTO 
 
 ## Where to Start
 
-- ISA overview: `docs/PTOISA.md`
-- Instruction index: `docs/isa/README.md`
-- Common conventions: `docs/isa/conventions.md`
-- PTO assembly syntax reference (PTO-AS): `docs/grammar/PTO-AS.md`
-- Programming model (Tiles/GlobalTensor/Events/Scalars): `docs/coding/ProgrammingModel.md`
-- PTO ISA programming tutorial (C++ intrinsics): `docs/coding/tutorial.md`
-- Abstract machine model (core/device/host): `docs/machine/abstract-machine.md`
-- Getting started (recommended: run on CPU first): `docs/getting-started.md`
-- Implementation and extension notes: `docs/coding/README.md`
-- Kernel examples (NPU-focused): `kernels/README.md`
+- [Virtual ISA manual entry](PTO-Virtual-ISA-Manual.md)
+- [ISA overview](PTOISA.md)
+- [Instruction index](isa/README.md)
+- [PTO AS index](assembly/README.md)
+- [Common conventions](isa/conventions.md)
+- [PTO assembly syntax reference (PTO-AS)](assembly/PTO-AS.md)
+- [Virtual ISA / AS guide](../manual/09-virtual-isa-and-ir.md)
+- [Bytecode / toolchain guide](../manual/10-bytecode-and-toolchain.md)
+- [Memory ordering / consistency guide](../manual/11-memory-ordering-and-consistency.md)
+- [Backend profiles / conformance guide](../manual/12-backend-profiles-and-conformance.md)
+- [Programming model (Tiles/GlobalTensor/Events/Scalars)](coding/ProgrammingModel.md)
+- [PTO ISA programming tutorial (C++ intrinsics)](coding/tutorial.md)
+- [Abstract machine model (core/device/host)](machine/abstract-machine.md)
+- [Getting started (recommended: run on CPU first)](getting-started.md)
+- [Doc tooling (manifest/index/svg/consistency)](tools/)
+- [Implementation and extension notes](coding/README.md)
+- [Kernel examples (NPU-focused)](../kernels/README.md)
 
 ## Documentation Layout
 
 - `docs/isa/`: Instruction reference (one file per instruction, plus category pages)
-- `docs/grammar/`: PTO assembly grammar and specification (PTO-AS)
+- `docs/assembly/`: PTO assembly grammar and specification (PTO-AS)
 - `docs/coding/`: Developer notes for extending PTO Tile Lib

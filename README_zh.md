@@ -34,7 +34,7 @@ PTO Tile Lib 并不面向入门级用户，主要面向：
 
 ## 性能
 
-本仓库包含面向性能的 kernels，并给出参考测量数据与可复现的实验设置。
+本仓库包含面向性能的 kernels，并给出参考测量数据与可复现的实验设置。性能测试工具，请参考[msprof工具](https://www.hiascend.com/document/detail/zh/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html)。
 
 ### GEMM（A2/A3 参考）
 
@@ -49,15 +49,15 @@ PTO Tile Lib 并不面向入门级用户，主要面向：
 | `m=6144` `k=6144` `n=6144` | 86.7% | 68.1% | 95.2% | 3.1% | 1.5060 |
 | `m=7680` `k=7680` `n=7680` | 80.6% | 63.0% | 98.4% | 2.4% | 3.1680 |
 
-详细分析与调参说明：`kernels/manual/a2a3/gemm_performance/README_zh.md`。
+详细分析与调参说明：[高性能 GEMM 算子示例](kernels/manual/a2a3/gemm_performance/README_zh.md)。
 
 ![GEMM 性能参考（Ascend A3，24 核）](docs/figures/performance/gemm_performance_a3.svg)
 
 ### Flash Attention（A2/A3 参考）
 
-- Kernel：`kernels/manual/a2a3/flash_atten/`
+- Kernel：`kernels/manual/common/flash_atten/`
 
-详细分析与调参说明：`kernels/manual/a2a3/flash_atten/README_zh.md`。
+详细分析与调参说明：[Flash Attention 算子实现](kernels/manual/common/flash_atten/README_zh.md)。
 
 ![Flash Attention 归一化 TFLOPS（A2/A3）](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
 
@@ -103,13 +103,19 @@ PTO ISA 定义了 90+ 条标准操作。本仓库实现了其中不断增长的�
 * Ascend A5（Ascend 950）
 * CPU（x86_64 / AArch64）
 
-更多细节请参考：`include/README_zh.md`
+更多细节请参考：[include/README_zh.md](include/README_zh.md)
 
 ## 快速开始
 
-更详细、分操作系统的环境配置（Windows / Linux / macOS），请参考：[docs/getting-started.md](docs/getting-started.md)。
+更详细、分操作系统的环境配置（Windows / Linux / macOS），请参考：[docs/getting-started_zh.md](docs/getting-started_zh.md)。
 
 ### 构建文档（MkDocs）
+
+如果想直接查阅PTO ISA文档，可访问以下链接获取完整内容：
+
+- [文档中心](https://pto-isa.gitcode.com)
+
+如希望自行构建文档，也可参考以下步骤进行操作。
 
 本仓库在 `docs/mkdocs/` 下提供 MkDocs（Read the Docs 主题）站点。
 
@@ -238,8 +244,8 @@ source ${install-path}/cann/bin/setenv.bash
 * ISA 指南与导航：[docs/README_zh.md](docs/README_zh.md)
 * ISA 指令索引：[docs/isa/README_zh.md](docs/isa/README_zh.md)
 * 开发者文档索引：[docs/coding/README_zh.md](docs/coding/README_zh.md)
-* 入门指南（建议先 CPU，再 NPU）：[docs/getting-started.md](docs/getting-started.md)
-* 安全与披露流程：[SECURITY.md](SECURITY.md)
+* 入门指南（建议先 CPU，再 NPU）：[docs/getting-started_zh.md](docs/getting-started_zh.md)
+* 安全与披露流程：[SECURITY_zh.md](SECURITY_zh.md)
 * 分目录阅读（代码组织）：
 
   * 构建与打包（CMake）：[cmake/README_zh.md](cmake/README_zh.md)

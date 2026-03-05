@@ -1,4 +1,9 @@
-# TGATHERB
+﻿# TGATHERB
+
+
+## Tile Operation Diagram
+
+![TGATHERB tile operation](../figures/isa/TGATHERB.svg)
 
 ## Introduction
 
@@ -14,12 +19,24 @@ Exact bounds behavior is implementation-defined.
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
 %dst = tgatherb %src, %offsets : !pto.tile<...> -> !pto.tile<...>
+```
+
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.tgatherb %src, %offsets : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.tgatherb ins(%src, %offsets : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -83,3 +100,31 @@ void example_manual() {
   TGATHERB(dst, src, off);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tgatherb %src, %offsets : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tgatherb %src, %offsets : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tgatherb %src, %offsets : !pto.tile<...> -> !pto.tile<...>
+# IR Level 2 (DPS)
+pto.tgatherb ins(%src, %offsets : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+

@@ -1,4 +1,9 @@
-# TRECIP
+﻿# TRECIP
+
+
+## Tile Operation Diagram
+
+![TRECIP tile operation](../figures/isa/TRECIP.svg)
 
 ## Introduction
 
@@ -12,12 +17,24 @@ $$ \mathrm{dst}_{i,j} = \frac{1}{\mathrm{src}_{i,j}} $$
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
 %dst = trecip %src : !pto.tile<...>
+```
+
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.trecip %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -54,5 +71,32 @@ void example() {
   TileT x, out;
   TRECIP(out, x);
 }
+```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.trecip %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.trecip %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = trecip %src : !pto.tile<...>
+# IR Level 2 (DPS)
+pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

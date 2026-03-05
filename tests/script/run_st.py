@@ -47,7 +47,7 @@ def set_env_variables(run_mode, soc_version):
             raise EnvironmentError("ASCEND_HOME_PATH is not set")
 
         os.environ["LD_LIBRARY_PATH"] = f"{ascend_home}/runtime/lib64/stub:{os.environ.get('LD_LIBRARY_PATH', '')}"
-        if soc_version == "Kirin9030":
+        if soc_version == "Kirin9030" or soc_version == "KirinX90":
             setenv_path = os.path.join(ascend_home, "set_env.sh")
         else:
             setenv_path = os.path.join(ascend_home, "bin", "setenv.bash")
@@ -139,25 +139,63 @@ def run_gen_data(golden_path):
     finally:
         os.chdir(original_dir)
 
-def run_binary(testcase, run_mode, args="all"):
+def find_mpirun():
+    """Find mpirun executable, checking MPI_HOME and common paths."""
+    mpi_home = os.environ.get("MPI_HOME", "")
+    if mpi_home:
+        candidate = os.path.join(mpi_home, "bin", "mpirun")
+        if os.path.isfile(candidate):
+            return candidate
+
+    candidates = [
+        "/usr/local/mpich/bin/mpirun",
+        "/usr/local/bin/mpirun",
+        "/usr/bin/mpirun",
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+
+    result = shutil.which("mpirun")
+    if result:
+        return result
+
+    return None
+
+def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
     original_dir = os.getcwd()
     try:
         build_dir = "build/bin/"
         os.chdir(build_dir)
 
+        cmd = ["./" + testcase]
         if args != "all":
             if run_mode == "sim":
                 os.environ["CAMODEL_LOG_PATH"] = f"../{args}"
-            single_case = "--gtest_filter=" + args
-            cmd = ["./" + testcase, single_case]
-            print(f"run single testcase : {args}")
-            output = run_command(cmd)
-            print(output)
-        else : # all
-            cmd = ["./" + testcase]
-            print(f"run testcase : {testcase}")
-            output = run_command(cmd)
-            print(output)
+            cmd.append("--gtest_filter=" + args)
+
+        if is_comm:
+            mpirun = find_mpirun()
+            if not mpirun:
+                raise RuntimeError(
+                    "mpirun not found. Install MPICH/OpenMPI or set MPI_HOME env.\n"
+                    "Also set MPI_LIB_PATH to point to libmpi.so for runtime loading.")
+            mpi_cmd = [mpirun, "-n", str(nranks)]
+            try:
+                ver = subprocess.run([mpirun, "--version"], capture_output=True, text=True)
+                ver_text = ver.stdout + ver.stderr
+                if "open mpi" in ver_text.lower() or "openmpi" in ver_text.lower():
+                    mpi_cmd.append("--allow-run-as-root")
+            except Exception:
+                pass
+            cmd = mpi_cmd + cmd
+            mpi_lib_dir = os.path.dirname(mpirun).replace("/bin", "/lib")
+            if os.path.isdir(mpi_lib_dir):
+                os.environ["MPI_LIB_PATH"] = os.path.join(mpi_lib_dir, "libmpi.so")
+
+        print(f"run command: {' '.join(cmd)}")
+        output = run_command(cmd)
+        print(output)
 
     except Exception as e:
         print(f"run binary failed: {e}")
@@ -169,21 +207,30 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
-    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / kirin9030")
+    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / kirin9030 / kirinX90")
     parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
     parser.add_argument("-d", "--debug-enable", action='store_true', help="开启debug检查")
     parser.add_argument("-w", "--without-build", action='store_true', help="关闭编译（需要预先编译）")
+    parser.add_argument("-n", "--nranks", type=int, default=2, help="comm测试的MPI rank数量（默认2）")
 
     args = parser.parse_args()
     default_soc_version = "Ascend910B1"
     if args.soc_version == "a5":
         default_soc_version = "Ascend910_9599"
-    if args.soc_version == "kirin9030":
+    elif args.soc_version == "kirin9030":
         default_soc_version = "Kirin9030"
+    elif args.soc_version == "kirinX90":
+        default_soc_version = "KirinX90"
     default_cases = "all"
     if args.gtest_filter != None:
         default_cases = args.gtest_filter
+    testcase = args.testcase
+    is_comm = testcase.startswith("comm/")
+    if is_comm:
+        testcase = testcase[len("comm/"):]
+        if not testcase:
+            raise ValueError("comm/ 后必须指定用例名")
 
     original_dir = os.getcwd()
     try:
@@ -191,9 +238,13 @@ def main():
         script_path = os.path.abspath(__file__)
         target_dir = os.path.dirname(os.path.dirname(script_path))
 
-        if args.soc_version == "a3":
+        if is_comm and args.soc_version == "a5":
+            target_dir = target_dir + "/npu/a5/comm/st"
+        elif is_comm:
+            target_dir = target_dir + "/npu/a2a3/comm/st"
+        elif args.soc_version == "a3":
             target_dir = target_dir + "/npu/a2a3/src/st"
-        elif args.soc_version == "kirin9030" : # kirin9030
+        elif args.soc_version == "kirin9030" or args.soc_version == "kirinX90": # kirin9030 与 kirinX90 共享代码
             target_dir = target_dir + "/npu/kirin9030/src/st"
         else : # a5
             target_dir = target_dir + "/npu/a5/src/st"
@@ -210,14 +261,15 @@ def main():
                 cwd=original_dir,
                 check=True)
         else:
-            build_project(args.run_mode, default_soc_version, args.testcase, args.debug_enable)
+            build_project(args.run_mode, default_soc_version, testcase, args.debug_enable)
 
         # 生成标杆
-        golden_path = "testcase/" + args.testcase + "/gen_data.py"
+        golden_path = "testcase/" + testcase + "/gen_data.py"
         run_gen_data(golden_path)
 
         # 执行二进制文件
-        run_binary(args.testcase, args.run_mode, default_cases)
+        run_binary(testcase, args.run_mode, default_cases,
+                   is_comm=is_comm, nranks=args.nranks)
 
     except Exception as e:
         print(f"run failed: {str(e)}", file=sys.stderr)

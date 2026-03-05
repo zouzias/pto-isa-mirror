@@ -1,4 +1,9 @@
-# MSCATTER
+﻿# MSCATTER
+
+
+## Tile Operation Diagram
+
+![MSCATTER tile operation](../figures/isa/MSCATTER.svg)
 
 ## Introduction
 
@@ -14,12 +19,24 @@ If multiple elements map to the same destination location, the final value is im
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
 mscatter %src, %mem, %idx : !pto.memref<...>, !pto.tile<...>, !pto.tile<...>
+```
+
+### IR Level 1 (SSA)
+
+```text
+pto.mscatter %src, %idx, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.mscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
 ```
 ## C++ Intrinsic
 
@@ -34,4 +51,35 @@ PTO_INST RecordEvent MSCATTER(GlobalData& dst, TileSrc& src, TileInd& indexes, W
 
 - Index interpretation is target-defined. The CPU simulator treats indices as linear element indices into `dst.data()`.
 - No bounds checks are enforced on `indexes` by the CPU simulator.
+
+## Examples
+
+See related examples in `docs/isa/` and `docs/coding/tutorials/`.
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+pto.mscatter %src, %idx, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+pto.mscatter %src, %idx, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
+```
+
+### PTO Assembly Form
+
+```text
+mscatter %src, %mem, %idx : !pto.memref<...>, !pto.tile<...>, !pto.tile<...>
+# IR Level 2 (DPS)
+pto.mscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
+```
 

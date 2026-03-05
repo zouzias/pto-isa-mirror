@@ -1,4 +1,9 @@
-# TROWEXPAND
+﻿# TROWEXPAND
+
+
+## Tile Operation Diagram
+
+![TROWEXPAND tile operation](../figures/isa/TROWEXPAND.svg)
 
 ## Introduction
 
@@ -12,12 +17,24 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,0} $$
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
 %dst = trowexpand %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.trowexpand %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.trowexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -74,3 +91,31 @@ void example_manual() {
   TROWEXPAND(dst, src);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.trowexpand %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.trowexpand %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = trowexpand %src : !pto.tile<...> -> !pto.tile<...>
+# IR Level 2 (DPS)
+pto.trowexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+

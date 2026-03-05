@@ -42,12 +42,12 @@ template <typename TileDataDst>
 PTO_INTERNAL void TEXPANDS_IMPL(TileDataDst &dst, typename TileDataDst::DType scalar)
 {
     using T = typename TileDataDst::DType;
-    static_assert(std::is_same<T, int32_t>::value || std::is_same<T, uint32_t>::value || std::is_same<T, int>::value ||
-                      std::is_same<T, int16_t>::value || std::is_same<T, uint16_t>::value ||
-                      std::is_same<T, int8_t>::value || std::is_same<T, uint8_t>::value ||
-                      std::is_same<T, half>::value || std::is_same<T, float16_t>::value ||
-                      std::is_same<T, float>::value || std::is_same<T, float32_t>::value,
-                  "TEXPANDS: Invalid data type");
+    static_assert(
+        std::is_same<T, int32_t>::value || std::is_same<T, uint32_t>::value || std::is_same<T, int>::value ||
+            std::is_same<T, int16_t>::value || std::is_same<T, uint16_t>::value || std::is_same<T, int8_t>::value ||
+            std::is_same<T, uint8_t>::value || std::is_same<T, half>::value || std::is_same<T, float16_t>::value ||
+            std::is_same<T, float>::value || std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value,
+        "TEXPANDS: Invalid data type");
     static_assert(TileDataDst::Loc == TileType::Vec, "Location of src and dst tiles must be Location::Vec.");
     static_assert(TileDataDst::ValidCol <= TileDataDst::Cols,
                   "Number of valid columns must not be greater than number of tile columns.");

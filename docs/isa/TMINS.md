@@ -1,4 +1,9 @@
-# TMINS
+﻿# TMINS
+
+
+## Tile Operation Diagram
+
+![TMINS tile operation](../figures/isa/TMINS.svg)
 
 ## Introduction
 
@@ -12,12 +17,24 @@ $$ \mathrm{dst}_{i,j} = \min(\mathrm{src}_{i,j}, \mathrm{scalar}) $$
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
 %dst = tmins %src, %scalar : !pto.tile<...>, f32
+```
+
+### IR Level 1 (SSA)
+
+```text
+%dst = pto.tmins %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.tmins ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -71,3 +88,31 @@ void example_manual() {
   TMINS(dst, src, 0.0f);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tmins %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tmins %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tmins %src, %scalar : !pto.tile<...>, f32
+# IR Level 2 (DPS)
+pto.tmins ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```
+

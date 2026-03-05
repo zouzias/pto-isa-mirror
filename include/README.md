@@ -10,7 +10,7 @@ Include the unified entry header:
 #include <pto/pto-inst.hpp>
 ```
 
-`pto/pto-inst.hpp` selects the appropriate backend (CPU simulation/stub or NPU implementation) based on build configuration. See `include/pto/README.md` for details.
+`pto/pto-inst.hpp` selects the appropriate backend (CPU simulation/stub or NPU implementation) based on build configuration. See [include/pto/README.md](pto/README.md) for details.
 
 ## Layout
 
@@ -18,8 +18,8 @@ Include the unified entry header:
 
 ## Related Docs
 
-- ISA guide: `docs/README.md`
-- Getting started: `docs/getting-started.md`
+- [ISA guide](../docs/README.md)
+- [Getting started](../docs/getting-started.md)
 
 ## PTO Instruction Implementation Status (CPU / A2 / A3 / A5)
 
@@ -56,6 +56,7 @@ This table tracks per-instruction backend availability:
 | [`TCOLMAX`](../docs/isa/TCOLMAX.md) | Yes | Yes | Yes | Yes |
 | [`TCOLMIN`](../docs/isa/TCOLMIN.md) | Yes | Yes | Yes | Yes |
 | [`TCOLSUM`](../docs/isa/TCOLSUM.md) | Yes | Yes | Yes | Yes |
+| [`TCOLPROD`](../docs/isa/TCOLPROD.md) | TODO | Yes | Yes | Yes |
 | [`TCVT`](../docs/isa/TCVT.md) | Yes | Yes | Yes | Yes |
 | [`TDIV`](../docs/isa/TDIV.md) | Yes | Yes | Yes | Yes |
 | [`TDIVS`](../docs/isa/TDIVS.md) | Yes | Yes | Yes | Yes |
@@ -96,6 +97,8 @@ This table tracks per-instruction backend availability:
 | [`TRELU`](../docs/isa/TRELU.md) | Yes | Yes | Yes | Yes |
 | [`TREM`](../docs/isa/TREM.md) | Yes | Yes | Yes | Yes |
 | [`TREMS`](../docs/isa/TREMS.md) | Yes | Yes | Yes | Yes |
+| [`TFMOD`](../docs/isa/TFMOD.md) | TODO | Yes | Yes | Yes |
+| [`TFMODS`](../docs/isa/TFMODS.md) | TODO | Yes | Yes | Yes |
 | [`TRESHAPE`](../docs/isa/TRESHAPE.md) | Yes | Yes | Yes | Yes |
 | [`TROWEXPAND`](../docs/isa/TROWEXPAND.md) | Yes | Yes | Yes | Yes |
 | [`TROWEXPANDADD `]() | TODO | Yes | Yes | Yes |
@@ -108,6 +111,7 @@ This table tracks per-instruction backend availability:
 | [`TROWMAX`](../docs/isa/TROWMAX.md) | Yes | Yes | Yes | Yes |
 | [`TROWMIN`](../docs/isa/TROWMIN.md) | Yes | Yes | Yes | Yes |
 | [`TROWSUM`](../docs/isa/TROWSUM.md) | Yes | Yes | Yes | Yes |
+| [`TROWPROD`](../docs/isa/TROWPROD.md) | TODO | Yes | Yes | TODO |
 | [`TRSQRT`](../docs/isa/TRSQRT.md) | Yes | Yes | Yes | Yes |
 | [`TSCATTER`](../docs/isa/TSCATTER.md) | Yes | Yes | Yes | Yes |
 | [`TSEL`](../docs/isa/TSEL.md) | Yes | Yes | Yes | Yes |

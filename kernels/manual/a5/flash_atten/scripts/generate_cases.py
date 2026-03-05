@@ -26,10 +26,11 @@ Defaults replicate the previous hard-coded set if --cases is omitted.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import List, Dict
 
-TILE_S1_DEFAULT = 256
+TILE_S1_DEFAULT = 128
 QK_PRELOAD_DEFAULT = 4
 
 DEFAULT_CASES = [

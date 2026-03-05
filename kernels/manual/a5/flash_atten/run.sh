@@ -69,7 +69,7 @@ set -euo pipefail
 
 # default device id
 : "${NPU_ID:=0}"
-: "${QK_PRELOAD:=4}"
+: "${QK_PRELOAD:=2}"
 : "${FIFO_MODE:=1}"  # 0=ALL_GM_PATH, 1=ALL_UB_PATH, 2=QK_PV_UB_ONLY
 
 GEN_CASE_ARGS=()
