@@ -42,6 +42,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TAND`](../docs/isa/TAND_zh.md) | 是 | 是 | 是 | 是 |
 | [`TANDS`](../docs/isa/TANDS_zh.md) | 是 | 是 | 是 | 是 |
 | [`TASSIGN`](../docs/isa/TASSIGN_zh.md) | 是 | 是 | 是 | 是 |
+| [`TAXPY`]() | TODO | 是 | 是 | 是 |
 | [`TCI`](../docs/isa/TCI_zh.md) | 是 | 是 | 是 | 是 |
 | [`TCMP`](../docs/isa/TCMP_zh.md) | 是 | 是 | 是 | 是 |
 | [`TCMPS`](../docs/isa/TCMPS_zh.md) | 是 | 是 | 是 | 是 |
