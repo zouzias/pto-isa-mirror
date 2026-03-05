@@ -305,10 +305,8 @@ __global__ AICORE void TStoreAcc2gmScalarNz2nz(__gm__ dstDataType *out, __gm__ s
     TASSIGN(aTile, 0x0);
     TASSIGN(bTile, 0x0);
     TASSIGN(cTile, 0x0);
-
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
-
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     TMOV(aTile, aMatTile);
