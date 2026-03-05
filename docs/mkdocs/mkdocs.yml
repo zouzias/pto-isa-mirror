@@ -201,6 +201,7 @@ nav:
           - TFILLPAD_EXPAND: docs/isa/TFILLPAD_EXPAND.md
           - TRESHAPE: docs/isa/TRESHAPE.md
           - TTRANS: docs/isa/TTRANS.md
+          - TSUBVIEW: docs/isa/TSUBVIEW.md
           - TIMG2COL: docs/isa/TIMG2COL.md
       - Complex Instructions:
           - TGATHER: docs/isa/TGATHER.md
