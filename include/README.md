@@ -62,6 +62,7 @@ This table tracks per-instruction backend availability:
 | [`TDIVS`](../docs/isa/TDIVS.md) | Yes | Yes | Yes | Yes |
 | [`TEXP`](../docs/isa/TEXP.md) | Yes | Yes | Yes | Yes |
 | [`TEXPANDS`](../docs/isa/TEXPANDS.md) | Yes | Yes | Yes | Yes |
+| [`TEXPM1`]() | TODO | TODO | TODO | Yes |
 | [`TEXTRACT`](../docs/isa/TEXTRACT.md) | Yes | Yes | Yes | Yes |
 | [`TFILLPAD`](../docs/isa/TFILLPAD.md) | Yes | Yes | Yes | Yes |
 | [`TGATHER`](../docs/isa/TGATHER.md) | Yes | Yes | Yes | Yes |
