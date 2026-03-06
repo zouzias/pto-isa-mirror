@@ -83,6 +83,8 @@ struct TileTraits {
 // ============================================================
 
 // === STATIC SCHEDULE: UB addresses known at init time ===
+// For dual-dst: same UB offset for both AIV0 and AIV1 (they get different halves of data)
+// For single-dst: use separate FIFO per AIV with different UB addresses
 template <typename AccTileT, typename VecTileT, int Depth = 2, int NumVecBuffers = Depth>
 struct CrossCoreFIFO {
     // Ring buffer state
@@ -92,11 +94,8 @@ struct CrossCoreFIFO {
     // Memory layout - L1 buffer for cross-core transfer
     void*    l1BufferBase;   // Base address of FIFO buffer in L1
     
-    // UB addresses for each AIV (ping-pong/N-buffer)
-    // For dual-dst (cutM/cutN): AIV0 and AIV1 get different halves
-    // For sameShape: both AIVs get same data at same UB offset
-    uint32_t ubAddrsAIV0[NumVecBuffers];  // VecTile addresses in AIV0's UB
-    uint32_t ubAddrsAIV1[NumVecBuffers];  // VecTile addresses in AIV1's UB
+    // UB addresses for VecTile (same offset for both AIVs in dual-dst)
+    uint32_t ubAddrs[NumVecBuffers];  // VecTile UB addresses (ping-pong/N-buffer)
     
     // Cross-core sync
     uint16_t pushEventId;
@@ -115,9 +114,8 @@ struct CrossCoreFIFO {
     static constexpr int slotSize = accRows * accCols * sizeof(typename TileTraits<AccTileT>::DType);
     static constexpr int vecTileSize = vecRows * vecCols * sizeof(typename TileTraits<VecTileT>::DType);
     
-    uint32_t getCurrentUBAddr(int aivId) const {
-        uint32_t bufIdx = head % NumVecBuffers;
-        return (aivId == 0) ? ubAddrsAIV0[bufIdx] : ubAddrsAIV1[bufIdx];
+    uint32_t getCurrentUBAddr() const {
+        return ubAddrs[head % NumVecBuffers];
     }
 };
 
@@ -139,13 +137,14 @@ struct CrossCoreFIFO_Dynamic {
 ### Initialization
 
 ```cpp
-// === STATIC SCHEDULE: Array of VecTile UB addresses (ping-pong/N-buffer) ===
+// === STATIC SCHEDULE: Single UB address array (same offset for both AIVs) ===
+// For dual-dst: both AIV0/AIV1 use same UB offset, hardware routes different halves
+// For single-dst to specific AIV: create separate FIFO per AIV
 template <typename AccTileT, typename VecTileT, int Depth, int NumVecBuffers>
 void FIFO_INIT(
     CrossCoreFIFO<AccTileT, VecTileT, Depth, NumVecBuffers>& fifo,
     void*    l1BufferBase,
-    const uint32_t (&ubAddrsAIV0)[NumVecBuffers],
-    const uint32_t (&ubAddrsAIV1)[NumVecBuffers],
+    const uint32_t (&ubAddrs)[NumVecBuffers],  // UB addresses (same for both AIVs)
     uint16_t pushEventId,
     uint16_t popEventId
 ) {
@@ -153,8 +152,7 @@ void FIFO_INIT(
     fifo.tail = 0;
     fifo.l1BufferBase = l1BufferBase;
     for (int i = 0; i < NumVecBuffers; i++) {
-        fifo.ubAddrsAIV0[i] = ubAddrsAIV0[i];
-        fifo.ubAddrsAIV1[i] = ubAddrsAIV1[i];
+        fifo.ubAddrs[i] = ubAddrs[i];
     }
     fifo.pushEventId = pushEventId;
     fifo.popEventId = popEventId;
@@ -232,6 +230,8 @@ void PTO_PUSH_TO_AIV(
 // ============================================================
 
 // === FIFO for V2C direction (Vector → Cube) ===
+// For dual-src: same UB offset for both AIVs
+// For single-src from specific AIV: use separate FIFO per AIV
 template <typename VecTileT, typename MatTileT, int Depth = 2, int NumMatBuffers = Depth>
 struct CrossCoreFIFO_V2C {
     uint32_t head;
@@ -240,9 +240,8 @@ struct CrossCoreFIFO_V2C {
     // L1 addresses for MatTile buffers (ping-pong/N-buffer)
     uint32_t l1AddrsMatTile[NumMatBuffers];
     
-    // UB addresses of source VecTiles
-    uint32_t ubAddrsAIV0[NumMatBuffers];
-    uint32_t ubAddrsAIV1[NumMatBuffers];
+    // UB addresses of source VecTiles (same offset for both AIVs)
+    uint32_t ubAddrs[NumMatBuffers];
     
     uint16_t pushEventId;
     uint16_t popEventId;
@@ -257,6 +256,10 @@ struct CrossCoreFIFO_V2C {
     
     uint32_t getCurrentL1Addr() const {
         return l1AddrsMatTile[head % NumMatBuffers];
+    }
+    
+    uint32_t getCurrentUBAddr() const {
+        return ubAddrs[head % NumMatBuffers];
     }
 };
 
@@ -278,8 +281,7 @@ template <typename VecTileT, typename MatTileT, int Depth, int NumMatBuffers>
 void FIFO_INIT_V2C(
     CrossCoreFIFO_V2C<VecTileT, MatTileT, Depth, NumMatBuffers>& fifo,
     const uint32_t (&l1AddrsMatTile)[NumMatBuffers],  // Array of MatTile L1 addrs
-    const uint32_t (&ubAddrsAIV0)[NumMatBuffers],     // Array of VecTile UB addrs for AIV0
-    const uint32_t (&ubAddrsAIV1)[NumMatBuffers],     // Array of VecTile UB addrs for AIV1
+    const uint32_t (&ubAddrs)[NumMatBuffers],         // Array of VecTile UB addrs (same for both AIVs)
     uint16_t pushEventId,
     uint16_t popEventId
 ) {
@@ -287,8 +289,7 @@ void FIFO_INIT_V2C(
     fifo.tail = 0;
     for (int i = 0; i < NumMatBuffers; i++) {
         fifo.l1AddrsMatTile[i] = l1AddrsMatTile[i];
-        fifo.ubAddrsAIV0[i] = ubAddrsAIV0[i];
-        fifo.ubAddrsAIV1[i] = ubAddrsAIV1[i];
+        fifo.ubAddrs[i] = ubAddrs[i];
     }
     fifo.pushEventId = pushEventId;
     fifo.popEventId = popEventId;
@@ -584,26 +585,32 @@ using TileDataH_T = Tile<TileType::Vec, half, Vec_M, Cube_N, BLayout::RowMajor, 
 CrossCoreFIFO<TileQKData, TileDataH_T, 2> qkFIFO;
 
 // ============ INIT (called once) ============
-// === STATIC SCHEDULE: Ping-pong buffers (2 VecTiles per AIV) ===
-constexpr uint32_t UB_ADDRS_AIV0[2] = {0x0000, 0x8000};  // Ping-pong for AIV0
-constexpr uint32_t UB_ADDRS_AIV1[2] = {0x0000, 0x8000};  // Ping-pong for AIV1
+// === STATIC SCHEDULE: Ping-pong buffers ===
+// Same UB offset for both AIVs (dual-dst sends different halves to each)
+constexpr uint32_t UB_ADDRS[2] = {0x0000, 0x8000};  // Ping-pong buffers
 
 // FIFO with Depth=2, NumVecBuffers=2 (ping-pong)
 CrossCoreFIFO<TileQKData, TileDataH_T, 2, 2> qkFIFO;
 
 FIFO_INIT(qkFIFO,
     L1_BUFFER_ADDR,           // Pre-allocated L1 buffer
-    UB_ADDRS_AIV0,            // Array of AIV0's VecTile UB addresses
-    UB_ADDRS_AIV1,            // Array of AIV1's VecTile UB addresses
+    UB_ADDRS,                 // UB addresses (same offset for both AIVs)
     EVENT_QK_PUSH,            // User-defined event ID
     EVENT_QK_POP              // User-defined event ID
 );
 
+// === SINGLE-DST to specific AIV: Use separate FIFOs ===
+// CrossCoreFIFO<...> fifoAIV0, fifoAIV1;
+// FIFO_INIT(fifoAIV0, L1_BUF_0, UB_ADDRS_AIV0, EVT_PUSH_0, EVT_POP_0);
+// FIFO_INIT(fifoAIV1, L1_BUF_1, UB_ADDRS_AIV1, EVT_PUSH_1, EVT_POP_1);
+
 // === DYNAMIC SCHEDULE (alternative): User passes VecTile directly ===
+// CrossCoreFIFO_Dynamic<TileQKData, TileDataH_T, 2> dynFIFO;
+// FIFO_INIT(dynFIFO, L1_BUFFER_ADDR, EVENT_QK_PUSH, EVENT_QK_POP);
 // TileDataH_T vecTilePing, vecTilePong;
 // TASSIGN(vecTilePing, 0x0000);
 // TASSIGN(vecTilePong, 0x8000);
-// PTO_PUSH_TO_AIV(accTile, vecTilePing, vecTilePong, EVENT_QK_PUSH, -1);
+// PTO_PUSH_TO_AIV(accTile, dynFIFO, vecTilePing);  // pass tile at runtime
 
 // ============ AIC KERNEL (Cube Core) ============
 void aic_matmul_kernel() {
