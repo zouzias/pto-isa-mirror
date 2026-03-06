@@ -100,6 +100,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_S /* TSET_IMG2COL_RPT */,
     PIPE_S /* TSET_IMG2COL_PADDING */,
     PIPE_V /* TDEQUANT */,
+    PIPE_MTE2 /* TSETVALUE */,
     PIPE_ALL /* OP_COUNT */,
 };
 

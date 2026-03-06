@@ -194,6 +194,7 @@ tcolexpandmul
 tcolexpandsub
 tquant
 tdequant
+tsetvalue
 t_dhrystone
 )
 

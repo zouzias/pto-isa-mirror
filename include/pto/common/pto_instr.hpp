@@ -142,6 +142,14 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
     return {};
 }
 
+template <typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TSET_VALUE(TileData &dst, typename TileData::DType value, WaitEvents &...events)
+{
+    TSYNC(events...);
+    TSET_VALUE_IMPL(dst, value);
+    return {};
+}
+
 template <typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &... events)
 {

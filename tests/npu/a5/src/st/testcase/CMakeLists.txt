@@ -214,6 +214,7 @@ set(ALL_TESTCASES
     t_dhrystone
     engram
     tpack
+    tsetvalue
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
