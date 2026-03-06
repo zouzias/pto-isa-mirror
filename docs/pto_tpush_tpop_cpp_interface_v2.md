@@ -504,23 +504,83 @@ void PTO_PUSH_TO_AIC(
 ### Pop API (Consumer Side)
 
 ```cpp
-// AIV: Pop tile from AIC
-// Each AIV core receives its portion based on dual-dst split
-template <typename AccTileT, typename VecTileT>
-void PTO_POP_FROM_AIC(
-    VecTileT& vecTile,                   // Destination tile (vector format)
-    CrossCoreFIFO_C2V<AccTileT, VecTileT>& fifo
-);
-// If dualDst && cutM: AIV0 gets rows[0:R/2], AIV1 gets rows[R/2:R]
-// If dualDst && cutN: AIV0 gets cols[0:C/2], AIV1 gets cols[C/2:C]
+// ============================================================
+// C2V: AIV pops tile from AIC
+// ============================================================
 
-// AIC: Pop tile from AIV (rare)
-template <typename VecTileT, typename AccTileT>
+// Static schedule
+template <typename AccTileT, typename VecTileT, FIFOLocation Location, int Depth, int NumVecBuffers>
+void PTO_POP_FROM_AIC(
+    VecTileT& vecTile,
+    CrossCoreFIFO_C2V<AccTileT, VecTileT, Location, Depth, NumVecBuffers>& fifo
+) {
+    // 1. Wait for data available
+    WAIT_EVENT(fifo.pushEventId);
+    
+    // 2. Get data based on FIFO location
+    if constexpr (Location == FIFOLocation::GM) {
+        // GM FIFO: need to TLOAD from GM to UB
+        uint64_t fifoSlot = fifo.fifoBufferBase + (fifo.tail % Depth) * fifo.slotSize;
+        uint32_t ubAddr = fifo.ubAddrs[fifo.tail % NumVecBuffers];
+        TLOAD(vecTile, fifoSlot);  // Load from GM to vecTile (UB)
+    } else {
+        // Local FIFO: data already in UB (TPUSH did DMA L1→UB)
+        // vecTile is already assigned to the UB address, just use it
+    }
+    
+    // 3. Increment tail
+    fifo.tail++;
+    
+    // 4. Signal producer (slot freed for backpressure)
+    SET_FLAG(fifo.popEventId);
+}
+
+// Dynamic schedule
+template <typename AccTileT, typename VecTileT, FIFOLocation Location, int Depth>
+void PTO_POP_FROM_AIC(
+    VecTileT& vecTile,
+    CrossCoreFIFO_C2V_Dynamic<AccTileT, VecTileT, Location, Depth>& fifo
+) {
+    WAIT_EVENT(fifo.pushEventId);
+    
+    if constexpr (Location == FIFOLocation::GM) {
+        uint64_t fifoSlot = fifo.fifoBufferBase + (fifo.tail % Depth) * fifo.slotSize;
+        TLOAD(vecTile, fifoSlot);
+    }
+    // Local: data already in vecTile's UB
+    
+    fifo.tail++;
+    SET_FLAG(fifo.popEventId);
+}
+
+// ============================================================
+// V2C: AIC pops tile from AIV
+// ============================================================
+
+template <typename VecTileT, typename DstTileT, FIFOLocation Location, int Depth, int NumBuffers>
 void PTO_POP_FROM_AIV(
-    AccTileT& accTile,                   // Destination tile (accumulator format)
-    CrossCoreFIFO_C2V<VecTileT, AccTileT>& fifo
-);
+    DstTileT& dstTile,
+    CrossCoreFIFO_V2C<VecTileT, DstTileT, Location, Depth, NumBuffers>& fifo
+) {
+    WAIT_EVENT(fifo.pushEventId);
+    
+    if constexpr (Location == FIFOLocation::GM) {
+        // GM FIFO: TLOAD from GM to L1
+        uint64_t fifoSlot = fifo.getCurrentFIFOSlot();
+        TLOAD(dstTile, fifoSlot);
+    }
+    // Local FIFO: data already in L1 (TPUSH wrote directly)
+    
+    fifo.tail++;
+    SET_FLAG(fifo.popEventId);
+}
 ```
+
+**Summary:**
+| Location | TPUSH | TPOP |
+|----------|-------|------|
+| GM | TSTORE to GM | TLOAD from GM |
+| Local | TSTORE to L1/DMA to UB | Just wait (data in UB) |
 
 ---
 
@@ -595,35 +655,43 @@ void PTO_PUSH_TO_AIV(
 ### What TPOP Does Internally
 
 ```cpp
-template <typename AccTileT, typename VecTileT>
+template <typename AccTileT, typename VecTileT, FIFOLocation Location, int Depth, int NumVecBuffers>
 void PTO_POP_FROM_AIC(
     VecTileT& vecTile,
-    CrossCoreFIFO_C2V<AccTileT, VecTileT>& fifo
+    CrossCoreFIFO_C2V<AccTileT, VecTileT, Location, Depth, NumVecBuffers>& fifo
 ) {
     // Get this core's ID (0 = AIV0, 1 = AIV1)
     int coreId = get_subblockid();
     
     // 1. Wait for data available
-    if (fifo.tail >= fifo.head) {
-        WAIT_EVENT(fifo.pushEventId);  // Producer pushed data
-    }
+    WAIT_EVENT(fifo.pushEventId);
     
-    // 2. Data is already in our UB (TPUSH did the DMA)
-    // The vecTile was assigned to ubAddrAIV0 or ubAddrAIV1 during TASSIGN
-    // TPUSH copied data directly to that address
+    // 2. Get data based on FIFO location
+    if constexpr (Location == FIFOLocation::GM) {
+        // GM FIFO: need to TLOAD from GM to UB
+        uint64_t fifoSlot = fifo.fifoBufferBase + (fifo.tail % Depth) * fifo.slotSize;
+        TLOAD(vecTile, fifoSlot);  // Load from GM to vecTile's UB address
+    } else {
+        // Local FIFO: data already in our UB (TPUSH did DMA L1→UB)
+        // The vecTile was assigned to ubAddrs[idx] during TASSIGN
+        // TPUSH copied data directly to that address
+        // No additional copy needed
+    }
     
     // 3. Increment tail (local to this core)
     fifo.tail++;
     
     // 4. Signal producer (slot freed)
-    SET_CROSS_CORE_EVENT(fifo.popEventId, coreId);
+    SET_FLAG(fifo.popEventId);
     
-    // Note: vecTile is now ready to use - data was written by TPUSH
-    // No additional copy needed since TPUSH targeted our UB address
+    // Note: For Local FIFO, vecTile is ready immediately after wait
+    // For GM FIFO, vecTile is ready after TLOAD completes
 }
 ```
 
-**Key insight:** TPUSH writes directly to the AIV's UB address stored in the FIFO. When AIV calls TPOP, the data is already in its UB - TPOP just handles synchronization.
+**Key insight:**
+- **Local FIFO:** TPUSH writes directly to the AIV's UB address (via L1→UB DMA). TPOP just waits for the event signal — data is already in UB.
+- **GM FIFO:** TPUSH writes to GM. TPOP must TLOAD from GM to UB before using the data.
 ```
 
 ---
