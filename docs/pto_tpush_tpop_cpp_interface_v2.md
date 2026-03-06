@@ -3,10 +3,43 @@
 ## Design Goals
 
 1. **Kill subtile complexity** — No `pro_set_allocate`, no subtile tiling in API
-2. **Explicit dtype conversion** — Template params for source and destination types
+2. **Use existing PTO Tile syntax** — Match FA kernel's TileDef conventions
 3. **FIFO object encapsulates state** — Ring buffer counter, memory address, position
 4. **User-controlled event IDs** — Cross-core events setup during init
 5. **TPUSH handles sync internally** — Or provide explicit API for reserve/dependency
+6. **Infer dual-dst split from tile shapes** — ROWS/COLS mismatch determines cutM/cutN
+
+---
+
+## Existing PTO Tile Syntax (from FA kernel)
+
+The FA kernel uses this tile definition pattern:
+
+```cpp
+// Mat tiles (for Cube core L1)
+using TileMatQData = Tile<TileType::Mat, half, ROWS, COLS, BLayout::ColMajor, 
+                          ROWS, COLS, SLayout::RowMajor, 512>;
+using TileMatKData = Tile<TileType::Mat, half, ROWS, COLS, BLayout::RowMajor,
+                          ROWS, COLS, SLayout::ColMajor, 512>;
+
+// Accumulator tiles (for Cube core output)
+using TileQKData = TileAcc<float, Cube_S0, Cube_S1, Cube_S0, Cube_S1>;
+using TilePVData = TileAcc<float, Cube_S0, HEAD_SIZE, Cube_S0, HEAD_SIZE>;
+
+// Vector tiles (for Vec core UB)
+using TileDataF_T = Tile<TileType::Vec, float, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Tile_S1>;
+using TileDataH_T = Tile<TileType::Vec, half, Vec_S0, Tile_S1, BLayout::RowMajor, Vec_S0, Tile_S1>;
+
+// Reduce tiles (column vectors)
+using ReduceTileF_T = Tile<TileType::Vec, float, SubblockRows, 1, BLayout::ColMajor, SubblockRows, 1>;
+```
+
+**Key observations:**
+- `TileType::Mat` = L1 buffer for Cube matmul inputs
+- `TileType::Vec` = UB buffer for Vector operations  
+- `TileAcc<dtype, ROWS, COLS, ...>` = Accumulator output from Cube
+- Template params: `<TileType, dtype, ROWS, COLS, BLayout, BRows, BCols, [SLayout, Align]>`
+- ROWS/COLS are compile-time constants
 
 ---
 
@@ -14,30 +47,32 @@
 
 ### Tile Type Definition
 
-Tile types carry shape info used to infer dual-dst split axis:
+Use existing PTO Tile template syntax. Tile types carry shape info (ROWS/COLS) used to infer dual-dst split axis:
 
 ```cpp
-// Tile type with compile-time shape info
-template <typename Dtype, int ROWS, int COLS>
-struct TileDef {
-    using dtype = Dtype;
-    static constexpr int rows = ROWS;
-    static constexpr int cols = COLS;
-    static constexpr int size = ROWS * COLS * sizeof(Dtype);
-};
+// Accumulator tile from Cube core (source for TPUSH)
+// TileAcc<dtype, ROWS, COLS, BlockRows, BlockCols>
+using AccTile_32x16_fp32 = TileAcc<float, 32, 16, 32, 16>;  // 2KB
+using AccTile_16x16_fp32 = TileAcc<float, 16, 16, 16, 16>;  // 1KB
 
-// Common tile definitions
-using AccTile_16x16_fp32 = TileDef<fp32, 16, 16>;   // 1KB
-using AccTile_32x16_fp32 = TileDef<fp32, 32, 16>;   // 2KB
-using VecTile_16x16_half = TileDef<half, 16, 16>;   // 512B
-using VecTile_32x16_half = TileDef<half, 32, 16>;   // 1KB
-using VecTile_16x32_half = TileDef<half, 16, 32>;   // 1KB
+// Vector tile for Vec core (destination for TPOP)
+// Tile<TileType::Vec, dtype, ROWS, COLS, BLayout, BRows, BCols>
+using VecTile_16x16_half = Tile<TileType::Vec, half, 16, 16, BLayout::RowMajor, 16, 16>;  // 512B
+using VecTile_32x16_half = Tile<TileType::Vec, half, 32, 16, BLayout::RowMajor, 32, 16>;  // 1KB
+
+// Extract ROWS/COLS from tile type
+template <typename TileT>
+struct TileTraits {
+    static constexpr int Rows = TileT::Rows;  // or use template param position
+    static constexpr int Cols = TileT::Cols;
+    using DType = typename TileT::DType;
+};
 ```
 
 ### FIFO Object
 
 ```cpp
-template <typename AccTileDef, typename VecTileDef, int Depth = 2>
+template <typename AccTileT, typename VecTileT, int Depth = 2>
 struct CrossCoreFIFO {
     // Ring buffer state
     uint32_t head;           // Producer position
@@ -50,21 +85,21 @@ struct CrossCoreFIFO {
     uint16_t pushEventId;    // Event ID for producer → consumer signal
     uint16_t popEventId;     // Event ID for consumer → producer signal (backpressure)
     
-    // Compile-time shape info from tile types
-    static constexpr int accRows = AccTileDef::rows;
-    static constexpr int accCols = AccTileDef::cols;
-    static constexpr int vecRows = VecTileDef::rows;
-    static constexpr int vecCols = VecTileDef::cols;
+    // Compile-time shape info extracted from tile types
+    static constexpr int accRows = TileTraits<AccTileT>::Rows;
+    static constexpr int accCols = TileTraits<AccTileT>::Cols;
+    static constexpr int vecRows = TileTraits<VecTileT>::Rows;
+    static constexpr int vecCols = TileTraits<VecTileT>::Cols;
     
     // Infer dual-dst split axis from shape mismatch
-    // If accRows == 2 * vecRows → cut M (row split)
-    // If accCols == 2 * vecCols → cut N (col split)
+    // If accRows == 2 * vecRows → cut M (row split to AIV0/AIV1)
+    // If accCols == 2 * vecCols → cut N (col split to AIV0/AIV1)
     static constexpr bool dualDst = (accRows == 2 * vecRows) || (accCols == 2 * vecCols);
-    static constexpr bool cutM = (accRows == 2 * vecRows);  // Row split to AIV0/AIV1
-    static constexpr bool cutN = (accCols == 2 * vecCols);  // Col split to AIV0/AIV1
+    static constexpr bool cutM = (accRows == 2 * vecRows);  // Row split
+    static constexpr bool cutN = (accCols == 2 * vecCols);  // Col split
     
-    // Slot size is the larger of acc/vec tile
-    static constexpr int slotSize = AccTileDef::size;
+    // Slot size based on accumulator tile
+    static constexpr int slotSize = accRows * accCols * sizeof(typename TileTraits<AccTileT>::DType);
 };
 ```
 
@@ -72,14 +107,14 @@ struct CrossCoreFIFO {
 
 ```cpp
 // Called once per kernel launch, before any TPUSH/TPOP
-template <typename AccTileDef, typename VecTileDef, int Depth>
+template <typename AccTileT, typename VecTileT, int Depth>
 void FIFO_INIT(
-    CrossCoreFIFO<AccTileDef, VecTileDef, Depth>& fifo,
+    CrossCoreFIFO<AccTileT, VecTileT, Depth>& fifo,
     void*    bufferBase,      // Pre-allocated buffer in L1/shared memory
     uint16_t pushEventId,     // User-assigned event ID for push signal
     uint16_t popEventId       // User-assigned event ID for pop signal
 );
-// Note: slotSize is inferred from AccTileDef::size
+// Note: slotSize is inferred from AccTileT shape and dtype
 ```
 
 ### Push API (Producer Side)
@@ -87,20 +122,20 @@ void FIFO_INIT(
 ```cpp
 // AIC → AIV: Push accumulator tile to vector core(s)
 // If FIFO::dualDst is true, automatically splits to both AIV cores
-template <typename AccTileDef, typename VecTileDef>
+template <typename AccTileT, typename VecTileT>
 void PTO_PUSH_TO_AIV(
-    const Tile<AccTileDef>& accTile,     // Source tile (accumulator)
-    CrossCoreFIFO<AccTileDef, VecTileDef>& fifo
+    const AccTileT& accTile,             // Source tile (accumulator)
+    CrossCoreFIFO<AccTileT, VecTileT>& fifo
 );
 // Dual-dst split axis inferred from tile shapes:
 //   AccTile[32,16] → VecTile[16,16]: cutM, rows split to AIV0/AIV1
 //   AccTile[16,32] → VecTile[16,16]: cutN, cols split to AIV0/AIV1
 
 // AIV → AIC: Push vector tile back to cube core (rare, for gradients)
-template <typename VecTileDef, typename AccTileDef>
+template <typename VecTileT, typename AccTileT>
 void PTO_PUSH_TO_AIC(
-    const Tile<VecTileDef>& vecTile,     // Source tile (vector)
-    CrossCoreFIFO<VecTileDef, AccTileDef>& fifo
+    const VecTileT& vecTile,             // Source tile (vector)
+    CrossCoreFIFO<VecTileT, AccTileT>& fifo
 );
 ```
 
@@ -109,19 +144,19 @@ void PTO_PUSH_TO_AIC(
 ```cpp
 // AIV: Pop tile from AIC
 // Each AIV core receives its portion based on dual-dst split
-template <typename AccTileDef, typename VecTileDef>
+template <typename AccTileT, typename VecTileT>
 void PTO_POP_FROM_AIC(
-    Tile<VecTileDef>& vecTile,           // Destination tile (vector format)
-    CrossCoreFIFO<AccTileDef, VecTileDef>& fifo
+    VecTileT& vecTile,                   // Destination tile (vector format)
+    CrossCoreFIFO<AccTileT, VecTileT>& fifo
 );
 // If dualDst && cutM: AIV0 gets rows[0:R/2], AIV1 gets rows[R/2:R]
 // If dualDst && cutN: AIV0 gets cols[0:C/2], AIV1 gets cols[C/2:C]
 
 // AIC: Pop tile from AIV (rare)
-template <typename VecTileDef, typename AccTileDef>
+template <typename VecTileT, typename AccTileT>
 void PTO_POP_FROM_AIV(
-    Tile<AccTileDef>& accTile,           // Destination tile (accumulator format)
-    CrossCoreFIFO<VecTileDef, AccTileDef>& fifo
+    AccTileT& accTile,                   // Destination tile (accumulator format)
+    CrossCoreFIFO<VecTileT, AccTileT>& fifo
 );
 ```
 
@@ -190,13 +225,13 @@ void PTO_POP_FROM_AIC(
 ## Usage Example: Flash Attention QK→Softmax
 
 ```cpp
-// ============ TILE DEFINITIONS ============
+// ============ TILE DEFINITIONS (using existing PTO syntax) ============
 // Accumulator: 32x16 fp32 (2KB) from matmul
-using AccTile = TileDef<fp32, 32, 16>;
+using AccTile = TileAcc<float, 32, 16, 32, 16>;
 
 // Vector: 16x16 half (512B) per AIV core
 // Shape mismatch: 32 rows → 16 rows = cutM (row split)
-using VecTile = TileDef<half, 16, 16>;
+using VecTile = Tile<TileType::Vec, half, 16, 16, BLayout::RowMajor, 16, 16>;
 
 // FIFO automatically infers: dualDst=true, cutM=true
 CrossCoreFIFO<AccTile, VecTile, 2> qkFIFO;
@@ -210,27 +245,29 @@ FIFO_INIT(qkFIFO,
 
 // ============ AIC KERNEL (Cube Core) ============
 void aic_matmul_kernel() {
-    Tile<AccTile> qkTile;     // 32x16 accumulator
+    AccTile qkAccTile;        // 32x16 accumulator
+    TASSIGN(qkAccTile, 0x0);  // Assign to accumulator buffer
     
     for (int i = 0; i < num_tiles; i++) {
         // Compute Q @ K^T → 32x16 result
-        MATMUL(Q_tile, K_tile, qkTile);
+        pto_macro_matmul<32, HEAD, 16>(qMatTile, kMatTile, qkAccTile, AccMode::InitFinalSum);
         
         // Push to AIV — automatically splits rows[0:16]→AIV0, rows[16:32]→AIV1
-        PTO_PUSH_TO_AIV(qkTile, qkFIFO);
+        PTO_PUSH_TO_AIV(qkAccTile, qkFIFO);
     }
 }
 
 // ============ AIV KERNEL (Vector Core) ============
 void aiv_softmax_kernel() {
-    Tile<VecTile> qkTile;     // 16x16 half (this core's portion)
+    VecTile qkVecTile;        // 16x16 half (this core's portion)
+    TASSIGN(qkVecTile, UB_OFFSET);
     
     for (int i = 0; i < num_tiles; i++) {
         // Pop from AIC — AIV0 gets rows[0:16], AIV1 gets rows[16:32]
-        PTO_POP_FROM_AIC(qkTile, qkFIFO);
+        PTO_POP_FROM_AIC(qkVecTile, qkFIFO);
         
         // Compute softmax on our portion
-        SOFTMAX(qkTile);
+        pto_macro_fa_softmax<...>(x_expT, qkVecTile, ...);
         
         // Store or continue pipeline...
     }
