@@ -194,21 +194,31 @@ void FIFO_INIT(
     fifo.popEventId = popEventId;
 }
 
-// === Simplified single-buffer init ===
+// === DYNAMIC MODE: No UB arrays needed, VecTile passed at runtime ===
+// Use lightweight FIFO that only tracks L1 buffer and sync
+template <typename AccTileT, typename VecTileT, int Depth = 2>
+struct CrossCoreFIFO_Dynamic {
+    uint32_t head;
+    uint32_t tail;
+    void*    l1BufferBase;
+    uint16_t pushEventId;
+    uint16_t popEventId;
+    
+    static constexpr int accRows = TileTraits<AccTileT>::Rows;
+    static constexpr int accCols = TileTraits<AccTileT>::Cols;
+    static constexpr int slotSize = accRows * accCols * sizeof(typename TileTraits<AccTileT>::DType);
+};
+
 template <typename AccTileT, typename VecTileT, int Depth>
 void FIFO_INIT(
-    CrossCoreFIFO<AccTileT, VecTileT, Depth, 1>& fifo,
+    CrossCoreFIFO_Dynamic<AccTileT, VecTileT, Depth>& fifo,
     void*    l1BufferBase,
-    uint32_t ubAddrAIV0,
-    uint32_t ubAddrAIV1,
     uint16_t pushEventId,
     uint16_t popEventId
 ) {
     fifo.head = 0;
     fifo.tail = 0;
     fifo.l1BufferBase = l1BufferBase;
-    fifo.ubAddrsAIV0[0] = ubAddrAIV0;
-    fifo.ubAddrsAIV1[0] = ubAddrAIV1;
     fifo.pushEventId = pushEventId;
     fifo.popEventId = popEventId;
 }
@@ -217,43 +227,66 @@ void FIFO_INIT(
 ### Push API (Producer Side)
 
 ```cpp
-// === STATIC SCHEDULE: FIFO manages buffer rotation automatically ===
+// ============================================================
+// STATIC SCHEDULE: FIFO manages buffer rotation automatically
+// ============================================================
+
+// Dual-dst mode (cutM/cutN)
 template <typename AccTileT, typename VecTileT, int Depth, int NumVecBuffers>
 void PTO_PUSH_TO_AIV(
     const AccTileT& accTile,
     CrossCoreFIFO<AccTileT, VecTileT, Depth, NumVecBuffers>& fifo,
-    int aivId = -1
-) {
-    // Uses fifo.getCurrentUBAddr(aivId) to get destination based on head % NumVecBuffers
-    // Automatic ping-pong buffer rotation
-    // ...
-}
+    int aivId = -1                     // -1 = dual-dst, 0 = AIV0, 1 = AIV1
+);
 
-// === DYNAMIC SCHEDULE: User provides current VecTile (for complex scheduling) ===
-template <typename AccTileT, typename VecTileT>
+// SIMD mode (same data to both AIVs)
+template <typename AccTileT, typename VecTileT, int Depth, int NumVecBuffers>
 void PTO_PUSH_TO_AIV(
     const AccTileT& accTile,
-    const VecTileT& dstVecTileAIV0,    // Current VecTile for AIV0 (has UB addr)
-    const VecTileT& dstVecTileAIV1,    // Current VecTile for AIV1 (has UB addr)
-    uint16_t pushEventId,
+    CrossCoreFIFO_SIMD<AccTileT, VecTileT, Depth, NumVecBuffers>& fifo
+);
+
+// ============================================================
+// DYNAMIC SCHEDULE: User provides VecTile object at runtime
+// ============================================================
+
+// Dual-dst: User provides both VecTiles (gets UB addr from tile.getAddress())
+template <typename AccTileT, typename VecTileT, int Depth>
+void PTO_PUSH_TO_AIV(
+    const AccTileT& accTile,
+    CrossCoreFIFO_Dynamic<AccTileT, VecTileT, Depth>& fifo,
+    const VecTileT& dstVecTileAIV0,    // Target VecTile for AIV0 (runtime UB addr)
+    const VecTileT& dstVecTileAIV1,    // Target VecTile for AIV1 (runtime UB addr)
     int aivId = -1
 ) {
-    // User controls which VecTile buffer to use
     uint32_t ubAddrAIV0 = dstVecTileAIV0.getAddress();
     uint32_t ubAddrAIV1 = dstVecTileAIV1.getAddress();
+    // Use runtime addresses instead of FIFO arrays
     // ...
 }
 
-// === DYNAMIC SCHEDULE (single AIV): User provides single VecTile ===
-template <typename AccTileT, typename VecTileT>
+// Single-dst: User provides one VecTile
+template <typename AccTileT, typename VecTileT, int Depth>
 void PTO_PUSH_TO_AIV(
     const AccTileT& accTile,
-    const VecTileT& dstVecTile,        // Target VecTile (has UB addr)
-    uint16_t pushEventId,
+    CrossCoreFIFO_Dynamic<AccTileT, VecTileT, Depth>& fifo,
+    const VecTileT& dstVecTile,        // Target VecTile (runtime UB addr)
     int aivId                          // Must be 0 or 1 (not -1)
 ) {
     assert(aivId == 0 || aivId == 1);
     uint32_t ubAddr = dstVecTile.getAddress();
+    // ...
+}
+
+// SIMD dynamic: User provides single VecTile (same UB offset for both AIVs)
+template <typename AccTileT, typename VecTileT, int Depth>
+void PTO_PUSH_TO_AIV(
+    const AccTileT& accTile,
+    CrossCoreFIFO_Dynamic<AccTileT, VecTileT, Depth>& fifo,
+    const VecTileT& dstVecTile         // Same UB offset used for both AIVs
+) {
+    uint32_t ubAddr = dstVecTile.getAddress();
+    // Broadcast to both AIV0 and AIV1 at same UB offset
     // ...
 }
 ```
