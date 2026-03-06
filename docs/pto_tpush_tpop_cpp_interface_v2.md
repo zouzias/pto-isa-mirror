@@ -207,6 +207,99 @@ void PTO_PUSH_TO_AIV(
     uint32_t ubAddr = dstVecTile.getAddress();
     // ...
 }
+```
+
+### Push to AIC (AIV → Cube) API
+
+```cpp
+// ============================================================
+// AIV → AIC: Push vector tile back to cube core (for gradients, P*V results)
+// ============================================================
+
+// === FIFO for V2C direction (Vector → Cube) ===
+template <typename VecTileT, typename MatTileT, int Depth = 2, int NumMatBuffers = Depth>
+struct CrossCoreFIFO_V2C {
+    uint32_t head;
+    uint32_t tail;
+    
+    // L1 addresses for MatTile buffers (ping-pong/N-buffer)
+    uint32_t l1AddrsMatTile[NumMatBuffers];
+    
+    // UB addresses of source VecTiles (on AIV side)
+    uint32_t ubAddrsAIV0[NumMatBuffers];
+    uint32_t ubAddrsAIV1[NumMatBuffers];
+    
+    uint16_t pushEventId;
+    uint16_t popEventId;
+    
+    // Shape info
+    static constexpr int vecRows = TileTraits<VecTileT>::Rows;
+    static constexpr int vecCols = TileTraits<VecTileT>::Cols;
+    static constexpr int matRows = TileTraits<MatTileT>::Rows;
+    static constexpr int matCols = TileTraits<MatTileT>::Cols;
+    
+    static constexpr int vecTileSize = vecRows * vecCols * sizeof(typename TileTraits<VecTileT>::DType);
+    
+    // Helper: get current L1 address for MatTile
+    uint32_t getCurrentL1Addr() const {
+        return l1AddrsMatTile[head % NumMatBuffers];
+    }
+};
+
+// === STATIC SCHEDULE: Array of MatTile L1 addresses (ping-pong) ===
+template <typename VecTileT, typename MatTileT, int Depth, int NumMatBuffers>
+void FIFO_INIT_V2C(
+    CrossCoreFIFO_V2C<VecTileT, MatTileT, Depth, NumMatBuffers>& fifo,
+    const uint32_t (&l1AddrsMatTile)[NumMatBuffers],  // Array of MatTile L1 addrs
+    const uint32_t (&ubAddrsAIV0)[NumMatBuffers],     // Array of VecTile UB addrs for AIV0
+    const uint32_t (&ubAddrsAIV1)[NumMatBuffers],     // Array of VecTile UB addrs for AIV1
+    uint16_t pushEventId,
+    uint16_t popEventId
+) {
+    fifo.head = 0;
+    fifo.tail = 0;
+    for (int i = 0; i < NumMatBuffers; i++) {
+        fifo.l1AddrsMatTile[i] = l1AddrsMatTile[i];
+        fifo.ubAddrsAIV0[i] = ubAddrsAIV0[i];
+        fifo.ubAddrsAIV1[i] = ubAddrsAIV1[i];
+    }
+    fifo.pushEventId = pushEventId;
+    fifo.popEventId = popEventId;
+}
+
+// === STATIC SCHEDULE: FIFO manages buffer rotation ===
+template <typename VecTileT, typename MatTileT, int Depth, int NumMatBuffers>
+void PTO_PUSH_TO_AIC(
+    const VecTileT& vecTile,
+    CrossCoreFIFO_V2C<VecTileT, MatTileT, Depth, NumMatBuffers>& fifo,
+    int aivId                          // Which AIV is pushing (0 or 1)
+) {
+    // Get source UB addr based on current buffer index
+    uint32_t bufIdx = fifo.head % NumMatBuffers;
+    uint32_t srcUBAddr = (aivId == 0) ? fifo.ubAddrsAIV0[bufIdx] : fifo.ubAddrsAIV1[bufIdx];
+    uint32_t dstL1Addr = fifo.l1AddrsMatTile[bufIdx];
+    
+    // DMA from UB[srcUBAddr] → L1[dstL1Addr]
+    // ... implementation ...
+}
+
+// === DYNAMIC SCHEDULE: User provides MatTile with L1 address ===
+template <typename VecTileT, typename MatTileT>
+void PTO_PUSH_TO_AIC(
+    const VecTileT& srcVecTile,        // Source VecTile (has UB addr via getAddress())
+    const MatTileT& dstMatTile,        // Target MatTile (has L1 addr via getAddress())
+    uint16_t pushEventId
+) {
+    uint32_t srcUBAddr = srcVecTile.getAddress();
+    uint32_t dstL1Addr = dstMatTile.getAddress();
+    // DMA from UB[srcUBAddr] → L1[dstL1Addr]
+    // ... implementation ...
+}
+```
+
+### Shape Inference for PTO_PUSH_TO_AIV
+
+```cpp
 // AIC → AIV: Push accumulator tile to vector core(s)
 // aivId: 0 = AIV0 only, 1 = AIV1 only, -1 = dual-dst (both AIV0 and AIV1)
 template <typename AccTileT, typename VecTileT>
