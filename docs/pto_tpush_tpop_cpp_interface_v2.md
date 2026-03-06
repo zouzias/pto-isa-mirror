@@ -78,6 +78,11 @@ struct TileTraits {
 ### FIFO Object
 
 ```cpp
+// ============================================================
+// C2V FIFO: AIC → AIV (Cube to Vector)
+// ============================================================
+
+// === DUAL-DST MODE: Both AIV0 and AIV1 receive data (cutM/cutN) ===
 template <typename AccTileT, typename VecTileT, int Depth = 2, int NumVecBuffers = Depth>
 struct CrossCoreFIFO {
     // Ring buffer state
@@ -87,36 +92,61 @@ struct CrossCoreFIFO {
     // Memory layout - L1 buffer for cross-core transfer
     void*    l1BufferBase;   // Base address of FIFO buffer in L1
     
-    // === STATIC SCHEDULE: Array of UB addresses for ping-pong/N-buffer ===
-    // Each AIV has NumVecBuffers VecTile slots for automatic buffer rotation
+    // UB addresses for each AIV (dual-dst: different addrs per AIV)
     uint32_t ubAddrsAIV0[NumVecBuffers];  // VecTile addresses in AIV0's UB
     uint32_t ubAddrsAIV1[NumVecBuffers];  // VecTile addresses in AIV1's UB
     
     // Cross-core sync
-    uint16_t pushEventId;    // Event ID for producer → consumer signal
-    uint16_t popEventId;     // Event ID for consumer → producer signal (backpressure)
+    uint16_t pushEventId;
+    uint16_t popEventId;
     
-    // Compile-time shape info extracted from tile types
+    // Compile-time shape info
     static constexpr int accRows = TileTraits<AccTileT>::Rows;
     static constexpr int accCols = TileTraits<AccTileT>::Cols;
     static constexpr int vecRows = TileTraits<VecTileT>::Rows;
     static constexpr int vecCols = TileTraits<VecTileT>::Cols;
     
-    // Infer dual-dst split axis from shape mismatch
     static constexpr bool dualDst = (accRows == 2 * vecRows) || (accCols == 2 * vecCols);
-    static constexpr bool cutM = (accRows == 2 * vecRows);  // Row split
-    static constexpr bool cutN = (accCols == 2 * vecCols);  // Col split
+    static constexpr bool cutM = (accRows == 2 * vecRows);
+    static constexpr bool cutN = (accCols == 2 * vecCols);
     
-    // Slot size based on accumulator tile
     static constexpr int slotSize = accRows * accCols * sizeof(typename TileTraits<AccTileT>::DType);
-    
-    // VecTile size (per AIV)
     static constexpr int vecTileSize = vecRows * vecCols * sizeof(typename TileTraits<VecTileT>::DType);
     
-    // Helper: get current UB address based on head/tail position
     uint32_t getCurrentUBAddr(int aivId) const {
-        uint32_t bufIdx = (aivId == 0 ? head : head) % NumVecBuffers;
+        uint32_t bufIdx = head % NumVecBuffers;
         return (aivId == 0) ? ubAddrsAIV0[bufIdx] : ubAddrsAIV1[bufIdx];
+    }
+};
+
+// === SIMD MODE: Same data to both AIVs (broadcast, no split) ===
+// Use when AccTile and VecTile have same shape, or explicit broadcast
+template <typename AccTileT, typename VecTileT, int Depth = 2, int NumVecBuffers = Depth>
+struct CrossCoreFIFO_SIMD {
+    uint32_t head;
+    uint32_t tail;
+    
+    void*    l1BufferBase;
+    
+    // Single UB address array (same for both AIV0 and AIV1)
+    uint32_t ubAddrsAIV[NumVecBuffers];   // Shared: both AIVs use same UB offset
+    
+    uint16_t pushEventId;
+    uint16_t popEventId;
+    
+    static constexpr int accRows = TileTraits<AccTileT>::Rows;
+    static constexpr int accCols = TileTraits<AccTileT>::Cols;
+    static constexpr int vecRows = TileTraits<VecTileT>::Rows;
+    static constexpr int vecCols = TileTraits<VecTileT>::Cols;
+    
+    // SIMD mode: same shape, broadcast to both
+    static constexpr bool sameShape = (accRows == vecRows) && (accCols == vecCols);
+    
+    static constexpr int slotSize = accRows * accCols * sizeof(typename TileTraits<AccTileT>::DType);
+    static constexpr int vecTileSize = vecRows * vecCols * sizeof(typename TileTraits<VecTileT>::DType);
+    
+    uint32_t getCurrentUBAddr() const {
+        return ubAddrsAIV[head % NumVecBuffers];
     }
 };
 ```
@@ -124,13 +154,13 @@ struct CrossCoreFIFO {
 ### Initialization
 
 ```cpp
-// === OPTION A: Static schedule with array of VecTile addresses (ping-pong/N-buffer) ===
+// === DUAL-DST MODE: Separate UB addresses for AIV0/AIV1 ===
 template <typename AccTileT, typename VecTileT, int Depth, int NumVecBuffers>
 void FIFO_INIT(
     CrossCoreFIFO<AccTileT, VecTileT, Depth, NumVecBuffers>& fifo,
-    void*    l1BufferBase,                    // Pre-allocated buffer in L1
-    const uint32_t (&ubAddrsAIV0)[NumVecBuffers],  // Array of VecTile UB addrs for AIV0
-    const uint32_t (&ubAddrsAIV1)[NumVecBuffers],  // Array of VecTile UB addrs for AIV1
+    void*    l1BufferBase,
+    const uint32_t (&ubAddrsAIV0)[NumVecBuffers],
+    const uint32_t (&ubAddrsAIV1)[NumVecBuffers],
     uint16_t pushEventId,
     uint16_t popEventId
 ) {
@@ -145,13 +175,32 @@ void FIFO_INIT(
     fifo.popEventId = popEventId;
 }
 
-// === OPTION B: Simplified init for single buffer (no ping-pong) ===
+// === SIMD MODE: Single UB address array (same for both AIVs) ===
+template <typename AccTileT, typename VecTileT, int Depth, int NumVecBuffers>
+void FIFO_INIT(
+    CrossCoreFIFO_SIMD<AccTileT, VecTileT, Depth, NumVecBuffers>& fifo,
+    void*    l1BufferBase,
+    const uint32_t (&ubAddrsAIV)[NumVecBuffers],  // Same UB offset for both AIVs
+    uint16_t pushEventId,
+    uint16_t popEventId
+) {
+    fifo.head = 0;
+    fifo.tail = 0;
+    fifo.l1BufferBase = l1BufferBase;
+    for (int i = 0; i < NumVecBuffers; i++) {
+        fifo.ubAddrsAIV[i] = ubAddrsAIV[i];
+    }
+    fifo.pushEventId = pushEventId;
+    fifo.popEventId = popEventId;
+}
+
+// === Simplified single-buffer init ===
 template <typename AccTileT, typename VecTileT, int Depth>
 void FIFO_INIT(
     CrossCoreFIFO<AccTileT, VecTileT, Depth, 1>& fifo,
     void*    l1BufferBase,
-    uint32_t ubAddrAIV0,      // Single VecTile UB address for AIV0
-    uint32_t ubAddrAIV1,      // Single VecTile UB address for AIV1
+    uint32_t ubAddrAIV0,
+    uint32_t ubAddrAIV1,
     uint16_t pushEventId,
     uint16_t popEventId
 ) {
@@ -225,7 +274,7 @@ struct CrossCoreFIFO_V2C {
     // L1 addresses for MatTile buffers (ping-pong/N-buffer)
     uint32_t l1AddrsMatTile[NumMatBuffers];
     
-    // UB addresses of source VecTiles (on AIV side)
+    // UB addresses of source VecTiles (dual-dst: separate per AIV)
     uint32_t ubAddrsAIV0[NumMatBuffers];
     uint32_t ubAddrsAIV1[NumMatBuffers];
     
@@ -243,6 +292,34 @@ struct CrossCoreFIFO_V2C {
     // Helper: get current L1 address for MatTile
     uint32_t getCurrentL1Addr() const {
         return l1AddrsMatTile[head % NumMatBuffers];
+    }
+};
+
+// === SIMD V2C: Same UB offset for both AIVs ===
+template <typename VecTileT, typename MatTileT, int Depth = 2, int NumMatBuffers = Depth>
+struct CrossCoreFIFO_V2C_SIMD {
+    uint32_t head;
+    uint32_t tail;
+    
+    uint32_t l1AddrsMatTile[NumMatBuffers];
+    uint32_t ubAddrsAIV[NumMatBuffers];    // Same UB offset for both AIVs
+    
+    uint16_t pushEventId;
+    uint16_t popEventId;
+    
+    static constexpr int vecRows = TileTraits<VecTileT>::Rows;
+    static constexpr int vecCols = TileTraits<VecTileT>::Cols;
+    static constexpr int matRows = TileTraits<MatTileT>::Rows;
+    static constexpr int matCols = TileTraits<MatTileT>::Cols;
+    
+    static constexpr int vecTileSize = vecRows * vecCols * sizeof(typename TileTraits<VecTileT>::DType);
+    
+    uint32_t getCurrentL1Addr() const {
+        return l1AddrsMatTile[head % NumMatBuffers];
+    }
+    
+    uint32_t getCurrentUBAddr() const {
+        return ubAddrsAIV[head % NumMatBuffers];
     }
 };
 
