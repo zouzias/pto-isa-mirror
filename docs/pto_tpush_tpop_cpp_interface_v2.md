@@ -362,3 +362,230 @@ FIFO_SIGNAL_PUSH(qkFIFO, 0);  // Deferred signal
 3. Implement PTO_PUSH_TO_AIV / PTO_POP_FROM_AIC
 4. Add CPU sim support
 5. Add NPU codegen in compiler
+
+---
+
+## TMATMUL + TADD Fusion Example with TPUSH/TPOP
+
+This example shows a simple fused kernel where:
+- **AIC (Cube)**: Computes MATMUL → pushes result to AIV
+- **AIV (Vector)**: Pops result → adds bias → stores to GM
+
+### Sync Pattern
+
+```
+AIC (Cube)                          AIV (Vector)
+-----------                         ------------
+                                    
+[TMATMUL] → accTile                 
+    |                               
+[TSTORE to FIFO]                    
+    |                               
+sync.record() ─────────────────────→ sync.wait()
+                                        |
+                                    [TLOAD from FIFO]
+                                        |
+                                    [TADD bias]
+                                        |
+                                    [TSTORE to GM]
+                                        |
+sync.allocate() ←─────────────────── sync.free()
+    |
+[next iteration...]
+```
+
+### Cross-Core Sync Methods (TSync_Custom)
+
+| Method | Called By | Purpose | Underlying Op |
+|--------|-----------|---------|---------------|
+| `record()` | Producer (AIC) | Signal data ready | `set_intra_block(PIPE_FIX, flag_id)` |
+| `wait()` | Consumer (AIV) | Wait for data | `wait_intra_block(PIPE_MTE2, flag_id)` |
+| `allocate()` | Producer (AIC) | Wait for buffer free | `wait_intra_block(PIPE_FIX, flag_id+1)` |
+| `free()` | Consumer (AIV) | Signal buffer consumed | `set_intra_block(PIPE_MTE2, flag_id+1)` |
+
+### Complete Code Example
+
+```cpp
+#include <pto/pto-inst.hpp>
+#include <pto/npu/a5/custom/TSync_Custom.hpp>
+
+using namespace pto;
+
+// ============ CONSTANTS ============
+constexpr uint32_t M = 32;          // Output rows
+constexpr uint32_t K = 64;          // Inner dimension
+constexpr uint32_t N = 16;          // Output cols
+constexpr uint32_t Vec_M = M / 2;   // Each AIV gets half rows (dual-dst)
+constexpr int FIFO_DEPTH = 2;       // Double buffer
+
+// ============ TILE DEFINITIONS ============
+// Cube input tiles (L1)
+using TileMatA = Tile<TileType::Mat, half, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
+using TileMatB = Tile<TileType::Mat, half, K, N, BLayout::RowMajor, K, N, SLayout::ColMajor, 512>;
+
+// Cube accumulator output (on-chip CO buffer)
+using TileAccOut = TileAcc<float, M, N>;  // 32x16 fp32
+
+// Vector tiles (UB) - each AIV gets half the rows
+using TileVecIn = Tile<TileType::Vec, float, Vec_M, N, BLayout::RowMajor, Vec_M, N>;   // 16x16 fp32
+using TileBias  = Tile<TileType::Vec, float, Vec_M, N, BLayout::RowMajor, Vec_M, N>;   // 16x16 fp32
+using TileVecOut = Tile<TileType::Vec, float, Vec_M, N, BLayout::RowMajor, Vec_M, N>;  // 16x16 fp32
+
+// ============ SYNC FLAG IDs ============
+enum SyncFlagID : uint16_t {
+    MATMUL_TO_ADD_FLAG = 0,  // AIC→AIV data ready
+    // Flag+1 is automatically used for backpressure (allocate/free)
+};
+
+// ============ SYNC OBJECT ============
+// TSync_Custom: producer op = TSTORE_C2GM (Cube), consumer op = TLOAD
+constexpr TSync_Custom<SyncOpType::TSTORE_C2GM, SyncOpType::TLOAD> matmul2addSync = {MATMUL_TO_ADD_FLAG};
+
+// ============ AIC KERNEL (Cube Core) ============
+__attribute__((aic))
+void aic_matmul_kernel(__gm__ half* A, __gm__ half* B, __gm__ float* fifo_buffer, int num_tiles) {
+    // Tile declarations
+    TileMatA aTile;
+    TileMatB bTile;
+    TileAccOut accTile;
+    
+    // Assign buffers (L1 for mat tiles, CO for acc)
+    uint32_t l1_offset = 0;
+    TASSIGN(aTile, l1_offset); l1_offset += M * K * sizeof(half);
+    TASSIGN(bTile, l1_offset);
+    TASSIGN(accTile, 0x0);  // Accumulator at CO base
+    
+    // Init pipe flags
+    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+    set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    
+    for (int tile_id = 0; tile_id < num_tiles; tile_id++) {
+        // === BACKPRESSURE: Wait for buffer slot ===
+        // Skip for first FIFO_DEPTH tiles (buffer not full yet)
+        if (tile_id >= FIFO_DEPTH) {
+            matmul2addSync.allocate();  // wait_intra_block(PIPE_FIX, flag_id+1)
+        }
+        
+        // === LOAD A, B tiles ===
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+        
+        using GlobalA = GlobalTensor<half, Shape<1,1,1,M,K>, Stride<1,1,1,K,1>>;
+        using GlobalB = GlobalTensor<half, Shape<1,1,1,K,N>, Stride<1,1,1,1,K>, Layout::DN>;
+        GlobalA aGlobal(A + tile_id * M * K);
+        GlobalB bGlobal(B);  // B is shared
+        
+        TLOAD(aTile, aGlobal);
+        TLOAD(bTile, bGlobal);
+        
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        
+        // === MATMUL ===
+        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+        TMATMUL(accTile, aTile, bTile, AccMode::InitFinalSum);
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        
+        // === STORE to FIFO ===
+        using GlobalFIFO = GlobalTensor<float, Shape<1,1,1,M,N>, Stride<1,1,1,N,1>>;
+        uint32_t slot_idx = tile_id % FIFO_DEPTH;
+        __gm__ float* slot_addr = fifo_buffer + slot_idx * M * N;
+        GlobalFIFO fifoSlot(slot_addr);
+        
+        TSTORE(fifoSlot, accTile);
+        
+        // === SIGNAL: Data ready for AIV ===
+        matmul2addSync.record();  // set_intra_block(PIPE_FIX, flag_id) to both AIV0/AIV1
+        
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+        set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    }
+    
+    // Drain pending allocate waits
+    for (int i = 0; i < (num_tiles < FIFO_DEPTH ? num_tiles : FIFO_DEPTH); i++) {
+        matmul2addSync.allocate();
+    }
+    
+    pipe_barrier(PIPE_ALL);
+}
+
+// ============ AIV KERNEL (Vector Core) ============
+__attribute__((aiv))
+void aiv_add_kernel(__gm__ float* fifo_buffer, __gm__ float* bias, __gm__ float* output, int num_tiles) {
+    // Tile declarations
+    TileVecIn inTile;
+    TileBias biasTile;
+    TileVecOut outTile;
+    
+    // Assign UB buffers
+    uint32_t ub_offset = 0;
+    TASSIGN(inTile, ub_offset);  ub_offset += Vec_M * N * sizeof(float);
+    TASSIGN(biasTile, ub_offset); ub_offset += Vec_M * N * sizeof(float);
+    TASSIGN(outTile, ub_offset);
+    
+    // Init pipe flags
+    set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    
+    // Load bias once (shared across tiles)
+    // Each AIV core loads its portion based on get_subblockid()
+    uint32_t subblock_id = get_subblockid();  // 0 or 1
+    using GlobalBias = GlobalTensor<float, Shape<1,1,1,Vec_M,N>, Stride<1,1,1,N,1>>;
+    GlobalBias biasGlobal(bias + subblock_id * Vec_M * N);
+    TLOAD(biasTile, biasGlobal);
+    
+    for (int tile_id = 0; tile_id < num_tiles; tile_id++) {
+        // === WAIT: Data ready from AIC ===
+        matmul2addSync.wait();  // wait_intra_block(PIPE_MTE2, flag_id)
+        
+        // === LOAD from FIFO (each AIV gets its half) ===
+        wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        
+        uint32_t slot_idx = tile_id % FIFO_DEPTH;  // Consumer tracks its own tail
+        // Dual-dst cutM: AIV0 gets rows[0:16], AIV1 gets rows[16:32]
+        __gm__ float* slot_addr = fifo_buffer + slot_idx * M * N + subblock_id * Vec_M * N;
+        
+        using GlobalFIFOSlice = GlobalTensor<float, Shape<1,1,1,Vec_M,N>, Stride<1,1,1,N,1>>;
+        GlobalFIFOSlice fifoSlice(slot_addr);
+        TLOAD(inTile, fifoSlice);
+        
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        
+        // === TADD: inTile + biasTile → outTile ===
+        TADD(outTile, inTile, biasTile);
+        
+        set_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
+        
+        // === SIGNAL: Buffer consumed, AIC can reuse ===
+        matmul2addSync.free();  // set_intra_block(PIPE_MTE2, flag_id+1)
+        
+        // === STORE to GM ===
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        
+        using GlobalOut = GlobalTensor<float, Shape<1,1,1,Vec_M,N>, Stride<1,1,1,N,1>>;
+        GlobalOut outGlobal(output + tile_id * M * N + subblock_id * Vec_M * N);
+        TSTORE(outGlobal, outTile);
+    }
+    
+    pipe_barrier(PIPE_ALL);
+}
+```
+
+### Key Sync Points Summary
+
+| Location | Call | Direction | Purpose |
+|----------|------|-----------|---------|
+| AIC: before TMATMUL (tile_id >= FIFO_DEPTH) | `allocate()` | AIC ← AIV | Wait for buffer space |
+| AIC: after TSTORE to FIFO | `record()` | AIC → AIV | Signal data ready |
+| AIV: before TLOAD from FIFO | `wait()` | AIC → AIV | Wait for data |
+| AIV: after using data | `free()` | AIV → AIC | Signal buffer consumed |
+
+### Dual-Dst Row Split
+
+With `TileAccOut[32,16]` → `TileVecIn[16,16]`:
+- FIFO::dualDst = true, cutM = true
+- AIC writes full 32×16 tile to FIFO slot
+- `record()` signals BOTH AIV0 and AIV1 (via `flag_id` and `flag_id+16`)
+- AIV0 reads rows[0:16], AIV1 reads rows[16:32] using `get_subblockid()` offset
