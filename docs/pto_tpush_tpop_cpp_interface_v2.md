@@ -84,8 +84,12 @@ struct CrossCoreFIFO {
     uint32_t head;           // Producer position
     uint32_t tail;           // Consumer position
     
-    // Memory layout
-    void*    bufferBase;     // Base address of FIFO buffer
+    // Memory layout - L1 buffer for cross-core transfer
+    void*    l1BufferBase;   // Base address of FIFO buffer in L1
+    
+    // UB addresses for each AIV (destination for TPUSH)
+    uint32_t ubAddrAIV0;     // VecTile address in AIV0's UB
+    uint32_t ubAddrAIV1;     // VecTile address in AIV1's UB
     
     // Cross-core sync
     uint16_t pushEventId;    // Event ID for producer → consumer signal
@@ -106,6 +110,9 @@ struct CrossCoreFIFO {
     
     // Slot size based on accumulator tile
     static constexpr int slotSize = accRows * accCols * sizeof(typename TileTraits<AccTileT>::DType);
+    
+    // VecTile size (per AIV)
+    static constexpr int vecTileSize = vecRows * vecCols * sizeof(typename TileTraits<VecTileT>::DType);
 };
 ```
 
@@ -116,11 +123,22 @@ struct CrossCoreFIFO {
 template <typename AccTileT, typename VecTileT, int Depth>
 void FIFO_INIT(
     CrossCoreFIFO<AccTileT, VecTileT, Depth>& fifo,
-    void*    bufferBase,      // Pre-allocated buffer in L1/shared memory
+    void*    l1BufferBase,    // Pre-allocated buffer in L1 (shared memory)
+    uint32_t ubAddrAIV0,      // VecTile UB address for AIV0
+    uint32_t ubAddrAIV1,      // VecTile UB address for AIV1 (ignored if sameShape)
     uint16_t pushEventId,     // User-assigned event ID for push signal
     uint16_t popEventId       // User-assigned event ID for pop signal
-);
+) {
+    fifo.head = 0;
+    fifo.tail = 0;
+    fifo.l1BufferBase = l1BufferBase;
+    fifo.ubAddrAIV0 = ubAddrAIV0;
+    fifo.ubAddrAIV1 = ubAddrAIV1;
+    fifo.pushEventId = pushEventId;
+    fifo.popEventId = popEventId;
+}
 // Note: slotSize is inferred from AccTileT shape and dtype
+// For sameShape (1:1), only ubAddrAIV0 or ubAddrAIV1 is used based on aivId
 ```
 
 ### Push API (Producer Side)
@@ -167,24 +185,32 @@ void PTO_PUSH_TO_AIV(
     if constexpr (sameShape) {
         // 1:1 mapping: send entire tile to specified AIV
         assert(aivId == 0 || aivId == 1);  // Must specify which AIV
-        // ... TSTORE to FIFO slot for aivId ...
+        uint32_t dstUBAddr = (aivId == 0) ? fifo.ubAddrAIV0 : fifo.ubAddrAIV1;
+        // Copy accTile → L1 slot → UB[dstUBAddr]
+        // ... TSTORE accTile to L1, then DMA L1 → UB[dstUBAddr] ...
     } else if constexpr (cutM) {
         // Row split: AccTile[M,N] -> VecTile[M/2,N]
         if (aivId == -1) {
             // Dual-dst: AIV0 gets rows[0:M/2], AIV1 gets rows[M/2:M]
-            // ... TSTORE full tile, signal both AIV0 and AIV1 ...
+            // Copy accTile[0:M/2, :] → UB[ubAddrAIV0]
+            // Copy accTile[M/2:M, :] → UB[ubAddrAIV1]
         } else {
             // Single-dst: only send to specified AIV
-            // ... TSTORE half tile to specified aivId ...
+            uint32_t dstUBAddr = (aivId == 0) ? fifo.ubAddrAIV0 : fifo.ubAddrAIV1;
+            uint32_t rowOffset = (aivId == 0) ? 0 : (accM / 2);
+            // Copy accTile[rowOffset:rowOffset+M/2, :] → UB[dstUBAddr]
         }
     } else if constexpr (cutN) {
         // Col split: AccTile[M,N] -> VecTile[M,N/2]
         if (aivId == -1) {
             // Dual-dst: AIV0 gets cols[0:N/2], AIV1 gets cols[N/2:N]
-            // ... TSTORE full tile, signal both AIV0 and AIV1 ...
+            // Copy accTile[:, 0:N/2] → UB[ubAddrAIV0]
+            // Copy accTile[:, N/2:N] → UB[ubAddrAIV1]
         } else {
             // Single-dst: only send to specified AIV
-            // ... TSTORE half tile to specified aivId ...
+            uint32_t dstUBAddr = (aivId == 0) ? fifo.ubAddrAIV0 : fifo.ubAddrAIV1;
+            uint32_t colOffset = (aivId == 0) ? 0 : (accN / 2);
+            // Copy accTile[:, colOffset:colOffset+N/2] → UB[dstUBAddr]
         }
     }
 }
@@ -256,57 +282,101 @@ void PTO_POP_FROM_AIV(
 ### What TPUSH Does Internally
 
 ```cpp
-template <typename AccTileDtype, typename VecTileDtype, int CoreId>
+template <typename AccTileT, typename VecTileT>
 void PTO_PUSH_TO_AIV(
-    const Tile<AccTileDtype>& accTile,
-    CrossCoreFIFO<AccTileDtype, VecTileDtype>& fifo
+    const AccTileT& accTile,
+    CrossCoreFIFO<AccTileT, VecTileT>& fifo,
+    int aivId = -1
 ) {
+    constexpr int accM = TileTraits<AccTileT>::Rows;
+    constexpr int accN = TileTraits<AccTileT>::Cols;
+    constexpr bool cutM = (accM == 2 * TileTraits<VecTileT>::Rows);
+    constexpr bool cutN = (accN == 2 * TileTraits<VecTileT>::Cols);
+    
     // 1. Wait for slot available (backpressure from consumer)
     if (fifo.head - fifo.tail >= Depth) {
         WAIT_EVENT(fifo.popEventId);  // Consumer freed a slot
     }
     
-    // 2. Calculate slot address
+    // 2. Calculate slot address in L1
     uint32_t slotIdx = fifo.head % Depth;
-    void* slotAddr = (char*)fifo.bufferBase + slotIdx * fifo.slotSize;
+    void* l1SlotAddr = (char*)fifo.l1BufferBase + slotIdx * fifo.slotSize;
     
-    // 3. Copy tile to FIFO slot (with optional dtype conversion)
-    COPY_TILE_TO_BUFFER<AccTileDtype, VecTileDtype>(accTile, slotAddr);
+    // 3. Copy tile to L1 slot
+    TSTORE_TO_L1(accTile, l1SlotAddr);
     
-    // 4. Increment head
+    // 4. DMA from L1 to UB (based on split mode)
+    if constexpr (cutM) {
+        if (aivId == -1 || aivId == 0) {
+            // Copy rows[0:M/2] to AIV0's UB
+            DMA_L1_TO_UB(l1SlotAddr, fifo.ubAddrAIV0, fifo.vecTileSize, /*rowOffset=*/0);
+        }
+        if (aivId == -1 || aivId == 1) {
+            // Copy rows[M/2:M] to AIV1's UB
+            uint32_t srcOffset = (accM / 2) * accN * sizeof(AccTileT::DType);
+            DMA_L1_TO_UB((char*)l1SlotAddr + srcOffset, fifo.ubAddrAIV1, fifo.vecTileSize, /*rowOffset=*/0);
+        }
+    } else if constexpr (cutN) {
+        if (aivId == -1 || aivId == 0) {
+            // Copy cols[0:N/2] to AIV0's UB (strided copy)
+            DMA_L1_TO_UB_STRIDED(l1SlotAddr, fifo.ubAddrAIV0, accM, accN/2, /*srcStride=*/accN, /*colOffset=*/0);
+        }
+        if (aivId == -1 || aivId == 1) {
+            // Copy cols[N/2:N] to AIV1's UB
+            DMA_L1_TO_UB_STRIDED(l1SlotAddr, fifo.ubAddrAIV1, accM, accN/2, /*srcStride=*/accN, /*colOffset=*/accN/2);
+        }
+    } else {
+        // sameShape: copy entire tile to specified AIV
+        uint32_t dstUBAddr = (aivId == 0) ? fifo.ubAddrAIV0 : fifo.ubAddrAIV1;
+        DMA_L1_TO_UB(l1SlotAddr, dstUBAddr, fifo.vecTileSize, 0);
+    }
+    
+    // 5. Increment head
     fifo.head++;
     
-    // 5. Signal consumer
-    SET_CROSS_CORE_EVENT(fifo.pushEventId, CoreId);
+    // 6. Signal consumer(s)
+    if (aivId == -1) {
+        // Dual-dst: signal both AIV0 and AIV1
+        SET_CROSS_CORE_EVENT(fifo.pushEventId, 0);
+        SET_CROSS_CORE_EVENT(fifo.pushEventId, 1);
+    } else {
+        SET_CROSS_CORE_EVENT(fifo.pushEventId, aivId);
+    }
 }
 ```
 
 ### What TPOP Does Internally
 
 ```cpp
-template <typename AccTileDtype, typename VecTileDtype, int CoreId>
+template <typename AccTileT, typename VecTileT>
 void PTO_POP_FROM_AIC(
-    Tile<VecTileDtype>& vecTile,
-    CrossCoreFIFO<AccTileDtype, VecTileDtype>& fifo
+    VecTileT& vecTile,
+    CrossCoreFIFO<AccTileT, VecTileT>& fifo
 ) {
+    // Get this core's ID (0 = AIV0, 1 = AIV1)
+    int coreId = get_subblockid();
+    
     // 1. Wait for data available
     if (fifo.tail >= fifo.head) {
         WAIT_EVENT(fifo.pushEventId);  // Producer pushed data
     }
     
-    // 2. Calculate slot address
-    uint32_t slotIdx = fifo.tail % Depth;
-    void* slotAddr = (char*)fifo.bufferBase + slotIdx * fifo.slotSize;
+    // 2. Data is already in our UB (TPUSH did the DMA)
+    // The vecTile was assigned to ubAddrAIV0 or ubAddrAIV1 during TASSIGN
+    // TPUSH copied data directly to that address
     
-    // 3. Copy from FIFO slot to tile
-    COPY_BUFFER_TO_TILE<AccTileDtype, VecTileDtype>(slotAddr, vecTile);
-    
-    // 4. Increment tail
+    // 3. Increment tail (local to this core)
     fifo.tail++;
     
-    // 5. Signal producer (slot freed)
-    SET_CROSS_CORE_EVENT(fifo.popEventId, CoreId);
+    // 4. Signal producer (slot freed)
+    SET_CROSS_CORE_EVENT(fifo.popEventId, coreId);
+    
+    // Note: vecTile is now ready to use - data was written by TPUSH
+    // No additional copy needed since TPUSH targeted our UB address
 }
+```
+
+**Key insight:** TPUSH writes directly to the AIV's UB address stored in the FIFO. When AIV calls TPOP, the data is already in its UB - TPOP just handles synchronization.
 ```
 
 ---
@@ -331,8 +401,14 @@ using TileDataH_T = Tile<TileType::Vec, half, Vec_M, Cube_N, BLayout::RowMajor, 
 CrossCoreFIFO<TileQKData, TileDataH_T, 2> qkFIFO;
 
 // ============ INIT (called once) ============
+// UB addresses where each AIV's VecTile is assigned
+constexpr uint32_t UB_ADDR_AIV0 = 0x0000;  // VecTile for AIV0
+constexpr uint32_t UB_ADDR_AIV1 = 0x8000;  // VecTile for AIV1 (offset by 32KB)
+
 FIFO_INIT(qkFIFO,
     L1_BUFFER_ADDR,           // Pre-allocated L1 buffer
+    UB_ADDR_AIV0,             // AIV0's VecTile UB address
+    UB_ADDR_AIV1,             // AIV1's VecTile UB address
     EVENT_QK_PUSH,            // User-defined event ID
     EVENT_QK_POP              // User-defined event ID
 );
