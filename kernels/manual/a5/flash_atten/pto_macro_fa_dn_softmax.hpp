@@ -285,6 +285,22 @@ __tf__ AICORE inline void softmax_opt_fa_dn_init_impl(TileDataD2 __out__ x_exp, 
         }
     }
 
+
+    // using TileDataS1_ND = Tile<TileType::Vec, float, TileDataS1::Cols, TileDataS1::Rows, BLayout::RowMajor, TileDataS1::Cols, TileDataS1::Rows>;
+    // TileDataS1_ND triu_ND;
+    // const uint64_t offset = 224U * 1024U;
+    // TASSIGN(triu_ND, offset);
+
+    // if constexpr (CAUSAL_MASK) {
+    //     if (s0_index / TileDataS1::Rows == s1_index / TileDataS1::Rows) {  
+    //         constexpr float negInf = -3.40282e+38;
+    //         TTRI<TileDataS1_ND, 1>(triu_ND, 1 + (s0_index % TileDataS1_ND::Cols));
+    //         TTRANS(triu, triu_ND, triu_ND);
+    //         TMULS(triu, triu, negInf);
+    //         TADD(input_x, input_x, triu);
+    //     }
+    // }
+
     TCOLMAX(new_global_max, input_x);
     TCOLEXPANDSUB(input_x, input_x, new_global_max);
     TMULS(input_x, input_x, scale);
@@ -553,6 +569,21 @@ __tf__ AICORE inline void softmax_opt_fa_dn_not_init_impl(
             TADD(input_x, input_x, triu);
         }
     }
+
+    // using TileDataS1_ND = Tile<TileType::Vec, float, TileDataS1::Cols, TileDataS1::Rows, BLayout::RowMajor, TileDataS1::Cols, TileDataS1::Rows>;
+    // TileDataS1_ND triu_ND;
+    // const uint64_t offset = 224U * 1024U;
+    // TASSIGN(triu_ND, offset);
+
+    // if constexpr (CAUSAL_MASK) {
+    //     if (s0_index / TileDataS1::Rows == s1_index / TileDataS1::Rows) {  
+    //         constexpr float negInf = -3.40282e+38;
+    //         TTRI<TileDataS1_ND, 1>(triu_ND, 1 + (s0_index % TileDataS1_ND::Cols));
+    //         TTRANS(triu, triu_ND, triu_ND);
+    //         TMULS(triu, triu, negInf);
+    //         TADD(input_x, input_x, triu);
+    //     }
+    // }
 
     // FA2.0 streaming mode (not first tile): update (global_max, global_sum) and rescale old sums.
 
