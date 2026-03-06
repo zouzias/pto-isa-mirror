@@ -12,10 +12,32 @@
 
 ## Core API
 
+### Tile Type Definition
+
+Tile types carry shape info used to infer dual-dst split axis:
+
+```cpp
+// Tile type with compile-time shape info
+template <typename Dtype, int ROWS, int COLS>
+struct TileDef {
+    using dtype = Dtype;
+    static constexpr int rows = ROWS;
+    static constexpr int cols = COLS;
+    static constexpr int size = ROWS * COLS * sizeof(Dtype);
+};
+
+// Common tile definitions
+using AccTile_16x16_fp32 = TileDef<fp32, 16, 16>;   // 1KB
+using AccTile_32x16_fp32 = TileDef<fp32, 32, 16>;   // 2KB
+using VecTile_16x16_half = TileDef<half, 16, 16>;   // 512B
+using VecTile_32x16_half = TileDef<half, 32, 16>;   // 1KB
+using VecTile_16x32_half = TileDef<half, 16, 32>;   // 1KB
+```
+
 ### FIFO Object
 
 ```cpp
-template <typename SrcDtype, typename DstDtype, int Depth = 2>
+template <typename AccTileDef, typename VecTileDef, int Depth = 2>
 struct CrossCoreFIFO {
     // Ring buffer state
     uint32_t head;           // Producer position
@@ -23,14 +45,26 @@ struct CrossCoreFIFO {
     
     // Memory layout
     void*    bufferBase;     // Base address of FIFO buffer
-    uint32_t slotSize;       // Size of each slot in bytes
     
     // Cross-core sync
     uint16_t pushEventId;    // Event ID for producer → consumer signal
     uint16_t popEventId;     // Event ID for consumer → producer signal (backpressure)
     
-    // Direction info (compile-time)
-    static constexpr bool isAicToAiv = std::is_same_v<SrcDtype, AccDtype>;
+    // Compile-time shape info from tile types
+    static constexpr int accRows = AccTileDef::rows;
+    static constexpr int accCols = AccTileDef::cols;
+    static constexpr int vecRows = VecTileDef::rows;
+    static constexpr int vecCols = VecTileDef::cols;
+    
+    // Infer dual-dst split axis from shape mismatch
+    // If accRows == 2 * vecRows → cut M (row split)
+    // If accCols == 2 * vecCols → cut N (col split)
+    static constexpr bool dualDst = (accRows == 2 * vecRows) || (accCols == 2 * vecCols);
+    static constexpr bool cutM = (accRows == 2 * vecRows);  // Row split to AIV0/AIV1
+    static constexpr bool cutN = (accCols == 2 * vecCols);  // Col split to AIV0/AIV1
+    
+    // Slot size is the larger of acc/vec tile
+    static constexpr int slotSize = AccTileDef::size;
 };
 ```
 
@@ -38,31 +72,35 @@ struct CrossCoreFIFO {
 
 ```cpp
 // Called once per kernel launch, before any TPUSH/TPOP
-template <typename SrcDtype, typename DstDtype, int Depth>
+template <typename AccTileDef, typename VecTileDef, int Depth>
 void FIFO_INIT(
-    CrossCoreFIFO<SrcDtype, DstDtype, Depth>& fifo,
+    CrossCoreFIFO<AccTileDef, VecTileDef, Depth>& fifo,
     void*    bufferBase,      // Pre-allocated buffer in L1/shared memory
-    uint32_t slotSize,        // Tile size in bytes
     uint16_t pushEventId,     // User-assigned event ID for push signal
     uint16_t popEventId       // User-assigned event ID for pop signal
 );
+// Note: slotSize is inferred from AccTileDef::size
 ```
 
 ### Push API (Producer Side)
 
 ```cpp
-// AIC → AIV: Push accumulator tile to vector core
-template <typename AccTileDtype, typename VecTileDtype, int CoreId = 0>
+// AIC → AIV: Push accumulator tile to vector core(s)
+// If FIFO::dualDst is true, automatically splits to both AIV cores
+template <typename AccTileDef, typename VecTileDef>
 void PTO_PUSH_TO_AIV(
-    const Tile<AccTileDtype>& accTile,   // Source tile (accumulator)
-    CrossCoreFIFO<AccTileDtype, VecTileDtype>& fifo
+    const Tile<AccTileDef>& accTile,     // Source tile (accumulator)
+    CrossCoreFIFO<AccTileDef, VecTileDef>& fifo
 );
+// Dual-dst split axis inferred from tile shapes:
+//   AccTile[32,16] → VecTile[16,16]: cutM, rows split to AIV0/AIV1
+//   AccTile[16,32] → VecTile[16,16]: cutN, cols split to AIV0/AIV1
 
 // AIV → AIC: Push vector tile back to cube core (rare, for gradients)
-template <typename VecTileDtype, typename AccTileDtype, int CoreId = 0>
+template <typename VecTileDef, typename AccTileDef>
 void PTO_PUSH_TO_AIC(
-    const Tile<VecTileDtype>& vecTile,   // Source tile (vector)
-    CrossCoreFIFO<VecTileDtype, AccTileDtype>& fifo
+    const Tile<VecTileDef>& vecTile,     // Source tile (vector)
+    CrossCoreFIFO<VecTileDef, AccTileDef>& fifo
 );
 ```
 
@@ -70,17 +108,20 @@ void PTO_PUSH_TO_AIC(
 
 ```cpp
 // AIV: Pop tile from AIC
-template <typename AccTileDtype, typename VecTileDtype, int CoreId = 0>
+// Each AIV core receives its portion based on dual-dst split
+template <typename AccTileDef, typename VecTileDef>
 void PTO_POP_FROM_AIC(
-    Tile<VecTileDtype>& vecTile,         // Destination tile (vector format)
-    CrossCoreFIFO<AccTileDtype, VecTileDtype>& fifo
+    Tile<VecTileDef>& vecTile,           // Destination tile (vector format)
+    CrossCoreFIFO<AccTileDef, VecTileDef>& fifo
 );
+// If dualDst && cutM: AIV0 gets rows[0:R/2], AIV1 gets rows[R/2:R]
+// If dualDst && cutN: AIV0 gets cols[0:C/2], AIV1 gets cols[C/2:C]
 
 // AIC: Pop tile from AIV (rare)
-template <typename VecTileDtype, typename AccTileDtype, int CoreId = 0>
+template <typename VecTileDef, typename AccTileDef>
 void PTO_POP_FROM_AIV(
-    Tile<AccTileDtype>& accTile,         // Destination tile (accumulator format)
-    CrossCoreFIFO<VecTileDtype, AccTileDtype>& fifo
+    Tile<AccTileDef>& accTile,           // Destination tile (accumulator format)
+    CrossCoreFIFO<VecTileDef, AccTileDef>& fifo
 );
 ```
 
@@ -149,39 +190,46 @@ void PTO_POP_FROM_AIC(
 ## Usage Example: Flash Attention QK→Softmax
 
 ```cpp
-// ============ INIT (called once) ============
-CrossCoreFIFO<fp32, half, 2> qkFIFO;   // 2-slot double buffer
+// ============ TILE DEFINITIONS ============
+// Accumulator: 32x16 fp32 (2KB) from matmul
+using AccTile = TileDef<fp32, 32, 16>;
 
-// User allocates buffer and assigns event IDs
+// Vector: 16x16 half (512B) per AIV core
+// Shape mismatch: 32 rows → 16 rows = cutM (row split)
+using VecTile = TileDef<half, 16, 16>;
+
+// FIFO automatically infers: dualDst=true, cutM=true
+CrossCoreFIFO<AccTile, VecTile, 2> qkFIFO;
+
+// ============ INIT (called once) ============
 FIFO_INIT(qkFIFO,
     L1_BUFFER_ADDR,           // Pre-allocated L1 buffer
-    TILE_SIZE_BYTES,          // e.g., 256 * sizeof(half)
     EVENT_QK_PUSH,            // User-defined event ID
     EVENT_QK_POP              // User-defined event ID
 );
 
 // ============ AIC KERNEL (Cube Core) ============
 void aic_matmul_kernel() {
-    Tile<fp32> qkTile;        // Accumulator tile
+    Tile<AccTile> qkTile;     // 32x16 accumulator
     
     for (int i = 0; i < num_tiles; i++) {
-        // Compute Q @ K^T
+        // Compute Q @ K^T → 32x16 result
         MATMUL(Q_tile, K_tile, qkTile);
         
-        // Push to AIV for softmax
-        PTO_PUSH_TO_AIV<fp32, half, 0>(qkTile, qkFIFO);
+        // Push to AIV — automatically splits rows[0:16]→AIV0, rows[16:32]→AIV1
+        PTO_PUSH_TO_AIV(qkTile, qkFIFO);
     }
 }
 
 // ============ AIV KERNEL (Vector Core) ============
 void aiv_softmax_kernel() {
-    Tile<half> qkTile;        // Vector tile
+    Tile<VecTile> qkTile;     // 16x16 half (this core's portion)
     
     for (int i = 0; i < num_tiles; i++) {
-        // Pop from AIC
-        PTO_POP_FROM_AIC<fp32, half, 0>(qkTile, qkFIFO);
+        // Pop from AIC — AIV0 gets rows[0:16], AIV1 gets rows[16:32]
+        PTO_POP_FROM_AIC(qkTile, qkFIFO);
         
-        // Compute softmax
+        // Compute softmax on our portion
         SOFTMAX(qkTile);
         
         // Store or continue pipeline...
@@ -233,21 +281,17 @@ FIFO_SIGNAL_PUSH(qkFIFO, 0);  // Deferred signal
 1. **Event ID allocation**: Should we provide a helper like `ALLOC_EVENT_PAIR()` or leave it fully manual?
 
 2. **Dtype conversion**: Where does fp32→half conversion happen?
-   - Option A: Inside TPUSH (on AIC side)
-   - Option B: Inside TPOP (on AIV side)
+   - Option A: Inside TPUSH (on AIC side, before write to FIFO)
+   - Option B: Inside TPOP (on AIV side, after read from FIFO)
    - Option C: User handles explicitly before/after
 
-3. **A5 dual-AIV**: For 1:2 split to both vector cores, do we need:
-   ```cpp
-   PTO_PUSH_TO_AIV_DUAL<fp32, half>(accTile, fifo0, fifo1);  // Splits rows
-   ```
-   Or just two separate pushes with different FIFOs?
-
-4. **Buffer ownership**: Who allocates the FIFO buffer?
+3. **Buffer ownership**: Who allocates the FIFO buffer?
    - Option A: User passes pre-allocated buffer to `FIFO_INIT`
    - Option B: FIFO allocates from a pool (`L1_ALLOC(size)`)
 
-5. **Depth template param**: Fixed at compile time, or runtime configurable?
+4. **Depth template param**: Fixed at compile time (current), or runtime configurable?
+
+5. **Same-shape tiles**: When AccTile and VecTile have same ROWS/COLS (no dual-dst), should we require explicit `CoreId` template param, or use some other mechanism?
 
 ---
 
