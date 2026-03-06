@@ -78,7 +78,7 @@ struct TileTraits {
 ### FIFO Object
 
 ```cpp
-template <typename AccTileT, typename VecTileT, int Depth = 2>
+template <typename AccTileT, typename VecTileT, int Depth = 2, int NumVecBuffers = Depth>
 struct CrossCoreFIFO {
     // Ring buffer state
     uint32_t head;           // Producer position
@@ -87,9 +87,10 @@ struct CrossCoreFIFO {
     // Memory layout - L1 buffer for cross-core transfer
     void*    l1BufferBase;   // Base address of FIFO buffer in L1
     
-    // UB addresses for each AIV (destination for TPUSH)
-    uint32_t ubAddrAIV0;     // VecTile address in AIV0's UB
-    uint32_t ubAddrAIV1;     // VecTile address in AIV1's UB
+    // === STATIC SCHEDULE: Array of UB addresses for ping-pong/N-buffer ===
+    // Each AIV has NumVecBuffers VecTile slots for automatic buffer rotation
+    uint32_t ubAddrsAIV0[NumVecBuffers];  // VecTile addresses in AIV0's UB
+    uint32_t ubAddrsAIV1[NumVecBuffers];  // VecTile addresses in AIV1's UB
     
     // Cross-core sync
     uint16_t pushEventId;    // Event ID for producer → consumer signal
@@ -102,8 +103,6 @@ struct CrossCoreFIFO {
     static constexpr int vecCols = TileTraits<VecTileT>::Cols;
     
     // Infer dual-dst split axis from shape mismatch
-    // If accRows == 2 * vecRows → cut M (row split to AIV0/AIV1)
-    // If accCols == 2 * vecCols → cut N (col split to AIV0/AIV1)
     static constexpr bool dualDst = (accRows == 2 * vecRows) || (accCols == 2 * vecCols);
     static constexpr bool cutM = (accRows == 2 * vecRows);  // Row split
     static constexpr bool cutN = (accCols == 2 * vecCols);  // Col split
@@ -113,37 +112,101 @@ struct CrossCoreFIFO {
     
     // VecTile size (per AIV)
     static constexpr int vecTileSize = vecRows * vecCols * sizeof(typename TileTraits<VecTileT>::DType);
+    
+    // Helper: get current UB address based on head/tail position
+    uint32_t getCurrentUBAddr(int aivId) const {
+        uint32_t bufIdx = (aivId == 0 ? head : head) % NumVecBuffers;
+        return (aivId == 0) ? ubAddrsAIV0[bufIdx] : ubAddrsAIV1[bufIdx];
+    }
 };
 ```
 
 ### Initialization
 
 ```cpp
-// Called once per kernel launch, before any TPUSH/TPOP
-template <typename AccTileT, typename VecTileT, int Depth>
+// === OPTION A: Static schedule with array of VecTile addresses (ping-pong/N-buffer) ===
+template <typename AccTileT, typename VecTileT, int Depth, int NumVecBuffers>
 void FIFO_INIT(
-    CrossCoreFIFO<AccTileT, VecTileT, Depth>& fifo,
-    void*    l1BufferBase,    // Pre-allocated buffer in L1 (shared memory)
-    uint32_t ubAddrAIV0,      // VecTile UB address for AIV0
-    uint32_t ubAddrAIV1,      // VecTile UB address for AIV1 (ignored if sameShape)
-    uint16_t pushEventId,     // User-assigned event ID for push signal
-    uint16_t popEventId       // User-assigned event ID for pop signal
+    CrossCoreFIFO<AccTileT, VecTileT, Depth, NumVecBuffers>& fifo,
+    void*    l1BufferBase,                    // Pre-allocated buffer in L1
+    const uint32_t (&ubAddrsAIV0)[NumVecBuffers],  // Array of VecTile UB addrs for AIV0
+    const uint32_t (&ubAddrsAIV1)[NumVecBuffers],  // Array of VecTile UB addrs for AIV1
+    uint16_t pushEventId,
+    uint16_t popEventId
 ) {
     fifo.head = 0;
     fifo.tail = 0;
     fifo.l1BufferBase = l1BufferBase;
-    fifo.ubAddrAIV0 = ubAddrAIV0;
-    fifo.ubAddrAIV1 = ubAddrAIV1;
+    for (int i = 0; i < NumVecBuffers; i++) {
+        fifo.ubAddrsAIV0[i] = ubAddrsAIV0[i];
+        fifo.ubAddrsAIV1[i] = ubAddrsAIV1[i];
+    }
     fifo.pushEventId = pushEventId;
     fifo.popEventId = popEventId;
 }
-// Note: slotSize is inferred from AccTileT shape and dtype
-// For sameShape (1:1), only ubAddrAIV0 or ubAddrAIV1 is used based on aivId
+
+// === OPTION B: Simplified init for single buffer (no ping-pong) ===
+template <typename AccTileT, typename VecTileT, int Depth>
+void FIFO_INIT(
+    CrossCoreFIFO<AccTileT, VecTileT, Depth, 1>& fifo,
+    void*    l1BufferBase,
+    uint32_t ubAddrAIV0,      // Single VecTile UB address for AIV0
+    uint32_t ubAddrAIV1,      // Single VecTile UB address for AIV1
+    uint16_t pushEventId,
+    uint16_t popEventId
+) {
+    fifo.head = 0;
+    fifo.tail = 0;
+    fifo.l1BufferBase = l1BufferBase;
+    fifo.ubAddrsAIV0[0] = ubAddrAIV0;
+    fifo.ubAddrsAIV1[0] = ubAddrAIV1;
+    fifo.pushEventId = pushEventId;
+    fifo.popEventId = popEventId;
+}
 ```
 
 ### Push API (Producer Side)
 
 ```cpp
+// === STATIC SCHEDULE: FIFO manages buffer rotation automatically ===
+template <typename AccTileT, typename VecTileT, int Depth, int NumVecBuffers>
+void PTO_PUSH_TO_AIV(
+    const AccTileT& accTile,
+    CrossCoreFIFO<AccTileT, VecTileT, Depth, NumVecBuffers>& fifo,
+    int aivId = -1
+) {
+    // Uses fifo.getCurrentUBAddr(aivId) to get destination based on head % NumVecBuffers
+    // Automatic ping-pong buffer rotation
+    // ...
+}
+
+// === DYNAMIC SCHEDULE: User provides current VecTile (for complex scheduling) ===
+template <typename AccTileT, typename VecTileT>
+void PTO_PUSH_TO_AIV(
+    const AccTileT& accTile,
+    const VecTileT& dstVecTileAIV0,    // Current VecTile for AIV0 (has UB addr)
+    const VecTileT& dstVecTileAIV1,    // Current VecTile for AIV1 (has UB addr)
+    uint16_t pushEventId,
+    int aivId = -1
+) {
+    // User controls which VecTile buffer to use
+    uint32_t ubAddrAIV0 = dstVecTileAIV0.getAddress();
+    uint32_t ubAddrAIV1 = dstVecTileAIV1.getAddress();
+    // ...
+}
+
+// === DYNAMIC SCHEDULE (single AIV): User provides single VecTile ===
+template <typename AccTileT, typename VecTileT>
+void PTO_PUSH_TO_AIV(
+    const AccTileT& accTile,
+    const VecTileT& dstVecTile,        // Target VecTile (has UB addr)
+    uint16_t pushEventId,
+    int aivId                          // Must be 0 or 1 (not -1)
+) {
+    assert(aivId == 0 || aivId == 1);
+    uint32_t ubAddr = dstVecTile.getAddress();
+    // ...
+}
 // AIC → AIV: Push accumulator tile to vector core(s)
 // aivId: 0 = AIV0 only, 1 = AIV1 only, -1 = dual-dst (both AIV0 and AIV1)
 template <typename AccTileT, typename VecTileT>
@@ -401,17 +464,26 @@ using TileDataH_T = Tile<TileType::Vec, half, Vec_M, Cube_N, BLayout::RowMajor, 
 CrossCoreFIFO<TileQKData, TileDataH_T, 2> qkFIFO;
 
 // ============ INIT (called once) ============
-// UB addresses where each AIV's VecTile is assigned
-constexpr uint32_t UB_ADDR_AIV0 = 0x0000;  // VecTile for AIV0
-constexpr uint32_t UB_ADDR_AIV1 = 0x8000;  // VecTile for AIV1 (offset by 32KB)
+// === STATIC SCHEDULE: Ping-pong buffers (2 VecTiles per AIV) ===
+constexpr uint32_t UB_ADDRS_AIV0[2] = {0x0000, 0x8000};  // Ping-pong for AIV0
+constexpr uint32_t UB_ADDRS_AIV1[2] = {0x0000, 0x8000};  // Ping-pong for AIV1
+
+// FIFO with Depth=2, NumVecBuffers=2 (ping-pong)
+CrossCoreFIFO<TileQKData, TileDataH_T, 2, 2> qkFIFO;
 
 FIFO_INIT(qkFIFO,
     L1_BUFFER_ADDR,           // Pre-allocated L1 buffer
-    UB_ADDR_AIV0,             // AIV0's VecTile UB address
-    UB_ADDR_AIV1,             // AIV1's VecTile UB address
+    UB_ADDRS_AIV0,            // Array of AIV0's VecTile UB addresses
+    UB_ADDRS_AIV1,            // Array of AIV1's VecTile UB addresses
     EVENT_QK_PUSH,            // User-defined event ID
     EVENT_QK_POP              // User-defined event ID
 );
+
+// === DYNAMIC SCHEDULE (alternative): User passes VecTile directly ===
+// TileDataH_T vecTilePing, vecTilePong;
+// TASSIGN(vecTilePing, 0x0000);
+// TASSIGN(vecTilePong, 0x8000);
+// PTO_PUSH_TO_AIV(accTile, vecTilePing, vecTilePong, EVENT_QK_PUSH, -1);
 
 // ============ AIC KERNEL (Cube Core) ============
 void aic_matmul_kernel() {
