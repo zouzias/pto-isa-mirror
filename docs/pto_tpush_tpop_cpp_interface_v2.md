@@ -193,31 +193,20 @@ void PTO_PUSH_TO_AIV(
 // DYNAMIC SCHEDULE: User provides VecTile object at runtime
 // ============================================================
 
-// Dual-dst: User provides both VecTiles (gets UB addr from tile.getAddress())
-template <typename AccTileT, typename VecTileT, int Depth>
-void PTO_PUSH_TO_AIV(
-    const AccTileT& accTile,
-    CrossCoreFIFO_Dynamic<AccTileT, VecTileT, Depth>& fifo,
-    const VecTileT& dstVecTileAIV0,    // Target VecTile for AIV0 (runtime UB addr)
-    const VecTileT& dstVecTileAIV1,    // Target VecTile for AIV1 (runtime UB addr)
-    int aivId = -1
-) {
-    uint32_t ubAddrAIV0 = dstVecTileAIV0.getAddress();
-    uint32_t ubAddrAIV1 = dstVecTileAIV1.getAddress();
-    // Use runtime addresses instead of FIFO arrays
-    // ...
-}
-
-// Single-dst: User provides one VecTile
+// Dual-dst or single-dst: same API, one VecTile (same UB addr for both AIVs)
+// aivId: -1 = dual-dst (both AIVs get data at same UB offset, HW splits)
+//        0 = AIV0 only, 1 = AIV1 only
 template <typename AccTileT, typename VecTileT, int Depth>
 void PTO_PUSH_TO_AIV(
     const AccTileT& accTile,
     CrossCoreFIFO_Dynamic<AccTileT, VecTileT, Depth>& fifo,
     const VecTileT& dstVecTile,        // Target VecTile (runtime UB addr)
-    int aivId                          // Must be 0 or 1 (not -1)
+    int aivId = -1
 ) {
-    assert(aivId == 0 || aivId == 1);
     uint32_t ubAddr = dstVecTile.getAddress();
+    // For dual-dst: HW sends top half to AIV0, bottom half to AIV1 (cutM)
+    //               or left half to AIV0, right half to AIV1 (cutN)
+    // For single-dst: only specified AIV receives data
     // ...
 }
 ```
