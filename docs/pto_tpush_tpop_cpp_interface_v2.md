@@ -133,10 +133,92 @@ void PTO_PUSH_TO_AIV(
     const AccTileT& accTile,             // Source tile (accumulator)
     CrossCoreFIFO<AccTileT, VecTileT>& fifo,
     int aivId = -1                       // -1 = dual-dst, 0 = AIV0, 1 = AIV1
-);
-// When aivId = -1 (dual-dst), split axis inferred from tile shapes:
-//   AccTile[128,128] → VecTile[64,128]: cutM, rows split to AIV0/AIV1
-//   AccTile[64,256] → VecTile[64,128]: cutN, cols split to AIV0/AIV1
+) {
+    // ============ COMPILE-TIME SHAPE INFERENCE ============
+    constexpr int accM = TileTraits<AccTileT>::Rows;
+    constexpr int accN = TileTraits<AccTileT>::Cols;
+    constexpr int vecM = TileTraits<VecTileT>::Rows;
+    constexpr int vecN = TileTraits<VecTileT>::Cols;
+    
+    // Infer split mode from shape relationship
+    constexpr bool cutM = (accM == 2 * vecM) && (accN == vecN);  // Row split
+    constexpr bool cutN = (accN == 2 * vecN) && (accM == vecM);  // Col split
+    constexpr bool sameShape = (accM == vecM) && (accN == vecN); // 1:1 mapping
+    
+    // ============ ASSERTIONS ============
+    // Must be exactly one of: cutM, cutN, or sameShape
+    static_assert(cutM || cutN || sameShape,
+        "Invalid tile shape relationship: AccTile must be either "
+        "(2*vecM, vecN) for cutM, (vecM, 2*vecN) for cutN, or (vecM, vecN) for 1:1");
+    
+    static_assert(!(cutM && cutN),
+        "Ambiguous tile shape: cannot have both cutM and cutN");
+    
+    // Dual-dst requires cutM or cutN (shape mismatch)
+    static_assert(!(aivId == -1 && sameShape),
+        "Dual-dst (aivId=-1) requires shape mismatch: "
+        "AccTile[M,N] -> VecTile[M/2,N] (cutM) or AccTile[M,N] -> VecTile[M,N/2] (cutN). "
+        "For 1:1 shape, use aivId=0 or aivId=1 explicitly.");
+    
+    // Single-dst with shape mismatch is allowed (send to one core only)
+    // aivId=0 or aivId=1 with cutM/cutN: only that core receives its half
+    
+    // ============ IMPLEMENTATION ============
+    if constexpr (sameShape) {
+        // 1:1 mapping: send entire tile to specified AIV
+        assert(aivId == 0 || aivId == 1);  // Must specify which AIV
+        // ... TSTORE to FIFO slot for aivId ...
+    } else if constexpr (cutM) {
+        // Row split: AccTile[M,N] -> VecTile[M/2,N]
+        if (aivId == -1) {
+            // Dual-dst: AIV0 gets rows[0:M/2], AIV1 gets rows[M/2:M]
+            // ... TSTORE full tile, signal both AIV0 and AIV1 ...
+        } else {
+            // Single-dst: only send to specified AIV
+            // ... TSTORE half tile to specified aivId ...
+        }
+    } else if constexpr (cutN) {
+        // Col split: AccTile[M,N] -> VecTile[M,N/2]
+        if (aivId == -1) {
+            // Dual-dst: AIV0 gets cols[0:N/2], AIV1 gets cols[N/2:N]
+            // ... TSTORE full tile, signal both AIV0 and AIV1 ...
+        } else {
+            // Single-dst: only send to specified AIV
+            // ... TSTORE half tile to specified aivId ...
+        }
+    }
+}
+```
+
+**Shape Relationship Rules:**
+
+| AccTile Shape | VecTile Shape | Mode | aivId Options |
+|---------------|---------------|------|---------------|
+| `[M, N]` | `[M/2, N]` | cutM (row split) | -1, 0, 1 |
+| `[M, N]` | `[M, N/2]` | cutN (col split) | -1, 0, 1 |
+| `[M, N]` | `[M, N]` | sameShape (1:1) | 0, 1 only |
+
+**Examples:**
+```cpp
+// cutM: 128x128 -> 64x128 (row split)
+using AccTile = TileAcc<float, 128, 128>;
+using VecTile = Tile<TileType::Vec, half, 64, 128, ...>;
+PTO_PUSH_TO_AIV(accTile, fifo, -1);  // OK: dual-dst cutM
+PTO_PUSH_TO_AIV(accTile, fifo, 0);   // OK: AIV0 gets rows[0:64]
+PTO_PUSH_TO_AIV(accTile, fifo, 1);   // OK: AIV1 gets rows[64:128]
+
+// cutN: 64x256 -> 64x128 (col split)
+using AccTile = TileAcc<float, 64, 256>;
+using VecTile = Tile<TileType::Vec, half, 64, 128, ...>;
+PTO_PUSH_TO_AIV(accTile, fifo, -1);  // OK: dual-dst cutN
+
+// sameShape: 64x128 -> 64x128 (1:1)
+using AccTile = TileAcc<float, 64, 128>;
+using VecTile = Tile<TileType::Vec, float, 64, 128, ...>;
+PTO_PUSH_TO_AIV(accTile, fifo, -1);  // ERROR: static_assert fails
+PTO_PUSH_TO_AIV(accTile, fifo, 0);   // OK: send to AIV0
+PTO_PUSH_TO_AIV(accTile, fifo, 1);   // OK: send to AIV1
+```
 
 // AIV → AIC: Push vector tile back to cube core (rare, for gradients)
 template <typename VecTileT, typename AccTileT>
