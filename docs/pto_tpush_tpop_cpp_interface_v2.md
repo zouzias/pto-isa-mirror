@@ -127,15 +127,16 @@ void FIFO_INIT(
 
 ```cpp
 // AIC → AIV: Push accumulator tile to vector core(s)
-// If FIFO::dualDst is true, automatically splits to both AIV cores
+// aivId: 0 = AIV0 only, 1 = AIV1 only, -1 = dual-dst (both AIV0 and AIV1)
 template <typename AccTileT, typename VecTileT>
 void PTO_PUSH_TO_AIV(
     const AccTileT& accTile,             // Source tile (accumulator)
-    CrossCoreFIFO<AccTileT, VecTileT>& fifo
+    CrossCoreFIFO<AccTileT, VecTileT>& fifo,
+    int aivId = -1                       // -1 = dual-dst, 0 = AIV0, 1 = AIV1
 );
-// Dual-dst split axis inferred from tile shapes:
-//   AccTile[32,16] → VecTile[16,16]: cutM, rows split to AIV0/AIV1
-//   AccTile[16,32] → VecTile[16,16]: cutN, cols split to AIV0/AIV1
+// When aivId = -1 (dual-dst), split axis inferred from tile shapes:
+//   AccTile[128,128] → VecTile[64,128]: cutM, rows split to AIV0/AIV1
+//   AccTile[64,256] → VecTile[64,128]: cutN, cols split to AIV0/AIV1
 
 // AIV → AIC: Push vector tile back to cube core (rare, for gradients)
 template <typename VecTileT, typename AccTileT>
@@ -233,16 +234,16 @@ void PTO_POP_FROM_AIC(
 ```cpp
 // ============ TILE DEFINITIONS (using existing PTO syntax) ============
 // From FA kernel: TileAcc<Element, Rows, Cols, RowValid, ColValid>
-constexpr uint32_t Cube_S0 = 32;
-constexpr uint32_t Cube_S1 = 16;
-constexpr uint32_t Vec_S0 = Cube_S0 / 2;  // Each AIV gets half the rows
+constexpr uint32_t Cube_M = 128;
+constexpr uint32_t Cube_N = 128;
+constexpr uint32_t Vec_M = Cube_M / 2;  // Each AIV gets half the rows (64)
 
-// Accumulator: 32x16 fp32 (2KB) from matmul
-using TileQKData = TileAcc<float, Cube_S0, Cube_S1>;
+// Accumulator: 128x128 fp32 from matmul
+using TileQKData = TileAcc<float, Cube_M, Cube_N>;
 
-// Vector: 16x16 half (512B) per AIV core
-// Shape mismatch: 32 rows → 16 rows = cutM (row split)
-using TileDataH_T = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
+// Vector: 64x128 half per AIV core (dual-dst cutM)
+// Shape mismatch: 128 rows → 64 rows = cutM (row split)
+using TileDataH_T = Tile<TileType::Vec, half, Vec_M, Cube_N, BLayout::RowMajor, Vec_M, Cube_N>;
 
 // FIFO automatically infers: dualDst=true, cutM=true
 CrossCoreFIFO<TileQKData, TileDataH_T, 2> qkFIFO;
@@ -256,25 +257,26 @@ FIFO_INIT(qkFIFO,
 
 // ============ AIC KERNEL (Cube Core) ============
 void aic_matmul_kernel() {
-    TileQKData qkAccTile;     // 32x16 accumulator
+    TileQKData qkAccTile;     // 128x128 accumulator
     TASSIGN(qkAccTile, 0x0);  // Assign to accumulator buffer
     
     for (int i = 0; i < num_tiles; i++) {
-        // Compute Q @ K^T → 32x16 result
-        pto_macro_matmul<Cube_S0, HEAD, Cube_S1>(qMatTile, kMatTile, qkAccTile, AccMode::InitFinalSum);
+        // Compute Q @ K^T → 128x128 result
+        pto_macro_matmul<Cube_M, HEAD, Cube_N>(qMatTile, kMatTile, qkAccTile, AccMode::InitFinalSum);
         
-        // Push to AIV — automatically splits rows[0:16]→AIV0, rows[16:32]→AIV1
-        PTO_PUSH_TO_AIV(qkAccTile, qkFIFO);
+        // Push to AIV with dual-dst (-1)
+        // Automatically splits rows[0:64]→AIV0, rows[64:128]→AIV1
+        PTO_PUSH_TO_AIV(qkAccTile, qkFIFO, -1);  // -1 = dual-dst
     }
 }
 
 // ============ AIV KERNEL (Vector Core) ============
 void aiv_softmax_kernel() {
-    TileDataH_T qkVecTile;    // 16x16 half (this core's portion)
+    TileDataH_T qkVecTile;    // 64x128 half (this core's portion)
     TASSIGN(qkVecTile, UB_OFFSET);
     
     for (int i = 0; i < num_tiles; i++) {
-        // Pop from AIC — AIV0 gets rows[0:16], AIV1 gets rows[16:32]
+        // Pop from AIC — AIV0 gets rows[0:64], AIV1 gets rows[64:128]
         PTO_POP_FROM_AIC(qkVecTile, qkFIFO);
         
         // Compute softmax on our portion
@@ -412,10 +414,10 @@ sync.allocate() ←─────────────────── syn
 using namespace pto;
 
 // ============ CONSTANTS ============
-constexpr uint32_t M = 32;          // Output rows
-constexpr uint32_t K = 64;          // Inner dimension
-constexpr uint32_t N = 16;          // Output cols
-constexpr uint32_t Vec_M = M / 2;   // Each AIV gets half rows (dual-dst)
+constexpr uint32_t M = 128;         // Output rows (Cube)
+constexpr uint32_t K = 128;         // Inner dimension
+constexpr uint32_t N = 128;         // Output cols
+constexpr uint32_t Vec_M = M / 2;   // Each AIV gets half rows = 64 (dual-dst cutM)
 constexpr int FIFO_DEPTH = 2;       // Double buffer
 
 // ============ TILE DEFINITIONS ============
@@ -423,13 +425,13 @@ constexpr int FIFO_DEPTH = 2;       // Double buffer
 using TileMatA = Tile<TileType::Mat, half, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
 using TileMatB = Tile<TileType::Mat, half, K, N, BLayout::RowMajor, K, N, SLayout::ColMajor, 512>;
 
-// Cube accumulator output (on-chip CO buffer)
-using TileAccOut = TileAcc<float, M, N>;  // 32x16 fp32
+// Cube accumulator output (on-chip CO buffer) - 128x128 fp32
+using TileAccOut = TileAcc<float, M, N>;  // 128x128 fp32 = 64KB
 
-// Vector tiles (UB) - each AIV gets half the rows
-using TileVecIn = Tile<TileType::Vec, float, Vec_M, N, BLayout::RowMajor, Vec_M, N>;   // 16x16 fp32
-using TileBias  = Tile<TileType::Vec, float, Vec_M, N, BLayout::RowMajor, Vec_M, N>;   // 16x16 fp32
-using TileVecOut = Tile<TileType::Vec, float, Vec_M, N, BLayout::RowMajor, Vec_M, N>;  // 16x16 fp32
+// Vector tiles (UB) - each AIV gets 64x128 (half the rows)
+using TileVecIn = Tile<TileType::Vec, float, Vec_M, N, BLayout::RowMajor, Vec_M, N>;   // 64x128 fp32 = 32KB
+using TileBias  = Tile<TileType::Vec, float, Vec_M, N, BLayout::RowMajor, Vec_M, N>;   // 64x128 fp32
+using TileVecOut = Tile<TileType::Vec, float, Vec_M, N, BLayout::RowMajor, Vec_M, N>;  // 64x128 fp32
 
 // ============ SYNC FLAG IDs ============
 enum SyncFlagID : uint16_t {
@@ -495,6 +497,7 @@ void aic_matmul_kernel(__gm__ half* A, __gm__ half* B, __gm__ float* fifo_buffer
         TSTORE(fifoSlot, accTile);
         
         // === SIGNAL: Data ready for AIV ===
+        // aivId = -1 means dual-dst: signal both AIV0 and AIV1
         matmul2addSync.record();  // set_intra_block(PIPE_FIX, flag_id) to both AIV0/AIV1
         
         set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
@@ -512,7 +515,7 @@ void aic_matmul_kernel(__gm__ half* A, __gm__ half* B, __gm__ float* fifo_buffer
 // ============ AIV KERNEL (Vector Core) ============
 __attribute__((aiv))
 void aiv_add_kernel(__gm__ float* fifo_buffer, __gm__ float* bias, __gm__ float* output, int num_tiles) {
-    // Tile declarations
+    // Tile declarations - each AIV processes 64x128
     TileVecIn inTile;
     TileBias biasTile;
     TileVecOut outTile;
@@ -529,7 +532,7 @@ void aiv_add_kernel(__gm__ float* fifo_buffer, __gm__ float* bias, __gm__ float*
     
     // Load bias once (shared across tiles)
     // Each AIV core loads its portion based on get_subblockid()
-    uint32_t subblock_id = get_subblockid();  // 0 or 1
+    uint32_t subblock_id = get_subblockid();  // 0 = AIV0, 1 = AIV1
     using GlobalBias = GlobalTensor<float, Shape<1,1,1,Vec_M,N>, Stride<1,1,1,N,1>>;
     GlobalBias biasGlobal(bias + subblock_id * Vec_M * N);
     TLOAD(biasTile, biasGlobal);
@@ -542,7 +545,7 @@ void aiv_add_kernel(__gm__ float* fifo_buffer, __gm__ float* bias, __gm__ float*
         wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID0);
         
         uint32_t slot_idx = tile_id % FIFO_DEPTH;  // Consumer tracks its own tail
-        // Dual-dst cutM: AIV0 gets rows[0:16], AIV1 gets rows[16:32]
+        // Dual-dst cutM: AIV0 gets rows[0:64], AIV1 gets rows[64:128]
         __gm__ float* slot_addr = fifo_buffer + slot_idx * M * N + subblock_id * Vec_M * N;
         
         using GlobalFIFOSlice = GlobalTensor<float, Shape<1,1,1,Vec_M,N>, Stride<1,1,1,N,1>>;
@@ -582,10 +585,11 @@ void aiv_add_kernel(__gm__ float* fifo_buffer, __gm__ float* bias, __gm__ float*
 | AIV: before TLOAD from FIFO | `wait()` | AIC → AIV | Wait for data |
 | AIV: after using data | `free()` | AIV → AIC | Signal buffer consumed |
 
-### Dual-Dst Row Split
+### Dual-Dst Row Split (cutM)
 
-With `TileAccOut[32,16]` → `TileVecIn[16,16]`:
+With `TileAccOut[128,128]` → `TileVecIn[64,128]`:
 - FIFO::dualDst = true, cutM = true
-- AIC writes full 32×16 tile to FIFO slot
+- AIC writes full 128×128 tile to FIFO slot (64KB)
 - `record()` signals BOTH AIV0 and AIV1 (via `flag_id` and `flag_id+16`)
-- AIV0 reads rows[0:16], AIV1 reads rows[16:32] using `get_subblockid()` offset
+- AIV0 reads rows[0:64], AIV1 reads rows[64:128] using `get_subblockid()` offset
+- Each AIV processes 64×128 = 32KB per tile
