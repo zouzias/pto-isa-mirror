@@ -50,20 +50,26 @@ using ReduceTileF_T = Tile<TileType::Vec, float, SubblockRows, 1, BLayout::ColMa
 Use existing PTO Tile template syntax. Tile types carry shape info (ROWS/COLS) used to infer dual-dst split axis:
 
 ```cpp
+// TileAcc definition (from pto_tile.hpp):
+// template <typename Element_, const int Rows_, const int Cols_,
+//           const int RowValid_ = Rows_, const int ColValid_ = Cols_>
+// using TileAcc = Tile<TileType::Acc, Element_, Rows_, Cols_, BLayout::ColMajor,
+//                      RowValid_, ColValid_, SLayout::RowMajor, TileConfig::fractalCSize>;
+
 // Accumulator tile from Cube core (source for TPUSH)
-// TileAcc<dtype, ROWS, COLS, BlockRows, BlockCols>
-using AccTile_32x16_fp32 = TileAcc<float, 32, 16, 32, 16>;  // 2KB
-using AccTile_16x16_fp32 = TileAcc<float, 16, 16, 16, 16>;  // 1KB
+// TileAcc<Element, Rows, Cols, RowValid=Rows, ColValid=Cols>
+using AccTile_32x16_fp32 = TileAcc<float, 32, 16>;              // 2KB, RowValid=32, ColValid=16
+using AccTile_16x16_fp32 = TileAcc<float, 16, 16>;              // 1KB
 
 // Vector tile for Vec core (destination for TPOP)
 // Tile<TileType::Vec, dtype, ROWS, COLS, BLayout, BRows, BCols>
 using VecTile_16x16_half = Tile<TileType::Vec, half, 16, 16, BLayout::RowMajor, 16, 16>;  // 512B
 using VecTile_32x16_half = Tile<TileType::Vec, half, 32, 16, BLayout::RowMajor, 32, 16>;  // 1KB
 
-// Extract ROWS/COLS from tile type
+// Extract ROWS/COLS from tile type (Tile struct has Rows/Cols members)
 template <typename TileT>
 struct TileTraits {
-    static constexpr int Rows = TileT::Rows;  // or use template param position
+    static constexpr int Rows = TileT::Rows;
     static constexpr int Cols = TileT::Cols;
     using DType = typename TileT::DType;
 };
@@ -226,15 +232,20 @@ void PTO_POP_FROM_AIC(
 
 ```cpp
 // ============ TILE DEFINITIONS (using existing PTO syntax) ============
+// From FA kernel: TileAcc<Element, Rows, Cols, RowValid, ColValid>
+constexpr uint32_t Cube_S0 = 32;
+constexpr uint32_t Cube_S1 = 16;
+constexpr uint32_t Vec_S0 = Cube_S0 / 2;  // Each AIV gets half the rows
+
 // Accumulator: 32x16 fp32 (2KB) from matmul
-using AccTile = TileAcc<float, 32, 16, 32, 16>;
+using TileQKData = TileAcc<float, Cube_S0, Cube_S1>;
 
 // Vector: 16x16 half (512B) per AIV core
 // Shape mismatch: 32 rows → 16 rows = cutM (row split)
-using VecTile = Tile<TileType::Vec, half, 16, 16, BLayout::RowMajor, 16, 16>;
+using TileDataH_T = Tile<TileType::Vec, half, Vec_S0, Cube_S1, BLayout::RowMajor, Vec_S0, Cube_S1>;
 
 // FIFO automatically infers: dualDst=true, cutM=true
-CrossCoreFIFO<AccTile, VecTile, 2> qkFIFO;
+CrossCoreFIFO<TileQKData, TileDataH_T, 2> qkFIFO;
 
 // ============ INIT (called once) ============
 FIFO_INIT(qkFIFO,
@@ -245,12 +256,12 @@ FIFO_INIT(qkFIFO,
 
 // ============ AIC KERNEL (Cube Core) ============
 void aic_matmul_kernel() {
-    AccTile qkAccTile;        // 32x16 accumulator
+    TileQKData qkAccTile;     // 32x16 accumulator
     TASSIGN(qkAccTile, 0x0);  // Assign to accumulator buffer
     
     for (int i = 0; i < num_tiles; i++) {
         // Compute Q @ K^T → 32x16 result
-        pto_macro_matmul<32, HEAD, 16>(qMatTile, kMatTile, qkAccTile, AccMode::InitFinalSum);
+        pto_macro_matmul<Cube_S0, HEAD, Cube_S1>(qMatTile, kMatTile, qkAccTile, AccMode::InitFinalSum);
         
         // Push to AIV — automatically splits rows[0:16]→AIV0, rows[16:32]→AIV1
         PTO_PUSH_TO_AIV(qkAccTile, qkFIFO);
@@ -259,7 +270,7 @@ void aic_matmul_kernel() {
 
 // ============ AIV KERNEL (Vector Core) ============
 void aiv_softmax_kernel() {
-    VecTile qkVecTile;        // 16x16 half (this core's portion)
+    TileDataH_T qkVecTile;    // 16x16 half (this core's portion)
     TASSIGN(qkVecTile, UB_OFFSET);
     
     for (int i = 0; i < num_tiles; i++) {
