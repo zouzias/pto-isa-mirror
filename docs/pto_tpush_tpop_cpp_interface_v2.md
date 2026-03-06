@@ -219,18 +219,19 @@ void PTO_PUSH_TO_AIV(
 // ============================================================
 
 // === FIFO for V2C direction (Vector → Cube) ===
+// Destination can be either L1 (for cube reuse) or GM (for output)
 // For dual-src: same UB offset for both AIVs
 // For single-src from specific AIV: use separate FIFO per AIV
-template <typename VecTileT, typename MatTileT, int Depth = 2, int NumMatBuffers = Depth>
+template <typename VecTileT, typename DstTileT, int Depth = 2, int NumBuffers = Depth>
 struct CrossCoreFIFO_V2C {
     uint32_t head;
     uint32_t tail;
     
-    // L1 addresses for MatTile buffers (ping-pong/N-buffer)
-    uint32_t l1AddrsMatTile[NumMatBuffers];
+    // Destination addresses (L1 or GM, depending on use case)
+    uint32_t dstAddrs[NumBuffers];    // Ping-pong destination buffers
     
-    // UB addresses of source VecTiles (same offset for both AIVs)
-    uint32_t ubAddrs[NumMatBuffers];
+    // Source UB addresses (same offset for both AIVs)
+    uint32_t ubAddrs[NumBuffers];
     
     uint16_t pushEventId;
     uint16_t popEventId;
@@ -238,22 +239,19 @@ struct CrossCoreFIFO_V2C {
     // Shape info
     static constexpr int vecRows = TileTraits<VecTileT>::Rows;
     static constexpr int vecCols = TileTraits<VecTileT>::Cols;
-    static constexpr int matRows = TileTraits<MatTileT>::Rows;
-    static constexpr int matCols = TileTraits<MatTileT>::Cols;
-    
     static constexpr int vecTileSize = vecRows * vecCols * sizeof(typename TileTraits<VecTileT>::DType);
     
-    uint32_t getCurrentL1Addr() const {
-        return l1AddrsMatTile[head % NumMatBuffers];
+    uint32_t getCurrentDstAddr() const {
+        return dstAddrs[head % NumBuffers];
     }
     
     uint32_t getCurrentUBAddr() const {
-        return ubAddrs[head % NumMatBuffers];
+        return ubAddrs[head % NumBuffers];
     }
 };
 
-// === DYNAMIC V2C: No arrays, MatTile/VecTile passed at runtime ===
-template <typename VecTileT, typename MatTileT, int Depth = 2>
+// === DYNAMIC V2C: No arrays, tiles passed at runtime ===
+template <typename VecTileT, typename DstTileT, int Depth = 2>
 struct CrossCoreFIFO_V2C_Dynamic {
     uint32_t head;
     uint32_t tail;
@@ -265,52 +263,64 @@ struct CrossCoreFIFO_V2C_Dynamic {
     static constexpr int vecTileSize = vecRows * vecCols * sizeof(typename TileTraits<VecTileT>::DType);
 };
 
-// === STATIC SCHEDULE: Array of MatTile L1 addresses (ping-pong) ===
-template <typename VecTileT, typename MatTileT, int Depth, int NumMatBuffers>
+// === STATIC SCHEDULE: Destination addr arrays (L1 or GM) ===
+template <typename VecTileT, typename DstTileT, int Depth, int NumBuffers>
 void FIFO_INIT_V2C(
-    CrossCoreFIFO_V2C<VecTileT, MatTileT, Depth, NumMatBuffers>& fifo,
-    const uint32_t (&l1AddrsMatTile)[NumMatBuffers],  // Array of MatTile L1 addrs
-    const uint32_t (&ubAddrs)[NumMatBuffers],         // Array of VecTile UB addrs (same for both AIVs)
+    CrossCoreFIFO_V2C<VecTileT, DstTileT, Depth, NumBuffers>& fifo,
+    const uint32_t (&dstAddrs)[NumBuffers],   // Destination addresses (L1 or GM)
+    const uint32_t (&ubAddrs)[NumBuffers],    // Source VecTile UB addrs
     uint16_t pushEventId,
     uint16_t popEventId
 ) {
     fifo.head = 0;
     fifo.tail = 0;
-    for (int i = 0; i < NumMatBuffers; i++) {
-        fifo.l1AddrsMatTile[i] = l1AddrsMatTile[i];
+    for (int i = 0; i < NumBuffers; i++) {
+        fifo.dstAddrs[i] = dstAddrs[i];
         fifo.ubAddrs[i] = ubAddrs[i];
     }
     fifo.pushEventId = pushEventId;
     fifo.popEventId = popEventId;
 }
 
-// === STATIC SCHEDULE: FIFO manages buffer rotation ===
-template <typename VecTileT, typename MatTileT, int Depth, int NumMatBuffers>
-void PTO_PUSH_TO_AIC(
-    const VecTileT& vecTile,
-    CrossCoreFIFO_V2C<VecTileT, MatTileT, Depth, NumMatBuffers>& fifo,
-    int aivId                          // Which AIV is pushing (0 or 1)
+// === DYNAMIC V2C: No arrays ===
+template <typename VecTileT, typename DstTileT, int Depth>
+void FIFO_INIT_V2C(
+    CrossCoreFIFO_V2C_Dynamic<VecTileT, DstTileT, Depth>& fifo,
+    uint16_t pushEventId,
+    uint16_t popEventId
 ) {
-    // Get source UB addr based on current buffer index
-    uint32_t bufIdx = fifo.head % NumMatBuffers;
-    uint32_t srcUBAddr = (aivId == 0) ? fifo.ubAddrsAIV0[bufIdx] : fifo.ubAddrsAIV1[bufIdx];
-    uint32_t dstL1Addr = fifo.l1AddrsMatTile[bufIdx];
-    
-    // DMA from UB[srcUBAddr] → L1[dstL1Addr]
-    // ... implementation ...
+    fifo.head = 0;
+    fifo.tail = 0;
+    fifo.pushEventId = pushEventId;
+    fifo.popEventId = popEventId;
 }
 
-// === DYNAMIC SCHEDULE: User provides MatTile with L1 address ===
-template <typename VecTileT, typename MatTileT>
+// === STATIC SCHEDULE: FIFO manages buffer rotation ===
+template <typename VecTileT, typename DstTileT, int Depth, int NumBuffers>
+void PTO_PUSH_TO_AIC(
+    const VecTileT& vecTile,
+    CrossCoreFIFO_V2C<VecTileT, DstTileT, Depth, NumBuffers>& fifo,
+    int aivId                          // Which AIV is pushing (0 or 1)
+) {
+    uint32_t bufIdx = fifo.head % NumBuffers;
+    uint32_t srcUBAddr = fifo.ubAddrs[bufIdx];
+    uint32_t dstAddr = fifo.dstAddrs[bufIdx];  // L1 or GM
+    
+    // DMA from UB[srcUBAddr] → dst[dstAddr]
+    // ...
+}
+
+// === DYNAMIC SCHEDULE: User provides destination tile ===
+template <typename VecTileT, typename DstTileT>
 void PTO_PUSH_TO_AIC(
     const VecTileT& srcVecTile,        // Source VecTile (has UB addr via getAddress())
-    const MatTileT& dstMatTile,        // Target MatTile (has L1 addr via getAddress())
+    const DstTileT& dstTile,           // Target tile (L1 or GM addr via getAddress())
     uint16_t pushEventId
 ) {
     uint32_t srcUBAddr = srcVecTile.getAddress();
-    uint32_t dstL1Addr = dstMatTile.getAddress();
-    // DMA from UB[srcUBAddr] → L1[dstL1Addr]
-    // ... implementation ...
+    uint32_t dstAddr = dstTile.getAddress();
+    // DMA from UB[srcUBAddr] → dst[dstAddr]
+    // ...
 }
 ```
 
