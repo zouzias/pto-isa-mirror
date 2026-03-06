@@ -28,7 +28,7 @@ export BUILD_OUT_PATH="${BASE_PATH}/build_out"
 CANN_3RD_LIB_PATH="${BASE_PATH}/third_party"
 CMAKE_ARGS=""
 
-#print usage message
+#print usage message test
 usage() {
   echo "Usage:"
   echo ""
