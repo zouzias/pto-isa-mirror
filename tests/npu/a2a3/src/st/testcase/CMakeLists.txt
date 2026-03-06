@@ -195,6 +195,9 @@ tcolexpandsub
 tquant
 tdequant
 t_dhrystone
+textract_common
+tmov_common
+timg2col_common
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

@@ -214,6 +214,8 @@ set(ALL_TESTCASES
     t_dhrystone
     engram
     tpack
+    textract_common
+    timg2col_common
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
