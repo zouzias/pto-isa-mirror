@@ -101,8 +101,8 @@ Create and activate a virtual environment:
 **macOS / Linux:**
 
   ```bash
-  python3 -m venv .venv
-  source .venv/bin/activate
+  python3 -m venv .venv-mkdocs
+  source .venv-mkdocs/bin/activate
   python -m pip install -U pip
   python -m pip install numpy
   ```
@@ -110,8 +110,8 @@ Create and activate a virtual environment:
 **Windows (PowerShell):**
 
   ```powershell
-  py -3 -m venv .venv
-  .\.venv\Scripts\Activate.ps1
+  py -3 -m venv .venv-mkdocs
+  .\.venv-mkdocs\Scripts\Activate.ps1
   python -m pip install -U pip
   python -m pip install numpy
   ```
