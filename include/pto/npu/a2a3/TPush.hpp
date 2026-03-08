@@ -351,7 +351,15 @@ struct TPipe {
 
     template <FIFOType T = FiFoType, typename std::enable_if_t<T == FIFOType::GM_FIFO, int> = 0>
     PTO_INTERNAL explicit TPipe(__gm__ typename TileDataCons::DType *fifoBase) : fifo(fifoBase), prod(), cons()
-    {}
+    {
+        prod.free();
+    }
+
+    // Destructor for TPipe
+    PTO_INTERNAL ~TPipe()
+    {
+        cons.allocate();
+    }
 };
 
 /**
