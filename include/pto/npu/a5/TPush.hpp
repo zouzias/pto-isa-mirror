@@ -21,8 +21,8 @@ namespace pto {
 // Operation types for TSync - identifies the producer/consumer operation
 enum class TSyncOpType : uint8_t
 {
-    TSTORE_C2GM_UFON,  // Store (Cube core operation via PIPE_FIX) - GM path
-    TSTORE_C2GM_UFOFF, // Store (Cube core operation via PIPE_FIX) - GM path
+    TSTORE_C2GM_UFON,  // Store (Cube core operation via PIPE_FIX and enable unit-flag ) - GM path
+    TSTORE_C2GM_UFOFF, // Store (Cube core operation via PIPE_FIX and disable unit-flag) - GM path
     TSTORE_V2GM,       // Store (Vector core operation via PIPE_MTE3) - GM path
     TMOV_C2UB,         // TMOV from L0C to UB (Cube core operation via PIPE_FIX) - UB path
     TINSERT_V2L1,      // TINSERT from UB to L1 (Vector core operation via PIPE_MTE3) - UB path
@@ -228,8 +228,9 @@ struct TPipe {
                 constexpr uint32_t VecM = ProdM / VEC_CORES / kTileFactor;
                 using TileDataVec = Tile<TileType::Vec, T, VecM, ProdN, BLayout::RowMajor, VecM, ProdN>;
                 TileDataVec vecTile;
+                uint64_t fifoBase = (fifo.tilePtr != nullptr) ? (uint64_t)fifo.tilePtr->data() : fifo.fifoBase;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * VecM * ProdN * sizeof(T);
-                TASSIGN(vecTile, (uint64_t)fifo.tilePtr->data() + entryBase + entryOffset);
+                TASSIGN(vecTile, fifoBase + entryBase + entryOffset);
                 TMOV_IMPL<TileDataVec, TileDataProd, AccToVecMode::DualModeSplitM>(vecTile, tile);
             } else if constexpr (isSplitN) {
                 // split N between two vectors
@@ -237,14 +238,16 @@ struct TPipe {
                 constexpr uint32_t VecN = ProdN / VEC_CORES / kTileFactor;
                 using TileDataVec = Tile<TileType::Vec, T, ProdM, VecN, BLayout::RowMajor, ProdM, VecN>;
                 TileDataVec vecTile;
+                uint64_t fifoBase = (fifo.tilePtr != nullptr) ? (uint64_t)fifo.tilePtr->data() : fifo.fifoBase;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ProdM * VecN * sizeof(T);
-                TASSIGN(vecTile, (uint64_t)fifo.tilePtr->data() + entryBase + entryOffset);
+                TASSIGN(vecTile, fifoBase + entryBase + entryOffset);
                 TMOV_IMPL<TileDataVec, TileDataProd, AccToVecMode::DualModeSplitN>(vecTile, tile);
             } else if constexpr (nonSplit) {
                 // single vector core (1v:1v)
                 TileDataCons vecTile;
+                uint64_t fifoBase = (fifo.tilePtr != nullptr) ? (uint64_t)fifo.tilePtr->data() : fifo.fifoBase;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ProdM * ProdN * sizeof(T);
-                TASSIGN(vecTile, (uint64_t)fifo.tilePtr->data() + entryBase + entryOffset);
+                TASSIGN(vecTile, fifoBase + entryBase + entryOffset);
                 TMOV_IMPL<TileDataCons, TileDataProd, AccToVecMode::SingleModeVec0>(vecTile, tile);
             } else {
                 static_assert(isSplitM || isSplitN || nonSplit,
@@ -290,7 +293,8 @@ struct TPipe {
                 int row_offset = subblock_base_rows + entryOffset;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
                 TileDataCons matTile;
-                TASSIGN_IMPL(matTile, (uint64_t)fifo.tilePtr->data() + entryBase);
+                uint64_t fifoBase = (fifo.tilePtr != nullptr) ? (uint64_t)fifo.tilePtr->data() : fifo.fifoBase;
+                TASSIGN_IMPL(matTile, fifoBase + entryBase);
                 constexpr bool isNZPlus1 = (ConsM / ProdM) != 2;
                 if constexpr (isNZPlus1) { // NZ + 1 mode
                     TINSERT_CUSTOM<TInsertMode::NZ_PLUS_1>(matTile, tile, row_offset, 0);
@@ -302,7 +306,8 @@ struct TPipe {
                 int col_index = ProdN;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
                 TileDataCons matTile;
-                TASSIGN_IMPL(matTile, (uint64_t)fifo.tilePtr->data() + entryBase);
+                uint64_t fifoBase = (fifo.tilePtr != nullptr) ? (uint64_t)fifo.tilePtr->data() : fifo.fifoBase;
+                TASSIGN_IMPL(matTile, fifoBase + entryBase);
                 constexpr bool isNZPlus1 = (ConsM / ProdM) != 2;
                 if constexpr (isNZPlus1) { // NZ+1 mode
                     TINSERT_CUSTOM<TInsertMode::NZ_PLUS_1>(matTile, tile, 0, col_index);
@@ -312,8 +317,9 @@ struct TPipe {
             } else if constexpr (nonSplit) {
                 // single vector core
                 TileDataCons matTile;
+                uint64_t fifoBase = (fifo.tilePtr != nullptr) ? (uint64_t)fifo.tilePtr->data() : fifo.fifoBase;
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
-                TASSIGN_IMPL(matTile, (uint64_t)fifo.tilePtr->data() + entryBase);
+                TASSIGN_IMPL(matTile, fifoBase + entryBase);
                 constexpr bool isNZPlus1 = (ProdM > ConsM);
                 if constexpr (isNZPlus1) { // NZ+1 mode
                     TINSERT_CUSTOM<TInsertMode::NZ_PLUS_1>(matTile, tile, 0, 0);
@@ -543,6 +549,10 @@ struct TPipe {
 
     template <FIFOType T = FiFoType, typename std::enable_if_t<T == FIFOType::GM_FIFO, int> = 0>
     PTO_INTERNAL explicit TPipe(__gm__ typename TileDataCons::DType *fifoBase) : fifo(fifoBase), prod(), cons()
+    {}
+
+    template <FIFOType T = FiFoType, typename std::enable_if_t<T != FIFOType::GM_FIFO, int> = 0>
+    PTO_INTERNAL explicit TPipe(uint32_t fifoBase) : fifo(fifoBase), prod(), cons()
     {}
 
     template <FIFOType T = FiFoType, typename std::enable_if_t<T != FIFOType::GM_FIFO, int> = 0>

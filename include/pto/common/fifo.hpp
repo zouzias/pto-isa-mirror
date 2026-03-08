@@ -70,7 +70,11 @@ struct DataFIFO<DataType, FifoType, Depth, Period, typename std::enable_if<IsTil
     static constexpr int fifoPeriod = Period;
     static constexpr FIFOType fifoType = FifoType;
 
-    DataType *tilePtr;
+    uint32_t fifoBase = 0;       // Base address in local memory
+    DataType *tilePtr = nullptr; // Pointer to the tile in local memory
+
+    PTO_INTERNAL DataFIFO(uint32_t base) : fifoBase(base)
+    {}
 
     // Constructor for Pointer
     PTO_INTERNAL DataFIFO(DataType *ptr) : tilePtr(ptr)
