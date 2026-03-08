@@ -21,8 +21,8 @@ namespace pto {
 // Operation types for TSync - identifies the producer/consumer operation
 enum class TSyncOpType : uint8_t
 {
-    TSTORE_C2GM_UFON,  // Store (Cube core operation via PIPE_FIX) - GM path
-    TSTORE_C2GM_UFOFF, // Store (Cube core operation via PIPE_FIX) - GM path
+    TSTORE_C2GM_UFON,  // Store (Cube core operation via PIPE_FIX and enable unit-flag ) - GM path
+    TSTORE_C2GM_UFOFF, // Store (Cube core operation via PIPE_FIX and disable unit-flag) - GM path
     TSTORE_V2GM,       // Store (Vector core operation via PIPE_MTE3) - GM path
     TMOV_C2UB,         // TMOV from L0C to UB (Cube core operation via PIPE_FIX) - UB path
     TINSERT_V2L1,      // TINSERT from UB to L1 (Vector core operation via PIPE_MTE3) - UB path
@@ -543,6 +543,10 @@ struct TPipe {
 
     template <FIFOType T = FiFoType, typename std::enable_if_t<T == FIFOType::GM_FIFO, int> = 0>
     PTO_INTERNAL explicit TPipe(__gm__ typename TileDataCons::DType *fifoBase) : fifo(fifoBase), prod(), cons()
+    {}
+
+    template <FIFOType T = FiFoType, typename std::enable_if_t<T != FIFOType::GM_FIFO, int> = 0>
+    PTO_INTERNAL explicit TPipe(uint32_t fifoBase) : fifo(fifoBase), prod(), cons()
     {}
 
     template <FIFOType T = FiFoType, typename std::enable_if_t<T != FIFOType::GM_FIFO, int> = 0>
