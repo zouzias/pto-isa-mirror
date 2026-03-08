@@ -72,7 +72,7 @@ function(pto_comm_st NAME)
         ${ASCEND_HOME_PATH}/lib64
     )
     target_link_libraries(${NAME}_kernel PRIVATE
-        ${PTO_HCCL_LIB} hcomm runtime
+        ${PTO_HCCL_LIB} hcomm runtime nnopbase
     )
     target_link_options(${NAME}_kernel PRIVATE --cce-fatobj-link)
 
