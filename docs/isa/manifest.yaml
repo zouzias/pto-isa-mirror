@@ -768,6 +768,30 @@
       "notes": []
     },
     {
+      "instruction": "TROWCMAX",
+      "category": "Axis Reduce / Expand",
+      "summary_en": "Get the column index of the maximum element for each row.",
+      "summary_zh": "获取每行最大值对应列索引。",
+      "diagram_template": "reduce_expand",
+      "operands": [
+        "dst",
+        "src"
+      ],
+      "notes": []
+    },
+    {
+      "instruction": "TROWCMIN",
+      "category": "Axis Reduce / Expand",
+      "summary_en": "Get the column index of the minimum element for each row.",
+      "summary_zh": "获取每行最大值对应列索引。",
+      "diagram_template": "reduce_expand",
+      "operands": [
+        "dst",
+        "src"
+      ],
+      "notes": []
+    },
+    {
       "instruction": "TROWEXPAND",
       "category": "Axis Reduce / Expand",
       "summary_en": "Broadcast the first element of each source row across the destination row.",
