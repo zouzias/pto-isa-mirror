@@ -523,7 +523,7 @@ struct TPipe {
             TLOAD_IMPL(tile, globalTensor);
         }
 
-        PTO_INTERNAL void pop(DataFiFo &fifo, TileDataCons &tile)
+        PTO_INTERNAL bool pop(DataFiFo &fifo, TileDataCons &tile)
         {
             using T = typename TileDataCons::DType;
             constexpr int ProdM = TileDataProd::Rows;
@@ -539,16 +539,18 @@ struct TPipe {
                               "Fix: TPOP has unsupported fifo type!");
                 if constexpr (DataFiFo::fifoType == FIFOType::GM_FIFO) {
                     popVecTileFromGMFiFo<T, ProdM, ProdN, ConsM, ConsN>(fifo, tile);
+                    return true;
                 } else if constexpr (DataFiFo::fifoType == FIFOType::VEC_FIFO) {
-                    return;
+                    return false;
                 }
             } else if constexpr (TileDataCons::Loc == TileType::Mat) {
                 static_assert((DataFiFo::fifoType == FIFOType::GM_FIFO) || (DataFiFo::fifoType == FIFOType::MAT_FIFO),
                               "Fix: TPOP has unsupported fifo type!");
                 if constexpr (DataFiFo::fifoType == FIFOType::GM_FIFO) {
                     popMatTileFromGMFiFo<T, ConsM, ConsN, ProdN>(fifo, tile);
+                    return true;
                 } else if constexpr (DataFiFo::fifoType == FIFOType::MAT_FIFO) {
-                    return;
+                    return false;
                 }
             }
         }
