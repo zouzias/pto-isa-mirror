@@ -49,6 +49,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TRowProd.hpp"
 #include "pto/npu/a2a3/TRowMax.hpp"
 #include "pto/npu/a2a3/TRowMin.hpp"
+#include "pto/npu/a2a3/TRowReduceIdxOps.hpp"
 #include "pto/npu/a2a3/TFillPad.hpp"
 #include "pto/npu/a2a3/TColMax.hpp"
 #include "pto/npu/a2a3/TMatmul.hpp"
