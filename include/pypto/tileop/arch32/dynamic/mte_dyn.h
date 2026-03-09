@@ -186,6 +186,10 @@ TILEOP void TIndexoutcastBase(__gm__ T *dst, __ubuf__ T *src0, __ubuf__ T2 *src1
         set_flag(PIPE_V, PIPE_S, EVENT_ID7);
         wait_flag(PIPE_V, PIPE_S, EVENT_ID7);
         T2 curValue = *(reinterpret_cast<__ubuf__ T2 *>(src1 + i));
+        int64_t idxVal = static_cast<int64_t>(curValue);
+        if (idxVal < 0) {
+            continue;
+        }
         if constexpr (cacheMode == 1) { // PA_NZ
             T2 blockCount = curValue / blockSize;
             T2 index = curValue % blockSize;
@@ -219,13 +223,17 @@ TILEOP void DynTIndexoutcast(__gm__ T *dst, __ubuf__ T *src, __ubuf__ T2 *index,
     __ubuf__ T *curSrc = src;
     for (int i = 0; i < b; ++i) {
         for (int j = 0; j < s1; ++j) {
-            curDst = dst +  *dstIdx * nd;                                        // dst [index[i][j]] [n][d]
-            set_flag(PIPE_S, PIPE_MTE3, EVENT_ID7);
-            wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID7);
-            copy_ubuf_to_gm_align_b32(
-                curDst, curSrc, 0 /*sid*/, 1, nd * sizeof(T), 0, 0, (nd_32aligned - nd) * sizeof(T) / BLOCK_SIZE, 0);
-            curSrc += nd_32aligned;
-            dstIdx++;
+            int64_t idxVal = static_cast<int64_t>(*dstIdx);
+            if (idxVal >= 0) {
+                curDst = dst +  *dstIdx * nd;                                        // dst [index[i][j]] [n][d]
+                set_flag(PIPE_S, PIPE_MTE3, EVENT_ID7);
+                wait_flag(PIPE_S, PIPE_MTE3, EVENT_ID7);
+                copy_ubuf_to_gm_align_b32(
+                    curDst, curSrc, 0 /*sid*/, 1, nd * sizeof(T), 0, 0, (nd_32aligned - nd) * sizeof(T) / BLOCK_SIZE, 0);
+                curSrc += nd_32aligned;
+                dstIdx++;
+            }
+            
         }
         curSrc += (src0rawShape1 - s1) * nd_32aligned;
         dstIdx += s1_32aligned - s1;
@@ -586,6 +594,10 @@ TILEOP void TIndexoutcastBase(__gm__ T *dst, __ubuf__ T *src0, __ubuf__ T2 *src1
         set_flag(PIPE_V, PIPE_S, EVENT_ID7);
         wait_flag(PIPE_V, PIPE_S, EVENT_ID7);
         T2 curValue = *(reinterpret_cast<__ubuf__ T2 *>(src1 + i));
+        int64_t idxVal = static_cast<int64_t>(curValue);
+        if (idxVal < 0) {
+            continue;
+        }
         if constexpr (cacheMode == 1) { // PA_NZ
             T2 blockCount = curValue / blockSize;
             T2 index = curValue % blockSize;

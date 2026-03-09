@@ -69,9 +69,9 @@ TILEOP void TTrans(T0 dst, T1 src, T2 tmp) {
     TmpTileDefine tmpTile;
     pto::TASSIGN(tmpTile, (uint64_t)(tmp.GetAddr()));
 
-    for (size_t n0Index = 0; n0Index < dstShape0; ++n0Index) {
-        for (size_t n1Index = 0; n1Index < dstShape1; ++n1Index) {
-            for (size_t n2Index = 0; n2Index < dstShape2; ++n2Index) {
+    for (LoopVar n0Index = 0; n0Index < dstShape0; ++n0Index) {
+        for (LoopVar n1Index = 0; n1Index < dstShape1; ++n1Index) {
+            for (LoopVar n2Index = 0; n2Index < dstShape2; ++n2Index) {
                 auto dstOffset = n0Index * dstStride0 + n1Index * dstStride1 + n2Index * dstStride2;
                 auto srcOffset = n0Index * srcStride0 + n1Index * srcStride1 + n2Index * srcStride2;
                 pto::TASSIGN(dstTile, (uint64_t)(dst.GetAddr() + dstOffset * dstTypeSize));

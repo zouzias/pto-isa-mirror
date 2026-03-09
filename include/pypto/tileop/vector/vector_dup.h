@@ -35,9 +35,9 @@ TILEOP void TVecDup(T0 dst, Scalar src) {
     constexpr auto dstTileH = TileOp::GetTensorTileShapeDim<T0, 3, 5>();
     constexpr auto dstTileW = TileOp::GetTensorTileShapeDim<T0, 4, 5>();
     constexpr auto dstTypeSize = sizeof(typename T0::Type);
-    for (size_t n0Index = 0; n0Index < shape0; ++n0Index) {
-        for (size_t n1Index = 0; n1Index < shape1; ++n1Index) {
-            for (size_t n2Index = 0; n2Index < shape2; ++n2Index) {
+    for (LoopVar n0Index = 0; n0Index < shape0; ++n0Index) {
+        for (LoopVar n1Index = 0; n1Index < shape1; ++n1Index) {
+            for (LoopVar n2Index = 0; n2Index < shape2; ++n2Index) {
                 using TileDefineDst =
                     pto::Tile<pto::TileType::Vec, typename T0::Type, dstTileH, dstTileW, pto::BLayout::RowMajor, -1, -1>;
                 TileDefineDst dstTile(shape3, shape4);

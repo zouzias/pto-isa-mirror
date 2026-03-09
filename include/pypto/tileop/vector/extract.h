@@ -47,9 +47,9 @@ TILEOP void TExtract(T0 dst, T1 src) {
     if (dstShape3 == 0 || dstShape4 == 0) {
         return;
     }
-    for (size_t n0Index = 0; n0Index < dstShape0; ++n0Index) {
-        for (size_t n1Index = 0; n1Index < dstShape1; ++n1Index) {
-            for (size_t n2Index = 0; n2Index < dstShape2; ++n2Index) {
+    for (LoopVar n0Index = 0; n0Index < dstShape0; ++n0Index) {
+        for (LoopVar n1Index = 0; n1Index < dstShape1; ++n1Index) {
+            for (LoopVar n2Index = 0; n2Index < dstShape2; ++n2Index) {
                 using DstTileDefine = pto::Tile<pto::TileType::Vec, typename T0::Type, dstTileH, dstTileW,
                                                 pto::BLayout::RowMajor, -1, -1>;
                 using SrcTileDefine = pto::Tile<pto::TileType::Vec, typename T1::Type, srcTileH, srcTileW,

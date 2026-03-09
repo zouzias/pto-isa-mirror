@@ -17,13 +17,17 @@
 #define TILEOP_TILE_OPERATOR_PTO_TILE__H
 #include <cstddef>
 
-#include "../utils/layout.h"
-#include "../utils/tile_tensor.h"
-#include <pto/common/pto_tile.hpp>
-#include <pto/common/pto_instr.hpp>
+#include "utils/layout.h"
+#include "utils/tile_tensor.h"
+
+#ifdef __DAV_V220
+#define PTO_WITH_LAST_USE(OP, ...) OP
+#else
+#define PTO_WITH_LAST_USE(OP, ...) [[pto::last_use(__VA_ARGS__)]]OP
+#endif
 
 template <typename Tuple, size_t index, size_t default_value = 1, bool use_default = false>
-__aicore__ inline constexpr size_t GetTupleElement_(const Tuple &t) {
+__aicore__ inline constexpr size_t GetTupleElement(const Tuple &t) {
     static_assert(index < MAX_DIMS, "The index of tuple is out of range.");
     constexpr auto size = Std::tuple_size<Tuple>::value;
     if constexpr (use_default || (size < MAX_DIMS && index < (MAX_DIMS - size))) {
@@ -41,14 +45,14 @@ public:
 
     __aicore__ inline PtoGlobal(__gm__ typename T::Type *addr, const Shape &shape, const Stride &stride)
         : data_((__gm__ Dtype *)(addr),
-              pto::Shape(GetTupleElement_<Shape, DIM_1ST, 1, need_mask>(shape),
-                  GetTupleElement_<Shape, DIM_2ND, 1, need_mask>(shape),
-                  GetTupleElement_<Shape, DIM_3RD, 1, need_mask>(shape), GetTupleElement_<Shape, DIM_4TH>(shape),
-                  GetTupleElement_<Shape, DIM_5TH>(shape)),
-              pto::Stride(GetTupleElement_<Stride, DIM_1ST, 0, need_mask>(stride),
-                  GetTupleElement_<Stride, DIM_2ND, 0, need_mask>(stride),
-                  GetTupleElement_<Stride, DIM_3RD, 0, need_mask>(stride), GetTupleElement_<Stride, DIM_4TH, 0>(stride),
-                  GetTupleElement_<Stride, DIM_5TH, 0>(stride))) {}
+              pto::Shape(GetTupleElement<Shape, DIM_1ST, 1, need_mask>(shape),
+                  GetTupleElement<Shape, DIM_2ND, 1, need_mask>(shape),
+                  GetTupleElement<Shape, DIM_3RD, 1, need_mask>(shape), GetTupleElement<Shape, DIM_4TH>(shape),
+                  GetTupleElement<Shape, DIM_5TH>(shape)),
+              pto::Stride(GetTupleElement<Stride, DIM_1ST, 0, need_mask>(stride),
+                  GetTupleElement<Stride, DIM_2ND, 0, need_mask>(stride),
+                  GetTupleElement<Stride, DIM_3RD, 0, need_mask>(stride), GetTupleElement<Stride, DIM_4TH, 0>(stride),
+                  GetTupleElement<Stride, DIM_5TH, 0>(stride))) {}
 
     __aicore__ inline PtoGlobal(const Shape &shape, const Stride &stride) : PtoGlobal(0x0, shape, stride) {}
 
@@ -60,10 +64,24 @@ private:
     Type data_;
 };
 
-template <typename... Indexs>
-using Offsets = Std::tuple<Indexs...>;
+template <typename T>
+__aicore__ inline size_t GenTileOffset(const T &tensor, const TileOffset &offsets) {
+    const auto layout = tensor.GetLayout();
+    size_t offset = Std::get<DIM_1ST>(offsets) * layout.template GetStrideDim<DIM_1ST, MAX_DIMS>();
+    offset += Std::get<DIM_2ND>(offsets) * layout.template GetStrideDim<DIM_2ND, MAX_DIMS>();
+    offset += Std::get<DIM_3RD>(offsets) * layout.template GetStrideDim<DIM_3RD, MAX_DIMS>();
+    return offset;
+}
 
-using TileOffset = Offsets<size_t, size_t, size_t>;
+template <typename T>
+__aicore__ inline size_t GenTileOffset(const T &tensor, const TileOffset4Dim &offsets) {
+    const auto layout = tensor.GetLayout();
+    size_t offset = Std::get<DIM_1ST>(offsets) * layout.template GetStrideDim<DIM_1ST, MAX_DIMS>();
+    offset += Std::get<DIM_2ND>(offsets) * layout.template GetStrideDim<DIM_2ND, MAX_DIMS>();
+    offset += Std::get<DIM_3RD>(offsets) * layout.template GetStrideDim<DIM_3RD, MAX_DIMS>();
+    offset += Std::get<DIM_4TH>(offsets) * layout.template GetStrideDim<DIM_4TH, MAX_DIMS>();
+    return offset;
+}
 
 template <typename T, bool Mergeable = false>
 __aicore__ inline constexpr size_t GetMergedAxisIfNeed() {
@@ -109,22 +127,41 @@ public:
     using Dtype = std::conditional_t<std::is_same_v<typename T::Type, bool>, uint8_t, typename T::Type>;
     using Type = pto::Tile<pto::TileType::Vec, Dtype, tileH, tileW, Layout, validH, validW>;
 
-    __aicore__ inline PtoTile(const T &tensor = T(0)) {
+    __aicore__ inline PtoTile() : data_() {
+        static_assert(T::IsStaticLayout(), "Only valild for static layout tile tensor.");
+    }
+
+    __aicore__ inline PtoTile(const uint64_t &addr) : PtoTile() { pto::TASSIGN(data_, addr); }
+
+    __aicore__ inline PtoTile(const int &h, const int &w) {
         if constexpr (!T::IsStaticLayout()) {
-            Type tile(tensor.GetLayout().template GetShapeDim<DIM_4TH, MAX_DIMS>(),
-                tensor.GetLayout().template GetShapeDim<DIM_5TH, MAX_DIMS>());
+            Type tile(h, w);
             data_ = tile;
         }
     }
 
+    __aicore__ inline PtoTile(const int &h, const int &w, const uint64_t addr) : PtoTile(h, w) {
+        pto::TASSIGN(data_, addr);
+    }
+
+    __aicore__ inline PtoTile(const T &tensor)
+        : PtoTile(tensor.GetLayout().template GetShapeDim<DIM_4TH, MAX_DIMS>(),
+              tensor.GetLayout().template GetShapeDim<DIM_5TH, MAX_DIMS>()) {}
+
+    __aicore__ inline Type &Data() { return data_; }
+
     __aicore__ inline const Type &Data() const { return data_; }
 
-    __aicore__ inline void Assign(T &tensor, const TileOffset &offsets = TileOffset(0, 0, 0)) {
-        const auto layout = tensor.GetLayout();
-        size_t offset = Std::get<DIM_1ST>(offsets) * layout.template GetStrideDim<DIM_1ST, MAX_DIMS>();
-        offset += Std::get<DIM_2ND>(offsets) * layout.template GetStrideDim<DIM_2ND, MAX_DIMS>();
-        offset += Std::get<DIM_3RD>(offsets) * layout.template GetStrideDim<DIM_3RD, MAX_DIMS>();
-        pto::TASSIGN(data_, (uint64_t)(tensor.GetAddr() + offset * sizeof(typename T::Type)));
+    __aicore__ inline void Assign(uint64_t addr) { pto::TASSIGN(data_, addr); }
+
+    __aicore__ inline void Assign(uint64_t addr, uint64_t element_cnt) {
+        pto::TASSIGN(data_, addr + (element_cnt * sizeof(typename T::Type)));
+    }
+
+    __aicore__ inline void Assign(T &tensor) { Assign((uint64_t)(tensor.GetAddr())); }
+
+    __aicore__ inline void Assign(T &tensor, const TileOffset &offsets) {
+        pto::TASSIGN(data_, (uint64_t)(tensor.GetAddr() + GenTileOffset(tensor, offsets) * sizeof(typename T::Type)));
     }
 
 private:

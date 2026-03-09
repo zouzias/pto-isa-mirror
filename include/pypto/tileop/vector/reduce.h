@@ -15,21 +15,27 @@
 
 #ifndef TILEOP_TILE_OPERATOR_REDUCE__H
 #define TILEOP_TILE_OPERATOR_REDUCE__H
-#include "../utils/layout.h"
-#include "../utils/tile_tensor.h"
+#include "pto_tile.h"
+#include "utils/layout.h"
+#include "utils/tile_tensor.h"
 
-template <ReduceOp op, typename T0, typename T1, typename T2>
+template <ReduceOp op, typename LastUse, typename T0, typename T1, typename T2>
 TILEOP void ReduceComputeImpl(T0 dst, T1 src, T2 tmp) {
+    constexpr auto n1 = Std::tuple_element<DIM_1ST, LastUse>::type::value;
+    constexpr auto n2 = Std::tuple_element<DIM_2ND, LastUse>::type::value;
+    constexpr auto n3 = Std::tuple_element<DIM_3RD, LastUse>::type::value;
     if constexpr (op == ReduceOp::SUM) {
-        pto::TROWSUM(dst, src, tmp);
+        PTO_WITH_LAST_USE(pto::TROWSUM(dst, src, tmp), n1, n2, n3);
     } else if constexpr (op == ReduceOp::MAX) {
-        pto::TROWMAX(dst, src, tmp);
+        PTO_WITH_LAST_USE(pto::TROWMAX(dst, src, tmp), n1, n2, n3);
     } else if constexpr (op == ReduceOp::MIN) {
-        pto::TROWMIN(dst, src, tmp);
+        PTO_WITH_LAST_USE(pto::TROWMIN(dst, src, tmp), n1, n2, n3);
+    } else if constexpr (op == ReduceOp::PROD) {
+        PTO_WITH_LAST_USE(pto::TROWPROD(dst, src, tmp), n1, n2, n3);
     }
 }
 
-template <ReduceOp op, typename T0, typename T1, typename T2>
+template <ReduceOp op, typename LastUse, typename T0, typename T1, typename T2>
 TILEOP void ReduceLastAxisCompute(T0 dst, T1 src, T2 tmp) {
     constexpr auto srcShapeSize = Std::tuple_size<typename T1::Shape>::value;
     constexpr auto dstShapeSize = Std::tuple_size<typename T0::Shape>::value;
@@ -65,9 +71,9 @@ TILEOP void ReduceLastAxisCompute(T0 dst, T1 src, T2 tmp) {
     constexpr auto srcTileH = TileOp::GetTensorTileShapeDim<T1, 3, 5>();
     constexpr auto srcTileW = TileOp::GetTensorTileShapeDim<T1, 4, 5>();
     constexpr auto srcTypeSize = sizeof(typename T1::Type);
-    for (size_t n0Index = 0; n0Index < dstShape0; ++n0Index) {
-        for (size_t n1Index = 0; n1Index < dstShape1; ++n1Index) {
-            for (size_t n2Index = 0; n2Index < dstShape2; ++n2Index) {
+    for (LoopVar n0Index = 0; n0Index < dstShape0; ++n0Index) {
+        for (LoopVar n1Index = 0; n1Index < dstShape1; ++n1Index) {
+            for (LoopVar n2Index = 0; n2Index < dstShape2; ++n2Index) {
                 using DstTileDefine = typename std::conditional<(dstTileW == 1),
                     pto::Tile<pto::TileType::Vec, typename T0::Type, dstTileH, dstTileW, pto::BLayout::ColMajor, -1, -1>,
                     pto::Tile<pto::TileType::Vec, typename T0::Type, dstTileH, dstTileW, pto::BLayout::RowMajor, -1, -1>
@@ -84,32 +90,38 @@ TILEOP void ReduceLastAxisCompute(T0 dst, T1 src, T2 tmp) {
                 if (srcShape3 == 0 || srcShape4 == 0){
                     return;
                 }
-                ReduceComputeImpl<op>(dstTile, srcTile, tmpTile);
+                ReduceComputeImpl<op, LastUse>(dstTile, srcTile, tmpTile);
             }
         }
     }
 }
 
 #define OP_TILE_OP_ROWSUMSINGLE TRowSumSingle
-template <typename T0, typename T1, typename T2>
+template <typename LastUse = LastUse3Dim<0, 0, 0>, typename T0, typename T1, typename T2>
 TILEOP void TRowSumSingle(T0 dst, T1 src, T2 tmp) {
-    ReduceLastAxisCompute<ReduceOp::SUM>(dst, src, tmp);
+    ReduceLastAxisCompute<ReduceOp::SUM, LastUse>(dst, src, tmp);
 }
 
 #define OP_TILE_OP_ROWMAXSINGLE TRowMaxSingle
-template <typename T0, typename T1, typename T2>
+template <typename LastUse = LastUse3Dim<0, 0, 0>, typename T0, typename T1, typename T2>
 TILEOP void TRowMaxSingle(T0 dst, T1 src, T2 tmp) {
-    ReduceLastAxisCompute<ReduceOp::MAX>(dst, src, tmp);
+    ReduceLastAxisCompute<ReduceOp::MAX, LastUse>(dst, src, tmp);
 }
 
 #define OP_TILE_OP_ROWMINSINGLE TRowMinSingle
-template <typename T0, typename T1, typename T2>
+template <typename LastUse = LastUse3Dim<0, 0, 0>, typename T0, typename T1, typename T2>
 TILEOP void TRowMinSingle(T0 dst, T1 src, T2 tmp) {
-    ReduceLastAxisCompute<ReduceOp::MIN>(dst, src, tmp);
+    ReduceLastAxisCompute<ReduceOp::MIN, LastUse>(dst, src, tmp);
+}
+
+#define OP_TILE_OP_ROWPRODSINGLE TRowProdSingle
+template <typename LastUse = LastUse3Dim<0, 0, 0>, typename T0, typename T1, typename T2>
+TILEOP void TRowProdSingle(T0 dst, T1 src, T2 tmp) {
+    ReduceLastAxisCompute<ReduceOp::PROD, LastUse>(dst, src, tmp);
 }
 
 template <ReduceOp op, int axis, typename T0, typename T1>
-TILEOP void TRowMaxMinLineDynamic(T0 dst, T1 src) {
+TILEOP void TRowMaxMinProdLineDynamic(T0 dst, T1 src) {
     constexpr auto srcShapeSize = Std::tuple_size<typename T1::Shape>::value;
     constexpr auto dstShapeSize = Std::tuple_size<typename T0::Shape>::value;
     constexpr auto dstTileH = TileOp::GetTensorTileShapeDim<T0, axis + dstShapeSize - 5>();
@@ -148,10 +160,10 @@ TILEOP void TRowMaxMinLineDynamic(T0 dst, T1 src) {
         static_cast<size_t>(srcLayout.template GetStrideDim<2, expectSize>()),
         static_cast<size_t>(srcLayout.template GetStrideDim<3, expectSize>())
     };
-    for (size_t n0Index = 0, n0Size = (axis == 0 ? (size_t) 1 : dstShape[0]); n0Index < n0Size; ++n0Index) {
-        for (size_t n1Index = 0, n1Size = (axis == 1 ? (size_t) 1 : dstShape[1]); n1Index < n1Size; ++n1Index) {
-            for (size_t n2Index = 0, n2Size = (axis == 2 ? (size_t) 1 : dstShape[2]); n2Index < n2Size; ++n2Index) {
-                for (size_t n3Index = 0, n3Size = (axis == 3 ? (size_t) 1 : dstShape[3]); n3Index < n3Size; ++n3Index) {
+    for (LoopVar n0Index = 0, n0Size = (axis == 0 ? (size_t) 1 : dstShape[0]); n0Index < n0Size; ++n0Index) {
+        for (LoopVar n1Index = 0, n1Size = (axis == 1 ? (size_t) 1 : dstShape[1]); n1Index < n1Size; ++n1Index) {
+            for (LoopVar n2Index = 0, n2Size = (axis == 2 ? (size_t) 1 : dstShape[2]); n2Index < n2Size; ++n2Index) {
+                for (LoopVar n3Index = 0, n3Size = (axis == 3 ? (size_t) 1 : dstShape[3]); n3Index < n3Size; ++n3Index) {
                     DstTileDefine dstTile(dstShape[axis], dstShape[4]);
                     SrcTileDefine srcTile(srcShape[axis], srcShape[4]);
                     auto dstOffset = n0Index * dstStride[0] + n1Index * dstStride[1] +
@@ -164,7 +176,9 @@ TILEOP void TRowMaxMinLineDynamic(T0 dst, T1 src) {
                         pto::TCOLMAX(dstTile, srcTile);
                     } else if constexpr (op == ReduceOp::MIN) {
                         pto::TCOLMIN(dstTile, srcTile);
-                    } 
+                    } else if constexpr (op == ReduceOp::PROD) {
+                        pto::TCOLPROD(dstTile, srcTile);
+                    }
                 }
             }
         }
@@ -174,17 +188,23 @@ TILEOP void TRowMaxMinLineDynamic(T0 dst, T1 src) {
 #define OP_TILE_OP_ROWMAXLINE TRowMaxLine
 template <int axis, typename T0, typename T1>
 TILEOP void TRowMaxLine(T0 dst, T1 src) {
-    TRowMaxMinLineDynamic<ReduceOp::MAX, axis>(dst, src);
+    TRowMaxMinProdLineDynamic<ReduceOp::MAX, axis>(dst, src);
 }
 
 #define OP_TILE_OP_ROWMINLINE TRowMinLine
 template <int axis, typename T0, typename T1>
 TILEOP void TRowMinLine(T0 dst, T1 src) {
-    TRowMaxMinLineDynamic<ReduceOp::MIN, axis>(dst, src);
+    TRowMaxMinProdLineDynamic<ReduceOp::MIN, axis>(dst, src);
 }
 
-template <int axis, typename DstTileDefine, typename SrcTileDefine, typename TmpTileDefine, typename T0, typename T1, typename T2>
-TILEOP void TRowSumLineDynamic(T0 dst, T1 src, T2 tmp) {
+#define OP_TILE_OP_ROWPRODLINE TRowProdLine
+template <int axis, typename T0, typename T1>
+TILEOP void TRowProdLine(T0 dst, T1 src) {
+    TRowMaxMinProdLineDynamic<ReduceOp::PROD, axis>(dst, src);
+}
+
+template <int axis, typename DstTileDefine, typename SrcTileDefine, typename TmpTileDefine, typename T0, typename T1, typename T2>	 
+ TILEOP void TRowSumLineDynamic(T0 dst, T1 src, T2 tmp) {
     constexpr size_t expectSize = 5;
     constexpr auto typeSize = sizeof(typename T1::Type);
     const auto dstLayout = dst.GetLayout();
@@ -216,10 +236,10 @@ TILEOP void TRowSumLineDynamic(T0 dst, T1 src, T2 tmp) {
         static_cast<size_t>(srcLayout.template GetStrideDim<2, expectSize>()),
         static_cast<size_t>(srcLayout.template GetStrideDim<3, expectSize>())
     };
-    for (size_t n0Index = 0, n0Size = (axis == 0 ? (size_t) 1 : dstShape[0]); n0Index < n0Size; ++n0Index) {
-        for (size_t n1Index = 0, n1Size = (axis == 1 ? (size_t) 1 : dstShape[1]); n1Index < n1Size; ++n1Index) {
-            for (size_t n2Index = 0, n2Size = (axis == 2 ? (size_t) 1 : dstShape[2]); n2Index < n2Size; ++n2Index) {
-                for (size_t n3Index = 0, n3Size = (axis == 3 ? (size_t) 1 : dstShape[3]); n3Index < n3Size; ++n3Index) {
+    for (LoopVar n0Index = 0, n0Size = (axis == 0 ? (size_t) 1 : dstShape[0]); n0Index < n0Size; ++n0Index) {
+        for (LoopVar n1Index = 0, n1Size = (axis == 1 ? (size_t) 1 : dstShape[1]); n1Index < n1Size; ++n1Index) {
+            for (LoopVar n2Index = 0, n2Size = (axis == 2 ? (size_t) 1 : dstShape[2]); n2Index < n2Size; ++n2Index) {
+                for (LoopVar n3Index = 0, n3Size = (axis == 3 ? (size_t) 1 : dstShape[3]); n3Index < n3Size; ++n3Index) {
                     DstTileDefine dstTile(dstShape[axis], dstShape[4]);
                     SrcTileDefine srcTile(srcShape[axis], srcShape[4]);
                     TmpTileDefine tmpTile;

@@ -72,9 +72,9 @@ TILEOP void TOneHot(DstTensor dst,SrcTensor src) {
         return;
     }
 
-    for (size_t n0Index = 0; n0Index < dstShape0; ++n0Index) {
-        for (size_t n1Index = 0; n1Index < dstShape1; ++n1Index) {
-            for (size_t n2Index = 0; n2Index < dstShape2; ++n2Index) {
+    for (LoopVar n0Index = 0; n0Index < dstShape0; ++n0Index) {
+        for (LoopVar n1Index = 0; n1Index < dstShape1; ++n1Index) {
+            for (LoopVar n2Index = 0; n2Index < dstShape2; ++n2Index) {
                 DstTileType dstTile(dstShape3, dstShape4);
 
                 auto dstOffset = n0Index * dstStride0 + n1Index * dstStride1 + n2Index * dstStride2;
@@ -87,7 +87,7 @@ TILEOP void TOneHot(DstTensor dst,SrcTensor src) {
 
                 auto srcOffset = n0Index * srcStride0 + n1Index * srcStride1 + n2Index * srcStride2;
                 auto srcPtr = (__ubuf__ SrcDtype *)(src.GetAddr() + srcOffset * sizeof(SrcDtype));
-                for(size_t n3Index = 0; n3Index < dstShape3; ++n3Index) {
+                for(LoopVar n3Index = 0; n3Index < dstShape3; ++n3Index) {
                     auto dstPtr = (__ubuf__ DstDtype *)(dstAddr + n3Index * dstTileW * sizeof(DstDtype));
                     SrcDtype onePos = srcPtr[n3Index];
                     dstPtr[onePos] = 1;

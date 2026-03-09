@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "tilefwk/aikernel_runtime.h"
+
 namespace npu::tile_fwk {
 
 using RuntimeCallEntryType = void *(*)(void *, uint64_t);
@@ -52,15 +54,6 @@ using Call5EntryType = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t, uint
 #define RUNTIME_FUNCRET_CACHESTOP_CONTINUE          (reinterpret_cast<void *>(static_cast<uintptr_t>(0)))
 #define RUNTIME_FUNCRET_CACHESTOP_RETURN            (reinterpret_cast<void *>(static_cast<uintptr_t>(1)))
 
-#define RuntimeGetInputShapeDimSize(input) ((input)->shape.dimSize)
-#define RuntimeGetInputShapeDim(input, n) ((input)->shape.dim[(n)])
-#define RuntimeGetInputDataInt32Dim1(input, off0) (((int32_t *)(input)->address)[(off0)])
-#define RuntimeGetInputDataInt32Dim2(input, off0, off1) \
-    (((int32_t *)(input)->address)[(off0) * (input)->shape.dim[1] + (off1)])
-#define RuntimeGetInputDataInt32Dim3(input, off0, off1, off2) \
-    (((int32_t *)(input)->address)[(off0) * (input)->shape.dim[1] * (input)->shape.dim[2] + (off1) * (input)->shape.dim[2] + (off2)])
-#define RuntimeGetInputDataInt32Dim4(input, off0, off1, off2, off3) \
-    (((int32_t *)(input)->address)[((off0 * (input)->shape.dim[1] + off1) * (input)->shape.dim[2] + off2) * (input)->shape.dim[3] + (off3)])
 #define RuntimeIsLoopBegin(idx, begin) ((idx) == (begin))
 #define RuntimeIsLoopEnd(idx, end) ((int64_t)(idx) >= (int64_t)(end))
 #define RuntimeTernaryOP(cond, lhs, rhs) ((cond) ? (lhs) : (rhs))
@@ -101,18 +94,6 @@ int64_t RuntimeNe(int64_t input1, int64_t input2) {
     return input1 != input2;
 }
 
-#define RUNTIME_GetInputShapeDimSize(inputIndex) \
-    RuntimeGetInputShapeDimSize(&(startArgs)->devTensorList[(inputIndex)])
-#define RUNTIME_GetInputShapeDim(inputIndex, n) \
-    RuntimeGetInputShapeDim(&(startArgs)->devTensorList[(inputIndex)], (n))
-#define RUNTIME_GetInputDataInt32Dim1(inputIndex, off0) \
-    RuntimeGetInputDataInt32Dim1(&(startArgs)->devTensorList[(inputIndex)], (off0))
-#define RUNTIME_GetInputDataInt32Dim2(inputIndex, off0, off1) \
-    RuntimeGetInputDataInt32Dim2(&(startArgs)->devTensorList[(inputIndex)], (off0), (off1))
-#define RUNTIME_GetInputDataInt32Dim3(inputIndex, off0, off1, off2) \
-    RuntimeGetInputDataInt32Dim3(&(startArgs)->devTensorList[(inputIndex)], (off0), (off1), (off2))
-#define RUNTIME_GetInputDataInt32Dim4(inputIndex, off0, off1, off2, off3) \
-    RuntimeGetInputDataInt32Dim4(&(startArgs)->devTensorList[(inputIndex)], (off0), (off1), (off2), (off3))
 #define RUNTIME_IsLoopBegin(idx, begin) RuntimeIsLoopBegin((idx), (begin))
 #define RUNTIME_IsLoopEnd(idx, end) RuntimeIsLoopEnd((idx), (end))
 
@@ -121,11 +102,8 @@ int64_t RuntimeNe(int64_t input1, int64_t input2) {
 #define RUNTIME_GetViewValidShapeDim(validShape, viewOffset, viewShape) RuntimeGetViewValidShapeDim(validShape, viewOffset, viewShape)
 #define RUNTIME_Max(lhs, rhs) RuntimeMax(lhs, rhs)
 #define RUNTIME_Min(lhs, rhs) RuntimeMin(lhs, rhs)
-
 #define RUNTIME_And(lhs, rhs) ((lhs) && (rhs))
 #define RUNTIME_Select(cond, set, unset) ((cond) ? (set) : (unset))
-
-#define RUNTIME_GetSymbol(idx)          (symbolTable[idx])
 
 #define RUNTIME_SetExpr(exprList, index, value) \
     do { \

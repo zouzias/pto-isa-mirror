@@ -17,6 +17,7 @@
 #define RUNTIME_COMMON_DEF_H
 
 #include <cstdint>
+#include "aicpu_perf.h"
 
 const uint64_t AICORE_TASK_INIT = 0xFFFFFFFF;
 const uint64_t AICORE_TASK_STOP = 0x7FFFFFF0;
@@ -65,6 +66,7 @@ enum class ArchInfo {
 #define DEVICE_TASK_TYPE_STATIC  0
 #define DEVICE_TASK_TYPE_DYN     1
 #define DEVICE_TASK_TYPE_INVALID 0xf
+#define PYPTO                    59
 
 template <typename DerivedType, typename UnderlyingType>
 class BitmaskBase {
@@ -116,12 +118,30 @@ struct ProfConfig : public BitmaskBase<ProfConfig, uint32_t> {
 
 struct ToSubMachineConfig {
     ProfConfig profConfig{ProfConfig::OFF};
-    uint64_t isGETensorList{0};
 };
 
-struct OpMetaAddrs {
-    uint64_t generalAddr{0};     // aicpu meta addr
-    uint64_t stitchPoolAddr{0};  // aicpu meta addr
+enum DeviceKernelRunMode : uint32_t {
+    RUN_INVALID = 0,
+    RUN_UNIFIED_STREAM = 1,
+    RUN_SPLITTED_STREAM_CTRL = 2,
+    RUN_SPLITTED_STREAM_SCHE = 3,
+};
+
+struct DeviceKernelArgsParameter {
+    uint32_t runMode{RUN_UNIFIED_STREAM};
+    uint32_t p1;
+    uint64_t globalRound{0};
+};
+static_assert(sizeof(DeviceKernelArgsParameter) == sizeof(uint64_t) * 0x2, "Invalid parameter size");
+
+struct DeviceRuntimeOffset {
+    uint64_t startArgsOffset{0};
+    uint64_t taskCtrlPoolOffset{0};
+    uint64_t taskQueueOffset{0};
+    uint64_t generalOffset{0};
+    uint64_t stitchPoolOffset{0};
+    uint64_t size{0};
+    uint64_t count{0};
 };
 
 struct DeviceArgs {
@@ -144,17 +164,16 @@ struct DeviceArgs {
     uint64_t aicpuSoBin{0};    // server so Bin
     uint64_t aicpuSoLen{0};    // server so len
     uint64_t deviceId{0};      // for device copy fileName
-    uint64_t startArgsAddr{0}; // DevStartArgs addr
-    uint64_t taskQueue{0};     // task queue between ctrl and sche
-    uint64_t taskCtrl{0};      // task ctrl between ctrl and sche
+    uint64_t runtimeDataRingBufferAddr{0}; // DevStartArgs addr
+    uint32_t hostPid{0};       // for dump tensor
     uint32_t scheCpuNum{0};    // sche cpu num calc by host
     uint32_t enableCtrl : 2;    // if enable builtin ctrl
     uint32_t validGetPgMask : 2; // mark pgmask is invalid
-    uint32_t disableSync : 2;    // close ctrl and sche soft sync
-    uint32_t isGETensorList : 26;    // GE graph is tensor list
-    uint64_t generalAddr{0};     // aicpu meta addr
-    uint64_t stitchPoolAddr{0};  // aicpu meta addr
+    uint32_t disableSync : 28;    // close ctrl and sche soft sync
+    uint64_t aicpuPerfAddr{0};    // aicpuPer Gm addr
+    uint64_t devDfxArgAddr{0};   // devDfx
     uint64_t GetBlockNum() { return nrValidAic * (nrAiv / nrAic + 1); }
+    int maxAicpuNum{0};
     ArchInfo archInfo{ArchInfo::DAV_2201};
     ToSubMachineConfig toSubMachineConfig;
 };
@@ -185,6 +204,11 @@ struct TaskStat {
     int64_t waitStart; // 2.0 dfx 当前未使用
 };
 
+struct DevDfxArgs {
+    int32_t logLevel{-1};
+    int32_t isOpenSwim{0};
+};
+
 constexpr uint32_t PERF_TRACE_INST_MAX_NUM_EVERY_TYPE = 10;
 constexpr uint32_t INVALID_DEV_TASK_ID = 0xFFFFFFFF;
 enum AicorePerfTrace {
@@ -201,11 +225,17 @@ enum AicorePerfTrace {
 
 struct Metrics {
   int64_t isMetricStop;
-  int64_t taskCount; 
+  int64_t taskCount;
   int64_t perfTrace[PERF_TRACE_CORE_MAX][PERF_TRACE_INST_MAX_NUM_EVERY_TYPE];
   uint32_t perfTraceDevTaskId[PERF_TRACE_CORE_MAX][PERF_TRACE_INST_MAX_NUM_EVERY_TYPE];
   uint32_t perfTraceCnt[PERF_TRACE_CORE_MAX];
   TaskStat tasks[];
+};
+
+struct MetricPerf {
+    uint64_t perfAicpuTrace[npu::tile_fwk::dynamic::MAX_USED_AICPU_NUM][npu::tile_fwk::dynamic::PERF_TRACE_MAX] = {{0}};
+    uint64_t perfAicpuTraceDevTask[npu::tile_fwk::dynamic::MAX_USED_AICPU_NUM][npu::tile_fwk::dynamic::DEVTASK_PERF_TYPE_NUM][npu::tile_fwk::dynamic::PERF_TRACE_COUNT_DEVTASK_MAX_NUM] = {{{0}}}; // 每个devTask 的对应type的数据
+    uint8_t perfAicpuTraceDevTaskCnt[npu::tile_fwk::dynamic::MAX_USED_AICPU_NUM][npu::tile_fwk::dynamic::DEVTASK_PERF_TYPE_NUM] = {{0}};
 };
 
 inline const char *AicorePerfTraceName[] = {
@@ -237,6 +267,11 @@ struct KernelArgs {
     int64_t waveBufferCpuToCore[8];
     TaskEntry taskEntry;
     TaskStat taskStat[2]; // 寄存器高低32位，两个task 和 pending & running task存储： 2 * 2 个
+};
+
+union KernelSharedBuffer {
+    struct KernelArgs args;
+    uint8_t sharedBuffer[SHARED_BUFFER_SIZE];
 };
 
 static_assert(sizeof(KernelArgs) < SHARED_BUFFER_SIZE);

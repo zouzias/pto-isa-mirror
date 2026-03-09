@@ -98,6 +98,10 @@ TILEOP void PairBinaryComputeImpl(T0 dst, T1 src0, T2 src1) {
         pto::TPARTMIN(dst, src0, src1);
         return;
     }
+    if constexpr (op == PairBinaryOp::MUL) {
+        pto::TPARTMUL(dst, src0, src1);
+        return;
+    }
 }
 
 template <PairBinaryOp op, int reduceAxisIndex, typename T0, typename T1, typename T2>
@@ -176,9 +180,9 @@ TILEOP void InnerPairBinaryCompute(T0 dst, T1 src0, T2 src1) {
         using Src1TileDefine =
             pto::Tile<pto::TileType::Vec, typename T0::Type, src1TileH, src1TileW, pto::BLayout::RowMajor, -1, -1>;
 
-        for (size_t n0Index = 0; n0Index < dstShape0; ++n0Index) {
-            for (size_t n1Index = 0; n1Index < dstShape1; ++n1Index) {
-                for (size_t n2Index = 0; n2Index < dstShape2; ++n2Index) {
+        for (LoopVar n0Index = 0; n0Index < dstShape0; ++n0Index) {
+            for (LoopVar n1Index = 0; n1Index < dstShape1; ++n1Index) {
+                for (LoopVar n2Index = 0; n2Index < dstShape2; ++n2Index) {
                     DstTileDefine dstTile(dstShape3, dstShape4);
                     Src0TileDefine src0Tile(src0Shape3, src0Shape4);
                     Src1TileDefine src1Tile(src1Shape3, src1Shape4);
@@ -228,6 +232,12 @@ TILEOP void TPairMax(T0 dst, T1 src0, T2 src1) {
 template <typename T0, typename T1, typename T2>
 TILEOP void TPairMin(T0 dst, T1 src0, T2 src1) {
     PairBinaryCompute<PairBinaryOp::MIN>(dst, src0, src1);
+}
+
+#define OP_TILE_OP_PAIRPROD TPairProd
+template <typename T0, typename T1, typename T2>
+TILEOP void TPairProd(T0 dst, T1 src0, T2 src1) {
+    PairBinaryCompute<PairBinaryOp::MUL>(dst, src0, src1);
 }
 
 #endif

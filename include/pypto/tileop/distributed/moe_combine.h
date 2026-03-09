@@ -17,8 +17,6 @@
 #define __DISTRIBUTED_COMBINE__
 
 #include "common.h"
-#include "hccl_context.h"
-
 #include <type_traits>
 
 namespace TileOp::Distributed {

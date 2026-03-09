@@ -15,11 +15,12 @@
 
 #ifndef TILEOP_TILE_OPERATOR_CAST__H
 #define TILEOP_TILE_OPERATOR_CAST__H
-#include "../utils/layout.h"
-#include "../utils/tile_tensor.h"
+#include "pto_tile.h"
+#include "utils/layout.h"
+#include "utils/tile_tensor.h"
 
 #define OP_TILE_OP_CAST TCast
-template <unsigned Mode, typename T0, typename T1>
+template <typename LastUse = LastUse2Dim<0, 0>, unsigned Mode, typename T0, typename T1>
 TILEOP void TCast(T0 dst, T1 src) {
     constexpr auto shapeSize = Std::tuple_size<typename T0::Shape>::value;
     constexpr size_t expectSize = 5;
@@ -43,9 +44,11 @@ TILEOP void TCast(T0 dst, T1 src) {
     constexpr auto srcTileW = TileOp::GetTensorTileShapeDim<T1, 4, 5>();
     constexpr auto dstTypeSize = sizeof(typename T0::Type);
     constexpr auto srcTypeSize = sizeof(typename T1::Type);
-    for (size_t n0Index = 0; n0Index < shape0; ++n0Index) {
-        for (size_t n1Index = 0; n1Index < shape1; ++n1Index) {
-            for (size_t n2Index = 0; n2Index < shape2; ++n2Index) {
+    constexpr auto n1 = Std::tuple_element<DIM_1ST, LastUse>::type::value;
+    constexpr auto n2 = Std::tuple_element<DIM_2ND, LastUse>::type::value;
+    for (LoopVar n0Index = 0; n0Index < shape0; ++n0Index) {
+        for (LoopVar n1Index = 0; n1Index < shape1; ++n1Index) {
+            for (LoopVar n2Index = 0; n2Index < shape2; ++n2Index) {
                 using TileDefineDst =
                     pto::Tile<pto::TileType::Vec, typename T0::Type, dstTileH, dstTileW, pto::BLayout::RowMajor, -1, -1>;
                 using TileDefineSrc =
@@ -56,7 +59,7 @@ TILEOP void TCast(T0 dst, T1 src) {
                 auto srcOffset = n0Index * srcStride0 + n1Index * srcStride1 + n2Index * srcStride2;
                 pto::TASSIGN(dstTile, (uint64_t)(dst.GetAddr() + dstOffset * dstTypeSize));
                 pto::TASSIGN(srcTile, (uint64_t)(src.GetAddr() + srcOffset * srcTypeSize));
-                pto::TCVT(dstTile, srcTile, static_cast<pto::RoundMode>(Mode));
+                PTO_WITH_LAST_USE(pto::TCVT(dstTile, srcTile, static_cast<pto::RoundMode>(Mode)), n1, n2);
             }
         }
     }

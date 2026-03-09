@@ -16,7 +16,7 @@
 #ifndef __LOGICALTENSOR_TILEOP_VECTOR__
 #define __LOGICALTENSOR_TILEOP_VECTOR__
 
-#include "../tileop_common.h"
+#include "tileop_common.h"
 #include <type_traits>
 
 namespace TileOp {
@@ -2804,11 +2804,11 @@ TILEOP void Tvcopy(__ubuf__ T *dst, __ubuf__ T *src) {
 
 template <typename T, unsigned dstShape0, unsigned dstShape1, unsigned srcShape0, unsigned srcShape1,
     unsigned oriShape0, unsigned oriShape1, int axis, int offset, int isLargest>
-TILEOP void BitSort(__ubuf__ T *dst, __ubuf__ T *src) {
+TILEOP void BitSort(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *tmp) {
     // 生成index数据,首先创建一个1~8的数组,之后扩展到TShape1,构成0~TShape1的index数组
     // pipe_barrier(PIPE_ALL); // 当前OP无法描述两条流水,UB复用场景存在问题,暂时按照pipe_all规避
     constexpr int32_t srcShape1Align = (oriShape1 + 31) / 32 * 32;
-    __ubuf__ uint32_t *idx = (__ubuf__ uint32_t *)dst + 2 * srcShape1Align;
+    __ubuf__ uint32_t *idx = (__ubuf__ uint32_t *)tmp;
     for (int32_t j = 0; j < oriShape1; j++) {
         *(idx + j) = j;
     }
@@ -2819,14 +2819,14 @@ TILEOP void BitSort(__ubuf__ T *dst, __ubuf__ T *src) {
     if constexpr (oriShape1 < 32) {
         uint64_t srcShape1_Align_Block_Num = (oriShape1 * sizeof(float) + 31) / 32;
         uint64_t dstShape1_Block_Num = dstShape1 * sizeof(float) / 32;
-        copy_ubuf_to_ubuf((__ubuf__ float *)dst + 3 * srcShape1Align, (__ubuf__ void *)src, 0, oriShape0,
+        copy_ubuf_to_ubuf((__ubuf__ float *)tmp + srcShape1Align, (__ubuf__ void *)src, 0, oriShape0,
             srcShape1_Align_Block_Num, 0, dstShape1_Block_Num - srcShape1_Align_Block_Num);
         pipe_barrier(PIPE_V);
         if constexpr (isLargest == 0) {
             set_mask_count();
             set_vector_mask(0, oriShape1);
             // 按照升序排列时,需要首先将数据乘以-1,同时不可以污染src
-            vmuls((__ubuf__ float *)dst + 3 * srcShape1Align, (__ubuf__ float *)dst + 3 * srcShape1Align, -1.0f, 1, 1,
+            vmuls((__ubuf__ float *)tmp + srcShape1Align, (__ubuf__ float *)tmp + srcShape1Align, -1.0f, 1, 1,
                 1, 8, 8);
             pipe_barrier(PIPE_V);
             set_mask_norm();
@@ -2839,11 +2839,11 @@ TILEOP void BitSort(__ubuf__ T *dst, __ubuf__ T *src) {
         float FLOAT_MIN = -1.0e38f;
         set_mask_norm();
         set_vector_mask(0, mask);
-        vector_dup(dst + 3 * srcShape1Align, FLOAT_MIN, oriShape0, 1, 1, dstShape1 * sizeof(float) / 32, (int64_t)0);
+        vector_dup(tmp + srcShape1Align, FLOAT_MIN, oriShape0, 1, 1, dstShape1 * sizeof(float) / 32, (int64_t)0);
         pipe_barrier(PIPE_V);
         for (int rowIdx = 0; rowIdx < oriShape0; rowIdx++) {
             vbitsort((__ubuf__ float *)dst + rowIdx * dstShape1,
-                (__ubuf__ float *)dst + rowIdx * dstShape1 + 3 * srcShape1Align, (__ubuf__ uint32_t *)idx, 1);
+                (__ubuf__ float *)tmp + srcShape1Align, (__ubuf__ uint32_t *)idx, 1);
         }
         pipe_barrier(PIPE_V);
         set_vector_mask(-1, -1);
@@ -2858,7 +2858,7 @@ TILEOP void BitSort(__ubuf__ T *dst, __ubuf__ T *src) {
                 set_mask_count();
                 set_vector_mask(0, oriShape1);
                 // 按照升序排列时,需要首先将数据乘以-1,同时不可以污染src
-                srcData = reinterpret_cast<__ubuf__ float *>(dst) + rowIdx * dstShape1 + 3 * srcShape1Align;
+                srcData = reinterpret_cast<__ubuf__ float *>(tmp) + srcShape1Align;
                 vmuls(srcData, reinterpret_cast<__ubuf__ float *>(src) + rowIdx * srcShape1, -1.0f, 1, 1, 1, 8, 8);
                 pipe_barrier(PIPE_V);
                 set_mask_norm();
@@ -2879,7 +2879,7 @@ TILEOP void BitSort(__ubuf__ T *dst, __ubuf__ T *src) {
                 set_mask_count();
                 set_vector_mask(0, oriShape1);
                 // 按照升序排列时,需要首先将数据乘以-1,同时不可以污染src
-                srcData = reinterpret_cast<__ubuf__ float *>(dst) + rowIdx * dstShape1 + 3 * srcShape1Align;
+                srcData = reinterpret_cast<__ubuf__ float *>(tmp) + srcShape1Align;
                 vmuls(srcData, reinterpret_cast<__ubuf__ float *>(src) + rowIdx * srcShape1, -1.0f, 1, 1, 1, 8, 8);
                 pipe_barrier(PIPE_V);
                 set_mask_norm();
@@ -2908,16 +2908,16 @@ TILEOP void BitSort(__ubuf__ T *dst, __ubuf__ T *src) {
 }
 
 template <typename T, unsigned dstShape0, unsigned dstShape1, unsigned srcShape0, unsigned srcShape1,
-    unsigned oriShape0, unsigned oriShape1, int axis, int k, int isLargest>
-TILEOP void MrgSort(__ubuf__ T *dst, __ubuf__ T *src) {
+    unsigned oriShape0, unsigned oriShape1, int axis, int k, int mergeSize>
+TILEOP void MrgSort(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *tmp) {
     constexpr int32_t kAlign = (k + 3) / 4 * 4; // k需要向32Bytes取整,否则最后搬运出问题
-    constexpr int32_t totalNum = oriShape1 / 4;
+    constexpr int32_t totalNum = oriShape1 / 2;
     for (int rowIdx = 0; rowIdx < dstShape0; rowIdx++) {
         // 每4个合并,计算整块
         int32_t z = 32;
         for (; z * 4 <= totalNum; z *= 4) {
             __ubuf__ float *srcData = reinterpret_cast<__ubuf__ float *>(src) + rowIdx * srcShape1;
-            __ubuf__ float *dstData = reinterpret_cast<__ubuf__ float *>(src) + rowIdx * srcShape1 + totalNum * 2;
+            __ubuf__ float *dstData = reinterpret_cast<__ubuf__ float *>(src);
             uint64_t config = 0;
             uint32_t repeat_mrg = totalNum / (z * 4);
             config |= uint64_t(totalNum / (z * 4)); // Xt[7:0]: repeat time
@@ -2956,7 +2956,7 @@ TILEOP void MrgSort(__ubuf__ T *dst, __ubuf__ T *src) {
             uint16_t mrgSortedLen = 0;
             for (int32_t i = 0; i < arrayCount - 1; ++i) {
                 __ubuf__ float *srcData = reinterpret_cast<__ubuf__ float *>(src) + rowIdx * srcShape1;
-                __ubuf__ float *dstData = reinterpret_cast<__ubuf__ float *>(src) + rowIdx * srcShape1 + totalNum * 2;
+                __ubuf__ float *dstData = reinterpret_cast<__ubuf__ float *>(src);
                 mrgSortedLen += static_cast<uint16_t>(mrgArray[i]);
                 uint64_t tmpMrgSortedLen = mrgSortedLen;
                 uint64_t tmpMrgArray = mrgArray[i + 1];

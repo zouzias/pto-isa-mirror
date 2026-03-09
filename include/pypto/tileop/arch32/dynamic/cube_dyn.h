@@ -42,6 +42,19 @@ INLINE T CeilDiv(T num_1, T num_2) {
     return (num_1 + num_2 - 1) / num_2;
 }
 
+#define RT_OPERATION_OP_L1_COPY_IN(l1Addr, l1Dtype, l1Shape0, l1Shape1, l1ValidShape0, l1ValidShape1, l1Stride0, \
+    l1Stride1, gmAddr, gmDtype, gmShape0, gmShape1, gmOffset0, gmOffset1, copyInMode)                            \
+    do {                                                                                                         \
+        constexpr CopyInMode mode = static_cast<CopyInMode>(copyInMode);                                         \
+        if (mode == CopyInMode::NZ2NZ) {                                                                         \
+            DynL1CopyInNZ2NZ<gmDtype, l1Dtype>(l1Addr, gmAddr, l1ValidShape0, l1ValidShape1, gmShape0, gmShape1, \
+                gmOffset0, gmOffset1, gmShape0, gmShape1, 0);                                                    \
+        } else {                                                                                                 \
+            DynL1CopyIn<gmDtype, l1Dtype, mode>(                                                                 \
+                l1Addr, gmAddr, l1ValidShape0, l1ValidShape1, gmShape0, gmShape1, gmOffset0, gmOffset1, 0);      \
+        }                                                                                                        \
+    } while (0)
+
 template <typename GMT, typename L1T, CopyInMode mode = CopyInMode::ND2NZ>
 TILEOP void DynL1CopyIn(__cbuf__ L1T *dst, __gm__ GMT *src, unsigned TShape0, unsigned TShape1, unsigned GmShape0,
     unsigned GmShape1, unsigned GmOffset0, unsigned GmOffset1, int reserved) {
@@ -125,6 +138,12 @@ TILEOP void DynL1CopyInNZ2NZ(__cbuf__ L1T *dst, __gm__ GMT *src, unsigned TShape
     }
 }
 
+#define RT_OPERATION_OP_L1_TO_L0A(l0aAddr, l0aDtype, l0aShape0, l0aShape1, l0aValidShape0, l0aValidShape1, l0aStride0, \
+    l0aStride1, l1Addr, l1Dtype, l1Shape0, l1Shape1, l1ValidShape0, l1ValidShape1, l1Stride0, l1Stride1, l1Offset0,    \
+    l1Offset1, reluMode, scaleValue)                                                                                                         \
+    DynL1ToL0A<l1Dtype, l1Offset0, l1Offset1>(                                                                         \
+        l0aAddr, l1Addr, l0aValidShape0, l0aValidShape1, l1ValidShape0, l1ValidShape1);
+
 template <typename T, unsigned Offset0, unsigned Offset1>
 TILEOP void DynL1ToL0A(__ca__ T *dst, __cbuf__ T *src, unsigned dstM, unsigned dstK, unsigned srcM, unsigned srcK) {
     if (dstM == 0 || dstK == 0 || srcM == 0 || srcK == 0) {
@@ -166,6 +185,12 @@ TILEOP void DynL1ToL0A(__ca__ T *dst, __cbuf__ T *src, unsigned dstM, unsigned d
         srcOffset += srcOffsetStep;
     }
 }
+
+#define RT_OPERATION_OP_L1_TO_L0_AT(l0aAddr, l0aDtype, l0aShape0, l0aShape1, l0aValidShape0, l0aValidShape1,         \
+    l0aStride0, l0aStride1, l1Addr, l1Dtype, l1Shape0, l1Shape1, l1ValidShape0, l1ValidShape1, l1Stride0, l1Stride1, \
+    l1Offset0, l1Offset1, reluMode, scaleValue)                                                                                            \
+    DynL1ToL0At<l1Dtype, l1Offset0, l1Offset1>(                                                                      \
+        l0aAddr, l1Addr, l0aValidShape0, l0aValidShape1, l1ValidShape0, l1ValidShape1);
 
 template <typename T, unsigned Offset0, unsigned Offset1>
 TILEOP void DynL1ToL0At(__ca__ T *dst, __cbuf__ T *src, unsigned dstM, unsigned dstK, unsigned srcK, unsigned srcM) {
@@ -222,6 +247,12 @@ TILEOP void DynL1ToL0At(__ca__ T *dst, __cbuf__ T *src, unsigned dstM, unsigned 
     }
 }
 
+#define RT_OPERATION_OP_L1_TO_L0_B(l0bAddr, l0bDtype, l0bShape0, l0bShape1, l0bValidShape0, l0bValidShape1,          \
+    l0bStride0, l0bStride1, l1Addr, l1Dtype, l1Shape0, l1Shape1, l1ValidShape0, l1ValidShape1, l1Stride0, l1Stride1, \
+    l1Offset0, l1Offset1, reluMode, scaleValue)                                                                                            \
+    DynL1ToL0B<l1Dtype, l1Offset0, l1Offset1>(                                                                       \
+        l0bAddr, l1Addr, l0bValidShape0, l0bValidShape1, l1ValidShape0, l1ValidShape1);
+
 template <typename T, unsigned Offset0, unsigned Offset1>
 TILEOP void DynL1ToL0B(__cb__ T *dst, __cbuf__ T *src, unsigned dstK, unsigned dstN, unsigned srcK, unsigned srcN) {
     if (dstK == 0 || dstN == 0 || srcK == 0 || srcN == 0) {
@@ -277,6 +308,12 @@ TILEOP void DynL1ToL0B(__cb__ T *dst, __cbuf__ T *src, unsigned dstK, unsigned d
     }
 }
 
+#define RT_OPERATION_OP_L1_TO_L0_BT(l0bAddr, l0bDtype, l0bShape0, l0bShape1, l0bValidShape0, l0bValidShape1,         \
+    l0bStride0, l0bStride1, l1Addr, l1Dtype, l1Shape0, l1Shape1, l1ValidShape0, l1ValidShape1, l1Stride0, l1Stride1, \
+    l1Offset0, l1Offset1, reluMode, scaleValue)                                                                                            \
+    DynL1ToL0Bt<l1Dtype, l1Offset0, l1Offset1>(                                                                      \
+        l0bAddr, l1Addr, l0bValidShape0, l0bValidShape1, l1ValidShape0, l1ValidShape1);
+
 template <typename T, unsigned Offset0, unsigned Offset1>
 TILEOP void DynL1ToL0Bt(__cb__ T *dst, __cbuf__ T *src, unsigned dstK, unsigned dstN, unsigned srcN, unsigned srcK) {
     if (dstK == 0 || dstN == 0 || srcK == 0 || srcN == 0) {
@@ -312,6 +349,11 @@ TILEOP void DynL1ToL0Bt(__cb__ T *dst, __cbuf__ T *src, unsigned dstK, unsigned 
     }
 }
 
+#define RT_OPERATION_OP_L1_TO_BT(biasTableAddr, biasTableDtype, biasTableShape0, biasTableShape1,              \
+    biasTableValidShape0, biasTableValidShape1, biasTableStride0, biasTableStride1, l1Addr, l1Dtype, l1Shape0, \
+    l1Shape1, l1ValidShape0, l1ValidShape1, l1Stride0, l1Stride1, l1Offset0, l1Offset1)                        \
+    DynL1ToBT<l1Dtype, biasTableDtype, l1Offset1>(biasTableAddr, l1Addr, biasTableValidShape1);
+
 template <typename L1T, typename BTT, unsigned Offset>
 TILEOP void DynL1ToBT(uint64_t dst, __cbuf__ L1T *src, unsigned nSize){
     constexpr uint16_t nBurst = 1;
@@ -321,6 +363,11 @@ TILEOP void DynL1ToBT(uint64_t dst, __cbuf__ L1T *src, unsigned nSize){
     constexpr bool convControl = std::is_same<L1T, half>::value;
     copy_cbuf_to_bt(dst, src + Offset, convControl, nBurst, lenBurst, sourceGap, dstGap);
 }
+
+#define RT_OPERATION_OP_L1_TO_FIX_QUANT_PRE(fixPipeAddr, fixPipeDtype, fixPipeShape0, fixPipeShape1,             \
+    fixPipeValidShape0, fixPipeValidShape1, fixPipeStride0, fixPipeStride1, l1Addr, l1Dtype, l1Shape0, l1Shape1, \
+    l1ValidShape0, l1ValidShape1, l1Stride0, l1Stride1, l1Offset0, l1Offset1)                                    \
+    DynL1ToFB<l1Dtype, l1Offset1>(fixPipeAddr, l1Addr, fixPipeValidShape1);
 
 template <typename T, unsigned L1Offset>
 TILEOP void DynL1ToFB(__fbuf__ T* dst, __cbuf__ T *src, unsigned nSize){
@@ -334,6 +381,19 @@ TILEOP void DynL1ToFB(__fbuf__ T* dst, __cbuf__ T *src, unsigned nSize){
    uint64_t deqTensorAddr = ((uint64_t)dst >> static_cast<uint64_t>(7)) << 8;
    set_fpc(deqTensorAddr);
 }
+
+#define RT_OPERATION_OP_A_MUL_B(l0cAddr, l0cDtype, l0cShape0, l0cShape1, l0cValidShape0, l0cValidShape1, l0cStride0, \
+    l0cStride1, l0aAddr, l0aDtype, l0aShape0, l0aShape1, l0aValidShape0, l0aValidShape1, l0aStride0, l0aStride1,     \
+    l0bAddr, l0bDtype, l0bShape0, l0bShape1, l0bValidShape0, l0bValidShape1, l0bStride0, l0bStride1, hasbias)        \
+    DynTmad<l0cDtype, l0aDtype, l0bDtype, 0, 0, hasbias>(l0cAddr, l0aAddr, l0bAddr, l0aValidShape0, l0aValidShape1,   \
+       l0bValidShape1, false, 0, l0cValidShape0, l0cValidShape1);
+
+#define RT_OPERATION_OP_A_MULACC_B(l0cAddr, l0cDtype, l0cShape0, l0cShape1, l0cValidShape0, l0cValidShape1,        \
+    l0cStride0, l0cStride1, l0aAddr, l0aDtype, l0aShape0, l0aShape1, l0aValidShape0, l0aValidShape1, l0aStride0,   \
+    l0aStride1, l0bAddr, l0bDtype, l0bShape0, l0bShape1, l0bValidShape0, l0bValidShape1, l0bStride0, l0bStride1,   \
+    hasbias)                                                                                                       \
+    DynTmad<l0cDtype, l0aDtype, l0bDtype, 0, 0, hasbias>(l0cAddr, l0aAddr, l0bAddr, l0aValidShape0, l0aValidShape1, \
+       l0bValidShape1, true, 0, l0cValidShape0, l0cValidShape1);
 
 template <typename Tc, typename Ta, typename Tb, unsigned Offset0, unsigned Offset1, bool HasBias = false>
 TILEOP void DynTmad(__cc__ Tc *c, __ca__ Ta *a, __cb__ Tb *b, uint16_t m, uint16_t k, uint16_t n, bool zero_C, int uf,
@@ -353,6 +413,18 @@ TILEOP void DynTmad(__cc__ Tc *c, __ca__ Ta *a, __cb__ Tb *b, uint16_t m, uint16
         HasBias, zero_C);
     pipe_barrier(PIPE_M);
 }
+
+#define RT_OPERATION_OP_L0C_COPY_OUT(gmAddr, gmDtype, gmShape0, gmShape1, l0cAddr, l0cDtype, l0cShape0, l0cShape1,   \
+    l0cValidShape0, l0cValidShape1, l0cStride0, l0cStride1, gmOffset0, gmOffset1, reluMode, enableGmAcc, scaleValue) \
+    do {                                                                                                             \
+        if (enableGmAcc) {                                                                                           \
+            DynL0CCopyOut<gmDtype, l0cDtype, 1, true, reluMode>(gmAddr, l0cAddr, l0cValidShape0, l0cValidShape1,     \
+                gmShape0, gmShape1, gmOffset0, gmOffset1, gmShape0, gmShape1, 0);                                    \
+        } else {                                                                                                     \
+            DynL0CCopyOut<gmDtype, l0cDtype, 0, true, reluMode>(gmAddr, l0cAddr, l0cValidShape0, l0cValidShape1,     \
+                gmShape0, gmShape1, gmOffset0, gmOffset1, gmShape0, gmShape1, 0, scaleValue);                        \
+        }                                                                                                            \
+    } while (0)
 
 template <typename GMT, typename L0CT, bool enableNZ2ND, uint8_t reluMode>
 TILEOP void DynL0CCopyOut(__gm__ GMT *dst, __cc__ L0CT *src, unsigned oriTShape0, unsigned oriTShape1,
@@ -418,7 +490,7 @@ TILEOP void DynL0CCopyOut(__gm__ GMT *dst, __cc__ L0CT *src, unsigned oriTShape0
     unsigned GmShape0, unsigned GmShape1, unsigned GmOffset0, unsigned GmOffset1, unsigned curH, unsigned curW,
     int uf) {
     static_assert(reluMode == 0, "Relu operation is not supported in GM accumulate mode");
-    SetAtomicAdd<GMT>();
+    SetAtomicAddition<GMT>();
     DynL0CCopyOut<GMT, L0CT, enableNZ2ND, 0>(
         dst, src, oriTShape0, oriTShape1, GmShape0, GmShape1, GmOffset0, GmOffset1, curH, curW, uf);
     if constexpr (isAcc == 1) {
@@ -426,15 +498,21 @@ TILEOP void DynL0CCopyOut(__gm__ GMT *dst, __cc__ L0CT *src, unsigned oriTShape0
     }
 }
 
-template <typename L1T, typename L0CT, uint8_t reluMode>
-TILEOP void DynL0CToL1(__cbuf__ L1T *dst, __cc__ L0CT *src, unsigned oriTShape0, unsigned oriTShape1,
-    unsigned l1Shape0, unsigned l1Shape1, unsigned l1Offset0, unsigned l1Offset1, uint64_t scaleValue = 0) {
-    int64_t c0Size = BLOCK_ALIGN_BYTE / sizeof(L1T);
-    uint16_t mSize = oriTShape0;
-    uint16_t nSize = CeilAlign<uint16_t>(oriTShape1, c0Size);
-    uint32_t dstStrideDstD = l1Shape0;
-    uint16_t srcStride = CeilAlign<uint16_t>(oriTShape0, BLOCK_CUBE_M_N);
+#define RT_OPERATION_OP_L0C_TO_L1(l1Addr, l1Dtype, l1Shape0, l1Shape1, l1ValidShape0, l1ValidShape1, l1Stride0, \
+    l1Stride1, l0cAddr, l0cDtype, l0cShape0, l0cShape1, l0cValidShape0, l0cValidShape1, l0cStride0, l0cStride1, \
+    offset0, offset1, reluMode, scaleValue)                                                        \
+    DynL0CToL1<l1Dtype, l0cDtype, reluMode>(                                                                    \
+        l1Addr, l0cAddr, l0cValidShape0, l0cValidShape1, l1ValidShape0, l1ValidShape1, offset0, offset1, scaleValue);
 
+template <typename L1T, typename L0CT, uint8_t reluMode>
+TILEOP void DynL0CToL1(__cbuf__ L1T *dst, __cc__ L0CT *src, unsigned shape0, unsigned shape1, unsigned l1Shape0,
+    unsigned l1Shape1, unsigned l1Offset0, unsigned l1Offset1, unsigned l0cShape0, unsigned l0cShape1,
+    unsigned l0cOffset0, unsigned l0cOffset1, uint64_t scaleValue = 0) {
+    int64_t c0Size = BLOCK_ALIGN_BYTE / sizeof(L1T);
+    uint16_t mSize = CeilAlign<uint16_t>(shape0, BLOCK_CUBE_M_N);
+    uint16_t nSize = CeilAlign<uint16_t>(shape1, c0Size);
+    uint32_t dstStrideDstD = CeilAlign<uint16_t>(l1Shape0, BLOCK_CUBE_M_N);;
+    uint16_t srcStride = CeilAlign<uint16_t>(l0cShape0, BLOCK_CUBE_M_N);
     uint8_t unitFlagMode = 0;
     uint64_t quantPre = NoQuant;
     uint8_t reluPre = 0;
@@ -447,19 +525,19 @@ TILEOP void DynL0CToL1(__cbuf__ L1T *dst, __cc__ L0CT *src, unsigned oriTShape0,
             quantPre = QuantMode_t::NoQuant;
         }
     } else if constexpr (std::is_same<L0CT, int32_t>::value && std::is_same<L1T, half>::value) {
-       if (scaleValue == 0) {
-           quantPre = QuantMode_t::VDEQF16;
-       }else {
-           set_quant_pre(scaleValue);
-           quantPre = QuantMode_t::DEQF16;
-       }
+        if (scaleValue == 0) {
+            quantPre = QuantMode_t::VDEQF16;
+        }else {
+            set_quant_pre(scaleValue);
+            quantPre = QuantMode_t::DEQF16;
+        }
     }
-
     bool channelSplit = std::is_same<L1T, float>::value;
     bool nZ2NDEN = false;
     int64_t l1Offset = l1Offset1 * l1Shape0 + l1Offset0 * c0Size;
-    copy_matrix_cc_to_cbuf((__cbuf__ L1T *)(dst + l1Offset), (__cc__ L0CT *)src, 0, nSize, mSize, dstStrideDstD,
-        srcStride, unitFlagMode, quantPre, reluMode, channelSplit, nZ2NDEN);
+    int64_t l0cOffset = l0cOffset1 * l0cShape0 + l0cOffset0 * c0Size;
+    copy_matrix_cc_to_cbuf((__cbuf__ L1T *)(dst + l1Offset), (__cc__ L0CT *)(src + l0cOffset), 0, nSize, mSize,
+        dstStrideDstD, srcStride, unitFlagMode, quantPre, reluMode, channelSplit, nZ2NDEN);
 }
 
 // Internal: Reserved for custom scenarios.
@@ -738,7 +816,7 @@ template <typename GMT, typename L0CT, unsigned TShape0, unsigned TShape1, unsig
     int isAcc>
 TILEOP void DynL0CCopyOut(__gm__ GMT *dst, __cc__ L0CT *src, unsigned GmShape0, unsigned GmShape1, unsigned GmOffset0,
     unsigned GmOffset1, int uf) {
-    SetAtomicAdd<GMT>();
+    SetAtomicAddition<GMT>();
     DynL0CCopyOut<GMT, L0CT, TShape0, TShape1, oriTShape0, oriTShape1>(
         dst, src, GmShape0, GmShape1, GmOffset0, GmOffset1, uf);
     if constexpr (isAcc == 1) {

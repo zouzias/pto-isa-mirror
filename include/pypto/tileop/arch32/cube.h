@@ -274,39 +274,10 @@ TILEOP void L0CCopyOut(__gm__ GMT *dst, __cc__ L0CT *src, int uf) { // NZ2ND
         UnitFlagMode, QuantPRE, ReLUPRE, channelSplit, NZ2ND_EN);
 }
 
-template <bool b>
-struct BoolInst {
-    using Type = BoolInst<b>;
-    static constexpr bool value = b;
-};
-using TrueType = BoolInst<true>;
-using FalseType = BoolInst<false>;
-template <typename T, typename U>
-struct IsSameType : public FalseType {};
-template <typename T>
-struct IsSameType<T, T> : public TrueType {};
-template <typename T>
-TILEOP void SetAtomicAdd() {
-    if constexpr (IsSameType<T, float>::value) {
-        set_atomic_f32();
-    } else if constexpr (IsSameType<T, half>::value) {
-        set_atomic_f16();
-    } else if constexpr (IsSameType<T, int16_t>::value) {
-        set_atomic_s16();
-    } else if constexpr (IsSameType<T, int32_t>::value) {
-        set_atomic_s32();
-    } else if constexpr (IsSameType<T, int8_t>::value) {
-        set_atomic_s8();
-    } else if constexpr (IsSameType<T, bfloat16_t>::value) {
-        set_atomic_bf16();
-    }
-    set_atomic_add();
-}
-
 template <typename GMT, typename L0CT, unsigned TShape0, unsigned TShape1, unsigned GmShape0, unsigned GmShape1,
     unsigned GmOffset0, unsigned GmOffset1, unsigned oriTShape0, unsigned oriTShape1, int isAcc>
 TILEOP void L0CCopyOut(__gm__ GMT *dst, __cc__ L0CT *src, int uf) {
-    SetAtomicAdd<GMT>();
+    SetAtomicAddition<GMT>();
     L0CCopyOut<GMT, L0CT, TShape0, TShape1, GmShape0, GmShape1, GmOffset0, GmOffset1, oriTShape0, oriTShape1>(
         dst, src, uf);
     if constexpr (isAcc == 1) {

@@ -18,6 +18,12 @@
 
 #include "common_type.h"
 
+template <typename... Indexs>
+using Offsets = Std::tuple<Indexs...>;
+
+using TileOffset = Offsets<size_t, size_t, size_t>;
+using TileOffset4Dim = Offsets<size_t, size_t, size_t, size_t>;
+
 template <typename T, typename LA, Hardware FMT = Hardware::UB>
 struct TileTensor {
     using Type = T;
@@ -27,17 +33,26 @@ struct TileTensor {
     using TileShape = typename LA::TileShape;
     static constexpr Hardware FORMAT = FMT;
 
+    __aicore__ inline TileTensor() {}
     __aicore__ inline TileTensor(uint64_t addr, LA layout) : addr_(addr), layout_(layout) {}
     __aicore__ inline TileTensor(uint64_t addr, Shape shape) : addr_(addr), layout_(LA(shape)) {}
 
     __aicore__ inline TileTensor(uint64_t addr) : addr_(addr) {}
     __aicore__ inline uint64_t GetAddr() { return addr_; }
+    __aicore__ inline void SetAddr(uint64_t addr) { addr_ = addr; }
     __aicore__ inline LA GetLayout() { return layout_; }
     __aicore__ inline const LA GetLayout() const { return layout_; }
     __aicore__ inline static constexpr bool IsStaticLayout() { return LayoutType::IsStaticLayout(); }
     __aicore__ inline constexpr Hardware GetPhyType() { return FORMAT; }
     __aicore__ inline Shape GetShape() { return layout_.GetShape(); }
     __aicore__ inline Stride GetStride() { return layout_.GetStride(); }
+
+    __aicore__ inline uint64_t GetLinearAddr(const TileOffset &offsets = TileOffset(0, 0, 0)) {
+        size_t offset = Std::get<DIM_1ST>(offsets) * layout_.template GetStrideDim<DIM_1ST, MAX_DIMS>();
+        offset += Std::get<DIM_2ND>(offsets) * layout_.template GetStrideDim<DIM_2ND, MAX_DIMS>();
+        offset += Std::get<DIM_3RD>(offsets) * layout_.template GetStrideDim<DIM_3RD, MAX_DIMS>();
+        return addr_ + offset * sizeof(Type);
+    }
 
 private:
     uint64_t addr_;
@@ -53,6 +68,7 @@ struct TileTensor<T, LA, Hardware::GM> {
     using TileShape = typename LA::TileShape;
     static constexpr Hardware FORMAT = Hardware::GM;
 
+    __aicore__ inline TileTensor() {}
     __aicore__ inline TileTensor(T *addr, LA layout) : addr_(addr), layout_(layout) {}
     __aicore__ inline TileTensor(T *addr, Shape shape) : addr_(addr), layout_(LA(shape)) {}
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2025 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025-2026 Huawei Technologies Co., Ltd.
  * This program is free software, you can redistribute it and/or modify it under the terms and conditions of
  * CANN Open Software License Agreement Version 2.0 (the "License").
  * Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -15,6 +15,16 @@
 
 #ifndef DISTRIBUTED_COMMON_H
 #define DISTRIBUTED_COMMON_H
+
+#include "comm_context.h"
+#include "../tileop_common.h"
+
+#define PIPE_SYNC_EVENT(from, to, eventId) \
+    do { \
+        set_flag((from), (to), (eventId)); \
+        wait_flag((from), (to), (eventId)); \
+    } while (0)
+
 namespace TileOp::Distributed {
 enum class AtomicType {
     SET,
@@ -77,8 +87,8 @@ constexpr TILEOP T AlignUp(const T value, const T alignment)
 TILEOP void DevWinLog(__gm__ int64_t *hcclContext, __ubuf__ uint8_t *tmpBuf, size_t len, size_t offset = 0)
 {
     pipe_barrier(PIPE_ALL);
-    __gm__ HcclCombinOpParam *winContext = (__gm__ HcclCombinOpParam *)(hcclContext[0]);
-    GM_ADDR winBaseAddr = (GM_ADDR)(winContext->windowsOut[winContext->rankId]);
+    __gm__ CommContext *winContext = (__gm__ CommContext *)(hcclContext[0]);
+    GM_ADDR winBaseAddr = (GM_ADDR)(winContext->winAddr[winContext->debugIndex + winContext->rankId]);
     GM_ADDR dstWinGMAddr = winBaseAddr + offset;
     int32_t lenBurst = AlignUp<int32_t>(len, 32) / 32;
     set_flag(PIPE_S, PIPE_MTE3, EVENT_ID0);
@@ -92,8 +102,8 @@ TILEOP void DevWinLog(__gm__ int64_t *hcclContext, __ubuf__ uint8_t *tmpBuf, siz
 TILEOP void DevWinLog(__gm__ int64_t *hcclContext, __gm__ uint8_t *srcGm, __ubuf__ uint8_t *tmpBuf, size_t len, size_t offset = 0)
 {
     pipe_barrier(PIPE_ALL);
-    __gm__ HcclCombinOpParam *winContext = (__gm__ HcclCombinOpParam *)(hcclContext[0]);
-    GM_ADDR winBaseAddr = (GM_ADDR)(winContext->windowsOut[winContext->rankId]);
+    __gm__ CommContext *winContext = (__gm__ CommContext *)(hcclContext[0]);
+    GM_ADDR winBaseAddr = (GM_ADDR)(winContext->winAddr[winContext->debugIndex + winContext->rankId]);
     GM_ADDR dstWinGMAddr = winBaseAddr + offset;
     int32_t lenBurst = AlignUp<int32_t>(len, 32) / 32;
     set_flag(PIPE_S, PIPE_MTE2, EVENT_ID0);
@@ -148,38 +158,47 @@ TILEOP uint64_t GetVirtualAddrBist(uint64_t val, uint64_t start, uint64_t end)
     return (((val) >> (start)) & ((1UL << ((end) - (start) + 1UL)) - 1UL));
 }
 
-TILEOP uint64_t GetVirtaulAddrOffset(uint64_t val)
+TILEOP uint64_t GetVirtualAddrOffset(uint64_t val)
 {
     constexpr uint64_t offsetStart = 0UL; 
-    constexpr uint64_t offsetEnd = 57UL; 
+    constexpr uint64_t offsetEnd = 53UL; 
     return GetVirtualAddrBist(val, offsetStart, offsetEnd);
 }
 
-TILEOP uint64_t GetVirtaulAddrGroupIndex(uint64_t val)
+TILEOP uint64_t GetVirtualAddrGroupIndex(uint64_t val)
 {
-    constexpr uint64_t groupIndexStart = 58UL; 
-    constexpr uint64_t groupIndexEnd = 59UL; 
+    constexpr uint64_t groupIndexStart = 54UL; 
+    constexpr uint64_t groupIndexEnd = 55UL; 
     return GetVirtualAddrBist(val, groupIndexStart, groupIndexEnd);
 }
 
-TILEOP uint64_t GetVirtaulAddrMemType(uint64_t val)
+TILEOP uint64_t GetVirtualAddrMemType(uint64_t val)
 {
-    constexpr uint64_t memTypeStart = 60UL; 
-    constexpr uint64_t memTypeEnd = 61UL; 
+    constexpr uint64_t memTypeStart = 56UL; 
+    constexpr uint64_t memTypeEnd = 57UL; 
     return GetVirtualAddrBist(val, memTypeStart, memTypeEnd);
 }
 
 template<typename T>
 TILEOP __gm__ T* MapVirtualAddr(__gm__ int64_t *hcclContext, __gm__ T* vAddr, uint32_t dstRankId)
 {
-    auto groupIndex = GetVirtaulAddrGroupIndex((uint64_t)vAddr);
-    auto offset = GetVirtaulAddrOffset((uint64_t)vAddr);
-    auto memType = GetVirtaulAddrMemType((uint64_t)vAddr);
+    auto groupIndex = GetVirtualAddrGroupIndex((uint64_t)vAddr);
+    auto offset = GetVirtualAddrOffset((uint64_t)vAddr);
+    auto memType = GetVirtualAddrMemType((uint64_t)vAddr);
+    __gm__ TileOp::CommContext* commCtxParam = (__gm__ TileOp::CommContext*)hcclContext[groupIndex];
     if (memType == 0) {
-        return (__gm__ T*)(((__gm__ TileOp::HcclCombinOpParam *)hcclContext[groupIndex])->windowsIn[dstRankId] + offset);
+        return (__gm__ T*)(commCtxParam->winAddr[dstRankId] + offset);
     } else {
-        return (__gm__ T*)(((__gm__ TileOp::HcclCombinOpParam *)hcclContext[groupIndex])->windowsExp[dstRankId] + offset);
+        return (__gm__ T*)(commCtxParam->winAddr[commCtxParam->statusIndex + dstRankId] + offset);
     }
+}
+
+template<typename T>
+TILEOP __gm__ T* MapAndOffsetShmem(__gm__ int64_t* hcclContext, __gm__ T* shmemBase, uint32_t rankOffset,
+    uint32_t offset1, uint32_t offset2, uint32_t offset3, uint32_t rawShape2, uint32_t rawShape3)
+{
+    uint32_t linearOffset = TileOp::CalcLinearOffset(rawShape2, rawShape3, offset1, offset2, offset3);
+    return MapVirtualAddr<T>(hcclContext, shmemBase, rankOffset) + linearOffset;
 }
 
 /* UB 清 0 */
@@ -329,7 +348,7 @@ TILEOP void WaitFlagV2(__gm__ T *out, __ubuf__ uint32_t *src0, __ubuf__ uint32_t
 TILEOP void ClearFlagV2(__ubuf__ int32_t *flag, uint32_t offset, uint32_t repeat,
     __gm__ int64_t *hcclContext, DispatchInfo &dispatchInfo, __gm__ int32_t *shmemFlagBaseAddr)
 {
-    __gm__ HcclCombinOpParam *winContext = (__gm__ HcclCombinOpParam *)(hcclContext[dispatchInfo.groupIndex]);
+    __gm__ CommContext *winContext = (__gm__ CommContext *)(hcclContext[dispatchInfo.groupIndex]);
     uint32_t localUsrRankId = winContext->rankId;
     GM_ADDR winFlagBaseAddr = (GM_ADDR)MapVirtualAddr<int32_t>(hcclContext, shmemFlagBaseAddr, localUsrRankId); // flag 在 win 区的基地址
     GM_ADDR winFlagReadStartAddr = winFlagBaseAddr + offset;
@@ -359,7 +378,7 @@ template<typename T>
 TILEOP void ReadFlagV2(__ubuf__ uint32_t *flag, uint32_t offset, uint32_t repeat,
     __gm__ int64_t *hcclContext, __gm__ T* shmemFlagBaseAddr, DispatchInfo &dispatchInfo)
 {
-    __gm__ HcclCombinOpParam *winContext = (__gm__ HcclCombinOpParam *)(hcclContext[dispatchInfo.groupIndex]);
+    __gm__ CommContext *winContext = (__gm__ CommContext *)(hcclContext[dispatchInfo.groupIndex]);
     uint32_t localUsrRankId = winContext->rankId;
     __gm__ T* winFlagBaseAddr = MapVirtualAddr<T>(hcclContext, shmemFlagBaseAddr, localUsrRankId); // flag 在 win 区的基地址
     GM_ADDR winFlagReadStartAddr = (GM_ADDR) winFlagBaseAddr + static_cast<uint32_t>(offset);
