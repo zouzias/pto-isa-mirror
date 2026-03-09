@@ -214,6 +214,8 @@ set(ALL_TESTCASES
     t_dhrystone
     engram
     tpack
+    tqk
+    tpv
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
