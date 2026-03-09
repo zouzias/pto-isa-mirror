@@ -14,6 +14,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 
 namespace pto {
+template <typename T>
+PTO_INTERNAL uint32_t GetByteSize(const uint32_t value)
+{
+    return sizeof(T) * value;
+}
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantMode()
 {
