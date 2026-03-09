@@ -161,11 +161,11 @@ __tf__ AICORE void TMovCcToCb(typename DstTileData::TileDType __out__ dst, typen
         constexpr uint64_t channelPara = static_cast<uint64_t>(1) << 48;
         set_channel_para(channelPara);
     }
-
+    auto srcStride = (validRow + BLOCK_LEN - 1) / BLOCK_LEN * BLOCK_LEN;
     __cbuf__ dstType *dstAddr = (__cbuf__ dstType *)__cce_get_tile_ptr(dst);
     __cc__ srcType *srcData = (__cc__ srcType *)(src);
 
-    copy_matrix_cc_to_cbuf(dstAddr, srcData, 0, validCol, validRow, dstStride, SrcTileData::Rows, 0, 0, 0, QuantPre,
+    copy_matrix_cc_to_cbuf(dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, 0, 0, 0, QuantPre,
                            reluMode, channelSplitEnable, enableNz2Nd, 0, 0, false, false, 0, false, false, false, false,
                            false, enableNz2Dn);
 }
@@ -213,10 +213,10 @@ __tf__ AICORE void TMovCcToUb(typename DstTileData::TileDType __out__ dst, typen
         constexpr uint64_t channelPara = static_cast<uint64_t>(1) << 48;
         set_channel_para(channelPara);
     }
-
+    auto srcStride = (validRow + BLOCK_LEN - 1) / BLOCK_LEN * BLOCK_LEN;
     __ubuf__ dstType *dstAddr = (__ubuf__ dstType *)__cce_get_tile_ptr(dst);
     __cc__ srcType *srcData = (__cc__ srcType *)(src);
-    copy_matrix_cc_to_ub(dstAddr, srcData, 0, validCol, validRow, dstStride, SrcTileData::Rows, dualDstCtl, subBlockId,
+    copy_matrix_cc_to_ub(dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, dualDstCtl, subBlockId,
                          0, 0, quantPre, reluMode, channelSplitEnable, enableNz2Nd, 0, 0, false, false, 0, false, false,
                          false, false, false, enableNz2Dn);
 }
