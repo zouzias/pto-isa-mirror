@@ -186,8 +186,8 @@ template <typename T, typename U, uint32_t blockDim, uint32_t m, uint32_t k, uin
           typename RightTile>
 
 AICORE inline void Compute(__gm__ U *currentSrc0, __gm__ U *currentSrc1, __gm__ T *&currentDst,
-                           TileMatAData fmapMat[BUFFER_NUM], TileMatBData weightMat[BUFFER_NUM],
-                           LeftTile aTile[BUFFER_NUM], RightTile bTile[BUFFER_NUM])
+                           TileMatAData (&fmapMat)[BUFFER_NUM], TileMatBData (&weightMat)[BUFFER_NUM],
+                           LeftTile (&aTile)[BUFFER_NUM], RightTile (&bTile)[BUFFER_NUM])
 {
     constexpr uint32_t tailValidM = singleCoreM % baseM;
     constexpr uint32_t mLoop = CeilDivision(singleCoreM, baseM);

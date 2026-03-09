@@ -1036,7 +1036,7 @@ public:
         fmapW_ = fmapW;
     }
     PTO_INTERNAL uint8_t GetPadList(uint8_t index) const
-    { // PTO_Assert
+    {
         return padList_[index];
     }
     PTO_INTERNAL void SetPadList(uint8_t index, uint8_t value)
@@ -1049,8 +1049,8 @@ public:
     }
     PTO_INTERNAL void SetPadListArray(const uint8_t values[4])
     {
-        // PTO_Assert
-        for (int i = 0; i < 4; i++) {
+        constexpr uint8_t padCount = 4;
+        for (int i = 0; i < padCount; i++) {
             padList_[i] = values[i];
         }
     }
