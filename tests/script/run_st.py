@@ -139,6 +139,18 @@ def run_gen_data(golden_path):
     finally:
         os.chdir(original_dir)
 
+RANK_LEVELS = [2, 4, 8]
+
+def get_gtest_filter_for_nranks(nranks):
+    """Build GTEST_FILTER based on test naming convention (*_NRanks / *_Nranks)."""
+    if nranks == 2:
+        return "*-*4Ranks*:*4ranks*:*8Ranks*:*8ranks*"
+    elif nranks == 4:
+        return "*4Ranks*:*4ranks*"
+    elif nranks == 8:
+        return "*8Ranks*:*8ranks*"
+    return "*"
+
 def find_mpirun():
     """Find mpirun executable, checking MPI_HOME and common paths."""
     mpi_home = os.environ.get("MPI_HOME", "")
@@ -212,7 +224,7 @@ def main():
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
     parser.add_argument("-d", "--debug-enable", action='store_true', help="开启debug检查")
     parser.add_argument("-w", "--without-build", action='store_true', help="关闭编译（需要预先编译）")
-    parser.add_argument("-n", "--nranks", type=int, default=2, help="comm测试的MPI rank数量（默认2）")
+    parser.add_argument("-n", "--nranks", type=int, default=8, help="comm测试的最大MPI rank数量（默认8，自动按2/4/8分轮执行）")
 
     args = parser.parse_args()
     default_soc_version = "Ascend910B1"
@@ -268,8 +280,34 @@ def main():
         run_gen_data(golden_path)
 
         # 执行二进制文件
-        run_binary(testcase, args.run_mode, default_cases,
-                   is_comm=is_comm, nranks=args.nranks)
+        if is_comm and default_cases == "all":
+            fail_count = 0
+            total_runs = 0
+            for nranks in RANK_LEVELS:
+                if nranks > args.nranks:
+                    continue
+                gtest_filter = get_gtest_filter_for_nranks(nranks)
+                print(f"============================================================")
+                print(f"[INFO] Running comm test: {testcase}  (nranks={nranks}, GTEST_FILTER={gtest_filter})")
+                print(f"============================================================")
+                os.environ["GTEST_FILTER"] = gtest_filter
+                total_runs += 1
+                try:
+                    run_binary(testcase, args.run_mode, default_cases,
+                               is_comm=True, nranks=nranks)
+                except Exception as e:
+                    print(f"[ERROR] Testcase failed: {testcase} (nranks={nranks})")
+                    fail_count += 1
+            os.environ.pop("GTEST_FILTER", None)
+            print(f"============================================================")
+            if fail_count == 0:
+                print(f"[INFO] All {total_runs} comm ST run(s) passed.")
+            else:
+                print(f"[ERROR] {fail_count}/{total_runs} run(s) failed.")
+                sys.exit(1)
+        else:
+            run_binary(testcase, args.run_mode, default_cases,
+                       is_comm=is_comm, nranks=args.nranks)
 
     except Exception as e:
         print(f"run failed: {str(e)}", file=sys.stderr)
