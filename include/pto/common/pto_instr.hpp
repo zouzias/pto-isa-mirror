@@ -878,6 +878,23 @@ PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEv
     return {};
 }
 
+template <typename TileDataD, typename TileDataS, typename TmpTileData, typename... WaitEvents>
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode,
+                          WaitEvents &... events)
+{
+    TSYNC(events...);
+    TCVT_IMPL(dst, src, tmp, mode, satMode);
+    return {};
+}
+
+template <typename TileDataD, typename TileDataS, typename TmpTileData, typename... WaitEvents>
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TCVT_IMPL(dst, src, tmp, mode);
+    return {};
+}
+
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
 PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &... events)
 {

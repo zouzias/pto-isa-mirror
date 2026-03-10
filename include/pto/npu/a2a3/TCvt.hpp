@@ -38,15 +38,19 @@ See LICENSE in the root of the software repository for the full text of the Lice
  *
  * 3. GenCastCall Dispatcher (lines ~450-530)
  *    - Compile-time type routing to the correct GenCastCall* helper
+ *    - Overload with tmpPtr forwards scratch buffer to NonSatTorch paths
  *
  * 4. TCvtHead (lines ~540-600)
  *    - Processes aligned repeat blocks for main data region
+ *    - Overload with tmpPtr passes scratch buffer through to GenCastCall
  *
  * 5. TCvt Kernel (lines ~610-700)
  *    - Handles aligned region and remainder with vector masking
+ *    - Overload with TmpTileData uses user-supplied tile instead of TMP_UB_OFFSET
  *
  * 6. TCVT_IMPL (lines ~710-end)
  *    - High-level entry point computing repeat configuration
+ *    - Overloads with TmpTileData mirror TSort32's with-tmp interface
  *
  * QUICK FIND: Search for the conversion function name (e.g., "GenCastCallFp32ToFp16")
  * or the dispatcher "GenCastCall" to locate the relevant section.
@@ -465,12 +469,12 @@ template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD::DType *dst,
                                                     __ubuf__ typename TileDataS::DType *src, uint8_t repeatNum,
                                                     RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride,
-                                                    uint16_t dstRepeatStride, uint16_t srcRepeatStride)
+                                                    uint16_t dstRepeatStride, uint16_t srcRepeatStride,
+                                                    __ubuf__ int32_t *tempInt32Buf)
 {
     // One allocation covers all phases via reuse:
     //   Phase A (steps 1-2): tempInt32Buf [+0..+4095] holds int32 data
     //   Phase B (steps 3-6): tempInt32Buf is reused at [+0..+2047] for mask then fp16 output
-    __ubuf__ int32_t *tempInt32Buf = (__ubuf__ int32_t *)get_imm(TMP_UB_OFFSET);
     __ubuf__ int16_t *tempAndBuf = (__ubuf__ int16_t *)((__ubuf__ uint8_t *)tempInt32Buf + 4096);
     // After tempInt32Buf is consumed (post step-2 pipe_barrier), its first half is reused:
     __ubuf__ int16_t *tempMaskBuf = (__ubuf__ int16_t *)tempInt32Buf; // mask at [+0..+2047]
@@ -809,7 +813,8 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
         if (!isSatOn) {
             // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
             GenCastCallFp16ToInt8_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride,
-                                                                    srcBlockStride, dstRepeatStride, srcRepeatStride);
+                                                                    srcBlockStride, dstRepeatStride, srcRepeatStride,
+                                                                    (__ubuf__ int32_t *)get_imm(TMP_UB_OFFSET));
         } else {
             GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                         dstRepeatStride, srcRepeatStride);
@@ -842,6 +847,36 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
     } else {
         GenCastCallSpecialCases<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                       dstRepeatStride, srcRepeatStride);
+    }
+}
+
+// GenCastCall overload with explicit temporary buffer pointer.
+// Mirrors the no-tmp GenCastCall but forwards tmpPtr to NonSatTorch paths
+// instead of using the fixed TMP_UB_OFFSET global scratch area.
+template <typename TileDataD, typename TileDataS>
+AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typename TileDataS::DType *src,
+                        uint8_t repeatNum, RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride,
+                        uint16_t dstRepeatStride, uint16_t srcRepeatStride, __ubuf__ int32_t *tmpPtr)
+{
+    if constexpr (std::is_same<typename TileDataD::DType, int8_t>::value &&
+                  std::is_same<typename TileDataS::DType, half>::value) { // half to int8
+        bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
+#if EDGE_CASE_ALIGN_ENABLE
+        if (!isSatOn) {
+            GenCastCallFp16ToInt8_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride,
+                                                                    srcBlockStride, dstRepeatStride, srcRepeatStride,
+                                                                    tmpPtr);
+        } else {
+            GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
+                                                        dstRepeatStride, srcRepeatStride);
+        }
+#else
+        GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
+                                                    dstRepeatStride, srcRepeatStride);
+#endif
+    } else {
+        GenCastCall<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
+                                          dstRepeatStride, srcRepeatStride);
     }
 }
 
@@ -880,6 +915,32 @@ PTO_INST void TCvtHead(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ type
                                               srcPtr + i * SS + numLoop * elementsPerRepeat * REPEAT_MAX,
                                               (uint8_t)remainAfterLoop, mode, 1, 1, (uint16_t)dstRepeatStride,
                                               (uint16_t)srcRepeatStride);
+        }
+    }
+}
+
+// TCvtHead overload with explicit temporary buffer pointer (forwarded to GenCastCall with tmp).
+template <typename TileDataD, typename TileDataS, unsigned SS, unsigned DS>
+PTO_INST void TCvtHead(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ typename TileDataS::DType *srcPtr,
+                       RoundMode mode, unsigned numRepeatPerLine, unsigned validRow, unsigned elementsPerRepeat,
+                       unsigned dstRepeatStride, unsigned srcRepeatStride, __ubuf__ int32_t *tmpPtr)
+{
+    unsigned numLoop = numRepeatPerLine / REPEAT_MAX;
+    unsigned remainAfterLoop = numRepeatPerLine % REPEAT_MAX;
+    for (uint32_t i = 0; i < validRow; i++) {
+        if (numLoop > 0) {
+            for (uint32_t j = 0; j < numLoop; j++) {
+                GenCastCall<TileDataD, TileDataS>(dstPtr + i * DS + j * elementsPerRepeat * REPEAT_MAX,
+                                                  srcPtr + i * SS + j * elementsPerRepeat * REPEAT_MAX,
+                                                  (uint8_t)REPEAT_MAX, mode, 1, 1, (uint16_t)dstRepeatStride,
+                                                  (uint16_t)srcRepeatStride, tmpPtr);
+            }
+        }
+        if (remainAfterLoop > 0) {
+            GenCastCall<TileDataD, TileDataS>(dstPtr + i * DS + numLoop * elementsPerRepeat * REPEAT_MAX,
+                                              srcPtr + i * SS + numLoop * elementsPerRepeat * REPEAT_MAX,
+                                              (uint8_t)remainAfterLoop, mode, 1, 1, (uint16_t)dstRepeatStride,
+                                              (uint16_t)srcRepeatStride, tmpPtr);
         }
     }
 }
@@ -967,6 +1028,71 @@ __tf__ AICORE void TCvt(typename TileDataD::TileDType __out__ dst, typename Tile
     }
 }
 
+// TCvt overload with explicit TmpTileData parameter.
+// Mirrors TSort32Impl's with-tmp overload: passes a user-supplied scratch tile
+// through to GenCastCallFp16ToInt8_NonSatTorch instead of using TMP_UB_OFFSET.
+template <typename TileDataD, typename TileDataS, typename TmpTileData, unsigned SS, unsigned DS>
+__tf__ AICORE void TCvt(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src,
+                        typename TmpTileData::TileDType __in__ tmp,
+                        RoundMode mode, SaturationMode satMode, unsigned numRepeatPerLine, unsigned numRemainPerLine,
+                        unsigned validRow, unsigned elementsPerRepeat, unsigned dstRepeatStride,
+                        unsigned srcRepeatStride)
+{
+    // Save the original saturation mode state
+    uint64_t originalCtrl = get_ctrl();
+    bool originalSatMode = (originalCtrl & (1ULL << SAT_MODE_BIT)) == 0;
+
+    // Apply saturation mode
+    if (satMode == SaturationMode::OFF) {
+        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
+    } else {
+        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation (default)
+    }
+
+    // Get buffer pointers and block size
+    __ubuf__ typename TileDataD::DType *dstPtr = (__ubuf__ typename TileDataD::DType *)__cce_get_tile_ptr(dst);
+    __ubuf__ typename TileDataS::DType *srcPtr = (__ubuf__ typename TileDataS::DType *)__cce_get_tile_ptr(src);
+    __ubuf__ int32_t *tmpPtr = (__ubuf__ int32_t *)__cce_get_tile_ptr(tmp);
+    constexpr unsigned dstNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataD::DType);
+    constexpr unsigned srcNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataS::DType);
+
+    // Process main aligned region with complete repeat units
+    if (numRepeatPerLine > 0) {
+        TCvtHead<TileDataD, TileDataS, SS, DS>(dstPtr, srcPtr, mode, numRepeatPerLine, validRow, elementsPerRepeat,
+                                               dstRepeatStride, srcRepeatStride, tmpPtr);
+    }
+    // Advance pointers to unaligned remainder region
+    dstPtr += numRepeatPerLine * elementsPerRepeat;
+    srcPtr += numRepeatPerLine * elementsPerRepeat;
+
+    // Process remainder region with partial repeats (requires vector masking)
+    if (numRemainPerLine > 0) {
+        unsigned numLoop = validRow / REPEAT_MAX;
+        unsigned remainAfterLoop = validRow % REPEAT_MAX;
+        SetContinuousMask(numRemainPerLine);
+        if (numLoop > 0) {
+            for (uint32_t j = 0; j < numLoop; j++) {
+                GenCastCall<TileDataD, TileDataS>(dstPtr + j * DS * REPEAT_MAX, srcPtr + j * SS * REPEAT_MAX,
+                                                  (uint8_t)REPEAT_MAX, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
+                                                  (uint16_t)SS / srcNElemPerBlock, tmpPtr);
+            }
+        }
+        if (remainAfterLoop > 0) {
+            GenCastCall<TileDataD, TileDataS>(dstPtr + numLoop * DS * REPEAT_MAX, srcPtr + numLoop * SS * REPEAT_MAX,
+                                              (uint8_t)remainAfterLoop, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
+                                              (uint16_t)SS / srcNElemPerBlock, tmpPtr);
+        }
+        set_vector_mask(-1, -1);
+    }
+
+    // Restore original saturation mode to avoid affecting subsequent instructions
+    if (originalSatMode) {
+        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
+    } else {
+        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
+    }
+}
+
 // ============================================================================
 // High-Level Tile Conversion Interface
 // ============================================================================
@@ -1020,6 +1146,62 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
         TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, SaturationMode::ON, numRepeatPerLine,
                                            numRemainPerLine, validRow, elementsPerRepeat, dstRepeatStride,
                                            srcRepeatStride);
+    }
+}
+
+// TCVT_IMPL overload with explicit TmpTileData and explicit satMode.
+// Mirrors TSORT32_IMPL's with-tmp overload: uses user-supplied scratch tile
+// instead of TMP_UB_OFFSET for conversions that need temporary storage.
+template <typename TileDataD, typename TileDataS, typename TmpTileData>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode)
+{
+    uint64_t repeatWidth =
+        static_cast<uint64_t>(max(sizeof(typename TileDataD::DType), sizeof(typename TileDataS::DType)));
+    unsigned dstRepeatStride =
+        repeatWidth == sizeof(typename TileDataD::DType) ?
+            BLOCK_MAX_PER_REPEAT :
+            (BLOCK_MAX_PER_REPEAT / sizeof(typename TileDataS::DType) * sizeof(typename TileDataD::DType));
+    unsigned srcRepeatStride =
+        repeatWidth == sizeof(typename TileDataS::DType) ?
+            BLOCK_MAX_PER_REPEAT :
+            (BLOCK_MAX_PER_REPEAT / sizeof(typename TileDataD::DType) * sizeof(typename TileDataS::DType));
+    unsigned elementsPerRepeat = REPEAT_BYTE / repeatWidth;
+    unsigned numRepeatPerLine = dst.GetValidCol() / elementsPerRepeat;
+    unsigned numRemainPerLine = dst.GetValidCol() % elementsPerRepeat;
+    constexpr unsigned SS = TileDataS::RowStride;
+    constexpr unsigned DS = TileDataD::RowStride;
+    unsigned validRow = dst.GetValidRow();
+    TCvt<TileDataD, TileDataS, TmpTileData, SS, DS>(dst.data(), src.data(), tmp.data(), mode, satMode,
+                                                    numRepeatPerLine, numRemainPerLine, validRow, elementsPerRepeat,
+                                                    dstRepeatStride, srcRepeatStride);
+}
+
+// TCVT_IMPL overload with explicit TmpTileData and type-specific default satMode.
+template <typename TileDataD, typename TileDataS, typename TmpTileData>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode)
+{
+    if constexpr (
+        // FP16→UINT8
+        (std::is_same<typename TileDataD::DType, uint8_t>::value &&
+         std::is_same<typename TileDataS::DType, half>::value) ||
+        // FP16→INT8
+        (std::is_same<typename TileDataD::DType, int8_t>::value &&
+         std::is_same<typename TileDataS::DType, half>::value) ||
+        // FP32→INT16
+        (std::is_same<typename TileDataD::DType, int16_t>::value &&
+         std::is_same<typename TileDataS::DType, float>::value) ||
+        // FP16→INT16
+        (std::is_same<typename TileDataD::DType, int16_t>::value &&
+         std::is_same<typename TileDataS::DType, half>::value) ||
+        // INT64→INT32
+        (std::is_same<typename TileDataD::DType, int32_t>::value &&
+         std::is_same<typename TileDataS::DType, int64_t>::value) ||
+        // INT32→INT16
+        (std::is_same<typename TileDataD::DType, int16_t>::value &&
+         std::is_same<typename TileDataS::DType, int32_t>::value)) {
+        TCVT_IMPL(dst, src, tmp, mode, SaturationMode::OFF);
+    } else {
+        TCVT_IMPL(dst, src, tmp, mode, SaturationMode::ON);
     }
 }
 
