@@ -42,12 +42,18 @@ PTO_INTERNAL void TPOP_IMPL(PipeCons &cons, TileDataSrc &tile, DataFiFo &fifo)
     }
 }
 
-template <typename PipeCons>
-PTO_INTERNAL void TPOPDONE_IMPL(PipeCons &cons)
+template <typename TileData, typename Pipe>
+PTO_INTERNAL void TPOP_IMPL(TileData &tile, Pipe &pipe)
 {
-    bool isFree = cons.getFreeStatus();
+    TPOP_IMPL(pipe.cons, tile, pipe.fifo);
+}
+
+template <typename Pipe>
+PTO_INTERNAL void TFREE_IMPL(Pipe &pipe)
+{
+    bool isFree = pipe.cons.getFreeStatus();
     if (isFree) {
-        cons.free();
+        pipe.cons.free();
     }
 }
 
