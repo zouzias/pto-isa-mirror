@@ -22,6 +22,8 @@ __global__ AICORE void runTSELS(__gm__ T __out__ *out, __gm__ TMask *mask, __gm_
     using DynStride = pto::Stride<-1, -1, -1, -1, -1>;
     using GlobalData = GlobalTensor<T, DynShape, DynStride>;
     using GlobalDataMask = GlobalTensor<TMask, DynShape, DynStride>;
+    using TmpTileShapeDim5 = Shape<1,1,1,1,32>;
+    using TmpTileStridDim5 = Stride<1,1,1,32,1>;
     GlobalData dstGlobal(out, pto::Shape(1, 1, 1, vRows, vCols),
                          pto::Stride(dstTileH * dstTileW, dstTileH * dstTileW, dstTileH * dstTileW, dstTileW, 1));
     GlobalDataMask maskGlobal(
@@ -33,9 +35,13 @@ __global__ AICORE void runTSELS(__gm__ T __out__ *out, __gm__ TMask *mask, __gm_
     using TileDataDst = Tile<TileType::Vec, T, dstTileH, dstTileW, BLayout::RowMajor, -1, -1>;
     using TileDataMask = Tile<TileType::Vec, TMask, maskTileH, maskTileW, BLayout::RowMajor, -1, -1>;
     using TileDataSrc = Tile<TileType::Vec, T, srcTileH, srcTileW, BLayout::RowMajor, -1, -1>;
+    using TmpGlobal = GlobalTensor<uint8_t, TmpTileShapeDim5, TmpTileStridDim5>;
+    using TmpTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, -1, -1>;
     TileDataDst dstTile(vRows, vCols);
     TileDataMask maskTile(vRows, maskTileW);
     TileDataSrc srcTile(vRows, vCols);
+    TmpTile tmpTile(1,32);
+    
     size_t dstSize = sizeof(T) * dstTileH * dstTileW;
     size_t srcSize = sizeof(T) * srcTileH * srcTileW;
     size_t maskSize = sizeof(TMask) * maskTileH * maskTileW;
@@ -43,15 +49,18 @@ __global__ AICORE void runTSELS(__gm__ T __out__ *out, __gm__ TMask *mask, __gm_
     size_t dstOffset = totalSize * block_idx;
     size_t srcOffset = totalSize * block_idx + dstSize;
     size_t maskOffset = totalSize * block_idx + dstSize + srcSize;
+
     TASSIGN(dstTile, dstOffset);
     TASSIGN(maskTile, maskOffset);
     TASSIGN(srcTile, srcOffset);
+    TASSIGN(tmpTile, totalSize);
+
 
     TLOAD(maskTile, maskGlobal);
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TSELS(dstTile, maskTile, srcTile, scalar);
+    TSELS<TileDataDst, TileDataMask, TileDataSrc, TmpTile>(dstTile, maskTile, srcTile, tmpTile, scalar);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
