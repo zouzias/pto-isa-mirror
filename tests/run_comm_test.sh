@@ -14,7 +14,7 @@ set -euo pipefail
 # ============================================================================
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-n NPU_COUNT] [-v VERSION] [-t TESTCASE] [-d]
+Usage: $(basename "$0") [-n NPU_COUNT] [-v VERSION] [-t TESTCASE] [-a] [-d]
 
 Options:
   -n NPU_COUNT   Number of NPUs (devices) available: 2, 4, or 8 (default: 8)
@@ -22,12 +22,17 @@ Options:
   -v VERSION     SoC version: a3 (Ascend910B, default) or a5 (Ascend910_9599).
   -t TESTCASE    Run only the specified testcase (e.g. tput, treduce).
                  Can be specified multiple times. Default: run all.
+  -a             Include async testcases (e.g. tput_async, tget_async).
+                 Async tests are excluded by default as they require a
+                 newer CANN version with SDMA opapi support.
   -d             Enable debug mode (extra logging at each sync point).
   -h             Show this help message.
 
 Examples:
-  $(basename "$0")                   # Run all tests with 8 NPUs on a3
-  $(basename "$0") -n 2              # Run only 2-rank tests
+  $(basename "$0")                   # Run all non-async tests with 8 NPUs on a3
+  $(basename "$0") -n 2              # Run only 2-rank non-async tests
+  $(basename "$0") -a                # Run all tests including async
+  $(basename "$0") -a -t tput_async  # Run only tput_async
   $(basename "$0") -v a5 -n 2 -t tput  # Run tput on A5 with 2 NPUs
   $(basename "$0") -d -t tput        # Run tput with debug output
 EOF
@@ -40,13 +45,15 @@ EOF
 NPU_COUNT=8
 SOC_VERSION="a3"
 DEBUG_FLAG=""
+INCLUDE_ASYNC=false
 declare -a SELECTED_TESTS=()
 
-while getopts "n:v:t:dh" opt; do
+while getopts "n:v:t:adh" opt; do
   case "$opt" in
     n) NPU_COUNT="$OPTARG" ;;
     v) SOC_VERSION="$OPTARG" ;;
     t) SELECTED_TESTS+=("$OPTARG") ;;
+    a) INCLUDE_ASYNC=true ;;
     d) DEBUG_FLAG="-d" ;;
     h) usage ;;
     *) usage ;;
@@ -136,12 +143,18 @@ if [[ ! -d "${ST_DIR}" ]]; then
   exit 1
 fi
 
+is_async_test() { [[ "$1" == *_async ]]; }
+
 declare -a tests=()
 if [[ "${#SELECTED_TESTS[@]}" -gt 0 ]]; then
   tests=("${SELECTED_TESTS[@]}")
 else
   while IFS= read -r -d '' dir; do
-    tests+=("$(basename "${dir}")")
+    name="$(basename "${dir}")"
+    if is_async_test "$name" && ! $INCLUDE_ASYNC; then
+      continue
+    fi
+    tests+=("$name")
   done < <(find "${ST_DIR}" -maxdepth 1 -mindepth 1 -type d -print0 | sort -z)
 fi
 
@@ -150,7 +163,9 @@ if [[ "${#tests[@]}" -eq 0 ]]; then
   exit 1
 fi
 
-echo "[INFO] NPU_COUNT=${NPU_COUNT}, SOC=${SOC_VERSION}, DEBUG=${DEBUG_FLAG:-(off)}, running ${#tests[@]} testcase(s): ${tests[*]}"
+async_info=""
+$INCLUDE_ASYNC && async_info=", async=on" || async_info=", async=off"
+echo "[INFO] NPU_COUNT=${NPU_COUNT}, SOC=${SOC_VERSION}, DEBUG=${DEBUG_FLAG:-(off)}${async_info}, running ${#tests[@]} testcase(s): ${tests[*]}"
 
 # ============================================================================
 # Run
