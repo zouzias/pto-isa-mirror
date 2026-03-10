@@ -254,8 +254,8 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
 // ============================================================================
 
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
-PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                               const AsyncSession &session, WaitEvents &...events)
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, const AsyncSession &session,
+                               WaitEvents &... events)
 {
     WaitAllEvents(events...);
     if constexpr (engine == DmaEngine::SDMA) {
@@ -272,8 +272,8 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
 // ============================================================================
 
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
-PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                               const AsyncSession &session, WaitEvents &...events)
+PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, const AsyncSession &session,
+                               WaitEvents &... events)
 {
     WaitAllEvents(events...);
     if constexpr (engine == DmaEngine::SDMA) {
