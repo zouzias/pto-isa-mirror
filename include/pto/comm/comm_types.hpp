@@ -145,8 +145,12 @@ struct AsyncEvent {
     DmaEngine engine{DmaEngine::SDMA};
 
     AICORE constexpr AsyncEvent() = default;
-    AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e) : handle(h), engine(e) {}
-    AICORE constexpr bool valid() const { return handle != 0; }
+    AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e) : handle(h), engine(e)
+    {}
+    AICORE constexpr bool valid() const
+    {
+        return handle != 0;
+    }
 
     PTO_INTERNAL bool Wait(const AsyncSession &session) const;
     PTO_INTERNAL bool Test(const AsyncSession &session) const;
