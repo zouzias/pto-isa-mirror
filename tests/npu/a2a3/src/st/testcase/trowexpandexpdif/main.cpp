@@ -21,6 +21,9 @@ void launchTRowExpandExpdif(T *out, T *src0, T *src1, void *stream);
 template <typename T, int validRow, int validCol, int Row, int Col, bool src0eqdst>
 void launchTRowExpandExpdif2(T *out, T *src0, T *src1, void *stream);
 
+template <typename T, int validRow, int validCol, int Row, int Col, bool src0eqdst>
+void launchTRowExpandExpdif3(T *out, T *src0, T *src1, void *stream);
+
 class TROWEXPANDEXPDIFTest : public testing::Test {
 protected:
     void SetUp() override
@@ -38,7 +41,8 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int validRow, int validCol, int Row, int Col, bool src0eqdst, bool isRowMajor>
+template <typename T, int validRow, int validCol, int Row, int Col, bool src0eqdst, bool isRowMajor,
+          bool declTmp = false>
 void test_trowexpandexpdif()
 {
     size_t dstFileSize = Row * Col * sizeof(T);
@@ -68,7 +72,9 @@ void test_trowexpandexpdif()
 
     aclrtMemcpy(src0Device, dstFileSize, src0Host, dstFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, src1FileSize, src1Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    if (isRowMajor) {
+    if (declTmp) {
+        launchTRowExpandExpdif3<T, validRow, validCol, Row, Col, src0eqdst>(dstDevice, src0Device, src1Device, stream);
+    } else if (isRowMajor) {
         launchTRowExpandExpdif2<T, validRow, validCol, Row, Col, src0eqdst>(dstDevice, src0Device, src1Device, stream);
     } else {
         launchTRowExpandExpdif<T, validRow, validCol, Row, Col, src0eqdst>(dstDevice, src0Device, src1Device, stream);
@@ -164,4 +170,24 @@ TEST_F(TROWEXPANDEXPDIFTest, case13)
 TEST_F(TROWEXPANDEXPDIFTest, case14)
 {
     test_trowexpandexpdif<float, 16, 16, 16, 16, false, true>();
+}
+
+TEST_F(TROWEXPANDEXPDIFTest, case15)
+{
+    test_trowexpandexpdif<float, 16, 16, 32, 32, true, false, true>();
+}
+
+TEST_F(TROWEXPANDEXPDIFTest, case16)
+{
+    test_trowexpandexpdif<aclFloat16, 16, 16, 16, 16, true, false, true>();
+}
+
+TEST_F(TROWEXPANDEXPDIFTest, case17)
+{
+    test_trowexpandexpdif<float, 1, 16384, 1, 16384, true, false, true>();
+}
+
+TEST_F(TROWEXPANDEXPDIFTest, case18)
+{
+    test_trowexpandexpdif<float, 2048, 1, 2048, 8, true, false, true>();
 }
