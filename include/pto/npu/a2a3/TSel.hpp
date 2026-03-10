@@ -22,10 +22,14 @@ enum class SELMODE : uint8_t
     VSEL_TENSOR_TENSOR_MODE = 2,
 };
 
-template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile>
+struct EmptyTile {
+    using TileDType = void;
+};
+
+template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile = EmptyTile>
 __tf__ PTO_INTERNAL void TSel(typename DstTile::TileDType __out__ dst, typename MaskTile::TileDType __in__ selMask,
                               typename Src0Tile::TileDType __in__ src0, typename Src1Tile::TileDType __in__ src1,
-                              unsigned validRow, unsigned validCol)
+                              typename TmpTile::TileDType __in__ tmp,  unsigned validRow, unsigned validCol)
 {
     using T = std::conditional_t<sizeof(typename DstTile::DType) == 4, float, half>;
     using MaskT = typename MaskTile::DType;
@@ -39,7 +43,13 @@ __tf__ PTO_INTERNAL void TSel(typename DstTile::TileDType __out__ dst, typename 
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
     __ubuf__ MaskT *maskPtr = (__ubuf__ MaskT *)__cce_get_tile_ptr(selMask);
-    __ubuf__ uint32_t *cmpMaskPtr = (__ubuf__ uint32_t *)get_imm(TMP_UB_OFFSET); // 8KB tmpbuf addr
+
+    if constexpr (std::is_same_v<TmpTile, EmptyTile>) {
+        __ubuf__ uint32_t *cmpMaskPtr = (__ubuf__ uint32_t *)get_imm(TMP_UB_OFFSET); // 8KB tmpbuf addr
+    } else {
+        __ubuf__ uint32_t *cmpMaskPtr = (__ubuf__ uint32_t *)__cce_get_tile_ptr(tmp);
+    }
+
     uint32_t maskAddr;
     set_mask_count();
     for (unsigned i = 0; i < validRow; i++) {
@@ -70,8 +80,26 @@ PTO_INTERNAL void TSEL_IMPL(DstTile &dst, MaskTile &selMask, Src0Tile &src0, Src
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();
 
-    TSel<DstTile, MaskTile, Src0Tile, Src1Tile>(dst.data(), selMask.data(), src0.data(), src1.data(), validRow,
+    TSel<DstTile, MaskTile, Src0Tile, Src1Tile>(dst.data(), selMask.data(), src0.data(), src1.data(), nullptr, validRow,
                                                 validCol);
 }
+
+template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile>
+PTO_INTERNAL void TSEL_IMPL(DstTile &dst, MaskTile &selMask, Src0Tile &src0, Src1Tile &src1, TmpTile &tmp)
+{
+    static_assert(sizeof(typename DstTile::DType) == 4 || sizeof(typename DstTile::DType) == 2,
+                  "Fix: TSEL only support 16B and 32B data type.");
+    static_assert(std::is_same_v<typename DstTile::DType, typename Src0Tile::DType> ||
+                      std::is_same_v<typename DstTile::DType, typename Src1Tile::DType>,
+                  "Fix: TSEL only support same data type between dst, src0, and src1.");
+    static_assert(DstTile::isRowMajor && Src0Tile::isRowMajor && Src1Tile::isRowMajor,
+                  "Fix: TSEL only support RowMajor layout type.");
+    unsigned validRow = dst.GetValidRow();
+    unsigned validCol = dst.GetValidCol();
+
+    TSel<DstTile, MaskTile, Src0Tile, Src1Tile, TmpTile>(dst.data(), selMask.data(), src0.data(), src1.data(), tmp.data(), validRow,
+                                                validCol);
+}
+
 } // namespace pto
 #endif

@@ -16,10 +16,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a2a3/TSel.hpp>
 
 namespace pto {
-template <typename DstTile, typename MaskTile, typename SrcTile>
+struct EmptyTile {
+    using TileDType = void;
+};
+
+template <typename DstTile, typename MaskTile, typename SrcTile, typename TmpTile = EmptyTile>
 __tf__ PTO_INTERNAL void TSels(typename DstTile::TileDType __out__ dst, typename MaskTile::TileDType __in__ mask,
                                typename SrcTile::TileDType __in__ src, typename SrcTile::DType __in__ scalar,
-                               unsigned validRow, unsigned validCol)
+                               typename TmpTile::TileDType __in__ tmp, unsigned validRow, unsigned validCol)
 {
     using T = std::conditional_t<sizeof(typename DstTile::DType) == 4, float, half>;
     using MaskT = typename MaskTile::DType;
@@ -29,8 +33,13 @@ __tf__ PTO_INTERNAL void TSels(typename DstTile::TileDType __out__ dst, typename
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
     __ubuf__ MaskT *maskPtr = (__ubuf__ MaskT *)__cce_get_tile_ptr(mask);
-    __ubuf__ typename SrcTile::DType *scalarPtr =
-        (__ubuf__ typename SrcTile::DType *)get_imm(TMP_UB_OFFSET); // 8KB tmpbuf addr
+    if constexpr (std::is_same_v<TmpTile, EmptyTile>) {
+        __ubuf__ typename SrcTile::DType *scalarPtr =
+            (__ubuf__ typename SrcTile::DType *)get_imm(TMP_UB_OFFSET); // 8KB tmpbuf addr
+    } else {
+        __ubuf__ typename TmpTile::DType *scalarPtr =
+            (__ubuf__ typename TmpTile::DType *)__cce_get_tile_ptr(tmp);
+    }
     *scalarPtr = scalar;
     set_mask_count();
     set_vector_mask(0, validCol);
@@ -59,7 +68,25 @@ PTO_INTERNAL void TSELS_IMPL(TileDataDst &dst, TileDataMask &mask, TileDataSrc &
     PTO_ASSERT(src.GetValidCol() == dst.GetValidCol(), "Number of columns of src and dst must be the same.");
     PTO_ASSERT(src.GetValidRow() == dst.GetValidRow(), "Number of rows of src and dst must be the same.");
 
-    TSels<TileDataDst, TileDataMask, TileDataSrc>(dst.data(), mask.data(), src.data(), scalar, validRow, validCol);
+    TSels<TileDataDst, TileDataMask, TileDataSrc>(dst.data(), mask.data(), src.data(), nullptr, validRow, validCol);
 }
+
+template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename TmpTile>
+PTO_INTERNAL void TSELS_IMPL(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, TmpTile &tmp, typename TileDataSrc::DType scalar)
+{
+    static_assert(sizeof(typename TileDataDst::DType) == 4 || sizeof(typename TileDataDst::DType) == 2,
+                  "Fix: TSEL only support 16B and 32B data type.");
+    static_assert(std::is_same_v<typename TileDataDst::DType, typename TileDataSrc::DType>,
+                  "Fix: TSEL only support same data type between dst, src.");
+    static_assert(TileDataDst::isRowMajor && TileDataSrc::isRowMajor, "Fix: TSEL only support RowMajor layout type.");
+    unsigned validRow = dst.GetValidRow();
+    unsigned validCol = dst.GetValidCol();
+
+    PTO_ASSERT(src.GetValidCol() == dst.GetValidCol(), "Number of columns of src and dst must be the same.");
+    PTO_ASSERT(src.GetValidRow() == dst.GetValidRow(), "Number of rows of src and dst must be the same.");
+
+    TSels<TileDataDst, TileDataMask, TileDataSrc>(dst.data(), mask.data(), src.data(), tmp.data(), validRow, validCol);
+}
+
 } // namespace pto
 #endif
