@@ -161,7 +161,7 @@ void mla_reference(const std::vector<float> &q, const std::vector<float> &k, con
                         acc += ql[static_cast<std::size_t>(i) * latent_dim + r] *
                                kl[static_cast<std::size_t>(j) * latent_dim + r];
                     }
-                    scores[static_cast<std::size_t>(i) * seq_len + j] = acc * scale;
+                    scores[static_cast<std::size_t>(i) * seq_len + j] = acc * scales;
                 }
             }
 
