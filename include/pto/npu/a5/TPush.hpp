@@ -94,10 +94,10 @@ struct TPipe {
     // Producer Interface
     // -------------------------------------------------------------------------
     struct Producer {
-        int tile_id = -1;
-        int sub_tile_id = -1;
-        bool isAllocate = false;
-        bool isRecord = false;
+        int tile_id = 0;
+        int sub_tile_id = 0;
+        bool isAllocate = true;
+        bool isRecord = true;
         int entryOffset = 0;
 
         PTO_INTERNAL Producer() = default;
@@ -371,10 +371,10 @@ struct TPipe {
     // Consumer Interface
     // -------------------------------------------------------------------------
     struct Consumer {
-        int tile_id = -1;
-        int sub_tile_id = -1;
-        bool isWait = false;
-        bool isFree = false;
+        int tile_id = 0;
+        int sub_tile_id = 0;
+        bool isWait = true;
+        bool isFree = true;
         int entryOffset = 0;
 
         PTO_INTERNAL Consumer() = default;
@@ -611,6 +611,7 @@ PTO_INTERNAL void TPUSH_IMPL(PipeProd &prod, TileData &tile, DataFiFo &fifo)
 
     // 2. Address Calculation
     prod.push(fifo, tile);
+    prod.tile_id++;
 
     // 3； Cross-Core: Commit & Signal
     bool isRecord = prod.getRecordStatus();
