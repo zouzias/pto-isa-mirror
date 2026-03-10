@@ -200,3 +200,5 @@ bool RunGetAsyncRootGet(int n_ranks, int n_devices, int first_rank_id, int first
 template bool RunGetAsyncRootGet<float, 256>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunGetAsyncRootGet<int32_t, 4096>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
 template bool RunGetAsyncRootGet<uint8_t, 512>(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+
+

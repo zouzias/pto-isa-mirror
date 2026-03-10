@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <gtest/gtest.h>
 
 #include "tget_async_kernel.h"
+#include "../comm_mpi.h"
 
 // ============================================================================
 // 1D Vector Tile Tests
@@ -32,6 +33,9 @@ TEST(TGetAsync, Vec_Uint8Small)
 
 int main(int argc, char **argv)
 {
+    CommMpiInit(&argc, &argv);
     ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    int ret = RUN_ALL_TESTS();
+    CommMpiFinalize();
+    return ret;
 }
