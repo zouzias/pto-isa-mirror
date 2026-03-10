@@ -72,6 +72,10 @@ if __name__ == "__main__":
         "TROWEXPANDEXPDIFTest.case12",
         "TROWEXPANDEXPDIFTest.case13",
         "TROWEXPANDEXPDIFTest.case14",
+        "TROWEXPANDEXPDIFTest.case15",
+        "TROWEXPANDEXPDIFTest.case16",
+        "TROWEXPANDEXPDIFTest.case17",
+        "TROWEXPANDEXPDIFTest.case18",
     ]
 
     case_params_list = [
@@ -89,6 +93,10 @@ if __name__ == "__main__":
         TRowExpandExpdif(np.float32, 2048, 1, 2048, 8, True, True),
         TRowExpandExpdif(np.float32, 16, 16, 16, 16, False, False),
         TRowExpandExpdif(np.float32, 16, 16, 16, 16, False, True),
+        TRowExpandExpdif(np.float32, 16, 16, 32, 32, True, False),
+        TRowExpandExpdif(np.float16, 16, 16, 16, 16, True, False),
+        TRowExpandExpdif(np.float32, 1, 16384, 1, 16384, True, False),
+        TRowExpandExpdif(np.float32, 2048, 1, 2048, 8, True, False),
     ]
 
     for i, case_name in enumerate(case_name_list):
