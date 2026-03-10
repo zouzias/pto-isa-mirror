@@ -1317,24 +1317,6 @@ PTO_INST RecordEvent TSCATTER(TileDataD &dst, TileDataS &src, TileDataI &indexes
     return {};
 }
 
-template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
-                                TileData &stagingTileData, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TBROADCAST, parallelGroup, srcGlobalData, stagingTileData);
-    return {};
-}
-
-template <typename ParallelGroupType, typename GlobalSrcData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData, TileData &pingTile,
-                                TileData &pongTile, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TBROADCAST, parallelGroup, srcGlobalData, pingTile, pongTile);
-    return {};
-}
-
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
@@ -1456,11 +1438,11 @@ PTO_INST RecordEvent TPUSH(PipeProd &prod, TileData &tile, DataFifo &fifo, WaitE
     return {};
 }
 
-template <typename PipeProd, typename... WaitEvents>
-PTO_INST RecordEvent TPUSHSTART(PipeProd &prod, WaitEvents &... events)
+template <typename TileData, typename Pipe, typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(TileData &tile, Pipe &pipe, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPUSHSTART, prod);
+    MAP_INSTR_IMPL(TPUSH, tile, pipe);
     return {};
 }
 
@@ -1472,11 +1454,19 @@ PTO_INST RecordEvent TPOP(PipeCon &cons, TileData &tile, DataFifo &fifo, WaitEve
     return {};
 }
 
-template <typename PipeCon, typename... WaitEvents>
-PTO_INST RecordEvent TPOPDONE(PipeCon &cons, WaitEvents &... events)
+template <typename TileData, typename Pipe, typename... WaitEvents>
+PTO_INST RecordEvent TPOP(TileData &tile, Pipe &pipe, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPOPDONE, cons);
+    MAP_INSTR_IMPL(TPOP, tile, pipe);
+    return {};
+}
+
+template <typename Pipe, typename... WaitEvents>
+PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TFREE, pipe);
     return {};
 }
 
@@ -1519,32 +1509,5 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
     return {};
 }
-
-template <typename GlobalSignalData, typename... WaitEvents>
-PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, CmpMode cmp, WaitEvents &... events)
-{
-    TSYNC(events...);
-    return MAP_INSTR_IMPL(TTEST, signalData, cmpValue, cmp);
-}
-
-template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
-                             TileData &recvTileData, pto::comm::ReduceOp op, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TREDUCE, parallelGroup, dstGlobalData, accTileData, recvTileData, op);
-    return {};
-}
-
-template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
-                             TileData &pingTileData, TileData &pongTileData, pto::comm::ReduceOp op,
-                             WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TREDUCE, parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
-    return {};
-}
-
 } // namespace pto
 #endif

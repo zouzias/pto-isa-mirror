@@ -58,10 +58,10 @@ __tf__ PTO_INTERNAL void TAnd(typename TileDataDst::TileDType __out__ dst, typen
 
     if constexpr (dstRowStride == src0RowStride && dstRowStride == src1RowStride) {
         BinaryInstr<AndOp<T>, T, TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride>(dstPtr, src0Ptr, src1Ptr,
-                                                                                              validRows, validCols);
+                                                                                              validRows, transValidCol);
     } else {
         BinaryInstr<AndOp<T>, T, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
-            dstPtr, src0Ptr, src1Ptr, validRows, validCols);
+            dstPtr, src0Ptr, src1Ptr, validRows, transValidCol);
     }
     return;
 }
