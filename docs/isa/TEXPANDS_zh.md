@@ -48,17 +48,25 @@ PTO_INST RecordEvent TEXPANDS(TileData& dst, typename TileData::DType scalar, Wa
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `TileData::DType` 必须是以下之一： `int32_t`, `int16_t`, `half`, `float`.
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - Tile 布局必须是行主序（`TileData::isRowMajor`）。
-  - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
+  - 对于Tile位置是向量（`TileData::Loc == TileType::Vec`）:
+    - `TileData::DType` 必须是以下之一： `int32_t`, `int16_t`, `half`, `float`.
+    - Tile 布局必须是行主序（`TileData::isRowMajor`）。
+    - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
+  - 对于Tile位置是Mat（`TileData::Loc == TileType::Mat`）:
+    - `TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
 - **实现检查 (A5)**:
-  - `TileData::DType` 必须是以下之一： `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - Tile 布局必须是行主序（`TileData::isRowMajor`）。
-  - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
+  
+  - 对于Tile位置是向量（`TileData::Loc == TileType::Vec`）:
+    - Tile 布局必须是行主序（`TileData::isRowMajor`）。
+    - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
+    - `TileData::DType` 必须是以下之一： `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
+  - 对于Tile位置是Mat（`TileData::Loc == TileType::Mat`）:
+    - `TileData::DType` 必须是以下之一： `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
 - **有效区域**:
-  - 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上填充 `dst`。
+  - 对于Tile位置是向量（`TileData::Loc == TileType::Vec`）:
+    - 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上填充 `dst`。
+  - 对于Tile位置是Mat（`TileData::Loc == TileType::Mat`）:
+    - 该操作在 `TileData::Rows` / `TileData::Cols` 上填充 `dst`。
 
 ## 示例
 
