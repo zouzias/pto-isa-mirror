@@ -65,6 +65,7 @@ inline void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, comm::Wai
 
     bool allSatisfied = false;
     uint32_t spin = 0;
+    constexpr uint32_t kSleepMicroseconds = 10;
     constexpr uint32_t kMaxSpinCount = 100000000;
     while (!allSatisfied) {
         allSatisfied = true;
@@ -87,7 +88,7 @@ inline void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, comm::Wai
         }
         if (!allSatisfied) {
             PTO_ASSERT(spin < kMaxSpinCount, "TWAIT: possible deadlock detected, spin count exceeded maximum limit");
-            std::this_thread::sleep_for(std::chrono::microseconds(10));
+            std::this_thread::sleep_for(std::chrono::microseconds(kSleepMicroseconds));
             ++spin;
         }
     }
