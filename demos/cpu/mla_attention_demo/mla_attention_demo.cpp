@@ -165,7 +165,7 @@ void mla_reference(const std::vector<float> &q, const std::vector<float> &k, con
                 }
             }
 
-            // Softmax over rows.
+            // Softmax over rows. test
             for (int i = 0; i < seq_len; ++i) {
                 double row_max = -std::numeric_limits<double>::infinity();
                 for (int j = 0; j < seq_len; ++j) {
