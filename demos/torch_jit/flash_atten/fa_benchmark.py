@@ -94,6 +94,20 @@ def fused_reference(q_bsh, k_bsh, v_bsh):
     )
     return o
 
+def add_row(kernel_name, ms, rows_out, head_size, flops_total, sq, sk):
+    time_us = ms * 1000.0
+    perf = tflops(flops_total, ms)
+    rows_out.append(
+        [
+            sq,
+            sk,
+            head_size,
+            kernel_name,
+            f"{time_us:.3f}",
+            f"{perf:.6f}",
+            int(flops_total),
+        ]
+    )
 
 def bench(
     csv_path="jit_attn_bench.csv",
@@ -147,18 +161,10 @@ def bench(
             xexp_device = torch.empty((sq, sk), device=device, dtype=torch.float16)
             pout_fp32_device = torch.empty((sq, sk), device=device, dtype=torch.float32)
 
-            out_2d_device = torch.empty(
-                (num_tiles, sq, head_size), device=device, dtype=torch.float32
-            )
-            g_sum_device = torch.empty(
-                (num_tiles, sq), device=device, dtype=torch.float32
-            )
-            exp_max_device = torch.empty(
-                (num_tiles, sq), device=device, dtype=torch.float32
-            )
-            o_parts_device = torch.empty(
-                (num_tiles, sq, head_size), device=device, dtype=torch.float32
-            )
+            out_2d_device = torch.empty((num_tiles, sq, head_size), device=device, dtype=torch.float32)
+            g_sum_device = torch.empty((num_tiles, sq), device=device, dtype=torch.float32)
+            exp_max_device = torch.empty((num_tiles, sq), device=device, dtype=torch.float32)
+            o_parts_device = torch.empty((num_tiles, sq, head_size), device=device, dtype=torch.float32)
 
             ms_fused = time_npu(lambda: fused_reference(q_bsh, k_bsh, v_bsh))
 
@@ -181,28 +187,11 @@ def bench(
             # Correctness check: fused vs flash (run once per shape, not timed)
             if check:
                 # Reference: fused (1, sq, head) -> (sq, head) fp32
-                fused_out = (
-                    fused_reference(q_bsh, k_bsh, v_bsh).squeeze(0).to(torch.float32)
-                )
+                fused_out = (fused_reference(q_bsh, k_bsh, v_bsh).squeeze(0).to(torch.float32))
                 torch.testing.assert_close(o_out, fused_out, rtol=rtol, atol=atol)
 
-            def add_row(kernel_name, ms):
-                time_us = ms * 1000.0
-                perf = tflops(flops_total, ms)
-                rows_out.append(
-                    [
-                        sq,
-                        sk,
-                        head_size,
-                        kernel_name,
-                        f"{time_us:.3f}",
-                        f"{perf:.6f}",
-                        int(flops_total),
-                    ]
-                )
-
-            add_row("npu_fused_attention", ms_fused)
-            add_row("jit_flash", ms_jit)
+            add_row("npu_fused_attention", ms_fused, rows_out, head_size, flops_total, sq, sk)
+            add_row("jit_flash", ms_jit, rows_out, head_size, flops_total, sq, sk)
 
             print(
                 f"done sq={sq}, sk={sk} | "
