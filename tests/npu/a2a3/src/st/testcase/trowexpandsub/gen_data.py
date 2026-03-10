@@ -70,6 +70,10 @@ if __name__ == "__main__":
         "TROWEXPANDSUBTest.case12",
         "TROWEXPANDSUBTest.case13",
         "TROWEXPANDSUBTest.case14",
+        "TROWEXPANDSUBTest.case15",
+        "TROWEXPANDSUBTest.case16",
+        "TROWEXPANDSUBTest.case17",
+        "TROWEXPANDSUBTest.case18",
     ]
 
     case_params_list = [
@@ -87,6 +91,10 @@ if __name__ == "__main__":
         TRowExpandSub(np.float32, 2048, 1, 2048, 8, True, True),
         TRowExpandSub(np.float32, 16, 16, 16, 16, False, False),
         TRowExpandSub(np.float32, 16, 16, 16, 16, False, True),
+        TRowExpandSub(np.float32, 16, 16, 32, 32, True, False),
+        TRowExpandSub(np.float16, 16, 16, 16, 16, True, False),
+        TRowExpandSub(np.float32, 1, 16384, 1, 16384, True, False),
+        TRowExpandSub(np.float32, 2048, 1, 2048, 8, True, False),
     ]
 
     for i, case_name in enumerate(case_name_list):

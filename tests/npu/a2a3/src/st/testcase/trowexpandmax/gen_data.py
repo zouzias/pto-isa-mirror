@@ -65,6 +65,10 @@ if __name__ == "__main__":
         "TROWEXPANDMAXTest.case12",
         "TROWEXPANDMAXTest.case13",
         "TROWEXPANDMAXTest.case14",
+        "TROWEXPANDMAXTest.case15",
+        "TROWEXPANDMAXTest.case16",
+        "TROWEXPANDMAXTest.case17",
+        "TROWEXPANDMAXTest.case18",
     ]
 
     case_params_list = [
@@ -82,6 +86,10 @@ if __name__ == "__main__":
         TRowExpandMax(np.float32, 2048, 1, 2048, 8, True, True),
         TRowExpandMax(np.float32, 16, 16, 16, 16, False, False),
         TRowExpandMax(np.float32, 16, 16, 16, 16, False, True),
+        TRowExpandMax(np.float32, 16, 16, 32, 32, True, False),
+        TRowExpandMax(np.float16, 16, 16, 16, 16, True, False),
+        TRowExpandMax(np.float32, 1, 16384, 1, 16384, True, False),
+        TRowExpandMax(np.float32, 2048, 1, 2048, 8, True, False),
     ]
 
     for i, case_name in enumerate(case_name_list):
