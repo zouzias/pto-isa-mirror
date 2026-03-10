@@ -48,17 +48,24 @@ PTO_INST RecordEvent TEXPANDS(TileData& dst, typename TileData::DType scalar, Wa
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-  - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-  - Tile layout must be row-major (`TileData::isRowMajor`).
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+  - For `TileType::Vec` :
+    - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+  - For  `TileType::Mat` :
+    - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
 - **Implementation checks (A5)**:
-  - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-  - Tile layout must be row-major (`TileData::isRowMajor`).
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+  - For `TileType::Vec` :
+    - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+  - For  `TileType::Mat` :
+    - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
 - **Valid region**:
-  - The op fills `dst` over `dst.GetValidRow()` / `dst.GetValidCol()`.
+  - For `TileType::Vec` :
+    - The op fills `dst` over `dst.GetValidRow()` / `dst.GetValidCol()`.
+  - For  `TileType::Mat` :
+    - The op fills `dst` over `TileData::Rows` / `TileData::Cols`.
 
 ## Examples
 
