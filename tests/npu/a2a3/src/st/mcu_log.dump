@@ -1,0 +1,61 @@
+[debug] [MCU_LOG] [DEBUG] [0000000000] set_latency_cfg (1668):: mcu_wrapper cfg mcu_latency[proc_type=0]: 1
+[debug] [MCU_LOG] [DEBUG] [0000000000] set_latency_cfg (1668):: mcu_wrapper cfg mcu_latency[proc_type=1]: 1
+[debug] [MCU_LOG] [DEBUG] [0000000000] set_latency_cfg (1673):: mcu_wrapper cfg swap_out_timer: 1
+[debug] [MCU_LOG] [DEBUG] [0000000000] set_latency_cfg (1683):: mcu_wrapper cfg ffts_isr_latency[event_type=0]: 1
+[debug] [MCU_LOG] [DEBUG] [0000000000] set_latency_cfg (1683):: mcu_wrapper cfg ffts_isr_latency[event_type=1]: 1
+[debug] [MCU_LOG] [DEBUG] [0000000000] set_latency_cfg (1683):: mcu_wrapper cfg ffts_isr_latency[event_type=2]: 1
+[debug] [MCU_LOG] [DEBUG] [0000000000] set_latency_cfg (1683):: mcu_wrapper cfg ffts_isr_latency[event_type=3]: 1
+[debug] [MCU_LOG] [DEBUG] [0000000000] set_latency_cfg (1683):: mcu_wrapper cfg ffts_isr_latency[event_type=4]: 1
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262412988602464
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413013964896
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413022419040
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 0 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413610109024
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 1 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413600819296
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 2 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 4 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413592365152
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413509089376
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 5 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 6 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413500635232
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 3 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413492181088
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 7 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413483726944
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 8 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413475272800
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 9 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413466818656
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 10 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413458364512
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 12 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413039327328
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413030873184
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 11 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_loop (696):: mcu_wrapper created thread, thread_id=262413005510752
+[debug] [MCU_LOG] [DEBUG] [0000000000] reg_user_notify_cb (746):: mcu_wrapper reg notify callback, dev_id=0
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 14 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 13 starts =====
+[debug] [MCU_LOG] [DEBUG] [0000000000] mcu_default_event_proc_loop (786):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 15 starts =====
+[info] [MCU_LOG] [INFO] [0000015148] stop (645):: mcu_wrapper is stopping...
+[info] [MCU_LOG] [INFO] [0000015150] main_loop (624):: mcu_wrapper loop is stopping...
+[debug] [MCU_LOG] [DEBUG] [0000015152] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 0 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015155] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 1 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015158] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 2 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015162] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 3 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015163] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 4 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015165] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 5 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015168] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 6 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015170] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 7 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015173] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 8 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015174] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 9 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015175] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 10 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015177] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 11 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015178] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 12 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015179] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 13 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015180] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 14 ends =====
+[debug] [MCU_LOG] [DEBUG] [0000015181] mcu_default_event_proc_loop (831):: ===== mcu_default_event_proc_loop User Loop Function for DEV_ID 0 TS_ID 15 ends =====
+[info] [MCU_LOG] [INFO] [0000015184] stop (654):: mcu_wrapper loop joined successfully.
+[debug] [MCU_LOG] [DEBUG] [0000015185] ~mcu_wrapper (413):: ~mcu_wrapper

@@ -1,0 +1,6 @@
+[info] 8899:  pipe: 4 push_isa, pc:0x10d132c8, id:16417
+[info] 8904:  pipe: 4 retire_isa, pc:0x10d132c8, id:16417
+[info] 8941:  pipe: 4 push_isa, pc:0x10d1335c, id:16474
+[info] 8955:  pipe: 4 push_isa, pc:0x10d1336c, id:16498
+[info] 9297:  pipe: 4 push_isa, pc:0x10d13464, id:16560
+[info] 10830:  pipe: 4 retire_isa, pc:0x10d1335c, id:16474

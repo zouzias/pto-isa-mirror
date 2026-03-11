@@ -1,0 +1,127 @@
+$date
+    Mar 05, 2026       11:14:43
+$end
+
+$version
+    vcd_version : 1
+$end
+
+$timescale
+    1 tick
+$end
+
+$scope module AiCore $end
+$scope module fixp $end
+$var wire    1  aaaaa  fixp_l0c_read       $end
+$var wire    1  aaaao  fixp_su_busy       $end
+$upscope $end
+$scope module mte $end
+$var wire    1  aaaab  mte3_suv1_busy       $end
+$var wire    1  aaaac  mte2_suv1_busy       $end
+$var wire    1  aaaak  mte1_su_busy       $end
+$var wire    1  aaaal  mte3_su_busy       $end
+$var wire    1  aaaam  mte2_su_busy       $end
+$var wire    1  aaaan  mte3_suv0_busy       $end
+$var wire    1  aaaaq  mte2_suv0_busy       $end
+$upscope $end
+$scope module cube $end
+$var wire    1  aaaad  cube_busy       $end
+$upscope $end
+$scope module suv0 $end
+$var wire    1  aaaae  suv0_busy       $end
+$upscope $end
+$scope module vec0 $end
+$var wire    1  aaaaf  vec0_busy       $end
+$var wire    1  aaaap  vec0_ub_write       $end
+$upscope $end
+$scope module vec1 $end
+$var wire    1  aaaag  vec1_ub_write       $end
+$var wire    1  aaaah  vec1_busy       $end
+$upscope $end
+$scope module su $end
+$var wire    1  aaaai  su_busy       $end
+$upscope $end
+$scope module suv1 $end
+$var wire    1  aaaaj  suv1_busy       $end
+$upscope $end
+$upscope $end
+$enddefinitions  $end
+
+$comment
+    all initial values are dumped below at time : tick = 0
+$end
+$dumpvars
+0aaaaa
+0aaaab
+0aaaac
+0aaaad
+0aaaae
+0aaaaf
+0aaaag
+0aaaah
+0aaaai
+0aaaaj
+0aaaak
+0aaaal
+0aaaam
+0aaaan
+0aaaao
+0aaaap
+0aaaaq
+$end
+
+#673
+1aaaae
+#675
+0aaaae
+#677
+1aaaae
+#682
+0aaaae
+#683
+1aaaae
+#684
+1aaaaf
+#698
+0aaaaf
+#8900
+1aaaaq
+#8905
+0aaaaq
+#8942
+1aaaaq
+#9108
+0aaaae
+#9258
+1aaaae
+#9581
+0aaaae
+#10831
+0aaaaq
+#10833
+1aaaae
+#10835
+1aaaaf
+#10847
+1aaaap
+#11107
+0aaaap
+#11108
+1aaaap
+#11109
+0aaaap
+#11111
+0aaaaf
+#11115
+1aaaaf
+#11125
+1aaaap
+#11384
+0aaaap
+#11388
+0aaaaf
+1aaaan
+#11944
+0aaaan
+#14853
+0aaaae

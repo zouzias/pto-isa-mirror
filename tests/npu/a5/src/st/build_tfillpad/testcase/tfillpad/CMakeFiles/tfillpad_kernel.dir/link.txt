@@ -1,0 +1,1 @@
+bisheng -fPIC -s -Wl,-z,relro -Wl,-z,now --cce-fatobj-link -shared -Wl,-soname,libtfillpad_kernel.so -o ../../lib/libtfillpad_kernel.so CMakeFiles/tfillpad_kernel.dir/tfillpad_kernel.cpp.o 
