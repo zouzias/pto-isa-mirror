@@ -23,6 +23,7 @@ Key property:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import mkdocs_gen_files
@@ -78,16 +79,48 @@ def _should_skip(rel_posix: str) -> bool:
     return False
 
 
+_ABS_LINK_RE = re.compile(r'\]\(/((?!http)[^)]+)\)')
+
+
+def _rewrite_links_for_build(text: str, virtual_path: str) -> str:
+    """Rewrite repo-root-absolute links (e.g. /docs/isa/TADD.md) to
+    relative links suitable for the MkDocs virtual filesystem.
+
+    Files under docs/mkdocs/src/ are placed at their original relative path
+    in the virtual filesystem (e.g. manual/index.md).  A link like
+    /docs/isa/TADD.md needs to become ../docs/isa/TADD.md so it resolves
+    relative to the virtual file's location.
+    """
+    # Compute how many path components deep the virtual file is.
+    depth = len(Path(virtual_path).parent.parts)
+    prefix = '../' * depth if depth else ''
+
+    def _replace(m: re.Match) -> str:
+        target = m.group(1)
+        return f']({prefix}{target})'
+
+    return _ABS_LINK_RE.sub(_replace, text)
+
+
 def main() -> None:
     copied_md: list[str] = []
 
     # Mirror markdown files into the MkDocs virtual filesystem, preserving paths.
+    mkdocs_src = REPO_ROOT / "docs" / "mkdocs" / "src"
     for src in REPO_ROOT.rglob("*.md"):
         rel = src.relative_to(REPO_ROOT).as_posix()
         if _should_skip(rel):
             continue
         # Use utf-8-sig to automatically remove BOM if present
         text = src.read_text(encoding="utf-8-sig", errors="replace")
+        # For hand-written files under docs/mkdocs/src/, rewrite repo-root-absolute
+        # links (e.g. /docs/isa/TADD.md) to relative paths for MkDocs.
+        # These files use absolute-style links so they resolve correctly when
+        # browsing the repository statically (GitHub/Gitee), and this step
+        # converts them to the relative paths that MkDocs expects at build time.
+        if src.is_relative_to(mkdocs_src):
+            virtual_path = src.relative_to(mkdocs_src).as_posix()
+            text = _rewrite_links_for_build(text, virtual_path)
         with mkdocs_gen_files.open(rel, "w") as f:
             f.write(f"<!-- Generated from `{rel}` -->\n\n")
             f.write(text)
