@@ -269,6 +269,19 @@ struct ElementOpCal<DType, ElementOp::OP_EXPDIF> {
     }
 };
 
+template <>
+struct ElementOpCal<half, ElementOp::OP_EXPDIF> {
+    static void apply(half &dst, const half &src0, const half &src1)
+    {
+#if defined(__GNUC__) && !defined(__clang__)
+            dst = std::exp(src0 - src1);
+#else
+            const float diff = static_cast<float>(src0 - src1);
+            dst = static_cast<half>(std::expf(diff));
+#endif
+    }
+};
+
 template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_EXP> {
     static void apply(DType &dst, DType &src)
