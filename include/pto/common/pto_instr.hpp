@@ -1061,11 +1061,31 @@ PTO_INST RecordEvent TROWEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     return {};
 }
 
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TROWEXPANDDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
+                                   WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWEXPANDDIV, dst, src0, src1, tmp);
+    return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDMUL, dst, src0, src1);
+    return {};
+}
+
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TROWEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
+                                   WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWEXPANDMUL, dst, src0, src1, tmp);
     return {};
 }
 
@@ -1077,11 +1097,31 @@ PTO_INST RecordEvent TROWEXPANDSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     return {};
 }
 
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TROWEXPANDSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
+                                   WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWEXPANDSUB, dst, src0, src1, tmp);
+    return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDADD, dst, src0, src1);
+    return {};
+}
+
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TROWEXPANDADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
+                                   WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWEXPANDADD, dst, src0, src1, tmp);
     return {};
 }
 
@@ -1093,6 +1133,16 @@ PTO_INST RecordEvent TROWEXPANDMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     return {};
 }
 
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TROWEXPANDMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
+                                   WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWEXPANDMAX, dst, src0, src1, tmp);
+    return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
@@ -1101,11 +1151,31 @@ PTO_INST RecordEvent TROWEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDat
     return {};
 }
 
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TROWEXPANDMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
+                                   WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWEXPANDMIN, dst, src0, src1, tmp);
+    return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TROWEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWEXPANDEXPDIF, dst, src0, src1);
+    return {};
+}
+
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TROWEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
+                                      WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWEXPANDEXPDIF, dst, src0, src1, tmp);
     return {};
 }
 
