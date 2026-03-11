@@ -1,26 +1,16 @@
-# Auto Mode
+# Auto Mode Best Practices and Limitations
 
 ## Scope
 
-This section gives an overview of PTO auto mode.
+This document outlines the current limitations in auto mode. It addresses what coding practices should and should not be followed in order for auto synchronization and memory allocation to work as expected.
 
-## What is Auto Mode
-
-Auto mode does all the memory allocation for tiles and synchronization in the compiler. Programming in auto mode works just like in manual mode, except there is no need for `TASSIGN` and `TSYNC` (in fact, these will do nothing in auto mode). Auto mode is targetted towards users that don't want to worry about allocating tile buffers and managing pipelines, focusing on the actual computation instead.
-
-## Compiling Auto Mode with Ascend CANN
-
-TODO
-
-## Auto Mode Limitations/Best Practices
-
-### Auto Synchronization
+## Auto Synchronization
 
 Here are some patterns that should be avoided (and their alternative) to make sure auto synchronization works as intended in auto mode.
 
-* **if-statements in loops that will only run on either the first or last iterations should be peeled out of the loop.**
+### if-statements in Loops That Will Only Run on Either the First or Last Iterations Should be Peeled Out of the Loop
 
-Here is an example of this that shouldn't be done in auto mode:
+This needs to be done because the first/last iterations when the if-statement executes will likely need different synchronization than the other loop iterations. Here is an example of this that shouldn't be done in auto mode:
 
 ```cpp
 ...
@@ -58,7 +48,7 @@ TSTORE(globalDst, dstTile);
 ...
 ```
 
-* **if-statements nested in a loop that don't depend on the loop variable should be pulled out of the loop.**
+### if-statements Nested in a Loop That Don't Depend on Loop Variables Should be Pulled Out of the Loop
 
 For example, consider the if-statement inside the inner loop:
 
@@ -98,7 +88,7 @@ for (int tile_id = 0; tile_id < total_tiles; tile_id++) {
 ...
 ```
 
-* **PTO instructions after a loop should be moved after an if-statement instead.**
+### PTO Instructions After a Loop Should be Moved After an if-statement Instead
 
 Consider this example:
 
@@ -136,7 +126,36 @@ TSTORE(globalDst, dstTile); // now after if-statement
 ...
 ```
 
-### Memory Allocation
+### Evaluate Complex if-statement Conditions Before Using it in an if-statement
+
+Consider the following if-statement with multiple ands/ors in the condition:
+
+```cpp
+
+if ((srcTile.GetValidRow() > 16 || srcTile.GetValidCol() > 16) && srcTile.GetKAligned()) {
+    TLOAD(srcTile, globalSrc1);
+}
+else {
+    TLOAD(srcTile, globalSrc0);
+}
+
+```
+
+The condition should be evaluated before instead.
+
+```cpp
+bool cond = (srcTile.GetValidRow() > 16 || srcTile.GetValidCol() > 16) && srcTile.GetKAligned();
+
+if (cond) {
+    TLOAD(srcTile, globalSrc1);
+}
+else {
+    TLOAD(srcTile, globalSrc0);
+}
+
+```
+
+## Memory Allocation
 
 
 In Auto mode, the compiler will assign a constant memory address to each declared tile variable. That is, unlike in manual mode, we cannot have tiles that change their memory address in the middle of the kernel. For example, consider the following PTO Manual code:
@@ -177,6 +196,7 @@ bar(tile0);
 
 ...
 ```
+
 is not allowed. Multiple `TRESHAPE` or `TSUBVIEW` calls with the same destination tile will lead to a compiler crash.
 
 These operations only make sense if they are placed right after the declaration of the destination tile. Otherwise, we will still treat uses of the tile before the `TRESHAPE` or `TSUBVIEW` calls as though they already take the address dependency of the source tile. For example,
@@ -189,7 +209,3 @@ TRESHAPE(tile0, tile1);
 
 ...
 ```
-
-
-
-## Examples
