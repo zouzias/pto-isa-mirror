@@ -1008,6 +1008,17 @@ public:
     using TileDType = typename MemoryQualifier<Loc_, DType>::type;
 #endif
 
+#ifdef __CPU_SIM
+    // For CPU sim, return reference to pointer (allows TASSIGN to modify)
+    AICORE TileDType &data()
+    {
+        return data_;
+    }
+    AICORE TileDType data() const
+    {
+        return data_;
+    }
+#else
     AICORE TileDType &data()
     {
         return data_;
@@ -1016,6 +1027,7 @@ public:
     {
         return data_;
     }
+#endif
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
@@ -1265,12 +1277,19 @@ public:
         return *(ptr + offset);
     }
     // constructor for static shape
-    AICORE Tile(){};
+#ifdef __CPU_SIM
+    AICORE Tile() : data_(internalStorage_) {};
+#else
+    AICORE Tile() {};
+#endif
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VR,
                 std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VC)
+#ifdef __CPU_SIM
+        : data_(internalStorage_)
+#endif
     {
         RowMaskInternal = VR;
         ColMaskInternal = VC;
@@ -1279,6 +1298,9 @@ public:
     // constructor for row dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), size_t> VR)
+#ifdef __CPU_SIM
+        : data_(internalStorage_)
+#endif
     {
         RowMaskInternal = VR;
     }
@@ -1286,6 +1308,9 @@ public:
     // constructor for col dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), size_t> VC)
+#ifdef __CPU_SIM
+        : data_(internalStorage_)
+#endif
     {
         ColMaskInternal = VC;
     }
@@ -1322,7 +1347,14 @@ public:
                   "SFractalSize_ illegal");
 
 #ifdef __CPU_SIM
-    using TileDType = Tile::DType[Rows * Cols];
+    // CPU Sim: data_ is a pointer that TASSIGN can redirect to shared NPU memory
+    using TileDType = Tile::DType *;
+
+private:
+    // Internal storage for tiles not explicitly TASSIGN'd
+    Tile::DType internalStorage_[Rows * Cols] = {};
+
+public:
 #else
 #ifdef __PTO_AUTO__
     using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows *Cols);
@@ -1331,6 +1363,17 @@ public:
 #endif
 #endif
 
+#ifdef __CPU_SIM
+    // For CPU sim, return reference to pointer (allows TASSIGN to modify)
+    AICORE TileDType &data()
+    {
+        return data_;
+    }
+    AICORE TileDType data() const
+    {
+        return data_;
+    }
+#else
     AICORE TileDType &data()
     {
         return data_;
@@ -1339,6 +1382,7 @@ public:
     {
         return data_;
     }
+#endif
 
     int RowMaskInternal;
     int ColMaskInternal;
@@ -1463,16 +1507,14 @@ using TileAccCompact = Tile<TileType::Acc, Element_, Rows_, Cols_, BLayout::ColM
                             SLayout::RowMajor, TileConfig::fractalCSize, PadValue::Null, CompactMode::Normal>;
 
 template <typename T>
-struct is_global : std::false_type {
-};
+struct is_global : std::false_type {};
 template <typename T>
 struct is_tile : std::false_type {
     static constexpr SLayout layout_enum = SLayout::NoneBox;
 };
 
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_>
-struct is_global<GlobalTensor<Element_, Shape_, Stride_, Layout_>> : std::true_type {
-};
+struct is_global<GlobalTensor<Element_, Shape_, Stride_, Layout_>> : std::true_type {};
 
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_, const BLayout BFractal_,
           const int RowValid_, const int ColValid_, const SLayout SFractal_, const int SFractalSize_,
@@ -1487,11 +1529,9 @@ template <typename T>
 constexpr bool is_boxed_tile = is_tile<T>::value && (is_tile<T>::layout_enum != SLayout::NoneBox);
 
 template <typename T>
-struct is_conv_tile : std::false_type {
-};
+struct is_conv_tile : std::false_type {};
 template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
-struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {
-};
+struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {};
 
 template <typename tile_shape>
 struct is_Nz_layout {
