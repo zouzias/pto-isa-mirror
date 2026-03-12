@@ -300,7 +300,7 @@ def _en_url_to_zh_url(en_url: str) -> str | None:
     if base == "/manual":
         return "/manual/index_zh/"
     # README pages: last segment is a known directory name
-    _README_DIRS = {
+    README_DIRS = {
         "coding", "isa", "machine", "assembly", "docs", "kernels",
         "tests", "demos", "scripts", "include", "cmake", "reference",
         "tutorials", "script", "package", "custom", "baseline", "add",
@@ -308,7 +308,7 @@ def _en_url_to_zh_url(en_url: str) -> str | None:
         "kirin9030", "npu", "pto",
     }
     last = base.rsplit("/", 1)[-1]
-    if last in _README_DIRS:
+    if last in README_DIRS:
         return en_url.rstrip("/") + "/README_zh/"
     # general page: append _zh
     return base + "_zh/"
