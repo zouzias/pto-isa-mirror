@@ -1,51 +1,24 @@
-# Auto Mode Best Practices and Limitations
+# Auto Mode Programming Best Practices and Restrictions
 
 ## Scope
+To achieve best performance, kernel developers who use the PTO AUTO Mode need to follow a number of practices and restrictions. In most cases, not following these rules will still results in correct compilation, but performance of the generated kernel may be impacted.  
 
-This document outlines the current limitations in auto mode. It addresses what coding practices should and should not be followed in order for auto synchronization and memory allocation to work as expected.
+## Control Flow Rules 
+Complex control flow (especially inside loops) often makes it difficult to optimize the precise cross-pipe parallelization and double-buffering. Since PTO AUTO compiler is required to maintain program correctness, it may generate the synchronization operations more conservatively resulting in performance degradation.  
 
-## Auto Synchronization
-
-Here are some patterns that should be avoided (and their alternative) to make sure auto synchronization works as intended in auto mode.
-
-### if-statements in Loops That Will Only Run on Either the First or Last Iterations Should be Peeled Out of the Loop
-
-This needs to be done because the first/last iterations when the if-statement executes will likely need different synchronization than the other loop iterations. Here is an example of this that shouldn't be done in auto mode:
+### Guards for First and Last Iteraions 
+Any condition that guards the first and last iteraion of a loop should be expressed in a form that can be statically evaluated. That makes it possible for the PTO AUTO compiler to automatically peel the first and last iteration of the loop which results in simplifying the auto synchronization substantially.  Here is an example: 
 
 ```cpp
-...
-
 for (int tile_id = 0; tile_id < total_tiles; tile_id++) {
     if (tile_id == 0) {
         TLOAD(srcTile, globalSrc);
     }
-
     ...
-
     if (tile_id == total_tiles-1) {
         TSTORE(globalDst, dstTile);
     }
 }
-
-...
-```
-
-Those branches should instead be pulled out of the loop:
-
-```cpp
-...
-
-TLOAD(srcTile, globalSrc);
-
-for (int tile_id = 0; tile_id < total_tiles; tile_id++) {
-
-    ...
-
-}
-
-TSTORE(globalDst, dstTile);
-
-...
 ```
 
 ### if-statements Nested in a Loop That Don't Depend on Loop Variables Should be Pulled Out of the Loop
@@ -155,9 +128,7 @@ else {
 
 ```
 
-## Memory Allocation
-
-
+## Memory Allocation Rules 
 In Auto mode, the compiler will assign a constant memory address to each declared tile variable. That is, unlike in manual mode, we cannot have tiles that change their memory address in the middle of the kernel. For example, consider the following PTO Manual code:
 
 ```cpp
@@ -209,3 +180,4 @@ TRESHAPE(tile0, tile1);
 
 ...
 ```
+
