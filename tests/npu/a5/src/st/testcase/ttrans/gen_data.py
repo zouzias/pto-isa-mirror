@@ -13,7 +13,9 @@
 import os
 
 import numpy as np
+
 np.random.seed(19)
+
 
 def gen_random_data(dtype, shape):
     if dtype in [np.float32, np.float16]:
@@ -26,6 +28,7 @@ def gen_random_data(dtype, shape):
         return np.random.randint(0, 255, size=shape).astype(dtype)
     else:
         return np.random.randint(1, 10, size=shape).astype(dtype)
+
 
 def gen_golden_data(param):
     dtype = param.dtype
@@ -42,7 +45,7 @@ def gen_golden_data(param):
 
 class TTRANSParams:
     def __init__(self, dtype, dst_row, dst_col, src_row, src_col, valid_row, valid_col):
-        self.dtype = dtype 
+        self.dtype = dtype
         self.dst_row = dst_row
         self.dst_col = dst_col
         self.src_row = src_row
@@ -50,12 +53,12 @@ class TTRANSParams:
         self.valid_row = valid_row
         self.valid_col = valid_col
         dtype_str = {
-            np.float32: 'float',
-            np.float16: 'half',
-            np.int32: 'int32',
-            np.int16: 'int16',
-            np.int8: 'int8',
-            np.uint8: 'uint8',
+            np.float32: "float",
+            np.float16: "half",
+            np.int32: "int32",
+            np.int16: "int16",
+            np.int8: "int8",
+            np.uint8: "uint8",
         }[dtype]
         self.name = f"TTRANSTest.case_{dtype_str}_{dst_row}x{dst_col}_{src_row}x{src_col}_{valid_row}x{valid_col}"
 
