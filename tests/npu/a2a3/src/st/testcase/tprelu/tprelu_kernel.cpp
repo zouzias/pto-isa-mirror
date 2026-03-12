@@ -33,10 +33,11 @@ __global__ AICORE void runTPrelu(__gm__ T __out__ *out, __gm__ T __in__ *src0, _
     TileData dstTile(vRows, vCols);
     TileDataTmp tmpTile(tmpVRow, tmpVCol);
     size_t size = kTRows_ * kTCols_ * sizeof(T);
+    size_t tmpSize = tmpRow * tmpCol + 32;
     TASSIGN(src0Tile, 0x0);
     TASSIGN(src1Tile, size);
-    TASSIGN(dstTile, size * 2);
-    TASSIGN(tmpTile, size * 3);
+    TASSIGN(tmpTile, size * 2);
+    TASSIGN(dstTile, size * 2 + tmpSize);
 
     GlobalData src0Global(src0);
     GlobalData src1Global(src1);
