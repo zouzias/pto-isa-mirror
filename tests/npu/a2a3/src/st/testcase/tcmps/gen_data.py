@@ -14,7 +14,7 @@ import os
 import numpy as np
 np.random.seed(19)
 
-def gen_golden_data_tcmps(case_name, param):
+def gen_golden_data_tcmps(case_name, param, is_tile_src1=False):
     dtype = param.dtype
 
     H, W = [param.tile_row, param.tile_col]
@@ -23,10 +23,16 @@ def gen_golden_data_tcmps(case_name, param):
     # Generate random input arrays
     if (dtype == np.float16):
         input1 = np.random.randint(-5, 5, size=[H, W]).astype(dtype)
-        input2 = np.zeros(1).astype(dtype)
+        if is_tile_src1:
+            input2 = np.random.randint(-5, 5, size=[H, W]).astype(dtype)
+        else:
+            input2 = np.zeros(1).astype(dtype)
     else:
         input1 = np.random.randint(1, 10, size=[H, W]).astype(dtype)
-        input2 = np.random.randint(1, 10, size=[1]).astype(dtype)
+        if is_tile_src1:
+            input2 = np.random.randint(1, 10, size=[H, W]).astype(dtype)
+        else:
+            input2 = np.random.randint(1, 10, size=[1]).astype(dtype)
 
     if param.mode == "CmpMode::EQ":
         golden = np.equal(input1, input2[0])
@@ -74,14 +80,15 @@ class tcmpsParams:
         self.valid_col = valid_col
         self.mode = cmpMode
 
-def generate_case_name(param):
+def generate_case_name(param, is_tile_src1=False):
     dtype_str = {
         np.float32: 'float',
         np.float16: 'half',
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
-    return f"TCMPSTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}"
+    suffix = "_tilesrc1" if is_tile_src1 else ""
+    return f"TCMPSTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}{suffix}"
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -106,10 +113,19 @@ if __name__ == "__main__":
     ]
 
     for i, param in enumerate(case_params_list):
+        # Generate original scalar src1 test cases
         case_name = generate_case_name(param)
         if not os.path.exists(case_name):
             os.makedirs(case_name)
         original_dir = os.getcwd()
         os.chdir(case_name)
         gen_golden_data_tcmps(case_name, param)
+        os.chdir(original_dir)
+        
+        # Generate tile src1 test cases
+        case_name_tile = generate_case_name(param, is_tile_src1=True)
+        if not os.path.exists(case_name_tile):
+            os.makedirs(case_name_tile)
+        os.chdir(case_name_tile)
+        gen_golden_data_tcmps(case_name_tile, param, is_tile_src1=True)
         os.chdir(original_dir)

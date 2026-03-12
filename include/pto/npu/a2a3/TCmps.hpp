@@ -134,5 +134,20 @@ PTO_INTERNAL void TCMPS_IMPL(TileDataDst &dst, TileDataSrc0 &src0, T src1, CmpMo
     TCmps<TileDataDst, TileDataSrc0, T>(dst.data(), src0.data(), src1, cmpMode, numRepeatPerLine, validRow,
                                         elementsPerRepeat);
 }
+
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
+PTO_INTERNAL void TCMPS_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, CmpMode cmpMode)
+{
+    static_assert(std::is_same<typename TileDataSrc0::DType, typename TileDataSrc1::DType>::value,
+                  "TCMPS: src0 and src1 data types must be the same.");
+    static_assert(TileDataSrc1::Loc == TileType::Vec, "TileType of src1 tile must be TileType::Vec.");
+    static_assert(TileDataSrc1::ValidCol <= TileDataSrc1::Cols,
+                  "Number of valid columns for src1 must not be greater than number of tile columns.");
+    static_assert(TileDataSrc1::ValidRow <= TileDataSrc1::Rows,
+                  "Number of valid rows for src1 must not be greater than number of tile rows.");
+    __ubuf__ typename TileDataSrc1::DType *src1Ptr = (__ubuf__ typename TileDataSrc1::DType *)__cce_get_tile_ptr(src1.data());
+    typename TileDataSrc1::DType scalar = src1Ptr[0];
+    TCMPS_IMPL<TileDataDst, TileDataSrc0, typename TileDataSrc1::DType>(dst, src0, scalar, cmpMode);
+}
 } // namespace pto
 #endif
