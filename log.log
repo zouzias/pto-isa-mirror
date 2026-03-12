@@ -1,5 +1,5 @@
 run failed: Command '['cmake', '-DRUN_MODE=sim', '-DSOC_VERSION=Kirin9030', '-DTEST_CASE=all', '..']' returned non-zero exit status 1.
-target_dir: /root/workspace/daily/2026-03-11-00/pto-isa/tests/npu/kirin9030/src/st
+target_dir: /root/workspace/daily/2026-03-13-00/pto-isa/tests/npu/kirin9030/src/st
 build failed: -- The C compiler identification is GNU 11.4.0
 -- The CXX compiler identification is GNU 11.4.0
 -- Detecting C compiler ABI info
@@ -20,5 +20,5 @@ CMake Error at testcase/CMakeLists.txt:180 (add_subdirectory):
 
 
 -- Configuring incomplete, errors occurred!
-See also "/root/workspace/daily/2026-03-11-00/pto-isa/tests/npu/kirin9030/src/st/build/CMakeFiles/CMakeOutput.log".
+See also "/root/workspace/daily/2026-03-13-00/pto-isa/tests/npu/kirin9030/src/st/build/CMakeFiles/CMakeOutput.log".
 
