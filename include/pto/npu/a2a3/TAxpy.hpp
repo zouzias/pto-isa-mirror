@@ -49,8 +49,7 @@ PTO_INTERNAL void TAXPY_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDa
     using T = typename TileDataSrc::DType;
     static_assert(std::is_same_v<T, typename TileDataDst::DType>,
                   "TAXPY: The data type of dst must be consistent with src.");
-    static_assert(std::is_same<T, half>::value || std::is_same<T, float>::value,
-                  "TAXPY: Invalid data type");
+    static_assert(std::is_same<T, half>::value || std::is_same<T, float>::value, "TAXPY: Invalid data type");
 
     static_assert(TileDataSrc::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
 
