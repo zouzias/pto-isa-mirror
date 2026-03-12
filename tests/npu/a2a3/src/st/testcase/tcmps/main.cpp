@@ -40,11 +40,15 @@ template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int cm
 void LaunchTCmps(uint8_t *out, T *src0, T *src1, void *stream);
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int cmpMode>
+void LaunchTCmpsTile(uint8_t *out, T *src0, T *src1, void *stream);
+
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int cmpMode, bool isTileSrc1 = false>
 void test_tcmps()
 {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
     size_t file_size_dst = kTRows_ * kTCols_ / 8;
     size_t scalarfileSize = sizeof(T);
+    size_t src1fileSize = isTileSrc1 ? fileSize : scalarfileSize;
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -57,19 +61,23 @@ void test_tcmps()
     uint8_t *dstHost, *dstDevice;
     aclrtMallocHost((void **)(&dstHost), fileSize);
     aclrtMallocHost((void **)(&src0Host), fileSize);
-    aclrtMallocHost((void **)(&src1Host), scalarfileSize);
+    aclrtMallocHost((void **)(&src1Host), src1fileSize);
 
     aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src0Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src1Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input1.bin", fileSize, src0Host, fileSize);
-    ReadFile(GetGoldenDir() + "/input2.bin", scalarfileSize, src1Host, scalarfileSize);
+    ReadFile(GetGoldenDir() + "/input2.bin", src1fileSize, src1Host, src1fileSize);
 
     aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(src1Device, scalarfileSize, src1Host, scalarfileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, src1fileSize, src1Host, src1fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    LaunchTCmps<T, kGRows_, kGCols_, kTRows_, kTCols_, cmpMode>(dstDevice, src0Device, src1Device, stream);
+    if constexpr (isTileSrc1) {
+        LaunchTCmpsTile<T, kGRows_, kGCols_, kTRows_, kTCols_, cmpMode>(dstDevice, src0Device, src1Device, stream);
+    } else {
+        LaunchTCmps<T, kGRows_, kGCols_, kTRows_, kTCols_, cmpMode>(dstDevice, src0Device, src1Device, stream);
+    }
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, file_size_dst, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -136,4 +144,45 @@ TEST_F(TCMPSTest, case_int32_77x81_32x32_77x81)
 TEST_F(TCMPSTest, case_int32_32x32_32x32_32x32)
 {
     test_tcmps<int32_t, 32, 32, 32, 32, 0>();
+}
+
+TEST_F(TCMPSTest, case_half_32x32_32x32_32x32_tilesrc1)
+{
+    test_tcmps<aclFloat16, 32, 32, 32, 32, 5, true>();
+}
+TEST_F(TCMPSTest, case_float_1x64_1x64_1x64_tilesrc1)
+{
+    test_tcmps<float, 1, 64, 1, 64, 0, true>();
+}
+TEST_F(TCMPSTest, case_float_8x64_8x64_8x64_tilesrc1)
+{
+    test_tcmps<float, 8, 64, 8, 64, 4, true>();
+}
+TEST_F(TCMPSTest, case_float_4x64_4x64_4x64_tilesrc1)
+{
+    test_tcmps<float, 4, 64, 4, 64, 1, true>();
+}
+TEST_F(TCMPSTest, case_float_128x128_64x64_128x128_tilesrc1)
+{
+    test_tcmps<float, 128, 128, 64, 64, 2, true>();
+}
+TEST_F(TCMPSTest, case_int32_64x64_32x32_64x64_tilesrc1)
+{
+    test_tcmps<int32_t, 64, 64, 32, 32, 0, true>();
+}
+TEST_F(TCMPSTest, case_int32_16x32_16x32_16x32_tilesrc1)
+{
+    test_tcmps<int32_t, 16, 32, 16, 32, 0, true>();
+}
+TEST_F(TCMPSTest, case_float_128x128_128x128_128x128_tilesrc1)
+{
+    test_tcmps<float, 128, 128, 128, 128, 3, true>();
+}
+TEST_F(TCMPSTest, case_int32_77x81_32x32_77x81_tilesrc1)
+{
+    test_tcmps<int32_t, 77, 81, 32, 32, 0, true>();
+}
+TEST_F(TCMPSTest, case_int32_32x32_32x32_32x32_tilesrc1)
+{
+    test_tcmps<int32_t, 32, 32, 32, 32, 0, true>();
 }
