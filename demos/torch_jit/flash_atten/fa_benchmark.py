@@ -21,7 +21,7 @@ from jit_util_flash import jit_compile_flash
 
 NUM_ITERATIONS = 50
 WARMUP = 10
-SEED = 1
+SEED = 42
 
 random.seed(SEED)
 torch.manual_seed(SEED)
@@ -82,7 +82,6 @@ def time_npu(fn, iters=NUM_ITERATIONS, warmup=WARMUP):
         _ = fn()
     torch.npu.synchronize()
     end.record()
-    
 
     return start.elapsed_time(end) / iters
 
@@ -93,8 +92,12 @@ def time_npu(fn, iters=NUM_ITERATIONS, warmup=WARMUP):
 def fa_reference(q, k, v, is_causal=False):
     scale = 1.0 / math.sqrt(q.shape[1])
     out, _ = torch_npu.npu_fused_infer_attention_score(
-        q.unsqueeze(0), k.unsqueeze(0), v.unsqueeze(0),
-        num_heads=1, input_layout="BSH", scale=scale,
+        q.unsqueeze(0),
+        k.unsqueeze(0),
+        v.unsqueeze(0),
+        num_heads=1,
+        input_layout="BSH",
+        scale=scale,
         next_tokens=0 if is_causal else 65535,
     )
     return out.squeeze(0)
@@ -116,7 +119,17 @@ def bench(
     batch_size = 1
 
     rows_out = []
-    header = ["sq", "sk", "head_size", "kernel", "time_us", "tflops", "flops_total"]
+    header = [
+        "sq",
+        "sk",
+        "head_size",
+        "fused_time_us",
+        "fused_tflops",
+        "jit_time_us",
+        "jit_tflops",
+        "speedup",
+        "flops_total",
+    ]
 
     # Compile JIT flash once
     flash = jit_compile_flash(verbose=False)
@@ -124,7 +137,6 @@ def bench(
     for sq in sqs:
         for sk in sks:
             # Inputs
-
             q = torch.randn((sq, head_size), dtype=dtype).npu()
             k = torch.randn((sk, head_size), dtype=dtype).npu()
             v = torch.randn((sk, head_size), dtype=dtype).npu()
@@ -139,76 +151,36 @@ def bench(
             )
             flops_total = flops_dict["total"]
 
-            # JIT flash buffers
-            num_tiles = sq // 128
-
-            o_out = torch.empty((sq, head_size), device=device, dtype=torch.float32)
-
-            # Each S0 block needs 8 FIFO slots (CV_FIFO_SIZE); each slot holds one (CUBE_S0=128, TILE_S1=256) tile
-            out_device = torch.empty((num_tiles * 8, 128, 256), device=device, dtype=torch.float32)
-            xexp_device = torch.empty((num_tiles * 8, 128, 256), device=device, dtype=torch.float16)
-            pout_fp32_device = torch.empty((num_tiles * 8, 128), device=device, dtype=torch.float32)
-
-            out_2d_device = torch.empty(
-                (num_tiles * 8, 128, head_size), device=device, dtype=torch.float32
-            )
-            g_sum_device = torch.empty(
-                (num_tiles, sq), device=device, dtype=torch.float32
-            )
-            exp_max_device = torch.empty(
-                (num_tiles, sq), device=device, dtype=torch.float32
-            )
-            o_parts_device = torch.empty(
-                (num_tiles, sq, head_size), device=device, dtype=torch.float32
-            )
-
             ms_fused = time_npu(lambda: fa_reference(q, k, v))
-
-            ms_jit = time_npu(
-                lambda: flash(
-                    q,
-                    k,
-                    v,
-                    o_out,
-                    out_device,
-                    xexp_device,
-                    pout_fp32_device,
-                    out_2d_device,
-                    g_sum_device,
-                    exp_max_device,
-                    o_parts_device,
-                )
-            )
+            ms_jit = time_npu(lambda: flash(q, k, v))
 
             # Correctness check: fused vs flash (run once per shape, not timed)
             if check:
-                # Reference: fused (1, sq, head) -> (sq, head) fp32
+                o_out = flash(q, k, v)
                 fused_out = fa_reference(q, k, v).to(torch.float32)
                 torch.npu.synchronize()
                 torch.testing.assert_close(o_out, fused_out, rtol=rtol, atol=atol)
 
-            def add_row(kernel_name, ms):
-                time_us = ms * 1000.0
-                perf = tflops(flops_total, ms)
-                rows_out.append(
-                    [
-                        sq,
-                        sk,
-                        head_size,
-                        kernel_name,
-                        f"{time_us:.3f}",
-                        f"{perf:.6f}",
-                        int(flops_total),
-                    ]
-                )
-
-            add_row("npu_fused", ms_fused)
-            add_row("jit_flash", ms_jit)
+            speedup = ms_fused / ms_jit
+            rows_out.append(
+                [
+                    sq,
+                    sk,
+                    head_size,
+                    f"{ms_fused * 1000:.3f}",
+                    f"{tflops(flops_total, ms_fused):.6f}",
+                    f"{ms_jit  * 1000:.3f}",
+                    f"{tflops(flops_total, ms_jit):.6f}",
+                    f"{speedup:.3f}",
+                    int(flops_total),
+                ]
+            )
 
             print(
                 f"done sq={sq}, sk={sk} | "
                 f"fused {ms_fused*1000:.2f}us  "
-                f"jit {ms_jit*1000:.2f}us" + ("" if not check else "  (checked)")
+                f"jit {ms_jit*1000:.2f}us  "
+                f"speedup {speedup:.2f}x" + ("" if not check else "  (checked)")
             )
 
     # Write benchmark results
