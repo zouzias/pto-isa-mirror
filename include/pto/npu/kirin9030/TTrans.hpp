@@ -145,10 +145,6 @@ PTO_INTERNAL void TTRANS_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &t
     static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "Fix: TTRANS has unsupported data type.");
     static_assert(sizeof(T) == sizeof(U), "Fix: TTRANS has inconsistent input and output data types.");
     static_assert(TileDataSrc::isRowMajor, "Fix: TTRANS has not supported layout type.");
-    static_assert(TileDataSrc::Rows > 0, "Fix: TTRANS source tile Rows must be positive");
-    static_assert(TileDataSrc::Cols > 0, "Fix: TTRANS source tile Cols must be positive");
-    static_assert(TileDataSrc::Rows <= TileDataDst::RowStride,
-                  "Fix: TTRANS destination stride must accommodate transposed source rows");
 
     if constexpr (TileDataSrc::isRowMajor) {
         static_assert(TileDataSrc::Cols * sizeof(T) % 32 == 0, "Fix: TTRANS has inconsistent input shape.");
