@@ -32,3 +32,11 @@ docs/mkdocs/src/manual/isa-reference.md
 docs/mkdocs/src/manual/isa-reference_zh.md
 docs/mkdocs/src/scripts/
 docs/mkdocs/src/tests/
+
+# Local artifacts (bench outputs, installers, python packaging, compiled extensions)
+build_out/
+logs_*/
+kernels/manual/a2a3/gemm_performance/input/
+demos/**/dist/
+demos/**/*.egg-info/
+*.so

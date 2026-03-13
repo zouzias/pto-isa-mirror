@@ -9,7 +9,8 @@ demos/
 ├── baseline/         # Production PyTorch operator examples (NPU)
 │   ├── add/          # Basic element-wise addition
 │   ├── gemm_basic/   # GEMM with pipeline optimization
-│   └── flash_atten/  # Flash Attention with dynamic tiling
+│   ├── flash_atten/  # Flash Attention with dynamic tiling
+│   └── moe_grouped_ffn/ # Grouped MoE FFN stage-1
 ├── cpu/              # CPU simulation demos (cross-platform)
 │   ├── gemm_demo/
 │   ├── flash_attention_demo/
@@ -28,7 +29,7 @@ Production-ready examples showing how to implement custom PTO kernels and expose
 
 **Supported Platforms**: A2/A3/A5
 
-**Examples**: Element-wise addition, GEMM with double-buffering pipeline, Flash Attention with automatic tile size selection.
+**Examples**: Element-wise addition, GEMM with double-buffering pipeline, Flash Attention with automatic tile size selection, grouped MoE FFN stage-1 with expert-packed tokens.
 
 ### 2. CPU Simulation (`cpu/`)
 

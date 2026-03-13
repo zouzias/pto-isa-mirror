@@ -11,9 +11,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_INSTR_IMPL_HPP
 #define PTO_INSTR_IMPL_HPP
 
-#include <pto/common/pto_tile.hpp>
-#include <pto/common/type.hpp>
-#include <pto/common/event.hpp>
+#include "pto_tile.hpp"
+#include "type.hpp"
+#include "event.hpp"
 
 #ifdef PTO_NPU_ARCH_A2A3
 #include "pto/npu/a2a3/TAssign.hpp"

@@ -12,7 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COMMON_TASSIGN_CHECK_HPP
 
 #include <cstddef>
-#include <pto/common/pto_tile.hpp>
+#include "pto_tile.hpp"
 
 // CPUSIM does not model on-chip buffer capacities, so skip all static checks.
 #ifdef __CPU_SIM
@@ -29,8 +29,8 @@ struct tassign_static_check {
 
 #else // NPU targets — full static checks
 
-#include <pto/common/buffer_limits.hpp>
-#include <pto/common/memory.hpp>
+#include "buffer_limits.hpp"
+#include "memory.hpp"
 
 namespace pto {
 namespace detail {

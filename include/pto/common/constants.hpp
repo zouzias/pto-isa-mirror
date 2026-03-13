@@ -10,8 +10,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef CONSTANTS_HPP
 #define CONSTANTS_HPP
-#include <pto/common/type.hpp>
-#include <pto/common/memory.hpp>
+#include "type.hpp"
+#include "memory.hpp"
 
 namespace pto {
 constexpr int REPEAT_BYTE = 256;

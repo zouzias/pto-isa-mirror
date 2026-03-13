@@ -9,7 +9,8 @@ demos/
 ├── baseline/         # 生产级 PyTorch 算子示例（NPU）
 │   ├── add/          # 基础逐元素加法
 │   ├── gemm_basic/   # 带流水线优化的 GEMM
-│   └── flash_atten/  # 带动态分块的 Flash Attention
+│   ├── flash_atten/  # 带动态分块的 Flash Attention
+│   └── moe_grouped_ffn/ # Grouped MoE FFN stage-1
 ├── cpu/              # CPU 模拟演示（跨平台）
 │   ├── gemm_demo/
 │   ├── flash_attention_demo/
@@ -28,7 +29,7 @@ demos/
 
 **支持平台**：A2/A3/A5
 
-**示例**：逐元素加法、带双缓冲流水线的 GEMM、带自动 tile 大小选择的 Flash Attention。
+**示例**：逐元素加法、带双缓冲流水线的 GEMM、带自动 tile 大小选择的 Flash Attention、面向 expert 连续打包输入的 grouped MoE FFN stage-1。
 
 ### 2. CPU 模拟 (`cpu/`)
 

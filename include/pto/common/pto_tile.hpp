@@ -11,10 +11,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_TILE_HPP
 #define PTO_TILE_HPP
 
-#include "pto/common/memory.hpp"
-#include <pto/common/type.hpp>
-#include <pto/common/constants.hpp>
-#include "pto/common/debug.h"
+#include "memory.hpp"
+#include "type.hpp"
+#include "constants.hpp"
+#include "debug.h"
 #ifdef __CPU_SIM
 #include <iomanip>
 #endif
