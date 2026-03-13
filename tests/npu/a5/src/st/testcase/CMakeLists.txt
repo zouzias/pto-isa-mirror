@@ -234,6 +234,8 @@ set(ALL_TESTCASES
     mscatter
     t_dhrystone
     tpack
+    tpushpop_cv
+    tpushpop_vc
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
