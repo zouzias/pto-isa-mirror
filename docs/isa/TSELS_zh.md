@@ -54,18 +54,19 @@ PTO_INST RecordEvent TSELS(TileData& dst, TileData& src0, TileData& src1, uint8_
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `TileData::DType` 必须是以下之一： `half`, `float16_t`, `float`, `float32_t`.
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
-  - 运行时：实现期望 `src0/src1/dst` 具有匹配的有效行/列。
+  - `TileData::DType` 必须是以下之一：`half`、`float16_t`、`float`、`float32_t`。
 - **实现检查 (A5)**:
-  - `sizeof(TileData::DType)` 必须是 `1`、`2` 或 `4` 字节。
+  - `TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`float`。
+- **通用约束**:
+  - Tile 布局必须是行主序（`TileData::isRowMajor`）。
   - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
   - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
-  - 运行时：实现期望 `src0/src1/dst` 具有匹配的有效行/列。
-  - 填充行为取决于 `TileData::PadVal`（`Null`/`Zero` 与 `-INF/+INF` 模式）。
+  - 运行时：`dst`、`src0` 和 `src1` 的有效行列数必须相同。
+  - 标量类型必须与 Tile 数据类型一致。
 - **有效区域**:
-  - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
+  - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
+- **掩码编码**:
+  - 掩码 Tile 被解释为打包的谓词位，具体编码由目标定义。
 
 ## 示例
 

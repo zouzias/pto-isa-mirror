@@ -55,15 +55,17 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-  - `sizeof(TileDataDst::DType)` and `sizeof(TileDataSrc::DType)` must be `2` or `4` bytes.
-  - Supported `DType`: `int16_t`, `uint16_t`, `int32_t, `uint32_t`, `half`, `float`.
-  - No explicit assertions are enforced on the mask tile type/shape; mask encoding is target-defined.
-  - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
+  - `TileData::DType` must be one of: `half`, `float16_t`, `float`, `float32_t`.
 - **Implementation checks (A5)**:
-  - `sizeof(TileData::DType)` must be `2` or `4` bytes.
-  - Supported `DType`: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
-  - No explicit assertions are enforced on the mask tile type/shape; mask encoding is target-defined.
-  - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
+  - `TileData::DType` must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
+- **Common constraints**:
+  - Tile layout must be row-major (`TileData::isRowMajor`).
+  - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+  - Runtime: `dst`, `src0` and `src1` must have the same valid row/col.
+  - Scalar type must match the Tile data type.
+- **Valid region**:
+  - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 - **Mask encoding**:
   - The mask tile is interpreted as packed predicate bits in a target-defined layout.
 
