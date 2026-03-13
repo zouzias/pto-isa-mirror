@@ -48,14 +48,15 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ uint64_t *ffts_addr, __gm__ Ou
     constexpr uint16_t FLAG_ID = 0;
     constexpr uint8_t FIFO_DEPTH = 2;
     constexpr uint8_t FIFO_PERIOD = 1;
+    // fifo base used for TPOP of cube side (bMatTile)
+    constexpr uint32_t localFiFoBase = 0x20000;
 
     using VecTileProd = Tile<TileType::Vec, OutT, HALF_TILE_K, TILE_N, BLayout::RowMajor, HALF_TILE_K, TILE_N>;
     using MatTileCons =
         Tile<TileType::Mat, OutT, TILE_K, TILE_N, BLayout::ColMajor, TILE_K, TILE_N, SLayout::RowMajor, 512>;
 
-    using MatPipe = TPipe<FLAG_ID, FIFOType::GM_FIFO, FIFO_DEPTH, FIFO_PERIOD, VecTileProd, MatTileCons,
-                          TSyncOpType::TSTORE_V2GM, TSyncOpType::TLOAD>;
-    MatPipe mPipe(fifoMem);
+    using MatPipe = TPipe<FLAG_ID, FIFOType::GM_FIFO, FIFO_DEPTH, FIFO_PERIOD, VecTileProd, MatTileCons>;
+    MatPipe mPipe(fifoMem, localFiFoBase);
 
     constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
     constexpr uint32_t ALIGNED_M = CeilAlign<uint32_t>(TOTAL_M, 16);
@@ -139,7 +140,6 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ uint64_t *ffts_addr, __gm__ Ou
         TileMatA aMatTile;
         PopTile bMatTile;
         TASSIGN(aMatTile, 0x0);
-        TASSIGN(bMatTile, 0x20000);
 
         LeftTile aTile;
         RightTile bTile;
