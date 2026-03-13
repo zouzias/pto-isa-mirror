@@ -48,7 +48,14 @@ PTO_INST RecordEvent TADDSC(TileData& dst, TileData& src0, typename TileData::DT
 
 ## Constraints
 
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+- **Supported Data Types**: `int32_t`, `int16_t`, `half`, `float`
+- **Tile Layout**: Tiles must use row-major layout
+- **Tile Type**: `dst`, `src0` and `src1` tile type must be `TileType::Vec`
+- **Valid Region**: The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`
+- **Input/Output Compatibility**:
+  - `dst`, `src0` and `src1` must have the same data type
+  - `dst`, `src0` and `src1` must have the same valid dimensions
+  - Scalar type must match the Tile data type
 
 ## Examples
 

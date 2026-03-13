@@ -54,18 +54,17 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-  - `sizeof(TileDataDst::DType)` and `sizeof(TileDataSrc::DType)` must be `2` or `4` bytes.
-  - Supported `DType`: `int16_t`, `uint16_t`, `int32_t, `uint32_t`, `half`, `float`.
-  - No explicit assertions are enforced on the mask tile type/shape; mask encoding is target-defined.
-  - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
-- **Implementation checks (A5)**:
-  - `sizeof(TileData::DType)` must be `2` or `4` bytes.
-  - Supported `DType`: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
-  - No explicit assertions are enforced on the mask tile type/shape; mask encoding is target-defined.
-  - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
-- **Mask encoding**:
-  - The mask tile is interpreted as packed predicate bits in a target-defined layout.
+- **Supported Data Types**:
+  - A2A3 Architecture: `half`, `float16_t`, `float`, `float32_t`
+  - A5 Architecture: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`
+- **Tile Layout**: Tiles must use row-major layout
+- **Tile Type**: `dst`, `src0` and `src1` tile type must be `TileType::Vec`
+- **Valid Region**: The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` as the selection domain
+- **Input/Output Compatibility**:
+  - `dst`, `src0` and `src1` must have the same data type
+  - `dst`, `src0` and `src1` must have the same valid dimensions
+  - Scalar type must match the Tile data type
+- **Mask Encoding**: The mask tile is interpreted as packed predicate bits in a target-defined layout
 
 ## Examples
 

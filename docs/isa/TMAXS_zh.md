@@ -47,7 +47,16 @@ PTO_INST RecordEvent TMAXS(TileData& dst, TileData& src0, typename TileData::DTy
 
 ## 约束
 
-- 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+- **数据类型支持**：
+  - A2A3 架构：`int32_t`、`int16_t`、`half`、`float`
+  - A5 架构：`int32_t`、`uint32_t`、`float`、`int16_t`、`uint16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`
+- **Tile 布局**：Tile 必须采用行主序（Row-Major）布局（`TileData::isRowMajor == true`）
+- **Tile 类型**：必须为 `TileType::Vec`
+- **有效区域**：操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代，且 `dst.GetValidRow() > 0` 且 `dst.GetValidCol() > 0`
+- **输入输出兼容性**：
+  - `dst` 和 `src` 的数据类型必须一致
+  - `dst` 和 `src` 的有效行列数必须相同（`dst.GetValidRow() == src.GetValidRow()` 且 `dst.GetValidCol() == src.GetValidCol()`）
+  - 标量类型必须与 Tile 数据类型一致
 
 ## 示例
 

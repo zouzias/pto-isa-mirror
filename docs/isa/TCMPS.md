@@ -49,15 +49,14 @@ PTO_INST RecordEvent TCMPS(TileDataDst& dst, TileDataSrc0& src0, T src1, CmpMode
 
 ## Constraints
 
-- **Implementation checks (A2A3)**:
-  - `src0` and `dst` tile location must be vector (`TileType::Vec`).
-  - Static valid bounds: `TileDataSrc0::ValidRow <= TileDataSrc0::Rows` and `TileDataSrc0::ValidCol <= TileDataSrc0::Cols`.
-  - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-- **Implementation checks (A5)**:
-  - No explicit `static_assert`/`PTO_ASSERT` shape checks are enforced by `TCMPS_IMPL`.
-  - Effective support depends on `TileDataSrc0::DType` (only specific 1/2/4-byte integer/float types are dispatched in the implementation).
-- **Valid region**:
-  - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+- **Supported Data Types**: `int32_t`, `float`, `half`, `uint16_t`, `int16_t`
+- **Tile Layout**: Tiles must use row-major layout (`TileData::isRowMajor == true`)
+- **Tile Type**: `src0` and `dst` tile type must be `TileType::Vec`
+- **Valid Region**: The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain
+- **Input/Output Compatibility**:
+  - `src0.GetValidRow() == dst.GetValidRow()`
+  - `src0.GetValidCol() == dst.GetValidCol()`
+- **Comparison Modes**: Supports `CmpMode::EQ`, `CmpMode::NE`, `CmpMode::LT`, `CmpMode::GT`, `CmpMode::LE`, `CmpMode::GE`
 
 ## Examples
 

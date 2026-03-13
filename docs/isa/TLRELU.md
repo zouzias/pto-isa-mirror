@@ -47,7 +47,14 @@ PTO_INST RecordEvent TLRELU(TileData& dst, TileData& src0, typename TileData::DT
 
 ## Constraints
 
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+- **Supported Data Types**: `half`, `float16_t`, `float`, `float32_t` (floating-point types only)
+- **Tile Layout**: Tiles must use row-major layout
+- **Tile Type**: `dst` and `src` tile type must be `TileType::Vec`
+- **Valid Region**: The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`, with `dst.GetValidRow() > 0` and `dst.GetValidCol() > 0`
+- **Input/Output Compatibility**:
+  - `dst` and `src` must have the same data type
+  - `dst` and `src` must have the same valid dimensions
+  - Slope scalar type must match the Tile data type
 
 ## Examples
 

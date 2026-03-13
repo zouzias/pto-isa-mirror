@@ -47,7 +47,14 @@ PTO_INST RecordEvent TLRELU(TileData& dst, TileData& src0, typename TileData::DT
 
 ## 约束
 
-- 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+- **数据类型支持**：`half`、`float16_t`、`float`、`float32_t`（仅浮点类型）
+- **Tile 布局**：Tile 必须采用行主序（Row-Major）布局
+- **Tile 类型**：`dst` 和 `src` 的 Tile 类型必须为 `TileType::Vec`
+- **有效区域**：操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代，且 `dst.GetValidRow() > 0` 且 `dst.GetValidCol() > 0`
+- **输入输出兼容性**：
+  - `dst` 和 `src` 的数据类型必须一致
+  - `dst` 和 `src` 的有效行列数必须相同
+  - 斜率标量类型必须与 Tile 数据类型一致
 
 ## 示例
 

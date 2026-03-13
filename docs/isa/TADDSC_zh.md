@@ -48,7 +48,14 @@ PTO_INST RecordEvent TADDSC(TileData& dst, TileData& src0, typename TileData::DT
 
 ## 约束
 
-- 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+- **数据类型支持**：`int32_t`、`int16_t`、`half`、`float`
+- **Tile 布局**：Tile 必须采用行主序（Row-Major）布局
+- **Tile 类型**：`dst`、`src0` 和 `src1` 的 Tile 类型必须为 `TileType::Vec`
+- **有效区域**：操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代
+- **输入输出兼容性**：
+  - `dst`、`src0` 和 `src1` 的数据类型必须一致
+  - `dst`、`src0` 和 `src1` 的有效行列数必须相同
+  - 标量类型必须与 Tile 数据类型一致
 
 ## 示例
 

@@ -47,7 +47,16 @@ PTO_INST RecordEvent TMAXS(TileData& dst, TileData& src0, typename TileData::DTy
 
 ## Constraints
 
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+- **Supported Data Types**:
+  - A2A3 Architecture: `int32_t`, `int16_t`, `half`, `float`
+  - A5 Architecture: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, `int8_t`
+- **Tile Layout**: Tiles must use row-major layout (`TileData::isRowMajor == true`)
+- **Tile Type**: Must be `TileType::Vec`
+- **Valid Region**: The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`, with `dst.GetValidRow() > 0` and `dst.GetValidCol() > 0`
+- **Input/Output Compatibility**:
+  - `dst` and `src` must have the same data type
+  - `dst` and `src` must have the same valid dimensions (`dst.GetValidRow() == src.GetValidRow()` and `dst.GetValidCol() == src.GetValidCol()`)
+  - Scalar type must match the Tile data type
 
 ## Examples
 
