@@ -16,10 +16,35 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 #include "TBinSOp.hpp"
 
+#ifdef HIGH_PRECISION_IMPL
+#include "kernel_operator.h"
+#include "impl/micro_api/dav_c310/kernel_micro_vec_binary_impl.h"
+#endif
+
 namespace pto {
 
 template <typename T>
 struct DivSOp {
+#ifdef HIGH_PRECISION_IMPL
+    using RegT = AscendC::MicroAPI::RegTensor<T>;
+    using MaskRT = AscendC::MicroAPI::MaskReg;
+    PTO_INTERNAL static void BinInstr(RegT &reg_dst, RegT &reg_src0, T src1, MaskRT &preg)
+    {
+        if constexpr (std::is_same_v<T, float>) {
+            vdup(reg_dst, src1, preg, MODE_ZEROING);
+            AscendC::MicroAPI::DivIEEE754FloatImpl<T, AscendC::MicroAPI::MaskMergeMode::ZEROING, RegT, true>(
+                reg_dst, reg_src0, reg_dst, preg);
+        } else if constexpr (std::is_same_v<T, half>) {
+            vdup(reg_dst, src1, preg, MODE_ZEROING);
+            AscendC::MicroAPI::DivIEEE754HalfImpl<T, AscendC::MicroAPI::MaskMergeMode::ZEROING, RegT>(reg_dst, reg_src0,
+                                                                                                      reg_dst, preg);
+        } else {
+            vdup(reg_dst, src1, preg, MODE_ZEROING);
+            vdiv(reg_dst, reg_src0, reg_dst, preg, MODE_ZEROING);
+        }
+    }
+#else 
+
     PTO_INTERNAL static void BinSInstr(RegTensor<T> &vregdst, RegTensor<T> &vregsrc, T src1, MaskReg &preg)
     {
         float divider = static_cast<float>(src1);
@@ -46,6 +71,7 @@ struct DivSOp {
             vcvt(vregdst, tempDst, preg, ROUND_Z, RS_ENABLE);
         }
     }
+#endif
 };
 
 template <typename T>

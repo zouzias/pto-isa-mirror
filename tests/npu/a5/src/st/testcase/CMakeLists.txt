@@ -11,7 +11,7 @@
 function(pto_vec_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-vec -DREGISTER_BASE -std=c++17)
-
+    
     if(HIGH_PRECISION_IMPL)
         # Host-arch aware include root: x86_64 first, fallback to aarch64.
         set(PTO_TOOLKIT_DIR "${ASCEND_HOME_PATH}/x86_64-linux")
@@ -43,7 +43,7 @@ function(pto_vec_st NAME)
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../../common
     )
-
+    
     target_link_directories(${NAME} PUBLIC
         ${ASCEND_HOME_PATH}/lib64
         ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib

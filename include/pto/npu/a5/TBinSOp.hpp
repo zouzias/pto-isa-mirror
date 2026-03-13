@@ -17,6 +17,19 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+
+template <typename DATA_T, typename OP_T, typename EN1 = void, typename EN2 = void>
+struct ExtractRegTypes {
+    using RegT = RegTensor<DATA_T>;
+    using MaskRT = MaskReg;
+};
+
+template <typename DATA_T, typename OP_T>
+struct ExtractRegTypes<DATA_T, OP_T, std::void_t<typename OP_T::RegT>, std::void_t<typename OP_T::MaskRT>> {
+    using RegT = typename OP_T::RegT;
+    using MaskRT = typename OP_T::MaskRT;
+};
+
 template <typename Op, typename TileData, typename T, typename ScalarType, unsigned elementsPerRepeat,
           unsigned blockSizeElem, unsigned rowStride>
 PTO_INTERNAL void TBinSOps_1D_NoPostUpdate(__ubuf__ typename TileData::DType *dstPtr,
@@ -26,9 +39,9 @@ PTO_INTERNAL void TBinSOps_1D_NoPostUpdate(__ubuf__ typename TileData::DType *ds
     uint16_t repeatTimes = CeilDivision(kValidRows * kValidCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        RegTensor<T> vreg0;
-        RegTensor<T> vreg2;
-        MaskReg preg;
+        using RTypes = ExtractRegTypes<T, Op>;
+        typename RTypes::RegT vreg0, vreg2;
+        typename RTypes::MaskRT preg;
 
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
@@ -51,9 +64,9 @@ PTO_INTERNAL void TBinSOps_1D_PostUpdate(__ubuf__ typename TileData::DType *dstP
     uint16_t repeatTimes_pu = CeilDivision(kValidRows * kValidCols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        RegTensor<T> vreg0_pu;
-        RegTensor<T> vreg2_pu;
-        MaskReg preg_pu;
+        using RTypes = ExtractRegTypes<T, Op>;
+        typename RTypes::RegT vreg0_pu, vreg2_pu;
+        typename RTypes::MaskRT preg_pu;
 
         constexpr auto distValue_pu =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
@@ -78,9 +91,10 @@ PTO_INTERNAL void TBinSOps_2D_NoPostUpdate(__ubuf__ typename TileDataDst::DType 
 
     __VEC_SCOPE__
     {
-        RegTensor<T> vreg0;
-        RegTensor<T> vreg2;
-        MaskReg preg;
+        using RTypes = ExtractRegTypes<T, Op>;
+        typename RTypes::RegT vreg0, vreg2;
+        typename RTypes::MaskRT preg;
+
         constexpr auto distValue =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         for (uint16_t i = 0; i < (uint16_t)(kValidRows); ++i) {
@@ -105,9 +119,10 @@ PTO_INTERNAL void TBinSOps_2D_PostUpdate(__ubuf__ typename TileDataDst::DType *d
 
     __VEC_SCOPE__
     {
-        RegTensor<T> vreg0_pu;
-        RegTensor<T> vreg2_pu;
-        MaskReg preg_pu;
+        using RTypes = ExtractRegTypes<T, Op>;
+        typename RTypes::RegT vreg0_pu, vreg2_pu;
+        typename RTypes::MaskRT preg_pu;
+
         constexpr auto distValue_pu =
             std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
         for (uint16_t i = 0; i < (uint16_t)(kValidRows); ++i) {
