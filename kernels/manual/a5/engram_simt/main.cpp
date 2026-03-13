@@ -146,7 +146,10 @@ static bool RunOneCase(const std::string &caseName, int tableRows)
     std::vector<float> golden(B * D);
     std::vector<float> actual(B * D);
     ReadFile(gDir + "/golden.bin", fSz, golden.data(), outBytes);
-    memcpy_s(actual.data(), outBytes, hOutput, outBytes);
+    if (memcpy_s(actual.data(), outBytes, hOutput, outBytes) != EOK) {
+        printf("[ERROR] memcpy_s failed for actual output\n");
+        return false;
+    }
 
     bool pass = FullResultCmp(golden, actual, 0.001f);
 
