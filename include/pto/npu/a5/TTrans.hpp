@@ -130,12 +130,8 @@ __tf__ PTO_INTERNAL void TTransB8ColWise(typename TileData::TileDType __out__ ds
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
-PTO_INTERNAL void TTRANS_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp)
+PTO_INTERNAL void TransTile(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp)
 {
-    using T = typename TileDataSrc::DType;
-    using U = typename TileDataDst::DType;
-    static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "Fix: TTRANS has unsupported data type.");
-    static_assert(sizeof(T) == sizeof(U), "Fix: TTRANS has inconsistent input and output data types.");
     static_assert(TileDataSrc::isRowMajor, "Fix: TTRANS has not supported layout type.");
 
     if constexpr (TileDataSrc::isRowMajor) {
@@ -159,6 +155,188 @@ PTO_INTERNAL void TTRANS_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &t
         TTransB8ColWise<TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(dst.data(), src.data());
     } else {
         static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "Fix: TTRANS has invalid data type.");
+    }
+}
+
+template <typename TileData, unsigned blockSizeElem>
+__tf__ PTO_INTERNAL void TTransConvNCHW2NC1HWC0(typename TileData::TileDType __out__ dst,
+                                                typename TileData::TileDType __in__ src, unsigned srcN, unsigned srcC,
+                                                unsigned srcH, unsigned srcW, unsigned dstC0)
+{
+    using T = typename TileData::DType;
+    __ubuf__ T *dstPtrOrig = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *srcPtrOrig = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    unsigned srcStride = srcH * srcW;
+    unsigned dstStride = dstC0;
+    unsigned rows = dstC0;
+    unsigned cols = srcH * srcW;
+    unsigned dstC1 = (srcC + dstC0 - 1) / dstC0;
+    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T); // REPEAT_BYTE = 256
+    unsigned staticRepeatTimes = (srcStride + elementsPerRepeat - 1) / elementsPerRepeat;
+    unsigned nStride = dstC1 * dstC0 * srcH * srcW;
+    unsigned cStride = dstC0 * srcH * srcW;
+    if (cols * sizeof(T) % BLOCK_BYTE_SIZE != 0 || rows * sizeof(T) % BLOCK_BYTE_SIZE != 0) {
+        for (int n = 0; n < srcN; n++) {
+            for (int c = 0; c < dstC1; c++) {
+                __ubuf__ T *srcPtr = srcPtrOrig + n * nStride + c * cStride;
+                __ubuf__ T *dstPtr = dstPtrOrig + n * nStride + c * cStride;
+                for (int i = 0; i < rows; i++) {
+                    for (int j = 0; j < cols; j++) {
+                        dstPtr[j * rows + i] = srcPtr[i * cols + j];
+                    }
+                }
+            }
+        }
+        return;
+    }
+    for (int n = 0; n < srcN; n++) {
+        for (int c = 0; c < dstC1; c++) {
+            __ubuf__ T *srcPtr = srcPtrOrig + n * nStride + c * cStride;
+            __ubuf__ T *dstPtr = dstPtrOrig + n * nStride + c * cStride;
+            if constexpr (sizeof(T) == 4) {
+                TTransB32ColWise<TileData, elementsPerRepeat, blockSizeElem>(dstPtr, srcPtr, dstStride, srcStride, rows,
+                                                                             cols);
+            } else if constexpr (sizeof(T) == 2) {
+                TTransB16ColWise<TileData, elementsPerRepeat, blockSizeElem>(dstPtr, srcPtr, dstStride, srcStride, rows,
+                                                                             cols);
+            } else if constexpr (sizeof(T) == 1) {
+                TTransB8ColWise<TileData, elementsPerRepeat, blockSizeElem>(dstPtr, srcPtr, dstStride, srcStride, rows,
+                                                                            cols);
+            } else {
+                static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "Fix: TTRANS has invalid data type.");
+            }
+        }
+    }
+}
+
+template <typename TileData, unsigned blockSizeElem>
+__tf__ PTO_INTERNAL void TTransConvNC1HWC02C1HWNC0(typename TileData::TileDType __out__ dst,
+                                                   typename TileData::TileDType __in__ src, unsigned dstN,
+                                                   unsigned srcN, unsigned srcC1HW, unsigned srcC0)
+{
+    using T = typename TileData::DType;
+    __ubuf__ T *dstPtrOrig = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *srcPtrOrig = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    if (srcC0 * sizeof(T) % BLOCK_BYTE_SIZE == 0) {
+        unsigned validCol = srcC0;
+        unsigned validRow = srcC1HW;
+        unsigned srcStride = srcC0;
+        unsigned dstStride = dstN * srcC0;
+        constexpr unsigned nRepeatElem = REPEAT_BYTE / sizeof(T);
+        uint16_t repeatTimes = CeilDivision(validCol, nRepeatElem);
+        unsigned nStride = srcC1HW * srcC0;
+        __VEC_SCOPE__
+        {
+            for (uint16_t num = 0; num < (uint16_t)srcN; num++) {
+                __ubuf__ T *srcPtr = srcPtrOrig + num * nStride;
+                __ubuf__ T *dstPtr = dstPtrOrig + num * srcC0;
+                RegTensor<T> vreg0;
+                MaskReg preg;
+                uint32_t sreg;
+                constexpr auto distValue =
+                    std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+                for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
+                    sreg = (uint32_t)validCol;
+                    for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                        preg = CreatePredicate<T>(sreg);
+                        vlds(vreg0, srcPtr, i * srcStride + j * nRepeatElem, NORM);
+                        vsts(vreg0, dstPtr, i * dstStride + j * nRepeatElem, distValue, preg);
+                    }
+                }
+            }
+        }
+    } else {
+        unsigned validCol = srcC0;
+        unsigned validRow = srcC1HW;
+        unsigned srcStride = srcC0;
+        unsigned dstStride = dstN * srcC0;
+        unsigned nStride = srcC1HW * srcC0;
+        for (uint16_t num = 0; num < (uint16_t)srcN; num++) {
+            __ubuf__ T *srcPtr = srcPtrOrig + num * nStride;
+            __ubuf__ T *dstPtr = dstPtrOrig + num * srcC0;
+            for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
+                for (uint16_t j = 0; j < (uint16_t)validCol; ++j) {
+                    dstPtr[i * dstStride + j] = srcPtr[i * srcStride + j];
+                }
+            }
+        }
+    }
+}
+
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
+PTO_INTERNAL void CheckConvTile()
+{
+#ifdef _DEBUG
+    using T = typename TileDataSrc::DType;
+    constexpr const int UB_SIZE = 262144; // 256*1024 B
+    if (TileDataSrc::layout == Layout::NCHW && TileDataDst::layout == Layout::NC1HWC0) {
+        unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
+        unsigned srcC = src.GetShape(GlobalTensorDim::DIM_1);
+        unsigned srcH = src.GetShape(GlobalTensorDim::DIM_2);
+        unsigned srcW = src.GetShape(GlobalTensorDim::DIM_3);
+        unsigned dstN = dst.GetShape(GlobalTensorDim::DIM_0);
+        unsigned dstC1 = dst.GetShape(GlobalTensorDim::DIM_1);
+        unsigned dstH = dst.GetShape(GlobalTensorDim::DIM_2);
+        unsigned dstW = dst.GetShape(GlobalTensorDim::DIM_3);
+        unsigned dstC0 = dst.GetShape(GlobalTensorDim::DIM_4);
+        unsigned srcSize = srcN * srcC * srcH * srcW;
+        unsigned dstSize = dstN * dstC1 * dstC0 * dstH * dstW;
+        unsigned tmpSize = TileDataTmp::Rows * TileDataTmp::Cols;
+        PTO_ASSERT(srcH * srcW * sizeof(T) % BLOCK_BYTE_SIZE == 0, "expect align for H * W");
+        PTO_ASSERT(srcN == dstN && srcH == dstH && srcW == dstW && dstC1 == (srcC + dstC0 - 1) / dstC0,
+                   "expect same size for src and dst.");
+        PTO_ASSERT((srcSize + dstSize + tmpSize) * sizeof(T) < UB_SIZE, "ERROR: memory usage exceeds UB limit!");
+    } else if (TileDataSrc::layout == Layout::NC1HWC0 && TileDataDst::layout == Layout::FRACTAL_Z) {
+        unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
+        unsigned srcC1 = src.GetShape(GlobalTensorDim::DIM_1);
+        unsigned srcH = src.GetShape(GlobalTensorDim::DIM_2);
+        unsigned srcW = src.GetShape(GlobalTensorDim::DIM_3);
+        unsigned srcC0 = src.GetShape(GlobalTensorDim::DIM_4);
+        unsigned dstC1HW = dst.GetShape(GlobalTensorDim::DIM_0);
+        unsigned dstN1 = dst.GetShape(GlobalTensorDim::DIM_1);
+        unsigned dstN0 = dst.GetShape(GlobalTensorDim::DIM_2);
+        unsigned dstC0 = dst.GetShape(GlobalTensorDim::DIM_3);
+        unsigned srcSize = srcN * srcC1 * srcC0 * srcH * srcW;
+        unsigned dstSize = dstC1HW * dstN1 * dstN0 * dstC0;
+        unsigned tmpSize = TileDataTmp::Rows * TileDataTmp::Cols;
+        PTO_ASSERT(srcC1 * srcH * srcW == dstC1HW && srcC0 == dstC0 && dstN1 == (srcN + dstN0 - 1) / dstN0,
+                   "expect same size for src and dst.");
+        PTO_ASSERT((srcSize + dstSize + tmpSize) * sizeof(T) < UB_SIZE, "ERROR: memory usage exceeds UB limit!");
+    }
+#endif
+}
+
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
+PTO_INTERNAL void TTRANS_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp)
+{
+    using T = typename TileDataSrc::DType;
+    using U = typename TileDataDst::DType;
+    static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "Fix: TTRANS has unsupported data type.");
+    static_assert(sizeof(T) == sizeof(U), "Fix: TTRANS has inconsistent input and output data types.");
+    if constexpr (is_conv_tile_v<TileDataSrc>) {
+        constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
+        CheckConvTile<TileDataDst, TileDataSrc, TileDataTmp>();
+        if (TileDataSrc::layout == Layout::NCHW && TileDataDst::layout == Layout::NC1HWC0) {
+            unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
+            unsigned srcC = src.GetShape(GlobalTensorDim::DIM_1);
+            unsigned srcH = src.GetShape(GlobalTensorDim::DIM_2);
+            unsigned srcW = src.GetShape(GlobalTensorDim::DIM_3);
+            unsigned dstC0 = dst.GetShape(GlobalTensorDim::DIM_4);
+            TTransConvNCHW2NC1HWC0<TileDataSrc, blockSizeElem>(dst.data(), src.data(), srcN, srcC, srcH, srcW, dstC0);
+        } else if (TileDataSrc::layout == Layout::NC1HWC0 && TileDataDst::layout == Layout::FRACTAL_Z) {
+            unsigned srcN = src.GetShape(GlobalTensorDim::DIM_0);
+            unsigned srcC1 = src.GetShape(GlobalTensorDim::DIM_1);
+            unsigned srcH = src.GetShape(GlobalTensorDim::DIM_2);
+            unsigned srcW = src.GetShape(GlobalTensorDim::DIM_3);
+            unsigned srcC0 = src.GetShape(GlobalTensorDim::DIM_4);
+            unsigned dstN1 = dst.GetShape(GlobalTensorDim::DIM_1);
+            unsigned dstN0 = dst.GetShape(GlobalTensorDim::DIM_2);
+            TTransConvNC1HWC02C1HWNC0<TileDataSrc, blockSizeElem>(dst.data(), src.data(), dstN0 * dstN1, srcN,
+                                                                  srcC1 * srcH * srcW, srcC0);
+        }
+        return;
+    } else {
+        TransTile<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp);
     }
 }
 } // namespace pto
