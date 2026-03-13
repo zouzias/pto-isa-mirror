@@ -51,7 +51,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 ## Tile-Scalar / Tile-Immediate
 - [TEXPANDS](TEXPANDS.md) - Broadcast a scalar into a destination tile.
 - [TCMPS](TCMPS.md) - Compare a tile against a scalar and write per-element comparison results.
-- [TSELS](TSELS.md) - Select one of two source tiles using a scalar `selectMode` (global select).
+- [TSELS](TSELS.md) - Select between source tile and scalar using a mask tile (per-element selection for source tile).
 - [TMINS](TMINS.md) - Elementwise minimum of a tile and a scalar.
 - [TADDS](TADDS.md) - Elementwise add a scalar to a tile.
 - [TSUBS](TSUBS.md) - Elementwise subtract a scalar from a tile.

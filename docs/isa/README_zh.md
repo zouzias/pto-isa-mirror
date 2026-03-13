@@ -51,7 +51,7 @@
 ## Tile-标量 / Tile-立即数
 - [TEXPANDS](TEXPANDS_zh.md) - 将标量广播到目标 Tile 中。
 - [TCMPS](TCMPS_zh.md) - 将 Tile 与标量比较并写入逐元素比较结果。
-- [TSELS](TSELS_zh.md) - 使用掩码Tile在源Tile和标量之间进行选择（源Tile逐元素选择）。
+- [TSELS](TSELS_zh.md) - 使用掩码 Tile 在源 Tile 和标量之间进行选择（源 Tile 逐元素选择）。
 - [TMINS](TMINS_zh.md) - Tile 与标量的逐元素最小值。
 - [TADDS](TADDS_zh.md) - Tile 与标量的逐元素加法。
 - [TSUBS](TSUBS_zh.md) - 从 Tile 中逐元素减去一个标量。
