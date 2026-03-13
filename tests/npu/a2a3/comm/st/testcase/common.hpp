@@ -658,6 +658,6 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     return perRankFn(rankId, &rootInfo);
 }
 
-// SdmaWorkspaceManager moved to pto/comm/async/sdma/sdma_workspace_manager.hpp
-#include "pto/comm/async/sdma/sdma_workspace_manager.hpp"
+// SdmaWorkspaceManager moved to pto/npu/comm/async/sdma/sdma_workspace_manager.hpp
+#include "pto/npu/comm/async/sdma/sdma_workspace_manager.hpp"
 using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;
