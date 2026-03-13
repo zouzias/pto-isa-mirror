@@ -49,15 +49,16 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
     constexpr uint16_t FLAG_ID = 0;
     constexpr uint8_t FIFO_DEPTH = 2;
     constexpr uint8_t FIFO_PERIOD = 1;
+    // local fifo base used for TPOP of vector side(vecTileHalf)
+    constexpr uint32_t localFiFoBase = 0x0;
 
     using AccTile = TileAcc<OutT, CASE_TILE_M, TILE_N, CASE_TILE_M, TILE_N>;
     using VecTileHalf = Tile<TileType::Vec, OutT, VEC_M, TILE_N, BLayout::RowMajor, VEC_M, TILE_N>;
     using BiasTile = Tile<TileType::Vec, OutT, VEC_M, TILE_N, BLayout::RowMajor, VEC_M, TILE_N>;
     using OutTile = Tile<TileType::Vec, OutT, VEC_M, TILE_N, BLayout::RowMajor, VEC_M, TILE_N>;
 
-    using MatPipe = TPipe<FLAG_ID, FIFOType::GM_FIFO, FIFO_DEPTH, FIFO_PERIOD, AccTile, VecTileHalf,
-                          TSyncOpType::TSTORE_C2GM_UFOFF, TSyncOpType::TLOAD>;
-    MatPipe mPipe(fifoMem);
+    using MatPipe = TPipe<FLAG_ID, FIFOType::GM_FIFO, FIFO_DEPTH, FIFO_PERIOD, AccTile, VecTileHalf>;
+    MatPipe mPipe(fifoMem, localFiFoBase);
 
     constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
     constexpr uint32_t ALIGNED_M = CeilAlign<uint32_t>(CASE_TILE_M, 16);
@@ -144,7 +145,6 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
         VecTileHalf vecTileHalf;
         BiasTile biasTile;
         OutTile outTile;
-        TASSIGN(vecTileHalf, 0x0);
         TASSIGN(biasTile, 0x10000);
         TASSIGN(outTile, 0x20000);
 
