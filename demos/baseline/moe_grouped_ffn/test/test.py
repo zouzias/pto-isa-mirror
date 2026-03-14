@@ -32,7 +32,6 @@ HIDDEN_SIZE = 4096
 INTER_SIZE = 1920
 
 _SPLIT_ENV = "PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT"
-_FUSED_ENV = "PTO_MOE_GROUPED_FFN_USE_FUSED"
 
 
 def ref_grouped_ffn(x_cpu, gate_dn_cpu, up_dn_cpu, group_offsets):
@@ -82,28 +81,19 @@ def ref_grouped_ffn_stage1_input(x_cpu, gate_dn_cpu, up_dn_cpu, group_offsets):
 
 
 @contextlib.contextmanager
-def impl_env(split=False, fused=False):
+def impl_env(split=False):
     prev_split = os.environ.get(_SPLIT_ENV)
-    prev_fused = os.environ.get(_FUSED_ENV)
     try:
         if split:
             os.environ[_SPLIT_ENV] = "1"
         else:
             os.environ.pop(_SPLIT_ENV, None)
-        if fused:
-            os.environ[_FUSED_ENV] = "1"
-        else:
-            os.environ.pop(_FUSED_ENV, None)
         yield
     finally:
         if prev_split is None:
             os.environ.pop(_SPLIT_ENV, None)
         else:
             os.environ[_SPLIT_ENV] = prev_split
-        if prev_fused is None:
-            os.environ.pop(_FUSED_ENV, None)
-        else:
-            os.environ[_FUSED_ENV] = prev_fused
 
 
 class TestPtoMoeGroupedFFN(TestCase):
@@ -140,7 +130,7 @@ class TestPtoMoeGroupedFFN(TestCase):
         up_dn = torch.randn((num_experts, INTER_SIZE, HIDDEN_SIZE), dtype=torch.bfloat16) * 0.02
         return x, gate_dn, up_dn, group_offsets
 
-    def _assert_repeated_large_forward(self, seed, repeats=10, split=False, fused=False):
+    def _assert_repeated_large_forward(self, seed, repeats=10, split=False):
         x, gate_dn, up_dn, group_offsets = self._make_large_inputs(seed=seed)
 
         x_npu = x.npu()
@@ -150,7 +140,7 @@ class TestPtoMoeGroupedFFN(TestCase):
         ref = ref_grouped_ffn(x, gate_dn, up_dn, group_offsets)
 
         ref_out = None
-        with impl_env(split=split, fused=fused):
+        with impl_env(split=split):
             for idx in range(repeats):
                 out = torch.ops.npu.pto_moe_grouped_ffn(x_npu, gate_dn_npu, up_dn_npu, group_offsets_npu)
                 torch.npu.synchronize()
@@ -219,14 +209,6 @@ class TestPtoMoeGroupedFFN(TestCase):
             out = torch.ops.npu.pto_moe_grouped_ffn(x.npu(), gate_dn.npu(), up_dn.npu(), group_offsets.npu())
             self.assertRtolEqual(out.cpu(), ref, prec=2.0e-2)
 
-    def test_pto_moe_grouped_ffn_fused_forward(self):
-        x, gate_dn, up_dn, group_offsets = self._make_demo_inputs(seed=4)
-        ref = ref_grouped_ffn(x, gate_dn, up_dn, group_offsets)
-
-        with impl_env(fused=True):
-            out = torch.ops.npu.pto_moe_grouped_ffn(x.npu(), gate_dn.npu(), up_dn.npu(), group_offsets.npu())
-            self.assertRtolEqual(out.cpu(), ref, prec=2.0e-2)
-
     def test_pto_moe_grouped_ffn_impl_consistency(self):
         x, gate_dn, up_dn, group_offsets = self._make_demo_inputs(seed=8)
         ref = ref_grouped_ffn(x, gate_dn, up_dn, group_offsets)
@@ -284,10 +266,6 @@ class TestPtoMoeGroupedFFN(TestCase):
 
     def test_pto_moe_grouped_ffn_custom_split_repeated_large_forward(self):
         self._assert_repeated_large_forward(seed=5, repeats=5, split=True)
-
-    def test_pto_moe_grouped_ffn_fused_repeated_large_forward(self):
-        self._assert_repeated_large_forward(seed=6, repeats=5, fused=True)
-
 
 if __name__ == "__main__":
     run_tests()

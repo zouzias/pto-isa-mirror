@@ -28,21 +28,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "aclrtlaunch_moe_grouped_dual_proj_packed_custom.h"
 #include "aclrtlaunch_moe_grouped_dual_proj_packed_nd_custom.h"
 #include "aclrtlaunch_moe_grouped_gate_proj_custom.h"
-#include "aclrtlaunch_moe_grouped_gemm_custom.h"
-#include "aclrtlaunch_moe_grouped_gemm_with_intermediates_custom.h"
 #include "aclrtlaunch_moe_grouped_up_proj_custom.h"
 #include "../kernel/moe_grouped_ffn_custom.h"
 
 namespace ascendc_path {
 
 namespace {
-
-struct WorkList {
-    at::Tensor expertIds;
-    at::Tensor rowOffsets;
-    at::Tensor validRows;
-    uint32_t blockDim;
-};
 
 // Work items for the projection kernels (gate/up).
 // Each block computes a single [kMoeBaseM, kMoeBaseN] tile, identified by (expert, rowOffset, colTile).
@@ -52,14 +43,6 @@ struct ProjectionWorkList {
     at::Tensor tileOffsets;
     uint32_t numExperts;
     uint32_t blockDim;
-};
-
-struct PaddedLayout {
-    at::Tensor x;
-    at::Tensor groupOffsetsCpu;
-    std::vector<int32_t> originalOffsets;
-    std::vector<int32_t> paddedOffsets;
-    bool enabled;
 };
 
 struct Stage1Outputs {
@@ -105,16 +88,11 @@ struct RoutingPlanKeyHash {
 
 struct CachedRoutingPlan {
     at::Tensor groupOffsetsCpu;
-    std::vector<int32_t> originalOffsets;
-    std::vector<int32_t> paddedOffsets;
-    WorkList workList;
     ProjectionWorkList projectionWorkList;
-    bool enabled;
 };
 
 enum class ForwardImpl {
     GroupedMatmul,
-    Fused,
     CustomSplit,
 };
 
@@ -204,40 +182,6 @@ std::vector<int32_t> ExtractCpuOffsets(const at::Tensor &groupOffsetsCpu)
     return std::vector<int32_t>(offsetPtr, offsetPtr + groupOffsetsCpu.numel());
 }
 
-WorkList BuildWorkList(const at::Tensor &groupOffsetsCpu)
-{
-    const int64_t numExperts = groupOffsetsCpu.size(0) - 1;
-    const auto *offsetPtr = groupOffsetsCpu.data_ptr<int32_t>();
-
-    std::vector<int32_t> expertIds;
-    std::vector<int32_t> rowOffsets;
-    std::vector<int32_t> validRows;
-
-    const int64_t mTiles =
-        (offsetPtr[numExperts] + static_cast<int32_t>(kMoeBaseM) - 1) / static_cast<int32_t>(kMoeBaseM);
-    expertIds.reserve(numExperts * mTiles);
-    rowOffsets.reserve(numExperts * mTiles);
-    validRows.reserve(numExperts * mTiles);
-
-    for (int64_t expert = 0; expert < numExperts; ++expert) {
-        const int32_t start = offsetPtr[expert];
-        const int32_t end = offsetPtr[expert + 1];
-        for (int32_t row = start; row < end; row += kMoeBaseM) {
-            const int32_t rows = std::min<int32_t>(kMoeBaseM, end - row);
-            expertIds.push_back(static_cast<int32_t>(expert));
-            rowOffsets.push_back(row);
-            validRows.push_back(rows);
-        }
-    }
-
-    WorkList workList;
-    workList.blockDim = static_cast<uint32_t>(expertIds.size());
-    workList.expertIds = CopyTensorHostToDevice(MakeCpuIntTensor(expertIds));
-    workList.rowOffsets = CopyTensorHostToDevice(MakeCpuIntTensor(rowOffsets));
-    workList.validRows = CopyTensorHostToDevice(MakeCpuIntTensor(validRows));
-    return workList;
-}
-
 ProjectionWorkList BuildProjectionWorkList(const at::Tensor &groupOffsetsCpu)
 {
     const int64_t numExperts = groupOffsetsCpu.size(0) - 1;
@@ -267,37 +211,9 @@ ProjectionWorkList BuildProjectionWorkList(const at::Tensor &groupOffsetsCpu)
 
 CachedRoutingPlan BuildRoutingPlan(const std::vector<int32_t> &originalOffsets)
 {
-    const int64_t numExperts = static_cast<int64_t>(originalOffsets.size()) - 1;
-
     CachedRoutingPlan plan;
-    plan.enabled = false;
-    plan.originalOffsets = originalOffsets;
-    plan.paddedOffsets.reserve(static_cast<size_t>(numExperts) + 1);
-    plan.paddedOffsets.push_back(0);
-
-    bool needsPadding = false;
-    for (int64_t expert = 0; expert < numExperts; ++expert) {
-        const int32_t start = originalOffsets[expert];
-        const int32_t end = originalOffsets[expert + 1];
-        const int32_t rows = end - start;
-        const int32_t paddedRows = RoundUpToMultiple(rows, static_cast<int32_t>(kMoeBaseM));
-        needsPadding |= (paddedRows != rows);
-        plan.paddedOffsets.push_back(plan.paddedOffsets.back() + paddedRows);
-    }
-
-    if (!needsPadding) {
-        plan.groupOffsetsCpu = MakeCpuIntTensor(plan.originalOffsets);
-        plan.workList = BuildWorkList(plan.groupOffsetsCpu);
-        plan.projectionWorkList = BuildProjectionWorkList(plan.groupOffsetsCpu);
-        return plan;
-    }
-
-    plan.enabled = true;
-    plan.groupOffsetsCpu = MakeCpuIntTensor(plan.paddedOffsets);
-    plan.workList = BuildWorkList(plan.groupOffsetsCpu);
-    // Projection kernels support ragged M via tileMeta, so keep the unpadded worklist
-    // to avoid extra GM copies in MaybePadInputs/RestoreOutputLayout for the split path.
-    plan.projectionWorkList = BuildProjectionWorkList(MakeCpuIntTensor(plan.originalOffsets));
+    plan.groupOffsetsCpu = MakeCpuIntTensor(originalOffsets);
+    plan.projectionWorkList = BuildProjectionWorkList(plan.groupOffsetsCpu);
     return plan;
 }
 
@@ -315,7 +231,7 @@ CachedRoutingPlan GetCachedRoutingPlan(const at::Tensor &groupOffsetsCpu, const 
         }
     }
 
-    auto routingPlan = BuildRoutingPlan(key.offsets);
+    const auto routingPlan = BuildRoutingPlan(key.offsets);
     {
         std::lock_guard<std::mutex> guard(cacheMutex);
         if (cache.size() >= kMaxRoutingPlanCacheEntries) {
@@ -324,83 +240,6 @@ CachedRoutingPlan GetCachedRoutingPlan(const at::Tensor &groupOffsetsCpu, const 
         cache[key] = routingPlan;
     }
     return routingPlan;
-}
-
-PaddedLayout MaybePadInputs(const at::Tensor &x, const CachedRoutingPlan &routingPlan)
-{
-    PaddedLayout layout;
-    layout.enabled = routingPlan.enabled;
-    layout.groupOffsetsCpu = routingPlan.groupOffsetsCpu;
-    layout.originalOffsets = routingPlan.originalOffsets;
-    layout.paddedOffsets = routingPlan.paddedOffsets;
-
-    if (!layout.enabled) {
-        layout.x = x;
-        return layout;
-    }
-
-    layout.x = at::zeros({layout.paddedOffsets.back(), x.size(1)}, x.options());
-
-    const int64_t numExperts = static_cast<int64_t>(layout.originalOffsets.size()) - 1;
-    for (int64_t expert = 0; expert < numExperts; ++expert) {
-        const int32_t start = layout.originalOffsets[expert];
-        const int32_t end = layout.originalOffsets[expert + 1];
-        const int32_t rows = end - start;
-        if (rows == 0) {
-            continue;
-        }
-        layout.x.narrow(0, layout.paddedOffsets[expert], rows).copy_(x.narrow(0, start, rows));
-    }
-
-    return layout;
-}
-
-at::Tensor RestoreOutputLayout(const at::Tensor &paddedOut, const PaddedLayout &layout, const at::Tensor &x)
-{
-    if (!layout.enabled) {
-        return paddedOut;
-    }
-
-    auto out = at::empty({x.size(0), kMoeInterSize}, x.options().dtype(at::kFloat));
-    const int64_t numExperts = static_cast<int64_t>(layout.originalOffsets.size()) - 1;
-    for (int64_t expert = 0; expert < numExperts; ++expert) {
-        const int32_t start = layout.originalOffsets[expert];
-        const int32_t end = layout.originalOffsets[expert + 1];
-        const int32_t rows = end - start;
-        if (rows == 0) {
-            continue;
-        }
-        out.narrow(0, start, rows).copy_(paddedOut.narrow(0, layout.paddedOffsets[expert], rows));
-    }
-    return out;
-}
-
-Stage1Outputs RestoreStage1Outputs(const Stage1Outputs &paddedOutputs, const PaddedLayout &layout, const at::Tensor &x)
-{
-    if (!layout.enabled) {
-        return paddedOutputs;
-    }
-
-    Stage1Outputs outputs;
-    outputs.out = at::empty({x.size(0), kMoeInterSize}, x.options().dtype(at::kFloat));
-    outputs.gateProj = at::empty_like(outputs.out);
-    outputs.upProj = at::empty_like(outputs.out);
-
-    const int64_t numExperts = static_cast<int64_t>(layout.originalOffsets.size()) - 1;
-    for (int64_t expert = 0; expert < numExperts; ++expert) {
-        const int32_t start = layout.originalOffsets[expert];
-        const int32_t end = layout.originalOffsets[expert + 1];
-        const int32_t rows = end - start;
-        if (rows == 0) {
-            continue;
-        }
-
-        const int32_t paddedStart = layout.paddedOffsets[expert];
-        outputs.out.narrow(0, start, rows).copy_(paddedOutputs.out.narrow(0, paddedStart, rows));
-        outputs.gateProj.narrow(0, start, rows).copy_(paddedOutputs.gateProj.narrow(0, paddedStart, rows));
-        outputs.upProj.narrow(0, start, rows).copy_(paddedOutputs.upProj.narrow(0, paddedStart, rows));
-    }
-    return outputs;
 }
 
 void ValidateInputs(const at::Tensor &x, const at::Tensor &gateWeightDn, const at::Tensor &upWeightDn,
@@ -458,63 +297,6 @@ at::Tensor NormalizeGroupOffsetsToCpuInt(const at::Tensor &groupOffsets)
 
 Projections LaunchGroupedFFNGroupedMatmulProjections(const at::Tensor &x, const at::Tensor &gateWeightDn,
                                                      const at::Tensor &upWeightDn, const at::Tensor &groupOffsetsCpu);
-
-at::Tensor LaunchGroupedFFN(const at::Tensor &x, const at::Tensor &gateWeightDn, const at::Tensor &upWeightDn,
-                            const at::Tensor &groupOffsetsCpu, const WorkList &workList)
-{
-    (void)groupOffsetsCpu;
-    auto out = at::empty({x.size(0), kMoeInterSize}, x.options().dtype(at::kFloat));
-    if (workList.blockDim == 0) {
-        return out.zero_();
-    }
-
-    auto ascendcPlatform = platform_ascendc::PlatformAscendCManager::GetInstance();
-    const std::size_t systemWorkspaceSize = static_cast<std::size_t>(ascendcPlatform->GetLibApiWorkSpaceSize());
-    const uint32_t blockDim = workList.blockDim;
-
-    const std::size_t userWorkspaceSize = GetMoeUserWorkspaceBytes(blockDim);
-    const std::size_t workspaceSize = std::max<std::size_t>(userWorkspaceSize + systemWorkspaceSize, 1);
-    auto workspaceTensor = at::empty({static_cast<int64_t>(workspaceSize)},
-                                     at::TensorOptions().dtype(at::kByte).device(x.options().device()));
-
-    EXEC_KERNEL_CMD(moe_grouped_gemm_custom, blockDim, x, gateWeightDn, upWeightDn, out, workList.expertIds,
-                    workList.rowOffsets, workList.validRows, workspaceTensor);
-    return out;
-}
-
-Stage1Outputs LaunchGroupedFFNFusedWithIntermediates(const at::Tensor &x,
-                                                     const at::Tensor &gateWeightDn,
-                                                     const at::Tensor &upWeightDn,
-                                                     const at::Tensor &groupOffsetsCpu,
-                                                     const WorkList &workList)
-{
-    (void)groupOffsetsCpu;
-    Stage1Outputs outputs;
-    outputs.out = at::empty({x.size(0), kMoeInterSize}, x.options().dtype(at::kFloat));
-    outputs.gateProj = at::empty_like(outputs.out);
-    outputs.upProj = at::empty_like(outputs.out);
-
-    if (workList.blockDim == 0) {
-        outputs.out.zero_();
-        outputs.gateProj.zero_();
-        outputs.upProj.zero_();
-        return outputs;
-    }
-
-    auto ascendcPlatform = platform_ascendc::PlatformAscendCManager::GetInstance();
-    const std::size_t systemWorkspaceSize = static_cast<std::size_t>(ascendcPlatform->GetLibApiWorkSpaceSize());
-    const uint32_t blockDim = workList.blockDim;
-
-    const std::size_t userWorkspaceSize = GetMoeUserWorkspaceBytes(blockDim);
-    const std::size_t workspaceSize = std::max<std::size_t>(userWorkspaceSize + systemWorkspaceSize, 1);
-    auto workspaceTensor = at::empty({static_cast<int64_t>(workspaceSize)},
-                                     at::TensorOptions().dtype(at::kByte).device(x.options().device()));
-
-    EXEC_KERNEL_CMD(moe_grouped_gemm_with_intermediates_custom, blockDim, x, gateWeightDn, upWeightDn, outputs.out,
-                    outputs.gateProj, outputs.upProj, workList.expertIds, workList.rowOffsets, workList.validRows,
-                    workspaceTensor);
-    return outputs;
-}
 
 Projections LaunchGroupedFFNSplitProjections(const at::Tensor &x, const at::Tensor &gateWeightDn,
                                              const at::Tensor &upWeightDn, const ProjectionWorkList &workList)
@@ -691,11 +473,6 @@ Stage1Outputs LaunchGroupedFFNGroupedMatmul(const at::Tensor &x, const at::Tenso
 
 ForwardImpl GetForwardImpl()
 {
-    const char *fusedEnv = std::getenv("PTO_MOE_GROUPED_FFN_USE_FUSED");
-    if (fusedEnv != nullptr && std::strcmp(fusedEnv, "0") != 0) {
-        return ForwardImpl::Fused;
-    }
-
     const char *splitEnv = std::getenv("PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT");
     if (splitEnv != nullptr && std::strcmp(splitEnv, "0") != 0) {
         return ForwardImpl::CustomSplit;
@@ -730,12 +507,6 @@ at::Tensor run_moe_grouped_ffn(const at::Tensor &x, const at::Tensor &gateWeight
     if (forwardImpl == ForwardImpl::CustomSplit) {
         // The projection worklist encodes ragged validM, so we can avoid padding copies.
         return LaunchGroupedFFNSplit(x, gateWeightDn, upWeightDn, routingPlan.projectionWorkList).out;
-    }
-
-    if (forwardImpl == ForwardImpl::Fused) {
-        auto paddedLayout = MaybePadInputs(x, routingPlan);
-        auto paddedOut = LaunchGroupedFFN(paddedLayout.x, gateWeightDn, upWeightDn, groupOffsetsCpu, routingPlan.workList);
-        return RestoreOutputLayout(paddedOut, paddedLayout, x);
     }
 
     TORCH_CHECK(false, "Unsupported forward implementation");
@@ -813,13 +584,6 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> run_moe_grouped_ffn_with_intermed
     } else if (forwardImpl == ForwardImpl::CustomSplit) {
         const auto routingPlan = GetCachedRoutingPlan(groupOffsetsCpu, x);
         outputs = LaunchGroupedFFNSplit(x, gateWeightDn, upWeightDn, routingPlan.projectionWorkList);
-    } else if (forwardImpl == ForwardImpl::Fused) {
-        const auto routingPlan = GetCachedRoutingPlan(groupOffsetsCpu, x);
-        auto paddedLayout = MaybePadInputs(x, routingPlan);
-        auto paddedOutputs =
-            LaunchGroupedFFNFusedWithIntermediates(paddedLayout.x, gateWeightDn, upWeightDn, groupOffsetsCpu,
-                                                   routingPlan.workList);
-        outputs = RestoreStage1Outputs(paddedOutputs, paddedLayout, x);
     } else {
         TORCH_CHECK(false, "Unsupported forward implementation");
     }

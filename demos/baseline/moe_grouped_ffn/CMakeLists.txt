@@ -59,7 +59,6 @@ ascendc_library(moe_grouped_ffn_kernel STATIC
     csrc/kernel/moe_grouped_dual_proj_custom.cpp
     csrc/kernel/moe_grouped_dual_proj_packed_custom.cpp
     csrc/kernel/moe_grouped_dual_proj_packed_nd_custom.cpp
-    csrc/kernel/moe_grouped_ffn_custom.cpp
     csrc/kernel/moe_grouped_gate_proj_custom.cpp
     csrc/kernel/moe_grouped_up_proj_custom.cpp
 )

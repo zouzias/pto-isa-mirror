@@ -64,9 +64,9 @@ pip install dist/*.whl --force-reinstall
 cd test
 python3 test.py
 
-# Explicit backend comparison: ACLNN grouped matmul vs fused PTO path
+# Explicit backend comparison: ACLNN grouped matmul vs split PTO path
 cd ..
-python3 benchmark.py --case aligned_2k_8e --impl aclnn,fused --mode forward --json
+python3 benchmark.py --case aligned_2k_8e --impl aclnn,custom_split --mode forward --json
 ```
 
 ## Operator Signature
@@ -85,5 +85,4 @@ torch.ops.npu.pto_moe_grouped_ffn(x, gate_weight_dn, up_weight_dn, group_offsets
 
 - `aclnn`: default `npu_grouped_matmul` host path
 - `custom_split`: PTO gate projection + PTO up projection + host `SiLU * up`
-- `fused`: single PTO fused grouped FFN kernel, currently experimental and can stall on hardware
 - `eager`: PyTorch eager reference on NPU

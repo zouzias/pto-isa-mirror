@@ -18,12 +18,10 @@ HIDDEN_SIZE = 4096
 INTER_SIZE = 1920
 
 _SPLIT_ENV = "PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT"
-_FUSED_ENV = "PTO_MOE_GROUPED_FFN_USE_FUSED"
 
 _IMPL_ENVS = {
     "aclnn": {},
     "custom_split": {_SPLIT_ENV: "1"},
-    "fused": {_FUSED_ENV: "1"},
 }
 
 _IMPL_ALIASES = {
@@ -34,8 +32,8 @@ _IMPL_ALIASES = {
 
 _IMPL_SETS = {
     "both": ["aclnn", "eager"],
-    "pto": ["custom_split", "fused"],
-    "all": ["aclnn", "custom_split", "fused", "eager"],
+    "pto": ["custom_split"],
+    "all": ["aclnn", "custom_split", "eager"],
 }
 
 
@@ -82,11 +80,9 @@ def eager_grouped_ffn(x, gate_dn, up_dn, offsets_cpu):
 @contextlib.contextmanager
 def impl_env(impl):
     prev_split = os.environ.get(_SPLIT_ENV)
-    prev_fused = os.environ.get(_FUSED_ENV)
 
     try:
         os.environ.pop(_SPLIT_ENV, None)
-        os.environ.pop(_FUSED_ENV, None)
         for key, value in _IMPL_ENVS.get(impl, {}).items():
             os.environ[key] = value
         yield
@@ -95,10 +91,6 @@ def impl_env(impl):
             os.environ.pop(_SPLIT_ENV, None)
         else:
             os.environ[_SPLIT_ENV] = prev_split
-        if prev_fused is None:
-            os.environ.pop(_FUSED_ENV, None)
-        else:
-            os.environ[_FUSED_ENV] = prev_fused
 
 
 def parse_impls(spec):
@@ -261,7 +253,7 @@ def main():
         "--impl",
         type=str,
         default="both",
-        help="Comma-separated impls or aliases: aclnn, custom_split, fused, eager, both, pto, all",
+        help="Comma-separated impls or aliases: aclnn, custom_split, eager, both, pto, all",
     )
     parser.add_argument("--mode", choices=["forward", "train", "both"], default="both")
     parser.add_argument("--warmup", type=int, default=10)
