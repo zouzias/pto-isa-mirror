@@ -1,1 +1,24 @@
-/root/workspace/daily/run_daily.sh: line 9: ./tests/run_st.sh: No such file or directory
+run failed: Command '['cmake', '-DRUN_MODE=sim', '-DSOC_VERSION=Kirin9030', '-DTEST_CASE=all', '..']' returned non-zero exit status 1.
+target_dir: /root/workspace/daily/2026-03-14-09/pto-isa/tests/npu/kirin9030/src/st
+build failed: -- The C compiler identification is GNU 11.4.0
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found GTest: /usr/lib/x86_64-linux-gnu/cmake/GTest/GTestConfig.cmake (found version "1.11.0")  
+-- run : all
+CMake Error at testcase/CMakeLists.txt:180 (add_subdirectory):
+  add_subdirectory given source "tfillpad" which is not an existing
+  directory.
+
+
+-- Configuring incomplete, errors occurred!
+See also "/root/workspace/daily/2026-03-14-09/pto-isa/tests/npu/kirin9030/src/st/build/CMakeFiles/CMakeOutput.log".
+
