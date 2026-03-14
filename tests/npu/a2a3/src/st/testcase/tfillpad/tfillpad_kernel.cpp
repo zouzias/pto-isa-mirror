@@ -16,6 +16,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
+// Custom pad value for test case 12
+// -1.0f has bit pattern 0xBF800000
+constexpr PadValue PadCustomNeg1 = static_cast<PadValue>(0xBF80000100000000ULL);
+
 #define LOGSIZE 128
 #define PRINTLOG 4
 #define DEBUGLOG
@@ -278,6 +282,14 @@ extern "C" __global__ AICORE void launchTFILLPAD_11(__gm__ uint8_t *out, __gm__ 
         (__gm__ int32_t *)out, (__gm__ int32_t *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
+// Case 12: Custom pad value (-1.0f)
+extern "C" __global__ AICORE void launchTFILLPAD_12(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
+                                                    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
+    runTFILLPAD<float, 1, 1, 1, 128, 64, 128, 128, 1, PadValue::Null, PadCustomNeg1>(
+        (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
 template <int32_t testKey>
 void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
 {
@@ -303,6 +315,8 @@ void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
         launchTFILLPAD_10<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 260, 7, gLog);
     } else if constexpr (testKey == 11) {
         launchTFILLPAD_11<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 260, 7, gLog);
+    } else if constexpr (testKey == 12) {
+        launchTFILLPAD_12<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 128, 64, gLog);
     }
 }
 
@@ -363,7 +377,7 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden)
                             gold_arr[x0][x1][x2][i][j] = t_padVal;
                         }
                     } // j
-                }     // i
+                } // i
 
     std::copy((uint8_t *)in_arr, ((uint8_t *)(in_arr)) + in_byteSize, input);
     std::copy((uint8_t *)gold_arr, ((uint8_t *)(gold_arr)) + out_byteSize, golden);
@@ -406,7 +420,8 @@ template void launchTFILLPAD<7>(uint8_t *out, uint8_t *src, uint64_t *gLog, void
 template void launchTFILLPAD<8>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
 template void launchTFILLPAD<9>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);  // 实例化 Key=0 的版本
 template void launchTFILLPAD<10>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
-template void launchTFILLPAD<11>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
+template void launchTFILLPAD<11>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
+template void launchTFILLPAD<12>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
 
 template int get_input_golden<1>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<2>(uint8_t *input, uint8_t *golden);
@@ -419,3 +434,4 @@ template int get_input_golden<8>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<9>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<10>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<11>(uint8_t *input, uint8_t *golden);
+template int get_input_golden<12>(uint8_t *input, uint8_t *golden);
