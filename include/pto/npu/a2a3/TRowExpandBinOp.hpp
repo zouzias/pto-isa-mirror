@@ -206,5 +206,22 @@ __tf__ PTO_INTERNAL void TRowExpandBin(typename TileDataDst::TileDType __out__ d
             dstPtr, src0Ptr, src1Ptr, tmpPtr, tmpPtr_, validRow, validCol);
     }
 }
+
+template <typename Op, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp>
+__tf__ PTO_INTERNAL void TRowExpandBin(typename TileDataDst::TileDType __out__ dst,
+                                       typename TileDataSrc0::TileDType __in__ src0,
+                                       typename TileDataSrc1::TileDType __in__ src1,
+                                       typename TileDataTmp::TileDType __in__ tmp, unsigned validRow, unsigned validCol)
+{
+    using T = typename TileDataDst::DType;
+    using U = typename std::conditional<sizeof(typename TileDataDst::DType) == 4, uint32_t, uint16_t>::type;
+    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
+    __ubuf__ U *src1Ptr = (__ubuf__ U *)__cce_get_tile_ptr(src1);
+    __ubuf__ T *tmpPtr = (__ubuf__ T *)__cce_get_tile_ptr(tmp);
+    __ubuf__ U *tmpPtr_ = (__ubuf__ U *)__cce_get_tile_ptr(tmp);
+    TRowExpandBinaryInstr<Op, T, U, TileDataDst::Rows, TileDataDst::RowStride, TileDataSrc0::RowStride>(
+        dstPtr, src0Ptr, src1Ptr, tmpPtr, tmpPtr_, validRow, validCol);
+}
 } // namespace pto
 #endif

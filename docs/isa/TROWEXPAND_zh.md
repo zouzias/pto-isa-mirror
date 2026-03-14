@@ -10,7 +10,7 @@
 
 ## 数学语义
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. For `0 <= i < R` and `0 <= j < C`:
+设 `R = dst.GetValidRow()`，`C = dst.GetValidCol()`。对 `0 <= i < R` 且 `0 <= j < C`：
 
 $$ \mathrm{dst}_{i,j} = \mathrm{src}_{i,0} $$
 
@@ -49,12 +49,12 @@ PTO_INST RecordEvent TROWEXPAND(TileDataDst& dst, TileDataSrc& src, WaitEvents&.
 
 实现检查 (NPU):
 
-- Tile Type: `dst` and `src` must be `TileType::Vec`.
-- Tile 布局: ND fractal (`isRowMajor` and `SLayout::NoneBox`) for both `src` and `dst`.
-- Data type: A2A3/A5 element types must be one of: `int8_t` or `uint8_t` or `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
-- 运行期有效区域检查:
-  - A2A3: returns early if any of `dstValidRow`, `dstValidCol`, `srcValidRow`, `srcValidCol` is zero.
-  - A5: asserts `srcValidRow == dstValidRow` and asserts `srcValidRow != 0 && srcValidCol != 0`.
+- Tile 类型：`dst` 和 `src` 必须是 `TileType::Vec`。
+- Tile 布局：`src` 和 `dst` 均为 ND 分形（`isRowMajor` 且 `SLayout::NoneBox`）。
+- 数据类型：A2A3/A5 元素类型必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
+- 运行期有效区域检查：
+  - A2A3：若 `dstValidRow`、`dstValidCol`、`srcValidRow`、`srcValidCol` 中任意一个为零则提前返回。
+  - A5：断言 `srcValidRow == dstValidRow`，且断言 `srcValidRow != 0 && srcValidCol != 0`。
 
 ## 示例
 
