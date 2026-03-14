@@ -17,17 +17,18 @@ np.random.seed(19)
 
 
 def gen_golden_data_taxpy(case_name, param):
-    dtype = param.dtype
+    dst_dtype = param.dst_dtype
+    src_dtype = param.src_dtype
 
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = np.random.uniform(-100, 100, size=h_valid * w_valid).astype(dtype)
-    input2 = np.random.uniform(-100, 100, size=h_valid * w_valid).astype(dtype)
-    scalar = np.random.uniform(low=-8, high=8, size=(1, 1)).astype(dtype)
+    input1 = np.random.uniform(-100, 100, size=h_valid * w_valid).astype(dst_dtype)
+    input2 = np.random.uniform(-100, 100, size=h_valid * w_valid).astype(src_dtype)
+    scalar = np.random.uniform(low=-8, high=8, size=(1, 1)).astype(src_dtype)
 
     # Perform the andbtraction
-    golden = input1 + input2 * scalar
+    golden = input1 + input2.astype(dst_dtype) * scalar
 
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
@@ -38,9 +39,10 @@ def gen_golden_data_taxpy(case_name, param):
 
 
 class TAxpyParams:
-    def __init__(self, name, dtype, tile_row, tile_col, valid_row, valid_col):
+    def __init__(self, name, dst_dtype, src_dtype, tile_row, tile_col, valid_row, valid_col):
         self.name = name
-        self.dtype = dtype
+        self.dst_dtype = dst_dtype
+        self.src_dtype = src_dtype
         self.tile_row = tile_row
         self.tile_col = tile_col
         self.valid_row = valid_row
@@ -56,12 +58,15 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TAxpyParams("TAXPYTest.case1", np.float16, 64, 64, 64, 64),
-        TAxpyParams("TAXPYTest.case2", np.float16, 64, 64, 63, 63),
-        TAxpyParams("TAXPYTest.case3", np.float16, 1, 16384, 1, 16384),
-        TAxpyParams("TAXPYTest.case4", np.float16, 2048, 16, 2048, 16),
-        TAxpyParams("TAXPYTest.case5", np.float32, 8, 8, 8, 8),
-        TAxpyParams("TAXPYTest.case6", np.float32, 16, 16, 15, 15),
+        TAxpyParams("TAXPYTest.case1", np.float16, np.float16, 64, 64, 64, 64),
+        TAxpyParams("TAXPYTest.case2", np.float16, np.float16, 64, 64, 63, 63),
+        TAxpyParams("TAXPYTest.case3", np.float16, np.float16, 1, 16384, 1, 16384),
+        TAxpyParams("TAXPYTest.case4", np.float16, np.float16, 2048, 16, 2048, 16),
+        TAxpyParams("TAXPYTest.case5", np.float32, np.float32, 64, 64, 64, 64),
+        TAxpyParams("TAXPYTest.case6", np.float32, np.float32, 64, 64, 63, 63),
+        TAxpyParams("TAXPYTest.case7", np.float32, np.float16, 64, 64, 63, 63),
+        TAxpyParams("TAXPYTest.case8", np.float32, np.float16, 4, 1024, 4, 1023),
+        TAxpyParams("TAXPYTest.case9", np.float32, np.float16, 256, 16, 256, 15),
     ]
 
     for param in case_params_list:
