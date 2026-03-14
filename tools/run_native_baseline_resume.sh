@@ -7,24 +7,20 @@ set -euo pipefail
 
 pick_free_port() {
     python3 - <<'PY'
-import subprocess
+import socket
 
-used = set()
-try:
-    output = subprocess.check_output(["ss", "-ltn"], text=True)
-except Exception:
-    output = ""
-
-for line in output.splitlines()[1:]:
-    fields = line.split()
-    if len(fields) < 4:
-        continue
-    port = fields[3].rsplit(":", 1)[-1]
-    if port.isdigit():
-        used.add(int(port))
+def is_bindable(port: int) -> bool:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", port))
+    except OSError:
+        return False
+    finally:
+        sock.close()
+    return True
 
 for candidate in range(35000, 45000):
-    if candidate not in used:
+    if is_bindable(candidate):
         print(candidate)
         break
 else:
@@ -116,6 +112,15 @@ MS_REMOTE="$(git -C "${MS_REPO}" remote get-url origin 2>/dev/null || true)"
 LATEST_CKPT_ITERATION=""
 if [[ -f "${CKPT_LOAD_DIR}/latest_checkpointed_iteration.txt" ]]; then
     LATEST_CKPT_ITERATION="$(cat "${CKPT_LOAD_DIR}/latest_checkpointed_iteration.txt")"
+fi
+
+if [[ "${LOAD_CHECKPOINT}" == "1" && -n "${LATEST_CKPT_ITERATION}" ]]; then
+    if [[ "${TRAIN_ITERS}" =~ ^[0-9]+$ && "${LATEST_CKPT_ITERATION}" =~ ^[0-9]+$ ]]; then
+        if (( TRAIN_ITERS <= LATEST_CKPT_ITERATION )); then
+            echo "TRAIN_ITERS (${TRAIN_ITERS}) must be greater than latest checkpoint iteration (${LATEST_CKPT_ITERATION})" >&2
+            exit 1
+        fi
+    fi
 fi
 
 case "${MODEL_SCALE}" in
