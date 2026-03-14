@@ -290,6 +290,14 @@ extern "C" __global__ AICORE void launchTFILLPAD_12(__gm__ uint8_t *out, __gm__ 
         (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
+// Case 13: Custom pad value for both TLOAD and TFILLPAD (32B unaligned: 127 cols)
+extern "C" __global__ AICORE void launchTFILLPAD_13(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
+                                                    int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
+{
+    runTFILLPAD<float, 1, 1, 1, 128, 127, 128, 160, 1, PadCustomNeg1, PadCustomNeg1>(
+        (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
 template <int32_t testKey>
 void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
 {
@@ -317,6 +325,8 @@ void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
         launchTFILLPAD_11<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 260, 7, gLog);
     } else if constexpr (testKey == 12) {
         launchTFILLPAD_12<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 128, 64, gLog);
+    } else if constexpr (testKey == 13) {
+        launchTFILLPAD_13<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 128, 127, gLog);
     }
 }
 
@@ -377,7 +387,46 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden)
                             gold_arr[x0][x1][x2][i][j] = t_padVal;
                         }
                     } // j
-                } // i
+                }     // i
+
+    std::copy((uint8_t *)in_arr, ((uint8_t *)(in_arr)) + in_byteSize, input);
+    std::copy((uint8_t *)gold_arr, ((uint8_t *)(gold_arr)) + out_byteSize, golden);
+    return sizeof(gold_arr);
+}
+
+// Specialized golden generator for custom pad values (float only)
+template <int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_>
+int get_input_golden_case_custom_float(uint8_t *input, uint8_t *golden, float customPadVal)
+{
+    using T = uint32_t; // for float storage
+
+    int in_shape[5] = {Shape0, Shape1, Shape2, Shape3, Shape4};
+    int out_shape[5] = {Shape0, Shape1, Shape2, kTRows_, kTCols_};
+    int in_capacity = in_shape[0] * in_shape[1] * in_shape[2] * in_shape[3] * in_shape[4];
+    int out_capacity = out_shape[0] * out_shape[1] * out_shape[2] * out_shape[3] * out_shape[4];
+    int in_byteSize = in_capacity * sizeof(T);
+    int out_byteSize = out_capacity * sizeof(T);
+
+    T t_padVal = *(T *)(&customPadVal);
+
+    T in_arr[Shape0][Shape1][Shape2][Shape3][Shape4] = {};
+    T gold_arr[Shape0][Shape1][Shape2][kTRows_][kTCols_] = {};
+    for (int x0 = 0; x0 < Shape0; x0++)
+        for (int x1 = 0; x1 < Shape1; x1++)
+            for (int x2 = 0; x2 < Shape2; x2++)
+                for (int i = 0; i < kTRows_; i++) {
+                    for (int j = 0; j < kTCols_; j++) {
+                        if (i < Shape3 && j < Shape4) {
+                            float val = static_cast<float>(x0 * Shape1 * Shape2 * Shape3 * Shape4 +
+                                                           x1 * Shape2 * Shape3 * Shape4 + x2 * Shape3 * Shape4 +
+                                                           i * Shape4 + j);
+                            in_arr[x0][x1][x2][i][j] = *(T *)(&val);
+                            gold_arr[x0][x1][x2][i][j] = in_arr[x0][x1][x2][i][j];
+                        } else {
+                            gold_arr[x0][x1][x2][i][j] = t_padVal;
+                        }
+                    }
+                }
 
     std::copy((uint8_t *)in_arr, ((uint8_t *)(in_arr)) + in_byteSize, input);
     std::copy((uint8_t *)gold_arr, ((uint8_t *)(gold_arr)) + out_byteSize, golden);
@@ -405,6 +454,10 @@ int get_input_golden(uint8_t *input, uint8_t *golden)
         return get_input_golden_case<int16_t, 1, 1, 1, 260, 7, 260, 32, PadValue::Min>(input, golden);
     } else if constexpr (testKey == 11) {
         return get_input_golden_case<int32_t, 1, 1, 1, 260, 7, 260, 32, PadValue::Min>(input, golden);
+    } else if constexpr (testKey == 12) {
+        return get_input_golden_case_custom_float<1, 1, 1, 128, 64, 128, 128>(input, golden, -1.0f);
+    } else if constexpr (testKey == 13) {
+        return get_input_golden_case_custom_float<1, 1, 1, 128, 127, 128, 160>(input, golden, -1.0f);
     }
 
     return 0;
@@ -422,6 +475,7 @@ template void launchTFILLPAD<9>(uint8_t *out, uint8_t *src, uint64_t *gLog, void
 template void launchTFILLPAD<10>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
 template void launchTFILLPAD<11>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 template void launchTFILLPAD<12>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
+template void launchTFILLPAD<13>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 
 template int get_input_golden<1>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<2>(uint8_t *input, uint8_t *golden);
@@ -435,3 +489,4 @@ template int get_input_golden<9>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<10>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<11>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<12>(uint8_t *input, uint8_t *golden);
+template int get_input_golden<13>(uint8_t *input, uint8_t *golden);
