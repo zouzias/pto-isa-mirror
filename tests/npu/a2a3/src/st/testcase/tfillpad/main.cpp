@@ -210,3 +210,8 @@ TEST_F(TFILLPADTest, case_float_GT_128_64_VT_128_128_PADCUSTOM_NEG1)
 {
     tfillpad_test<12, float, 1>();
 }
+
+TEST_F(TFILLPADTest, case_float_GT_128_127_VT_128_160_BLK1_PADCUSTOM_NEG1_PADCUSTOM_NEG1)
+{
+    tfillpad_test<13, float, 1>();
+}
