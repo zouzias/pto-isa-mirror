@@ -10,7 +10,7 @@
 
 ## 数学语义
 
-Merges sorted input lists into `dst`. Ordering, element format (e.g., value/index pairs), and the meaning of executed counts depend on the implementation.
+将多个已排序的输入列表归并到 `dst` 中。排序规则、元素格式（如值/索引对）以及已执行计数的含义取决于具体实现。
 
 $$ \mathrm{dst} = \mathrm{merge}(\mathrm{src}_0, \mathrm{src}_1, \ldots) $$
 
@@ -18,7 +18,7 @@ $$ \mathrm{dst} = \mathrm{merge}(\mathrm{src}_0, \mathrm{src}_1, \ldots) $$
 
 PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 
-Synchronous form (conceptual):
+同步形式（概念性）：
 
 ```text
 %dst, %executed = tmrgsort %src0, %src1 {exhausted = false}
@@ -71,15 +71,15 @@ PTO_INST RecordEvent TMRGSORT(DstTileData& dst, SrcTileData& src, uint32_t block
 ## 约束
 
 - **实现检查 (A2A3/A5)**:
-  - Element type must be `half` or `float` and must match across `dst/tmp/src*` tiles.
-  - All tiles must be `TileType::Vec`, row-major, and have `Rows == 1` (list stored in a single row).
-  - UB memory usage is checked (compile-time and runtime) against target limits (single `Cols` across inputs plus `tmp`/`dst`).
-- **Single-list variant (`TMRGSORT(dst, src, blockLen)`)**:
-  - `blockLen` must be a multiple of 64 (as checked by the implementation).
-  - `src.GetValidCol()` must be an integer multiple of `blockLen * 4`.
-  - `repeatTimes = src.GetValidCol() / (blockLen * 4)` must be in `[1, 255]`.
-- **Multi-list variants**:
-  - `tmp` is required and `executedNumList` is written by the implementation; supported list counts and exact semantics are target-defined.
+  - 元素类型必须是 `half` 或 `float`，且在 `dst`/`tmp`/`src*` Tile 间必须一致。
+  - 所有 Tile 必须是 `TileType::Vec`、行主序，且 `Rows == 1`（列表存储在单行中）。
+  - 针对目标限制，编译时和运行时均会检查 UB 内存使用量（包括各输入、`tmp` 和 `dst` 的 `Cols`）。
+- **单列表变体（`TMRGSORT(dst, src, blockLen)`）**：
+  - `blockLen` 必须是 64 的倍数（由实现检查）。
+  - `src.GetValidCol()` 必须是 `blockLen * 4` 的整数倍。
+  - `repeatTimes = src.GetValidCol() / (blockLen * 4)` 必须在 `[1, 255]` 范围内。
+- **多列表变体**：
+  - 需要 `tmp`，`executedNumList` 由实现写入；支持的列表数量及确切语义由目标定义。
 
 ## 示例
 
