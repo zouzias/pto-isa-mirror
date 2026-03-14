@@ -24,7 +24,7 @@ __global__ AICORE void runTAxpy(__gm__ T __out__ *out, __gm__ T __in__ *src0, fl
     TileData src0Tile(vRows, vCols);
     TileData dstTile(vRows, vCols);
     TASSIGN(src0Tile, 0x0);
-    TASSIGN(dstTile, 0x20000);
+    TASSIGN(dstTile, 0x10000);
 
     GlobalData src0Global(src0);
     GlobalData dstGlobal(out);
@@ -39,13 +39,47 @@ __global__ AICORE void runTAxpy(__gm__ T __out__ *out, __gm__ T __in__ *src0, fl
     out = dstGlobal.data();
 }
 
+template <typename T, typename U, int kTRows_, int kTCols_, int vRows, int vCols>
+__global__ AICORE void runTAxpy(__gm__ T __out__ *out, __gm__ U __in__ *src0, float scalar)
+{
+    using DynShapeDim5 = Shape<1, 1, 1, vRows, vCols>;
+    using DynStridDim5 = pto::Stride<1, 1, 1, vCols, 1>;
+    using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+    using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+    using SrcGlobalData = GlobalTensor<U, DynShapeDim5, DynStridDim5>;
+    using SrcTileData = Tile<TileType::Vec, U, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+    SrcTileData src0Tile(vRows, vCols);
+    TileData dstTile(vRows, vCols);
+    TASSIGN(src0Tile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    SrcGlobalData src0Global(src0);
+    GlobalData dstGlobal(out);
+
+    Event<Op::TLOAD, Op::TAXPY> event0;
+    Event<Op::TAXPY, Op::TSTORE_VEC> event1;
+
+    TLOAD(src0Tile, src0Global);
+    event0 = TLOAD(dstTile, dstGlobal);
+    event1 = TAXPY(dstTile, src0Tile, (U)scalar, event0);
+    TSTORE(dstGlobal, dstTile, event1);
+    out = dstGlobal.data();
+}
+
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
 void LaunchTAxpy(T *out, T *src0, float scalar, void *stream)
 {
-    if constexpr (std::is_same_v<T, aclFloat16>)
+    if constexpr (std::is_same_v<T, aclFloat16>) {
         runTAxpy<half, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>((half *)out, (half *)src0, scalar);
-    else
+    } else {
         runTAxpy<T, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(out, src0, scalar);
+    }
+}
+
+template <typename T, typename U, int kTRows_, int kTCols_, int vRows, int vCols>
+void LaunchTAxpy(T *out, U *src0, float scalar, void *stream)
+{
+    runTAxpy<float, half, kTRows_, kTCols_, vRows, vCols><<<1, nullptr, stream>>>(out, (half *)src0, scalar);
 }
 
 template void LaunchTAxpy<aclFloat16, 64, 64, 64, 64>(aclFloat16 *out, aclFloat16 *src0, float scalar, void *stream);
@@ -54,5 +88,8 @@ template void LaunchTAxpy<aclFloat16, 1, 16384, 1, 16384>(aclFloat16 *out, aclFl
                                                           void *stream);
 template void LaunchTAxpy<aclFloat16, 2048, 16, 2048, 16>(aclFloat16 *out, aclFloat16 *src0, float scalar,
                                                           void *stream);
-template void LaunchTAxpy<float, 8, 8, 8, 8>(float *out, float *src0, float scalar, void *stream);
-template void LaunchTAxpy<float, 16, 16, 15, 15>(float *out, float *src0, float scalar, void *stream);
+template void LaunchTAxpy<float, 64, 64, 64, 64>(float *out, float *src0, float scalar, void *stream);
+template void LaunchTAxpy<float, 64, 64, 63, 63>(float *out, float *src0, float scalar, void *stream);
+template void LaunchTAxpy<float, aclFloat16, 64, 64, 63, 63>(float *out, aclFloat16 *src0, float scalar, void *stream);
+template void LaunchTAxpy<float, aclFloat16, 4, 1024, 4, 1023>(float *out, aclFloat16 *src0, float scalar, void *stream);
+template void LaunchTAxpy<float, aclFloat16, 256, 16, 256, 15>(float *out, aclFloat16 *src0, float scalar, void *stream);

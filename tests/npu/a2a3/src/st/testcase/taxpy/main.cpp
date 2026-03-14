@@ -35,42 +35,51 @@ std::string GetGoldenDir()
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
 void LaunchTAxpy(T *out, T *src0, float scalar, void *stream);
 
-template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
+template <typename T, typename U, int kTRows_, int kTCols_, int vRows, int vCols>
+void LaunchTAxpy(T *out, U *src0, float scalar, void *stream);
+
+template <typename T, int kTRows_, int kTCols_, int vRows, int vCols, typename U = T>
 void test_taxpy()
 {
-    size_t fileSize = kTRows_ * kTCols_ * sizeof(T);
+    size_t dstFileSize = kTRows_ * kTCols_ * sizeof(T);
+    size_t srcFileSize = kTRows_ * kTCols_ * sizeof(U);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    T *dstHost, *src0Host;
-    T *dstDevice, *src0Device;
+    T *dstHost, *dstDevice;
+    U *src0Host, *src0Device;
     float scalar;
 
-    aclrtMallocHost((void **)(&dstHost), fileSize);
-    aclrtMallocHost((void **)(&src0Host), fileSize);
+    aclrtMallocHost((void **)(&dstHost), dstFileSize);
+    aclrtMallocHost((void **)(&src0Host), srcFileSize);
 
-    aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src0Device, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    ReadFile(GetGoldenDir() + "/input1.bin", fileSize, dstHost, fileSize);
-    ReadFile(GetGoldenDir() + "/input2.bin", fileSize, src0Host, fileSize);
+    ReadFile(GetGoldenDir() + "/input1.bin", dstFileSize, dstHost, dstFileSize);
+    ReadFile(GetGoldenDir() + "/input2.bin", srcFileSize, src0Host, srcFileSize);
     std::string scalar_file = GetGoldenDir() + "/scalar.bin";
     std::ifstream file(scalar_file, std::ios::binary);
 
     file.read(reinterpret_cast<char *>(&scalar), 4);
     file.close();
 
-    aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(dstDevice, fileSize, dstHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTAxpy<T, kTRows_, kTCols_, vRows, vCols>(dstDevice, src0Device, scalar, stream);
+    aclrtMemcpy(src0Device, srcFileSize, src0Host, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(dstDevice, dstFileSize, dstHost, dstFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    if constexpr (std::is_same_v<T, U>) {
+        LaunchTAxpy<T, kTRows_, kTCols_, vRows, vCols>(dstDevice, src0Device, scalar, stream);
+    } else {
+        LaunchTAxpy<T, U, kTRows_, kTCols_, vRows, vCols>(dstDevice, src0Device, scalar, stream);
+    }
+    
 
     aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    WriteFile(GetGoldenDir() + "/output.bin", dstHost, fileSize);
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstFileSize);
 
     aclrtFree(dstDevice);
     aclrtFree(src0Device);
@@ -81,10 +90,10 @@ void test_taxpy()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSize);
-    std::vector<T> devFinal(fileSize);
-    ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize);
-    ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize);
+    std::vector<T> golden(dstFileSize);
+    std::vector<T> devFinal(dstFileSize);
+    ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 
     bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
 
@@ -113,10 +122,25 @@ TEST_F(TAXPYTest, case4)
 
 TEST_F(TAXPYTest, case5)
 {
-    test_taxpy<float, 8, 8, 8, 8>();
+    test_taxpy<float, 64, 64, 64, 64>();
 }
 
 TEST_F(TAXPYTest, case6)
 {
-    test_taxpy<float, 16, 16, 15, 15>();
+    test_taxpy<float, 64, 64, 63, 63>();
+}
+
+TEST_F(TAXPYTest, case7)
+{
+    test_taxpy<float, 64, 64, 63, 63, aclFloat16>();
+}
+
+TEST_F(TAXPYTest, case8)
+{
+    test_taxpy<float, 4, 1024, 4, 1023, aclFloat16>();
+}
+
+TEST_F(TAXPYTest, case9)
+{
+    test_taxpy<float, 256, 16, 256, 15, aclFloat16>();
 }

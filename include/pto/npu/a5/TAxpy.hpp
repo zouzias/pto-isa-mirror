@@ -15,54 +15,79 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/utils.hpp>
 #include "common.hpp"
 #include "utils.hpp"
-#include "TBinSOp.hpp"
 
 namespace pto {
-
-template <typename T>
-struct AxpyOp {
-    PTO_INTERNAL static void BinSInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, T src1, MaskReg &preg)
-    {
-        vaxpy(reg_dst, reg_src0, src1, preg, MODE_ZEROING);
+template <typename T, typename U>
+PTO_INTERNAL static void CallAxpy(RegTensor<T> &reg_dst, RegTensor<U> &reg_src0, U scalar, MaskReg &preg)
+{
+    if constexpr (std::is_same_v<T, U>) {
+        vaxpy(reg_dst, reg_src0, scalar, preg);
+    } else {
+        // fp32 + fp16 * fp16
+        RegTensor<T> reg_src_tmp;
+        vcvt(reg_src_tmp, reg_src0, preg, PART_EVEN);
+        vaxpy(reg_dst, reg_src_tmp, (T)(scalar), preg);
     }
-};
+}
 
-template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
+template <typename T, typename U,
+          unsigned elementsPerRepeat, unsigned dstRowStride, unsigned srcRowStride>
+PTO_INTERNAL void AxpyInstr(__ubuf__ T *dstPtr, __ubuf__ U *src0Ptr, U scalar,
+                             unsigned validRow, unsigned validCol)
+{
+    uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
+
+    __VEC_SCOPE__
+    {
+        RegTensor<U> vreg0;
+        RegTensor<T> vreg2;
+        MaskReg preg;
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+        for (uint16_t i = 0; i < (uint16_t)(validRow); ++i) {
+            for (uint16_t j = 0; j < (uint16_t)repeatTimes; ++j) {
+                if constexpr (std::is_same_v<T, U>) {
+                    vlds(vreg0, src0Ptr, i * srcRowStride + j * elementsPerRepeat, NORM);
+                } else {
+                    vlds(vreg0, src0Ptr, i * srcRowStride + j * elementsPerRepeat, UNPK_B16);
+                }
+                vlds(vreg2, dstPtr, i * dstRowStride + j * elementsPerRepeat, NORM);
+                uint32_t count = ((j + 1) * elementsPerRepeat >= validCol ? validCol - j * elementsPerRepeat :
+                                                                                 elementsPerRepeat);
+                preg = CreatePredicate<U>(count);
+                CallAxpy<T, U>(vreg2, vreg0, scalar, preg);
+                vsts(vreg2, dstPtr, i * dstRowStride + j * elementsPerRepeat, distValue, preg);
+            }
+        }
+    }
+}
+
+template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat,
           unsigned dstRowStride, unsigned src0RowStride>
-__tf__ PTO_INTERNAL OP_NAME(TAXPY)
-    OP_TYPE(element_wise) void TAxpy(typename TileDataDst::TileDType __out__ dst,
-                                     typename TileDataSrc::TileDType __in__ src0, typename TileDataSrc::DType src1,
-                                     unsigned kValidRows, unsigned kValidCols,
-                                     VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
+__tf__ PTO_INTERNAL void TAxpy(typename TileDataDst::TileDType __out__ dst,
+                                     typename TileDataSrc::TileDType __in__ src0, typename TileDataSrc::DType scalar,
+                                     unsigned validRow, unsigned validCol)
 {
     using T = typename TileDataDst::DType;
+    using U = typename TileDataSrc::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
-    BinaryInstr<AxpyOp<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride>(
-        dstPtr, src0Ptr, src1, kValidRows, kValidCols, version);
+    __ubuf__ U *src0Ptr = (__ubuf__ U *)__cce_get_tile_ptr(src0);
+    AxpyInstr<T, U, elementsPerRepeat, dstRowStride, src0RowStride>(
+        dstPtr, src0Ptr, scalar, validRow, validCol);
 }
 
 template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TAXPY_IMPL(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType src1)
+PTO_INTERNAL void TAXPY_IMPL(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar)
 {
     using T = typename TileDataDst::DType;
-    static_assert(std::is_same<T, int32_t>::value || std::is_same<T, int>::value || std::is_same<T, int16_t>::value ||
-                      std::is_same<T, half>::value || std::is_same<T, float16_t>::value ||
-                      std::is_same<T, float>::value || std::is_same<T, float32_t>::value ||
-                      std::is_same<T, bfloat16_t>::value,
+    using U = typename TileDataSrc::DType;
+    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, bfloat16_t>,
                   "TAXPY: Invalid data type");
-    static_assert(TileDataDst::Loc == TileType::Vec, "TileType of dst tiles must be TileType::Vec.");
-    static_assert(TileDataDst::ValidCol <= TileDataDst::Cols,
-                  "Number of valid columns must not be greater than number of tile columns.");
-    static_assert(TileDataDst::ValidRow <= TileDataDst::Rows,
-                  "Number of valid rows must not be greater than number of tile rows.");
-    static_assert(TileDataSrc::Loc == TileType::Vec, "TileType of src tiles must be TileType::Vec.");
-    static_assert(TileDataSrc::ValidCol <= TileDataSrc::Cols,
-                  "Number of valid columns must not be greater than number of tile columns.");
-    static_assert(TileDataSrc::ValidRow <= TileDataSrc::Rows,
-                  "Number of valid rows must not be greater than number of tile rows.");
+    static_assert(std::is_same_v<T, U> || (std::is_same_v<T, float> && std::is_same_v<U, half>),
+                  "TAXPY: The data type of dst must be consistent with src or dst is float while src is half.");
 
-    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
+    static_assert(TileDataDst::Loc == TileType::Vec, "TileType of dst tiles must be TileType::Vec.");
+
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
     constexpr unsigned dstRowStride = TileDataDst::RowStride;
     constexpr unsigned src0RowStride = TileDataSrc::RowStride;
@@ -72,8 +97,8 @@ PTO_INTERNAL void TAXPY_IMPL(TileDataDst &dst, TileDataSrc &src0, typename TileD
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();
 
-    TAxpy<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride>(
-        dst.data(), src0.data(), src1, validRow, validCol);
+    TAxpy<TileDataDst, TileDataSrc, elementsPerRepeat, dstRowStride, src0RowStride>(
+        dst.data(), src0.data(), scalar, validRow, validCol);
 }
 } // namespace pto
 #endif
