@@ -1278,9 +1278,9 @@ public:
     }
     // constructor for static shape
 #ifdef __CPU_SIM
-    AICORE Tile() : data_(internalStorage_) {};
+    AICORE Tile() : data_(internalStorage_){};
 #else
-    AICORE Tile() {};
+    AICORE Tile(){};
 #endif
 
     // constructor for both dimensions are runtime variables
@@ -1507,14 +1507,16 @@ using TileAccCompact = Tile<TileType::Acc, Element_, Rows_, Cols_, BLayout::ColM
                             SLayout::RowMajor, TileConfig::fractalCSize, PadValue::Null, CompactMode::Normal>;
 
 template <typename T>
-struct is_global : std::false_type {};
+struct is_global : std::false_type {
+};
 template <typename T>
 struct is_tile : std::false_type {
     static constexpr SLayout layout_enum = SLayout::NoneBox;
 };
 
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_>
-struct is_global<GlobalTensor<Element_, Shape_, Stride_, Layout_>> : std::true_type {};
+struct is_global<GlobalTensor<Element_, Shape_, Stride_, Layout_>> : std::true_type {
+};
 
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_, const BLayout BFractal_,
           const int RowValid_, const int ColValid_, const SLayout SFractal_, const int SFractalSize_,
@@ -1529,9 +1531,11 @@ template <typename T>
 constexpr bool is_boxed_tile = is_tile<T>::value && (is_tile<T>::layout_enum != SLayout::NoneBox);
 
 template <typename T>
-struct is_conv_tile : std::false_type {};
+struct is_conv_tile : std::false_type {
+};
 template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
-struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {};
+struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {
+};
 
 template <typename tile_shape>
 struct is_Nz_layout {
