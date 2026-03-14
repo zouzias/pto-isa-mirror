@@ -33,6 +33,14 @@ using ProjectionTileMatBView = Tile<TileType::Mat, bfloat16_t, kMoeBaseK * kMoeS
 using ProjectionLeftTile = TileLeftCompact<bfloat16_t, kMoeBaseM, kMoeBaseK, -1, -1>;
 using ProjectionRightTile = TileRightCompact<bfloat16_t, kMoeBaseK, kMoeBaseN, -1, -1>;
 using ProjectionResTile = TileAcc<float, kMoeBaseM, kMoeBaseN, -1, -1>;
+using ProjectionFullTileMatA =
+    Tile<TileType::Mat, bfloat16_t, kMoeBaseM, kMoeBaseK * kMoeStepKa, BLayout::ColMajor, kMoeBaseM,
+         kMoeBaseK * kMoeStepKa, SLayout::RowMajor>;
+using ProjectionFullLeftTile =
+    TileLeftCompact<bfloat16_t, kMoeBaseM, kMoeBaseK, kMoeBaseM, kMoeBaseK>;
+using ProjectionFullRightTile =
+    TileRightCompact<bfloat16_t, kMoeBaseK, kMoeBaseN, kMoeBaseK, kMoeBaseN>;
+using ProjectionFullResTile = TileAcc<float, kMoeBaseM, kMoeBaseN, kMoeBaseM, kMoeBaseN>;
 constexpr uint32_t kMoeCombinedInterSize = static_cast<uint32_t>(kMoeInterSize * 2);
 
 template <pipe_t srcPipe, pipe_t dstPipe>
@@ -90,7 +98,8 @@ AICORE inline void WaitSyncFlags()
     WaitFlag<PIPE_MTE1, PIPE_MTE2>(1);
 }
 
-AICORE inline void StoreProjectionToOutput(ProjectionResTile &projTile, __gm__ float *currentDst, uint32_t rowCount)
+template <typename ProjTile>
+AICORE inline void StoreProjectionToOutput(ProjTile &projTile, __gm__ float *currentDst, uint32_t rowCount)
 {
     using CValidShape = TileShape2D<float, -1, -1, Layout::ND>;
     using CBaseShape = BaseShape2D<float, kMoeBaseM, kMoeInterSize, Layout::ND>;
@@ -104,9 +113,9 @@ AICORE inline void StoreProjectionToOutput(ProjectionResTile &projTile, __gm__ f
     wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
 }
 
-template <typename OutType>
-AICORE inline void StoreProjectionToOutputStrided(ProjectionResTile &projTile, __gm__ OutType *currentDst,
-                                                  uint32_t rowCount, uint32_t outputWidth)
+template <typename ProjTile, typename OutType>
+AICORE inline void StoreProjectionToOutputStrided(ProjTile &projTile, __gm__ OutType *currentDst, uint32_t rowCount,
+                                                  uint32_t outputWidth)
 {
     using CValidShape = TileShape2D<OutType, -1, -1, Layout::ND>;
     using CBaseShape = BaseShape2D<OutType, -1, -1, Layout::ND>;
@@ -138,6 +147,61 @@ AICORE inline void ProcessKIteration(uint32_t kIter, __gm__ bfloat16_t *currentS
 
     if (kModStepKa == 0) {
         AGlobal gmA(currentSrc0 + kIter * kMoeBaseK, AValidShape(currentM, kMoeBaseK * kMoeStepKa));
+        BGlobal gmB(currentSrc1 + kIter * kMoeBaseK);
+
+        WaitFlag<PIPE_MTE1, PIPE_MTE2>(mte2DBFlag);
+        TLOAD(aMatTile[mte2DBFlag], gmA);
+        SetFlag<PIPE_MTE2, PIPE_MTE1>(0);
+        TLOAD(bMatTile[mte2DBFlag], gmB);
+        SetFlag<PIPE_MTE2, PIPE_MTE1>(1);
+        mte2DBFlag = (mte2DBFlag == 0) ? 1 : 0;
+    }
+
+    const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0;
+
+    WaitFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
+
+    if (kModStepKa == 0) {
+        WaitFlag<PIPE_MTE2, PIPE_MTE1>(0);
+    }
+    TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModStepKa * kMoeBaseK);
+
+    if (kModStepKa == 0) {
+        WaitFlag<PIPE_MTE2, PIPE_MTE1>(1);
+    }
+    TEXTRACT(bTile[mte1DBFlag], bMatTile[currMte2Idx], (kIter % kMoeStepKb) * kMoeBaseK, 0);
+
+    if ((kIter + 1) % kMoeStepKa == 0) {
+        SetFlag<PIPE_MTE1, PIPE_MTE2>(currMte2Idx);
+    }
+
+    SetFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
+    WaitFlag<PIPE_MTE1, PIPE_M>(mte1DBFlag);
+    MatmulAcc(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag], kIter);
+    SetFlag<PIPE_M, PIPE_MTE1>(mte1DBFlag);
+    mte1DBFlag = (mte1DBFlag == 0) ? 1 : 0;
+}
+
+AICORE inline void ProcessKIterationFullM(uint32_t kIter, __gm__ bfloat16_t *currentSrc0,
+                                          __gm__ bfloat16_t *currentSrc1,
+                                          ProjectionFullTileMatA aMatTile[kBufferNum],
+                                          ProjectionTileMatB bMatTile[kBufferNum],
+                                          ProjectionFullLeftTile aTile[kBufferNum],
+                                          ProjectionFullRightTile bTile[kBufferNum], ProjectionFullResTile &cTile,
+                                          uint8_t &mte2DBFlag, uint8_t &mte1DBFlag)
+{
+    using AValidShape = TileShape2D<bfloat16_t, kMoeBaseM, kMoeBaseK * kMoeStepKa, Layout::ND>;
+    using ABaseShape = BaseShape2D<bfloat16_t, kMoeBaseM, kMoeHiddenSize, Layout::ND>;
+    using AGlobal = GlobalTensor<bfloat16_t, AValidShape, ABaseShape, Layout::ND>;
+
+    using BValidShape = TileShape2D<bfloat16_t, kMoeBaseK * kMoeStepKb, kMoeBaseN, Layout::DN>;
+    using BBaseShape = BaseShape2D<bfloat16_t, kMoeHiddenSize, kMoeInterSize, Layout::DN>;
+    using BGlobal = GlobalTensor<bfloat16_t, BValidShape, BBaseShape, Layout::DN>;
+
+    const uint32_t kModStepKa = kIter % kMoeStepKa;
+
+    if (kModStepKa == 0) {
+        AGlobal gmA(currentSrc0 + kIter * kMoeBaseK);
         BGlobal gmB(currentSrc1 + kIter * kMoeBaseK);
 
         WaitFlag<PIPE_MTE1, PIPE_MTE2>(mte2DBFlag);
@@ -277,6 +341,36 @@ AICORE inline void RunProjectionKernelStrided(__gm__ bfloat16_t *xPtr, __gm__ bf
                                               uint32_t colTile, uint32_t currentM)
 {
     if (currentM == 0) {
+        return;
+    }
+
+    if (currentM == static_cast<uint32_t>(kMoeBaseM)) {
+        __gm__ bfloat16_t *currentSrc0 = xPtr + rowOffset * kMoeHiddenSize;
+        __gm__ OutType *currentDst =
+            projPtr + static_cast<std::size_t>(rowOffset) * outputWidth + static_cast<std::size_t>(baseColOffset);
+        const uint32_t colOffset = colTile * static_cast<uint32_t>(kMoeBaseN);
+        __gm__ bfloat16_t *currentSrc1 = weightPtr + (expertId * kMoeInterSize + colOffset) * kMoeHiddenSize;
+
+        ProjectionFullTileMatA aMatTile[kBufferNum];
+        ProjectionTileMatB bMatTile[kBufferNum];
+        ProjectionFullLeftTile aTile[kBufferNum];
+        ProjectionFullRightTile bTile[kBufferNum];
+        ProjectionFullResTile cTile;
+
+        InitBuffers(aMatTile, bMatTile, aTile, bTile, cTile);
+        InitSyncFlags();
+
+        uint8_t mte2DBFlag = 0;
+        uint8_t mte1DBFlag = 0;
+        constexpr uint32_t kLoop = kMoeHiddenSize / kMoeBaseK;
+
+        for (uint32_t kIter = 0; kIter < kLoop; ++kIter) {
+            ProcessKIterationFullM(kIter, currentSrc0, currentSrc1, aMatTile, bMatTile, aTile, bTile, cTile,
+                                   mte2DBFlag, mte1DBFlag);
+        }
+
+        WaitSyncFlags();
+        StoreProjectionToOutputStrided(cTile, currentDst + colOffset, static_cast<uint32_t>(kMoeBaseM), outputWidth);
         return;
     }
 
