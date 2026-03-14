@@ -3,7 +3,7 @@ set -euo pipefail
 
 MODE="${MODE:-native}"
 MASTER_ADDR="${MASTER_ADDR:-localhost}"
-MASTER_PORT="${MASTER_PORT:-33371}"
+MASTER_PORT="${MASTER_PORT:-}"
 NPUS_PER_NODE="${NPUS_PER_NODE:-16}"
 NNODES="${NNODES:-1}"
 NODE_RANK="${NODE_RANK:-0}"
@@ -27,6 +27,33 @@ MS_REPO_PTO="${MS_REPO_PTO:-/home/llx/MindSpeed}"
 DATA_PATH="${DATA_PATH:-/sharedata/zimoliu/data/alpaca_zh_text_document}"
 TOKENIZER_PATH="${TOKENIZER_PATH:-/sharedata/zimoliu/models/Qwen2.5-7B-Instruct}"
 
+pick_free_port() {
+    python3 - <<'PY'
+import subprocess
+
+used = set()
+try:
+    output = subprocess.check_output(["ss", "-ltn"], text=True)
+except Exception:
+    output = ""
+
+for line in output.splitlines()[1:]:
+    fields = line.split()
+    if len(fields) < 4:
+        continue
+    port = fields[3].rsplit(":", 1)[-1]
+    if port.isdigit():
+        used.add(int(port))
+
+for candidate in range(35000, 45000):
+    if candidate not in used:
+        print(candidate)
+        break
+else:
+    print(45001)
+PY
+}
+
 case "${MODE}" in
     native)
         LLM_REPO="${LLM_REPO_CLEAN}"
@@ -49,10 +76,15 @@ PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT="${PTO_ISA_REPO_ROOT}/demos/baseline/moe_gro
 if [[ "${ENABLE_PTO_MOE_GROUPED_FFN}" == "1" ]]; then
     # Keep training-side config simple: use the fast split kernels by default.
     export PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT="${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-1}"
+    export PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT="${PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT:-}"
     # Prefer the freshly built .so from this repo if available, unless user overrides it.
     if [[ -z "${PTO_MOE_GROUPED_FFN_SO_PATH:-}" && -f "${PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT}" ]]; then
         export PTO_MOE_GROUPED_FFN_SO_PATH="${PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT}"
     fi
+fi
+
+if [[ -z "${MASTER_PORT}" ]]; then
+    MASTER_PORT="$(pick_free_port)"
 fi
 
 export HCCL_CONNECT_TIMEOUT="${HCCL_CONNECT_TIMEOUT:-1200}"
@@ -104,6 +136,7 @@ data_path=${DATA_PATH}
 tokenizer_path=${TOKENIZER_PATH}
 enable_pto_moe_grouped_ffn=${ENABLE_PTO_MOE_GROUPED_FFN}
 pto_moe_grouped_ffn_use_custom_split=${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-}
+pto_moe_grouped_ffn_cache_dn_weight=${PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT:-}
 pto_moe_grouped_ffn_so_path=${PTO_MOE_GROUPED_FFN_SO_PATH:-}
 seq_len=${SEQ_LEN}
 micro_batch_size=${MICRO_BATCH_SIZE}

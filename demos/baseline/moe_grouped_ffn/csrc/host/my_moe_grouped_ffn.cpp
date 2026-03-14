@@ -24,8 +24,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "tiling/platform/platform_ascendc.h"
 
 #include "utils.h"
+#include "aclrtlaunch_moe_grouped_dual_proj_custom.h"
+#include "aclrtlaunch_moe_grouped_dual_proj_packed_custom.h"
+#include "aclrtlaunch_moe_grouped_dual_proj_packed_nd_custom.h"
 #include "aclrtlaunch_moe_grouped_gate_proj_custom.h"
 #include "aclrtlaunch_moe_grouped_gemm_custom.h"
+#include "aclrtlaunch_moe_grouped_gemm_with_intermediates_custom.h"
 #include "aclrtlaunch_moe_grouped_up_proj_custom.h"
 #include "../kernel/moe_grouped_ffn_custom.h"
 
@@ -44,10 +48,9 @@ struct WorkList {
 // Each block computes a single [kMoeBaseM, kMoeBaseN] tile, identified by (expert, rowOffset, colTile).
 // Keeping colTile explicit improves core utilization versus looping all N tiles inside one block.
 struct ProjectionWorkList {
-    at::Tensor expertIds;
-    at::Tensor rowOffsets;
-    // Packed int32: hi16 = colTile, lo16 = validM (rows in [1, kMoeBaseM]).
-    at::Tensor tileMeta;
+    at::Tensor groupOffsets;
+    at::Tensor tileOffsets;
+    uint32_t numExperts;
     uint32_t blockDim;
 };
 
@@ -240,40 +243,25 @@ ProjectionWorkList BuildProjectionWorkList(const at::Tensor &groupOffsetsCpu)
     const int64_t numExperts = groupOffsetsCpu.size(0) - 1;
     const auto *offsetPtr = groupOffsetsCpu.data_ptr<int32_t>();
 
-    std::vector<int32_t> expertIds;
-    std::vector<int32_t> rowOffsets;
-    std::vector<int32_t> tileMeta;
-
-    // Number of [kMoeBaseM] row tiles across the packed token axis.
-    const int64_t mTiles =
-        (offsetPtr[numExperts] + static_cast<int32_t>(kMoeBaseM) - 1) / static_cast<int32_t>(kMoeBaseM);
-
-    const int64_t approxWorkItems = numExperts * mTiles * static_cast<int64_t>(kMoeNumNTiles);
-    expertIds.reserve(static_cast<size_t>(approxWorkItems));
-    rowOffsets.reserve(static_cast<size_t>(approxWorkItems));
-    tileMeta.reserve(static_cast<size_t>(approxWorkItems));
+    std::vector<int32_t> tileOffsets;
+    tileOffsets.reserve(static_cast<size_t>(numExperts) + 1);
+    tileOffsets.push_back(0);
 
     for (int64_t expert = 0; expert < numExperts; ++expert) {
         const int32_t start = offsetPtr[expert];
         const int32_t end = offsetPtr[expert + 1];
-        for (int32_t row = start; row < end; row += kMoeBaseM) {
-            const int32_t rows = std::min<int32_t>(kMoeBaseM, end - row);
-            if (rows == 0) {
-                continue;
-            }
-            for (int32_t colTile = 0; colTile < kMoeNumNTiles; ++colTile) {
-                expertIds.push_back(static_cast<int32_t>(expert));
-                rowOffsets.push_back(row);
-                tileMeta.push_back((colTile << 16) | (rows & 0xffff));
-            }
-        }
+        const int32_t rows = std::max<int32_t>(end - start, 0);
+        const int32_t expertTiles = rows == 0 ? 0 : RoundUpToMultiple(rows, static_cast<int32_t>(kMoeBaseM)) /
+                                                        static_cast<int32_t>(kMoeBaseM);
+        tileOffsets.push_back(tileOffsets.back() + expertTiles);
     }
 
     ProjectionWorkList workList;
-    workList.blockDim = static_cast<uint32_t>(expertIds.size());
-    workList.expertIds = CopyTensorHostToDevice(MakeCpuIntTensor(expertIds));
-    workList.rowOffsets = CopyTensorHostToDevice(MakeCpuIntTensor(rowOffsets));
-    workList.tileMeta = CopyTensorHostToDevice(MakeCpuIntTensor(tileMeta));
+    workList.groupOffsets = CopyTensorHostToDevice(groupOffsetsCpu);
+    workList.tileOffsets = CopyTensorHostToDevice(MakeCpuIntTensor(tileOffsets));
+    workList.numExperts = static_cast<uint32_t>(numExperts);
+    workList.blockDim =
+        static_cast<uint32_t>(static_cast<int64_t>(tileOffsets.back()) * static_cast<int64_t>(kMoeNumNTiles));
     return workList;
 }
 
@@ -421,6 +409,8 @@ void ValidateInputs(const at::Tensor &x, const at::Tensor &gateWeightDn, const a
     TORCH_CHECK(x.device().type() == DEVICE_TYPE, "x must be a NPU tensor (PrivateUse1)");
     TORCH_CHECK(gateWeightDn.device().type() == DEVICE_TYPE, "gate_weight_dn must be a NPU tensor (PrivateUse1)");
     TORCH_CHECK(upWeightDn.device().type() == DEVICE_TYPE, "up_weight_dn must be a NPU tensor (PrivateUse1)");
+    TORCH_CHECK(groupOffsets.device().is_cpu() || groupOffsets.device().type() == DEVICE_TYPE,
+                "group_offsets must be a CPU or NPU tensor");
     TORCH_CHECK(x.scalar_type() == at::kBFloat16, "x must be bfloat16");
     TORCH_CHECK(gateWeightDn.scalar_type() == at::kBFloat16, "gate_weight_dn must be bfloat16");
     TORCH_CHECK(upWeightDn.scalar_type() == at::kBFloat16, "up_weight_dn must be bfloat16");
@@ -438,6 +428,32 @@ void ValidateInputs(const at::Tensor &x, const at::Tensor &gateWeightDn, const a
     TORCH_CHECK(x.is_contiguous(), "x must be contiguous");
     TORCH_CHECK(gateWeightDn.is_contiguous(), "gate_weight_dn must be contiguous");
     TORCH_CHECK(upWeightDn.is_contiguous(), "up_weight_dn must be contiguous");
+}
+
+void ValidateNdWeightInput(const at::Tensor &x, const at::Tensor &weightNd, const at::Tensor &groupOffsets)
+{
+    TORCH_CHECK(x.device().type() == DEVICE_TYPE, "x must be a NPU tensor (PrivateUse1)");
+    TORCH_CHECK(weightNd.device().type() == DEVICE_TYPE, "weight_nd must be a NPU tensor (PrivateUse1)");
+    TORCH_CHECK(groupOffsets.device().is_cpu() || groupOffsets.device().type() == DEVICE_TYPE,
+                "group_offsets must be a CPU or NPU tensor");
+    TORCH_CHECK(x.scalar_type() == at::kBFloat16, "x must be bfloat16");
+    TORCH_CHECK(weightNd.scalar_type() == at::kBFloat16, "weight_nd must be bfloat16");
+    TORCH_CHECK(x.dim() == 2, "x must be rank-2 [M, H]");
+    TORCH_CHECK(weightNd.dim() == 3, "weight_nd must be rank-3 [E, H, 2I]");
+    TORCH_CHECK(groupOffsets.dim() == 1, "group_offsets must be rank-1 [E+1]");
+    TORCH_CHECK(x.size(1) == kMoeHiddenSize, "x hidden size must match kernel specialization");
+    TORCH_CHECK(weightNd.size(1) == kMoeHiddenSize, "weight_nd hidden size must match kernel specialization");
+    TORCH_CHECK(weightNd.size(2) == kMoeInterSize * 2, "weight_nd last dim must be 2 * intermediate size");
+    TORCH_CHECK(weightNd.is_contiguous(), "weight_nd must be contiguous");
+}
+
+at::Tensor NormalizeGroupOffsetsToCpuInt(const at::Tensor &groupOffsets)
+{
+    at::Tensor groupOffsetsCpu = groupOffsets.device().is_cpu() ? groupOffsets.contiguous() : groupOffsets.cpu().contiguous();
+    if (groupOffsetsCpu.scalar_type() != at::kInt) {
+        groupOffsetsCpu = groupOffsetsCpu.to(at::kInt);
+    }
+    return groupOffsetsCpu;
 }
 
 Projections LaunchGroupedFFNGroupedMatmulProjections(const at::Tensor &x, const at::Tensor &gateWeightDn,
@@ -466,19 +482,52 @@ at::Tensor LaunchGroupedFFN(const at::Tensor &x, const at::Tensor &gateWeightDn,
     return out;
 }
 
-Stage1Outputs LaunchGroupedFFNSplit(const at::Tensor &x, const at::Tensor &gateWeightDn, const at::Tensor &upWeightDn,
-                                    const ProjectionWorkList &workList)
+Stage1Outputs LaunchGroupedFFNFusedWithIntermediates(const at::Tensor &x,
+                                                     const at::Tensor &gateWeightDn,
+                                                     const at::Tensor &upWeightDn,
+                                                     const at::Tensor &groupOffsetsCpu,
+                                                     const WorkList &workList)
 {
+    (void)groupOffsetsCpu;
     Stage1Outputs outputs;
-    outputs.gateProj = at::empty({x.size(0), kMoeInterSize}, x.options().dtype(at::kFloat));
+    outputs.out = at::empty({x.size(0), kMoeInterSize}, x.options().dtype(at::kFloat));
+    outputs.gateProj = at::empty_like(outputs.out);
+    outputs.upProj = at::empty_like(outputs.out);
+
     if (workList.blockDim == 0) {
+        outputs.out.zero_();
         outputs.gateProj.zero_();
-        outputs.upProj = at::zeros_like(outputs.gateProj);
-        outputs.out = at::zeros_like(outputs.gateProj);
+        outputs.upProj.zero_();
         return outputs;
     }
 
-    outputs.upProj = at::empty_like(outputs.gateProj);
+    auto ascendcPlatform = platform_ascendc::PlatformAscendCManager::GetInstance();
+    const std::size_t systemWorkspaceSize = static_cast<std::size_t>(ascendcPlatform->GetLibApiWorkSpaceSize());
+    const uint32_t blockDim = workList.blockDim;
+
+    const std::size_t userWorkspaceSize = GetMoeUserWorkspaceBytes(blockDim);
+    const std::size_t workspaceSize = std::max<std::size_t>(userWorkspaceSize + systemWorkspaceSize, 1);
+    auto workspaceTensor = at::empty({static_cast<int64_t>(workspaceSize)},
+                                     at::TensorOptions().dtype(at::kByte).device(x.options().device()));
+
+    EXEC_KERNEL_CMD(moe_grouped_gemm_with_intermediates_custom, blockDim, x, gateWeightDn, upWeightDn, outputs.out,
+                    outputs.gateProj, outputs.upProj, workList.expertIds, workList.rowOffsets, workList.validRows,
+                    workspaceTensor);
+    return outputs;
+}
+
+Projections LaunchGroupedFFNSplitProjections(const at::Tensor &x, const at::Tensor &gateWeightDn,
+                                             const at::Tensor &upWeightDn, const ProjectionWorkList &workList)
+{
+    Projections projections;
+    projections.gateProj = at::empty({x.size(0), kMoeInterSize}, x.options().dtype(at::kFloat));
+    if (workList.blockDim == 0) {
+        projections.gateProj.zero_();
+        projections.upProj = at::zeros_like(projections.gateProj);
+        return projections;
+    }
+
+    projections.upProj = at::empty_like(projections.gateProj);
 
     auto ascendcPlatform = platform_ascendc::PlatformAscendCManager::GetInstance();
     const std::size_t systemWorkspaceSize = static_cast<std::size_t>(ascendcPlatform->GetLibApiWorkSpaceSize());
@@ -487,15 +536,65 @@ Stage1Outputs LaunchGroupedFFNSplit(const at::Tensor &x, const at::Tensor &gateW
                                      at::TensorOptions().dtype(at::kByte).device(x.options().device()));
 
     const uint32_t blockDim = workList.blockDim;
-    // The projection kernels interpret the final int32 list as packed tileMeta (colTile + validM).
-    EXEC_KERNEL_CMD(moe_grouped_gate_proj_custom, blockDim, x, gateWeightDn, outputs.gateProj, workList.expertIds,
-                    workList.rowOffsets, workList.tileMeta, workspaceTensor);
-    EXEC_KERNEL_CMD(moe_grouped_up_proj_custom, blockDim, x, upWeightDn, outputs.upProj, workList.expertIds,
-                    workList.rowOffsets, workList.tileMeta, workspaceTensor);
+    EXEC_KERNEL_CMD(moe_grouped_dual_proj_custom, blockDim, x, gateWeightDn, upWeightDn, projections.gateProj,
+                    projections.upProj, workList.groupOffsets, workList.tileOffsets, workList.numExperts,
+                    workspaceTensor);
+    return projections;
+}
+
+Stage1Outputs LaunchGroupedFFNSplit(const at::Tensor &x, const at::Tensor &gateWeightDn, const at::Tensor &upWeightDn,
+                                    const ProjectionWorkList &workList)
+{
+    auto projections = LaunchGroupedFFNSplitProjections(x, gateWeightDn, upWeightDn, workList);
+    Stage1Outputs outputs;
+    outputs.gateProj = projections.gateProj;
+    outputs.upProj = projections.upProj;
 
     outputs.out = at::silu(outputs.gateProj);
     outputs.out.mul_(outputs.upProj);
     return outputs;
+}
+
+at::Tensor LaunchGroupedFFNSplitStage1Input(const at::Tensor &x, const at::Tensor &gateWeightDn,
+                                            const at::Tensor &upWeightDn, const ProjectionWorkList &workList)
+{
+    if (workList.blockDim == 0) {
+        return at::zeros({x.size(0), kMoeInterSize * 2}, x.options().dtype(at::kBFloat16));
+    }
+
+    auto stage1Input = at::empty({x.size(0), kMoeInterSize * 2}, x.options().dtype(at::kBFloat16));
+
+    auto ascendcPlatform = platform_ascendc::PlatformAscendCManager::GetInstance();
+    const std::size_t systemWorkspaceSize = static_cast<std::size_t>(ascendcPlatform->GetLibApiWorkSpaceSize());
+    const std::size_t workspaceSize = std::max<std::size_t>(systemWorkspaceSize, 1);
+    auto workspaceTensor = at::empty({static_cast<int64_t>(workspaceSize)},
+                                     at::TensorOptions().dtype(at::kByte).device(x.options().device()));
+
+    const uint32_t blockDim = workList.blockDim;
+    EXEC_KERNEL_CMD(moe_grouped_dual_proj_packed_custom, blockDim, x, gateWeightDn, upWeightDn, stage1Input,
+                    workList.groupOffsets, workList.tileOffsets, workList.numExperts, workspaceTensor);
+    return stage1Input;
+}
+
+at::Tensor LaunchGroupedFFNSplitStage1InputNd(const at::Tensor &x, const at::Tensor &weightNd,
+                                              const ProjectionWorkList &workList)
+{
+    if (workList.blockDim == 0) {
+        return at::zeros({x.size(0), kMoeInterSize * 2}, x.options().dtype(at::kBFloat16));
+    }
+
+    auto stage1Input = at::empty({x.size(0), kMoeInterSize * 2}, x.options().dtype(at::kBFloat16));
+
+    auto ascendcPlatform = platform_ascendc::PlatformAscendCManager::GetInstance();
+    const std::size_t systemWorkspaceSize = static_cast<std::size_t>(ascendcPlatform->GetLibApiWorkSpaceSize());
+    const std::size_t workspaceSize = std::max<std::size_t>(systemWorkspaceSize, 1);
+    auto workspaceTensor = at::empty({static_cast<int64_t>(workspaceSize)},
+                                     at::TensorOptions().dtype(at::kByte).device(x.options().device()));
+
+    const uint32_t blockDim = workList.blockDim;
+    EXEC_KERNEL_CMD(moe_grouped_dual_proj_packed_nd_custom, blockDim, x, weightNd, stage1Input, workList.groupOffsets,
+                    workList.tileOffsets, workList.numExperts, workspaceTensor);
+    return stage1Input;
 }
 
 std::vector<at::Tensor> BuildGroupedInputs(const at::Tensor &x, const at::Tensor &groupOffsetsCpu)
@@ -612,10 +711,7 @@ at::Tensor run_moe_grouped_ffn(const at::Tensor &x, const at::Tensor &gateWeight
 {
     ValidateInputs(x, gateWeightDn, upWeightDn, groupOffsets);
 
-    at::Tensor groupOffsetsCpu = groupOffsets.cpu().contiguous();
-    if (groupOffsetsCpu.scalar_type() != at::kInt) {
-        groupOffsetsCpu = groupOffsetsCpu.to(at::kInt);
-    }
+    at::Tensor groupOffsetsCpu = NormalizeGroupOffsetsToCpuInt(groupOffsets);
 
     const auto *offsetPtr = groupOffsetsCpu.data_ptr<int32_t>();
     TORCH_CHECK(offsetPtr[0] == 0, "group_offsets[0] must be 0");
@@ -645,18 +741,12 @@ at::Tensor run_moe_grouped_ffn(const at::Tensor &x, const at::Tensor &gateWeight
     TORCH_CHECK(false, "Unsupported forward implementation");
 }
 
-std::tuple<at::Tensor, at::Tensor, at::Tensor> run_moe_grouped_ffn_with_intermediates(
-    const at::Tensor &x,
-    const at::Tensor &gateWeightDn,
-    const at::Tensor &upWeightDn,
-    const at::Tensor &groupOffsets)
+at::Tensor run_moe_grouped_ffn_stage1_input(const at::Tensor &x, const at::Tensor &gateWeightDn,
+                                            const at::Tensor &upWeightDn, const at::Tensor &groupOffsets)
 {
     ValidateInputs(x, gateWeightDn, upWeightDn, groupOffsets);
 
-    at::Tensor groupOffsetsCpu = groupOffsets.cpu().contiguous();
-    if (groupOffsetsCpu.scalar_type() != at::kInt) {
-        groupOffsetsCpu = groupOffsetsCpu.to(at::kInt);
-    }
+    at::Tensor groupOffsetsCpu = NormalizeGroupOffsetsToCpuInt(groupOffsets);
 
     const auto *offsetPtr = groupOffsetsCpu.data_ptr<int32_t>();
     TORCH_CHECK(offsetPtr[0] == 0, "group_offsets[0] must be 0");
@@ -667,10 +757,55 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> run_moe_grouped_ffn_with_intermed
                 "group_offsets[-1] must equal x.size(0)");
 
     const auto forwardImpl = GetForwardImpl();
-    TORCH_CHECK(
-        forwardImpl != ForwardImpl::Fused,
-        "pto_moe_grouped_ffn_with_intermediates does not support the fused PTO kernel path."
-    );
+    TORCH_CHECK(forwardImpl == ForwardImpl::CustomSplit,
+                "pto_moe_grouped_ffn_stage1_input requires PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT=1");
+
+    const auto routingPlan = GetCachedRoutingPlan(groupOffsetsCpu, x);
+    return LaunchGroupedFFNSplitStage1Input(x, gateWeightDn, upWeightDn, routingPlan.projectionWorkList);
+}
+
+at::Tensor run_moe_grouped_ffn_stage1_input_nd(const at::Tensor &x, const at::Tensor &weightNd,
+                                               const at::Tensor &groupOffsets)
+{
+    ValidateNdWeightInput(x, weightNd, groupOffsets);
+
+    at::Tensor groupOffsetsCpu = NormalizeGroupOffsetsToCpuInt(groupOffsets);
+
+    const auto *offsetPtr = groupOffsetsCpu.data_ptr<int32_t>();
+    TORCH_CHECK(offsetPtr[0] == 0, "group_offsets[0] must be 0");
+    for (int64_t idx = 0; idx < groupOffsetsCpu.size(0) - 1; ++idx) {
+        TORCH_CHECK(offsetPtr[idx] <= offsetPtr[idx + 1], "group_offsets must be non-decreasing");
+    }
+    TORCH_CHECK(offsetPtr[groupOffsetsCpu.size(0) - 1] == x.size(0),
+                "group_offsets[-1] must equal x.size(0)");
+
+    const auto forwardImpl = GetForwardImpl();
+    TORCH_CHECK(forwardImpl == ForwardImpl::CustomSplit,
+                "pto_moe_grouped_ffn_stage1_input_nd requires PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT=1");
+
+    const auto routingPlan = GetCachedRoutingPlan(groupOffsetsCpu, x);
+    return LaunchGroupedFFNSplitStage1InputNd(x, weightNd, routingPlan.projectionWorkList);
+}
+
+std::tuple<at::Tensor, at::Tensor, at::Tensor> run_moe_grouped_ffn_with_intermediates(
+    const at::Tensor &x,
+    const at::Tensor &gateWeightDn,
+    const at::Tensor &upWeightDn,
+    const at::Tensor &groupOffsets)
+{
+    ValidateInputs(x, gateWeightDn, upWeightDn, groupOffsets);
+
+    at::Tensor groupOffsetsCpu = NormalizeGroupOffsetsToCpuInt(groupOffsets);
+
+    const auto *offsetPtr = groupOffsetsCpu.data_ptr<int32_t>();
+    TORCH_CHECK(offsetPtr[0] == 0, "group_offsets[0] must be 0");
+    for (int64_t idx = 0; idx < groupOffsetsCpu.size(0) - 1; ++idx) {
+        TORCH_CHECK(offsetPtr[idx] <= offsetPtr[idx + 1], "group_offsets must be non-decreasing");
+    }
+    TORCH_CHECK(offsetPtr[groupOffsetsCpu.size(0) - 1] == x.size(0),
+                "group_offsets[-1] must equal x.size(0)");
+
+    const auto forwardImpl = GetForwardImpl();
 
     Stage1Outputs outputs;
     if (forwardImpl == ForwardImpl::GroupedMatmul) {
@@ -678,6 +813,13 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> run_moe_grouped_ffn_with_intermed
     } else if (forwardImpl == ForwardImpl::CustomSplit) {
         const auto routingPlan = GetCachedRoutingPlan(groupOffsetsCpu, x);
         outputs = LaunchGroupedFFNSplit(x, gateWeightDn, upWeightDn, routingPlan.projectionWorkList);
+    } else if (forwardImpl == ForwardImpl::Fused) {
+        const auto routingPlan = GetCachedRoutingPlan(groupOffsetsCpu, x);
+        auto paddedLayout = MaybePadInputs(x, routingPlan);
+        auto paddedOutputs =
+            LaunchGroupedFFNFusedWithIntermediates(paddedLayout.x, gateWeightDn, upWeightDn, groupOffsetsCpu,
+                                                   routingPlan.workList);
+        outputs = RestoreStage1Outputs(paddedOutputs, paddedLayout, x);
     } else {
         TORCH_CHECK(false, "Unsupported forward implementation");
     }
@@ -690,6 +832,8 @@ namespace {
 TORCH_LIBRARY_FRAGMENT(npu, m)
 {
     m.def("pto_moe_grouped_ffn(Tensor x, Tensor gate_weight_dn, Tensor up_weight_dn, Tensor group_offsets) -> Tensor");
+    m.def("pto_moe_grouped_ffn_stage1_input(Tensor x, Tensor gate_weight_dn, Tensor up_weight_dn, Tensor group_offsets) -> Tensor");
+    m.def("pto_moe_grouped_ffn_stage1_input_nd(Tensor x, Tensor weight_nd, Tensor group_offsets) -> Tensor");
     m.def(
         "pto_moe_grouped_ffn_with_intermediates(Tensor x, Tensor gate_weight_dn, Tensor up_weight_dn, Tensor group_offsets) -> (Tensor, Tensor, Tensor)"
     );
@@ -700,6 +844,8 @@ namespace {
 TORCH_LIBRARY_IMPL(npu, PrivateUse1, m)
 {
     m.impl("pto_moe_grouped_ffn", TORCH_FN(ascendc_path::run_moe_grouped_ffn));
+    m.impl("pto_moe_grouped_ffn_stage1_input", TORCH_FN(ascendc_path::run_moe_grouped_ffn_stage1_input));
+    m.impl("pto_moe_grouped_ffn_stage1_input_nd", TORCH_FN(ascendc_path::run_moe_grouped_ffn_stage1_input_nd));
     m.impl(
         "pto_moe_grouped_ffn_with_intermediates",
         TORCH_FN(ascendc_path::run_moe_grouped_ffn_with_intermediates)

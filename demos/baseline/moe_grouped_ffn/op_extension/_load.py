@@ -27,6 +27,7 @@ def _candidate_so_paths():
 
     yield pkg_path / "lib" / "libop_extension.so"
     yield repo_root / "build" / "lib" / "libop_extension.so"
+    yield repo_root / "build" / "libop_extension.so"
     yield repo_root / "build_manual" / "lib" / "libop_extension.so"
 
 

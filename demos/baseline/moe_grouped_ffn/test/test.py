@@ -12,12 +12,18 @@
 
 import contextlib
 import os
+import pathlib
+import sys
 import unittest
 
 import torch
 import torch.nn.functional as F
 import torch_npu
 from torch_npu.testing.testcase import TestCase, run_tests
+
+TEST_ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(TEST_ROOT) not in sys.path:
+    sys.path.insert(0, str(TEST_ROOT))
 
 import op_extension
 
@@ -66,6 +72,13 @@ def ref_grouped_ffn_with_intermediates(x_cpu, gate_dn_cpu, up_dn_cpu, group_offs
         return empty, empty.clone(), empty.clone()
 
     return torch.cat(outputs, dim=0), torch.cat(gate_projs, dim=0), torch.cat(up_projs, dim=0)
+
+
+def ref_grouped_ffn_stage1_input(x_cpu, gate_dn_cpu, up_dn_cpu, group_offsets):
+    _, gate_proj, up_proj = ref_grouped_ffn_with_intermediates(x_cpu, gate_dn_cpu, up_dn_cpu, group_offsets)
+    if gate_proj.numel() == 0:
+        return torch.empty((0, INTER_SIZE * 2), dtype=torch.bfloat16)
+    return torch.cat([gate_proj.to(torch.bfloat16), up_proj.to(torch.bfloat16)], dim=-1)
 
 
 @contextlib.contextmanager
@@ -174,6 +187,29 @@ class TestPtoMoeGroupedFFN(TestCase):
         self.assertRtolEqual(out.cpu(), ref_out, prec=2.0e-2)
         self.assertRtolEqual(gate_proj.cpu(), ref_gate, prec=2.0e-2)
         self.assertRtolEqual(up_proj.cpu(), ref_up, prec=2.0e-2)
+
+    def test_pto_moe_grouped_ffn_stage1_input_custom_split(self):
+        x, gate_dn, up_dn, group_offsets = self._make_demo_inputs(seed=10)
+        ref = ref_grouped_ffn(x, gate_dn, up_dn, group_offsets)
+
+        with impl_env(split=True):
+            stage1_input = torch.ops.npu.pto_moe_grouped_ffn_stage1_input(
+                x.npu(), gate_dn.npu(), up_dn.npu(), group_offsets.npu()
+            )
+            out = torch_npu.npu_swiglu(stage1_input, dim=-1)
+        self.assertRtolEqual(out.cpu().float(), ref.float(), prec=2.0e-2)
+
+    def test_pto_moe_grouped_ffn_stage1_input_nd_custom_split(self):
+        x, gate_dn, up_dn, group_offsets = self._make_demo_inputs(seed=11)
+        ref = ref_grouped_ffn(x, gate_dn, up_dn, group_offsets)
+        weight_nd = torch.cat([gate_dn.transpose(1, 2), up_dn.transpose(1, 2)], dim=-1).contiguous()
+
+        with impl_env(split=True):
+            stage1_input = torch.ops.npu.pto_moe_grouped_ffn_stage1_input_nd(
+                x.npu(), weight_nd.npu(), group_offsets.npu()
+            )
+            out = torch_npu.npu_swiglu(stage1_input, dim=-1)
+        self.assertRtolEqual(out.cpu().float(), ref.float(), prec=2.0e-2)
 
     def test_pto_moe_grouped_ffn_custom_split_forward(self):
         x, gate_dn, up_dn, group_offsets = self._make_demo_inputs(seed=3)

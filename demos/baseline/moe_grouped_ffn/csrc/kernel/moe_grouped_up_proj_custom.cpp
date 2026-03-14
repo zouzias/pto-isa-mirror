@@ -10,7 +10,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #if (__CHECK_FEATURE_AT_PRECOMPILE) || (defined(__CCE_AICORE__) && __CCE_AICORE__ == 220)
 
-#if defined(__CHECK_FEATURE_AT_PRECOMPILE) || defined(__DAV_C220_CUBE__) || defined(__DAV_CUBE__)
+#if defined(__CHECK_FEATURE_AT_PRECOMPILE) || defined(__DAV_C220_CUBE__) || defined(__DAV_CUBE__) || \
+    defined(__DAV_C220_VEC__) || defined(__DAV_VEC__)
 
 #include "moe_grouped_ffn_projection_common.h"
 

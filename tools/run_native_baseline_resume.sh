@@ -7,12 +7,28 @@ set -euo pipefail
 
 pick_free_port() {
     python3 - <<'PY'
-import socket
+import subprocess
 
-sock = socket.socket()
-sock.bind(("", 0))
-print(sock.getsockname()[1])
-sock.close()
+used = set()
+try:
+    output = subprocess.check_output(["ss", "-ltn"], text=True)
+except Exception:
+    output = ""
+
+for line in output.splitlines()[1:]:
+    fields = line.split()
+    if len(fields) < 4:
+        continue
+    port = fields[3].rsplit(":", 1)[-1]
+    if port.isdigit():
+        used.add(int(port))
+
+for candidate in range(35000, 45000):
+    if candidate not in used:
+        print(candidate)
+        break
+else:
+    print(45001)
 PY
 }
 
@@ -131,7 +147,16 @@ mkdir -p "${TENSORBOARD_DIR}"
 
 export HCCL_CONNECT_TIMEOUT="${HCCL_CONNECT_TIMEOUT:-1200}"
 export CUDA_DEVICE_MAX_CONNECTIONS="${CUDA_DEVICE_MAX_CONNECTIONS:-1}"
-export ENABLE_PTO_MOE_GROUPED_FFN=0
+export ENABLE_PTO_MOE_GROUPED_FFN="${ENABLE_PTO_MOE_GROUPED_FFN:-0}"
+
+if [[ "${ENABLE_PTO_MOE_GROUPED_FFN}" == "1" ]]; then
+    export PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT="${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-1}"
+    export PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT="${PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT:-1}"
+    PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT="${REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/lib/libop_extension.so"
+    if [[ -z "${PTO_MOE_GROUPED_FFN_SO_PATH:-}" && -f "${PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT}" ]]; then
+        export PTO_MOE_GROUPED_FFN_SO_PATH="${PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT}"
+    fi
+fi
 
 PYTHONPATH_ENTRIES=(
     "/sharedata/zimoliu/code/zimo_mindspeed"
@@ -302,7 +327,10 @@ log_root=${LOG_ROOT}
 log_dir=${LOG_DIR}
 log_file=${LOG_FILE}
 tensorboard_dir=${TENSORBOARD_DIR}
-enable_pto_moe_grouped_ffn=0
+enable_pto_moe_grouped_ffn=${ENABLE_PTO_MOE_GROUPED_FFN}
+pto_moe_grouped_ffn_use_custom_split=${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-}
+pto_moe_grouped_ffn_cache_dn_weight=${PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT:-}
+pto_moe_grouped_ffn_so_path=${PTO_MOE_GROUPED_FFN_SO_PATH:-}
 pythonpath=${PYTHONPATH}
 EOF
 
@@ -311,7 +339,14 @@ EOF
     echo "set -euo pipefail"
     printf 'export HCCL_CONNECT_TIMEOUT=%q\n' "${HCCL_CONNECT_TIMEOUT}"
     printf 'export CUDA_DEVICE_MAX_CONNECTIONS=%q\n' "${CUDA_DEVICE_MAX_CONNECTIONS}"
-    printf 'export ENABLE_PTO_MOE_GROUPED_FFN=%q\n' "0"
+    printf 'export ENABLE_PTO_MOE_GROUPED_FFN=%q\n' "${ENABLE_PTO_MOE_GROUPED_FFN}"
+    if [[ "${ENABLE_PTO_MOE_GROUPED_FFN}" == "1" ]]; then
+        printf 'export PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT=%q\n' "${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-}"
+        printf 'export PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT=%q\n' "${PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT:-}"
+        if [[ -n "${PTO_MOE_GROUPED_FFN_SO_PATH:-}" ]]; then
+            printf 'export PTO_MOE_GROUPED_FFN_SO_PATH=%q\n' "${PTO_MOE_GROUPED_FFN_SO_PATH}"
+        fi
+    fi
     printf 'export PYTHONPATH=%q\n' "${PYTHONPATH}"
     printf '%q ' "${TORCHRUN_CMD[@]}"
     printf '\n'

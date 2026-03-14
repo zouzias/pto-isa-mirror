@@ -17,19 +17,25 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace moe_grouped_ffn_projection;
 
-extern "C" __global__ AICORE void moe_grouped_gate_proj_custom(GM_ADDR x, GM_ADDR gate_weight_dn, GM_ADDR gate_proj,
-                                                               GM_ADDR expert_ids, GM_ADDR row_offsets,
-                                                               GM_ADDR valid_rows, GM_ADDR workspace)
+extern "C" __global__ AICORE void moe_grouped_dual_proj_custom(GM_ADDR x, GM_ADDR gate_weight_dn, GM_ADDR up_weight_dn,
+                                                               GM_ADDR gate_proj, GM_ADDR up_proj,
+                                                               GM_ADDR group_offsets, GM_ADDR tile_offsets,
+                                                               uint32_t num_experts, GM_ADDR workspace)
 {
     KERNEL_TASK_TYPE_DEFAULT(KERNEL_TYPE_AIC_ONLY);
 
 #if defined(__DAV_C220_CUBE__) || defined(__DAV_CUBE__)
     (void)workspace;
-    RunProjectionKernel(reinterpret_cast<__gm__ bfloat16_t *>(x), reinterpret_cast<__gm__ bfloat16_t *>(gate_weight_dn),
-                        reinterpret_cast<__gm__ float *>(gate_proj),
-                        reinterpret_cast<__gm__ int32_t *>(expert_ids),
-                        reinterpret_cast<__gm__ int32_t *>(row_offsets),
-                        reinterpret_cast<__gm__ int32_t *>(valid_rows));
+    auto *xPtr = reinterpret_cast<__gm__ bfloat16_t *>(x);
+    auto *groupOffsetsPtr = reinterpret_cast<__gm__ int32_t *>(group_offsets);
+    auto *tileOffsetsPtr = reinterpret_cast<__gm__ int32_t *>(tile_offsets);
+
+    RunProjectionKernelCompact(xPtr, reinterpret_cast<__gm__ bfloat16_t *>(gate_weight_dn),
+                               reinterpret_cast<__gm__ float *>(gate_proj), groupOffsetsPtr, tileOffsetsPtr,
+                               num_experts);
+    RunProjectionKernelCompact(xPtr, reinterpret_cast<__gm__ bfloat16_t *>(up_weight_dn),
+                               reinterpret_cast<__gm__ float *>(up_proj), groupOffsetsPtr, tileOffsetsPtr,
+                               num_experts);
 #endif
 
     pipe_barrier(PIPE_ALL);
