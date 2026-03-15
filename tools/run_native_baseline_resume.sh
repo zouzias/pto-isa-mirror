@@ -6,8 +6,14 @@ set -euo pipefail
 # logging at the wrapper level so the run is reproducible and logs are durable.
 
 pick_free_port() {
-    python3 - <<'PY'
+    local start_port="${1:-35000}"
+    local end_port="${2:-45000}"
+    python3 - "${start_port}" "${end_port}" <<'PY'
 import socket
+import sys
+
+start = int(sys.argv[1])
+end = int(sys.argv[2])
 
 def is_bindable(port: int) -> bool:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -19,12 +25,43 @@ def is_bindable(port: int) -> bool:
         sock.close()
     return True
 
-for candidate in range(35000, 45000):
+for candidate in range(start, end):
     if is_bindable(candidate):
         print(candidate)
         break
 else:
-    print(45001)
+    print(end + 1)
+PY
+}
+
+pick_free_port_window() {
+    local start_port="${1:-45000}"
+    local end_port="${2:-55000}"
+    local window_size="${3:-64}"
+    python3 - "${start_port}" "${end_port}" "${window_size}" <<'PY'
+import socket
+import sys
+
+start = int(sys.argv[1])
+end = int(sys.argv[2])
+window = int(sys.argv[3])
+
+def is_bindable(port: int) -> bool:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", port))
+    except OSError:
+        return False
+    finally:
+        sock.close()
+    return True
+
+for candidate in range(start, end - window + 2):
+    if all(is_bindable(port) for port in range(candidate, candidate + window)):
+        print(candidate)
+        break
+else:
+    print(end + 1)
 PY
 }
 
@@ -39,6 +76,8 @@ SOURCE_EXAMPLE_SCRIPT="${SOURCE_EXAMPLE_SCRIPT:-${LLM_REPO}/examples/mcore/qwen2
 MODEL_SCALE="${MODEL_SCALE:-1b}"
 MASTER_ADDR="${MASTER_ADDR:-localhost}"
 MASTER_PORT="${MASTER_PORT:-}"
+HCCL_IF_BASE_PORT="${HCCL_IF_BASE_PORT:-}"
+HCCL_IF_PORT_WINDOW_SIZE="${HCCL_IF_PORT_WINDOW_SIZE:-64}"
 NPUS_PER_NODE="${NPUS_PER_NODE:-16}"
 NNODES="${NNODES:-1}"
 NODE_RANK="${NODE_RANK:-0}"
@@ -53,6 +92,14 @@ LOAD_CHECKPOINT="${LOAD_CHECKPOINT:-1}"
 SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 TRAINING_EXTRA_ARGS="${TRAINING_EXTRA_ARGS:-}"
+MOE_TOKEN_DISPATCHER_TYPE="${MOE_TOKEN_DISPATCHER_TYPE:-alltoall_seq}"
+ENABLE_MOE_GROUPED_GEMM="${ENABLE_MOE_GROUPED_GEMM:-1}"
+ENABLE_MOE_PERMUTATION_ASYNC_COMM="${ENABLE_MOE_PERMUTATION_ASYNC_COMM:-1}"
+ENABLE_MOE_ALLTOALL_OVERLAP_COMM="${ENABLE_MOE_ALLTOALL_OVERLAP_COMM:-1}"
+ENABLE_MOE_PERMUTE_FUSION="${ENABLE_MOE_PERMUTE_FUSION:-1}"
+ENABLE_MOE_ALLTOALL_MC2="${ENABLE_MOE_ALLTOALL_MC2:-0}"
+ENABLE_MOE_BMM_MC2="${ENABLE_MOE_BMM_MC2:-0}"
+LEGACY_MINDSPEED_REPO="${LEGACY_MINDSPEED_REPO:-}"
 
 EXP_NAME="${EXP_NAME:-qwen2_1b_fp16_test_4k_jamba_gdn_moe_8npu_cann850}"
 CKPT_LOAD_DIR="${CKPT_LOAD_DIR:-/sharedata/zimoliu/ckpts/${EXP_NAME}}"
@@ -71,7 +118,11 @@ LLM_STATUS_FILE="${LOG_DIR}/git_status_llm.txt"
 MS_STATUS_FILE="${LOG_DIR}/git_status_ms.txt"
 
 if [[ -z "${MASTER_PORT}" ]]; then
-    MASTER_PORT="$(pick_free_port)"
+    MASTER_PORT="$(pick_free_port 35000 45000)"
+fi
+
+if [[ -z "${HCCL_IF_BASE_PORT}" ]]; then
+    HCCL_IF_BASE_PORT="$(pick_free_port_window 45000 55000 "${HCCL_IF_PORT_WINDOW_SIZE}")"
 fi
 
 if [[ ! -d "${LLM_REPO}" ]]; then
@@ -152,6 +203,7 @@ TENSORBOARD_DIR="${TENSORBOARD_DIR:-${LOG_DIR}/tensorboard}"
 mkdir -p "${TENSORBOARD_DIR}"
 
 export HCCL_CONNECT_TIMEOUT="${HCCL_CONNECT_TIMEOUT:-1200}"
+export HCCL_IF_BASE_PORT
 export CUDA_DEVICE_MAX_CONNECTIONS="${CUDA_DEVICE_MAX_CONNECTIONS:-1}"
 export ENABLE_PTO_MOE_GROUPED_FFN="${ENABLE_PTO_MOE_GROUPED_FFN:-0}"
 
@@ -165,10 +217,13 @@ if [[ "${ENABLE_PTO_MOE_GROUPED_FFN}" == "1" ]]; then
 fi
 
 PYTHONPATH_ENTRIES=(
-    "/sharedata/zimoliu/code/zimo_mindspeed"
     "${MS_REPO}"
     "${LLM_REPO}"
 )
+
+if [[ -n "${LEGACY_MINDSPEED_REPO}" ]]; then
+    PYTHONPATH_ENTRIES+=("${LEGACY_MINDSPEED_REPO}")
+fi
 
 EXISTING_PYTHONPATH="${PYTHONPATH:-}"
 EXISTING_PYTHONPATH="${EXISTING_PYTHONPATH#:}"
@@ -258,11 +313,7 @@ TORCHRUN_CMD=(
     --moe-router-topk "${TOPK}"
     --moe-router-load-balancing-type "${ROUTER_BALANCING_TYPE}"
     --moe-ffn-hidden-size "${MOE_FFN_HIDDEN_SIZE}"
-    --moe-grouped-gemm
-    --moe-permutation-async-comm
-    --moe-token-dispatcher-type alltoall_seq
-    --moe-alltoall-overlap-comm
-    --moe-permute-fusion
+    --moe-token-dispatcher-type "${MOE_TOKEN_DISPATCHER_TYPE}"
     --moe-layer-freq -1
     --moe-aux-loss-coeff 0.001
     --seq-aux
@@ -279,6 +330,30 @@ TORCHRUN_CMD=(
     --log-throughput
     --distributed-backend nccl
 )
+
+if [[ "${ENABLE_MOE_GROUPED_GEMM}" == "1" ]]; then
+    TORCHRUN_CMD+=(--moe-grouped-gemm)
+fi
+
+if [[ "${ENABLE_MOE_PERMUTATION_ASYNC_COMM}" == "1" ]]; then
+    TORCHRUN_CMD+=(--moe-permutation-async-comm)
+fi
+
+if [[ "${ENABLE_MOE_ALLTOALL_OVERLAP_COMM}" == "1" ]]; then
+    TORCHRUN_CMD+=(--moe-alltoall-overlap-comm)
+fi
+
+if [[ "${ENABLE_MOE_PERMUTE_FUSION}" == "1" ]]; then
+    TORCHRUN_CMD+=(--moe-permute-fusion)
+fi
+
+if [[ "${ENABLE_MOE_ALLTOALL_MC2}" == "1" ]]; then
+    TORCHRUN_CMD+=(--moe-alltoall-mc2)
+fi
+
+if [[ "${ENABLE_MOE_BMM_MC2}" == "1" ]]; then
+    TORCHRUN_CMD+=(--moe-bmm-mc2)
+fi
 
 if [[ "${LOG_PARAMS_NORM}" == "1" ]]; then
     TORCHRUN_CMD+=(--log-params-norm)
@@ -314,6 +389,8 @@ pretrain_entry=${PRETRAIN_ENTRY}
 model_scale=${MODEL_SCALE}
 master_addr=${MASTER_ADDR}
 master_port=${MASTER_PORT}
+hccl_if_base_port=${HCCL_IF_BASE_PORT}
+hccl_if_port_window_size=${HCCL_IF_PORT_WINDOW_SIZE}
 nproc_per_node=${NPUS_PER_NODE}
 nnodes=${NNODES}
 node_rank=${NODE_RANK}
@@ -340,10 +417,18 @@ log_dir=${LOG_DIR}
 log_file=${LOG_FILE}
 tensorboard_dir=${TENSORBOARD_DIR}
 training_extra_args=${TRAINING_EXTRA_ARGS}
+moe_token_dispatcher_type=${MOE_TOKEN_DISPATCHER_TYPE}
+enable_moe_grouped_gemm=${ENABLE_MOE_GROUPED_GEMM}
+enable_moe_permutation_async_comm=${ENABLE_MOE_PERMUTATION_ASYNC_COMM}
+enable_moe_alltoall_overlap_comm=${ENABLE_MOE_ALLTOALL_OVERLAP_COMM}
+enable_moe_permute_fusion=${ENABLE_MOE_PERMUTE_FUSION}
+enable_moe_alltoall_mc2=${ENABLE_MOE_ALLTOALL_MC2}
+enable_moe_bmm_mc2=${ENABLE_MOE_BMM_MC2}
 enable_pto_moe_grouped_ffn=${ENABLE_PTO_MOE_GROUPED_FFN}
 pto_moe_grouped_ffn_use_custom_split=${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-}
 pto_moe_grouped_ffn_cache_dn_weight=${PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT:-}
 pto_moe_grouped_ffn_so_path=${PTO_MOE_GROUPED_FFN_SO_PATH:-}
+legacy_mindspeed_repo=${LEGACY_MINDSPEED_REPO}
 pythonpath=${PYTHONPATH}
 EOF
 
