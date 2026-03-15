@@ -156,7 +156,7 @@ PTO_INTERNAL void Unary2LProcess(unsigned validRow, unsigned validCol)
     }
 }
 
-template <typename Op, typename T, typename DstTile, typename SrcTile>
+template <typename T, typename Op, typename DstTile, typename SrcTile>
 PTO_INTERNAL void TUnaryOp(unsigned validRow, unsigned validCol)
 {   
     constexpr int nRepeatElem = REPEAT_BYTE / sizeof(T);
@@ -187,6 +187,14 @@ PTO_INTERNAL void TUnaryOp(unsigned validRow, unsigned validCol)
             Unary2LProcess<Op, T, DstTile, SrcTile, nRepeatElem>(validRow, validCol);
         }
     }
+}
+
+template <typename T, typename Op, typename DstTile, typename SrcTile, bool floatOnly = true>
+PTO_INTERNAL void runUnaryOp(DstTile &dst, SrcTile &src)
+{
+    unsigned dstValidRow = dst.GetValidRow();
+    unsigned dstValidCol = dst.GetValidCol();
+    TUnaryOp<T, Op, DstTile, SrcTile>(dstValidRow, dstValidCol);
 }
 
 
