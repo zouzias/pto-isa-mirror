@@ -52,6 +52,7 @@ DATA_SPLIT="${DATA_SPLIT:-100,0,0}"
 LOAD_CHECKPOINT="${LOAD_CHECKPOINT:-1}"
 SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-1}"
 DRY_RUN="${DRY_RUN:-0}"
+TRAINING_EXTRA_ARGS="${TRAINING_EXTRA_ARGS:-}"
 
 EXP_NAME="${EXP_NAME:-qwen2_1b_fp16_test_4k_jamba_gdn_moe_8npu_cann850}"
 CKPT_LOAD_DIR="${CKPT_LOAD_DIR:-/sharedata/zimoliu/ckpts/${EXP_NAME}}"
@@ -292,6 +293,12 @@ if [[ "${LOAD_CHECKPOINT}" == "1" ]]; then
     TORCHRUN_CMD+=(--load "${CKPT_LOAD_DIR}")
 fi
 
+if [[ -n "${TRAINING_EXTRA_ARGS}" ]]; then
+    # Allow caller to append extra training CLI flags, e.g. profiling knobs.
+    read -r -a EXTRA_ARGS_ARRAY <<< "${TRAINING_EXTRA_ARGS}"
+    TORCHRUN_CMD+=("${EXTRA_ARGS_ARRAY[@]}")
+fi
+
 cat > "${META_FILE}" <<EOF
 run_id=${RUN_ID}
 started_at=$(date -Is)
@@ -332,6 +339,7 @@ log_root=${LOG_ROOT}
 log_dir=${LOG_DIR}
 log_file=${LOG_FILE}
 tensorboard_dir=${TENSORBOARD_DIR}
+training_extra_args=${TRAINING_EXTRA_ARGS}
 enable_pto_moe_grouped_ffn=${ENABLE_PTO_MOE_GROUPED_FFN}
 pto_moe_grouped_ffn_use_custom_split=${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-}
 pto_moe_grouped_ffn_cache_dn_weight=${PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT:-}
