@@ -72,7 +72,7 @@ case "${MODE}" in
 esac
 
 PTO_ISA_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT="${PTO_ISA_REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/lib/libop_extension.so"
+PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT="${PTO_ISA_REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/libop_extension.so"
 if [[ "${ENABLE_PTO_MOE_GROUPED_FFN}" == "1" ]]; then
     # Keep training-side config simple: use the fast split kernels by default.
     export PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT="${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-1}"
