@@ -12,6 +12,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TLOAD_HPP
 
 namespace pto {
+
+struct MrgSortExecutedNumList {
+    uint16_t mrgSortList0;
+    uint16_t mrgSortList1;
+    uint16_t mrgSortList2;
+    uint16_t mrgSortList3;
+};
+
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
 {

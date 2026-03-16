@@ -256,6 +256,7 @@ struct NotOp {
 template <typename DstTile, typename SrcTile>
 PTO_INTERNAL void TNOT_IMPL(DstTile &dst, SrcTile &src)
 {
+    using TransType = typename B82B16Trait<typename DstTile::DType>::TransType;
     TUNARY_IMPL<NotOp<TransType>, DstTile, SrcTile, false>(dst, src);
 }
 
