@@ -83,7 +83,7 @@ PTO_INTERNAL void Unary2LNormModeTail(unsigned validRow, unsigned nRemainPerLine
     unsigned loop = 0;
     unsigned remain = validRow;
     constexpr bool strideOverFlag = (dstStride > REPEAT_STRIDE_MAX || srcStride > REPEAT_STRIDE_MAX);
-    if constexpr (DstTile::Rows > pto::REPEAT_MAX || SrcTile::Rows > pto::REPEAT_MAX) {
+    if constexpr (DstTile::Rows > REPEAT_MAX || SrcTile::Rows > REPEAT_MAX) {
         loop = validRow / REPEAT_MAX;
         for (uint32_t i = 0; i < loop; i++) {
             if constexpr (strideOverFlag) {
@@ -114,8 +114,8 @@ PTO_INTERNAL void Unary2LNormModeRowRpt(unsigned validRow, unsigned validCol)
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned dstStride = DstTile::RowStride / blockSizeElem;
     constexpr unsigned srcStride = SrcTile::RowStride / blockSizeElem;
-    constexpr bool condRowRpt = ((DstTile::Rows <= pto::REPEAT_MAX) && (dstStride <= REPEAT_STRIDE_MAX) &&
-                                 (SrcTile::Rows <= pto::REPEAT_MAX) && (srcStride <= REPEAT_STRIDE_MAX));
+    constexpr bool condRowRpt = ((DstTile::Rows <= REPEAT_MAX) && (dstStride <= REPEAT_STRIDE_MAX) &&
+                                 (SrcTile::Rows <= REPEAT_MAX) && (srcStride <= REPEAT_STRIDE_MAX));
     if constexpr (condRowRpt) {
         unsigned loop = validCol / nRepeatElem;
         unsigned tailElements = validCol % nRepeatElem;
@@ -159,13 +159,13 @@ PTO_INTERNAL void Unary2LProcess(unsigned validRow, unsigned validCol)
 template <typename T, typename Op, typename DstTile, typename SrcTile>
 PTO_INTERNAL void TUnaryOp(unsigned validRow, unsigned validCol)
 {   
-    constexpr int nRepeatElem = REPEAT_BYTE / sizeof(T);
+    constexpr unsigned nRepeatElem = REPEAT_BYTE / sizeof(T);
     constexpr bool isCombined = ((DstTile::ValidCol == DstTile::Cols) && (SrcTile::ValidCol == SrcTile::Cols)) ||
                                 ((DstTile::Rows == 1) && (SrcTile::Rows == 1));
 
     if constexpr (isCombined) {
         constexpr unsigned totalRepeats = (DstTile::Rows * DstTile::Cols + nRepeatElem - 1) / nRepeatElem;
-        if constexpr (totalRepeats > pto::REPEAT_MAX) {
+        if constexpr (totalRepeats > REPEAT_MAX) {
             Unary1LCountMode<Op, T>(validRow, validCol);
         } else {
             Unary1LNormMode<Op, T>(validRow, DstTile::Cols);
@@ -175,7 +175,7 @@ PTO_INTERNAL void TUnaryOp(unsigned validRow, unsigned validCol)
         if constexpr (isSameShape) {
             if ((validCol == DstTile::Cols) || (validRow == 1)) {
                 unsigned totalRepeats = (validRow * validCol + nRepeatElem - 1) / nRepeatElem;
-                if (totalRepeats > pto::REPEAT_MAX) {
+                if (totalRepeats > REPEAT_MAX) {
                     Unary1LCountMode<Op, T>(validRow, validCol);
                 } else {
                     Unary1LNormMode<Op, T>(validRow, validCol);
