@@ -280,8 +280,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TAdd.hpp"
 #include "pto/costmodel/a2a3/TAddS.hpp"
 #include "pto/costmodel/a2a3/TAssign.hpp"
-#include "pto/costmodel/a2a3/TBinOp.hpp"
-#include "pto/costmodel/a2a3/TBinSOp.hpp"
 #include "pto/costmodel/a2a3/TDivS.hpp"
 #include "pto/costmodel/a2a3/TExp.hpp"
 #include "pto/costmodel/a2a3/TLoad.hpp"
@@ -291,7 +289,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TSqrt.hpp"
 #include "pto/costmodel/a2a3/TStore.hpp"
 #include "pto/costmodel/a2a3/TSub.hpp"
-#include "pto/costmodel/a2a3/TUnaryOp.hpp"
 #endif
 
 #endif

@@ -322,7 +322,7 @@ def run_gtest_binary(binary: Path, gtest_filter: Optional[str], build_type: str,
         xml_output.parent.mkdir(parents=True, exist_ok=True)
         cmd.append(f"--gtest_output=xml:{xml_output}")
 
-    # CPU ST test data is under build_dir/..., and tests use paths like "../<suite.case>/input1.bin".
+    # costmodel ST test data is under build_dir/..., and tests use paths like "../<suite.case>/input1.bin".
     # For multi-config generators on Windows, binaries are under build/bin/<Config>/, so we run from build/bin/.
     run_cwd = binary.parent
     if os.name == "nt" and binary.parent.name.lower() == build_type.lower():
@@ -339,7 +339,7 @@ def run_binary(binary: Path, build_type: str, cwd: Optional[Path] = None) -> Non
 
 def build_and_run_demo(demo_name: str, repo_root: Path, build_type: str, cxx: Optional[str], cc: Optional[str], *,
 	                   verbose: bool) -> None:
-    demos_root = repo_root / ".." / "demos" / "cpu"
+    demos_root = repo_root / ".." / "demos" / "costmodel"
     demo_map: dict[str, tuple[Path, str]] = {
         "gemm": (demos_root / "gemm_demo", "gemm_demo"),
         "flash_attn": (demos_root / "flash_attention_demo", "flash_attention_demo"),
@@ -430,7 +430,7 @@ def _parse_duration_seconds(s: str) -> float:
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Build & run CPU simulator ST unit tests (tests/cpu/st)",
+        description="Build & run costmodel simulator ST unit tests (tests/costmodel/st)",
         epilog=("Examples:\n  python run_costmodel.py --build-type Release\n"
             "  python run_costmodel.py --testcase tadd --build-type Release\n"
             "  python run_costmodel.py --no-build --gtest_filter TADDTest.*\n"
@@ -449,7 +449,7 @@ def parse_arguments():
     parser.add_argument("--cc", help="C compiler (e.g. clang). Default: $CC or auto-detect.")
     parser.add_argument("--build-type", default="Release", choices=["Release", "Debug", "RelWithDebInfo", "MinSizeRel"],
                         help="CMake build type.",)
-    parser.add_argument("--build-dir", default=None, help="Build directory. Default: tests/cpu/st/build",)
+    parser.add_argument("--build-dir", default=None, help="Build directory. Default: tests/costmodel/st/build",)
     parser.add_argument("--no-clean", action="store_true", help="(Deprecated) No-op; kept for backward compatibility.")
     parser.add_argument("--clean", action="store_true", help="Delete build dir and rebuild.")
     parser.add_argument("--rebuild", action="store_true", help="Force re-configure and rebuild .")
@@ -459,8 +459,8 @@ def parse_arguments():
     parser.add_argument("--no-install", action="store_true", help="Do not auto-install missing tools/deps (numpy).")
     parser.add_argument("--demo", choices=["gemm", "flash_attn", "mla", "all"], default=None, help="Build & run demo program \
                         (e.g. 'gemm', 'flash_attn'). \
-                        Note: demo runs alone (does not run CPU ST).")
-    parser.add_argument("--demo-only", action="store_true", help="Same as --demo (demo runs without CPU ST).")
+                        Note: demo runs alone (does not run costmodel ST).")
+    parser.add_argument("--demo-only", action="store_true", help="Same as --demo (demo runs without costmodel ST).")
     parser.add_argument("--generator", default=None, help="CMake generator(Windows required: 'MinGW Makefiles' etc..)")
     parser.add_argument("--cmake_prefix_path", default=None, help="-DCMAKE_PREFIX_PATH=<path> e.g. D:\\gtest")
     args = parser.parse_args()
@@ -503,9 +503,9 @@ def run_demo_mode(args, repo_root, cxx, cc) -> int:
 
 
 def run_test_mode(args, repo_root, cxx, cc) -> int:
-    source_dir = repo_root / "cpu" / "st"
+    source_dir = repo_root / "costmodel" / "st"
     if not source_dir.exists():
-        logging.error(f"error: not found CPU ST dir: {source_dir}")
+        logging.error(f"error: not found costmodel ST dir: {source_dir}")
         return 2
 
     build_dir = Path(args.build_dir) if args.build_dir else (source_dir / "build")
