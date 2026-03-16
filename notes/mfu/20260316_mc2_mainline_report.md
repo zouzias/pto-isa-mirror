@@ -203,9 +203,9 @@ Relevant lines:
 - Log:
   - `/home/llx/pto-isa/logs_native_resume/qwen2_1b_fp16_test_4k_jamba_gdn_moe_8npu_cann850_0/20260316_pto_mc2_reorder_500step/train.log`
 - Current completed steady-state interval:
-  - `6503-6536`
-- Median over `6503-6536`:
-  - `2056.30 ms / 39.49% MFU`
+  - `6503-6739`
+- Median over `6503-6739`:
+  - `2055.50 ms / 39.51% MFU`
 - Current interpretation:
   - On the completed steady-state window so far, the PTO-ISA reorder path is slightly ahead of the
     non-PTO long-window reference (`39.40%`).
@@ -289,8 +289,8 @@ Relevant lines:
   - `-52.05 ms/iter`
   - `+0.965 MFU points`
 - PTO reorder long-run-progress vs non-PTO long-window reference:
-  - `-4.60 ms/iter`
-  - `+0.090 MFU points`
+  - `-5.40 ms/iter`
+  - `+0.110 MFU points`
 - `probs` overlap + metadata DtoH side-stream vs `probs` overlap mainline:
   - `-6.75 ms/iter`
   - `+0.130 MFU points`
