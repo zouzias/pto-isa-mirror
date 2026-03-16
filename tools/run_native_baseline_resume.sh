@@ -65,6 +65,49 @@ else:
 PY
 }
 
+is_port_bindable() {
+    local port="${1:?port is required}"
+    python3 - "${port}" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    sock.bind(("127.0.0.1", port))
+except OSError:
+    print("0")
+else:
+    print("1")
+finally:
+    sock.close()
+PY
+}
+
+is_port_window_bindable() {
+    local start_port="${1:?start_port is required}"
+    local window_size="${2:?window_size is required}"
+    python3 - "${start_port}" "${window_size}" <<'PY'
+import socket
+import sys
+
+start = int(sys.argv[1])
+window = int(sys.argv[2])
+
+def is_bindable(port: int) -> bool:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", port))
+    except OSError:
+        return False
+    finally:
+        sock.close()
+    return True
+
+print("1" if all(is_bindable(port) for port in range(start, start + window)) else "0")
+PY
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -98,11 +141,20 @@ TRAINING_EXTRA_ARGS="${TRAINING_EXTRA_ARGS:-}"
 MOE_TOKEN_DISPATCHER_TYPE="${MOE_TOKEN_DISPATCHER_TYPE:-alltoall_seq}"
 ENABLE_MOE_GROUPED_GEMM="${ENABLE_MOE_GROUPED_GEMM:-1}"
 ENABLE_MOE_PERMUTATION_ASYNC_COMM="${ENABLE_MOE_PERMUTATION_ASYNC_COMM:-1}"
-ENABLE_MOE_ALLTOALL_OVERLAP_COMM="${ENABLE_MOE_ALLTOALL_OVERLAP_COMM:-1}"
 ENABLE_MOE_PERMUTE_FUSION="${ENABLE_MOE_PERMUTE_FUSION:-1}"
 ENABLE_MOE_ALLTOALL_MC2="${ENABLE_MOE_ALLTOALL_MC2:-0}"
 ENABLE_MOE_BMM_MC2="${ENABLE_MOE_BMM_MC2:-0}"
 LEGACY_MINDSPEED_REPO="${LEGACY_MINDSPEED_REPO:-}"
+
+if [[ -z "${ENABLE_MOE_ALLTOALL_OVERLAP_COMM+x}" ]]; then
+    if [[ "${ENABLE_MOE_ALLTOALL_MC2}" == "1" ]]; then
+        ENABLE_MOE_ALLTOALL_OVERLAP_COMM="0"
+    else
+        ENABLE_MOE_ALLTOALL_OVERLAP_COMM="1"
+    fi
+else
+    ENABLE_MOE_ALLTOALL_OVERLAP_COMM="${ENABLE_MOE_ALLTOALL_OVERLAP_COMM}"
+fi
 
 EXP_NAME="${EXP_NAME:-qwen2_1b_fp16_test_4k_jamba_gdn_moe_8npu_cann850}"
 CKPT_LOAD_DIR="${CKPT_LOAD_DIR:-/sharedata/zimoliu/ckpts/${EXP_NAME}}"
@@ -121,11 +173,17 @@ LLM_STATUS_FILE="${LOG_DIR}/git_status_llm.txt"
 MS_STATUS_FILE="${LOG_DIR}/git_status_ms.txt"
 
 if [[ -z "${MASTER_PORT}" ]]; then
-    MASTER_PORT="$(pick_free_port 35000 45000)"
+    MASTER_PORT="$(pick_free_port 37000 45000)"
+elif [[ "$(is_port_bindable "${MASTER_PORT}")" != "1" ]]; then
+    echo "MASTER_PORT ${MASTER_PORT} is not bindable, picking a free replacement" >&2
+    MASTER_PORT="$(pick_free_port 37000 45000)"
 fi
 
 if [[ -z "${HCCL_IF_BASE_PORT}" ]]; then
-    HCCL_IF_BASE_PORT="$(pick_free_port_window 45000 55000 "${HCCL_IF_PORT_WINDOW_SIZE}")"
+    HCCL_IF_BASE_PORT="$(pick_free_port_window 60000 64900 "${HCCL_IF_PORT_WINDOW_SIZE}")"
+elif [[ "$(is_port_window_bindable "${HCCL_IF_BASE_PORT}" "${HCCL_IF_PORT_WINDOW_SIZE}")" != "1" ]]; then
+    echo "HCCL_IF_BASE_PORT window ${HCCL_IF_BASE_PORT}-${HCCL_IF_BASE_PORT}+$((HCCL_IF_PORT_WINDOW_SIZE - 1)) is not bindable, picking a free replacement" >&2
+    HCCL_IF_BASE_PORT="$(pick_free_port_window 60000 64900 "${HCCL_IF_PORT_WINDOW_SIZE}")"
 fi
 
 if [[ ! -d "${LLM_REPO}" ]]; then
@@ -462,6 +520,7 @@ EOF
     echo "#!/bin/bash"
     echo "set -euo pipefail"
     printf 'export HCCL_CONNECT_TIMEOUT=%q\n' "${HCCL_CONNECT_TIMEOUT}"
+    printf 'export HCCL_IF_BASE_PORT=%q\n' "${HCCL_IF_BASE_PORT}"
     printf 'export CUDA_DEVICE_MAX_CONNECTIONS=%q\n' "${CUDA_DEVICE_MAX_CONNECTIONS}"
     printf 'export ENABLE_PTO_MOE_GROUPED_FFN=%q\n' "${ENABLE_PTO_MOE_GROUPED_FFN}"
     printf 'export ENABLE_PTO_MOE_MC2_REORDER=%q\n' "${ENABLE_PTO_MOE_MC2_REORDER}"
