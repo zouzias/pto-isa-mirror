@@ -133,12 +133,15 @@ The FIX-PIPE unit provides a **dual/single destination switch** for L0C→UB tra
             ▼                               ▼
 ┌───────────────────────┐       ┌───────────────────────┐
 │   AIV0 UB @ 0x2000    │       │   AIV1 UB @ 0x4000    │
-│   Tile [16, 128]      │       │   Tile [16, 128]      │
+│   Tile [8, 128]       │       │   Tile [8, 128]       │
+│   (upper half M)      │       │   (lower half M)      │
 └───────────────────────┘       └───────────────────────┘
         (different addresses OK, or same address OK)
 ```
 
-**Benefit of Dual-Dst**: Single ISA instruction, single L0C read, dual UB writes = 2× bandwidth efficiency.
+**Performance Comparison**:
+- **Dual-Dst**: Single ISA instruction, single L0C read, dual UB writes = **2× bandwidth efficiency**
+- **Single-Dst**: Two ISA instructions, two L0C reads, two UB writes = **1/2 performance of dual-dst**
 
 ---
 
@@ -278,23 +281,34 @@ The pass CAN detect paired patterns by analyzing cut-M/cut-N view patterns withi
 **Design**: Single API with `aiv_id` enum: `0` (AIV0), `1` (AIV1), or `-1` (dual/SIMD)
 
 ```python
-# Pipe initialization specifies FIFO mode
+# Pipe initialization specifies FIFO target
+# This determines UB allocation and address mapping
 pl.comm.initialize_pipe(
-    fifo_mode='separated'  # 'separated' (aiv0/aiv1 independent) or 'simd' (aiv0||aiv1 paired)
+    fifo_target='AIV0'     # AIV0 only: allocates AIV0 UB FIFO
+    # OR
+    fifo_target='AIV1'     # AIV1 only: allocates AIV1 UB FIFO
+    # OR
+    fifo_target='SIMD'     # SIMD (AIV0||AIV1): allocates paired FIFO with same UB addr
 )
 
 # Single API with aiv_id enum
-pl.comm.tpush_to_aiv(tile, aiv_id=0)   # AIV0 only (uses AIV0 FIFO if separated)
-pl.comm.tpush_to_aiv(tile, aiv_id=1)   # AIV1 only (uses AIV1 FIFO if separated)
-pl.comm.tpush_to_aiv(tile, aiv_id=-1)  # Dual/SIMD (uses shared FIFO + dual-dst ISA)
+pl.comm.tpush_to_aiv(tile, aiv_id=0)   # AIV0 only (requires fifo_target='AIV0' or 'SIMD')
+pl.comm.tpush_to_aiv(tile, aiv_id=1)   # AIV1 only (requires fifo_target='AIV1' or 'SIMD')
+pl.comm.tpush_to_aiv(tile, aiv_id=-1)  # Dual/SIMD (requires fifo_target='SIMD')
 
 # Pop API unchanged
 data = pl.comm.tpop_from_aic(AIV_IDX)
 ```
 
-**FIFO Mode in Pipe Initialization**:
-- `fifo_mode='separated'`: Two independent FIFOs for AIV0 and AIV1
-- `fifo_mode='simd'`: Single shared FIFO with paired AIV0||AIV1 entries
+**FIFO Target in Pipe Initialization**:
+- `fifo_target='AIV0'`: Allocates AIV0 UB FIFO only, AIV1 UB not used
+- `fifo_target='AIV1'`: Allocates AIV1 UB FIFO only, AIV0 UB not used
+- `fifo_target='SIMD'`: Allocates paired FIFO with **same UB address** in both AIV0 and AIV1 banks (required for dual-dst)
+
+**Why FIFO Target Matters**:
+- UB allocation and address mapping are bound to pipe initialization
+- `SIMD` mode guarantees same UB address for dual-dst ISA
+- Separated modes (`AIV0`/`AIV1`) allow independent UB allocation
 
 **Cut-M or Cut-N Inference**:
 - Can be inferred from the pop tile shape
@@ -302,27 +316,29 @@ data = pl.comm.tpop_from_aic(AIV_IDX)
 
 **Lowering**:
 ```
-fifo_mode='separated':
-  tpush_to_aiv(tile, 0) → copy_cc_matrix_to_ubuf(tile, dst=AIV0_UB, fifo=AIV0_FIFO)
-  tpush_to_aiv(tile, 1) → copy_cc_matrix_to_ubuf(tile, dst=AIV1_UB, fifo=AIV1_FIFO)
+fifo_target='AIV0':
+  tpush_to_aiv(tile, 0) → copy_cc_matrix_to_ubuf(tile, dst=AIV0_UB[slot])
 
-fifo_mode='simd':
+fifo_target='AIV1':
+  tpush_to_aiv(tile, 1) → copy_cc_matrix_to_ubuf(tile, dst=AIV1_UB[slot])
+
+fifo_target='SIMD':
   tpush_to_aiv(tile, -1) → copy_cc_matrix_to_ubuf_dual(
       src=L0C_tile,
-      dst0=AIV0_UB[addr],
-      dst1=AIV1_UB[addr],  // Same address
+      dst0=AIV0_UB[slot],   // Same slot index
+      dst1=AIV1_UB[slot],   // Same slot index → same UB addr
       split=inferred_from_tile
   )
 ```
 
 **Pros**:
 - ✅ Simple unified API with enum
-- ✅ Pipe initialization declares FIFO mode upfront
-- ✅ Cut-M/Cut-N can be inferred or configured
-- ✅ Supports both separated and SIMD modes
+- ✅ Pipe initialization declares FIFO target (AIV0/AIV1/SIMD) upfront
+- ✅ UB allocation and address mapping bound at init time
+- ✅ SIMD mode enables dual-dst with guaranteed same UB address
 
 **Cons**:
-- ❌ Pipe initialization must know FIFO mode before kernel execution
+- ❌ Pipe initialization must specify FIFO target before kernel execution
 
 ### 3.2 Option B: Fallback for Missed AIV in Basic Block (Not Recommended)
 
