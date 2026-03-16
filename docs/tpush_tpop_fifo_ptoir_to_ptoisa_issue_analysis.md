@@ -265,10 +265,9 @@ The `ExpandMixedKernel` pass generates `tpush_to_aiv(tile, aiv_id)` calls that:
 2. **Are loop-agnostic**: Can appear in any loop structure
 3. **Assume shared FIFO**: All pushes go to same FIFO with slot tags
 
-But the lowering to `copy_cc_matrix_to_ubuf` (l0c2ub) ISA:
+The pass CAN detect paired patterns by analyzing cut-M/cut-N view patterns within a single basic block and translate to dual-dst calls. However, the key constraint is:
 
-1. **Cannot detect paired patterns**: When pushes ARE paired, no way to identify and use dual-dst
-2. **UB address mismatch**: Separate scheduling may allocate different UB addresses, breaking dual-dst requirement
+**UB address alignment**: To use dual-dst, AIV0 and AIV1 must write to the **same UB address**. This requires enforcing a **single FIFO index** for both AIV0 and AIV1 UB FIFOs—i.e., paired pushes must use the same slot index, which guarantees the same UB address allocation in both banks.
 
 ---
 
