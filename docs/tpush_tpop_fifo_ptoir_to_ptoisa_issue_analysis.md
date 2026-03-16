@@ -192,7 +192,23 @@ def paged_attention_incore_0_aiv(..., AIV_IDX: pl.Scalar[pl.INDEX]):
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Note**: To support separated AIV0/AIV1 representation (non-paired pushes), the design would need to change to **two separate FIFOs with independent indices**:
+### 2.3 Combined FIFO Index Problem
+
+The problem with a combined (shared) FIFO index is:
+
+1. **AIC loop schedule complexity**: AIC needs to know the schedule differences between AIV0 and AIV1 to compute the combined FIFO index correctly
+2. **AIV local index computation**: Each AIV (running as separate SU/control thread) also needs to know **all branches** to compute the combined index correctly from its local loop
+
+**Example**: If AIV0 pushes in iterations [0,2,4] and AIV1 pushes in iterations [1,3,5]:
+- AIC must interleave: push(aiv0, idx=0), push(aiv1, idx=1), push(aiv0, idx=2), ...
+- AIV0 must compute: "my local iteration 0 → combined index 0", "my local iteration 1 → combined index 2", ...
+- AIV1 must compute: "my local iteration 0 → combined index 1", "my local iteration 1 → combined index 3", ...
+
+This requires cross-SU schedule awareness, which breaks the independent control thread model.
+
+### 2.4 Separated FIFO Model (Alternative)
+
+To support separated AIV0/AIV1 representation (non-paired pushes), the design would need **two separate FIFOs with independent indices**:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -213,6 +229,33 @@ def paged_attention_incore_0_aiv(..., AIV_IDX: pl.Scalar[pl.INDEX]):
 │  Independent progress, no cross-AIV ordering dependency     │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### 2.5 Current Workaround (User Restrictions)
+
+The current design can be kept as-is with the following **user restrictions**:
+
+1. **Single-AIV mode**: Use only AIV0 OR only AIV1 (not both) throughout the kernel
+2. **Paired-AIV mode**: If using both AIV0 and AIV1, **must do push/pop for both AIV0 and AIV1 in the same basic block**
+
+```python
+# ✅ Valid: Single-AIV mode (only AIV0)
+for i in pl.range(0, N, 1):
+    pl.comm.tpush_to_aiv(tile, 0)  # Only AIV0, OK
+
+# ✅ Valid: Paired-AIV mode (both in same basic block)
+for i in pl.range(0, N, 1):
+    pl.comm.tpush_to_aiv(half0, 0)  # AIV0 in same block
+    pl.comm.tpush_to_aiv(half1, 1)  # AIV1 in same block, OK
+
+# ❌ Invalid: Mixed mode (AIV0 and AIV1 in different blocks/iterations)
+for i in pl.range(0, N, 1):
+    if i % 2 == 0:
+        pl.comm.tpush_to_aiv(tile, 0)  # AIV0 only
+    else:
+        pl.comm.tpush_to_aiv(tile, 1)  # AIV1 only - BREAKS combined index
+```
+
+This restriction ensures the combined FIFO index can be computed locally without cross-SU schedule awareness.
 
 ---
 
