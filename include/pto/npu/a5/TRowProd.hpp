@@ -24,9 +24,10 @@ template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TRowProdCheck(uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow)
 {
     using T = typename TileDataIn::DType;
-    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float>,
-                  "TRowProd only supports 'half' or 'float' data types. "
-                  "Fix: Define TileDataIn with DType = half or float.");
+    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float> ||
+                  std::is_same_v<T, int16_t> || std::is_same_v<T, int32_t>,
+                  "TRowProd only supports 'half', 'float', 'int16_t', or 'int32_t' data types. "
+                  "Fix: Define TileDataIn with DType = half, float, int16_t, or int32_t.");
     static_assert(std::is_same_v<T, typename TileDataOut::DType>,
                   "Input and output tile data types must match. "
                   "Fix: Ensure TileDataOut uses the same DType as TileDataIn.");

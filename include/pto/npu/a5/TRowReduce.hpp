@@ -22,6 +22,7 @@ namespace pto {
 
 // ==========================================
 // FloatLimits: get max value for float types
+// IntLimits: get max value for int types
 // ==========================================
 
 template <typename T>
@@ -51,6 +52,40 @@ struct FloatLimits {
 };
 
 template <typename T>
+struct IntLimits;
+
+template <>
+struct IntLimits<int16_t> {
+    static constexpr int16_t max()
+    {
+        return INT16_MAX;
+    }
+    static constexpr int16_t min()
+    {
+        return INT16_MIN;
+    }
+};
+
+template <>
+struct IntLimits<int32_t> {
+    static constexpr int32_t max()
+    {
+        return INT32_MAX;
+    }
+    static constexpr int32_t min()
+    {
+        return INT32_MIN;
+    }
+};
+
+template <typename T>
+struct IntLimits {
+    static_assert(sizeof(T) == 0,
+                  "IntLimits<T> is not specialized for this type. "
+                  "Supported types: int16_t, int32_t.");
+};
+
+template <typename T>
 struct ROWSUM {
     static constexpr T InitVal = 0;
     using RegType = typename TypeGet<T>::T;
@@ -66,7 +101,7 @@ struct ROWSUM {
 
 template <typename T>
 struct ROWMAX {
-    static constexpr T InitVal = -FloatLimits<T>::max();
+    static constexpr T InitVal;
     using RegType = typename TypeGet<T>::T;
     static PTO_INTERNAL void Accumulate(RegType &dst, RegType &src0, RegType &src1, MaskReg &pred)
     {
@@ -80,7 +115,7 @@ struct ROWMAX {
 
 template <typename T>
 struct ROWMIN {
-    static constexpr T InitVal = FloatLimits<T>::max();
+    static constexpr T InitVal;
     using RegType = typename TypeGet<T>::T;
     static PTO_INTERNAL void Accumulate(RegType &dst, RegType &src0, RegType &src1, MaskReg &pred)
     {
@@ -92,13 +127,40 @@ struct ROWMIN {
     }
 };
 
+// ROWMAX InitVal specializations
+template <>
+constexpr float ROWMAX<float>::InitVal = -__FLT_MAX__;
+
+template <>
+constexpr half ROWMAX<half>::InitVal = static_cast<half>(-65504.0f);
+
+template <>
+constexpr int16_t ROWMAX<int16_t>::InitVal = INT16_MIN;
+
+template <>
+constexpr int32_t ROWMAX<int32_t>::InitVal = INT32_MIN;
+
+// ROWMIN InitVal specializations
+template <>
+constexpr float ROWMIN<float>::InitVal = __FLT_MAX__;
+
+template <>
+constexpr half ROWMIN<half>::InitVal = static_cast<half>(65504.0f);
+
+template <>
+constexpr int16_t ROWMIN<int16_t>::InitVal = INT16_MAX;
+
+template <>
+constexpr int32_t ROWMIN<int32_t>::InitVal = INT32_MAX;
+
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow)
 {
     using T = typename TileDataIn::DType;
-    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float>,
-                  "Row reduction only supports 'half' or 'float' data types. "
-                  "Fix: Define TileDataIn with DType = half or float.");
+    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float> ||
+                  std::is_same_v<T, int16_t> || std::is_same_v<T, int32_t>,
+                  "Row reduction only supports 'half', 'float', 'int16_t', or 'int32_t' data types. "
+                  "Fix: Define TileDataIn with DType = half, float, int16_t, or int32_t.");
     static_assert(std::is_same_v<T, typename TileDataOut::DType>,
                   "Input and output tile data types must match. "
                   "Fix: Ensure TileDataOut uses the same DType as TileDataIn.");
