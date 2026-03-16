@@ -74,21 +74,21 @@ void test_texp()
 
 TEST_F(TEXPTest, case_float_64x64_64x64_64x64)
 {
-    test_texp<float, 64, 64, 64, 64, 128.0f, 0.6f>();
+    test_texp<float, 64, 64, 64, 64, 128.0f, 0.0f>();
 }
 TEST_F(TEXPTest, case_half_64x64_64x64_64x64)
 {
-    test_texp<aclFloat16, 64, 64, 64, 64, 128.0f, 0.6f>();
+    test_texp<aclFloat16, 64, 64, 64, 64, 128.0f, 0.0f>();
 }
 TEST_F(TEXPTest, case_half_32x32_32x32_32x32)
 {
-    test_texp<aclFloat16, 32, 32, 32, 32, 128.0f, 0.6f>();
+    test_texp<aclFloat16, 32, 32, 32, 32, 128.0f, 0.0f>();
 }
 TEST_F(TEXPTest, case_float_32x32_32x32_32x32)
 {
-    test_texp<float, 32, 32, 32, 32, 128.0f, 0.6f>();
+    test_texp<float, 32, 32, 32, 32, 128.0f, 0.0f>();
 }
 TEST_F(TEXPTest, case_float_32x16_32x16_32x16)
 {
-    test_texp<float, 32, 16, 32, 16, 128.0f, 0.6f>();
+    test_texp<float, 32, 16, 32, 16, 128.0f, 0.0f>();
 }

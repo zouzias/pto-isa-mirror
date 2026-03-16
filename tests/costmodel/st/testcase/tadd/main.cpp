@@ -74,17 +74,17 @@ void test_tadd()
 
 TEST_F(TADDTest, case_float_64x64_64x64_64x64)
 {
-    test_tadd<float, 64, 64, 64, 64, 160.0f, 0.6f>();
+    test_tadd<float, 64, 64, 64, 64, 160.0f, 0.0f>();
 }
 TEST_F(TADDTest, case_int32_64x64_64x64_64x64)
 {
-    test_tadd<int32_t, 64, 64, 64, 64, 150.0f, 0.6f>();
+    test_tadd<int32_t, 64, 64, 64, 64, 150.0f, 0.0f>();
 }
 TEST_F(TADDTest, case_int16_64x64_64x64_64x64)
 {
-    test_tadd<int16_t, 64, 64, 64, 64, 150.0f, 0.6f>();
+    test_tadd<int16_t, 64, 64, 64, 64, 150.0f, 0.0f>();
 }
 TEST_F(TADDTest, case_half_16x256_16x256_16x256)
 {
-    test_tadd<aclFloat16, 16, 256, 16, 256, 150.0f, 0.6f>();
+    test_tadd<aclFloat16, 16, 256, 16, 256, 150.0f, 0.0f>();
 }
