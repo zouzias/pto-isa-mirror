@@ -2,46 +2,55 @@
 
 ## Executive Summary
 
-This document analyzes a fundamental design gap in PyPTO's `ExpandMixedKernel` pass when lowering TPUSH/TPOP operations to the PTO-ISA library. The core issue is the tension between:
+This document analyzes a design gap in PyPTO's `ExpandMixedKernel` pass when lowering TPUSH/TPOP operations to the PTO-ISA library. The core issue is the tension between:
 
 1. **Flexible scheduling**: Allowing separate AIV0/AIV1 push operations in different loop iterations
 2. **Hardware optimization**: Utilizing dual-destination ISA for efficient L0C→UB transfers
-3. **Deadlock prevention**: Ensuring FIFO ordering doesn't cause cross-AIV deadlocks
+3. **Pipeline efficiency**: Ensuring V→C→V pipelined workloads can be fully scheduled
+
+**Note**: Without synchronization dependencies between AIV0 and AIV1, there is no deadlock risk—only **performance/pipeline efficiency** issues when separate FIFO scheduling prevents optimal dual-dst ISA utilization.
 
 ---
 
 ## 1. Background: TPUSH/TPOP Architecture
 
-### 1.1 Hardware Model
+### 1.1 Hardware Model (A5 Architecture)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        AIC (Cube Unit)                          │
 │                                                                 │
 │  ┌─────────┐    ┌─────────┐    ┌─────────┐                     │
-│  │  L0A    │    │  L0B    │    │  L0C    │                     │
-│  │ (Left)  │    │ (Right) │    │ (Acc)   │                     │
-│  └────┬────┘    └────┬────┘    └────┬────┘                     │
-│       │              │              │                           │
-│       └──────────────┼──────────────┘                           │
-│                      │                                          │
-│                      ▼ copy_cc_matrix_to_ubuf (l0c2ub)          │
-│              ┌───────┴───────┐                                  │
-│              │  Dual-Dst HW  │ ← Can split M or N axis          │
-│              └───────┬───────┘   to two UB destinations         │
-│                      │                                          │
-└──────────────────────┼──────────────────────────────────────────┘
-                       │
-         ┌─────────────┼─────────────┐
-         ▼                           ▼
-┌─────────────────┐         ┌─────────────────┐
-│   AIV0 UB       │         │   AIV1 UB       │
-│  (addr space 0) │         │  (addr space 1) │
-│                 │         │                 │
-│  Local address  │         │  Local address  │
-│  0x0000-0xFFFF  │         │  0x0000-0xFFFF  │
-└─────────────────┘         └─────────────────┘
-    (Separate physical memory banks)
+│  │  L0A    │    │  L0B    │    │  L0C    │ ← Only L0C supports │
+│  │ (Left)  │    │ (Right) │    │ (Acc)   │   dual-dst transfer │
+│  └─────────┘    └─────────┘    └────┬────┘                     │
+│                                     │                           │
+│                                     ▼ copy_cc_matrix_to_ubuf    │
+│                             ┌───────┴───────┐   (l0c2ub)        │
+│                             │  Dual-Dst HW  │                   │
+│                             │  split M or N │                   │
+│                             └───────┬───────┘                   │
+│                                     │                           │
+└─────────────────────────────────────┼───────────────────────────┘
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              │                       │                       │
+              ▼                       │                       ▼
+┌─────────────────────────┐           │         ┌─────────────────────────┐
+│       AIV0 UB           │           │         │       AIV1 UB           │
+│                         │           │         │                         │
+│  256KB (A5)             │           │         │  256KB (A5)             │
+│  Addr: 0x00000-0x3FFFF  │           │         │  Addr: 0x00000-0x3FFFF  │
+│                         │           │         │                         │
+│  (Separate physical     │           │         │  (Separate physical     │
+│   memory bank)          │           │         │   memory bank)          │
+└─────────────────────────┘           │         └─────────────────────────┘
+                                      │
+                              ┌───────┴───────┐
+                              │  Dual-Dst:    │
+                              │  Same UB addr │
+                              │  in both AIVs │
+                              └───────────────┘
 ```
 
 ### 1.2 ISA Operations
@@ -54,23 +63,40 @@ This document analyzes a fundamental design gap in PyPTO's `ExpandMixedKernel` p
 
 ### 1.3 Dual-Destination Hardware Feature
 
-The hardware supports a **dual-destination mode** where a single L0C matrix tile can be split along M or N axis and written to **both AIV0 and AIV1 UB simultaneously** (at the same UB address in each bank):
+The hardware supports a **dual-destination mode** where a single L0C matrix tile can be split along M or N axis and written to **both AIV0 and AIV1 UB simultaneously**:
+
+**Key Constraint**: Dual-dst requires **same UB address** in both AIV0 and AIV1 banks.
 
 ```
-L0C Tile [16, 128]
+L0C Tile [16, 128]  (Source: Only L0C/Acc supported)
         │
         ├──────────────────────────────────────┐
         │  Dual-Dst ISA (single instruction)   │
         │  split_axis=M                        │
         ▼                                      ▼
 ┌───────────────────┐              ┌───────────────────┐
-│  AIV0 UB @ 0x1000 │              │  AIV1 UB @ 0x1000 │
+│  AIV0 UB @ 0x1000 │              │  AIV1 UB @ 0x1000 │  ← SAME address
 │  Tile [8, 128]    │              │  Tile [8, 128]    │
 │  (upper half M)   │              │  (lower half M)   │
 └───────────────────┘              └───────────────────┘
 ```
 
-**Benefit**: Single ISA instruction, single L0C read, dual UB writes = 2× bandwidth efficiency.
+**Alternative**: Separate AIV0-only or AIV1-only transfers to different UB addresses.
+
+```
+L0C Tile [16, 128]
+        │
+        └──────────────────────────┐
+           Single-Dst ISA          │
+           (two instructions)      │
+        ▼                          ▼
+┌───────────────────┐    ┌───────────────────┐
+│  AIV0 UB @ 0x2000 │    │  AIV1 UB @ 0x4000 │  ← Different addresses OK
+│  Tile [16, 128]   │    │  Tile [16, 128]   │
+└───────────────────┘    └───────────────────┘
+```
+
+**Benefit of Dual-Dst**: Single ISA instruction, single L0C read, dual UB writes = 2× bandwidth efficiency.
 
 ---
 
@@ -126,7 +152,7 @@ def paged_attention_incore_0_aiv(..., AIV_IDX: pl.Scalar[pl.INDEX]):
 
 ---
 
-## 3. The Problem: Separate Loop Scheduling
+## 3. The Problem: Pipeline Efficiency with Separate Scheduling
 
 ### 3.1 Problematic IR Pattern
 
@@ -158,28 +184,29 @@ def kernel_aiv(..., AIV_IDX):
             process(data)
 ```
 
-### 3.2 Deadlock Scenario (Shared FIFO)
+### 3.2 Pipeline Efficiency Issue (No Deadlock)
 
-With a **shared FIFO**, this pattern causes deadlock:
+**Clarification**: Without synchronization dependencies between AIV0 and AIV1, there is **no deadlock**. However, there are **pipeline efficiency problems**:
 
 ```
-Timeline with Shared FIFO:
+Timeline with Separate Scheduling:
 ────────────────────────────────────────────────────────────────
 
-AIC:    push(aiv0) → push(aiv0) → push(aiv0) → push(aiv1) → push(aiv1)
-        ↓           ↓           ↓           ↓           ↓
-FIFO:   [A0, A0, A0, A1, A1, _, _, _]
-        
-AIV0:   pop() ← gets A0 ✓
-        pop() ← gets A0 ✓  
-        pop() ← gets A0 ✓
-        (done)
+Scenario: V→C→V pipelined workload (AIV0 pre-processing, AIV1 post-processing)
 
-AIV1:   pop() ← BLOCKED! FIFO head is empty (AIV0 already consumed)
-        or
-        pop() ← BLOCKED! FIFO head has A0 data, not A1
-        
-🔴 DEADLOCK: AIV1 waiting for data that requires different FIFO ordering
+Optimal (paired dual-dst):
+  AIV0: preprocess ──┐
+                     ├──→ AIC: matmul ──→ dual-dst push ──┬──→ AIV0: postA
+                     │                                    └──→ AIV1: postB
+  AIV1: preprocess ──┘
+
+Suboptimal (separate scheduling):
+  AIV0: preprocess ──→ AIC: matmul ──→ push(aiv0) ──→ AIV0: postA
+  AIV1: preprocess ──→ AIC: matmul ──→ push(aiv1) ──→ AIV1: postB
+  
+  ❌ Cannot pipeline: Second matmul waits for first to complete
+  ❌ 2× L0C reads instead of 1× (no dual-dst)
+  ❌ FIFO slot usage inefficient
 ```
 
 ### 3.3 Why Current Design Has This Gap
@@ -192,9 +219,8 @@ The `ExpandMixedKernel` pass generates `tpush_to_aiv(tile, aiv_id)` calls that:
 
 But the lowering to `copy_cc_matrix_to_ubuf` (l0c2ub) ISA:
 
-1. **Maps to single FIFO**: Sequential ordering assumed
-2. **Cannot handle divergent schedules**: AIV0-only and AIV1-only loops break FIFO assumptions
-3. **Misses dual-dst optimization**: When pushes ARE paired, no way to detect and use dual-dst
+1. **Cannot detect paired patterns**: When pushes ARE paired, no way to identify and use dual-dst
+2. **UB address mismatch**: Separate scheduling may allocate different UB addresses, breaking dual-dst requirement
 
 ---
 
@@ -215,9 +241,9 @@ data_1 = pl.comm.tpop_from_aic_fifo(fifo_id=1)  # AIV1
 ```
 
 **Pros**:
-- ✅ No deadlock: Each AIV has independent FIFO
 - ✅ Flexible scheduling: Loops can target AIV0/AIV1 separately
 - ✅ Simple mental model
+- ✅ Independent progress for each AIV
 
 **Cons**:
 - ❌ **Cannot use dual-dst optimization**: Separate FIFOs prevent detecting paired pushes
@@ -263,10 +289,11 @@ pl.comm.tpush_to_aiv_single(tile, aiv_id=0)  # Only AIV0, independent FIFO
 pl.comm.tpush_to_aiv_single(tile, aiv_id=1)  # Only AIV1, independent FIFO
 
 # Dual-AIV push (uses shared FIFO + dual-dst ISA)
+# Requires same UB address in both AIV banks
 pl.comm.tpush_to_aiv_dual(
     tile_half0,      # Goes to AIV0 UB
-    tile_half1,      # Goes to AIV1 UB (same local address)
-    ub_addr=0x1000,  # Same UB address for both
+    tile_half1,      # Goes to AIV1 UB
+    ub_addr=0x1000,  # Same UB address for both (required for dual-dst)
     split_axis='M'   # M or N axis split
 )
 
@@ -276,13 +303,13 @@ data = pl.comm.tpop_from_aic(AIV_IDX)
 
 **Lowering**:
 ```
-tpush_to_aiv_single(tile, 0) → copy_cc_matrix_to_ubuf(tile, dst=AIV0_FIFO)
-tpush_to_aiv_single(tile, 1) → copy_cc_matrix_to_ubuf(tile, dst=AIV1_FIFO)
+tpush_to_aiv_single(tile, 0) → copy_cc_matrix_to_ubuf(tile, dst=AIV0_UB[addr0])
+tpush_to_aiv_single(tile, 1) → copy_cc_matrix_to_ubuf(tile, dst=AIV1_UB[addr1])
 
 tpush_to_aiv_dual(h0, h1, addr, 'M') → copy_cc_matrix_to_ubuf_dual(
     src=L0C_tile,
     dst0=AIV0_UB[addr],
-    dst1=AIV1_UB[addr],
+    dst1=AIV1_UB[addr],  // Same address required
     split='M'
 )  // Single ISA instruction, dual write
 ```
@@ -290,8 +317,7 @@ tpush_to_aiv_dual(h0, h1, addr, 'M') → copy_cc_matrix_to_ubuf_dual(
 **Pros**:
 - ✅ **Best of both**: Flexibility (single) + optimization (dual)
 - ✅ Explicit intent: User/pass clearly specifies which mode
-- ✅ No deadlock: Single-AIV uses separate FIFOs
-- ✅ Dual-dst enabled: Dual-AIV uses optimized ISA
+- ✅ Dual-dst enabled: Dual-AIV uses optimized ISA with same UB address
 
 **Cons**:
 - ❌ API complexity: Two push variants
@@ -348,13 +374,14 @@ pl.comm.tpush_to_aiv(__half0__, 0)  # Adjacent
 pl.comm.tpush_to_aiv(__half1__, 1)  # Adjacent
 
 # Analysis:
-# - Same source tile: sij_0 [16, 128]
+# - Same source tile: sij_0 [16, 128] from L0C
 # - Complementary views: [0:8, :] and [8:16, :] 
 # - Adjacent in IR: Yes
+# - Can allocate same UB address for both
 # → Lower to: tpush_to_aiv_dual(__half0__, __half1__, ub_addr, 'M')
 ```
 
-### 5.3 Hypothetical Problem Case
+### 5.3 Non-Paired Case
 
 ```python
 # This pattern CANNOT use dual-dst:
@@ -370,97 +397,29 @@ for bn in pl.range(0, bn_this_batch, 1):
 # - Different loop iterations
 # - Cannot be made adjacent
 # - Different source tiles
-# → Must use: tpush_to_aiv_single(tile, aiv_id) with separate FIFOs
+# - May need different UB addresses
+# → Must use: tpush_to_aiv_single(tile, aiv_id) with separate addressing
 ```
 
 ---
 
-## 6. Implementation Recommendations
-
-### 6.1 Short-Term Fix (Minimal Change)
-
-Add validation in `ExpandMixedKernel` pass to **reject** non-paired patterns:
-
-```python
-def validate_tpush_pattern(ir):
-    """Ensure all tpush_to_aiv calls are properly paired."""
-    for block in ir.basic_blocks:
-        pushes = find_tpush_ops(block)
-        
-        # Verify pairing
-        for i in range(0, len(pushes), 2):
-            if i+1 >= len(pushes):
-                raise IRValidationError(
-                    f"Unpaired tpush_to_aiv at {pushes[i].location}. "
-                    "AIV0 and AIV1 pushes must be paired for dual-dst lowering."
-                )
-            p0, p1 = pushes[i], pushes[i+1]
-            if p0.aiv_id == p1.aiv_id:
-                raise IRValidationError(
-                    f"Consecutive pushes to same AIV ({p0.aiv_id}) at {p0.location}. "
-                    "Must alternate AIV0/AIV1 for paired lowering."
-                )
-```
-
-### 6.2 Medium-Term Enhancement
-
-Implement **Option C** (Explicit SIMD Dual-Entry API):
-
-1. **Add new ops** to PTO-IR:
-   - `pto.comm.tpush_to_aiv_single(tile, aiv_id)`
-   - `pto.comm.tpush_to_aiv_dual(tile0, tile1, ub_addr, split_axis)`
-
-2. **Modify ExpandMixedKernel pass**:
-   - Detect paired vs unpaired push patterns
-   - Emit appropriate op variant
-
-3. **Add lowering rules**:
-   - `tpush_to_aiv_single` → per-AIV FIFO + standard l0c2ub
-   - `tpush_to_aiv_dual` → shared FIFO + dual-dst l0c2ub ISA
-
-### 6.3 Long-Term Architecture
-
-Consider **hardware FIFO enhancement**:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│               Enhanced FIFO Architecture                         │
-│                                                                  │
-│  ┌──────────────────────┐  ┌──────────────────────┐            │
-│  │   AIV0 FIFO (4 slots)│  │   AIV1 FIFO (4 slots)│            │
-│  │  Independent         │  │  Independent         │            │
-│  └──────────┬───────────┘  └───────────┬──────────┘            │
-│             │                          │                        │
-│             └──────────┬───────────────┘                        │
-│                        │                                        │
-│              ┌─────────▼─────────┐                              │
-│              │   SIMD FIFO       │ ← Shared for dual-dst        │
-│              │   (4 paired slots)│                              │
-│              └───────────────────┘                              │
-│                                                                  │
-│  Mode selection per push:                                        │
-│  - SINGLE mode: Use AIV0 or AIV1 FIFO independently            │
-│  - DUAL mode: Use SIMD FIFO with paired entries                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 7. Summary
+## 6. Summary
 
 | Aspect | Current State | Gap | Recommendation |
 |--------|---------------|-----|----------------|
 | **API** | `tpush_to_aiv(tile, aiv_id)` | Too generic, doesn't distinguish single vs dual | Add `tpush_to_aiv_single` + `tpush_to_aiv_dual` |
-| **FIFO** | Assumed shared | Deadlock with divergent schedules | Separate FIFOs for single mode, shared for dual |
+| **FIFO** | Assumed shared | Separate scheduling loses dual-dst opportunity | Mode selection: single (per-AIV) vs dual (shared) |
 | **Dual-Dst ISA** | Not utilized | Adjacent paired pushes not detected | Pattern detection in pass + dual-dst lowering |
+| **UB Address** | Independently allocated | Dual-dst requires same address | Constrain address allocation for paired pushes |
 | **Pass Analysis** | Basic block level | Cannot detect cross-loop pairing | Add data flow analysis for push patterns |
-| **Validation** | None | Silent incorrect lowering | Add pairing validation with clear errors |
 
 ### Key Takeaway
 
 The fundamental tension is:
 
-> **Flexibility** (arbitrary AIV0/AIV1 scheduling) vs **Optimization** (dual-dst ISA requiring paired pushes)
+> **Flexibility** (arbitrary AIV0/AIV1 scheduling) vs **Optimization** (dual-dst ISA requiring paired pushes + same UB address)
+
+**Note**: This is primarily a **performance/efficiency** issue, not a correctness/deadlock issue (assuming no AIV0↔AIV1 sync dependencies).
 
 **Recommended approach**: Make this explicit in the API. Let the pass choose single vs dual mode based on pattern analysis, with clear semantics for each.
 
