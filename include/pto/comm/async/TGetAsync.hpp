@@ -15,7 +15,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/type.hpp"
 #include "pto/common/constants.hpp"
 #include "pto/comm/comm_types.hpp"
+<<<<<<< HEAD
 #include "pto/comm/async/async_types.hpp"
+=======
+>>>>>>> zhouzhe/tput_get_async
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
 
 namespace pto {
