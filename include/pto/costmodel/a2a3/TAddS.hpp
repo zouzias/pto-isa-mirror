@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TADDS_Impl(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar)
+PTO_INTERNAL void TADDS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar)
 {
     pto::CostModel::GetInstance().BinSOpPredictCycle<AddSOp, TileDataDst, TileDataSrc>("TADDS", dst, src, scalar);
 }

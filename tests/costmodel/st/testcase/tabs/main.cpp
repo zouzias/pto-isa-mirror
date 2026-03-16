@@ -70,17 +70,17 @@ void test_tabs()
 
 TEST_F(TABSTest, case_float_64x64_64x64_64x64)
 {
-    test_tabs<float, 64, 64, 64, 64, 160.0f, 0.0f>();
+    test_tabs<float, 64, 64, 64, 64, 160.0f, 0.6f>();
 }
 TEST_F(TABSTest, case_int32_64x64_64x64_64x64)
 {
-    test_tabs<int32_t, 64, 64, 64, 64, 160.0f, 0.0f>();
+    test_tabs<int32_t, 64, 64, 64, 64, 160.0f, 0.6f>();
 }
 TEST_F(TABSTest, case_int16_64x64_64x64_64x64)
 {
-    test_tabs<int16_t, 64, 64, 64, 64, 160.0f, 0.0f>();
+    test_tabs<int16_t, 64, 64, 64, 64, 160.0f, 0.6f>();
 }
 TEST_F(TABSTest, case_half_16x256_16x256_16x256)
 {
-    test_tabs<aclFloat16, 16, 256, 16, 256, 160.0f, 0.0f>();
+    test_tabs<aclFloat16, 16, 256, 16, 256, 160.0f, 0.6f>();
 }
