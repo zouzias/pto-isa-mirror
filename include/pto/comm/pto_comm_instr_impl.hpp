@@ -30,7 +30,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/TReduce.hpp"
 #endif
 
-#if defined(__CPU_SIM) || defined(__COSTMODEL__)
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 // Point-to-Point Communication (Synchronous)
 #include "pto/cpu/comm/TPut.hpp"
 #include "pto/cpu/comm/TGet.hpp"

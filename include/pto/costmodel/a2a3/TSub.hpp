@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
-PTO_INTERNAL void TSUB_Impl(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
+PTO_INTERNAL void TSUB_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
     pto::CostModel::GetInstance().BinOpPredictCycle<SubOp, TileDataDst, TileDataSrc0, TileDataSrc1>("TSUB", dst, src0, src1);
 }

@@ -277,6 +277,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 #ifdef __COSTMODEL
+#include "pto/costmodel/a2a3/TAbs.hpp"
 #include "pto/costmodel/a2a3/TAdd.hpp"
 #include "pto/costmodel/a2a3/TAddS.hpp"
 #include "pto/costmodel/a2a3/TAssign.hpp"
