@@ -193,10 +193,11 @@ PTO_INTERNAL void BinaryInstrGeneralPath(unsigned validRow, unsigned validCol)
     }
 }
 
-template <typename Op, typename T, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem,
+template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem,
           unsigned rowStride>
 PTO_INTERNAL void BinaryInstr(unsigned validRow, unsigned validCol)
 {
+    using T = typename TileData::Type;
     // Small shape optimization
     if constexpr ((TileData::Rows <= pto::REPEAT_MAX) && (TileData::Cols < elementsPerRepeat)) {
         constexpr uint8_t repeatStride = rowStride / blockSizeElem;
