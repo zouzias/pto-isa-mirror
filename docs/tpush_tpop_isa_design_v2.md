@@ -32,8 +32,10 @@ The TPUSH/TPOP design supports two AIV communication modes:
 
 | AIV_MODE | Description | Use Case |
 |---|---|---|
-| `AIV_SINGLE` (1:1) | Communication with **one** buddy Vector core only (AIV0 or AIV1) | Simple workloads, single Vector core active |
+| `AIV_SINGLE` (1:1) | Communication with **one** buddy Vector core only | Simple workloads, single Vector core active |
 | `AIV_DUAL` (1:2) | Communication with **both** buddy Vector cores simultaneously | Full cluster utilization, tile split/combined across AIV0 and AIV1 |
+
+**Assumption for 1:1 mode**: In the current design, 1:1 mode (`TILE_NO_SPLIT`) communicates with **AIV0 by default**. This simplifies the API and provides forward compatibility — when upgrading to 1:2 mode, AIV0's role remains the same (upper/left portion), only AIV1 is added.
 
 ### Tile Split/Combine Axis
 
@@ -721,35 +723,32 @@ The compiler must provide a **DSL-level mechanism** for InCore kernel programs t
 
 ## Version History
 
-### v2.1 — Split Axis on Instruction (not Init)
+### v2.1 — 1:1 and 1:2 Modes with Tile Split/Combine Axis
 
 **Date**: 2026-03-16
 
-**Changes from v2.0**:
-
-1. **Moved `SPLIT` parameter from `initialize_pipe` to instructions**:
-   - `initialize_pipe` no longer takes `C2V_SPLIT` / `V2C_SPLIT` params
-   - Each `tpush_*` / `tpop_*` instruction takes `SPLIT` as second parameter
-
-2. **A2A3 lowering**: `tpop_from_aic` and `tpop_from_aiv` lower to `TLOAD` on A2A3 platform
-
-**Rationale**: The split axis is a per-operation property, not a per-pipe property. This allows more flexibility (e.g., same pipe could theoretically be used with different split modes in different loop iterations).
-
-### v2.0 — 1:2 Mode with Tile Split/Combine Axis
-
-**Date**: 2026-03-16
-
-**Changes from v1.0**:
+**Key Design Decisions**:
 
 1. **Added `TileSplitAxis` enum** with three values:
-   - `TILE_NO_SPLIT` — 1:1 mode, full tile to/from single AIV
+   - `TILE_NO_SPLIT` — 1:1 mode, full tile to/from single AIV (AIV0 by default)
    - `TILE_UP_DOWN` — 1:2 mode, split/combine along rows (upper/lower halves)
    - `TILE_LEFT_RIGHT` — 1:2 mode, split/combine along cols (left/right halves)
 
-2. **Updated flow control semantics**:
+2. **Split axis specified per-instruction** (not during init):
+   - `initialize_pipe` does not take split params
+   - Each `tpush_*` / `tpop_*` instruction takes `SPLIT` as second parameter
+   - Rationale: Split axis is per-operation, not per-pipe property
+
+3. **1:1 mode uses AIV0 by default** for forward compatibility:
+   - When upgrading to 1:2 mode, AIV0's role remains the same
+   - AIV1 is simply added for the other half
+
+4. **A2A3 lowering**: `tpop_from_aic` and `tpop_from_aiv` lower to `TLOAD` on A2A3 platform
+
+5. **Updated flow control semantics**:
    - **C2V 1:2**: Cube `tpush_to_aiv` waits for **both** AIV free flags, signals **both** ready
    - **V2C 1:2**: Each AIV `tpush_to_aic` waits its own free, signals its own ready; Cube `tpop_from_aiv` waits **both** ready, signals **both** free
 
-3. **Naming convention**: Used `UP_DOWN` / `LEFT_RIGHT` instead of `M` / `N` axis for clarity — users immediately understand the tile partition without needing to know the M/N axis mapping.
+6. **User-friendly naming**: Used `UP_DOWN` / `LEFT_RIGHT` instead of `M` / `N` axis — users immediately understand the tile partition without needing to know the M/N axis mapping.
 
 **Rationale**: The split/combine axis **must be specified** so Vector kernel code knows which portion of the tile it receives or produces. Without this information, compute code cannot be correct.
