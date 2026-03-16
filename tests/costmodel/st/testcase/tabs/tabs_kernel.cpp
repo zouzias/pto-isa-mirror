@@ -57,7 +57,7 @@ void LaunchTAbs(T *out, T *src, void *stream)
         runTAbs<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(out, src);
 }
 
-template void LaunchTAbs<float, 64, 64, 64, 64, 160.0f, 0.6f>(float *out, float *src, void *stream);
-template void LaunchTAbs<int32_t, 64, 64, 64, 64, 160.0f, 0.6f>(int32_t *out, int32_t *src, void *stream);
-template void LaunchTAbs<aclFloat16, 16, 256, 16, 256, 160.0f, 0.6f>(aclFloat16 *out, aclFloat16 *src, void *stream);
-template void LaunchTAbs<int16_t, 64, 64, 64, 64, 160.0f, 0.6f>(int16_t *out, int16_t *src, void *stream);
+template void LaunchTAbs<float, 64, 64, 64, 64, 160.0f, 0.0f>(float *out, float *src, void *stream);
+template void LaunchTAbs<int32_t, 64, 64, 64, 64, 160.0f, 0.0f>(int32_t *out, int32_t *src, void *stream);
+template void LaunchTAbs<aclFloat16, 16, 256, 16, 256, 160.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTAbs<int16_t, 64, 64, 64, 64, 160.0f, 0.0f>(int16_t *out, int16_t *src, void *stream);

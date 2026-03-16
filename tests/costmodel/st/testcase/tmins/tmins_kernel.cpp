@@ -56,10 +56,10 @@ void LaunchTMins(T *out, T *src0, T *src1, void *stream)
     }
 }
 
-template void LaunchTMins<float, 64, 64, 64, 64, 128.0f, 0.6f>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTMins<int32_t, 64, 64, 64, 64, 128.0f, 0.6f>(int32_t *out, int32_t *src0, int32_t *src1, void *stream);
-template void LaunchTMins<int16_t, 64, 64, 64, 64, 128.0f, 0.6f>(int16_t *out, int16_t *src0, int16_t *src1, void *stream);
-template void LaunchTMins<aclFloat16, 64, 64, 64, 64, 128.0f, 0.6f>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+template void LaunchTMins<float, 64, 64, 64, 64, 128.0f, 0.0f>(float *out, float *src0, float *src1, void *stream);
+template void LaunchTMins<int32_t, 64, 64, 64, 64, 128.0f, 0.0f>(int32_t *out, int32_t *src0, int32_t *src1, void *stream);
+template void LaunchTMins<int16_t, 64, 64, 64, 64, 128.0f, 0.0f>(int16_t *out, int16_t *src0, int16_t *src1, void *stream);
+template void LaunchTMins<aclFloat16, 64, 64, 64, 64, 128.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
                                                       void *stream);
-template void LaunchTMins<aclFloat16, 16, 256, 16, 256, 128.0f, 0.6f>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
+template void LaunchTMins<aclFloat16, 16, 256, 16, 256, 128.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
                                                         void *stream);
