@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/type.hpp"
 #include "pto/common/constants.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/comm/async/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
 
 namespace pto {
@@ -95,10 +96,10 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
 
 template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
 PTO_INTERNAL AsyncEvent TGET_ASYNC_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                                        const sdma::SdmaExecContext &execCtx)
+                                        const AsyncSession &session)
 {
     if constexpr (engine == DmaEngine::SDMA) {
-        return detail::TGET_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData, execCtx);
+        return detail::TGET_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
     } else {
         PTO_ASSERT(false, "TGET_ASYNC: only SDMA engine is implemented currently");
         return AsyncEvent(0, engine);

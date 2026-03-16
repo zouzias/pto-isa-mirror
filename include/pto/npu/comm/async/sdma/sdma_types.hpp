@@ -12,33 +12,25 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COMM_ASYNC_SDMA_SDMA_TYPES_HPP
 
 #include <cstdint>
+#include "pto/comm/async/async_types.hpp"
 
 namespace pto {
 namespace comm {
 namespace sdma {
 
-// SDMA SQE constants
+// NPU-internal SDMA SQE constants
 constexpr uint64_t kRtStarsSqeTypeSdma = 11ULL;
 constexpr uint64_t kCreditTimeDefault = 240ULL;
 constexpr uint32_t kSqDepth = 2048U;
-constexpr uint32_t kSdmaFlagLength = 128U;
-constexpr uint32_t kUbAlignSize = 256U;
 constexpr uint32_t kSdmaMaxChannel = 40U;
-constexpr uint32_t kSdmaEventRecordBytes = 16U;
-constexpr uint32_t kSdmaEventSlotCount = kSdmaFlagLength / kSdmaEventRecordBytes;
 
-// Backward-compatible aliases for existing callsites.
 constexpr uint64_t RT_STARS_SQE_TYPE_SDMA = kRtStarsSqeTypeSdma;
 constexpr uint64_t K_CREDIT_TIME_DEFAULT = kCreditTimeDefault;
 constexpr uint32_t SQ_DEPTH = kSqDepth;
-constexpr uint32_t SDMA_FLAG_LENGTH = kSdmaFlagLength;
-constexpr uint32_t UB_ALIGN_SIZE = kUbAlignSize;
 constexpr uint32_t SDMA_MAX_CHAN = kSdmaMaxChannel;
-constexpr uint32_t SDMA_EVENT_RECORD_BYTES = kSdmaEventRecordBytes;
-constexpr uint32_t SDMA_EVENT_SLOT_COUNT = kSdmaEventSlotCount;
 
 // ============================================================================
-// SDMA Configuration Structure
+// SDMA Configuration Structure (full, with dynamic fields)
 // ============================================================================
 struct SdmaConfig {
     uint64_t block_bytes;       // Block size per SQE (typically 1MB)
@@ -48,15 +40,6 @@ struct SdmaConfig {
     uint32_t iter_num;          // Number of iterations (SQEs) needed
 };
 using sdma_config_t = SdmaConfig;
-
-// Static SDMA config supplied by caller context.
-// Dynamic transfer fields (per_core_bytes/iter_num) are derived per-call.
-struct SdmaBaseConfig {
-    uint64_t block_bytes;       // Block size per SQE
-    uint64_t comm_block_offset; // Transfer offset for this operation
-    uint32_t queue_num;         // Number of queues per core
-};
-using sdma_base_config_t = SdmaBaseConfig;
 
 // ============================================================================
 // Workspace Layout Structure

@@ -138,9 +138,7 @@ enum class DmaEngine : uint8_t
 // AsyncEvent: Returned by TPUT_ASYNC / TGET_ASYNC for asynchronous DMA
 // ============================================================================
 
-#ifndef __CPU_SIM
 struct AsyncSession;
-#endif
 
 struct AsyncEvent {
     uint64_t handle{0};
@@ -154,10 +152,8 @@ struct AsyncEvent {
         return handle != 0;
     }
 
-#ifndef __CPU_SIM
     PTO_INTERNAL bool Wait(const AsyncSession &session) const;
     PTO_INTERNAL bool Test(const AsyncSession &session) const;
-#endif
 };
 
 // ============================================================================

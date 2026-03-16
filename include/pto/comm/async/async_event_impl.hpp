@@ -12,28 +12,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COMM_ASYNC_EVENT_IMPL_HPP
 
 #include "pto/comm/comm_types.hpp"
+#include "pto/comm/async/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
 
 namespace pto {
 namespace comm {
 
-// ============================================================================
-// AsyncSession: engine-agnostic session for async DMA operations.
-// Users build via comm::BuildAsyncSession<engine>() and pass to
-// TPUT_ASYNC / TGET_ASYNC / event.Wait() without knowing engine internals.
-// ============================================================================
-
-struct AsyncSession {
-    DmaEngine engine{DmaEngine::SDMA};
-    sdma::SdmaSession sdmaSession{};
-    bool valid{false};
-};
-
 template <DmaEngine engine = DmaEngine::SDMA, typename ScratchTile>
 PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace, AsyncSession &session,
                                     uint32_t syncId = 0,
-                                    const sdma::SdmaBaseConfig &baseConfig = {sdma::detail::kDefaultSdmaBlockBytes, 0,
-                                                                              1},
+                                    const sdma::SdmaBaseConfig &baseConfig = {sdma::kDefaultSdmaBlockBytes, 0, 1},
                                     uint32_t channelGroupIdx = sdma::kAutoChannelGroupIdx)
 {
     session.engine = engine;
