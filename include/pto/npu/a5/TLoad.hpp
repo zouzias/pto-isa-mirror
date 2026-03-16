@@ -644,8 +644,7 @@ PTO_INTERNAL void TLoadMxCubeZZ2ZZ(__cbuf__ typename TileData::DType *dst, typen
 // ND for ADN2ZZ && BND2NN
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadMxCubeAND2ZZ(__cbuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
-                                    int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
-                                    int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
+                                    int gStride3, int validRow, int validCol)
 {
     uint16_t nValue = validCol >> 1;
     uint32_t dValue = validRow;
@@ -779,11 +778,6 @@ __tf__ PTO_INTERNAL void TLoadMxCube(typename TileData::TileDType __out__ dst, t
                          (!TileData::isRowMajor && TileData::SFractal == SLayout::ColMajor)) {
         TLoadMxCubeNN2NN<TileData, GlobalData>(dstAddr, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
                                                gStride1, gStride2, gStride3, gStride4);
-    } else if constexpr (GlobalData::layout == pto::Layout::MX_A_ND &&
-                         (TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) {
-        // newgStride3 -> gStride2;
-        TLoadMxCubeAND2ZZ<TileData, GlobalData>(dstAddr, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
-                                                gStride1, gStride2, gStride2, gStride4, validRow, validCol);
     } else if constexpr (GlobalData::layout == pto::Layout::MX_A_DN &&
                          (TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) {
         // newgStride4 -> gStride2 / gStride3;
@@ -884,10 +878,16 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(TileData &dst, GlobalData &src)
                 src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
         } else if constexpr (IsScale<TileData, GlobalData>()) {
             TLoadMxCubeCheck<TileData, GlobalData>();
-            TLoadMxCube<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2),
+            if constexpr (GlobalData::layout == pto::Layout::MX_A_ND &&
+                          (TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) {
+                // newgStride3 -> gStride2;
+                TLoadMxCubeAND2ZZ<TileData, GlobalData>(dst.data(), src.data(), src.GetStride(2), dst.GetValidRow(), dst.GetValidCol());
+            } else {
+                TLoadMxCube<TileData, GlobalData>(dst.data(), src.data(), src.GetShape(0), src.GetShape(1), src.GetShape(2),
                                               src.GetShape(3), src.GetShape(4), src.GetStride(0), src.GetStride(1),
                                               src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetValidRow(),
                                               dst.GetValidCol());
+            }
         }
     }
 }
