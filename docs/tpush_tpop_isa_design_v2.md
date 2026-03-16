@@ -532,10 +532,11 @@ function tpop_from_aic(TILE, SPLIT):
     // Receive my tile (full in 1:1, half in 1:2)
     src_addr = my_slot[target_tag]
     if PLATFORM_A5:
-        TILE.data = src_addr   // zero-copy
+        TILE.data = src_addr   // zero-copy, data already in UB
     else:  // PLATFORM_A2A3
-        // tpop lowers to TLOAD on A2A3
-        TLOAD(dst=TILE.data, src=src_addr, size=tile_size)
+        // Must load from GM (not a no-op sync)
+        // Implementation: strided read or strided write, per GM access perf
+        MTE_load(dst=TILE.data, src=src_addr, size=tile_size)
         WAIT mte_flag
 
     // Signal my free flag
@@ -560,10 +561,10 @@ function tpop_from_aiv(TILE, TILE_NO_SPLIT):
     // Receive full tile
     src_addr = slot[target_tag]
     if PLATFORM_A5:
-        TILE.data = src_addr   // zero-copy
+        TILE.data = src_addr   // zero-copy, data already in L1
     else:  // PLATFORM_A2A3
-        // tpop lowers to TLOAD on A2A3
-        TLOAD(dst=TILE.data, src=src_addr, size=SLOT_SIZE)
+        // Must load from GM (not a no-op sync)
+        MTE_load(dst=TILE.data, src=src_addr, size=SLOT_SIZE)
         WAIT mte_flag
 
     // Signal single AIV free
@@ -578,14 +579,14 @@ function tpop_from_aiv(TILE, SPLIT):
     WAIT flag_ready[V2C, AIV0]: target_tag
     WAIT flag_ready[V2C, AIV1]: target_tag
 
-    // The combined tile is now complete in L1 slot
+    // The combined tile is now complete in L1 slot (A5) or GM slot (A2A3)
     // (AIV0 wrote upper/left half, AIV1 wrote lower/right half)
     src_addr = slot[target_tag]
     if PLATFORM_A5:
-        TILE.data = src_addr   // zero-copy
+        TILE.data = src_addr   // zero-copy, data already in L1
     else:  // PLATFORM_A2A3
-        // tpop lowers to TLOAD on A2A3
-        TLOAD(dst=TILE.data, src=src_addr, size=FULL_TILE_SIZE)
+        // Must load from GM with strided read to combine halves
+        MTE_strided_load(dst=TILE.data, src=src_addr, ...)
         WAIT mte_flag
 
     // Signal BOTH AIV0 and AIV1 free
@@ -706,8 +707,8 @@ AIC (Cube, consumer):
 | `aiv_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF)` | Vector (AIV) | Setup | — | Bind ring buffer, init tags, pre-signal free slots |
 | `tpush_to_aiv(TILE, SPLIT)` | Cube (AIC) | Producer | C2V | 1:1: push to single AIV; 1:2: split and push to both AIVs |
 | `tpush_to_aic(TILE, SPLIT)` | Vector (AIV) | Producer | V2C | 1:1: push full tile; 1:2: push my half with strided write |
-| `tpop_from_aic(TILE, SPLIT)` | Vector (AIV) | Consumer | C2V | Receive my portion (full in 1:1, half in 1:2). Lowers to TLOAD on A2A3 |
-| `tpop_from_aiv(TILE, SPLIT)` | Cube (AIC) | Consumer | V2C | 1:1: receive from single AIV; 1:2: wait both, receive combined. Lowers to TLOAD on A2A3 |
+| `tpop_from_aic(TILE, SPLIT)` | Vector (AIV) | Consumer | C2V | Receive my portion. A5: zero-copy; A2A3: load from GM |
+| `tpop_from_aiv(TILE, SPLIT)` | Cube (AIC) | Consumer | V2C | 1:1: receive from single AIV; 1:2: wait both, receive combined. A5: zero-copy; A2A3: load from GM |
 
 ### DSL Grammar: `pl.reserve_buffer` — Reserved Address Space Declaration
 
@@ -740,19 +741,20 @@ The compiler must provide a **DSL-level mechanism** for InCore kernel programs t
    - Rationale: Split axis is per-operation, not per-pipe property
 
 3. **Platform-specific split/combine implementation**:
-   - **A5**: Split/combine logic in `tpush` — producer directly writes to consumer's tile address space with correct layout
-   - **A2A3**: Split/combine logic in `tpop` — consumer uses strided `TLOAD` to read and reassemble from GM ring buffer
+   - **A5**: Split/combine logic in `tpush` — producer directly writes to consumer's on-chip SRAM with correct layout; `tpop` is sync-only (zero-copy)
+   - **A2A3**: Split/combine logic in `tpop` — consumer must load data from GM (not a no-op sync). Implementation options:
+     - Strided read from GM and combine on consumer side, OR
+     - Strided write to consumer's local buffer during read
+     - Choice depends on GM access pattern performance on A3
 
 4. **1:1 mode uses AIV0 by default** for forward compatibility:
    - When upgrading to 1:2 mode, AIV0's role remains the same
    - AIV1 is simply added for the other half
 
-5. **A2A3 lowering**: `tpop_from_aic` and `tpop_from_aiv` lower to `TLOAD` on A2A3 platform
-
-6. **Updated flow control semantics**:
+5. **Updated flow control semantics**:
    - **C2V 1:2**: Cube `tpush_to_aiv` waits for **both** AIV free flags, signals **both** ready
    - **V2C 1:2**: Each AIV `tpush_to_aic` waits its own free, signals its own ready; Cube `tpop_from_aiv` waits **both** ready, signals **both** free
 
-7. **User-friendly naming**: Used `UP_DOWN` / `LEFT_RIGHT` instead of `M` / `N` axis — users immediately understand the tile partition without needing to know the M/N axis mapping.
+6. **User-friendly naming**: Used `UP_DOWN` / `LEFT_RIGHT` instead of `M` / `N` axis — users immediately understand the tile partition without needing to know the M/N axis mapping.
 
 **Rationale**: The split/combine axis **must be specified** so Vector kernel code knows which portion of the tile it receives or produces. Without this information, compute code cannot be correct.
