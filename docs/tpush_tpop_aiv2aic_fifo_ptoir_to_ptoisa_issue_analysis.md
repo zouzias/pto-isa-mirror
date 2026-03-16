@@ -394,19 +394,53 @@ matmul(L1_tile_at(fifo_slot), ...)
 | Non-NZ layouts (ZN, ZZ) | Medium | Different stride patterns |
 | Cut-K (for weights) | Medium | Different block structure |
 
-### 6.2 Fallback: L1→L1 Copy
+### 6.2 Fallback: When Strided tpush Cannot Be Inferred
 
-If the pass cannot infer how to lower `tpop` + `assemble` to strided `tpush`:
+If the pass cannot infer how to lower `tpop` + `assemble` to strided `tpush`, several problems arise:
 
+**Problem 1: AIC cannot read from AIV UB**
 ```
-Fallback path (NOT performance-optimal):
-1. AIV0 pushes to L1_temp0
-2. AIV1 pushes to L1_temp1
-3. ??? No L1→L1 path exists ???
-4. Would need: read back to UB, then re-copy with strides (2× memory traffic)
+tpop runs on AIC only → AIC has no ISA to read from AIV0/AIV1 UB directly
 ```
 
-This is why we **must** capture the assembly semantics in the FIFO definition — the fallback is extremely expensive or impossible.
+**Problem 2: Separated control flow breaks correlation**
+```
+PTO-ISA pass processes AIC and AIV control flows separately.
+Cannot easily correlate which tpop basic block needs what info
+to re-emit ub2l1 copies with correct strides.
+```
+
+**Problem 3: No L1→L1 path**
+```
+Even if we could identify the tiles, no hardware path exists
+to copy/reassemble within L1.
+```
+
+**Possible Fallback Solution: GM-based FIFO**
+
+If strided tpush cannot be inferred, reallocate the FIFO to **Global Memory (GM)** instead of L1:
+
+```
+Fallback with GM FIFO:
+1. tpush_to_aic(tile, aiv_id) → writes to GM (not L1)
+   - AIV0 writes [8, 128] to GM_fifo_slot + offset0
+   - AIV1 writes [8, 128] to GM_fifo_slot + offset1
+
+2. tpop_from_aiv(aiv_id) → becomes TLOAD from GM
+   - AIC uses TLOAD ISA to read tile from GM
+   - Can specify different stride pattern during load
+   - Assembles into L1 with correct NZ layout via strided TLOAD
+
+3. assemble() → still doesn't lower (handled by TLOAD strides)
+```
+
+**Trade-off**:
+- ❌ 2× memory traffic (UB→GM→L1 instead of UB→L1)
+- ❌ Higher latency (GM access vs L1)
+- ✅ Works without cross-control-flow analysis
+- ✅ AIC has ISA (TLOAD) to read from GM with arbitrary strides
+
+This is why we **must** capture the assembly semantics in the FIFO definition upfront — the GM fallback is expensive but at least possible.
 
 ---
 
