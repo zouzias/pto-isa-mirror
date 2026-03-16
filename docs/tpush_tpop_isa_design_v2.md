@@ -739,16 +739,20 @@ The compiler must provide a **DSL-level mechanism** for InCore kernel programs t
    - Each `tpush_*` / `tpop_*` instruction takes `SPLIT` as second parameter
    - Rationale: Split axis is per-operation, not per-pipe property
 
-3. **1:1 mode uses AIV0 by default** for forward compatibility:
+3. **Platform-specific split/combine implementation**:
+   - **A5**: Split/combine logic in `tpush` — producer directly writes to consumer's tile address space with correct layout
+   - **A2A3**: Split/combine logic in `tpop` — consumer uses strided `TLOAD` to read and reassemble from GM ring buffer
+
+4. **1:1 mode uses AIV0 by default** for forward compatibility:
    - When upgrading to 1:2 mode, AIV0's role remains the same
    - AIV1 is simply added for the other half
 
-4. **A2A3 lowering**: `tpop_from_aic` and `tpop_from_aiv` lower to `TLOAD` on A2A3 platform
+5. **A2A3 lowering**: `tpop_from_aic` and `tpop_from_aiv` lower to `TLOAD` on A2A3 platform
 
-5. **Updated flow control semantics**:
+6. **Updated flow control semantics**:
    - **C2V 1:2**: Cube `tpush_to_aiv` waits for **both** AIV free flags, signals **both** ready
    - **V2C 1:2**: Each AIV `tpush_to_aic` waits its own free, signals its own ready; Cube `tpop_from_aiv` waits **both** ready, signals **both** free
 
-6. **User-friendly naming**: Used `UP_DOWN` / `LEFT_RIGHT` instead of `M` / `N` axis — users immediately understand the tile partition without needing to know the M/N axis mapping.
+7. **User-friendly naming**: Used `UP_DOWN` / `LEFT_RIGHT` instead of `M` / `N` axis — users immediately understand the tile partition without needing to know the M/N axis mapping.
 
 **Rationale**: The split/combine axis **must be specified** so Vector kernel code knows which portion of the tile it receives or produces. Without this information, compute code cannot be correct.
