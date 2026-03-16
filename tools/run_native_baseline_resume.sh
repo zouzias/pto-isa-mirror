@@ -18,7 +18,7 @@ end = int(sys.argv[2])
 def is_bindable(port: int) -> bool:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        sock.bind(("127.0.0.1", port))
+        sock.bind(("0.0.0.0", port))
     except OSError:
         return False
     finally:
@@ -49,7 +49,7 @@ window = int(sys.argv[3])
 def is_bindable(port: int) -> bool:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        sock.bind(("127.0.0.1", port))
+        sock.bind(("0.0.0.0", port))
     except OSError:
         return False
     finally:
@@ -74,7 +74,7 @@ import sys
 port = int(sys.argv[1])
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 try:
-    sock.bind(("127.0.0.1", port))
+    sock.bind(("0.0.0.0", port))
 except OSError:
     print("0")
 else:
@@ -97,7 +97,7 @@ window = int(sys.argv[2])
 def is_bindable(port: int) -> bool:
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        sock.bind(("127.0.0.1", port))
+        sock.bind(("0.0.0.0", port))
     except OSError:
         return False
     finally:
@@ -144,6 +144,7 @@ ENABLE_MOE_PERMUTATION_ASYNC_COMM="${ENABLE_MOE_PERMUTATION_ASYNC_COMM:-1}"
 ENABLE_MOE_PERMUTE_FUSION="${ENABLE_MOE_PERMUTE_FUSION:-1}"
 ENABLE_MOE_ALLTOALL_MC2="${ENABLE_MOE_ALLTOALL_MC2:-0}"
 ENABLE_MOE_BMM_MC2="${ENABLE_MOE_BMM_MC2:-0}"
+USE_FUSED_ROTARY_POS_EMB="${USE_FUSED_ROTARY_POS_EMB:-1}"
 LEGACY_MINDSPEED_REPO="${LEGACY_MINDSPEED_REPO:-}"
 
 if [[ -z "${ENABLE_MOE_ALLTOALL_OVERLAP_COMM+x}" ]]; then
@@ -276,14 +277,14 @@ export ENABLE_PTO_MOE_MC2_REORDER="${ENABLE_PTO_MOE_MC2_REORDER:-0}"
 if [[ "${ENABLE_PTO_MOE_GROUPED_FFN}" == "1" ]]; then
     export PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT="${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-1}"
     export PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT="${PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT:-1}"
-    PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT="${REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/libop_extension.so"
+    PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT="${REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/lib/libop_extension.so"
     if [[ -z "${PTO_MOE_GROUPED_FFN_SO_PATH:-}" && -f "${PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT}" ]]; then
         export PTO_MOE_GROUPED_FFN_SO_PATH="${PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT}"
     fi
 fi
 
 if [[ "${ENABLE_PTO_MOE_MC2_REORDER}" == "1" ]]; then
-    PTO_MOE_MC2_SO_PATH_DEFAULT="${REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/libop_extension.so"
+    PTO_MOE_MC2_SO_PATH_DEFAULT="${REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/lib/libop_extension.so"
     if [[ -z "${PTO_MOE_MC2_SO_PATH:-}" && -f "${PTO_MOE_MC2_SO_PATH_DEFAULT}" ]]; then
         export PTO_MOE_MC2_SO_PATH="${PTO_MOE_MC2_SO_PATH_DEFAULT}"
     fi
@@ -341,7 +342,6 @@ TORCHRUN_CMD=(
     --use-fused-rmsnorm
     --swiglu
     --use-flash-attn
-    --use-fused-rotary-pos-emb
     --use-rotary-position-embeddings
     --use-fused-swiglu
     --no-masked-softmax-fusion
@@ -400,6 +400,10 @@ TORCHRUN_CMD=(
     --eval-iters "${EVAL_ITERS}"
     --distributed-backend nccl
 )
+
+if [[ "${USE_FUSED_ROTARY_POS_EMB}" == "1" ]]; then
+    TORCHRUN_CMD+=(--use-fused-rotary-pos-emb)
+fi
 
 if [[ "${ENABLE_TENSORBOARD}" == "1" ]]; then
     TORCHRUN_CMD+=(--tensorboard-dir "${TENSORBOARD_DIR}")
