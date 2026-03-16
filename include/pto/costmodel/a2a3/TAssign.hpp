@@ -7,19 +7,15 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TMULS_HPP
-#define TMULS_HPP
 
-#include "pto/costmodel/pto_isa_costmodel.hpp"
+#ifndef TTILE_ASSIGN
+#define TTILE_ASSIGN
 
 namespace pto {
-
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TMULS_Impl(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar)
+template <typename T, typename AddrType>
+PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
 {
-    pto::CostModel::GetInstance().BinSOpPredictCycle<MulSOp, TileDataDst, TileDataSrc>("TMULS", dst, src, scalar);
+    return;
 }
-
-}
-
+} // namespace pto
 #endif

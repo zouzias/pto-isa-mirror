@@ -7,19 +7,23 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TMULS_HPP
-#define TMULS_HPP
 
-#include "pto/costmodel/pto_isa_costmodel.hpp"
+#ifndef TLOAD_HPP
+#define TLOAD_HPP
 
 namespace pto {
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TMULS_Impl(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar)
+struct MrgSortExecutedNumList {
+    uint16_t mrgSortList0;
+    uint16_t mrgSortList1;
+    uint16_t mrgSortList2;
+    uint16_t mrgSortList3;
+};
+
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
 {
-    pto::CostModel::GetInstance().BinSOpPredictCycle<MulSOp, TileDataDst, TileDataSrc>("TMULS", dst, src, scalar);
+    return;
 }
-
-}
-
-#endif
+} // namespace pto
+#endif // TLOAD_HPP

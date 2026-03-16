@@ -1,5 +1,5 @@
 # --------------------------------------------------------------------------------
-# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 # CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -22,14 +22,9 @@ function(pto_costmodel_sim_st NAME)
         ${PROJECT_SOURCE_DIR}/../../common
     )
 
-    set(pybind11_DIR /usr/local/lib/python3.10/dist-packages/pybind11/share/cmake/pybind11/)
-
-    find_package(pybind11 REQUIRED)
-
     target_link_libraries(${NAME} PRIVATE
         GTest::gtest_main
         Threads::Threads
-        pybind11::embed
     )
     if (UNIX)
         target_link_libraries(${NAME} PRIVATE m)
