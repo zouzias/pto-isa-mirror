@@ -288,13 +288,13 @@ pl.comm.initialize_pipe(
     # OR
     fifo_target='AIV1'     # AIV1 only: allocates AIV1 UB FIFO
     # OR
-    fifo_target='SIMD'     # SIMD (AIV0||AIV1): allocates paired FIFO with same UB addr
+    fifo_target='AIV_ALL'     # SIMD (AIV0||AIV1): allocates paired FIFO with same UB addr
 )
 
 # Single API with aiv_id enum
-pl.comm.tpush_to_aiv(tile, aiv_id=0)   # AIV0 only (requires fifo_target='AIV0' or 'SIMD')
-pl.comm.tpush_to_aiv(tile, aiv_id=1)   # AIV1 only (requires fifo_target='AIV1' or 'SIMD')
-pl.comm.tpush_to_aiv(tile, aiv_id=-1)  # Dual/SIMD (requires fifo_target='SIMD')
+pl.comm.tpush_to_aiv(tile, aiv_id=0)   # AIV0 only (requires fifo_target='AIV0' or 'AIV_ALL')
+pl.comm.tpush_to_aiv(tile, aiv_id=1)   # AIV1 only (requires fifo_target='AIV1' or 'AIV_ALL')
+pl.comm.tpush_to_aiv(tile, aiv_id=-1)  # Dual (AIV_ALL) (requires fifo_target='AIV_ALL')
 
 # Pop API unchanged
 data = pl.comm.tpop_from_aic(AIV_IDX)
@@ -303,7 +303,7 @@ data = pl.comm.tpop_from_aic(AIV_IDX)
 **FIFO Target in Pipe Initialization**:
 - `fifo_target='AIV0'`: Allocates AIV0 UB FIFO only, AIV1 UB not used
 - `fifo_target='AIV1'`: Allocates AIV1 UB FIFO only, AIV0 UB not used
-- `fifo_target='SIMD'`: Allocates paired FIFO with **same UB address** in both AIV0 and AIV1 banks (required for dual-dst)
+- `fifo_target='AIV_ALL'`: Allocates paired FIFO with **same UB address** in both AIV0 and AIV1 banks (required for dual-dst)
 
 **Why FIFO Target Matters**:
 - UB allocation and address mapping are bound to pipe initialization
@@ -322,7 +322,7 @@ fifo_target='AIV0':
 fifo_target='AIV1':
   tpush_to_aiv(tile, 1) → copy_cc_matrix_to_ubuf(tile, dst=AIV1_UB[slot])
 
-fifo_target='SIMD':
+fifo_target='AIV_ALL':
   tpush_to_aiv(tile, -1) → copy_cc_matrix_to_ubuf_dual(
       src=L0C_tile,
       dst0=AIV0_UB[slot],   // Same slot index
@@ -335,7 +335,7 @@ fifo_target='SIMD':
 - ✅ Simple unified API with enum
 - ✅ Pipe initialization declares FIFO target (AIV0/AIV1/SIMD) upfront
 - ✅ UB allocation and address mapping bound at init time
-- ✅ SIMD mode enables dual-dst with guaranteed same UB address
+- ✅ AIV_ALL mode enables dual-dst with guaranteed same UB address
 
 **Cons**:
 - ❌ Pipe initialization must specify FIFO target before kernel execution
@@ -448,7 +448,7 @@ for bn in pl.range(0, bn_this_batch, 1):
 
 | Aspect | Current State | Gap | Recommendation |
 |--------|---------------|-----|----------------|
-| **API** | `tpush_to_aiv(tile, aiv_id)` | No dual mode | Add `aiv_id=-1` for dual/SIMD mode |
+| **API** | `tpush_to_aiv(tile, aiv_id)` | No dual mode | Add `aiv_id=-1` for dual/AIV_ALL mode |
 | **FIFO Mode** | Implicit shared | No separated option | `initialize_pipe(fifo_mode=...)` |
 | **Dual-Dst ISA** | Not utilized | Adjacent paired pushes not detected | Pattern detection + `aiv_id=-1` lowering |
 | **Cut-M/Cut-N** | Not specified | Needs explicit config | Infer from pop tile or pipe init |
