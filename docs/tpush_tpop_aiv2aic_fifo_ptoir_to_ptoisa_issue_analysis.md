@@ -342,14 +342,16 @@ def lower_tpush_to_aic(tile, aiv_id, fifo_config):
     )
 ```
 
-### 3.4 Consumer Side: assemble() Becomes No-Op
+### 3.4 Consumer Side: tpop is Sync, assemble Doesn't Lower
 
 ```python
 # On AIC side, after lowering:
 
-# tpop_from_aiv(0) → just advances FIFO read pointer
-# tpop_from_aiv(1) → no additional action (same slot)
-# assemble() → NO-OP (data already in correct layout)
+# tpop_from_aiv(0) → lowers to SYNC (wait cross-core / intra-block)
+#                    waits for AIV0's strided write to complete
+# tpop_from_aiv(1) → lowers to SYNC (wait cross-core / intra-block)
+#                    waits for AIV1's strided write to complete
+# assemble()       → doesn't lower to anything (data already in correct layout)
 
 # AIC reads from L1_base with full [16, 128] shape
 matmul(L1_tile_at(fifo_slot), ...)
@@ -365,7 +367,8 @@ matmul(L1_tile_at(fifo_slot), ...)
 | **Single FIFO Index** | Both AIV0 and AIV1 use same slot index → same L1 base address |
 | **aiv_id** | Determines offset within each NZ block (0 for AIV0, 256B for AIV1) |
 | **tpush_to_aic** | Computes strided write pattern from FIFO config + aiv_id |
-| **assemble()** | Becomes no-op at ISA level — just documents intent in IR |
+| **tpop_from_aiv** | Lowers to SYNC (wait cross-core / intra-block) |
+| **assemble()** | Doesn't lower to anything — data already in correct layout |
 
 **Performance Goal Achieved**: Direct strided UB→L1 writes that form the assembled tile during transfer (fused TINSERT), without any L1→L1 copy.
 
