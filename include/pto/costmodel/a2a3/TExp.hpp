@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <typename DstTIle, typename SrcTile>
+template <typename DstTile, typename SrcTile>
 PTO_INTERNAL void TEXP_Impl(DstTile &dst, SrcTile &src)
 {
     pto::CostModel::GetInstance().UnaryOpPredictCycle<ExpOp, DstTile, SrcTile>("TEXP", dst, src);

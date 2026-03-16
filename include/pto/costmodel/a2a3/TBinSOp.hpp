@@ -23,7 +23,7 @@ template <typename Op, typename T, unsigned dstStride, unsigned srcStride>
 PTO_INTERNAL void BinS2LCountMode(unsigned validRow, unsigned validCol)
 {
     for (unsigned i = 0; i < validRow; i++) {
-        Op::BinSInstr(src1, 0);
+        Op::BinSInstr(0);
     }
 }
 template <typename Op, typename T, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned Cols>
@@ -75,7 +75,7 @@ PTO_INTERNAL void BinS2LNormModeTail(unsigned validRow, unsigned numRemainPerLin
 {
     unsigned numLoop = 0;
     unsigned remainAfterLoop = validRow;
-    const bool strideOverFlag =
+    constexpr bool strideOverFlag =
         (dstStride / blockSizeElem > REPEAT_STRIDE_MAX) || (srcStride / blockSizeElem > REPEAT_STRIDE_MAX);
     if constexpr (Rows > pto::REPEAT_MAX) {
         numLoop = validRow / REPEAT_MAX;
@@ -96,7 +96,7 @@ PTO_INTERNAL void BinS2LNormModeTail(unsigned validRow, unsigned numRemainPerLin
     if (remainAfterLoop) {
         if constexpr (strideOverFlag) {
             for (unsigned j = 0; j < remainAfterLoop; j++) {
-                Op::BinSInstr(src1, 1, 1, 1);
+                Op::BinSInstr(1, 1, 1);
             }
         } else {
             uint8_t dstRepeatStride = dstStride / blockSizeElem;
@@ -208,8 +208,9 @@ PTO_INTERNAL void runBinaryScalarOp(TileDataDst& dst, TileDataSrc& src){
     if ((dstValidRow != 0 && dstValidCol != 0) && 
         (dstValidRow == src.GetValidRow() && dstValidCol == src.GetValidCol())){
             TBinaryScalarOp<T, Op, TileDataDst, TileDataSrc>(dstValidRow, dstValidCol);
-    } esle{
+    } else {
         PTO_ASSERT(false, "TADDS: dstTel ValidRow/validCol must be consistent with of src");
     }
+}
 } // namespace pto
 #endif

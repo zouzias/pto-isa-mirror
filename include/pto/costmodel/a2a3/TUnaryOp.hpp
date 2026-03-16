@@ -83,7 +83,7 @@ PTO_INTERNAL void Unary2LNormModeTail(unsigned validRow, unsigned nRemainPerLine
     unsigned loop = 0;
     unsigned remain = validRow;
     constexpr bool strideOverFlag = (dstStride > REPEAT_STRIDE_MAX || srcStride > REPEAT_STRIDE_MAX);
-    if constexpr (DstTile::Rows > pto::REPEAT_MAX || srcRow > pto::REPEAT_MAX) {
+    if constexpr (DstTile::Rows > pto::REPEAT_MAX || SrcTile::Rows > pto::REPEAT_MAX) {
         loop = validRow / REPEAT_MAX;
         for (uint32_t i = 0; i < loop; i++) {
             if constexpr (strideOverFlag) {
@@ -129,7 +129,7 @@ PTO_INTERNAL void Unary2LNormModeRowRpt(unsigned validRow, unsigned validCol)
     } else {
         unsigned nRepeatPerLine = validCol / nRepeatElem;
         unsigned remain = validCol % nRepeatElem;
-        if constexpr (dstRow > nRepeatElem) {
+        if constexpr (DstTile::Rows > nRepeatElem) {
             Unary2LNormModeHead<Op, T, DstTile, SrcTile, nRepeatElem>(validRow, nRepeatPerLine);
         }
         if (remain) {
@@ -171,9 +171,9 @@ PTO_INTERNAL void TUnaryOp(unsigned validRow, unsigned validCol)
             Unary1LNormMode<Op, T>(validRow, DstTile::Cols);
         }
     } else {
-        constexpr bool isSameShape = (DstTile::Cols == SrcTile::Cols) && (dstRow == srcRow);
+        constexpr bool isSameShape = (DstTile::Cols == SrcTile::Cols) && (DstTile::Rows == SrcTile::Rows);
         if constexpr (isSameShape) {
-            if ((validCol == dstCol) || (validRow == 1)) {
+            if ((validCol == DstTile::Cols) || (validRow == 1)) {
                 unsigned totalRepeats = (validRow * validCol + nRepeatElem - 1) / nRepeatElem;
                 if (totalRepeats > pto::REPEAT_MAX) {
                     Unary1LCountMode<Op, T>(validRow, validCol);

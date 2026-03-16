@@ -7,23 +7,17 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TDIVS_HPP
-#define TDIVS_HPP
+#ifndef TABS_HPP
+#define TABS_HPP
 
 #include "pto/costmodel/pto_isa_costmodel.hpp"
 
 namespace pto {
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TDIVS_Impl(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar)
+template <typename DstTile, typename SrcTile>
+PTO_INTERNAL void TABS_Impl(DstTile &dst, SrcTile &src)
 {
-    pto::CostModel::GetInstance().BinSOpPredictCycle<DivSOp, TileDataDst, TileDataSrc>("TDIVS", dst, src, scalar);
-}
-
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TDIVS_Impl(TileDataDst &dst, typename TileDataSrc::DType scalar, TileDataSrc &src)
-{
-    pto::CostModel::GetInstance().BinSOpPredictCycle<SDivOp, TileDataDst, TileDataSrc>("TDIVS", dst, src, scalar);
+    pto::CostModel::GetInstance().UnaryOpPredictCycle<AbsOp, DstTile, SrcTile>("TABS", dst, src);
 }
 
 }
