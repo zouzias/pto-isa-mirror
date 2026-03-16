@@ -13,7 +13,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 namespace pto {
-#define SMALL_RPT (4)
+constexpr unsigned PTO_SMALL_RPT = 4;
+
 template <typename Op, typename T>
 PTO_INTERNAL void BinS1LCountMode(unsigned validRow, unsigned validCol)
 {
@@ -75,7 +76,7 @@ PTO_INTERNAL void BinS2LNormModeTail(unsigned validRow, unsigned numRemainPerLin
 {
     unsigned numLoop = 0;
     unsigned remainAfterLoop = validRow;
-    constexpr bool strideOverFlag =
+    const bool strideOverFlag =
         (dstStride / blockSizeElem > REPEAT_STRIDE_MAX) || (srcStride / blockSizeElem > REPEAT_STRIDE_MAX);
     if constexpr (Rows > pto::REPEAT_MAX) {
         numLoop = validRow / REPEAT_MAX;
@@ -172,8 +173,8 @@ PTO_INTERNAL void TBinSInstr(unsigned validRow, unsigned validCol)
             }
         else {
             constexpr unsigned normColRepeat = TileDataDst::Cols / elementsPerRepeat;
-            constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < SMALL_RPT) &&
-                                       ((TileDataSrc::Rows * normColRepeat) < SMALL_RPT);
+            constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < PTO_MAX_RPT) &&
+                                       ((TileDataSrc::Rows * normColRepeat) < PTO_MAX_RPT);
             constexpr bool isColRpt =
                 (TileDataDst::Rows < (normColRepeat + 1)) && (TileDataSrc::Rows < (normColRepeat + 1));
             if constexpr (countMode) {
@@ -209,7 +210,7 @@ PTO_INTERNAL void runBinaryScalarOp(TileDataDst& dst, TileDataSrc& src){
         (dstValidRow == src.GetValidRow() && dstValidCol == src.GetValidCol())){
             TBinaryScalarOp<T, Op, TileDataDst, TileDataSrc>(dstValidRow, dstValidCol);
     } else {
-        PTO_ASSERT(false, "TADDS: dstTel ValidRow/validCol must be consistent with of src");
+        PTO_ASSERT(false, "TADDS: dstTile validRow/validCol must be consistent with of src");
     }
 }
 } // namespace pto
