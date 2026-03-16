@@ -8,17 +8,15 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
+#include <cmath>
 
 using namespace std;
 using namespace PtoTestCommon;
 
-template <int32_t tilingKey>
-void launchTABS_demo(uint8_t *out, uint8_t *src, void *stream);
-
-class TABSTest : public testing::Test {
+class TMINSTest : public testing::Test {
 protected:
     void SetUp() override
     {}
@@ -26,40 +24,45 @@ protected:
     {}
 };
 
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
+void LaunchTMins(T *out, T *src0, T *src1, void *stream);
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTAbs(T *out, T *src, void *stream);
-
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_tabs()
+void test_tmins()
 {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
+    size_t scalarFileSize = sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    T *dstHost, *srcHost;
-    T *dstDevice, *srcDevice;
+    T *dstHost, *src0Host, *src1Host;
+    T *dstDevice, *src0Device, *src1Device;
 
     aclrtMallocHost((void **)(&dstHost), fileSize);
-    aclrtMallocHost((void **)(&srcHost), fileSize);
+    aclrtMallocHost((void **)(&src0Host), fileSize);
+    aclrtMallocHost((void **)(&src1Host), scalarFileSize);
 
     aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src0Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src1Device, scalarFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTAbs<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, srcDevice, stream);
+    aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, fileSize, src1Host, scalarFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTMins<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, src0Device, src1Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
+    aclrtFree(src0Device);
+    aclrtFree(src1Device);
 
     aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
+    aclrtFreeHost(src0Host);
+    aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
@@ -67,19 +70,23 @@ void test_tabs()
     return;
 }
 
-TEST_F(TABSTest, case_float_64x64_64x64_64x64)
+TEST_F(TMINSTest, case_float_64x64_64x64_64x64)
 {
-    test_tabs<float, 64, 64, 64, 64, 160.0f, 0.6f>();
+    test_tmins<float, 64, 64, 64, 64, 128.0f, 0.6f>();
 }
-TEST_F(TABSTest, case_int32_64x64_64x64_64x64)
+TEST_F(TMINSTest, case_int32_64x64_64x64_64x64)
 {
-    test_tabs<int32_t, 64, 64, 64, 64, 160.0f, 0.6f>();
+    test_tmins<int32_t, 64, 64, 64, 64, 128.0f, 0.6f>();
 }
-TEST_F(TABSTest, case_int16_64x64_64x64_64x64)
+TEST_F(TMINSTest, case_int16_64x64_64x64_64x64)
 {
-    test_tabs<int16_t, 64, 64, 64, 64, 160.0f, 0.6f>();
+    test_tmins<int16_t, 64, 64, 64, 64, 128.0f, 0.6f>();
 }
-TEST_F(TABSTest, case_half_16x256_16x256_16x256)
+TEST_F(TMINSTest, case_half_64x64_64x64_64x64)
 {
-    test_tabs<aclFloat16, 16, 256, 16, 256, 160.0f, 0.6f>();
+    test_tmins<aclFloat16, 64, 64, 64, 64, 128.0f, 0.6f>();
+}
+TEST_F(TMINSTest, case_half_16x256_16x256_16x256)
+{
+    test_tmins<aclFloat16, 16, 256, 16, 256, 128.0f, 0.6f>();
 }

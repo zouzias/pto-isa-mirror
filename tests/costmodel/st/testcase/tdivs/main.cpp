@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <uint32_t caseId>
-void launchTADDSTestCase(void *out, void *src, float scalar, aclrtStream stream);
+void launchTDIVSTestCase(void *out, void *src, float scalar, aclrtStream stream);
 
-class TADDSTest : public testing::Test {
+class TDIVSTest : public testing::Test {
 public:
 protected:
     void SetUp() override
@@ -38,7 +38,7 @@ std::string GetGoldenDir()
 }
 
 template <uint32_t caseId, typename T, int row, int vaildRow, int col, int srcVaildCol, float profiling, float accuracy>
-bool TAddSTestFramework()
+bool TDivSTestFramework()
 {
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -61,7 +61,7 @@ bool TAddSTestFramework()
     aclrtMalloc((void **)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTADDSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
+    launchTDIVSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
@@ -78,38 +78,50 @@ bool TAddSTestFramework()
     return true;
 }
 
-TEST_F(TADDSTest, case1)
+TEST_F(TDIVSTest, case1)
 {
-    bool ret = TAddSTestFramework<1, float, 32, 32, 64, 64, 128.0f, 0.6f>();
+    bool ret = TDivSTestFramework<1, float, 32, 32, 64, 64, 128.0f, 0.6f>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TADDSTest, case2)
+TEST_F(TDIVSTest, case2)
 {
-    bool ret = TAddSTestFramework<2, aclFloat16, 63, 63, 64, 64, 128.0f, 0.6f>();
+    bool ret = TDivSTestFramework<2, aclFloat16, 63, 63, 64, 64, 128.0f, 0.6f>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TADDSTest, case3)
+TEST_F(TDIVSTest, case3)
 {
-    bool ret = TAddSTestFramework<3, int32_t, 31, 31, 128, 128, 128.0f, 0.6f>();
+    bool ret = TDivSTestFramework<3, int32_t, 31, 31, 128, 128, 128.0f, 0.6f>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TADDSTest, case4)
+TEST_F(TDIVSTest, case4)
 {
-    bool ret = TAddSTestFramework<4, int16_t, 15, 15, 192, 192, 128.0f, 0.6f>();
+    bool ret = TDivSTestFramework<4, int16_t, 15, 15, 192, 192, 128.0f, 0.6f>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TADDSTest, case5)
+TEST_F(TDIVSTest, case5)
 {
-    bool ret = TAddSTestFramework<5, float, 7, 7, 448, 448, 128.0f, 0.6f>();
+    bool ret = TDivSTestFramework<5, float, 32, 32, 64, 64, 128.0f, 0.6f>();
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TADDSTest, case6)
+TEST_F(TDIVSTest, case6)
 {
-    bool ret = TAddSTestFramework<6, float, 256, 256, 16, 16, 128.0f, 0.6f>();
+    bool ret = TDivSTestFramework<6, aclFloat16, 63, 63, 64, 64, 128.0f, 0.6f>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TDIVSTest, case7)
+{
+    bool ret = TDivSTestFramework<7, int32_t, 31, 31, 128, 128, 128.0f, 0.6f>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TDIVSTest, case8)
+{
+    bool ret = TDivSTestFramework<8, int16_t, 15, 15, 192, 192, 128.0f, 0.6f>();
     EXPECT_TRUE(ret);
 }
