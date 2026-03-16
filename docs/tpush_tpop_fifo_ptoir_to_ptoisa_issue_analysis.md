@@ -1,4 +1,4 @@
-# TPUSH/TPOP FIFO Gap Analysis: AIV0/AIV1 Scheduling Challenges
+# tpush_to_aiv and tpop_from_aic FIFO PTO-IR Design to PTO-ISA Issue Analysis: Separated AIV Calls to Dual-Dst Mapping Challenges
 
 ## Executive Summary
 
@@ -42,27 +42,28 @@ This document analyzes a design gap in PyPTO's `ExpandMixedKernel` pass when low
 │              │      (Accumulator)        │                                │
 │              └─────────────┬─────────────┘                                │
 │                            │                                              │
-│                            ▼ FIXP (Fixed-Point Unit)                      │
+│                            ▼ FIX-PIPE Unit                                │
 │                            │                                              │
 │              ┌─────────────┴─────────────┐                                │
 │              │     Dual/Single Dst       │                                │
 │              │         Switch            │                                │
+│              │                           │                                │
+│              │  Dual-Dst: Split M or N   │                                │
+│              │  to SAME UB addr in both  │                                │
 │              └─────────────┬─────────────┘                                │
 │                            │                                              │
-│         ┌──────────────────┼──────────────────┐                           │
-│         │                  │                  │                           │
-│         ▼                  │                  ▼                           │
-│  ┌─────────────────┐       │       ┌─────────────────┐                   │
-│  │    AIV0 UB      │       │       │    AIV1 UB      │                   │
-│  │                 │       │       │                 │                   │
-│  │  256KB (A5)     │       │       │  256KB (A5)     │                   │
-│  │  0x00000-0x3FFFF│       │       │  0x00000-0x3FFFF│                   │
-│  │                 │       │       │                 │                   │
-│  │ (Separate bank) │       │       │ (Separate bank) │                   │
-│  └─────────────────┘       │       └─────────────────┘                   │
-│                            │                                              │
-│                   Dual-Dst: Split M or N                                  │
-│                   to SAME UB addr in both                                 │
+│         ┌──────────────────┴──────────────────┐                           │
+│         │                                     │                           │
+│         ▼                                     ▼                           │
+│  ┌─────────────────┐               ┌─────────────────┐                   │
+│  │    AIV0 UB      │               │    AIV1 UB      │                   │
+│  │                 │               │                 │                   │
+│  │  256KB (A5)     │               │  256KB (A5)     │                   │
+│  │  0x00000-0x3FFFF│               │  0x00000-0x3FFFF│                   │
+│  │                 │               │                 │                   │
+│  │ (Local addr     │               │ (Local addr     │                   │
+│  │  space)         │               │  space)         │                   │
+│  └─────────────────┘               └─────────────────┘                   │
 │                                                                            │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
@@ -70,7 +71,7 @@ This document analyzes a design gap in PyPTO's `ExpandMixedKernel` pass when low
 **Data Path Summary:**
 - **L1 → L0A/L0B**: via MTE1 (Memory Transfer Engine)
 - **L0A × L0B → L0C**: via CUBE (Matrix Multiply)
-- **L0C → UB**: via FIXP (Fixed-Point Unit) with Dual/Single Dst switch
+- **L0C → UB**: via FIX-PIPE Unit with Dual/Single Dst switch
 
 ### 1.2 ISA Operations
 
@@ -80,9 +81,9 @@ This document analyzes a design gap in PyPTO's `ExpandMixedKernel` pass when low
 | `tpop_from_aic(aiv_id)` | Implicit via FIFO consumption | UB receives L0C data |
 | `tfree_to_aiv(aiv_id)` | FIFO slot release | Signal buffer available |
 
-### 1.3 Dual/Single Destination Switch (via FIXP)
+### 1.3 Dual/Single Destination Switch (via FIX-PIPE)
 
-The FIXP unit provides a **dual/single destination switch** for L0C→UB transfers:
+The FIX-PIPE unit provides a **dual/single destination switch** for L0C→UB transfers:
 
 #### Dual-Dst Mode (Split M or N to SAME UB address)
 
@@ -91,9 +92,12 @@ The FIXP unit provides a **dual/single destination switch** for L0C→UB transfe
                             │
                             ▼
                     ┌───────────────┐
-                    │  FIXP Unit    │
-                    │  Dual-Dst ON  │
-                    │  split_axis=M │
+                    │ FIX-PIPE Unit │
+                    │ Dual-Dst ON   │
+                    │ split_axis=M  │
+                    │               │
+                    │ Split M or N  │
+                    │ to SAME addr  │
                     └───────┬───────┘
                             │
             ┌───────────────┴───────────────┐
@@ -104,12 +108,11 @@ The FIXP unit provides a **dual/single destination switch** for L0C→UB transfe
 │   Tile [8, 128]       │       │   Tile [8, 128]       │
 │   (upper half M)      │       │   (lower half M)      │
 └───────────────────────┘       └───────────────────────┘
-                    ↑                       ↑
-                    └───────────────────────┘
-                         SAME UB address
+            ↑                               ↑
+            └───────── SAME UB address ─────┘
 ```
 
-**Key Constraint**: Dual-dst requires **same UB address** in both AIV0 and AIV1 banks.
+**Key Constraint**: Dual-dst requires **same UB address** in both AIV0 and AIV1 local address spaces.
 
 #### Single-Dst Mode (Separate transfers)
 
@@ -118,8 +121,8 @@ The FIXP unit provides a **dual/single destination switch** for L0C→UB transfe
                             │
                             ▼
                     ┌───────────────┐
-                    │  FIXP Unit    │
-                    │  Single-Dst   │
+                    │ FIX-PIPE Unit │
+                    │ Single-Dst    │
                     └───────┬───────┘
                             │
                             ▼
@@ -186,6 +189,28 @@ def paged_attention_incore_0_aiv(..., AIV_IDX: pl.Scalar[pl.INDEX]):
 │                                                              │
 │  Producer (AIC) writes sequentially                         │
 │  Consumer (AIV0, AIV1) reads must match order               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Note**: To support separated AIV0/AIV1 representation (non-paired pushes), the design would need to change to **two separate FIFOs with independent indices**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Separated FIFO Model (if needed)                │
+│                                                              │
+│  AIV0 FIFO:                                                  │
+│  ┌────┬────┬────┬────┐                                      │
+│  │ S0 │ S1 │ S2 │ S3 │  4 slots, index 0-3                  │
+│  └────┴────┴────┴────┘                                      │
+│    ▲ tpush_to_aiv(tile, 0) only                             │
+│                                                              │
+│  AIV1 FIFO:                                                  │
+│  ┌────┬────┬────┬────┐                                      │
+│  │ S0 │ S1 │ S2 │ S3 │  4 slots, index 0-3                  │
+│  └────┴────┴────┴────┘                                      │
+│    ▲ tpush_to_aiv(tile, 1) only                             │
+│                                                              │
+│  Independent progress, no cross-AIV ordering dependency     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -452,15 +477,7 @@ for bn in pl.range(0, bn_this_batch, 1):
 | **UB Address** | Independently allocated | Dual-dst requires same address | Constrain address allocation for paired pushes |
 | **Pass Analysis** | Basic block level | Cannot detect cross-loop pairing | Add data flow analysis for push patterns |
 
-### Key Takeaway
-
-The fundamental tension is:
-
-> **Flexibility** (arbitrary AIV0/AIV1 scheduling) vs **Optimization** (dual-dst ISA requiring paired pushes + same UB address)
-
 **Note**: This is primarily a **performance/efficiency** issue, not a correctness/deadlock issue (assuming no AIV0↔AIV1 sync dependencies).
-
-**Recommended approach**: Make this explicit in the API. Let the pass choose single vs dual mode based on pattern analysis, with clear semantics for each.
 
 ---
 
