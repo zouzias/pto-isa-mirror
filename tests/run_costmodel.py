@@ -318,9 +318,6 @@ def run_gtest_binary(binary: Path, gtest_filter: Optional[str], build_type: str,
     cmd: List[str] = [str(binary)]
     if gtest_filter:
         cmd.append(f"--gtest_filter={gtest_filter}")
-    if xml_output:
-        xml_output.parent.mkdir(parents=True, exist_ok=True)
-        cmd.append(f"--gtest_output=xml:{xml_output}")
 
     # costmodel ST test data is under build_dir/..., and tests use paths like "../<suite.case>/input1.bin".
     # For multi-config generators on Windows, binaries are under build/bin/<Config>/, so we run from build/bin/.
