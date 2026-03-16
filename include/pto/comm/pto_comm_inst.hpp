@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COMM_INST_HPP
 
 #include "pto/comm/comm_types.hpp"
+#include "pto/comm/async/async_types.hpp"
 #include "pto/comm/pto_comm_instr_impl.hpp"
 #ifndef __CPU_SIM
 #include "pto/comm/async/async_event_impl.hpp"
@@ -250,7 +251,6 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
     return {};
 }
 
-#ifndef __CPU_SIM
 // ============================================================================
 // TPUT_ASYNC: Asynchronous remote write (GM-to-GM via DMA engine).
 // Build once with comm::BuildAsyncSession<engine>(), then pass to all calls.
@@ -261,12 +261,7 @@ PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
                                WaitEvents &... events)
 {
     WaitAllEvents(events...);
-    if constexpr (engine == DmaEngine::SDMA) {
-        return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
-    } else {
-        PTO_ASSERT(false, "TPUT_ASYNC: only SDMA engine is implemented currently");
-        return AsyncEvent(0, engine);
-    }
+    return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
 }
 
 // ============================================================================
@@ -279,14 +274,8 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
                                WaitEvents &... events)
 {
     WaitAllEvents(events...);
-    if constexpr (engine == DmaEngine::SDMA) {
-        return ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
-    } else {
-        PTO_ASSERT(false, "TGET_ASYNC: only SDMA engine is implemented currently");
-        return AsyncEvent(0, engine);
-    }
+    return ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
 }
-#endif // !__CPU_SIM
 
 } // namespace comm
 } // namespace pto

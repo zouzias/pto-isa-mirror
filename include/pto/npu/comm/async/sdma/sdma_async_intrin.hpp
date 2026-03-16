@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "pto/npu/comm/async/sdma/sdma_types.hpp"
 #include "pto/comm/comm_types.hpp"
+#include "pto/comm/async/async_types.hpp"
 #include "pto/pto-inst.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -21,28 +22,9 @@ namespace pto {
 namespace comm {
 namespace sdma {
 
-struct TmpBuffer {
-    __ubuf__ uint8_t *addr;
-    uint32_t size;
-};
-
-struct SdmaExecContext {
-    __gm__ uint8_t *contextGm;
-    TmpBuffer tmpBuf;
-    uint32_t syncId;
-    uint32_t channelGroupIdx;
-    SdmaBaseConfig baseConfig;
-};
-
-struct SdmaEventContext {
-    TmpBuffer tmpBuf;
-    uint32_t syncId;
-};
-
 namespace detail {
 
 static_assert(kSdmaEventSlotCount > 0, "SDMA_EVENT_SLOT_COUNT must be >= 1");
-constexpr uint64_t kDefaultSdmaBlockBytes = 32 * 1024;
 
 using UbTmpBuf = TmpBuffer;
 
@@ -405,22 +387,10 @@ PTO_INTERNAL bool BuildSdmaEventContext(ScratchTile &scratchTile, uint32_t syncI
     return true;
 }
 
-// ============================================================================
-// SdmaSession: bundles ExecContext + EventContext for convenient async usage.
-// Users only need to provide scratchTile and workspace; defaults handle the rest.
-// ============================================================================
-struct SdmaSession {
-    SdmaExecContext execCtx{};
-    SdmaEventContext eventCtx{};
-    bool valid{false};
-};
-
-static constexpr uint32_t kAutoChannelGroupIdx = UINT32_MAX;
-
 template <typename ScratchTile>
 PTO_INTERNAL bool BuildSdmaSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace, SdmaSession &session,
                                    uint32_t syncId = 0,
-                                   const SdmaBaseConfig &baseConfig = {detail::kDefaultSdmaBlockBytes, 0, 1},
+                                   const SdmaBaseConfig &baseConfig = {kDefaultSdmaBlockBytes, 0, 1},
                                    uint32_t channelGroupIdx = kAutoChannelGroupIdx)
 {
     if (channelGroupIdx == kAutoChannelGroupIdx) {
