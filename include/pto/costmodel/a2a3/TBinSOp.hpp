@@ -173,8 +173,8 @@ PTO_INTERNAL void TBinSInstr(unsigned validRow, unsigned validCol)
             }
         else {
             constexpr unsigned normColRepeat = TileDataDst::Cols / elementsPerRepeat;
-            constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < PTO_MAX_RPT) &&
-                                       ((TileDataSrc::Rows * normColRepeat) < PTO_MAX_RPT);
+            constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < PTO_SMALL_RPT) &&
+                                       ((TileDataSrc::Rows * normColRepeat) < PTO_SMALL_RPT);
             constexpr bool isColRpt =
                 (TileDataDst::Rows < (normColRepeat + 1)) && (TileDataSrc::Rows < (normColRepeat + 1));
             if constexpr (countMode) {
