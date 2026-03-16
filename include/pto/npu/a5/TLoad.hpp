@@ -644,8 +644,7 @@ PTO_INTERNAL void TLoadMxCubeZZ2ZZ(__cbuf__ typename TileData::DType *dst, typen
 // ND for ADN2ZZ && BND2NN
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadMxCubeAND2ZZ(__cbuf__ typename TileData::DType *dst, typename GlobalData::DType *src,
-                                    int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
-                                    int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
+                                    int gStride3, int validRow, int validCol)
 {
     uint16_t nValue = validCol >> 1;
     uint32_t dValue = validRow;
@@ -782,8 +781,7 @@ __tf__ PTO_INTERNAL void TLoadMxCube(typename TileData::TileDType __out__ dst, t
     } else if constexpr (GlobalData::layout == pto::Layout::MX_A_ND &&
                          (TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) {
         // newgStride3 -> gStride2;
-        TLoadMxCubeAND2ZZ<TileData, GlobalData>(dstAddr, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
-                                                gStride1, gStride2, gStride2, gStride4, validRow, validCol);
+        TLoadMxCubeAND2ZZ<TileData, GlobalData>(dstAddr, src, gStride2, validRow, validCol);
     } else if constexpr (GlobalData::layout == pto::Layout::MX_A_DN &&
                          (TileData::isRowMajor && (TileData::SFractal == SLayout::RowMajor))) {
         // newgStride4 -> gStride2 / gStride3;
