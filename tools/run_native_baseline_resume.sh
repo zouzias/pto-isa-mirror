@@ -87,6 +87,9 @@ SAVE_INTERVAL="${SAVE_INTERVAL:-2000}"
 EVAL_INTERVAL="${EVAL_INTERVAL:-2000}"
 EVAL_ITERS="${EVAL_ITERS:-16}"
 LOG_PARAMS_NORM="${LOG_PARAMS_NORM:-1}"
+ENABLE_TENSORBOARD="${ENABLE_TENSORBOARD:-1}"
+LOG_TIMERS_TO_TENSORBOARD="${LOG_TIMERS_TO_TENSORBOARD:-1}"
+LOG_THROUGHPUT="${LOG_THROUGHPUT:-1}"
 DATA_SPLIT="${DATA_SPLIT:-100,0,0}"
 LOAD_CHECKPOINT="${LOAD_CHECKPOINT:-1}"
 SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-1}"
@@ -199,13 +202,18 @@ case "${MODEL_SCALE}" in
         ;;
 esac
 
-TENSORBOARD_DIR="${TENSORBOARD_DIR:-${LOG_DIR}/tensorboard}"
-mkdir -p "${TENSORBOARD_DIR}"
+if [[ "${ENABLE_TENSORBOARD}" == "1" ]]; then
+    TENSORBOARD_DIR="${TENSORBOARD_DIR:-${LOG_DIR}/tensorboard}"
+    mkdir -p "${TENSORBOARD_DIR}"
+else
+    TENSORBOARD_DIR="${TENSORBOARD_DIR:-}"
+fi
 
 export HCCL_CONNECT_TIMEOUT="${HCCL_CONNECT_TIMEOUT:-1200}"
 export HCCL_IF_BASE_PORT
 export CUDA_DEVICE_MAX_CONNECTIONS="${CUDA_DEVICE_MAX_CONNECTIONS:-1}"
 export ENABLE_PTO_MOE_GROUPED_FFN="${ENABLE_PTO_MOE_GROUPED_FFN:-0}"
+export ENABLE_PTO_MOE_MC2_REORDER="${ENABLE_PTO_MOE_MC2_REORDER:-0}"
 
 if [[ "${ENABLE_PTO_MOE_GROUPED_FFN}" == "1" ]]; then
     export PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT="${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-1}"
@@ -213,6 +221,13 @@ if [[ "${ENABLE_PTO_MOE_GROUPED_FFN}" == "1" ]]; then
     PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT="${REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/libop_extension.so"
     if [[ -z "${PTO_MOE_GROUPED_FFN_SO_PATH:-}" && -f "${PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT}" ]]; then
         export PTO_MOE_GROUPED_FFN_SO_PATH="${PTO_MOE_GROUPED_FFN_SO_PATH_DEFAULT}"
+    fi
+fi
+
+if [[ "${ENABLE_PTO_MOE_MC2_REORDER}" == "1" ]]; then
+    PTO_MOE_MC2_SO_PATH_DEFAULT="${REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/libop_extension.so"
+    if [[ -z "${PTO_MOE_MC2_SO_PATH:-}" && -f "${PTO_MOE_MC2_SO_PATH_DEFAULT}" ]]; then
+        export PTO_MOE_MC2_SO_PATH="${PTO_MOE_MC2_SO_PATH_DEFAULT}"
     fi
 fi
 
@@ -325,11 +340,20 @@ TORCHRUN_CMD=(
     --save-interval "${SAVE_INTERVAL}"
     --eval-interval "${EVAL_INTERVAL}"
     --eval-iters "${EVAL_ITERS}"
-    --tensorboard-dir "${TENSORBOARD_DIR}"
-    --log-timers-to-tensorboard
-    --log-throughput
     --distributed-backend nccl
 )
+
+if [[ "${ENABLE_TENSORBOARD}" == "1" ]]; then
+    TORCHRUN_CMD+=(--tensorboard-dir "${TENSORBOARD_DIR}")
+fi
+
+if [[ "${LOG_TIMERS_TO_TENSORBOARD}" == "1" ]]; then
+    TORCHRUN_CMD+=(--log-timers-to-tensorboard)
+fi
+
+if [[ "${LOG_THROUGHPUT}" == "1" ]]; then
+    TORCHRUN_CMD+=(--log-throughput)
+fi
 
 if [[ "${ENABLE_MOE_GROUPED_GEMM}" == "1" ]]; then
     TORCHRUN_CMD+=(--moe-grouped-gemm)
@@ -425,9 +449,11 @@ enable_moe_permute_fusion=${ENABLE_MOE_PERMUTE_FUSION}
 enable_moe_alltoall_mc2=${ENABLE_MOE_ALLTOALL_MC2}
 enable_moe_bmm_mc2=${ENABLE_MOE_BMM_MC2}
 enable_pto_moe_grouped_ffn=${ENABLE_PTO_MOE_GROUPED_FFN}
+enable_pto_moe_mc2_reorder=${ENABLE_PTO_MOE_MC2_REORDER}
 pto_moe_grouped_ffn_use_custom_split=${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-}
 pto_moe_grouped_ffn_cache_dn_weight=${PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT:-}
 pto_moe_grouped_ffn_so_path=${PTO_MOE_GROUPED_FFN_SO_PATH:-}
+pto_moe_mc2_so_path=${PTO_MOE_MC2_SO_PATH:-}
 legacy_mindspeed_repo=${LEGACY_MINDSPEED_REPO}
 pythonpath=${PYTHONPATH}
 EOF
@@ -438,12 +464,16 @@ EOF
     printf 'export HCCL_CONNECT_TIMEOUT=%q\n' "${HCCL_CONNECT_TIMEOUT}"
     printf 'export CUDA_DEVICE_MAX_CONNECTIONS=%q\n' "${CUDA_DEVICE_MAX_CONNECTIONS}"
     printf 'export ENABLE_PTO_MOE_GROUPED_FFN=%q\n' "${ENABLE_PTO_MOE_GROUPED_FFN}"
+    printf 'export ENABLE_PTO_MOE_MC2_REORDER=%q\n' "${ENABLE_PTO_MOE_MC2_REORDER}"
     if [[ "${ENABLE_PTO_MOE_GROUPED_FFN}" == "1" ]]; then
         printf 'export PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT=%q\n' "${PTO_MOE_GROUPED_FFN_USE_CUSTOM_SPLIT:-}"
         printf 'export PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT=%q\n' "${PTO_MOE_GROUPED_FFN_CACHE_DN_WEIGHT:-}"
         if [[ -n "${PTO_MOE_GROUPED_FFN_SO_PATH:-}" ]]; then
             printf 'export PTO_MOE_GROUPED_FFN_SO_PATH=%q\n' "${PTO_MOE_GROUPED_FFN_SO_PATH}"
         fi
+    fi
+    if [[ "${ENABLE_PTO_MOE_MC2_REORDER}" == "1" && -n "${PTO_MOE_MC2_SO_PATH:-}" ]]; then
+        printf 'export PTO_MOE_MC2_SO_PATH=%q\n' "${PTO_MOE_MC2_SO_PATH}"
     fi
     printf 'export PYTHONPATH=%q\n' "${PYTHONPATH}"
     printf '%q ' "${TORCHRUN_CMD[@]}"
