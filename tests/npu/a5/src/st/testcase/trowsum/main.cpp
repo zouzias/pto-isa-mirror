@@ -108,4 +108,28 @@ TEST_F(TROWSUMTest, test3)
     bool res = TRowSumTest<float, bigSize666, bigSize666, bigSize666, bigSizeAligned>();
     EXPECT_TRUE(res);
 }
+
+TEST_F(TROWSUMTest, test4)
+{
+    bool res = TRowSumTest<int16_t, smallSize, smallSize, smallSize, smallSize>();
+    EXPECT_TRUE(res);
+}
+
+TEST_F(TROWSUMTest, test5)
+{
+    bool res = TRowSumTest<int32_t, smallSize, smallSize, smallSize, smallSize>();
+    EXPECT_TRUE(res);
+}
+
+TEST_F(TROWSUMTest, test6)
+{
+    bool res = TRowSumTest<int16_t, bigSize666, bigSize666, bigSize666, bigSizeAligned>();
+    EXPECT_TRUE(res);
+}
+
+TEST_F(TROWSUMTest, test7)
+{
+    bool res = TRowSumTest<int32_t, bigSize666, bigSize666, bigSize666, bigSizeAligned>();
+    EXPECT_TRUE(res);
+}
 } // namespace TRowSumTest

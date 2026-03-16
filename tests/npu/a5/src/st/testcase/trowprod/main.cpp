@@ -151,3 +151,39 @@ TEST_F(TROWPRODTest, case10)
     bool ret = TRowProdTestFramework<10, float, 8, 8, 1024, 1024, 1>();
     EXPECT_TRUE(ret);
 }
+
+TEST_F(TROWPRODTest, case11)
+{
+    bool ret = TRowProdTestFramework<11, int16_t, 64, 64, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWPRODTest, case12)
+{
+    bool ret = TRowProdTestFramework<12, int32_t, 64, 64, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWPRODTest, case13)
+{
+    bool ret = TRowProdTestFramework<13, int16_t, 128, 128, 32, 32, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWPRODTest, case14)
+{
+    bool ret = TRowProdTestFramework<14, int32_t, 128, 128, 32, 32, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWPRODTest, case15)
+{
+    bool ret = TRowProdTestFramework<15, int16_t, 256, 256, 16, 16, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWPRODTest, case16)
+{
+    bool ret = TRowProdTestFramework<16, int32_t, 256, 256, 16, 16, 1>();
+    EXPECT_TRUE(ret);
+}

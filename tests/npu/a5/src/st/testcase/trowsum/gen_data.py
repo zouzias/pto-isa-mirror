@@ -43,7 +43,11 @@ if __name__ == "__main__":
     case_list = [
         TrowsumParams("TROWSUMTest.test1", np.float32, 16, 16),
         TrowsumParams("TROWSUMTest.test2", np.float16, 16, 16),
-        TrowsumParams("TROWSUMTest.test3", np.float32, 666, 666)
+        TrowsumParams("TROWSUMTest.test3", np.float32, 666, 666),
+        TrowsumParams("TROWSUMTest.test4", np.int16, 16, 16),
+        TrowsumParams("TROWSUMTest.test5", np.int32, 16, 16),
+        TrowsumParams("TROWSUMTest.test6", np.int16, 666, 666),
+        TrowsumParams("TROWSUMTest.test7", np.int32, 666, 666)
     ]
 
     for case in case_list:

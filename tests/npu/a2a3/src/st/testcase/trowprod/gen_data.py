@@ -53,6 +53,12 @@ if __name__ == "__main__":
         TRowProdParams("TROWPRODTest.case8", np.float32, 8, 4, 3, 16, 9),
         TRowProdParams("TROWPRODTest.case9", np.float16, 16, 1, 1, 16, 16),
         TRowProdParams("TROWPRODTest.case10", np.float16, 32, 26, 19, 32, 26),
+        TRowProdParams("TROWPRODTest.case11", np.int16, 16, 1, 1, 16, 16),
+        TRowProdParams("TROWPRODTest.case12", np.int32, 16, 1, 1, 16, 16),
+        TRowProdParams("TROWPRODTest.case13", np.int16, 16, 4, 3, 32, 24),
+        TRowProdParams("TROWPRODTest.case14", np.int32, 16, 4, 3, 32, 24),
+        TRowProdParams("TROWPRODTest.case15", np.int16, 32, 8, 5, 64, 48),
+        TRowProdParams("TROWPRODTest.case16", np.int32, 32, 8, 5, 64, 48),
     ]
 
     for _, case in enumerate(case_params_list):

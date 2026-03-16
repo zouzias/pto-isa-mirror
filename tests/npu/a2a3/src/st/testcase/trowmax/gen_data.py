@@ -62,7 +62,13 @@ if __name__ == "__main__":
         TRowMaxParams("TROWMAXTest.case15", np.float32, 64, 64, 128, 128),
         TRowMaxParams("TROWMAXTest.case16", np.float32, 32, 32, 256, 256),
         TRowMaxParams("TROWMAXTest.case17", np.float32, 16, 16, 512, 512),
-        TRowMaxParams("TROWMAXTest.case18", np.float32, 8, 8, 1024, 1024)
+        TRowMaxParams("TROWMAXTest.case18", np.float32, 8, 8, 1024, 1024),
+        TRowMaxParams("TROWMAXTest.case19", np.int16, 64, 64, 64, 64),
+        TRowMaxParams("TROWMAXTest.case20", np.int32, 64, 64, 64, 64),
+        TRowMaxParams("TROWMAXTest.case21", np.int16, 128, 128, 32, 32),
+        TRowMaxParams("TROWMAXTest.case22", np.int32, 128, 128, 32, 32),
+        TRowMaxParams("TROWMAXTest.case23", np.int16, 256, 256, 16, 16),
+        TRowMaxParams("TROWMAXTest.case24", np.int32, 256, 256, 16, 16)
     ]
 
     for _, case in enumerate(case_params_list):
