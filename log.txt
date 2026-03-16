@@ -1,0 +1,389 @@
+Running main() from /build/googletest-K1TalW/googletest-1.10.0/googletest/src/gtest_main.cc
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from TPHILOXRANDOMTest
+[ RUN      ] TPHILOXRANDOMTest.case01
+[INFO] Top sim cfg file: /home/developer/Ascend/cann-9.0.0-beta.1/aarch64-linux/simulator/dav_3510/lib/Ascend950pr_9599_sim.toml
+[INFO] Model cfg file: /home/developer/Ascend/cann-9.0.0-beta.1/aarch64-linux/simulator/dav_3510/lib/Ascend950pr_9599_model.toml
+[INFO] FFTS plus cfg file: /home/developer/Ascend/cann-9.0.0-beta.1/aarch64-linux/simulator/dav_3510/lib/Ascend950pr_9599_ffts_plus.toml
+[INFO] [0000000000] sim_cfg: /home/developer/Ascend/cann-9.0.0-beta.1/aarch64-linux/simulator/dav_3510/lib/Ascend950pr_9599_sim.toml
+[INFO] [0000000000] model_cfg: /home/developer/Ascend/cann-9.0.0-beta.1/aarch64-linux/simulator/dav_3510/lib/Ascend950pr_9599_model.toml
+[INFO] [0000000000] stars_cfg: /home/developer/Ascend/cann-9.0.0-beta.1/aarch64-linux/simulator/dav_3510/lib/Ascend950pr_9599_stars.toml
+[INFO] [0000000000] ffts_cfg: /home/developer/Ascend/cann-9.0.0-beta.1/aarch64-linux/simulator/dav_3510/lib/Ascend950pr_9599_ffts.toml
+[INFO] [0000000000] ffts_plus_cfg: /home/developer/Ascend/cann-9.0.0-beta.1/aarch64-linux/simulator/dav_3510/lib/Ascend950pr_9599_ffts_plus.toml
+[FuncCache]: size:0x20000, line_size:128, way_num:16, line_num:1024, idx_num:64
+             idx_lsb:7, idx_mask:0x3f, tag_lsb:13, tag_mask:0xffffffffffffffff, ofst_mask:0x7f
+
+[INFO] Config file [1982_cloud_config.toml] from model dynamic library path. Path: /home/developer/Ascend/cann-9.0.0-beta.1/aarch64-linux/simulator/dav_3510/lib/1982_cloud_config.toml
+[TmSim]: Run in serial mode.
+[INFO] Config file [./1982_cloud_config.toml] from model dynamic library path. Path: /home/developer/Ascend/cann-9.0.0-beta.1/aarch64-linux/simulator/dav_3510/lib/1982_cloud_config.toml
+[INFO] AicWrapper attach AIC 0, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 1, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 2, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 3, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 4, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 5, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 6, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 7, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 8, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 9, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 10, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 11, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 12, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 13, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 14, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 15, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 16, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 17, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 18, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 19, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 20, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 21, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 22, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 23, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 24, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 25, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 26, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 27, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 28, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 29, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 30, num_vec_core=2, num_subcore=3
+[INFO] AicWrapper attach AIC 31, num_vec_core=2, num_subcore=3
+[INFO] Chip 0 AIC / Scheduler / Soc periods: 200.0000 / 200.0000 / 105.0000
+[INFO] chip 0 die 0 device created
+================================================================================
+>>>>                                                                        
+>>>>                             " PEM MODEL "                                
+>>>>             Total no. of 1 chip(s) Model Init Success!                
+>>>>                                                                        
+================================================================================
+[INFO] Model Start Time: 2026-03-16 09:59:21
+[DRVSTUB_LOG] driver_api.c:556 sendSwapBuf:swapbuf_base_addr:10000000
+[DRVSTUB_LOG] driver_api.c:557 sendSwapBuf:sq:0 swapbuf_addr:10000000
+[DRVSTUB_LOG] driver_api.c:556 sendSwapBuf:swapbuf_base_addr:10000000
+[DRVSTUB_LOG] driver_api.c:557 sendSwapBuf:sq:1 swapbuf_addr:10000040
+[info] [0000000009] [block_start]           : AIV, task_id=0, core_id=0, block_id=0
+[info] [0000002206] [block_end]             : AIV, task_id=0, core_id=0, block_id=0
+[1;31midx: 0x1, exp->0, act->10, diff->10, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x2, exp->0, act->20, diff->20, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x3, exp->0, act->30, diff->30, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x4, exp->0, act->40, diff->40, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x5, exp->0, act->50, diff->50, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x6, exp->0, act->60, diff->60, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x7, exp->0, act->70, diff->70, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x8, exp->0, act->80, diff->80, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x9, exp->0, act->90, diff->90, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x10, exp->0, act->100, diff->100, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x11, exp->0, act->110, diff->110, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x12, exp->0, act->120, diff->120, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x13, exp->0, act->130, diff->130, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x14, exp->0, act->140, diff->140, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x15, exp->0, act->150, diff->150, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x16, exp->0, act->160, diff->160, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x17, exp->0, act->170, diff->170, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x18, exp->0, act->180, diff->180, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x19, exp->0, act->190, diff->190, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x20, exp->0, act->200, diff->200, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x21, exp->0, act->210, diff->210, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x22, exp->0, act->220, diff->220, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x23, exp->0, act->230, diff->230, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x24, exp->0, act->240, diff->240, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x25, exp->0, act->250, diff->250, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x26, exp->0, act->260, diff->260, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x27, exp->0, act->270, diff->270, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x28, exp->0, act->280, diff->280, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x29, exp->0, act->290, diff->290, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x30, exp->0, act->300, diff->300, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x31, exp->0, act->310, diff->310, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x32, exp->0, act->320, diff->320, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x33, exp->0, act->330, diff->330, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x34, exp->0, act->340, diff->340, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x35, exp->0, act->350, diff->350, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x36, exp->0, act->360, diff->360, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x37, exp->0, act->370, diff->370, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x38, exp->0, act->380, diff->380, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x39, exp->0, act->390, diff->390, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x40, exp->0, act->400, diff->400, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x41, exp->0, act->410, diff->410, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x42, exp->0, act->420, diff->420, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x43, exp->0, act->430, diff->430, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x44, exp->0, act->440, diff->440, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x45, exp->0, act->450, diff->450, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x46, exp->0, act->460, diff->460, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x47, exp->0, act->470, diff->470, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x48, exp->0, act->480, diff->480, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x49, exp->0, act->490, diff->490, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x50, exp->0, act->500, diff->500, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x51, exp->0, act->510, diff->510, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x52, exp->0, act->520, diff->520, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x53, exp->0, act->530, diff->530, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x54, exp->0, act->540, diff->540, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x55, exp->0, act->550, diff->550, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x56, exp->0, act->560, diff->560, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x57, exp->0, act->570, diff->570, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x58, exp->0, act->580, diff->580, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x59, exp->0, act->590, diff->590, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x60, exp->0, act->600, diff->600, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x61, exp->0, act->610, diff->610, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x62, exp->0, act->620, diff->620, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x63, exp->0, act->630, diff->630, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x64, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x65, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x66, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x67, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x68, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x69, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x70, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x71, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x72, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x73, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x74, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x75, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x76, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x77, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x78, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x79, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x80, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x81, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x82, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x83, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x84, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x85, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x86, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x87, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x88, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x89, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x90, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x91, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x92, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x93, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x94, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x95, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x96, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x97, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x98, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x99, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x100, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x101, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x102, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x103, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x104, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x105, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x106, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x107, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x108, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x109, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x110, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x111, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x112, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x113, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x114, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x115, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x116, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x117, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x118, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x119, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x120, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x121, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x122, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x123, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x124, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x125, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x126, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x127, exp->0, act->1, diff->1, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x128, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x129, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x130, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x131, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x132, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x133, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x134, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x135, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x136, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x137, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x138, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x139, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x140, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x141, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x142, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x143, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x144, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x145, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x146, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x147, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x148, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x149, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x150, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x151, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x152, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x153, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x154, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x155, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x156, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x157, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x158, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x159, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x160, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x161, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x162, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x163, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x164, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x165, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x166, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x167, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x168, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x169, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x170, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x171, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x172, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x173, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x174, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x175, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x176, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x177, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x178, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x179, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x180, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x181, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x182, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x183, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x184, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x185, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x186, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x187, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x188, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x189, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x190, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x191, exp->0, act->2, diff->2, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x192, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x193, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x194, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x195, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x196, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x197, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x198, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x199, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x200, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x201, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x202, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x203, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x204, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x205, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x206, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x207, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x208, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x209, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x210, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x211, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x212, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x213, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x214, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x215, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x216, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x217, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x218, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x219, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x220, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x221, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x222, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x223, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x224, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x225, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x226, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x227, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x228, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x229, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x230, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x231, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x232, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x233, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x234, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x235, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x236, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x237, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x238, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x239, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x240, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x241, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x242, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x243, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x244, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x245, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x246, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x247, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x248, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x249, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x250, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x251, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x252, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x253, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x254, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+[1;31midx: 0x255, exp->0, act->3, diff->3, diff ratio->inf, zero count->0x0 [ERROR][0m
+max diff: 630, diff threshold: 0.001, max diff ratio: inf, err count: 255, err threshold: 1, err count ratio: 0.996094, act zero count: 0x0, act zero threshold: 0x1000, act zero ratio: 0
+/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/testcase/tphiloxrandom/main.cpp:89: Failure
+Value of: ret
+  Actual: false
+Expected: true
+[warning] [0000002208] [stars_top.cpp : 1181 : acsq_idle_state_proc] NOT SUPPORT TASK TYPE 3
+[DRVSTUB_LOG] driver_api.c:2245 send_stars_interrupt:get cq_0 base_addr: 10020000
+[info] [MCU_LOG] [INFO] [0000002209] stop (645):: mcu_wrapper is stopping...
+[info] [MCU_LOG] [INFO] [0000002209] main_loop (624):: mcu_wrapper loop is stopping...
+[info] [MCU_LOG] [INFO] [0000002209] stop (654):: mcu_wrapper loop joined successfully.
+[INFO] Model Stop Time: 2026-03-16 09:59:44
+Model RUN TIME: 23334.3 ms
+[INFO] Total tick: 2208
+[INFO] Model stopped successfully.
+[  FAILED  ] TPHILOXRANDOMTest.case01 (38349 ms)
+[----------] 1 test from TPHILOXRANDOMTest (38349 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (38349 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] TPHILOXRANDOMTest.case01
+
+ 1 FAILED TEST
+target_dir: /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st
+run env shell: /home/developer/Ascend/cann-9.0.0-beta.1/bin/setenv.bash
+clean build: build
+compile process:
+ /opt/buildtools/cmake-3.20.5-linux-aarch64/bin/cmake -S/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st -B/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build --check-build-system CMakeFiles/Makefile.cmake 0
+/opt/buildtools/cmake-3.20.5-linux-aarch64/bin/cmake -E cmake_progress_start /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/CMakeFiles /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build//CMakeFiles/progress.marks
+make  -f CMakeFiles/Makefile2 all
+make[1]: Entering directory '/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build'
+make  -f testcase/tphiloxrandom/CMakeFiles/tphiloxrandom_kernel.dir/build.make testcase/tphiloxrandom/CMakeFiles/tphiloxrandom_kernel.dir/depend
+make[2]: Entering directory '/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build'
+cd /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build && /opt/buildtools/cmake-3.20.5-linux-aarch64/bin/cmake -E cmake_depends "Unix Makefiles" /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/testcase/tphiloxrandom /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/testcase/tphiloxrandom /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/testcase/tphiloxrandom/CMakeFiles/tphiloxrandom_kernel.dir/DependInfo.cmake --color=
+make[2]: Leaving directory '/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build'
+make  -f testcase/tphiloxrandom/CMakeFiles/tphiloxrandom_kernel.dir/build.make testcase/tphiloxrandom/CMakeFiles/tphiloxrandom_kernel.dir/build
+make[2]: Entering directory '/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build'
+[ 25%] Building CXX object testcase/tphiloxrandom/CMakeFiles/tphiloxrandom_kernel.dir/tphiloxrandom_kernel.cpp.o
+cd /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/testcase/tphiloxrandom && bisheng -Dtphiloxrandom_kernel_EXPORTS -I/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/../../../../../include -I/home/developer/Ascend/cann-9.0.0-beta.1/include -I/usr/local/Ascend/driver/kernel/inc -I/home/developer/Ascend/cann-9.0.0-beta.1/pkg_inc -I/home/developer/Ascend/cann-9.0.0-beta.1/pkg_inc/profiling -I/home/developer/Ascend/cann-9.0.0-beta.1/pkg_inc/runtime/runtime -fPIC -D_FORTIFY_SOURCE=2 -O2 -std=c++17 -Wno-macro-redefined -Wno-ignored-attributes -Wno-unknown-attributes -fstack-protector-strong -xcce -Xhost-start -Xhost-end -mllvm -cce-aicore-stack-size=0x8000 -mllvm -cce-aicore-function-stack-size=0x8000 -mllvm -cce-aicore-record-overflow=true -mllvm -cce-aicore-addr-transform -mllvm -cce-aicore-dcci-insert-for-scalar=false --cce-aicore-arch=dav-c310-vec -DREGISTER_BASE -std=gnu++17 -MD -MT testcase/tphiloxrandom/CMakeFiles/tphiloxrandom_kernel.dir/tphiloxrandom_kernel.cpp.o -MF CMakeFiles/tphiloxrandom_kernel.dir/tphiloxrandom_kernel.cpp.o.d -o CMakeFiles/tphiloxrandom_kernel.dir/tphiloxrandom_kernel.cpp.o -c /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/testcase/tphiloxrandom/tphiloxrandom_kernel.cpp
+[ 50%] Linking CXX shared library ../../lib/libtphiloxrandom_kernel.so
+cd /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/testcase/tphiloxrandom && /opt/buildtools/cmake-3.20.5-linux-aarch64/bin/cmake -E cmake_link_script CMakeFiles/tphiloxrandom_kernel.dir/link.txt --verbose=1
+bisheng -fPIC -s -Wl,-z,relro -Wl,-z,now --cce-fatobj-link -shared -Wl,-soname,libtphiloxrandom_kernel.so -o ../../lib/libtphiloxrandom_kernel.so CMakeFiles/tphiloxrandom_kernel.dir/tphiloxrandom_kernel.cpp.o 
+make[2]: Leaving directory '/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build'
+[ 50%] Built target tphiloxrandom_kernel
+make  -f testcase/tphiloxrandom/CMakeFiles/tphiloxrandom.dir/build.make testcase/tphiloxrandom/CMakeFiles/tphiloxrandom.dir/depend
+make[2]: Entering directory '/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build'
+cd /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build && /opt/buildtools/cmake-3.20.5-linux-aarch64/bin/cmake -E cmake_depends "Unix Makefiles" /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/testcase/tphiloxrandom /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/testcase/tphiloxrandom /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/testcase/tphiloxrandom/CMakeFiles/tphiloxrandom.dir/DependInfo.cmake --color=
+make[2]: Leaving directory '/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build'
+make  -f testcase/tphiloxrandom/CMakeFiles/tphiloxrandom.dir/build.make testcase/tphiloxrandom/CMakeFiles/tphiloxrandom.dir/build
+make[2]: Entering directory '/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build'
+[ 75%] Building CXX object testcase/tphiloxrandom/CMakeFiles/tphiloxrandom.dir/main.cpp.o
+cd /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/testcase/tphiloxrandom && bisheng  -I/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/../../../../../include -I/home/developer/Ascend/cann-9.0.0-beta.1/include -I/usr/local/Ascend/driver/kernel/inc -I/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/../../../../common -fPIE -D_FORTIFY_SOURCE=2 -O2 -std=c++17 -Wno-macro-redefined -Wno-ignored-attributes -Wno-unknown-attributes -fstack-protector-strong -xc++ -include stdint.h -include stddef.h -std=gnu++17 -MD -MT testcase/tphiloxrandom/CMakeFiles/tphiloxrandom.dir/main.cpp.o -MF CMakeFiles/tphiloxrandom.dir/main.cpp.o.d -o CMakeFiles/tphiloxrandom.dir/main.cpp.o -c /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/testcase/tphiloxrandom/main.cpp
+[100%] Linking CXX executable ../../bin/tphiloxrandom
+cd /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/testcase/tphiloxrandom && /opt/buildtools/cmake-3.20.5-linux-aarch64/bin/cmake -E cmake_link_script CMakeFiles/tphiloxrandom.dir/link.txt --verbose=1
+bisheng -s -Wl,-z,relro -Wl,-z,now CMakeFiles/tphiloxrandom.dir/main.cpp.o -o ../../bin/tphiloxrandom   -L/home/developer/Ascend/cann-9.0.0-beta.1/lib64  -L/home/developer/Ascend/cann-9.0.0-beta.1/tools/simulator/Ascend950PR_9599/lib  -Wl,-rpath,/home/developer/Ascend/cann-9.0.0-beta.1/lib64:/home/developer/Ascend/cann-9.0.0-beta.1/tools/simulator/Ascend950PR_9599/lib:/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/lib ../../lib/libtphiloxrandom_kernel.so -lruntime_camodel -lstdc++ -lascendcl -lm -ltiling_api -lplatform -lc_sec -ldl -lnnopbase /usr/lib/aarch64-linux-gnu/libgtest.a /usr/lib/aarch64-linux-gnu/libgtest_main.a -lpthread /usr/lib/aarch64-linux-gnu/libgtest.a -lpthread 
+make[2]: Leaving directory '/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build'
+[100%] Built target tphiloxrandom
+make[1]: Leaving directory '/mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build'
+/opt/buildtools/cmake-3.20.5-linux-aarch64/bin/cmake -E cmake_progress_start /mnt/workspace/gitCode/pto-isa/tests/npu/a5/src/st/build/CMakeFiles 0
+
+run command: cp testcase/tphiloxrandom/gen_data.py build/gen_data.py
+run command: /usr/local/bin/python3 gen_data.py
+
+run command: ./tphiloxrandom
+run command: ./tphiloxrandom
+run command failed with return code 1
+run binary failed: Command '['./tphiloxrandom']' returned non-zero exit status 1.

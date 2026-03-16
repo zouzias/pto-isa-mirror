@@ -236,6 +236,7 @@ set(ALL_TESTCASES
     tpack
     tpushpop_cv
     tpushpop_vc
+    tphiloxrandom
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
