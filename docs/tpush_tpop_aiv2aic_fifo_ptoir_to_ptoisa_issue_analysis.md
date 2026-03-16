@@ -92,48 +92,132 @@ Memory Layout (8 blocks of 16×16):
 Total size: 8 blocks × 256B = 2048B = 2KB (for bf16: 16×128×2B = 4KB)
 ```
 
-### 1.3 Cut-M in NZ Layout: Non-Contiguous Address Problem
+### 1.3 Cut-M in NZ Layout: UB to L1 Strided Insert
 
-When cutting along M (rows), **each AIV writes to non-contiguous addresses**:
+**UB Layout** (packed NZ): `[8][1][8][16]` for each AIV's [8, 128] tile
+**L1 Layout** (combined NZ): `[8][1][16][16]` for the assembled [16, 128] tile
+
+The key insight: UB is packed contiguously, but L1 needs interleaved insertion.
 
 ```
-Cut-M: AIV0 writes rows 0-7, AIV1 writes rows 8-15
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     UB Source: Packed [8][1][8][16]                          │
+│                                                                              │
+│  AIV0 UB: [8, 128] = [N1=8][M1=1][M0=8][N0=16]                              │
+│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│  │ Burst0 │ │ Burst1 │ │ Burst2 │ │ Burst3 │ │ Burst4 │ │ Burst5 │ │ Burst6 │ │ Burst7 │
+│  │[8][16] │ │[8][16] │ │[8][16] │ │[8][16] │ │[8][16] │ │[8][16] │ │[8][16] │ │[8][16] │
+│  │ 256B   │ │ 256B   │ │ 256B   │ │ 256B   │ │ 256B   │ │ 256B   │ │ 256B   │ │ 256B   │
+│  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘ └────────┘ └────────┘ └────────┘
+│  n1=0       n1=1       n1=2       n1=3       n1=4       n1=5       n1=6       n1=7
+│                                                                              │
+│  Contiguous in UB: burst0, burst1, burst2, ... burst7                       │
+│  Total: 8 × 256B = 2KB                                                       │
+│                                                                              │
+│  AIV1 UB: Same layout [8][1][8][16], also 8 contiguous bursts               │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-Inside EACH [M0=16][N0=16] block:
-┌────────────────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│    Block n1 (any of the 8 blocks):                                         │
-│    ┌─────────────────────────────┐                                         │
-│    │  row 0  ─────────────────── │  ← AIV0 writes here                     │
-│    │  row 1  ─────────────────── │  ← AIV0                                 │
-│    │  row 2  ─────────────────── │  ← AIV0                                 │
-│    │  row 3  ─────────────────── │  ← AIV0                                 │
-│    │  row 4  ─────────────────── │  ← AIV0                                 │
-│    │  row 5  ─────────────────── │  ← AIV0                                 │
-│    │  row 6  ─────────────────── │  ← AIV0                                 │
-│    │  row 7  ─────────────────── │  ← AIV0                                 │
-│    │─────────────────────────────│                                         │
-│    │  row 8  ─────────────────── │  ← AIV1 writes here                     │
-│    │  row 9  ─────────────────── │  ← AIV1                                 │
-│    │  row 10 ─────────────────── │  ← AIV1                                 │
-│    │  row 11 ─────────────────── │  ← AIV1                                 │
-│    │  row 12 ─────────────────── │  ← AIV1                                 │
-│    │  row 13 ─────────────────── │  ← AIV1                                 │
-│    │  row 14 ─────────────────── │  ← AIV1                                 │
-│    │  row 15 ─────────────────── │  ← AIV1                                 │
-│    └─────────────────────────────┘                                         │
-│                                                                             │
-│    Each row = 16 elements × 2B = 32B                                       │
-│    AIV0 offset within block: 0                                             │
-│    AIV1 offset within block: 8 rows × 32B = 256B (half the block)          │
-│                                                                             │
-└────────────────────────────────────────────────────────────────────────────┘
+                              │
+                              │  ub2l1 strided copy
+                              │  (8 burst transfers)
+                              ▼
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                  L1 Destination: Combined [8][1][16][16]                     │
+│                                                                              │
+│  L1 MatTile: [16, 128] = [N1=8][M1=1][M0=16][N0=16]                         │
+│                                                                              │
+│  ┌──────────────────┐  ┌──────────────────┐       ┌──────────────────┐      │
+│  │   Block n1=0     │  │   Block n1=1     │  ...  │   Block n1=7     │      │
+│  │   [16][16]=512B  │  │   [16][16]=512B  │       │   [16][16]=512B  │      │
+│  │                  │  │                  │       │                  │      │
+│  │ ┌──────────────┐ │  │ ┌──────────────┐ │       │ ┌──────────────┐ │      │
+│  │ │AIV0: row 0-7 │ │  │ │AIV0: row 0-7 │ │       │ │AIV0: row 0-7 │ │      │
+│  │ │[8][16]=256B  │ │  │ │[8][16]=256B  │ │       │ │[8][16]=256B  │ │      │
+│  │ │offset: 0     │ │  │ │offset: 0     │ │       │ │offset: 0     │ │      │
+│  │ ├──────────────┤ │  │ ├──────────────┤ │       │ ├──────────────┤ │      │
+│  │ │AIV1: row 8-15│ │  │ │AIV1: row 8-15│ │       │ │AIV1: row 8-15│ │      │
+│  │ │[8][16]=256B  │ │  │ │[8][16]=256B  │ │       │ │[8][16]=256B  │ │      │
+│  │ │offset: 256B  │ │  │ │offset: 256B  │ │       │ │offset: 256B  │ │      │
+│  │ └──────────────┘ │  │ └──────────────┘ │       │ └──────────────┘ │      │
+│  │                  │  │                  │       │                  │      │
+│  └──────────────────┘  └──────────────────┘       └──────────────────┘      │
+│                                                                              │
+│  L1 Address per block:                                                       │
+│    Block n1: L1_base + n1 × 512B                                            │
+│                                                                              │
+│  AIV0 writes to: L1_base + n1 × 512B + 0       (rows 0-7)                   │
+│  AIV1 writes to: L1_base + n1 × 512B + 256B    (rows 8-15)                  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**AIV0 writes to**: `L1_base + n1 × block_size + 0` for each of 8 blocks
-**AIV1 writes to**: `L1_base + n1 × block_size + 8 × row_size` for each of 8 blocks
+**Strided Copy as 8 Bursts**:
 
-This is **NOT a simple contiguous copy** — requires strided writes across all N1 blocks!
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    AIV0: 8 Burst Transfers                                   │
+│                                                                              │
+│  UB src (contiguous):     L1 dst (strided):                                 │
+│  ┌────────┐               ┌────────┐                                        │
+│  │ Burst0 │ ──────────────│ Block0 │ offset 0                               │
+│  │ @UB+0  │               │ @L1+0  │                                        │
+│  └────────┘               └────────┘                                        │
+│  ┌────────┐               ┌────────┐                                        │
+│  │ Burst1 │ ──────────────│ Block1 │ offset 0                               │
+│  │@UB+256 │               │@L1+512 │                                        │
+│  └────────┘               └────────┘                                        │
+│  ┌────────┐               ┌────────┐                                        │
+│  │ Burst2 │ ──────────────│ Block2 │ offset 0                               │
+│  │@UB+512 │               │@L1+1024│                                        │
+│  └────────┘               └────────┘                                        │
+│  ...                      ...                                                │
+│  ┌────────┐               ┌────────┐                                        │
+│  │ Burst7 │ ──────────────│ Block7 │ offset 0                               │
+│  │@UB+1792│               │@L1+3584│                                        │
+│  └────────┘               └────────┘                                        │
+│                                                                              │
+│  src_stride: 256B (contiguous in UB)                                        │
+│  dst_stride: 512B (every other half-block in L1)                            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    AIV1: 8 Burst Transfers                                   │
+│                                                                              │
+│  UB src (contiguous):     L1 dst (strided):                                 │
+│  ┌────────┐               ┌────────┐                                        │
+│  │ Burst0 │ ──────────────│ Block0 │ offset 256B                            │
+│  │ @UB+0  │               │@L1+256 │                                        │
+│  └────────┘               └────────┘                                        │
+│  ┌────────┐               ┌────────┐                                        │
+│  │ Burst1 │ ──────────────│ Block1 │ offset 256B                            │
+│  │@UB+256 │               │@L1+768 │                                        │
+│  └────────┘               └────────┘                                        │
+│  ┌────────┐               ┌────────┐                                        │
+│  │ Burst2 │ ──────────────│ Block2 │ offset 256B                            │
+│  │@UB+512 │               │@L1+1280│                                        │
+│  └────────┘               └────────┘                                        │
+│  ...                      ...                                                │
+│  ┌────────┐               ┌────────┐                                        │
+│  │ Burst7 │ ──────────────│ Block7 │ offset 256B                            │
+│  │@UB+1792│               │@L1+3840│                                        │
+│  └────────┘               └────────┘                                        │
+│                                                                              │
+│  src_stride: 256B (contiguous in UB)                                        │
+│  dst_stride: 512B (every other half-block in L1)                            │
+│  dst_offset: +256B (second half of each block)                              │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Summary**:
+- **UB**: Packed `[8][1][8][16]` — 8 contiguous 256B bursts
+- **L1**: Combined `[8][1][16][16]` — 8 blocks of 512B each
+- **AIV0**: Inserts at `[8][1][0:8][16]` (offset 0 in each block)
+- **AIV1**: Inserts at `[8][1][8:16][16]` (offset 256B in each block)
+- **Burst view**: 8 burst transfers with `src_stride=256B`, `dst_stride=512B`
 
 ### 1.4 Strided Write Pattern for Cut-M
 
