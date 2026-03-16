@@ -15,10 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-template <int32_t tilingKey>
-void launchTABS_demo(uint8_t *out, uint8_t *src, void *stream);
-
-class TABSTest : public testing::Test {
+class TSQRTTest : public testing::Test {
 protected:
     void SetUp() override
     {}
@@ -26,12 +23,20 @@ protected:
     {}
 };
 
+std::string GetGoldenDir()
+{
+    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const std::string caseName = testInfo->name();
+    std::string suiteName = testInfo->test_suite_name();
+    std::string fullPath = "../" + suiteName + "." + caseName;
+    return fullPath;
+}
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTAbs(T *out, T *src, void *stream);
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false, float profiling, float accuracy>
+void LaunchTSqrt(T *out, T *src, void *stream);
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_tabs()
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false, float profiling, float accuracy>
+void test_tsqrt()
 {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
 
@@ -50,7 +55,7 @@ void test_tabs()
     aclrtMalloc((void **)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTAbs<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, srcDevice, stream);
+    LaunchTSqrt<T, kGRows_, kGCols_, kTRows_, kTCols_, isInPlace, profiling, accuracy>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -67,19 +72,19 @@ void test_tabs()
     return;
 }
 
-TEST_F(TABSTest, case_float_64x64_64x64_64x64)
+TEST_F(TSQRTTest, case_float_64x64_64x64_64x64_inPlace_True)
 {
-    test_tabs<float, 64, 64, 64, 64, 160.0f, 0.6f>();
+    test_tsqrt<float, 64, 64, 64, 64, true, 128.0f, 0.6f>();
 }
-TEST_F(TABSTest, case_int32_64x64_64x64_64x64)
+TEST_F(TSQRTTest, case_float_64x64_64x64_64x64_inPlace_False)
 {
-    test_tabs<int32_t, 64, 64, 64, 64, 160.0f, 0.6f>();
+    test_tsqrt<float, 64, 64, 64, 64, false, 128.0f, 0.6f>();
 }
-TEST_F(TABSTest, case_int16_64x64_64x64_64x64)
+TEST_F(TSQRTTest, case_half_64x64_64x64_64x64_inPlace_True)
 {
-    test_tabs<int16_t, 64, 64, 64, 64, 160.0f, 0.6f>();
+    test_tsqrt<aclFloat16, 64, 64, 64, 64, true, 128.0f, 0.6f>();
 }
-TEST_F(TABSTest, case_half_16x256_16x256_16x256)
+TEST_F(TSQRTTest, case_half_64x64_64x64_64x64_inPlace_False)
 {
-    test_tabs<aclFloat16, 16, 256, 16, 256, 160.0f, 0.6f>();
+    test_tsqrt<aclFloat16, 64, 64, 64, 64, false, 128.0f, 0.6f>();
 }

@@ -197,7 +197,7 @@ template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned b
           unsigned rowStride>
 PTO_INTERNAL void BinaryInstr(unsigned validRow, unsigned validCol)
 {
-    using T = typename TileData::Type;
+    using T = typename TileData::DType;
     // Small shape optimization
     if constexpr ((TileData::Rows <= pto::REPEAT_MAX) && (TileData::Cols < elementsPerRepeat)) {
         constexpr uint8_t repeatStride = rowStride / blockSizeElem;

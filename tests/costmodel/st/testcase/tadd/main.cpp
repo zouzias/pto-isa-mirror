@@ -69,8 +69,7 @@ void test_tadd()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<T> golden(fileSize);
-    std::vector<T> devFinal(fileSize);
+    return;
 }
 
 TEST_F(TADDTest, case_float_64x64_64x64_64x64)

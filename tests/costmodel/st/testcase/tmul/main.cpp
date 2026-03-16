@@ -16,9 +16,9 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <int32_t tilingKey>
-void launchTABS_demo(uint8_t *out, uint8_t *src, void *stream);
+void launchTMUL_demo(uint8_t *out, uint8_t *src, void *stream);
 
-class TABSTest : public testing::Test {
+class TMULTest : public testing::Test {
 protected:
     void SetUp() override
     {}
@@ -26,12 +26,20 @@ protected:
     {}
 };
 
+std::string GetGoldenDir()
+{
+    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
+    const std::string caseName = testInfo->name();
+    std::string suiteName = testInfo->test_suite_name();
+    std::string fullPath = "../" + suiteName + "." + caseName;
+    return fullPath;
+}
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTAbs(T *out, T *src, void *stream);
+void LaunchTMul(T *out, T *src0, T *src1, void *stream);
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_tabs()
+void test_tmul()
 {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
 
@@ -40,26 +48,31 @@ void test_tabs()
     aclrtStream stream;
     aclrtCreateStream(&stream);
 
-    T *dstHost, *srcHost;
-    T *dstDevice, *srcDevice;
+    T *dstHost, *src0Host, *src1Host;
+    T *dstDevice, *src0Device, *src1Device;
 
     aclrtMallocHost((void **)(&dstHost), fileSize);
-    aclrtMallocHost((void **)(&srcHost), fileSize);
+    aclrtMallocHost((void **)(&src0Host), fileSize);
+    aclrtMallocHost((void **)(&src1Host), fileSize);
 
     aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src0Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src1Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTAbs<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, srcDevice, stream);
+    aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, fileSize, src1Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTMul<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, src0Device, src1Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
+    aclrtFree(src0Device);
+    aclrtFree(src1Device);
 
     aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
+    aclrtFreeHost(src0Host);
+    aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
@@ -67,19 +80,19 @@ void test_tabs()
     return;
 }
 
-TEST_F(TABSTest, case_float_64x64_64x64_64x64)
+TEST_F(TMULTest, case_float_64x64_64x64_64x64)
 {
-    test_tabs<float, 64, 64, 64, 64, 160.0f, 0.6f>();
+    test_tmul<float, 64, 64, 64, 64, 128.0f, 0.6f>();
 }
-TEST_F(TABSTest, case_int32_64x64_64x64_64x64)
+TEST_F(TMULTest, case_int32_64x64_64x64_64x64)
 {
-    test_tabs<int32_t, 64, 64, 64, 64, 160.0f, 0.6f>();
+    test_tmul<int32_t, 64, 64, 64, 64, 128.0f, 0.6f>();
 }
-TEST_F(TABSTest, case_int16_64x64_64x64_64x64)
+TEST_F(TMULTest, case_int16_64x64_64x64_64x64)
 {
-    test_tabs<int16_t, 64, 64, 64, 64, 160.0f, 0.6f>();
+    test_tmul<int16_t, 64, 64, 64, 64, 128.0f, 0.6f>();
 }
-TEST_F(TABSTest, case_half_16x256_16x256_16x256)
+TEST_F(TMULTest, case_half_16x256_16x256_16x256)
 {
-    test_tabs<aclFloat16, 16, 256, 16, 256, 160.0f, 0.6f>();
+    test_tmul<aclFloat16, 16, 256, 16, 256, 128.0f, 0.6f>();
 }
