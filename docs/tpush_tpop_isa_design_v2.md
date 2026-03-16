@@ -224,7 +224,7 @@ Orchestration function (A5):
         vector_kernel(..., GM_SLOT_BUFFER=nullptr, ...)
 ```
 
-#### `aic_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF, C2V_SPLIT, V2C_SPLIT)`
+#### `aic_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF)`
 
 **Called on the Cube (AIC) core at kernel startup.** Initializes the ring buffer pipe(s) for the specified direction(s).
 
@@ -235,8 +235,8 @@ Orchestration function (A5):
 | `GM_SLOT_BUFFER` | `__gm__ void*` | GM buffer allocated by orchestration (INOUT). Active on A2A3; `nullptr` on A5 |
 | `C2V_CONSUMER_BUF` | `uint32_t` | Consumer's SRAM base address for C2V direction (Vector's UB). `0` on A2A3; explicit on A5 |
 | `V2C_CONSUMER_BUF` | `uint32_t` | Consumer's SRAM base address for V2C direction (Cube's own L1). `0` on A2A3; explicit on A5 |
-| `C2V_SPLIT` | `TileSplitAxis` | **NEW**: `TILE_NO_SPLIT` (1:1), `TILE_UP_DOWN`, or `TILE_LEFT_RIGHT` for C2V direction |
-| `V2C_SPLIT` | `TileSplitAxis` | **NEW**: `TILE_NO_SPLIT` (1:1), `TILE_UP_DOWN`, or `TILE_LEFT_RIGHT` for V2C direction |
+
+**Note**: The split axis (`TILE_UP_DOWN` / `TILE_LEFT_RIGHT`) is **not** specified during initialization. It is specified per-instruction on `tpush_to_aiv` and `tpop_from_aiv`.
 
 **Description**: Binds the ring buffer pipe(s) to the appropriate backing memory based on `PLATFORM_ID`, computes `SLOT_NUM` from `DIR_MASK` (8 if unidirectional, 4 if bidirectional), and initializes internal state. On A5, the ring buffer base addresses are passed as **explicit arguments** (`C2V_CONSUMER_BUF`, `V2C_CONSUMER_BUF`) — no implicit constant symbol lookup is required. For each direction where the Cube is the **consumer** (`DIR_V2C`), it signals all slots as free to the Vector producer.
 
@@ -248,15 +248,11 @@ Orchestration function (A5):
 **Pseudocode**:
 
 ```
-function aic_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF, C2V_SPLIT, V2C_SPLIT):
+function aic_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF):
     if DIR_MASK == (DIR_C2V | DIR_V2C):
         SLOT_NUM = 4
     else:
         SLOT_NUM = 8
-
-    // Store split axis for use in tpush/tpop instructions
-    c2v_split_axis = C2V_SPLIT
-    v2c_split_axis = V2C_SPLIT
 
     if DIR_MASK & DIR_C2V:
         // Cube is PRODUCER in C2V direction
@@ -274,16 +270,15 @@ function aic_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_B
         else:  // PLATFORM_A5
             v2c_ring_buf = V2C_CONSUMER_BUF                       // Cube's own L1 (explicit argument)
         v2c_target_tag = 0
-        // Signal all slots as free to Vector producer
+        // Signal all slots as free to Vector producer(s)
+        // Note: flags for both AIV0 and AIV1 are pre-signaled
+        // The actual 1:1 vs 1:2 mode is determined per-instruction
         for (i = 0; i < SLOT_NUM; i++):
-            if V2C_SPLIT == TILE_NO_SPLIT:
-                SET flag_V2C_free[AIV0]: i     // only AIV0 in 1:1 mode
-            else:
-                SET flag_V2C_free[AIV0]: i     // both AIVs in 1:2 mode
-                SET flag_V2C_free[AIV1]: i
+            SET flag_V2C_free[AIV0]: i
+            SET flag_V2C_free[AIV1]: i
 ```
 
-#### `aiv_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF, C2V_SPLIT, V2C_SPLIT)`
+#### `aiv_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF)`
 
 **Called on a Vector (AIV) core at kernel startup.** Initializes the ring buffer pipe(s) for the specified direction(s).
 
@@ -294,23 +289,20 @@ function aic_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_B
 | `GM_SLOT_BUFFER` | `__gm__ void*` | GM buffer allocated by orchestration (INOUT). Active on A2A3; `nullptr` on A5 |
 | `C2V_CONSUMER_BUF` | `uint32_t` | Consumer's SRAM base address for C2V direction (Vector's own UB). `0` on A2A3; explicit on A5 |
 | `V2C_CONSUMER_BUF` | `uint32_t` | Consumer's SRAM base address for V2C direction (Cube's L1). `0` on A2A3; explicit on A5 |
-| `C2V_SPLIT` | `TileSplitAxis` | **NEW**: `TILE_NO_SPLIT` (1:1), `TILE_UP_DOWN`, or `TILE_LEFT_RIGHT` for C2V direction |
-| `V2C_SPLIT` | `TileSplitAxis` | **NEW**: `TILE_NO_SPLIT` (1:1), `TILE_UP_DOWN`, or `TILE_LEFT_RIGHT` for V2C direction |
+
+**Note**: The split axis (`TILE_UP_DOWN` / `TILE_LEFT_RIGHT`) is **not** specified during initialization. It is specified per-instruction on `tpush_to_aic` and `tpop_from_aic`.
 
 **Description**: Binds the ring buffer pipe(s) to the appropriate backing memory based on `PLATFORM_ID`, computes `SLOT_NUM`, and initializes internal state. On A5, the ring buffer base addresses are passed as **explicit arguments** (`C2V_CONSUMER_BUF`, `V2C_CONSUMER_BUF`) — no implicit constant symbol lookup is required. For each direction where the Vector is the **consumer** (`DIR_C2V`), it signals all slots as free to the Cube producer.
 
 **Pseudocode**:
 
 ```
-function aiv_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF, C2V_SPLIT, V2C_SPLIT):
+function aiv_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF):
     if DIR_MASK == (DIR_C2V | DIR_V2C):
         SLOT_NUM = 4
     else:
         SLOT_NUM = 8
 
-    // Store split axis for use in tpush/tpop instructions
-    c2v_split_axis = C2V_SPLIT
-    v2c_split_axis = V2C_SPLIT
     my_aiv_idx = get_my_aiv_idx()   // 0 or 1
 
     if DIR_MASK & DIR_C2V:
@@ -423,26 +415,27 @@ A5 (ring buffer in consumer SRAM, CONSUMER_BUFFER_BASE/SIZE):
 
 #### Data Transfer Instructions
 
-The ISA defines **four distinct instructions**, each executed on a specific core type with an implicit direction. Each instruction supports both **1:1 mode** (single AIV) and **1:2 mode** (dual AIV with split/combine).
+The ISA defines **four distinct instructions**, each executed on a specific core type with an implicit direction. Each instruction takes a `TileSplitAxis` parameter to specify 1:1 or 1:2 mode.
 
 | Instruction | Executed On | Role | Direction | Description |
 |---|---|---|---|---|
-| `tpush_to_aiv(TILE)` | **Cube** | Producer | C2V | Push tile from Cube to buddy Vector(s) |
-| `tpush_to_aic(TILE)` | **Vector** | Producer | V2C | Push tile from Vector to buddy Cube |
-| `tpop_from_aic(TILE)` | **Vector** | Consumer | C2V | Pop tile that Cube pushed |
-| `tpop_from_aiv(TILE)` | **Cube** | Consumer | V2C | Pop tile that Vector(s) pushed |
+| `tpush_to_aiv(TILE, SPLIT)` | **Cube** | Producer | C2V | Push tile from Cube to buddy Vector(s) |
+| `tpush_to_aic(TILE, SPLIT)` | **Vector** | Producer | V2C | Push tile from Vector to buddy Cube |
+| `tpop_from_aic(TILE, SPLIT)` | **Vector** | Consumer | C2V | Pop tile that Cube pushed |
+| `tpop_from_aiv(TILE, SPLIT)` | **Cube** | Consumer | V2C | Pop tile that Vector(s) pushed |
 
-**Note**: The `AIV_IDX` parameter is removed. The split axis is set during `initialize_pipe`, and the instruction behavior is determined by the configured `TileSplitAxis`:
-- `TILE_NO_SPLIT`: 1:1 mode (must specify which AIV via separate API or implicit)
-- `TILE_UP_DOWN` or `TILE_LEFT_RIGHT`: 1:2 mode (both AIVs participate)
+**`SPLIT` parameter values**:
+- `TILE_NO_SPLIT`: 1:1 mode (full tile to/from single AIV)
+- `TILE_UP_DOWN`: 1:2 mode (split/combine along rows)
+- `TILE_LEFT_RIGHT`: 1:2 mode (split/combine along cols)
 
-#### `tpush_to_aiv(TILE)` — C2V Direction
+#### `tpush_to_aiv(TILE, SPLIT)` — C2V Direction
 
 **Executed on Cube (AIC).** Pushes a tile into the C2V ring buffer destined for buddy Vector core(s).
 
-**1:1 Mode** (`c2v_split_axis == TILE_NO_SPLIT`):
+**1:1 Mode** (`SPLIT == TILE_NO_SPLIT`):
 ```
-function tpush_to_aiv(TILE):
+function tpush_to_aiv(TILE, TILE_NO_SPLIT):
     // Wait for single AIV's free flag
     WAIT flag_free[C2V, target_aiv]: target_tag
 
@@ -456,15 +449,15 @@ function tpush_to_aiv(TILE):
     target_tag = (target_tag + 1) % SLOT_NUM
 ```
 
-**1:2 Mode** (`c2v_split_axis == TILE_UP_DOWN` or `TILE_LEFT_RIGHT`):
+**1:2 Mode** (`SPLIT == TILE_UP_DOWN` or `TILE_LEFT_RIGHT`):
 ```
-function tpush_to_aiv(TILE):
+function tpush_to_aiv(TILE, SPLIT):
     // Wait for BOTH AIV0 and AIV1 free flags
     WAIT flag_free[C2V, AIV0]: target_tag
     WAIT flag_free[C2V, AIV1]: target_tag
 
     // Split tile and DMA halves to both AIVs
-    if c2v_split_axis == TILE_UP_DOWN:
+    if SPLIT == TILE_UP_DOWN:
         // Upper half to AIV0, lower half to AIV1
         MTE_copy(src=TILE.upper_half, dst=aiv0_slot[target_tag], size=HALF_TILE_SIZE)
         MTE_copy(src=TILE.lower_half, dst=aiv1_slot[target_tag], size=HALF_TILE_SIZE)
@@ -480,13 +473,13 @@ function tpush_to_aiv(TILE):
     target_tag = (target_tag + 1) % SLOT_NUM
 ```
 
-#### `tpush_to_aic(TILE)` — V2C Direction
+#### `tpush_to_aic(TILE, SPLIT)` — V2C Direction
 
 **Executed on Vector (AIV).** Pushes a tile into the V2C ring buffer destined for the buddy Cube core.
 
-**1:1 Mode** (`v2c_split_axis == TILE_NO_SPLIT`):
+**1:1 Mode** (`SPLIT == TILE_NO_SPLIT`):
 ```
-function tpush_to_aic(TILE):
+function tpush_to_aic(TILE, TILE_NO_SPLIT):
     // Wait for my free flag
     WAIT flag_free[V2C, my_aiv_idx]: target_tag
 
@@ -500,14 +493,14 @@ function tpush_to_aic(TILE):
     target_tag = (target_tag + 1) % SLOT_NUM
 ```
 
-**1:2 Mode** (`v2c_split_axis == TILE_UP_DOWN` or `TILE_LEFT_RIGHT`):
+**1:2 Mode** (`SPLIT == TILE_UP_DOWN` or `TILE_LEFT_RIGHT`):
 ```
-function tpush_to_aic(TILE):
+function tpush_to_aic(TILE, SPLIT):
     // Wait for my free flag
     WAIT flag_free[V2C, my_aiv_idx]: target_tag
 
     // Compute my write offset based on my AIV index and split axis
-    if v2c_split_axis == TILE_UP_DOWN:
+    if SPLIT == TILE_UP_DOWN:
         // AIV0 writes upper half (offset 0), AIV1 writes lower half
         dst_offset = my_aiv_idx * HALF_TILE_SIZE
     else:  // TILE_LEFT_RIGHT
@@ -524,13 +517,13 @@ function tpush_to_aic(TILE):
     target_tag = (target_tag + 1) % SLOT_NUM
 ```
 
-#### `tpop_from_aic(TILE)` — C2V Direction
+#### `tpop_from_aic(TILE, SPLIT)` — C2V Direction
 
 **Executed on Vector (AIV).** Pops a tile from the C2V ring buffer (data that Cube pushed).
 
 **Both 1:1 and 1:2 modes**: Each AIV receives its portion independently.
 ```
-function tpop_from_aic(TILE):
+function tpop_from_aic(TILE, SPLIT):
     // Wait for my ready flag
     WAIT flag_ready[C2V, my_aiv_idx]: target_tag
 
@@ -538,8 +531,9 @@ function tpop_from_aic(TILE):
     src_addr = my_slot[target_tag]
     if PLATFORM_A5:
         TILE.data = src_addr   // zero-copy
-    else:
-        MTE_copy(src=src_addr, dst=TILE.data, ...)
+    else:  // PLATFORM_A2A3
+        // tpop lowers to TLOAD on A2A3
+        TLOAD(dst=TILE.data, src=src_addr, size=tile_size)
         WAIT mte_flag
 
     // Signal my free flag
@@ -547,38 +541,50 @@ function tpop_from_aic(TILE):
     target_tag = (target_tag + 1) % SLOT_NUM
 ```
 
-**Note**: In 1:2 mode, each AIV's kernel knows which portion it received based on the `c2v_split_axis` set during init:
+**Note**: In 1:2 mode, each AIV's kernel knows which portion it received based on `SPLIT`:
 - `TILE_UP_DOWN`: AIV0 has upper rows, AIV1 has lower rows
 - `TILE_LEFT_RIGHT`: AIV0 has left cols, AIV1 has right cols
 
-#### `tpop_from_aiv(TILE)` — V2C Direction
+#### `tpop_from_aiv(TILE, SPLIT)` — V2C Direction
 
 **Executed on Cube (AIC).** Pops a tile from the V2C ring buffer (data that Vector(s) pushed).
 
-**1:1 Mode** (`v2c_split_axis == TILE_NO_SPLIT`):
+**1:1 Mode** (`SPLIT == TILE_NO_SPLIT`):
 ```
-function tpop_from_aiv(TILE):
+function tpop_from_aiv(TILE, TILE_NO_SPLIT):
     // Wait for single AIV's ready flag
     WAIT flag_ready[V2C, target_aiv]: target_tag
 
     // Receive full tile
-    TILE.data = slot[target_tag]   // zero-copy on A5
+    src_addr = slot[target_tag]
+    if PLATFORM_A5:
+        TILE.data = src_addr   // zero-copy
+    else:  // PLATFORM_A2A3
+        // tpop lowers to TLOAD on A2A3
+        TLOAD(dst=TILE.data, src=src_addr, size=SLOT_SIZE)
+        WAIT mte_flag
 
     // Signal single AIV free
     SET flag_free[V2C, target_aiv]: target_tag
     target_tag = (target_tag + 1) % SLOT_NUM
 ```
 
-**1:2 Mode** (`v2c_split_axis == TILE_UP_DOWN` or `TILE_LEFT_RIGHT`):
+**1:2 Mode** (`SPLIT == TILE_UP_DOWN` or `TILE_LEFT_RIGHT`):
 ```
-function tpop_from_aiv(TILE):
+function tpop_from_aiv(TILE, SPLIT):
     // Wait for BOTH AIV0 and AIV1 ready flags
     WAIT flag_ready[V2C, AIV0]: target_tag
     WAIT flag_ready[V2C, AIV1]: target_tag
 
     // The combined tile is now complete in L1 slot
     // (AIV0 wrote upper/left half, AIV1 wrote lower/right half)
-    TILE.data = slot[target_tag]   // zero-copy on A5
+    src_addr = slot[target_tag]
+    if PLATFORM_A5:
+        TILE.data = src_addr   // zero-copy
+    else:  // PLATFORM_A2A3
+        // tpop lowers to TLOAD on A2A3
+        TLOAD(dst=TILE.data, src=src_addr, size=FULL_TILE_SIZE)
+        WAIT mte_flag
 
     // Signal BOTH AIV0 and AIV1 free
     SET flag_free[V2C, AIV0]: target_tag
@@ -694,12 +700,12 @@ AIC (Cube, consumer):
 
 | API | Called On | Role | Direction | Description |
 |---|---|---|---|---|
-| `aic_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF, C2V_SPLIT, V2C_SPLIT)` | Cube (AIC) | Setup | — | Bind ring buffer, init tags, set split axis, pre-signal free slots for V2C |
-| `aiv_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF, C2V_SPLIT, V2C_SPLIT)` | Vector (AIV) | Setup | — | Bind ring buffer, init tags, set split axis, pre-signal free slots for C2V |
-| `tpush_to_aiv(TILE)` | Cube (AIC) | Producer | C2V | 1:1: push to single AIV; 1:2: split and push to both AIVs |
-| `tpush_to_aic(TILE)` | Vector (AIV) | Producer | V2C | 1:1: push full tile; 1:2: push my half with strided write |
-| `tpop_from_aic(TILE)` | Vector (AIV) | Consumer | C2V | Receive my portion (full in 1:1, half in 1:2) |
-| `tpop_from_aiv(TILE)` | Cube (AIC) | Consumer | V2C | 1:1: receive from single AIV; 1:2: wait both, receive combined |
+| `aic_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF)` | Cube (AIC) | Setup | — | Bind ring buffer, init tags, pre-signal free slots |
+| `aiv_initialize_pipe(DIR_MASK, SLOT_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF)` | Vector (AIV) | Setup | — | Bind ring buffer, init tags, pre-signal free slots |
+| `tpush_to_aiv(TILE, SPLIT)` | Cube (AIC) | Producer | C2V | 1:1: push to single AIV; 1:2: split and push to both AIVs |
+| `tpush_to_aic(TILE, SPLIT)` | Vector (AIV) | Producer | V2C | 1:1: push full tile; 1:2: push my half with strided write |
+| `tpop_from_aic(TILE, SPLIT)` | Vector (AIV) | Consumer | C2V | Receive my portion (full in 1:1, half in 1:2). Lowers to TLOAD on A2A3 |
+| `tpop_from_aiv(TILE, SPLIT)` | Cube (AIC) | Consumer | V2C | 1:1: receive from single AIV; 1:2: wait both, receive combined. Lowers to TLOAD on A2A3 |
 
 ### DSL Grammar: `pl.reserve_buffer` — Reserved Address Space Declaration
 
@@ -715,6 +721,20 @@ The compiler must provide a **DSL-level mechanism** for InCore kernel programs t
 
 ## Version History
 
+### v2.1 — Split Axis on Instruction (not Init)
+
+**Date**: 2026-03-16
+
+**Changes from v2.0**:
+
+1. **Moved `SPLIT` parameter from `initialize_pipe` to instructions**:
+   - `initialize_pipe` no longer takes `C2V_SPLIT` / `V2C_SPLIT` params
+   - Each `tpush_*` / `tpop_*` instruction takes `SPLIT` as second parameter
+
+2. **A2A3 lowering**: `tpop_from_aic` and `tpop_from_aiv` lower to `TLOAD` on A2A3 platform
+
+**Rationale**: The split axis is a per-operation property, not a per-pipe property. This allows more flexibility (e.g., same pipe could theoretically be used with different split modes in different loop iterations).
+
 ### v2.0 — 1:2 Mode with Tile Split/Combine Axis
 
 **Date**: 2026-03-16
@@ -726,18 +746,10 @@ The compiler must provide a **DSL-level mechanism** for InCore kernel programs t
    - `TILE_UP_DOWN` — 1:2 mode, split/combine along rows (upper/lower halves)
    - `TILE_LEFT_RIGHT` — 1:2 mode, split/combine along cols (left/right halves)
 
-2. **Updated `initialize_pipe` APIs** with two new parameters:
-   - `C2V_SPLIT`: Split axis for C2V direction
-   - `V2C_SPLIT`: Split axis for V2C direction
-
-3. **Simplified instruction signatures** — removed `AIV_IDX` parameter:
-   - 1:1 vs 1:2 mode determined by split axis set during init
-   - In 1:2 mode, both AIVs participate automatically
-
-4. **Updated flow control semantics**:
+2. **Updated flow control semantics**:
    - **C2V 1:2**: Cube `tpush_to_aiv` waits for **both** AIV free flags, signals **both** ready
    - **V2C 1:2**: Each AIV `tpush_to_aic` waits its own free, signals its own ready; Cube `tpop_from_aiv` waits **both** ready, signals **both** free
 
-5. **Naming convention**: Used `UP_DOWN` / `LEFT_RIGHT` instead of `M` / `N` axis for clarity — users immediately understand the tile partition without needing to know the M/N axis mapping.
+3. **Naming convention**: Used `UP_DOWN` / `LEFT_RIGHT` instead of `M` / `N` axis for clarity — users immediately understand the tile partition without needing to know the M/N axis mapping.
 
 **Rationale**: The split/combine axis **must be specified** so Vector kernel code knows which portion of the tile it receives or produces. Without this information, compute code cannot be correct.
