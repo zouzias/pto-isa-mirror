@@ -5,8 +5,9 @@
 This document analyzes the V→C (Vector to Cube) data path challenges when lowering `tpush_to_aic` / `tpop_from_aiv` operations from PTO-IR to PTO-ISA. The core issue is:
 
 1. **Two separate UB buffers** (AIV0 UB, AIV1 UB) must be assembled into a **single L1 MatTile** for CUBE consumption
-2. **No L1→L1 path** exists in current NPU hardware, so `TINSERT`/`assemble` IR cannot directly translate to ISA
-3. The solution uses **FIFO definition** to convey cut-M/cut-N semantics from consumer (`tpop_from_aiv` + `assemble`) to producer (`tpush_to_aic`)
+2. **Performance goal**: UB→L1 strided write (fused TINSERT) for direct assembly during transfer
+3. **Fallback only**: L1→L1 copy would be a fallback if we cannot infer how to lower separated `tpop` + `assemble` to a single strided `tpush`
+4. The solution uses **FIFO definition** to convey cut-M/cut-N semantics, enabling direct strided writes
 
 ---
 
@@ -27,6 +28,7 @@ This document analyzes the V→C (Vector to Cube) data path challenges when lowe
 │           │                                             │                    │
 │           │ MTE2 (ub2l1)                                │ MTE2 (ub2l1)       │
 │           │ copy_ubuf_to_cbuf                           │ copy_ubuf_to_cbuf  │
+│           │ ⭐ STRIDED WRITE ⭐                          │ ⭐ STRIDED WRITE ⭐ │
 │           │                                             │                    │
 │           ▼                                             ▼                    │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
@@ -34,52 +36,143 @@ This document analyzes the V→C (Vector to Cube) data path challenges when lowe
 │  │                                                                      │    │
 │  │   ┌────────────────────────────────────────────────────────────┐    │    │
 │  │   │              MatTile [16, 128] (NZ Layout)                  │    │    │
+│  │   │              Physical: [8][1][16][16] in L1                 │    │    │
 │  │   │                                                             │    │    │
 │  │   │    ┌─────────────────┬─────────────────┐                   │    │    │
 │  │   │    │  From AIV0 UB   │  From AIV1 UB   │                   │    │    │
-│  │   │    │  [0:8, :]       │  [8:16, :]      │  (Cut-M)          │    │    │
+│  │   │    │  rows 0-7       │  rows 8-15      │  (Cut-M)          │    │    │
 │  │   │    └─────────────────┴─────────────────┘                   │    │    │
 │  │   │                                                             │    │    │
-│  │   │    Physical Layout: [N1][M1][M0=16][N0=16]                  │    │    │
 │  │   └────────────────────────────────────────────────────────────┘    │    │
 │  │                                                                      │    │
-│  │   ❌ NO L1→L1 PATH: Cannot assemble tiles within L1                 │    │
+│  │   ❌ NO L1→L1 PATH: L1→L1 copy is fallback only, NOT performance    │    │
+│  │   ✅ GOAL: Direct strided UB→L1 writes (fused TINSERT)              │    │
 │  │                                                                      │    │
 │  └──────────────────────────────────────────────────────────────────────┘    │
-│                                                                              │
-│                            │ MTE1 (l12l0)                                    │
-│                            ▼                                                 │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                         L0A / L0B                                    │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Constraint**: No L1→L1 data path means we cannot do post-hoc assembly in L1. The assembly must be done **during** the UB→L1 copy via strided stores.
+**Key Points**:
+- **Performance Goal**: UB→L1 strided write that directly forms the assembled tile
+- **L1→L1 is fallback only**: Would be used if we cannot infer how to fuse `tpop` + `assemble` into strided `tpush`
+- No L1→L1 data path exists in current hardware anyway
 
-### 1.2 NZ Layout for CUBE
+### 1.2 NZ Layout Detail for [16, 128] Tile
 
-For CUBE computation (MatMul), activation tiles use NZ (non-transposed) layout:
+For CUBE computation, activation tiles use **NZ (non-transposed) layout**:
 
 ```
-Physical Memory Layout: [N1][M1][M0=16][N0=16]
+Logical Tile: [M=16, N=128] (bf16/fp16)
+
+Physical NZ Layout in L1: [N1][M1][M0][N0] = [8][1][16][16]
 
 Where:
-  N = N1 × N0  (e.g., 128 = 8 × 16)
-  M = M1 × M0  (e.g., 16 = 1 × 16)
+  N = N1 × N0 = 8 × 16 = 128
+  M = M1 × M0 = 1 × 16 = 16
 
-Logical View [M, N] = [16, 128]:
-  Row 0-15 (M dimension) × Col 0-127 (N dimension)
+Memory Layout (8 blocks of 16×16):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│  Block 0 (n1=0)      Block 1 (n1=1)      ...      Block 7 (n1=7)            │
+│  cols 0-15           cols 16-31                   cols 112-127              │
+│  ┌──────────────┐    ┌──────────────┐            ┌──────────────┐           │
+│  │ [M0=16][N0=16]│   │ [M0=16][N0=16]│           │ [M0=16][N0=16]│          │
+│  │              │    │              │            │              │           │
+│  │  row 0-15    │    │  row 0-15    │    ...     │  row 0-15    │           │
+│  │  col 0-15    │    │  col 16-31   │            │  col 112-127 │           │
+│  │              │    │              │            │              │           │
+│  └──────────────┘    └──────────────┘            └──────────────┘           │
+│                                                                              │
+│  Address:  base        base+256B       ...        base+7×256B               │
+│            (16×16×1B)                                                        │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Total size: 8 blocks × 256B = 2048B = 2KB (for bf16: 16×128×2B = 4KB)
 ```
 
-### 1.3 ISA Operations
+### 1.3 Cut-M in NZ Layout: Non-Contiguous Address Problem
 
-| PyPTO API | PTO-ISA Lowering | Description |
-|-----------|------------------|-------------|
-| `tpush_to_aic(tile, aiv_id)` | `copy_ubuf_to_cbuf` (ub2l1) | UB → L1 transfer |
-| `tpop_from_aiv(aiv_id)` | Implicit via FIFO consumption | L1 receives assembled tile |
-| `tfree_to_aiv(aiv_id)` | FIFO slot release | Signal buffer available |
+When cutting along M (rows), **each AIV writes to non-contiguous addresses**:
+
+```
+Cut-M: AIV0 writes rows 0-7, AIV1 writes rows 8-15
+
+Inside EACH [M0=16][N0=16] block:
+┌────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│    Block n1 (any of the 8 blocks):                                         │
+│    ┌─────────────────────────────┐                                         │
+│    │  row 0  ─────────────────── │  ← AIV0 writes here                     │
+│    │  row 1  ─────────────────── │  ← AIV0                                 │
+│    │  row 2  ─────────────────── │  ← AIV0                                 │
+│    │  row 3  ─────────────────── │  ← AIV0                                 │
+│    │  row 4  ─────────────────── │  ← AIV0                                 │
+│    │  row 5  ─────────────────── │  ← AIV0                                 │
+│    │  row 6  ─────────────────── │  ← AIV0                                 │
+│    │  row 7  ─────────────────── │  ← AIV0                                 │
+│    │─────────────────────────────│                                         │
+│    │  row 8  ─────────────────── │  ← AIV1 writes here                     │
+│    │  row 9  ─────────────────── │  ← AIV1                                 │
+│    │  row 10 ─────────────────── │  ← AIV1                                 │
+│    │  row 11 ─────────────────── │  ← AIV1                                 │
+│    │  row 12 ─────────────────── │  ← AIV1                                 │
+│    │  row 13 ─────────────────── │  ← AIV1                                 │
+│    │  row 14 ─────────────────── │  ← AIV1                                 │
+│    │  row 15 ─────────────────── │  ← AIV1                                 │
+│    └─────────────────────────────┘                                         │
+│                                                                             │
+│    Each row = 16 elements × 2B = 32B                                       │
+│    AIV0 offset within block: 0                                             │
+│    AIV1 offset within block: 8 rows × 32B = 256B (half the block)          │
+│                                                                             │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+**AIV0 writes to**: `L1_base + n1 × block_size + 0` for each of 8 blocks
+**AIV1 writes to**: `L1_base + n1 × block_size + 8 × row_size` for each of 8 blocks
+
+This is **NOT a simple contiguous copy** — requires strided writes across all N1 blocks!
+
+### 1.4 Strided Write Pattern for Cut-M
+
+```
+AIV0 UB [8, 128] → L1 MatTile [16, 128] (NZ layout)
+
+AIV0 must write:
+  - To each of 8 blocks (n1 = 0..7)
+  - Within each block: rows 0-7 (offset 0, size 8×16×2B = 256B)
+  - Stride between blocks: block_size = 16×16×2B = 512B
+
+  L1 addresses for AIV0:
+    Block 0: L1_base + 0×512 + 0     = L1_base
+    Block 1: L1_base + 1×512 + 0     = L1_base + 512
+    Block 2: L1_base + 2×512 + 0     = L1_base + 1024
+    ...
+    Block 7: L1_base + 7×512 + 0     = L1_base + 3584
+
+AIV1 must write:
+  - To each of 8 blocks (n1 = 0..7)  
+  - Within each block: rows 8-15 (offset 256B, size 8×16×2B = 256B)
+  - Stride between blocks: block_size = 512B
+
+  L1 addresses for AIV1:
+    Block 0: L1_base + 0×512 + 256   = L1_base + 256
+    Block 1: L1_base + 1×512 + 256   = L1_base + 768
+    Block 2: L1_base + 2×512 + 256   = L1_base + 1280
+    ...
+    Block 7: L1_base + 7×512 + 256   = L1_base + 3840
+```
+
+**Generalized formula**:
+```
+AIV_offset(aiv_id) = aiv_id × (M0/2) × N0 × element_size
+                   = aiv_id × 8 × 16 × 2B
+                   = aiv_id × 256B
+
+L1_addr(aiv_id, n1) = L1_base + n1 × block_size + AIV_offset(aiv_id)
+```
 
 ---
 
@@ -115,7 +208,7 @@ def paged_attention_incore_0_aic(...):
 ### 2.2 The Assembly Problem
 
 ```
-PTO-IR Level:
+PTO-IR Level (Consumer expresses intent):
 ─────────────────────────────────────────────────────────────────
 
     tpop_from_aiv(0)          tpop_from_aiv(1)
@@ -130,285 +223,160 @@ PTO-IR Level:
                         │
                         ▼
                qi_0 [16, 128] in L1
-                        │
-                        ▼
-              MatMul (CUBE uses NZ layout)
+               (NZ: [8][1][16][16])
 
 
-ISA Level Problem:
+What we need at ISA Level (Producer does the work):
 ─────────────────────────────────────────────────────────────────
 
     AIV0 UB [8,128]           AIV1 UB [8,128]
            │                         │
-           │ ub2l1                   │ ub2l1
+           │ tpush_to_aic(0)         │ tpush_to_aic(1)
+           │                         │
+           │ ub2l1 strided           │ ub2l1 strided
+           │ dst=[8][1][8][16]       │ dst=[8][1][8+8×1][16]
            │                         │
            ▼                         ▼
-    L1 region A               L1 region B
-           │                         │
-           └────────────┬────────────┘
-                        │
-                        ▼
-              ❌ TINSERT/assemble
-              (No L1→L1 path!)
-                        │
-                        ▼
-               Single L1 MatTile?
+    ┌─────────────────────────────────────────────────────────────┐
+    │                    L1 MatTile [16, 128]                      │
+    │                    NZ: [8][1][16][16]                        │
+    │                                                              │
+    │  Each of 8 blocks:                                          │
+    │  ┌─────────────────────────────────────────────────────┐    │
+    │  │  Block n1:  [M0=16][N0=16]                          │    │
+    │  │  ┌───────────────────────────────────────────────┐  │    │
+    │  │  │  AIV0: rows 0-7   (offset 0)                  │  │    │
+    │  │  ├───────────────────────────────────────────────┤  │    │
+    │  │  │  AIV1: rows 8-15  (offset 256B)               │  │    │
+    │  │  └───────────────────────────────────────────────┘  │    │
+    │  └─────────────────────────────────────────────────────┘    │
+    │                                                              │
+    └─────────────────────────────────────────────────────────────┘
 ```
 
-**Problem**: The `assemble` IR operation implies an L1→L1 copy/insert, but **no such hardware path exists**. We cannot directly translate `TINSERT`/`assemble` to ISA.
-
-### 2.3 Diagram: The Gap Between IR and Hardware
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        What IR Expresses                                     │
-│                                                                              │
-│   AIV0 UB              AIV1 UB                                              │
-│   [8,128]              [8,128]                                              │
-│      │                    │                                                  │
-│      │ tpush_to_aic(0)    │ tpush_to_aic(1)                                 │
-│      ▼                    ▼                                                  │
-│   L1 temp0             L1 temp1          ← Two separate L1 regions          │
-│      │                    │                                                  │
-│      └────────┬───────────┘                                                  │
-│               │ assemble (TINSERT)                                           │
-│               ▼                                                              │
-│         L1 MatTile [16,128]              ← Unified tile for CUBE            │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     What Hardware Requires                                   │
-│                                                                              │
-│   AIV0 UB              AIV1 UB                                              │
-│   [8,128]              [8,128]                                              │
-│      │                    │                                                  │
-│      │ ub2l1 (stride)     │ ub2l1 (stride)                                  │
-│      │ dst=L1+offset0     │ dst=L1+offset1                                  │
-│      ▼                    ▼                                                  │
-│   ┌─────────────────────────────────────┐                                   │
-│   │        L1 MatTile [16,128]          │  ← Single unified address         │
-│   │  ┌────────────┬────────────┐        │                                   │
-│   │  │ [0:8,:]    │ [8:16,:]   │        │  ← Strided writes to same tile    │
-│   │  │ from AIV0  │ from AIV1  │        │                                   │
-│   │  └────────────┴────────────┘        │                                   │
-│   └─────────────────────────────────────┘                                   │
-│                                                                              │
-│   ✅ No L1→L1 needed: Both UB→L1 writes go to same MatTile address         │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+**Key Insight**: The `tpop` + `assemble` on consumer (AIC) side must be **conveyed to the producer (AIV)** so that `tpush_to_aic` can emit the correct strided writes.
 
 ---
 
-## 3. Current Solution: FIFO Definition with Cut-M/Cut-N Semantics
+## 3. Solution: FIFO Definition with Combined Entry for Merged Semantics
 
 ### 3.1 Design Principle
 
-Since `assemble`/`TINSERT` cannot be executed in hardware, we **convey the assembly semantics through the FIFO definition** at pipe initialization time:
+The **FIFO entry in L1 must be combined for AIV0 and AIV1** to represent the final merged `tpop` + `assemble` semantics:
 
-1. **Consumer side** (`tpop_from_aiv` + `assemble`): Defines the desired final MatTile layout and how pieces fit together
-2. **Producer side** (`tpush_to_aic`): Uses FIFO info to compute correct L1 offsets for strided stores
-3. **FIFO carries**: Cut axis (M or N), tile dimensions, and layout info
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         L1 FIFO Structure                                    │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                        FIFO Slot 0                                      │ │
+│  │  ┌──────────────────────────────────────────────────────────────────┐  │ │
+│  │  │            Combined MatTile [16, 128] (NZ layout)                 │  │ │
+│  │  │                                                                   │  │ │
+│  │  │  ┌─────────────────────┬─────────────────────┐                   │  │ │
+│  │  │  │  AIV0 region        │  AIV1 region        │                   │  │ │
+│  │  │  │  rows 0-7           │  rows 8-15          │                   │  │ │
+│  │  │  │  (strided write)    │  (strided write)    │                   │  │ │
+│  │  │  └─────────────────────┴─────────────────────┘                   │  │ │
+│  │  │                                                                   │  │ │
+│  │  │  Single FIFO index → Single L1 base address                      │  │ │
+│  │  │  Both AIVs write to SAME slot with different offsets             │  │ │
+│  │  └──────────────────────────────────────────────────────────────────┘  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                        FIFO Slot 1                                      │ │
+│  │  (same structure)                                                       │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  ...                                                                         │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ### 3.2 FIFO Definition Carries Assembly Info
 
 ```python
 # At pipe initialization time
 pl.comm.aiv_initialize_pipe(
+    fifo_target='AIV_ALL',  # Combined FIFO for both AIVs
     fifo_config={
-        'aiv0_aiv1_to_l1': {
-            'cut_axis': 'M',           # Cut along M dimension
-            'mattile_shape': [16, 128], # Final assembled shape
-            'vectile_shape': [8, 128],  # Each AIV's contribution
-            'layout': 'NZ',             # [N1][M1][M0=16][N0=16]
-        }
+        'cut_axis': 'M',              # Cut along M dimension
+        'mattile_shape': [16, 128],   # Final assembled shape
+        'vectile_shape': [8, 128],    # Each AIV's contribution
+        'layout': 'NZ',               # [N1][M1][M0][N0] = [8][1][16][16]
     }
 )
 ```
 
-### 3.3 Lowering Strategy
-
-```
-PTO-IR:
-    tpush_to_aic(half0, aiv_id=0)  # From AIV0
-    tpush_to_aic(half1, aiv_id=1)  # From AIV1
-
-    tpop_from_aiv(0)  # qi_0__h0
-    tpop_from_aiv(1)  # qi_0__h1
-    assemble(qi_0__h0, qi_0__h1)  # → qi_0
-
-PTO-ISA (with FIFO info):
-    # FIFO knows: cut_axis='M', mattile=[16,128], layout=NZ
-    
-    # AIV0: Write to L1 offset 0 (rows 0-7)
-    copy_ubuf_to_cbuf(
-        src=AIV0_UB[slot],
-        dst=L1_MatTile + offset_for_M_half_0,  # Computed from FIFO
-        stride=NZ_stride_for_cut_M
-    )
-    
-    # AIV1: Write to L1 offset for rows 8-15
-    copy_ubuf_to_cbuf(
-        src=AIV1_UB[slot],
-        dst=L1_MatTile + offset_for_M_half_1,  # Computed from FIFO
-        stride=NZ_stride_for_cut_M
-    )
-    
-    # assemble() becomes no-op: data already in correct L1 layout
-```
-
-### 3.4 Cut-M vs Cut-N in NZ Layout
-
-**NZ Layout**: `[N1][M1][M0=16][N0=16]`
-
-```
-Cut-M Example (M=16 split into 2×8):
-────────────────────────────────────────────────────────────────
-
-Logical: [16, 128] → AIV0 gets [0:8, :], AIV1 gets [8:16, :]
-
-Physical NZ [N1=8][M1=1][M0=16][N0=16]:
-  - M0=16 is the innermost M dimension
-  - Cut-M splits M1 or requires interleaved writes
-
-  AIV0 writes: rows 0-7 of each [M0=16][N0=16] block
-  AIV1 writes: rows 8-15 of each [M0=16][N0=16] block
-
-  Stride pattern for ub2l1 must account for NZ layout.
-
-
-Cut-N Example (N=128 split into 2×64):
-────────────────────────────────────────────────────────────────
-
-Logical: [16, 128] → AIV0 gets [:, 0:64], AIV1 gets [:, 64:128]
-
-Physical NZ [N1=8][M1=1][M0=16][N0=16]:
-  - N1=8 means 8 blocks of N0=16
-  - Cut-N splits N1: AIV0 gets N1=[0:4], AIV1 gets N1=[4:8]
-
-  AIV0 writes: first 4 [M0][N0] blocks (cols 0-63)
-  AIV1 writes: last 4 [M0][N0] blocks (cols 64-127)
-
-  Simpler stride pattern (contiguous N1 blocks).
-```
-
-### 3.5 Inferring Cut Axis from Shape
-
-The cut axis can be inferred from the ratio of VecTile to MatTile dimensions:
+### 3.3 Lowering: tpush Computes Offset from aiv_id
 
 ```python
-def infer_cut_axis(vectile_shape, mattile_shape):
-    """Infer cut-M or cut-N from shape ratio."""
-    v_rows, v_cols = vectile_shape
-    m_rows, m_cols = mattile_shape
-    
-    if v_rows < m_rows and v_cols == m_cols:
-        return 'M'  # Cut along M (rows)
-    elif v_rows == m_rows and v_cols < m_cols:
-        return 'N'  # Cut along N (cols)
-    else:
-        raise ValueError("Cannot infer cut axis")
+# tpush_to_aic lowering (on AIV side)
 
-# PA4 example:
-infer_cut_axis([8, 128], [16, 128])  # → 'M' (rows halved, cols same)
+def lower_tpush_to_aic(tile, aiv_id, fifo_config):
+    """Lower tpush_to_aic to ub2l1 with computed stride."""
+    
+    # Get FIFO slot (same for both AIVs!)
+    fifo_slot = get_current_fifo_slot()
+    l1_base = fifo_slot_to_l1_addr(fifo_slot)
+    
+    # Compute offset based on aiv_id and cut_axis
+    if fifo_config['cut_axis'] == 'M':
+        # NZ layout: [N1][M1][M0][N0]
+        # AIV0: offset 0 within each block
+        # AIV1: offset = (M0/2) × N0 × element_size
+        M0 = 16
+        N0 = 16
+        elem_size = 2  # bf16
+        aiv_offset = aiv_id * (M0 // 2) * N0 * elem_size  # 0 or 256B
+    
+    # Emit strided ub2l1
+    emit_copy_ubuf_to_cbuf(
+        src=UB_addr(aiv_id, fifo_slot),
+        dst=l1_base,
+        src_shape=fifo_config['vectile_shape'],
+        dst_layout='NZ',
+        dst_offset_per_block=aiv_offset,  # Different for AIV0 vs AIV1
+        dst_block_stride=M0 * N0 * elem_size  # 512B per block
+    )
+```
+
+### 3.4 Consumer Side: assemble() Becomes No-Op
+
+```python
+# On AIC side, after lowering:
+
+# tpop_from_aiv(0) → just advances FIFO read pointer
+# tpop_from_aiv(1) → no additional action (same slot)
+# assemble() → NO-OP (data already in correct layout)
+
+# AIC reads from L1_base with full [16, 128] shape
+matmul(L1_tile_at(fifo_slot), ...)
 ```
 
 ---
 
-## 4. PFA4 Example Walkthrough
+## 4. Summary: How FIFO Enables Fused TINSERT
 
-### 4.1 Producer Side (AIV)
+| Component | Role |
+|-----------|------|
+| **FIFO Definition** | Carries cut_axis, layout, shapes — shared by producer and consumer |
+| **Single FIFO Index** | Both AIV0 and AIV1 use same slot index → same L1 base address |
+| **aiv_id** | Determines offset within each NZ block (0 for AIV0, 256B for AIV1) |
+| **tpush_to_aic** | Computes strided write pattern from FIFO config + aiv_id |
+| **assemble()** | Becomes no-op at ISA level — just documents intent in IR |
 
-```python
-@pl.function(type=pl.FunctionType.InCore)
-def paged_attention_incore_0_aiv(..., AIV_IDX: pl.Scalar[pl.INDEX]):
-    # ... vector processing produces q_tile [8, 128] in UB ...
-    
-    # Push to AIC via FIFO (FIFO knows cut-M semantics)
-    pl.comm.tpush_to_aic(q_tile, AIV_IDX)  # AIV_IDX ∈ {0, 1}
-```
-
-### 4.2 Consumer Side (AIC)
-
-```python
-@pl.function(type=pl.FunctionType.InCore)
-def paged_attention_incore_0_aic(...):
-    # Pop from FIFO (each pop returns a half)
-    qi_0__h0 = pl.comm.tpop_from_aiv(0)  # [8, 128] from AIV0
-    qi_0__h1 = pl.comm.tpop_from_aiv(1)  # [8, 128] from AIV1
-    
-    # Assemble (IR level - conveys intent)
-    qi_0 = pl.tensor.assemble(
-        pl.tensor.assemble(qi_0__h0, [0, 0], [8, 128]),
-        [8, 0], [16, 128],
-        qi_0__h1
-    )
-    
-    # CUBE uses assembled tile
-    sij_0 = pl.tensor.matmul(qi_0, kj_0, ...)
-```
-
-### 4.3 Lowered ISA (Unified L1 with Strided Stores)
-
-```
-# FIFO config: cut_axis='M', mattile=[16,128], layout=NZ
-
-# AIV0 tpush_to_aic(q_tile, 0):
-copy_ubuf_to_cbuf(
-    src = AIV0_UB + fifo_slot_offset,
-    dst = L1_MatTile_base,              # Same base for both
-    src_shape = [8, 128],
-    dst_stride = NZ_M_cut_stride_0,     # Write to rows 0-7
-)
-
-# AIV1 tpush_to_aic(q_tile, 1):
-copy_ubuf_to_cbuf(
-    src = AIV1_UB + fifo_slot_offset,
-    dst = L1_MatTile_base,              # Same base as AIV0!
-    src_shape = [8, 128],
-    dst_stride = NZ_M_cut_stride_1,     # Write to rows 8-15
-)
-
-# tpop_from_aiv(0), tpop_from_aiv(1), assemble():
-#   → NO-OP at ISA level
-#   → Data already assembled in L1 via strided stores
-
-# matmul reads from L1_MatTile_base with full [16,128] shape
-```
+**Performance Goal Achieved**: Direct strided UB→L1 writes that form the assembled tile during transfer (fused TINSERT), without any L1→L1 copy.
 
 ---
 
 ## 5. Current Restrictions
 
-### 5.1 Supported Patterns
-
-The current design restricts representation to:
-
 1. **Cut-M or Cut-N only**: No arbitrary 2D tiling/assembly
 2. **NZ layout only**: For CUBE-bound MatTiles
 3. **Symmetric split**: AIV0 and AIV1 contribute equal-sized halves
-4. **FIFO-based coordination**: Assembly info encoded in FIFO definition
-
-### 5.2 What This Enables
-
-```python
-# ✅ Supported: Cut-M (rows split)
-AIV0: [8, 128] → L1[0:8, :]
-AIV1: [8, 128] → L1[8:16, :]
-Result: [16, 128] MatTile
-
-# ✅ Supported: Cut-N (cols split)
-AIV0: [16, 64] → L1[:, 0:64]
-AIV1: [16, 64] → L1[:, 64:128]
-Result: [16, 128] MatTile
-
-# ❌ Not Supported: 2D split (quadrants)
-AIV0: [8, 64]  → L1[0:8, 0:64]      # Would need 4 AIVs
-AIV1: [8, 64]  → L1[0:8, 64:128]    # or 2-stage assembly
-AIV2: [8, 64]  → L1[8:16, 0:64]
-AIV3: [8, 64]  → L1[8:16, 64:128]
-```
+4. **Combined FIFO entry**: AIV0 and AIV1 must push to same slot
 
 ---
 
@@ -416,86 +384,45 @@ AIV3: [8, 64]  → L1[8:16, 64:128]
 
 ### 6.1 Potential Extensions
 
-| Extension | Complexity | Hardware Requirement |
-|-----------|------------|---------------------|
-| 2D tiling (quadrants) | High | More AIVs or multi-pass |
-| Asymmetric splits | Medium | Variable stride computation |
-| Non-NZ layouts (ZN, ZZ) | Medium | Layout-aware stride tables |
-| Runtime cut-axis selection | Low | FIFO config at init time |
+| Extension | Complexity | Notes |
+|-----------|------------|-------|
+| 2D tiling (quadrants) | High | Would need 4 AIVs or multi-pass |
+| Asymmetric splits | Medium | Variable offset computation |
+| Non-NZ layouts (ZN, ZZ) | Medium | Different stride patterns |
+| Cut-K (for weights) | Medium | Different block structure |
 
-### 6.2 Alternative: Explicit TINSERT with Strided Store
+### 6.2 Fallback: L1→L1 Copy
 
-If future hardware adds L1→L1 paths, the IR could directly lower `TINSERT`:
+If the pass cannot infer how to lower `tpop` + `assemble` to strided `tpush`:
 
-```python
-# Future possibility (not current hardware)
-tinsert(
-    dst=L1_MatTile,
-    src=L1_temp,
-    offset=[8, 0],  # Insert at row 8
-    shape=[8, 128]
-)
+```
+Fallback path (NOT performance-optimal):
+1. AIV0 pushes to L1_temp0
+2. AIV1 pushes to L1_temp1
+3. ??? No L1→L1 path exists ???
+4. Would need: read back to UB, then re-copy with strides (2× memory traffic)
 ```
 
-### 6.3 Current Best Practice
-
-For now, the recommended pattern is:
-
-1. **Use cut-M or cut-N** based on tile dimensions
-2. **Encode in FIFO config** at pipe initialization
-3. **Let lowering compute strides** for NZ layout
-4. **Avoid explicit assemble** in IR when possible (convey via FIFO)
+This is why we **must** capture the assembly semantics in the FIFO definition — the fallback is extremely expensive or impossible.
 
 ---
 
-## 7. Summary
-
-| Aspect | Challenge | Solution |
-|--------|-----------|----------|
-| **Hardware** | No L1→L1 path | Strided UB→L1 stores to unified address |
-| **IR Semantics** | `assemble`/`TINSERT` not directly executable | FIFO carries assembly info |
-| **Layout** | NZ format for CUBE | Cut-M/Cut-N with computed strides |
-| **Coordination** | AIV0/AIV1 must write to same L1 tile | Single FIFO index, shared base address |
-| **Restrictions** | Only cut-M or cut-N | Matches V→C fusion patterns in practice |
-
----
-
-## Appendix: PA4 Pass 08 IR Snippet (V→C Path)
+## Appendix: PA4 Example with NZ Layout Detail
 
 ```python
-# From 08_after_ExpandMixedKernel.py - AIC function (consumer)
+# PA4: [16, 128] tile in NZ layout = [8][1][16][16]
 
-@pl.function(type=pl.FunctionType.InCore)
-def paged_attention_incore_0_aic(
-    query_0: pl.Tensor[[4096, 128], pl.BFLOAT16],
-    # ... other params ...
-):
-    pl.comm.aic_initialize_pipe()
-    
-    # ════════════════════════════════════════════════════════════
-    # V→C Path: Pop from AIV UB, assemble into L1 MatTile
-    # ════════════════════════════════════════════════════════════
-    
-    # Pop Q tile halves from AIV0 and AIV1
-    qi_0__h0 = pl.comm.tpop_from_aiv(0)  # [8, 128] from AIV0 UB
-    qi_0__h1 = pl.comm.tpop_from_aiv(1)  # [8, 128] from AIV1 UB
-    
-    # Assemble into single [16, 128] MatTile
-    # ⭐ THIS IS THE ASSEMBLY PATTERN - LOWERED VIA FIFO STRIDES ⭐
-    qi_0 = pl.tensor.assemble(
-        pl.tensor.assemble(qi_0__h0, [0, 0], [8, 128]),
-        [8, 0], [16, 128],
-        qi_0__h1
-    )
-    
-    pl.comm.tfree_to_aiv(0)
-    pl.comm.tfree_to_aiv(1)
-    
-    # ════════════════════════════════════════════════════════════
-    # CUBE Path: MatMul uses assembled L1 tile
-    # ════════════════════════════════════════════════════════════
-    
-    sij_0 = pl.tensor.matmul(qi_0, kj_0, ...)  # qi_0 is now [16,128] in L1
+# AIV0 pushes [8, 128]:
+# - Writes rows 0-7 into each of 8 blocks
+# - Within each block: offset 0, size 256B (8 rows × 16 cols × 2B)
+# - Block stride: 512B
+
+# AIV1 pushes [8, 128]:
+# - Writes rows 8-15 into each of 8 blocks
+# - Within each block: offset 256B, size 256B
+# - Block stride: 512B
+
+# Result in L1:
+# [8][1][16][16] = 8 blocks, each 512B, total 4KB
+# Each block has rows 0-7 from AIV0, rows 8-15 from AIV1
 ```
-
-The `tpop_from_aiv` + `assemble` pattern captures the V→C assembly semantics. The FIFO definition conveys this to `tpush_to_aic` on the AIV side, enabling correct strided stores to form the unified L1 MatTile.
