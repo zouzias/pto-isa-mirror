@@ -257,66 +257,7 @@ for i in pl.range(0, N, 1):
 
 This restriction ensures the combined FIFO index can be computed locally without cross-SU schedule awareness.
 
----
-
-## 3. The Problem: Pipeline Efficiency with Separate Scheduling
-
-### 3.1 Problematic IR Pattern
-
-Consider a scenario where the pass generates code with AIV0 and AIV1 pushes in **different loop iterations**:
-
-```python
-# Problematic pattern - AIV0 and AIV1 in different loop blocks
-@pl.function(type=pl.FunctionType.InCore)
-def kernel_aic(...):
-    for i in pl.range(0, N, 1):
-        tile_0 = compute_tile_for_aiv0(i)
-        pl.comm.tpush_to_aiv(tile_0, 0)  # Only AIV0 in this iteration
-        
-    for j in pl.range(0, M, 1):
-        tile_1 = compute_tile_for_aiv1(j)
-        pl.comm.tpush_to_aiv(tile_1, 1)  # Only AIV1 in this iteration
-```
-
-```python
-@pl.function(type=pl.FunctionType.InCore)
-def kernel_aiv(..., AIV_IDX):
-    if AIV_IDX == 0:
-        for i in pl.range(0, N, 1):
-            data = pl.comm.tpop_from_aic(0)  # AIV0 pops N times
-            process(data)
-    else:
-        for j in pl.range(0, M, 1):
-            data = pl.comm.tpop_from_aic(1)  # AIV1 pops M times
-            process(data)
-```
-
-### 3.2 Pipeline Efficiency Issue (No Deadlock)
-
-**Clarification**: Without synchronization dependencies between AIV0 and AIV1, there is **no deadlock**. However, there are **pipeline efficiency problems**:
-
-```
-Timeline with Separate Scheduling:
-────────────────────────────────────────────────────────────────
-
-Scenario: V→C→V pipelined workload (AIV0 pre-processing, AIV1 post-processing)
-
-Optimal (paired dual-dst):
-  AIV0: preprocess ──┐
-                     ├──→ AIC: matmul ──→ dual-dst push ──┬──→ AIV0: postA
-                     │                                    └──→ AIV1: postB
-  AIV1: preprocess ──┘
-
-Suboptimal (separate scheduling):
-  AIV0: preprocess ──→ AIC: matmul ──→ push(aiv0) ──→ AIV0: postA
-  AIV1: preprocess ──→ AIC: matmul ──→ push(aiv1) ──→ AIV1: postB
-  
-  ❌ Cannot pipeline: Second matmul waits for first to complete
-  ❌ 2× L0C reads instead of 1× (no dual-dst)
-  ❌ FIFO slot usage inefficient
-```
-
-### 3.3 Why Current Design Has This Gap
+### 2.6 Current Design Gap
 
 The `ExpandMixedKernel` pass generates `tpush_to_aiv(tile, aiv_id)` calls that:
 
@@ -331,110 +272,88 @@ But the lowering to `copy_cc_matrix_to_ubuf` (l0c2ub) ISA:
 
 ---
 
-## 4. Proposed Solutions
+## 3. Proposed Solutions
 
-### 4.1 Option A: Separate AIV0/AIV1 FIFOs
+### 3.1 Option A: Unified API with aiv_id Enum (Recommended)
 
-**Design**: Explicit separate FIFOs for AIV0 and AIV1
-
-```python
-# New API with explicit FIFO targeting
-pl.comm.tpush_to_aiv_fifo(tile, aiv_id=0, fifo_id=0)  # AIV0 FIFO
-pl.comm.tpush_to_aiv_fifo(tile, aiv_id=1, fifo_id=1)  # AIV1 FIFO
-
-# Pop from specific FIFO
-data_0 = pl.comm.tpop_from_aic_fifo(fifo_id=0)  # AIV0
-data_1 = pl.comm.tpop_from_aic_fifo(fifo_id=1)  # AIV1
-```
-
-**Pros**:
-- ✅ Flexible scheduling: Loops can target AIV0/AIV1 separately
-- ✅ Simple mental model
-- ✅ Independent progress for each AIV
-
-**Cons**:
-- ❌ **Cannot use dual-dst optimization**: Separate FIFOs prevent detecting paired pushes
-- ❌ More hardware resources (2 FIFOs vs 1)
-- ❌ Pass cannot easily analyze cross-FIFO dependencies
-
-### 4.2 Option B: Dual-Entry FIFO with Same-Sequence Constraint
-
-**Design**: Single FIFO, but paired entries (AIV0, AIV1) must appear together in same sequence
+**Design**: Single API with `aiv_id` enum: `0` (AIV0), `1` (AIV1), or `-1` (dual/SIMD)
 
 ```python
-# Constraint: tpush_to_aiv(tile, 0) and tpush_to_aiv(tile, 1) must be adjacent
-# and from same source tile (for dual-dst lowering)
-
-# Valid pattern (can lower to dual-dst):
-half0 = pl.tensor.view(tile, [8, 128], [0, 0])
-half1 = pl.tensor.view(tile, [8, 128], [8, 0])
-pl.comm.tpush_to_aiv(half0, 0)  # Must be immediately followed by...
-pl.comm.tpush_to_aiv(half1, 1)  # ...push to AIV1 from same tile
-
-# Invalid pattern (error or fallback to non-optimal):
-for i in range(N):
-    pl.comm.tpush_to_aiv(tile_i, 0)  # AIV0 only - ERROR or separate FIFO fallback
-```
-
-**Pros**:
-- ✅ **Enables dual-dst ISA**: Paired pushes detected at IR level
-- ✅ Single FIFO, less hardware
-- ✅ Clear optimization opportunity
-
-**Cons**:
-- ❌ Restrictive: Not all algorithms have paired AIV0/AIV1 patterns
-- ❌ Requires pass to verify adjacency constraint
-- ❌ Fallback needed for non-paired cases
-
-### 4.3 Option C: Explicit SIMD Dual-Entry API (Recommended)
-
-**Design**: New API distinguishing single-AIV vs dual-AIV pushes
-
-```python
-# Single-AIV push (uses separate per-AIV FIFO internally)
-pl.comm.tpush_to_aiv_single(tile, aiv_id=0)  # Only AIV0, independent FIFO
-pl.comm.tpush_to_aiv_single(tile, aiv_id=1)  # Only AIV1, independent FIFO
-
-# Dual-AIV push (uses shared FIFO + dual-dst ISA)
-# Requires same UB address in both AIV banks
-pl.comm.tpush_to_aiv_dual(
-    tile_half0,      # Goes to AIV0 UB
-    tile_half1,      # Goes to AIV1 UB
-    ub_addr=0x1000,  # Same UB address for both (required for dual-dst)
-    split_axis='M'   # M or N axis split
+# Pipe initialization specifies FIFO mode
+pl.comm.initialize_pipe(
+    fifo_mode='separated'  # 'separated' (aiv0/aiv1 independent) or 'simd' (aiv0||aiv1 paired)
 )
 
-# Pop API unchanged (FIFO determined by push type)
+# Single API with aiv_id enum
+pl.comm.tpush_to_aiv(tile, aiv_id=0)   # AIV0 only (uses AIV0 FIFO if separated)
+pl.comm.tpush_to_aiv(tile, aiv_id=1)   # AIV1 only (uses AIV1 FIFO if separated)
+pl.comm.tpush_to_aiv(tile, aiv_id=-1)  # Dual/SIMD (uses shared FIFO + dual-dst ISA)
+
+# Pop API unchanged
 data = pl.comm.tpop_from_aic(AIV_IDX)
 ```
 
+**FIFO Mode in Pipe Initialization**:
+- `fifo_mode='separated'`: Two independent FIFOs for AIV0 and AIV1
+- `fifo_mode='simd'`: Single shared FIFO with paired AIV0||AIV1 entries
+
+**Cut-M or Cut-N Inference**:
+- Can be inferred from the pop tile shape
+- Or initialized in `initialize_pipe()` configuration
+
 **Lowering**:
 ```
-tpush_to_aiv_single(tile, 0) → copy_cc_matrix_to_ubuf(tile, dst=AIV0_UB[addr0])
-tpush_to_aiv_single(tile, 1) → copy_cc_matrix_to_ubuf(tile, dst=AIV1_UB[addr1])
+fifo_mode='separated':
+  tpush_to_aiv(tile, 0) → copy_cc_matrix_to_ubuf(tile, dst=AIV0_UB, fifo=AIV0_FIFO)
+  tpush_to_aiv(tile, 1) → copy_cc_matrix_to_ubuf(tile, dst=AIV1_UB, fifo=AIV1_FIFO)
 
-tpush_to_aiv_dual(h0, h1, addr, 'M') → copy_cc_matrix_to_ubuf_dual(
-    src=L0C_tile,
-    dst0=AIV0_UB[addr],
-    dst1=AIV1_UB[addr],  // Same address required
-    split='M'
-)  // Single ISA instruction, dual write
+fifo_mode='simd':
+  tpush_to_aiv(tile, -1) → copy_cc_matrix_to_ubuf_dual(
+      src=L0C_tile,
+      dst0=AIV0_UB[addr],
+      dst1=AIV1_UB[addr],  // Same address
+      split=inferred_from_tile
+  )
 ```
 
 **Pros**:
-- ✅ **Best of both**: Flexibility (single) + optimization (dual)
-- ✅ Explicit intent: User/pass clearly specifies which mode
-- ✅ Dual-dst enabled: Dual-AIV uses optimized ISA with same UB address
+- ✅ Simple unified API with enum
+- ✅ Pipe initialization declares FIFO mode upfront
+- ✅ Cut-M/Cut-N can be inferred or configured
+- ✅ Supports both separated and SIMD modes
 
 **Cons**:
-- ❌ API complexity: Two push variants
-- ❌ Pass must decide which to emit
+- ❌ Pipe initialization must know FIFO mode before kernel execution
+
+### 3.2 Option B: Fallback for Missed AIV in Basic Block (Not Recommended)
+
+**Design**: If a basic block has only AIV0 or only AIV1 push (but kernel uses both), handle as fallback
+
+```python
+# Scenario: Basic block misses one AIV
+for i in pl.range(0, N, 1):
+    if some_condition:
+        pl.comm.tpush_to_aiv(tile, 0)  # Only AIV0, AIV1 missing
+    else:
+        pl.comm.tpush_to_aiv(tile, 1)  # Only AIV1, AIV0 missing
+```
+
+**Possible Fallback Strategies**:
+1. **Insert dummy push**: Push zero/padding tile to missing AIV to maintain paired sequence
+2. **Dynamic FIFO switch**: Runtime switch between separated/shared FIFO based on pattern
+3. **Error/warning**: Reject pattern and require user to restructure code
+
+**Why Not Recommended**:
+- Adds complexity without clear benefit
+- Dummy pushes waste bandwidth
+- Dynamic switching complicates hardware/lowering
+- Better to enforce workaround restrictions (Section 2.5)
 
 ---
 
-## 5. IR Pattern Analysis: When to Use Dual vs Single
+## 4. IR Pattern Analysis
 
-### 5.1 Detection Heuristic for ExpandMixedKernel Pass
+### 4.1 Detection Heuristic for ExpandMixedKernel Pass
 
 ```python
 def analyze_tpush_pattern(basic_block):
@@ -454,7 +373,7 @@ def analyze_tpush_pattern(basic_block):
             if is_complementary_split(p0.view, p1.view, src_tile):
                 # Check if adjacent in IR (no ops between)
                 if is_adjacent(p0, p1):
-                    # ✅ Can use dual-dst
+                    # ✅ Can use dual-dst (aiv_id=-1)
                     yield DualPushPattern(p0, p1, src_tile)
                 else:
                     # ⚠️ Same block but not adjacent - try to reorder
@@ -469,12 +388,12 @@ def analyze_tpush_pattern(basic_block):
                 yield SinglePushPattern(p)
 ```
 
-### 5.2 PA4 Example - Dual-Dst Candidate
+### 4.2 PA4 Example - Dual-Dst Candidate
 
 From the PA4 dump:
 
 ```python
-# This pattern IS dual-dst eligible:
+# This pattern IS dual-dst eligible (aiv_id=-1):
 __half0__ = pl.tensor.view(sij_0, [8, 128], [0, 0])    # M split, upper
 __half1__ = pl.tensor.view(sij_0, [8, 128], [8, 0])    # M split, lower
 pl.comm.tpush_to_aiv(__half0__, 0)  # Adjacent
@@ -485,13 +404,13 @@ pl.comm.tpush_to_aiv(__half1__, 1)  # Adjacent
 # - Complementary views: [0:8, :] and [8:16, :] 
 # - Adjacent in IR: Yes
 # - Can allocate same UB address for both
-# → Lower to: tpush_to_aiv_dual(__half0__, __half1__, ub_addr, 'M')
+# → Lower to: tpush_to_aiv(tile, aiv_id=-1)  // Dual mode
 ```
 
-### 5.3 Non-Paired Case
+### 4.3 Non-Paired Case
 
 ```python
-# This pattern CANNOT use dual-dst:
+# This pattern requires separated FIFOs (aiv_id=0 or 1):
 for bn in pl.range(0, bn_this_batch, 1):
     if bn % 2 == 0:
         tile_0 = compute_for_aiv0(bn)
@@ -504,21 +423,21 @@ for bn in pl.range(0, bn_this_batch, 1):
 # - Different loop iterations
 # - Cannot be made adjacent
 # - Different source tiles
-# - May need different UB addresses
-# → Must use: tpush_to_aiv_single(tile, aiv_id) with separate addressing
+# → Must use: initialize_pipe(fifo_mode='separated')
+# → Use: tpush_to_aiv(tile, aiv_id=0) and tpush_to_aiv(tile, aiv_id=1)
 ```
 
 ---
 
-## 6. Summary
+## 5. Summary
 
 | Aspect | Current State | Gap | Recommendation |
 |--------|---------------|-----|----------------|
-| **API** | `tpush_to_aiv(tile, aiv_id)` | Too generic, doesn't distinguish single vs dual | Add `tpush_to_aiv_single` + `tpush_to_aiv_dual` |
-| **FIFO** | Assumed shared | Separate scheduling loses dual-dst opportunity | Mode selection: single (per-AIV) vs dual (shared) |
-| **Dual-Dst ISA** | Not utilized | Adjacent paired pushes not detected | Pattern detection in pass + dual-dst lowering |
-| **UB Address** | Independently allocated | Dual-dst requires same address | Constrain address allocation for paired pushes |
-| **Pass Analysis** | Basic block level | Cannot detect cross-loop pairing | Add data flow analysis for push patterns |
+| **API** | `tpush_to_aiv(tile, aiv_id)` | No dual mode | Add `aiv_id=-1` for dual/SIMD mode |
+| **FIFO Mode** | Implicit shared | No separated option | `initialize_pipe(fifo_mode=...)` |
+| **Dual-Dst ISA** | Not utilized | Adjacent paired pushes not detected | Pattern detection + `aiv_id=-1` lowering |
+| **Cut-M/Cut-N** | Not specified | Needs explicit config | Infer from pop tile or pipe init |
+| **Pass Analysis** | Basic block level | Cannot detect cross-loop pairing | Add data flow analysis |
 
 **Note**: This is primarily a **performance/efficiency** issue, not a correctness/deadlock issue (assuming no AIV0↔AIV1 sync dependencies).
 
@@ -565,4 +484,4 @@ def paged_attention_incore_0_aic(
     pl.comm.tpush_to_aiv(__half1__1, 1)
 ```
 
-The `view` + consecutive `tpush_to_aiv` pattern with complementary M-axis splits is the ideal candidate for dual-dst ISA lowering.
+The `view` + consecutive `tpush_to_aiv` pattern with complementary M-axis splits is the ideal candidate for dual-dst ISA lowering with `aiv_id=-1`.
