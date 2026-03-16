@@ -105,7 +105,7 @@ struct MinSOp {
         std::cout << "MinSOp, repeats: " << repeats << std::endl;
     }
 
-    PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
+    PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t srcStride = srcRepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
         std::cout << "MinSOp, repeats: " << repeats << std::endl;
@@ -120,7 +120,7 @@ struct SDivOp {
         std::cout << "SDivOp, repeats: " << repeats << std::endl;
     }
 
-    PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
+    PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t srcStride = srcRepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
         std::cout << "SDivOp, repeats: " << repeats << std::endl;
@@ -134,7 +134,7 @@ struct DivSOp {
         std::cout << "DivSOp, repeats: " << repeats << std::endl;
     }
 
-    PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
+    PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t srcStride = srcRepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
         std::cout << "DivSOp, repeats: " << repeats << std::endl;
@@ -175,7 +175,7 @@ enum class DataType {
     FP32,
     INT8,
     INT16,
-    UNIT8,
+    UINT8,
     INT32,
     BF16
 };
@@ -210,7 +210,7 @@ public:
         cycle = cycle_;
     }
 
-    float GetCycle() const
+    float GetCycle()
     {
         return cycle;
     }
@@ -219,9 +219,9 @@ public:
 struct InstrTypeHash {
     size_t operator()(const std::pair<std::string, DataType>& key) const
     {
-        auto hash_instr = std::hash<std::string>{}(key.first);
-        auto hash_type = std::hash<int>{}(static_cast<int>(key.second));
-        return hash_instr ^ (hash_type << 1);
+        auto hash_instr = std::hash<std::string>()(key.first);
+        auto hash_dtype = std::hash<int>()(static_cast<int>(key.second));
+        return hash_instr ^ (hash_dtype << 1);
     }
 };
 
@@ -301,23 +301,21 @@ public:
         sum_repeat_times = 0;
         using T = typename TileDataDst::DType;
         runBinaryOp <T, Op, TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
-        float resultCycles = PredictCycles<T>(instr_name);
+        float resultCycles = PredictCycle<T>(instr_name);
         dst.SetCycle(resultCycles);
-        DataType dtype = GetDataTypeEnum<T>();
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Cycles: " << resultCycles << std::endl;
+        std::cout << "Instr: " << instr_name << " Cycles: " << resultCycles << std::endl;
     }
 
     // TBinSOp
     template <typename Op, typename TileDataDst, typename TileDataSrc>
-    void BinSOpPredictCycle(const std::string& instr_name, TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar)
+    void BinSOpPredictCycle(const std::string& instr_name, TileDataDst& dst, TileDataSrc& src, TileDataSrc::DType scalar)
     {
         sum_repeat_times = 0;
         using T = typename TileDataSrc::DType;
         runBinaryScalarOp <T, Op, TileDataDst, TileDataSrc>(dst, src);
-        float resultCycles = PredictCycles<T>(instr_name);
+        float resultCycles = PredictCycle<T>(instr_name);
         dst.SetCycle(resultCycles);
-        DataType dtype = GetDataTypeEnum<T>();
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Cycles: " << resultCycles << std::endl;
+        std::cout << "Instr: " << instr_name << " Cycles: " << resultCycles << std::endl;
     }
 
     // TUnaryOp
@@ -325,16 +323,15 @@ public:
     void UnaryOpPredictCycle(const std::string& instr_name, TileDataDst& dst, TileDataSrc& src)
     {
         sum_repeat_times = 0;
-        using T = typename TileDataSrc::DType;
+        using T = typename TileDataDst::DType;
         runUnaryOp<T, Op, TileDataDst, TileDataSrc, false>(dst, src);
-        float resultCycles = PredictCycles<T>(instr_name);
+        float resultCycles = PredictCycle<T>(instr_name);
         dst.SetCycle(resultCycles);
-        DataType dtype = GetDataTypeEnum<T>();
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Cycles: " << resultCycles << std::endl;
+        std::cout << "Instr: " << instr_name << " Cycles: " << resultCycles << std::endl;
     }
 
     template <typename T>
-    float PredictCycles(const std::string& instr_name)
+    float PredictCycle(const std::string& instr_name)
     {
         DataType dtype = GetDataTypeEnum<T>();
         auto key = std::make_pair(instr_name, dtype);
@@ -361,9 +358,8 @@ public:
 
         std::cout << "sum_repeat_times: " << sum_repeat_times << std::endl;
 
-        float sum_cycles = additional_cycles + complete_cycles + computing_cycles +
-            ((sum_repeat_times - 1) * computing_cycles * mask_effect)
-        + bank_conflict_cycles;
+        float sum_cycles = additional_cycles + complete_cycles +
+            ((sum_repeat_times - 1) * computing_cycles * mask_effect) + bank_conflict_cycles;
 
         return sum_cycles;
     }
