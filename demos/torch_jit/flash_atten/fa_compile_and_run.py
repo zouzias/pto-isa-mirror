@@ -13,6 +13,7 @@
 # --------------------------------------------------------------------------------
 
 import random
+import math
 import torch
 import torch_npu
 from jit_util_flash import jit_compile_flash
@@ -26,25 +27,34 @@ torch.manual_seed(SEED)
 torch.npu.manual_seed(SEED)
 
 
-def prep_inputs_for_fused(q2d, k2d, v2d):
-    """
-    Make inputs match default layout BSH: (B,S,H).
-    """
-    # q2d: (S0,H) -> (1,S0,H)
-    q = q2d.unsqueeze(0)
+# ---------------------------
+# 2) Reference attention (pure PyTorch, fp32)
+# ---------------------------
+def fa_reference(q, k, v, is_causal=False):
+    scale = 1.0 / math.sqrt(q.shape[1])
+    scores = q.float() @ k.float().T * scale
+    if is_causal:
+        mask = torch.triu(
+            torch.ones(scores.shape, device=q.device, dtype=torch.bool), diagonal=1
+        )
+        scores = scores.masked_fill(mask, float("-inf"))
+    attn = torch.softmax(scores, dim=-1)
+    return attn @ v.float()
 
-    # k2d: (S1,H) -> (1,S1,H)
-    k = k2d.unsqueeze(0)
 
-    # v2d: (S1,H) -> (1,S1,H)
-    v = v2d.unsqueeze(0)
-
-    return q, k, v
-
-
-def fused_only(q_bsh, k_bsh, v_bsh):
-    out, _ = torch_npu.npu_fused_infer_attention_score(q_bsh, k_bsh, v_bsh)
-    return out  # (B,S,H)
+def fused_attention(q, k, v, is_causal=False):
+    scale = 1.0 / math.sqrt(q.shape[1])
+    # npu_fused_infer_attention_score expects BSH: (1, S, H)
+    out, _ = torch_npu.npu_fused_infer_attention_score(
+        q.unsqueeze(0),
+        k.unsqueeze(0),
+        v.unsqueeze(0),
+        num_heads=1,
+        input_layout="BSH",
+        scale=scale,
+        next_tokens=0 if is_causal else 65535,
+    )
+    return out.squeeze(0)
 
 
 def time_op_npu(fn):
@@ -72,44 +82,19 @@ def time_op_npu(fn):
 
 
 def test_flash():
-    s0, s1, head = 256, 2048, 128
-    num_tiles = s0 // 128
+    s0, s1, head = 128, 2048, 128
 
-    device = "npu"
+    device = "npu:6"
     torch.npu.set_device(device)
 
     dtype = torch.float16
-    out_dtype = torch.float32
 
     # ==========================
     # Inputs
     # ==========================
-    q2d = torch.rand((s0, head), device=device, dtype=dtype)
-    k2d = torch.rand((s1, head), device=device, dtype=dtype)
-    v2d = torch.rand((s1, head), device=device, dtype=dtype)
-
-    # ==========================
-    # Reference fused inputs
-    # ==========================
-    q_bsh, k_bsh, v_bsh = prep_inputs_for_fused(q2d, k2d, v2d)
-
-    # ==========================
-    # Flash kernel buffers
-    # ==========================
-    o_out = torch.empty((s0, head), device=device, dtype=out_dtype)
-
-    out_device = torch.empty((s0, s1), device=device, dtype=torch.float32)
-    xexp_device = torch.empty((s0, s1), device=device, dtype=torch.float16)
-    pout_fp32_device = torch.empty((s0, s1), device=device, dtype=torch.float32)
-
-    out_2d_device = torch.empty(
-        (num_tiles, s0, head), device=device, dtype=torch.float32
-    )
-    g_sum_device = torch.empty((num_tiles, s0), device=device, dtype=torch.float32)
-    exp_max_device = torch.empty((num_tiles, s0), device=device, dtype=torch.float32)
-    o_parts_device = torch.empty(
-        (num_tiles, s0, head), device=device, dtype=torch.float32
-    )
+    q2d = torch.randn((s0, head), dtype=dtype).npu()
+    k2d = torch.randn((s1, head), dtype=dtype).npu()
+    v2d = torch.randn((s1, head), dtype=dtype).npu()
 
     # ==========================
     # Compile flash ONCE
@@ -117,42 +102,26 @@ def test_flash():
     flash = jit_compile_flash(verbose=False)
 
     # ==========================
-    # Benchmark ONLY fused op
+    # Benchmark reference ops
     # ==========================
-    fused_ms = time_op_npu(lambda: fused_only(q_bsh, k_bsh, v_bsh))
-
-    # ==========================
-    # Benchmark flash kernel call
-    # ==========================
-    flash_ms = time_op_npu(
-        lambda: flash(
-            q2d,
-            k2d,
-            v2d,
-            o_out,
-            out_device,
-            xexp_device,
-            pout_fp32_device,
-            out_2d_device,
-            g_sum_device,
-            exp_max_device,
-            o_parts_device,
-        )
-    )
+    ref_ms = time_op_npu(lambda: fa_reference(q2d, k2d, v2d))
+    npu_ms = time_op_npu(lambda: fused_attention(q2d, k2d, v2d))
+    flash_ms = time_op_npu(lambda: flash(q2d, k2d, v2d))
 
     # ==========================
     # Correctness check
     # ==========================
+    o_out = flash(q2d, k2d, v2d)
+    o_ref = fa_reference(q2d, k2d, v2d).to(torch.float32)
+    o_npu = fused_attention(q2d, k2d, v2d).to(torch.float32)
 
-    o_ref_bsh = fused_only(q_bsh, k_bsh, v_bsh)
-    o_ref = o_ref_bsh.squeeze(0).to(torch.float32)
-
-    print(f"FlashAttention kernel time : {flash_ms:.3f} ms/iter")
-    print(f"Fused attention time       : {fused_ms:.3f} ms/iter")
-    print(f"Speedup                    : {fused_ms / flash_ms:.2f}×")
-
-    torch.testing.assert_close(o_out, o_ref, rtol=0.3, atol=1e-1)
-    print("FlashAttention test passed!")
+    print(f"JIT flash kernel           : {flash_ms:.3f} ms/iter")
+    print(f"npu_fused_infer_attention  : {npu_ms:.3f} ms/iter")
+    print(f"torch reference            : {ref_ms:.3f} ms/iter")
+    torch.testing.assert_close(o_out, o_ref, rtol=1e-3, atol=1e-3)
+    print("vs torch reference: PASSED")
+    torch.testing.assert_close(o_out, o_npu, rtol=1e-3, atol=1e-3)
+    print("vs npu_fused_attention: PASSED")
 
 
 if __name__ == "__main__":
