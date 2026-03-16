@@ -39,22 +39,23 @@ AICORE void runTAbs(__gm__ T __out__ *out, __gm__ T __in__ *src)
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
 
+    out = dstGlobal.data();
+
     // accuracy compare
     float costResult = dstTile.GetCycle();
     float precision = 1 - fabs(profiling - costResult) / profiling;
     bool ret = precision > accuracy;
     EXPECT_TRUE(ret);
 
-    out = dstGlobal.data();
 }
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
 void LaunchTAbs(T *out, T *src, void *stream)
 {
     if constexpr (std::is_same_v<T, aclFloat16>)
-        runTAbs<half, kGRows_, kGCols_, kTRows_, kTCols_>((half *)(out), (half *)(src));
+        runTAbs<half, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>((half *)(out), (half *)(src));
     else
-        runTAbs<T, kGRows_, kGCols_, kTRows_, kTCols_>(out, src);
+        runTAbs<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(out, src);
 }
 
 template void LaunchTAbs<float, 64, 64, 64, 64, 160.0f, 0.6f>(float *out, float *src, void *stream);
