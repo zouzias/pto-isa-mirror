@@ -30,13 +30,13 @@ struct AddOp {
     PTO_INTERNAL static void BinInstr(uint8_t repeats)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << std::endl;
+        std::cout << "AddOp, repeats:  " << repeats << std::endl;
     }
 
     PTO_INTERNAL static void BinInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t src0RepeatStride, uint8_t src1RepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstRepeatStride: " << dstRepeatStride << " Src0RepeatStride: " << src0RepeatStride << " Src1RepeatStride: " << src1RepeatStride << std::endl;
+        std::cout << "AddOp, repeats:  " << repeats << std::endl;
     }
 };
 
@@ -44,13 +44,13 @@ struct MulOp {
     PTO_INTERNAL static void BinInstr(uint8_t repeats)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << std::endl;
+        std::cout << "MulOp, repeats: " << repeats << std::endl;
     }
 
     PTO_INTERNAL static void BinInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t src0RepeatStride, uint8_t src1RepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstRepeatStride: " << dstRepeatStride << " Src0RepeatStride: " << src0RepeatStride << " Src1RepeatStride: " << src1RepeatStride << std::endl;
+        std::cout << "MulOp, repeats: " << repeats << std::endl;
     }
 };
 
@@ -58,13 +58,13 @@ struct SubOp {
     PTO_INTERNAL static void BinInstr(uint8_t repeats)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << std::endl;
+        std::cout << "SubOp, repeats: " << repeats << std::endl;
     }
 
     PTO_INTERNAL static void BinInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t src0RepeatStride, uint8_t src1RepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstRepeatStride: " << dstRepeatStride << " Src0RepeatStride: " << src0RepeatStride << " Src1RepeatStride: " << src1RepeatStride << std::endl;
+        std::cout << "SubOp, repeats: " << repeats << std::endl;
     }
 };
 
@@ -73,13 +73,13 @@ struct AddSOp {
     PTO_INTERNAL static void BinSInstr(uint8_t repeats)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << std::endl;
+        std::cout << "AddSOp, repeats: " << repeats << std::endl;
     }
 
     PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t srcRepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstRepeatStride: " << dstRepeatStride << " SrcRepeatStride: " << srcRepeatStride << std::endl;
+        std::cout << "AddSOp, repeats: " << repeats << std::endl;
     }
 };
 
@@ -87,13 +87,13 @@ struct MulSOp {
     PTO_INTERNAL static void BinSInstr(uint8_t repeats)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << std::endl;
+        std::cout << "MulSOp, repeats: " << repeats << std::endl;
     }
 
     PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t srcRepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstRepeatStride: " << dstRepeatStride << " SrcRepeatStride: " << srcRepeatStride << std::endl;
+        std::cout << "MulSOp, repeats: " << repeats << std::endl;
     }
 };
 
@@ -102,13 +102,13 @@ struct MinSOp {
     PTO_INTERNAL static void BinSInstr(uint8_t repeats)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << std::endl;
+        std::cout << "MinSOp, repeats: " << repeats << std::endl;
     }
 
     PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstStride: " << dstStride << " SrcStride: " << srcStride << std::endl;
+        std::cout << "MinSOp, repeats: " << repeats << std::endl;
     }
 };
 
@@ -117,13 +117,13 @@ struct SDivOp {
     PTO_INTERNAL static void BinSInstr(uint8_t repeats)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << std::endl;
+        std::cout << "SDivOp, repeats: " << repeats << std::endl;
     }
 
     PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstStride: " << dstStride << " SrcStride: " << srcStride << std::endl;
+        std::cout << "SDivOp, repeats: " << repeats << std::endl;
     }
 };
 
@@ -131,13 +131,13 @@ struct DivSOp {
     PTO_INTERNAL static void BinSInstr(uint8_t repeats)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << std::endl;
+        std::cout << "DivSOp, repeats: " << repeats << std::endl;
     }
 
     PTO_INTERNAL static void BinSInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstStride: " << dstStride << " SrcStride: " << srcStride << std::endl;
+        std::cout << "DivSOp, repeats: " << repeats << std::endl;
     }
 };
 
@@ -147,7 +147,7 @@ struct AbsOp {
     PTO_INTERNAL static void UnaryInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstStride: " << dstStride << " SrcStride: " << srcStride << std::endl;
+        std::cout << "AbsOp, repeats: " << repeats << std::endl;
     }
 };
 
@@ -155,7 +155,7 @@ struct ExpOp {
     PTO_INTERNAL static void UnaryInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstStride: " << dstStride << " SrcStride: " << srcStride << std::endl;
+        std::cout << "ExpOp, repeats: " << repeats << std::endl;
     }
 };
 
@@ -163,7 +163,7 @@ struct SqrtOp {
     PTO_INTERNAL static void UnaryInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
         sum_repeat_times += static_cast<int>(repeats);
-        std::cout << "Instr: " << instr_name << " Dtype: " << static_cast<int>(dtype) << " Repeats: " << repeats << " DstStride: " << dstStride << " SrcStride: " << srcStride << std::endl;
+        std::cout << "SqrtOp, repeats: " << repeats << std::endl;
     }
 };
 
