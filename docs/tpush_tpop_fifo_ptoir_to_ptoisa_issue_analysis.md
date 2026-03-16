@@ -17,41 +17,60 @@ This document analyzes a design gap in PyPTO's `ExpandMixedKernel` pass when low
 ### 1.1 Hardware Model (A5 Architecture)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        AIC (Cube Unit)                          │
-│                                                                 │
-│  ┌─────────┐    ┌─────────┐    ┌─────────┐                     │
-│  │  L0A    │    │  L0B    │    │  L0C    │ ← Only L0C supports │
-│  │ (Left)  │    │ (Right) │    │ (Acc)   │   dual-dst transfer │
-│  └─────────┘    └─────────┘    └────┬────┘                     │
-│                                     │                           │
-│                                     ▼ copy_cc_matrix_to_ubuf    │
-│                             ┌───────┴───────┐   (l0c2ub)        │
-│                             │  Dual-Dst HW  │                   │
-│                             │  split M or N │                   │
-│                             └───────┬───────┘                   │
-│                                     │                           │
-└─────────────────────────────────────┼───────────────────────────┘
-                                      │
-              ┌───────────────────────┼───────────────────────┐
-              │                       │                       │
-              ▼                       │                       ▼
-┌─────────────────────────┐           │         ┌─────────────────────────┐
-│       AIV0 UB           │           │         │       AIV1 UB           │
-│                         │           │         │                         │
-│  256KB (A5)             │           │         │  256KB (A5)             │
-│  Addr: 0x00000-0x3FFFF  │           │         │  Addr: 0x00000-0x3FFFF  │
-│                         │           │         │                         │
-│  (Separate physical     │           │         │  (Separate physical     │
-│   memory bank)          │           │         │   memory bank)          │
-└─────────────────────────┘           │         └─────────────────────────┘
-                                      │
-                              ┌───────┴───────┐
-                              │  Dual-Dst:    │
-                              │  Same UB addr │
-                              │  in both AIVs │
-                              └───────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                              AI Core                                       │
+│                                                                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │                            L1 Buffer                                 │  │
+│  └───────────────────────────────┬─────────────────────────────────────┘  │
+│                                  │                                         │
+│                                  ▼ MTE1 (Memory Transfer Engine)           │
+│                    ┌─────────────┴─────────────┐                          │
+│                    │                           │                          │
+│                    ▼                           ▼                          │
+│  ┌─────────────────────────┐     ┌─────────────────────────┐             │
+│  │         L0A             │     │         L0B             │             │
+│  │       (Left Mat)        │     │       (Right Mat)       │             │
+│  └───────────┬─────────────┘     └─────────────┬───────────┘             │
+│              │                                 │                          │
+│              └─────────────┬───────────────────┘                          │
+│                            │                                              │
+│                            ▼ CUBE (Matrix Multiply Unit)                  │
+│                            │                                              │
+│              ┌─────────────┴─────────────┐                                │
+│              │          L0C              │                                │
+│              │      (Accumulator)        │                                │
+│              └─────────────┬─────────────┘                                │
+│                            │                                              │
+│                            ▼ FIXP (Fixed-Point Unit)                      │
+│                            │                                              │
+│              ┌─────────────┴─────────────┐                                │
+│              │     Dual/Single Dst       │                                │
+│              │         Switch            │                                │
+│              └─────────────┬─────────────┘                                │
+│                            │                                              │
+│         ┌──────────────────┼──────────────────┐                           │
+│         │                  │                  │                           │
+│         ▼                  │                  ▼                           │
+│  ┌─────────────────┐       │       ┌─────────────────┐                   │
+│  │    AIV0 UB      │       │       │    AIV1 UB      │                   │
+│  │                 │       │       │                 │                   │
+│  │  256KB (A5)     │       │       │  256KB (A5)     │                   │
+│  │  0x00000-0x3FFFF│       │       │  0x00000-0x3FFFF│                   │
+│  │                 │       │       │                 │                   │
+│  │ (Separate bank) │       │       │ (Separate bank) │                   │
+│  └─────────────────┘       │       └─────────────────┘                   │
+│                            │                                              │
+│                   Dual-Dst: Split M or N                                  │
+│                   to SAME UB addr in both                                 │
+│                                                                            │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Data Path Summary:**
+- **L1 → L0A/L0B**: via MTE1 (Memory Transfer Engine)
+- **L0A × L0B → L0C**: via CUBE (Matrix Multiply)
+- **L0C → UB**: via FIXP (Fixed-Point Unit) with Dual/Single Dst switch
 
 ### 1.2 ISA Operations
 
@@ -61,39 +80,59 @@ This document analyzes a design gap in PyPTO's `ExpandMixedKernel` pass when low
 | `tpop_from_aic(aiv_id)` | Implicit via FIFO consumption | UB receives L0C data |
 | `tfree_to_aiv(aiv_id)` | FIFO slot release | Signal buffer available |
 
-### 1.3 Dual-Destination Hardware Feature
+### 1.3 Dual/Single Destination Switch (via FIXP)
 
-The hardware supports a **dual-destination mode** where a single L0C matrix tile can be split along M or N axis and written to **both AIV0 and AIV1 UB simultaneously**:
+The FIXP unit provides a **dual/single destination switch** for L0C→UB transfers:
+
+#### Dual-Dst Mode (Split M or N to SAME UB address)
+
+```
+                    L0C Tile [16, 128]
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │  FIXP Unit    │
+                    │  Dual-Dst ON  │
+                    │  split_axis=M │
+                    └───────┬───────┘
+                            │
+            ┌───────────────┴───────────────┐
+            │                               │
+            ▼                               ▼
+┌───────────────────────┐       ┌───────────────────────┐
+│   AIV0 UB @ 0x1000    │       │   AIV1 UB @ 0x1000    │
+│   Tile [8, 128]       │       │   Tile [8, 128]       │
+│   (upper half M)      │       │   (lower half M)      │
+└───────────────────────┘       └───────────────────────┘
+                    ↑                       ↑
+                    └───────────────────────┘
+                         SAME UB address
+```
 
 **Key Constraint**: Dual-dst requires **same UB address** in both AIV0 and AIV1 banks.
 
-```
-L0C Tile [16, 128]  (Source: Only L0C/Acc supported)
-        │
-        ├──────────────────────────────────────┐
-        │  Dual-Dst ISA (single instruction)   │
-        │  split_axis=M                        │
-        ▼                                      ▼
-┌───────────────────┐              ┌───────────────────┐
-│  AIV0 UB @ 0x1000 │              │  AIV1 UB @ 0x1000 │  ← SAME address
-│  Tile [8, 128]    │              │  Tile [8, 128]    │
-│  (upper half M)   │              │  (lower half M)   │
-└───────────────────┘              └───────────────────┘
-```
-
-**Alternative**: Separate AIV0-only or AIV1-only transfers to different UB addresses.
+#### Single-Dst Mode (Separate transfers)
 
 ```
-L0C Tile [16, 128]
-        │
-        └──────────────────────────┐
-           Single-Dst ISA          │
-           (two instructions)      │
-        ▼                          ▼
-┌───────────────────┐    ┌───────────────────┐
-│  AIV0 UB @ 0x2000 │    │  AIV1 UB @ 0x4000 │  ← Different addresses OK
-│  Tile [16, 128]   │    │  Tile [16, 128]   │
-└───────────────────┘    └───────────────────┘
+                    L0C Tile [16, 128]
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │  FIXP Unit    │
+                    │  Single-Dst   │
+                    └───────┬───────┘
+                            │
+                            ▼
+                    (Two separate ISA instructions)
+                            
+            ┌───────────────┴───────────────┐
+            │                               │
+            ▼                               ▼
+┌───────────────────────┐       ┌───────────────────────┐
+│   AIV0 UB @ 0x2000    │       │   AIV1 UB @ 0x4000    │
+│   Tile [16, 128]      │       │   Tile [16, 128]      │
+└───────────────────────┘       └───────────────────────┘
+        (different addresses OK, or same address OK)
 ```
 
 **Benefit of Dual-Dst**: Single ISA instruction, single L0C read, dual UB writes = 2× bandwidth efficiency.
