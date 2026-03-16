@@ -43,13 +43,13 @@ AICORE void runTAdd(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in_
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
 
+    out = dstGlobal.data();
+
     // accuracy compare
     float costResult = dstTile.GetCycle();
     float precision = 1 - fabs(profiling - costResult) / profiling;
     bool ret = precision > accuracy;
     EXPECT_TRUE(ret);
-
-    out = dstGlobal.data();
 }
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
