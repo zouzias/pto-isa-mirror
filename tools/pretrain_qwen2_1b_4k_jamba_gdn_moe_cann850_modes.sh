@@ -7,7 +7,8 @@ set -euo pipefail
 # Presets:
 #   native_base : original native baseline path (bench_native_ms + bench_native_llm)
 #   mc2         : current MC2 mainline path (MindSpeed + lzm_Mindspeed-LLm)
-#   pto_mc2     : current PTO-ISA validation path on top of MC2 reorder
+#   pto_mc2     : current PTO-ISA validation path on top of MC2 reorder,
+#                 with the validated defer_probs defaults enabled
 #
 # Example:
 #   LAUNCH_PRESET=pto_mc2 TRAIN_ITERS=6508 LOAD_CHECKPOINT=1 \
@@ -86,6 +87,9 @@ case "${LAUNCH_PRESET}" in
         export PTO_MOE_MC2_SO_PATH="${PTO_MOE_MC2_SO_PATH:-${REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/lib/libop_extension.so}"
         # PTO MC2 validation should use the same fused rotary default as the MC2 mainline.
         export USE_FUSED_ROTARY_POS_EMB="${USE_FUSED_ROTARY_POS_EMB:-1}"
+        # Current best-known stable PTO MC2 path relies on defer_probs plus the allocator hint.
+        export MINDSPEED_MOE_MC2_DEFER_PROBS_TO_UNPERMUTE="${MINDSPEED_MOE_MC2_DEFER_PROBS_TO_UNPERMUTE:-1}"
+        export PYTORCH_NPU_ALLOC_CONF="${PYTORCH_NPU_ALLOC_CONF:-expandable_segments:True}"
         ;;
     *)
         echo "Unsupported LAUNCH_PRESET=${LAUNCH_PRESET}" >&2
@@ -104,6 +108,8 @@ echo "ckpt_load_dir=${CKPT_LOAD_DIR}"
 echo "enable_moe_alltoall_overlap_comm=${ENABLE_MOE_ALLTOALL_OVERLAP_COMM:-0}"
 echo "enable_moe_alltoall_mc2=${ENABLE_MOE_ALLTOALL_MC2:-0}"
 echo "enable_pto_moe_mc2_reorder=${ENABLE_PTO_MOE_MC2_REORDER:-0}"
+echo "mindspeed_moe_mc2_defer_probs_to_unpermute=${MINDSPEED_MOE_MC2_DEFER_PROBS_TO_UNPERMUTE:-0}"
+echo "pytorch_npu_alloc_conf=${PYTORCH_NPU_ALLOC_CONF:-}"
 echo "use_fused_rotary_pos_emb=${USE_FUSED_ROTARY_POS_EMB}"
 
 exec "${WRAPPER}"
