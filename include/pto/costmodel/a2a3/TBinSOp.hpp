@@ -131,10 +131,12 @@ PTO_INTERNAL void BinS2LNormModeRowRpt(unsigned validRow, unsigned validCol)
         if constexpr (Rows > elementsPerRepeat) {
             unsigned numRepeatPerLine = validCol / elementsPerRepeat;
             numRemainPerLine = validCol % elementsPerRepeat;
-            BinS2LNormModeHead<Op, T, Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(validRow, numRepeatPerLine);
+            BinS2LNormModeHead<Op, T, Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(validRow,
+                                                                                                    numRepeatPerLine);
         }
         if (numRemainPerLine) {
-            BinS2LNormModeTail<Op, T, Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(validRow, numRemainPerLine);
+            BinS2LNormModeTail<Op, T, Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(validRow,
+                                                                                                    numRemainPerLine);
         }
     }
 }
@@ -147,8 +149,10 @@ PTO_INTERNAL void TBinSInstr(unsigned validRow, unsigned validCol)
         ((TileDataDst::Cols == TileDataDst::ValidCol) && (TileDataSrc::Cols == TileDataSrc::ValidCol)) ||
         ((TileDataDst::Rows == 1) && (TileDataSrc::Rows == 1));
     if constexpr (tileDataContinue) {
-        constexpr unsigned totalRepeats = (TileDataDst::Rows * TileDataDst::Cols + elementsPerRepeat - 1) / elementsPerRepeat;
-        constexpr bool nonVLAligned = (((TileDataDst::Cols % elementsPerRepeat) != 0) && (TileDataDst::Cols > elementsPerRepeat));
+        constexpr unsigned totalRepeats =
+            (TileDataDst::Rows * TileDataDst::Cols + elementsPerRepeat - 1) / elementsPerRepeat;
+        constexpr bool nonVLAligned =
+            (((TileDataDst::Cols % elementsPerRepeat) != 0) && (TileDataDst::Cols > elementsPerRepeat));
         constexpr bool enbleCountMode = nonVLAligned || (totalRepeats > pto::REPEAT_MAX);
         if constexpr (enbleCountMode) {
             BinS1LCountMode<Op, T>(validRow, validCol);
@@ -187,28 +191,31 @@ PTO_INTERNAL void TBinSInstr(unsigned validRow, unsigned validCol)
                     BinS2LNormModeColVLAlign<Op, T, elementsPerRepeat, dstStride, srcStride>(validRow, validCol);
                 }
             } else {
-                BinS2LNormModeRowRpt<Op, T, TileDataDst::Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(validRow, validCol);
+                BinS2LNormModeRowRpt<Op, T, TileDataDst::Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(
+                    validRow, validCol);
             }
         }
     }
 }
 
 template <typename T, typename Op, typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TBinaryScalarOp(unsigned validRow, unsigned validCol){
+PTO_INTERNAL void TBinaryScalarOp(unsigned validRow, unsigned validCol)
+{
     constexpr unsigned elementsPerRepeat = pto::REPEAT_BYTE / sizeof(T);
     constexpr unsigned blockSizeElem = pto::BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned dstStride = TileDataDst::RowStride;
     constexpr unsigned srcStride = TileDataSrc::RowStride;
-    TBinSInstr<Op, TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(validRow, validCol);
+    TBinSInstr<Op, TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(validRow,
+                                                                                                     validCol);
 }
 
 template <typename T, typename Op, typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void runBinaryScalarOp(TileDataDst& dst, TileDataSrc& src){
+PTO_INTERNAL void runBinaryScalarOp(TileDataDst &dst, TileDataSrc &src){
     unsigned dstValidRow = dst.GetValidRow();
     unsigned dstValidCol = dst.GetValidCol();
-    if ((dstValidRow != 0 && dstValidCol != 0) && 
-        (dstValidRow == src.GetValidRow() && dstValidCol == src.GetValidCol())){
-            TBinaryScalarOp<T, Op, TileDataDst, TileDataSrc>(dstValidRow, dstValidCol);
+    if ((dstValidRow != 0 && dstValidCol != 0) &&
+        (dstValidRow == src.GetValidRow() && dstValidCol == src.GetValidCol())) {
+        TBinaryScalarOp<T, Op, TileDataDst, TileDataSrc>(dstValidRow, dstValidCol);
     } else {
         PTO_ASSERT(false, "TADDS: dstTile validRow/validCol must be consistent with of src");
     }

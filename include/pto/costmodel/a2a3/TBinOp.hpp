@@ -193,8 +193,7 @@ PTO_INTERNAL void BinaryInstrGeneralPath(unsigned validRow, unsigned validCol)
     }
 }
 
-template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned rowStride>
+template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
 PTO_INTERNAL void BinaryInstr(unsigned validRow, unsigned validCol)
 {
     using T = typename TileData::DType;
@@ -283,34 +282,37 @@ PTO_INTERNAL void Bin2LNormModeRowRpt(unsigned validRow, unsigned validCol)
     }
 }
 
-template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride, unsigned src0RowStride, unsigned src1RowStride>
-PTO_INTERNAL void BinaryInstr( unsigned validRows,
-                              unsigned validCols)
+template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride,
+          unsigned src0RowStride, unsigned src1RowStride>
+PTO_INTERNAL void BinaryInstr(unsigned validRows, unsigned validCols)
 {
 	using T = typename TileData::DType;
-    Bin2LNormModeRowRpt<Op, T, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(validRows, validCols);
+    Bin2LNormModeRowRpt<Op, T, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(validRows,
+                                                                                                             validCols);
 }
 
 template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride,
-    unsigned src0RowStride = dstRowStride, unsigned src1RowStride = dstRowStride>
+          unsigned src0RowStride = dstRowStride, unsigned src1RowStride = dstRowStride>
 PTO_INTERNAL void TBinaryOp(unsigned validRows, unsigned validCols)
 {
     if constexpr (dstRowStride == src0RowStride && dstRowStride == src1RowStride) {
         BinaryInstr<Op, TileData, elementsPerRepeat, blockSizeElem, dstRowStride>(validRows, validCols);
-    }else{
+    } else {
         BinaryInstr<Op, TileData, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
             validRows, validCols);
     }
 }
 
 template <typename T, typename Op, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
-PTO_INTERNAL void runBinaryOp(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1){
+PTO_INTERNAL void runBinaryOp(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
+{
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
 
-    if constexpr (std::is_same_v<TileDataDst, TileDataSrc0> && std::is_same_v<TileDataDst, TileDataSrc1>){
+    if constexpr (std::is_same_v<TileDataDst, TileDataSrc0> && std::is_same_v<TileDataDst, TileDataSrc1>) {
         constexpr unsigned dstRowStride = TileDataDst::RowStride;
-        TBinaryOp<Op, TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride>(dst.GetValidRow(), dst.GetValidCol());
+        TBinaryOp<Op, TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride>(dst.GetValidRow(),
+                                                                                   dst.GetValidCol());
     } else{
         constexpr unsigned dstRowStride = TileDataDst::RowStride;
         constexpr unsigned src0RowStride = TileDataSrc0::RowStride;

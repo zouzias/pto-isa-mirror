@@ -33,7 +33,8 @@ struct AddOp {
         std::cout << "AddOp, repeats:  " << static_cast<int>(repeats) << std::endl;
     }
 
-    PTO_INTERNAL static void BinInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t src0RepeatStride, uint8_t src1RepeatStride)
+    PTO_INTERNAL static void BinInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t src0RepeatStride,
+                                      uint8_t src1RepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
         std::cout << "AddOp, repeats:  " << static_cast<int>(repeats) << std::endl;
@@ -47,7 +48,8 @@ struct MulOp {
         std::cout << "MulOp, repeats: " << static_cast<int>(repeats) << std::endl;
     }
 
-    PTO_INTERNAL static void BinInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t src0RepeatStride, uint8_t src1RepeatStride)
+    PTO_INTERNAL static void BinInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t src0RepeatStride,
+                                      uint8_t src1RepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
         std::cout << "MulOp, repeats: " << static_cast<int>(repeats) << std::endl;
@@ -61,7 +63,8 @@ struct SubOp {
         std::cout << "SubOp, repeats: " << static_cast<int>(repeats) << std::endl;
     }
 
-    PTO_INTERNAL static void BinInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t src0RepeatStride, uint8_t src1RepeatStride)
+    PTO_INTERNAL static void BinInstr(uint8_t repeats, uint8_t dstRepeatStride, uint8_t src0RepeatStride,
+                                      uint8_t src1RepeatStride)
     {
         sum_repeat_times += static_cast<int>(repeats);
         std::cout << "SubOp, repeats: " << static_cast<int>(repeats) << std::endl;
@@ -97,7 +100,6 @@ struct MulSOp {
     }
 };
 
-
 struct MinSOp {
     PTO_INTERNAL static void BinSInstr(uint8_t repeats)
     {
@@ -111,7 +113,6 @@ struct MinSOp {
         std::cout << "MinSOp, repeats: " << static_cast<int>(repeats) << std::endl;
     }
 };
-
 
 struct SDivOp {
     PTO_INTERNAL static void BinSInstr(uint8_t repeats)
@@ -141,10 +142,10 @@ struct DivSOp {
     }
 };
 
-
 // UnaryOp
 struct AbsOp {
-    PTO_INTERNAL static void UnaryInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
+    PTO_INTERNAL static void UnaryInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT,
+                                        uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
         sum_repeat_times += static_cast<int>(repeats);
         std::cout << "AbsOp, repeats: " << static_cast<int>(repeats) << std::endl;
@@ -152,7 +153,8 @@ struct AbsOp {
 };
 
 struct ExpOp {
-    PTO_INTERNAL static void UnaryInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
+    PTO_INTERNAL static void UnaryInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT,
+                                        uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
         sum_repeat_times += static_cast<int>(repeats);
         std::cout << "ExpOp, repeats: " << static_cast<int>(repeats) << std::endl;
@@ -160,17 +162,16 @@ struct ExpOp {
 };
 
 struct SqrtOp {
-    PTO_INTERNAL static void UnaryInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT, uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
+    PTO_INTERNAL static void UnaryInstr(uint8_t repeats, uint8_t dstStride = BLOCK_MAX_PER_REPEAT,
+                                        uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
         sum_repeat_times += static_cast<int>(repeats);
         std::cout << "SqrtOp, repeats: " << static_cast<int>(repeats) << std::endl;
     }
 };
 
-
-
-
-enum class DataType {
+enum class DataType
+{
     FP16,
     FP32,
     INT8,
@@ -217,7 +218,7 @@ public:
 };
 
 struct InstrTypeHash {
-    size_t operator()(const std::pair<std::string, DataType>& key) const
+    size_t operator()(const std::pair<std::string, DataType> &key) const
     {
         auto hash_instr = std::hash<std::string>()(key.first);
         auto hash_dtype = std::hash<int>()(static_cast<int>(key.second));
@@ -227,16 +228,17 @@ struct InstrTypeHash {
 
 class CostModel {
 public:
-    static CostModel& GetInstance()
+    static CostModel &GetInstance()
     {
         static CostModel instance;
         return instance;
     }
 
-    CostModel(const CostModel&) = delete;
-    CostModel& operator=(const CostModel&) = delete;
+    CostModel(const CostModel &) = delete;
+    CostModel &operator=(const CostModel &) = delete;
 
-    void InitDefaultParams() {
+    void InitDefaultParams()
+    {
         // TADD
         SetParam("TADD", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
         SetParam("TADD", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
@@ -296,11 +298,11 @@ public:
 
     // TBinOp
     template <typename Op, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
-    void BinOpPredictCycle(const std::string& instr_name, TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1)
+    void BinOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
     {
         sum_repeat_times = 0;
         using T = typename TileDataDst::DType;
-        runBinaryOp <T, Op, TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
+        runBinaryOp<T, Op, TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
         float resultCycles = PredictCycle<T>(instr_name);
         dst.SetCycle(resultCycles);
         std::cout << "Instr: " << instr_name << " Cycles: " << resultCycles << std::endl;
@@ -308,11 +310,12 @@ public:
 
     // TBinSOp
     template <typename Op, typename TileDataDst, typename TileDataSrc>
-    void BinSOpPredictCycle(const std::string& instr_name, TileDataDst& dst, TileDataSrc& src, TileDataSrc::DType scalar)
+    void BinSOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src,
+                            TileDataSrc::DType scalar)
     {
         sum_repeat_times = 0;
         using T = typename TileDataSrc::DType;
-        runBinaryScalarOp <T, Op, TileDataDst, TileDataSrc>(dst, src);
+        runBinaryScalarOp<T, Op, TileDataDst, TileDataSrc>(dst, src);
         float resultCycles = PredictCycle<T>(instr_name);
         dst.SetCycle(resultCycles);
         std::cout << "Instr: " << instr_name << " Cycles: " << resultCycles << std::endl;
@@ -320,7 +323,7 @@ public:
 
     // TUnaryOp
     template <typename Op, typename TileDataDst, typename TileDataSrc>
-    void UnaryOpPredictCycle(const std::string& instr_name, TileDataDst& dst, TileDataSrc& src)
+    void UnaryOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
     {
         sum_repeat_times = 0;
         using T = typename TileDataDst::DType;
@@ -331,7 +334,7 @@ public:
     }
 
     template <typename T>
-    float PredictCycle(const std::string& instr_name)
+    float PredictCycle(const std::string &instr_name)
     {
         DataType dtype = GetDataTypeEnum<T>();
         auto key = std::make_pair(instr_name, dtype);
@@ -359,20 +362,20 @@ public:
         std::cout << "sum_repeat_times: " << sum_repeat_times << std::endl;
 
         float sum_cycles = additional_cycles + complete_cycles +
-            ((sum_repeat_times - 1) * computing_cycles * mask_effect) + bank_conflict_cycles;
+                           ((sum_repeat_times - 1) * computing_cycles * mask_effect) + bank_conflict_cycles;
 
         return sum_cycles;
     }
 
 
 private:
-    CostModel() {
+    CostModel()
+    {
         InitDefaultParams();
     }
 
-    void SetParam(const std::string& instr_name, DataType dtype,
-        double head, double complete, double computing, double interval,
-        double mask, double bank_conflict)
+    void SetParam(const std::string &instr_name, DataType dtype, double head, double complete, double computing,
+                  double interval, double mask, double bank_conflict)
     {
         auto key = std::make_pair(instr_name, dtype);
         additional_cycles_map_[key] = head;
@@ -383,14 +386,11 @@ private:
         bank_conflict_cycles_map_[key] = bank_conflict;
     }
 
-    bool CheckParamExist(const std::pair<std::string, DataType>& key)
+    bool CheckParamExist(const std::pair<std::string, DataType> &key)
     {
-        return additional_cycles_map_.count(key) &&
-            complete_cycles_map_.count(key) &&
-            computing_cycles_map_.count(key) &&
-            interval_cycles_map_.count(key) &&
-            mask_effect_map_.count(key) &&
-            bank_conflict_cycles_map_.count(key);
+        return additional_cycles_map_.count(key) && complete_cycles_map_.count(key) &&
+               computing_cycles_map_.count(key) && interval_cycles_map_.count(key) && mask_effect_map_.count(key) &&
+               bank_conflict_cycles_map_.count(key);
     }
 
     template <typename T>
@@ -422,7 +422,6 @@ private:
     std::unordered_map<std::pair<std::string, DataType>, float, InstrTypeHash> interval_cycles_map_;
     std::unordered_map<std::pair<std::string, DataType>, float, InstrTypeHash> mask_effect_map_;
     std::unordered_map<std::pair<std::string, DataType>, float, InstrTypeHash> bank_conflict_cycles_map_;
-
 };
 
 } // namespace pto

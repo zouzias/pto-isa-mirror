@@ -1384,14 +1384,15 @@ public:
     }
 #endif
 
-
 #ifdef __COSTMODEL
     float cycle;
-    AICORE void SetCycle(const float cycle_){
+    AICORE void SetCycle(const float cycle_)
+    {
         cycle = cycle_;
     }
 
-    AICORE float GetCycle(){
+    AICORE float GetCycle()
+    {
         return cycle;
     }
 #endif
