@@ -651,8 +651,10 @@ AICORE void TGather_cmp(typename TileDataD::TileDType dst, typename TileDataS::T
     }
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
-PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst)
+template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode,
+          uint32_t offset>
+PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst,
+                               TileDataTmp &tmp)
 {
     static_assert(
         std::is_same_v<typename TileDataD::DType, uint32_t> || std::is_same_v<typename TileDataD::DType, int32_t>,
