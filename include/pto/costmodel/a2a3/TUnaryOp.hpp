@@ -155,7 +155,7 @@ PTO_INTERNAL void Unary2LProcess(unsigned validRow, unsigned validCol)
 
 template <typename T, typename Op, typename DstTile, typename SrcTile>
 PTO_INTERNAL void TUnaryOp(unsigned validRow, unsigned validCol)
-{   
+{
     constexpr unsigned nRepeatElem = REPEAT_BYTE / sizeof(T);
     constexpr bool isCombined = ((DstTile::ValidCol == DstTile::Cols) && (SrcTile::ValidCol == SrcTile::Cols)) ||
                                 ((DstTile::Rows == 1) && (SrcTile::Rows == 1));
