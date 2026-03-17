@@ -69,11 +69,28 @@ mpirun --version
 mpirun -n 2 echo "MPI OK"
 ```
 
+### 同步与异步指令测试
+
+通信测试分为**同步指令**（如 `tput`、`tget`）和**异步指令**（如 `tput_async`、`tget_async`）两类：
+
+| 类型 | 测试用例示例 | CANN 版本要求 |
+|------|-------------|--------------|
+| 同步指令 | `tput`、`tget`、`treduce`、`tbroadcast` 等 | CANN 8.x 及以上 |
+| 异步指令 | `tput_async`、`tget_async` | **CANN 9.0 及以上** |
+
+异步指令依赖 CANN 9.0 引入的 SDMA opapi 接口（如 `aclnnShmemSdmaStarsQuery`），在低版本 CANN 上会因符号缺失而运行失败。因此 `run_comm_test.sh` **默认不包含异步指令测试**，需通过 `-a` 参数显式启用。
+
 ### 快速开始
 
 ```bash
-# 8 卡全量测试（默认 A2/A3）
+# 8 卡全量测试（默认 A2/A3，不含异步指令）
 ./run_comm_test.sh
+
+# 包含异步指令测试（需 CANN 9.0+）
+./run_comm_test.sh -a
+
+# 仅跑异步 tput 用例
+./run_comm_test.sh -t tput_async
 
 # 指定 A5 SoC，2 卡
 ./run_comm_test.sh -v a5 -n 2
@@ -85,6 +102,16 @@ mpirun -n 2 echo "MPI OK"
 ./run_comm_test.sh -d -t tput
 ```
 
+也可以通过 `run_st.py` 直接运行，脚本会自动按 rank 数分轮执行：
+
+```bash
+# 自动分轮运行 tput_async（2/4/8 rank）
+python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async
+
+# 限制最多 2 rank
+python3 tests/script/run_st.py -r npu -v a3 -t comm/tput_async -n 2
+```
+
 ### 参数说明
 
 | 参数 | 说明 | 默认值 |
@@ -92,6 +119,7 @@ mpirun -n 2 echo "MPI OK"
 | `-n` | 可用 NPU 数量：2、4 或 8 | 8 |
 | `-v` | SoC 版本：`a3`（Ascend910B）或 `a5`（Ascend910_9599） | a3 |
 | `-t` | 指定测试用例（可多次使用），如 `tput`、`treduce` | 全部 |
+| `-a` | 包含异步指令测试（`*_async`），需 CANN 9.0+ | 关闭 |
 | `-d` | 开启调试模式，打印详细初始化与同步日志 | 关闭 |
 
 ### 运行机制
