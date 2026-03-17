@@ -84,8 +84,8 @@ case "${LAUNCH_PRESET}" in
         export ENABLE_MOE_BMM_MC2="${ENABLE_MOE_BMM_MC2:-0}"
         export ENABLE_PTO_MOE_MC2_REORDER="${ENABLE_PTO_MOE_MC2_REORDER:-1}"
         export PTO_MOE_MC2_SO_PATH="${PTO_MOE_MC2_SO_PATH:-${REPO_ROOT}/demos/baseline/moe_grouped_ffn/build/lib/libop_extension.so}"
-        # Current fused rotary path is unstable for true PTO validation.
-        export USE_FUSED_ROTARY_POS_EMB="${USE_FUSED_ROTARY_POS_EMB:-0}"
+        # PTO MC2 validation should use the same fused rotary default as the MC2 mainline.
+        export USE_FUSED_ROTARY_POS_EMB="${USE_FUSED_ROTARY_POS_EMB:-1}"
         ;;
     *)
         echo "Unsupported LAUNCH_PRESET=${LAUNCH_PRESET}" >&2
