@@ -1399,16 +1399,32 @@ public:
         return RowMaskInternal;
     }
 
-    template <int ColMask = ValidCol>
-    AICORE static constexpr std::enable_if_t<(ColMask > 0), int> GetValidCol()
-    {
-        return ColMask;
+    // Call this function need PIPE_S wait
+    PTO_INTERNAL void SetValidRow(int rowMask) {
+        static_cast(ValidRow == DYNAMIC, "Only Dynamic Valid Row Support Set Value.")
+        PTO_ASSERT(rowMask <= Rows, "rowMask must less than Rows.");
+        RowMaskInternal = rowMask;
     }
 
     template <int ColMask = ValidCol>
     AICORE std::enable_if_t<ColMask == DYNAMIC, int> GetValidCol() const
     {
         return ColMaskInternal;
+    }
+
+    // Call this function need PIPE_S wait
+    PTO_INTERNAL void SetValidCol(int colMask) {
+        static_cast(ValidCol == DYNAMIC, "Only Dynamic Valid Col Support Set Value.")
+        PTO_ASSERT(colMask <= Cols, "colMask must less than Cols.");
+        ColMaskInternal = colMask;
+    }
+
+    // Call this function need PIPE_S wait
+    PTO_INTERNAL void SetValidShape(int rowMask, int colMask) {
+        static_cast(ValidCol == DYNAMIC && ValidRow == DYNAMIC, "Only Dynamic Valid Shape Support Set Value.")
+        PTO_ASSERT(rowMask <= Rows && colMask <= Cols, "colMask must less than Cols.");
+        RowMaskInternal = rowMask;
+        ColMaskInternal = colMask;
     }
 
     template <typename T, typename AddrType>
