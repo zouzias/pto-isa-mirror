@@ -72,7 +72,7 @@ PTO_INTERNAL void Bin2LNormModeHead(unsigned validRow, unsigned numRepeatPerLine
         for (int i = 0; i < validRow; i++) {
             if (numLoop)
                 [[unlikely]] 
-                {s
+                {
                     for (int j = 0; j < numLoop; j++) {
                         Op::BinInstr(REPEAT_MAX);
                     }
