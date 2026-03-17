@@ -11,7 +11,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TDIV754_HPP
 #define TDIV754_HPP
 
-#include "kernel_reg_compute_utils.h"
+#include "kernel_reg_compute_utils.h"\
+
 
 using namespace AscendC::Reg;
 
