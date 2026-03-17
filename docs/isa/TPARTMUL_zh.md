@@ -10,14 +10,14 @@
 
 ## 数学语义
 
-对每个元素 `(i, j)` in the destination valid region:
+对目标有效区域内的每个元素 `(i, j)`：
 
 $$
 \mathrm{dst}_{i,j} =
-egin{cases}
-\mathrm{src0}_{i,j} \cdot \mathrm{src1}_{i,j} & 	ext{if both inputs are defined at } (i,j) \
-\mathrm{src0}_{i,j} & 	ext{if only src0 is defined at } (i,j) \
-\mathrm{src1}_{i,j} & 	ext{if only src1 is defined at } (i,j)
+\begin{cases}
+\mathrm{src0}_{i,j} \cdot \mathrm{src1}_{i,j} & \text{若两个输入在 } (i,j) \text{ 处均有定义} \\\\
+\mathrm{src0}_{i,j} & \text{若仅 src0 在 } (i,j) \text{ 处有定义} \\\\
+\mathrm{src1}_{i,j} & \text{若仅 src1 在 } (i,j) \text{ 处有定义}
 \end{cases}
 $$
 
@@ -54,9 +54,9 @@ PTO_INST RecordEvent TPARTMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 
 ## 约束
 
-- Element type/layout legality follows backend checks and is analogous to `TPARTADD` / `TPARTMAX` / `TPARTMIN`.
-- Destination valid region defines the result domain.
-- Partial-validity handling is implementation-defined for unsupported shape combinations.
+- 元素类型/布局合法性遵循后端检查，类似于 `TPARTADD` / `TPARTMAX` / `TPARTMIN`。
+- 目标有效区域定义结果域。
+- 对于不支持的形状组合，部分有效性处理由实现定义。
 
 ## 示例
 
@@ -115,4 +115,3 @@ void example_manual() {
 # IR Level 2 (DPS)
 pto.tpartmul ins(%src0, %src1 : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TPOP_HPP
 #define TPOP_HPP
 
+#include <type_traits>
 #include <pto/common/fifo.hpp>
 #include <pto/npu/a5/TStore.hpp>
 #include <pto/npu/a5/TPush.hpp>
@@ -33,21 +34,28 @@ PTO_INTERNAL void TPOP_IMPL(PipeCons &cons, TileDataSrc &tile, DataFiFo &fifo)
     }
 
     // 2. Address Calculation & Pop
-    cons.pop(fifo, tile);
+    bool reqFree = cons.pop(fifo, tile);
+    cons.tile_id++;
 
     // 3. Cross-Core: Free Space
-    bool isFree = cons.getFreeStatus();
+    bool isFree = reqFree && cons.getFreeStatus();
     if (isFree) {
         cons.free();
     }
 }
 
-template <typename PipeCons>
-PTO_INTERNAL void TPOPDONE_IMPL(PipeCons &cons)
+template <typename TileData, typename Pipe>
+PTO_INTERNAL void TPOP_IMPL(TileData &tile, Pipe &pipe)
 {
-    bool isFree = cons.getFreeStatus();
+    TPOP_IMPL(pipe.cons, tile, pipe.fifo);
+}
+
+template <typename Pipe>
+PTO_INTERNAL void TFREE_IMPL(Pipe &pipe)
+{
+    bool isFree = pipe.cons.getFreeStatus();
     if (isFree) {
-        cons.template free<true>();
+        pipe.cons.free();
     }
 }
 

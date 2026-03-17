@@ -168,6 +168,7 @@ tci
 tcolmax
 tcolmin
 texpands
+texpands_mat
 tcolsum
 tcolprod
 tcmp
@@ -195,6 +196,8 @@ tcolexpandsub
 tquant
 tdequant
 t_dhrystone
+tpushpop_cv
+tpushpop_vc
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

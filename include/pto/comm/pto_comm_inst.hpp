@@ -280,4 +280,5 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
 } // namespace comm
 } // namespace pto
 
+#endif // !defined(PTO_NPU_ARCH_KIRIN9030) && !defined(PTO_NPU_ARCH_KIRINX90)
 #endif // PTO_COMM_INST_HPP
