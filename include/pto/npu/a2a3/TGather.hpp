@@ -126,5 +126,44 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
     PTO_ASSERT(dst.GetValidCol() == DstTileData::Cols, "Fix: TGATHER expect continuous memory for dst.");
     TGather<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
 }
+
+template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
+__tf__ AICORE void TGather_cmp(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src0,
+                        typename TileDataC::TileDType __in__ cdst, typename TileDataS::DType __in__ k_value, unsigned srcValidCol,
+                        unsigned srcValidRow)
+{
+    __ubuf__ typename TileDataD::DType *dstPtr = (__ubuf__ typename TileDataD::DType *)__cce_get_tile_ptr(dst);
+    __ubuf__ typename TileDataS::DType *src0Ptr = (__ubuf__ typename TileDataS::DType *)__cce_get_tile_ptr(src0);
+    __ubuf__ typename TileDataC::DType *cdstPtr = (__ubuf__ typename TileDataC::DType *)__cce_get_tile_ptr(cdst);
+
+    constexpr unsigned dstRowStride = TileDataD::Cols;
+    for (int i = 0; i < srcValidRow; i ++) {
+        
+    }
+}
+
+template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
+PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst)
+{
+    static_assert(
+        std::is_same_v<typename TileDataD::DType, uint32_t> || std::is_same_v<typename TileDataD::DType, int32_t>,
+        "Fix: TGATHER Dst data type must be int32_t/uint32_t.");
+    static_assert(
+        std::is_same_v<typename TileDataS::DType, float> || std::is_same_v<typename TileDataS::DType, uint32_t> ||
+            std::is_same_v<typename TileDataS::DType, int32_t> || std::is_same_v<typename TileDataS::DType, uint16_t> ||
+            std::is_same_v<typename TileDataS::DType, int16_t> || std::is_same_v<typename TileDataS::DType, half>,
+        "Fix: TGATHER Src data type must be int16_t/uint16_t/int32_t/uint32_t/half/float.");
+    static_assert((cmpMode == CmpMode::GT || cmpMode == CmpMode::EQ), "Fix: TGATHER only support GT or EQ mode");
+    static_assert((TileDataD::Loc == TileType::Vec) && (TileDataS::Loc == TileType::Vec),
+                "Fix: TGATHER expect vec TileType");
+
+    unsigned sValidCols = src0.GetValidCol();
+    unsigned sValidRows = src0.GetValidRow();
+    // unsigned dValidCols = dst.GetValidCol();
+    // unsigned dValidRows = dst.GetValidRow();
+
+    TGather_cmp<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst.data(), src0.data(), cdst.data(), k_value,
+                                                                sValidCols, sValidRows);
+}
 } // namespace pto
 #endif
