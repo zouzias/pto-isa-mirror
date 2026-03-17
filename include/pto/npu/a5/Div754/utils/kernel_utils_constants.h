@@ -19,8 +19,9 @@
 #endif
 #ifndef ASCENDC_MODULE_UTILS_CONSTANTS_H
 #define ASCENDC_MODULE_UTILS_CONSTANTS_H
-#include "utils/kernel_utils_ceil_oom_que.h"
-#include "utils/kernel_utils_dump_constants.h"
+#include "kernel_utils_ceil_oom_que.h"
+#include "sys_macros.h"
+#include "kernel_utils_macros.h"
 
 namespace AscendC {
 const int32_t DEFAULT_BLK_NUM = 8;

@@ -21,6 +21,28 @@ namespace AscendC {
 constexpr int32_t MIX = 0;
 constexpr int32_t AIC = 1;
 constexpr int32_t AIV = 2;
+
+enum class TPosition : uint8_t {
+    GM,
+    A1,
+    A2,
+    B1,
+    B2,
+    C1,
+    C2,
+    CO1,
+    CO2,
+    VECIN,
+    VECOUT,
+    VECCALC,
+    LCM = VECCALC,
+    SPM,
+    SHM = SPM,
+    TSCM,
+    C2PIPE2GM,
+    C2PIPE2LOCAL,
+    MAX,
+};
 } // namespace AscendC
 
 #endif

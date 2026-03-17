@@ -34,8 +34,6 @@
 #endif
 
 #include "kernel_macros.h"
-#include "kernel_log.h"
-#include "kernel_event.h"
 #if defined(ASCENDC_CPU_DEBUG) && ASCENDC_CPU_DEBUG == 1
 #include <set>
 #include <map>
@@ -109,12 +107,12 @@ enum KernelType {
     K_TYPE_AIV = 3,                 // v220-vec
     K_TYPE_MIX_AIC_MAIN = 4,        // v220 mix cube/vector 1:2
     K_TYPE_MIX_AIV_MAIN = 5,        // v220 mix vector/cube 1:2
-    K_TYPE_AIC_ROLLBACK = 6,        // v220-cube£¬aic rollback
-    K_TYPE_AIV_ROLLBACK = 7,        // v220-vec£¬aiv rollback
+    K_TYPE_AIC_ROLLBACK = 6,        // v220-cubeï¿½ï¿½aic rollback
+    K_TYPE_AIV_ROLLBACK = 7,        // v220-vecï¿½ï¿½aiv rollback
     K_TYPE_MAX
 };
 
-enum BinaryMetaType { // º¯Êý¼¶TLVÀàÐÍ
+enum BinaryMetaType { // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½TLVï¿½ï¿½ï¿½ï¿½
     B_TYPE_BIN_VERSION_INFO = 0,
     B_TYPE_DEBUG_INFO = 1,
     B_TYPE_DYNAMIC_PARAM = 2,
@@ -122,32 +120,32 @@ enum BinaryMetaType { // º¯Êý¼¶TLVÀàÐÍ
     B_TYPE_SK_INFO = 5
 };
 
-struct BaseTlv {  // TLVÍ·²¿¶¨Òå
+struct BaseTlv {  // TLVÍ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     unsigned short type;
     unsigned short len;
 };
 
 struct BinaryMetaVersion {
     BaseTlv head;     // B_TYPE_BIN_VERSION = 0
-    uint32_t version;  // °æ±¾ÐÅÏ¢'
+    uint32_t version;  // ï¿½æ±¾ï¿½ï¿½Ï¢'
 };
 
 struct BinaryMetaDebug {
     BaseTlv head;     // B_TYPE_DEBUG_INFO = 1
-    uint32_t debugBufSize;  // µ÷ÊÔÐèÒªµÄÄÚ´æ¿Õ¼ä
-    uint32_t debugOptions; // µ÷ÊÔ¿ª¹Ø¿ªÆô
+    uint32_t debugBufSize;  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½Ú´ï¿½Õ¼ï¿½
+    uint32_t debugOptions; // ï¿½ï¿½ï¿½Ô¿ï¿½ï¿½Ø¿ï¿½ï¿½ï¿½
 };
 
 struct BinaryMetaDynamicParam {
     BaseTlv head;
     uint16_t reserve;
-    uint16_t dynamicParamMode;  // ¶¯Ì¬²ÎÊý£¬Ö§³Ö¶þ¼¶Ö¸Õë·½Ê½´«²Î¸økernel
+    uint16_t dynamicParamMode;  // ï¿½ï¿½Ì¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö§ï¿½Ö¶ï¿½ï¿½ï¿½Ö¸ï¿½ë·½Ê½ï¿½ï¿½ï¿½Î¸ï¿½kernel
 };
 
 struct BinaryMetaOptionalParam {
     BaseTlv head;
-    uint16_t optionalInputMode; // ¶ÔÓÚ¿ÉÑ¡ÊäÈëÐèÒªÕ¼Î»·¢²¼
-    uint16_t optionalOutputMode; // ¶ÔÓÚ¿ÉÑ¡ÊäÈëÐèÒªÕ¼Î»·¢²¼
+    uint16_t optionalInputMode; // ï¿½ï¿½ï¿½Ú¿ï¿½Ñ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÒªÕ¼Î»ï¿½ï¿½ï¿½ï¿½
+    uint16_t optionalOutputMode; // ï¿½ï¿½ï¿½Ú¿ï¿½Ñ¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÒªÕ¼Î»ï¿½ï¿½ï¿½ï¿½
 };
 
 struct BinaryMetaAscFeature {
@@ -155,7 +153,7 @@ struct BinaryMetaAscFeature {
     uint32_t feature; // PRINT = 1, FFTS = 2, L2CACHE = 3
 };
 
-enum FuncMetaType { // º¯Êý¼¶TLVÀàÐÍ
+enum FuncMetaType { // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½TLVï¿½ï¿½ï¿½ï¿½
     F_TYPE_KTYPE = 1, // kernel type tlv
     F_TYPE_CROSS_CORE_SYNC = 2, // cross core sync
     F_TYPE_MIX_TASK_RATION = 3, // MIX CORE TYPE
@@ -170,7 +168,7 @@ enum FuncMetaType { // º¯Êý¼¶TLVÀàÐÍ
 
 struct FuncMetaDeterministic {
     BaseTlv head;
-    uint32_t deterministic; // È·¶¨ÐÔ¼ÆËã
+    uint32_t deterministic; // È·ï¿½ï¿½ï¿½Ô¼ï¿½ï¿½ï¿½
 };
 
 struct FuncMetaFunctionEntry {
@@ -184,7 +182,7 @@ struct FuncMetaNumBlocks {
     uint32_t numBlocks; // numBlocks
 };
 
-enum CrossCoreSyncType { // º¯Êý¼¶TLVÀàÐÍ
+enum CrossCoreSyncType { // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½TLVï¿½ï¿½ï¿½ï¿½
     C_TYPE_USE_SYNC = 1, // use cross core sync
     C_TYPE_MAX
 };

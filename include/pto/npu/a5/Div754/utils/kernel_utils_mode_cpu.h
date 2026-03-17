@@ -19,7 +19,7 @@
 #endif
 #ifndef ASCENDC_MODULE_UTILS_MODE_CPU_H
 #define ASCENDC_MODULE_UTILS_MODE_CPU_H
-#include "utils/kernel_utils_constants.h"
+#include "kernel_utils_constants.h"
 
 namespace AscendC {
 class MaskSetter {

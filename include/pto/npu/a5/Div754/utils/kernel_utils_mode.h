@@ -19,8 +19,8 @@
 #endif
 #ifndef ASCENDC_MODULE_UTILS_MODE_H
 #define ASCENDC_MODULE_UTILS_MODE_H
-#include "utils/kernel_utils_constants.h"
-#include "utils/kernel_utils_mode_cpu.h"
+#include "kernel_utils_constants.h"
+#include "kernel_utils_mode_cpu.h"
 
 namespace AscendC {
 /*

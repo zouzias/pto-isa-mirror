@@ -11,15 +11,18 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TDIV754_HPP
 #define TDIV754_HPP
 
-struct DefaultType {};
+#include "kernel_reg_compute_utils.h"
 
+using namespace AscendC::Reg;
+
+namespace AscendC {
 namespace Internal {
 __aicore__ inline constexpr DivSpecificMode GetDivSpecificMode(MaskMergeMode mrgMode)
 {
     return {
         .mrgMode = mrgMode,
         .precisionMode = false,
-        .algo = DivAlgo::INTRINSIC
+        //.algo = DivAlgo::INTRINSIC
     };
 }
 
@@ -28,14 +31,14 @@ __aicore__ inline constexpr DivSpecificMode GetDivSpecificMode(const DivSpecific
     return {
         .mrgMode = sprMode->mrgMode,
         .precisionMode = sprMode->precisionMode,
-        .algo = sprMode->algo
+        //.algo = sprMode->algo
     };
 }
 
 } // namespace Internal
 
 template <typename T = DefaultType, auto mode = MaskMergeMode::ZEROING, typename U>
-__simd_callee__ inline void DivPrecisionImpl(U& dstReg, U& srcReg0, U& srcReg1, MaskReg& mask)
+PTO_INTERNAL inline void DivPrecisionImpl(U& dstReg, U& srcReg0, U& srcReg1, MaskReg& mask)
 {
     constexpr DivSpecificMode sprMode = Internal::GetDivSpecificMode(mode);
     constexpr auto modeValue = GetMaskMergeMode<sprMode.mrgMode>();
@@ -86,7 +89,7 @@ __simd_callee__ inline void DivPrecisionImpl(U& dstReg, U& srcReg0, U& srcReg1, 
 }
 
 template <typename T = DefaultType, auto mode = MaskMergeMode::ZEROING, typename U, bool is0ULP>
-__simd_callee__ inline void DivIEEE754FloatImpl(RegTensor<float>& dst, RegTensor<float>& src0,
+PTO_INTERNAL inline void DivIEEE754FloatImpl(RegTensor<float>& dst, RegTensor<float>& src0,
                                                 RegTensor<float>& src1, MaskReg& mask)
 {
     constexpr uint32_t exponentExtractor = 0x807FFFFF;
@@ -106,22 +109,22 @@ __simd_callee__ inline void DivIEEE754FloatImpl(RegTensor<float>& dst, RegTensor
     NotNumUnion normalizeScaleReduce;
     normalizeScaleReduce.i = 0x34000000; // 2^-23
 
-    Reg::RegTensor<float> maxSubnormal;
-    Reg::RegTensor<uint32_t> tmp0;
-    Reg::RegTensor<int32_t> tmp1;
-    Reg::RegTensor<uint32_t> tmp2;
+    RegTensor<float> maxSubnormal;
+    RegTensor<uint32_t> tmp0;
+    RegTensor<int32_t> tmp1;
+    RegTensor<uint32_t> tmp2;
 
-    Reg::RegTensor<float> src0Abs;
-    Reg::RegTensor<float> src0Subnormal;
-    Reg::RegTensor<float> src0Norm;
-    Reg::RegTensor<float> src0All;
-    Reg::RegTensor<float> src0AbsNorm;
+    RegTensor<float> src0Abs;
+    RegTensor<float> src0Subnormal;
+    RegTensor<float> src0Norm;
+    RegTensor<float> src0All;
+    RegTensor<float> src0AbsNorm;
 
-    Reg::RegTensor<float> src1Abs;
-    Reg::RegTensor<float> src1Subnormal;
-    Reg::RegTensor<float> src1Norm;
-    Reg::RegTensor<float> src1All;
-    Reg::RegTensor<float> src1AbsNorm;
+    RegTensor<float> src1Abs;
+    RegTensor<float> src1Subnormal;
+    RegTensor<float> src1Norm;
+    RegTensor<float> src1All;
+    RegTensor<float> src1AbsNorm;
 
     MaskReg mask0;
     MaskReg maskSrc0Normal;
@@ -310,7 +313,7 @@ __simd_callee__ inline void DivIEEE754FloatImpl(RegTensor<float>& dst, RegTensor
 
 
 template <typename T = DefaultType, auto mode = MaskMergeMode::ZEROING, typename U>
-__simd_callee__ inline void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0,
+PTO_INTERNAL inline void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0,
                                                RegTensor<half>& src1, MaskReg& mask)
 {
     constexpr uint16_t exponentExtractor = 0x83FF;
@@ -331,22 +334,22 @@ __simd_callee__ inline void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<h
     HalfUnion normalizeScaleReduce;
     normalizeScaleReduce.i = 0x1400; // 2^-10
 
-    Reg::RegTensor<half> maxSubnormal;
-    Reg::RegTensor<uint16_t> tmp0;
-    Reg::RegTensor<int16_t> tmp1;
-    Reg::RegTensor<uint16_t> tmp2;
+    RegTensor<half> maxSubnormal;
+    RegTensor<uint16_t> tmp0;
+    RegTensor<int16_t> tmp1;
+    RegTensor<uint16_t> tmp2;
 
-    Reg::RegTensor<half> src0Abs;
-    Reg::RegTensor<half> src0Subnormal;
-    Reg::RegTensor<half> src0Norm;
-    Reg::RegTensor<half> src0All;
-    Reg::RegTensor<half> src0AbsNorm;
+    RegTensor<half> src0Abs;
+    RegTensor<half> src0Subnormal;
+    RegTensor<half> src0Norm;
+    RegTensor<half> src0All;
+    RegTensor<half> src0AbsNorm;
 
-    Reg::RegTensor<half> src1Abs;
-    Reg::RegTensor<half> src1Subnormal;
-    Reg::RegTensor<half> src1Norm;
-    Reg::RegTensor<half> src1All;
-    Reg::RegTensor<half> src1AbsNorm;
+    RegTensor<half> src1Abs;
+    RegTensor<half> src1Subnormal;
+    RegTensor<half> src1Norm;
+    RegTensor<half> src1All;
+    RegTensor<half> src1AbsNorm;
 
     MaskReg mask0;
     MaskReg maskSrc0Normal;
@@ -525,5 +528,5 @@ __simd_callee__ inline void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<h
     // set output with nan input to nan
     Select(dst, (RegTensor<half>&)tmp0, dst, maskNan);
 }
-
+}
 #endif // TINSERT_CUSTOM_HPP

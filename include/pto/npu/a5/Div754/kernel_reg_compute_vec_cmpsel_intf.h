@@ -21,8 +21,8 @@
 #ifndef ASCENDC_MODULE_REG_COMPUTE_VEC_CMPSEL_INTERFACE_H
 #define ASCENDC_MODULE_REG_COMPUTE_VEC_CMPSEL_INTERFACE_H
 
-#include "kernel_reg_compute_common_intf.h"
-#include "kernel_reg_compute_utils.h"
+#include "Div754/kernel_reg_compute_common_intf.h"
+#include "Div754/kernel_reg_compute_utils.h"
 
 namespace AscendC {
 namespace Reg {

@@ -20,8 +20,8 @@
 #ifndef ASCENDC_KERNEL_MACROS_H
 #define ASCENDC_KERNEL_MACROS_H
 
-#include "impl/utils/sys_macros.h"
-#include "impl/utils/sys_constants.h"
+#include "sys_macros.h"
+#include "sys_constants.h"
 
 #if defined(ASCENDC_CPU_DEBUG) && ASCENDC_CPU_DEBUG == 1
 #define ASSERT(x) assert(x)

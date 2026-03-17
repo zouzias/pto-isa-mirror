@@ -16,7 +16,7 @@
 #define IMPL_UTILS_SYS_MACROS_H
 
 #include <cstdint>
-#include "impl/utils/sys_constants.h"
+#include "sys_constants.h"
 
 #if (defined(ASCENDC_CPU_DEBUG) && (ASCENDC_CPU_DEBUG == 1))
 #include "stub_def.h"
