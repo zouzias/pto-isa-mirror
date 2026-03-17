@@ -154,47 +154,47 @@ extern "C" __global__ AICORE void launchTROWMINCase18(__gm__ float *out, __gm__ 
 }
 
 // int32 test cases
-extern "C" __global__ AICORE void launchTROWMINCase19(__gm__ int *out, __gm__ int *src)
+extern "C" __global__ AICORE void launchTROWMINCase19(__gm__ int32_t *out, __gm__ int32_t *src)
 {
-    runTRowMin<int, 127, 127, 64, 63, 1>(out, src);
+    runTRowMin<int32_t, 127, 127, 64, 63, 1>(out, src);
 }
-extern "C" __global__ AICORE void launchTROWMINCase20(__gm__ int *out, __gm__ int *src)
+extern "C" __global__ AICORE void launchTROWMINCase20(__gm__ int32_t *out, __gm__ int32_t *src)
 {
-    runTRowMin<int, 63, 63, 64, 64, 1>(out, src);
+    runTRowMin<int32_t, 63, 63, 64, 64, 1>(out, src);
 }
-extern "C" __global__ AICORE void launchTROWMINCase21(__gm__ int *out, __gm__ int *src)
+extern "C" __global__ AICORE void launchTROWMINCase21(__gm__ int32_t *out, __gm__ int32_t *src)
 {
-    runTRowMin<int, 31, 31, 128, 127, 1>(out, src);
+    runTRowMin<int32_t, 31, 31, 128, 127, 1>(out, src);
 }
-extern "C" __global__ AICORE void launchTROWMINCase22(__gm__ int *out, __gm__ int *src)
+extern "C" __global__ AICORE void launchTROWMINCase22(__gm__ int32_t *out, __gm__ int32_t *src)
 {
-    runTRowMin<int, 15, 15, 192, 192, 1>(out, src);
+    runTRowMin<int32_t, 15, 15, 192, 192, 1>(out, src);
 }
-extern "C" __global__ AICORE void launchTROWMINCase23(__gm__ int *out, __gm__ int *src)
+extern "C" __global__ AICORE void launchTROWMINCase23(__gm__ int32_t *out, __gm__ int32_t *src)
 {
-    runTRowMin<int, 7, 7, 448, 447, 1>(out, src);
+    runTRowMin<int32_t, 7, 7, 448, 447, 1>(out, src);
 }
 
-// int16 test cases - need 32-byte alignment for short (2 bytes), so cols must be multiple of 16
-extern "C" __global__ AICORE void launchTROWMINCase24(__gm__ short *out, __gm__ short *src)
+// int16 test cases - need 32-byte alignment for int16_t (2 bytes), so cols must be multiple of 16
+extern "C" __global__ AICORE void launchTROWMINCase24(__gm__ int16_t *out, __gm__ int16_t *src)
 {
-    runTRowMin<short, 128, 128, 64, 64, 1>(out, src);
+    runTRowMin<int16_t, 128, 128, 64, 64, 1>(out, src);
 }
-extern "C" __global__ AICORE void launchTROWMINCase25(__gm__ short *out, __gm__ short *src)
+extern "C" __global__ AICORE void launchTROWMINCase25(__gm__ int16_t *out, __gm__ int16_t *src)
 {
-    runTRowMin<short, 64, 64, 64, 64, 1>(out, src);
+    runTRowMin<int16_t, 64, 64, 64, 64, 1>(out, src);
 }
-extern "C" __global__ AICORE void launchTROWMINCase26(__gm__ short *out, __gm__ short *src)
+extern "C" __global__ AICORE void launchTROWMINCase26(__gm__ int16_t *out, __gm__ int16_t *src)
 {
-    runTRowMin<short, 32, 32, 128, 128, 1>(out, src);
+    runTRowMin<int16_t, 32, 32, 128, 128, 1>(out, src);
 }
-extern "C" __global__ AICORE void launchTROWMINCase27(__gm__ short *out, __gm__ short *src)
+extern "C" __global__ AICORE void launchTROWMINCase27(__gm__ int16_t *out, __gm__ int16_t *src)
 {
-    runTRowMin<short, 16, 16, 192, 192, 1>(out, src);
+    runTRowMin<int16_t, 16, 16, 192, 192, 1>(out, src);
 }
-extern "C" __global__ AICORE void launchTROWMINCase28(__gm__ short *out, __gm__ short *src)
+extern "C" __global__ AICORE void launchTROWMINCase28(__gm__ int16_t *out, __gm__ int16_t *src)
 {
-    runTRowMin<short, 8, 8, 448, 448, 1>(out, src);
+    runTRowMin<int16_t, 8, 8, 448, 448, 1>(out, src);
 }
 
 template <uint32_t caseId>
@@ -274,43 +274,43 @@ void launchTROWMINTestCase(void *out, void *src, aclrtStream stream)
             break;
         }
         case 19: {
-            launchTROWMINCase19<<<1, nullptr, stream>>>((int *)out, (int *)src);
+            launchTROWMINCase19<<<1, nullptr, stream>>>((int32_t *)out, (int32_t *)src);
             break;
         }
         case 20: {
-            launchTROWMINCase20<<<1, nullptr, stream>>>((int *)out, (int *)src);
+            launchTROWMINCase20<<<1, nullptr, stream>>>((int32_t *)out, (int32_t *)src);
             break;
         }
         case 21: {
-            launchTROWMINCase21<<<1, nullptr, stream>>>((int *)out, (int *)src);
+            launchTROWMINCase21<<<1, nullptr, stream>>>((int32_t *)out, (int32_t *)src);
             break;
         }
         case 22: {
-            launchTROWMINCase22<<<1, nullptr, stream>>>((int *)out, (int *)src);
+            launchTROWMINCase22<<<1, nullptr, stream>>>((int32_t *)out, (int32_t *)src);
             break;
         }
         case 23: {
-            launchTROWMINCase23<<<1, nullptr, stream>>>((int *)out, (int *)src);
+            launchTROWMINCase23<<<1, nullptr, stream>>>((int32_t *)out, (int32_t *)src);
             break;
         }
         case 24: {
-            launchTROWMINCase24<<<1, nullptr, stream>>>((short *)out, (short *)src);
+            launchTROWMINCase24<<<1, nullptr, stream>>>((int16_t *)out, (int16_t *)src);
             break;
         }
         case 25: {
-            launchTROWMINCase25<<<1, nullptr, stream>>>((short *)out, (short *)src);
+            launchTROWMINCase25<<<1, nullptr, stream>>>((int16_t *)out, (int16_t *)src);
             break;
         }
         case 26: {
-            launchTROWMINCase26<<<1, nullptr, stream>>>((short *)out, (short *)src);
+            launchTROWMINCase26<<<1, nullptr, stream>>>((int16_t *)out, (int16_t *)src);
             break;
         }
         case 27: {
-            launchTROWMINCase27<<<1, nullptr, stream>>>((short *)out, (short *)src);
+            launchTROWMINCase27<<<1, nullptr, stream>>>((int16_t *)out, (int16_t *)src);
             break;
         }
         case 28: {
-            launchTROWMINCase28<<<1, nullptr, stream>>>((short *)out, (short *)src);
+            launchTROWMINCase28<<<1, nullptr, stream>>>((int16_t *)out, (int16_t *)src);
             break;
         }
         default: {
