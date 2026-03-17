@@ -12,7 +12,37 @@ full text of the License.
 
 #ifndef TSUBVIEW_A5_HPP
 #define TSUBVIEW_A5_HPP
+#include <pto/common/type.hpp>
+#include <cstdint>
 
-#include "pto/npu/a2a3/TSubView.hpp"
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TSUBVIEW_IMPL(TileDataDst &dst, TileDataSrc &src, uint16_t rowIdx,
+                          uint16_t colIdx) {
+  constexpr int kRowStride = TileDataSrc::RowStride;
+  constexpr int kColStride = TileDataSrc::ColStride;
+  const uint64_t totalOffset = rowIdx * kRowStride + colIdx * kColStride;
+
+#ifndef __PTO_AUTO__
+  // implementation for manual mode
+  TASSIGN_IMPL(dst, (uint64_t)(src.data() + totalOffset));
+#else
+  // we simply call a dummy tile function for auto mode, and the compiler
+  // will generate the implementation during memory allocation
+  static_assert(
+      TileDataDst::Loc == TileDataSrc::Loc,
+      "The destination and source tiles must have the same TileType!");
+  static_assert(TileDataDst::BFractal == TileDataSrc::BFractal,
+                "The destination and source tiles must have the same BFractal");
+  PTO_ASSERT(src.GetValidRow() >= dst.GetValidRow(),
+             "The source tile's validRow must be at least as big as the destination "
+             "tile's validRow!");
+  PTO_ASSERT(src.GetValidCol() >= dst.GetValidCol(),
+             "The source tile's validCol must be at least as big as the destination "
+             "tile's validCol!");
+
+  const uint64_t byteOffset = totalOffset * sizeof(typename TileDataSrc::DType);
+  __cce_alias(dst.data(), src.data(), byteOffset);
+#endif
+}
 
 #endif

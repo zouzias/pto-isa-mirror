@@ -49,9 +49,13 @@ if [ "$4" = "build_only" ]; then
   RUN_MODE=build_st.py
 fi
 
+if [ "$5" = "auto_mode" ]; then
+  AUTO_MODE_FLAG="-a"
+fi
+
 if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
-    python3 tests/script/build_st.py -r $RUN_TYPE -v a3 -t all
+    python3 tests/script/build_st.py -r $RUN_TYPE -v a3 -t all $AUTO_MODE_FLAG
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolexpand -g TCOLEXPANDTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolsum -g TCOLSUMTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolprod -g TCOLPRODTest.case1
@@ -140,7 +144,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tconcat -g TCONCATTest.case_int32_64x128_64x64_64x64_64x64_64x64
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
-    python3 tests/script/build_st.py -r $RUN_TYPE -v a3 -t all
+    python3 tests/script/build_st.py -r $RUN_TYPE -v a3 -t all $AUTO_MODE_FLAG
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolexpand
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolsum
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolprod
@@ -222,7 +226,7 @@ fi
 
 if [ "$ENABLE_A5" = "true" ]; then
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
-    python3 tests/script/build_st.py -r $RUN_TYPE -v a5 -t all
+    python3 tests/script/build_st.py -r $RUN_TYPE -v a5 -t all $AUTO_MODE_FLAG
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdequant -g TDEQUANTTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfmods -g TFMODSTest.case1
@@ -335,7 +339,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
-    python3 tests/script/build_st.py -r $RUN_TYPE -v a5 -t all
+    python3 tests/script/build_st.py -r $RUN_TYPE -v a5 -t all $AUTO_MODE_FLAG
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdequant
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfmod
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfmods
