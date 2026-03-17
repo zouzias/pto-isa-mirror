@@ -67,7 +67,7 @@ case "${LAUNCH_PRESET}" in
     mc2)
         export LLM_REPO="${LLM_REPO:-/home/llx/lzm_Mindspeed-LLm}"
         export MS_REPO="${MS_REPO:-/home/llx/MindSpeed}"
-        export PRETRAIN_ENTRY="${PRETRAIN_ENTRY:-${MS_REPO}/pretrain_jamba.py}"
+        export PRETRAIN_ENTRY="${PRETRAIN_ENTRY:-${LLM_REPO}/pretrain_jamba.py}"
         export SOURCE_EXAMPLE_SCRIPT="${SOURCE_EXAMPLE_SCRIPT:-/home/llx/bench_native_llm/examples/mcore/qwen2/pretrain_qwen2_30b_4k_jamba_gdn_moe_cann850_bck.sh}"
         export ENABLE_MOE_ALLTOALL_OVERLAP_COMM="${ENABLE_MOE_ALLTOALL_OVERLAP_COMM:-0}"
         export ENABLE_MOE_ALLTOALL_MC2="${ENABLE_MOE_ALLTOALL_MC2:-1}"
@@ -77,7 +77,7 @@ case "${LAUNCH_PRESET}" in
     pto_mc2)
         export LLM_REPO="${LLM_REPO:-/home/llx/lzm_Mindspeed-LLm}"
         export MS_REPO="${MS_REPO:-/home/llx/MindSpeed}"
-        export PRETRAIN_ENTRY="${PRETRAIN_ENTRY:-${MS_REPO}/pretrain_jamba.py}"
+        export PRETRAIN_ENTRY="${PRETRAIN_ENTRY:-${LLM_REPO}/pretrain_jamba.py}"
         export SOURCE_EXAMPLE_SCRIPT="${SOURCE_EXAMPLE_SCRIPT:-/home/llx/bench_native_llm/examples/mcore/qwen2/pretrain_qwen2_30b_4k_jamba_gdn_moe_cann850_bck.sh}"
         export ENABLE_MOE_ALLTOALL_OVERLAP_COMM="${ENABLE_MOE_ALLTOALL_OVERLAP_COMM:-0}"
         export ENABLE_MOE_ALLTOALL_MC2="${ENABLE_MOE_ALLTOALL_MC2:-1}"
