@@ -110,6 +110,6 @@ TEST_F(TADDSTest, case5)
 
 TEST_F(TADDSTest, case6)
 {
-    bool ret = TAddSTestFramework<6, float, 256, 256, 16, 16, 128.0f, 0.0f>();
+    bool ret = TAddSTestFramework<6, float, 256, 256, 16, 16, 288.0f, 0.0f>();
     EXPECT_TRUE(ret);
 }

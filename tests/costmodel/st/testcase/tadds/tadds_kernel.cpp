@@ -73,7 +73,7 @@ extern "C" __global__ AICORE void launchTADDSCase5(__gm__ float *out, __gm__ flo
 }
 extern "C" __global__ AICORE void launchTADDSCase6(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTAddS<float, 256, 256, 16, 16, 128.0f, 0.0f>(out, src, scalar);
+    runTAddS<float, 256, 256, 16, 16, 288.0f, 0.0f>(out, src, scalar);
 }
 
 template <uint32_t caseId>
