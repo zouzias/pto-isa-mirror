@@ -35,8 +35,26 @@ struct ColExpandExpdifOp {
     }
 };
 
-template <typename TileData, typename TileDataSrc>
-PTO_INTERNAL void TCOLEXPANDEXPDIF_IMPL(TileData &dst, TileData &src0, TileDataSrc &src1)
+template <typename T>
+struct ColExpandExpdifOp2 {
+    PTO_INTERNAL static void ColExpandBinInstr(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1, uint8_t repeats)
+    {
+        vsub(dst, src1, src0, repeats, 1, 1, 1, 8, 8, 8);
+        pipe_barrier(PIPE_V);
+        vexp(dst, dst, repeats, 1, 1, 8, 8);
+    }
+    PTO_INTERNAL static void ColExpandBinInstr(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1, uint8_t repeats,
+                                               uint8_t dstRepeatStride, uint8_t src0RepeatStride,
+                                               uint8_t src1RepeatStride)
+    {
+        vsub(dst, src1, src0, repeats, 1, 1, 1, dstRepeatStride, 0, src0RepeatStride);
+        pipe_barrier(PIPE_V);
+        vexp(dst, dst, repeats, 1, 1, dstRepeatStride, dstRepeatStride);
+    }
+};
+
+template <typename TileData, typename TileDataSrc0, typename TileDataSrc1>
+PTO_INTERNAL void TCOLEXPANDEXPDIF_IMPL(TileData &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
     using T = typename TileData::DType;
     static_assert(
@@ -48,9 +66,20 @@ PTO_INTERNAL void TCOLEXPANDEXPDIF_IMPL(TileData &dst, TileData &src0, TileDataS
     constexpr unsigned rowStride = TileData::RowStride;
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();
+    unsigned src0ValidRow = src0.GetValidRow();
+    unsigned src0ValidCol = src0.GetValidCol();
+    unsigned src1ValidRow = src1.GetValidRow();
+    unsigned src1ValidCol = src1.GetValidCol();
+    bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
+    bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
 
-    ColExpandBinaryInstr<ColExpandExpdifOp<T>, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(
-        dst.data(), src0.data(), src1.data(), validRow, validCol);
+    if (src0eqdst) {
+        ColExpandBinaryInstr<ColExpandExpdifOp<T>, TileData, TileDataSrc1, elementsPerRepeat, blockSizeElem, rowStride>(
+            dst.data(), src0.data(), src1.data(), validRow, validCol);
+    } else {
+        ColExpandBinaryInstr<ColExpandExpdifOp2<T>, TileData, TileDataSrc0, elementsPerRepeat, blockSizeElem,
+                             rowStride>(dst.data(), src1.data(), src0.data(), validRow, validCol);
+    }
 }
 } // namespace pto
 #endif
