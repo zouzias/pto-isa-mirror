@@ -210,7 +210,8 @@ PTO_INTERNAL void TBinaryScalarOp(unsigned validRow, unsigned validCol)
 }
 
 template <typename T, typename Op, typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void runBinaryScalarOp(TileDataDst &dst, TileDataSrc &src){
+PTO_INTERNAL void runBinaryScalarOp(TileDataDst &dst, TileDataSrc &src)
+{
     unsigned dstValidRow = dst.GetValidRow();
     unsigned dstValidCol = dst.GetValidCol();
     if ((dstValidRow != 0 && dstValidCol != 0) &&

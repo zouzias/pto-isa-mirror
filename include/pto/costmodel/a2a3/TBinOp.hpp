@@ -286,7 +286,7 @@ template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned b
           unsigned src0RowStride, unsigned src1RowStride>
 PTO_INTERNAL void BinaryInstr(unsigned validRows, unsigned validCols)
 {
-	using T = typename TileData::DType;
+    using T = typename TileData::DType;
     Bin2LNormModeRowRpt<Op, T, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(validRows,
                                                                                                              validCols);
 }
@@ -313,7 +313,7 @@ PTO_INTERNAL void runBinaryOp(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
         constexpr unsigned dstRowStride = TileDataDst::RowStride;
         TBinaryOp<Op, TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride>(dst.GetValidRow(),
                                                                                    dst.GetValidCol());
-    } else{
+    } else {
         constexpr unsigned dstRowStride = TileDataDst::RowStride;
         constexpr unsigned src0RowStride = TileDataSrc0::RowStride;
         constexpr unsigned src1RowStride = TileDataSrc1::RowStride;
