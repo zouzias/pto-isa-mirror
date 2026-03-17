@@ -148,6 +148,10 @@
 
 ## 下一步建议
 
+同日的公平矩阵对比见：
+
+- `/home/llx/pto-isa/notes/mfu/20260317_expandseg_fair_matrix.md`
+
 如果后续要把这条结果变成默认可复现流程，我建议按以下顺序推进：
 
 1. 先把 `PYTORCH_NPU_ALLOC_CONF=expandable_segments:True` 纳入正式实验矩阵记录
