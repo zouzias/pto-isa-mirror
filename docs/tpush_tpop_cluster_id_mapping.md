@@ -240,6 +240,5 @@ On A5, the CVID is computed directly from `get_coreid()` without any GM communic
 
 ## Related Documents
 
-- [TPUSH/TPOP ISA Design](tpush_tpop_isa_design.md) — Main ring buffer protocol spec
 - [Source: A5 TSyncCVID.hpp](https://gitcode.com/cann/pto-isa/blob/master/include/pto/npu/a5/custom/TSyncCVID.hpp)
 - [Source: A2A3 TSyncCVID.hpp](https://gitcode.com/cann/pto-isa/blob/master/include/pto/npu/a2a3/custom/TSyncCVID.hpp)
