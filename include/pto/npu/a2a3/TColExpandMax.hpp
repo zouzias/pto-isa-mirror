@@ -31,8 +31,8 @@ struct ColExpandMaxOp {
     }
 };
 
-template <typename TileData, typename TileDataSrc>
-PTO_INTERNAL void TCOLEXPANDMAX_IMPL(TileData &dst, TileData &src0, TileDataSrc &src1)
+template <typename TileData, typename TileDataSrc0, typename TileDataSrc1>
+PTO_INTERNAL void TCOLEXPANDMAX_IMPL(TileData &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
     using T = typename TileData::DType;
     static_assert(
@@ -44,9 +44,20 @@ PTO_INTERNAL void TCOLEXPANDMAX_IMPL(TileData &dst, TileData &src0, TileDataSrc 
     constexpr unsigned rowStride = TileData::RowStride;
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();
+    unsigned src0ValidRow = src0.GetValidRow();
+    unsigned src0ValidCol = src0.GetValidCol();
+    unsigned src1ValidRow = src1.GetValidRow();
+    unsigned src1ValidCol = src1.GetValidCol();
+    bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
+    bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
 
-    ColExpandBinaryInstr<ColExpandMaxOp<T>, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(
-        dst.data(), src0.data(), src1.data(), validRow, validCol);
+    if (src0eqdst) {
+        ColExpandBinaryInstr<ColExpandMaxOp<T>, TileData, TileDataSrc1, elementsPerRepeat, blockSizeElem, rowStride>(
+            dst.data(), src0.data(), src1.data(), validRow, validCol);
+    } else {
+        ColExpandBinaryInstr<ColExpandMaxOp<T>, TileData, TileDataSrc0, elementsPerRepeat, blockSizeElem, rowStride>(
+            dst.data(), src1.data(), src0.data(), validRow, validCol);
+    }
 }
 } // namespace pto
 #endif
