@@ -1,4 +1,4 @@
-# TSEL
+﻿# TSEL
 
 ## 指令示意图
 
@@ -22,7 +22,7 @@ $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 
 同步形式：
 
@@ -30,13 +30,13 @@ PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
 %dst = tsel %mask, %src0, %src1 : !pto.tile<...>
 ```
 
-### IR Level 1（SSA）
+### AS Level 1（SSA）
 
 ```text
 %dst = pto.tsel %mask, %src0, %src1 : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2（DPS）
+### AS Level 2（DPS）
 
 ```text
 pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -54,17 +54,17 @@ PTO_INST RecordEvent TSEL(TileData& dst, MaskTile& selMask, TileData& src0, Tile
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `sizeof(TileData::DType)` must be `2` or `4` bytes.
-  - `TileData::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
-  - No explicit assertions are enforced on the mask tile type/shape; mask encoding is target-defined.
-  - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
+  - `sizeof(TileData::DType)` 必须是 `2` 或 `4` 字节。
+  - `TileData::DType` 必须是 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
+  - 掩码 tile 类型/形状不强制执行显式断言；掩码编码由目标定义。
+  - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
 - **实现检查 (A5)**:
-  - `sizeof(TileData::DType)` must be `2` or `4` bytes.
-  - `TileData::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
-  - No explicit `static_assert`/`PTO_ASSERT` checks are enforced by `TSEL_IMPL`.
-  - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
-- **Mask encoding**:
-  - The mask tile is interpreted as packed predicate bits in a target-defined layout.
+  - `sizeof(TileData::DType)` 必须是 `2` 或 `4` 字节。
+  - `TileData::DType` 必须是 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
+  - `TSEL_IMPL` 不强制执行显式的 `static_assert`/`PTO_ASSERT` 检查。
+  - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
+- **掩码编码**:
+  - 掩码 tile 被解释为目标定义布局中的打包谓词位。
 
 ## 示例
 

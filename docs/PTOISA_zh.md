@@ -10,7 +10,7 @@
 | 概述 | [`docs/PTOISA_zh.md`](PTOISA_zh.md) | 本页（概述 + 全量指令索引）。 |
 | ISA 参考 | [`docs/isa/README_zh.md`](isa/README_zh.md) | 每条指令参考目录。 |
 | ISA 参考 | [`docs/isa/conventions_zh.md`](isa/conventions_zh.md) | 通用符号、操作数、事件与修饰符。 |
-| 汇编 (PTO-AS) | [`docs/grammar/PTO-AS_zh.md`](grammar/PTO-AS_zh.md) | PTO-AS 语法参考。 |
+| 汇编 (PTO-AS) | [`docs/assembly/PTO-AS_zh.md`](assembly/PTO-AS_zh.md) | PTO-AS 语法参考。 |
 | 权威源 | [`include/pto/common/pto_instr.hpp`](reference/pto-intrinsics-header_zh.md) | C++ intrinsic API（权威来源）。 |
 
 ## 指令索引（全部 PTO 指令）
@@ -19,8 +19,6 @@
 |---|---|---|
 | 同步 | [`TSYNC`](isa/TSYNC_zh.md) | 同步 PTO 执行（等待事件或插入每操作流水线屏障）。 |
 | 手动 / 资源绑定 | [`TASSIGN`](isa/TASSIGN_zh.md) | 将 Tile 对象绑定到实现定义的片上地址（手动放置）。 |
-| 手动 / 资源绑定 | [`TSETHF32MODE`](isa/TSETHF32MODE_zh.md) | 设置 HF32 变换模式（实现定义）。 |
-| 手动 / 资源绑定 | [`TSETTF32MODE`](isa/TSETTF32MODE_zh.md) | 设置 TF32 变换模式（实现定义）。 |
 | 手动 / 资源绑定 | [`TSETFMATRIX`](isa/TSETFMATRIX_zh.md) | 为类 IMG2COL 操作设置 FMATRIX 寄存器。 |
 | 手动 / 资源绑定 | [`TSET_IMG2COL_RPT`](isa/TSET_IMG2COL_RPT_zh.md) | 从 IMG2COL 配置 Tile 设置 IMG2COL 重复次数元数据。 |
 | 手动 / 资源绑定 | [`TSET_IMG2COL_PADDING`](isa/TSET_IMG2COL_PADDING_zh.md) | 从 IMG2COL 配置 Tile 设置 IMG2COL 填充元数据。 |

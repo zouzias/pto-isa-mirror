@@ -385,8 +385,8 @@ __global__ AICORE void RunTGEMV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, _
     out = dstGlobal.data();
 }
 
-template <typename T, typename U, typename S, typename B, int validM, int validK, int validN, RoundMode hf32TransMode>
-__global__ AICORE void RunTMATMUL_HF32(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, __gm__ B *src2)
+template <typename T, typename U, typename S, typename B, int validM, int validK, int validN, RoundMode tf32TransMode>
+__global__ AICORE void RunTMATMUL_TF32(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, __gm__ B *src2)
 {
     constexpr int M = CeilAlign<int>(validM, 16);
     constexpr int N = CeilAlign<int>(validN, 16);
@@ -418,7 +418,7 @@ __global__ AICORE void RunTMATMUL_HF32(__gm__ T *out, __gm__ U *src0, __gm__ S *
     TASSIGN(bMatTile, 0x20000);
 
     LeftTile aTile;
-    aTile.SetMadHF32Mode(hf32TransMode);
+    aTile.SetMadTF32Mode(tf32TransMode);
     RightTile bTile;
     AccTile cTile;
     TASSIGN(aTile, 0x0);
@@ -567,10 +567,10 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
         RunTGEMV<float, half, half, float, 1, 200, 32, false><<<1, nullptr, stream>>>(
             reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
     } else if constexpr (tilingKey == 7) {
-        RunTMATMUL_HF32<float, float, float, float, 16, 32, 64, RoundMode::CAST_RINT><<<1, nullptr, stream>>>(
+        RunTMATMUL_TF32<float, float, float, float, 16, 32, 64, RoundMode::CAST_RINT><<<1, nullptr, stream>>>(
             reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1), nullptr);
     } else if constexpr (tilingKey == 8) {
-        RunTMATMUL_HF32<float, float, float, float, 5, 75, 11, RoundMode::CAST_ROUND><<<1, nullptr, stream>>>(
+        RunTMATMUL_TF32<float, float, float, float, 5, 75, 11, RoundMode::CAST_ROUND><<<1, nullptr, stream>>>(
             reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1), nullptr);
     }
 }

@@ -315,6 +315,7 @@ __tf__ PTO_INTERNAL void TQuant_Int8Sym(typename TileDataOut::TileDType __out__ 
     __VEC_SCOPE__
     {
         RegTensor<float> v_input, v_scale;
+        RegTensor<int32_t> v_s32;
         RegTensor<half> vb16;
         RegTensor<int8_t> v_output_s8;
         for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
@@ -324,6 +325,10 @@ __tf__ PTO_INTERNAL void TQuant_Int8Sym(typename TileDataOut::TileDType __out__ 
                 vlds(v_scale, scalePtr, row, BRC_B32); // broadcast row scaling
                 vlds(v_input, srcPtr, ELE_CNT_B32 * idx + row * TileDataSrc::Cols, NORM);
                 vmul(v_input, v_input, v_scale, preg_b32, MODE_ZEROING);
+                // Round at fp32 precision to avoid double-rounding:
+                // fp32 -> s32 (round once) -> fp32 -> fp16 -> s8 (all exact for small ints)
+                vcvt(v_s32, v_input, preg_b32, ROUND_R, RS_ENABLE);
+                vcvt(v_input, v_s32, preg_b32, ROUND_R);
                 vcvt(vb16, v_input, preg_b32, ROUND_R, RS_ENABLE, PART_EVEN);
                 vcvt(v_output_s8, vb16, preg_b32, ROUND_R, RS_ENABLE, PART_EVEN);
                 vsts(v_output_s8, dstPtr, ELE_CNT_B32 * idx + row * TileDataOut::Cols, PK4_B32, preg_b32);
@@ -351,6 +356,7 @@ __tf__ PTO_INTERNAL void TQuant_Int8Asym(typename TileDataOut::TileDType __out__
     __VEC_SCOPE__
     {
         RegTensor<float> vb32_scale, vb32_input, vb32_offset;
+        RegTensor<int32_t> vb32_int;
         RegTensor<half> vb16_output;
         RegTensor<uint8_t> vb8_output;
         for (uint16_t row = 0; row < (uint16_t)validRows; ++row) {
@@ -362,6 +368,10 @@ __tf__ PTO_INTERNAL void TQuant_Int8Asym(typename TileDataOut::TileDType __out__
                 vlds(vb32_input, srcPtr, ELE_CNT_B32 * idx + row * TileDataSrc::Cols, NORM);
                 vmul(vb32_input, vb32_input, vb32_scale, preg_b32, MODE_ZEROING);
                 vadd(vb32_input, vb32_input, vb32_offset, preg_b32, MODE_ZEROING);
+                // Round at fp32 precision to avoid double-rounding:
+                // fp32 -> s32 (round once) -> fp32 -> fp16 -> u8 (all exact for small ints)
+                vcvt(vb32_int, vb32_input, preg_b32, ROUND_R, RS_ENABLE);
+                vcvt(vb32_input, vb32_int, preg_b32, ROUND_R);
                 vcvt(vb16_output, vb32_input, preg_b32, ROUND_R, RS_ENABLE, PART_EVEN);
                 vcvt(vb8_output, vb16_output, preg_b32, ROUND_R, RS_ENABLE, PART_EVEN);
                 vsts(vb8_output, dstPtr, ELE_CNT_B32 * idx + row * TileDataOut::Cols, PK4_B32, preg_b32);

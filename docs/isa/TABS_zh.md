@@ -1,4 +1,4 @@
-# TABS
+﻿# TABS
 
 ## 指令示意图
 
@@ -16,7 +16,7 @@ $$ \mathrm{dst}_{i,j} = \left|\mathrm{src}_{i,j}\right| $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 
 同步形式：
 
@@ -24,13 +24,13 @@ PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
 %dst = tabs %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1（SSA）
+### AS Level 1（SSA）
 
 ```text
 %dst = pto.tabs %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2（DPS）
+### AS Level 2（DPS）
 
 ```text
 pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -48,16 +48,16 @@ PTO_INST RecordEvent TABS(TileData& dst, TileData& src, WaitEvents&... events);
 ## 约束
 
 - **实现检查 (CPU sim)**:
-  - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float`.
-  - The implementation iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+  - `TileData::DType` 必须是以下之一：`int32_t`、`int`、`int16_t`、`half`、`float`。
+  - 实现在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
 - **实现检查 (NPU)**:
-  - `TileData::DType` must be one of: `float` or `half`;
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`);
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
-  - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-  - Tile 布局 must be row-major (`TileData::isRowMajor`).
+  - `TileData::DType` 必须是以下之一：`float` 或 `half`。
+  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
+  - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
+  - 运行时：`src.GetValidRow() == dst.GetValidRow()` 且 `src.GetValidCol() == dst.GetValidCol()`。
+  - Tile 布局必须是行主序（`TileData::isRowMajor`）。
 - **有效区域**:
-  - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+  - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 
 ## 示例
 

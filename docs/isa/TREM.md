@@ -1,4 +1,4 @@
-# TREM
+﻿# TREM
 
 
 ## Tile Operation Diagram
@@ -17,7 +17,7 @@ $$\mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} \bmod \mathrm{src1}_{i,j}$$
 
 ## Assembly Syntax
 
-PTO-AS form: see [docs/grammar/PTO-AS.md](../grammar/PTO-AS.md).
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
@@ -49,7 +49,6 @@ PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 
 - The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
 - Division-by-zero behavior is target-defined; the CPU simulator asserts in debug builds.
-- Temporary space is required by A3 for calculation, while not used by A5.
 
 ## Examples
 

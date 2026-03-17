@@ -7,8 +7,9 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+
+#include <type_traits>
 #include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 #include "acl/acl.h"
 
 using namespace pto;
@@ -18,7 +19,7 @@ namespace TPartMinTest {
 
 template <typename T, int dstVR, int dstVC, int src0VR, int src0VC, int src1VR, int src1VC, int dstTR, int dstTC,
           int src0TR, int src0TC, int src1TR, int src1TC>
-__global__ AICORE void runTPartMin(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
+__global__ AICORE void runTPartMin(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 {
     using GlobalDataDst = GlobalTensor<T, Shape<1, 1, 1, dstVR, dstVC>, pto::Stride<1, 1, dstVR, dstVC, 1>>;
     using GlobalDataSrc0 = GlobalTensor<T, Shape<1, 1, 1, src0VR, src0VC>, pto::Stride<1, 1, src0VR, src0VC, 1>>;
@@ -58,9 +59,10 @@ __global__ AICORE void runTPartMin(__gm__ T __out__ *out, __gm__ T __in__ *src0,
 template <typename T, int dstVR, int dstVC, int src0VR, int src0VC, int src1VR, int src1VC, bool isHalf = false>
 void LaunchTPartMin(T *out, T *src0, T *src1, void *stream)
 {
-    constexpr int alignedSrc0VC = PTO_CEIL(src0VC, BLOCK_BYTE_SIZE / sizeof(T));
-    constexpr int alignedSrc1VC = PTO_CEIL(src1VC, BLOCK_BYTE_SIZE / sizeof(T));
-    constexpr int alignedDstVC = PTO_CEIL(dstVC, BLOCK_BYTE_SIZE / sizeof(T));
+    constexpr int blockSize = 32;
+    constexpr int alignedSrc0VC = PTO_CEIL(src0VC, blockSize / sizeof(T));
+    constexpr int alignedSrc1VC = PTO_CEIL(src1VC, blockSize / sizeof(T));
+    constexpr int alignedDstVC = PTO_CEIL(dstVC, blockSize / sizeof(T));
     if constexpr (std::is_same_v<T, aclFloat16> && isHalf == true) {
         runTPartMin<half, dstVR, dstVC, src0VR, src0VC, src1VR, src1VC, dstVR, alignedDstVC, src0VR, alignedSrc0VC,
                     src1VR, alignedSrc1VC><<<1, nullptr, stream>>>((half *)out, (half *)src0, (half *)src1);

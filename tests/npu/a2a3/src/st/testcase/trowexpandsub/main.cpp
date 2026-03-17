@@ -21,6 +21,9 @@ void launchTRowExpandSub(T *out, T *src0, T *src1, void *stream);
 template <typename T, int validRow, int validCol, int Row, int Col, bool src0eqdst>
 void launchTRowExpandSub2(T *out, T *src0, T *src1, void *stream);
 
+template <typename T, int validRow, int validCol, int Row, int Col, bool src0eqdst>
+void launchTRowExpandSub3(T *out, T *src0, T *src1, void *stream);
+
 class TROWEXPANDSUBTest : public testing::Test {
 protected:
     void SetUp() override
@@ -38,7 +41,8 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int validRow, int validCol, int Row, int Col, bool src0eqdst, bool isRowMajor>
+template <typename T, int validRow, int validCol, int Row, int Col, bool src0eqdst, bool isRowMajor,
+          bool declTmp = false>
 void test_trowexpandsub()
 {
     size_t dstFileSize = Row * Col * sizeof(T);
@@ -68,7 +72,9 @@ void test_trowexpandsub()
 
     aclrtMemcpy(src0Device, dstFileSize, src0Host, dstFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, src1FileSize, src1Host, src1FileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    if (isRowMajor) {
+    if (declTmp) {
+        launchTRowExpandSub3<T, validRow, validCol, Row, Col, src0eqdst>(dstDevice, src0Device, src1Device, stream);
+    } else if (isRowMajor) {
         launchTRowExpandSub2<T, validRow, validCol, Row, Col, src0eqdst>(dstDevice, src0Device, src1Device, stream);
     } else {
         launchTRowExpandSub<T, validRow, validCol, Row, Col, src0eqdst>(dstDevice, src0Device, src1Device, stream);
@@ -164,4 +170,24 @@ TEST_F(TROWEXPANDSUBTest, case13)
 TEST_F(TROWEXPANDSUBTest, case14)
 {
     test_trowexpandsub<float, 16, 16, 16, 16, false, true>();
+}
+
+TEST_F(TROWEXPANDSUBTest, case15)
+{
+    test_trowexpandsub<float, 16, 16, 32, 32, true, false, true>();
+}
+
+TEST_F(TROWEXPANDSUBTest, case16)
+{
+    test_trowexpandsub<aclFloat16, 16, 16, 16, 16, true, false, true>();
+}
+
+TEST_F(TROWEXPANDSUBTest, case17)
+{
+    test_trowexpandsub<float, 1, 16384, 1, 16384, true, false, true>();
+}
+
+TEST_F(TROWEXPANDSUBTest, case18)
+{
+    test_trowexpandsub<float, 2048, 1, 2048, 8, true, false, true>();
 }

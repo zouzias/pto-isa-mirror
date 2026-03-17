@@ -32,12 +32,15 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType>
-void LaunchTExpandS(void *out, float scalar, void *stream);
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
+          bool isBf16>
+void LaunchTExpandS(void *out, void *scalar, void *stream);
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kVRows_, int kVCols_, int padValueType,
+          bool isBf16 = false>
 void test_texpands()
 {
+    size_t tSize = sizeof(T);
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
 
     aclInit(nullptr);
@@ -47,17 +50,19 @@ void test_texpands()
 
     T *dstHost;
     T *dstDevice;
+    T *scalarHost;
+    T *scalarDevice;
 
     aclrtMallocHost((void **)(&dstHost), fileSize);
+    aclrtMallocHost((void **)(&scalarHost), tSize);
     aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&scalarDevice, tSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    float scalar;
-    std::string scalar_file = GetGoldenDir() + "/scalar.bin";
-    std::ifstream file(scalar_file, std::ios::binary);
-    file.read(reinterpret_cast<char *>(&scalar), 4);
-    file.close();
+    ReadFile(GetGoldenDir() + "/scalar.bin", tSize, scalarHost, tSize);
+    aclrtMemcpy(scalarDevice, tSize, scalarHost, tSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    LaunchTExpandS<T, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType>(dstDevice, scalar, stream);
+    LaunchTExpandS<T, kGRows_, kGCols_, kTRows_, kTCols_, kVRows_, kVCols_, padValueType, isBf16>(dstDevice,
+                                                                                                  scalarDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -93,6 +98,10 @@ TEST_F(TEXPANDSTest, case_half_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
     test_texpands<aclFloat16, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
 }
+TEST_F(TEXPANDSTest, case_bfloat16_64x64_64x64_64x64_PAD_VALUE_NULL)
+{
+    test_texpands<aclFloat16, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL, true>();
+}
 TEST_F(TEXPANDSTest, case_int16_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
     test_texpands<int16_t, 64, 64, 64, 64, 64, 64, PAD_VALUE_NULL>();
@@ -109,6 +118,10 @@ TEST_F(TEXPANDSTest, case_int32_60x60_64x64_60x60_PAD_VALUE_MAX)
 TEST_F(TEXPANDSTest, case_half_1x3600_2x4096_1x3600_PAD_VALUE_MAX)
 {
     test_texpands<aclFloat16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX>();
+}
+TEST_F(TEXPANDSTest, case_bfloat16_1x3600_2x4096_1x3600_PAD_VALUE_MAX)
+{
+    test_texpands<aclFloat16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX, true>();
 }
 TEST_F(TEXPANDSTest, case_int16_16x200_20x512_16x200_PAD_VALUE_MAX)
 {

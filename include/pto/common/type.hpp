@@ -105,6 +105,29 @@ enum class MaskPattern : uint8_t
     P1111 = 7, // 7: 11111111...1111 # 每个repeat内取全部元素
 };
 
+enum class Layout
+{
+    ND, // ND RowMajor
+    DN, // DN ColMajor
+    NZ, // NZ for cube
+    SCALE,
+    MX_A_ND,
+    MX_A_DN,
+    MX_A_ZZ,
+    MX_B_ND,
+    MX_B_DN,
+    MX_B_NN,
+    NC1HWC0,
+    NCHW,
+    NHWC,
+    NDC1HWC0,
+    NCDHW,
+    FRACTAL_Z,
+    FRACTAL_Z_S16S8,
+    FRACTAL_Z_3D,
+    MAX,
+};
+
 enum class CmpMode : uint8_t
 {
     EQ = 0,
@@ -178,12 +201,18 @@ enum class AtomicType : uint8_t
     AtomicAdd = 1,
 };
 
-enum class PadValue
+// PadValue enum with uint64_t underlying type to support custom pad values.
+// - Standard values (Null, Zero, Max, Min) use values 0-3
+// - Custom values use bits [32:63] for the float bit pattern
+// - Use PadCustom<-1.0f> helper from constants.hpp for custom values
+enum class PadValue : uint64_t
 {
-    Null,
-    Zero,
-    Max,
-    Min,
+    Null = 0,
+    Zero = 1,
+    Max = 2,
+    Min = 3,
+    // CustomBase marks the start of custom values (bit 32 set)
+    CustomBase = 0x100000000ULL,
 };
 
 enum class SaturationMode : uint8_t

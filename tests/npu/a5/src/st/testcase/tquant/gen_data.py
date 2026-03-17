@@ -72,14 +72,8 @@ def nd2zz_e8m0(e8m0, tile_m, tile_n_div_32):
     index_zz_b16 = index_zz // 2
     index_zz_b16_selected = index_zz_b16[::2].astype(np.uint16)
     index_zz_b16_selected.tofile("index_vselr_b16.bin")
-    print(f"Index ZZ B16 Selected: {index_zz_b16_selected}")
-    ## make the divisions here round up
     e8m0_reshaped = e8m0.reshape(int(math.ceil(tile_m / 16)), 16, int(math.ceil(tile_n_div_32 / 2)), 2)
     e8m0_zz = np.transpose(e8m0_reshaped, [0, 2, 1, 3]).astype(np.uint8)
-    # print the index nd against the zz indices
-    print(f"Index ND: {index_array}")
-    
-    
     return e8m0_zz
 
 
@@ -132,8 +126,10 @@ def fp32_to_int8_sym(valid_rows, valid_cols, mode):
     inv_scale.tofile("inv_scale_fp32.bin")
     offset.tofile("offset_fp32.bin")
     src_fp32_scaled = src_fp32 * inv_scale
-    src_fp16 = src_fp32_scaled.astype(np.float16)
-    src_s8 = np.clip(np.round(src_fp16), -128, 127).astype(np.int8)
+    # Round at fp32 precision first (eliminates double-rounding vs fp16 path)
+    src_fp32_rounded = np.round(src_fp32_scaled).astype(np.float32)
+    src_fp16 = src_fp32_rounded.astype(np.float16)
+    src_s8 = np.clip(src_fp16, -128, 127).astype(np.int8)
     src_s8.tofile("golden_s8.bin")
     ## if mode == nz, use nd to nz for fp8 layout conversion
     return src_fp32, src_s8
@@ -150,10 +146,11 @@ def fp32_to_int8_asym(valid_rows, valid_cols, mode):
     inv_scale.tofile("inv_scale_fp32.bin")
     zero_point = np.clip(np.round(-src_fp32_rowmin / scale), 0, 255).astype(np.float32)
     zero_point.tofile("offset_fp32.bin")
-    # Multiply in fp32, convert to fp16, then to uint8
+    # Round at fp32 precision first (eliminates double-rounding vs fp16 path)
     src_fp32_out = src_fp32 * inv_scale + zero_point
-    src_fp16_out = src_fp32_out.astype(np.float16)
-    src_u8 = np.clip(np.round(src_fp16_out), 0, 255).astype(np.uint8)
+    src_fp32_rounded = np.round(src_fp32_out).astype(np.float32)
+    src_fp16_out = src_fp32_rounded.astype(np.float16)
+    src_u8 = np.clip(src_fp16_out, 0, 255).astype(np.uint8)
     src_u8.tofile("golden_u8.bin")
     ## if mode == nz, use nd to nz for fp8 layout conversion
     return src_fp32, src_u8

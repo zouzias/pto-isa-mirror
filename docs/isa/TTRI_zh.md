@@ -1,4 +1,4 @@
-# TTRI
+﻿# TTRI
 
 ## 指令示意图
 
@@ -10,31 +10,31 @@
 
 ## 数学语义
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `d = diagonal`.
+设 `R = dst.GetValidRow()`，`C = dst.GetValidCol()`，`d = diagonal`。
 
-Lower-triangular (`isUpperOrLower=0`) conceptually produces:
-
-$$
-\mathrm{dst}_{i,j} = egin{cases}1 & j \le i + d \ 0 & 	ext{otherwise}\end{cases}
-$$
-
-Upper-triangular (`isUpperOrLower=1`) conceptually produces:
+下三角（`isUpperOrLower=0`）概念上产生：
 
 $$
-\mathrm{dst}_{i,j} = egin{cases}0 & j < i + d \ 1 & 	ext{otherwise}\end{cases}
+\mathrm{dst}_{i,j} = \begin{cases}1 & j \le i + d \\\\ 0 & \text{否则}\end{cases}
+$$
+
+上三角（`isUpperOrLower=1`）概念上产生：
+
+$$
+\mathrm{dst}_{i,j} = \begin{cases}0 & j < i + d \\\\ 1 & \text{否则}\end{cases}
 $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 
-### IR Level 1（SSA）
+### AS Level 1（SSA）
 
 ```text
 %dst = pto.ttri %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2（DPS）
+### AS Level 2（DPS）
 
 ```text
 pto.ttri ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -51,12 +51,12 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents&... events);
 
 ## 约束
 
-- `isUpperOrLower` must be `0` (lower) or `1` (upper).
-- Destination tile must be row-major on some targets (see `include/pto/npu/*/TTri.hpp`).
+- `isUpperOrLower` 必须是 `0`（下三角）或 `1`（上三角）。
+- 目标 Tile 在某些目标上必须是行主序（参见 `include/pto/npu/*/TTri.hpp`）。
 
 ## 示例
 
-See related examples in `docs/isa/` and `docs/coding/tutorials/`.
+参见 `docs/isa/` 和 `docs/coding/tutorials/` 中的相关示例。
 
 ## 汇编示例（ASM）
 
@@ -84,4 +84,3 @@ See related examples in `docs/isa/` and `docs/coding/tutorials/`.
 # IR Level 2 (DPS)
 pto.ttri ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

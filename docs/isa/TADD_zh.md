@@ -1,4 +1,4 @@
-# TADD
+﻿# TADD
 
 ## 指令示意图
 
@@ -16,7 +16,7 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} + \mathrm{src1}_{i,j} $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 
 同步形式：
 
@@ -24,13 +24,13 @@ PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
 %dst = tadd %src0, %src1 : !pto.tile<...>
 ```
 
-### IR Level 1（SSA）
+### AS Level 1（SSA）
 
 ```text
 %dst = pto.tadd %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2（DPS）
+### AS Level 2（DPS）
 
 ```text
 pto.tadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -48,13 +48,13 @@ PTO_INST RecordEvent TADD(TileData& dst, TileData& src0, TileData& src1, WaitEve
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
-  - Tile 布局 must be row-major (`TileData::isRowMajor`).
+  - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
+  - Tile 布局必须是行主序（`TileData::isRowMajor`）。
 - **实现检查 (A5)**:
-  - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`, `bfloat16_t`, `uint8_t`, `int8_t`.
-  - Tile 布局 must be row-major (`TileData::isRowMajor`).
+  - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`float`、`int16_t`、`uint16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`。
+  - Tile 布局必须是行主序（`TileData::isRowMajor`）。
 - **有效区域**:
-  - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain; `src0/src1` are assumed to be compatible (not validated by explicit runtime checks in this op).
+  - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域；假定 `src0/src1` 是兼容的（此操作中不通过显式运行时检查进行验证）。
 
 ## 示例
 

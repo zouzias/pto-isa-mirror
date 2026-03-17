@@ -15,70 +15,23 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 // HcclDeviceContext
 //
-// Binary layout must match the struct returned by HcclAllocComResourceByTiling().
-// Tests only read rankId / winSize / windowsIn[]; the remaining fields exist
-// solely to preserve the correct ABI-compatible memory layout.
+// Simplified device-side context for TPUT/TGET tests.
+// On MESH topology (A2), HCCL returns HcclCombinOpParamA5 whose first fields
+// match this struct directly (windowsIn[64] already contains per-rank RDMA
+// addresses).
+// On RING topology (A3), we build this struct manually on the host by
+// extracting remote RDMA addresses from HcclOpResParam's remoteRes array.
 // ============================================================================
 
-static constexpr uint32_t HCCL_MAX_RANK_NUM = 32;
+static constexpr uint32_t HCCL_MAX_RANK_NUM = 64;
 
 struct HcclDeviceContext {
-    // mc2WorkSpace
     uint64_t workSpace;
     uint64_t workSpaceSize;
 
-    // Rank metadata (used by tests)
     uint32_t rankId;
     uint32_t rankNum;
     uint64_t winSize;
     uint64_t windowsIn[HCCL_MAX_RANK_NUM];
     uint64_t windowsOut[HCCL_MAX_RANK_NUM];
-
-    // ---------- ABI tail (not accessed by tests) ----------
-
-    char hcomId[128];
-
-    struct {
-        int32_t streamIds;
-        uint32_t sqIds, cqIds, logicCqids;
-    } streamInfo[HCCL_MAX_RANK_NUM];
-
-    struct {
-        struct {
-            uint64_t resId, addr;
-            uint32_t devId, tsId, rankId, flag;
-        } noIpcNotifys[HCCL_MAX_RANK_NUM * 2], ipcNotifys[HCCL_MAX_RANK_NUM * 4], noIpcEvents[HCCL_MAX_RANK_NUM],
-            aicpuNotify, aicpuOpNotify[2];
-    } signalInfo;
-
-    struct {
-        uint8_t deterministic;
-        uint8_t retryEnable;
-        uint8_t highPerfEnable;
-        uint8_t _pad0[5];
-        uint8_t linkTimeOut[8];
-        uint64_t notifyWaitTime;
-        uint32_t retryHoldTime;
-        uint32_t retryIntervalTime;
-        bool interXLinkDisable;
-        // rtFloatOverflowMode_t (enum class, underlying = int32_t)
-        int32_t floatOverflowMode;
-        uint32_t multiQpThreshold;
-    } config;
-
-    uint64_t overFlowAddr;
-    uint8_t onlyRead;
-
-    struct {
-        uint64_t hostAddr, deviceAddr, readCacheAddr;
-        uint32_t devMemSize, buffLen, flag;
-    } kfcControlTransferH2DParams, kfcStatusTransferD2HParams;
-
-    uint8_t _pad1[16];
-    uint64_t winExpSize;
-    uint64_t windowsExp[HCCL_MAX_RANK_NUM];
-
-    uint8_t multiServerFlag;
-    uint64_t ibverbsData;
-    uint64_t ibverbsDataSize;
 };

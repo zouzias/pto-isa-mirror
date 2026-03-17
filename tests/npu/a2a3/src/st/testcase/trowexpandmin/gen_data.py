@@ -65,6 +65,10 @@ if __name__ == "__main__":
         "TROWEXPANDMINTest.case12",
         "TROWEXPANDMINTest.case13",
         "TROWEXPANDMINTest.case14",
+        "TROWEXPANDMINTest.case15",
+        "TROWEXPANDMINTest.case16",
+        "TROWEXPANDMINTest.case17",
+        "TROWEXPANDMINTest.case18",
     ]
 
     case_params_list = [
@@ -82,6 +86,10 @@ if __name__ == "__main__":
         TRowExpandMin(np.float32, 2048, 1, 2048, 8, True, True),
         TRowExpandMin(np.float32, 16, 16, 16, 16, False, False),
         TRowExpandMin(np.float32, 16, 16, 16, 16, False, True),
+        TRowExpandMin(np.float32, 16, 16, 32, 32, True, False),
+        TRowExpandMin(np.float16, 16, 16, 16, 16, True, False),
+        TRowExpandMin(np.float32, 1, 16384, 1, 16384, True, False),
+        TRowExpandMin(np.float32, 2048, 1, 2048, 8, True, False),
     ]
 
     for i, case_name in enumerate(case_name_list):

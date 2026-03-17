@@ -1,4 +1,4 @@
-# TROWEXPANDSUB
+﻿# TROWEXPANDSUB
 
 ## 指令示意图
 
@@ -16,7 +16,7 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{src1}_{0,i} $$
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 
 同步形式：
 
@@ -24,13 +24,13 @@ PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
 %dst = trowexpandsub %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1（SSA）
+### AS Level 1（SSA）
 
 ```text
 %dst = pto.tcolexpandsub %src0, %src1 : !pto.tile<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2（DPS）
+### AS Level 2（DPS）
 
 ```text
 pto.tcolexpandsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -48,11 +48,11 @@ PTO_INST RecordEvent TROWEXPANDSUB(TileDataDst& dst, TileDataDst& src0, TileData
 ## 约束
 
 - **实现检查**:
-  - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType` (compile-time).
-  - `TileDataDst::DType`, `TileDataSrc0::DType`, `TileDataSrc1::DType` must be one of: `half`, `float`.
-  - Tile 形状/布局约束 (compile-time): `TileDataDst::isRowMajor`.
-  - Mode 1: `src1` is expected to provide **one scalar per row** (i.e., its valid shape must cover `R` values).
-  - Mode 2: `src1` is expected to provide **32 bytes data per row**.
+  - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType`（编译时）。
+  - `TileDataDst::DType`、`TileDataSrc0::DType`、`TileDataSrc1::DType` 必须是以下之一：`half`、`float`。
+  - Tile 形状/布局约束（编译时）：`TileDataDst::isRowMajor`。
+  - 模式 1：`src1` 预期提供**每行一个标量**（即，其有效形状必须覆盖 `R` 个值）。
+  - 模式 2：`src1` 预期提供**每行 32 字节数据**。
 
 ## 示例
 

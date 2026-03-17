@@ -13,6 +13,8 @@ set -e
 
 ENABLE_A3=false
 ENABLE_A5=false
+ENABLE_KIRIN9030=false
+ENABLE_KIRINX90=false
 ENABLE_SIM=false
 ENABLE_NPU=false
 RUN_TYPE=sim
@@ -25,6 +27,10 @@ elif [ "$1" = "a5" ]; then
 elif [ "$1" = "a3_a5" ]; then
   ENABLE_A3=true
   ENABLE_A5=true
+elif [ "$1" = "kirin9030" ]; then
+  ENABLE_KIRIN9030=true
+elif [ "$1" = "kirinX90" ]; then
+  ENABLE_KIRINX90=true
 fi
 
 if [ "$2" = "sim" ]; then
@@ -110,6 +116,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tmuls -g TMULSTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tadds -g TADDSTest.case6
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t texpands -g TEXPANDSTest.case_float_64x64_64x64_64x64_PAD_VALUE_NULL
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t texpands_mat -g TEXPANDSTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcmp -g TCMPTest.case_float_1x64_1x64_1x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tscatter -g TSCATTERTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t ttri -g TTRITest.case_float_128x128_128x31_1__444
@@ -188,6 +195,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tlog
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trecip
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t texpands
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t texpands_mat
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcmp
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tscatter
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t ttri
@@ -240,6 +248,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdivs -g TDIVSTest.case5
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t texp -g TEXPTest.case_float_64x64_64x64_64x64_inPlace_False
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t texpands -g TEXPANDSTest.case_float_64x64_64x64_64x64_PAD_VALUE_NULL
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t texpands_mat -g TEXPANDSTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t textract -g TEXTRACTTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfillpad -g TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tgather -g TGATHERTest.case1_float
@@ -314,6 +323,9 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tquant -g TQUANTTest.case_int8_asym_fp32_128x128_nd
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttri -g TTRITest.case_float_128x128_lower_diag_n3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t ttri -g TTRITest.case_float_128x128_upper_diag_0
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpack -g TPACKTEST.case_fp32_fp16_128x128
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpack -g TPACKTEST.case_fp32_fp8_128x128
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpack -g TPACKTEST.case_fp16_fp8_128x128
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py -r $RUN_TYPE -v a5 -t all
@@ -346,6 +358,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdivs
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t texp
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t texpands
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t texpands_mat
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t textract
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfillpad
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tgather
@@ -411,5 +424,26 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t mgather
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t mscatter
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tquant
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpack
   fi
+fi
+
+if [ "$ENABLE_KIRIN9030" = "true" ]; then
+  python3 tests/script/build_st.py -r $RUN_TYPE -v kirin9030 -t all
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t textract
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tmov
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tadd
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tcolsum
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tpartadd
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t trowsum
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tsort32
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tcvt
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tmrgsort
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tgather
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tsub
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tmatmul
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tload
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t ttrans
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t tstore
+  python3 tests/script/$RUN_MODE -r $RUN_TYPE -v kirin9030 -t trowexpand
 fi

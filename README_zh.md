@@ -55,9 +55,9 @@ PTO Tile Lib 并不面向入门级用户，主要面向：
 
 ### Flash Attention（A2/A3 参考）
 
-- Kernel：`kernels/manual/a2a3/flash_atten/`
+- Kernel：`kernels/manual/common/flash_atten/`
 
-详细分析与调参说明：[Flash Attention 算子实现](kernels/manual/a2a3/flash_atten/README_zh.md)。
+详细分析与调参说明：[Flash Attention 算子实现](kernels/manual/common/flash_atten/README_zh.md)。
 
 ![Flash Attention 归一化 TFLOPS（A2/A3）](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
 
@@ -111,33 +111,78 @@ PTO ISA 定义了 90+ 条标准操作。本仓库实现了其中不断增长的�
 
 ### 构建文档（MkDocs）
 
-如果想直接查阅PTO ISA文档，可访问以下链接获取完整内容：
+本仓库在 `docs/mkdocs/` 下提供完整的 API 文档和 ISA 指令参考，使用 MkDocs（Material 主题）构建。文档内容包括：
 
-- [文档中心](https://pto-isa.gitcode.com)
+- 完整的 PTO ISA 指令参考
+- API 使用指南与示例
+- 性能调优指南
+- 架构与设计文档
 
-如希望自行构建文档，也可参考以下步骤进行操作。
+**选项 1：访问在线文档（推荐）**
 
-本仓库在 `docs/mkdocs/` 下提供 MkDocs（Read the Docs 主题）站点。
+访问[文档中心](https://pto-isa.gitcode.com)获取最新文档。
 
-先安装 mkdocs 依赖：
+**选项 2：本地构建文档**
+
+如果需要离线访问、正在修改文档或想查看未发布的功能，可以本地构建文档。
+
+**前置条件：**
+- Python >= 3.8
+- pip（Python 包管理器）
+
+**方法 1：使用 MkDocs CLI 快速开始**
+
+1. 安装 MkDocs 及依赖：
 
 ```bash
 python -m pip install -r docs/mkdocs/requirements.txt
+```
+
+2. 选择以下选项之一：
+
+**选项 A：本地运行文档服务器（用于开发/预览）**
+
+```bash
 python -m mkdocs serve -f docs/mkdocs/mkdocs.yml
 ```
 
-构建静态站点：
+文档将在 `http://127.0.0.1:8000` 可访问。服务器会监听文件变化并自动重新加载。按 `Ctrl+C` 停止服务器。
+
+**选项 B：构建静态 HTML 站点（用于离线使用/部署）**
 
 ```bash
 python -m mkdocs build -f docs/mkdocs/mkdocs.yml
 ```
 
-通过 CMake 构建文档：
+输出将位于 `docs/mkdocs/site/`。在浏览器中打开 `docs/mkdocs/site/index.html` 即可查看。
+
+**方法 2：通过 CMake 构建（高级）**
+
+此方法适用于 CI/CD 流水线或将文档构建集成到开发工作流中。
+
+1. 创建 Python 虚拟环境（推荐）：
+
+```bash
+python3 -m venv .venv-mkdocs
+source .venv-mkdocs/bin/activate  # Windows: .venv-mkdocs\Scripts\Activate.ps1
+python -m pip install -r docs/mkdocs/requirements.txt
+```
+
+2. 使用 CMake 配置和构建：
 
 ```bash
 cmake -S docs -B build/docs -DPython3_EXECUTABLE=$PWD/.venv-mkdocs/bin/python
 cmake --build build/docs --target pto_docs
 ```
+
+Windows (PowerShell)：
+
+```powershell
+cmake -S docs -B build/docs -DPython3_EXECUTABLE="$PWD\.venv-mkdocs\Scripts\python.exe"
+cmake --build build/docs --target pto_docs
+```
+
+构建的文档将位于 `build/docs/site/`。
 
 ### 运行 CPU Simulator（建议第一步）
 

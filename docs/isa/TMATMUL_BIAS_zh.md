@@ -1,4 +1,4 @@
-# TMATMUL_BIAS
+﻿# TMATMUL_BIAS
 
 ## 指令示意图
 
@@ -10,21 +10,21 @@
 
 ## 数学语义
 
-Let:
+设：
 
 - `M = aMatrix.GetValidRow()`
 - `K = aMatrix.GetValidCol()`
 - `N = bMatrix.GetValidCol()`
 
-For `0 <= i < M` and `0 <= j < N`:
+对于 `0 <= i < M` 和 `0 <= j < N`：
 
 $$ \mathrm{C}_{i,j} = \sum_{k=0}^{K-1} \mathrm{A}_{i,k} \cdot \mathrm{B}_{k,j} + \mathrm{Bias}_{0,j} $$
 
-Bias broadcasting behavior is implementation-defined.
+偏置广播行为由实现定义。
 
 ## 汇编语法
 
-PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
+PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 
 同步形式：
 
@@ -32,13 +32,13 @@ PTO-AS 形式：参见 [docs/grammar/PTO-AS_zh.md](../grammar/PTO-AS_zh.md)。
 %acc = tmatmul.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 1（SSA）
+### AS Level 1（SSA）
 
 ```text
 %c = pto.tmatmul.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2（DPS）
+### AS Level 2（DPS）
 
 ```text
 pto.tmatmul.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
@@ -56,13 +56,13 @@ PTO_INST RecordEvent TMATMUL_BIAS(TileRes& cMatrix, TileLeft& aMatrix, TileRight
 
 ## 约束
 
-- All constraints from `TMATMUL` apply to the `(cMatrix, aMatrix, bMatrix)` triple.
-- **Bias constraints (A2A3)**:
-  - `TileBias::DType` must match `TileRes::DType`.
-  - `TileBias::Loc == TileType::Bias` and `TileBias::Rows == 1`.
-- **Bias constraints (A5)**:
-  - `TileBias::DType` must match `TileRes::DType`.
-  - `TileBias::Loc == TileType::Bias`, `TileBias::Rows == 1`, and `TileBias::isRowMajor`.
+- 所有来自 `TMATMUL` 的约束都适用于 `(cMatrix, aMatrix, bMatrix)` 三元组。
+- **偏置约束 (A2A3)**:
+  - `TileBias::DType` 必须匹配 `TileRes::DType`。
+  - `TileBias::Loc == TileType::Bias` 且 `TileBias::Rows == 1`。
+- **偏置约束 (A5)**:
+  - `TileBias::DType` 必须匹配 `TileRes::DType`。
+  - `TileBias::Loc == TileType::Bias`、`TileBias::Rows == 1` 且 `TileBias::isRowMajor`。
 
 ## 示例
 

@@ -11,6 +11,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(pto_test)
 
+# bisheng/cce-ld does not support --dependency-file; disable linker dep tracking
+# that CMake 3.27+ enables by default.
+set(CMAKE_LINK_DEPENDS_USE_LINKER FALSE)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -57,17 +61,17 @@ set(CMAKE_CCE_COMPILE_OPTIONS
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
 )
 
-if(DEBUG_MODE)
-    message(STATUS "Debug Mode Enabled, Add Debug Options")
-    add_compile_definitions(_DEBUG)
-    set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-enable-print")
-endif()
-
 set(CMAKE_CPP_COMPILE_OPTIONS
     -xc++
     "SHELL:-include stdint.h"
     "SHELL:-include stddef.h"
 )
+
+if(DEBUG_MODE)
+    message(STATUS "Debug Mode Enabled, Add Debug Options")
+    list(APPEND CMAKE_CPP_COMPILE_OPTIONS -DCOMM_DEBUG)
+    list(APPEND CMAKE_CCE_COMPILE_OPTIONS -DCOMM_DEBUG)
+endif()
 
 # 公共 include 路径
 include_directories(

@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef __CPU_SIM
 #include "pto/common/cpu_stub.hpp"
 #endif
+#include <pto/common/memory.hpp>
 
 #if defined(__CPU_SIM) || defined(__CCE_AICORE__)
 #include <pto/common/arch_macro.hpp>

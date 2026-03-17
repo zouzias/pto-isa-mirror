@@ -8,8 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+#include <type_traits>
 #include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 #include "acl/acl.h"
 
 #define PAD_VALUE_NULL (-100)
@@ -40,18 +40,20 @@ struct GenericDataSelector<T, kGRows_, kGCols_, kTRows_, kTCols_, PAD_VALUE_MAX>
 };
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kPadValue_>
-__global__ AICORE void runTSELS(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1, uint8_t selectMode)
+__global__ AICORE void runTSELS(__gm__ T *out, __gm__ T *src0, __gm__ T *src1, uint8_t selectMode)
 {
     using GDS = GenericDataSelector<T, kGRows_, kGCols_, kTRows_, kTCols_, kPadValue_>;
     using GlobalData = typename GDS::GlobalType;
     using TileData = typename GDS::TileType;
+    using TmpTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, -1, -1>;
     TileData src0Tile;
     TileData src1Tile;
     TileData dstTile;
+    TmpTile tmpTile(1, 32);
     TASSIGN(src0Tile, 0x0 + 0x400 * block_idx);
     TASSIGN(src1Tile, 0x4000 + 0x400 * block_idx);
     TASSIGN(dstTile, 0x8000 + 0x400 * block_idx);
-
+    TASSIGN(tmpTile, 0x12000);
     int offset = (block_idx / 4) * (64 * 16) + (block_idx % 4) * 16;
     GlobalData src0Global(src0 + offset);
     GlobalData src1Global(src1 + offset);
@@ -61,7 +63,7 @@ __global__ AICORE void runTSELS(__gm__ T __out__ *out, __gm__ T __in__ *src0, __
     TLOAD(src1Tile, src1Global);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TSELS(dstTile, src0Tile, src1Tile, selectMode);
+    TSELS(dstTile, src0Tile, src1Tile, tmpTile, selectMode);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
