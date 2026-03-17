@@ -16,6 +16,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
+template <typename TileDataDst, typename TileDataSrc>
+__tf__ PTO_INTERNAL void tf_copy_cbuf_to_ubuf(typename TileDataDst::TileDType __out__ dst,
+                                              typename TileDataSrc::TileDType __in__ src, int vec_core, int block_count,
+                                              int block_len, int src_stride, int dst_stride)
+{
+    copy_cbuf_to_ubuf((__ubuf__ void *)__cce_get_tile_ptr(dst), (__cbuf__ void *)__cce_get_tile_ptr(src), vec_core,
+                      block_count, block_len, src_stride, dst_stride);
+}
+
+
 template <typename T, typename TileData, typename TileUBData, typename GlobalData>
 AICORE inline void runTexpandsAndTstore(__gm__ T *&out, TileData &MatTile, TileUBData &srcTile, GlobalData &dstGlobal,
                                         T value, int elementSize)
@@ -23,8 +33,6 @@ AICORE inline void runTexpandsAndTstore(__gm__ T *&out, TileData &MatTile, TileU
     TASSIGN(MatTile, 0x0);
     TASSIGN(srcTile, 0x0);
 
-    __cbuf__ T *srcMatAddr = MatTile.data();
-    __ubuf__ T *srcUbAddr = srcTile.data();
     uint8_t syncID = 0;
 
 #if defined(__DAV_CUBE__)
@@ -36,8 +44,9 @@ AICORE inline void runTexpandsAndTstore(__gm__ T *&out, TileData &MatTile, TileU
     // L1 -> UB : AIC
     uint16_t blockCount = 1;
     uint16_t blockLen = elementSize * sizeof(T) / 32;
-    copy_cbuf_to_ubuf((__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 0, blockCount, blockLen, 0, 0);
-    copy_cbuf_to_ubuf((__ubuf__ void *)srcUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockCount, blockLen, 0, 0);
+
+    tf_copy_cbuf_to_ubuf<TileUBData, TileData>(srcTile.data(), MatTile.data(), 0, blockCount, blockLen, 0, 0);
+    tf_copy_cbuf_to_ubuf<TileUBData, TileData>(srcTile.data(), MatTile.data(), 1, blockCount, blockLen, 0, 0); 
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);

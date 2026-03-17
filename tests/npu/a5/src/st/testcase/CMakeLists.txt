@@ -234,11 +234,16 @@ set(ALL_TESTCASES
     mscatter
     t_dhrystone
     tpack
-    tpushpop_cv
-    tpushpop_vc
     tconcat
 
 )
+
+if (NOT AUTO_MODE)
+    # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
+    # which doesn't work for auto mode. They need to be disabled for auto mode 
+    # until rewritten to adapt to auto mode
+    list(APPEND ALL_TESTCASES tpushpop_cv tpushpop_vc)
+endif()
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
     message(STATUS "run : ${TEST_CASE}")

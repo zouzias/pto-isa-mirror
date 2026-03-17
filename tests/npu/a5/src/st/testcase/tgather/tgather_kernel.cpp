@@ -256,12 +256,16 @@ __global__ AICORE void runTGATHER_CMP(__gm__ srcT *src, __gm__ src1T *src1, __gm
     DstGlobalData dstGlobal(out);
 
     TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TGATHER<DstTileData, TileData, ConcatTileData, cmpMode, offset>(dstTile, srcTile, src1[0], concatTile);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
