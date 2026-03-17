@@ -151,3 +151,33 @@ TEST_F(TROWSUMTest, case10)
     bool ret = TRowSumTestFramework<10, float, 8, 8, 1024, 1024, 1>();
     EXPECT_TRUE(ret);
 }
+
+TEST_F(TROWSUMTest, case11)
+{
+    bool ret = TRowSumTestFramework<11, int, 127, 127, 64, 63, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case12)
+{
+    bool ret = TRowSumTestFramework<12, int, 63, 63, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case13)
+{
+    bool ret = TRowSumTestFramework<13, int, 31, 31, 128, 127, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case14)
+{
+    bool ret = TRowSumTestFramework<14, int, 15, 15, 192, 192, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case15)
+{
+    bool ret = TRowSumTestFramework<15, int, 7, 7, 448, 447, 1>();
+    EXPECT_TRUE(ret);
+}

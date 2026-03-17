@@ -202,3 +202,33 @@ TEST_F(TROWMAXTest, case18)
     bool ret = TRowMaxTestFramework<18, float, 8, 8, 1024, 1024, 1>();
     EXPECT_TRUE(ret);
 }
+
+TEST_F(TROWMAXTest, case19)
+{
+    bool ret = TRowMaxTestFramework<19, int, 127, 127, 64, 63, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case20)
+{
+    bool ret = TRowMaxTestFramework<20, int, 63, 63, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case21)
+{
+    bool ret = TRowMaxTestFramework<21, int, 31, 31, 128, 127, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case22)
+{
+    bool ret = TRowMaxTestFramework<22, int, 15, 15, 192, 192, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case23)
+{
+    bool ret = TRowMaxTestFramework<23, int, 7, 7, 448, 447, 1>();
+    EXPECT_TRUE(ret);
+}

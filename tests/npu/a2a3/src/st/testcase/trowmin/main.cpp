@@ -199,3 +199,33 @@ TEST_F(TROWMINTest, case18)
     bool ret = TRowMinTestFramework<18, float, 8, 8, 1024, 1024, 1>();
     EXPECT_TRUE(ret);
 }
+
+TEST_F(TROWMINTest, case19)
+{
+    bool ret = TRowMinTestFramework<19, int, 127, 127, 64, 63, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case20)
+{
+    bool ret = TRowMinTestFramework<20, int, 63, 63, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case21)
+{
+    bool ret = TRowMinTestFramework<21, int, 31, 31, 128, 127, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case22)
+{
+    bool ret = TRowMinTestFramework<22, int, 15, 15, 192, 192, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMINTest, case23)
+{
+    bool ret = TRowMinTestFramework<23, int, 7, 7, 448, 447, 1>();
+    EXPECT_TRUE(ret);
+}
