@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -8,18 +8,22 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_INST_HPP
-#define PTO_INST_HPP
+#ifndef TLOAD_HPP
+#define TLOAD_HPP
 
-#include <pto/common/type.hpp>
-#if defined(__CPU_SIM) || defined(__COSTMODEL)
-#include "pto/common/cpu_stub.hpp"
-#endif
-#include <pto/common/memory.hpp>
+namespace pto {
 
-#if defined(__CPU_SIM) || defined(__CCE_AICORE__) || defined(__COSTMODEL)
-#include <pto/common/arch_macro.hpp>
-#include <pto/common/pto_tile.hpp>
-#include "pto/common/pto_instr.hpp"
-#endif
-#endif
+struct MrgSortExecutedNumList {
+    uint16_t mrgSortList0;
+    uint16_t mrgSortList1;
+    uint16_t mrgSortList2;
+    uint16_t mrgSortList3;
+};
+
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
+{
+    return;
+}
+} // namespace pto
+#endif // TLOAD_HPP
