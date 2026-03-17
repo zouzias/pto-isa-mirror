@@ -242,3 +242,42 @@ On A5, the CVID is computed directly from `get_coreid()` without any GM communic
 
 - [Source: A5 TSyncCVID.hpp](https://gitcode.com/cann/pto-isa/blob/master/include/pto/npu/a5/custom/TSyncCVID.hpp)
 - [Source: A2A3 TSyncCVID.hpp](https://gitcode.com/cann/pto-isa/blob/master/include/pto/npu/a2a3/custom/TSyncCVID.hpp)
+
+
+## Alternative: Logical Block ID as Cluster ID
+
+If PyPTO **always launches with `block_dim` equal to the number of physical core clusters**, a simpler mapping is possible:
+
+```
+cluster_id = block_idx
+```
+
+### Conditions for This Simplification
+
+1. **block_dim == number of physical clusters**: The runtime guarantees a 1:1 mapping between logical blocks and physical clusters.
+
+2. **No over-subscription**: Each cluster runs exactly one block — no time-sharing of clusters across multiple blocks.
+
+3. **Consistent dispatch**: AICPU assigns `block_idx=0` to cluster 0, `block_idx=1` to cluster 1, etc.
+
+### Advantages
+
+- **No GM communication needed on A2A3**: Skip the `TSYNC_CVID()` handshake entirely
+- **No working buffer reservation**: The 12.5KB `cv_comm_buf` region is not required
+- **Simpler kernel startup**: Both Cube and Vector cores use `block_idx` directly as the cluster ID
+
+### Implementation
+
+```cpp
+// Simplified cluster ID resolution (when block_dim == num_clusters)
+inline int get_cluster_id() {
+    return get_block_idx();  // Direct mapping, no GM exchange
+}
+
+// GM_SLOT_BUFFER indexing
+my_gm_slot_buffer = GM_SLOT_BUFFER_BASE + get_block_idx() * PER_CLUSTER_SLOT_BUFFER_SIZE
+```
+
+### Trade-off
+
+This approach **sacrifices flexibility** (cannot run fewer blocks than clusters, or share clusters) for **simplicity** (no runtime CVID negotiation). If PyPTO's execution model always uses full cluster utilization, this is the preferred approach.
