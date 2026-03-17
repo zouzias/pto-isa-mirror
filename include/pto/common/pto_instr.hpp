@@ -805,6 +805,18 @@ PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src1,
     return {};
 }
 
+#ifdef PTO_NPU_ARCH_A5
+template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, int offset,
+          typename... WaitEvents>
+PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst,
+                             WaitEvents &... events)
+{
+    TSYNC(events...);
+    TGATHER_IMPL<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst, src0, k_value, cdst);
+    return {};
+}
+#endif
+
 template <typename TileData, typename T, int descending, typename... WaitEvents>
 PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents &... events)
 {
@@ -1011,20 +1023,22 @@ PTO_INST RecordEvent TROWMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
     return {};
 }
 
-template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, typename TileDataSrc::DType scalar,
-                           WaitEvents &... events)
+template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, TileDataTmp &tmp,
+                           typename TileDataSrc::DType scalar, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TSELS, dst, mask, src, scalar);
+    MAP_INSTR_IMPL(TSELS, dst, mask, src, tmp, scalar);
     return {};
 }
 
-template <typename TileData, typename MaskTile, typename... WaitEvents>
-PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, TileData &src1, WaitEvents &... events)
+template <typename TileData, typename MaskTile, typename TmpTile, typename... WaitEvents>
+PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, TileData &src1, TmpTile &tmp,
+                          WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TSEL, dst, selMask, src0, src1);
+    MAP_INSTR_IMPL(TSEL, dst, selMask, src0, src1, tmp);
     return {};
 }
 

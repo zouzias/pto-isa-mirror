@@ -22,6 +22,12 @@ ASCEND_TOOLKIT_HOME = os.environ["ASCEND_TOOLKIT_HOME"]
 PTO_LIB_PATH = os.environ["PTO_LIB_PATH"]
 
 
+# Compile-time constants from fa_kernel.cpp — must stay in sync
+_CV_FIFO_SIZE = 8  # CV_FIFO_SIZE
+_CUBE_S0 = 128  # CUBE_S0
+_TILE_S1 = 256  # TILE_S1
+
+
 def torch_to_ctypes(t: torch.Tensor) -> ctypes.c_void_p:
     return ctypes.c_void_p(t.data_ptr())
 
@@ -83,15 +89,49 @@ def load_flash_lib(lib_path: str, check_type: bool = True):
             ctypes.c_void_p,  # k
             ctypes.c_void_p,  # v
             ctypes.c_void_p,  # o_out
-            ctypes.c_void_p,  # qk_out fp32
-            ctypes.c_void_p,  # p_out fp16
-            ctypes.c_void_p,  # p_out fp32
-            ctypes.c_void_p,  # pv_out tiles
-            ctypes.c_void_p,  # global_sum
-            ctypes.c_void_p,  # exp_max
-            ctypes.c_void_p,  # o_parts
+            ctypes.c_void_p,  # qk_tile_fifo  fp32
+            ctypes.c_void_p,  # p_tile_fifo   fp16
+            ctypes.c_void_p,  # exp_max_ififo fp32
+            ctypes.c_void_p,  # pv_tile_fifo  fp32
+            ctypes.c_void_p,  # global_sum_out
+            ctypes.c_void_p,  # exp_max_out
+            ctypes.c_void_p,  # o_parts_out
         ]
         lib.call_kernel.restype = None
+
+    # Workspace buffers, allocated on first call and reallocated only on shape change
+    _ws: dict = {}
+
+    def _alloc_workspace(s0: int, s1: int, head: int, device):
+        shape = (s0, s1, head, str(device))
+        if _ws.get("_shape") == shape:
+            return
+        num_s0_blocks = s0 // _CUBE_S0
+        slots = num_s0_blocks * _CV_FIFO_SIZE  # one FIFO slot per block * depth
+        _ws.clear()
+        _ws["_shape"] = shape
+        _ws["o_out"] = torch.empty((s0, head), device=device, dtype=torch.float32)
+        _ws["qk_tile_fifo"] = torch.empty(
+            (slots, _CUBE_S0, _TILE_S1), device=device, dtype=torch.float32
+        )
+        _ws["p_tile_fifo"] = torch.empty(
+            (slots, _CUBE_S0, _TILE_S1), device=device, dtype=torch.float16
+        )
+        _ws["exp_max_ififo"] = torch.empty(
+            (slots, _CUBE_S0), device=device, dtype=torch.float32
+        )
+        _ws["pv_tile_fifo"] = torch.empty(
+            (slots, _CUBE_S0, head), device=device, dtype=torch.float32
+        )
+        _ws["global_sum_out"] = torch.empty(
+            (num_s0_blocks, s0), device=device, dtype=torch.float32
+        )
+        _ws["exp_max_out"] = torch.empty(
+            (num_s0_blocks, s0), device=device, dtype=torch.float32
+        )
+        _ws["o_parts_out"] = torch.empty(
+            (num_s0_blocks, s0, head), device=device, dtype=torch.float32
+        )
 
     default_causal = False
     default_stream_ptr = torch.npu.current_stream()._as_parameter_
@@ -100,36 +140,30 @@ def load_flash_lib(lib_path: str, check_type: bool = True):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
-        o_out: torch.Tensor,
-        out_device: torch.Tensor,
-        xexp_device: torch.Tensor,
-        p_out_fp32_device: torch.Tensor,
-        out_2device: torch.Tensor,
-        g_sum_device: torch.Tensor,
-        exp_max_device: torch.Tensor,
-        o_parts_device: torch.Tensor,
         stream_ptr=default_stream_ptr,
         is_causal=default_causal,
-    ):
+    ) -> torch.Tensor:
+        _alloc_workspace(q.shape[0], k.shape[0], q.shape[1], q.device)
 
         lib.call_kernel(
             stream_ptr,
-            q.shape[1],  # head_size
-            q.shape[0],  # s0
-            k.shape[0],  # s1
+            q.shape[1],
+            q.shape[0],
+            k.shape[0],
             is_causal,
             torch_to_ctypes(q),
             torch_to_ctypes(k),
             torch_to_ctypes(v),
-            torch_to_ctypes(o_out),
-            torch_to_ctypes(out_device),  # qk_out fp32
-            torch_to_ctypes(xexp_device),  # p_out fp16
-            torch_to_ctypes(p_out_fp32_device),  # p_out fp32
-            torch_to_ctypes(out_2device),  # pv_out tiles
-            torch_to_ctypes(g_sum_device),  # global_sum
-            torch_to_ctypes(exp_max_device),  # exp_max
-            torch_to_ctypes(o_parts_device),  # o snapshots
+            torch_to_ctypes(_ws["o_out"]),
+            torch_to_ctypes(_ws["qk_tile_fifo"]),
+            torch_to_ctypes(_ws["p_tile_fifo"]),
+            torch_to_ctypes(_ws["exp_max_ififo"]),
+            torch_to_ctypes(_ws["pv_tile_fifo"]),
+            torch_to_ctypes(_ws["global_sum_out"]),
+            torch_to_ctypes(_ws["exp_max_out"]),
+            torch_to_ctypes(_ws["o_parts_out"]),
         )
+        return _ws["o_out"]
 
     return flash
 

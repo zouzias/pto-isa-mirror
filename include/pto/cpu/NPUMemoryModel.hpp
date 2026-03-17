@@ -14,6 +14,10 @@
  * Provides UB, L1, L0A, L0B, L0C memory buffers sized per NPU architecture.
  * TASSIGN maps tiles to offsets within these buffers based on TileType.
  *
+ * Each thread gets its own independent NPUMemoryModel instance via
+ * thread_local storage, accurately modeling the hardware where each
+ * AICore has physically separate UB/L0 memory.
+ *
  * Memory mapping:
  *   - Vec tiles   → UB (Unified Buffer)
  *   - Mat tiles   → L1
@@ -53,7 +57,7 @@ inline constexpr ArchMemorySizes kA2A3MemorySizes = {
 
 inline constexpr ArchMemorySizes kA5MemorySizes = {
     256 * 1024, // UB:  256 KB
-    256 * 1024, // L1:  256 KB
+    512 * 1024, // L1:  512 KB
     64 * 1024,  // L0A: 64 KB (placeholder - verify actual A5 spec)
     64 * 1024,  // L0B: 64 KB
     256 * 1024  // L0C: 256 KB
@@ -76,13 +80,22 @@ enum class MemoryRegion
 
 class NPUMemoryModel {
 public:
+    // Each thread gets its own NPUMemoryModel instance, accurately modeling
+    // the hardware where each AICore has physically separate memory.
     static NPUMemoryModel &Instance()
     {
-        static NPUMemoryModel instance;
+        thread_local NPUMemoryModel instance;
         return instance;
     }
 
-    // Initialize with specific architecture (call once at startup)
+    // Set the default architecture for all threads.
+    // Call once before any thread uses Instance().
+    static void SetDefaultArch(NPUArch arch)
+    {
+        defaultArch_ = arch;
+    }
+
+    // Initialize with specific architecture (call once per thread at startup)
     void Initialize(NPUArch arch)
     {
         switch (arch) {
@@ -108,7 +121,7 @@ public:
     void EnsureInitialized()
     {
         if (!initialized_) {
-            Initialize(NPUArch::A2A3);
+            Initialize(defaultArch_);
         }
     }
 
@@ -213,6 +226,10 @@ public:
 private:
     NPUMemoryModel() = default;
 
+    // Shared default architecture — set once, read by all threads during auto-init
+    static inline NPUArch defaultArch_ = NPUArch::A2A3;
+
+    // Per-thread memory buffers (thread_local instance owns these)
     std::vector<char> ubBuffer_;
     std::vector<char> l1Buffer_;
     std::vector<char> l0aBuffer_;
