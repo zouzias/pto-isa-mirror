@@ -11,7 +11,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TDIV754_HPP
 #define TDIV754_HPP
 
-#include "kernel_reg_compute_utils.h"\
+#include "kernel_reg_compute_utils.h"
+#include "Div754/reg_compute/kernel_reg_compute_vec_binary_impl.h"
+#include "Div754/reg_compute/kernel_reg_compute_vec_cmpsel_impl.h"
+#include "Div754/reg_compute/kernel_reg_compute_vec_duplicate_impl.h"
 
 
 using namespace AscendC::Reg;
@@ -39,7 +42,7 @@ __aicore__ inline constexpr DivSpecificMode GetDivSpecificMode(const DivSpecific
 } // namespace Internal
 
 template <typename T = DefaultType, auto mode = MaskMergeMode::ZEROING, typename U>
-PTO_INTERNAL inline void DivPrecisionImpl(U& dstReg, U& srcReg0, U& srcReg1, MaskReg& mask)
+PTO_INTERNAL void DivPrecisionImpl(U& dstReg, U& srcReg0, U& srcReg1, MaskReg& mask)
 {
     constexpr DivSpecificMode sprMode = Internal::GetDivSpecificMode(mode);
     constexpr auto modeValue = GetMaskMergeMode<sprMode.mrgMode>();
@@ -90,7 +93,7 @@ PTO_INTERNAL inline void DivPrecisionImpl(U& dstReg, U& srcReg0, U& srcReg1, Mas
 }
 
 template <typename T = DefaultType, auto mode = MaskMergeMode::ZEROING, typename U, bool is0ULP>
-PTO_INTERNAL inline void DivIEEE754FloatImpl(RegTensor<float>& dst, RegTensor<float>& src0,
+PTO_INTERNAL void DivIEEE754FloatImpl(RegTensor<float>& dst, RegTensor<float>& src0,
                                                 RegTensor<float>& src1, MaskReg& mask)
 {
     constexpr uint32_t exponentExtractor = 0x807FFFFF;
@@ -314,7 +317,7 @@ PTO_INTERNAL inline void DivIEEE754FloatImpl(RegTensor<float>& dst, RegTensor<fl
 
 
 template <typename T = DefaultType, auto mode = MaskMergeMode::ZEROING, typename U>
-PTO_INTERNAL inline void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0,
+PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half>& dst, RegTensor<half>& src0,
                                                RegTensor<half>& src1, MaskReg& mask)
 {
     constexpr uint16_t exponentExtractor = 0x83FF;

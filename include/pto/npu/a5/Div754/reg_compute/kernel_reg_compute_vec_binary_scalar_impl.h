@@ -29,7 +29,7 @@
 namespace AscendC {
 namespace Reg {
 template <typename T = DefaultType, typename U, MaskMergeMode mode = MaskMergeMode::ZEROING, typename S>
-__simd_callee__ inline void AddsComplexTraitTwoImpl(S& dstReg, S& srcReg, const U& scalarValue, MaskReg& mask)
+__simd_callee__ inline void AddsComplexTraitTwo(S& dstReg, S& srcReg, const U& scalarValue, MaskReg& mask)
 {
     using ActualT = typename S::ActualT;
     static_assert(CheckRegTrait<S, RegTraitNumTwo>(), "S should be RegTraitNumTwo");
@@ -47,7 +47,7 @@ __simd_callee__ inline void AddsComplexTraitTwoImpl(S& dstReg, S& srcReg, const 
 }
 
 template <typename T = DefaultType, typename U, MaskMergeMode mode = MaskMergeMode::ZEROING, typename S>
-__simd_callee__ inline void AddsComplexTraitOneImpl(S& dstReg, S& srcReg, const U& scalarValue, MaskReg& mask)
+__simd_callee__ inline void AddsComplexTraitOne(S& dstReg, S& srcReg, const U& scalarValue, MaskReg& mask)
 {
     using ActualT = typename S::ActualT;
     static_assert(CheckRegTrait<S, RegTraitNumOne>(), "S should be RegTraitNumOne");
@@ -58,13 +58,13 @@ __simd_callee__ inline void AddsComplexTraitOneImpl(S& dstReg, S& srcReg, const 
     RegTensor<ActualT, RegTraitNumTwo> traitTwoDstReg;
     TraitOneToTraitTwoTmpl<RegTensor<ActualT, RegTraitNumTwo>, RegTensor<ActualT, RegTraitNumOne>, typename ActualT::EleType>(
                           traitTwoSrcReg, srcReg);
-    AddsComplexTraitTwoImpl(traitTwoDstReg, traitTwoSrcReg, scalarValue, maskTrait2);
+    AddsComplexTraitTwo(traitTwoDstReg, traitTwoSrcReg, scalarValue, maskTrait2);
     TraitTwoToTraitOneTmpl<RegTensor<ActualT, RegTraitNumOne>, RegTensor<ActualT, RegTraitNumTwo>, typename ActualT::EleType>(
                           dstReg, traitTwoDstReg);
 }
 
 template <typename T = DefaultType, typename U, MaskMergeMode mode = MaskMergeMode::ZEROING, typename S>
-__simd_callee__ inline void AddsImpl(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
+__simd_callee__ inline void Adds(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
 {
     using ActualT = typename S::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -80,21 +80,21 @@ __simd_callee__ inline void AddsImpl(S& dstReg, S& srcReg, U scalarValue, MaskRe
 
     if constexpr(SupportType<ActualT, complex32>()) {
         if constexpr (CheckRegTrait<S, RegTraitNumTwo>()) {
-            AddsComplexTraitTwoImpl(dstReg, srcReg, scalarValue, mask);
+            AddsComplexTraitTwo(dstReg, srcReg, scalarValue, mask);
         } else {
-            AddsComplexTraitOneImpl(dstReg, srcReg, scalarValue, mask);
+            AddsComplexTraitOne(dstReg, srcReg, scalarValue, mask);
         }
     } else if constexpr (sizeof(ActualT) == 8) {
         if constexpr(SupportType<ActualT, complex64>()) {
             if constexpr (CheckRegTrait<S, RegTraitNumTwo>()) {
-                AddsComplexTraitTwoImpl(dstReg, srcReg, scalarValue, mask);
+                AddsComplexTraitTwo(dstReg, srcReg, scalarValue, mask);
             } else {
                 MaskReg maskTrait2;
                 MaskPack(maskTrait2, mask);
                 RegTensor<ActualT, RegTraitNumTwo> traitTwoSrcReg;
                 RegTensor<ActualT, RegTraitNumTwo> traitTwoDstReg;
                 B64TraitOneToTraitTwo(traitTwoSrcReg, srcReg);
-                AddsComplexTraitTwoImpl(traitTwoDstReg, traitTwoSrcReg, scalarValue, maskTrait2);
+                AddsComplexTraitTwo(traitTwoDstReg, traitTwoSrcReg, scalarValue, maskTrait2);
                 B64TraitTwoToTraitOne(dstReg, traitTwoDstReg);
             }
         } else {
@@ -137,7 +137,7 @@ __simd_callee__ inline void MulsKernel(S& dstReg, S& srcReg, const U& scalarValu
 }
 
 template <typename T = DefaultType, typename U, MaskMergeMode mode = MaskMergeMode::ZEROING, typename S>
-__simd_callee__ inline void MulsImpl(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
+__simd_callee__ inline void Muls(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
 {
     using ActualT = typename S::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -191,7 +191,7 @@ __simd_callee__ inline void MulsImpl(S& dstReg, S& srcReg, U scalarValue, MaskRe
 }
 
 template <typename T = DefaultType, typename U, MaskMergeMode mode = MaskMergeMode::ZEROING, typename S>
-__simd_callee__ inline void MaxsImpl(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
+__simd_callee__ inline void Maxs(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
 {
     using ActualT = typename S::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -215,7 +215,7 @@ __simd_callee__ inline void MaxsImpl(S& dstReg, S& srcReg, U scalarValue, MaskRe
 }
 
 template <typename T = DefaultType, typename U, MaskMergeMode mode = MaskMergeMode::ZEROING, typename S>
-__simd_callee__ inline void MinsImpl(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
+__simd_callee__ inline void Mins(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
 {
     using ActualT = typename S::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -237,7 +237,7 @@ __simd_callee__ inline void MinsImpl(S& dstReg, S& srcReg, U scalarValue, MaskRe
 }
 
 template <typename T = DefaultType, typename U, MaskMergeMode mode = MaskMergeMode::ZEROING, typename S>
-__simd_callee__ inline void ShiftLeftsImpl(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
+__simd_callee__ inline void ShiftLefts(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
 {
     using ActualT = typename S::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -253,7 +253,7 @@ __simd_callee__ inline void ShiftLeftsImpl(S& dstReg, S& srcReg, U scalarValue, 
     } else {
         if constexpr (CheckRegTrait<S, RegTraitNumTwo>()) {
             S dstTemp;
-            ShiftLeftsB64Impl(dstTemp, srcReg, scalarValue, mask);
+            ShiftLeftsB64(dstTemp, srcReg, scalarValue, mask);
             dstReg = dstTemp;
         } else if constexpr (CheckRegTrait<S, RegTraitNumOne>()) {
             MaskReg maskTrait2;
@@ -261,14 +261,14 @@ __simd_callee__ inline void ShiftLeftsImpl(S& dstReg, S& srcReg, U scalarValue, 
             RegTensor<ActualT, RegTraitNumTwo> traitTwoSrcReg0;
             RegTensor<ActualT, RegTraitNumTwo> traitTwoDstReg;
             B64TraitOneToTraitTwo(traitTwoSrcReg0, srcReg);
-            ShiftLeftsB64Impl(traitTwoDstReg, traitTwoSrcReg0, scalarValue, maskTrait2);
+            ShiftLeftsB64(traitTwoDstReg, traitTwoSrcReg0, scalarValue, maskTrait2);
             B64TraitTwoToTraitOne(dstReg, traitTwoDstReg);
         }
     }
 }
 
 template <typename T, MaskMergeMode mode = MaskMergeMode::ZEROING, typename U>
-__simd_callee__ inline void ShiftLeftsB64Impl(U& dstReg, U& srcReg, T scalarValue, MaskReg& mask)
+__simd_callee__ inline void ShiftLeftsB64(U& dstReg, U& srcReg, T scalarValue, MaskReg& mask)
 {
     using ActualT = typename U::ActualT;
     constexpr auto modeValue = GetMaskMergeMode<mode>();
@@ -295,7 +295,7 @@ __simd_callee__ inline void ShiftLeftsB64Impl(U& dstReg, U& srcReg, T scalarValu
 }
 
 template <typename T = DefaultType, typename U, MaskMergeMode mode = MaskMergeMode::ZEROING, typename S>
-__simd_callee__ inline void ShiftRightsImpl(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
+__simd_callee__ inline void ShiftRights(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
 {
     using ActualT = typename S::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -310,7 +310,7 @@ __simd_callee__ inline void ShiftRightsImpl(S& dstReg, S& srcReg, U scalarValue,
     } else if constexpr (sizeof(ActualT) == 8) {
         if constexpr (CheckRegTrait<S, RegTraitNumTwo>()) {
             S dstTemp;
-            ShiftRightsB64Impl(dstTemp, srcReg, scalarValue, mask);
+            ShiftRightsB64(dstTemp, srcReg, scalarValue, mask);
             dstReg = dstTemp;
         } else if constexpr (CheckRegTrait<S, RegTraitNumOne>()) {
             MaskReg maskTrait2;
@@ -318,14 +318,14 @@ __simd_callee__ inline void ShiftRightsImpl(S& dstReg, S& srcReg, U scalarValue,
             RegTensor<ActualT, RegTraitNumTwo> traitTwoSrcReg0;
             RegTensor<ActualT, RegTraitNumTwo> traitTwoDstReg;
             B64TraitOneToTraitTwo(traitTwoSrcReg0, srcReg);
-            ShiftRightsB64Impl(traitTwoDstReg, traitTwoSrcReg0, scalarValue, maskTrait2);
+            ShiftRightsB64(traitTwoDstReg, traitTwoSrcReg0, scalarValue, maskTrait2);
             B64TraitTwoToTraitOne(dstReg, traitTwoDstReg);
         }
     }
 }
 
 template <typename T, MaskMergeMode mode = MaskMergeMode::ZEROING, typename U>
-__simd_callee__ inline void ShiftRightsB64Impl(U& dstReg, U& srcReg, T scalarValue, MaskReg& mask)
+__simd_callee__ inline void ShiftRightsB64(U& dstReg, U& srcReg, T scalarValue, MaskReg& mask)
 {
     using ActualT = typename U::ActualT;
     constexpr auto modeValue = GetMaskMergeMode<mode>();
@@ -352,7 +352,7 @@ __simd_callee__ inline void ShiftRightsB64Impl(U& dstReg, U& srcReg, T scalarVal
 }
 
 template <typename T = DefaultType, typename U, MaskMergeMode mode = MaskMergeMode::ZEROING, typename S>
-__simd_callee__ inline void LeakyReluImpl(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
+__simd_callee__ inline void LeakyRelu(S& dstReg, S& srcReg, U scalarValue, MaskReg& mask)
 {
     using ActualT = typename S::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");

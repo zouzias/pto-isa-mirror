@@ -25,7 +25,7 @@
 namespace AscendC {
 namespace Reg {
 template <typename T, const RegTrait& regTrait = RegTraitNumOne>
-__simd_callee__ inline MaskReg UpdateMaskImpl(uint32_t& scalarValue)
+__simd_callee__ inline MaskReg UpdateMask(uint32_t& scalarValue)
 {
     static_assert(SupportBytes<T, 1, 2, 4, 8>(), "UpdateMask only support type b8/b16/b32/b64 on current device");
     MaskReg reg;
@@ -81,7 +81,7 @@ __simd_callee__ inline constexpr MaskPattern GetMaskPattern()
 }
 
 template <typename T, MaskPattern mode = MaskPattern::ALL, const RegTrait& regTrait = RegTraitNumOne>
-__simd_callee__ inline MaskReg CreateMaskImpl()
+__simd_callee__ inline MaskReg CreateMask()
 {
     static_assert(SupportBytes<T, 1, 2, 4, 8>(), "CreateMask only support type b8/b16/b32/b64 on current device");
     constexpr auto modeValue = std::integral_constant<::Pat, static_cast<::Pat>(GetMaskPattern<T, mode, regTrait>())>();
@@ -109,7 +109,7 @@ __simd_callee__ inline MaskReg CreateMaskImpl()
 }
 
 template <typename T = DefaultType, int16_t offset, typename U>
-__simd_callee__ inline void MaskGenWithRegTensorImpl(MaskReg &dst, U &srcReg)
+__simd_callee__ inline void MaskGenWithRegTensor(MaskReg &dst, U &srcReg)
 {
     using ActualT = typename U::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -123,38 +123,38 @@ __simd_callee__ inline void MaskGenWithRegTensorImpl(MaskReg &dst, U &srcReg)
     }
 }
 
-__simd_callee__ inline void MaskNotImpl(MaskReg& dst, MaskReg& src, MaskReg& mask)
+__simd_callee__ inline void MaskNot(MaskReg& dst, MaskReg& src, MaskReg& mask)
 {
     pnot(dst, src, mask);
 }
 
-__simd_callee__ inline void MaskAndImpl(MaskReg& dst, MaskReg& src0, MaskReg& src1, MaskReg& mask)
+__simd_callee__ inline void MaskAnd(MaskReg& dst, MaskReg& src0, MaskReg& src1, MaskReg& mask)
 {
     pand(dst, src0, src1, mask);
 }
 
-__simd_callee__ inline void MaskOrImpl(MaskReg& dst, MaskReg& src0, MaskReg& src1, MaskReg& mask)
+__simd_callee__ inline void MaskOr(MaskReg& dst, MaskReg& src0, MaskReg& src1, MaskReg& mask)
 {
     por(dst, src0, src1, mask);
 }
 
-__simd_callee__ inline void MaskXorImpl(MaskReg& dst, MaskReg& src0, MaskReg& src1, MaskReg& mask)
+__simd_callee__ inline void MaskXor(MaskReg& dst, MaskReg& src0, MaskReg& src1, MaskReg& mask)
 {
     pxor(dst, src0, src1, mask);
 }
 
-__simd_callee__ inline void MaskMovImpl(MaskReg& dst, MaskReg& src, MaskReg& mask)
+__simd_callee__ inline void MaskMov(MaskReg& dst, MaskReg& src, MaskReg& mask)
 {
     pmov(dst, src, mask);
 }
 
-__simd_callee__ inline void MaskMovImpl(MaskReg& dst, MaskReg& src)
+__simd_callee__ inline void MaskMov(MaskReg& dst, MaskReg& src)
 {
     pmov(dst, src);
 }
 
 template <typename T>
-__simd_callee__ inline void MaskInterleaveImpl(MaskReg& dst0, MaskReg& dst1, MaskReg& src0, MaskReg& src1)
+__simd_callee__ inline void MaskInterleave(MaskReg& dst0, MaskReg& dst1, MaskReg& src0, MaskReg& src1)
 {
     static_assert(SupportBytes<T, 1, 2, 4>(), "MaskInterleave only support type b8/b16/b32 on current device");
     if constexpr (sizeof(T) == 1) {
@@ -167,7 +167,7 @@ __simd_callee__ inline void MaskInterleaveImpl(MaskReg& dst0, MaskReg& dst1, Mas
 }
 
 template <typename T>
-__simd_callee__ inline void MaskDeInterleaveImpl(MaskReg& dst0, MaskReg& dst1, MaskReg& src0, MaskReg& src1)
+__simd_callee__ inline void MaskDeInterleave(MaskReg& dst0, MaskReg& dst1, MaskReg& src0, MaskReg& src1)
 {
     static_assert(SupportBytes<T, 1, 2, 4>(), "MaskDeInterleave only support type b8/b16/b32 on current device");
     if constexpr (sizeof(T) == 1) {
@@ -179,27 +179,27 @@ __simd_callee__ inline void MaskDeInterleaveImpl(MaskReg& dst0, MaskReg& dst1, M
     }
 }
 
-__simd_callee__ inline void MaskSelImpl(MaskReg& dst, MaskReg& src0, MaskReg& src1, MaskReg& mask)
+__simd_callee__ inline void MaskSel(MaskReg& dst, MaskReg& src0, MaskReg& src1, MaskReg& mask)
 {
     psel(dst, src0, src1, mask);
 }
 
 template <HighLowPart part = HighLowPart::LOWEST>
-__simd_callee__ inline void MaskPackImpl(MaskReg& dst, MaskReg& src)
+__simd_callee__ inline void MaskPack(MaskReg& dst, MaskReg& src)
 {
     constexpr auto partValue = std::integral_constant<::HiloPart, static_cast<::HiloPart>(part)>();
     ppack(dst, src, partValue);
 }
 
 template <HighLowPart part = HighLowPart::LOWEST>
-__simd_callee__ inline void MaskUnPackImpl(MaskReg& dst, MaskReg& src)
+__simd_callee__ inline void MaskUnPack(MaskReg& dst, MaskReg& src)
 {
     constexpr auto partValue = std::integral_constant<::HiloPart, static_cast<::HiloPart>(part)>();
     punpack(dst, src, partValue);
 }
 
 template <typename T>
-__simd_callee__ inline MaskReg MoveMaskImpl()
+__simd_callee__ inline MaskReg MoveMask()
 {
     static_assert(SupportBytes<T, 2, 4>(), "MoveMask only support type b16/b32 on current device");
 
