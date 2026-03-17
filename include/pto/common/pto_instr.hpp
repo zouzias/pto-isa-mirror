@@ -78,17 +78,6 @@ PTO_INST RecordEvent TAND(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     return {};
 }
 
-#ifdef __PTO_AUTO__
-// temp hack: needed by auto mode to support aliasing right now
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TALIAS(TileDataDst &original, TileDataSrc &alias, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TALIAS, original, alias);
-    return {};
-}
-#endif
-
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
@@ -1674,18 +1663,39 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
     return {};
 }
-template <typename TileDataDst, typename TileDataSrc>
-__tf__ PTO_INTERNAL OP_NAME(TGET_SCALE_ADDR)
-    OP_TYPE(element_wise) void TGetScaleAddr(typename TileDataDst::TileDType __out__ dst,
-                                             typename TileDataSrc::TileDType __in__ src)
+
+template <typename GlobalSignalData, typename... WaitEvents>
+PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, CmpMode cmp, WaitEvents &... events)
 {
-    return;
+    TSYNC(events...);
+    return MAP_INSTR_IMPL(TTEST, signalData, cmpValue, cmp);
 }
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TGET_SCALE_ADDR(TileDataDst &dst, TileDataSrc &src)
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+                             TileData &recvTileData, pto::comm::ReduceOp op, WaitEvents &... events)
 {
-    TGetScaleAddr<TileDataDst, TileDataSrc>(dst.data(), src.data());
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TREDUCE, parallelGroup, dstGlobalData, accTileData, recvTileData, op);
+    return {};
+}
+
+template <typename ParallelGroupType, typename GlobalDstData, typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &dstGlobalData, TileData &accTileData,
+                             TileData &pingTileData, TileData &pongTileData, pto::comm::ReduceOp op,
+                             WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TREDUCE, parallelGroup, dstGlobalData, accTileData, pingTileData, pongTileData, op);
+    return {};
+}
+
+template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
+PTO_INST RecordEvent TGET_SCALE_ADDR(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TGET_SCALE_ADDR, dst, src);
+    return {};
 }
 
 } // namespace pto

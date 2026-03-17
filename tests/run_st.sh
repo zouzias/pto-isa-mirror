@@ -22,63 +22,66 @@ ARGS=" "
 checkopts() {
   while true; do
     case "$1" in
-      --a3)
-        ENABLE_A3=true
-        shift
-        ;;
-      --a5)
-        ENABLE_A5=true
-        shift
-        ;;
-      --a3_a5)
-        ENABLE_A3=true
-        ENABLE_A5=true
-        shift
-        ;;
-      --kirin9030)
-        ENABLE_KIRIN9030=true
-        shift
-        ;;
-      --kirinX90)
-        ENABLE_KIRINX90=true
-        shift
-        ;;
-      --sim)
-        ARGS+=" -r sim "
-        shift
-        ;;
-      --npu)
-        ARGS+="-r npu "
-        shift
-        ;;
-      --simple)
-        ENABLE_SIMPLE=true
-        shift
-        ;;
-      --all)
-        ENABLE_ALL=true
-        shift
-        ;;
-      --auto_mode)
-        ARGS+="-a "
-        shift
-        ;;
-      --)
-        shift
-        break
-        ;;
-      *)
-        break
-        ;;
+    --a3)
+      ENABLE_A3=true
+      shift
+      ;;
+    --a5)
+      ENABLE_A5=true
+      shift
+      ;;
+    --a3_a5)
+      ENABLE_A3=true
+      ENABLE_A5=true
+      shift
+      ;;
+    --kirin9030)
+      ENABLE_KIRIN9030=true
+      shift
+      ;;
+    --kirinX90)
+      ENABLE_KIRINX90=true
+      shift
+      ;;
+    --sim)
+      ARGS+=" -r sim "
+      shift
+      ;;
+    --npu)
+      ARGS+="-r npu "
+      shift
+      ;;
+    --simple)
+      ENABLE_SIMPLE=true
+      shift
+      ;;
+    --all)
+      ENABLE_ALL=true
+      shift
+      ;;
+    --auto_mode)
+      ARGS+="-a "
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      break
+      ;;
     esac
   done
 }
 
 checkopts "$@"
 
+if [ "$5" = "auto_mode" ]; then
+  AUTO_MODE_FLAG="-a"
+fi
 
-if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
-  if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
+if [ "$ENABLE_A3" = "true" ]; then       # A2A3
+  if [ "$ENABLE_SIMPLE" = "true" ]; then # 单个用例
     python3 tests/script/build_st.py $ARGS -v a3 -t all
     python3 tests/script/run_st.py $ARGS -w -v a3 -t taxpy -g TAXPYTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpand -g TCOLEXPANDTest.case1
@@ -168,7 +171,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcat -g TCONCATTest.case_int16_32x256_32x128_32x128_32x127_32x128
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcat -g TCONCATTest.case_int32_64x128_64x64_64x64_64x64_64x64
 
-  elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
+  elif [ "$ENABLE_ALL" = "true" ]; then # 所有用例
     python3 tests/script/build_st.py $ARGS -v a3 -t all
     python3 tests/script/run_st.py $ARGS -w -v a3 -t taxpy
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpand
@@ -250,7 +253,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 fi
 
 if [ "$ENABLE_A5" = "true" ]; then
-  if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
+  if [ "$ENABLE_SIMPLE" = "true" ]; then # 单个用例
     python3 tests/script/build_st.py $ARGS -v a5 -t all
     python3 tests/script/run_st.py $ARGS -w -v a5 -t taxpy -g TAXPYTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdequant -g TDEQUANTTest.case1
@@ -368,8 +371,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nd_1
 
-
-  elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
+  elif [ "$ENABLE_ALL" = "true" ]; then # 所有用例
     python3 tests/script/build_st.py $ARGS -v a5 -t all
     python3 tests/script/run_st.py $ARGS -w -v a5 -t taxpy
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdequant
@@ -494,3 +496,4 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tstore
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpand
 fi
+
