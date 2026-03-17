@@ -233,7 +233,7 @@ On A5, the CVID is computed directly from `get_coreid()` without any GM communic
 |----------|----------|------------|-------------|
 | `CORE_PER_DIE` | 18 | 25 | Clusters per die |
 | `AIV_RATIO` | 2 | 2 | Vector cores per Cube |
-| `AIC_AIV_PER_DIE` | 36 | 50 | Total cores per die (programmer view) |
+| `AIC_AIV_PER_DIE` | 54 | 75 | Total cores per die (AIC + AIV) |
 | `CV_COMM_SLOT_BYTES` | 512 | 512 | Bytes per block's comm slot |
 | `CV_MAX_CORES` | 36 | 25 | Max clusters supported |
 | `CV_COMM_RESERVED` | 0 | 12.5KB | Bottom working buffer reservation for CVID |
