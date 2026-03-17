@@ -243,21 +243,23 @@ fi
 
 case "${MODEL_SCALE}" in
     1b)
-        TENSOR_MODEL_PARALLEL_SIZE=1
-        EXPERT_MODEL_PARALLEL_SIZE=16
-        PIPELINE_MODEL_PARALLEL_SIZE=1
-        NUM_LAYERS=10
-        NUM_EXPERTS=128
-        TOPK=4
-        HIDDEN_SIZE=4096
-        FFN_HIDDEN_SIZE=8192
-        MOE_FFN_HIDDEN_SIZE=1920
-        NUM_ATTENTION_HEADS=32
-        NUM_QUERY_GROUPS=8
+        TENSOR_MODEL_PARALLEL_SIZE="${TENSOR_MODEL_PARALLEL_SIZE:-1}"
+        EXPERT_MODEL_PARALLEL_SIZE="${EXPERT_MODEL_PARALLEL_SIZE:-4}"
+        PIPELINE_MODEL_PARALLEL_SIZE="${PIPELINE_MODEL_PARALLEL_SIZE:-1}"
+        NUM_LAYERS="${NUM_LAYERS:-8}"
+        NUM_EXPERTS="${NUM_EXPERTS:-16}"
+        TOPK="${TOPK:-4}"
+        HIDDEN_SIZE="${HIDDEN_SIZE:-4096}"
+        FFN_HIDDEN_SIZE="${FFN_HIDDEN_SIZE:-8192}"
+        MOE_SHARED_EXPERT_INTERMEDIATE_SIZE="${MOE_SHARED_EXPERT_INTERMEDIATE_SIZE:-4096}"
+        MOE_FFN_HIDDEN_SIZE="${MOE_FFN_HIDDEN_SIZE:-4096}"
+        NUM_ATTENTION_HEADS="${NUM_ATTENTION_HEADS:-32}"
+        NUM_QUERY_GROUPS="${NUM_QUERY_GROUPS:-8}"
         MICRO_BATCH_SIZE="${MICRO_BATCH_SIZE:-1}"
         GLOBAL_BATCH_SIZE="${GLOBAL_BATCH_SIZE:-64}"
-        SEQ_LEN="${SEQ_LEN:-4096}"
-        ROUTER_BALANCING_TYPE='aux_loss'
+        SEQ_LEN="${SEQ_LEN:-6144}"
+        ROUTER_BALANCING_TYPE="${ROUTER_BALANCING_TYPE:-aux_loss}"
+        N_SHARED_EXPERTS="${N_SHARED_EXPERTS:-1}"
         ;;
     *)
         echo "Unsupported MODEL_SCALE=${MODEL_SCALE}. Only 1b is scripted." >&2
@@ -395,7 +397,7 @@ TORCHRUN_CMD=(
     --moe-aux-loss-coeff 0.001
     --seq-aux
     --norm-topk-prob
-    --n-shared-experts 1
+    --n-shared-experts "${N_SHARED_EXPERTS}"
     --data-path "${DATA_PATH}"
     --split "${DATA_SPLIT}"
     --log-interval "${LOG_INTERVAL}"
@@ -423,6 +425,10 @@ fi
 
 if [[ "${ENABLE_MOE_GROUPED_GEMM}" == "1" ]]; then
     TORCHRUN_CMD+=(--moe-grouped-gemm)
+fi
+
+if [[ -n "${MOE_SHARED_EXPERT_INTERMEDIATE_SIZE:-}" ]]; then
+    TORCHRUN_CMD+=(--moe-shared-expert-intermediate-size "${MOE_SHARED_EXPERT_INTERMEDIATE_SIZE}")
 fi
 
 if [[ "${ENABLE_MOE_PERMUTATION_ASYNC_COMM}" == "1" ]]; then
@@ -477,6 +483,18 @@ ms_head=${MS_HEAD}
 ms_remote=${MS_REMOTE}
 pretrain_entry=${PRETRAIN_ENTRY}
 model_scale=${MODEL_SCALE}
+tensor_model_parallel_size=${TENSOR_MODEL_PARALLEL_SIZE}
+pipeline_model_parallel_size=${PIPELINE_MODEL_PARALLEL_SIZE}
+expert_model_parallel_size=${EXPERT_MODEL_PARALLEL_SIZE}
+num_layers=${NUM_LAYERS}
+num_experts=${NUM_EXPERTS}
+moe_router_topk=${TOPK}
+hidden_size=${HIDDEN_SIZE}
+ffn_hidden_size=${FFN_HIDDEN_SIZE}
+moe_ffn_hidden_size=${MOE_FFN_HIDDEN_SIZE}
+moe_shared_expert_intermediate_size=${MOE_SHARED_EXPERT_INTERMEDIATE_SIZE:-}
+n_shared_experts=${N_SHARED_EXPERTS:-}
+num_attention_heads=${NUM_ATTENTION_HEADS}
 master_addr=${MASTER_ADDR}
 master_port=${MASTER_PORT}
 hccl_if_base_port=${HCCL_IF_BASE_PORT}
