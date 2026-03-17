@@ -134,7 +134,7 @@ ENABLE_TENSORBOARD="${ENABLE_TENSORBOARD:-1}"
 LOG_TIMERS_TO_TENSORBOARD="${LOG_TIMERS_TO_TENSORBOARD:-1}"
 LOG_THROUGHPUT="${LOG_THROUGHPUT:-1}"
 DATA_SPLIT="${DATA_SPLIT:-100,0,0}"
-LOAD_CHECKPOINT="${LOAD_CHECKPOINT:-1}"
+LOAD_CHECKPOINT="${LOAD_CHECKPOINT:-0}"
 SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 TRAINING_EXTRA_ARGS="${TRAINING_EXTRA_ARGS:-}"
@@ -228,7 +228,7 @@ LLM_REMOTE="$(git -C "${LLM_REPO}" remote get-url origin 2>/dev/null || true)"
 MS_REMOTE="$(git -C "${MS_REPO}" remote get-url origin 2>/dev/null || true)"
 
 LATEST_CKPT_ITERATION=""
-if [[ -f "${CKPT_LOAD_DIR}/latest_checkpointed_iteration.txt" ]]; then
+if [[ "${LOAD_CHECKPOINT}" == "1" && -f "${CKPT_LOAD_DIR}/latest_checkpointed_iteration.txt" ]]; then
     LATEST_CKPT_ITERATION="$(cat "${CKPT_LOAD_DIR}/latest_checkpointed_iteration.txt")"
 fi
 
@@ -579,7 +579,11 @@ chmod +x "${COMMAND_FILE}"
 echo "[$(date -Is)] Log directory: ${LOG_DIR}"
 echo "[$(date -Is)] Log file: ${LOG_FILE}"
 echo "[$(date -Is)] Command file: ${COMMAND_FILE}"
-echo "[$(date -Is)] Latest checkpoint iteration: ${LATEST_CKPT_ITERATION:-unknown}"
+if [[ "${LOAD_CHECKPOINT}" == "1" ]]; then
+    echo "[$(date -Is)] Latest checkpoint iteration: ${LATEST_CKPT_ITERATION:-unknown}"
+else
+    echo "[$(date -Is)] Checkpoint loading disabled; starting from iteration 0"
+fi
 
 if [[ "${DRY_RUN}" == "1" ]]; then
     echo "[$(date -Is)] DRY_RUN=1, not launching training."
