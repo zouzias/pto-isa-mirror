@@ -18,6 +18,7 @@ ENABLE_KIRINX90=false
 ENABLE_SIMPLE=false
 ENABLE_ALL=false
 ARGS=" "
+IS_AUTO_MODE=false
 
 checkopts() {
   while true; do
@@ -61,6 +62,7 @@ checkopts() {
       ;;
     --auto_mode)
       ARGS+="-a "
+      IS_AUTO_MODE=true
       shift
       ;;
     --)
@@ -148,7 +150,10 @@ if [ "$ENABLE_A3" = "true" ]; then       # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tmuls -g TMULSTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tadds -g TADDSTest.case6
     python3 tests/script/run_st.py $ARGS -w -v a3 -t texpands -g TEXPANDSTest.case_float_64x64_64x64_64x64_PAD_VALUE_NULL
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t texpands_mat -g TEXPANDSTest.case1
+    if not IS_AUTO_MODE:
+      # This testcase currently has to directly call CCE intrinsics in the kernel, which
+      # won't compile in auto mode; besides the auto-sync won't work with raw CCE intrinsics
+      python3 tests/script/run_st.py $ARGS -w -v a3 -t texpands_mat -g TEXPANDSTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcmp -g TCMPTest.case_float_1x64_1x64_1x64
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tscatter -g TSCATTERTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t ttri -g TTRITest.case_float_128x128_128x31_1__444
@@ -231,7 +236,10 @@ if [ "$ENABLE_A3" = "true" ]; then       # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tlog
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trecip
     python3 tests/script/run_st.py $ARGS -w -v a3 -t texpands
-    python3 tests/script/run_st.py $ARGS -w -v a3 -t texpands_mat
+    if not IS_AUTO_MODE:
+      # This testcase currently has to directly call CCE intrinsics in the kernel, which
+      # won't compile in auto mode; besides the auto-sync won't work with raw CCE intrinsics
+      python3 tests/script/run_st.py $ARGS -w -v a3 -t texpands_mat
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcmp
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tscatter
     python3 tests/script/run_st.py $ARGS -w -v a3 -t ttri
@@ -287,7 +295,10 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdivs -g TDIVSTest.case5
     python3 tests/script/run_st.py $ARGS -w -v a5 -t texp -g TEXPTest.case_float_64x64_64x64_64x64_inPlace_False
     python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands -g TEXPANDSTest.case_float_64x64_64x64_64x64_PAD_VALUE_NULL
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands_mat -g TEXPANDSTest.case1
+    if not IS_AUTO_MODE:
+      # This testcase currently has to directly call CCE intrinsics in the kernel, which
+      # won't compile in auto mode; besides the auto-sync won't work with raw CCE intrinsics
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands_mat -g TEXPANDSTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract -g TEXTRACTTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tfillpad -g TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tgather -g TGATHERTest.case1_float_32x1024_16x64
@@ -403,7 +414,10 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdivs
     python3 tests/script/run_st.py $ARGS -w -v a5 -t texp
     python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands_mat
+    if not IS_AUTO_MODE:
+      # This testcase currently has to directly call CCE intrinsics in the kernel, which
+      # won't compile in auto mode; besides the auto-sync won't work with raw CCE intrinsics
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands_mat
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tfillpad
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tgather
