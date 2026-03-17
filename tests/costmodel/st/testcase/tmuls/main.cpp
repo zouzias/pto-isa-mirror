@@ -110,6 +110,6 @@ TEST_F(TMULSTest, case5)
 
 TEST_F(TMULSTest, case6)
 {
-    bool ret = TMulSTestFramework<6, float, 256, 256, 16, 16, 128.0f, 0.0f>();
+    bool ret = TMulSTestFramework<6, float, 256, 256, 16, 16, 256.0f, 0.0f>();
     EXPECT_TRUE(ret);
 }
