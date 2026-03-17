@@ -7,6 +7,7 @@ set -euo pipefail
 # Presets:
 #   native_base : original native baseline path (bench_native_ms + bench_native_llm)
 #   mc2         : current MC2 mainline path (MindSpeed + lzm_Mindspeed-LLm)
+#   ep4_overlap : current codebase overlap path with EP=4 and MC2 disabled
 #   pto_mc2     : current PTO-ISA validation path on top of MC2 reorder,
 #                 with the validated defer_probs defaults enabled
 #
@@ -75,6 +76,19 @@ case "${LAUNCH_PRESET}" in
         export ENABLE_MOE_BMM_MC2="${ENABLE_MOE_BMM_MC2:-0}"
         export USE_FUSED_ROTARY_POS_EMB="${USE_FUSED_ROTARY_POS_EMB:-1}"
         ;;
+    ep4_overlap)
+        export LLM_REPO="${LLM_REPO:-/home/llx/lzm_Mindspeed-LLm}"
+        export MS_REPO="${MS_REPO:-/home/llx/MindSpeed}"
+        export PRETRAIN_ENTRY="${PRETRAIN_ENTRY:-${LLM_REPO}/pretrain_jamba.py}"
+        export SOURCE_EXAMPLE_SCRIPT="${SOURCE_EXAMPLE_SCRIPT:-/home/llx/bench_native_llm/examples/mcore/qwen2/pretrain_qwen2_30b_4k_jamba_gdn_moe_cann850_bck.sh}"
+        export EXPERT_MODEL_PARALLEL_SIZE="${EXPERT_MODEL_PARALLEL_SIZE:-4}"
+        export ENABLE_MOE_ALLTOALL_OVERLAP_COMM="${ENABLE_MOE_ALLTOALL_OVERLAP_COMM:-1}"
+        export ENABLE_MOE_ALLTOALL_MC2="${ENABLE_MOE_ALLTOALL_MC2:-0}"
+        export ENABLE_MOE_BMM_MC2="${ENABLE_MOE_BMM_MC2:-0}"
+        export ENABLE_PTO_MOE_MC2_REORDER="${ENABLE_PTO_MOE_MC2_REORDER:-0}"
+        export MINDSPEED_MOE_MC2_DEFER_PROBS_TO_UNPERMUTE="${MINDSPEED_MOE_MC2_DEFER_PROBS_TO_UNPERMUTE:-0}"
+        export USE_FUSED_ROTARY_POS_EMB="${USE_FUSED_ROTARY_POS_EMB:-1}"
+        ;;
     pto_mc2)
         export LLM_REPO="${LLM_REPO:-/home/llx/lzm_Mindspeed-LLm}"
         export MS_REPO="${MS_REPO:-/home/llx/MindSpeed}"
@@ -93,7 +107,7 @@ case "${LAUNCH_PRESET}" in
         ;;
     *)
         echo "Unsupported LAUNCH_PRESET=${LAUNCH_PRESET}" >&2
-        echo "Supported presets: native_base, mc2, pto_mc2" >&2
+        echo "Supported presets: native_base, mc2, ep4_overlap, pto_mc2" >&2
         exit 1
         ;;
 esac
