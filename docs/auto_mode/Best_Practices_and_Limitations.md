@@ -96,34 +96,21 @@ To address this limitation, PTO AUTO uses two instructions, ``TRESHAPE`` and ``T
 
 * `TRESHAPE`: 
 
-    The Auto Mode has a different implementation of `TRESHAPE` to the Manual Mode. In Manual Mode, it assigns the address of the "source" tile to the "destination" tile. On the other hand, in Auto Mode, `TRESHAPE` acts as a compiler hint that tells the compiler to assign the destination tile the same address as the source tile.
+    The semantic of the `TRESHAPE` instruction is slightly different in the AUTO mode compared to the Manual Mode. In Manual Mode, ``TRESHAPE`` it assigns the address of the ``source`` tile to the ``destination`` tile at the point of execution of the ``TRESHAPE`` instruction. However, in the AUTO mode, `TRESHAPE` acts as a mechanism to bind the source and destination tile to the same address. This binding is valid across the entire scope in which the source and destination tiles are defined.
 
 * `TSUBVIEW`:
 
-    `TSUBVIEW` lets users get a subtile from a larger tile. The compiler will then calculate the relative offset of the subtile and add it to the allocated address of the source tile.
+    The `TSUBVIEW` instruction allows users obtain a subtile from a larger tile. In the AUTO mode, the compiler calculates the relative offset of the subtile and add it to the automatically allocated address of the base tile.
 
-Since the address of tiles are constant throughout the kernel, we cannot change the address of a tile with `TRESHAPE` or `TSUBVIEW`. For example,
+Note that since in the AUTO mode is that the address of a tile cannot change throughout its scope, a tile cannot be used as the destination for multiple `TRESHAPE` or `TSUBVIEW` instructions. For example, the following example is invalid in the AUTO mode and the actual behavior is undefined.  
+
 ```cpp
-...
-
 TRESHAPE(tile0, tile1);
 foo(tile0);
+... 
 TSUBVIEW(tile0, tile2, 0, 0);
 bar(tile0);
-
-...
 ```
 
-is not allowed. Multiple `TRESHAPE` or `TSUBVIEW` calls with the same destination tile will lead to a compiler crash.
-
-These operations only make sense if they are placed right after the declaration of the destination tile. Otherwise, we will still treat uses of the tile before the `TRESHAPE` or `TSUBVIEW` calls as though they already take the address dependency of the source tile. For example,
-
-```cpp
-...
-
-foo(tile0); // tile0 already takes the address of tile1 here.
-TRESHAPE(tile0, tile1);
-
-...
-```
+As a good practice, it is highly recommended that the ``TSUBVIEW`` and ``TRESHAPE`` instructions are placed right the declaration of the destination tiles. 
 
