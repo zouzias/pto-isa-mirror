@@ -25,28 +25,31 @@ enum TSyncCVMode : uint8_t
     CV_CORES_SYNC = 2
 };
 
-/**
- * Pipe: Manages Cross-Core Pipe Synchronization
- * @tparam FlagID      Signal from Producer to Consumer (Data Ready)
- * @tparam FiFoType     FIFO Type (e.g., GM_FIFO, VEC_FIFO, MAT_FIFO)
- * @tparam FiFoDepth    FIFO Depth (Number of entries in the FIFO)
- * @tparam FiFoSyncT    FIFO Sync Period (Sync once every N tiles)
- * @tparam TileDataProd Data type for the producer tile
- * @tparam TileDataCons Data type for the consumer tile
- * @tparam LocalFiFoDepth  Local FIFO Depth for GM FIFOs (ignored for non-GM FIFOs)
- * @tparam EN_UNIT_FLAG    Whether to enable unit flags (only for GM FIFOs)
- * @tparam VCRatio         Vector-to-Cube core ratio
- */
-template <uint8_t FlagID, FIFOType FiFoType, uint8_t FiFoDepth, uint8_t FiFoSyncT, typename TileDataProd,
-          typename TileDataCons, bool EN_UNIT_FLAG = false, uint8_t LocalFiFoDepth = 2,
-          VecCubeRatio VCRatio = VecCubeRatio::V2C1_VECS>
+template <uint8_t FlagID, uint8_t DirType, uint32_t SlotSize, uint32_t SlotNum, uint32_t LocalSlotNum = 2,
+          bool EN_UNIT_FLAG = false>
 struct TPipe {
-    static constexpr bool is_c2v =
-        (FiFoType == FIFOType::GM_FIFO) && (TileDataProd::Loc == TileType::Acc) && (TileDataCons::Loc == TileType::Vec);
-    static constexpr bool is_v2c =
-        (FiFoType == FIFOType::GM_FIFO) && (TileDataProd::Loc == TileType::Vec) && (TileDataCons::Loc == TileType::Mat);
+    static constexpr uint8_t DIR_MASK = 0x7;
+    static constexpr uint8_t DIR_TYPE = DIR_MASK & DirType;
+    static constexpr bool is_c2v = (DIR_TYPE == Direction::DIR_C2V);
+    static constexpr bool is_v2c = (DIR_TYPE == Direction::DIR_V2C);
+    static constexpr bool is_v2c_ctrl = (DIR_TYPE == Direction::DIR_V2C_CTRL);
 
-    using DataFiFo = DataFIFO<typename TileDataCons::DType, FiFoType, FiFoDepth, FiFoSyncT, LocalFiFoDepth>;
+    // uint32_t AIV_INDEX = get_subblockid();
+
+    struct DataFiFo {
+        __gm__ void *GM_SLOT_BUFFER = nullptr; // Global memory
+        uint32_t C2V_CONSUMER_BUF = 0x0;       // UB buffer
+        uint32_t V2C_CONSUMER_BUF = 0x0;       // L1 buffer
+        uint64_t V2C_CONTROL_BUF = 0x0;        // scalar buffer for control signals
+        static constexpr uint32_t SLOT_NUM = SlotNum;
+        static constexpr uint32_t SLOT_SIZE = SlotSize;
+        static constexpr uint32_t SLOT_SYNCT = SLOT_NUM;
+        static constexpr uint32_t LOCAL_SLOT_NUM = LocalSlotNum;
+
+        PTO_INTERNAL DataFiFo(__gm__ void *gmSlotBuf, uint32_t c2vConsBuf, uint32_t v2cConBuf)
+            : GM_SLOT_BUFFER(gmSlotBuf), C2V_CONSUMER_BUF(c2vConsBuf), V2C_CONSUMER_BUF(v2cConBuf)
+        {}
+    };
 
     PTO_INTERNAL static uint64_t getFFTSMsgCfg(TSyncCVMode mode, uint16_t flagID, uint16_t base_const = 0x1)
     {
@@ -145,35 +148,45 @@ struct TPipe {
             }
         }
 
-        template <typename T, int ProdM, int ProdN, int ConsM, int ConsN>
-        PTO_INTERNAL void pushAcc2GMFiFo(DataFiFo &fifo, TileDataProd &tile)
+        template <typename TileProd, typename TileCons>
+        PTO_INTERNAL void pushAcc2GMFiFo(DataFiFo &fifo, TileProd &tile)
         {
+            using T = typename TileProd::DType;
+            constexpr int ProdM = TileProd::Rows;
+            constexpr int ProdN = TileProd::Cols;
+            constexpr int ConsM = TileCons::Rows;
+            constexpr int ConsN = TileCons::Cols;
             // calculate base address in GM FIFO for this tile
             constexpr int kTileFactor = ConsN / ProdN;
-            uint32_t buf_idx = static_cast<uint32_t>(tile_id % DataFiFo::fifoDepth);
-            size_t entryBase = buf_idx * kTileFactor * ProdM * ProdN * sizeof(T);
+            uint32_t slotIndex = static_cast<uint32_t>(tile_id % DataFiFo::SLOT_NUM);
+            size_t entryBase = slotIndex * DataFiFo::SLOT_SIZE;
             using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ProdM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
-            GlobalData globalTensor((__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset));
+            GlobalData globalTensor((__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset));
             // store tile to GM FIFO, enable unit-flag one
             if constexpr (EN_UNIT_FLAG) {
-                TSTORE_IMPL<TileDataProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
+                TSTORE_IMPL<TileProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
             } else { // disable unit flag
                 TSTORE_IMPL(globalTensor, tile);
             }
         }
 
-        template <typename T, int ProdM, int ProdN, int ConsM, int ConsN>
-        PTO_INTERNAL void pushVec2GMFiFo(DataFiFo &fifo, TileDataProd &tile)
+        template <typename TileProd, typename TileCons>
+        PTO_INTERNAL void pushVec2GMFiFo(DataFiFo &fifo, TileProd &tile)
         {
-            static_assert(DataFiFo::fifoType == FIFOType::GM_FIFO, "Fix: TPUSH: unsupported fifoType!");
+            using T = typename TileProd::DType;
+            constexpr int ProdM = TileProd::Rows;
+            constexpr int ProdN = TileProd::Cols;
+            constexpr int ConsM = TileCons::Rows;
+            constexpr int ConsN = TileCons::Cols;
+
             // calculate base address in GM FIFO for this tile
             constexpr int kTileFactor = ProdN / ConsN;
-            uint32_t buf_idx = static_cast<uint32_t>(tile_id % DataFiFo::fifoDepth);
-            size_t entryBase = buf_idx * kTileFactor * ConsM * ConsN * sizeof(T);
+            uint32_t slotIndex = static_cast<uint32_t>(tile_id % DataFiFo::SLOT_NUM);
+            size_t entryBase = slotIndex * kTileFactor * ConsM * ConsN * sizeof(T);
             using GlobalDataSub = GlobalTensor<T, pto::Shape<1, 1, 1, ProdM, ConsN>, pto::Stride<1, 1, 1, ConsN, 1>>;
             using TileDataSub = Tile<TileType::Vec, T, ProdM, ProdN, BLayout::RowMajor, ProdM, ConsN>;
             TileDataSub subTile;
-            __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset);
+            __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset);
             // store tile to GM FIFO in sub-tiles if needed (when Tile_S1 > Cube_S1)
             for (int sub_col = 0; sub_col < kTileFactor; ++sub_col) {
                 __gm__ T *addrSub = addr + sub_col * ConsM * ConsN;
@@ -184,42 +197,85 @@ struct TPipe {
             }
         }
 
-        PTO_INTERNAL void pushVec2CtrlFiFo(DataFiFo &fifo, TileDataProd &tile)
+        template <typename TileProd, typename TileCons>
+        PTO_INTERNAL void pushVec2CtrlFiFo(DataFiFo &fifo, TileProd &tile)
         {
-            static_assert(DataFiFo::fifoType == FIFOType::CTRL_FIFO, "Fix: TPUSH has unsupported fifo Type!");
-            uint32_t buf_idx = static_cast<uint32_t>(tile_id % DataFiFo::fifoDepth);
-            uint64_t entryBase = buf_idx * sizeof(uint32_t);
-            __gm__ uint32_t *ctrlBuf = (__gm__ uint32_t *)(fifo.fifoBase + entryBase + entryOffset);
+            using T = typename TileProd::DType;
+            constexpr int ProdM = TileProd::Rows;
+            constexpr int ProdN = TileProd::Cols;
+            constexpr int ConsM = TileCons::Rows;
+            constexpr int ConsN = TileCons::Cols;
+            uint32_t slotIndex = static_cast<uint32_t>(tile_id % DataFiFo::SLOT_NUM);
+            uint64_t entryBase = slotIndex * sizeof(uint32_t);
+            __gm__ uint32_t *ctrlBuf = (__gm__ uint32_t *)(fifo.CTRL_SLOT_BUFFER + entryBase + entryOffset);
             set_flag(PIPE_V, PIPE_S, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
             uint32_t ctrlSignal = *(tile.data());
             *(ctrlBuf) = ctrlSignal;
         }
 
-        PTO_INTERNAL void push(DataFiFo &fifo, TileDataProd &tile)
+        template <typename TileProd, typename TileCons, TileSplitAxis Split>
+        PTO_INTERNAL void push(DataFiFo &fifo, TileProd &tile)
         {
             // get tile shape and valid shape
-            using T = typename TileDataProd::DType;
-            constexpr int ProdM = TileDataProd::Rows;
-            constexpr int ProdN = TileDataProd::Cols;
-            constexpr int ConsM = TileDataCons::Rows;
-            constexpr int ConsN = TileDataCons::Cols;
-
-            static_assert(TileDataProd::Loc == TileType::Acc || TileDataProd::Loc == TileType::Vec,
+            static_assert(TileProd::Loc == TileType::Acc || TileProd::Loc == TileType::Vec,
                           "Fix: TPUSH has unsupported tile type!");
-            if constexpr (TileDataProd::Loc == TileType::Acc) {
-                pushAcc2GMFiFo<T, ProdM, ProdN, ConsM, ConsN>(fifo, tile);
-            } else if constexpr (TileDataProd::Loc == TileType::Vec) {
-                static_assert(DataFiFo::fifoType == FIFOType::GM_FIFO || DataFiFo::fifoType == FIFOType::CTRL_FIFO,
-                              "Fix: TPUSH has unsupported fifo type!");
-                if constexpr (DataFiFo::fifoType == FIFOType::GM_FIFO) {
-                    pushVec2GMFiFo<T, ProdM, ProdN, ConsM, ConsN>(fifo, tile);
-                } else if constexpr (DataFiFo::fifoType == FIFOType::CTRL_FIFO) {
-                    pushVec2CtrlFiFo(fifo, tile);
+            if constexpr (TileProd::Loc == TileType::Acc) {
+                pushAcc2GMFiFo<TileProd, TileCons>(fifo, tile);
+            } else if constexpr (TileProd::Loc == TileType::Vec) {
+                if constexpr (is_v2c) {
+                    pushVec2GMFiFo<TileProd, TileCons>(fifo, tile);
+                } else if constexpr (is_v2c_ctrl) {
+                    pushVec2CtrlFiFo<TileProd, TileCons>(fifo, tile);
                 }
             }
         } // end of store
-    };    // end of Producer
+
+        //--------------------------------------------------------------
+        template <typename TileProd>
+        PTO_INTERNAL void pushAcc2GMFiFo(DataFiFo &fifo, TileProd &tile)
+        {
+            using T = typename TileProd::DType;
+            constexpr int ProdM = TileProd::Rows;
+            constexpr int ProdN = TileProd::Cols;
+            uint32_t slotIndex = static_cast<uint32_t>(tile_id % DataFiFo::SLOT_NUM);
+            size_t entryBase = slotIndex * ProdM * ProdN * sizeof(T);
+            using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ProdM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
+            GlobalData globalTensor((__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset));
+            // store tile to GM FIFO, enable unit-flag one
+            if constexpr (EN_UNIT_FLAG) {
+                TSTORE_IMPL<TileProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
+            } else { // disable unit flag
+                TSTORE_IMPL(globalTensor, tile);
+            }
+        }
+
+        template <typename TileProd>
+        PTO_INTERNAL void pushVec2GMFiFo(DataFiFo &fifo, TileProd &tile)
+        {
+            using T = typename TileProd::DType;
+            constexpr int ProdM = TileProd::Rows;
+            constexpr int ProdN = TileProd::Cols;
+            uint32_t slotIndex = static_cast<uint32_t>(tile_id % DataFiFo::SLOT_NUM);
+            size_t entryBase = slotIndex * ProdM * ProdN * sizeof(T);
+            using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ProdM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
+            __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset);
+            GlobalData globalData((__gm__ T *)(addr));
+            TSTORE_IMPL(globalData, tile);
+        }
+
+        template <typename TileProd, TileSplitAxis Split>
+        PTO_INTERNAL void push(DataFiFo &fifo, TileProd &tile)
+        {
+            static_assert(TileProd::Loc == TileType::Acc || TileProd::Loc == TileType::Vec,
+                          "Fix: TPUSH has unsupported tile type!");
+            if constexpr (TileProd::Loc == TileType::Acc) {
+                pushAcc2GMFiFo<TileProd>(fifo, tile);
+            } else if constexpr (TileProd::Loc == TileType::Vec) {
+                pushVec2GMFiFo<TileProd>(fifo, tile);
+            }
+        }
+    }; // end of Producer
 
     // -------------------------------------------------------------------------
     // Consumer Interface
@@ -308,20 +364,24 @@ struct TPipe {
             }
         }
 
-        template <typename T, int ProdM, int ProdN, int ConsM, int ConsN>
-        PTO_INTERNAL void popVecTileFromGMFiFo(DataFiFo &fifo, TileDataCons &tile)
+        template <typename TileProd, typename TileCons>
+        PTO_INTERNAL void popVecTileFromGMFiFo(DataFiFo &fifo, TileCons &tile)
         {
-            size_t buf_idx = static_cast<size_t>(tile_id) % fifo.fifoDepth;
-            constexpr int kTileFactor = ConsN / ProdN;
-            size_t entryBase = static_cast<size_t>(buf_idx) * kTileFactor * ProdM * ProdN * sizeof(T);
-            __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset);
+            using T = typename TileProd::DType;
+            constexpr int ProdM = TileProd::Rows;
+            constexpr int ProdN = TileProd::Cols;
+            constexpr int ConsM = TileCons::Rows;
+            constexpr int ConsN = TileCons::Cols;
 
-            if constexpr (DataFiFo::useLocalFiFo) {
-                uint64_t localTileBase =
-                    (uint64_t)fifo.localFiFoBase +
-                    (static_cast<size_t>(tile_id) % fifo.localFiFoDepth) * ConsM * ConsN * sizeof(T);
-                TASSIGN_IMPL(tile, localTileBase);
-            }
+            size_t slotIndex = static_cast<size_t>(tile_id) % DataFiFo::SLOT_NUM;
+            constexpr int kTileFactor = ConsN / ProdN;
+            size_t entryBase = static_cast<size_t>(slotIndex) * kTileFactor * ProdM * ProdN * sizeof(T);
+            __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset);
+
+            uint64_t localTileBase =
+                (uint64_t)fifo.C2V_SLOT_BUFFER +
+                (static_cast<size_t>(tile_id) % DataFiFo::LOCAL_SLOT_NUM) * ConsM * ConsN * sizeof(T);
+            TASSIGN_IMPL(tile, localTileBase);
 
             using GlobalDataSub = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
             using TileDataSub = Tile<TileType::Vec, T, ConsM, ConsN, BLayout::RowMajor, ConsM, ProdN>;
@@ -335,50 +395,84 @@ struct TPipe {
             }
         }
 
-        template <typename T, int ConsM, int ConsN, int ProdN>
-        PTO_INTERNAL void popMatTileFromGMFiFo(DataFiFo &fifo, TileDataCons &tile)
+        template <typename TileProd, typename TileCons>
+        PTO_INTERNAL void popMatTileFromGMFiFo(DataFiFo &fifo, TileCons &tile)
         {
-            uint32_t buf_idx = static_cast<uint32_t>(tile_id % fifo.fifoDepth);
-            size_t entryBase = buf_idx * ConsM * ProdN * sizeof(T);
+            using T = typename TileProd::DType;
+            constexpr int ProdM = TileProd::Rows;
+            constexpr int ProdN = TileProd::Cols;
+            constexpr int ConsM = TileCons::Rows;
+            constexpr int ConsN = TileCons::Cols;
+            uint32_t slotIndex = static_cast<uint32_t>(tile_id % DataFiFo::SLOT_NUM);
+            size_t entryBase = slotIndex * ConsM * ProdN * sizeof(T);
             using GlobaData = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ConsN>, pto::Stride<1, 1, 1, ConsN, 1>>;
-            GlobaData globalTensor((__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset));
+            GlobaData globalTensor((__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset));
 
-            if constexpr (DataFiFo::useLocalFiFo) {
-                uint64_t localTileBase =
-                    (uint64_t)fifo.localFiFoBase +
-                    (static_cast<size_t>(tile_id) % fifo.localFiFoDepth) * ConsM * ConsN * sizeof(T);
-                TASSIGN_IMPL(tile, localTileBase);
-            }
+            uint64_t localTileBase =
+                (uint64_t)fifo.V2C_CONSUMER_BUF +
+                (static_cast<size_t>(tile_id) % DataFiFo::LOCAL_SLOT_NUM) * ConsM * ConsN * sizeof(T);
+            TASSIGN_IMPL(tile, localTileBase);
             TLOAD_IMPL(tile, globalTensor);
         }
 
         PTO_INTERNAL void popCtrlFromCtrlFiFo(DataFiFo &fifo)
         {
-            uint32_t buf_idx = static_cast<uint32_t>(tile_id % fifo.fifoDepth);
-            size_t entryBase = buf_idx * sizeof(uint32_t);
-            uint64_t ctrlTileBase = fifo.fifoBase + entryBase + entryOffset;
+            uint32_t slotIndex = static_cast<uint32_t>(tile_id % DataFiFo::SLOT_NUM);
+            size_t entryBase = slotIndex * sizeof(uint32_t);
+            uint64_t ctrlTileBase = fifo.CTRL_SLOT_BUFFER + entryBase + entryOffset;
             fifo.ctrlSignal = ((*(__gm__ uint32_t *)(ctrlTileBase)) == 1) ? true : false;
         }
 
-        PTO_INTERNAL void pop(DataFiFo &fifo, TileDataCons &tile)
+        template <typename TileProd, typename TileCons, TileSplitAxis Split>
+        PTO_INTERNAL void pop(DataFiFo &fifo, TileCons &tile)
         {
-            using T = typename TileDataCons::DType;
-            constexpr int ConsM = TileDataCons::Rows;
-            constexpr int ConsN = TileDataCons::Cols;
-            constexpr int ProdM = TileDataProd::Rows;
-            constexpr int ProdN = TileDataProd::Cols;
-            constexpr int VEC_CORES = (VCRatio == VecCubeRatio::V2C1_VECS) ? 2 : 1;
-            static_assert(DataFiFo::fifoType == FIFOType::GM_FIFO || DataFiFo::fifoType == FIFOType::CTRL_FIFO,
-                          "Fix: TPOP has unsupported fifo type!");
-            static_assert(TileDataCons::Loc == TileType::Vec || TileDataCons::Loc == TileType::Mat,
+            static_assert(TileCons::Loc == TileType::Vec || TileCons::Loc == TileType::Mat,
                           "Fix: TPOP has unsupported tile type!");
-            if constexpr (DataFiFo::fifoType == FIFOType::GM_FIFO) {
-                if constexpr (TileDataCons::Loc == TileType::Vec) {
-                    popVecTileFromGMFiFo<T, ProdM, ProdN, ConsM, ConsN>(fifo, tile);
-                } else if constexpr (TileDataCons::Loc == TileType::Mat) {
-                    popMatTileFromGMFiFo<T, ConsM, ConsN, ProdN>(fifo, tile);
-                }
-            } else if constexpr (DataFiFo::fifoType == FIFOType::CTRL_FIFO) {
+            if constexpr (TileCons::Loc == TileType::Vec) {
+                popVecTileFromGMFiFo<TileProd, TileCons>(fifo, tile);
+            } else if constexpr (TileCons::Loc == TileType::Mat) {
+                popMatTileFromGMFiFo<TileProd, TileCons>(fifo, tile);
+            } else {
+                popCtrlFromCtrlFiFo(fifo);
+            }
+        }
+
+        //--------------------------------------------------------------------
+        template <typename TileCons, TileSplitAxis Split>
+        PTO_INTERNAL void popVecTileFromGMFiFo(DataFiFo &fifo, TileCons &tile)
+        {
+            using T = typename TileCons::DType;
+            constexpr int ConsM = TileCons::Rows;
+            constexpr int ConsN = TileCons::Cols;
+            constexpr int splitNum = 2;
+            constexpr int ProdM = (Split == TileSplitAxis::TILE_UP_DOWN) ? ProdM / splitNum : ConsM;
+            constexpr int ProdN = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? ConsN / splitNum : ConsN;
+
+            // global tensor
+            size_t slotIndex = static_cast<size_t>(tile_id) % DataFiFo::SLOT_NUM;
+            size_t entryBase = static_cast<size_t>(slotIndex) * ProdM * ProdN * sizeof(T);
+            __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset);
+            using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
+            GlobalData globalTensor(addr);
+
+            // local vector tile
+            uint64_t localTileBase =
+                (uint64_t)fifo.C2V_CONSUMER_BUF +
+                (static_cast<size_t>(tile_id) % DataFiFo::LOCAL_SLOT_NUM) * ConsM * ConsN * sizeof(T);
+            TASSIGN_IMPL(tile, localTileBase);
+            TLOAD_IMPL(tile, globalTensor);
+        }
+
+        template <typename TileCons, TileSplitAxis Split>
+        PTO_INTERNAL void pop(DataFiFo &fifo, TileCons &tile)
+        {
+            static_assert(TileCons::Loc == TileType::Vec || TileCons::Loc == TileType::Mat,
+                          "Fix: TPOP has unsupported tile type!");
+            if constexpr (TileCons::Loc == TileType::Vec) {
+                popVecTileFromGMFiFo<TileCons>(fifo, tile);
+            } else if constexpr (TileCons::Loc == TileType::Mat) {
+                popMatTileFromGMFiFo<TileCons>(fifo, tile);
+            } else {
                 popCtrlFromCtrlFiFo(fifo);
             }
         }
@@ -388,17 +482,11 @@ struct TPipe {
     Producer prod;
     Consumer cons;
 
-    template <FIFOType T = FiFoType, typename std::enable_if_t<T == FIFOType::GM_FIFO, int> = 0>
-    PTO_INTERNAL explicit TPipe(__gm__ typename TileDataCons::DType *gmFiFoBase, uint32_t localFiFoBase)
-        : fifo(gmFiFoBase, localFiFoBase), prod(), cons()
+    // initialize_pipe(DIR_MASK, entry_SIZE, GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF)
+    PTO_INTERNAL explicit TPipe(__gm__ void *GM_SLOT_BUFFER, uint32_t C2V_CONSUMER_BUF, uint32_t V2C_CONSUMER_BUF)
+        : fifo(GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF), prod(), cons()
     {
-        cons.free();
-    }
-
-    template <FIFOType T = FiFoType, typename std::enable_if_t<T == FIFOType::CTRL_FIFO, int> = 0>
-    PTO_INTERNAL explicit TPipe(uint32_t fifoBase) : fifo(fifoBase), prod(), cons()
-    {
-        cons.free();
+        cons.template free();
     }
 
     // Destructor for TPipe
@@ -415,32 +503,45 @@ struct TPipe {
  * 2. [Store]   Write data to GM
  * 3. [Commit]  Signal Consumer (Cross-Core)
  */
-template <typename PipeProd, typename TileData, typename DataFiFo>
-PTO_INTERNAL void TPUSH_IMPL(PipeProd &prod, TileData &tile, DataFiFo &fifo)
+template <typename Pipe, typename TileProd, typename TileCons, TileSplitAxis Split>
+PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
 {
     // 1. Cross-Core: Wait for space
-    bool isAllocate = prod.getAllocateStatus();
+    bool isAllocate = pipe.prod.getAllocateStatus();
     if (isAllocate) {
-        prod.allocate();
+        pipe.prod.allocate();
     }
 
     // 2. Address Calculation
-    prod.push(fifo, tile);
-    prod.tile_id++;
+    pipe.prod.template push<TileProd, TileCons, Split>(pipe.fifo, tile);
+    pipe.prod.tile_id++;
 
     // 3； Cross-Core: Commit & Signal
-    bool isRecord = prod.getRecordStatus();
+    bool isRecord = pipe.prod.getRecordStatus();
     if (isRecord) {
-        prod.record();
+        pipe.prod.record();
     }
 }
 
-template <typename TileData, typename Pipe>
-PTO_INTERNAL void TPUSH_IMPL(TileData &tile, Pipe &pipe)
+template <typename Pipe, typename TileProd, TileSplitAxis Split>
+PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
 {
-    TPUSH_IMPL(pipe.prod, tile, pipe.fifo);
-}
+    // 1. Cross-Core: Wait for space
+    bool isAllocate = pipe.prod.getAllocateStatus();
+    if (isAllocate) {
+        pipe.prod.allocate();
+    }
 
+    // 2. Address Calculation
+    pipe.prod.template push<TileProd, Split>(pipe.fifo, tile);
+    pipe.prod.tile_id++;
+
+    // 3； Cross-Core: Commit & Signal
+    bool isRecord = pipe.prod.getRecordStatus();
+    if (isRecord) {
+        pipe.prod.record();
+    }
+}
 } // namespace pto
 
 #endif
