@@ -50,6 +50,8 @@ PTO_INST RecordEvent TABS(TileData& dst, TileData& src, WaitEvents&... events);
 - **实现检查 (CPU sim)**:
   - `TileData::DType` 必须是以下之一：`int32_t`、`int`、`int16_t`、`half`、`float`。
   - 实现在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+- **实现检查 (Costmodel)**:
+  - TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`int8_t`、`uint8_t`、`half`、`float`。
 - **实现检查 (NPU)**:
   - `TileData::DType` 必须是以下之一：`float` 或 `half`。
   - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
