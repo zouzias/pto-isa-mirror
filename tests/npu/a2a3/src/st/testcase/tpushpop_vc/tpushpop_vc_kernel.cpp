@@ -55,8 +55,8 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ uint64_t *ffts_addr, __gm__ Ou
     using MatTileCons =
         Tile<TileType::Mat, OutT, TILE_K, TILE_N, BLayout::ColMajor, TILE_K, TILE_N, SLayout::RowMajor, 512>;
 
-    using MatPipe = TPipe<FLAG_ID, FIFOType::GM_FIFO, FIFO_DEPTH, FIFO_PERIOD, VecTileProd, MatTileCons>;
-    MatPipe mPipe(fifoMem, localFiFoBase);
+    using MatPipe = TPipe<FLAG_ID, Direction::DIR_V2C, TILE_K * TILE_N * sizeof(OutT), FIFO_DEPTH>;
+    MatPipe mPipe((__gm__ void *)fifoMem, 0x0, localFiFoBase);
 
     constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
     constexpr uint32_t ALIGNED_M = CeilAlign<uint32_t>(TOTAL_M, 16);
@@ -100,7 +100,6 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ uint64_t *ffts_addr, __gm__ Ou
             GlobalTensor<OutT, pto::Shape<1, 1, 1, HALF_TILE_K, 1>, pto::Stride<TOTAL_K, TOTAL_K, HALF_TILE_K, 1, 1>>;
 
         uint32_t subBlockIdx = get_subblockid();
-        size_t entryOffsetVal = subBlockIdx * HALF_TILE_K * TILE_N * sizeof(OutT);
 
         for (int k_tile = 0; k_tile < NUM_K_TILES; k_tile++) {
             GlobalQuantB globalQuantB(quantB + k_tile * TILE_K * TILE_N + subBlockIdx * HALF_TILE_K * TILE_N);
@@ -125,8 +124,7 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ uint64_t *ffts_addr, __gm__ Ou
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-            mPipe.prod.setEntryOffset(entryOffsetVal);
-            TPUSH(dequantTile, mPipe);
+            TPUSH<MatPipe, VecTileProd, TileSplitAxis::TILE_UP_DOWN>(mPipe, dequantTile);
             set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
         }
 
@@ -160,7 +158,7 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ uint64_t *ffts_addr, __gm__ Ou
 
             TLOAD(aMatTile, globalA);
 
-            TPOP(bMatTile, mPipe);
+            TPOP<MatPipe, PopTile, TileSplitAxis::TILE_UP_DOWN>(mPipe, bMatTile);
 
             set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
