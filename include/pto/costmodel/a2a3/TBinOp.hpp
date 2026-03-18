@@ -38,8 +38,7 @@ PTO_INTERNAL void Bin1LNormModeSmall(CostModelStats &stats, unsigned validRow, u
     return;
 }
 
-template <typename T, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride,
-          unsigned tileCols>
+template <typename T, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride, unsigned tileCols>
 PTO_INTERNAL void Bin1LNormMode(CostModelStats &stats, unsigned validRow, unsigned validCol)
 {
     unsigned numElements = validRow * validCol;
@@ -113,8 +112,7 @@ PTO_INTERNAL void Bin2LNormModeTail(CostModelStats &stats, unsigned validRow, un
     }
 }
 
-template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned rowStride>
+template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
 PTO_INTERNAL void Bin2LNormModeRowRpt(CostModelStats &stats, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned repeatStride = rowStride / blockSizeElem;
@@ -134,18 +132,15 @@ PTO_INTERNAL void Bin2LNormModeRowRpt(CostModelStats &stats, unsigned validRow, 
         if constexpr (Rows > elementsPerRepeat) {
             unsigned numRepeatPerLine = validCol / elementsPerRepeat;
             numRemainPerLine = validCol % elementsPerRepeat;
-            Bin2LNormModeHead<T, Rows, elementsPerRepeat, blockSizeElem, rowStride>(stats, validRow,
-                                                                                        numRepeatPerLine);
+            Bin2LNormModeHead<T, Rows, elementsPerRepeat, blockSizeElem, rowStride>(stats, validRow, numRepeatPerLine);
         }
         if (numRemainPerLine) {
-            Bin2LNormModeTail<T, Rows, elementsPerRepeat, blockSizeElem, rowStride>(stats, validRow,
-                                                                                        numRemainPerLine);
+            Bin2LNormModeTail<T, Rows, elementsPerRepeat, blockSizeElem, rowStride>(stats, validRow, numRemainPerLine);
         }
     }
 }
 
-template <typename T, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned rowStride>
+template <typename T, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
 PTO_INTERNAL void BinaryInstrFastPath(CostModelStats &stats, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned totalRepeats = (TileData::Rows * TileData::Cols + elementsPerRepeat - 1) / elementsPerRepeat;
@@ -157,8 +152,7 @@ PTO_INTERNAL void BinaryInstrFastPath(CostModelStats &stats, unsigned validRow, 
     }
 }
 
-template <typename T, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned rowStride>
+template <typename T, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
 PTO_INTERNAL void BinaryInstrGeneralPath(CostModelStats &stats, unsigned validRow, unsigned validCol)
 {
     // Continuous check in runtime(merge axis)
@@ -174,7 +168,7 @@ PTO_INTERNAL void BinaryInstrGeneralPath(CostModelStats &stats, unsigned validRo
                 }
             else {
                 Bin1LNormMode<T, elementsPerRepeat, blockSizeElem, rowStride, TileData::Cols>(stats, validRow,
-                                                                                                  validCol);
+                                                                                              validCol);
             }
         }
     else { // Non continuous
@@ -189,7 +183,7 @@ PTO_INTERNAL void BinaryInstrGeneralPath(CostModelStats &stats, unsigned validRo
             }
         } else {
             Bin2LNormModeRowRpt<T, TileData::Rows, elementsPerRepeat, blockSizeElem, rowStride>(stats, validRow,
-                                                                                                    validCol);
+                                                                                                validCol);
         }
     }
 }
@@ -286,7 +280,7 @@ PTO_INTERNAL CostModelStats runBinaryOp(TileDataDst &dst, TileDataSrc0 &src0, Ti
     if constexpr (std::is_same_v<TileDataDst, TileDataSrc0> && std::is_same_v<TileDataDst, TileDataSrc1>) {
         constexpr unsigned dstRowStride = TileDataDst::RowStride;
         return TBinaryOp<TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride>(dst.GetValidRow(),
-                                                                                          dst.GetValidCol());
+                                                                                      dst.GetValidCol());
     } else {
         constexpr unsigned dstRowStride = TileDataDst::RowStride;
         constexpr unsigned src0RowStride = TileDataSrc0::RowStride;

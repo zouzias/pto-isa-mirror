@@ -49,8 +49,8 @@ PTO_INTERNAL void BinS2LNormModeColVLAlign(CostModelStats &stats, unsigned valid
         RecordRepeat(stats, static_cast<uint8_t>(headRepeats));
     }
 }
-template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned dstStride, unsigned srcStride>
+template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride,
+          unsigned srcStride>
 PTO_INTERNAL void BinS2LNormModeHead(CostModelStats &stats, unsigned validRow, unsigned numRepeatPerLine)
 {
     if (numRepeatPerLine > 0) {
@@ -71,8 +71,8 @@ PTO_INTERNAL void BinS2LNormModeHead(CostModelStats &stats, unsigned validRow, u
     }
 }
 
-template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned dstStride, unsigned srcStride>
+template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride,
+          unsigned srcStride>
 PTO_INTERNAL void BinS2LNormModeTail(CostModelStats &stats, unsigned validRow, unsigned numRemainPerLine)
 {
     unsigned numLoop = 0;
@@ -104,8 +104,8 @@ PTO_INTERNAL void BinS2LNormModeTail(CostModelStats &stats, unsigned validRow, u
     }
 }
 
-template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned dstStride, unsigned srcStride>
+template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride,
+          unsigned srcStride>
 PTO_INTERNAL void BinS2LNormModeRowRpt(CostModelStats &stats, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned dstRepeatStride = dstStride / blockSizeElem;
@@ -128,11 +128,11 @@ PTO_INTERNAL void BinS2LNormModeRowRpt(CostModelStats &stats, unsigned validRow,
             unsigned numRepeatPerLine = validCol / elementsPerRepeat;
             numRemainPerLine = validCol % elementsPerRepeat;
             BinS2LNormModeHead<T, Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(stats, validRow,
-                                                                                                    numRepeatPerLine);
+                                                                                                numRepeatPerLine);
         }
         if (numRemainPerLine) {
             BinS2LNormModeTail<T, Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(stats, validRow,
-                                                                                                    numRemainPerLine);
+                                                                                                numRemainPerLine);
         }
     }
 }
@@ -168,8 +168,7 @@ PTO_INTERNAL void TBinSInstr(CostModelStats &stats, unsigned validRow, unsigned 
                         BinS1LCountMode<T>(stats, validRow, validCol);
                     }
                 else {
-                    BinS1LNormMode<T, elementsPerRepeat, blockSizeElem, TileDataDst::Cols>(stats, validRow,
-                                                                                               validCol);
+                    BinS1LNormMode<T, elementsPerRepeat, blockSizeElem, TileDataDst::Cols>(stats, validRow, validCol);
                 }
             }
         else {
@@ -204,7 +203,7 @@ PTO_INTERNAL CostModelStats TBinaryScalarOp(unsigned validRow, unsigned validCol
     constexpr unsigned dstStride = TileDataDst::RowStride;
     constexpr unsigned srcStride = TileDataSrc::RowStride;
     TBinSInstr<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(stats, validRow,
-                                                                                                     validCol);
+                                                                                                 validCol);
     return stats;
 }
 
