@@ -42,7 +42,7 @@ pto.tcolprod ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
-PTO_INST RecordEvent TCOLPROD(TileDataOut& dst, TileDataIn& src, WaitEvents&... events);
+PTO_INST RecordEvent TCOLPROD(TileDataOut &dst, TileDataIn &src, WaitEvents &... events);
 ```
 
 ## 约束
@@ -53,11 +53,11 @@ PTO_INST RecordEvent TCOLPROD(TileDataOut& dst, TileDataIn& src, WaitEvents&... 
 - Tile 布局：两者都必须是 ND fractal（`isRowMajor` 且 `SLayout::NoneBox`）。
 - 数据类型一致性：`dst.DType == src.DType`。
 - 支持的 `src.DType`：
-  - A2A3：`half`、`float`、`int16_t`、`int32_t`。
-  - A5：`half`、`float`、`bfloat16`、`int16_t`、`int32_t`、`uint16_t`、`uint32_t`。
+    - A2A3：`half`、`float`、`int16_t`、`int32_t`。
+    - A5：`half`、`float`、`bfloat16`、`int16_t`、`int32_t`、`uint16_t`、`uint32_t`。
 - 运行期有效区域检查：
-  - `src.GetValidCol() == dst.GetValidCol()`。
-  - 当 `src.GetValidRow() == 0` 或 `src.GetValidCol() == 0` 时，指令实现会提前返回。
+    - `src.GetValidCol() == dst.GetValidCol()`。
+    - 当 `src.GetValidRow() == 0` 或 `src.GetValidCol() == 0` 时，指令实现会提前返回。
 
 ## 示例
 

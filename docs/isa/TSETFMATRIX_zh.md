@@ -33,8 +33,8 @@ pto.tsetfmatrix ins(%cfg : !pto.fmatrix_config) outs()
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint64_t, typename... WaitEvents>
-PTO_INST RecordEvent TSETFMATRIX(const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents&... events);
+template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
+PTO_INST RecordEvent TSETFMATRIX(ConvTileData &src, WaitEvents &... events);
 ```
 
 ## 约束

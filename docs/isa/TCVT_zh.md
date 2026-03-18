@@ -44,7 +44,10 @@ pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : 
 
 ```cpp
 template <typename TileDataD, typename TileDataS, typename... WaitEvents>
-PTO_INST RecordEvent TCVT(TileDataD& dst, TileDataS& src, RoundMode mode, WaitEvents&... events);
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode, WaitEvents &... events);
+
+template <typename TileDataD, typename TileDataS, typename... WaitEvents>
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEvents &... events);
 ```
 
 ## 约束
@@ -52,7 +55,7 @@ PTO_INST RecordEvent TCVT(TileDataD& dst, TileDataS& src, RoundMode mode, WaitEv
 - `dst` 和 `src` 必须在形状/有效区域方面兼容，如实现所要求的。
 - 对于给定的 `RoundMode`，转换 `(src 元素类型) -> (dst 元素类型)` 必须被目标支持。
 - **实现说明 (A2A3/A5)**:
-  - `TCVT_IMPL` 不对类型对强制执行额外的 `static_assert`/`PTO_ASSERT` 检查；不支持的转换由目标定义。
+    - `TCVT_IMPL` 不对类型对强制执行额外的 `static_assert`/`PTO_ASSERT` 检查；不支持的转换由目标定义。
 
 ## 示例
 

@@ -38,13 +38,13 @@ Synchronous form (conceptual):
 %dst = tfillpad %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tfillpad %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -54,17 +54,11 @@ pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 Implemented in the backend headers pulled in by `include/pto/common/pto_instr_impl.hpp`:
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD(TileDataDst& dst, TileDataSrc& src);
+template <typename TileData, PadValue PadVal = PadValue::Zero, typename... WaitEvents>
+PTO_INST RecordEvent TFILLPAD(TileData &dst, TileData &src, WaitEvents &... events);
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD_INPLACE(TileDataDst& dst, TileDataSrc& src);
-
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD_EXPAND(TileDataDst& dst, TileDataSrc& src);
-
-template <typename TileData, PadValue PadVal = PadValue::Zero>
-PTO_INTERNAL void TFILLPAD(TileData &dst, TileData &src);
+template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TFILLPAD(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 ```
 
 ## Constraints

@@ -31,7 +31,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileData, int isUpperOrLower, typename... WaitEvents>
-PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents&... events);
+PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events);
 ```
 
 ## Constraints
@@ -43,13 +43,13 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents&... events);
 
 PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.ttri %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.ttri ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)

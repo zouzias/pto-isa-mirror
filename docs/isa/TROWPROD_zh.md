@@ -26,13 +26,13 @@ PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 ```
 降级可能引入内部临时 tile；C++ 内建函数需要显式的 `tmp` 操作数。
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.trowprod %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.trowprod ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -44,7 +44,7 @@ pto.trowprod ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst 
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TROWPROD(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
+PTO_INST RecordEvent TROWPROD(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## 约束条件
@@ -52,17 +52,17 @@ PTO_INST RecordEvent TROWPROD(TileDataOut& dst, TileDataIn& src, TileDataTmp& tm
 NPU 实现检查：
 
 - A2A3:
-  - Tile 位置：`dst` 和 `src` 必须为 `TileType::Vec`。
-  - `src` 的 Tile 布局：ND 分形（`isRowMajor` 且 `SLayout::NoneBox`）。
-  - `dst` 的 Tile 布局：
+    - Tile 位置：`dst` 和 `src` 必须为 `TileType::Vec`。
+    - `src` 的 Tile 布局：ND 分形（`isRowMajor` 且 `SLayout::NoneBox`）。
+    - `dst` 的 Tile 布局：
     - **推荐**：一维 DN 布局 Tile，例如 `Tile<TileType::Vec, T, ROWS, 1, BLayout::ColMajor, ValidRows, 1>`
     - **将被移除**：二维 ND 布局 Tile，例如 `Tile<TileType::Vec, T, ROWS, COLS, BLayout::RowMajor, ValidRows, 1>`
-  - 数据类型：`half`、`float`。
-  - DType 一致性：`dst.DType == src.DType`。
-  - 运行时有效性检查：
+    - 数据类型：`half`、`float`。
+    - DType 一致性：`dst.DType == src.DType`。
+    - 运行时有效性检查：
     - `srcValidCol != 0` 且 `srcValidRow != 0`。
     - `srcValidRow == dstValidRow`（输出有效行数必须与输入有效行数匹配）。
-  - `tmp` 必须与 `src` 具有相同的形状。
+    - `tmp` 必须与 `src` 具有相同的形状。
 
 ## 实现说明
 
