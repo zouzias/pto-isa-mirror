@@ -55,10 +55,9 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ OutT *out, __gm__ InT *srcA, _
     using MatTileCons =
         Tile<TileType::Mat, OutT, TILE_K, TILE_N, BLayout::ColMajor, TILE_K, TILE_N, SLayout::RowMajor, 512>;
 
-    using MatPipe = TPipe<FLAG_ID, FIFOType::MAT_FIFO, FIFO_DEPTH, FIFO_PERIOD, VecTileNZ, MatTileCons>;
-
+    using MatPipe = TPipe<FLAG_ID, Direction::DIR_V2C, TILE_K * TILE_N * sizeof(OutT), FIFO_DEPTH>;
     MatTileCons matFifoTile;
-    MatPipe mPipe((uint32_t)0x10000);
+    MatPipe mPipe((__gm__ void *)(uint64_t)0x0, (uint32_t)0x0, (uint32_t)0x10000);
 
     constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
     constexpr uint32_t ALIGNED_M = CeilAlign<uint32_t>(TOTAL_M, 16);
@@ -129,7 +128,7 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ OutT *out, __gm__ InT *srcA, _
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-            TPUSH(dequantTileNZ, mPipe);
+            TPUSH<MatPipe, VecTileNZ, TileSplitAxis::TILE_UP_DOWN>(mPipe, dequantTileNZ);
             set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
         }
 
@@ -159,7 +158,7 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ OutT *out, __gm__ InT *srcA, _
             wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
 
             TLOAD(aMatTile, globalA);
-            TPOP(matFifoTile, mPipe);
+            TPOP<MatPipe, MatTileCons, TileSplitAxis::TILE_UP_DOWN>(mPipe, matFifoTile);
 
             set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
@@ -168,7 +167,7 @@ __global__ AICORE void runTPushPopVCMatmul(__gm__ OutT *out, __gm__ InT *srcA, _
 
             TMOV(aTile, aMatTile);
             TMOV(bTile, matFifoTile);
-            TFREE(mPipe);
+            TFREE<MatPipe, TileSplitAxis::TILE_UP_DOWN>(mPipe);
 
             set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
             wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
