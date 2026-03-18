@@ -196,7 +196,7 @@ struct ROWMIN<int16_t> {
     }
 };
 
-template <typename TileDataOut, typename TileDataIn>
+template <typename TileDataOut, typename TileDataIn, bool idx = false>
 PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow)
 {
     using T = typename TileDataIn::DType;
@@ -204,7 +204,7 @@ PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, 
         std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t>,
         "Row reduction only supports 'half', 'float', 'int32', or 'int16' data types. "
         "Fix: Define TileDataIn with DType = half, float, int32, or int16.");
-    static_assert(std::is_same_v<T, typename TileDataOut::DType>,
+    static_assert(idx || std::is_same_v<T, typename TileDataOut::DType>,
                   "Input and output tile data types must match. "
                   "Fix: Ensure TileDataOut uses the same DType as TileDataIn.");
     static_assert(TileDataOut::Loc == pto::TileType::Vec && TileDataIn::Loc == pto::TileType::Vec,
