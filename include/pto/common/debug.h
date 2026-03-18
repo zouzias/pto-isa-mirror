@@ -35,7 +35,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_ASSERT(condition, message) ((void)0)
 #endif
 
-#ifdef __CPU_SIM
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <algorithm>
 #include <climits>
 #include <iomanip>
