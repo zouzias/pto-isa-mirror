@@ -22,7 +22,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
         if (!(cond)) {                                                                                             \
             std::fprintf(stderr, "[PTO][CA] Constraint violated. Condition: %s. Hint: see docs/coding/debug.md\n", \
                          #cond);                                                                                   \
-            std::abort();                                                                                          \
+            assert(false);                                                                                         \
         }                                                                                                          \
     } while (0)
 
