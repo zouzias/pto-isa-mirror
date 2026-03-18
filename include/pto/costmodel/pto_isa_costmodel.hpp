@@ -367,7 +367,6 @@ public:
         return sum_cycles;
     }
 
-
 private:
     CostModel()
     {
