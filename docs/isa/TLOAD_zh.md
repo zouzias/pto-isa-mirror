@@ -43,37 +43,37 @@ pto.tload ins(%mem : !pto.partition_tensor_view<MxNxdtype>) outs(%dst : !pto.til
 
 ```cpp
 template <typename TileData, typename GlobalData, typename... WaitEvents>
-PTO_INST RecordEvent TLOAD(TileData& dst, GlobalData& src, WaitEvents&... events);
+PTO_INST RecordEvent TLOAD(TileData &dst, GlobalData &src, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half`、`bfloat16_t`、`float`。
-  - 目标 tile 位置必须是 `TileType::Vec` 或 `TileType::Mat`。
-  - `sizeof(TileData::DType) == sizeof(GlobalData::DType)`。
-  - 运行时：所有 `src.GetShape(dim)` 值和 `dst.GetValidRow()/GetValidCol()` 必须 `> 0`。
-  - `TileType::Vec` 加载仅支持匹配的布局：ND->ND、DN->DN、NZ->NZ。
-  - `TileType::Mat` 加载支持：ND->ND、DN->DN、NZ->NZ，以及 ND->NZ 和 DN->ZN。
+    - `TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half`、`bfloat16_t`、`float`。
+    - 目标 tile 位置必须是 `TileType::Vec` 或 `TileType::Mat`。
+    - `sizeof(TileData::DType) == sizeof(GlobalData::DType)`。
+    - 运行时：所有 `src.GetShape(dim)` 值和 `dst.GetValidRow()/GetValidCol()` 必须 `> 0`。
+    - `TileType::Vec` 加载仅支持匹配的布局：ND->ND、DN->DN、NZ->NZ。
+    - `TileType::Mat` 加载支持：ND->ND、DN->DN、NZ->NZ，以及 ND->NZ 和 DN->ZN。
     - 对于 ND->NZ 或 DN->ZN：`GlobalData::staticShape[0..2] == 1` 且 `TileData::SFractalSize == 512`。
-  - 对于 `int64_t/uint64_t`，仅支持 ND->ND 或 DN->DN。
+    - 对于 `int64_t/uint64_t`，仅支持 ND->ND 或 DN->DN。
 - **实现检查 (A5)**:
-  - `sizeof(TileData::DType)` 必须是 `1`、`2`、`4` 或 `8` 字节，且必须匹配 `sizeof(GlobalData::DType)`。
-  - 对于 `int64_t/uint64_t`，`TileData::PadVal` 必须是 `PadValue::Null` 或 `PadValue::Zero`。
-  - `TileType::Vec` 加载需要以下布局对之一：
+    - `sizeof(TileData::DType)` 必须是 `1`、`2`、`4` 或 `8` 字节，且必须匹配 `sizeof(GlobalData::DType)`。
+    - 对于 `int64_t/uint64_t`，`TileData::PadVal` 必须是 `PadValue::Null` 或 `PadValue::Zero`。
+    - `TileType::Vec` 加载需要以下布局对之一：
     - ND 使用行主序 + `SLayout::NoneBox`（ND->ND），
     - DN 使用列主序 + `SLayout::NoneBox`（DN->DN），
     - NZ 使用 `SLayout::RowMajor`（NZ->NZ）。
-  - 对于使用编译时已知形状的行主序 ND->ND，`TileData::ValidCol` 必须等于 `GlobalData::staticShape[4]`，且 `TileData::ValidRow` 必须等于 `GlobalData::staticShape[0..3]` 的乘积。
-  - `TileType::Mat` 加载还受到 `TLoadCubeCheck` 的约束（例如，仅特定的 ND/DN/NZ 转换和 L1 大小限制）。
-  - `TileType::Mat` 加载还处理 mx 格式的加载，包括 `MX_A_ZZ/MX_A_ND/MX_A_DN` 到 ZZ（用于 scalarA）和 `MX_B_NN/MX_B_ND/MX_B_DN` 到 NN（用于 scalarB）。
+    - 对于使用编译时已知形状的行主序 ND->ND，`TileData::ValidCol` 必须等于 `GlobalData::staticShape[4]`，且 `TileData::ValidRow` 必须等于 `GlobalData::staticShape[0..3]` 的乘积。
+    - `TileType::Mat` 加载还受到 `TLoadCubeCheck` 的约束（例如，仅特定的 ND/DN/NZ 转换和 L1 大小限制）。
+    - `TileType::Mat` 加载还处理 mx 格式的加载，包括 `MX_A_ZZ/MX_A_ND/MX_A_DN` 到 ZZ（用于 scalarA）和 `MX_B_NN/MX_B_ND/MX_B_DN` 到 NN（用于 scalarB）。
     - 对于 `MX_A_ZZ/MX_B_NN`：`GlobalData::staticShape[3] == 16` 且 `GlobalData::staticShape[4] == 2`。
     - 对于 `MX_A_ND/MX_ADN/MX_B_ND/MX_B_DN`：`GlobalData::staticShape[0] == 1` 且 `GlobalData::staticShape[1] == 1` 且 `GlobalData::staticShape[4] == 2`。
     - 对于 scaleA，`dst.GetValidCol() % 2 == 0`。
     - 对于 scaleB，`dst.GetValidRow() % 2 == 0`。
 
 - **有效区域**:
-  - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为传输大小。
+    - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为传输大小。
 
 ## 示例
 

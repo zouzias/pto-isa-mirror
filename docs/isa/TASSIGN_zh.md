@@ -89,10 +89,10 @@ PTO_INST void TASSIGN(T& obj);
 ## 约束
 
 - **实现检查**:
-  - 如果 `obj` 是 Tile：
+    - 如果 `obj` 是 Tile：
     - 在手动模式下（未定义 `__PTO_AUTO__` 时），`addr` 必须是整数类型，并被重新解释为 tile 的存储地址。
     - 在自动模式下（定义了 `__PTO_AUTO__` 时），`TASSIGN(tile, addr)` 是空操作。
-  - 如果 `obj` 是 `GlobalTensor`：
+    - 如果 `obj` 是 `GlobalTensor`：
     - `addr` 必须是指针类型。
     - 指向的元素类型必须匹配 `GlobalTensor::DType`。
 

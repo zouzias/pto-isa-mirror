@@ -42,8 +42,7 @@ pto.tsubsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<
 
 ```cpp
 template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSUBSC(TileData& dst, TileData& src0, typename TileData::DType scalar, TileData& src1,
-                            WaitEvents&... events);
+PTO_INST RecordEvent TSUBSC(TileData &dst, TileData &src0, typename TileData::DType scalar, TileData &src1, WaitEvents &... events);
 ```
 
 ## 约束

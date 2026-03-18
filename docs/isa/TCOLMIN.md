@@ -25,13 +25,13 @@ Synchronous form:
 %dst = tcolmin %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tcolmin %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tcolmin ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -42,7 +42,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
-PTO_INST RecordEvent TCOLMIN(TileDataOut& dst, TileDataIn& src, WaitEvents&... events);
+PTO_INST RecordEvent TCOLMIN(TileDataOut &dst, TileDataIn &src, WaitEvents &... events);
 ```
 
 ## Constraints
@@ -52,12 +52,12 @@ Implementation checks (NPU):
 - Tile location: `dst` and `src` must be `TileType::Vec`.
 - Tile layout: both tiles must be ND fractal (`isRowMajor` and `SLayout::NoneBox`).
 - Data types:
-  - A2A3: `half`, `float`, `int16_t`, `int32_t`.
-  - A5: `half`, `float`, `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `bfloat16_t`.
+    - A2A3: `half`, `float`, `int16_t`, `int32_t`.
+    - A5: `half`, `float`, `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `bfloat16_t`.
 - DType consistency: `dst.DType == src.DType`.
 - Runtime valid checks:
-  - `src.GetValidCol() == dst.GetValidCol()`.
-  - If `src.GetValidRow() == 0` or `src.GetValidCol() == 0`, the implementation returns early.
+    - `src.GetValidCol() == dst.GetValidCol()`.
+    - If `src.GetValidRow() == 0` or `src.GetValidCol() == 0`, the implementation returns early.
 
 ## Examples
 

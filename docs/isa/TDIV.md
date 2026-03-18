@@ -25,13 +25,13 @@ Synchronous form:
 %dst = tdiv %src0, %src1 : !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tdiv %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -41,28 +41,28 @@ pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TDIV(TileData& dst, TileData& src0, TileData& src1, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-  - `TileData::DType` must be one of: `half`, `float`.
-  - Tile layout must be row-major (`TileData::isRowMajor`).
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-  - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
+    - `TileData::DType` must be one of: `half`, `float`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
 - **Implementation checks (A5)**:
-  - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`.
-  - Tile layout must be row-major (`TileData::isRowMajor`).
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-  - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
+    - `TileData::DType` must be one of: `int32_t`, `uint32_t`, `float`, `int16_t`, `uint16_t`, `half`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
 - **Valid region**:
-  - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain;.
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain;.
 - **Division-by-zero**:
-  - Behavior is target-defined.
+    - Behavior is target-defined.
 
 ## Examples
 
