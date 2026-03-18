@@ -99,8 +99,7 @@ PTO_INTERNAL void TBinSInstrNonContinuousPath(CostModelStats &stats, unsigned va
     constexpr unsigned normColRepeat = TileDataDst::Cols / elementsPerRepeat;
     constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < PTO_SMALL_RPT) &&
                                ((TileDataSrc::Rows * normColRepeat) < PTO_SMALL_RPT);
-    constexpr bool isColRpt =
-        (TileDataDst::Rows < (normColRepeat + 1)) && (TileDataSrc::Rows < (normColRepeat + 1));
+    constexpr bool isColRpt = (TileDataDst::Rows < (normColRepeat + 1)) && (TileDataSrc::Rows < (normColRepeat + 1));
     if constexpr (countMode) {
         BinS2LCountMode<T, dstStride, srcStride>(stats, validRow, validCol);
     } else if constexpr (isColRpt) {
