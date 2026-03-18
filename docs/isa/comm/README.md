@@ -1,4 +1,4 @@
-﻿# PTO Communication ISA Reference
+# PTO Communication ISA Reference
 
 This directory contains the per-instruction reference for the PTO Communication ISA.
 
@@ -8,6 +8,10 @@ This directory contains the per-instruction reference for the PTO Communication 
 ## Point-to-Point Communication (Synchronous)
 - [**TPUT**](TPUT.md): Remote write (GM → UB → GM)
 - [**TGET**](TGET.md): Remote read (GM → UB → GM)
+
+## Point-to-Point Communication (Asynchronous)
+- [**TPUT_ASYNC**](TPUT_ASYNC.md): Asynchronous remote write (GM → DMA engine → GM)
+- [**TGET_ASYNC**](TGET_ASYNC.md): Asynchronous remote read (GM → DMA engine → GM)
 
 ## Signal-Based Synchronization
 - [**TNOTIFY**](TNOTIFY.md): Send notification to remote NPU
@@ -70,6 +74,41 @@ Atomic operation type for `TPUT` (defined in `include/pto/common/constants.hpp`)
 |-------|-------------|
 | `AtomicType::AtomicNone` | No atomic operation (default) |
 | `AtomicType::AtomicAdd` | Atomic add operation |
+
+### DmaEngine
+
+DMA backend selection for `TPUT_ASYNC` and `TGET_ASYNC`:
+
+| Value | Description |
+|-------|-------------|
+| `DmaEngine::SDMA` | SDMA engine (supports 2D transfer) |
+| `DmaEngine::URMA` | URMA engine (supports 1D transfer, todo) |
+
+### AsyncEvent
+
+Returned by `TPUT_ASYNC` / `TGET_ASYNC`. Use to synchronize completion:
+
+```cpp
+struct AsyncEvent {
+    uint64_t handle;
+    DmaEngine engine;
+
+    bool valid() const;                        // true if handle != 0
+    bool Wait(const AsyncSession &session) const; // block until transfer completes
+    bool Test(const AsyncSession &session) const; // non-blocking completion check
+};
+```
+
+### AsyncSession
+
+Engine-agnostic session for async DMA operations. Build once, pass to all async calls:
+
+```cpp
+comm::AsyncSession session;
+comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
+```
+
+Defined in `include/pto/comm/async/async_types.hpp`. See [TPUT_ASYNC](TPUT_ASYNC.md) for construction details and parameters.
 
 ### ParallelGroup
 
