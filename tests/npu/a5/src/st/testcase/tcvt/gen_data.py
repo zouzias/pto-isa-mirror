@@ -79,7 +79,7 @@ def _float32_to_bf16_bits(arr: np.ndarray) -> np.ndarray:
 
 def _bf16_bits_to_float32(arr_bits: np.ndarray) -> np.ndarray:
     """Decode BF16 bit-patterns (uint16) into float32 values."""
-    u32 = (np.asarray(arr_bits, dtype=np.uint16).astype(np.uint32) << 16)
+    u32 = np.asarray(arr_bits, dtype=np.uint16).astype(np.uint32) << 16
     return u32.view(np.float32)
 
 
@@ -119,7 +119,7 @@ def _bf16_to_fp4x2_array(src: np.ndarray, pos_grid: np.ndarray) -> np.ndarray:
             byte_idx = c // 2
             if c % 2 == 0:  # even → low nibble
                 out[r, byte_idx] = (out[r, byte_idx] & 0xF0) | nibble
-            else:           # odd → high nibble
+            else:  # odd → high nibble
                 out[r, byte_idx] = (out[r, byte_idx] & 0x0F) | (nibble << 4)
     return out
 
@@ -127,11 +127,13 @@ def _bf16_to_fp4x2_array(src: np.ndarray, pos_grid: np.ndarray) -> np.ndarray:
 # Sentinel dtype objects so gen_golden can dispatch on type identity
 class _Fp4E1m2x2Type:
     """Sentinel for float4_e1m2x2_t (BF16→FP4-E1M2 packed)"""
+
     __name__ = "fp4_e1m2x2"
 
 
 class _Fp4E2m1x2Type:
     """Sentinel for float4_e2m1x2_t (BF16→FP4-E2M1 packed)"""
+
     __name__ = "fp4_e2m1x2"
 
 
@@ -165,7 +167,7 @@ def gen_golden(case_name, param):
     m, n = param.m, param.n
     valid_m, valid_n = param.valid_m, param.valid_n
 
-    # FP4 packed types: delegate to dedicated generator
+    # FP4 packed types as DESTINATION: BF16→FP4 quantization
     if isinstance(dsttype, (_Fp4E1m2x2Type, _Fp4E2m1x2Type)):
         pos_grid = _FP4_E1M2_POS if isinstance(dsttype, _Fp4E1m2x2Type) else _FP4_E2M1_POS
         max_val = float(pos_grid.max())  # E1M2: 1.75, E2M1: 6.0
@@ -186,6 +188,39 @@ def gen_golden(case_name, param):
             packed = full
         x1_bf16_bits.tofile("./x1_gm.bin")
         packed.tofile("./golden.bin")
+        return
+
+    # FP4 packed types as SOURCE: FP4→BF16 dequantization
+    if isinstance(srctype, (_Fp4E1m2x2Type, _Fp4E2m1x2Type)):
+        pos_grid = _FP4_E1M2_POS if isinstance(srctype, _Fp4E1m2x2Type) else _FP4_E2M1_POS
+        n_src_bytes = (n + 1) // 2
+        # Generate random packed FP4x2 bytes
+        x1_gm = np.random.randint(0, 256, [m, n_src_bytes]).astype(np.uint8)
+        # Dequantize: unpack nibbles to float values, then convert to BF16
+        golden_f32 = np.zeros([m, n], dtype=np.float32)
+        for r in range(m):
+            for c in range(n):
+                byte_idx = c // 2
+                if c % 2 == 0:
+                    nibble = int(x1_gm[r, byte_idx]) & 0x0F
+                else:
+                    nibble = (int(x1_gm[r, byte_idx]) >> 4) & 0x0F
+                sign = (nibble >> 3) & 1
+                mag_code = nibble & 0x07
+                val = float(pos_grid[mag_code])
+                if sign:
+                    val = -val
+                golden_f32[r, c] = val
+        golden_bf16_bits = _float32_to_bf16_bits(golden_f32)
+        # Apply valid region mask
+        # FP4 nibbles are processed in byte-pairs; round valid_n to even (truncate odd boundary nibble)
+        valid_n_adj = valid_n & ~1
+        if valid_m < m or valid_n_adj < n:
+            full = np.zeros([m, n], dtype=np.uint16)
+            full[:valid_m, :valid_n_adj] = golden_bf16_bits[:valid_m, :valid_n_adj]
+            golden_bf16_bits = full
+        x1_gm.tofile("./x1_gm.bin")
+        golden_bf16_bits.tofile("./golden.bin")
         return
 
     # Build type tuples dynamically to exclude None types
@@ -404,6 +439,9 @@ if __name__ == "__main__":
         ("bf16_fp16", bfloat16, np.float16),
         ("bf16_fp4_e1m2x2", bfloat16, fp4_e1m2x2),
         ("bf16_fp4_e2m1x2", bfloat16, fp4_e2m1x2),
+        # FP4 conversions
+        ("fp4_e1m2x2_bf16", fp4_e1m2x2, bfloat16),
+        ("fp4_e2m1x2_bf16", fp4_e2m1x2, bfloat16),
         # U8/I8 conversions
         ("uint8_fp16", np.uint8, np.float16),
         ("int8_fp16", np.int8, np.float16),

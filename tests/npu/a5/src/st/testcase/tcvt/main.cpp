@@ -103,9 +103,11 @@ void test_tcvt()
     uint32_t N = kGCols_;
 
     constexpr bool isFp4Dst = std::is_same_v<D, fp4_e1m2x2_wrapper> || std::is_same_v<D, fp4_e2m1x2_wrapper>;
+    constexpr bool isFp4Src = std::is_same_v<S, fp4_e1m2x2_wrapper> || std::is_same_v<S, fp4_e2m1x2_wrapper>;
+    size_t srcCols = isFp4Src ? ((N + 1) / 2) : N;
     size_t dstCols = isFp4Dst ? ((N + 1) / 2) : N;
 
-    size_t srcFileSize = M * N * sizeof(S);
+    size_t srcFileSize = M * srcCols * sizeof(S);
     size_t dstFileSize = M * dstCols * sizeof(D);
 
     aclInit(nullptr);
@@ -209,6 +211,10 @@ GENERATE_TCVT_TESTS(int32_t, aclFloat16, bf16_int32)
 // GENERATE_TCVT_TESTS(aclFloat16, bfloat16_t, bf16_fp16)
 GENERATE_TCVT_TESTS(fp4_e1m2x2_wrapper, bf16_wrapper, bf16_fp4_e1m2x2)
 GENERATE_TCVT_TESTS(fp4_e2m1x2_wrapper, bf16_wrapper, bf16_fp4_e2m1x2)
+
+// FP4 Source → bf16
+GENERATE_TCVT_TESTS(bf16_wrapper, fp4_e1m2x2_wrapper, fp4_e1m2x2_bf16)
+GENERATE_TCVT_TESTS(bf16_wrapper, fp4_e2m1x2_wrapper, fp4_e2m1x2_bf16)
 
 // U8 Source → half, uint16
 GENERATE_TCVT_TESTS(aclFloat16, uint8_t, uint8_fp16)

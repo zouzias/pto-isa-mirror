@@ -132,19 +132,28 @@ void launchTCVT(D *dst, S *src, void *stream)
     // Map aclFloat16 to half for kernel execution
     using DstType = std::conditional_t<
         std::is_same_v<D, aclFloat16>, half,
-        std::conditional_t<std::is_same_v<D, fp8_e4m3_wrapper>, float8_e4m3_t,
-                           std::conditional_t<std::is_same_v<D, fp8_e5m2_wrapper>, float8_e5m2_t,
-                                              std::conditional_t<std::is_same_v<D, hifloat8_wrapper>, hifloat8_t,
-                                                  std::conditional_t<std::is_same_v<D, fp4_e1m2x2_wrapper>, float4_e1m2x2_t,
-                                                      std::conditional_t<std::is_same_v<D, fp4_e2m1x2_wrapper>, float4_e2m1x2_t,
-                                                          D>>>>>>;
+        std::conditional_t<
+            std::is_same_v<D, fp8_e4m3_wrapper>, float8_e4m3_t,
+            std::conditional_t<
+                std::is_same_v<D, fp8_e5m2_wrapper>, float8_e5m2_t,
+                std::conditional_t<
+                    std::is_same_v<D, hifloat8_wrapper>, hifloat8_t,
+                    std::conditional_t<
+                        std::is_same_v<D, fp4_e1m2x2_wrapper>, float4_e1m2x2_t,
+                        std::conditional_t<std::is_same_v<D, fp4_e2m1x2_wrapper>, float4_e2m1x2_t,
+                                           std::conditional_t<std::is_same_v<D, bf16_wrapper>, bfloat16_t, D>>>>>>>;
     using SrcType = std::conditional_t<
         std::is_same_v<S, aclFloat16>, half,
-        std::conditional_t<std::is_same_v<S, fp8_e4m3_wrapper>, float8_e4m3_t,
-                           std::conditional_t<std::is_same_v<S, fp8_e5m2_wrapper>, float8_e5m2_t,
-                                              std::conditional_t<std::is_same_v<S, hifloat8_wrapper>, hifloat8_t,
-                                                  std::conditional_t<std::is_same_v<S, bf16_wrapper>, bfloat16_t,
-                                                      S>>>>>;
+        std::conditional_t<
+            std::is_same_v<S, fp8_e4m3_wrapper>, float8_e4m3_t,
+            std::conditional_t<
+                std::is_same_v<S, fp8_e5m2_wrapper>, float8_e5m2_t,
+                std::conditional_t<
+                    std::is_same_v<S, hifloat8_wrapper>, hifloat8_t,
+                    std::conditional_t<std::is_same_v<S, bf16_wrapper>, bfloat16_t,
+                                       std::conditional_t<std::is_same_v<S, fp4_e1m2x2_wrapper>, float4_e1m2x2_t,
+                                                          std::conditional_t<std::is_same_v<S, fp4_e2m1x2_wrapper>,
+                                                                             float4_e2m1x2_t, S>>>>>>>;
 
     runTCVT<DstType, SrcType, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>
         <<<1, nullptr, stream>>>(reinterpret_cast<DstType *>(dst), reinterpret_cast<SrcType *>(src));
@@ -185,6 +194,10 @@ INSTANTIATE_TCVT(int32_t, bfloat16_t)
 // INSTANTIATE_TCVT(aclFloat16, bfloat16_t)
 INSTANTIATE_TCVT(fp4_e1m2x2_wrapper, bf16_wrapper)
 INSTANTIATE_TCVT(fp4_e2m1x2_wrapper, bf16_wrapper)
+
+// FP4 Source → bf16
+INSTANTIATE_TCVT(bf16_wrapper, fp4_e1m2x2_wrapper)
+INSTANTIATE_TCVT(bf16_wrapper, fp4_e2m1x2_wrapper)
 
 // U8 Source → half, uint16
 INSTANTIATE_TCVT(aclFloat16, uint8_t)
