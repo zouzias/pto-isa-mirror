@@ -160,40 +160,23 @@ PTO_INTERNAL void TBinSInstr(unsigned validRow, unsigned validCol)
             BinS1LNormMode<Op, T, elementsPerRepeat, blockSizeElem, TileDataDst::Cols>(validRow, validCol);
         }
     } else {
-        if (tileDataContinue)
-            [[likely]]
-            {
-                unsigned totalRepeats = (validRow * validCol + elementsPerRepeat - 1) / elementsPerRepeat;
-                bool nonVLAligned = ((validCol > elementsPerRepeat) && ((validCol % elementsPerRepeat) != 0));
-                bool enbleCountMode = nonVLAligned || (totalRepeats > pto::REPEAT_MAX);
-                if (enbleCountMode)
-                    [[unlikely]]
-                    {
-                        BinS1LCountMode<Op, T>(validRow, validCol);
-                    }
-                else {
-                    BinS1LNormMode<Op, T, elementsPerRepeat, blockSizeElem, TileDataDst::Cols>(validRow, validCol);
-                }
-            }
-        else {
-            constexpr unsigned normColRepeat = TileDataDst::Cols / elementsPerRepeat;
-            constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < PTO_SMALL_RPT) &&
-                                       ((TileDataSrc::Rows * normColRepeat) < PTO_SMALL_RPT);
-            constexpr bool isColRpt =
-                (TileDataDst::Rows < (normColRepeat + 1)) && (TileDataSrc::Rows < (normColRepeat + 1));
-            if constexpr (countMode) {
+        constexpr unsigned normColRepeat = TileDataDst::Cols / elementsPerRepeat;
+        constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < PTO_SMALL_RPT) &&
+                                   ((TileDataSrc::Rows * normColRepeat) < PTO_SMALL_RPT);
+        constexpr bool isColRpt =
+            (TileDataDst::Rows < (normColRepeat + 1)) && (TileDataSrc::Rows < (normColRepeat + 1));
+        if constexpr (countMode) {
+            BinS2LCountMode<Op, T, dstStride, srcStride>(validRow, validCol);
+        } else if constexpr (isColRpt) {
+            unsigned tailElements = validCol % elementsPerRepeat;
+            if (tailElements) {
                 BinS2LCountMode<Op, T, dstStride, srcStride>(validRow, validCol);
-            } else if constexpr (isColRpt) {
-                unsigned tailElements = validCol % elementsPerRepeat;
-                if (tailElements) {
-                    BinS2LCountMode<Op, T, dstStride, srcStride>(validRow, validCol);
-                } else {
-                    BinS2LNormModeColVLAlign<Op, T, elementsPerRepeat, dstStride, srcStride>(validRow, validCol);
-                }
             } else {
-                BinS2LNormModeRowRpt<Op, T, TileDataDst::Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(
-                    validRow, validCol);
+                BinS2LNormModeColVLAlign<Op, T, elementsPerRepeat, dstStride, srcStride>(validRow, validCol);
             }
+        } else {
+            BinS2LNormModeRowRpt<Op, T, TileDataDst::Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(
+                validRow, validCol);
         }
     }
 }

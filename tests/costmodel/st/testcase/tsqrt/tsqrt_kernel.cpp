@@ -47,7 +47,7 @@ __global__ AICORE void runTSqrt(__gm__ T __out__ *out, __gm__ T __in__ *src)
     // accuracy compare
     float costResult = dstTile.GetCycle();
     float precision = 1 - fabs(profiling - costResult) / profiling;
-    bool ret = precision > accuracy;
+    bool ret = precision >= accuracy;
     EXPECT_TRUE(ret);
 }
 
@@ -62,9 +62,9 @@ void LaunchTSqrt(T *out, T *src, void *stream)
         runTSqrt<T, kGRows_, kGCols_, kTRows_, kTCols_, isInPlace, profiling, accuracy>(out, src);
 }
 
-template void LaunchTSqrt<float, 64, 64, 64, 64, true, 128.0f, 0.0f>(float *out, float *src, void *stream);
-template void LaunchTSqrt<float, 64, 64, 64, 64, false, 128.0f, 0.0f>(float *out, float *src, void *stream);
-template void LaunchTSqrt<aclFloat16, 64, 64, 64, 64, true, 128.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src,
-                                                                          void *stream);
-template void LaunchTSqrt<aclFloat16, 64, 64, 64, 64, false, 128.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src,
+template void LaunchTSqrt<float, 64, 64, 64, 64, true, 166.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTSqrt<float, 64, 64, 64, 64, false, 166.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTSqrt<aclFloat16, 64, 64, 64, 64, true, 166.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src,
                                                                            void *stream);
+template void LaunchTSqrt<aclFloat16, 64, 64, 64, 64, false, 166.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src,
+                                                                            void *stream);

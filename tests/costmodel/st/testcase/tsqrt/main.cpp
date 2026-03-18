@@ -76,17 +76,17 @@ void test_tsqrt()
 
 TEST_F(TSQRTTest, case_float_64x64_64x64_64x64_inPlace_True)
 {
-    test_tsqrt<float, 64, 64, 64, 64, true, 128.0f, 0.0f>();
+    test_tsqrt<float, 64, 64, 64, 64, true, 166.0f, 1.0f>();
 }
 TEST_F(TSQRTTest, case_float_64x64_64x64_64x64_inPlace_False)
 {
-    test_tsqrt<float, 64, 64, 64, 64, false, 128.0f, 0.0f>();
+    test_tsqrt<float, 64, 64, 64, 64, false, 166.0f, 1.0f>();
 }
 TEST_F(TSQRTTest, case_half_64x64_64x64_64x64_inPlace_True)
 {
-    test_tsqrt<aclFloat16, 64, 64, 64, 64, true, 128.0f, 0.0f>();
+    test_tsqrt<aclFloat16, 64, 64, 64, 64, true, 166.0f, 1.0f>();
 }
 TEST_F(TSQRTTest, case_half_64x64_64x64_64x64_inPlace_False)
 {
-    test_tsqrt<aclFloat16, 64, 64, 64, 64, false, 128.0f, 0.0f>();
+    test_tsqrt<aclFloat16, 64, 64, 64, 64, false, 166.0f, 1.0f>();
 }

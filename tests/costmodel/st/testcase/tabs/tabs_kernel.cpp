@@ -43,7 +43,8 @@ AICORE void runTAbs(__gm__ T __out__ *out, __gm__ T __in__ *src)
     // accuracy compare
     float costResult = dstTile.GetCycle();
     float precision = 1 - fabs(profiling - costResult) / profiling;
-    bool ret = precision > accuracy;
+    std::cout << "[DEBUG] costResult: " << costResult << ", precision: " << precision << ", profiling: " << profiling << ", accuracy: " << accuracy << std::endl;
+    bool ret = precision >= accuracy;
     EXPECT_TRUE(ret);
 }
 
@@ -56,7 +57,7 @@ void LaunchTAbs(T *out, T *src, void *stream)
         runTAbs<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(out, src);
 }
 
-template void LaunchTAbs<float, 64, 64, 64, 64, 160.0f, 0.0f>(float *out, float *src, void *stream);
-template void LaunchTAbs<int32_t, 64, 64, 64, 64, 160.0f, 0.0f>(int32_t *out, int32_t *src, void *stream);
-template void LaunchTAbs<aclFloat16, 16, 256, 16, 256, 160.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
-template void LaunchTAbs<int16_t, 64, 64, 64, 64, 160.0f, 0.0f>(int16_t *out, int16_t *src, void *stream);
+template void LaunchTAbs<float, 64, 64, 64, 64, 95.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTAbs<int32_t, 64, 64, 64, 64, 95.0f, 1.0f>(int32_t *out, int32_t *src, void *stream);
+template void LaunchTAbs<aclFloat16, 16, 256, 16, 256, 63.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTAbs<int16_t, 64, 64, 64, 64, 63.0f, 1.0f>(int16_t *out, int16_t *src, void *stream);
