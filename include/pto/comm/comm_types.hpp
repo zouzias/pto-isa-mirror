@@ -32,8 +32,6 @@ namespace comm {
 // - `tensors` points to an array of GlobalData objects (not pointers).
 // ============================================================================
 
-#define AsyncEvent RecordEvent
-
 template <typename GlobalData>
 struct ParallelGroup {
     using value_type = GlobalData; // Type alias for type traits
@@ -134,6 +132,28 @@ enum class DmaEngine : uint8_t
 {
     SDMA = 0, // Supports 2D transfer
     URMA = 1, // Supports 1D transfer
+};
+
+// ============================================================================
+// AsyncEvent: Returned by TPUT_ASYNC / TGET_ASYNC for asynchronous DMA
+// ============================================================================
+
+struct AsyncSession;
+
+struct AsyncEvent {
+    uint64_t handle{0};
+    DmaEngine engine{DmaEngine::SDMA};
+
+    AICORE constexpr AsyncEvent() = default;
+    AICORE constexpr AsyncEvent(uint64_t h, DmaEngine e) : handle(h), engine(e)
+    {}
+    AICORE constexpr bool valid() const
+    {
+        return handle != 0;
+    }
+
+    PTO_INTERNAL bool Wait(const AsyncSession &session) const;
+    PTO_INTERNAL bool Test(const AsyncSession &session) const;
 };
 
 // ============================================================================

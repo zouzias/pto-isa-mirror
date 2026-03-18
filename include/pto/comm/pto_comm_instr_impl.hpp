@@ -18,6 +18,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/TPut.hpp"
 #include "pto/comm/TGet.hpp"
 
+// Point-to-Point Communication (Asynchronous)
+#include "pto/comm/async/TPutAsync.hpp"
+#include "pto/comm/async/TGetAsync.hpp"
+
 // Signal-Based Synchronization
 #include "pto/comm/TNotify.hpp"
 #include "pto/comm/TWait.hpp"
