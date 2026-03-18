@@ -51,7 +51,7 @@ Synchronous form:
 %acc = tgemv.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %c = pto.tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
@@ -59,7 +59,7 @@ Synchronous form:
 %c = pto.tgemv.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tgemv ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
@@ -84,30 +84,30 @@ PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-  - Supported `(CType, AType, BType)` triples:
+    - Supported `(CType, AType, BType)` triples:
     - `(int32_t, int8_t, int8_t)`
     - `(float, half, half)`
     - `(float, float, float)`
     - `(float, bfloat16_t, bfloat16_t)`
-  - Static shape constraints: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
-  - Tile locations: `TileLeft::Loc == Left`, `TileRight::Loc == Right`, `TileRes::Loc == Acc`.
-  - Runtime: `m` must be 1 ; `k/n` (taken from `bMatrix.GetValidRow()`, `bMatrix.GetValidCol()`) must be in `[1, 4095]`.
-  - Bias checks:
+    - Static shape constraints: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
+    - Tile locations: `TileLeft::Loc == Left`, `TileRight::Loc == Right`, `TileRes::Loc == Acc`.
+    - Runtime: `m` must be 1 ; `k/n` (taken from `bMatrix.GetValidRow()`, `bMatrix.GetValidCol()`) must be in `[1, 4095]`.
+    - Bias checks:
     - The data type of the bias tile `TileBias::DType` must exactly match the data type of the result tile `(TileRes::DType)`.
     - The bias tile must be configured as a single row.
     - The bias tile's location must be `TileBias::Loc == TileType::Bias`.
 - **Implementation checks (A5)**:
-  - Accumulator type must be `int32_t` or `float`.
+    - Accumulator type must be `int32_t` or `float`.
     - If `int32_t`: `AType == int8_t` and `BType == int8_t`.
     - If `float`: supports `half/bfloat16_t/float` and selected fp8 pairs (target-defined).
-  - Static shape constraints: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
-  - Fractal/layout constraints are enforced:
+    - Static shape constraints: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
+    - Fractal/layout constraints are enforced:
     - Left: `Loc == Left`, `!isRowMajor`, `SFractal == RowMajor`
     - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
     - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
-  - No explicit runtime range checks on `m/k/n` are enforced in `TMATMUL_IMPL` on this target.
-  - Runtime: `m` must be 1 ; `k/n` (taken from `bMatrix.GetValidRow()`, `bMatrix.GetValidCol()`) must be in `[1, 4095]`.
-  - Bias checks:
+    - No explicit runtime range checks on `m/k/n` are enforced in `TMATMUL_IMPL` on this target.
+    - Runtime: `m` must be 1 ; `k/n` (taken from `bMatrix.GetValidRow()`, `bMatrix.GetValidCol()`) must be in `[1, 4095]`.
+    - Bias checks:
     - The data type of the bias tile `TileBias::DType` must exactly match the data type of the result tile `(TileRes::DType)`.
     - The bias tile must be configured as a single row.
     - The bias tile's location must be `TileBias::Loc == TileType::Bias`.

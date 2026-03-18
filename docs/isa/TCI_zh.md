@@ -50,17 +50,17 @@ pto.tci ins(%scalar {descending = false} : dtype) outs(%dst : !pto.tile_buf<...>
 
 ```cpp
 template <typename TileData, typename T, int descending, typename... WaitEvents>
-PTO_INST RecordEvent TCI(TileData& dst, T S, WaitEvents&... events);
+PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3/A5)**:
-  - `TileData::DType` 必须与标量模板参数 `T` 的类型完全相同。
-  - `dst`/`scalar` 元素类型必须相同，且必须是以下之一：`int32_t`、`uint32_t`、`int16_t`、`uint16_t`。
-  - `TileData::Cols != 1`（此为实现强制执行的条件）。
+    - `TileData::DType` 必须与标量模板参数 `T` 的类型完全相同。
+    - `dst`/`scalar` 元素类型必须相同，且必须是以下之一：`int32_t`、`uint32_t`、`int16_t`、`uint16_t`。
+    - `TileData::Cols != 1`（此为实现强制执行的条件）。
 - **有效区域**:
-  - 实现使用 `dst.GetValidCol()` 作为序列长度，不参考 `dst.GetValidRow()`。
+    - 实现使用 `dst.GetValidCol()` 作为序列长度，不参考 `dst.GetValidRow()`。
 
 ## 示例
 

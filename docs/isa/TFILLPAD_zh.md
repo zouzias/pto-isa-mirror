@@ -53,17 +53,11 @@ pto.tfillpad ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 在 `include/pto/common/pto_instr_impl.hpp` 引入的后端头文件中实现：
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD(TileDataDst& dst, TileDataSrc& src);
+template <typename TileData, PadValue PadVal = PadValue::Zero, typename... WaitEvents>
+PTO_INST RecordEvent TFILLPAD(TileData &dst, TileData &src, WaitEvents &... events);
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD_INPLACE(TileDataDst& dst, TileDataSrc& src);
-
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TFILLPAD_EXPAND(TileDataDst& dst, TileDataSrc& src);
-
-template <typename TileData, PadValue PadVal = PadValue::Zero>
-PTO_INTERNAL void TFILLPAD(TileData &dst, TileData &src);
+template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TFILLPAD(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 ```
 
 ## 约束
