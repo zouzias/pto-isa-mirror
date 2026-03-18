@@ -182,6 +182,7 @@ struct PadValueMap<uint32_t, PadValue::Max> {
 };
 
 #ifndef __CPU_SIM
+#ifndef __COSTMODEL
 template <>
 struct PadValueMap<bfloat16_t, PadValue::Null> {
     static constexpr auto value = uint16_t(0);
@@ -199,6 +200,7 @@ template <>
 struct PadValueMap<bfloat16_t, PadValue::Max> {
     static constexpr auto value = uint16_t(0x7f80);
 };
+#endif
 #endif
 template <>
 struct PadValueMap<half, PadValue::Null> {
