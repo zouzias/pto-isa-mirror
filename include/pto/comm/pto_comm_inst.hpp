@@ -12,8 +12,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COMM_INST_HPP
 
 #include "pto/comm/comm_types.hpp"
-#if !defined(PTO_NPU_ARCH_KIRIN9030) && !defined(PTO_NPU_ARCH_KIRINX90)
+#include "pto/comm/async/async_types.hpp"
 #include "pto/comm/pto_comm_instr_impl.hpp"
+#ifndef __CPU_SIM
+#include "pto/comm/async/async_event_impl.hpp"
+#endif
 #include "pto/common/event.hpp"
 
 namespace pto {
@@ -248,8 +251,33 @@ PTO_INST RecordEvent TREDUCE(ParallelGroupType &parallelGroup, GlobalDstData &ds
     return {};
 }
 
+// ============================================================================
+// TPUT_ASYNC: Asynchronous remote write (GM-to-GM via DMA engine).
+// Build once with comm::BuildAsyncSession<engine>(), then pass to all calls.
+// ============================================================================
+
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TPUT_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, const AsyncSession &session,
+                               WaitEvents &... events)
+{
+    WaitAllEvents(events...);
+    return ::pto::comm::TPUT_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+}
+
+// ============================================================================
+// TGET_ASYNC: Asynchronous remote read (GM-to-GM via DMA engine).
+// Build once with comm::BuildAsyncSession<engine>(), then pass to all calls.
+// ============================================================================
+
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData, typename... WaitEvents>
+PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, const AsyncSession &session,
+                               WaitEvents &... events)
+{
+    WaitAllEvents(events...);
+    return ::pto::comm::TGET_ASYNC_IMPL<engine>(dstGlobalData, srcGlobalData, session);
+}
+
 } // namespace comm
 } // namespace pto
 
-#endif // !defined(PTO_NPU_ARCH_KIRIN9030) && !defined(PTO_NPU_ARCH_KIRINX90)
 #endif // PTO_COMM_INST_HPP

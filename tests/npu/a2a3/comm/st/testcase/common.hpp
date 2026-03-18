@@ -14,12 +14,19 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <limits>
+#include <numeric>
 #include <vector>
 #include <dlfcn.h>
-
 #include "acl/acl.h"
-
 #include "hccl/hccl_comm.h"
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#if __has_include("hccl/hccl.h")
+#include "hccl/hccl.h"
+#endif
 #include "hccl/hccl_types.h"
 #include "hccl_context.h"
 #include "comm_mpi.h"
@@ -69,6 +76,29 @@ using CommTopo = uint32_t;
 extern "C" HcclResult HcomGetL0TopoTypeEx(const char *group, CommTopo *topoType, uint32_t isSetDevice);
 static constexpr uint32_t COMM_IS_NOT_SET_DEVICE = 0;
 static constexpr uint32_t COMM_TOPO_MESH = 0b1u;
+
+// aclnn tensor API (from aclnn/acl_meta.h, linked via libnnopbase).
+// Forward-declared here to avoid pulling in aclnn headers that may
+// conflict with the bisheng -xcce compilation mode.
+struct aclTensor;
+struct aclOpExecutor;
+extern "C" aclTensor *aclCreateTensor(const int64_t *viewDims, uint64_t viewDimsNum, aclDataType dataType,
+                                      const int64_t *stride, int64_t offset, aclFormat format,
+                                      const int64_t *storageDims, uint64_t storageDimsNum, void *tensorData);
+extern "C" int32_t aclDestroyTensor(const aclTensor *tensor);
+
+// Mc2 tiling structures passed to HcclAllocComResourceByTiling.
+// Binary layout must match the HCCL internal expectation.
+#pragma pack(push, 8)
+struct Mc2ServerCfg {
+    uint32_t version = 0;
+    uint8_t debugMode = 0;
+    uint8_t sendArgIndex = 0;
+    uint8_t recvArgIndex = 0;
+    uint8_t commOutArgIndex = 0;
+    uint8_t reserved[8] = {};
+};
+#pragma pack(pop)
 
 // ============================================================================
 // V2 tiling structures (same as A5).
@@ -627,3 +657,7 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
 
     return perRankFn(rankId, &rootInfo);
 }
+
+// SdmaWorkspaceManager moved to pto/npu/comm/async/sdma/sdma_workspace_manager.hpp
+#include "pto/npu/comm/async/sdma/sdma_workspace_manager.hpp"
+using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;
