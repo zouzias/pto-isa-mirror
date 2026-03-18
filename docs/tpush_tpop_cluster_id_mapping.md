@@ -244,6 +244,110 @@ On A5, the CVID is computed directly from `get_coreid()` without any GM communic
 - [Source: A2A3 TSyncCVID.hpp](https://gitcode.com/cann/pto-isa/blob/master/include/pto/npu/a2a3/custom/TSyncCVID.hpp)
 
 
+
+## A3 FFTS Scheduler and Logical Cluster Setup
+
+### Current TPUSH/TPOP Implementation on A3
+
+The current A3 TPUSH/TPOP implementation relies on the **FFTS (Fast Function Task Scheduler) cross-core synchronization** features. During mixed kernel kickstart, the FFTS hardware establishes a **logical cluster** through the block scheduler.
+
+### Logical Cluster Formation
+
+When FFTS launches a mixed kernel, it creates a logical cluster with a **1:2 block-subblock relationship**:
+
+```
+FFTS Mixed Kernel Kickstart:
+
+    +---------------------------------------------------------------------+
+    |  FFTS Block Scheduler                                               |
+    |                                                                     |
+    |  Kickstart: 1 block + 2 subblocks (1:2 ratio)                       |
+    |                                                                     |
+    |  +-------------------+                                              |
+    |  | Logical Cluster   |                                              |
+    |  |                   |                                              |
+    |  |  Block (AIC)      |  <-- block_id identifies the cluster         |
+    |  |    |              |                                              |
+    |  |    +-- Subblock 0 |  <-- subblock_id = 0 (AIV0)                  |
+    |  |    +-- Subblock 1 |  <-- subblock_id = 1 (AIV1)                  |
+    |  |                   |                                              |
+    |  +-------------------+                                              |
+    |                                                                     |
+    +---------------------------------------------------------------------+
+```
+
+### Logical-to-Physical Core Mapping
+
+The FFTS hardware builds the **logical-to-physical core mapping** at task launch time:
+
+1. **Block ID → Physical Cube Core**: The block scheduler assigns a physical AIC core to each logical block.
+
+2. **Subblock ID → Physical Vector Core**: Each subblock (0, 1) maps to a physical AIV core that becomes a buddy of the assigned Cube.
+
+3. **Intra-cluster sync resolution**: The FFTS hardware resolves all intra-cluster synchronization and communication paths based on this mapping.
+
+### Kernel Identification of Cluster
+
+Kernels running on Cube and Vector cores can identify their **logical block cluster** using:
+
+- **Cube core**: `get_block_idx()` — returns the logical block ID
+- **Vector core**: `get_block_idx()` + `get_subblockid()` — block ID identifies the cluster, subblock ID identifies AIV0 vs AIV1
+
+```cpp
+// On Cube (AIC)
+int my_cluster = get_block_idx();
+
+// On Vector (AIV)
+int my_cluster = get_block_idx();
+int my_aiv_idx = get_subblockid();  // 0 or 1
+```
+
+### PyPTO Recommendation: Logical Block ID as Cluster ID
+
+When PyPTO initializes a task with **`block_dim == num_cores`** (number of physical core clusters), we recommend using the **logical block ID directly as the cluster ID** for GM FIFO access:
+
+```cpp
+// Recommended: use logical block_idx as cluster_id
+// (when block_dim == num_cores, no wastage)
+int cluster_id = get_block_idx();
+
+// GM_SLOT_BUFFER access
+my_gm_slot_buffer = GM_SLOT_BUFFER_BASE + cluster_id * PER_CLUSTER_SLOT_BUFFER_SIZE;
+```
+
+**Rationale**: Since there is a 1:1 mapping between logical blocks and physical clusters (no over-subscription), using `block_idx` directly avoids the overhead of GM-based CVID negotiation while maintaining correctness.
+
+### AICPU Runtime Requirement
+
+When AICPU kicks off a runtime on a cluster, it **must follow the same logical block_idx → cluster mapping** as the FFTS-launched kernels:
+
+1. **Consistent block_idx assignment**: AICPU must assign `block_idx` values that match the FFTS block scheduler's logical cluster numbering.
+
+2. **Physical core binding**: The physical Cube and Vector cores assigned by AICPU must form the same 1:2 cluster relationship.
+
+3. **Synchronization compatibility**: The AICPU-launched runtime must be able to use the same FFTS cross-core sync primitives (`ffts_cross_core_sync`, `wait_flag_dev`) as the kernel code.
+
+```
+AICPU + FFTS Coordination:
+
+    AICPU                           FFTS Block Scheduler
+    +---------------------------+   +---------------------------+
+    | Launch runtime on         |   | Launch kernel on          |
+    | cluster with block_idx=N  |   | cluster with block_idx=N  |
+    |                           |   |                           |
+    | Physical cores:           |   | Physical cores:           |
+    |   AIC = core_X            |   |   AIC = core_X            |
+    |   AIV0 = core_Y           |   |   AIV0 = core_Y           |
+    |   AIV1 = core_Z           |   |   AIV1 = core_Z           |
+    +---------------------------+   +---------------------------+
+                |                               |
+                +-------------------------------+
+                              |
+                              v
+                    Same logical cluster mapping
+```
+
+This ensures that TPUSH/TPOP ring buffer operations work correctly whether the kernel is launched via FFTS directly or through AICPU runtime initialization.
 ## Alternative: Logical Block ID as Cluster ID
 
 If PyPTO **always launches with `block_dim` equal to the number of physical core clusters**, a simpler mapping is possible:
