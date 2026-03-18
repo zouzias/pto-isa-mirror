@@ -12,9 +12,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TDIV754_HPP
 
 #include "kernel_reg_compute_utils.h"
-#include "Div754/reg_compute/kernel_reg_compute_vec_binary_impl.h"
-#include "Div754/reg_compute/kernel_reg_compute_vec_cmpsel_impl.h"
-#include "Div754/reg_compute/kernel_reg_compute_vec_duplicate_impl.h"
+#include "reg_compute/kernel_reg_compute_vec_binary_impl.h"
+#include "reg_compute/kernel_reg_compute_vec_cmpsel_impl.h"
+#include "reg_compute/kernel_reg_compute_vec_duplicate_impl.h"
 
 
 using namespace AscendC::Reg;

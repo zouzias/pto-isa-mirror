@@ -1,5 +1,5 @@
 template <typename T = DefaultType, typename RegT>
-__simd_callee__ inline void Select(RegT &dstReg, RegT &srcReg0, RegT &srcReg1, MaskReg &mask)
+__simd_callee__ inline void SelectImpl(RegT &dstReg, RegT &srcReg0, RegT &srcReg1, MaskReg &mask)
 {
     using ActualT = typename RegT::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -31,7 +31,7 @@ __simd_callee__ inline void Compare(MaskReg &dstMask, RegT &srcReg0, RegT &srcRe
 }
 
 template <typename T>
-__aicore__ inline void DuplicateIntrinsics(__ubuf__ T* dstLocal, uint32_t scalarValue, const uint8_t repeatTime,
+__aicore__ inline void DuplicateIntrinsicsImpl(__ubuf__ T* dstLocal, uint32_t scalarValue, const uint8_t repeatTime,
     const uint16_t dstBlockStride, const uint8_t dstRepeatStride)
 {
     vector_dup(dstLocal, scalarValue, repeatTime, dstBlockStride, 1, dstRepeatStride, 0);
@@ -44,7 +44,7 @@ __aicore__ inline void Duplicate(__ubuf__ T* dstLocal, const T& scalarValue, uin
     if constexpr (isSetMask) {
         AscendCUtils::SetMask<T>(mask);
     }
-    DuplicateIntrinsics(dstLocal, scalarValue, repeatTime, dstBlockStride, dstRepeatStride);
+    DuplicateIntrinsicsImpl(dstLocal, scalarValue, repeatTime, dstBlockStride, dstRepeatStride);
 }
 
 template <typename T, bool isSetMask = true>

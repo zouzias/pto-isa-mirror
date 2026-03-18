@@ -21,7 +21,7 @@
 #ifndef ASCENDC_MODULE_REG_COMPUTE_STRUCT_INTERFACE_H
 #define ASCENDC_MODULE_REG_COMPUTE_STRUCT_INTERFACE_H
 
-#include "../kernel_reg_compute_datatype_impl.h"
+#include "kernel_reg_compute_datatype_impl.h"
 #include "reg_compute/kernel_reg_compute_vec_binary_impl.h"
 #include "reg_compute/kernel_reg_compute_vec_cmpsel_impl.h"
 #include "reg_compute/kernel_reg_compute_vec_duplicate_impl.h"

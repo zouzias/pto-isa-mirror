@@ -23,13 +23,12 @@
 #define ASCENDC_MODULE_REG_COMPUTE_VEC_CMPSEL_IMPL_H
 
 #include "kernel_reg_compute_common_impl.h"
-#include "../../../../include/basic_api/reg_compute/kernel_reg_compute_struct_intf.h"
-#include "../../../../include/utils/std/type_traits.h"
+#include "../kernel_reg_compute_struct_intf.h"
 
 namespace AscendC {
 namespace Reg {
 template <CMPMODE mode = CMPMODE::EQ, typename T>
-__simd_callee__ inline void CompareUint64(MaskReg& dst, T& srcReg0, T& srcReg1, MaskReg& mask)
+__simd_callee__ inline void CompareUint64Impl(MaskReg& dst, T& srcReg0, T& srcReg1, MaskReg& mask)
 {
     using ActualT = typename T::ActualT;
     static_assert(SupportType<ActualT, uint64_t>(), "CompareUint64Impl only support uint64_t type");
@@ -69,7 +68,7 @@ __simd_callee__ inline void CompareUint64(MaskReg& dst, T& srcReg0, T& srcReg1, 
 }
 
 template <CMPMODE mode = CMPMODE::EQ, typename T>
-__simd_callee__ inline void CompareInt64(MaskReg& dst, T& srcReg0, T& srcReg1, MaskReg& mask)
+__simd_callee__ inline void CompareInt64Impl(MaskReg& dst, T& srcReg0, T& srcReg1, MaskReg& mask)
 {
     using ActualT = typename T::ActualT;
     static_assert(SupportType<ActualT, int64_t>(), "CompareInt64Impl only support int64_t type");
@@ -109,7 +108,7 @@ __simd_callee__ inline void CompareInt64(MaskReg& dst, T& srcReg0, T& srcReg1, M
 }
 
 template <CMPMODE mode = CMPMODE::EQ, typename T>
-__simd_callee__ inline void CompareB64(MaskReg& dst, T& srcReg0, T& srcReg1, MaskReg& mask)
+__simd_callee__ inline void CompareB64Impl(MaskReg& dst, T& srcReg0, T& srcReg1, MaskReg& mask)
 {
     using ActualT = typename T::ActualT;
     static_assert(SupportType<ActualT, uint64_t, int64_t>(),
@@ -123,7 +122,7 @@ __simd_callee__ inline void CompareB64(MaskReg& dst, T& srcReg0, T& srcReg1, Mas
 }
 
 template <typename T = DefaultType, CMPMODE mode = CMPMODE::EQ, typename U>
-__simd_callee__ inline void Compare(MaskReg& dst, U& srcReg0, U& srcReg1, MaskReg& mask)
+__simd_callee__ inline void CompareImpl(MaskReg& dst, U& srcReg0, U& srcReg1, MaskReg& mask)
 {
     using ActualT = typename U::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -160,7 +159,7 @@ __simd_callee__ inline void Compare(MaskReg& dst, U& srcReg0, U& srcReg1, MaskRe
 }
 
 template <typename T = DefaultType, CMPMODE mode = CMPMODE::EQ, typename U, typename S>
-__simd_callee__ inline void CompareScalar(MaskReg& dst, U& srcReg, S scalarValue, MaskReg& mask)
+__simd_callee__ inline void CompareScalarImpl(MaskReg& dst, U& srcReg, S scalarValue, MaskReg& mask)
 {
     using ActualT = typename U::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -189,7 +188,7 @@ __simd_callee__ inline void CompareScalar(MaskReg& dst, U& srcReg, S scalarValue
 }
 
 template <typename T = DefaultType, typename U>
-__simd_callee__ inline void Select(U& dstReg, U& srcReg0, U& srcReg1, MaskReg& mask)
+__simd_callee__ inline void SelectImpl(U& dstReg, U& srcReg0, U& srcReg1, MaskReg& mask)
 {
     using ActualT = typename U::ActualT;
     static_assert(std::is_same_v<T, DefaultType> || std::is_same_v<T, ActualT>, "T type is not correct!");

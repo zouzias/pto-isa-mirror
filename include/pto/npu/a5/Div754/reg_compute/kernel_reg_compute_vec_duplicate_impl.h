@@ -30,7 +30,7 @@
 namespace AscendC {
 namespace Reg {
 template <typename T, typename U>
-__simd_callee__ inline void DuplicateComplexTraitTwo(U& dstReg, T scalarValue)
+__simd_callee__ inline void DuplicateComplexTraitTwoImpl(U& dstReg, T scalarValue)
 {
     using ActualT = typename U::ActualT;
     static_assert(SupportType<ActualT, complex32, complex64>(), "current data type is not supported on current device!");
@@ -41,13 +41,13 @@ __simd_callee__ inline void DuplicateComplexTraitTwo(U& dstReg, T scalarValue)
 }
 
 template <typename T, typename U>
-__simd_callee__ inline void DuplicateB64(U& dstReg, T scalarValue)
+__simd_callee__ inline void DuplicateB64Impl(U& dstReg, T scalarValue)
 {
     using ActualT = typename U::ActualT;
     static_assert(sizeof(ActualT) == 8, "data type should be B64");
     static_assert(CheckRegTrait<U, RegTraitNumTwo>(), "U should be RegTraitNumTwo for DuplicateB64Impl");
     if constexpr (SupportType<ActualT, complex64>()) {
-        DuplicateComplexTraitTwo(dstReg, scalarValue);
+        DuplicateComplexTraitTwoImpl(dstReg, scalarValue);
     } else {
         vbr((RegTensor<uint32_t> &)dstReg.reg[0], static_cast<uint32_t>(scalarValue));
         if constexpr (sizeof(T) == 8) {
@@ -61,7 +61,7 @@ __simd_callee__ inline void DuplicateB64(U& dstReg, T scalarValue)
 }
 
 template <typename T = DefaultType, typename U, typename S>
-__simd_callee__ inline void Duplicate(S& dstReg, U scalarValue)
+__simd_callee__ inline void DuplicateImpl(S& dstReg, U scalarValue)
 {
     using ActualT = typename S::ActualT;
     static_assert(Std::is_same_v<T, DefaultType> || Std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -81,10 +81,10 @@ __simd_callee__ inline void Duplicate(S& dstReg, U scalarValue)
         if constexpr (SupportType<ActualT, complex32>()) {
             if constexpr (CheckRegTrait<S, RegTraitNumOne>()) {
                 RegTensor<ActualT, RegTraitNumTwo> traitTwoDstReg;
-                DuplicateComplexTraitTwo(traitTwoDstReg, scalarValue);
+                DuplicateComplexTraitTwoImpl(traitTwoDstReg, scalarValue);
                 B32TraitTwoToTraitOne(dstReg, traitTwoDstReg);
             } else {
-                DuplicateComplexTraitTwo(dstReg, scalarValue);
+                DuplicateComplexTraitTwoImpl(dstReg, scalarValue);
             }
         } else {
             vbr(dstReg, (ActualT)scalarValue);
@@ -92,18 +92,18 @@ __simd_callee__ inline void Duplicate(S& dstReg, U scalarValue)
     } else {
         if constexpr (CheckRegTrait<S, RegTraitNumOne>()) {
             RegTensor<ActualT, RegTraitNumTwo> traitTwoDstReg;
-            DuplicateB64(traitTwoDstReg, scalarValue);
+            DuplicateB64Impl(traitTwoDstReg, scalarValue);
             B64TraitTwoToTraitOne(dstReg, traitTwoDstReg);
         } else if constexpr (CheckRegTrait<S, RegTraitNumTwo>()) {
             S dstTemp;
-            DuplicateB64(dstTemp, scalarValue);
+            DuplicateB64Impl(dstTemp, scalarValue);
             dstReg = dstTemp;
         }
     }
 }
 
 template <MaskMergeMode mode = MaskMergeMode::ZEROING, typename T, typename U>
-__simd_callee__ inline void DuplicateComplexTraitTwo(U& dstReg, T scalarValue, MaskReg& mask)
+__simd_callee__ inline void DuplicateComplexTraitTwoImpl(U& dstReg, T scalarValue, MaskReg& mask)
 {
     using ActualT = typename U::ActualT;
     static_assert(SupportType<ActualT, complex32, complex64>(), "current data type is not supported on current device!");
@@ -115,14 +115,14 @@ __simd_callee__ inline void DuplicateComplexTraitTwo(U& dstReg, T scalarValue, M
 }
 
 template <MaskMergeMode mode = MaskMergeMode::ZEROING, typename T, typename U>
-__simd_callee__ inline void DuplicateB64(U& dstReg, T scalarValue, MaskReg& mask)
+__simd_callee__ inline void DuplicateB64Impl(U& dstReg, T scalarValue, MaskReg& mask)
 {
     using ActualT = typename U::ActualT;
     static_assert(sizeof(ActualT) == 8, "data type should be B64");
     static_assert(CheckRegTrait<U, RegTraitNumTwo>(), "U should be RegTraitNumTwo for DuplicateB64Impl");
     constexpr auto modeValue = GetMaskMergeMode<mode>();
     if constexpr (SupportType<ActualT, complex64>()) {
-        DuplicateComplexTraitTwo(dstReg, scalarValue, mask);
+        DuplicateComplexTraitTwoImpl(dstReg, scalarValue, mask);
     } else {
         vdup((RegTensor<uint32_t>&)dstReg.reg[0], static_cast<uint32_t>(scalarValue), mask, modeValue);
         if constexpr (sizeof(T) == 8) {
@@ -136,7 +136,7 @@ __simd_callee__ inline void DuplicateB64(U& dstReg, T scalarValue, MaskReg& mask
 }
 
 template <typename T = DefaultType, MaskMergeMode mode = MaskMergeMode::ZEROING, typename U, typename S>
-__simd_callee__ inline void Duplicate(S& dstReg, U scalarValue, MaskReg& mask)
+__simd_callee__ inline void DuplicateImpl(S& dstReg, U scalarValue, MaskReg& mask)
 {
     using ActualT = typename S::ActualT;
     static_assert(Std::is_same_v<T, DefaultType> || Std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -159,10 +159,10 @@ __simd_callee__ inline void Duplicate(S& dstReg, U scalarValue, MaskReg& mask)
                 MaskReg maskTrait2;
                 MaskPack(maskTrait2, mask);
                 RegTensor<ActualT, RegTraitNumTwo> traitTwoDstReg;
-                DuplicateComplexTraitTwo(traitTwoDstReg, scalarValue, maskTrait2);
+                DuplicateComplexTraitTwoImpl(traitTwoDstReg, scalarValue, maskTrait2);
                 B32TraitTwoToTraitOne(dstReg, traitTwoDstReg);
             } else {
-                DuplicateComplexTraitTwo(dstReg, scalarValue, mask);
+                DuplicateComplexTraitTwoImpl(dstReg, scalarValue, mask);
             }
         } else {
             vdup(dstReg, (ActualT)scalarValue, mask, modeValue);
@@ -190,7 +190,7 @@ __simd_callee__ inline void Duplicate(S& dstReg, U scalarValue, MaskReg& mask)
 }
 
 template <HighLowPart pos = HighLowPart::LOWEST, MaskMergeMode mode = MaskMergeMode::ZEROING, typename T>
-__simd_callee__ inline void DuplicateComplexTraitTwo(T& dstReg, T& srcReg, MaskReg& mask)
+__simd_callee__ inline void DuplicateComplexTraitTwoImpl(T& dstReg, T& srcReg, MaskReg& mask)
 {
     using ActualT = typename T::ActualT;
     static_assert(SupportType<ActualT, complex32, complex64>(), "current data type is not supported on current device!");
@@ -204,13 +204,13 @@ __simd_callee__ inline void DuplicateComplexTraitTwo(T& dstReg, T& srcReg, MaskR
 }
 
 template <HighLowPart pos = HighLowPart::LOWEST, MaskMergeMode mode = MaskMergeMode::ZEROING, typename T>
-__simd_callee__ inline void DuplicateB64(T& dstReg, T& srcReg, MaskReg& mask)
+__simd_callee__ inline void DuplicateB64Impl(T& dstReg, T& srcReg, MaskReg& mask)
 {
     using ActualT = typename T::ActualT;
     static_assert(sizeof(ActualT) == 8, "data type should be B64");
     static_assert(CheckRegTrait<T, RegTraitNumTwo>(), "T should be RegTraitNumTwo for DuplicateB64Impl");
     if constexpr (SupportType<ActualT, complex64>()) {
-        DuplicateComplexTraitTwo(dstReg, srcReg, mask);
+        DuplicateComplexTraitTwoImpl(dstReg, srcReg, mask);
     } else {
         constexpr auto posValue = std::integral_constant<::Pos, static_cast<::Pos>(pos)>();
         constexpr auto modeValue = GetMaskMergeMode<mode>();
@@ -221,7 +221,7 @@ __simd_callee__ inline void DuplicateB64(T& dstReg, T& srcReg, MaskReg& mask)
 
 template <typename T = DefaultType, HighLowPart pos = HighLowPart::LOWEST, MaskMergeMode mode = MaskMergeMode::ZEROING,
           typename U>
-__simd_callee__ inline void Duplicate(U& dstReg, U& srcReg, MaskReg& mask)
+__simd_callee__ inline void DuplicateImpl(U& dstReg, U& srcReg, MaskReg& mask)
 {
     using ActualT = typename U::ActualT;
     static_assert(Std::is_same_v<T, DefaultType> || Std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -247,10 +247,10 @@ __simd_callee__ inline void Duplicate(U& dstReg, U& srcReg, MaskReg& mask)
                 RegTensor<ActualT, RegTraitNumTwo> traitTwoDstReg;
                 RegTensor<ActualT, RegTraitNumTwo> traitTwoSrcReg;
                 B32TraitOneToTraitTwo(traitTwoSrcReg, srcReg);
-                DuplicateComplexTraitTwo(traitTwoDstReg, traitTwoSrcReg, maskTrait2);
+                DuplicateComplexTraitTwoImpl(traitTwoDstReg, traitTwoSrcReg, maskTrait2);
                 B32TraitTwoToTraitOne(dstReg, traitTwoDstReg);
             } else {
-                DuplicateComplexTraitTwo(dstReg, srcReg, mask);
+                DuplicateComplexTraitTwoImpl(dstReg, srcReg, mask);
             }
         } else {
             vdup(dstReg, srcReg, mask, posValue, modeValue);
@@ -273,7 +273,7 @@ __simd_callee__ inline void Duplicate(U& dstReg, U& srcReg, MaskReg& mask)
 }
 
 template <typename T>
-__simd_callee__ inline void InterleaveB64(T& dstReg0, T& dstReg1, T& srcReg0, T& srcReg1)
+__simd_callee__ inline void InterleaveB64Impl(T& dstReg0, T& dstReg1, T& srcReg0, T& srcReg1)
 {
     using ActualT = typename T::ActualT;
     static_assert(sizeof(ActualT) == 8, "data type should be B64");
@@ -285,7 +285,7 @@ __simd_callee__ inline void InterleaveB64(T& dstReg0, T& dstReg1, T& srcReg0, T&
 }
 
 template <typename T = DefaultType, typename U>
-__simd_callee__ inline void Interleave(U& dstReg0, U& dstReg1, U& srcReg0, U& srcReg1)
+__simd_callee__ inline void InterleaveImpl(U& dstReg0, U& dstReg1, U& srcReg0, U& srcReg1)
 {
     using ActualT = typename U::ActualT;
     static_assert(Std::is_same_v<T, DefaultType> || Std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -300,14 +300,14 @@ __simd_callee__ inline void Interleave(U& dstReg0, U& dstReg1, U& srcReg0, U& sr
         static_assert(CheckRegTrait<U, RegTraitNumTwo>(), "Interleave only support RegTraitNumTwo on current device");
         U dstTemp0;
         U dstTemp1;
-        InterleaveB64(dstTemp0, dstTemp1, srcReg0, srcReg1);
+        InterleaveB64Impl(dstTemp0, dstTemp1, srcReg0, srcReg1);
         dstReg0 = dstTemp0;
         dstReg1 = dstTemp1;
     }
 }
 
 template <typename T>
-__simd_callee__ inline void DeInterleaveB64(T& dstReg0, T& dstReg1, T& srcReg0, T& srcReg1)
+__simd_callee__ inline void DeInterleaveB64Impl(T& dstReg0, T& dstReg1, T& srcReg0, T& srcReg1)
 {
     using ActualT = typename T::ActualT;
     static_assert(sizeof(ActualT) == 8, "data type should be B64");
@@ -319,7 +319,7 @@ __simd_callee__ inline void DeInterleaveB64(T& dstReg0, T& dstReg1, T& srcReg0, 
 }
 
 template <typename T = DefaultType, typename U>
-__simd_callee__ inline void DeInterleave(U& dstReg0, U& dstReg1, U& srcReg0, U& srcReg1)
+__simd_callee__ inline void DeInterleaveImpl(U& dstReg0, U& dstReg1, U& srcReg0, U& srcReg1)
 {
     using ActualT = typename U::ActualT;
     static_assert(Std::is_same_v<T, DefaultType> || Std::is_same_v<T, ActualT>, "T type is not correct!");
@@ -335,7 +335,7 @@ __simd_callee__ inline void DeInterleave(U& dstReg0, U& dstReg1, U& srcReg0, U& 
         static_assert(CheckRegTrait<U, RegTraitNumTwo>(), "DeInterleave only support RegTraitNumTwo on current device");
         U dstTemp0;
         U dstTemp1;
-        DeInterleaveB64(dstTemp0, dstTemp1, srcReg0, srcReg1);
+        DeInterleaveB64Impl(dstTemp0, dstTemp1, srcReg0, srcReg1);
         dstReg0 = dstTemp0;
         dstReg1 = dstTemp1;
     }
