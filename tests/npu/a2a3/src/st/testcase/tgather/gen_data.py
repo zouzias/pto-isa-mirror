@@ -158,6 +158,14 @@ if __name__ == "__main__":
         TGatherParams1D("TGATHERTest.case_1D_int32_32x512_16x256", np.int32, 32, 512, 16, 256),
         TGatherParams1D("TGATHERTest.case_1D_half_16x1024_16x128", np.float16, 16, 1024, 16, 128),
         TGatherParams1D("TGATHERTest.case_1D_int16_32x256_32x64", np.int16, 32, 256, 32, 64),
+        TGatherParams1D("TGATHERTest.case_1D_half_1x16_1x16", np.float16, 1, 16, 1, 16),
+        TGatherParams1D("TGATHERTest.case_1D_half_1x32_1x32", np.float16, 1, 32, 1, 32),
+        TGatherParams1D("TGATHERTest.case_1D_half_1x64_1x64", np.float16, 1, 64, 1, 64),
+        TGatherParams1D("TGATHERTest.case_1D_half_1x128_1x128", np.float16, 1, 128, 1, 128),
+        TGatherParams1D("TGATHERTest.case_1D_half_1x128_1x64", np.float16, 1, 128, 1, 64),
+        TGatherParams1D("TGATHERTest.case_1D_float_1024x16_1024x16", np.float32, 1024, 16, 1024, 16),
+        TGatherParams1D("TGATHERTest.case_1D_float_16x16_32x32", np.float32, 16, 16, 32, 32),
+        TGatherParams1D("TGATHERTest.case_1D_half_16x16_32x32", np.float16, 16, 16, 32, 32),
     ]
 
     for case in case_params_list:
