@@ -23,33 +23,27 @@ namespace pto {
  * 2. [Load]    Load data from GM
  * 3. [Free]    Release GM space (Cross-Core)
  */
-template <typename PipeCons, typename TileDataSrc, typename DataFiFo>
-PTO_INTERNAL void TPOP_IMPL(PipeCons &cons, TileDataSrc &tile, DataFiFo &fifo)
+template <typename Pipe, typename TileProd, typename TileCons, TileSplitAxis Split>
+PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
 {
     // // 1. Cross-Core: Wait for Data
-    bool isWait = cons.getWaitStatus();
+    bool isWait = pipe.cons.getWaitStatus();
     if (isWait) {
-        cons.wait();
+        pipe.cons.wait();
     }
 
     // 2. Address Calculation & Load
-    cons.pop(fifo, tile);
-    cons.tile_id++;
+    pipe.cons.pop(pipe.fifo, tile);
+    pipe.cons.tile_id++;
 
     // 3. Cross-Core: Free Space
-    bool isFree = cons.getFreeStatus();
+    bool isFree = pipe.cons.getFreeStatus();
     if (isFree) {
-        cons.free();
+        pipe.cons.free();
     }
 }
 
-template <typename TileData, typename Pipe>
-PTO_INTERNAL void TPOP_IMPL(TileData &tile, Pipe &pipe)
-{
-    TPOP_IMPL(pipe.cons, tile, pipe.fifo);
-}
-
-template <typename Pipe>
+template <typename Pipe, TileSplitAxis Split>
 PTO_INTERNAL void TFREE_IMPL(Pipe &pipe)
 {
     bool isFree = pipe.cons.getFreeStatus();
