@@ -14,7 +14,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
 #include "pto/common/pto_instr_impl.hpp"
+#ifndef __COSTMODEL
 #include "pto/comm/pto_comm_inst.hpp"
+#endif
 #include "pto/common/tassign_check.hpp"
 
 #define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)

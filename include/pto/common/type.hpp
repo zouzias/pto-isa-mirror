@@ -60,7 +60,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_DETAIL_GET_MACRO(_1, _2, NAME, ...) NAME
 #define PTO_STATIC_ASSERT(...) PTO_DETAIL_GET_MACRO(__VA_ARGS__, PTO_STATIC_ASSERT_2, PTO_STATIC_ASSERT_1)(__VA_ARGS__)
 
-#if defined(__CPU_SIM)
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <cstdio>
 #include <cstdlib>
 
@@ -259,7 +259,7 @@ constexpr int TOTAL_DIM = 5;
 
 } // namespace pto
 
-#if defined(__CPU_SIM)
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 typedef _Float16 half;
 typedef _Float16 aclFloat16;
 // Note: clang version should be >=15 and gcc version should be >=14
