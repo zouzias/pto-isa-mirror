@@ -53,10 +53,10 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ OutT *out, __gm__ InT *srcA, 
     using BiasTile = Tile<TileType::Vec, OutT, VEC_M, TILE_N, BLayout::RowMajor, VEC_M, TILE_N>;
     using OutTile = Tile<TileType::Vec, OutT, VEC_M, TILE_N, BLayout::RowMajor, VEC_M, TILE_N>;
 
-    using MatPipe = TPipe<FLAG_ID, FIFOType::VEC_FIFO, FIFO_DEPTH, FIFO_PERIOD, AccTile, VecTileHalf>;
-
     VecTileHalf vecFifoTile;
-    MatPipe mPipe((uint32_t)0x0);
+    // pip init
+    using MatPipe = TPipe<FLAG_ID, Direction::DIR_C2V, sizeof(OutT) * VEC_M * TILE_N, FIFO_DEPTH>;
+    MatPipe mPipe((__gm__ void *)(uint64_t)0x0, (uint32_t)0x0, (uint32_t)0x0);
 
     constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
     constexpr uint32_t ALIGNED_M = CeilAlign<uint32_t>(CASE_TILE_M, 16);
@@ -127,7 +127,8 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ OutT *out, __gm__ InT *srcA, 
             set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
-            TPUSH(accTile, mPipe);
+            // push Acc tile to fifo
+            TPUSH<MatPipe, AccTile, TileSplitAxis::TILE_UP_DOWN>(mPipe, accTile);
 
             set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
         }
@@ -153,7 +154,8 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ OutT *out, __gm__ InT *srcA, 
         for (int m_tile = 0; m_tile < NUM_M_TILES; m_tile++) {
             wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
 
-            TPOP(vecFifoTile, mPipe);
+            // pop vector tile from fifo
+            TPOP<MatPipe, VecTileHalf, TileSplitAxis::TILE_UP_DOWN>(mPipe, vecFifoTile);
 
             size_t biasOffset = static_cast<size_t>(m_tile * CASE_TILE_M + subBlockIdx * VEC_M) * TILE_N;
             GlobalBias globalBias(bias + biasOffset);
@@ -166,7 +168,8 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ OutT *out, __gm__ InT *srcA, 
             wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
 
             TADD(outTile, vecFifoTile, biasTile);
-            TFREE(mPipe);
+            // free the buffer
+            TFREE<MatPipe, TileSplitAxis::TILE_UP_DOWN>(mPipe);
 
             set_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
 
