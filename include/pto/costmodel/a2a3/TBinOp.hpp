@@ -82,12 +82,11 @@ PTO_INTERNAL void Bin2LNormModeHead(CostModelStats &stats, unsigned validRow, un
     }
 }
 
-template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned stride>
-PTO_INTERNAL void Bin2LNormModeTail(CostModelStats &stats, unsigned validRow, unsigned numRemainPerLine)
+template <bool strideOverFlag, unsigned Rows>
+PTO_INTERNAL void RecordTailLoopRepeats(CostModelStats &stats, unsigned validRow)
 {
     unsigned numLoop = 0;
     unsigned remainAfterLoop = validRow;
-    constexpr bool strideOverFlag = (stride / blockSizeElem > REPEAT_STRIDE_MAX);
     if constexpr (Rows > pto::REPEAT_MAX) {
         numLoop = validRow / REPEAT_MAX;
         for (int i = 0; i < numLoop; i++) {
@@ -112,21 +111,33 @@ PTO_INTERNAL void Bin2LNormModeTail(CostModelStats &stats, unsigned validRow, un
     }
 }
 
+template <unsigned elementsPerRepeat>
+PTO_INTERNAL void RecordRowRptLoopRepeats(CostModelStats &stats, unsigned validRow, unsigned validCol)
+{
+    unsigned numLoop = validCol / elementsPerRepeat;
+    unsigned tailElements = validCol % elementsPerRepeat;
+    for (unsigned i = 0; i < numLoop; i++) {
+        RecordRepeat(stats, static_cast<uint8_t>(validRow), false, true);
+    }
+    if (tailElements) {
+        RecordRepeat(stats, static_cast<uint8_t>(validRow), true, true);
+    }
+}
+
+template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned stride>
+PTO_INTERNAL void Bin2LNormModeTail(CostModelStats &stats, unsigned validRow, unsigned numRemainPerLine)
+{
+    constexpr bool strideOverFlag = (stride / blockSizeElem > REPEAT_STRIDE_MAX);
+    RecordTailLoopRepeats<strideOverFlag, Rows>(stats, validRow);
+}
+
 template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
 PTO_INTERNAL void Bin2LNormModeRowRpt(CostModelStats &stats, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned repeatStride = rowStride / blockSizeElem;
     constexpr bool condRowRpt = ((Rows <= pto::REPEAT_MAX) && (repeatStride <= REPEAT_STRIDE_MAX));
     if constexpr (condRowRpt) {
-        unsigned numLoop = validCol / elementsPerRepeat;
-        unsigned tailElements = validCol % elementsPerRepeat;
-        for (unsigned i = 0; i < numLoop; i++) {
-            RecordRepeat(stats, static_cast<uint8_t>(validRow), false, true);
-        }
-
-        if (tailElements) {
-            RecordRepeat(stats, static_cast<uint8_t>(validRow), true, true);
-        }
+        RecordRowRptLoopRepeats<elementsPerRepeat>(stats, validRow, validCol);
     } else {
         unsigned numRemainPerLine = validCol;
         if constexpr (Rows > elementsPerRepeat) {

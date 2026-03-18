@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include "pto/costmodel/costmodel_types.hpp"
+#include "pto/costmodel/a2a3/TBinOp.hpp"
 namespace pto {
 constexpr unsigned PTO_SMALL_RPT = 4;
 
@@ -27,19 +28,6 @@ PTO_INTERNAL void BinS2LCountMode(CostModelStats &stats, unsigned validRow, unsi
     for (unsigned i = 0; i < validRow; i++) {
         RecordCountMode(stats);
     }
-}
-template <typename T, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned Cols>
-PTO_INTERNAL void BinS1LNormMode(CostModelStats &stats, unsigned validRow, unsigned validCol)
-{
-    unsigned numElements = validRow * validCol;
-    unsigned headRepeats = numElements / elementsPerRepeat;
-    unsigned tailElements = numElements % elementsPerRepeat;
-    RecordRepeat(stats, static_cast<uint8_t>(headRepeats));
-    if (tailElements)
-        [[unlikely]]
-        {
-            RecordRepeat(stats, 1, true);
-        }
 }
 template <typename T, unsigned elementsPerRepeat, unsigned dstStride, unsigned srcStride>
 PTO_INTERNAL void BinS2LNormModeColVLAlign(CostModelStats &stats, unsigned validRow, unsigned validCol)
@@ -75,33 +63,9 @@ template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockS
           unsigned srcStride>
 PTO_INTERNAL void BinS2LNormModeTail(CostModelStats &stats, unsigned validRow, unsigned numRemainPerLine)
 {
-    unsigned numLoop = 0;
-    unsigned remainAfterLoop = validRow;
-    const bool strideOverFlag =
+    constexpr bool strideOverFlag =
         (dstStride / blockSizeElem > REPEAT_STRIDE_MAX) || (srcStride / blockSizeElem > REPEAT_STRIDE_MAX);
-    if constexpr (Rows > pto::REPEAT_MAX) {
-        numLoop = validRow / REPEAT_MAX;
-        for (int i = 0; i < numLoop; i++) {
-            if constexpr (strideOverFlag) {
-                for (uint64_t j = 0; j < REPEAT_MAX; j++) {
-                    RecordRepeat(stats, 1, true, true);
-                }
-            } else {
-                RecordRepeat(stats, REPEAT_MAX, true, true);
-            }
-        }
-        remainAfterLoop = validRow % REPEAT_MAX;
-    }
-
-    if (remainAfterLoop) {
-        if constexpr (strideOverFlag) {
-            for (unsigned j = 0; j < remainAfterLoop; j++) {
-                RecordRepeat(stats, 1, true, true);
-            }
-        } else {
-            RecordRepeat(stats, static_cast<uint8_t>(remainAfterLoop), true, true);
-        }
-    }
+    RecordTailLoopRepeats<strideOverFlag, Rows>(stats, validRow);
 }
 
 template <typename T, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride,
@@ -113,15 +77,7 @@ PTO_INTERNAL void BinS2LNormModeRowRpt(CostModelStats &stats, unsigned validRow,
     constexpr bool condRowRpt =
         ((Rows <= pto::REPEAT_MAX) && dstRepeatStride <= (REPEAT_STRIDE_MAX) && srcRepeatStride <= (REPEAT_STRIDE_MAX));
     if constexpr (condRowRpt) {
-        unsigned numLoop = validCol / elementsPerRepeat;
-        unsigned tailElements = validCol % elementsPerRepeat;
-        for (unsigned i = 0; i < numLoop; i++) {
-            RecordRepeat(stats, static_cast<uint8_t>(validRow), false, true);
-        }
-
-        if (tailElements) {
-            RecordRepeat(stats, static_cast<uint8_t>(validRow), true, true);
-        }
+        RecordRowRptLoopRepeats<elementsPerRepeat>(stats, validRow, validCol);
     } else {
         unsigned numRemainPerLine = validCol;
         if constexpr (Rows > elementsPerRepeat) {
@@ -136,6 +92,30 @@ PTO_INTERNAL void BinS2LNormModeRowRpt(CostModelStats &stats, unsigned validRow,
         }
     }
 }
+template <typename T, typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
+          unsigned dstStride, unsigned srcStride>
+PTO_INTERNAL void TBinSInstrNonContinuousPath(CostModelStats &stats, unsigned validRow, unsigned validCol)
+{
+    constexpr unsigned normColRepeat = TileDataDst::Cols / elementsPerRepeat;
+    constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < PTO_SMALL_RPT) &&
+                               ((TileDataSrc::Rows * normColRepeat) < PTO_SMALL_RPT);
+    constexpr bool isColRpt =
+        (TileDataDst::Rows < (normColRepeat + 1)) && (TileDataSrc::Rows < (normColRepeat + 1));
+    if constexpr (countMode) {
+        BinS2LCountMode<T, dstStride, srcStride>(stats, validRow, validCol);
+    } else if constexpr (isColRpt) {
+        unsigned tailElements = validCol % elementsPerRepeat;
+        if (tailElements) {
+            BinS2LCountMode<T, dstStride, srcStride>(stats, validRow, validCol);
+        } else {
+            BinS2LNormModeColVLAlign<T, elementsPerRepeat, dstStride, srcStride>(stats, validRow, validCol);
+        }
+    } else {
+        BinS2LNormModeRowRpt<T, TileDataDst::Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(
+            stats, validRow, validCol);
+    }
+}
+
 template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
           unsigned dstStride, unsigned srcStride>
 PTO_INTERNAL void TBinSInstr(CostModelStats &stats, unsigned validRow, unsigned validCol)
@@ -153,7 +133,7 @@ PTO_INTERNAL void TBinSInstr(CostModelStats &stats, unsigned validRow, unsigned 
         if constexpr (enbleCountMode) {
             BinS1LCountMode<T>(stats, validRow, validCol);
         } else {
-            BinS1LNormMode<T, elementsPerRepeat, blockSizeElem, TileDataDst::Cols>(stats, validRow, validCol);
+            Bin1LNormMode<T, elementsPerRepeat, blockSizeElem, dstStride, TileDataDst::Cols>(stats, validRow, validCol);
         }
     } else {
         if (tileDataContinue)
@@ -168,28 +148,13 @@ PTO_INTERNAL void TBinSInstr(CostModelStats &stats, unsigned validRow, unsigned 
                         BinS1LCountMode<T>(stats, validRow, validCol);
                     }
                 else {
-                    BinS1LNormMode<T, elementsPerRepeat, blockSizeElem, TileDataDst::Cols>(stats, validRow, validCol);
+                    Bin1LNormMode<T, elementsPerRepeat, blockSizeElem, dstStride, TileDataDst::Cols>(stats, validRow,
+                                                                                                     validCol);
                 }
             }
         else {
-            constexpr unsigned normColRepeat = TileDataDst::Cols / elementsPerRepeat;
-            constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < PTO_SMALL_RPT) &&
-                                       ((TileDataSrc::Rows * normColRepeat) < PTO_SMALL_RPT);
-            constexpr bool isColRpt =
-                (TileDataDst::Rows < (normColRepeat + 1)) && (TileDataSrc::Rows < (normColRepeat + 1));
-            if constexpr (countMode) {
-                BinS2LCountMode<T, dstStride, srcStride>(stats, validRow, validCol);
-            } else if constexpr (isColRpt) {
-                unsigned tailElements = validCol % elementsPerRepeat;
-                if (tailElements) {
-                    BinS2LCountMode<T, dstStride, srcStride>(stats, validRow, validCol);
-                } else {
-                    BinS2LNormModeColVLAlign<T, elementsPerRepeat, dstStride, srcStride>(stats, validRow, validCol);
-                }
-            } else {
-                BinS2LNormModeRowRpt<T, TileDataDst::Rows, elementsPerRepeat, blockSizeElem, dstStride, srcStride>(
-                    stats, validRow, validCol);
-            }
+            TBinSInstrNonContinuousPath<T, TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstStride,
+                                        srcStride>(stats, validRow, validCol);
         }
     }
 }
