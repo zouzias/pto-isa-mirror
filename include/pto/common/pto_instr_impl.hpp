@@ -278,4 +278,20 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #endif
 
+#ifdef __COSTMODEL
+#include "pto/costmodel/a2a3/TAbs.hpp"
+#include "pto/costmodel/a2a3/TAdd.hpp"
+#include "pto/costmodel/a2a3/TAddS.hpp"
+#include "pto/costmodel/a2a3/TAssign.hpp"
+#include "pto/costmodel/a2a3/TDivS.hpp"
+#include "pto/costmodel/a2a3/TExp.hpp"
+#include "pto/costmodel/a2a3/TLoad.hpp"
+#include "pto/costmodel/a2a3/TMinS.hpp"
+#include "pto/costmodel/a2a3/TMul.hpp"
+#include "pto/costmodel/a2a3/TMulS.hpp"
+#include "pto/costmodel/a2a3/TSqrt.hpp"
+#include "pto/costmodel/a2a3/TStore.hpp"
+#include "pto/costmodel/a2a3/TSub.hpp"
+#endif
+
 #endif
