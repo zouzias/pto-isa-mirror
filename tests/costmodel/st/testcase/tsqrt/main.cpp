@@ -32,10 +32,12 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false, float profiling,
+          float accuracy>
 void LaunchTSqrt(T *out, T *src, void *stream);
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false, float profiling,
+          float accuracy>
 void test_tsqrt()
 {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);

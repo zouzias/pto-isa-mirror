@@ -45,7 +45,6 @@ AICORE void runTAbs(__gm__ T __out__ *out, __gm__ T __in__ *src)
     float precision = 1 - fabs(profiling - costResult) / profiling;
     bool ret = precision > accuracy;
     EXPECT_TRUE(ret);
-
 }
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>

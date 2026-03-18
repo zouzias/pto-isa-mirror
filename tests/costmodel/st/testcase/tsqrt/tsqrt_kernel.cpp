@@ -15,7 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false, float profiling,
+          float accuracy>
 __global__ AICORE void runTSqrt(__gm__ T __out__ *out, __gm__ T __in__ *src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, kGRows_, kGCols_>;
@@ -50,16 +51,20 @@ __global__ AICORE void runTSqrt(__gm__ T __out__ *out, __gm__ T __in__ *src)
     EXPECT_TRUE(ret);
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool isInPlace = false, float profiling,
+          float accuracy>
 void LaunchTSqrt(T *out, T *src, void *stream)
 {
     if constexpr (std::is_same_v<T, aclFloat16>)
-        runTSqrt<half, kGRows_, kGCols_, kTRows_, kTCols_, isInPlace, profiling, accuracy>((half *)(out), (half *)(src));
+        runTSqrt<half, kGRows_, kGCols_, kTRows_, kTCols_, isInPlace, profiling, accuracy>((half *)(out),
+                                                                                           (half *)(src));
     else
         runTSqrt<T, kGRows_, kGCols_, kTRows_, kTCols_, isInPlace, profiling, accuracy>(out, src);
 }
 
 template void LaunchTSqrt<float, 64, 64, 64, 64, true, 128.0f, 0.0f>(float *out, float *src, void *stream);
 template void LaunchTSqrt<float, 64, 64, 64, 64, false, 128.0f, 0.0f>(float *out, float *src, void *stream);
-template void LaunchTSqrt<aclFloat16, 64, 64, 64, 64, true, 128.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
-template void LaunchTSqrt<aclFloat16, 64, 64, 64, 64, false, 128.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTSqrt<aclFloat16, 64, 64, 64, 64, true, 128.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src,
+                                                                          void *stream);
+template void LaunchTSqrt<aclFloat16, 64, 64, 64, 64, false, 128.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src,
+                                                                           void *stream);

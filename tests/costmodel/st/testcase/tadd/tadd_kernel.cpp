@@ -55,13 +55,16 @@ template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float 
 void LaunchTAdd(T *out, T *src0, T *src1, void *stream)
 {
     if constexpr (std::is_same_v<T, aclFloat16>)
-        runTAdd<half, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>((half *)(out), (half *)(src0), (half *)(src1));
+        runTAdd<half, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>((half *)(out), (half *)(src0),
+                                                                               (half *)(src1));
     else
         runTAdd<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(out, src0, src1);
 }
 
 template void LaunchTAdd<float, 64, 64, 64, 64, 160.0f, 0.0f>(float *out, float *src0, float *src1, void *stream);
-template void LaunchTAdd<int32_t, 64, 64, 64, 64, 150.0f, 0.0f>(int32_t *out, int32_t *src0, int32_t *src1, void *stream);
-template void LaunchTAdd<aclFloat16, 16, 256, 16, 256, 150.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
-                                                       void *stream);
-template void LaunchTAdd<int16_t, 64, 64, 64, 64, 150.0f, 0.0f>(int16_t *out, int16_t *src0, int16_t *src1, void *stream);
+template void LaunchTAdd<int32_t, 64, 64, 64, 64, 150.0f, 0.0f>(int32_t *out, int32_t *src0, int32_t *src1,
+                                                                void *stream);
+template void LaunchTAdd<aclFloat16, 16, 256, 16, 256, 150.0f, 0.0f>(aclFloat16 *out, aclFloat16 *src0,
+                                                                     aclFloat16 *src1, void *stream);
+template void LaunchTAdd<int16_t, 64, 64, 64, 64, 150.0f, 0.0f>(int16_t *out, int16_t *src0, int16_t *src1,
+                                                                void *stream);

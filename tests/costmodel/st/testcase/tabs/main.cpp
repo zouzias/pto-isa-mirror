@@ -26,7 +26,6 @@ protected:
     {}
 };
 
-
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
 void LaunchTAbs(T *out, T *src, void *stream);
 
