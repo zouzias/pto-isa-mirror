@@ -815,6 +815,16 @@ PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS &src0, typename TileDataS
     return {};
 }
 
+template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode, int offset,
+          typename... WaitEvents>
+PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst,
+                             TileDataTmp &tmp, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TGATHER_IMPL<TileDataD, TileDataS, TileDataC, TileDataTmp, cmpMode, offset>(dst, src0, k_value, cdst, tmp);
+    return {};
+}
+
 template <typename TileData, typename T, int descending, typename... WaitEvents>
 PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents &... events)
 {

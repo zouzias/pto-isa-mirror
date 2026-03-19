@@ -127,42 +127,58 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
     TGather<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
-__tf__ AICORE void TGather_cmp(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src0,
-                        typename TileDataC::TileDType __in__ cdst, typename TileDataS::DType __in__ k_value, unsigned srcValidCol,
-                        unsigned srcValidRow)
+template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode, uint32_t offset>
+__tf__ AICORE void TGather_cmp(typename TileDataD::TileDType __out__ dst, typename TileDataC::TileDType __in__ cdst,
+                        typename TileDataTmp::TileDType __in__ tmp, typename TileDataS::DType __in__ k_value,
+                        unsigned srcValidCol, unsigned srcValidRow)
 {
-    __ubuf__ typename TileDataD::DType *dstPtr = (__ubuf__ typename TileDataD::DType *)__cce_get_tile_ptr(dst);
-    __ubuf__ typename TileDataS::DType *src0Ptr = (__ubuf__ typename TileDataS::DType *)__cce_get_tile_ptr(src0);
+    using T = typename TileDataD::DType;
+    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ typename TileDataC::DType *cdstPtr = (__ubuf__ typename TileDataC::DType *)__cce_get_tile_ptr(cdst);
+    __ubuf__ uint8_t *cmpsTmpPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(tmp);
+    uint32_t indexTmpAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(cmpsTmpPtr)) +
+                                TileDataTmp::Rows * TileDataTmp::Cols * sizeof(uint8_t);
+    __ubuf__ T *indexTmpPtr = (__ubuf__ T *)get_imm(indexTmpAddr);
 
-    constexpr unsigned dstRowStride = TileDataD::Cols;
-    for (int i = 0; i < srcValidRow; i ++) {
-        
+    for (int i = 0; i < TileDataS::Rows * TileDataS::Cols; i++) {
+        *(indexTmpPtr + i) = offset + i;
     }
+    PtoSetWaitFlag<PIPE_S, PIPE_V>();
+
+    set_mask_count();
+    set_vector_mask(0, srcValidCol);
+    for (int i = 0; i < srcValidRow; i++) {
+        vreducev2(reinterpret_cast<__ubuf__ uint32_t *>(dstPtr + i * TileDataD::RowStride),
+                  reinterpret_cast<__ubuf__ uint32_t *>(indexTmpPtr + i * TileDataS::RowStride),
+                  reinterpret_cast<__ubuf__ uint32_t *>(cmpsTmpPtr + i * TileDataTmp::RowStride),
+                  1, 1, 0, 8, 0);
+        // PtoSetWaitFlag<PIPE_S, PIPE_V>();
+        *(cdstPtr + i) = (T)get_rsvd_cnt();
+    }
+    set_mask_norm();
+    set_vector_mask(-1, -1);
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
-PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst)
+template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode, uint32_t offset>
+PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst, TileDataTmp &tmp)
 {
     static_assert(
         std::is_same_v<typename TileDataD::DType, uint32_t> || std::is_same_v<typename TileDataD::DType, int32_t>,
         "Fix: TGATHER Dst data type must be int32_t/uint32_t.");
     static_assert(
-        std::is_same_v<typename TileDataS::DType, float> || std::is_same_v<typename TileDataS::DType, uint32_t> ||
-            std::is_same_v<typename TileDataS::DType, int32_t> || std::is_same_v<typename TileDataS::DType, uint16_t> ||
-            std::is_same_v<typename TileDataS::DType, int16_t> || std::is_same_v<typename TileDataS::DType, half>,
-        "Fix: TGATHER Src data type must be int16_t/uint16_t/int32_t/uint32_t/half/float.");
+        std::is_same_v<typename TileDataS::DType, float> || std::is_same_v<typename TileDataS::DType, half> ||
+            (std::is_same_v<typename TileDataS::DType, int32_t> && cmpMode == CmpMode::EQ), 
+        "Fix: TGATHER Src data type must be int32_t/half/float.");
     static_assert((cmpMode == CmpMode::GT || cmpMode == CmpMode::EQ), "Fix: TGATHER only support GT or EQ mode");
     static_assert((TileDataD::Loc == TileType::Vec) && (TileDataS::Loc == TileType::Vec),
                 "Fix: TGATHER expect vec TileType");
 
+    TCMPS_IMPL(tmp, src0, k_value, cmpMode);
+
     unsigned sValidCols = src0.GetValidCol();
     unsigned sValidRows = src0.GetValidRow();
-    // unsigned dValidCols = dst.GetValidCol();
-    // unsigned dValidRows = dst.GetValidRow();
 
-    TGather_cmp<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst.data(), src0.data(), cdst.data(), k_value,
+    TGather_cmp<TileDataD, TileDataS, TileDataC, TileDataTmp, cmpMode, offset>(dst.data(), cdst.data(), tmp.data(), k_value,
                                                                 sValidCols, sValidRows);
 }
 } // namespace pto
