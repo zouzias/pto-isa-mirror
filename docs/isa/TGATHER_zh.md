@@ -65,27 +65,27 @@ PTO_INST RecordEvent TGATHER(DstTileData& dst, SrcTileData& src, WaitEvents&... 
 ## 约束
 
 - **基于索引的 gather：实现检查 (A2A3)**:
-  - `sizeof(DstTileData::DType)` 对应类型必须是 `int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`float` 之一。
-  - `sizeof(Src1TileData::DType)` 对应类型必须是 `int32_t`、`uint32_t` 之一。
-  - `DstTileData::DType` 必须与 `Src0TileData::DType` 类型相同。
-  - `src1.GetValidCol() == Src1TileData::Cols` 且 `dst.GetValidCol() == DstTileData::Cols`。
+    - `sizeof(DstTileData::DType)` 对应类型必须是 `int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`float` 之一。
+    - `sizeof(Src1TileData::DType)` 对应类型必须是 `int32_t`、`uint32_t` 之一。
+    - `DstTileData::DType` 必须与 `Src0TileData::DType` 类型相同。
+    - `src1.GetValidCol() == Src1TileData::Cols` 且 `dst.GetValidCol() == DstTileData::Cols`。
 - **基于索引的 gather：实现检查 (A5)**:
-  - `sizeof(DstTileData::DType)` 对应类型必须是 `int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`float` 之一。
-  - `sizeof(Src1TileData::DType)` 对应类型必须是 `int16_t`、`uint16_t`、`int32_t`、`uint32_t` 之一。
-  - `DstTileData::DType` 必须与 `Src0TileData::DType` 类型相同。
-  - `src1.GetValidCol() == Src1TileData::Cols` 且 `dst.GetValidCol() == DstTileData::Cols`。
+    - `sizeof(DstTileData::DType)` 对应类型必须是 `int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`float` 之一。
+    - `sizeof(Src1TileData::DType)` 对应类型必须是 `int16_t`、`uint16_t`、`int32_t`、`uint32_t` 之一。
+    - `DstTileData::DType` 必须与 `Src0TileData::DType` 类型相同。
+    - `src1.GetValidCol() == Src1TileData::Cols` 且 `dst.GetValidCol() == DstTileData::Cols`。
 - **基于掩码模式的 gather：实现检查 (A2A3)**:
-  - 源元素大小必须是 `2` 或 `4` 字节。
-  - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t` 或 `float` 之一。
-  - `dst` 和 `src` 必须都是 `TileType::Vec` 且行主序。
-  - `sizeof(dst element) == sizeof(src element)` 且 `dst.GetValidCol() == DstTileData::Cols`（连续的目标存储）。
+    - 源元素大小必须是 `2` 或 `4` 字节。
+    - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t` 或 `float` 之一。
+    - `dst` 和 `src` 必须都是 `TileType::Vec` 且行主序。
+    - `sizeof(dst element) == sizeof(src element)` 且 `dst.GetValidCol() == DstTileData::Cols`（连续的目标存储）。
 - **基于掩码模式的 gather：实现检查 (A5)**:
-  - 源元素大小必须是 `1`、`2` 或 `4` 字节。
-  - `dst` 和 `src` 必须都是 `TileType::Vec` 且行主序。
-  - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`、`float8_e4m3_t`、`float8_e5m2_t` 或 `hifloat8_t` 之一。
-  - 支持的数据类型限制为目标定义的集合（通过实现中的 `static_assert` 强制执行），且 `sizeof(dst element) == sizeof(src element)`，`dst.GetValidCol() == DstTileData::Cols`（连续的目标存储）。
+    - 源元素大小必须是 `1`、`2` 或 `4` 字节。
+    - `dst` 和 `src` 必须都是 `TileType::Vec` 且行主序。
+    - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`、`float8_e4m3_t`、`float8_e5m2_t` 或 `hifloat8_t` 之一。
+    - 支持的数据类型限制为目标定义的集合（通过实现中的 `static_assert` 强制执行），且 `sizeof(dst element) == sizeof(src element)`，`dst.GetValidCol() == DstTileData::Cols`（连续的目标存储）。
 - **边界 / 有效性**:
-  - 索引边界不通过显式运行时断言进行验证；超出范围的索引行为由目标定义。
+    - 索引边界不通过显式运行时断言进行验证；超出范围的索引行为由目标定义。
 
 ## 示例
 

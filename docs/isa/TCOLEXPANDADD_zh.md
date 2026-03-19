@@ -46,7 +46,7 @@ pto.tcolexpandadd ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc1, typename... WaitEvents>
-PTO_INST RecordEvent TCOLEXPANDADD(TileDataDst &dst, TileDataDst &src0, TileDataSrc1 &src1, WaitEvents&... events);
+PTO_INST RecordEvent TCOLEXPANDADD(TileDataDst &dst, TileDataDst &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
 ## 约束

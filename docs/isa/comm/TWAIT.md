@@ -42,12 +42,12 @@ PTO_INST void TWAIT(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 ## Constraints
 
 - **Type constraints**:
-  - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
+    - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-  - `signalData` must point to local address (on current NPU).
+    - `signalData` must point to local address (on current NPU).
 - **Shape semantics**:
-  - For single signal: Shape is `<1,1,1,1,1>`.
-  - For signal tensor: Shape determines the multi-dimensional region (up to 5-D) to wait on. All signals in the tensor must satisfy the condition.
+    - For single signal: Shape is `<1,1,1,1,1>`.
+    - For signal tensor: Shape determines the multi-dimensional region (up to 5-D) to wait on. All signals in the tensor must satisfy the condition.
 - **Comparison operators** (WaitCmp):
   | Value | Condition |
   |-------|-----------|

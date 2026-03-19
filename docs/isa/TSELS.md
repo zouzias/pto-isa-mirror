@@ -31,13 +31,13 @@ Synchronous form:
 %dst = tsel %mask, %src, %scalar : !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tsels %src0, %src1, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
@@ -47,25 +47,25 @@ pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dt
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, typename TileDataSrc::DType scalar,
-                           WaitEvents &... events);
+template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, TileDataTmp &tmp, typename TileDataSrc::DType scalar, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-  - `sizeof(TileDataDst::DType)` and `sizeof(TileDataSrc::DType)` must be `2` or `4` bytes.
-  - Supported `DType`: `int16_t`, `uint16_t`, `int32_t, `uint32_t`, `half`, `float`.
-  - No explicit assertions are enforced on the mask tile type/shape; mask encoding is target-defined.
-  - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
+    - `sizeof(TileDataDst::DType)` and `sizeof(TileDataSrc::DType)` must be `2` or `4` bytes.
+    - Supported `DType`: `int16_t`, `uint16_t`, `int32_t, `uint32_t`, `half`, `float`.
+    - No explicit assertions are enforced on the mask tile type/shape; mask encoding is target-defined.
+    - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
 - **Implementation checks (A5)**:
-  - `sizeof(TileData::DType)` must be `2` or `4` bytes.
-  - Supported `DType`: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
-  - No explicit assertions are enforced on the mask tile type/shape; mask encoding is target-defined.
-  - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
+    - `sizeof(TileData::DType)` must be `2` or `4` bytes.
+    - Supported `DType`: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
+    - No explicit assertions are enforced on the mask tile type/shape; mask encoding is target-defined.
+    - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
 - **Mask encoding**:
-  - The mask tile is interpreted as packed predicate bits in a target-defined layout.
+    - The mask tile is interpreted as packed predicate bits in a target-defined layout.
 
 ## Examples
 

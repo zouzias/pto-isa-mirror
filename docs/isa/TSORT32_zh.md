@@ -44,22 +44,22 @@ pto.tsort32 ins(%src : !pto.tile_buf<...>) outs(%dst, %idx : !pto.tile_buf<...>,
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename IdxTileData>
-PTO_INST RecordEvent TSORT32(DstTileData& dst, SrcTileData& src, IdxTileData& idx);
+PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &idx);
 
 template <typename DstTileData, typename SrcTileData, typename IdxTileData, typename TmpTileData>
-PTO_INST RecordEvent TSORT32(DstTileData& dst, SrcTileData& src, IdxTileData& idx, TmpTileData& tmp);
+PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &idx, TmpTileData &tmp);
 ```
 
 ## 约束
 
 - `TSORT32` 不接受 `WaitEvents&...` 参数，也不在内部调用 `TSYNC(...)`；如有需要请显式同步。
 - **实现检查 (A2A3/A5)**:
-  - `DstTileData::DType` 必须是 `half` 或 `float`。
-  - `SrcTileData::DType` 必须与 `DstTileData::DType` 匹配。
-  - `IdxTileData::DType` 必须是 `uint32_t`。
-  - `dst`/`src`/`idx` Tile 位置必须是 `TileType::Vec`，且都必须是行主序（`isRowMajor`）。
+    - `DstTileData::DType` 必须是 `half` 或 `float`。
+    - `SrcTileData::DType` 必须与 `DstTileData::DType` 匹配。
+    - `IdxTileData::DType` 必须是 `uint32_t`。
+    - `dst`/`src`/`idx` Tile 位置必须是 `TileType::Vec`，且都必须是行主序（`isRowMajor`）。
 - **有效区域**:
-  - 实现使用 `dst.GetValidRow()` 作为行数，并使用 `src.GetValidCol()` 确定每行需要排序的 32 元素块的数量。
+    - 实现使用 `dst.GetValidRow()` 作为行数，并使用 `src.GetValidCol()` 确定每行需要排序的 32 元素块的数量。
 
 ## 示例
 

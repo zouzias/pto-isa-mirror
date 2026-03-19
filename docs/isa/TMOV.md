@@ -38,13 +38,13 @@ The PTO AS design recommends splitting `TMOV` into a family of ops:
 %v1    = tmov.v2v %v0   : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tmov.s2d %src  : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -55,50 +55,46 @@ Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events);
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events);
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 
 template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events);
-
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
-          typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, WaitEvents&... events);
-
-template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
-          typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, WaitEvents&... events);
-
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
-          typename... WaitEvents>
-PTO_INST RecordEvent TMOV_FP(DstTileData& dst, SrcTileData& src, FpTileData& fp, WaitEvents&... events);
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode,
           ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, FpTileData& fp, WaitEvents&... events);
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-  - Shapes must match: `SrcTileData::Rows == DstTileData::Rows` and `SrcTileData::Cols == DstTileData::Cols`.
-  - Supported location pairs (compile-time checked):
+    - Shapes must match: `SrcTileData::Rows == DstTileData::Rows` and `SrcTileData::Cols == DstTileData::Cols`.
+    - Supported location pairs (compile-time checked):
     - `Mat -> Left/Right/Bias/Scaling`
     - `Vec -> Vec`
     - `Acc -> Mat` (including optional pre-quant / relu / fp variants via overloads)
-  - For `Acc -> Mat`, additional fractal/type constraints are enforced (e.g., `Acc` uses NZ-like fractal, `Mat` uses 512B fractal, and only specific dtype conversions are allowed).
+    - For `Acc -> Mat`, additional fractal/type constraints are enforced (e.g., `Acc` uses NZ-like fractal, `Mat` uses 512B fractal, and only specific dtype conversions are allowed).
 - **Implementation checks (A5)**:
-  - For `Mat -> *`, shapes must match; for some `Vec` moves, the effective copy size is the min of src/dst valid rows/cols.
-  - Supported location pairs include (target-dependent):
+    - For `Mat -> *`, shapes must match; for some `Vec` moves, the effective copy size is the min of src/dst valid rows/cols.
+    - Supported location pairs include (target-dependent):
     - `Mat -> Left/Right/Bias/Scaling/Scale`
     - `Vec -> Vec` and `Vec -> Mat`
     - `Acc -> Vec` and `Acc -> Mat` (including optional pre-quant / relu / fp variants via overloads)
-  - For `Mat -> Left/Right`, additional fractal and dtype constraints are enforced via `CommonCheck` (source fractal must be compatible and element types must match).
-  - For `Acc -> Vec/Mat`, additional fractal/type/alignment constraints are enforced via `CheckTMovAccValid`.
-  - For `Mat -> Scale`, additional fractal and dtype constraints are enforced via `CommonCheckMX` (source fractal must be compatible and element types must match).
+    - For `Mat -> Left/Right`, additional fractal and dtype constraints are enforced via `CommonCheck` (source fractal must be compatible and element types must match).
+    - For `Acc -> Vec/Mat`, additional fractal/type/alignment constraints are enforced via `CheckTMovAccValid`.
+    - For `Mat -> Scale`, additional fractal and dtype constraints are enforced via `CommonCheckMX` (source fractal must be compatible and element types must match).
 
 ## Examples
 

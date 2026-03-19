@@ -27,13 +27,13 @@ Synchronous form:
 tstore.fp %src, %fp, %sv_out[%c0, %c0]
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 pto.tstore.fp %src, %fp, %mem : (!pto.tile<...>, !pto.tile<...>, !pto.partition_tensor_view<MxNxdtype>) -> ()
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem : !pto.partition_tensor_view<MxNxdtype>)
@@ -43,23 +43,23 @@ pto.tstore.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem 
 Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants.hpp`:
 
 ```cpp
-template <typename TileData, typename GlobalData, typename FpTileData,
-          AtomicType atomicType = AtomicType::AtomicNone, typename... WaitEvents>
-PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, WaitEvents&... events);
+template <typename TileData, typename GlobalData, typename FpTileData, AtomicType atomicType = AtomicType::AtomicNone,
+          ReluPreMode reluPreMode = ReluPreMode::NoRelu, typename... WaitEvents>
+PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-  - The fp store path is implemented via `TSTORE_IMPL(dst, src, fp)` and uses the same accumulator-to-GM legality checks as quantized accumulator stores:
+    - The fp store path is implemented via `TSTORE_IMPL(dst, src, fp)` and uses the same accumulator-to-GM legality checks as quantized accumulator stores:
     - Destination layout must be ND or NZ.
     - Source dtype must be `int32_t` or `float`.
     - Static shape constraints: `1 <= TileData::Cols <= 4095`; if ND then `1 <= TileData::Rows <= 8192`; if NZ then `1 <= TileData::Rows <= 65535` and `TileData::Cols % 16 == 0`.
     - Runtime: `1 <= src.GetValidCol() <= 4095`.
-  - No explicit `static_assert` is enforced on `FpTileData` (the implementation uses `fp` to set FPC state).
+    - No explicit `static_assert` is enforced on `FpTileData` (the implementation uses `fp` to set FPC state).
 - **Implementation checks (A5)**:
-  - Implemented via `TSTORE_IMPL(dst, src, fp)` and validated by `CheckStaticAcc<..., true>()` for the accumulator path (ND/NZ only, `int32_t/float` source dtype, rows/cols ranges).
-  - No explicit `static_assert` is enforced on `FpTileData` (the implementation uses `fp` to set FPC state).
+    - Implemented via `TSTORE_IMPL(dst, src, fp)` and validated by `CheckStaticAcc<..., true>()` for the accumulator path (ND/NZ only, `int32_t/float` source dtype, rows/cols ranges).
+    - No explicit `static_assert` is enforced on `FpTileData` (the implementation uses `fp` to set FPC state).
 
 ## Examples
 

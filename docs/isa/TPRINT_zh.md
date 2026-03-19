@@ -46,12 +46,8 @@ pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>
 
 声明于 `include/pto/common/pto_instr.hpp`：
 ```cpp
-template <typename T, typename... WaitEvents>
-PTO_INST RecordEvent TPRINT(T &src, WaitEvents&... events) {
-  TSYNC(events...);
-  MAP_INSTR_IMPL(TPRINT, src);
-  return {};
-}
+template <typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPRINT(TileData &src, WaitEvents &... events);
 ```
 
 ### 支持的 T 类型
@@ -61,9 +57,9 @@ PTO_INST RecordEvent TPRINT(T &src, WaitEvents&... events) {
 ## 约束
 
 - **支持的元素类型**:
-  - 浮点数：`float`、`half`
-  - 有符号整数：`int8_t`、`int16_t`、`int32_t`
-  - 无符号整数：`uint8_t`、`uint16_t`、`uint32_t`
+    - 浮点数：`float`、`half`
+    - 有符号整数：`int8_t`、`int16_t`、`int32_t`
+    - 无符号整数：`uint8_t`、`uint16_t`、`uint32_t`
 - **对于 Tiles**：`TileData::Loc == TileType::Vec`（仅向量 tiles 可打印）。
 - **对于 GlobalTensor**：布局必须是 `Layout::ND`、`Layout::DN` 或 `Layout::NZ` 之一。
 

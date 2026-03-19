@@ -44,21 +44,21 @@ pto.tgatherb ins(%src, %offsets : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename TileDataOffset, typename... WaitEvents>
-PTO_INST RecordEvent TGATHERB(TileDataDst& dst, TileDataSrc& src, TileDataOffset& offset, WaitEvents&... events);
+PTO_INST RecordEvent TGATHERB(TileDataDst &dst, TileDataSrc &src, TileDataOffset &offset, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - 目标布局必须是行主序（`TileDataDst::isRowMajor`）。
-  - 目标元素大小必须是 `1`、`2` 或 `4` 字节（通过辅助函数中的 `static_assert` 强制执行）。
-  - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
+    - 目标布局必须是行主序（`TileDataDst::isRowMajor`）。
+    - 目标元素大小必须是 `1`、`2` 或 `4` 字节（通过辅助函数中的 `static_assert` 强制执行）。
+    - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
 - **实现检查 (A5)**:
-  - 目标元素大小必须是 `1`、`2` 或 `4` 字节。
-  - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
+    - 目标元素大小必须是 `1`、`2` 或 `4` 字节。
+    - `SrcTileData::DType`/`DstTileData::DType` 必须是 `int8_t` 或 `uint8_t` 或 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
 - **偏移量解释**:
-  - 偏移量被实现解释为 `uint32_t` 值（字节偏移量）。
-  - 偏移量边界不通过显式运行时断言进行验证；超出范围的偏移量由目标定义。
+    - 偏移量被实现解释为 `uint32_t` 值（字节偏移量）。
+    - 偏移量边界不通过显式运行时断言进行验证；超出范围的偏移量由目标定义。
 
 ## 示例
 

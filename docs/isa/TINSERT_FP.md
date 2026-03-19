@@ -18,8 +18,9 @@ Vector-quantization variant of `TINSERT` that also takes an `fp` (scaling) tile.
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp,
-                            uint16_t indexRow, uint16_t indexCol, WaitEvents&... events);
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 ```
 
 ## Math Interpretation
@@ -30,13 +31,13 @@ Unless otherwise specified, semantics are defined over the valid region and targ
 
 PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tinsert_fp %src, %fp, %idxrow, %idxcol : (!pto.tile<...>, !pto.tile<...>, dtype, dtype) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tinsert_fp ins(%src, %fp, %idxrow, %idxcol : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)

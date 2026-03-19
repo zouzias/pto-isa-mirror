@@ -41,20 +41,20 @@ pto.tmov.fp ins(%src, %fp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 声明于 `include/pto/common/pto_instr.hpp` 和 `include/pto/common/constants.hpp`：
 
 ```cpp
-template <typename DstTileData, typename SrcTileData, typename FpTileData,
-          ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
-PTO_INST RecordEvent TMOV_FP(DstTileData& dst, SrcTileData& src, FpTileData& fp, WaitEvents&... events);
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - fp 路径仅支持累加器转换，并通过 `TMOV_IMPL(dst, src, fp)` 中的内部编译时检查进行验证。
-  - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
+    - fp 路径仅支持累加器转换，并通过 `TMOV_IMPL(dst, src, fp)` 中的内部编译时检查进行验证。
+    - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
 - **实现检查 (A5)**:
-  - 通过 `CheckTMovAccValid(...)` 和 `TMOV_IMPL(dst, src, fp)` 中的相关编译时检查进行验证。
-  - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
-  - 目标位置取决于目标（fp 路径支持 `Vec` 或 `Mat`）。
+    - 通过 `CheckTMovAccValid(...)` 和 `TMOV_IMPL(dst, src, fp)` 中的相关编译时检查进行验证。
+    - `FpTileData::Loc` 必须是 `TileType::Scaling`（`static_assert`）。
+    - 目标位置取决于目标（fp 路径支持 `Vec` 或 `Mat`）。
 
 ## 示例
 

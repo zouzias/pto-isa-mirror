@@ -31,13 +31,13 @@ Synchronous form:
 %acc1 = tmatmul.acc %acc0, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %c_out = pto.tmatmul.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tmatmul.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c_out : !pto.tile_buf<...>)
@@ -48,16 +48,22 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_ACC(TileRes& cOutMatrix, TileRes& cInMatrix, TileLeft& aMatrix, TileRight& bMatrix,
-                                 WaitEvents&... events);
+PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events);
+
+template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
+PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events);
+
+template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMATMUL_ACC(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - All constraints from `TMATMUL` apply to the `(cOutMatrix, aMatrix, bMatrix)` triple.
 - **Implementation notes (A2A3/A5)**:
-  - `TMATMUL_ACC_IMPL` uses `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, and `bMatrix.GetValidCol()` for `m/k/n`.
-  - `cInMatrix` is not validated by explicit assertions in the current implementations (target-defined behavior).
+    - `TMATMUL_ACC_IMPL` uses `aMatrix.GetValidRow()`, `aMatrix.GetValidCol()`, and `bMatrix.GetValidCol()` for `m/k/n`.
+    - `cInMatrix` is not validated by explicit assertions in the current implementations (target-defined behavior).
 
 ## Examples
 

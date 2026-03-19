@@ -11,8 +11,8 @@ Data flow:
 ## Template Parameter
 
 - `engine`:
-  - `DmaEngine::SDMA` (default)
-  - `DmaEngine::URMA` (todo)
+    - `DmaEngine::SDMA` (default)
+    - `DmaEngine::URMA` (todo)
 
 > **Important (SDMA path)**  
 > `TGET_ASYNC` with `DmaEngine::SDMA` currently supports **only flat contiguous logical 1D tensors**.  

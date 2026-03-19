@@ -33,13 +33,13 @@ Synchronous form:
 %dst = tci %S {descending = false} : !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tci %scalar {descending = false} : dtype -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tci ins(%scalar {descending = false} : dtype) outs(%dst : !pto.tile_buf<...>)
@@ -50,17 +50,17 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileData, typename T, int descending, typename... WaitEvents>
-PTO_INST RecordEvent TCI(TileData& dst, T S, WaitEvents&... events);
+PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (A2A3/A5)**:
-  - `TileData::DType` must be exactly the same type as the scalar template parameter `T`.
-  - `dst/scalar` element types must be identical, and must be one of: `int32_t`, `uint32_t`, `int16_t`, `uint16_t`.
-  - `TileData::Cols != 1` (this is the condition enforced by the implementation).
+    - `TileData::DType` must be exactly the same type as the scalar template parameter `T`.
+    - `dst/scalar` element types must be identical, and must be one of: `int32_t`, `uint32_t`, `int16_t`, `uint16_t`.
+    - `TileData::Cols != 1` (this is the condition enforced by the implementation).
 - **Valid region**:
-  - The implementation uses `dst.GetValidCol()` as the sequence length and does not consult `dst.GetValidRow()`.
+    - The implementation uses `dst.GetValidCol()` as the sequence length and does not consult `dst.GetValidRow()`.
 
 ## Examples
 

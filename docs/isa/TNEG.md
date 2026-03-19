@@ -25,13 +25,13 @@ Synchronous form:
 %dst = tneg %src : !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tneg %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -41,8 +41,8 @@ pto.tneg ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TNEG(TileData& dst, TileData& src, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TNEG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
 ## Constraints

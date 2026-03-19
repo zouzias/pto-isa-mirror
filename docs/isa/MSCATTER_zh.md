@@ -44,7 +44,7 @@ pto.mscatter ins(%src, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%mem 
 
 ```cpp
 template <typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
-PTO_INST RecordEvent MSCATTER(GlobalData& dst, TileSrc& src, TileInd& indexes, WaitEvents&... events);
+PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &... events);
 ```
 
 ## 约束

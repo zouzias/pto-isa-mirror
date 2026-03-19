@@ -50,18 +50,18 @@ PTO_INST RecordEvent TGET(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 ## Constraints
 
 - **Type constraints**:
-  - `GlobalSrcData::RawDType` must equal `GlobalDstData::RawDType`.
-  - `TileData::DType` must equal `GlobalSrcData::RawDType`.
-  - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
+    - `GlobalSrcData::RawDType` must equal `GlobalDstData::RawDType`.
+    - `TileData::DType` must equal `GlobalSrcData::RawDType`.
+    - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
 - **Memory constraints**:
-  - `srcGlobalData` must point to remote address (on source NPU).
-  - `dstGlobalData` must point to local address (on current NPU).
-  - `stagingTileData` / `pingTile` / `pongTile` must be pre-allocated in Unified Buffer.
+    - `srcGlobalData` must point to remote address (on source NPU).
+    - `dstGlobalData` must point to local address (on current NPU).
+    - `stagingTileData` / `pingTile` / `pongTile` must be pre-allocated in Unified Buffer.
 - **Valid region**:
-  - Transfer size is determined by `GlobalTensor` shape (auto-chunked to fit tile).
+    - Transfer size is determined by `GlobalTensor` shape (auto-chunked to fit tile).
 - **Ping-pong**:
-  - `pingTile` and `pongTile` must have the same type and dimensions.
-  - Must reside at non-overlapping UB offsets.
+    - `pingTile` and `pongTile` must have the same type and dimensions.
+    - Must reside at non-overlapping UB offsets.
 
 ## Examples
 

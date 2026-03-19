@@ -47,24 +47,24 @@ pto.tsel ins(%mask, %src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileData, typename MaskTile, typename... WaitEvents>
-PTO_INST RecordEvent TSEL(TileData& dst, MaskTile& selMask, TileData& src0, TileData& src1, WaitEvents&... events);
+template <typename TileData, typename MaskTile, typename TmpTile, typename... WaitEvents>
+PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, TileData &src1, TmpTile &tmp, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `sizeof(TileData::DType)` 必须是 `2` 或 `4` 字节。
-  - `TileData::DType` 必须是 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
-  - 掩码 tile 类型/形状不强制执行显式断言；掩码编码由目标定义。
-  - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
+    - `sizeof(TileData::DType)` 必须是 `2` 或 `4` 字节。
+    - `TileData::DType` 必须是 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
+    - 掩码 tile 类型/形状不强制执行显式断言；掩码编码由目标定义。
+    - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
 - **实现检查 (A5)**:
-  - `sizeof(TileData::DType)` 必须是 `2` 或 `4` 字节。
-  - `TileData::DType` 必须是 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
-  - `TSEL_IMPL` 不强制执行显式的 `static_assert`/`PTO_ASSERT` 检查。
-  - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
+    - `sizeof(TileData::DType)` 必须是 `2` 或 `4` 字节。
+    - `TileData::DType` 必须是 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
+    - `TSEL_IMPL` 不强制执行显式的 `static_assert`/`PTO_ASSERT` 检查。
+    - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
 - **掩码编码**:
-  - 掩码 tile 被解释为目标定义布局中的打包谓词位。
+    - 掩码 tile 被解释为目标定义布局中的打包谓词位。
 
 ## 示例
 

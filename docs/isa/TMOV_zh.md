@@ -57,50 +57,46 @@ pto.tmov ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events);
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events);
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 
 template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, WaitEvents&... events);
-
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
-          typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, WaitEvents&... events);
-
-template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
-          typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, uint64_t preQuantScalar, WaitEvents&... events);
-
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
-          typename... WaitEvents>
-PTO_INST RecordEvent TMOV_FP(DstTileData& dst, SrcTileData& src, FpTileData& fp, WaitEvents&... events);
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, WaitEvents &... events);
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData, AccToVecMode mode,
           ReluPreMode reluMode = ReluPreMode::NoRelu, typename... WaitEvents>
-PTO_INST RecordEvent TMOV(DstTileData& dst, SrcTileData& src, FpTileData& fp, WaitEvents&... events);
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, FpTileData &fp, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, AccToVecMode mode, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - 形状必须匹配：`SrcTileData::Rows == DstTileData::Rows` 且 `SrcTileData::Cols == DstTileData::Cols`。
-  - 支持的位置对（编译时检查）：
+    - 形状必须匹配：`SrcTileData::Rows == DstTileData::Rows` 且 `SrcTileData::Cols == DstTileData::Cols`。
+    - 支持的位置对（编译时检查）：
     - `Mat -> Left/Right/Bias/Scaling`
     - `Vec -> Vec`
     - `Acc -> Mat`（包括通过重载的可选预量化/relu/fp 变体）
-  - 对于 `Acc -> Mat`，强制执行额外的分形/类型约束（例如，`Acc` 使用类 NZ 分形，`Mat` 使用 512B 分形，且仅允许特定的数据类型转换）。
+    - 对于 `Acc -> Mat`，强制执行额外的分形/类型约束（例如，`Acc` 使用类 NZ 分形，`Mat` 使用 512B 分形，且仅允许特定的数据类型转换）。
 - **实现检查 (A5)**:
-  - 对于 `Mat -> *`，形状必须匹配；对于某些 `Vec` 移动，有效复制大小是 src/dst 有效行/列的最小值。
-  - 支持的位置对包括（取决于目标）：
+    - 对于 `Mat -> *`，形状必须匹配；对于某些 `Vec` 移动，有效复制大小是 src/dst 有效行/列的最小值。
+    - 支持的位置对包括（取决于目标）：
     - `Mat -> Left/Right/Bias/Scaling/Scale`
     - `Vec -> Vec` 和 `Vec -> Mat`
     - `Acc -> Vec` 和 `Acc -> Mat`（包括通过重载的可选预量化/relu/fp 变体）
-  - 对于 `Mat -> Left/Right`，通过 `CommonCheck` 强制执行额外的分形和数据类型约束（源分形必须兼容且元素类型必须匹配）。
-  - 对于 `Acc -> Vec/Mat`，通过 `CheckTMovAccValid` 强制执行额外的分形/类型/对齐约束。
-  - 对于 `Mat -> Scale`，通过 `CommonCheckMX` 强制执行额外的分形和数据类型约束（源分形必须兼容且元素类型必须匹配）。
+    - 对于 `Mat -> Left/Right`，通过 `CommonCheck` 强制执行额外的分形和数据类型约束（源分形必须兼容且元素类型必须匹配）。
+    - 对于 `Acc -> Vec/Mat`，通过 `CheckTMovAccValid` 强制执行额外的分形/类型/对齐约束。
+    - 对于 `Mat -> Scale`，通过 `CommonCheckMX` 强制执行额外的分形和数据类型约束（源分形必须兼容且元素类型必须匹配）。
 
 ## 示例
 
