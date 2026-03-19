@@ -104,7 +104,7 @@ void test_gather_index()
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 
-    bool ret = ResultCmp(golden, devFinal, 0.001f);
+    bool ret = ResultCmp(golden, devFinal, 0);
 
     EXPECT_TRUE(ret);
 }
