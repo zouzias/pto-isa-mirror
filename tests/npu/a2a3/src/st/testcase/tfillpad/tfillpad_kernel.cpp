@@ -157,8 +157,8 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
     volatile uint64_t t0, t1, t2;
 
     using TileDataP =
-        Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, kTCols_, SLayout::NoneBox, 512, FillPadVal_>;
-    TileDataP vecTileP(kTRows_);
+        Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, FillPadVal_>;
+    TileDataP vecTileP(kTRows_, kTCols_);
     TASSIGN(vecTileP, (uint64_t)ubaddr1);
 
     if constexpr (expand) {
