@@ -41,18 +41,22 @@ pto.tcolexpandmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) out
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc1, typename... WaitEvents>
-PTO_INST RecordEvent TROWEXPANDMUL(TileDataDst& dst, TileDataDst& src0, TileDataSrc1& src1, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TROWEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
+
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TROWEXPANDMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查**:
-  - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType`（编译时）。
-  - `TileDataDst::DType`、`TileDataSrc0::DType`、`TileDataSrc1::DType` 必须是以下之一：`half`、`float`。
-  - Tile 形状/布局约束（编译时）：`TileDataDst::isRowMajor`。
-  - 模式 1：`src1` 预期提供**每行一个标量**（即，其有效形状必须覆盖 `R` 个值）。
-  - 模式 2：`src1` 预期提供**每行 32 字节数据**。
+    - `TileDataDst::DType == TileDataSrc0::DType == TileDataSrc1::DType`（编译时）。
+    - `TileDataDst::DType`、`TileDataSrc0::DType`、`TileDataSrc1::DType` 必须是以下之一：`half`、`float`。
+    - Tile 形状/布局约束（编译时）：`TileDataDst::isRowMajor`。
+    - 模式 1：`src1` 预期提供**每行一个标量**（即，其有效形状必须覆盖 `R` 个值）。
+    - 模式 2：`src1` 预期提供**每行 32 字节数据**。
 
 ## 示例
 

@@ -38,7 +38,7 @@ pto.treshape ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
-PTO_INST RecordEvent TRESHAPE(TileDataOut& dst, TileDataIn& src, WaitEvents&... events);
+PTO_INST RecordEvent TRESHAPE(TileDataOut &dst, TileDataIn &src, WaitEvents &... events);
 ```
 
 ## 约束
@@ -48,7 +48,7 @@ PTO_INST RecordEvent TRESHAPE(TileDataOut& dst, TileDataIn& src, WaitEvents&... 
 - **Tile 类型必须匹配**：`TileDataIn::Loc == TileDataOut::Loc`。
 - **总字节大小必须匹配**：`sizeof(InElem) * InNumel == sizeof(OutElem) * OutNumel`。
 - **不允许 boxed/non-boxed 转换**：
-  - 不能在 `SLayout::NoneBox` 与 boxed 布局之间进行 reshape。
+    - 不能在 `SLayout::NoneBox` 与 boxed 布局之间进行 reshape。
 
 ## 示例
 

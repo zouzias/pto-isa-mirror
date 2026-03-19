@@ -25,13 +25,13 @@ Synchronous form:
 tassign %tile, %addr : !pto.tile<...>, index
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 pto.tassign %tile, %addr : !pto.tile<...>, dtype
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tassign ins(%tile, %addr : !pto.tile_buf<...>, dtype)
@@ -94,10 +94,10 @@ Capacities can be overridden at build time via `-D` flags (e.g.
 ## Constraints
 
 - **Implementation checks**:
-  - If `obj` is a Tile:
+    - If `obj` is a Tile:
     - In manual mode (when `__PTO_AUTO__` is not defined), `addr` must be an integral type and is reinterpreted as the tile's storage address.
     - In auto mode (when `__PTO_AUTO__` is defined), `TASSIGN(tile, addr)` is a no-op.
-  - If `obj` is a `GlobalTensor`:
+    - If `obj` is a `GlobalTensor`:
     - `addr` must be a pointer type.
     - The pointed-to element type must match `GlobalTensor::DType`.
 

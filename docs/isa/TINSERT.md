@@ -27,13 +27,13 @@ Synchronous form:
 %dst = tinsert %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tinsert %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tinsert ins(%src[%r0, %r1] : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -44,8 +44,14 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
-                            uint16_t indexRow, uint16_t indexCol, WaitEvents&... events);
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 ```
 
 ## Constraints

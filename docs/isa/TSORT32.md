@@ -27,13 +27,13 @@ Synchronous form:
 %dst, %idx = tsort32 %src : !pto.tile<...> -> (!pto.tile<...>, !pto.tile<...>)
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst, %idx = pto.tsort32 %src : !pto.tile<...> -> (!pto.tile<...>, !pto.tile<...>)
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tsort32 ins(%src : !pto.tile_buf<...>) outs(%dst, %idx : !pto.tile_buf<...>, !pto.tile_buf<...>)
@@ -44,22 +44,22 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename IdxTileData>
-PTO_INST RecordEvent TSORT32(DstTileData& dst, SrcTileData& src, IdxTileData& idx);
+PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &idx);
 
 template <typename DstTileData, typename SrcTileData, typename IdxTileData, typename TmpTileData>
-PTO_INST RecordEvent TSORT32(DstTileData& dst, SrcTileData& src, IdxTileData& idx, TmpTileData& tmp);
+PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &idx, TmpTileData &tmp);
 ```
 
 ## Constraints
 
 - `TSORT32` does not take `WaitEvents&...` and does not call `TSYNC(...)` internally; synchronize explicitly if needed.
 - **Implementation checks (A2A3/A5)**:
-  - `DstTileData::DType` must be `half` or `float`.
-  - `SrcTileData::DType` must match `DstTileData::DType`.
-  - `IdxTileData::DType` must be `uint32_t`.
-  - `dst/src/idx` tile location must be `TileType::Vec`, and all must be row-major (`isRowMajor`).
+    - `DstTileData::DType` must be `half` or `float`.
+    - `SrcTileData::DType` must match `DstTileData::DType`.
+    - `IdxTileData::DType` must be `uint32_t`.
+    - `dst/src/idx` tile location must be `TileType::Vec`, and all must be row-major (`isRowMajor`).
 - **Valid region**:
-  - The implementation uses `dst.GetValidRow()` as the number of rows and uses `src.GetValidCol()` to determine how many 32-element blocks to sort per row.
+    - The implementation uses `dst.GetValidRow()` as the number of rows and uses `src.GetValidCol()` to determine how many 32-element blocks to sort per row.
 
 ## Examples
 

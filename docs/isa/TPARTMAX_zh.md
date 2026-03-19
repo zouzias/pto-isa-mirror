@@ -49,20 +49,20 @@ pto.tpartmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
-PTO_INST RecordEvent TPARTMAX(TileDataDst& dst, TileDataSrc0& src0, TileDataSrc1& src1, WaitEvents&... events);
+PTO_INST RecordEvent TPARTMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `dst`/`src0`/`src1` 元素类型必须相同，且必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
-  - 三个 Tile 都必须是行主序（`isRowMajor`）。
-  - 运行时：若 `dst.GetValidRow() == 0` 或 `dst.GetValidCol() == 0`，操作提前返回。
-  - 运行时：实现要求至少一个输入的有效区域与 `dst` 的有效区域匹配，另一个输入的有效区域不大于 `dst` 的有效区域（否则断言失败）。
+    - `dst`/`src0`/`src1` 元素类型必须相同，且必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
+    - 三个 Tile 都必须是行主序（`isRowMajor`）。
+    - 运行时：若 `dst.GetValidRow() == 0` 或 `dst.GetValidCol() == 0`，操作提前返回。
+    - 运行时：实现要求至少一个输入的有效区域与 `dst` 的有效区域匹配，另一个输入的有效区域不大于 `dst` 的有效区域（否则断言失败）。
 - **实现检查 (A5)**:
-  - `dst`/`src0`/`src1` 元素类型必须相同，且必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
-  - 运行时：若 `src0`/`src1`/`dst` 中任意一个的有效区域为零，操作提前返回。
-  - 要求 `src0` 和 `src1` 的有效区域在两个维度上均不超过 `dst` 的有效区域；其他模式不受支持（由目标定义行为）。
+    - `dst`/`src0`/`src1` 元素类型必须相同，且必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
+    - 运行时：若 `src0`/`src1`/`dst` 中任意一个的有效区域为零，操作提前返回。
+    - 要求 `src0` 和 `src1` 的有效区域在两个维度上均不超过 `dst` 的有效区域；其他模式不受支持（由目标定义行为）。
 
 ## 示例
 

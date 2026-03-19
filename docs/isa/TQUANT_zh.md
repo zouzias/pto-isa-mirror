@@ -33,8 +33,16 @@ pto.tquant ins(%src, %qp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-PTO_INST RecordEvent TQUANT(TileDataSrc &src, TileDataExp &exp, TileDataOut &dst,
-                            TileDataMax &max, TileDataSrc &scaling, WaitEvents&... events);
+template <auto quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
+          typename... WaitEvents>
+PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max, TileDataSrc *scaling, WaitEvents &... events);
+
+template <auto quant_type, auto store_mode, typename TileDataOut, typename TileDataSrc, typename TileDataExp,
+          typename TileDataMax, typename TileDataIdx, typename... WaitEvents>
+PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataExp *exp, TileDataMax *max, TileDataSrc *scaling, TileDataExp *exp_zz, TileDataIdx *vgather_idx, WaitEvents &... events);
+
+template <auto quant_type, typename TileDataOut, typename TileDataSrc, typename TileDataPara, typename... WaitEvents>
+PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &scale, TileDataPara *offset = nullptr, WaitEvents &... events);
 ```
 
 ## 约束

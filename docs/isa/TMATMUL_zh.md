@@ -50,26 +50,29 @@ pto.tmatmul ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, WaitEvents&... events);
+PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events);
+
+template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
+PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - 支持的 `(CType, AType, BType)` 三元组：
+    - 支持的 `(CType, AType, BType)` 三元组：
     - `(int32_t, int8_t, int8_t)`
     - `(float, half, half)`
     - `(float, float, float)`
     - `(float, bfloat16_t, bfloat16_t)`
-  - 静态形状约束：`TileLeft::Rows == TileRes::Rows`、`TileLeft::Cols == TileRight::Rows`、`TileRight::Cols == TileRes::Cols`。
-  - Tile 位置：`TileLeft::Loc == Left`、`TileRight::Loc == Right`、`TileRes::Loc == Acc`。
-  - 运行时：`m/k/n`（取自 `aMatrix.GetValidRow()`、`aMatrix.GetValidCol()`、`bMatrix.GetValidCol()`）必须在 `[1, 4095]` 范围内。
+    - 静态形状约束：`TileLeft::Rows == TileRes::Rows`、`TileLeft::Cols == TileRight::Rows`、`TileRight::Cols == TileRes::Cols`。
+    - Tile 位置：`TileLeft::Loc == Left`、`TileRight::Loc == Right`、`TileRes::Loc == Acc`。
+    - 运行时：`m/k/n`（取自 `aMatrix.GetValidRow()`、`aMatrix.GetValidCol()`、`bMatrix.GetValidCol()`）必须在 `[1, 4095]` 范围内。
 - **实现检查 (A5)**:
-  - 累加器类型必须是 `int32_t` 或 `float`。
+    - 累加器类型必须是 `int32_t` 或 `float`。
     - 如果是 `int32_t`：`AType == int8_t` 且 `BType == int8_t`。
     - 如果是 `float`：支持 `half/bfloat16_t/float` 和选定的 fp8 对（目标定义）。
-  - 静态形状约束：`TileLeft::Rows == TileRes::Rows`、`TileLeft::Cols == TileRight::Rows`、`TileRight::Cols == TileRes::Cols`。
-  - 强制执行分形/布局约束：
+    - 静态形状约束：`TileLeft::Rows == TileRes::Rows`、`TileLeft::Cols == TileRight::Rows`、`TileRight::Cols == TileRes::Cols`。
+    - 强制执行分形/布局约束：
     - Left：`Loc == Left`、`!isRowMajor`、`SFractal == RowMajor`
     - Right：`Loc == Right`、`isRowMajor`、`SFractal == ColMajor`
     - Acc：`Loc == Acc`、`!isRowMajor`、`SFractal == RowMajor`

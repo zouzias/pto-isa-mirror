@@ -106,7 +106,7 @@ svg { font-family: Arial, Helvetica, sans-serif; }
 <text x="593" y="374" class="axisText">c</text>
 <text x="553" y="408" class="axisText" text-anchor="end">r</text>
 <text x="600" y="140" class="subtitle" text-anchor="middle" fill="#C46A1C">dst[r,c] = src[r,0]</text>
-<path d="M 556 300 L 556 324 L 600 324 L 600 348" class="arrow" stroke="#C46A1C" marker-end="url(#arrow)" />
+<path d="M 600 288 L 600 360" class="arrow" stroke="#C46A1C" marker-end="url(#arrow)" />
 <rect x="40" y="502" width="1120" height="194" class="procBox" />
 <text x="56" y="528" class="procTitle">Procedure (conceptual)</text>
 <text x="56" y="554" class="procText" xml:space="preserve">

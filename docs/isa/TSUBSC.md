@@ -25,13 +25,13 @@ Synchronous form:
 %dst = tsubsc %src0, %scalar, %src1 : !pto.tile<...>, f32, !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tsubsc %src0, %scalar, %src1 : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tsubsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -42,8 +42,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSUBSC(TileData& dst, TileData& src0, typename TileData::DType scalar, TileData& src1,
-                            WaitEvents&... events);
+PTO_INST RecordEvent TSUBSC(TileData &dst, TileData &src0, typename TileData::DType scalar, TileData &src1, WaitEvents &... events);
 ```
 
 ## Constraints

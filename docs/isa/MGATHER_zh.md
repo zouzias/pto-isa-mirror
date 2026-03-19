@@ -43,7 +43,7 @@ pto.mgather ins(%mem, %idx : !pto.partition_tensor_view<MxNxdtype>, !pto.tile_bu
 
 ```cpp
 template <typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
-PTO_INST RecordEvent MGATHER(TileDst& dst, GlobalData& src, TileInd& indexes, WaitEvents&... events);
+PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &... events);
 ```
 
 ## 约束

@@ -41,21 +41,21 @@ pto.tmins ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileData, typename T, typename... WaitEvents>
-PTO_INST RecordEvent TMINS(TileData& dst, TileData& src, T scalar, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TMINS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `TMINS_IMPL` 除了通用的 Tile 类型不变量外，不强制执行额外的 `static_assert`/`PTO_ASSERT` 检查。
+    - `TMINS_IMPL` 除了通用的 Tile 类型不变量外，不强制执行额外的 `static_assert`/`PTO_ASSERT` 检查。
 - **实现检查 (A5)**:
-  - `TileData::DType` 必须是以下之一： `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
-  - 运行时： `src.GetValidCol() == dst.GetValidCol()`.
+    - `TileData::DType` 必须是以下之一： `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`, `bfloat16_t`.
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
+    - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
+    - 运行时： `src.GetValidCol() == dst.GetValidCol()`.
 - **有效区域**:
-  - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域.
+    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域.
 
 ## 示例
 

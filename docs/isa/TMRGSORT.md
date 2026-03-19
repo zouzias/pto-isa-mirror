@@ -26,7 +26,7 @@ Synchronous form (conceptual):
     : !pto.tile<...>, !pto.tile<...> -> (!pto.tile<...>, vector<4xi16>)
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tmrgsort %src, %blockLen : (!pto.tile<...>, dtype) -> !pto.tile<...>
@@ -34,7 +34,7 @@ Synchronous form (conceptual):
  : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, vector<4xi16>)
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tmrgsort ins(%src, %blockLen : !pto.tile_buf<...>, dtype)  outs(%dst : !pto.tile_buf<...>)
@@ -46,40 +46,34 @@ outs(%dst, %executed : !pto.tile_buf<...>, vector<4xi16>)
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename DstTileData, typename TmpTileData, typename Src0TileData,
-          typename Src1TileData, typename Src2TileData, typename Src3TileData,
-          bool exhausted, typename... WaitEvents>
-PTO_INST RecordEvent TMRGSORT(DstTileData& dst, MrgSortExecutedNumList& executedNumList,
-                             TmpTileData& tmp, Src0TileData& src0, Src1TileData& src1,
-                             Src2TileData& src2, Src3TileData& src3, WaitEvents&... events);
+template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData,
+          typename Src2TileData, typename Src3TileData, bool exhausted, typename... WaitEvents>
+PTO_INST RecordEvent TMRGSORT(DstTileData &dst, MrgSortExecutedNumList &executedNumList, TmpTileData &tmp, Src0TileData &src0, Src1TileData &src1, Src2TileData &src2, Src3TileData &src3, WaitEvents &... events);
 
-template <typename DstTileData, typename TmpTileData, typename Src0TileData,
-          typename Src1TileData, typename Src2TileData, bool exhausted, typename... WaitEvents>
-PTO_INST RecordEvent TMRGSORT(DstTileData& dst, MrgSortExecutedNumList& executedNumList,
-                             TmpTileData& tmp, Src0TileData& src0, Src1TileData& src1,
-                             Src2TileData& src2, WaitEvents&... events);
+template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData,
+          typename Src2TileData, bool exhausted, typename... WaitEvents>
+PTO_INST RecordEvent TMRGSORT(DstTileData &dst, MrgSortExecutedNumList &executedNumList, TmpTileData &tmp, Src0TileData &src0, Src1TileData &src1, Src2TileData &src2, WaitEvents &... events);
 
-template <typename DstTileData, typename TmpTileData, typename Src0TileData,
-          typename Src1TileData, bool exhausted, typename... WaitEvents>
-PTO_INST RecordEvent TMRGSORT(DstTileData& dst, MrgSortExecutedNumList& executedNumList,
-                             TmpTileData& tmp, Src0TileData& src0, Src1TileData& src1, WaitEvents&... events);
+template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData, bool exhausted,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMRGSORT(DstTileData &dst, MrgSortExecutedNumList &executedNumList, TmpTileData &tmp, Src0TileData &src0, Src1TileData &src1, WaitEvents &... events);
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TMRGSORT(DstTileData& dst, SrcTileData& src, uint32_t blockLen, WaitEvents&... events);
+PTO_INST RecordEvent TMRGSORT(DstTileData &dst, SrcTileData &src, uint32_t blockLen, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (A2A3/A5)**:
-  - Element type must be `half` or `float` and must match across `dst/tmp/src*` tiles.
-  - All tiles must be `TileType::Vec`, row-major, and have `Rows == 1` (list stored in a single row).
-  - UB memory usage is checked (compile-time and runtime) against target limits (single `Cols` across inputs plus `tmp`/`dst`).
+    - Element type must be `half` or `float` and must match across `dst/tmp/src*` tiles.
+    - All tiles must be `TileType::Vec`, row-major, and have `Rows == 1` (list stored in a single row).
+    - UB memory usage is checked (compile-time and runtime) against target limits (single `Cols` across inputs plus `tmp`/`dst`).
 - **Single-list variant (`TMRGSORT(dst, src, blockLen)`)**:
-  - `blockLen` must be a multiple of 64 (as checked by the implementation).
-  - `src.GetValidCol()` must be an integer multiple of `blockLen * 4`.
-  - `repeatTimes = src.GetValidCol() / (blockLen * 4)` must be in `[1, 255]`.
+    - `blockLen` must be a multiple of 64 (as checked by the implementation).
+    - `src.GetValidCol()` must be an integer multiple of `blockLen * 4`.
+    - `repeatTimes = src.GetValidCol() / (blockLen * 4)` must be in `[1, 255]`.
 - **Multi-list variants**:
-  - `tmp` is required and `executedNumList` is written by the implementation; supported list counts and exact semantics are target-defined.
+    - `tmp` is required and `executedNumList` is written by the implementation; supported list counts and exact semantics are target-defined.
 
 ## Examples
 

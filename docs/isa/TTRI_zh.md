@@ -46,7 +46,7 @@ pto.ttri ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ```cpp
 template <typename TileData, int isUpperOrLower, typename... WaitEvents>
-PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents&... events);
+PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events);
 ```
 
 ## 约束

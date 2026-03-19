@@ -25,13 +25,13 @@ Synchronous form:
 %dst = trecip %src : !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.trecip %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -41,23 +41,23 @@ pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TRECIP(TileData& dst, TileData& src, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TRECIP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (NPU)**:
-  - `TileData::DType` must be one of: `float` or `half`;
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`);
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
-  - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-  - Tile layout must be row-major (`TileData::isRowMajor`).
-  - A3's TRECIP instruction does not support setting the source Tile and destination Tile to the same memory.
+    - `TileData::DType` must be one of: `float` or `half`;
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`);
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
+    - Tile layout must be row-major (`TileData::isRowMajor`).
+    - A3's TRECIP instruction does not support setting the source Tile and destination Tile to the same memory.
 - **Valid region**:
-  - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 - **Domain / NaN**:
-  - Division-by-zero behavior is target-defined; the CPU simulator asserts in debug builds.
+    - Division-by-zero behavior is target-defined; the CPU simulator asserts in debug builds.
 
 ## Examples
 

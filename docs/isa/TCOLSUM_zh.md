@@ -46,9 +46,11 @@ pto.tcolsum ins(%src, %tmp {isBinary = false} : !pto.tile_buf<...>, !pto.tile_bu
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
+template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
+PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, WaitEvents &... events);
+
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TCOLSUM(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, bool isBinary,
-                             WaitEvents&... events);
+PTO_INST RecordEvent TCOLSUM(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, bool isBinary, WaitEvents &... events);
 ```
 
 ## 约束
@@ -58,11 +60,11 @@ PTO_INST RecordEvent TCOLSUM(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp
 - Tile 位置：`dst`、`src`、`tmp` 必须是 `TileType::Vec`。
 - Tile 布局：所有 Tile 必须是 ND 分形（`isRowMajor` 且 `SLayout::NoneBox`）。
 - 数据类型一致性：
-  - A2A3：`src.DType` 必须是 `half`、`float`、`int16_t`、`int32_t` 之一，且 `dst.DType == tmp.DType == src.DType`。
-  - A5：`TColReduceCheck` 要求 `dst.DType == src.DType`；确切支持的 `src.DType` 集合由目标定义（参见 `include/pto/npu/a5/TColReduceOps.hpp`）。
+    - A2A3：`src.DType` 必须是 `half`、`float`、`int16_t`、`int32_t` 之一，且 `dst.DType == tmp.DType == src.DType`。
+    - A5：`TColReduceCheck` 要求 `dst.DType == src.DType`；确切支持的 `src.DType` 集合由目标定义（参见 `include/pto/npu/a5/TColReduceOps.hpp`）。
 - 运行期有效区域检查：
-  - A2A3：`src.GetValidCol() == dst.GetValidCol()`；若 `src.GetValidRow() == 0` 或 `src.GetValidCol() == 0` 则提前返回。
-  - A5：`srcValidRow` 和 `srcValidCol` 必须非零；`TColReduceCheck` 断言 `srcValidCol == dstValidCol`。
+    - A2A3：`src.GetValidCol() == dst.GetValidCol()`；若 `src.GetValidRow() == 0` 或 `src.GetValidCol() == 0` 则提前返回。
+    - A5：`srcValidRow` 和 `srcValidCol` 必须非零；`TColReduceCheck` 断言 `srcValidCol == dstValidCol`。
 
 ## 示例
 

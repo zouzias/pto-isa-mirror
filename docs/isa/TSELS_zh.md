@@ -47,25 +47,26 @@ pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dt
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSELS(TileData& dst, TileData& src0, TileData& src1, uint8_t selectMode, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, TileDataTmp &tmp, typename TileDataSrc::DType scalar, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `TileData::DType` 必须是以下之一： `half`, `float16_t`, `float`, `float32_t`.
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
-  - 运行时：实现期望 `src0/src1/dst` 具有匹配的有效行/列。
+    - `TileData::DType` 必须是以下之一： `half`, `float16_t`, `float`, `float32_t`.
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
+    - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
+    - 运行时：实现期望 `src0/src1/dst` 具有匹配的有效行/列。
 - **实现检查 (A5)**:
-  - `sizeof(TileData::DType)` 必须是 `1`、`2` 或 `4` 字节。
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
-  - 运行时：实现期望 `src0/src1/dst` 具有匹配的有效行/列。
-  - 填充行为取决于 `TileData::PadVal`（`Null`/`Zero` 与 `-INF/+INF` 模式）。
+    - `sizeof(TileData::DType)` 必须是 `1`、`2` 或 `4` 字节。
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
+    - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
+    - 运行时：实现期望 `src0/src1/dst` 具有匹配的有效行/列。
+    - 填充行为取决于 `TileData::PadVal`（`Null`/`Zero` 与 `-INF/+INF` 模式）。
 - **有效区域**:
-  - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
+    - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
 
 ## 示例
 

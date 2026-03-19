@@ -57,32 +57,32 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData& dst, TileData& src, FpTileData& fp, W
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - 源 tile 位置必须是以下之一：`TileType::Vec`、`TileType::Mat`、`TileType::Acc`。
-  - 运行时：所有 `dst.GetShape(dim)` 值和 `src.GetValidRow()/GetValidCol()` 必须 `> 0`。
-  - 对于 `TileType::Vec` / `TileType::Mat`：
+    - 源 tile 位置必须是以下之一：`TileType::Vec`、`TileType::Mat`、`TileType::Acc`。
+    - 运行时：所有 `dst.GetShape(dim)` 值和 `src.GetValidRow()/GetValidCol()` 必须 `> 0`。
+    - 对于 `TileType::Vec` / `TileType::Mat`：
     - `TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half`、`bfloat16_t`、`float`。
     - `sizeof(TileData::DType) == sizeof(GlobalData::DType)`。
     - 布局必须匹配 ND/DN/NZ（或特殊情况：`TileData::Rows == 1` 或 `TileData::Cols == 1`）。
     - 对于 `int64_t/uint64_t`，仅支持 ND->ND 或 DN->DN。
-  - 对于 `TileType::Acc`（包括量化/原子变体）：
+    - 对于 `TileType::Acc`（包括量化/原子变体）：
     - 目标布局必须是 ND 或 NZ。
     - 源数据类型必须是 `int32_t` 或 `float`。
     - 不使用量化时，目标数据类型必须是 `__gm__ int32_t/float/half/bfloat16_t`。
     - 静态形状约束：`1 <= TileData::Cols <= 4095`；如果是 ND 则 `1 <= TileData::Rows <= 8192`；如果是 NZ 则 `1 <= TileData::Rows <= 65535` 且 `TileData::Cols % 16 == 0`。
     - 运行时：`1 <= src.GetValidCol() <= 4095`。
 - **实现检查 (A5)**:
-  - 源 tile 位置必须是 `TileType::Vec` 或 `TileType::Acc`（此目标不支持 `Mat` 存储）。
-  - 对于 `TileType::Vec`：
+    - 源 tile 位置必须是 `TileType::Vec` 或 `TileType::Acc`（此目标不支持 `Mat` 存储）。
+    - 对于 `TileType::Vec`：
     - `sizeof(TileData::DType) == sizeof(GlobalData::DType)`。
     - `TileData::DType` 必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`int64_t`、`uint64_t`、`half`、`bfloat16_t`、`float`、`float8_e4m3_t`、`float8_e5m2_t`、`hifloat8_t`、`float4_e1m2x2_t`、`float4_e2m1x2_t`。
     - 布局必须匹配 ND/DN/NZ（或特殊情况：`TileData::Rows == 1` 或 `TileData::Cols == 1`）。
     - 强制执行额外的对齐约束（例如，对于 ND，行主序宽度（以字节为单位）必须是 32 的倍数；对于 DN，列主序高度（以字节为单位）必须是 32 的倍数，但有特殊情况例外）。
-  - 对于 `TileType::Acc`：
+    - 对于 `TileType::Acc`：
     - 目标布局必须是 ND 或 NZ；源数据类型必须是 `int32_t` 或 `float`。
     - 不使用量化时，目标数据类型必须是 `__gm__ int32_t/float/half/bfloat16_t`。
     - 静态形状约束与 A2A3 对于行/列的约束相同；`AtomicAdd` 额外限制目标数据类型为支持的原子类型。
 - **有效区域**:
-  - 实现使用 `src.GetValidRow()` / `src.GetValidCol()` 作为传输大小.
+    - 实现使用 `src.GetValidRow()` / `src.GetValidCol()` 作为传输大小.
 
 ## 示例
 

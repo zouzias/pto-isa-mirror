@@ -42,7 +42,7 @@ pto.trowexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TROWEXPAND(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events);
+PTO_INST RecordEvent TROWEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
 ## 约束
@@ -53,8 +53,8 @@ PTO_INST RecordEvent TROWEXPAND(TileDataDst& dst, TileDataSrc& src, WaitEvents&.
 - Tile 布局：`src` 和 `dst` 均为 ND 分形（`isRowMajor` 且 `SLayout::NoneBox`）。
 - 数据类型：A2A3/A5 元素类型必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
 - 运行期有效区域检查：
-  - A2A3：若 `dstValidRow`、`dstValidCol`、`srcValidRow`、`srcValidCol` 中任意一个为零则提前返回。
-  - A5：断言 `srcValidRow == dstValidRow`，且断言 `srcValidRow != 0 && srcValidCol != 0`。
+    - A2A3：若 `dstValidRow`、`dstValidCol`、`srcValidRow`、`srcValidCol` 中任意一个为零则提前返回。
+    - A5：断言 `srcValidRow == dstValidRow`，且断言 `srcValidRow != 0 && srcValidCol != 0`。
 
 ## 示例
 

@@ -41,15 +41,15 @@ PTO_INST bool TTEST(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp,
 ## Constraints
 
 - **Type constraints**:
-  - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
+    - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-  - `signalData` must point to local address (on current NPU).
+    - `signalData` must point to local address (on current NPU).
 - **Return value**:
-  - Returns `true` if condition is satisfied, `false` otherwise.
-  - For signal tensor, returns `true` only if ALL signals satisfy the condition.
+    - Returns `true` if condition is satisfied, `false` otherwise.
+    - For signal tensor, returns `true` only if ALL signals satisfy the condition.
 - **Shape semantics**:
-  - For single signal: Shape is `<1,1,1,1,1>`.
-  - For signal tensor: Shape determines the multi-dimensional region (up to 5-D) to test.
+    - For single signal: Shape is `<1,1,1,1,1>`.
+    - For signal tensor: Shape determines the multi-dimensional region (up to 5-D) to test.
 - **Comparison operators** (WaitCmp):
   | Value | Condition |
   |-------|-----------|

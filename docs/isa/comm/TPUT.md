@@ -60,20 +60,20 @@ PTO_INST RecordEvent TPUT(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobal
 ## Constraints
 
 - **Type constraints**:
-  - `GlobalSrcData::RawDType` must equal `GlobalDstData::RawDType`.
-  - `TileData::DType` must equal `GlobalSrcData::RawDType`.
-  - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
+    - `GlobalSrcData::RawDType` must equal `GlobalDstData::RawDType`.
+    - `TileData::DType` must equal `GlobalSrcData::RawDType`.
+    - `GlobalSrcData::layout` must equal `GlobalDstData::layout`.
 - **Memory constraints**:
-  - `dstGlobalData` must point to remote address (on target NPU).
-  - `srcGlobalData` must point to local address (on current NPU).
-  - `stagingTileData` / `pingTile` / `pongTile` must be pre-allocated in Unified Buffer.
+    - `dstGlobalData` must point to remote address (on target NPU).
+    - `srcGlobalData` must point to local address (on current NPU).
+    - `stagingTileData` / `pingTile` / `pongTile` must be pre-allocated in Unified Buffer.
 - **Valid region**:
-  - Transfer size is determined by `GlobalTensor` shape (auto-chunked to fit tile).
+    - Transfer size is determined by `GlobalTensor` shape (auto-chunked to fit tile).
 - **Atomic operation**:
-  - `atomicType` supports `AtomicNone` and `AtomicAdd`.
+    - `atomicType` supports `AtomicNone` and `AtomicAdd`.
 - **Ping-pong**:
-  - `pingTile` and `pongTile` must have the same type and dimensions.
-  - Must reside at non-overlapping UB offsets.
+    - `pingTile` and `pongTile` must have the same type and dimensions.
+    - Must reside at non-overlapping UB offsets.
 
 ## Examples
 
