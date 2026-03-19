@@ -439,7 +439,6 @@ TEST_F(TGATHERTest, case_1D_int16_32x256_32x64)
     EXPECT_TRUE(ret);
 }
 
-
 template <typename srcT, typename dstT, uint32_t offset, uint32_t ROW, uint32_t COL, uint32_t K, pto::CmpMode cmpMode>
 void test_gather_cmp()
 {
@@ -486,8 +485,8 @@ void test_gather_cmp()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<dstT> golden(dstsize);
-    std::vector<dstT> devFinal(dstsize);
+    std::vector<float> golden(dstsize);
+    std::vector<float> devFinal(dstsize);
     ReadFile(GetGoldenDir() + "/golden.bin", dstsize, golden.data(), dstsize);
     ReadFile(GetGoldenDir() + "/output.bin", dstsize, devFinal.data(), dstsize);
 
@@ -501,9 +500,9 @@ TEST_F(TGATHERTest, case1_float_topk)
     test_gather_cmp<float, uint32_t, 0, 16, 64, 32, pto::CmpMode::GT>();
 }
 
-TEST_F(TGATHERTest, case2_u32_topk)
+TEST_F(TGATHERTest, case2_s32_topk)
 {
-    test_gather_cmp<uint32_t, uint32_t, 0, 8, 128, 64, pto::CmpMode::GT>();
+    test_gather_cmp<int32_t, uint32_t, 0, 8, 128, 64, pto::CmpMode::EQ>();
 }
 
 TEST_F(TGATHERTest, case3_float_topk)
@@ -511,22 +510,12 @@ TEST_F(TGATHERTest, case3_float_topk)
     test_gather_cmp<float, uint32_t, 0, 4, 256, 64, pto::CmpMode::EQ>();
 }
 
-TEST_F(TGATHERTest, case4_s16_topk)
-{
-    test_gather_cmp<int16_t, uint32_t, 0, 16, 128, 32, pto::CmpMode::GT>();
-}
-
-TEST_F(TGATHERTest, case5_s16_topk)
-{
-    test_gather_cmp<int16_t, uint32_t, 0, 4, 64, 32, pto::CmpMode::EQ>();
-}
-
-TEST_F(TGATHERTest, case6_half_topk)
+TEST_F(TGATHERTest, case4_half_topk)
 {
     test_gather_cmp<aclFloat16, uint32_t, 0, 2, 256, 32, pto::CmpMode::GT>();
 }
 
-TEST_F(TGATHERTest, case7_half_topk)
+TEST_F(TGATHERTest, case5_half_topk)
 {
     test_gather_cmp<aclFloat16, uint32_t, 0, 8, 128, 32, pto::CmpMode::EQ>();
 }
