@@ -14,9 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
 #include "pto/common/pto_instr_impl.hpp"
-#ifndef __COSTMODEL
 #include "pto/comm/pto_comm_inst.hpp"
-#endif
 #include "pto/common/tassign_check.hpp"
 
 #define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
@@ -818,11 +816,12 @@ PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &id
     return {};
 }
 
-template <typename TileDataD, typename TileDataS0, typename TileDataS1, typename... WaitEvents>
-PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src1, WaitEvents &... events)
+template <typename TileDataD, typename TileDataS0, typename TileDataS1, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src1, TileDataTmp &tmp,
+                             WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TGATHER, dst, src0, src1);
+    MAP_INSTR_IMPL(TGATHER, dst, src0, src1, tmp);
     return {};
 }
 
