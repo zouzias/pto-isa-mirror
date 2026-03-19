@@ -104,7 +104,7 @@ void test_gather_index()
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize);
 
-    bool ret = ResultCmp(golden, devFinal, 0.001f);
+    bool ret = ResultCmp(golden, devFinal, 0);
 
     EXPECT_TRUE(ret);
 }
@@ -373,8 +373,8 @@ void test_gather_cmp()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<dstT> golden(dstsize);
-    std::vector<dstT> devFinal(dstsize);
+    std::vector<float> golden(dstsize);
+    std::vector<float> devFinal(dstsize);
     ReadFile(GetGoldenDir() + "/golden.bin", dstsize, golden.data(), dstsize);
     ReadFile(GetGoldenDir() + "/output.bin", dstsize, devFinal.data(), dstsize);
 
