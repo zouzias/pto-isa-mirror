@@ -221,6 +221,8 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
         // Float/Half implementation (original vcmax-based)
         TRowReduceInstr<Op, T, TileDataOut, TileDataIn, TileDataTmp>(stats, validCol, validRow);
     }
+
+    return stats;
 }
 
 template <typename T, typename Op, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
@@ -228,12 +230,13 @@ PTO_INTERNAL std::vector<CostModelStats> runRowReduceOps(const std::string &inst
 {
     int validCol = src.GetValidCol();
     int validRow = src.GetValidRow();
+    std::vector<CostModelStats> stats;
     TRowReduceCheck<TileDataOut, TileDataIn>(validRow, validCol, dst.GetValidRow());
     if (validCol == 0 || validRow == 0) {
-        return;
+        return stats;
     }
 
-    TRowReduce<T, Op, TileDataOut, TileDataIn, TileDataTmp>(instr_name, validCol, validRow);
+    return TRowReduce<T, Op, TileDataOut, TileDataIn, TileDataTmp>(instr_name, validCol, validRow);
 }
 
 } // namespace pto

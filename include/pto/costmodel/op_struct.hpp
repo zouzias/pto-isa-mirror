@@ -330,7 +330,7 @@ struct TRowReduceOp {
     }
 };
 
-struct TRowMaxOp : TRowReduceOp<T, TRowMaxOp<T>> {
+struct TRowMaxOp : TRowReduceOp<TRowMaxOp> {
     PTO_INTERNAL static void BinInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
                                           uint16_t src0RptStride, uint16_t src1RptStride, uint8_t dstBlockStride = 1,
                                           uint8_t src0BlockStride = 1, uint8_t src1BlockStride = 1)
