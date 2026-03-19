@@ -129,7 +129,7 @@ struct ROWMAX<int32_t> {
     using RegType = typename TypeGet<int32_t>::T;
     static PTO_INTERNAL void Accumulate(RegType &dst, RegType &src0, RegType &src1, MaskReg &pred)
     {
-        vmax(dst, src0, src1, pred, MODE_ZEROING);
+        vmax(dst, src0, src1, pred, MODE_ZEROING); // int32
     }
     static PTO_INTERNAL void Reduce(RegType &dst, RegType &src, MaskReg &pred)
     {
@@ -173,7 +173,7 @@ struct ROWMIN<int32_t> {
     using RegType = typename TypeGet<int32_t>::T;
     static PTO_INTERNAL void Accumulate(RegType &dst, RegType &src0, RegType &src1, MaskReg &pred)
     {
-        vmin(dst, src0, src1, pred, MODE_ZEROING);
+        vmin(dst, src0, src1, pred, MODE_ZEROING); // int32
     }
     static PTO_INTERNAL void Reduce(RegType &dst, RegType &src, MaskReg &pred)
     {
