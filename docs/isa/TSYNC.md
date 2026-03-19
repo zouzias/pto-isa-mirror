@@ -34,13 +34,13 @@ Single-op barrier form:
 tsync.op #pto.op<TADD>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 // Level 1 (SSA) does not support explicit synchronization primitives.
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.record_event[src_op, dst_op, eventID]
@@ -59,15 +59,15 @@ template <Op OpCode>
 PTO_INST void TSYNC();
 
 template <typename... WaitEvents>
-PTO_INST void TSYNC(WaitEvents&... events);
+PTO_INST void TSYNC(WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (`TSYNC<Op>()`)**:
-  - `TSYNC_IMPL<Op>()` only supports vector-pipeline ops (`static_assert(pipe == PIPE_V)` in `include/pto/common/event.hpp`).
+    - `TSYNC_IMPL<Op>()` only supports vector-pipeline ops (`static_assert(pipe == PIPE_V)` in `include/pto/common/event.hpp`).
 - **`TSYNC(events...)` semantics**:
-  - `TSYNC(events...)` calls `WaitAllEvents(events...)`, which invokes `events.Wait()` on each event token.
+    - `TSYNC(events...)` calls `WaitAllEvents(events...)`, which invokes `events.Wait()` on each event token.
 
 ## Examples
 

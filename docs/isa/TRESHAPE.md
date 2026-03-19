@@ -19,13 +19,13 @@ PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 %dst = treshape %src : !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.treshape %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.treshape ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -36,7 +36,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
-PTO_INST RecordEvent TRESHAPE(TileDataOut& dst, TileDataIn& src, WaitEvents&... events);
+PTO_INST RecordEvent TRESHAPE(TileDataOut &dst, TileDataIn &src, WaitEvents &... events);
 ```
 
 ## Constraints
@@ -46,7 +46,7 @@ Enforced by `TRESHAPE_IMPL`:
 - **Tile type must match**: `TileDataIn::Loc == TileDataOut::Loc`.
 - **Total byte size must match**: `sizeof(InElem) * InNumel == sizeof(OutElem) * OutNumel`.
 - **No boxed/non-boxed conversion**:
-  - cannot reshape between `SLayout::NoneBox` and boxed layouts.
+    - cannot reshape between `SLayout::NoneBox` and boxed layouts.
 
 ## Notes
 

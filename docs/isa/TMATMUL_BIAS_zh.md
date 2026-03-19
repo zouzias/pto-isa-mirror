@@ -50,19 +50,22 @@ pto.tmatmul.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pt
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileRight, typename TileBias, typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_BIAS(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData,
-                                  WaitEvents&... events);
+PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData, WaitEvents &... events);
+
+template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename TileBias,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData, WaitEvents &... events);
 ```
 
 ## 约束
 
 - 所有来自 `TMATMUL` 的约束都适用于 `(cMatrix, aMatrix, bMatrix)` 三元组。
 - **偏置约束 (A2A3)**:
-  - `TileBias::DType` 必须匹配 `TileRes::DType`。
-  - `TileBias::Loc == TileType::Bias` 且 `TileBias::Rows == 1`。
+    - `TileBias::DType` 必须匹配 `TileRes::DType`。
+    - `TileBias::Loc == TileType::Bias` 且 `TileBias::Rows == 1`。
 - **偏置约束 (A5)**:
-  - `TileBias::DType` 必须匹配 `TileRes::DType`。
-  - `TileBias::Loc == TileType::Bias`、`TileBias::Rows == 1` 且 `TileBias::isRowMajor`。
+    - `TileBias::DType` 必须匹配 `TileRes::DType`。
+    - `TileBias::Loc == TileType::Bias`、`TileBias::Rows == 1` 且 `TileBias::isRowMajor`。
 
 ## 示例
 

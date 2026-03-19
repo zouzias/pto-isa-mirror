@@ -25,14 +25,14 @@ Synchronous form:
 %dst = mgather %mem, %idx : !pto.memref<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.mgather %mem, %idx : (!pto.partition_tensor_view<MxNxdtype>, pto.tile<...>)
 -> !pto.tile<loc, dtype, rows, cols, blayout, slayout, fractal, pad>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.mgather ins(%mem, %idx : !pto.partition_tensor_view<MxNxdtype>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -43,7 +43,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
-PTO_INST RecordEvent MGATHER(TileDst& dst, GlobalData& src, TileInd& indexes, WaitEvents&... events);
+PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &... events);
 ```
 
 ## Constraints
