@@ -42,6 +42,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TSQRT */,
     PIPE_V /* TRSQRT */,
     PIPE_V /* TEXPANDS */,
+    PIPE_MTE2 /* TEXPANDS_MAT */,
     PIPE_V /* TPARTADD */,
     PIPE_V /* TPARTMUL */,
     PIPE_V /* TPARTMAX */,
@@ -99,6 +100,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_S /* TSETFMATRIX */,
     PIPE_S /* TSET_IMG2COL_RPT */,
     PIPE_S /* TSET_IMG2COL_PADDING */,
+    PIPE_V /* TCONCAT */,
     PIPE_V /* TDEQUANT */,
     PIPE_ALL /* OP_COUNT */,
 };
