@@ -1,163 +1,217 @@
-target_dir: /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st
-[  1%] Building CXX object testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/tmrgsort_kernel.cpp.o
+target_dir: /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st
+[  3%] Building CXX object testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/tmatmul_kernel.cpp.o
 
-[  2%] Building CXX object testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/tmatmul_kernel.cpp.o
+[  3%] Building CXX object testcase/ttrans/CMakeFiles/ttrans_kernel.dir/ttrans_kernel.cpp.o
+
+[  3%] Building CXX object testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/tmrgsort_kernel.cpp.o
 
 [  4%] Building CXX object testcase/tload/CMakeFiles/tload_kernel.dir/tload_kernel.cpp.o
 
-[  4%] Building CXX object testcase/ttrans/CMakeFiles/ttrans_kernel.dir/ttrans_kernel.cpp.o
+[  3%] Building CXX object testcase/tstore/CMakeFiles/tstore_kernel.dir/tstore_kernel.cpp.o
 
-[  4%] Building CXX object testcase/tstore/CMakeFiles/tstore_kernel.dir/tstore_kernel.cpp.o
+[  5%] Building CXX object testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/tcolsum_kernel.cpp.o
 
-[  5%] Building CXX object testcase/textract/CMakeFiles/textract_kernel.dir/textract_kernel.cpp.o
+[  6%] Building CXX object testcase/textract/CMakeFiles/textract_kernel.dir/textract_kernel.cpp.o
 
-[  6%] Building CXX object testcase/trowsum/CMakeFiles/trowsum_kernel.dir/trowsum_kernel.cpp.o
+[  7%] Building CXX object testcase/trowsum/CMakeFiles/trowsum_kernel.dir/trowsum_kernel.cpp.o
 
-[  7%] Building CXX object testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/tcolsum_kernel.cpp.o
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
 
-In file included from In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp:12:
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cppIn file included from :/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:11In file included from :
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:18:
 
-23In file included from :
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cppIn file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:::1723:
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
 
-11:
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
 
-In file included from In file included from :
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hppIn file included from ::1617:
+In file included from In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hppIn file included from :/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp23:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hppIn file included from :
+:In file included from 12/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:
 
-:In file included from 23/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:
+11In file included from ::
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hppIn file included from :/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp26::
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp18:In file included from 23:
 
-16::
+:
 
-17In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hppIn file included from In file included from :/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp23:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:In file included from 48::26/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp9::
+:18In file included from 16:
 
-16::
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppIn file included from :
 
- /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpperror: In file included from :48use of undeclared identifier 'st_atomic'/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:
+:In file included from 18/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:
 
-:926::
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hppIn file included from ::1626/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:
 
- error: /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:use of undeclared identifier 'st_atomic'48
+:In file included from 16:
 
-:9: error: use of undeclared identifier 'st_atomic'
+:
 
-        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hppIn file included from :/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp26/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp::
 
-In file included from         ^
+:4826::
 
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:9:48:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp 48error: ::use of undeclared identifier 'st_atomic':
 
+9911:::
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp        ^:
+  In file included from error: error: /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hppuse of undeclared identifier 'st_atomic':
 
-11:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9:         st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);error: 
-
-use of undeclared identifier 'st_atomic'        ^
+23use of undeclared identifier 'st_atomic':
 
 
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:18:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:18:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:18:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:18:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
 
         st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
 
         ^
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:11:
+        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+        ^
 
         st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
 
         ^
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
+        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);        ^
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+
+        ^        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);        ^
+
+
+
+
+
+        ^
 
         st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
 
         ^
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp:12:
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+    ^
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:11:
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
 
-        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-        ^
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);689
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+:    ^5
 
-        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
+: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-        ^
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:687:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+689    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
 
     ^
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:687:5/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:695:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp
+
+    ^
+
+:697/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+:    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+697:5/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
 :    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
 
@@ -165,43 +219,39 @@ In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kiri
 
  warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+In file included from     TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
 
     ^
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:695:5: warning: /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:748:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
 
-use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-    ^
-
-
-
-    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
 
     ^
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:758:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
+:23:
 
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:687:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
 
     ^
 
+:750:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp750::5:750 :warning: 5use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]:
 
+ warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);5
+
+:    ^ 
+
+warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:748:/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:695:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-
 
     ^
 
@@ -209,303 +259,253 @@ In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kiri
 
     ^
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:768:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:758:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
-
-    ^
-
-:748:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
 
     ^
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:768:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:758:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:768:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp:12:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:687:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:695:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
 
     ^
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:748:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:758:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
 
     ^
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:768:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);:
 
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1612:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1612:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1612:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
-
-    ^
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:11:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:687:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:695:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:748:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:758:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:768:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:687:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:695:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1612:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:748:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:758:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:768:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:687:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:695:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1612:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1612:5: /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppwarning: :748use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]:
+760    ^:
 
 5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);:770:5: 
+
+warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    ^
+
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
 
 
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppuse of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
+
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
+
+:750:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+:760    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
+
+:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+5    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+In file included from     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    ^/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
+
+    ^
+
+
+
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+
+    ^
+
+warning: /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
+
+    ^
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+
+    ^
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
 
     ^    ^
 
 
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:758:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:768:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
-
-In file included from /root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:687:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:695:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:748:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:758:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:768:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1612:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
 
     ^
 
-/root/workspace/daily/2026-03-19-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1612:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
 
@@ -525,15 +525,15 @@ make[1]: *** Waiting for unfinished jobs....
 
 make[2]: *** [testcase/textract/CMakeFiles/textract_kernel.dir/build.make:76: testcase/textract/CMakeFiles/textract_kernel.dir/textract_kernel.cpp.o] Error 1
 
-make[2]: *** [testcase/trowsum/CMakeFiles/trowsum_kernel.dir/build.make:76: testcase/trowsum/CMakeFiles/trowsum_kernel.dir/trowsum_kernel.cpp.o] Error 1
-
 make[1]: *** [CMakeFiles/Makefile2:995: testcase/textract/CMakeFiles/textract_kernel.dir/all] Error 2
+
+make[2]: *** [testcase/trowsum/CMakeFiles/trowsum_kernel.dir/build.make:76: testcase/trowsum/CMakeFiles/trowsum_kernel.dir/trowsum_kernel.cpp.o] Error 1
 
 make[1]: *** [CMakeFiles/Makefile2:1047: testcase/trowsum/CMakeFiles/trowsum_kernel.dir/all] Error 2
 
-run failed: build failed
 7 warnings and 1 error generated.
 
+run failed: build failed
 make[2]: *** [testcase/ttrans/CMakeFiles/ttrans_kernel.dir/build.make:76: testcase/ttrans/CMakeFiles/ttrans_kernel.dir/ttrans_kernel.cpp.o] Error 1
 
 make[1]: *** [CMakeFiles/Makefile2:891: testcase/ttrans/CMakeFiles/ttrans_kernel.dir/all] Error 2
@@ -546,15 +546,15 @@ make[1]: *** [CMakeFiles/Makefile2:735: testcase/tmatmul/CMakeFiles/tmatmul_kern
 
 7 warnings and 1 error generated.
 
+make[2]: *** [testcase/tload/CMakeFiles/tload_kernel.dir/build.make:76: testcase/tload/CMakeFiles/tload_kernel.dir/tload_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:787: testcase/tload/CMakeFiles/tload_kernel.dir/all] Error 2
+
 7 warnings and 1 error generated.
 
 make[2]: *** [testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/build.make:76: testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/tmrgsort_kernel.cpp.o] Error 1
 
 make[1]: *** [CMakeFiles/Makefile2:839: testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/all] Error 2
-
-make[2]: *** [testcase/tload/CMakeFiles/tload_kernel.dir/build.make:76: testcase/tload/CMakeFiles/tload_kernel.dir/tload_kernel.cpp.o] Error 1
-
-make[1]: *** [CMakeFiles/Makefile2:787: testcase/tload/CMakeFiles/tload_kernel.dir/all] Error 2
 
 7 warnings and 1 error generated.
 
