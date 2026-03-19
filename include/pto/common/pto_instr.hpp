@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
+#include "pto/common/fifo.hpp"
 #include "pto/common/pto_instr_impl.hpp"
 #ifndef __COSTMODEL
 #include "pto/comm/pto_comm_inst.hpp"
@@ -1535,39 +1536,39 @@ PTO_INST RecordEvent TFMOD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &s
     return {};
 }
 
-template <typename PipeProd, typename TileData, typename DataFifo, typename... WaitEvents>
-PTO_INST RecordEvent TPUSH(PipeProd &prod, TileData &tile, DataFifo &fifo, WaitEvents &... events)
+template <typename Pipe, typename TileProd, TileSplitAxis Split, typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPUSH, prod, tile, fifo);
+    MAP_INSTR_IMPL(TPUSH, pipe, tile);
     return {};
 }
 
-template <typename TileData, typename Pipe, typename... WaitEvents>
-PTO_INST RecordEvent TPUSH(TileData &tile, Pipe &pipe, WaitEvents &... events)
+template <typename Pipe, typename TileProd, typename TileCons, TileSplitAxis Split, typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPUSH, tile, pipe);
+    MAP_INSTR_IMPL(TPUSH, pipe, tile);
     return {};
 }
 
-template <typename PipeCon, typename TileData, typename DataFifo, typename... WaitEvents>
-PTO_INST RecordEvent TPOP(PipeCon &cons, TileData &tile, DataFifo &fifo, WaitEvents &... events)
+template <typename Pipe, typename TileCons, TileSplitAxis Split, typename... WaitEvents>
+PTO_INST RecordEvent TPOP(Pipe &pipe, TileCons &tile, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPOP, cons, tile, fifo);
+    MAP_INSTR_IMPL(TPOP, pipe, tile);
     return {};
 }
 
-template <typename TileData, typename Pipe, typename... WaitEvents>
-PTO_INST RecordEvent TPOP(TileData &tile, Pipe &pipe, WaitEvents &... events)
+template <typename Pipe, typename TileProd, typename TileCons, TileSplitAxis Split, typename... WaitEvents>
+PTO_INST RecordEvent TPOP(Pipe &pipe, TileCons &tile, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPOP, tile, pipe);
+    MAP_INSTR_IMPL(TPOP, pipe, tile);
     return {};
 }
 
-template <typename Pipe, typename... WaitEvents>
+template <typename Pipe, TileSplitAxis Split, typename... WaitEvents>
 PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &... events)
 {
     TSYNC(events...);
