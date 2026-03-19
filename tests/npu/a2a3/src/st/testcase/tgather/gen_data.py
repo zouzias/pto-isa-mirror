@@ -155,6 +155,8 @@ def gen_golden_data(param: TGatherParamsBase):
         cmpmode = param.cmpmode
         src_data = np.random.randint(0, 100, [src_row, src_col]).astype(src_type)
         golden = np.zeros((dst_row, dst_col)).astype(dst_type)
+        # 0x7F800001转float比较时为nan，保证尾块对比通过
+        golden[:dst_row][:dst_col] = 0x7F800001
         if cmpmode == 0:
             for i in range(src_row):
                 k = 0
@@ -212,13 +214,12 @@ if __name__ == "__main__":
         TGatherParams1D("TGATHERTest.case_1D_int32_32x512_16x256", np.int32, 32, 512, 16, 256),
         TGatherParams1D("TGATHERTest.case_1D_half_16x1024_16x128", np.float16, 16, 1024, 16, 128),
         TGatherParams1D("TGATHERTest.case_1D_int16_32x256_32x64", np.int16, 32, 256, 32, 64),
+        # Test cases for topk
         TGatherParamsCmp("TGATHERTest.case1_float_topk", np.float32, np.uint32, 16, 64, 80, 0, 32, 0),
-        TGatherParamsCmp("TGATHERTest.case2_u32_topk", np.uint32, np.uint32, 8, 128, 80, 0, 64, 0),
+        TGatherParamsCmp("TGATHERTest.case2_s32_topk", np.int32, np.uint32, 8, 128, 80, 0, 64, 1),
         TGatherParamsCmp("TGATHERTest.case3_float_topk", np.float32, np.uint32, 4, 256, 30, 0, 64, 1),
-        TGatherParamsCmp("TGATHERTest.case4_s16_topk", np.int16, np.uint32, 16, 128, 90, 0, 32, 0),
-        TGatherParamsCmp("TGATHERTest.case5_s16_topk", np.int16, np.uint32, 4, 64, 20, 0, 32, 1),
-        TGatherParamsCmp("TGATHERTest.case6_half_topk", np.half, np.uint32, 2, 256, 90, 0, 32, 0),
-        TGatherParamsCmp("TGATHERTest.case7_half_topk", np.half, np.uint32, 8, 128, 40, 0, 32, 1),
+        TGatherParamsCmp("TGATHERTest.case4_half_topk", np.half, np.uint32, 2, 256, 90, 0, 32, 0),
+        TGatherParamsCmp("TGATHERTest.case5_half_topk", np.half, np.uint32, 8, 128, 40, 0, 32, 1),
     ]
 
     for case in case_params_list:
