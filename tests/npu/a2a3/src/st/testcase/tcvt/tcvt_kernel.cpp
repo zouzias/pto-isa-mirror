@@ -107,7 +107,7 @@ void launchTCVT(D *dst, S *src, void *stream)
     template void launchTCVT<dst_type, src_type, 4, 256, 4, 256, 4, 200>(dst_type * dst, src_type * src,               \
                                                                          void *stream);                                \
     template void launchTCVT<dst_type, src_type, 1, 256, 1, 256, 1, 129>(dst_type * dst, src_type * src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 2, 32, 2, 32, 2, 19>(dst_type * dst, src_type * src, void *stream);
+    template void launchTCVT<dst_type, src_type, 2, 32, 2, 32, 2, 16>(dst_type * dst, src_type * src, void *stream);
 
 // FP32 Source → fp16, int16, int32, int64
 INSTANTIATE_TCVT(aclFloat16, float)

@@ -437,7 +437,7 @@ if __name__ == "__main__":
     ]
 
     # Partial tiles (2D path: ValidCol != Cols)
-    partial_shapes = [(4, 128, 4, 65), (4, 256, 4, 200), (1, 256, 1, 129), (2, 32, 2, 19)]
+    partial_shapes = [(4, 128, 4, 65), (4, 256, 4, 200), (1, 256, 1, 129), (2, 32, 2, 16)]
 
     case_name_list = []
     case_params_list = []

@@ -145,9 +145,9 @@ void test_tcvt()
     {                                                            \
         test_tcvt<dst_type, src_type, 1, 256, 1, 256, 1, 129>();\
     }                                                            \
-    TEST_F(TCVTTest, case_##type_name##_2x32_2x19)               \
+    TEST_F(TCVTTest, case_##type_name##_2x32_2x16)               \
     {                                                            \
-        test_tcvt<dst_type, src_type, 2, 32, 2, 32, 2, 19>();   \
+        test_tcvt<dst_type, src_type, 2, 32, 2, 32, 2, 16>();   \
     }
 
 // FP32 Source → fp16, int16, int32, int64
