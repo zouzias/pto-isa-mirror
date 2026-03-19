@@ -826,17 +826,15 @@ PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src1,
     return {};
 }
 
-#ifdef PTO_NPU_ARCH_A5
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, int offset,
+template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode, int offset,
           typename... WaitEvents>
 PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst,
-                             WaitEvents &... events)
+                             TileDataTmp &tmp, WaitEvents &... events)
 {
     TSYNC(events...);
-    TGATHER_IMPL<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst, src0, k_value, cdst);
+    TGATHER_IMPL<TileDataD, TileDataS, TileDataC, TileDataTmp, cmpMode, offset>(dst, src0, k_value, cdst, tmp);
     return {};
 }
-#endif
 
 template <typename TileData, typename T, int descending, typename... WaitEvents>
 PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents &... events)

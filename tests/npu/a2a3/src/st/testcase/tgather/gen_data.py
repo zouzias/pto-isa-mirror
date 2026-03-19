@@ -81,6 +81,19 @@ class TGatherParams1D(TGatherParamsBase):
         self.dst_col = dst_col
 
 
+class TGatherParamsCmp(TGatherParamsBase):
+    def __init__(self, name, src_type, dst_type, src_row, src_col, kvalue, i_offset, k, cmpmode=0):
+        super().__init__(name)
+        self.src_type = src_type
+        self.dst_type = dst_type
+        self.src_row = src_row
+        self.src_col = src_col
+        self.kvalue = kvalue
+        self.i_offset = i_offset
+        self.k = k
+        self.cmpmode = cmpmode  # 0 for gt, 1 for eq
+
+
 def gather_1dim(src, indices):
     output = np.zeros_like(indices, dtype=src.dtype)
     for i in range(indices.shape[0]):
@@ -126,6 +139,49 @@ def gen_golden_data(param: TGatherParamsBase):
         indices.tofile("./src1.bin")
         golden = gather_1dim(src_data, indices)
         golden.tofile("./golden.bin")
+    else:
+        if param.cmpmode == 0:
+            assert param.kvalue > 50, (
+                "k-value is not supposed to be too small to make sure golden will not exceed src data"
+            )
+        src_type = param.src_type
+        dst_type = param.dst_type
+        src_row = param.src_row
+        src_col = param.src_col
+        dst_row = param.src_row
+        dst_col = param.k
+        kvalue = param.kvalue
+        i_offset = param.i_offset
+        cmpmode = param.cmpmode
+        src_data = np.random.randint(0, 100, [src_row, src_col]).astype(src_type)
+        golden = np.zeros((dst_row, dst_col)).astype(dst_type)
+        # 0x7F800001转float比较时为nan，保证尾块对比通过
+        golden[:dst_row][:dst_col] = 0x7F800001
+        if cmpmode == 0:
+            for i in range(src_row):
+                k = 0
+                for j in range(src_col):
+                    idx = i * src_col + j
+                    if src_data[i, j] > kvalue:
+                        golden[i, k] = idx
+                        k = k + 1
+        elif cmpmode == 1:
+            for i in range(src_row):
+                k = 0
+                for j in range(src_col):
+                    idx = i * src_col + j
+                    if src_data[i, j] == kvalue:
+                        golden[i, k] = idx
+                        k = k + 1
+        else:
+            assert False, "not implemented"
+
+        src_data1 = np.array(kvalue).astype(src_type)
+
+        src_data.tofile("./src.bin")
+        src_data1.tofile("./src1.bin")
+        golden.tofile("./golden.bin")
+        os.chdir(original_dir)
 
 
 if __name__ == "__main__":
@@ -158,6 +214,12 @@ if __name__ == "__main__":
         TGatherParams1D("TGATHERTest.case_1D_int32_32x512_16x256", np.int32, 32, 512, 16, 256),
         TGatherParams1D("TGATHERTest.case_1D_half_16x1024_16x128", np.float16, 16, 1024, 16, 128),
         TGatherParams1D("TGATHERTest.case_1D_int16_32x256_32x64", np.int16, 32, 256, 32, 64),
+        # Test cases for topk
+        TGatherParamsCmp("TGATHERTest.case1_float_topk", np.float32, np.uint32, 16, 64, 80, 0, 32, 0),
+        TGatherParamsCmp("TGATHERTest.case2_s32_topk", np.int32, np.uint32, 8, 128, 80, 0, 64, 1),
+        TGatherParamsCmp("TGATHERTest.case3_float_topk", np.float32, np.uint32, 4, 256, 30, 0, 64, 1),
+        TGatherParamsCmp("TGATHERTest.case4_half_topk", np.half, np.uint32, 2, 256, 90, 0, 32, 0),
+        TGatherParamsCmp("TGATHERTest.case5_half_topk", np.half, np.uint32, 8, 128, 40, 0, 32, 1),
     ]
 
     for case in case_params_list:
