@@ -15,7 +15,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
+          int kValidCols_ = kTCols_>
 void launchTCVT(D *dst, S *src, void *stream);
 
 // Saturation mode test launcher
@@ -39,7 +40,8 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
+          int kValidCols_ = kTCols_>
 void test_tcvt()
 {
     uint32_t M = kGRows_;
@@ -65,7 +67,7 @@ void test_tcvt()
     ReadFile(GetGoldenDir() + "/x1_gm.bin", srcFileSize, srcHost, srcFileSize);
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_>(dstDevice, srcDevice, stream);
+    launchTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -87,36 +89,65 @@ void test_tcvt()
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output_z.bin", dstFileSize, devFinal.data(), dstFileSize);
 
-    bool ret = ResultCmp<D>(golden, devFinal, 0.001f);
-
-    EXPECT_TRUE(ret);
+    // For partial tiles, only compare the valid region
+    constexpr bool isPartialTile = (kValidRows_ != kTRows_) || (kValidCols_ != kTCols_);
+    if constexpr (isPartialTile) {
+        bool ret = true;
+        for (uint32_t r = 0; r < kValidRows_; r++) {
+            std::vector<D> goldenRow(golden.data() + r * N, golden.data() + r * N + kValidCols_);
+            std::vector<D> devRow(devFinal.data() + r * N, devFinal.data() + r * N + kValidCols_);
+            if (!ResultCmp<D>(goldenRow, devRow, 0.001f)) {
+                ret = false;
+            }
+        }
+        EXPECT_TRUE(ret);
+    } else {
+        bool ret = ResultCmp<D>(golden, devFinal, 0.001f);
+        EXPECT_TRUE(ret);
+    }
 }
 
 // Macro to generate test cases for all shapes for a given type pair
-#define GENERATE_TCVT_TESTS(dst_type, src_type, type_name) \
-    TEST_F(TCVTTest, case_##type_name##_1x32)              \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 1, 32, 1, 32>();     \
-    }                                                      \
-    TEST_F(TCVTTest, case_##type_name##_2x64)              \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 2, 64, 2, 64>();     \
-    }                                                      \
-    TEST_F(TCVTTest, case_##type_name##_4x32)              \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 4, 32, 4, 32>();     \
-    }                                                      \
-    TEST_F(TCVTTest, case_##type_name##_8x64)              \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 8, 64, 8, 64>();     \
-    }                                                      \
-    TEST_F(TCVTTest, case_##type_name##_1x256)             \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 1, 256, 1, 256>();   \
-    }                                                      \
-    TEST_F(TCVTTest, case_##type_name##_8x128)             \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 8, 128, 8, 128>();   \
+#define GENERATE_TCVT_TESTS(dst_type, src_type, type_name)       \
+    TEST_F(TCVTTest, case_##type_name##_1x32)                    \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 1, 32, 1, 32>();           \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_2x64)                    \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 2, 64, 2, 64>();           \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_4x32)                    \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 4, 32, 4, 32>();           \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_8x64)                    \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 8, 64, 8, 64>();           \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_1x256)                   \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 1, 256, 1, 256>();         \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_8x128)                   \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 8, 128, 8, 128>();         \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_4x128_4x65)              \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 4, 128, 4, 128, 4, 65>(); \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_4x256_4x200)             \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 4, 256, 4, 256, 4, 200>();\
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_1x256_1x129)             \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 1, 256, 1, 256, 1, 129>();\
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_2x32_2x19)               \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 2, 32, 2, 32, 2, 19>();   \
     }
 
 // FP32 Source → fp16, int16, int32, int64

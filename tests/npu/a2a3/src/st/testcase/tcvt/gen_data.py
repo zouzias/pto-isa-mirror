@@ -260,6 +260,14 @@ def gen_golden(case_name, param):
     x1_gm.tofile("./x1_gm.bin")
     golden.tofile("./golden.bin")
 
+    # For partial tiles, apply valid region mask
+    valid_m, valid_n = param.valid_m, param.valid_n
+    if valid_m < m or valid_n < n:
+        output = np.zeros([m, n], dtype=dsttype)
+        output[:valid_m, :valid_n] = golden[:valid_m, :valid_n]
+        golden = output
+        golden.tofile("./golden.bin")
+
     # For saturation tests, generate golden data using PyTorch behavior
     if is_saturation_test:
         if np.issubdtype(dsttype, np.integer):
@@ -375,12 +383,14 @@ def gen_golden(case_name, param):
 
 
 class tcvtParams:
-    def __init__(self, srctype, dsttype, m, n, mode):
+    def __init__(self, srctype, dsttype, m, n, mode, valid_m=None, valid_n=None):
         self.srctype = srctype
         self.dsttype = dsttype
         self.m = m
         self.n = n
         self.mode = mode
+        self.valid_m = valid_m if valid_m is not None else m
+        self.valid_n = valid_n if valid_n is not None else n
 
 
 if __name__ == "__main__":
@@ -426,6 +436,9 @@ if __name__ == "__main__":
         (8, 128),  # Larger batch (common ML size)
     ]
 
+    # Partial tiles (2D path: ValidCol != Cols)
+    partial_shapes = [(4, 128, 4, 65), (4, 256, 4, 200), (1, 256, 1, 129), (2, 32, 2, 19)]
+
     case_name_list = []
     case_params_list = []
 
@@ -435,6 +448,10 @@ if __name__ == "__main__":
             case_name = f"case_{type_name}_{m}x{n}"
             case_name_list.append(f"TCVTTest.{case_name}")
             case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT"))
+        for m, n, valid_m, valid_n in partial_shapes:
+            case_name = f"case_{type_name}_{m}x{n}_{valid_m}x{valid_n}"
+            case_name_list.append(f"TCVTTest.{case_name}")
+            case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT", valid_m, valid_n))
 
     # Add saturation mode test cases (only for supported conversions on A2A3)
     # Note: fp32→int8 is NOT supported on A2A3 hardware

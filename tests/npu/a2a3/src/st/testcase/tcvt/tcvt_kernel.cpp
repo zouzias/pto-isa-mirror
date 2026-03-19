@@ -16,7 +16,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
-template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
+          int kValidCols_ = kTCols_>
 __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src)
 {
     using DynShapeDim4 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
@@ -24,53 +25,89 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src)
     using GlobalData_src = GlobalTensor<S, DynShapeDim4, DynStridDim4>;
     using GlobalData_dst = GlobalTensor<T, DynShapeDim4, DynStridDim4>;
 
-    using TileDataSrc = Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor>;
-    using TileDataDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor>;
-
-    TileDataSrc srcTile;
-    TileDataDst dstTile;
-
-    TASSIGN(srcTile, 0x0 + 0x400 * block_idx);
-    TASSIGN(dstTile, 0x20000 + 0x400 * block_idx);
+    constexpr bool useDynamicTile = (kValidRows_ != kTRows_) || (kValidCols_ != kTCols_);
 
     GlobalData_src srcGlobal(src);
-
     GlobalData_dst dstGlobal(out);
 
-    TLOAD(srcTile, srcGlobal);
+    if constexpr (useDynamicTile) {
+        // A2A3 TStore DMA requires block-aligned UB gaps. When validCol != Cols,
+        // the gap (Cols - validCol) * sizeof(DType) may not be 32-byte aligned,
+        // causing incorrect flat-stream writes. Use full tiles for TLoad/TStore
+        // and dynamic tiles only for TCVT (the actual feature under test).
+        using TileDataSrcFull = Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor>;
+        using TileDataDstFull = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor>;
+        using TileDataSrcDyn = Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+        using TileDataDstDyn = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+        TileDataSrcFull srcTileFull;
+        TileDataDstFull dstTileFull;
+        TileDataSrcDyn srcTile(kValidRows_, kValidCols_);
+        TileDataDstDyn dstTile(kValidRows_, kValidCols_);
+        TASSIGN(srcTileFull, 0x0 + 0x400 * block_idx);
+        TASSIGN(dstTileFull, 0x20000 + 0x400 * block_idx);
+        TASSIGN(srcTile, 0x0 + 0x400 * block_idx);
+        TASSIGN(dstTile, 0x20000 + 0x400 * block_idx);
 
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        TLOAD(srcTileFull, srcGlobal);
 
-    TCVT(dstTile, srcTile, RoundMode::CAST_RINT);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        TCVT(dstTile, srcTile, RoundMode::CAST_RINT);
 
-    TSTORE(dstGlobal, dstTile);
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+        TSTORE(dstGlobal, dstTileFull);
+    } else {
+        using TileDataSrc = Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor>;
+        using TileDataDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor>;
+        TileDataSrc srcTile;
+        TileDataDst dstTile;
+        TASSIGN(srcTile, 0x0 + 0x400 * block_idx);
+        TASSIGN(dstTile, 0x20000 + 0x400 * block_idx);
+
+        TLOAD(srcTile, srcGlobal);
+
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+        TCVT(dstTile, srcTile, RoundMode::CAST_RINT);
+
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+        TSTORE(dstGlobal, dstTile);
+    }
 
     out = dstGlobal.data();
 }
 
-template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
+          int kValidCols_ = kTCols_>
 void launchTCVT(D *dst, S *src, void *stream)
 {
     // Map aclFloat16 to half for kernel execution
     using DstType = std::conditional_t<std::is_same_v<D, aclFloat16>, half, D>;
     using SrcType = std::conditional_t<std::is_same_v<S, aclFloat16>, half, S>;
 
-    runTCVT<DstType, SrcType, kGRows_, kGCols_, kTRows_, kTCols_>
+    runTCVT<DstType, SrcType, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>
         <<<1, nullptr, stream>>>(reinterpret_cast<DstType *>(dst), reinterpret_cast<SrcType *>(src));
 }
 
 // Macro to generate template instantiations for all shapes for a given type pair
-#define INSTANTIATE_TCVT(dst_type, src_type)                                                                    \
-    template void launchTCVT<dst_type, src_type, 1, 32, 1, 32>(dst_type * dst, src_type * src, void *stream);   \
-    template void launchTCVT<dst_type, src_type, 2, 64, 2, 64>(dst_type * dst, src_type * src, void *stream);   \
-    template void launchTCVT<dst_type, src_type, 4, 32, 4, 32>(dst_type * dst, src_type * src, void *stream);   \
-    template void launchTCVT<dst_type, src_type, 8, 64, 8, 64>(dst_type * dst, src_type * src, void *stream);   \
-    template void launchTCVT<dst_type, src_type, 1, 256, 1, 256>(dst_type * dst, src_type * src, void *stream); \
-    template void launchTCVT<dst_type, src_type, 8, 128, 8, 128>(dst_type * dst, src_type * src, void *stream);
+#define INSTANTIATE_TCVT(dst_type, src_type)                                                                           \
+    template void launchTCVT<dst_type, src_type, 1, 32, 1, 32>(dst_type * dst, src_type * src, void *stream);          \
+    template void launchTCVT<dst_type, src_type, 2, 64, 2, 64>(dst_type * dst, src_type * src, void *stream);          \
+    template void launchTCVT<dst_type, src_type, 4, 32, 4, 32>(dst_type * dst, src_type * src, void *stream);          \
+    template void launchTCVT<dst_type, src_type, 8, 64, 8, 64>(dst_type * dst, src_type * src, void *stream);          \
+    template void launchTCVT<dst_type, src_type, 1, 256, 1, 256>(dst_type * dst, src_type * src, void *stream);        \
+    template void launchTCVT<dst_type, src_type, 8, 128, 8, 128>(dst_type * dst, src_type * src, void *stream);        \
+    template void launchTCVT<dst_type, src_type, 4, 128, 4, 128, 4, 65>(dst_type * dst, src_type * src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 4, 256, 4, 256, 4, 200>(dst_type * dst, src_type * src,               \
+                                                                         void *stream);                                \
+    template void launchTCVT<dst_type, src_type, 1, 256, 1, 256, 1, 129>(dst_type * dst, src_type * src, void *stream); \
+    template void launchTCVT<dst_type, src_type, 2, 32, 2, 32, 2, 19>(dst_type * dst, src_type * src, void *stream);
 
 // FP32 Source → fp16, int16, int32, int64
 INSTANTIATE_TCVT(aclFloat16, float)
