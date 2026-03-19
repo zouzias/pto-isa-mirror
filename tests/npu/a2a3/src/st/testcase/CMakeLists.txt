@@ -109,6 +109,7 @@ timg2col
 tmov
 tload
 ttrans
+ttrans_conv
 tmrgsort
 tfillpad
 tgather
