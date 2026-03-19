@@ -2410,7 +2410,7 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int6
  * Converts tile data from source type to destination type using specified rounding mode
  * Iterates over rows and calls appropriate castData specialization
  *
- * @param satMode: Saturation mode control (A5-specific):
+ * @tparam satMode: Saturation mode control (A5-specific, compile-time template parameter):
  *                 In A5, saturation is controlled by both:
  *                 1. CTRL register bits [60] and [48] - set by TCVT_IMPL based on conversion type
  *                 2. RS_DISABLE/RS_DISABLE parameters in vcvt intrinsics
@@ -2422,17 +2422,77 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int6
  *                 The actual saturation behavior is determined by both the CTRL bit setting
  *                 and the CastMode used in castData template instantiations.
  */
-template <typename TileDataD, typename TileDataS, typename R>
-__tf__ PTO_INTERNAL OP_NAME(TCVT)
-    OP_TYPE(element_wise) void implTCVT(typename TileDataD::TileDType __out__ dst,
+template <typename TileDataD, typename TileDataS, typename R, SaturationMode satMode>
+__tf__ PTO_INTERNAL OP_NAME(TCVT_SAT)
+    OP_TYPE(element_wise) void implTCVT_SAT(typename TileDataD::TileDType __out__ dst,
                                         typename TileDataS::TileDType __in__ src, unsigned validRows,
-                                        unsigned validCols, SaturationMode satMode,
+                                        unsigned validCols,
                                         VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
     // Saturation is controlled by:
     // 1. CTRL[60]/CTRL[48] register bits (set by caller TCVT_IMPL based on conversion type)
     // 2. RS_DISABLE/RS_DISABLE in vcvt intrinsics (determined by CastMode in castData templates)
-    // The satMode parameter is passed through to castData functions which use it to select
+    // The satMode template parameter is passed through to castData functions which use it to select
+    // between RS_DISABLE and RS_DISABLE in the vcvt intrinsic calls.
+
+    using T1 = typename TileDataD::DType;
+    using T2 = typename TileDataS::DType;
+    __ubuf__ T1 *dstPtr = (__ubuf__ T1 *)__cce_get_tile_ptr(dst);
+    __ubuf__ T2 *srcPtr = (__ubuf__ T2 *)__cce_get_tile_ptr(src);
+    __VEC_SCOPE__
+    {
+        // Compile-time check: Use 1D optimization if:
+        // 1. ValidCol == Cols (no column padding) for both src and dst, OR
+        // 2. Both tiles have Rows == 1 (single row case)
+        if constexpr (((TileDataD::ValidCol == TileDataD::Cols) && (TileDataS::ValidCol == TileDataS::Cols)) ||
+                      ((TileDataD::Rows == 1) && (TileDataS::Rows == 1))) {
+            // Use 1D path: faster bulk processing without row iteration overhead
+            switch (version) {
+                case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
+                    castData_2D_NoPostUpdate<R>(dstPtr, srcPtr, validRows, validCols, TileDataD::Cols, TileDataS::Cols,
+                                                satMode);
+                    break;
+                case VFImplKind::VFIMPL_DEFAULT:
+                case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
+                case VFImplKind::VFIMPL_1D_POST_UPDATE:
+                case VFImplKind::VFIMPL_2D_POST_UPDATE:
+                default:
+                    castData_1D_NoPostUpdate<R>(dstPtr, srcPtr, validRows, validCols, TileDataD::Cols, TileDataS::Cols,
+                                                satMode);
+                    break;
+            }
+
+        } else {
+            // Use 2D path: handles strided/padded data with row-by-row iteration
+            // version parameter controls predicate update strategy:
+            // VFIMPL_2D_NO_POST_UPDATE: manual predicate handling
+            // default: auto predicate update
+            switch (version) {
+                case VFImplKind::VFIMPL_1D_NO_POST_UPDATE:
+                case VFImplKind::VFIMPL_2D_NO_POST_UPDATE:
+                    castData_2D_NoPostUpdate<R>(dstPtr, srcPtr, validRows, validCols, TileDataD::Cols, TileDataS::Cols,
+                                                satMode);
+                    break;
+                default:
+                    castData<R>(dstPtr, srcPtr, validRows, validCols, TileDataD::Cols, TileDataS::Cols, satMode);
+                    break;
+            }
+        }
+    }
+}
+
+
+template <typename TileDataD, typename TileDataS, typename R, SaturationMode satMode>
+__tf__ PTO_INTERNAL OP_NAME(TCVT_UNSAT)
+    OP_TYPE(element_wise) void implTCVT_UNSAT(typename TileDataD::TileDType __out__ dst,
+                                        typename TileDataS::TileDType __in__ src, unsigned validRows,
+                                        unsigned validCols,
+                                        VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
+{
+    // Saturation is controlled by:
+    // 1. CTRL[60]/CTRL[48] register bits (set by caller TCVT_IMPL based on conversion type)
+    // 2. RS_DISABLE/RS_DISABLE in vcvt intrinsics (determined by CastMode in castData templates)
+    // The satMode template parameter is passed through to castData functions which use it to select
     // between RS_DISABLE and RS_DISABLE in the vcvt intrinsic calls.
 
     using T1 = typename TileDataD::DType;
@@ -2689,6 +2749,92 @@ PTO_INTERNAL void restoreSaturationCtrlBits(const SaturationCtrlConfig &config, 
  *       - CTRL[48]/[60]/[59] are neglected
  *       - Note: vtrc (fp32→fp32) falls into this category
  */
+
+/**
+ * Helper that holds satMode as a compile-time template parameter and dispatches
+ * on the runtime RoundMode. Called from TCVT_IMPL after CTRL bits are configured.
+ * Using a named function (rather than a lambda) preserves the aicore calling context.
+ *
+ * Dispatch rules (SaturationMode is uint8_t):
+ *   satMode == 0 (SaturationMode::ON)  → implTCVT_SAT
+ *   satMode == 1 (SaturationMode::OFF) → implTCVT_UNSAT
+ */
+template <typename TileDataD, typename TileDataS, SaturationMode satMode>
+PTO_INTERNAL void TCVT_IMPL_SAT(TileDataD &dst, TileDataS &src, RoundMode mode)
+{
+    if constexpr (satMode == SaturationMode::ON) {
+        // satMode == 0: saturation enabled → call implTCVT_SAT
+        switch (mode) {
+            case RoundMode::CAST_RINT:
+                implTCVT_SAT<TileDataD, TileDataS, RoundRType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                        dst.GetValidCol());
+                break;
+            case RoundMode::CAST_ROUND:
+                implTCVT_SAT<TileDataD, TileDataS, RoundAType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                        dst.GetValidCol());
+                break;
+            case RoundMode::CAST_FLOOR:
+                implTCVT_SAT<TileDataD, TileDataS, RoundFType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                        dst.GetValidCol());
+                break;
+            case RoundMode::CAST_CEIL:
+                implTCVT_SAT<TileDataD, TileDataS, RoundCType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                        dst.GetValidCol());
+                break;
+            case RoundMode::CAST_TRUNC:
+                implTCVT_SAT<TileDataD, TileDataS, RoundZType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                        dst.GetValidCol());
+                break;
+            case RoundMode::CAST_ODD:
+                if constexpr (std::is_same<typename TileDataD::DType, half>::value &&
+                              std::is_same<typename TileDataS::DType, float>::value) {
+                    implTCVT_SAT<TileDataD, TileDataS, RoundOType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                            dst.GetValidCol());
+                }
+                break;
+            default:
+                implTCVT_SAT<TileDataD, TileDataS, RoundRType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                        dst.GetValidCol());
+                break;
+        }
+    } else {
+        // satMode == 1: saturation disabled → call implTCVT_UNSAT
+        switch (mode) {
+            case RoundMode::CAST_RINT:
+                implTCVT_UNSAT<TileDataD, TileDataS, RoundRType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                          dst.GetValidCol());
+                break;
+            case RoundMode::CAST_ROUND:
+                implTCVT_UNSAT<TileDataD, TileDataS, RoundAType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                          dst.GetValidCol());
+                break;
+            case RoundMode::CAST_FLOOR:
+                implTCVT_UNSAT<TileDataD, TileDataS, RoundFType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                          dst.GetValidCol());
+                break;
+            case RoundMode::CAST_CEIL:
+                implTCVT_UNSAT<TileDataD, TileDataS, RoundCType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                          dst.GetValidCol());
+                break;
+            case RoundMode::CAST_TRUNC:
+                implTCVT_UNSAT<TileDataD, TileDataS, RoundZType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                          dst.GetValidCol());
+                break;
+            case RoundMode::CAST_ODD:
+                if constexpr (std::is_same<typename TileDataD::DType, half>::value &&
+                              std::is_same<typename TileDataS::DType, float>::value) {
+                    implTCVT_UNSAT<TileDataD, TileDataS, RoundOType, satMode>(dst.data(), src.data(),
+                                                                              dst.GetValidRow(), dst.GetValidCol());
+                }
+                break;
+            default:
+                implTCVT_UNSAT<TileDataD, TileDataS, RoundRType, satMode>(dst.data(), src.data(), dst.GetValidRow(),
+                                                                          dst.GetValidCol());
+                break;
+        }
+    }
+}
+
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
 {
@@ -2706,39 +2852,12 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
     SaturationCtrlConfig config = determineSaturationCtrlBits<SrcType, DstType>(satMode);
     applySaturationCtrlBits(config);
 
-    // Execute the conversion with appropriate rounding mode
-    switch (mode) {
-        case RoundMode::CAST_RINT:
-            implTCVT<TileDataD, TileDataS, RoundRType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(),
-                                                       satMode);
-            break;
-        case RoundMode::CAST_ROUND:
-            implTCVT<TileDataD, TileDataS, RoundAType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(),
-                                                       satMode);
-            break;
-        case RoundMode::CAST_FLOOR:
-            implTCVT<TileDataD, TileDataS, RoundFType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(),
-                                                       satMode);
-            break;
-        case RoundMode::CAST_CEIL:
-            implTCVT<TileDataD, TileDataS, RoundCType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(),
-                                                       satMode);
-            break;
-        case RoundMode::CAST_TRUNC:
-            implTCVT<TileDataD, TileDataS, RoundZType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(),
-                                                       satMode);
-            break;
-        case RoundMode::CAST_ODD:
-            if constexpr (std::is_same<typename TileDataD::DType, half>::value &&
-                          std::is_same<typename TileDataS::DType, float>::value) {
-                implTCVT<TileDataD, TileDataS, RoundOType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(),
-                                                           satMode);
-            }
-            break;
-        default:
-            implTCVT<TileDataD, TileDataS, RoundRType>(dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(),
-                                                       satMode);
-            break;
+    // Promote the runtime satMode to a compile-time template parameter via the
+    // TCVT_IMPL_SAT helper, so implTCVT<..., satMode> can be instantiated correctly.
+    if (satMode == SaturationMode::ON) {
+        TCVT_IMPL_SAT<TileDataD, TileDataS, SaturationMode::ON>(dst, src, mode);
+    } else {
+        TCVT_IMPL_SAT<TileDataD, TileDataS, SaturationMode::OFF>(dst, src, mode);
     }
 
     // Restore original CTRL bit states
