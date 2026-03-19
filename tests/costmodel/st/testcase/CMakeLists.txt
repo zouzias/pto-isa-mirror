@@ -40,11 +40,16 @@ set(ALL_TESTCASES
 tabs
 tadd
 tadds
+tcolmax
+tcolmin
 tdivs
 texp
 tmins
 tmul
 tmuls
+trowexpand
+trowmax
+trowmin
 tsqrt
 tsub
 )

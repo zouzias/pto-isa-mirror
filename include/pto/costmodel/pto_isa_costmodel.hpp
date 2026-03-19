@@ -21,6 +21,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TBinOp.hpp"
 #include "pto/costmodel/a2a3/TBinSOp.hpp"
 #include "pto/costmodel/a2a3/TUnaryOp.hpp"
+#include "pto/costmodel/a2a3/TColReduceOp.hpp"
+#include "pto/costmodel/a2a3/TRowReduceOp.hpp"
+#include "pto/costmodel/a2a3/TRowExpandOp.hpp"
 
 namespace pto {
 
@@ -148,6 +151,35 @@ public:
         SetParam("TDIVS", DataType::INT32, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
         SetParam("TDIVS", DataType::FP16, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
         SetParam("TDIVS", DataType::FP32, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
+
+        // TCOLMAX
+        SetParam("TCOLMAX", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("TCOLMAX", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("TCOLMAX", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("TCOLMAX", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+
+        // TCOLMIN
+        SetParam("TCOLMIN", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("TCOLMIN", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("TCOLMIN", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("TCOLMIN", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+
+        // TROWMAX
+        SetParam("TROWMAX", DataType::FP16, 13.0, 31.0, 4.0, 18.0, 1.0, 0.0);
+        SetParam("TROWMAX", DataType::FP32, 13.0, 29.0, 4.0, 18.0, 1.0, 0.0);
+
+        // TROWMIN
+        SetParam("TROWMIN", DataType::FP16, 13.0, 31.0, 4.0, 18.0, 1.0, 0.0);
+        SetParam("TROWMIN", DataType::FP32, 13.0, 29.0, 4.0, 18.0, 1.0, 0.0);
+
+        // TROWEXPAND
+        SetParam("TROWEXPAND", DataType::INT8, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("TROWEXPAND", DataType::UINT8, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("TROWEXPAND", DataType::INT16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("TROWEXPAND", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("TROWEXPAND", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("TROWEXPAND", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("TROWEXPAND", DataType::BF16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
     }
 
     // TBinOp
@@ -177,6 +209,36 @@ public:
     {
         using T = typename TileDataDst::DType;
         CostModelStats stats = runUnaryOp(dst, src);
+        float resultCycles = PredictCycle<T>(instr_name, stats);
+        dst.SetCycle(resultCycles);
+    }
+
+    // TColMax / TColMin
+    template <typename TileDataOut, typename TileDataIn>
+    void ColReducePredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src)
+    {
+        using T = typename TileDataIn::DType;
+        CostModelStats stats = runColReduceOp(dst, src);
+        float resultCycles = PredictCycle<T>(instr_name, stats);
+        dst.SetCycle(resultCycles);
+    }
+
+    // TRowMax / TRowMin
+    template <typename TileDataOut, typename TileDataIn>
+    void RowReducePredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src)
+    {
+        using T = typename TileDataIn::DType;
+        CostModelStats stats = runRowReduceOp(dst, src);
+        float resultCycles = PredictCycle<T>(instr_name, stats);
+        dst.SetCycle(resultCycles);
+    }
+
+    // TRowExpand
+    template <typename TileDataDst, typename TileDataSrc>
+    void RowExpandPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
+    {
+        using T = typename TileDataDst::DType;
+        CostModelStats stats = runRowExpandOp(dst, src);
         float resultCycles = PredictCycle<T>(instr_name, stats);
         dst.SetCycle(resultCycles);
     }
