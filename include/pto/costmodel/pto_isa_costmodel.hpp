@@ -17,13 +17,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <type_traits>
 #include <pto/common/pto_tile.hpp>
-#include "pto/costmodel/costmodel_types.hpp"
+#include "pto/costmodel/op_struct.hpp"
 #include "pto/costmodel/a2a3/TBinOp.hpp"
 #include "pto/costmodel/a2a3/TBinSOp.hpp"
 #include "pto/costmodel/a2a3/TUnaryOp.hpp"
 #include "pto/costmodel/a2a3/TColReduceOp.hpp"
 #include "pto/costmodel/a2a3/TRowReduceOp.hpp"
 #include "pto/costmodel/a2a3/TRowExpandOp.hpp"
+#include "pto/costmodel/a2a3/TRowReduceOps.hpp"
 
 namespace pto {
 
@@ -231,6 +232,18 @@ public:
         CostModelStats stats = runRowReduceOp(dst, src);
         float resultCycles = PredictCycle<T>(instr_name, stats);
         dst.SetCycle(resultCycles);
+    }
+
+    // TRowReduceOp
+    template <typename Op, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
+    void RowReduceOpPredictCycle(const std::string& instr_name, TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
+    {
+        sum_repeat_times = 0;
+        using T = typename TileDataIn::DType;
+        std::vector<CostModelStats> stats = runRowReduceOps<T, Op, TileDataOut, TileDataIn, TileDataTmp>(instr_name, dst, src, tmp);
+        float resultCycles = PredictCycle<T>(instr_name);
+        dst.SetCycle(resultCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << resultCycles << std::endl;
     }
 
     // TRowExpand

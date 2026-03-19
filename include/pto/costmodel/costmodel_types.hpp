@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COSTMODEL_TYPES_HPP
 
 #include <cstdint>
+#include <iostream>
 
 namespace pto {
 
@@ -20,6 +21,57 @@ struct CostModelStats {
     int masked_repeats = 0;
     int strided_repeats = 0;
     int count_mode_calls = 0;
+
+    std::string cceInstName;
+    int repeats = 0;
+    int maskCount = 0;
+    int maskmode = 0;
+    int dstBlockStride;
+    int src0BlockStride;
+    int src1BlockStride;
+    int dstRepeatStride;
+    int src0RepeatStride;
+    int src1RepeatStride;
+    int order;  // vcmax/vcmin专用
+
+    int sid;
+    int nBurst;
+    int lenBurst;
+    int srcGap;
+    int dstGap;
+
+    void setCceInstName(std::string cceInstName_)
+    {
+        cceInstName = cceInstName_;
+    }
+
+    void setBarrier(bool barrier_)
+    {
+        isBarrier = barrier_;
+    }
+
+    // BinOp
+    CostModelStats(const std::string cceInstName_, int repeats_, int dstBlockStride_, int src0BlockStride_,
+                        int src1BlockStride_, int dstRepeatStride_, int src0RepeatStride_, int src1RepeatStride_,
+                        int maskCount_, int order_ = 2) :
+    cceInstName(cceInstName_), repeats(repeats_),
+    dstBlockStride(dstBlockStride_), src0BlockStride(src0BlockStride_), src1BlockStride(src1BlockStride_),
+    dstRepeatStride(dstRepeatStride_), src0RepeatStride(src0RepeatStride_), src1RepeatStride(src1RepeatStride_),
+    maskCount(maskCount_), order(order_) {}
+
+    // pipe_barrier
+    CostModelStats(const std::string cceInstName_) :
+    cceInstName(cceInstName_) {}
+
+    // move
+    CostModelStats(const std::string cceInstName_, int sid_ = 0, int nBurst_, int lenBurst_, int srcGap_, int dstGap_) :
+    cceInstName(cceInstName_), sid(sid_), nBurst(nBurst_), lenBurst(lenBurst_), srcGap(srcGap_), dstGap(dstGap_) {}
+
+    // BinSOp UnaryOp
+    CostModelStats(std::string cceInstName_, unsigned repeats_, int dstBlockStride_, int srcBlockStride_,
+                   int dstRepeatStride_, int srcRepeatStride_, unsigned maskCount_) :
+    cceInstName(cceInstName_), repeats(repeats_), dstBlockStride(dstBlockStride_), srcBlockStride(srcBlockStride_),
+    dstRepeatStride(dstRepeatStride_), srcRepeatStride(srcRepeatStride_), maskCount(maskCount_) {}
 
     void AddRepeat(unsigned repeats, bool isMasked = false, bool isStrided = false)
     {
