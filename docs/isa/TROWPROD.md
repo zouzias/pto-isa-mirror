@@ -26,13 +26,13 @@ Synchronous form:
 ```
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.trowprod %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.trowprod ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -44,7 +44,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TROWPROD(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
+PTO_INST RecordEvent TROWPROD(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## Constraints
@@ -52,15 +52,15 @@ PTO_INST RecordEvent TROWPROD(TileDataOut& dst, TileDataIn& src, TileDataTmp& tm
 Implementation checks (NPU):
 
 - A2A3:
-  - Tile location: `dst` and `src` must be `TileType::Vec`.
-  - Tile layout of `src`: ND fractal (`isRowMajor` and `SLayout::NoneBox`).
-  - Tile layout of `dst`: DN layout Tile of 1D, e.g., `Tile<TileType::Vec, T, ROWS, 1, BLayout::ColMajor, ValidRows, 1>`
-  - Data types: `half`, `float`.
-  - DType consistency: `dst.DType == src.DType`.
-  - Runtime valid checks:
+    - Tile location: `dst` and `src` must be `TileType::Vec`.
+    - Tile layout of `src`: ND fractal (`isRowMajor` and `SLayout::NoneBox`).
+    - Tile layout of `dst`: DN layout Tile of 1D, e.g., `Tile<TileType::Vec, T, ROWS, 1, BLayout::ColMajor, ValidRows, 1>`
+    - Data types: `half`, `float`.
+    - DType consistency: `dst.DType == src.DType`.
+    - Runtime valid checks:
     - `srcValidCol != 0` and `srcValidRow != 0`.
     - `srcValidRow == dstValidRow` (the output valid row must match the input valid row).
-  - `tmp` must have the same shape as `src`.
+    - `tmp` must have the same shape as `src`.
 
 ## Implementation Notes
 

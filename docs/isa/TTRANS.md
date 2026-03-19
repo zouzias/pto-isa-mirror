@@ -28,13 +28,13 @@ Synchronous form:
 ```
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.ttrans %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.ttrans ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -45,30 +45,30 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TTRANS(TileDataDst& dst, TileDataSrc& src, TileDataTmp& tmp, WaitEvents&... events);
+PTO_INST RecordEvent TTRANS(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-  - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`.
-  - Source layout must be row-major (`TileDataSrc::isRowMajor`).
-  - Element size must be `1`, `2`, or `4` bytes.
-  - Supported element types are restricted per element width:
+    - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`.
+    - Source layout must be row-major (`TileDataSrc::isRowMajor`).
+    - Element size must be `1`, `2`, or `4` bytes.
+    - Supported element types are restricted per element width:
     - 4 bytes: `uint32_t`, `int32_t`, `float`
     - 2 bytes: `uint16_t`, `int16_t`, `half`, `bfloat16_t`
     - 1 byte: `uint8_t`, `int8_t`
-  - The transpose size is taken from `src.GetValidRow()` / `src.GetValidCol()`.
+    - The transpose size is taken from `src.GetValidRow()` / `src.GetValidCol()`.
 - **Implementation checks (A5)**:
-  - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`.
-  - 32-byte alignment constraints are enforced on the major dimension of both input and output (row-major checks `Cols * sizeof(T) % 32 == 0`, col-major checks `Rows * sizeof(T) % 32 == 0`).
-  - Supported element types are restricted per element width:
+    - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`.
+    - 32-byte alignment constraints are enforced on the major dimension of both input and output (row-major checks `Cols * sizeof(T) % 32 == 0`, col-major checks `Rows * sizeof(T) % 32 == 0`).
+    - Supported element types are restricted per element width:
     - 4 bytes: `uint32_t`, `int32_t`, `float`
     - 2 bytes: `uint16_t`, `int16_t`, `half`, `bfloat16_t`
     - 1 byte: `uint8_t`, `int8_t`
-  - The implementation operates over the static tile shape (`TileDataSrc::Rows/Cols`) and does not consult `GetValidRow/GetValidCol`.
+    - The implementation operates over the static tile shape (`TileDataSrc::Rows/Cols`) and does not consult `GetValidRow/GetValidCol`.
 - **Temporary tile**:
-  - The C++ API requires `tmp`, but some implementations may not use it.
+    - The C++ API requires `tmp`, but some implementations may not use it.
 
 ## Examples
 

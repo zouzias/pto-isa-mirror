@@ -59,15 +59,15 @@ template <Op OpCode>
 PTO_INST void TSYNC();
 
 template <typename... WaitEvents>
-PTO_INST void TSYNC(WaitEvents&... events);
+PTO_INST void TSYNC(WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查（`TSYNC<Op>()`）**:
-  - `TSYNC_IMPL<Op>()` 仅支持向量流水线操作（`include/pto/common/event.hpp` 中通过 `static_assert(pipe == PIPE_V)` 强制执行）。
+    - `TSYNC_IMPL<Op>()` 仅支持向量流水线操作（`include/pto/common/event.hpp` 中通过 `static_assert(pipe == PIPE_V)` 强制执行）。
 - **`TSYNC(events...)` 语义**:
-  - `TSYNC(events...)` 调用 `WaitAllEvents(events...)`，后者对每个事件令牌调用 `events.Wait()`。
+    - `TSYNC(events...)` 调用 `WaitAllEvents(events...)`，后者对每个事件令牌调用 `events.Wait()`。
 
 ## 示例
 

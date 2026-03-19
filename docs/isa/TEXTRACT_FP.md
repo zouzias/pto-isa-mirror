@@ -18,8 +18,9 @@ Extract a sub-tile from a source tile, while also providing an `fp` (scaling) ti
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp,
-                            uint16_t indexRow, uint16_t indexCol, WaitEvents&... events);
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 ```
 
 ## Math Interpretation
@@ -30,13 +31,13 @@ Unless otherwise specified, semantics are defined over the valid region and targ
 
 PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.textract_fp %src, %idxrow, %idxcol : (!pto.tile<...>, dtype, dtype) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.textract_fp ins(%src, %idxrow, %idxcol : !pto.tile_buf<...>, dtype, dtype) outs(%dst : !pto.tile_buf<...>)
