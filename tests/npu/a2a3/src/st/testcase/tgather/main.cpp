@@ -287,3 +287,43 @@ TEST_F(TGATHERTest, case_1D_int16_32x256_32x64)
 {
     test_gather_index<int16_t, int32_t, int16_t, 32, 256, 32, 64>();
 }
+
+TEST_F(TGATHERTest, case_1D_half_1x16_1x16)
+{
+    test_gather_index<int16_t, int32_t, int16_t, 1, 16, 1, 16>();
+}
+
+TEST_F(TGATHERTest, case_1D_half_1x32_1x32)
+{
+    test_gather_index<int16_t, int32_t, int16_t, 1, 32, 1, 32>();
+}
+
+TEST_F(TGATHERTest, case_1D_half_1x64_1x64)
+{
+    test_gather_index<int16_t, int32_t, int16_t, 1, 64, 1, 64>();
+}
+
+TEST_F(TGATHERTest, case_1D_half_1x128_1x128)
+{
+    test_gather_index<int16_t, int32_t, int16_t, 1, 128, 1, 128>();
+}
+
+TEST_F(TGATHERTest, case_1D_half_1x128_1x64)
+{
+    test_gather_index<int16_t, int32_t, int16_t, 1, 128, 1, 64>();
+}
+
+TEST_F(TGATHERTest, case_1D_float_1024x16_1024x16)
+{
+    test_gather_index<float, int32_t, float, 1024, 16, 1024, 16>();
+}
+
+TEST_F(TGATHERTest, case_1D_float_16x16_32x32)
+{
+    test_gather_index<float, int32_t, float, 16, 16, 32, 32>();
+}
+
+TEST_F(TGATHERTest, case_1D_half_16x16_32x32)
+{
+    test_gather_index<int16_t, int32_t, int16_t, 16, 16, 32, 32>();
+}
