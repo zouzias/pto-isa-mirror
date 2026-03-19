@@ -130,7 +130,7 @@ PTO_INTERNAL void TRowReduceInstr(std::vector<CostModelStats>& stats, int validC
         //copy_ubuf_to_ubuf(tmp, src, 0, validRow, BLOCK_MAX_PER_REPEAT, srcRptStride - BLOCK_MAX_PER_REPEAT,
                           //tmpRptStride - BLOCK_MAX_PER_REPEAT);
         stats.emplace_back("copy_ubuf_to_ubuf", 0, validRow, BLOCK_MAX_PER_REPEAT, srcRptStride - BLOCK_MAX_PER_REPEAT,
-                           tmpRptStride - BLOCK_MAX_PER_REPEAT)
+                           tmpRptStride - BLOCK_MAX_PER_REPEAT);
         //pipe_barrier(PIPE_V);
         stats.emplace_back("pipe_barrier");
     }
@@ -189,9 +189,9 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
             for (unsigned block = 0; block < blocksPerRow; ++block) {
                 //vmax(tmp, tmp, src + block * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
                 if (instr_name == "TROWMAX") {
-                    stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1, elemsLessThanBlock);
+                    stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1, elemsPerBlock);
                 } else if (instr_name == "TROWMIN") {
-                    stats.emplace_back("vmin", 1, 0, 0, 1, 0, 0, 1, elemsLessThanBlock);
+                    stats.emplace_back("vmin", 1, 0, 0, 1, 0, 0, 1, elemsPerBlock);
                 }
                 //pipe_barrier(PIPE_V);
             }
