@@ -50,17 +50,6 @@ np.random.seed(19)
 # ---------------------------------------------------------------------------
 # float4_e1m2x2_t: two FP4-E1M2 (1 sign, 1 exp, 2 mantissa) nibbles per byte
 # float4_e2m1x2_t: two FP4-E2M1 (1 sign, 2 exp, 1 mantissa) nibbles per byte
-#
-# Quantization grids (positive values; negatives mirror with sign bit set)
-#   E1M2 (bias=1): subnormals 0.MM×2^0, normals 1.MM×2^0
-#     nibble: 0000=0  0001=0.25  0010=0.5   0011=0.75
-#             0100=1.0 0101=1.25 0110=1.5  0111=1.75
-#   E2M1 (MX-FP4 spec, bias=1):
-#     nibble: 0000=0  0001=0.5  0010=1    0011=1.5
-#             0100=2  0101=3    0110=4    0111=6
-#
-# Packing (PART_EVEN/PART_ODD convention):
-#   byte[i] = (nibble(src[2i+1]) << 4) | nibble(src[2i])
 
 # Positive representable values for each format (index = nibble code for positive values 0..7)
 _FP4_E1M2_POS = np.array([0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75], dtype=np.float32)
