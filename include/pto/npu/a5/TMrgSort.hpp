@@ -14,10 +14,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 
 namespace pto {
-
+#ifndef DEVICE_UB_SIZE
+#define DEVICE_UB_SIZE 256
+#endif
+#ifndef COPY_UBUF_TO_UBUF
+#define COPY_UBUF_TO_UBUF(dst, src, nBrust, lenBrust) copy_ubuf_to_ubuf((dst), (src), 0, (nBrust), (lenBrust), 0, 0);
+#endif
 constexpr const int STRUCT_SIZE = 8;
 constexpr const int STRUCT_SIZE_SHIFT = 3;
-constexpr const int UB_SIZE = 262144; // 256*1024 B
+constexpr const int UB_SIZE = DEVICE_UB_SIZE * 1024;
 constexpr const int LIST_NUM_1 = 1;
 constexpr const int LIST_NUM_2 = 2;
 constexpr const int LIST_NUM_3 = 3;
@@ -51,7 +56,7 @@ PTO_INTERNAL void MovUb2Ub(__ubuf__ typename DstTileData::DType *dstPtr, __ubuf_
                            unsigned dstCol)
 {
     unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
-    copy_ubuf_to_ubuf((__ubuf__ void *)dstPtr, (__ubuf__ void *)tmpPtr, 0, 1, lenBurst, 0, 0);
+    COPY_UBUF_TO_UBUF((__ubuf__ void *)dstPtr, (__ubuf__ void *)tmpPtr, 0, 1, lenBurst);
 }
 
 template <bool exhausted>
