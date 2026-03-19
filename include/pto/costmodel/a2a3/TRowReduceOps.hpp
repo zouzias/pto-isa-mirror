@@ -12,11 +12,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define T_ROW_REDUCE_OPS_HPP
 
 #include <pto/common/type.hpp>
-#include "pto/costmodel/op_struct.hpp"
-
-#ifndef B16_REPEAT_MAX
-#define B16_REPEAT_MAX 65535
-#endif
 
 namespace pto {
 
@@ -53,22 +48,20 @@ PTO_INTERNAL void OneRepeatProc(std::vector<CostModelStats>& stats, int validCol
 {
     if (validCol == elemPerRpt) {
         InstrOp::template ReduceInstrByMode<true, SrcCols, dstRptStride, srcRptStride, elemPerRpt>(stats, validRow);
-        pipe_barrier(PIPE_V);
+        //pipe_barrier(PIPE_V);
         return;
     }
 
     unsigned rptTimes;
-    SetContinuousMask(remain);
+    //SetContinuousMask(remain);
     do {
         rptTimes = rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX;
         InstrOp::template ReduceInstrByMode<false, SrcCols, dstRptStride, srcRptStride, elemPerRpt>(stats, rptTimes);
-        pipe_barrier(PIPE_V);
+        //pipe_barrier(PIPE_V);
         rowRptTimes -= 1;
-        dst += rptTimes * DstCols;
-        src += rptTimes * SrcCols;
     } while (rowRptTimes >= 0);
 
-    set_vector_mask(-1, -1);
+    //set_vector_mask(-1, -1);
 }
 
 template <typename InstrOp, typename T, typename TileOut, typename TileIn>
@@ -147,15 +140,15 @@ PTO_INTERNAL void TRowReduceInstr(std::vector<CostModelStats>& stats, int validC
 
     // 不足一次repeat的部分设置mask与tmp计算, 此时tmp必定存在有效数据
     if (remain > 0) {
-        SetContinuousMask(remain);
+        //SetContinuousMask(remain);
         do {
             rptTimes = rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX;
             InstrOp::template BinInstrByMode<false, TileDataTmp::Cols, TileDataTmp::Cols, TileDataIn::Cols,
                                              tmpRptStride, tmpRptStride, srcRptStride, elemPerRpt>(stats, rptTimes);
             rowRptTimes -= 1;
         } while (rowRptTimes >= 0);
-        set_vector_mask(-1, -1);
-        pipe_barrier(PIPE_V);
+        //set_vector_mask(-1, -1);
+       // pipe_barrier(PIPE_V);
     }
 
     InstrOp::template TmpProc<TileDataTmp::Cols, TileDataIn::Cols, tmpRptStride, srcRptStride, elemPerRpt>(
@@ -163,7 +156,7 @@ PTO_INTERNAL void TRowReduceInstr(std::vector<CostModelStats>& stats, int validC
 
     InstrOp::template ReduceInstrByMode<true, TileDataTmp::Cols, dstRptStride, tmpRptStride, elemPerRpt>(stats,
                                                                                                          validRow);
-    pipe_barrier(PIPE_V);
+    //pipe_barrier(PIPE_V);
 }
 
 template <typename T, typename Op, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
@@ -178,10 +171,10 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
         constexpr unsigned elemsPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
         unsigned blocksPerRow = validCol / elemsPerBlock;
 
-        set_mask_count();
+       // set_mask_count();
 
         for (unsigned row = 0; row < validRow;) {
-            set_vector_mask(0, elemsPerBlock);
+            //set_vector_mask(0, elemsPerBlock);
 
             // Initialize tmp with minimum value
             if constexpr (std::is_same_v<T, int32_t>) {
@@ -190,7 +183,7 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
             } else {
                 //vector_dup(tmp, (T)std::numeric_limits<int16_t>::min(), 1, 1, 1, 0, 0);
             }
-            pipe_barrier(PIPE_V);
+            //pipe_barrier(PIPE_V);
 
             // Accumulate using vmax
             for (unsigned block = 0; block < blocksPerRow; ++block) {
@@ -200,13 +193,13 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
                 } else if (instr_name == "TROWMIN") {
                     stats.emplace_back("vmin", 1, 0, 0, 1, 0, 0, 1, elemsLessThanBlock);
                 }
-                pipe_barrier(PIPE_V);
+                //pipe_barrier(PIPE_V);
             }
 
             // Handle remaining elements
             unsigned elemsLessThanBlock = validCol % elemsPerBlock;
             if (elemsLessThanBlock > 0) {
-                set_vector_mask(0, elemsLessThanBlock);
+               // set_vector_mask(0, elemsLessThanBlock);
                 //vmax(tmp, tmp, src + blocksPerRow * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
                 if (instr_name == "TROWMAX") {
                     stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1, elemsLessThanBlock);
@@ -217,16 +210,16 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
                 stats.emplace_back("pipe_barrier");
             }
 
-            pipe_barrier(PIPE_ALL);
+           // pipe_barrier(PIPE_ALL);
 
             // Final scalar reduction, no vector
         }
 
-        set_mask_norm();
-        set_vector_mask(-1, -1);
+        //set_mask_norm();
+        //set_vector_mask(-1, -1);
     } else {
         // Float/Half implementation (original vcmax-based)
-        TRowReduceInstr<TRowMaxOp<T>, T, TileDataOut, TileDataIn, TileDataTmp>(stats, validCol, validRow);
+        TRowReduceInstr<Op, T, TileDataOut, TileDataIn, TileDataTmp>(stats, validCol, validRow);
     }
 }
 

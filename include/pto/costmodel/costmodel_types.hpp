@@ -34,7 +34,7 @@ struct CostModelStats {
     int src1RepeatStride;
     int order;  // vcmax/vcmin专用
 
-    int sid;
+    int sid = 0;
     int nBurst;
     int lenBurst;
     int srcGap;
@@ -43,11 +43,6 @@ struct CostModelStats {
     void setCceInstName(std::string cceInstName_)
     {
         cceInstName = cceInstName_;
-    }
-
-    void setBarrier(bool barrier_)
-    {
-        isBarrier = barrier_;
     }
 
     // BinOp
@@ -64,14 +59,20 @@ struct CostModelStats {
     cceInstName(cceInstName_) {}
 
     // move
-    CostModelStats(const std::string cceInstName_, int sid_ = 0, int nBurst_, int lenBurst_, int srcGap_, int dstGap_) :
-    cceInstName(cceInstName_), sid(sid_), nBurst(nBurst_), lenBurst(lenBurst_), srcGap(srcGap_), dstGap(dstGap_) {}
+    CostModelStats(const std::string cceInstName_, int nBurst_, int lenBurst_, int srcGap_, int dstGap_) :
+    cceInstName(cceInstName_), nBurst(nBurst_), lenBurst(lenBurst_), srcGap(srcGap_), dstGap(dstGap_) {}
 
     // BinSOp UnaryOp
-    CostModelStats(std::string cceInstName_, unsigned repeats_, int dstBlockStride_, int srcBlockStride_,
-                   int dstRepeatStride_, int srcRepeatStride_, unsigned maskCount_) :
-    cceInstName(cceInstName_), repeats(repeats_), dstBlockStride(dstBlockStride_), srcBlockStride(srcBlockStride_),
-    dstRepeatStride(dstRepeatStride_), srcRepeatStride(srcRepeatStride_), maskCount(maskCount_) {}
+    CostModelStats(const std::string cceInstName_, int repeats_, int dstBlockStride_, int srcBlockStride_,
+                   int dstRepeatStride_, int srcRepeatStride_, int maskCount_) :
+    cceInstName(cceInstName_), repeats(repeats_), dstBlockStride(dstBlockStride_), src0BlockStride(srcBlockStride_),
+    dstRepeatStride(dstRepeatStride_), src0RepeatStride(srcRepeatStride_), maskCount(maskCount_) {}
+
+    // GroupOp
+    CostModelStats(const std::string cceInstName_, int repeats_, int dstRepeatStride_, int srcBlockStride_,
+                    int srcRepeatStride_, int maskCount_) :
+    cceInstName(cceInstName_), repeats(repeats_), dstRepeatStride(dstRepeatStride_), src0BlockStride(srcBlockStride_),
+    src0RepeatStride(srcRepeatStride_), maskCount(maskCount_) {}
 
     void AddRepeat(unsigned repeats, bool isMasked = false, bool isStrided = false)
     {

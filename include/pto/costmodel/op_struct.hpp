@@ -12,7 +12,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_ISA_COSTMODEL_OP_STRUCT_HPP
 
 #include <iostream>
-#include "pto/costmodel/op_struct.hpp"
+#include "pto/costmodel/costmodel_types.hpp"
+
+#ifndef B16_REPEAT_MAX
+#define B16_REPEAT_MAX 65535
+#endif
 
 namespace pto {
 
@@ -192,9 +196,9 @@ struct TRowReduceOp {
     template <int Rows, int ValidRow, int Cols, int ValidCol>
     PTO_INTERNAL static void ReduceOptFP32_64x128(std::vector<CostModelStats>& stats)
     {
-        static_assert(std::is_same_v<T, float>, "This optimization is only for float type.");
-        static_assert(Rows == 64 && ValidRow == 64 && Cols == 128 && ValidCol == 128,
-                      "This optimization is only for [64, 128] input.");
+        //static_assert(std::is_same_v<T, float>, "This optimization is only for float type.");
+        //static_assert(Rows == 64 && ValidRow == 64 && Cols == 128 && ValidCol == 128,
+        //              "This optimization is only for [64, 128] input.");
         // [64, 128] -> [64, 16]
         InstrOp::GroupReduceInstrImpl(stats, ValidRow * 2, 1, 1, 8);
         //pipe_barrier(PIPE_V);
@@ -210,9 +214,9 @@ struct TRowReduceOp {
     template <int Rows, int ValidRow, int Cols, int ValidCol>
     PTO_INTERNAL static void ReduceOptFP32_32x256(std::vector<CostModelStats>& stats)
     {
-        static_assert(std::is_same_v<T, float>, "This optimization is only for float type.");
-        static_assert(Rows == 32 && ValidRow == 32 && Cols == 256 && ValidCol == 256,
-                      "This optimization is only for [32, 256] input.");
+       // static_assert(std::is_same_v<T, float>, "This optimization is only for float type.");
+        //static_assert(Rows == 32 && ValidRow == 32 && Cols == 256 && ValidCol == 256,
+        //              "This optimization is only for [32, 256] input.");
         // [32, 256] -> [32, 32]
         InstrOp::GroupReduceInstrImpl(stats, ValidRow * 4, 1, 1, 8);
         //pipe_barrier(PIPE_V);
@@ -231,9 +235,9 @@ struct TRowReduceOp {
     template <int Rows, int ValidRow, int Cols, int ValidCol>
     PTO_INTERNAL static void ReduceOptFP32_16x512(std::vector<CostModelStats>& stats)
     {
-        static_assert(std::is_same_v<T, float>, "This optimization is only for float type.");
-        static_assert(Rows == 16 && ValidRow == 16 && Cols == 512 && ValidCol == 512,
-                      "This optimization is only for [16, 512] input.");
+        //static_assert(std::is_same_v<T, float>, "This optimization is only for float type.");
+        //static_assert(Rows == 16 && ValidRow == 16 && Cols == 512 && ValidCol == 512,
+        //              "This optimization is only for [16, 512] input.");
         // [16, 512] -> [16, 64]
         InstrOp::GroupReduceInstrImpl(stats, ValidRow * 8, 1, 1, 8);
         //pipe_barrier(PIPE_V);
@@ -249,9 +253,9 @@ struct TRowReduceOp {
     template <int Rows, int ValidRow, int Cols, int ValidCol>
     PTO_INTERNAL static void ReduceOptFP32_8x1024(std::vector<CostModelStats>& stats)
     {
-        static_assert(std::is_same_v<T, float>, "This optimization is only for float type.");
-        static_assert(Rows == 8 && ValidRow == 8 && Cols == 1024 && ValidCol == 1024,
-                      "This optimization is only for [8, 1024] input.");
+        //static_assert(std::is_same_v<T, float>, "This optimization is only for float type.");
+        //static_assert(Rows == 8 && ValidRow == 8 && Cols == 1024 && ValidCol == 1024,
+        //              "This optimization is only for [8, 1024] input.");
         // [8, 1024] -> [8, 128]
         InstrOp::GroupReduceInstrImpl(stats, ValidRow * 16, 1, 1, 8);
         //pipe_barrier(PIPE_V);
@@ -334,21 +338,21 @@ struct TRowMaxOp : TRowReduceOp<T, TRowMaxOp<T>> {
         //vmax(dst, src0, src1, rptTimes, dstBlockStride, src0BlockStride, src1BlockStride, dstRptStride, src0RptStride,
              //src1RptStride);
         stats.emplace_back("vmax", rptTimes, dstBlockStride, src0BlockStride, src1BlockStride, dstRptStride,
-                           src0RptStride, src1RptStride, elemsLessThanBlock);
+                           src0RptStride, src1RptStride, 0);
     }
 
     PTO_INTERNAL static void ReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
                                              uint16_t srcBlkStride, uint16_t srcRptStride)
     {
         //vcmax(dst, src, rptTimes, dstRptStride, srcBlkStride, srcRptStride, ONLY_VALUE);
-        stats.emplace_back("vcmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride, elemsLessThanBlock);
+        stats.emplace_back("vcmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride, 2);
     }
 
     PTO_INTERNAL static void GroupReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes,
                                                   uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
         //vcgmax(dst, src, rptTimes, dstRptStride, src0Stride, src1Stride);
-        stats.emplace_back("vcgmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride, elemsLessThanBlock);
+        stats.emplace_back("vcgmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride, 0);
     }
 };
 

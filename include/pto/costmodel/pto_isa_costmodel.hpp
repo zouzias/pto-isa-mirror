@@ -238,10 +238,9 @@ public:
     template <typename Op, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
     void RowReduceOpPredictCycle(const std::string& instr_name, TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
     {
-        sum_repeat_times = 0;
         using T = typename TileDataIn::DType;
         std::vector<CostModelStats> stats = runRowReduceOps<T, Op, TileDataOut, TileDataIn, TileDataTmp>(instr_name, dst, src, tmp);
-        float resultCycles = PredictCycle<T>(instr_name);
+        float resultCycles = PredictCycle<T>(instr_name, stats[0]);
         dst.SetCycle(resultCycles);
         std::cout << "Instr: " << instr_name << " Cycles: " << resultCycles << std::endl;
     }

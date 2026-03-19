@@ -17,7 +17,7 @@ namespace pto {
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TROWMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
-    pto::CostModel::GetInstance().RowReduceOpPredictCycle("TROWMAX", dst, src, tmp);
+    pto::CostModel::GetInstance().RowReduceOpPredictCycle<TRowMaxOp, TileDataOut, TileDataIn, TileDataTmp>("TROWMAX", dst, src, tmp);
 }
 
 } // namespace pto
