@@ -501,13 +501,13 @@ inline AICORE void cast8to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
                                              uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
                                              SaturationMode satMode)
 {
+    uint32_t len8 = ELE_CNT_B8;
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B16);
     uint32_t sReg = totalElements;
     uint32_t next_len = (sReg > ELE_CNT_B32) ? sReg - ELE_CNT_B32 : 0;
-    uint32_t len8 = ELE_CNT_B8;
-    MaskReg preg_b8 = CreatePredicate<uint8_t>(len8);
     MaskReg pg = pset_b8(PAT_ALL);
+    MaskReg preg_b8 = CreatePredicate<uint8_t>(len8);
     SRC_VEC v_zero;
     vdup((RegTensor<uint8_t> &)v_zero, 0, pg, MODE_ZEROING);
 
