@@ -159,10 +159,10 @@ __tf__ AICORE void TInsertImpl(typename DstTileData::TileDType __out__ dst, type
     copy_ubuf_to_cbuf(dstAddr2, srcAddr, 0, burstNum, burstLen, srcGap, dstGap);
 }
 
-template <typename T, typename DstTileData, typename SrcTileData>
-__tf__ AICORE void TInsertSplit2Impl(typename DstTileData::TileDType __out__ dst,
-                                     typename SrcTileData::TileDType __in__ src, TInsertMode mode, uint16_t validRow,
-                                     uint16_t validCol, uint32_t indexRow = 0, uint32_t indexCol = 0)
+template <uint32_t SplitCount, typename T, typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TInsertSplitImpl(typename DstTileData::TileDType __out__ dst,
+                                    typename SrcTileData::TileDType __in__ src, TInsertMode mode, uint16_t validRow,
+                                    uint16_t validCol, uint32_t indexRow = 0, uint32_t indexCol = 0)
 {
     __cbuf__ T *dstAddr = (__cbuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
@@ -174,39 +174,7 @@ __tf__ AICORE void TInsertSplit2Impl(typename DstTileData::TileDType __out__ dst
     uint32_t alignedRow = CeilDivision(validRow, nzRow) * nzRow;
     uint16_t totalBurstNum = CeilDivision(validCol, c0Size);
     uint16_t burstLen = (alignedRow * c0Size * typeSize) / BLOCK_BYTE_SIZE;
-    uint16_t halfBurstNum = totalBurstNum >> 1;
-
-    uint32_t colBlockOffset = (indexCol / c0Size) * DstTileData::Rows * c0Size;
-    uint32_t rowOffset = indexRow * c0Size + (indexCol % c0Size);
-    uint32_t dstOffset = colBlockOffset + rowOffset;
-
-    __cbuf__ T *dstAddr0 = dstAddr + dstOffset;
-    copy_ubuf_to_cbuf(dstAddr0, srcAddr, 0, halfBurstNum, burstLen, 1, 0);
-
-    uint32_t srcBlockOffset = halfBurstNum * (burstLen + 1) * BLOCK_BYTE_SIZE / typeSize;
-    uint32_t dstBlockOffset = halfBurstNum * DstTileData::Rows * c0Size;
-    __ubuf__ T *srcAddr2 = srcAddr + srcBlockOffset;
-    __cbuf__ T *dstAddr2 = dstAddr0 + dstBlockOffset;
-
-    copy_ubuf_to_cbuf(dstAddr2, srcAddr2, 0, halfBurstNum, burstLen, 1, 0);
-}
-
-template <typename T, typename DstTileData, typename SrcTileData>
-__tf__ AICORE void TInsertSplit4Impl(typename DstTileData::TileDType __out__ dst,
-                                     typename SrcTileData::TileDType __in__ src, TInsertMode mode, uint16_t validRow,
-                                     uint16_t validCol, uint32_t indexRow = 0, uint32_t indexCol = 0)
-{
-    __cbuf__ T *dstAddr = (__cbuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
-
-    constexpr uint32_t typeSize = sizeof(T);
-    uint32_t c0Size = BLOCK_BYTE_SIZE / typeSize;
-    constexpr uint32_t nzRow = FRACTAL_NZ_ROW;
-
-    uint32_t alignedRow = CeilDivision(validRow, nzRow) * nzRow;
-    uint16_t totalBurstNum = CeilDivision(validCol, c0Size);
-    uint16_t burstLen = (alignedRow * c0Size * typeSize) / BLOCK_BYTE_SIZE;
-    uint16_t quarterBurstNum = totalBurstNum >> 2;
+    uint16_t partBurstNum = totalBurstNum / SplitCount;
     uint32_t srcBlockSize = (burstLen + 1) * BLOCK_BYTE_SIZE / typeSize;
     uint32_t dstBlockSize = DstTileData::Rows * c0Size;
 
@@ -215,19 +183,23 @@ __tf__ AICORE void TInsertSplit4Impl(typename DstTileData::TileDType __out__ dst
     uint32_t dstOffset = colBlockOffset + rowOffset;
 
     __cbuf__ T *dstAddr0 = dstAddr + dstOffset;
-    copy_ubuf_to_cbuf(dstAddr0, srcAddr, 0, quarterBurstNum, burstLen, 1, 0);
+    copy_ubuf_to_cbuf(dstAddr0, srcAddr, 0, partBurstNum, burstLen, 1, 0);
 
-    __ubuf__ T *srcQ1 = srcAddr + quarterBurstNum * srcBlockSize;
-    __cbuf__ T *dstQ1 = dstAddr0 + quarterBurstNum * dstBlockSize;
-    copy_ubuf_to_cbuf(dstQ1, srcQ1, 0, quarterBurstNum, burstLen, 1, 0);
+    if constexpr (SplitCount >= 2) {
+        __ubuf__ T *src1 = srcAddr + partBurstNum * srcBlockSize;
+        __cbuf__ T *dst1 = dstAddr0 + partBurstNum * dstBlockSize;
+        copy_ubuf_to_cbuf(dst1, src1, 0, partBurstNum, burstLen, 1, 0);
+    }
 
-    __ubuf__ T *srcQ2 = srcAddr + 2 * quarterBurstNum * srcBlockSize;
-    __cbuf__ T *dstQ2 = dstAddr0 + 2 * quarterBurstNum * dstBlockSize;
-    copy_ubuf_to_cbuf(dstQ2, srcQ2, 0, quarterBurstNum, burstLen, 1, 0);
+    if constexpr (SplitCount >= 4) {
+        __ubuf__ T *src2 = srcAddr + 2 * partBurstNum * srcBlockSize;
+        __cbuf__ T *dst2 = dstAddr0 + 2 * partBurstNum * dstBlockSize;
+        copy_ubuf_to_cbuf(dst2, src2, 0, partBurstNum, burstLen, 1, 0);
 
-    __ubuf__ T *srcQ3 = srcAddr + 3 * quarterBurstNum * srcBlockSize;
-    __cbuf__ T *dstQ3 = dstAddr0 + 3 * quarterBurstNum * dstBlockSize;
-    copy_ubuf_to_cbuf(dstQ3, srcQ3, 0, quarterBurstNum, burstLen, 1, 0);
+        __ubuf__ T *src3 = srcAddr + 3 * partBurstNum * srcBlockSize;
+        __cbuf__ T *dst3 = dstAddr0 + 3 * partBurstNum * dstBlockSize;
+        copy_ubuf_to_cbuf(dst3, src3, 0, partBurstNum, burstLen, 1, 0);
+    }
 }
 
 template <typename T, typename DstTileData, typename SrcTileData>
@@ -299,11 +271,11 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t inde
         uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
 
         if constexpr (mode == TInsertMode::SPLIT2_NZ_PLUS_1) {
-            TInsertSplit2Impl<T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, indexRow,
-                                                           indexCol);
+            TInsertSplitImpl<2, T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, indexRow,
+                                                             indexCol);
         } else if constexpr (mode == TInsertMode::SPLIT4_NZ_PLUS_1) {
-            TInsertSplit4Impl<T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, indexRow,
-                                                           indexCol);
+            TInsertSplitImpl<4, T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, indexRow,
+                                                             indexCol);
         } else {
             TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, dstRow, indexRow,
                                                      indexCol);

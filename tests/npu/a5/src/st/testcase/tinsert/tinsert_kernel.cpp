@@ -15,6 +15,67 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
+// NZ output format type helper
+template <int M, int N, typename OutType>
+struct NZOutputFormat {
+    static constexpr uint16_t sGRows = 16;
+    static constexpr uint16_t sGCols = 512 / (sGRows * sizeof(OutType));
+    static constexpr uint16_t kGRows = (M + sGRows - 1) / sGRows;
+    static constexpr uint16_t kGCols = (N + sGCols - 1) / sGCols;
+    using ShapeDim5 = Shape<1, kGCols, kGRows, sGRows, sGCols>;
+    using StridDim5 =
+        pto::Stride<kGCols * kGRows * sGCols * sGRows, kGRows * sGCols * sGRows, sGCols * sGRows, sGCols, 1>;
+    using GlobalData = GlobalTensor<OutType, ShapeDim5, StridDim5, Layout::NZ>;
+};
+
+// Helper: TLOAD + TMOV + TMATMUL + TINSERT on CUBE side
+template <typename TileMatAData, typename TileMatBData, typename LeftTile, typename RightTile, typename AccTile,
+          typename DstMatTile, typename GlobalDataSrc0, typename GlobalDataSrc1>
+AICORE inline void LoadMatmulInsert(TileMatAData &aMatTile, TileMatBData &bMatTile, LeftTile &aTile, RightTile &bTile,
+                                    AccTile &cTile, DstMatTile &dstMatTile, GlobalDataSrc0 &src0Global,
+                                    GlobalDataSrc1 &src1Global)
+{
+    TLOAD(aMatTile, src0Global);
+    TLOAD(bMatTile, src1Global);
+    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+
+    TMOV(aTile, aMatTile);
+    TMOV(bTile, bMatTile);
+    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+
+    TMATMUL(cTile, aTile, bTile);
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+
+    TINSERT(dstMatTile, cTile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+}
+
+// Helper: Read back L1/cbuf to UB and cross-core sync
+AICORE inline void ReadbackCbufToUbuf(__ubuf__ void *dstUb, __cbuf__ void *srcCbuf, uint16_t burstNum,
+                                      uint16_t burstLen, uint16_t srcGap, uint8_t syncId, uint8_t eventIdNum)
+{
+    wait_intra_block(PIPE_MTE1, syncId);
+    wait_intra_block(PIPE_MTE1, syncId + eventIdNum);
+    set_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
+    copy_cbuf_to_ubuf(dstUb, srcCbuf, 0, burstNum, burstLen, srcGap, 0);
+    copy_cbuf_to_ubuf(dstUb, srcCbuf, 1, burstNum, burstLen, srcGap, 0);
+    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
+    set_intra_block(PIPE_MTE1, syncId);
+    set_intra_block(PIPE_MTE1, syncId + eventIdNum);
+}
+
+// Helper: VEC wait and store
+template <typename GlobalData, typename VecTile>
+AICORE inline void WaitAndStore(GlobalData &dstGlobal, VecTile &dstTile, uint8_t syncId)
+{
+    wait_intra_block(PIPE_MTE3, syncId);
+    TSTORE(dstGlobal, dstTile);
+}
+
 template <typename AType, typename BType, int M, int K, int N>
 __global__ AICORE void RunTInsertAcc2Mat(__gm__ float *out, __gm__ AType *src0, __gm__ BType *src1)
 {
@@ -51,34 +112,13 @@ __global__ AICORE void RunTInsertAcc2Mat(__gm__ float *out, __gm__ AType *src0, 
     constexpr uint16_t burstLen = M * c0Size * sizeof(float) / 32;
     constexpr uint16_t burstNum = N / c0Size;
 
-    constexpr uint16_t sGRows = 16;
-    constexpr uint16_t sGCols = 512 / (sGRows * sizeof(float));
-    constexpr uint16_t kGRows = (M + sGRows - 1) / sGRows;
-    constexpr uint16_t kGCols = (N + sGCols - 1) / sGCols;
-    using OutShapeDim5 = Shape<1, kGCols, kGRows, sGRows, sGCols>;
-    using OutStridDim5 =
-        pto::Stride<kGCols * kGRows * sGCols * sGRows, kGRows * sGCols * sGRows, sGCols * sGRows, sGCols, 1>;
-    using GlobalDataOut = GlobalTensor<float, OutShapeDim5, OutStridDim5, Layout::NZ>;
-    GlobalDataOut dstGlobal(out);
+    using OutFmt = NZOutputFormat<M, N, float>;
+    typename OutFmt::GlobalData dstGlobal(out);
 
     uint8_t syncId = 0;
 
 #if defined(__DAV_CUBE__)
-    TLOAD(aMatTile, src0Global);
-    TLOAD(bMatTile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-
-    TMOV(aTile, aMatTile);
-    TMOV(bTile, bMatTile);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-
-    TMATMUL(cTile, aTile, bTile);
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-
-    TINSERT(dstMatTile, cTile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+    LoadMatmulInsert(aMatTile, bMatTile, aTile, bTile, cTile, dstMatTile, src0Global, src1Global);
 
     set_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_FIX, PIPE_MTE1, EVENT_ID0);
@@ -176,27 +216,13 @@ AICORE void runTInsertNZ(__gm__ T *out, __gm__ T *src)
 #endif
 
 #if defined(__DAV_CUBE__)
-    wait_intra_block(PIPE_MTE1, syncId);
-    wait_intra_block(PIPE_MTE1, syncId + eventIdNum);
-
-    set_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
-
-    copy_cbuf_to_ubuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, 0, burstNum, burstLen, srcGap, 0);
-    copy_cbuf_to_ubuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, 1, burstNum, burstLen, srcGap, 0);
-
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-
-    set_intra_block(PIPE_MTE1, syncId);
-    set_intra_block(PIPE_MTE1, syncId + eventIdNum);
+    ReadbackCbufToUbuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, burstNum, burstLen, srcGap, syncId,
+                       eventIdNum);
 #endif
 
 #if defined(__DAV_VEC__)
-    wait_intra_block(PIPE_MTE3, syncId);
-    TSTORE(dstGlobal, dstTile);
+    WaitAndStore(dstGlobal, dstTile, syncId);
 #endif
-    out = dstGlobal.data();
 }
 
 template <typename T, uint32_t Rows, uint32_t Cols, pto::TInsertMode Mode = pto::TInsertMode::NZ>
@@ -279,25 +305,12 @@ AICORE void runTInsertND(__gm__ int8_t *out, __gm__ int8_t *src)
 #endif
 
 #if defined(__DAV_CUBE__)
-    wait_intra_block(PIPE_MTE1, syncId);
-    wait_intra_block(PIPE_MTE1, syncId + eventIdNum);
-
-    set_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_MTE1, EVENT_ID0);
-    copy_cbuf_to_ubuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)srcMatAddr, 0, 1, blockLen, 0, 0);
-    copy_cbuf_to_ubuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)srcMatAddr, 1, 1, blockLen, 0, 0);
-    set_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_MTE3, EVENT_ID0);
-
-    set_intra_block(PIPE_MTE1, syncId);
-    set_intra_block(PIPE_MTE1, syncId + eventIdNum);
+    ReadbackCbufToUbuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)srcMatAddr, 1, blockLen, 0, syncId, eventIdNum);
 #endif
 
 #if defined(__DAV_VEC__)
-    wait_intra_block(PIPE_MTE3, syncId);
-    TSTORE(dstGlobal, dstTile);
+    WaitAndStore(dstGlobal, dstTile, syncId);
 #endif
-    out = dstGlobal.data();
 }
 
 template <uint32_t Rows, uint32_t Cols>

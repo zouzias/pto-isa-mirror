@@ -1,19 +1,21 @@
-#!/usr/bin/env python3
-"""
-Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
-"""
+#!/usr/bin/python3
+# coding=utf-8
+# --------------------------------------------------------------------------------
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# --------------------------------------------------------------------------------
 
-import numpy as np
 import os
 
+import numpy as np
 
-def get_golden_nd_to_nz(golden, M, N, out_type, is_float32_output=False):
+
+def get_golden_nd_to_nz(golden, rows, cols, out_type, is_float32_output=False):
     nz_block_row = 16
     if out_type == np.float32 or out_type == np.int32:
         c0_size = 8
@@ -22,7 +24,7 @@ def get_golden_nd_to_nz(golden, M, N, out_type, is_float32_output=False):
     else:
         c0_size = 16
     golden_nz = (
-        golden.reshape(int(M / nz_block_row), nz_block_row, int(N / c0_size), c0_size)
+        golden.reshape(int(rows / nz_block_row), nz_block_row, int(cols / c0_size), c0_size)
         .transpose(2, 0, 1, 3)
         .astype(out_type)
     )
@@ -40,14 +42,14 @@ if __name__ == "__main__":
         original_dir = os.getcwd()
         os.chdir(case_name)
 
-        M, K, N = acc2mat_params[i]
-        x1 = np.random.uniform(low=-1, high=1, size=(M, K)).astype(np.float16)
-        x2 = np.random.uniform(low=-1, high=1, size=(K, N)).astype(np.float16)
+        m, k, n = acc2mat_params[i]
+        x1 = np.random.randint(-2, 3, size=(m, k)).astype(np.float16)
+        x2 = np.random.randint(-2, 3, size=(k, n)).astype(np.float16)
         x1.tofile("x1_gm.bin")
         x2.tofile("x2_gm.bin")
 
         golden = np.matmul(x1.astype(np.float32), x2.astype(np.float32)).astype(np.float32)
-        golden_nz = get_golden_nd_to_nz(golden, M, N, np.float32)
+        golden_nz = get_golden_nd_to_nz(golden, m, n, np.float32)
         golden_nz.tofile("golden.bin")
 
         os.chdir(original_dir)
