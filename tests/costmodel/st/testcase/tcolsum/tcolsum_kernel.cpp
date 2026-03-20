@@ -22,12 +22,15 @@ AICORE inline void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src)
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
 
     using SrcTileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     using DscTileData = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
 
     SrcTileData srcTile(kTRows_, kTCols_);
+    TmpTileData tmpTile(kTRows_ / 2, kTCols_);
     DscTileData dstTile(1, kTCols_);
     TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x11000);
+    TASSIGN(tmpTile, 0x11000);
+    TASSIGN(dstTile, 0x22000);
 
     GlobalData srcGlobal(src, DynShapeDim5(kTRows_, kTCols_), DynStridDim5(kTRows_, kTCols_));
     GlobalData dstGlobal(out, DynShapeDim5(1, kTCols_), DynStridDim5(1, kTCols_));
@@ -35,7 +38,7 @@ AICORE inline void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src)
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TCOLSUM(dstTile, srcTile, IsBinary);
+    TCOLSUM(dstTile, srcTile, tmpTile, IsBinary);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
