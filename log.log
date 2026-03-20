@@ -1,367 +1,483 @@
-target_dir: /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st
-[  3%] Building CXX object testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/tmatmul_kernel.cpp.o
+target_dir: /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st
+[  2%] Building CXX object testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/tmatmul_kernel.cpp.o
 
-[  3%] Building CXX object testcase/ttrans/CMakeFiles/ttrans_kernel.dir/ttrans_kernel.cpp.o
+[  2%] Building CXX object testcase/ttrans/CMakeFiles/ttrans_kernel.dir/ttrans_kernel.cpp.o
 
 [  3%] Building CXX object testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/tmrgsort_kernel.cpp.o
 
 [  4%] Building CXX object testcase/tload/CMakeFiles/tload_kernel.dir/tload_kernel.cpp.o
 
-[  3%] Building CXX object testcase/tstore/CMakeFiles/tstore_kernel.dir/tstore_kernel.cpp.o
-
-[  5%] Building CXX object testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/tcolsum_kernel.cpp.o
+[  5%] Building CXX object testcase/trowsum/CMakeFiles/trowsum_kernel.dir/trowsum_kernel.cpp.o
 
 [  6%] Building CXX object testcase/textract/CMakeFiles/textract_kernel.dir/textract_kernel.cpp.o
 
-[  7%] Building CXX object testcase/trowsum/CMakeFiles/trowsum_kernel.dir/trowsum_kernel.cpp.o
+[  7%] Building CXX object testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/tcolsum_kernel.cpp.o
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
+[  7%] Building CXX object testcase/tstore/CMakeFiles/tstore_kernel.dir/tstore_kernel.cpp.o
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+In file included from In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:18:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp::23:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+In file included from 12In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+:In file included from 17/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+::In file included from 2311/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
+:In file included from 218:
 
-In file included from In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hppIn file included from :/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp23:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:
 
-:In file included from 12/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:
+In file included from :In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp17:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:
 
-11In file included from ::
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp18:In file included from 23:
+:23In file included from 27:
 
 :
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hppIn file included from In file included from :/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp23:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp::/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp21817::
 
-:18In file included from 16:
+17:
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppIn file included from :
+In file included from In file included from :/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp73:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hppIn file included from :27 ::
 
-:In file included from 18/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hppIn file included from ::1626/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:
-
-:In file included from 16:
+218error: /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?:
 
 :
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hppIn file included from :/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp26/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp::
+1711In file included from ::
 
-:4826::
+73/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp::In file included from 27 :
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:9:48:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp 48error: ::use of undeclared identifier 'st_atomic':
+error: /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hppuse of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?23
 
-9911:::
+:
 
-  In file included from error: error: /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hppuse of undeclared identifier 'st_atomic':
+:In file included from 17/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp::7317::
 
-23use of undeclared identifier 'st_atomic':
+ In file included from error: /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?:
 
 
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:18:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:27:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp:17:73: error: use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hppIn file included from :218:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:18:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp::27:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+11:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hppIn file included from :17/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp::7323::
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+ In file included from error: /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?17
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:18:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:27:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp:17:73: error: use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:18:
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:27:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_inst.hpp:16:
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp:17:73: error: use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/pto_comm_instr_impl.hpp:26:
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/comm/TNotify.hpp:48:9: error: use of undeclared identifier 'st_atomic'
+                                                                        ^~~~~~~~~~~~~~~
 
-        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
+                                                                        pto::BLOCK_BYTE_SIZE
 
-        ^
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
 
-        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-        ^
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
 
-        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
 
-        ^
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:27:
 
-        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp:17:73: error:     unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?
 
-        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);        ^
 
 
+                                                                        ^~~~~~~~~~~~~~~
 
+                                                                        pto::BLOCK_BYTE_SIZE
 
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
-        ^        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);        ^
+                                                                        ^~~~~~~~~~~~~~~
 
 
 
+                                                                        pto::BLOCK_BYTE_SIZE                                                                        ^~~~~~~~~~~~~~~
 
 
-        ^
 
-        st_atomic<int32_t>(value, (__gm__ int32_t *)sigPtr);
+                                                                        pto::BLOCK_BYTE_SIZE
 
-        ^
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
+                                                                        ^~~~~~~~~~~~~~~
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+                                                                        pto::BLOCK_BYTE_SIZE
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp:12:
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+                                                                        ^~~~~~~~~~~~~~~
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+                                                                        pto::BLOCK_BYTE_SIZE
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
-    ^
+                                                                        ^~~~~~~~~~~~~~~
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:11:
+                                                                        pto::BLOCK_BYTE_SIZE
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+                                                                        ^~~~~~~~~~~~~~~
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
+                                                                        pto::BLOCK_BYTE_SIZE
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:22:21: note: 'pto::BLOCK_BYTE_SIZE' declared here
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);689
+constexpr const int BLOCK_BYTE_SIZE = 32;
 
-:    ^5
+                    ^
 
-: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:22:21: note: 'pto::BLOCK_BYTE_SIZE' declared here
 
-689    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+constexpr const int BLOCK_BYTE_SIZE = 32;
 
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+                    ^
 
-    ^
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:22:21:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp note: :'pto::BLOCK_BYTE_SIZE' declared here22
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp21:: note: 22:'pto::BLOCK_BYTE_SIZE' declared here21
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+: note: 'pto::BLOCK_BYTE_SIZE' declared here
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:22/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:21::constexpr const int BLOCK_BYTE_SIZE = 32;22 
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+:note: 21                    ^: 'pto::BLOCK_BYTE_SIZE' declared here
 
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
 
-    ^
 
-    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+note: constexpr const int BLOCK_BYTE_SIZE = 32;
 
-    ^
+'pto::BLOCK_BYTE_SIZE' declared here                    ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp
 
-    ^
 
-:697/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+constexpr const int BLOCK_BYTE_SIZE = 32;
 
-    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+                    ^
 
-    ^
+constexpr const int BLOCK_BYTE_SIZE = 32;
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+                    ^constexpr const int BLOCK_BYTE_SIZE = 32;
 
-:    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
 
-    ^
 
-697:5/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+                    ^
 
-:    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
 
-    ^
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
- warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
 
-In file included from     TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
 
-    ^
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:27:
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp:17:96: error: In file included from use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-    ^
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:27:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp:17:96: error: use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;11
+
+:
+
+                                                                                               ^~~~~~~~~~~~~~~In file included from 
+
+                                                                                               pto::BLOCK_BYTE_SIZE/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp
 
 :23:
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:
+
+:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cppIn file included from 22:In file included from 12/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:
+
+::/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp21218:In file included from ::
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hppIn file included from : 11note: :
+
+'pto::BLOCK_BYTE_SIZE' declared here23/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:
+
+:In file included from 27    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;:
+
+
+
+
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hppIn file included from :/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp                                                                                               ^~~~~~~~~~~~~~~17/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppIn file included from ::/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp17
+
+:
+
+                                                                                               pto::BLOCK_BYTE_SIZEIn file included from 
+
+:In file included from 9623/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp::/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp11::constexpr const int BLOCK_BYTE_SIZE = 32;218/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:
+
+:
+
+In file included from In file included from 11/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:
+
+:
+
+In file included from  
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp                    ^::23/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:
+
+:In file included from In file included from error: 
+
+22use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?:
+
+:1727/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp21::
+
+23:
+
+:
+
+::17 :
+
+In file included from In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp::17218In file included from :
+
+note: In file included from ::218/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:
+
+:In file included from 17'pto::BLOCK_BYTE_SIZE' declared here/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp
+
+96:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp::27 :
+
+error: In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hppuse of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp17::
+
+27::
+
+21896:
+
+:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hppIn file included from : /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp17:error: :constexpr const int BLOCK_BYTE_SIZE = 32;27use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?:
+
+
+
+96
+
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp:: 17                    ^:
+
+96
+
+:error:                                                                                                 ^~~~~~~~~~~~~~~use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?
+
+error:                                                                                                pto::BLOCK_BYTE_SIZE
+
+
+
+use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:22:21: note: 'pto::BLOCK_BYTE_SIZE' declared here
+
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+
+                                                                                               ^~~~~~~~~~~~~~~
+
+                                                                                               pto::BLOCK_BYTE_SIZE
+
+constexpr const int BLOCK_BYTE_SIZE = 32;
+
+                    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:22:21: note: 'pto::BLOCK_BYTE_SIZE' declared here
+
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+
+                                                                                               ^~~~~~~~~~~~~~~
+
+                                                                                               pto::BLOCK_BYTE_SIZE    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+
+
+
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;                                                                                               ^~~~~~~~~~~~~~~
+
+
+
+                                                                                               ^~~~~~~~~~~~~~~                                                                                               pto::BLOCK_BYTE_SIZE
+
+
+
+                                                                                               pto::BLOCK_BYTE_SIZE
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:22:21: /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hppnote: constexpr const int BLOCK_BYTE_SIZE = 32;:'pto::BLOCK_BYTE_SIZE' declared here22/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp
+
+
+
+                    ^:
+
+:2122:: 21note: : 'pto::BLOCK_BYTE_SIZE' declared herenote: 
+
+'pto::BLOCK_BYTE_SIZE' declared here
+
+constexpr const int BLOCK_BYTE_SIZE = 32;
+
+                    ^
+
+constexpr const int BLOCK_BYTE_SIZE = 32;
+
+                    ^
+
+constexpr const int BLOCK_BYTE_SIZE = 32;
+
+                    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:22:21: note: 'pto::BLOCK_BYTE_SIZE' declared here
+
+constexpr const int BLOCK_BYTE_SIZE = 32;
+
+                    ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:27:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TMrgSort.hpp:17:96: error: use of undeclared identifier 'BLOCK_BYTE_SIZE'; did you mean 'pto::BLOCK_BYTE_SIZE'?
+
+    unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+
+                                                                                               ^~~~~~~~~~~~~~~
+
+                                                                                               pto::BLOCK_BYTE_SIZE
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/constants.hpp:22:21: note: 'pto::BLOCK_BYTE_SIZE' declared here
+
+constexpr const int BLOCK_BYTE_SIZE = 32;
+
+                    ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^In file included from 
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppwarning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
 
     ^
 
-:750:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp750::5:750 :warning: 5use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]:
-
- warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);5
-
-:    ^ 
-
-warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
-
-    ^
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-    ^
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);:
-
-760    ^:
-
-5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);:770:5: 
-
-warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    ^
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-
-
-    ^
-
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
-
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppuse of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
-
-    ^
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-:750:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
-
-    ^
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-:760    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-    ^
-
-:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-5    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+5    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
 
     ^
 
 : warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
 
     ^
 
-In file included from /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-In file included from     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
 
     ^
 
+:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-    ^/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp
+
+    ^
+
+:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+
+:    ^697
+
+:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
 
@@ -369,17 +485,99 @@ In file included from     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, 
 
 
 
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppIn file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppIn file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp::77023::
+
+5: /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppwarning: :use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]689
+
+:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+:    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+760/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+:5    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+
+    ^
+
+
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
     TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
-     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
 
     ^
 
-warning: /root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+In file included from :750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp:12:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+689:5: warning: /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hppuse of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+:750/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+:5/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:697:5: warning:     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+
+    ^use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+
+
+:    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+ warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp    ^
+
+:697:5: warning: /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
 use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
@@ -391,172 +589,2392 @@ use of function template name with no prior declaration in function call with ex
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
-
-    ^
-
-    ^
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
 
     ^
 
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
 
     ^
 
-:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
-
-    ^
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:855:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);5
+
+:    ^ 
+
+warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+
+    ^
+
+
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:855:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp: :warning: 760use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]:
+
+5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:855:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+
+
+    ^
+
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:855:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:855:5: In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:689:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:851:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:855:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);697:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:855:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:750:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:760:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, reluMode>(dst, src, preQuantScalar, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:770:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TINSERT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:855:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1634:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1634:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);    ^
+
+
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1634:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
-
-
-
-    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
-
-    ^    ^
-
-
-
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1634:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1634:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1634:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1634:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
 
     ^
 
-/root/workspace/daily/2026-03-20-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1621:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1634:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
 
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
 
     ^
 
-7 warnings and 1 error generated.
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
 
-make[2]: *** [testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/build.make:76: testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/tcolsum_kernel.cpp.o] Error 1
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
 
-make[1]: *** [CMakeFiles/Makefile2:1099: testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/all] Error 2
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
 
-make[1]: *** Waiting for unfinished jobs....
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
 
-7 warnings and 1 error generated.
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:15:
 
-7 warnings and 1 error generated.
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TAdd.hpp:10:
 
-make[2]: *** [testcase/textract/CMakeFiles/textract_kernel.dir/build.make:76: testcase/textract/CMakeFiles/textract_kernel.dir/textract_kernel.cpp.o] Error 1
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/common.hpp:54:30: error: implicit instantiation of undefined template 'pto::TypeGet<float __attribute__((ext_vector_type(64)))>'
 
-make[1]: *** [CMakeFiles/Makefile2:995: testcase/textract/CMakeFiles/textract_kernel.dir/all] Error 2
+    using RegType = typename TypeGet<T>::T;
+
+                             ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:222:27: note: in instantiation of template class 'pto::RegTensor<float __attribute__((ext_vector_type(64)))>' requested here
+
+        RegTensor<TAccum> vreg1;
+
+                          ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:303:5: note: in instantiation of function template specialization 'pto::TRowReduceImpl<pto::ROWSUM<float>, pto::Tile<pto::TileType::Vec, float, 127, 16, pto::BLayout::RowMajor, 127, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, 64U>' requested here
+
+    TRowReduceImpl<rowReduceOp, TileDataOut, TileDataIn, elementsPerRepeat>(dstPtr, srcPtr, srcValidRows, srcValidCols,
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:343:5: note: in instantiation of function template specialization 'pto::TRowSum<pto::Tile<pto::TileType::Vec, float, 127, 16, pto::BLayout::RowMajor, 127, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, 64U>' requested here
+
+    TRowSum<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), rows, cols, dst.GetValidRow());
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:981:5: note: in instantiation of function template specialization 'pto::TROWSUM_IMPL<pto::Tile<pto::TileType::Vec, float, 127, 16, pto::BLayout::RowMajor, 127, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>>' requested here
+
+    MAP_INSTR_IMPL(TROWSUM, dst, src, tmp);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:22:34: note: expanded from macro 'MAP_INSTR_IMPL'
+
+#define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
+
+                                 ^
+
+<scratch space>:215:1: note: expanded from here
+
+TROWSUM_IMPL
+
+^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:41:5: note: in instantiation of function template specialization 'pto::TROWSUM<pto::Tile<pto::TileType::Vec, float, 127, 16, pto::BLayout::RowMajor, 127, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>>' requested here
+
+    TROWSUM(dstTile, srcTile, tmpTile);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:85:5: note: in instantiation of function template specialization 'runTRowSum<float, 127, 127, 64, 63, 1>' requested here
+
+    runTRowSum<float, 127, 127, 64, 63, 1>(out, src);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/datatype.hpp:16:8: note: template is declared here
+
+struct TypeGet;
+
+       ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:32:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TRowReduce.hpp:12:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:230:17: error: no matching function for call to 'vbr'
+
+                vbr(vregdst, ReduceOp::InitVal);
+
+                ^~~
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:303:5: note: in instantiation of function template specialization 'pto::TRowReduceImpl<pto::ROWSUM<float>, pto::Tile<pto::TileType::Vec, float, 127, 16, pto::BLayout::RowMajor, 127, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, 64U>' requested here
+
+    TRowReduceImpl<rowReduceOp, TileDataOut, TileDataIn, elementsPerRepeat>(dstPtr, srcPtr, srcValidRows, srcValidCols,
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:343:5: note: in instantiation of function template specialization 'pto::TRowSum<pto::Tile<pto::TileType::Vec, float, 127, 16, pto::BLayout::RowMajor, 127, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, 64U>' requested here
+
+    TRowSum<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), rows, cols, dst.GetValidRow());
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:981:5: note: in instantiation of function template specialization 'pto::TROWSUM_IMPL<pto::Tile<pto::TileType::Vec, float, 127, 16, pto::BLayout::RowMajor, 127, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>>' requested here
+
+    MAP_INSTR_IMPL(TROWSUM, dst, src, tmp);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:22:34: note: expanded from macro 'MAP_INSTR_IMPL'
+
+#define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
+
+                                 ^
+
+<scratch space>:215:1: note: expanded from here
+
+TROWSUM_IMPL
+
+^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:41:5: note: in instantiation of function template specialization 'pto::TROWSUM<pto::Tile<pto::TileType::Vec, float, 127, 16, pto::BLayout::RowMajor, 127, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 127, 64, pto::BLayout::RowMajor, 127, 63, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>>' requested here
+
+    TROWSUM(dstTile, srcTile, tmpTile);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:85:5: note: in instantiation of function template specialization 'runTRowSum<float, 127, 127, 64, 63, 1>' requested here
+
+    runTRowSum<float, 127, 127, 64, 63, 1>(out, src);
+
+    ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8909:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f32 &' for 1st argument
+
+__VF_VBR(f32, float)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8902:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8 &' for 1st argument
+
+__VF_VBR(u8, uint8_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8903:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8 &' for 1st argument
+
+__VF_VBR(s8, int8_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8904:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16 &' for 1st argument
+
+__VF_VBR(u16, uint16_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8905:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16 &' for 1st argument
+
+__VF_VBR(s16, int16_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8906:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32 &' for 1st argument
+
+__VF_VBR(s32, int32_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8907:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32 &' for 1st argument
+
+__VF_VBR(u32, uint32_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8908:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16 &' for 1st argument
+
+__VF_VBR(f16, half)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:32:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TRowReduce.hpp:12:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:245:21: error: no matching function for call to 'vsts'
+
+                    vsts(vregdst, dstPtr, i * TileDataOut::RowStride, distValue, pregdst);
+
+                    ^~~~
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1621:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f32' for 1st argument
+
+__VF_VSTS(vsts, float, f32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1614:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8' for 1st argument
+
+__VF_VSTS(vsts, int8_t, s8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1615:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8' for 1st argument
+
+__VF_VSTS(vsts, uint8_t, u8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1616:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16' for 1st argument
+
+__VF_VSTS(vsts, int16_t, s16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1617:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16' for 1st argument
+
+__VF_VSTS(vsts, uint16_t, u16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1618:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32' for 1st argument
+
+__VF_VSTS(vsts, int32_t, s32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1619:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32' for 1st argument
+
+__VF_VSTS(vsts, uint32_t, u32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1620:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16' for 1st argument
+
+__VF_VSTS(vsts, half, f16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1622:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s64' for 1st argument
+
+__VF_VSTS(vsts, int64_t, s64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1623:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u64' for 1st argument
+
+__VF_VSTS(vsts, uint64_t, u64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1709:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, half, f16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1707:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint32_t, u32, v64b32)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1706:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int32_t, s32, v64b32)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1701:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint16_t, u16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1700:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int16_t, s16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1699:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint8_t, u8, v256b8)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1698:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int8_t, s8, v256b8)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1623:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint64_t, u64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1622:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int64_t, s64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1621:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, float, f32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1620:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, half, f16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1619:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint32_t, u32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1618:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int32_t, s32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1617:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint16_t, u16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1616:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int16_t, s16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1615:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint8_t, u8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1614:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int8_t, s8, v256, NOT_DEPRECATED)
+
+          ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:32:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TRowReduce.hpp:12:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:250:17: error: no matching function for call to 'vbr'
+
+                vbr(vregdst, ReduceOp::InitVal);
+
+                ^~~
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8909:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f32 &' for 1st argument
+
+__VF_VBR(f32, float)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8902:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8 &' for 1st argument
+
+__VF_VBR(u8, uint8_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8903:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8 &' for 1st argument
+
+__VF_VBR(s8, int8_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8904:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16 &' for 1st argument
+
+__VF_VBR(u16, uint16_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8905:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16 &' for 1st argument
+
+__VF_VBR(s16, int16_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8906:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32 &' for 1st argument
+
+__VF_VBR(s32, int32_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8907:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32 &' for 1st argument
+
+__VF_VBR(u32, uint32_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8908:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16 &' for 1st argument
+
+__VF_VBR(f16, half)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:32:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TRowReduce.hpp:12:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:266:21: error: no matching function for call to 'vsts'
+
+                    vsts(vregdst, dstPtr, TileDataOut::RowStride, distValue, pregdst, POST_UPDATE);
+
+                    ^~~~
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1621:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f32' for 1st argument
+
+__VF_VSTS(vsts, float, f32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1602:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1614:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8' for 1st argument
+
+__VF_VSTS(vsts, int8_t, s8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1602:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1615:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8' for 1st argument
+
+__VF_VSTS(vsts, uint8_t, u8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1602:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1616:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16' for 1st argument
+
+__VF_VSTS(vsts, int16_t, s16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1602:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1617:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16' for 1st argument
+
+__VF_VSTS(vsts, uint16_t, u16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1602:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1618:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32' for 1st argument
+
+__VF_VSTS(vsts, int32_t, s32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1602:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1619:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32' for 1st argument
+
+__VF_VSTS(vsts, uint32_t, u32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1602:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1620:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16' for 1st argument
+
+__VF_VSTS(vsts, half, f16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1602:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1622:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s64' for 1st argument
+
+__VF_VSTS(vsts, int64_t, s64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1602:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1623:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u64' for 1st argument
+
+__VF_VSTS(vsts, uint64_t, u64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1602:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1698:13: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8' for 1st argument
+
+__VF_VSTSX2(vsts, int8_t, s8, v256b8)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1687:22: note: expanded from macro '__VF_VSTSX2'
+
+  CCE_INTRINSIC void OP(vector_##ST src0, vector_##ST src1, __ubuf__ LT *base, \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1699:13: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8' for 1st argument
+
+__VF_VSTSX2(vsts, uint8_t, u8, v256b8)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1687:22: note: expanded from macro '__VF_VSTSX2'
+
+  CCE_INTRINSIC void OP(vector_##ST src0, vector_##ST src1, __ubuf__ LT *base, \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1700:13: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16' for 1st argument
+
+__VF_VSTSX2(vsts, int16_t, s16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1687:22: note: expanded from macro '__VF_VSTSX2'
+
+  CCE_INTRINSIC void OP(vector_##ST src0, vector_##ST src1, __ubuf__ LT *base, \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1701:13: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16' for 1st argument
+
+__VF_VSTSX2(vsts, uint16_t, u16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1687:22: note: expanded from macro '__VF_VSTSX2'
+
+  CCE_INTRINSIC void OP(vector_##ST src0, vector_##ST src1, __ubuf__ LT *base, \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1706:13: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32' for 1st argument
+
+__VF_VSTSX2(vsts, int32_t, s32, v64b32)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1687:22: note: expanded from macro '__VF_VSTSX2'
+
+  CCE_INTRINSIC void OP(vector_##ST src0, vector_##ST src1, __ubuf__ LT *base, \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1707:13: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32' for 1st argument
+
+__VF_VSTSX2(vsts, uint32_t, u32, v64b32)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1687:22: note: expanded from macro '__VF_VSTSX2'
+
+  CCE_INTRINSIC void OP(vector_##ST src0, vector_##ST src1, __ubuf__ LT *base, \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1709:13: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16' for 1st argument
+
+__VF_VSTSX2(vsts, half, f16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1687:22: note: expanded from macro '__VF_VSTSX2'
+
+  CCE_INTRINSIC void OP(vector_##ST src0, vector_##ST src1, __ubuf__ LT *base, \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1623:11: note: candidate function template not viable: requires 5 arguments, but 6 were provided
+
+__VF_VSTS(vsts, uint64_t, u64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1622:11: note: candidate function template not viable: requires 5 arguments, but 6 were provided
+
+__VF_VSTS(vsts, int64_t, s64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1621:11: note: candidate function template not viable: requires 5 arguments, but 6 were provided
+
+__VF_VSTS(vsts, float, f32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1620:11: note: candidate function template not viable: requires 5 arguments, but 6 were provided
+
+__VF_VSTS(vsts, half, f16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1619:11: note: candidate function template not viable: requires 5 arguments, but 6 were provided
+
+__VF_VSTS(vsts, uint32_t, u32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1618:11: note: candidate function template not viable: requires 5 arguments, but 6 were provided
+
+__VF_VSTS(vsts, int32_t, s32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1617:11: note: candidate function template not viable: requires 5 arguments, but 6 were provided
+
+__VF_VSTS(vsts, uint16_t, u16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1616:11: note: candidate function template not viable: requires 5 arguments, but 6 were provided
+
+__VF_VSTS(vsts, int16_t, s16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1615:11: note: candidate function template not viable: requires 5 arguments, but 6 were provided
+
+__VF_VSTS(vsts, uint8_t, u8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1614:11: note: candidate function template not viable: requires 5 arguments, but 6 were provided
+
+__VF_VSTS(vsts, int8_t, s8, v256, NOT_DEPRECATED)
+
+          ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:32:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TRowReduce.hpp:12:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:230:17: error: no matching function for call to 'vbr'
+
+                vbr(vregdst, ReduceOp::InitVal);
+
+                ^~~
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:303:5: note: in instantiation of function template specialization 'pto::TRowReduceImpl<pto::ROWSUM<float>, pto::Tile<pto::TileType::Vec, float, 63, 16, pto::BLayout::RowMajor, 63, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 63, 64, pto::BLayout::RowMajor, 63, 64, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, 64U>' requested here
+
+    TRowReduceImpl<rowReduceOp, TileDataOut, TileDataIn, elementsPerRepeat>(dstPtr, srcPtr, srcValidRows, srcValidCols,
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:343:5: note: in instantiation of function template specialization 'pto::TRowSum<pto::Tile<pto::TileType::Vec, float, 63, 16, pto::BLayout::RowMajor, 63, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 63, 64, pto::BLayout::RowMajor, 63, 64, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, 64U>' requested here
+
+    TRowSum<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), rows, cols, dst.GetValidRow());
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:981:5: note: in instantiation of function template specialization 'pto::TROWSUM_IMPL<pto::Tile<pto::TileType::Vec, float, 63, 16, pto::BLayout::RowMajor, 63, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 63, 64, pto::BLayout::RowMajor, 63, 64, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 63, 64, pto::BLayout::RowMajor, 63, 64, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>>' requested here
+
+    MAP_INSTR_IMPL(TROWSUM, dst, src, tmp);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:22:34: note: expanded from macro 'MAP_INSTR_IMPL'
+
+#define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
+
+                                 ^
+
+<scratch space>:215:1: note: expanded from here
+
+TROWSUM_IMPL
+
+^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:41:5: note: in instantiation of function template specialization 'pto::TROWSUM<pto::Tile<pto::TileType::Vec, float, 63, 16, pto::BLayout::RowMajor, 63, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 63, 64, pto::BLayout::RowMajor, 63, 64, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 63, 64, pto::BLayout::RowMajor, 63, 64, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>>' requested here
+
+    TROWSUM(dstTile, srcTile, tmpTile);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:89:5: note: in instantiation of function template specialization 'runTRowSum<float, 63, 63, 64, 64, 1>' requested here
+
+    runTRowSum<float, 63, 63, 64, 64, 1>(out, src);
+
+    ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8909:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f32 &' for 1st argument
+
+__VF_VBR(f32, float)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8902:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8 &' for 1st argument
+
+__VF_VBR(u8, uint8_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8903:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8 &' for 1st argument
+
+__VF_VBR(s8, int8_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8904:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16 &' for 1st argument
+
+__VF_VBR(u16, uint16_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8905:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16 &' for 1st argument
+
+__VF_VBR(s16, int16_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8906:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32 &' for 1st argument
+
+__VF_VBR(s32, int32_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8907:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32 &' for 1st argument
+
+__VF_VBR(u32, uint32_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8908:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16 &' for 1st argument
+
+__VF_VBR(f16, half)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:32:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TRowReduce.hpp:12:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:235:38: error: no viable conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'pto::ROWSUM<float>::RegType' (aka 'vector_f32')
+
+                    ReduceOp::Reduce(vreg1, vreg0, preg);
+
+                                     ^~~~~
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/common.hpp:58:18: note: candidate function
+
+    PTO_INTERNAL operator RegType &()
+
+                 ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:61:46: note: passing argument to parameter 'dst' here
+
+    static PTO_INTERNAL void Reduce(RegType &dst, RegType &src, MaskReg &pred)
+
+                                             ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:236:42: error: no viable conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'pto::ROWSUM<float>::RegType' (aka 'vector_f32')
+
+                    ReduceOp::Accumulate(vregdst, vregdst, vreg1, pregdst);
+
+                                         ^~~~~~~
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/common.hpp:58:18: note: candidate function
+
+    PTO_INTERNAL operator RegType &()
+
+                 ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:57:50: note: passing argument to parameter 'dst' here
+
+    static PTO_INTERNAL void Accumulate(RegType &dst, RegType &src0, RegType &src1, MaskReg &pred)
+
+                                                 ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:245:21: error: no matching function for call to 'vsts'
+
+                    vsts(vregdst, dstPtr, i * TileDataOut::RowStride, distValue, pregdst);
+
+                    ^~~~
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1621:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f32' for 1st argument
+
+__VF_VSTS(vsts, float, f32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1614:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8' for 1st argument
+
+__VF_VSTS(vsts, int8_t, s8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1615:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8' for 1st argument
+
+__VF_VSTS(vsts, uint8_t, u8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1616:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16' for 1st argument
+
+__VF_VSTS(vsts, int16_t, s16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1617:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16' for 1st argument
+
+__VF_VSTS(vsts, uint16_t, u16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1618:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32' for 1st argument
+
+__VF_VSTS(vsts, int32_t, s32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1619:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32' for 1st argument
+
+__VF_VSTS(vsts, uint32_t, u32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1620:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16' for 1st argument
+
+__VF_VSTS(vsts, half, f16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1622:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s64' for 1st argument
+
+__VF_VSTS(vsts, int64_t, s64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1623:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u64' for 1st argument
+
+__VF_VSTS(vsts, uint64_t, u64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1709:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, half, f16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1707:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint32_t, u32, v64b32)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1706:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int32_t, s32, v64b32)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1701:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint16_t, u16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1700:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int16_t, s16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1699:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint8_t, u8, v256b8)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1698:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int8_t, s8, v256b8)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1623:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint64_t, u64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1622:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int64_t, s64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1621:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, float, f32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1620:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, half, f16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1619:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint32_t, u32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1618:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int32_t, s32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1617:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint16_t, u16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1616:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int16_t, s16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1615:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint8_t, u8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1614:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int8_t, s8, v256, NOT_DEPRECATED)
+
+          ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:32:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TRowReduce.hpp:12:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:230:17: error: no matching function for call to 'vbr'
+
+                vbr(vregdst, ReduceOp::InitVal);
+
+                ^~~
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:303:5: note: in instantiation of function template specialization 'pto::TRowReduceImpl<pto::ROWSUM<float>, pto::Tile<pto::TileType::Vec, float, 31, 16, pto::BLayout::RowMajor, 31, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 31, 128, pto::BLayout::RowMajor, 31, 127, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, 64U>' requested here
+
+    TRowReduceImpl<rowReduceOp, TileDataOut, TileDataIn, elementsPerRepeat>(dstPtr, srcPtr, srcValidRows, srcValidCols,
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:343:5: note: in instantiation of function template specialization 'pto::TRowSum<pto::Tile<pto::TileType::Vec, float, 31, 16, pto::BLayout::RowMajor, 31, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 31, 128, pto::BLayout::RowMajor, 31, 127, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, 64U>' requested here
+
+    TRowSum<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), rows, cols, dst.GetValidRow());
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:981:5: note: in instantiation of function template specialization 'pto::TROWSUM_IMPL<pto::Tile<pto::TileType::Vec, float, 31, 16, pto::BLayout::RowMajor, 31, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 31, 128, pto::BLayout::RowMajor, 31, 127, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 31, 128, pto::BLayout::RowMajor, 31, 127, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>>' requested here
+
+    MAP_INSTR_IMPL(TROWSUM, dst, src, tmp);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:22:34: note: expanded from macro 'MAP_INSTR_IMPL'
+
+#define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
+
+                                 ^
+
+<scratch space>:215:1: note: expanded from here
+
+TROWSUM_IMPL
+
+^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:41:5: note: in instantiation of function template specialization 'pto::TROWSUM<pto::Tile<pto::TileType::Vec, float, 31, 16, pto::BLayout::RowMajor, 31, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 31, 128, pto::BLayout::RowMajor, 31, 127, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 31, 128, pto::BLayout::RowMajor, 31, 127, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>>' requested here
+
+    TROWSUM(dstTile, srcTile, tmpTile);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:93:5: note: in instantiation of function template specialization 'runTRowSum<float, 31, 31, 128, 127, 1>' requested here
+
+    runTRowSum<float, 31, 31, 128, 127, 1>(out, src);
+
+    ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8909:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f32 &' for 1st argument
+
+__VF_VBR(f32, float)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8902:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8 &' for 1st argument
+
+__VF_VBR(u8, uint8_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8903:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8 &' for 1st argument
+
+__VF_VBR(s8, int8_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8904:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16 &' for 1st argument
+
+__VF_VBR(u16, uint16_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8905:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16 &' for 1st argument
+
+__VF_VBR(s16, int16_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8906:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32 &' for 1st argument
+
+__VF_VBR(s32, int32_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8907:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32 &' for 1st argument
+
+__VF_VBR(u32, uint32_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8908:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16 &' for 1st argument
+
+__VF_VBR(f16, half)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:32:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TRowReduce.hpp:12:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:235:38: error: no viable conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'pto::ROWSUM<float>::RegType' (aka 'vector_f32')
+
+                    ReduceOp::Reduce(vreg1, vreg0, preg);
+
+                                     ^~~~~
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/common.hpp:58:18: note: candidate function
+
+    PTO_INTERNAL operator RegType &()
+
+                 ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:61:46: note: passing argument to parameter 'dst' here
+
+    static PTO_INTERNAL void Reduce(RegType &dst, RegType &src, MaskReg &pred)
+
+                                             ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:236:42: error: no viable conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'pto::ROWSUM<float>::RegType' (aka 'vector_f32')
+
+                    ReduceOp::Accumulate(vregdst, vregdst, vreg1, pregdst);
+
+                                         ^~~~~~~
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/common.hpp:58:18: note: candidate function
+
+    PTO_INTERNAL operator RegType &()
+
+                 ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:57:50: note: passing argument to parameter 'dst' here
+
+    static PTO_INTERNAL void Accumulate(RegType &dst, RegType &src0, RegType &src1, MaskReg &pred)
+
+                                                 ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:245:21: error: no matching function for call to 'vsts'
+
+                    vsts(vregdst, dstPtr, i * TileDataOut::RowStride, distValue, pregdst);
+
+                    ^~~~
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1621:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f32' for 1st argument
+
+__VF_VSTS(vsts, float, f32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1614:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8' for 1st argument
+
+__VF_VSTS(vsts, int8_t, s8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1615:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8' for 1st argument
+
+__VF_VSTS(vsts, uint8_t, u8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1616:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16' for 1st argument
+
+__VF_VSTS(vsts, int16_t, s16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1617:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16' for 1st argument
+
+__VF_VSTS(vsts, uint16_t, u16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1618:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32' for 1st argument
+
+__VF_VSTS(vsts, int32_t, s32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1619:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32' for 1st argument
+
+__VF_VSTS(vsts, uint32_t, u32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1620:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16' for 1st argument
+
+__VF_VSTS(vsts, half, f16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1622:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s64' for 1st argument
+
+__VF_VSTS(vsts, int64_t, s64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1623:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u64' for 1st argument
+
+__VF_VSTS(vsts, uint64_t, u64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1709:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, half, f16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1707:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint32_t, u32, v64b32)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1706:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int32_t, s32, v64b32)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1701:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint16_t, u16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1700:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int16_t, s16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1699:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint8_t, u8, v256b8)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1698:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int8_t, s8, v256b8)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1623:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint64_t, u64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1622:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int64_t, s64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1621:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, float, f32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1620:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, half, f16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1619:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint32_t, u32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1618:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int32_t, s32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1617:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint16_t, u16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1616:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int16_t, s16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1615:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint8_t, u8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1614:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int8_t, s8, v256, NOT_DEPRECATED)
+
+          ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:32:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TRowReduce.hpp:12:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:230:17: error: no matching function for call to 'vbr'
+
+                vbr(vregdst, ReduceOp::InitVal);
+
+                ^~~
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:303:5: note: in instantiation of function template specialization 'pto::TRowReduceImpl<pto::ROWSUM<float>, pto::Tile<pto::TileType::Vec, float, 15, 16, pto::BLayout::RowMajor, 15, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 15, 192, pto::BLayout::RowMajor, 15, 192, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, 64U>' requested here
+
+    TRowReduceImpl<rowReduceOp, TileDataOut, TileDataIn, elementsPerRepeat>(dstPtr, srcPtr, srcValidRows, srcValidCols,
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:343:5: note: in instantiation of function template specialization 'pto::TRowSum<pto::Tile<pto::TileType::Vec, float, 15, 16, pto::BLayout::RowMajor, 15, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 15, 192, pto::BLayout::RowMajor, 15, 192, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, 64U>' requested here
+
+    TRowSum<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), rows, cols, dst.GetValidRow());
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:981:5: note: in instantiation of function template specialization 'pto::TROWSUM_IMPL<pto::Tile<pto::TileType::Vec, float, 15, 16, pto::BLayout::RowMajor, 15, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 15, 192, pto::BLayout::RowMajor, 15, 192, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 15, 192, pto::BLayout::RowMajor, 15, 192, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>>' requested here
+
+    MAP_INSTR_IMPL(TROWSUM, dst, src, tmp);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:22:34: note: expanded from macro 'MAP_INSTR_IMPL'
+
+#define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
+
+                                 ^
+
+<scratch space>:215:1: note: expanded from here
+
+TROWSUM_IMPL
+
+^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:41:5: note: in instantiation of function template specialization 'pto::TROWSUM<pto::Tile<pto::TileType::Vec, float, 15, 16, pto::BLayout::RowMajor, 15, 1, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 15, 192, pto::BLayout::RowMajor, 15, 192, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>, pto::Tile<pto::TileType::Vec, float, 15, 192, pto::BLayout::RowMajor, 15, 192, pto::SLayout::NoneBox, 512, pto::PadValue::Null, pto::CompactMode::Null>>' requested here
+
+    TROWSUM(dstTile, srcTile, tmpTile);
+
+    ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:97:5: note: in instantiation of function template specialization 'runTRowSum<float, 15, 15, 192, 192, 1>' requested here
+
+    runTRowSum<float, 15, 15, 192, 192, 1>(out, src);
+
+    ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8909:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f32 &' for 1st argument
+
+__VF_VBR(f32, float)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8902:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8 &' for 1st argument
+
+__VF_VBR(u8, uint8_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8903:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8 &' for 1st argument
+
+__VF_VBR(s8, int8_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8904:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16 &' for 1st argument
+
+__VF_VBR(u16, uint16_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8905:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16 &' for 1st argument
+
+__VF_VBR(s16, int16_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8906:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32 &' for 1st argument
+
+__VF_VBR(s32, int32_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8907:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32 &' for 1st argument
+
+__VF_VBR(u32, uint32_t)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8908:1: note: candidate function not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16 &' for 1st argument
+
+__VF_VBR(f16, half)
+
+^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:8897:22: note: expanded from macro '__VF_VBR'
+
+  CCE_INTRINSIC void vbr(vector_##VTYPE &dst, STYPE src) {                     \
+
+                     ^
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:218:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:32:
+
+In file included from /root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TRowReduce.hpp:12:
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:235:38: error: no viable conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'pto::ROWSUM<float>::RegType' (aka 'vector_f32')
+
+                    ReduceOp::Reduce(vreg1, vreg0, preg);
+
+                                     ^~~~~
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/common.hpp:58:18: note: candidate function
+
+    PTO_INTERNAL operator RegType &()
+
+                 ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:61:46: note: passing argument to parameter 'dst' here
+
+    static PTO_INTERNAL void Reduce(RegType &dst, RegType &src, MaskReg &pred)
+
+                                             ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:236:42: error: no viable conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'pto::ROWSUM<float>::RegType' (aka 'vector_f32')
+
+                    ReduceOp::Accumulate(vregdst, vregdst, vreg1, pregdst);
+
+                                         ^~~~~~~
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/common.hpp:58:18: note: candidate function
+
+    PTO_INTERNAL operator RegType &()
+
+                 ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:57:50: note: passing argument to parameter 'dst' here
+
+    static PTO_INTERNAL void Accumulate(RegType &dst, RegType &src0, RegType &src1, MaskReg &pred)
+
+                                                 ^
+
+/root/workspace/daily/2026-03-20-19/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TRowReduce.hpp:245:21: error: no matching function for call to 'vsts'
+
+                    vsts(vregdst, dstPtr, i * TileDataOut::RowStride, distValue, pregdst);
+
+                    ^~~~
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1621:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f32' for 1st argument
+
+__VF_VSTS(vsts, float, f32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1614:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s8' for 1st argument
+
+__VF_VSTS(vsts, int8_t, s8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1615:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u8' for 1st argument
+
+__VF_VSTS(vsts, uint8_t, u8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1616:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s16' for 1st argument
+
+__VF_VSTS(vsts, int16_t, s16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1617:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u16' for 1st argument
+
+__VF_VSTS(vsts, uint16_t, u16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1618:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s32' for 1st argument
+
+__VF_VSTS(vsts, int32_t, s32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1619:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u32' for 1st argument
+
+__VF_VSTS(vsts, uint32_t, u32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1620:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_f16' for 1st argument
+
+__VF_VSTS(vsts, half, f16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1622:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_s64' for 1st argument
+
+__VF_VSTS(vsts, int64_t, s64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1623:11: note: candidate function template not viable: no known conversion from 'RegTensor<TAccum>' (aka 'RegTensor<vector_f32>') to 'vector_u64' for 1st argument
+
+__VF_VSTS(vsts, uint64_t, u64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1594:38: note: expanded from macro '__VF_VSTS'
+
+  DEPRECATED_ATTR CCE_INTRINSIC void OP(                                       \
+
+                                     ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1709:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, half, f16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1707:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint32_t, u32, v64b32)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1706:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int32_t, s32, v64b32)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1701:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint16_t, u16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1700:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int16_t, s16, v128b16)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1699:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, uint8_t, u8, v256b8)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1698:13: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTSX2(vsts, int8_t, s8, v256b8)
+
+            ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1623:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint64_t, u64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1622:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int64_t, s64, v32, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1621:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, float, f32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1620:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, half, f16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1619:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint32_t, u32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1618:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int32_t, s32, v64, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1617:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint16_t, u16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1616:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int16_t, s16, v128, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1615:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, uint8_t, u8, v256, NOT_DEPRECATED)
+
+          ^
+
+/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/__clang_cce_vector_intrinsics.h:1614:11: note: candidate function template not viable: requires 6 arguments, but 5 were provided
+
+__VF_VSTS(vsts, int8_t, s8, v256, NOT_DEPRECATED)
+
+          ^
+
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+
+7 warnings and 20 errors generated.
 
 make[2]: *** [testcase/trowsum/CMakeFiles/trowsum_kernel.dir/build.make:76: testcase/trowsum/CMakeFiles/trowsum_kernel.dir/trowsum_kernel.cpp.o] Error 1
 
 make[1]: *** [CMakeFiles/Makefile2:1047: testcase/trowsum/CMakeFiles/trowsum_kernel.dir/all] Error 2
 
-7 warnings and 1 error generated.
+make[1]: *** Waiting for unfinished jobs....
 
 run failed: build failed
+7 warnings and 2 errors generated.
+
+make[2]: *** [testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/build.make:76: testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/tcolsum_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:1099: testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/all] Error 2
+
+7 warnings and 2 errors generated.
+
+make[2]: *** [testcase/textract/CMakeFiles/textract_kernel.dir/build.make:76: testcase/textract/CMakeFiles/textract_kernel.dir/textract_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:995: testcase/textract/CMakeFiles/textract_kernel.dir/all] Error 2
+
+7 warnings and 2 errors generated.
+
 make[2]: *** [testcase/ttrans/CMakeFiles/ttrans_kernel.dir/build.make:76: testcase/ttrans/CMakeFiles/ttrans_kernel.dir/ttrans_kernel.cpp.o] Error 1
 
 make[1]: *** [CMakeFiles/Makefile2:891: testcase/ttrans/CMakeFiles/ttrans_kernel.dir/all] Error 2
 
-7 warnings and 1 error generated.
+7 warnings and 2 errors generated.
 
 make[2]: *** [testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/build.make:76: testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/tmatmul_kernel.cpp.o] Error 1
 
 make[1]: *** [CMakeFiles/Makefile2:735: testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/all] Error 2
 
-7 warnings and 1 error generated.
+7 warnings and 2 errors generated.
 
 make[2]: *** [testcase/tload/CMakeFiles/tload_kernel.dir/build.make:76: testcase/tload/CMakeFiles/tload_kernel.dir/tload_kernel.cpp.o] Error 1
 
-make[1]: *** [CMakeFiles/Makefile2:787: testcase/tload/CMakeFiles/tload_kernel.dir/all] Error 2
+7 warnings and 2 errors generated.
 
-7 warnings and 1 error generated.
+make[1]: *** [CMakeFiles/Makefile2:787: testcase/tload/CMakeFiles/tload_kernel.dir/all] Error 2
 
 make[2]: *** [testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/build.make:76: testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/tmrgsort_kernel.cpp.o] Error 1
 
 make[1]: *** [CMakeFiles/Makefile2:839: testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/all] Error 2
 
-7 warnings and 1 error generated.
+7 warnings and 2 errors generated.
 
 make[2]: *** [testcase/tstore/CMakeFiles/tstore_kernel.dir/build.make:76: testcase/tstore/CMakeFiles/tstore_kernel.dir/tstore_kernel.cpp.o] Error 1
 
