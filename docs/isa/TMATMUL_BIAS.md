@@ -33,13 +33,13 @@ Synchronous form:
 %acc = tmatmul.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %c = pto.tmatmul.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tmatmul.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
@@ -50,19 +50,22 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileRight, typename TileBias, typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_BIAS(TileRes& cMatrix, TileLeft& aMatrix, TileRight& bMatrix, TileBias& biasData,
-                                  WaitEvents&... events);
+PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData, WaitEvents &... events);
+
+template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename TileBias,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - All constraints from `TMATMUL` apply to the `(cMatrix, aMatrix, bMatrix)` triple.
 - **Bias constraints (A2A3)**:
-  - `TileBias::DType` must match `TileRes::DType`.
-  - `TileBias::Loc == TileType::Bias` and `TileBias::Rows == 1`.
+    - `TileBias::DType` must match `TileRes::DType`.
+    - `TileBias::Loc == TileType::Bias` and `TileBias::Rows == 1`.
 - **Bias constraints (A5)**:
-  - `TileBias::DType` must match `TileRes::DType`.
-  - `TileBias::Loc == TileType::Bias`, `TileBias::Rows == 1`, and `TileBias::isRowMajor`.
+    - `TileBias::DType` must match `TileRes::DType`.
+    - `TileBias::Loc == TileType::Bias`, `TileBias::Rows == 1`, and `TileBias::isRowMajor`.
 
 ## Examples
 

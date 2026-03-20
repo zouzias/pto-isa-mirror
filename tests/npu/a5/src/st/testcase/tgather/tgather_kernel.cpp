@@ -47,8 +47,8 @@ __global__ AICORE void runTGather(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__
     TileData_dst dstTile(dst_row, dst_col);
 
     TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x20000);
-    TASSIGN(dstTile, 0x28000);
+    TASSIGN(src1Tile, 0x0 + src0_row * src0_col * sizeof(Tsrc0));
+    TASSIGN(dstTile, 0x0 + src0_row * src0_col * sizeof(Tsrc0) + src1_row * src1_col * sizeof(Tsrc1));
 
     GlobalData_src0 src0Global(src0);
     GlobalData_src1 src1Global(src1);
@@ -77,7 +77,7 @@ void launchTGATHER_demo(src0T *src0, src1T *src1, dstT *out, void *stream)
 template void launchTGATHER_demo<float, int32_t, float, 32, 1024, 16, 64>(float *src0, int32_t *src1, float *out,
                                                                           void *stream);
 template void launchTGATHER_demo<int32_t, int32_t, int32_t, 32, 512, 16, 256>(int32_t *src0, int32_t *src1,
-                                                                              int32_t *out, void *stream); // nan?
+                                                                              int32_t *out, void *stream);
 template void launchTGATHER_demo<int16_t, int16_t, int16_t, 16, 1024, 16, 128>(int16_t *src0, int16_t *src1,
                                                                                int16_t *out, void *stream);
 template void launchTGATHER_demo<int16_t, int16_t, int16_t, 32, 256, 32, 64>(int16_t *src0, int16_t *src1, int16_t *out,
@@ -246,11 +246,16 @@ __global__ AICORE void runTGATHER_CMP(__gm__ srcT *src, __gm__ src1T *src1, __gm
 
     SrcGlobalData srcGlobal(src);
     DstGlobalData dstGlobal(out);
+    constexpr int cmpVCol = (kTCols_ + 7) / 8;
+    constexpr int cmpCol = (cmpVCol + 31) / 32 * 32;
+    using TmpTileData = Tile<TileType::Vec, uint8_t, kTRows_, cmpCol, BLayout::RowMajor, -1, -1>;
+    TmpTileData tmpTile(kTRows_, cmpVCol);
 
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TGATHER<DstTileData, TileData, ConcatTileData, cmpMode, offset>(dstTile, srcTile, src1[0], concatTile);
+    TGATHER<DstTileData, TileData, ConcatTileData, TmpTileData, cmpMode, offset>(dstTile, srcTile, src1[0], concatTile,
+                                                                                 tmpTile);
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);

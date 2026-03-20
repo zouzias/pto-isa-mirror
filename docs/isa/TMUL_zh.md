@@ -41,26 +41,26 @@ pto.tmul ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TMUL(TileData& dst, TileData& src0, TileData& src1, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TMUL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
-  - Tile 布局必须是行主序（`TileData::isRowMajor`）。
-  - 运行时：`src0`、`src1` 和 `dst` tiles 应具有相同的 `validRow/validCol`。
+    - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`half`、`float`。
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
+    - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
+    - Tile 布局必须是行主序（`TileData::isRowMajor`）。
+    - 运行时：`src0`、`src1` 和 `dst` tiles 应具有相同的 `validRow/validCol`。
 - **实现检查 (A5)**:
-  - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`float`、`int16_t`、`uint16_t`、`half`。
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
-  - Tile 布局必须是行主序（`TileData::isRowMajor`）。
-  - 运行时：`src0`、`src1` 和 `dst` tiles 应具有相同的 `validRow/validCol`。
+    - `TileData::DType` 必须是以下之一：`int32_t`、`uint32_t`、`float`、`int16_t`、`uint16_t`、`half`。
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
+    - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
+    - Tile 布局必须是行主序（`TileData::isRowMajor`）。
+    - 运行时：`src0`、`src1` 和 `dst` tiles 应具有相同的 `validRow/validCol`。
 - **有效区域**:
-  - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
+    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 
 ## 示例
 

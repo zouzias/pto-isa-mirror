@@ -14,7 +14,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
 #include "pto/common/pto_instr_impl.hpp"
+#ifndef __COSTMODEL
 #include "pto/comm/pto_comm_inst.hpp"
+#endif
 #include "pto/common/tassign_check.hpp"
 
 #define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
@@ -139,11 +141,22 @@ PTO_INST RecordEvent TPREFETCH(TileData &dst, GlobalData &src)
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename T, typename... WaitEvents>
-PTO_INST RecordEvent TCMPS(TileDataDst &dst, TileDataSrc0 &src0, T src1, CmpMode cmpMode, WaitEvents &... events)
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TCMPS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType src1, CmpMode mode,
+                           WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TCMPS, dst, src0, src1, cmpMode);
+    MAP_INSTR_IMPL(TCMPS, dst, src0, src1, mode);
+    return {};
+}
+
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+          typename = std::void_t<typename TileDataSrc1::DType>, typename... WaitEvents>
+PTO_INST RecordEvent TCMPS(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, CmpMode mode,
+                           WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TCMPS, dst, src0, src1, mode);
     return {};
 }
 
@@ -153,6 +166,14 @@ PTO_INST RecordEvent TCMP(TileDataDst &dst, TileDataSrc &src0, TileDataSrc &src1
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCMP, dst, src0, src1, cmpMode);
+    return {};
+}
+
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TCONCAT(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TCONCAT, dst, src0, src1);
     return {};
 }
 
@@ -805,17 +826,15 @@ PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src1,
     return {};
 }
 
-#ifdef PTO_NPU_ARCH_A5
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, int offset,
+template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode, int offset,
           typename... WaitEvents>
 PTO_INST RecordEvent TGATHER(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst,
-                             WaitEvents &... events)
+                             TileDataTmp &tmp, WaitEvents &... events)
 {
     TSYNC(events...);
-    TGATHER_IMPL<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst, src0, k_value, cdst);
+    TGATHER_IMPL<TileDataD, TileDataS, TileDataC, TileDataTmp, cmpMode, offset>(dst, src0, k_value, cdst, tmp);
     return {};
 }
-#endif
 
 template <typename TileData, typename T, int descending, typename... WaitEvents>
 PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents &... events)
@@ -1560,6 +1579,15 @@ PTO_INST RecordEvent TPACK(TileDataDst &dst, TileDataSrc &src, WaitEvents &... e
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TPACK, dst, src);
+    return {};
+}
+
+template <bool MSBorLSB = true, typename TileDataDst, typename TileDataSrc, typename TileDataIdx,
+          typename... WaitEvents>
+PTO_INST RecordEvent THISTOGRAM(TileDataDst &dst, TileDataSrc &src, TileDataIdx &idx, WaitEvents &... events)
+{
+    TSYNC(events...);
+    THISTOGRAM_IMPL<MSBorLSB>(dst, src, idx);
     return {};
 }
 

@@ -35,13 +35,13 @@ PTO_INST void TNOTIFY(GlobalSignalData &dstSignalData, int32_t value, NotifyOp o
 ## Constraints
 
 - **Type constraints**:
-  - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
+    - `GlobalSignalData::DType` must be `int32_t` (32-bit signal).
 - **Memory constraints**:
-  - `dstSignalData` must point to remote address (on target NPU).
-  - `dstSignalData` should be 4-byte aligned.
+    - `dstSignalData` must point to remote address (on target NPU).
+    - `dstSignalData` should be 4-byte aligned.
 - **Operation semantics**:
-  - `NotifyOp::Set`: Direct store to remote memory.
-  - `NotifyOp::AtomicAdd`: Hardware atomic add using `st_atomic` instruction.
+    - `NotifyOp::Set`: Direct store to remote memory.
+    - `NotifyOp::AtomicAdd`: Hardware atomic add using `st_atomic` instruction.
 
 ## Examples
 

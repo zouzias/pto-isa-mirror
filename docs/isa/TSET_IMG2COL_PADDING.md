@@ -22,13 +22,13 @@ Schematic form:
 tset_img2col_padding %cfg
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 pto.tset_img2col_padding %cfg : !pto.fmatrix_config -> ()
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tset_img2col_padding ins(%cfg : !pto.fmatrix_config) outs()
@@ -39,6 +39,9 @@ pto.tset_img2col_padding ins(%cfg : !pto.fmatrix_config) outs()
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
+template <typename ConvTileData, typename... WaitEvents>
+PTO_INST RecordEvent TSET_IMG2COL_PADDING(ConvTileData &src, WaitEvents &... events);
+
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
 PTO_INST RecordEvent TSET_IMG2COL_PADDING(ConvTileData &src, WaitEvents &... events);
 ```

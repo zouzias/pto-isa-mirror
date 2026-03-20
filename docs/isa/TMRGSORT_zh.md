@@ -46,40 +46,34 @@ outs(%dst, %executed : !pto.tile_buf<...>, vector<4xi16>)
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename DstTileData, typename TmpTileData, typename Src0TileData,
-          typename Src1TileData, typename Src2TileData, typename Src3TileData,
-          bool exhausted, typename... WaitEvents>
-PTO_INST RecordEvent TMRGSORT(DstTileData& dst, MrgSortExecutedNumList& executedNumList,
-                             TmpTileData& tmp, Src0TileData& src0, Src1TileData& src1,
-                             Src2TileData& src2, Src3TileData& src3, WaitEvents&... events);
+template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData,
+          typename Src2TileData, typename Src3TileData, bool exhausted, typename... WaitEvents>
+PTO_INST RecordEvent TMRGSORT(DstTileData &dst, MrgSortExecutedNumList &executedNumList, TmpTileData &tmp, Src0TileData &src0, Src1TileData &src1, Src2TileData &src2, Src3TileData &src3, WaitEvents &... events);
 
-template <typename DstTileData, typename TmpTileData, typename Src0TileData,
-          typename Src1TileData, typename Src2TileData, bool exhausted, typename... WaitEvents>
-PTO_INST RecordEvent TMRGSORT(DstTileData& dst, MrgSortExecutedNumList& executedNumList,
-                             TmpTileData& tmp, Src0TileData& src0, Src1TileData& src1,
-                             Src2TileData& src2, WaitEvents&... events);
+template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData,
+          typename Src2TileData, bool exhausted, typename... WaitEvents>
+PTO_INST RecordEvent TMRGSORT(DstTileData &dst, MrgSortExecutedNumList &executedNumList, TmpTileData &tmp, Src0TileData &src0, Src1TileData &src1, Src2TileData &src2, WaitEvents &... events);
 
-template <typename DstTileData, typename TmpTileData, typename Src0TileData,
-          typename Src1TileData, bool exhausted, typename... WaitEvents>
-PTO_INST RecordEvent TMRGSORT(DstTileData& dst, MrgSortExecutedNumList& executedNumList,
-                             TmpTileData& tmp, Src0TileData& src0, Src1TileData& src1, WaitEvents&... events);
+template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData, bool exhausted,
+          typename... WaitEvents>
+PTO_INST RecordEvent TMRGSORT(DstTileData &dst, MrgSortExecutedNumList &executedNumList, TmpTileData &tmp, Src0TileData &src0, Src1TileData &src1, WaitEvents &... events);
 
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TMRGSORT(DstTileData& dst, SrcTileData& src, uint32_t blockLen, WaitEvents&... events);
+PTO_INST RecordEvent TMRGSORT(DstTileData &dst, SrcTileData &src, uint32_t blockLen, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3/A5)**:
-  - 元素类型必须是 `half` 或 `float`，且在 `dst`/`tmp`/`src*` Tile 间必须一致。
-  - 所有 Tile 必须是 `TileType::Vec`、行主序，且 `Rows == 1`（列表存储在单行中）。
-  - 针对目标限制，编译时和运行时均会检查 UB 内存使用量（包括各输入、`tmp` 和 `dst` 的 `Cols`）。
+    - 元素类型必须是 `half` 或 `float`，且在 `dst`/`tmp`/`src*` Tile 间必须一致。
+    - 所有 Tile 必须是 `TileType::Vec`、行主序，且 `Rows == 1`（列表存储在单行中）。
+    - 针对目标限制，编译时和运行时均会检查 UB 内存使用量（包括各输入、`tmp` 和 `dst` 的 `Cols`）。
 - **单列表变体（`TMRGSORT(dst, src, blockLen)`）**：
-  - `blockLen` 必须是 64 的倍数（由实现检查）。
-  - `src.GetValidCol()` 必须是 `blockLen * 4` 的整数倍。
-  - `repeatTimes = src.GetValidCol() / (blockLen * 4)` 必须在 `[1, 255]` 范围内。
+    - `blockLen` 必须是 64 的倍数（由实现检查）。
+    - `src.GetValidCol()` 必须是 `blockLen * 4` 的整数倍。
+    - `repeatTimes = src.GetValidCol() / (blockLen * 4)` 必须在 `[1, 255]` 范围内。
 - **多列表变体**：
-  - 需要 `tmp`，`executedNumList` 由实现写入；支持的列表数量及确切语义由目标定义。
+    - 需要 `tmp`，`executedNumList` 由实现写入；支持的列表数量及确切语义由目标定义。
 
 ## 示例
 
