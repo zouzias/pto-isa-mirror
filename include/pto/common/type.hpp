@@ -60,7 +60,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_DETAIL_GET_MACRO(_1, _2, NAME, ...) NAME
 #define PTO_STATIC_ASSERT(...) PTO_DETAIL_GET_MACRO(__VA_ARGS__, PTO_STATIC_ASSERT_2, PTO_STATIC_ASSERT_1)(__VA_ARGS__)
 
-#if defined(__CPU_SIM)
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <cstdio>
 #include <cstdlib>
 
@@ -201,12 +201,18 @@ enum class AtomicType : uint8_t
     AtomicAdd = 1,
 };
 
-enum class PadValue
+// PadValue enum with uint64_t underlying type to support custom pad values.
+// - Standard values (Null, Zero, Max, Min) use values 0-3
+// - Custom values use bits [32:63] for the float bit pattern
+// - Use PadCustom<-1.0f> helper from constants.hpp for custom values
+enum class PadValue : uint64_t
 {
-    Null,
-    Zero,
-    Max,
-    Min,
+    Null = 0,
+    Zero = 1,
+    Max = 2,
+    Min = 3,
+    // CustomBase marks the start of custom values (bit 32 set)
+    CustomBase = 0x100000000ULL,
 };
 
 enum class SaturationMode : uint8_t
@@ -253,7 +259,7 @@ constexpr int TOTAL_DIM = 5;
 
 } // namespace pto
 
-#if defined(__CPU_SIM)
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 typedef _Float16 half;
 typedef _Float16 aclFloat16;
 // Note: clang version should be >=15 and gcc version should be >=14

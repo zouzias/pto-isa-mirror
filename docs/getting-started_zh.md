@@ -101,8 +101,8 @@ cd pto-isa
 **macOS / Linux：**
 
   ```bash
-  python3 -m venv .venv
-  source .venv/bin/activate
+  python3 -m venv .venv-mkdocs
+  source .venv-mkdocs/bin/activate
   python -m pip install -U pip
   python -m pip install numpy
   ```
@@ -110,8 +110,8 @@ cd pto-isa
 **Windows (PowerShell)：**
 
   ```powershell
-  py -3 -m venv .venv
-  .\.venv\Scripts\Activate.ps1
+  py -3 -m venv .venv-mkdocs
+  .\.venv-mkdocs\Scripts\Activate.ps1
   python -m pip install -U pip
   python -m pip install numpy
   ```
@@ -197,6 +197,10 @@ Windows 特定选项（如需要）：
 - CMake >= 3.16.0
 - Ascend NPU 驱动和固件（用于硬件执行）
 - CANN toolkit >= 8.5.0
+
+> **注意：** 请确保bisheng -v显示的GCC版本与gcc -v显示的GCC版本兼容或一致。
+>
+> 如果不同，您可以在bisheng -v所示的gcc路径下，安装与gcc -v所显示版本一致的gcc，或将默认的gcc替换为与bisheng -v显示一致的版本。
 
 **GoogleTest（单元测试所需）：**
 

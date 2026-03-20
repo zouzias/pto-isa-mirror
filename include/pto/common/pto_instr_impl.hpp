@@ -26,6 +26,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TShr.hpp"
 #include "pto/npu/a2a3/TMins.hpp"
 #include "pto/npu/a2a3/TAddS.hpp"
+#include "pto/npu/a2a3/TAxpy.hpp"
 #include "pto/npu/a2a3/TSubS.hpp"
 #include "pto/npu/a2a3/TRem.hpp"
 #include "pto/npu/a2a3/TRemS.hpp"
@@ -37,6 +38,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TSels.hpp"
 #include "pto/npu/a2a3/TMin.hpp"
 #include "pto/npu/a2a3/TCmp.hpp"
+#include "pto/npu/a2a3/TConcat.hpp"
 #include "pto/npu/a2a3/TExpandS.hpp"
 #include "pto/npu/a2a3/TMax.hpp"
 #include "pto/npu/a2a3/TLoad.hpp"
@@ -128,6 +130,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TFMod.hpp"
 #include "pto/npu/a5/TRem.hpp"
 #include "pto/npu/a5/TAddS.hpp"
+#include "pto/npu/a5/TAxpy.hpp"
 #include "pto/npu/a5/TSubS.hpp"
 #include "pto/npu/a5/TDivS.hpp"
 #include "pto/npu/a5/TMulS.hpp"
@@ -148,6 +151,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TColMax.hpp"
 #include "pto/npu/a5/TColMin.hpp"
 #include "pto/npu/a5/TColExpand.hpp"
+#include "pto/npu/a5/TConcat.hpp"
 #include "pto/npu/a5/TReshape.hpp"
 #include "pto/npu/a5/TRowReduce.hpp"
 #include "pto/npu/a5/TRowProd.hpp"
@@ -182,6 +186,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TSetImg2colRpt.hpp"
 #include "pto/npu/a5/TSetImg2colPadding.hpp"
 #include "pto/npu/a5/TPack.hpp"
+#include "pto/npu/a5/THistogram.hpp"
 #ifdef _DEBUG
 #include "pto/npu/a5/TPrint.hpp"
 #endif
@@ -274,6 +279,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/comm/TWait.hpp"
 #include "pto/cpu/comm/TReduce.hpp"
 
+#endif
+
+#ifdef __COSTMODEL
+#include "pto/costmodel/a2a3/TAbs.hpp"
+#include "pto/costmodel/a2a3/TAdd.hpp"
+#include "pto/costmodel/a2a3/TAddS.hpp"
+#include "pto/costmodel/a2a3/TAssign.hpp"
+#include "pto/costmodel/a2a3/TDivS.hpp"
+#include "pto/costmodel/a2a3/TExp.hpp"
+#include "pto/costmodel/a2a3/TLoad.hpp"
+#include "pto/costmodel/a2a3/TMinS.hpp"
+#include "pto/costmodel/a2a3/TMul.hpp"
+#include "pto/costmodel/a2a3/TMulS.hpp"
+#include "pto/costmodel/a2a3/TSqrt.hpp"
+#include "pto/costmodel/a2a3/TStore.hpp"
+#include "pto/costmodel/a2a3/TSub.hpp"
 #endif
 
 #endif

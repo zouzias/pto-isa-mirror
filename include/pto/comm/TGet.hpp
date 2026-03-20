@@ -22,6 +22,86 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 namespace comm {
 
+// Ping-pong double-buffering state for chunked TGET transfers
+struct TgetPingPongState {
+    bool usePing = true;
+    bool hasPending = false;
+    int64_t pendingDstOffset = 0;
+    int pendingRows = 0;
+    int pendingCols = 0;
+};
+
+// Single synchronous transfer: TLOAD from src → sync → TSTORE to dst → sync
+template <typename TileData, typename DstGT, typename SrcGT>
+PTO_INTERNAL void TgetTransferOnce(DstGT &dst, SrcGT &src, TileData &tile)
+{
+    TLOAD(tile, src);
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    TSTORE(dst, tile);
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+}
+
+// 2D sliding chunked transfer with single buffer
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+PTO_INTERNAL void TgetChunkedSingle(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                    TileData &stagingTileData, int gShape0, int gShape1, int gShape2, int gShape3,
+                                    int gShape4, int tileValidRow, int tileValidCol)
+{
+    using T = typename GlobalSrcData::RawDType;
+    constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+    constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+
+    const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+    const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+    const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+    const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+    const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+
+    const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
+    const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
+    const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
+    const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+    const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
+
+    using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+    using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+    using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+    DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
+    DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+
+    for (int i0 = 0; i0 < gShape0; ++i0) {
+        for (int i1 = 0; i1 < gShape1; ++i1) {
+            for (int i2 = 0; i2 < gShape2; ++i2) {
+                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
+                                  static_cast<int64_t>(i2) * srcStride2;
+                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
+                                  static_cast<int64_t>(i2) * dstStride2;
+                for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+                    int curRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+                    if constexpr (isDynamicRow)
+                        stagingTileData.RowMaskInternal = curRows;
+                    for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
+                        int curCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
+                        if constexpr (isDynamicCol)
+                            stagingTileData.ColMaskInternal = curCols;
+                        int64_t srcOff = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
+                                         static_cast<int64_t>(colOff) * srcStride4;
+                        int64_t dstOff = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
+                                         static_cast<int64_t>(colOff) * dstStride4;
+                        DynShape chunkShape(1, 1, 1, curRows, curCols);
+                        SrcViewT srcView(srcGlobalData.data() + srcOff, chunkShape, srcChunkStride);
+                        DstViewT dstView(dstGlobalData.data() + dstOff, chunkShape, dstChunkStride);
+                        TgetTransferOnce<TileData, DstViewT, SrcViewT>(dstView, srcView, stagingTileData);
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ============================================================================
 // TGET_IMPL: Remote read operation implementation
 //
@@ -50,7 +130,6 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     static_assert(std::is_same_v<T, typename TileData::DType>,
                   "TGET: TileData element type must match GlobalData element type");
 
-    // Get GlobalTensor dimensions
     const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
     const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
     const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
@@ -68,40 +147,24 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
         return;
     }
 
-    // ---- Simple path: data fits in UB tile in both dimensions ----
+    // Simple path: data fits in UB tile in both dimensions
     if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
-        TLOAD(stagingTileData, srcGlobalData);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        TSTORE(dstGlobalData, stagingTileData);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        TgetTransferOnce<TileData, GlobalDstData, GlobalSrcData>(dstGlobalData, srcGlobalData, stagingTileData);
         return;
     }
 
-    // ---- 2D sliding chunked path ----
-    //
-    // Strategy (ND layout):
-    //   - Iterate over outer dimensions (dim0, dim1, dim2) explicitly.
-    //   - Within each (i0, i1, i2) block, slide a (tileValidRow × tileValidCol)
-    //     window over the (dim3 × dim4) plane.
-    //   - For each chunk, create a view: shape = (1, 1, 1, curRows, curCols),
-    //     preserving the original strides for correct GM addressing.
-    //   - TLOAD the chunk view into UB, then TSTORE from UB to local GM.
-
+    // 2D sliding chunked path
     PTO_ASSERT(tileValidRow > 0, "TGET: tile ValidRow must be greater than 0 for chunked transfer");
     PTO_ASSERT(tileValidCol > 0, "TGET: tile ValidCol must be greater than 0 for chunked transfer");
 
     constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
 
-    // Row validation: static ValidRow requires shape3 to be exactly divisible
     if constexpr (!isDynamicRow) {
         PTO_ASSERT(gShape3 % tileValidRow == 0,
                    "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
-    // Column validation: static ValidCol requires shape4 to be exactly divisible
     if constexpr (!isDynamicCol) {
         PTO_ASSERT(gShape4 % tileValidCol == 0,
                    "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
@@ -120,15 +183,12 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     const int localStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
     const int localStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
 
-    // View types with fully dynamic shape/stride for chunk GlobalTensors
-    using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
     using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
     using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
     DynStride srcChunkStride(remoteStride0, remoteStride1, remoteStride2, remoteStride3, remoteStride4);
     DynStride dstChunkStride(localStride0, localStride1, localStride2, localStride3, localStride4);
 
-    // 2D sliding: iterate outer dims, then chunk rows (dim3) and columns (dim4)
     for (int i0 = 0; i0 < gShape0; ++i0) {
         for (int i1 = 0; i1 < gShape1; ++i1) {
             for (int i2 = 0; i2 < gShape2; ++i2) {
@@ -138,12 +198,7 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
                                   static_cast<int64_t>(i2) * localStride2;
 
                 for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
-                    int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
-
-                    if constexpr (isDynamicRow) {
-                        stagingTileData.RowMaskInternal = currentRows;
-                    }
-
+                    int curRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
                     for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
                         int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
 
@@ -175,6 +230,8 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
             }
         }
     }
+
+    TgetPingPongEpilogue<GlobalDstData, TileData>(dstGlobalData, pingTile, pongTile, state, dstChunkStride);
 }
 
 // ============================================================================
@@ -234,7 +291,7 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
         return;
     }
 
-    // ---- 2D sliding chunked path with ping-pong double buffering ----
+    // 2D sliding chunked path with ping-pong double buffering
     constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
 

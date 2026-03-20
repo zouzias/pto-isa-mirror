@@ -109,6 +109,7 @@ timg2col
 tmov
 tload
 ttrans
+ttrans_conv
 tmrgsort
 tfillpad
 tgather
@@ -163,11 +164,13 @@ tdivs
 tmuls
 tneg
 tadds
+taxpy
 tgatherb
 tci
 tcolmax
 tcolmin
 texpands
+texpands_mat
 tcolsum
 tcolprod
 tcmp
@@ -197,6 +200,7 @@ tdequant
 t_dhrystone
 tpushpop_cv
 tpushpop_vc
+tconcat
 )
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))

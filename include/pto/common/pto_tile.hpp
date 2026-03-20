@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
 #include "pto/common/debug.h"
-#ifdef __CPU_SIM
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <iomanip>
 #endif
 
@@ -1008,6 +1008,17 @@ public:
     using TileDType = typename MemoryQualifier<Loc_, DType>::type;
 #endif
 
+#ifdef __CPU_SIM
+    // For CPU sim, return reference to pointer (allows TASSIGN to modify)
+    AICORE TileDType &data()
+    {
+        return data_;
+    }
+    AICORE TileDType data() const
+    {
+        return data_;
+    }
+#else
     AICORE TileDType &data()
     {
         return data_;
@@ -1016,6 +1027,7 @@ public:
     {
         return data_;
     }
+#endif
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
@@ -1201,7 +1213,7 @@ private:
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,
           const BLayout BFractal_ = BLayout::RowMajor, const int RowValid_ = Rows_, const int ColValid_ = Cols_,
           const SLayout SFractal_ = SLayout::NoneBox, const int SFractalSize_ = TileConfig::fractalABSize,
-          const PadValue PadVal_ = PadValue::Null, const CompactMode Compact_ = CompactMode::Null>
+          auto PadVal_ = PadValue::Null, const CompactMode Compact_ = CompactMode::Null>
 struct Tile {
 public:
     using DType = Element_;
@@ -1248,7 +1260,7 @@ public:
     static constexpr bool isRowMajor = BFractal_ == BLayout::RowMajor;
 
     static constexpr int SFractalSize = SFractalSize_;
-    static constexpr PadValue PadVal = PadVal_;
+    static constexpr auto PadVal = PadVal_;
     static constexpr CompactMode Compact = Compact_;
 
     __tf__ AICORE void SetValue(const uint32_t offset, const DType val)
@@ -1265,12 +1277,19 @@ public:
         return *(ptr + offset);
     }
     // constructor for static shape
+#ifdef __CPU_SIM
+    AICORE Tile() : data_(internalStorage_){};
+#else
     AICORE Tile(){};
+#endif
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VR,
                 std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VC)
+#ifdef __CPU_SIM
+        : data_(internalStorage_)
+#endif
     {
         RowMaskInternal = VR;
         ColMaskInternal = VC;
@@ -1279,6 +1298,9 @@ public:
     // constructor for row dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), size_t> VR)
+#ifdef __CPU_SIM
+        : data_(internalStorage_)
+#endif
     {
         RowMaskInternal = VR;
     }
@@ -1286,6 +1308,9 @@ public:
     // constructor for col dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), size_t> VC)
+#ifdef __CPU_SIM
+        : data_(internalStorage_)
+#endif
     {
         ColMaskInternal = VC;
     }
@@ -1321,8 +1346,15 @@ public:
                       SFractalSize_ == TileConfig::fractalMxSize,
                   "SFractalSize_ illegal");
 
-#ifdef __CPU_SIM
-    using TileDType = Tile::DType[Rows * Cols];
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
+    // CPU Sim: data_ is a pointer that TASSIGN can redirect to shared NPU memory
+    using TileDType = Tile::DType *;
+
+private:
+    // Internal storage for tiles not explicitly TASSIGN'd
+    Tile::DType internalStorage_[Rows * Cols] = {};
+
+public:
 #else
 #ifdef __PTO_AUTO__
     using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows *Cols);
@@ -1331,6 +1363,17 @@ public:
 #endif
 #endif
 
+#ifdef __CPU_SIM
+    // For CPU sim, return reference to pointer (allows TASSIGN to modify)
+    AICORE TileDType &data()
+    {
+        return data_;
+    }
+    AICORE TileDType data() const
+    {
+        return data_;
+    }
+#else
     AICORE TileDType &data()
     {
         return data_;
@@ -1339,6 +1382,20 @@ public:
     {
         return data_;
     }
+#endif
+
+#ifdef __COSTMODEL
+    float cycle;
+    AICORE void SetCycle(const float cycle_)
+    {
+        cycle = cycle_;
+    }
+
+    AICORE float GetCycle()
+    {
+        return cycle;
+    }
+#endif
 
     int RowMaskInternal;
     int ColMaskInternal;
@@ -1365,6 +1422,31 @@ public:
     AICORE std::enable_if_t<ColMask == DYNAMIC, int> GetValidCol() const
     {
         return ColMaskInternal;
+    }
+
+    // Call this function need PIPE_S wait
+    PTO_INTERNAL void SetValidRow(int rowMask)
+    {
+        static_assert(ValidRow == DYNAMIC, "Only Dynamic Valid Row Support Set Value.");
+        PTO_ASSERT(rowMask <= Rows, "rowMask must less than Rows.");
+        RowMaskInternal = rowMask;
+    }
+
+    // Call this function need PIPE_S wait
+    PTO_INTERNAL void SetValidCol(int colMask)
+    {
+        static_assert(ValidCol == DYNAMIC, "Only Dynamic Valid Col Support Set Value.");
+        PTO_ASSERT(colMask <= Cols, "colMask must less than Cols.");
+        ColMaskInternal = colMask;
+    }
+
+    // Call this function need PIPE_S wait
+    PTO_INTERNAL void SetValidShape(int rowMask, int colMask)
+    {
+        static_assert(ValidCol == DYNAMIC && ValidRow == DYNAMIC, "Only Dynamic Valid Shape Support Set Value.");
+        PTO_ASSERT(rowMask <= Rows && colMask <= Cols, "colMask must less than Cols.");
+        RowMaskInternal = rowMask;
+        ColMaskInternal = colMask;
     }
 
     template <typename T, typename AddrType>
@@ -1419,7 +1501,7 @@ using TileLeftCompact = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::Ro
                              SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
 #endif
 
-#if !defined(PTO_NPU_ARCH_A2A3) || defined(__CPU_SIM)
+#if !defined(PTO_NPU_ARCH_A2A3) || defined(__CPU_SIM) || defined(__COSTMODEL)
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;

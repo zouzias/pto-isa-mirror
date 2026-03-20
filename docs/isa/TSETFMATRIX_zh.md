@@ -10,7 +10,7 @@
 
 ## 数学语义
 
-除非另有说明, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
+除非另有说明，语义定义在有效区域上，目标相关行为标记为实现定义。
 
 ## 汇编语法
 
@@ -33,13 +33,13 @@ pto.tsetfmatrix ins(%cfg : !pto.fmatrix_config) outs()
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename T = uint64_t, typename... WaitEvents>
-PTO_INST RecordEvent TSETFMATRIX(const Img2colTileConfig<T> &cfg = Img2colTileConfig<T>{}, WaitEvents&... events);
+template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
+PTO_INST RecordEvent TSETFMATRIX(ConvTileData &src, WaitEvents &... events);
 ```
 
 ## 约束
 
-Type/layout/location/shape legality is backend-dependent; treat implementation-specific notes as normative 对于that backend.
+类型/布局/位置/形状的合法性由后端决定；对于特定后端，请将实现相关说明视为规范性约束。
 
 ## 示例
 
@@ -68,7 +68,7 @@ pto.tsetfmatrix %cfg : !pto.fmatrix_config -> ()
 
 ```text
 pto.tsetfmatrix %cfg : !pto.fmatrix_config -> ()
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tsetfmatrix ins(%cfg : !pto.fmatrix_config) outs()
 ```
 
