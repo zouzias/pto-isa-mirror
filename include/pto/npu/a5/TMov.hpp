@@ -435,7 +435,7 @@ PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData &dst, SrcTileData &src)
             if constexpr ((SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox)) &&
                           (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor))) {
                 TMovToVecNd2Nz<typename DstTileData::DType, DstTileData, SrcTileData>(
-                    dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
+                    dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol());
             } else {
                 TMovToVec<DstTileData, SrcTileData>(dst, src);
             }
