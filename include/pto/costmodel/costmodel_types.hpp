@@ -32,7 +32,8 @@ struct CostModelStats {
     int dstRepeatStride;
     int src0RepeatStride;
     int src1RepeatStride;
-    std::string order;  // vcmax/vcmin专用
+    std::string order;  // vcmax/vcmin专用,取值VALUE_INDEX/INDEX_VALUE/ONLY_VALUE/ONLY_INDEX
+    bool mode;  // vcadd专用
 
     int nBurst;
     int lenBurst;
@@ -65,11 +66,17 @@ struct CostModelStats {
     cceInstName(cceInstName_), repeats(repeats_), dstBlockStride(dstBlockStride_), src0BlockStride(srcBlockStride_),
     dstRepeatStride(dstRepeatStride_), src0RepeatStride(srcRepeatStride_) {}
 
-    // GroupOp
+    // vcmax/vcmin/vcgadd/vcgmax/vcgmin/vcpadd
     CostModelStats(const std::string cceInstName_, int repeats_, int dstRepeatStride_, int srcBlockStride_,
-                   int srcRepeatStride_, const std::string order_ = "ONLY_VALUE") :
+                   int srcRepeatStride_, const std::string order_) :
     cceInstName(cceInstName_), repeats(repeats_), dstRepeatStride(dstRepeatStride_), src0BlockStride(srcBlockStride_),
     src0RepeatStride(srcRepeatStride_), order(order_) {}
+
+    // vcadd
+    CostModelStats(const std::string cceInstName_, int repeats_, int dstRepeatStride_, int srcBlockStride_,
+                   int srcRepeatStride_, bool mode_) :
+    cceInstName(cceInstName_), repeats(repeats_), dstRepeatStride(dstRepeatStride_), src0BlockStride(srcBlockStride_),
+    src0RepeatStride(srcRepeatStride_), mode(mode_),  {}
 
     // simple mode
     CostModelStats(const std::string cceInstName_, int repeats_) :
