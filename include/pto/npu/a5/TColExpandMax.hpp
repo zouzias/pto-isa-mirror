@@ -28,46 +28,11 @@ struct ColExpandMaxOp {
     }
 };
 
-template <typename TileData, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned rowStride>
-__tf__ AICORE void TColExpandMax(typename TileData::TileDType __out__ dst, typename TileData::TileDType __in__ src0,
-                                 typename TileDataSrc::TileDType __in__ src1, unsigned validRow, unsigned validCol)
-{
-    using T = typename TileData::DType;
-    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
-    __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
-
-    ColExpandBinaryInstr<ColExpandMaxOp<T>, TileData, TileDataSrc, elementsPerRepeat, blockSizeElem, rowStride>(
-        dstPtr, src0Ptr, src1Ptr, validRow, validCol);
-}
-
 template <typename TileData, typename TileDataSrc0, typename TileDataSrc1>
 PTO_INTERNAL void TCOLEXPANDMAX_IMPL(TileData &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
-    static_assert(
-        std::is_same<typename TileData::DType, float>::value || std::is_same<typename TileData::DType, half>::value,
-        "Fix: TCOLEXPANDMAX Invalid data type.");
-    static_assert(TileData::isRowMajor, "Fix: TCOLEXPANDMAX not supported Layout type");
-    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileData::DType);
-    constexpr unsigned rowStride = TileData::RowStride;
-    unsigned validRow = dst.GetValidRow();
-    unsigned validCol = dst.GetValidCol();
-    unsigned src0ValidRow = src0.GetValidRow();
-    unsigned src0ValidCol = src0.GetValidCol();
-    unsigned src1ValidRow = src1.GetValidRow();
-    unsigned src1ValidCol = src1.GetValidCol();
-    bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
-    bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
-
-    if (src0eqdst) {
-        TColExpandMax<TileData, TileDataSrc1, elementsPerRepeat, blockSizeElem, rowStride>(
-            dst.data(), src0.data(), src1.data(), validRow, validCol);
-    } else {
-        TColExpandMax<TileData, TileDataSrc0, elementsPerRepeat, blockSizeElem, rowStride>(
-            dst.data(), src1.data(), src0.data(), validRow, validCol);
-    }
+    using T = typename TileData::DType;
+    TCOLEXPANDOP_IMPL<ColExpandMaxOp<T>, ColExpandMaxOp<T>, TileData, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
 }
 } // namespace pto
 #endif
