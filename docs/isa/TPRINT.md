@@ -25,13 +25,13 @@ PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 tprint %src : !pto.tile<...> | !pto.global<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 pto.tprint %src : !pto.tile<...> | !pto.partition_tensor_view<MxNxdtype> -> ()
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>)
@@ -39,12 +39,8 @@ pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>
 ## C++ Intrinsic
 Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
-template <typename T, typename... WaitEvents>
-PTO_INST RecordEvent TPRINT(T &src, WaitEvents&... events) {
-  TSYNC(events...);
-  MAP_INSTR_IMPL(TPRINT, src);
-  return {};
-}
+template <typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPRINT(TileData &src, WaitEvents &... events);
 ```
 
 ### Supported Types for T
@@ -54,9 +50,9 @@ PTO_INST RecordEvent TPRINT(T &src, WaitEvents&... events) {
 ## Constraints
 
 - **Supported element type**:
-  - Floating-point: `float`, `half`
-  - Signed integers: `int8_t`, `int16_t`, `int32_t`
-  - Unsigned integers: `uint8_t`, `uint16_t`, `uint32_t`
+    - Floating-point: `float`, `half`
+    - Signed integers: `int8_t`, `int16_t`, `int32_t`
+    - Unsigned integers: `uint8_t`, `uint16_t`, `uint32_t`
 - **For Tiles**: `TileData::Loc == TileType::Vec` (only vector tiles are printable).
 - **For GlobalTensor**: Layout must be one of `Layout::ND`, `Layout::DN`, or `Layout::NZ`.
 
@@ -75,10 +71,10 @@ PTO_INST RecordEvent TPRINT(T &src, WaitEvents&... events) {
 
 - **Formatting**:
 
-  - Floating-point values: printed as `%6.2f`
-  - Integer values: printed as `%6d`
-  - For `GlobalTensor`, due to data size and buffer limitations, only elements within its logical shape (defined by `Shape`) are printed.
-  - For `Tile`, invalid regions (beyond `validRows`/`validCols`) are still printed but marked with a `|` separator when partial validity is specified.
+    - Floating-point values: printed as `%6.2f`
+    - Integer values: printed as `%6d`
+    - For `GlobalTensor`, due to data size and buffer limitations, only elements within its logical shape (defined by `Shape`) are printed.
+    - For `Tile`, invalid regions (beyond `validRows`/`validCols`) are still printed but marked with a `|` separator when partial validity is specified.
 
 ## Examples
 

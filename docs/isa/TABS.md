@@ -25,13 +25,13 @@ Synchronous form:
 %dst = tabs %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tabs %src : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -41,25 +41,25 @@ pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TABS(TileData& dst, TileData& src, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TABS(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (CPU sim)**:
-  - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float`.
-  - The implementation iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+    - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float`.
+    - The implementation iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
 - **Implementation checks (Costmodel)**:
-  - `TileData::DType` must be one of: `int32_t`、`int16_t`、`int8_t`、`uint8_t`、`half`、`float`.
+    - `TileData::DType` must be one of: `int32_t`、`int16_t`、`int8_t`、`uint8_t`、`half`、`float`.
 - **Implementation checks (NPU)**:
-  - `TileData::DType` must be one of: `float` or `half`;
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`);
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
-  - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
-  - Tile layout must be row-major (`TileData::isRowMajor`).
+    - `TileData::DType` must be one of: `float` or `half`;
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`);
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`;
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`;
+    - Tile layout must be row-major (`TileData::isRowMajor`).
 - **Valid region**:
-  - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
@@ -119,4 +119,3 @@ void example_manual() {
 # IR Level 2 (DPS)
 pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

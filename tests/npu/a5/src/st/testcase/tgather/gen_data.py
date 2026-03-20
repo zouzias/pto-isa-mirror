@@ -140,6 +140,8 @@ def gen_golden_data(param: TGatherParamsBase):
         cmpmode = param.cmpmode
         src_data = np.random.randint(0, 100, [src_row, src_col]).astype(src_type)
         golden = np.zeros((dst_row, dst_col)).astype(dst_type)
+        # 0x7F800001转float比较时为nan，保证尾块对比通过
+        golden[:dst_row][:dst_col] = 0x7F800001
         if cmpmode == 0:
             for i in range(src_row):
                 k = 0
@@ -193,10 +195,10 @@ class TGatherParamsCmp(TGatherParamsBase):
 
 if __name__ == "__main__":
     case_params_list = [
-        TGatherParamsNorm("TGATHERTest.case1_float", np.float32, np.int32, 32, 1024, 16, 64),
-        TGatherParamsNorm("TGATHERTest.case2_int32", np.int32, np.int32, 32, 512, 16, 256),
-        TGatherParamsNorm("TGATHERTest.case3_half", np.half, np.int16, 16, 1024, 16, 128),
-        TGatherParamsNorm("TGATHERTest.case4_int16", np.int16, np.int16, 32, 256, 32, 64),
+        TGatherParamsNorm("TGATHERTest.case1_float_32x1024_16x64", np.float32, np.int32, 32, 1024, 16, 64),
+        TGatherParamsNorm("TGATHERTest.case2_int32_32x512_16x256", np.int32, np.int32, 32, 512, 16, 256),
+        TGatherParamsNorm("TGATHERTest.case3_half_16x1024_16x128", np.half, np.int16, 16, 1024, 16, 128),
+        TGatherParamsNorm("TGATHERTest.case4_int16_32x256_32x64", np.int16, np.int16, 32, 256, 32, 64),
         ParamMasked("TGATHERTest.case1_float_P0101", np.float32, np.float32, FLOAT_P0101_ROW, FLOAT_P0101_COL, P0101),
         ParamMasked("TGATHERTest.case1_float_P1010", np.float32, np.float32, FLOAT_P1010_ROW, FLOAT_P1010_COL, P1010),
         ParamMasked("TGATHERTest.case1_float_P0001", np.float32, np.float32, FLOAT_P0001_ROW, FLOAT_P0001_COL, P0001),

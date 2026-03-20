@@ -30,13 +30,13 @@ Unless otherwise specified, semantics are defined over the valid region and targ
 
 PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 pto.tsetfmatrix %cfg : !pto.fmatrix_config -> ()
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tsetfmatrix ins(%cfg : !pto.fmatrix_config) outs()

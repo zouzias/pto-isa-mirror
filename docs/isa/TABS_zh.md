@@ -6,7 +6,7 @@
 
 ## 简介
 
-Tile 的逐元素绝对值。
+Tile 的逐元素绝对値。
 
 ## 数学语义
 
@@ -41,25 +41,25 @@ pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TABS(TileData& dst, TileData& src, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TABS(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (CPU sim)**:
-  - `TileData::DType` 必须是以下之一：`int32_t`、`int`、`int16_t`、`half`、`float`。
-  - 实现在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+    - `TileData::DType` 必须是以下之一：`int32_t`、`int`、`int16_t`、`half`、`float`。
+    - 实现在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
 - **实现检查 (Costmodel)**:
-  - TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`int8_t`、`uint8_t`、`half`、`float`。
+    - `TileData::DType` 必须是以下之一：`int32_t`、`int16_t`、`int8_t`、`uint8_t`、`half`、`float`。
 - **实现检查 (NPU)**:
-  - `TileData::DType` 必须是以下之一：`float` 或 `half`。
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
-  - 运行时：`src.GetValidRow() == dst.GetValidRow()` 且 `src.GetValidCol() == dst.GetValidCol()`。
-  - Tile 布局必须是行主序（`TileData::isRowMajor`）。
+    - `TileData::DType` 必须是以下之一：`float` 或 `half`。
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
+    - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
+    - 运行时：`src.GetValidRow() == dst.GetValidRow()` 且 `src.GetValidCol() == dst.GetValidCol()`。
+    - Tile 布局必须是行主序（`TileData::isRowMajor`）。
 - **有效区域**:
-  - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
+    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 
 ## 示例
 
@@ -119,4 +119,3 @@ void example_manual() {
 # IR Level 2 (DPS)
 pto.tabs ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-
