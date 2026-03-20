@@ -80,7 +80,7 @@ constexpr const size_t FP16_INT8_TEMP_BUFFER_SIZE = REPEAT_MAX * 256;
 
 // PyTorch alignment for edge cases (inf, -inf, nan, overflow)
 // 1 = PyTorch-compatible (uses NonSatTorch), 0 = standard (faster)
-#define EDGE_CASE_ALIGN_ENABLE 0
+#define EDGE_CASE_ALIGN_ENABLE 1
 
 // FP32 -> FP16 conversion
 template <typename TileDataD, typename TileDataS>
@@ -453,15 +453,19 @@ PTO_INTERNAL void GenCastCallFp16ToInt8(__ubuf__ typename TileDataD::DType *dst,
 // hwFp16Stride = 4 (64 fp16 per hw repeat) and hwInt32Stride = 8 (64 int32 per hw repeat).
 // hwRepeatCount = repeatNum * (srcRepeatStride / 4) ensures all logical elements are covered.
 //
-// Temporary buffer layout at TMP_UB_OFFSET (6144 bytes total via reuse):
+// Single temporary buffer layout (all in-place, no separate offset):
 //
-//   Step 1:  fp16 -> int32  writes to tempInt32Buf  [+0    .. +4095]  (4096 bytes)
-//   Step 2:  int32 -> int16 writes to tempAndBuf    [+4096 .. +6143]  (2048 bytes)
-//            (tempInt32Buf is now fully consumed and repurposed below)
-//   Step 3:  vector_dup 255 writes mask to           [+0    .. +2047]  (reuses tempInt32Buf as int16)
-//   Step 4:  vand tempAndBuf & mask -> tempAndBuf    [+4096 .. +6143]
-//   Step 5:  int16 -> fp16  writes to               [+0    .. +2047]  (reuses same region as fp16)
-//   Step 6:  fp16 -> int8   reads [+0..+2047], writes to dst
+//   Let N = hwRepeatCount * hwInt16Stride * BLOCK_BYTE_SIZE (int16 data size in bytes).
+//   The int32 data occupies 2N bytes; after in-place narrowing the upper half is free.
+//
+//   Step 1:  fp16 -> int32  writes to tempInt32Buf  [+0  .. +2N-1]   (2N bytes)
+//   Step 2:  int32 -> int16 in-place into tempAndBuf [+0  .. +N-1]    (N bytes)
+//            Safe because int16 dest (k*N/R) never overtakes int32 src (k*2N/R) for k>=1,
+//            and the vector unit reads all elements before writing for k=0.
+//   Step 3:  vector_dup 255 writes mask to           [+N  .. +2N-1]   (freed upper half)
+//   Step 4:  vand tempAndBuf & mask -> tempAndBuf    [+0  .. +N-1]
+//   Step 5:  int16 -> fp16  writes to                [+N  .. +2N-1]   (mask consumed, region reused)
+//   Step 6:  fp16 -> int8   reads [+N..+2N-1], writes to dst
 //
 // Note: src cannot be reused as tempAndBuf — the saturation test kernel calls TCVT three times
 // on the same srcTile (ON, OFF, default), so the NonSatTorch path would corrupt src for later calls.
@@ -472,13 +476,11 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
                                                     uint16_t dstRepeatStride, uint16_t srcRepeatStride,
                                                     __ubuf__ int32_t *tempInt32Buf)
 {
-    // One allocation covers all phases via reuse:
-    //   Phase A (steps 1-2): tempInt32Buf [+0..+4095] holds int32 data
-    //   Phase B (steps 3-6): tempInt32Buf is reused at [+0..+2047] for mask then fp16 output
-    __ubuf__ int16_t *tempAndBuf = (__ubuf__ int16_t *)((__ubuf__ uint8_t *)tempInt32Buf + 4096);
-    // After tempInt32Buf is consumed (post step-2 pipe_barrier), its first half is reused:
-    __ubuf__ int16_t *tempMaskBuf = (__ubuf__ int16_t *)tempInt32Buf; // mask at [+0..+2047]
-    __ubuf__ half *tempFp16Buf = (__ubuf__ half *)tempInt32Buf;       // fp16 output at [+0..+2047]
+    // All temporaries share a single buffer (in-place conversions, no +4096 offset):
+    //   [0..half]:  int16 data after in-place int32->int16 narrowing
+    //   [half..end]: mask (255) in the freed upper half of the int32 region,
+    //                then reused for fp16 output in step 5
+    __ubuf__ int16_t *tempAndBuf = (__ubuf__ int16_t *)tempInt32Buf;
 
     // Compute hardware-level strides for intermediate int32/int16 operations.
     // The hardware INT32 capacity per repeat is 64 (= REPEAT_BYTE / sizeof(int32) = 256 / 4).
@@ -491,6 +493,11 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
     const uint16_t hwInt32Stride = hwFp16Stride * 2; // int32 is 2x wider than fp16 in blocks
     const uint16_t hwInt16Stride = hwFp16Stride;     // int16 same width as fp16 in blocks
     const uint16_t hwDstStride = hwFp16Stride / 2;   // int8 is half as wide as fp16 in blocks
+
+    // Mask buffer placed in the freed upper half of the int32 region (after in-place int32->int16)
+    constexpr uint16_t int16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int16_t);
+    __ubuf__ int16_t *tempMaskBuf = tempAndBuf +
+        static_cast<uint32_t>(hwRepeatCount) * hwInt16Stride * int16ElemsPerBlock;
 
     set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
 
@@ -524,13 +531,13 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
     pipe_barrier(PIPE_V);
     set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
 
-    // Step 2: int32 -> int16 (narrow to low 16 bits) into tempAndBuf
-    // After this, tempInt32Buf [+0..+4095] is fully consumed and available for reuse.
+    // Step 2: int32 -> int16 in-place (narrowing: output half the size of input)
+    // Safe because dest repeat k writes to [k*hwInt16Stride] while src reads from [k*hwInt32Stride=2k*hwInt16Stride].
     vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
                   hwInt32Stride);
     pipe_barrier(PIPE_V);
 
-    // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (reuses tempInt32Buf [+0..+2047])
+    // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (freed upper half of int32 region)
     vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
                hwInt16Stride);
     pipe_barrier(PIPE_V);
@@ -540,12 +547,13 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
          hwInt16Stride, hwInt16Stride, hwInt16Stride);
     pipe_barrier(PIPE_V);
 
-    // Step 5: int16 -> fp16, writing into tempFp16Buf (reuses tempInt32Buf [+0..+2047])
-    vconv_s162f16(tempFp16Buf, tempAndBuf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride, hwInt16Stride);
+    // Step 5: int16 -> fp16, writing into tempMaskBuf region (mask is consumed, region is free)
+    __ubuf__ half *tempFp16Out = (__ubuf__ half *)tempMaskBuf;
+    vconv_s162f16(tempFp16Out, tempAndBuf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride, hwInt16Stride);
     pipe_barrier(PIPE_V);
 
     // Step 6: fp16 -> int8 (hwDstStride = hwFp16Stride / 2 since int8 is half the width of fp16)
-    vconv_f162s8z(dst, tempFp16Buf, hwRepeatCount, dstBlockStride, srcBlockStride, hwDstStride, hwFp16Stride);
+    vconv_f162s8z(dst, tempFp16Out, hwRepeatCount, dstBlockStride, srcBlockStride, hwDstStride, hwFp16Stride);
 }
 
 // FP16 -> UINT8 conversion
@@ -759,24 +767,8 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
                                                      dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                          std::is_same<typename TileDataS::DType, float>::value) { // fp32 to int16
-        // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
-        bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
-#if EDGE_CASE_ALIGN_ENABLE
-        if (!isSatOn) {
-            // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
-            __ubuf__ int32_t *tempInt32Buf = (__ubuf__ int32_t *)(TMP_UB_OFFSET);
-            GenCastCallFp32ToInt16_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride,
-                                                                     srcBlockStride, dstRepeatStride, srcRepeatStride,
-                                                                     tempInt32Buf);
-        } else {
-            GenCastCallFp32ToInt16<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
-                                                         dstRepeatStride, srcRepeatStride);
-        }
-#else
-        // Use default implementation when edge case alignment is disabled
         GenCastCallFp32ToInt16<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                      dstRepeatStride, srcRepeatStride);
-#endif
     } else if constexpr (std::is_same<typename TileDataD::DType, bfloat16_t>::value &&
                          std::is_same<typename TileDataS::DType, float>::value) { // fp32 to bf16
         GenCastCallFp32ToBf16<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
@@ -787,43 +779,12 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
                                                      dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                          std::is_same<typename TileDataS::DType, half>::value) { // half to int16
-        // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
-        bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
-#if EDGE_CASE_ALIGN_ENABLE
-        if (!isSatOn) {
-            // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
-            __ubuf__ int32_t *tempInt32Buf = (__ubuf__ int32_t *)(TMP_UB_OFFSET);
-            GenCastCallFp16ToInt16_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride,
-                                                                     srcBlockStride, dstRepeatStride, srcRepeatStride,
-                                                                     tempInt32Buf);
-        } else {
-            GenCastCallFp16ToInt16<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
-                                                         dstRepeatStride, srcRepeatStride);
-        }
-#else
-        // Use default implementation when edge case alignment is disabled
         GenCastCallFp16ToInt16<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                      dstRepeatStride, srcRepeatStride);
-#endif
     } else if constexpr (std::is_same<typename TileDataD::DType, int8_t>::value &&
                          std::is_same<typename TileDataS::DType, half>::value) { // half to int8
-        // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
-        bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
-#if EDGE_CASE_ALIGN_ENABLE
-        if (!isSatOn) {
-            // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
-            GenCastCallFp16ToInt8_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride,
-                                                                    srcBlockStride, dstRepeatStride, srcRepeatStride,
-                                                                    (__ubuf__ int32_t *)get_imm(TMP_UB_OFFSET));
-        } else {
-            GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
-                                                        dstRepeatStride, srcRepeatStride);
-        }
-#else
-        // Use default implementation when edge case alignment is disabled
         GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                     dstRepeatStride, srcRepeatStride);
-#endif
     } else if constexpr (std::is_same<typename TileDataD::DType, uint8_t>::value &&
                          std::is_same<typename TileDataS::DType, half>::value) { // half to uint8
         GenCastCallFp16ToUint8<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
@@ -858,8 +819,40 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
                         uint8_t repeatNum, RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride,
                         uint16_t dstRepeatStride, uint16_t srcRepeatStride, __ubuf__ int32_t *tmpPtr)
 {
-    if constexpr (std::is_same<typename TileDataD::DType, int8_t>::value &&
-                  std::is_same<typename TileDataS::DType, half>::value) { // half to int8
+    if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
+                  std::is_same<typename TileDataS::DType, float>::value) { // fp32 to int16
+        bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
+#if EDGE_CASE_ALIGN_ENABLE
+        if (!isSatOn) {
+            GenCastCallFp32ToInt16_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride,
+                                                                     srcBlockStride, dstRepeatStride, srcRepeatStride,
+                                                                     tmpPtr);
+        } else {
+            GenCastCallFp32ToInt16<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
+                                                         dstRepeatStride, srcRepeatStride);
+        }
+#else
+        GenCastCallFp32ToInt16<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
+                                                     dstRepeatStride, srcRepeatStride);
+#endif
+    } else if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
+                         std::is_same<typename TileDataS::DType, half>::value) { // half to int16
+        bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
+#if EDGE_CASE_ALIGN_ENABLE
+        if (!isSatOn) {
+            GenCastCallFp16ToInt16_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride,
+                                                                     srcBlockStride, dstRepeatStride, srcRepeatStride,
+                                                                     tmpPtr);
+        } else {
+            GenCastCallFp16ToInt16<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
+                                                         dstRepeatStride, srcRepeatStride);
+        }
+#else
+        GenCastCallFp16ToInt16<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
+                                                     dstRepeatStride, srcRepeatStride);
+#endif
+    } else if constexpr (std::is_same<typename TileDataD::DType, int8_t>::value &&
+                         std::is_same<typename TileDataS::DType, half>::value) { // half to int8
         bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
@@ -1120,6 +1113,12 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
     constexpr unsigned SS = TileDataS::RowStride;
     constexpr unsigned DS = TileDataD::RowStride;
     unsigned validRow = dst.GetValidRow();
+#if EDGE_CASE_ALIGN_ENABLE
+    // Without tmp buffer, NonSatTorch paths are unavailable; force saturation ON for affected types
+    TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, SaturationMode::ON, numRepeatPerLine,
+                                       numRemainPerLine, validRow, elementsPerRepeat, dstRepeatStride,
+                                       srcRepeatStride);
+#else
     if constexpr (
         // FP16→UINT8
         (std::is_same<typename TileDataD::DType, uint8_t>::value &&
@@ -1142,11 +1141,11 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
         TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, satMode, numRepeatPerLine, numRemainPerLine,
                                            validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
     } else {
-        // For all other conversions, default to saturation ON (native TCVT behavior)
         TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, SaturationMode::ON, numRepeatPerLine,
                                            numRemainPerLine, validRow, elementsPerRepeat, dstRepeatStride,
                                            srcRepeatStride);
     }
+#endif
 }
 
 // TCVT_IMPL overload with explicit TmpTileData and explicit satMode.
@@ -1215,7 +1214,11 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, Ro
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
-    // Conversions that default to OFF for PyTorch compatibility or truncation behavior
+#if EDGE_CASE_ALIGN_ENABLE
+    // Without tmp buffer, NonSatTorch paths are unavailable; always use saturation ON
+    TCVT_IMPL(dst, src, mode, SaturationMode::ON);
+#else
+    // Conversions that default to OFF for truncation behavior
     if constexpr (
         // FP16→UINT8
         (std::is_same<typename TileDataD::DType, uint8_t>::value &&
@@ -1237,9 +1240,9 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
          std::is_same<typename TileDataS::DType, int32_t>::value)) {
         TCVT_IMPL(dst, src, mode, SaturationMode::OFF);
     } else {
-        // All other conversions: default to ON (native TCVT saturation)
         TCVT_IMPL(dst, src, mode, SaturationMode::ON);
     }
+#endif
 }
 } // namespace pto
 #endif

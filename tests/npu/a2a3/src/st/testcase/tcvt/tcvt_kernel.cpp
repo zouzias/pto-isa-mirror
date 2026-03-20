@@ -241,3 +241,111 @@ template void launchTCVTSaturationTest<int32_t, int64_t, 1, 32, 1, 32>(int32_t *
                                                                        int32_t *dstDefault, int64_t *src, void *stream);
 template void launchTCVTSaturationTest<int16_t, int32_t, 1, 32, 1, 32>(int16_t *dstSat, int16_t *dstTrunc,
                                                                        int16_t *dstDefault, int32_t *src, void *stream);
+
+// ============================================================================
+// NonSatTorch Test Kernels (with explicit tmp tile)
+// ============================================================================
+// Test kernel that uses an explicit tmp tile to exercise the NonSatTorch path.
+// When EDGE_CASE_ALIGN_ENABLE is 1 and satMode is OFF, this requires a tmp tile.
+template <typename T, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
+          int kValidCols_ = kTCols_>
+__global__ AICORE void runTCVTNonSatTorch(__gm__ T *outTruncated, __gm__ S *src)
+{
+    using DynShapeDim4 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
+    using DynStridDim4 = pto::Stride<1, 1, 1, kGCols_, 1>;
+    using GlobalData_src = GlobalTensor<S, DynShapeDim4, DynStridDim4>;
+    using GlobalData_dst = GlobalTensor<T, DynShapeDim4, DynStridDim4>;
+
+    constexpr bool useDynamicTile = (kValidRows_ != kTRows_) || (kValidCols_ != kTCols_);
+
+    GlobalData_src srcGlobal(src);
+    GlobalData_dst dstGlobal(outTruncated);
+
+    if constexpr (useDynamicTile) {
+        using TileDataSrcFull = Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor>;
+        using TileDataDstFull = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor>;
+        using TileDataSrcDyn = Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+        using TileDataDstDyn = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
+        using TileDataTmp = Tile<TileType::Vec, int32_t, kTRows_, kTCols_, BLayout::RowMajor>;
+
+        TileDataSrcFull srcTileFull;
+        TileDataDstFull dstTileFull;
+        TileDataSrcDyn srcTile(kValidRows_, kValidCols_);
+        TileDataDstDyn dstTile(kValidRows_, kValidCols_);
+        TileDataTmp tmpTile;
+
+        TASSIGN(srcTileFull, 0x0);
+        TASSIGN(dstTileFull, 0x1000);
+        TASSIGN(srcTile, 0x0);
+        TASSIGN(dstTile, 0x1000);
+        TASSIGN(tmpTile, 0x2000);
+
+        TLOAD(srcTileFull, srcGlobal);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+        TCVT(dstTile, srcTile, tmpTile, RoundMode::CAST_RINT, SaturationMode::OFF);
+
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+        TSTORE(dstGlobal, dstTileFull);
+    } else {
+        using TileDataSrc = Tile<TileType::Vec, S, kTRows_, kTCols_, BLayout::RowMajor>;
+        using TileDataDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor>;
+        using TileDataTmp = Tile<TileType::Vec, int32_t, kTRows_, kTCols_, BLayout::RowMajor>;
+
+        TileDataSrc srcTile;
+        TileDataDst dstTile;
+        TileDataTmp tmpTile;
+
+        TASSIGN(srcTile, 0x0);
+        TASSIGN(dstTile, 0x1800);
+        TASSIGN(tmpTile, 0x800);
+
+        GlobalData_src srcGlobal(src);
+        GlobalData_dst dstGlobal(outTruncated);
+
+        TLOAD(srcTile, srcGlobal);
+        set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+        TCVT(dstTile, srcTile, tmpTile, RoundMode::CAST_RINT, SaturationMode::OFF);
+
+        set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+        TSTORE(dstGlobal, dstTile);
+    }
+}
+
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
+          int kValidCols_ = kTCols_>
+void launchTCVTNonSatTorch(D *dst, S *src, void *stream)
+{
+    if constexpr (std::is_same_v<D, aclFloat16>) {
+        runTCVTNonSatTorch<half, S, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>
+            <<<1, nullptr, stream>>>((half *)dst, src);
+    } else if constexpr (std::is_same_v<S, aclFloat16>) {
+        runTCVTNonSatTorch<D, half, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>
+            <<<1, nullptr, stream>>>(dst, (half *)src);
+    } else {
+        runTCVTNonSatTorch<D, S, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>
+            <<<1, nullptr, stream>>>(dst, src);
+    }
+}
+
+// NonSatTorch test instantiations
+template void launchTCVTNonSatTorch<int8_t, aclFloat16, 1, 32, 1, 32>(int8_t *dst, aclFloat16 *src, void *stream);
+template void launchTCVTNonSatTorch<int8_t, aclFloat16, 2, 64, 2, 64>(int8_t *dst, aclFloat16 *src, void *stream);
+template void launchTCVTNonSatTorch<int8_t, aclFloat16, 8, 128, 8, 128>(int8_t *dst, aclFloat16 *src, void *stream);
+template void launchTCVTNonSatTorch<int16_t, aclFloat16, 1, 32, 1, 32>(int16_t *dst, aclFloat16 *src, void *stream);
+template void launchTCVTNonSatTorch<int16_t, float, 1, 32, 1, 32>(int16_t *dst, float *src, void *stream);
+// NonSatTorch partial tile instantiations
+template void launchTCVTNonSatTorch<int8_t, aclFloat16, 4, 128, 4, 128, 4, 65>(int8_t *dst, aclFloat16 *src,
+                                                                               void *stream);
+template void launchTCVTNonSatTorch<int8_t, aclFloat16, 2, 32, 2, 32, 2, 16>(int8_t *dst, aclFloat16 *src,
+                                                                              void *stream);
+template void launchTCVTNonSatTorch<int16_t, aclFloat16, 4, 128, 4, 128, 4, 65>(int16_t *dst, aclFloat16 *src,
+                                                                                void *stream);
+template void launchTCVTNonSatTorch<int16_t, float, 4, 128, 4, 128, 4, 65>(int16_t *dst, float *src, void *stream);
