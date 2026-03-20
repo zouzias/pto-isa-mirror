@@ -7,9 +7,12 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+#ifndef TADD_HPP_KIRIN9030
+#define TADD_HPP_KIRIN9030
 #include <pto/npu/kirin9030/common.hpp>
 #include <pto/npu/kirin9030/utils.hpp>
 #include <pto/npu/kirin9030/TBinOp.hpp>
 #define bfloat16_t half
 #include "pto/npu/a5/TAdd.hpp"
 #undef bfloat16_t
+#endif

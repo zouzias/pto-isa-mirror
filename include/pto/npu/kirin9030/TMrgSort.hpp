@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TMRGSORT_KIRIN9030_HPP
 #define TMRGSORT_KIRIN9030_HPP
 #define MOV_UB_2_UB_STUB
+namespace pto {
 template <typename DstTileData>
 PTO_INTERNAL void MovUb2Ub(__ubuf__ typename DstTileData::DType *dstPtr, __ubuf__ typename DstTileData::DType *tmpPtr,
                            unsigned dstCol)
@@ -17,6 +18,7 @@ PTO_INTERNAL void MovUb2Ub(__ubuf__ typename DstTileData::DType *dstPtr, __ubuf_
     unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
     copy_ubuf_to_ubuf((__ubuf__ void *)dstPtr, (__ubuf__ void *)tmpPtr, 1, lenBurst, 0, 0);
 }
+} // namespace pto
 #include "pto/npu/a5/TMrgSort.hpp"
 #undef MOV_UB_2_UB_STUB
 #endif // TMRGSORT_KIRIN9030_HPP
