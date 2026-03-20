@@ -40,6 +40,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/kirin9030/TRowExpand.hpp"
 #include "pto/npu/kirin9030/TPartAdd.hpp"
 #include "pto/npu/kirin9030/TPartMax.hpp"
+#include "pto/npu/kirin9030/TInsert.hpp"
 #include "pto/npu/kirin9030/TPartMin.hpp"
 #include "pto/npu/kirin9030/TGather.hpp"
 #include "pto/npu/kirin9030/TRsqrt.hpp"

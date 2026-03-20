@@ -12,6 +12,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TINSERT_HPP
 #include "common.hpp"
 
+#ifndef COPY_CC_TO_CUBF
+#define COPY_CC_TO_CUBF(dst, src, nSize, srcRow, dstStride, srcStride, QuantPre, reluMode, channelSplitEnable) \
+    copy_matrix_cc_to_cbuf(dst, src, 0, nSize, srcRow, dstStride, srcStride, 0, 0, 0, QuantPre, reluMode,      \
+                           channelSplitEnable, false, 0, 0, false, false, 0, false, false, false, false, false, false)
+#endif
 namespace pto {
 template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
 __tf__ PTO_INTERNAL void TInsertAccToMat(typename DstTileData::TileDType __out__ dst,
@@ -31,9 +36,8 @@ __tf__ PTO_INTERNAL void TInsertAccToMat(typename DstTileData::TileDType __out__
     __cbuf__ dstType *dstAddr = (__cbuf__ dstType *)__cce_get_tile_ptr(dst) + dstOffset;
     __cc__ typename SrcTileData::DType *srcData = (__cc__ typename SrcTileData::DType *)(src);
 
-    copy_matrix_cc_to_cbuf(dstAddr, srcData, 0, nSize, SrcTileData::Rows, dstStride, SrcTileData::Rows, 0, 0, 0,
-                           QuantPre, reluMode, channelSplitEnable, false, 0, 0, false, false, 0, false, false, false,
-                           false, false, false);
+    COPY_CC_TO_CUBF(dstAddr, srcData, nSize, SrcTileData::Rows, dstStride, SrcTileData::Rows, QuantPre, reluMode,
+                    channelSplitEnable);
 }
 
 template <typename DstTileData, typename SrcTileData>
@@ -99,4 +103,7 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &f
                                                                   src.GetValidCol(), indexRow, indexCol);
 }
 } // namespace pto
+#ifdef COPY_CC_TO_CUBF
+#undef COPY_CC_TO_CUBF
+#endif
 #endif // TInsert_HPP

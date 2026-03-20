@@ -91,16 +91,16 @@ __tf__ PTO_INTERNAL void TRowSum(typename TileDataOut::TileDType __out__ dstData
     __ubuf__ T *src = (__ubuf__ T *)__cce_get_tile_ptr(srcData);
     __ubuf__ T *tmp = (__ubuf__ T *)__cce_get_tile_ptr(tmpData);
 
-    if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t>) {
+    if constexpr (std::is_same_v<T, int16_t> || std::is_same_v<T, int32_t>) {
         // Integer implementation (follows TROWPROD pattern)
         constexpr unsigned dstRowStride = TileDataOut::RowStride;
         constexpr unsigned srcRowStride = TileDataIn::RowStride;
         constexpr unsigned tmpRowStride = TileDataTmp::RowStride;
         constexpr unsigned elemsPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
         unsigned blocksPerRow = validCol / elemsPerBlock;
+        unsigned elemsLessThanBlock = validCol % elemsPerBlock;
 
         set_mask_count();
-
         for (unsigned row = 0; row < validRow; ++row, dst += dstRowStride, src += srcRowStride, tmp += tmpRowStride) {
             set_vector_mask(0, elemsPerBlock);
 
@@ -115,7 +115,6 @@ __tf__ PTO_INTERNAL void TRowSum(typename TileDataOut::TileDType __out__ dstData
             }
 
             // Handle remaining elements
-            unsigned elemsLessThanBlock = validCol % elemsPerBlock;
             if (elemsLessThanBlock > 0) {
                 set_vector_mask(0, elemsLessThanBlock);
                 vadd(tmp, tmp, src + blocksPerRow * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
