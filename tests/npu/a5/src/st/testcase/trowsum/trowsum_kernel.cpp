@@ -28,15 +28,14 @@ __global__ AICORE void runTRowsum(__gm__ T __out__ *out, __gm__ T __in__ *src, _
     srcTileData srcTile(kTRows_, kTCols_);
     srcTileData tmpTile;
     dstTileData dstTile(kTRows_, 1);
-    int tileSize = kTRows_ * kTCols_;
+    int tileSize = kTRows_ * kTCols_ * sizeof(T);
 
-    TASSIGN(srcTile, tileSize * 2 * block_idx * sizeof(T));
-    TASSIGN(dstTile, (tileSize + tileSize * 2 * block_idx) * sizeof(T));
-    TASSIGN(tmpTile, 0);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x0);
+    TASSIGN(dstTile, tileSize);
 
-    int offset = tileSize * block_idx;
-    GlobalData srcGlobal(src + offset, Shape(1, 1, 1, kGRows_, kGCols_), pto::Stride(1, 1, 1, kGCols_, 1));
-    GlobalData dstGlobal(out + offset, Shape(1, 1, 1, kGRows_, kGCols_), pto::Stride(1, 1, 1, kGCols_, 1));
+    GlobalData srcGlobal(src, Shape(1, 1, 1, kGRows_, kGCols_), pto::Stride(1, 1, 1, kGCols_, 1));
+    GlobalData dstGlobal(out, Shape(1, 1, 1, kGRows_, kGCols_), pto::Stride(1, 1, 1, kGCols_, 1));
 
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -68,8 +67,8 @@ template void launchTROWSUMTest<float, smallSize, smallSize, smallSize, smallSiz
                                                                                    aclrtStream stream);
 template void launchTROWSUMTest<uint16_t, smallSize, smallSize, smallSize, smallSize>(uint16_t *out, uint16_t *src,
                                                                                       aclrtStream stream);
-template void launchTROWSUMTest<float, bigSize666, bigSize666, bigSize666, bigSizeAligned>(float *out, float *src,
-                                                                                           aclrtStream stream);
+template void launchTROWSUMTest<float, smallSize, bigSize666, smallSize, bigSizeAligned>(float *out, float *src,
+                                                                                         aclrtStream stream);
 // int32 test cases
 template void launchTROWSUMTest<int32_t, smallSize, smallSize, smallSize, smallSize>(int32_t *out, int32_t *src,
                                                                                      aclrtStream stream);

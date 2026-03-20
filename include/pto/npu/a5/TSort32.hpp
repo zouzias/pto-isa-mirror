@@ -14,7 +14,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <limits>
 #include "common.hpp"
-
+#ifndef SID_MARCO
+#define SID_MARCO 0,
+#endif
 #define PTO_CEIL(x, y) ((((x) + (y)-1) / (y)) * (y))
 #define PTO_DIV_ROUNDUP(x, y) ((((x) + (y)-1) / (y)))
 
@@ -80,8 +82,8 @@ PTO_INTERNAL void LargeTmpBufferImpl(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, __u
                 // copy row src cbuf to tmp cbuf
                 uint16_t lenBurst = PTO_DIV_ROUNDUP(srcTailPerRow * sizeof(T), BLOCK_SIZE);
                 copy_ubuf_to_ubuf(tmpPtr,
-                                  srcPtr + i * srcStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE, 0, 1,
-                                  lenBurst, 0, 0);
+                                  srcPtr + i * srcStride + (j * REPEAT_MAX + (srcTailRepeatNum - 1)) * BLOCK_SIZE,
+                                  SID_MARCO 1, lenBurst, 0, 0);
 
                 __VEC_SCOPE__
                 {
@@ -130,7 +132,7 @@ __tf__ AICORE void TSort32Impl(typename DstTileData::TileDType __out__ dst, type
     if (srcShapeBytesPerRow <= MAX_UB_TMP) {
         uint16_t lenBurst = PTO_DIV_ROUNDUP(srcShapeBytesPerRow, BLOCK_SIZE);
         for (int32_t i = 0; i < validRow; i++) {
-            copy_ubuf_to_ubuf(tmpPtr, srcPtr + i * srcStride, 0, 1, lenBurst, 0, 0);
+            copy_ubuf_to_ubuf(tmpPtr, srcPtr + i * srcStride, SID_MARCO 1, lenBurst, 0, 0);
 
             __VEC_SCOPE__
             {

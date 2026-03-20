@@ -16,24 +16,16 @@ template <typename T>
 struct TypeGet;
 
 template <>
-struct TypeGet<uint64_t> {
-    using T = vector_u64;
+struct TypeGet<int8_t> {
+    using T = vector_s8;
 };
 template <>
-struct TypeGet<int64_t> {
-    using T = vector_s64;
+struct TypeGet<uint8_t> {
+    using T = vector_u8;
 };
 template <>
-struct TypeGet<uint32_t> {
-    using T = vector_u32;
-};
-template <>
-struct TypeGet<int32_t> {
-    using T = vector_s32;
-};
-template <>
-struct TypeGet<float> {
-    using T = vector_f32;
+struct TypeGet<int16_t> {
+    using T = vector_s16;
 };
 template <>
 struct TypeGet<uint16_t> {
@@ -44,16 +36,24 @@ struct TypeGet<half> {
     using T = vector_f16;
 };
 template <>
-struct TypeGet<int16_t> {
-    using T = vector_s16;
+struct TypeGet<int32_t> {
+    using T = vector_s32;
 };
 template <>
-struct TypeGet<uint8_t> {
-    using T = vector_u8;
+struct TypeGet<uint32_t> {
+    using T = vector_u32;
 };
 template <>
-struct TypeGet<int8_t> {
-    using T = vector_s8;
+struct TypeGet<float> {
+    using T = vector_f32;
+};
+template <>
+struct TypeGet<int64_t> {
+    using T = vector_s64;
+};
+template <>
+struct TypeGet<uint64_t> {
+    using T = vector_u64;
 };
 } // namespace pto
 #endif

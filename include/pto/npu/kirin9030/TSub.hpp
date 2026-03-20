@@ -7,6 +7,9 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+#ifndef TSUB_HPP_KIRIN9030
+#define TSUB_HPP_KIRIN9030
 #define bfloat16_t half
 #include "pto/npu/a5/TSub.hpp"
 #undef bfloat16_t
+#endif
