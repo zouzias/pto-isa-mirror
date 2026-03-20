@@ -16,6 +16,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+// Scalar reduction for integer types
+template <typename T, unsigned N>
+PTO_INTERNAL T ScalarReduceMax(__ubuf__ T *tmp)
+{
+    T result = tmp[0];
+    for (unsigned i = 1; i < N; ++i) {
+        result = result > tmp[i] ? result : tmp[i];
+    }
+    return result;
+}
+
 // Float/Half operation traits (for vcmax-based implementation)
 template <typename T>
 struct TRowMaxOp : TRowReduceOp<T, TRowMaxOp<T>> {
@@ -57,6 +68,7 @@ __tf__ PTO_INTERNAL void TRowMax(typename TileDataOut::TileDType __out__ dstData
         constexpr unsigned tmpRowStride = TileDataTmp::RowStride;
         constexpr unsigned elemsPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
         unsigned blocksPerRow = validCol / elemsPerBlock;
+        unsigned elemsLessThanBlock = validCol % elemsPerBlock;
 
         set_mask_count();
 
@@ -78,7 +90,6 @@ __tf__ PTO_INTERNAL void TRowMax(typename TileDataOut::TileDType __out__ dstData
             }
 
             // Handle remaining elements
-            unsigned elemsLessThanBlock = validCol % elemsPerBlock;
             if (elemsLessThanBlock > 0) {
                 set_vector_mask(0, elemsLessThanBlock);
                 vmax(tmp, tmp, src + blocksPerRow * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
@@ -89,33 +100,9 @@ __tf__ PTO_INTERNAL void TRowMax(typename TileDataOut::TileDType __out__ dstData
 
             // Final scalar reduction
             if constexpr (std::is_same_v<T, int32_t>) {
-                T result = tmp[0];
-                result = result > tmp[1] ? result : tmp[1];
-                result = result > tmp[2] ? result : tmp[2];
-                result = result > tmp[3] ? result : tmp[3];
-                result = result > tmp[4] ? result : tmp[4];
-                result = result > tmp[5] ? result : tmp[5];
-                result = result > tmp[6] ? result : tmp[6];
-                result = result > tmp[7] ? result : tmp[7];
-                dst[0] = result;
+                dst[0] = ScalarReduceMax<T, 8>(tmp);
             } else {
-                T result = tmp[0];
-                result = result > tmp[1] ? result : tmp[1];
-                result = result > tmp[2] ? result : tmp[2];
-                result = result > tmp[3] ? result : tmp[3];
-                result = result > tmp[4] ? result : tmp[4];
-                result = result > tmp[5] ? result : tmp[5];
-                result = result > tmp[6] ? result : tmp[6];
-                result = result > tmp[7] ? result : tmp[7];
-                result = result > tmp[8] ? result : tmp[8];
-                result = result > tmp[9] ? result : tmp[9];
-                result = result > tmp[10] ? result : tmp[10];
-                result = result > tmp[11] ? result : tmp[11];
-                result = result > tmp[12] ? result : tmp[12];
-                result = result > tmp[13] ? result : tmp[13];
-                result = result > tmp[14] ? result : tmp[14];
-                result = result > tmp[15] ? result : tmp[15];
-                dst[0] = result;
+                dst[0] = ScalarReduceMax<T, 16>(tmp);
             }
         }
 
