@@ -35,38 +35,41 @@ namespace detail {
 template <typename GlobalData>
 PTO_INTERNAL bool TPutAsyncIsFlatContiguous1D(GlobalData &globalData)
 {
-    const int shape0 = globalData.GetShape(GlobalTensorDim::DIM_0);
-    const int shape1 = globalData.GetShape(GlobalTensorDim::DIM_1);
-    const int shape2 = globalData.GetShape(GlobalTensorDim::DIM_2);
-    const int shape3 = globalData.GetShape(GlobalTensorDim::DIM_3);
-    const int shape4 = globalData.GetShape(GlobalTensorDim::DIM_4);
+    const int dim0 = globalData.GetShape(GlobalTensorDim::DIM_0);
+    const int dim1 = globalData.GetShape(GlobalTensorDim::DIM_1);
+    const int dim2 = globalData.GetShape(GlobalTensorDim::DIM_2);
+    const int dim3 = globalData.GetShape(GlobalTensorDim::DIM_3);
+    const int dim4 = globalData.GetShape(GlobalTensorDim::DIM_4);
 
-    const int stride0 = globalData.GetStride(GlobalTensorDim::DIM_0);
-    const int stride1 = globalData.GetStride(GlobalTensorDim::DIM_1);
-    const int stride2 = globalData.GetStride(GlobalTensorDim::DIM_2);
-    const int stride3 = globalData.GetStride(GlobalTensorDim::DIM_3);
-    const int stride4 = globalData.GetStride(GlobalTensorDim::DIM_4);
+    const int pitch0 = globalData.GetStride(GlobalTensorDim::DIM_0);
+    const int pitch1 = globalData.GetStride(GlobalTensorDim::DIM_1);
+    const int pitch2 = globalData.GetStride(GlobalTensorDim::DIM_2);
+    const int pitch3 = globalData.GetStride(GlobalTensorDim::DIM_3);
+    const int pitch4 = globalData.GetStride(GlobalTensorDim::DIM_4);
 
-    const bool isContiguous = (stride4 == 1) && (stride3 == shape4) && (stride2 == shape3 * stride3) &&
-                              (stride1 == shape2 * stride2) && (stride0 == shape1 * stride1);
-    const bool isLogical1D = (shape0 == 1 && shape1 == 1 && shape2 == 1 && shape3 == 1);
-    return isContiguous && isLogical1D;
+    const bool hasPackedLayout = (pitch4 == 1) && (pitch3 == dim4) && (pitch2 == dim3 * pitch3) &&
+                                 (pitch1 == dim2 * pitch2) && (pitch0 == dim1 * pitch1);
+    const bool isSingleLine = (dim0 == 1 && dim1 == 1 && dim2 == 1 && dim3 == 1);
+    return hasPackedLayout && isSingleLine;
 }
 
 template <typename GlobalData>
 PTO_INTERNAL uint32_t TPutAsyncGetTotalElemCount(GlobalData &globalData)
 {
-    return static_cast<uint32_t>(
-        globalData.GetShape(GlobalTensorDim::DIM_0) * globalData.GetShape(GlobalTensorDim::DIM_1) *
-        globalData.GetShape(GlobalTensorDim::DIM_2) * globalData.GetShape(GlobalTensorDim::DIM_3) *
-        globalData.GetShape(GlobalTensorDim::DIM_4));
+    const uint32_t d0 = static_cast<uint32_t>(globalData.GetShape(GlobalTensorDim::DIM_0));
+    const uint32_t d1 = static_cast<uint32_t>(globalData.GetShape(GlobalTensorDim::DIM_1));
+    const uint32_t d2 = static_cast<uint32_t>(globalData.GetShape(GlobalTensorDim::DIM_2));
+    const uint32_t d3 = static_cast<uint32_t>(globalData.GetShape(GlobalTensorDim::DIM_3));
+    const uint32_t d4 = static_cast<uint32_t>(globalData.GetShape(GlobalTensorDim::DIM_4));
+    return (((d0 * d1) * d2) * d3) * d4;
 }
 
 template <typename GlobalDstData, typename GlobalSrcData>
 PTO_INTERNAL bool TPutAsyncCheckTensorCompatibility()
 {
-    using SrcT = typename GlobalSrcData::RawDType;
-    static_assert(std::is_same_v<SrcT, typename GlobalDstData::RawDType>, "TPUT_ASYNC: src/dst element type mismatch");
+    using SrcElem = typename GlobalSrcData::RawDType;
+    static_assert(std::is_same_v<SrcElem, typename GlobalDstData::RawDType>,
+                  "TPUT_ASYNC: src/dst element type mismatch");
     static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TPUT_ASYNC: src/dst layout mismatch");
     return true;
 }
