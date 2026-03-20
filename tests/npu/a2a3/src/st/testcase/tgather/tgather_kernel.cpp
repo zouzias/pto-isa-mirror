@@ -133,7 +133,7 @@ template void LaunchTGATHER<float, FLOAT_P1111_ROW, FLOAT_P1111_COL, FLOAT_P1111
 
 template <typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_,
           int kTCols_>
-inline AICORE void runTGather1D(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *src0, __gm__ Tsrc1 __in__ *src1)
+__global__ AICORE void runTGather1D(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *src0, __gm__ Tsrc1 __in__ *src1)
 {
     using DynShapeDim5_src0 = pto::Shape<1, 1, 1, kGRows0_, kGCols0_>;
     using DynStridDim5_src0 = pto::Stride<1, 1, 1, kGCols0_, 1>;
@@ -155,13 +155,16 @@ inline AICORE void runTGather1D(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *
     using TileData_src0 = Tile<TileType::Vec, Tsrc0, kGRows0_, kGCols0_, BLayout::RowMajor, -1, -1>;
     using TileData_src1 = Tile<TileType::Vec, Tsrc1, kGRows1_, kGCols1_, BLayout::RowMajor, -1, -1>;
     using TileData_dst = Tile<TileType::Vec, Tsrc0, kGRows1_, kGCols1_, BLayout::RowMajor, -1, -1>;
+    using TileData_tmp = Tile<TileType::Vec, Tsrc1, kGRows1_, kGCols1_, BLayout::RowMajor, -1, -1>;
     TileData_src0 src0Tile(src0_row, src0_col);
     TileData_src1 src1Tile(src1_row, src1_col);
     TileData_dst dstTile(dst_row, dst_col);
+    TileData_tmp tmpTile(src1_row, src1_col);
 
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x20000);
-    TASSIGN(dstTile, 0x28000);
+    TASSIGN(src1Tile, 0x0);
+    TASSIGN(dstTile, 0x0 + dst_row * dst_col * sizeof(Tsrc1));
+    TASSIGN(src0Tile, 0x0 + dst_row * dst_col * (sizeof(Tsrc0) + sizeof(Tsrc1)));
+    TASSIGN(tmpTile, 0x0 + dst_row * dst_col * (sizeof(Tsrc0) + sizeof(Tsrc1)) + src0_row * src0_col * sizeof(Tsrc0));
 
     GlobalData_src0 src0Global(src0);
     GlobalData_src1 src1Global(src1);
@@ -171,60 +174,46 @@ inline AICORE void runTGather1D(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *
     TLOAD(src1Tile, src1Global);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TGATHER(dstTile, src0Tile, src1Tile);
+    TGATHER(dstTile, src0Tile, src1Tile, tmpTile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
 
-extern "C" __global__ AICORE void test_tgather1D_float(__gm__ float *out, __gm__ float *src0, __gm__ int32_t *src1)
+template <typename src0T, typename src1T, typename dstT, uint32_t SRCROW, uint32_t SRCCOL, uint32_t DSTROW,
+          uint32_t DSTCOL>
+void launchTGATHER_demo(src0T *src0, src1T *src1, dstT *out, void *stream)
 {
-    runTGather1D<float, int32_t, 32, 1024, 16, 64, 32, 1024>(out, src0, src1);
+    cout << "launch TGATHER index start!" << endl;
+    runTGather1D<src0T, src1T, SRCROW, SRCCOL, DSTROW, DSTCOL, SRCROW, SRCCOL><<<1, nullptr, stream>>>(out, src0, src1);
+    cout << "launch TGATHER index end!" << endl;
 }
 
-extern "C" __global__ AICORE void test_tgather1D_int32(__gm__ int32_t *out, __gm__ int32_t *src0, __gm__ int32_t *src1)
-{
-    runTGather1D<int32_t, int32_t, 32, 512, 16, 256, 32, 512>(out, src0, src1);
-}
-
-extern "C" __global__ AICORE void test_tgather1D_half(__gm__ int16_t *out, __gm__ int16_t *src0, __gm__ int32_t *src1)
-{
-    runTGather1D<int16_t, int32_t, 16, 1024, 16, 128, 16, 1024>(out, src0, src1);
-}
-
-extern "C" __global__ AICORE void test_tgather1D_int16(__gm__ int16_t *out, __gm__ int16_t *src0, __gm__ int32_t *src1)
-{
-    runTGather1D<int16_t, int32_t, 32, 256, 32, 64, 32, 256>(out, src0, src1);
-}
-
-void launchTGATHER1D_demo_float(float *out, float *src0, int32_t *src1, aclrtStream stream)
-{
-    cout << "launch TGATHER float start!" << endl;
-    test_tgather1D_float<<<1, nullptr, stream>>>(out, src0, src1);
-    cout << "launch TGATHER float end!" << endl;
-}
-
-void launchTGATHER1D_demo_int32(int32_t *out, int32_t *src0, int32_t *src1, aclrtStream stream)
-{
-    cout << "launch TGATHER int32 start!" << endl;
-    test_tgather1D_int32<<<1, nullptr, stream>>>(out, src0, src1);
-    cout << "launch TGATHER int32 end!" << endl;
-}
-
-void launchTGATHER1D_demo_half(int16_t *out, int16_t *src0, int32_t *src1, aclrtStream stream)
-{
-    cout << "launch TGATHER half start!" << endl;
-    test_tgather1D_half<<<1, nullptr, stream>>>(out, src0, src1);
-    cout << "launch TGATHER half end!" << endl;
-}
-
-void launchTGATHER1D_demo_int16(int16_t *out, int16_t *src0, int32_t *src1, aclrtStream stream)
-{
-    cout << "launch TGATHER int16 start!" << endl;
-    test_tgather1D_int16<<<1, nullptr, stream>>>(out, src0, src1);
-    cout << "launch TGATHER int16 end!" << endl;
-}
+template void launchTGATHER_demo<float, int32_t, float, 32, 1024, 16, 64>(float *src0, int32_t *src1, float *out,
+                                                                          void *stream);
+template void launchTGATHER_demo<int32_t, int32_t, int32_t, 32, 512, 16, 256>(int32_t *src0, int32_t *src1,
+                                                                              int32_t *out, void *stream);
+template void launchTGATHER_demo<int16_t, int32_t, int16_t, 16, 1024, 16, 128>(int16_t *src0, int32_t *src1,
+                                                                               int16_t *out, void *stream);
+template void launchTGATHER_demo<int16_t, int32_t, int16_t, 32, 256, 32, 64>(int16_t *src0, int32_t *src1, int16_t *out,
+                                                                             void *stream);
+template void launchTGATHER_demo<int16_t, int32_t, int16_t, 1, 16, 1, 16>(int16_t *src0, int32_t *src1, int16_t *out,
+                                                                          void *stream);
+template void launchTGATHER_demo<int16_t, int32_t, int16_t, 1, 32, 1, 32>(int16_t *src0, int32_t *src1, int16_t *out,
+                                                                          void *stream);
+template void launchTGATHER_demo<int16_t, int32_t, int16_t, 1, 64, 1, 64>(int16_t *src0, int32_t *src1, int16_t *out,
+                                                                          void *stream);
+template void launchTGATHER_demo<int16_t, int32_t, int16_t, 1, 128, 1, 128>(int16_t *src0, int32_t *src1, int16_t *out,
+                                                                            void *stream);
+template void launchTGATHER_demo<int16_t, int32_t, int16_t, 1, 128, 1, 64>(int16_t *src0, int32_t *src1, int16_t *out,
+                                                                           void *stream);
+template void launchTGATHER_demo<float, int32_t, float, 1024, 16, 1024, 16>(float *src0, int32_t *src1, float *out,
+                                                                            void *stream);
+template void launchTGATHER_demo<float, int32_t, float, 16, 16, 32, 32>(float *src0, int32_t *src1, float *out,
+                                                                        void *stream);
+template void launchTGATHER_demo<int16_t, int32_t, int16_t, 16, 16, 32, 32>(int16_t *src0, int32_t *src1, int16_t *out,
+                                                                            void *stream);
 
 template <typename srcT, typename src1T, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int K,
           CmpMode cmpMode, uint32_t offset>

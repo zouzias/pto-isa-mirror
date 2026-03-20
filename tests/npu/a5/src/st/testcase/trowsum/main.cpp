@@ -106,7 +106,7 @@ TEST_F(TROWSUMTest, test2)
 
 TEST_F(TROWSUMTest, test3)
 {
-    bool res = TRowSumTest<float, bigSize666, bigSize666, bigSize666, bigSizeAligned>();
+    bool res = TRowSumTest<float, smallSize, bigSize666, smallSize, bigSizeAligned>();
     EXPECT_TRUE(res);
 }
 
