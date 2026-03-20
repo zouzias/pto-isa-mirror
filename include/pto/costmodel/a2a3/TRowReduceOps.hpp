@@ -22,20 +22,20 @@ PTO_INTERNAL void OneRepeatProc(std::vector<CostModelStats>& stats, int validCol
 {
     if (validCol == elemPerRpt) {
         InstrOp::template ReduceInstrByMode<true, SrcCols, dstRptStride, srcRptStride, elemPerRpt>(stats, validRow);
-        //pipe_barrier(PIPE_V);
+        stats.emplace_back("PIPE_V");
         return;
     }
 
     unsigned rptTimes;
-    //SetContinuousMask(remain);
+    stats.emplace_back("mask", GetContinousMask1(remain), GetContinousMask0(remain));
     do {
         rptTimes = rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX;
         InstrOp::template ReduceInstrByMode<false, SrcCols, dstRptStride, srcRptStride, elemPerRpt>(stats, rptTimes);
-        //pipe_barrier(PIPE_V);
+        stats.emplace_back("PIPE_V");
         rowRptTimes -= 1;
     } while (rowRptTimes >= 0);
 
-    //set_vector_mask(-1, -1);
+    stats.emplace_back("mask", -1, -1);
 }
 
 template <typename InstrOp, typename T, typename TileOut, typename TileIn>
@@ -101,12 +101,9 @@ PTO_INTERNAL void TRowReduceInstr(std::vector<CostModelStats>& stats, int validC
             return;
         }
         // 将满足一次repeat部分copy到dst
-        //copy_ubuf_to_ubuf(tmp, src, 0, validRow, BLOCK_MAX_PER_REPEAT, srcRptStride - BLOCK_MAX_PER_REPEAT,
-                          //tmpRptStride - BLOCK_MAX_PER_REPEAT);
         stats.emplace_back("copy_ubuf_to_ubuf", 0, validRow, BLOCK_MAX_PER_REPEAT, srcRptStride - BLOCK_MAX_PER_REPEAT,
                            tmpRptStride - BLOCK_MAX_PER_REPEAT);
-        //pipe_barrier(PIPE_V);
-        stats.emplace_back("pipe_barrier");
+        stats.emplace_back("PIPE_V");
     }
 
     InstrOp::template FillTmp<TileDataTmp::Cols, TileDataIn::Cols, tmpRptStride, srcRptStride, elemPerRpt>(
@@ -114,15 +111,15 @@ PTO_INTERNAL void TRowReduceInstr(std::vector<CostModelStats>& stats, int validC
 
     // 不足一次repeat的部分设置mask与tmp计算, 此时tmp必定存在有效数据
     if (remain > 0) {
-        //SetContinuousMask(remain);
+        stats.emplace_back("mask", GetContinuousMask1(remain), GetContinuousMask0(remain));
         do {
             rptTimes = rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX;
             InstrOp::template BinInstrByMode<false, TileDataTmp::Cols, TileDataTmp::Cols, TileDataIn::Cols,
                                              tmpRptStride, tmpRptStride, srcRptStride, elemPerRpt>(stats, rptTimes);
             rowRptTimes -= 1;
         } while (rowRptTimes >= 0);
-        //set_vector_mask(-1, -1);
-       // pipe_barrier(PIPE_V);
+        stats.emplace_back("mask", -1, -1);
+        stats.emplace_back("PIPE_V");
     }
 
     InstrOp::template TmpProc<TileDataTmp::Cols, TileDataIn::Cols, tmpRptStride, srcRptStride, elemPerRpt>(
@@ -130,7 +127,7 @@ PTO_INTERNAL void TRowReduceInstr(std::vector<CostModelStats>& stats, int validC
 
     InstrOp::template ReduceInstrByMode<true, TileDataTmp::Cols, dstRptStride, tmpRptStride, elemPerRpt>(stats,
                                                                                                          validRow);
-    //pipe_barrier(PIPE_V);
+    stats.emplace_back("PIPE_V");
 }
 
 template <typename T, typename Op, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
@@ -163,9 +160,9 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
             for (unsigned block = 0; block < blocksPerRow; ++block) {
                 //vmax(tmp, tmp, src + block * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
                 if (instr_name == "TROWMAX") {
-                    stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1, elemsPerBlock);
+                    stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1);
                 } else if (instr_name == "TROWMIN") {
-                    stats.emplace_back("vmin", 1, 0, 0, 1, 0, 0, 1, elemsPerBlock);
+                    stats.emplace_back("vmin", 1, 0, 0, 1, 0, 0, 1);
                 }
                 //pipe_barrier(PIPE_V);
             }
@@ -174,14 +171,14 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
             unsigned elemsLessThanBlock = validCol % elemsPerBlock;
             if (elemsLessThanBlock > 0) {
                // set_vector_mask(0, elemsLessThanBlock);
-                //vmax(tmp, tmp, src + blocksPerRow * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
+
                 if (instr_name == "TROWMAX") {
-                    stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1, elemsLessThanBlock);
+                    stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1);
                 } else if (instr_name == "TROWMIN") {
-                    stats.emplace_back("vmin", 1, 0, 0, 1, 0, 0, 1, elemsLessThanBlock);
+                    stats.emplace_back("vmin", 1, 0, 0, 1, 0, 0, 1);
                 }
                 //pipe_barrier(PIPE_V);
-                stats.emplace_back("pipe_barrier");
+                stats.emplace_back("PIPE_V");
             }
 
            // pipe_barrier(PIPE_ALL);

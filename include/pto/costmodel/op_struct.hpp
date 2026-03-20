@@ -282,19 +282,19 @@ struct TRowMaxOp : TRowReduceOp<TRowMaxOp> {
                                           uint8_t src0BlockStride = 1, uint8_t src1BlockStride = 1)
     {
         stats.emplace_back("vmax", rptTimes, dstBlockStride, src0BlockStride, src1BlockStride, dstRptStride,
-                           src0RptStride, src1RptStride, 0);
+                           src0RptStride, src1RptStride);
     }
 
     PTO_INTERNAL static void ReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
                                              uint16_t srcBlkStride, uint16_t srcRptStride)
     {
-        stats.emplace_back("vcmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride, 2);
+        stats.emplace_back("vcmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride, "ONLY_VALUE");
     }
 
     PTO_INTERNAL static void GroupReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes,
                                                   uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
-        stats.emplace_back("vcgmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride, 0);
+        stats.emplace_back("vcgmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride);
     }
 };
 
