@@ -787,22 +787,24 @@ PTO_INST RecordEvent TFILLPAD(DstTileData &dst, SrcTileData &src, WaitEvents &..
     return {};
 }
 
-template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TFILLPAD_INPLACE(DstTileData &dst, SrcTileData &src, WaitEvents &... events)
+template <typename TileData, PadValue PadVal = PadValue::Zero,
+    std::enable_if_t<(TileData::Loc_ == TileType::Mat), int> = 0, typename... WaitEvents>
+PTO_INST RecordEvent TFILLPAD(TileData &dst, TileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TFILLPAD_INPLACE, dst, src);
+    TFILLPAD_IMPL<TileData, PadVal>(dst, src);
     return {};
 }
 
-template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TFILLPAD_EXPAND(DstTileData &dst, SrcTileData &src, WaitEvents &... events)
+template <typename DstTileData, typename SrcTileData,
+          std::enable_if_t<(DstTileData::Loc == TileType::Vec) && (SrcTileData::Loc == TileType::Vec), int> = 0,
+          typename... WaitEvents>
+PTO_INST RecordEvent TFILLPAD(DstTileData &dst, SrcTileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TFILLPAD_EXPAND, dst, src);
+    TFILLPAD_IMPL<DstTileData, SrcTileData>(dst, src);
     return {};
 }
-
 // TSORT32不自动实现wait, 需手动TSYNC(events...)
 template <typename DstTileData, typename SrcTileData, typename IdxTileData>
 PTO_INST RecordEvent TSORT32(DstTileData &dst, SrcTileData &src, IdxTileData &idx)
