@@ -134,8 +134,8 @@ PTO_INTERNAL void TGather(__ubuf__ typename TileDataD::DType *dst, __ubuf__ type
     }
 }
 
-template <typename TileDataD, typename TileDataS0, typename TileDataS1>
-PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src1)
+template <typename TileDataD, typename TileDataS0, typename TileDataS1, typename TileDataTmp>
+PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src1, TileDataTmp &tmp)
 {
     CheckValid<TileDataD, TileDataS0, TileDataS1>();
 

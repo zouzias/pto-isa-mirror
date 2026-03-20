@@ -39,7 +39,7 @@ def gen_golden_data(param):
 
     result_arr = input_arr.sum(axis=1, keepdims=True)
     output_arr = np.zeros((rows, cols), dtype=dst_type)
-    for i in range(cols):
+    for i in range(rows):
         output_arr[i, 0] = result_arr[i, 0]
 
     # Cast to destination type
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     case_list = [
         TrowsumParams("TROWSUMTest.test1", np.float32, 16, 16),
         TrowsumParams("TROWSUMTest.test2", np.float16, 16, 16),
-        TrowsumParams("TROWSUMTest.test3", np.float32, 666, 666),
+        TrowsumParams("TROWSUMTest.test3", np.float32, 16, 666),
         # int32 test cases
         TrowsumParams("TROWSUMTest.test4", np.int32, 16, 16),
         TrowsumParams("TROWSUMTest.test5", np.int32, 64, 64),
