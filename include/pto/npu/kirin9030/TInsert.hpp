@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -7,12 +7,12 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TMAX_HPP_KIRIN9030
-#define TMAX_HPP_KIRIN9030
-#include <pto/npu/kirin9030/common.hpp>
-#include <pto/npu/kirin9030/utils.hpp>
-#include <pto/npu/kirin9030/TBinOp.hpp>
-#define bfloat16_t half
-#include "pto/npu/a5/TMax.hpp"
-#undef bfloat16_t
+
+#ifndef TINSERT_HPP_KIRIN9030
+#define TINSERT_HPP_KIRIN9030
+#include "common.hpp"
+#define COPY_CC_TO_CUBF(dst, src, nSize, srcRow, dstStride, srcStride, QuantPre, reluMode, channelSplitEnable) \
+    copy_matrix_cc_to_cbuf(dst, src, 0, nSize, srcRow, dstStride, srcStride, 0, 0, QuantPre, reluMode,         \
+                           channelSplitEnable, false, 0, 0, false, false, 0, false, false, false, false, false, false)
+#include "pto/npu/a5/TInsert.hpp"
 #endif

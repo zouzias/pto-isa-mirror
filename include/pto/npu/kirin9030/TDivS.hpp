@@ -35,100 +35,98 @@ struct DivSOpS {
         vdiv(vregdst, vregdst, vregsrc, preg);
     }
 };
-template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned dstRowStride, unsigned srcRowStride>
+template <typename DstTile, typename SrcTile, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride,
+          unsigned srcRowStride>
 __tf__ PTO_INTERNAL OP_NAME(TDIVS)
-    OP_TYPE(element_wise) void TDivS(typename TileDataDst::TileDType __out__ dst,
-                                     typename TileDataSrc::TileDType __in__ src0,
-                                     typename TileDataSrc::DType __in__ src1, unsigned validRow, unsigned validCol,
+    OP_TYPE(element_wise) void TDivS(typename DstTile::TileDType __out__ dst, typename SrcTile::TileDType __in__ src0,
+                                     typename SrcTile::DType __in__ src1, unsigned validRow, unsigned validCol,
                                      VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
-    using T = typename TileDataDst::DType;
+    using T = typename DstTile::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
-    BinaryInstr<DivSOp<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
+    BinaryInstr<DivSOp<T>, DstTile, SrcTile, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
         dstPtr, src0Ptr, src1, validRow, validCol, version);
 }
 
-template <typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
-          unsigned dstRowStride, unsigned srcRowStride>
+template <typename DstTile, typename SrcTile, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride,
+          unsigned srcRowStride>
 __tf__ PTO_INTERNAL OP_NAME(TDIVS)
-    OP_TYPE(element_wise) void TDivS(typename TileDataDst::TileDType __out__ dst,
-                                     typename TileDataSrc::DType __in__ src1,
-                                     typename TileDataSrc::TileDType __in__ src0, unsigned validRow, unsigned validCol,
+    OP_TYPE(element_wise) void TDivS(typename DstTile::TileDType __out__ dst, typename SrcTile::DType __in__ src1,
+                                     typename SrcTile::TileDType __in__ src0, unsigned validRow, unsigned validCol,
                                      VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
-    using T = typename TileDataDst::DType;
+    using T = typename DstTile::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
-    BinaryInstr<DivSOpS<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
+    BinaryInstr<DivSOpS<T>, DstTile, SrcTile, T, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
         dstPtr, src0Ptr, src1, validRow, validCol, version);
 }
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TDIVS_IMPL(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar)
+template <typename DstTile, typename SrcTile>
+PTO_INTERNAL void TDIVS_IMPL(DstTile &dst, SrcTile &src0, typename SrcTile::DType scalar)
 {
-    static_assert(std::is_same<typename TileDataDst::DType, uint32_t>::value ||
-                      std::is_same<typename TileDataDst::DType, int32_t>::value ||
-                      std::is_same<typename TileDataDst::DType, int>::value ||
-                      std::is_same<typename TileDataDst::DType, uint16_t>::value ||
-                      std::is_same<typename TileDataDst::DType, int16_t>::value ||
-                      std::is_same<typename TileDataDst::DType, uint8_t>::value ||
-                      std::is_same<typename TileDataDst::DType, int8_t>::value ||
-                      std::is_same<typename TileDataDst::DType, half>::value ||
-                      std::is_same<typename TileDataDst::DType, float16_t>::value ||
-                      std::is_same<typename TileDataDst::DType, float>::value ||
-                      std::is_same<typename TileDataDst::DType, float32_t>::value,
+    static_assert(std::is_same<typename DstTile::DType, uint32_t>::value ||
+                      std::is_same<typename DstTile::DType, int32_t>::value ||
+                      std::is_same<typename DstTile::DType, int>::value ||
+                      std::is_same<typename DstTile::DType, uint16_t>::value ||
+                      std::is_same<typename DstTile::DType, int16_t>::value ||
+                      std::is_same<typename DstTile::DType, uint8_t>::value ||
+                      std::is_same<typename DstTile::DType, int8_t>::value ||
+                      std::is_same<typename DstTile::DType, half>::value ||
+                      std::is_same<typename DstTile::DType, float16_t>::value ||
+                      std::is_same<typename DstTile::DType, float>::value ||
+                      std::is_same<typename DstTile::DType, float32_t>::value,
                   "TDIVS: Invalid data type");
 
-    static_assert(TileDataSrc::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
-    static_assert(TileDataDst::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
-    static_assert(TileDataSrc::ValidCol <= TileDataSrc::Cols,
+    static_assert(SrcTile::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
+    static_assert(DstTile::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
+    static_assert(SrcTile::ValidCol <= SrcTile::Cols,
                   "Number of valid columns must not be greater than number of tile columns.");
-    static_assert(TileDataSrc::ValidRow <= TileDataSrc::Rows,
+    static_assert(SrcTile::ValidRow <= SrcTile::Rows,
                   "Number of valid rows must not be greater than number of tile rows.");
-    static_assert(TileDataDst::ValidCol <= TileDataDst::Cols,
+    static_assert(DstTile::ValidCol <= DstTile::Cols,
                   "Number of valid columns must not be greater than number of tile columns.");
-    static_assert(TileDataDst::ValidRow <= TileDataDst::Rows,
+    static_assert(DstTile::ValidRow <= DstTile::Rows,
                   "Number of valid rows must not be greater than number of tile rows.");
 
     PTO_ASSERT(src0.GetValidRow() == dst.GetValidRow(), "Number of rows of src and dst must be the same.");
     PTO_ASSERT(src0.GetValidCol() == dst.GetValidCol(), "Number of columns of src and dst must be the same.");
 
-    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileDataDst::DType);
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileDataDst::DType);
-    constexpr unsigned dstRowStride = TileDataDst::RowStride;
-    constexpr unsigned srcRowStride = TileDataSrc::RowStride;
+    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename DstTile::DType);
+    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename DstTile::DType);
+    constexpr unsigned dstRowStride = DstTile::RowStride;
+    constexpr unsigned srcRowStride = SrcTile::RowStride;
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();
-    TDivS<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
-        dst.data(), src0.data(), scalar, validRow, validCol);
+    TDivS<DstTile, SrcTile, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(dst.data(), src0.data(),
+                                                                                          scalar, validRow, validCol);
 }
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TDIVS_IMPL(TileDataDst &dst, typename TileDataSrc::DType scalar, TileDataSrc &src0)
+template <typename DstTile, typename SrcTile>
+PTO_INTERNAL void TDIVS_IMPL(DstTile &dst, typename SrcTile::DType scalar, SrcTile &src0)
 {
-    static_assert(TileDataSrc::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
-    static_assert(TileDataDst::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
-    static_assert(TileDataSrc::ValidCol <= TileDataSrc::Cols,
+    static_assert(SrcTile::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
+    static_assert(DstTile::Loc == TileType::Vec, "TileType of src and dst tiles must be TileType::Vec.");
+    static_assert(SrcTile::ValidCol <= SrcTile::Cols,
                   "Number of valid columns must not be greater than number of tile columns.");
-    static_assert(TileDataSrc::ValidRow <= TileDataSrc::Rows,
+    static_assert(SrcTile::ValidRow <= SrcTile::Rows,
                   "Number of valid rows must not be greater than number of tile rows.");
-    static_assert(TileDataDst::ValidCol <= TileDataDst::Cols,
+    static_assert(DstTile::ValidCol <= DstTile::Cols,
                   "Number of valid columns must not be greater than number of tile columns.");
-    static_assert(TileDataDst::ValidRow <= TileDataDst::Rows,
+    static_assert(DstTile::ValidRow <= DstTile::Rows,
                   "Number of valid rows must not be greater than number of tile rows.");
 
     PTO_ASSERT(src0.GetValidRow() == dst.GetValidRow(), "Number of rows of src and dst must be the same.");
     PTO_ASSERT(src0.GetValidCol() == dst.GetValidCol(), "Number of columns of src and dst must be the same.");
 
-    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileDataDst::DType);
-    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileDataDst::DType);
-    constexpr unsigned dstRowStride = TileDataDst::RowStride;
-    constexpr unsigned srcRowStride = TileDataSrc::RowStride;
+    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename DstTile::DType);
+    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename DstTile::DType);
+    constexpr unsigned dstRowStride = DstTile::RowStride;
+    constexpr unsigned srcRowStride = SrcTile::RowStride;
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();
-    TDivS<TileDataDst, TileDataSrc, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
+    TDivS<DstTile, SrcTile, elementsPerRepeat, blockSizeElem, dstRowStride, srcRowStride>(
         dst.data(), scalar, src0.data(), validRow, validCol);
 }
 } // namespace pto

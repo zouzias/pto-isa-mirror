@@ -49,6 +49,7 @@ const pipe_t PIPE_MTE2 = 3;
 const pipe_t PIPE_MTE3 = 4;
 const pipe_t PIPE_M = 5;
 const pipe_t PIPE_ALL = 6;
+const pipe_t PIPE_FIX = 7;
 inline void pipe_barrier(pipe_t pipe)
 {
     (void)pipe;
