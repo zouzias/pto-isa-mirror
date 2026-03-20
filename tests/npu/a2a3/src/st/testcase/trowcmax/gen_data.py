@@ -30,10 +30,6 @@ def gen_golden_data(param):
         src_input = np.random.uniform(low=dtype_info.min, high=dtype_info.max,
             size=[src_tile_row, src_tile_col]).astype(src_dtype)
 
-    for row in range(height):
-        for col in range(width):
-            src_input[row][col] = (row + col) % width + row
-
     # Apply valid region constraints
     golden = np.zeros([dst_tile_row, dst_tile_col]).astype(dst_dtype)
     golden[0:height, 0:1] = np.argmax(src_input[:, 0:width], axis=1, keepdims=True)
@@ -61,10 +57,12 @@ class TRowCMaxParams:
         self.dst_tile_col = dst_tile_col
         self.src_tile_row = src_tile_row
         self.src_tile_col = src_tile_col
+        self.tmp_tile_row = tmp_tile_row
+        self.tmp_tile_col = tmp_tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
         self.name = f"TROWCMAXTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"\
-            f"{dst_tile_row}x{dst_tile_col}_{src_tile_row}x{src_tile_col}_{valid_row}x{valid_col}"
+            f"{dst_tile_row}x{dst_tile_col}_{src_tile_row}x{src_tile_col}_{tmp_tile_row}x{tmp_tile_col}_{valid_row}x{valid_col}"
 
 
 if __name__ == "__main__":
@@ -77,15 +75,15 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_list = [
-        TRowCMaxParams(np.uint32, np.float32, 8, 1, 8, 8, 8, 8),
-        TRowCMaxParams(np.uint32, np.float32, 1024, 1, 1024, 8, 1024, 8),
-        TRowCMaxParams(np.uint32, np.float32, 16, 1, 13, 16, 13, 13),
-        TRowCMaxParams(np.uint32, np.float32, 1024, 1, 1023, 24, 1023, 17),
-        TRowCMaxParams(np.uint32, np.float32, 8, 1, 8, 64, 8, 64),
-        TRowCMaxParams(np.uint32, np.float32, 264, 1, 260, 64, 260, 64),
-        TRowCMaxParams(np.uint32, np.float32, 64, 1, 32, 128, 32, 128),
-        TRowCMaxParams(np.uint32, np.float32, 8, 1, 3, 4096, 3, 4095),
-        TRowCMaxParams(np.uint32, np.float32, 8, 1, 1, 16384, 1, 16381),
+        TRowCMaxParams(np.uint32, np.float32, 8, 1, 8, 8, 1, 8, 8, 8),
+        TRowCMaxParams(np.uint32, np.float32, 1024, 1, 1024, 8, 1, 8, 1024, 8),
+        TRowCMaxParams(np.uint32, np.float32, 16, 1, 13, 16, 1, 8, 13, 13),
+        TRowCMaxParams(np.uint32, np.float32, 1024, 1, 1023, 24, 1, 8, 1023, 17),
+        TRowCMaxParams(np.uint32, np.float32, 8, 1, 8, 64, 1, 8, 8, 64),
+        TRowCMaxParams(np.uint32, np.float32, 264, 1, 260, 64, 1, 8, 260, 64),
+        TRowCMaxParams(np.uint32, np.float32, 64, 1, 32, 128, 32, 24, 32, 128),
+        TRowCMaxParams(np.uint32, np.float32, 8, 1, 3, 4096, 3, 192, 3, 4095),
+        TRowCMaxParams(np.uint32, np.float32, 8, 1, 1, 16384, 1, 768, 1, 16381),
     ]
 
     for case in case_list:

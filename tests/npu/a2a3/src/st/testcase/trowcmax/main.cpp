@@ -105,39 +105,39 @@ protected:
     }
 };
 
-TEST_F(TROWCMAXTest, case_uint32_float_8x1_8x8_8x8)
+TEST_F(TROWCMAXTest, case_uint32_float_8x1_8x8_1x8_8x8)
 {
-    this->Launch<uint32_t, float, 8, 1, 8, 8, 8, 8>();
+    this->Launch<uint32_t, float, 8, 1, 8, 8, 1, 8, 8, 8>();
 }
-TEST_F(TROWCMAXTest, case_uint32_float_1024x1_1024x8_1024x8)
+TEST_F(TROWCMAXTest, case_uint32_float_1024x1_1024x8_1x8_1024x8)
 {
-    this->Launch<uint32_t, float, 1024, 1, 1024, 8, 1024, 8>();
+    this->Launch<uint32_t, float, 1024, 1, 1024, 8, 1, 8, 1024, 8>();
 }
-TEST_F(TROWCMAXTest, case_uint32_float_16x1_13x16_13x13)
+TEST_F(TROWCMAXTest, case_uint32_float_16x1_13x16_1x8_13x13)
 {
-    this->Launch<uint32_t, float, 16, 1, 13, 16, 13, 13>();
+    this->Launch<uint32_t, float, 16, 1, 13, 16, 1, 8, 13, 13>();
 }
-TEST_F(TROWCMAXTest, case_uint32_float_1024x1_1023x24_1023x17)
+TEST_F(TROWCMAXTest, case_uint32_float_1024x1_1023x24_1x8_1023x17)
 {
-    this->Launch<uint32_t, float, 1024, 1, 1023, 24, 1023, 17>();
+    this->Launch<uint32_t, float, 1024, 1, 1023, 24, 1, 8, 1023, 17>();
 }
-TEST_F(TROWCMAXTest, case_uint32_float_8x1_8x64_8x64)
+TEST_F(TROWCMAXTest, case_uint32_float_8x1_8x64_1x8_8x64)
 {
-    this->Launch<uint32_t, float, 8, 1, 8, 64, 8, 64>();
+    this->Launch<uint32_t, float, 8, 1, 8, 64, 1, 8, 8, 64>();
 }
-TEST_F(TROWCMAXTest, case_uint32_float_264x1_260x64_260x64)
+TEST_F(TROWCMAXTest, case_uint32_float_264x1_260x64_1x8_260x64)
 {
-    this->Launch<uint32_t, float, 264, 1, 260, 64, 260, 64>();
+    this->Launch<uint32_t, float, 264, 1, 260, 64, 1, 8, 260, 64>();
 }
-TEST_F(TROWCMAXTest, case_uint32_float_64x1_32x128_32x128)
+TEST_F(TROWCMAXTest, case_uint32_float_64x1_32x128_32x24_32x128)
 {
-    this->Launch<uint32_t, float, 64, 1, 32, 128, 32, 128>();
+    this->Launch<uint32_t, float, 64, 1, 32, 128, 32, 24, 32, 128>();
 }
-TEST_F(TROWCMAXTest, case_uint32_float_8x1_3x4096_3x4095)
+TEST_F(TROWCMAXTest, case_uint32_float_8x1_3x4096_3x192_3x4095)
 {
-    this->Launch<uint32_t, float, 8, 1, 3, 4096, 3, 4095>();
+    this->Launch<uint32_t, float, 8, 1, 3, 4096, 3, 192, 3, 4095>();
 }
-TEST_F(TROWCMAXTest, case_uint32_float_8x1_1x16384_1x16381)
+TEST_F(TROWCMAXTest, case_uint32_float_8x1_1x16384_1x768_1x16381)
 {
-    this->Launch<uint32_t, float, 8, 1, 1, 16384, 1, 16381>();
+    this->Launch<uint32_t, float, 8, 1, 1, 16384, 1, 768, 1, 16381>();
 }
