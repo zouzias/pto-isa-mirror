@@ -94,7 +94,7 @@ __tf__ PTO_INLINE void LoadPlain(typename GlobalData::DType __out__ *dst, typena
     }
 }
 
-template <typename GlobalData, typename TileData, std::enable_if_t<TileData::isRowMajor, int> = 0>
+template <typename GlobalData, typename TileData>
 __tf__ PTO_INLINE void LoadSubfractalMatrix(typename GlobalData::DType __out__ *dst,
                                             typename TileData::TileDType __in__ src, int gShape3, int gShape4,
                                             int gStride3, int gStride4, int validRow, int validCol)
@@ -107,34 +107,15 @@ __tf__ PTO_INLINE void LoadSubfractalMatrix(typename GlobalData::DType __out__ *
             for (size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
                 size_t subTileR = r / TileData::InnerRows;
                 size_t innerR = r % TileData::InnerRows;
-
-                size_t tile_idx = subTileR * TileData::Cols * TileData::InnerRows + subTileC * TileData::InnerNumel +
-                                  innerC * TileData::InnerRows + innerR;
+                if constexpr (TileData::isRowMajor) {
+                    size_t tile_idx = subTileR * TileData::Cols * TileData::InnerRows +
+                                      subTileC * TileData::InnerNumel + innerC * TileData::InnerRows + innerR;
+                } else {
+                    size_t tile_idx = subTileC * TileData::Rows * TileData::InnerCols +
+                                      subTileR * TileData::InnerNumel + innerR * TileData::InnerCols + innerC;
+                }
 
                 size_t gd_idx = r * static_cast<std::size_t>(gStride3) + c * static_cast<std::size_t>(gStride4);
-                dst[tile_idx] = src[gd_idx];
-            }
-        });
-}
-
-template <typename GlobalData, typename TileData, std::enable_if_t<!TileData::isRowMajor, int> = 0>
-__tf__ PTO_INLINE void LoadSubfractalMatrix(typename GlobalData::DType __out__ *dst,
-                                            typename TileData::TileDType __in__ src, int gShape3, int gShape4,
-                                            int gStride3, int gStride4, int validRow, int validCol)
-{
-    // Nz layout
-    cpu::parallel_for_1d(
-        0, static_cast<std::size_t>(gShape4), static_cast<std::size_t>(gShape3) * gShape4, [&](std::size_t c) {
-            size_t subTileC = c / TileData::InnerCols;
-            size_t innerC = c % TileData::InnerCols;
-            for (size_t r = 0; r < static_cast<std::size_t>(gShape3); r++) {
-                size_t subTileR = r / TileData::InnerRows;
-                size_t innerR = r % TileData::InnerRows;
-
-                size_t tile_idx = subTileC * TileData::Rows * TileData::InnerCols + subTileR * TileData::InnerNumel +
-                                  innerR * TileData::InnerCols + innerC;
-                size_t gd_idx = r * static_cast<std::size_t>(gStride3) + c * static_cast<std::size_t>(gStride4);
-
                 dst[tile_idx] = src[gd_idx];
             }
         });
