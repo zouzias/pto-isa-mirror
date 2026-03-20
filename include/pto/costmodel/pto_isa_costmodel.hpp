@@ -25,6 +25,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TRowReduceOp.hpp"
 #include "pto/costmodel/a2a3/TRowExpandOp.hpp"
 #include "pto/costmodel/a2a3/TRowReduceOps.hpp"
+#include "pto/costmodel/a2a3/TColReduceOps.hpp"
 
 namespace pto {
 

@@ -76,7 +76,7 @@ struct CostModelStats {
     CostModelStats(const std::string cceInstName_, int repeats_, int dstRepeatStride_, int srcBlockStride_,
                    int srcRepeatStride_, bool mode_) :
     cceInstName(cceInstName_), repeats(repeats_), dstRepeatStride(dstRepeatStride_), src0BlockStride(srcBlockStride_),
-    src0RepeatStride(srcRepeatStride_), mode(mode_),  {}
+    src0RepeatStride(srcRepeatStride_), mode(mode_) {}
 
     // simple mode
     CostModelStats(const std::string cceInstName_, int repeats_) :

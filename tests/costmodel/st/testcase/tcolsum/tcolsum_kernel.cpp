@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling, float accuracy>
 AICORE inline void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
@@ -35,7 +35,7 @@ AICORE inline void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src)
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TCOLSUM(dstTile, srcTile);
+    TCOLSUM(dstTile, srcTile, IsBinary);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
@@ -48,15 +48,15 @@ AICORE inline void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src)
     EXPECT_TRUE(ret);
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling, float accuracy>
 void LaunchTCOLSUM(T *out, T *src, void *stream)
 {
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLSUM<half, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>((half *)(out), (half *)src);
+        runTCOLSUM<half, kGRows_, kGCols_, kTRows_, kTCols_, IsBinary, profiling, accuracy>((half *)(out), (half *)src);
     } else {
-        runTCOLSUM<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(out, src);
+        runTCOLSUM<T, kGRows_, kGCols_, kTRows_, kTCols_, IsBinary, profiling, accuracy>(out, src);
     }
 }
 
-template void LaunchTCOLSUM<float, 64, 64, 64, 64, 156.0f, 1.0f>(float *out, float *src, void *stream);
-template void LaunchTCOLSUM<aclFloat16, 16, 256, 16, 256, 92.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTCOLSUM<float, 64, 64, 64, 64, true, 156.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTCOLSUM<aclFloat16, 16, 256, 16, 256, false, 92.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);

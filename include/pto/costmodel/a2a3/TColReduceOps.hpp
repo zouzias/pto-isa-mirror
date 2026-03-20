@@ -43,16 +43,16 @@ PTO_INTERNAL void ColReduceInstr(std::vector<CostModelStats>& stats, int validRo
 }
 
 template <typename T, typename Op, typename TileDataOut, typename TileDataIn>
-PTO_INTERNAL void runColReduceOps(TileDataOut &dst, TileDataIn &src)
+PTO_INTERNAL std::vector<CostModelStats> runColReduceOps(TileDataOut &dst, TileDataIn &src)
 {
-    std::vector<CostModelStats>& stats;
+    std::vector<CostModelStats> stats;
     int ValidRow = src.GetValidRow();
     int ValidCol = src.GetValidCol();
     if (ValidRow == 0 || ValidCol == 0) {
         return stats;
     }
     constexpr int srcstride = TileDataIn::RowStride;
-    ColReduceInstr<Op, T, TileDataDst, TileDataSrc, srcstride>(stats, validRow, validCol);
+    ColReduceInstr<Op, T, TileDataOut, TileDataIn, srcstride>(stats, ValidRow, ValidCol);
     return stats;
 }
 
@@ -101,7 +101,7 @@ PTO_INTERNAL void TColSum(std::vector<CostModelStats>& stats, int validRow, int 
         BinarySum<T, srcStride, tmpStride>(stats, validRow, validCol);
         int cnt = validRow / 2;
         while (cnt > 1) {
-            BinarySum<T, tmpStride, tmpStride>(stats, tmpPtr, cnt, validCol);
+            BinarySum<T, tmpStride, tmpStride>(stats, cnt, validCol);
             stats.emplace_back("PIPE_V");
             cnt /= 2;
         }
@@ -116,9 +116,9 @@ PTO_INTERNAL void TColSum(std::vector<CostModelStats>& stats, int validRow, int 
 }
 
 template <typename T, typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
-PTO_INTERNAL void runColSumOp(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, bool IsBinary)
+PTO_INTERNAL std::vector<CostModelStats> runColSumOp(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, bool IsBinary)
 {
-    std::vector<CostModelStats>& stats;
+    std::vector<CostModelStats> stats;
     int validRow = src.GetValidRow();
     int validCol = src.GetValidCol();
     constexpr int srcStride = TileDataSrc::RowStride;
@@ -129,11 +129,11 @@ PTO_INTERNAL void runColSumOp(TileDataDst &dst, TileDataSrc &src, TileDataTmp &t
         return stats;
     }
     if (IsBinary) {
-        TColSum<T, TileDataDst, TileDataSrc, TileDataTmp, srcStride, dstStride, tmpStride, true>(
-            stats validRow, validCol);
+        TColSum<T, TileDataDst, TileDataSrc, TileDataTmp, srcStride, dstStride, tmpStride, true>(stats, validRow,
+                                                                                                 validCol);
     } else {
-        TColSum<T, TileDataDst, TileDataSrc, TileDataTmp, srcStride, dstStride, tmpStride, false>(
-            stats, validRow, validCol);
+        TColSum<T, TileDataDst, TileDataSrc, TileDataTmp, srcStride, dstStride, tmpStride, false>(stats, validRow,
+                                                                                                  validCol);
     }
 
     return stats;

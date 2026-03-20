@@ -32,7 +32,7 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling, float accuracy>
 void LaunchTCOLSUM(T *out, T *src, void *stream);
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
@@ -56,7 +56,7 @@ void test_tcolsum()
     aclrtMalloc((void **)(&dstDevice), dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTCOLSUM<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, srcDevice, stream);
+    LaunchTCOLSUM<T, kGRows_, kGCols_, kTRows_, kTCols_, IsBinary, profiling, accuracy>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -73,9 +73,9 @@ void test_tcolsum()
 
 TEST_F(TCOLSUMTest, case_float_64x64_64x64_64x64)
 {
-    test_tcolsum<float, 64, 64, 64, 64, 156.0f, 1.0f>();
+    test_tcolsum<float, 64, 64, 64, 64, true, 156.0f, 1.0f>();
 }
 TEST_F(TCOLSUMTest, case_half_16x256_16x256_16x256)
 {
-    test_tcolsum<aclFloat16, 16, 256, 16, 256, 92.0f, 1.0f>();
+    test_tcolsum<aclFloat16, 16, 256, 16, 256, false, 92.0f, 1.0f>();
 }

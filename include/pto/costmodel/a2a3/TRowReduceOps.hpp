@@ -101,7 +101,7 @@ PTO_INTERNAL void TRowReduceInstr(std::vector<CostModelStats>& stats, int validC
             return;
         }
         // 将满足一次repeat部分copy到dst
-        stats.emplace_back("copy_ubuf_to_ubuf", 0, validRow, BLOCK_MAX_PER_REPEAT, srcRptStride - BLOCK_MAX_PER_REPEAT,
+        stats.emplace_back("copy_ubuf_to_ubuf", validRow, BLOCK_MAX_PER_REPEAT, srcRptStride - BLOCK_MAX_PER_REPEAT,
                            tmpRptStride - BLOCK_MAX_PER_REPEAT);
         stats.emplace_back("PIPE_V");
     }
