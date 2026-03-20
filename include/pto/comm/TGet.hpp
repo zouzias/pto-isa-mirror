@@ -109,33 +109,33 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     }
 
     // Get strides for offset calculation
-    const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
-    const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
+    const int remoteStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+    const int remoteStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+    const int remoteStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+    const int remoteStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+    const int remoteStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+    const int localStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
+    const int localStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
+    const int localStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
+    const int localStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+    const int localStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
 
     // View types with fully dynamic shape/stride for chunk GlobalTensors
     using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
     using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
     using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
-    DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
-    DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+    DynStride srcChunkStride(remoteStride0, remoteStride1, remoteStride2, remoteStride3, remoteStride4);
+    DynStride dstChunkStride(localStride0, localStride1, localStride2, localStride3, localStride4);
 
     // 2D sliding: iterate outer dims, then chunk rows (dim3) and columns (dim4)
     for (int i0 = 0; i0 < gShape0; ++i0) {
         for (int i1 = 0; i1 < gShape1; ++i1) {
             for (int i2 = 0; i2 < gShape2; ++i2) {
-                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
-                                  static_cast<int64_t>(i2) * srcStride2;
-                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
-                                  static_cast<int64_t>(i2) * dstStride2;
+                int64_t srcBase = static_cast<int64_t>(i0) * remoteStride0 + static_cast<int64_t>(i1) * remoteStride1 +
+                                  static_cast<int64_t>(i2) * remoteStride2;
+                int64_t dstBase = static_cast<int64_t>(i0) * localStride0 + static_cast<int64_t>(i1) * localStride1 +
+                                  static_cast<int64_t>(i2) * localStride2;
 
                 for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
                     int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
@@ -152,10 +152,10 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
                         }
 
                         // Compute element offsets
-                        int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
-                                            static_cast<int64_t>(colOff) * srcStride4;
-                        int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
-                                            static_cast<int64_t>(colOff) * dstStride4;
+                        int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * remoteStride3 +
+                                            static_cast<int64_t>(colOff) * remoteStride4;
+                        int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * localStride3 +
+                                            static_cast<int64_t>(colOff) * localStride4;
 
                         // Create chunk views with adjusted shape
                         DynShape chunkShape(1, 1, 1, currentRows, currentCols);
@@ -206,25 +206,25 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     static_assert(std::is_same_v<T, typename TileData::DType>,
                   "TGET: TileData element type must match GlobalData element type");
 
-    const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
-    const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
-    const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
-    const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
-    const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+    const int remoteDim0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
+    const int remoteDim1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
+    const int remoteDim2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+    const int remoteDim3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+    const int remoteDim4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
 
-    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
-    const int tileValidRow = pingTile.GetValidRow();
-    const int tileValidCol = pingTile.GetValidCol();
+    const int64_t totalRemoteRows = static_cast<int64_t>(remoteDim0) * remoteDim1 * remoteDim2 * remoteDim3;
+    const int pingRows = pingTile.GetValidRow();
+    const int pingCols = pingTile.GetValidCol();
 
-    PTO_ASSERT(tileValidRow > 0, "TGET: tileValidRow must be greater than 0");
-    PTO_ASSERT(tileValidCol > 0, "TGET: tileValidCol must be greater than 0");
+    PTO_ASSERT(pingRows > 0, "TGET: tileValidRow must be greater than 0");
+    PTO_ASSERT(pingCols > 0, "TGET: tileValidCol must be greater than 0");
 
-    if (totalRows == 0 || gShape4 == 0) {
+    if (totalRemoteRows == 0 || remoteDim4 == 0) {
         return;
     }
 
     // ---- Simple path: single chunk, no ping-pong benefit ----
-    if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
+    if (totalRemoteRows <= pingRows && remoteDim4 <= pingCols) {
         TLOAD(pingTile, srcGlobalData);
         set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
@@ -239,26 +239,26 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
 
     if constexpr (!isDynamicRow) {
-        PTO_ASSERT(gShape3 % tileValidRow == 0,
+        PTO_ASSERT(remoteDim3 % pingRows == 0,
                    "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
-        PTO_ASSERT(gShape4 % tileValidCol == 0,
+        PTO_ASSERT(remoteDim4 % pingCols == 0,
                    "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
-    const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
-    const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
+    const int remotePitch0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+    const int remotePitch1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+    const int remotePitch2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+    const int remotePitch3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+    const int remotePitch4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+    const int localPitch0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
+    const int localPitch1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
+    const int localPitch2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
+    const int localPitch3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+    const int localPitch4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
 
     using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
     using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
@@ -266,8 +266,8 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
 
     // Precompute strides (identical for all chunk views)
-    DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
-    DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+    DynStride srcChunkStride(remotePitch0, remotePitch1, remotePitch2, remotePitch3, remotePitch4);
+    DynStride dstChunkStride(localPitch0, localPitch1, localPitch2, localPitch3, localPitch4);
 
     // Ping-pong state (same as TPUT_IMPL ping-pong)
     // See TPUT_IMPL comments for detailed pipeline analysis.
@@ -277,34 +277,36 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     int pendingRows = 0;
     int pendingCols = 0;
 
-    for (int i0 = 0; i0 < gShape0; ++i0) {
-        for (int i1 = 0; i1 < gShape1; ++i1) {
-            for (int i2 = 0; i2 < gShape2; ++i2) {
-                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
-                                  static_cast<int64_t>(i2) * srcStride2;
-                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
-                                  static_cast<int64_t>(i2) * dstStride2;
+    for (int outer0 = 0; outer0 < remoteDim0; ++outer0) {
+        for (int outer1 = 0; outer1 < remoteDim1; ++outer1) {
+            for (int outer2 = 0; outer2 < remoteDim2; ++outer2) {
+                int64_t srcBaseOffset = static_cast<int64_t>(outer0) * remotePitch0 +
+                                        static_cast<int64_t>(outer1) * remotePitch1 +
+                                        static_cast<int64_t>(outer2) * remotePitch2;
+                int64_t dstBaseOffset = static_cast<int64_t>(outer0) * localPitch0 +
+                                        static_cast<int64_t>(outer1) * localPitch1 +
+                                        static_cast<int64_t>(outer2) * localPitch2;
 
-                for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
-                    int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+                for (int rowOffset = 0; rowOffset < remoteDim3; rowOffset += pingRows) {
+                    int chunkRows = (rowOffset + pingRows <= remoteDim3) ? pingRows : (remoteDim3 - rowOffset);
 
-                    for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
-                        int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
+                    for (int colOffset = 0; colOffset < remoteDim4; colOffset += pingCols) {
+                        int chunkCols = (colOffset + pingCols <= remoteDim4) ? pingCols : (remoteDim4 - colOffset);
 
-                        int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
-                                            static_cast<int64_t>(colOff) * srcStride4;
-                        int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
-                                            static_cast<int64_t>(colOff) * dstStride4;
+                        int64_t srcOffset = srcBaseOffset + static_cast<int64_t>(rowOffset) * remotePitch3 +
+                                            static_cast<int64_t>(colOffset) * remotePitch4;
+                        int64_t dstOffset = dstBaseOffset + static_cast<int64_t>(rowOffset) * localPitch3 +
+                                            static_cast<int64_t>(colOffset) * localPitch4;
 
                         TileData &loadTile = usePing ? pingTile : pongTile;
                         event_t curEvent = usePing ? EVENT_ID0 : EVENT_ID1;
 
                         if constexpr (isDynamicRow)
-                            loadTile.RowMaskInternal = currentRows;
+                            loadTile.RowMaskInternal = chunkRows;
                         if constexpr (isDynamicCol)
-                            loadTile.ColMaskInternal = currentCols;
+                            loadTile.ColMaskInternal = chunkCols;
 
-                        DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+                        DynShape chunkShape(1, 1, 1, chunkRows, chunkCols);
                         SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
 
                         if (hasPending) {
@@ -332,8 +334,8 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
                         }
 
                         pendingDstOffset = dstOffset;
-                        pendingRows = currentRows;
-                        pendingCols = currentCols;
+                        pendingRows = chunkRows;
+                        pendingCols = chunkCols;
                         hasPending = true;
                         usePing = !usePing;
                     }
@@ -344,17 +346,18 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
 
     // Epilogue: drain the last pending TSTORE
     if (hasPending) {
-        TileData &lastTile = usePing ? pongTile : pingTile;
-        event_t lastEvent = usePing ? EVENT_ID1 : EVENT_ID0;
+        const bool finalChunkInPong = usePing;
+        TileData &finalTile = finalChunkInPong ? pongTile : pingTile;
+        const event_t finalEvent = finalChunkInPong ? EVENT_ID1 : EVENT_ID0;
 
-        wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
+        wait_flag(PIPE_MTE2, PIPE_MTE3, finalEvent);
 
-        DynShape lastShape(1, 1, 1, pendingRows, pendingCols);
-        DstViewT lastView(dstGlobalData.data() + pendingDstOffset, lastShape, dstChunkStride);
+        const DynShape finalChunkShape(1, 1, 1, pendingRows, pendingCols);
+        DstViewT finalDstView(dstGlobalData.data() + pendingDstOffset, finalChunkShape, dstChunkStride);
 
-        TSTORE(lastView, lastTile);
-        set_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
+        TSTORE(finalDstView, finalTile);
+        set_flag(PIPE_MTE3, PIPE_MTE2, finalEvent);
+        wait_flag(PIPE_MTE3, PIPE_MTE2, finalEvent);
     }
 }
 

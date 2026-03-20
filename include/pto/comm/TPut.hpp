@@ -53,25 +53,25 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
                   "TPUT: TileData element type must match GlobalData element type");
 
     // Get GlobalTensor dimensions
-    const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
-    const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
-    const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
-    const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
-    const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+    const int srcDim0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
+    const int srcDim1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
+    const int srcDim2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+    const int srcDim3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+    const int srcDim4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
 
-    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
-    const int tileValidRow = stagingTileData.GetValidRow();
-    const int tileValidCol = stagingTileData.GetValidCol();
+    const int64_t totalLogicalRows = static_cast<int64_t>(srcDim0) * srcDim1 * srcDim2 * srcDim3;
+    const int ubChunkRows = stagingTileData.GetValidRow();
+    const int ubChunkCols = stagingTileData.GetValidCol();
 
-    PTO_ASSERT(tileValidRow > 0, "TPUT: tileValidRow must be greater than 0");
-    PTO_ASSERT(tileValidCol > 0, "TPUT: tileValidCol must be greater than 0");
+    PTO_ASSERT(ubChunkRows > 0, "TPUT: tileValidRow must be greater than 0");
+    PTO_ASSERT(ubChunkCols > 0, "TPUT: tileValidCol must be greater than 0");
 
-    if (totalRows == 0 || gShape4 == 0) {
+    if (totalLogicalRows == 0 || srcDim4 == 0) {
         return;
     }
 
     // ---- Simple path: data fits in UB tile in both dimensions ----
-    if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
+    if (totalLogicalRows <= ubChunkRows && srcDim4 <= ubChunkCols) {
         TLOAD(stagingTileData, srcGlobalData);
         set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
@@ -91,80 +91,82 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     //     preserving the original strides for correct GM addressing.
     //   - TLOAD the chunk view into UB, then TSTORE from UB to remote GM.
 
-    PTO_ASSERT(tileValidRow > 0, "TPUT: tile ValidRow must be greater than 0 for chunked transfer");
-    PTO_ASSERT(tileValidCol > 0, "TPUT: tile ValidCol must be greater than 0 for chunked transfer");
+    PTO_ASSERT(ubChunkRows > 0, "TPUT: tile ValidRow must be greater than 0 for chunked transfer");
+    PTO_ASSERT(ubChunkCols > 0, "TPUT: tile ValidCol must be greater than 0 for chunked transfer");
 
     constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
 
     // Row validation: static ValidRow requires shape3 to be exactly divisible
     if constexpr (!isDynamicRow) {
-        PTO_ASSERT(gShape3 % tileValidRow == 0,
+        PTO_ASSERT(srcDim3 % ubChunkRows == 0,
                    "TPUT chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     // Column validation: static ValidCol requires shape4 to be exactly divisible
     if constexpr (!isDynamicCol) {
-        PTO_ASSERT(gShape4 % tileValidCol == 0,
+        PTO_ASSERT(srcDim4 % ubChunkCols == 0,
                    "TPUT chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
     // Get strides for offset calculation
-    const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
+    const int srcStep0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
+    const int srcStep1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
+    const int srcStep2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
+    const int srcStep3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
+    const int srcStep4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
 
-    const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
+    const int dstStep0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
+    const int dstStep1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
+    const int dstStep2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
+    const int dstStep3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
+    const int dstStep4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
 
     // View types with fully dynamic shape/stride for chunk GlobalTensors
     using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
     using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
     using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
-    DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
-    DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+    DynStride srcChunkStride(srcStep0, srcStep1, srcStep2, srcStep3, srcStep4);
+    DynStride dstChunkStride(dstStep0, dstStep1, dstStep2, dstStep3, dstStep4);
 
     // 2D sliding: iterate outer dims, then chunk rows (dim3) and columns (dim4)
-    for (int i0 = 0; i0 < gShape0; ++i0) {
-        for (int i1 = 0; i1 < gShape1; ++i1) {
-            for (int i2 = 0; i2 < gShape2; ++i2) {
-                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
-                                  static_cast<int64_t>(i2) * srcStride2;
-                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
-                                  static_cast<int64_t>(i2) * dstStride2;
+    for (int dim0Idx = 0; dim0Idx < srcDim0; ++dim0Idx) {
+        for (int dim1Idx = 0; dim1Idx < srcDim1; ++dim1Idx) {
+            for (int dim2Idx = 0; dim2Idx < srcDim2; ++dim2Idx) {
+                int64_t srcBaseOffset = static_cast<int64_t>(dim0Idx) * srcStep0 +
+                                        static_cast<int64_t>(dim1Idx) * srcStep1 +
+                                        static_cast<int64_t>(dim2Idx) * srcStep2;
+                int64_t dstBaseOffset = static_cast<int64_t>(dim0Idx) * dstStep0 +
+                                        static_cast<int64_t>(dim1Idx) * dstStep1 +
+                                        static_cast<int64_t>(dim2Idx) * dstStep2;
 
-                for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
-                    int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+                for (int rowOffset = 0; rowOffset < srcDim3; rowOffset += ubChunkRows) {
+                    int chunkRows = (rowOffset + ubChunkRows <= srcDim3) ? ubChunkRows : (srcDim3 - rowOffset);
 
                     if constexpr (isDynamicRow) {
-                        stagingTileData.RowMaskInternal = currentRows;
+                        stagingTileData.RowMaskInternal = chunkRows;
                     }
 
-                    for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
-                        int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
+                    for (int colOffset = 0; colOffset < srcDim4; colOffset += ubChunkCols) {
+                        int chunkCols = (colOffset + ubChunkCols <= srcDim4) ? ubChunkCols : (srcDim4 - colOffset);
 
                         if constexpr (isDynamicCol) {
-                            stagingTileData.ColMaskInternal = currentCols;
+                            stagingTileData.ColMaskInternal = chunkCols;
                         }
 
                         // Compute element offsets
-                        int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
-                                            static_cast<int64_t>(colOff) * srcStride4;
-                        int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
-                                            static_cast<int64_t>(colOff) * dstStride4;
+                        int64_t srcChunkOffset = srcBaseOffset + static_cast<int64_t>(rowOffset) * srcStep3 +
+                                                 static_cast<int64_t>(colOffset) * srcStep4;
+                        int64_t dstChunkOffset = dstBaseOffset + static_cast<int64_t>(rowOffset) * dstStep3 +
+                                                 static_cast<int64_t>(colOffset) * dstStep4;
 
                         // Create chunk views with adjusted shape
-                        DynShape chunkShape(1, 1, 1, currentRows, currentCols);
+                        DynShape chunkViewShape(1, 1, 1, chunkRows, chunkCols);
 
-                        SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
-                        DstViewT dstView(dstGlobalData.data() + dstOffset, chunkShape, dstChunkStride);
+                        SrcViewT srcView(srcGlobalData.data() + srcChunkOffset, chunkViewShape, srcChunkStride);
+                        DstViewT dstView(dstGlobalData.data() + dstChunkOffset, chunkViewShape, dstChunkStride);
 
                         // Transfer: local GM → UB → remote GM
                         TLOAD(stagingTileData, srcView);
