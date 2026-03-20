@@ -42,7 +42,7 @@ pto.tcolexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TCOLEXPAND(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events);
+PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
 ## 约束
@@ -86,7 +86,7 @@ void example() {
 
 ```text
 %dst = tcolexpand %src : !pto.tile<...> -> !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tcolexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

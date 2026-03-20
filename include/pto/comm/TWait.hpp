@@ -30,22 +30,19 @@ namespace detail {
 // Helper: Compare signal value with runtime comparison operator
 PTO_INTERNAL bool CompareSignalRuntime(int32_t sigVal, int32_t cmpVal, WaitCmp cmp)
 {
-    switch (cmp) {
-        case WaitCmp::EQ:
-            return sigVal == cmpVal;
-        case WaitCmp::NE:
-            return sigVal != cmpVal;
-        case WaitCmp::GT:
-            return sigVal > cmpVal;
-        case WaitCmp::GE:
-            return sigVal >= cmpVal;
-        case WaitCmp::LT:
-            return sigVal < cmpVal;
-        case WaitCmp::LE:
-            return sigVal <= cmpVal;
-        default:
-            return false;
-    }
+    if (cmp == WaitCmp::EQ)
+        return sigVal == cmpVal;
+    if (cmp == WaitCmp::NE)
+        return sigVal != cmpVal;
+    if (cmp == WaitCmp::GT)
+        return sigVal > cmpVal;
+    if (cmp == WaitCmp::GE)
+        return sigVal >= cmpVal;
+    if (cmp == WaitCmp::LT)
+        return sigVal < cmpVal;
+    if (cmp == WaitCmp::LE)
+        return sigVal <= cmpVal;
+    return false;
 }
 
 } // namespace detail
@@ -53,6 +50,12 @@ PTO_INTERNAL bool CompareSignalRuntime(int32_t sigVal, int32_t cmpVal, WaitCmp c
 template <typename GlobalSignalData>
 PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, WaitCmp cmp)
 {
+    const int64_t st0 = signalData.GetStride(GlobalTensorDim::DIM_0);
+    const int64_t st1 = signalData.GetStride(GlobalTensorDim::DIM_1);
+    const int64_t st2 = signalData.GetStride(GlobalTensorDim::DIM_2);
+    const int64_t st3 = signalData.GetStride(GlobalTensorDim::DIM_3);
+    const int64_t st4 = signalData.GetStride(GlobalTensorDim::DIM_4);
+
     static_assert(std::is_same_v<typename GlobalSignalData::RawDType, int32_t>, "TWAIT: signal type must be int32_t");
 
     // Get full 5-D shape and stride
@@ -61,12 +64,6 @@ PTO_INTERNAL void TWAIT_IMPL(GlobalSignalData &signalData, int32_t cmpValue, Wai
     const int s2 = signalData.GetShape(GlobalTensorDim::DIM_2);
     const int s3 = signalData.GetShape(GlobalTensorDim::DIM_3);
     const int s4 = signalData.GetShape(GlobalTensorDim::DIM_4);
-
-    const int64_t st0 = signalData.GetStride(GlobalTensorDim::DIM_0);
-    const int64_t st1 = signalData.GetStride(GlobalTensorDim::DIM_1);
-    const int64_t st2 = signalData.GetStride(GlobalTensorDim::DIM_2);
-    const int64_t st3 = signalData.GetStride(GlobalTensorDim::DIM_3);
-    const int64_t st4 = signalData.GetStride(GlobalTensorDim::DIM_4);
 
     volatile __gm__ int32_t *basePtr = reinterpret_cast<volatile __gm__ int32_t *>(signalData.data());
 

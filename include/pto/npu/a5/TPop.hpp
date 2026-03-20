@@ -35,6 +35,7 @@ PTO_INTERNAL void TPOP_IMPL(PipeCons &cons, TileDataSrc &tile, DataFiFo &fifo)
 
     // 2. Address Calculation & Pop
     bool reqFree = cons.pop(fifo, tile);
+    cons.tile_id++;
 
     // 3. Cross-Core: Free Space
     bool isFree = reqFree && cons.getFreeStatus();

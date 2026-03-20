@@ -10,18 +10,18 @@
 
 ## 数学语义
 
-Let `R = dst.GetValidRow()` and `C = dst.GetValidCol()`. Let `d = diagonal`.
+设 `R = dst.GetValidRow()`，`C = dst.GetValidCol()`，`d = diagonal`。
 
-Lower-triangular (`isUpperOrLower=0`) conceptually produces:
-
-$$
-\mathrm{dst}_{i,j} = \begin{cases}1 & j \le i + d \\\\ 0 & \text{otherwise}\end{cases}
-$$
-
-Upper-triangular (`isUpperOrLower=1`) conceptually produces:
+下三角（`isUpperOrLower=0`）概念上产生：
 
 $$
-\mathrm{dst}_{i,j} = \begin{cases}0 & j < i + d \\\\ 1 & \text{otherwise}\end{cases}
+\mathrm{dst}_{i,j} = \begin{cases}1 & j \le i + d \\\\ 0 & \text{否则}\end{cases}
+$$
+
+上三角（`isUpperOrLower=1`）概念上产生：
+
+$$
+\mathrm{dst}_{i,j} = \begin{cases}0 & j < i + d \\\\ 1 & \text{否则}\end{cases}
 $$
 
 ## 汇编语法
@@ -46,13 +46,13 @@ pto.ttri ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ```cpp
 template <typename TileData, int isUpperOrLower, typename... WaitEvents>
-PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents&... events);
+PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events);
 ```
 
 ## 约束
 
-- `isUpperOrLower` 必须是 `0` (lower)或`1` (upper).
-- Destination tile 必须是 行主序 on some targets (参见 `include/pto/npu/*/TTri.hpp`）。
+- `isUpperOrLower` 必须是 `0`（下三角）或 `1`（上三角）。
+- 目标 Tile 在某些目标上必须是行主序（参见 `include/pto/npu/*/TTri.hpp`）。
 
 ## 示例
 
@@ -81,6 +81,6 @@ PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents&... events);
 
 ```text
 %dst = pto.ttri %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.ttri ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

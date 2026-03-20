@@ -39,6 +39,9 @@ pto.tset_img2col_rpt ins(%cfg : !pto.fmatrix_config) outs()
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
+template <typename ConvTileData, typename... WaitEvents>
+PTO_INST RecordEvent TSET_IMG2COL_RPT(ConvTileData &src, WaitEvents &... events);
+
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
 PTO_INST RecordEvent TSET_IMG2COL_RPT(ConvTileData &src, WaitEvents &... events);
 ```
@@ -87,7 +90,7 @@ pto.tset_img2col_rpt %cfg : !pto.fmatrix_config -> ()
 
 ```text
 tset_img2col_rpt %cfg
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tset_img2col_rpt ins(%cfg : !pto.fmatrix_config) outs()
 ```
 

@@ -38,8 +38,11 @@ pto.tgemv.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.
 
 ```cpp
 template <typename TileRes, typename TileLeft, typename TileRight, typename TileBias, typename... WaitEvents>
-PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData,
-  WaitEvents&... events);
+PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData, WaitEvents &... events);
+
+template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename TileBias,
+          typename... WaitEvents>
+PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData, WaitEvents &... events);
 ```
 
 ## 约束
@@ -73,7 +76,7 @@ PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &
 
 ```text
 %c = pto.tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tgemv ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
 ```
 

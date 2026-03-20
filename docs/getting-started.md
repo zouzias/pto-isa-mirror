@@ -101,8 +101,8 @@ Create and activate a virtual environment:
 **macOS / Linux:**
 
   ```bash
-  python3 -m venv .venv
-  source .venv/bin/activate
+  python3 -m venv .venv-mkdocs
+  source .venv-mkdocs/bin/activate
   python -m pip install -U pip
   python -m pip install numpy
   ```
@@ -110,8 +110,8 @@ Create and activate a virtual environment:
 **Windows (PowerShell):**
 
   ```powershell
-  py -3 -m venv .venv
-  .\.venv\Scripts\Activate.ps1
+  py -3 -m venv .venv-mkdocs
+  .\.venv-mkdocs\Scripts\Activate.ps1
   python -m pip install -U pip
   python -m pip install numpy
   ```
@@ -197,6 +197,10 @@ This section is for users who need to run on Ascend NPU hardware or simulator. I
 - CMake >= 3.16.0
 - Ascend NPU driver and firmware (for hardware execution)
 - CANN toolkit >= 8.5.0
+
+> **Note:** Please make sure that the GCC version shown by bisheng -v is compatible with or matches the version shown by gcc -v.
+>
+> If they are dififerent, you can install a version of GCC that matches the version shown by gcc -v at the gcc path indicated by bisheng -v,or replace the default gcc with the version that matches what bisheng -v shows.
 
 **GoogleTest (required for unit tests):**
 

@@ -25,6 +25,7 @@ enum class Op : uint16_t
     VECTOR,
     TADD,
     TADDS,
+    TAXPY,
     TSUB,
     TMUL,
     TMULS,
@@ -43,6 +44,7 @@ enum class Op : uint16_t
     TSQRT,
     TRSQRT,
     TEXPANDS,
+    TEXPANDS_MAT,
     TPARTADD,
     TPARTMUL,
     TPARTMAX,
@@ -100,6 +102,7 @@ enum class Op : uint16_t
     TSETFMATRIX,
     TSET_IMG2COL_RPT,
     TSET_IMG2COL_PADDING,
+    TCONCAT,
     TDEQUANT,
     OP_COUNT, // The Total number of operations, please add new operations before OP_COUNT
 };

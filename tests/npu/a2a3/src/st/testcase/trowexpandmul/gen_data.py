@@ -65,6 +65,10 @@ if __name__ == "__main__":
         "TROWEXPANDMULTest.case12",
         "TROWEXPANDMULTest.case13",
         "TROWEXPANDMULTest.case14",
+        "TROWEXPANDMULTest.case15",
+        "TROWEXPANDMULTest.case16",
+        "TROWEXPANDMULTest.case17",
+        "TROWEXPANDMULTest.case18",
     ]
 
     case_params_list = [
@@ -82,6 +86,10 @@ if __name__ == "__main__":
         TRowExpandMul(np.float32, 2048, 1, 2048, 8, True, True),
         TRowExpandMul(np.float32, 16, 16, 16, 16, False, False),
         TRowExpandMul(np.float32, 16, 16, 16, 16, False, True),
+        TRowExpandMul(np.float32, 16, 16, 32, 32, True, False),
+        TRowExpandMul(np.float16, 16, 16, 16, 16, True, False),
+        TRowExpandMul(np.float32, 1, 16384, 1, 16384, True, False),
+        TRowExpandMul(np.float32, 2048, 1, 2048, 8, True, False),
     ]
 
     for i, case_name in enumerate(case_name_list):
