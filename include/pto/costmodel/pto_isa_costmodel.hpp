@@ -103,6 +103,11 @@ public:
         SetParam("PIPE_V", DataType::FP16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         SetParam("PIPE_V", DataType::FP32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 
+        SetParam("vector_dup", DataType::INT16, 14.0, 14.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vector_dup", DataType::INT32, 14.0, 14.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vector_dup", DataType::FP16, 14.0, 14.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vector_dup", DataType::FP32, 14.0, 14.0, 1.0, 18.0, 1.0, 0.0);
+
         // TADD
         SetParam("vadd", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
         SetParam("vadd", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
@@ -160,10 +165,16 @@ public:
         SetParam("vdivs", DataType::FP32, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
 
         // vmax
-        SetParam("vmax", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vmax", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmax", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmax", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmax", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmax", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmax", DataType::FP16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmax", DataType::FP32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+
+        // vmin
+        SetParam("vmin", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmin", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmin", DataType::FP16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmin", DataType::FP32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
 
         // vcgmax
         SetParam("vcgmax", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
