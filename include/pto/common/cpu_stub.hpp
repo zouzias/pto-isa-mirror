@@ -16,16 +16,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cassert>
 #include <cstdio>
 
-// CPU simulator assertion helper (always enabled).
-#define PTO_CPU_STUB_ASSERT(cond)                                                                                  \
-    do {                                                                                                           \
-        if (!(cond)) {                                                                                             \
-            std::fprintf(stderr, "[PTO][CA] Constraint violated. Condition: %s. Hint: see docs/coding/debug.md\n", \
-                         #cond);                                                                                   \
-            std::abort();                                                                                          \
-        }                                                                                                          \
-    } while (0)
-
 #define __global__
 #define AICORE
 #define __aicore__
@@ -65,7 +55,7 @@ constexpr pipe_t opPipeList[] = {};
 
 static inline void aclrtMallocHost(void **p, size_t sz)
 {
-    PTO_CPU_STUB_ASSERT(sz != 0);
+    assert(sz != 0 && "[PTO][CA] Constraint violated. Condition: %s. Hint: see docs/coding/debug.md\n");
     *p = malloc(sz);
 }
 
