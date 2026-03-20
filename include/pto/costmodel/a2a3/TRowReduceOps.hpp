@@ -27,7 +27,7 @@ PTO_INTERNAL void OneRepeatProc(std::vector<CostModelStats>& stats, int validCol
     }
 
     unsigned rptTimes;
-    stats.emplace_back("mask", GetContinousMask1(remain), GetContinousMask0(remain));
+    stats.emplace_back("mask", GetContinuousMask1(remain), GetContinuousMask0(remain));
     do {
         rptTimes = rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX;
         InstrOp::template ReduceInstrByMode<false, SrcCols, dstRptStride, srcRptStride, elemPerRpt>(stats, rptTimes);

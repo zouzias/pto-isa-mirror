@@ -49,8 +49,7 @@ struct CostModelStats {
                         int src1BlockStride_, int dstRepeatStride_, int src0RepeatStride_, int src1RepeatStride_) :
     cceInstName(cceInstName_), repeats(repeats_),
     dstBlockStride(dstBlockStride_), src0BlockStride(src0BlockStride_), src1BlockStride(src1BlockStride_),
-    dstRepeatStride(dstRepeatStride_), src0RepeatStride(src0RepeatStride_), src1RepeatStride(src1RepeatStride_),
-    order(order_) {}
+    dstRepeatStride(dstRepeatStride_), src0RepeatStride(src0RepeatStride_), src1RepeatStride(src1RepeatStride_) {}
 
     // pipe_barrier
     CostModelStats(const std::string cceInstName_ = "PIPE_V") :

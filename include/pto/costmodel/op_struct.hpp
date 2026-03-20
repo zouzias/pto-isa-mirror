@@ -294,7 +294,7 @@ struct TRowMaxOp : TRowReduceOp<TRowMaxOp> {
     PTO_INTERNAL static void GroupReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes,
                                                   uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
-        stats.emplace_back("vcgmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride);
+        stats.emplace_back("vcgmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride, "None");
     }
 };
 
