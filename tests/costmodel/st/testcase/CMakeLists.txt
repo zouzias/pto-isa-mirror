@@ -42,6 +42,7 @@ tadd
 tadds
 tcolmax
 tcolmin
+tcolsum
 tdivs
 texp
 tmins

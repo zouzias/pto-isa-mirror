@@ -17,7 +17,7 @@ namespace pto {
 template <typename TileDataOut, typename TileDataIn>
 PTO_INTERNAL void TCOLMIN_IMPL(TileDataOut &dst, TileDataIn &src)
 {
-    pto::CostModel::GetInstance().ColReducePredictCycle("TCOLMIN", dst, src);
+    pto::CostModel::GetInstance().ColReduceOpPredictCycle<COLMINOp, TileDataOut, TileDataIn>("TCOLMIN", dst, src);
 }
 
 } // namespace pto

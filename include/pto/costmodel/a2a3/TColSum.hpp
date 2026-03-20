@@ -7,18 +7,19 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TCOLMAX_HPP
-#define TCOLMAX_HPP
+
+#ifndef TCOLSUM_HPP
+#define TCOLSUM_HPP
 
 #include "pto/costmodel/pto_isa_costmodel.hpp"
 
 namespace pto {
 
-template <typename TileDataOut, typename TileDataIn>
-PTO_INTERNAL void TCOLMAX_IMPL(TileDataOut &dst, TileDataIn &src)
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
+PTO_INTERNAL void TCOLSUM_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, bool IsBinary)
 {
-    pto::CostModel::GetInstance().ColReduceOpPredictCycle<COLMAXOp, TileDataOut, TileDataIn>("TCOLMAX", dst, src);
+    pto::CostModel::GetInstance().ColSumOpPredictCycle<TileDataDst, TileDataSrc, TileDataTmp>("TCOLSUM", dst, src, tmp,
+                                                                                              IsBinary);
 }
-
 } // namespace pto
 #endif

@@ -298,6 +298,48 @@ struct TRowMaxOp : TRowReduceOp<TRowMaxOp> {
     }
 };
 
+struct COLMAXOp {
+    PTO_INTERNAL static void ReduceInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+                                         uint8_t src0RepeatStride, uint8_t src1RepeatStride)
+    {
+        stats.emplace_back("vmax", repeats, 1, 1, 1, dstRepeatStride, src0RepeatStride, src1RepeatStride);
+    }
+};
+
+struct COLMINOp {
+    PTO_INTERNAL static void ReduceInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+                                         uint8_t src0RepeatStride, uint8_t src1RepeatStride)
+    {
+        stats.emplace_back("vmin", repeats, 1, 1, 1, dstRepeatStride, src0RepeatStride, src1RepeatStride);
+    }
+};
+
+template <typename InstrOp>
+struct TColReduceOp {
+    template <int dupSrcStride>
+    PTO_INTERNAL static void ColReduceInstrByMode(std::vector<CostModelStats>& stats, int numRepeatPerLine,
+                                                  int numRemainPerLine, int elementsPerLine, int validRow)
+    {
+        if (numRepeatPerLine > 0) {
+            stats.emplace_back("mask", 0, elementsPerLine);
+            for (int i = 1; i < validRow; i++) {
+                InstrOp::ReduceInstr(stats, 0, 8, 8, 8);
+                stats.emplace_back("PIPE_V");
+            }
+
+        }
+
+        if (numRemainPerLine > 0) {
+            stats.emplace_back("mask", GetContinuousMask1(numRemainPerLine), GetContinuousMask0(numRemainPerLine));
+            for (int i = 1; i < validRow; i++) {
+                InstrOp::ReduceInstr(stats, 1, 8, 8, 8);
+                stats.emplace_back("PIPE_V");
+            }
+            stats.emplace_back("mask", -1, -1);
+        }
+    }
+};
+
 } // namespace pto
 
 

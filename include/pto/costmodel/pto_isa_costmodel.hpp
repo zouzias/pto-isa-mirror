@@ -242,6 +242,36 @@ public:
         std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
 
+    // TColMax / TColMin
+    template <typename Op, typename TileDataOut, typename TileDataIn>
+    void ColReduceOpPredictCycle(const std::string& instr_name, TileDataOut &dst, TileDataIn &src)
+    {
+        using T = typename TileDataIn::DType;
+        std::vector<CostModelStats> stats = runColReduceOps<T, Op, TileDataOut, TileDataIn>(dst, src);
+        float totalCycles = 0.0f;
+        for (auto &stat : stats) {
+            totalCycles += PredictCycle<T>(stat);
+        }
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
+    }
+
+    // TColSum
+    template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
+    void ColSumOpPredictCycle(const std::string& instr_name, TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp,
+                              bool IsBinary)
+    {
+        using T = typename TileDataSrc::DType;
+        std::vector<CostModelStats> stats = runColSumOp<T, TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp,
+                                                                                                  IsBinary);
+        float totalCycles = 0.0f;
+        for (auto &stat : stats) {
+            totalCycles += PredictCycle<T>(stat);
+        }
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
+    }
+
     // TRowExpand
     template <typename TileDataDst, typename TileDataSrc>
     void RowExpandPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
