@@ -15,32 +15,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <typename TileDataOut, typename TileDataIn>
-PTO_INTERNAL void TRowReduceCheck(int validRow, int validCol, int dstValidRow)
-{
-    static_assert(TileDataOut::Loc == pto::TileType::Vec && TileDataIn::Loc == pto::TileType::Vec,
-                  "Fix: TROWREDUCE only support Vec Tile");
-
-    static_assert(TileDataIn::isRowMajor && TileDataIn::SFractal == SLayout::NoneBox,
-                  "Fix: TROWREDUCE only support Nd fractal Tile");
-
-    static_assert((!TileDataOut::isBoxedLayout &&
-                   (TileDataOut::isRowMajor || (!TileDataOut::isRowMajor && TileDataOut::Cols == 1))),
-                  "Fix: TROWREDUCE only support Nd fractal Tile or DN Tile with Col is 1.");
-
-    using T = typename TileDataIn::DType;
-    static_assert(
-        std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t>,
-        "Fix: TROWREDUCE input data type is not supported by this instruction. Supported types: half, float, int32, "
-        "int16.");
-
-    static_assert(std::is_same_v<typename TileDataOut::DType, typename TileDataIn::DType>,
-                  "Fix: TROWREDUCE input data type must be consistent with the output data type.");
-
-    PTO_ASSERT(validCol != 0 && validRow != 0, "Fix: TROWREDUCE input shape is invalid, validCol or validRow is 0.");
-    PTO_ASSERT(validRow == dstValidRow, "Fix: TROWREDUCE input validRow must be consistent with the output validRow.");
-}
-
 template <typename InstrOp, typename T, uint32_t DstCols, uint32_t SrcCols, uint8_t elemPerRpt, uint32_t dstRptStride,
           uint32_t srcRptStride>
 PTO_INTERNAL void OneRepeatProc(std::vector<CostModelStats>& stats, int validCol, int validRow, int remain,
@@ -231,7 +205,6 @@ PTO_INTERNAL std::vector<CostModelStats> runRowReduceOps(const std::string &inst
     int validCol = src.GetValidCol();
     int validRow = src.GetValidRow();
     std::vector<CostModelStats> stats;
-    TRowReduceCheck<TileDataOut, TileDataIn>(validRow, validCol, dst.GetValidRow());
     if (validCol == 0 || validRow == 0) {
         return stats;
     }

@@ -97,90 +97,84 @@ public:
 
     void InitDefaultParams()
     {
+        SetParam("PIPE_V", DataType::INT16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("PIPE_V", DataType::INT32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("PIPE_V", DataType::FP16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("PIPE_V", DataType::FP32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+
         // TADD
-        SetParam("TADD", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TADD", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TADD", DataType::FP16, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TADD", DataType::FP32, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vadd", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vadd", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vadd", DataType::FP16, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vadd", DataType::FP32, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
 
         // TMUL
-        SetParam("TMUL", DataType::INT16, 14.0, 18.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TMUL", DataType::INT32, 14.0, 18.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TMUL", DataType::FP16, 14.0, 20.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TMUL", DataType::FP32, 14.0, 20.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmul", DataType::INT16, 14.0, 18.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmul", DataType::INT32, 14.0, 18.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmul", DataType::FP16, 14.0, 20.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmul", DataType::FP32, 14.0, 20.0, 2.0, 18.0, 1.0, 0.0);
 
         // TSUB
-        SetParam("TSUB", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TSUB", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TSUB", DataType::FP16, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TSUB", DataType::FP32, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vsub", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vsub", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vsub", DataType::FP16, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vsub", DataType::FP32, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
 
         // TEXP
-        SetParam("TEXP", DataType::FP16, 13.0, 28.0, 4.0, 18.0, 1.0, 0.0);
-        SetParam("TEXP", DataType::FP32, 13.0, 26.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vexp", DataType::FP16, 13.0, 28.0, 4.0, 18.0, 1.0, 0.0);
+        SetParam("vexp", DataType::FP32, 13.0, 26.0, 2.0, 18.0, 1.0, 0.0);
 
         // TSQRT
-        SetParam("TSQRT", DataType::FP16, 13.0, 29.0, 4.0, 18.0, 1.0, 0.0);
-        SetParam("TSQRT", DataType::FP32, 13.0, 27.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vsqrt", DataType::FP16, 13.0, 29.0, 4.0, 18.0, 1.0, 0.0);
+        SetParam("vsqrt", DataType::FP32, 13.0, 27.0, 2.0, 18.0, 1.0, 0.0);
 
         // TADDS
-        SetParam("TADDS", DataType::INT16, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TADDS", DataType::INT32, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TADDS", DataType::FP16, 14.0, 19.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TADDS", DataType::FP32, 14.0, 19.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vadds", DataType::INT16, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vadds", DataType::INT32, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vadds", DataType::FP16, 14.0, 19.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vadds", DataType::FP32, 14.0, 19.0, 1.0, 18.0, 1.0, 0.0);
 
         // TABS
-        SetParam("TABS", DataType::INT16, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TABS", DataType::INT32, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TABS", DataType::FP16, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TABS", DataType::FP32, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vabs", DataType::INT16, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vabs", DataType::INT32, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vabs", DataType::FP16, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vabs", DataType::FP32, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
 
         // TMINS
-        SetParam("TMINS", DataType::INT16, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TMINS", DataType::INT32, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TMINS", DataType::FP16, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TMINS", DataType::FP32, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmins", DataType::INT16, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmins", DataType::INT32, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmins", DataType::FP16, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmins", DataType::FP32, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
 
         // TMULS
-        SetParam("TMULS", DataType::INT16, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TMULS", DataType::INT32, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TMULS", DataType::FP16, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TMULS", DataType::FP32, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmuls", DataType::INT16, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmuls", DataType::INT32, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmuls", DataType::FP16, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmuls", DataType::FP32, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
 
         // TDIVS
-        SetParam("TDIVS", DataType::INT16, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TDIVS", DataType::INT32, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TDIVS", DataType::FP16, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TDIVS", DataType::FP32, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vdivs", DataType::INT16, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vdivs", DataType::INT32, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vdivs", DataType::FP16, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vdivs", DataType::FP32, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
 
-        // TCOLMAX
-        SetParam("TCOLMAX", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TCOLMAX", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TCOLMAX", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TCOLMAX", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        // vmax
+        SetParam("vmax", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmax", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmax", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmax", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
 
-        // TCOLMIN
-        SetParam("TCOLMIN", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TCOLMIN", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TCOLMIN", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TCOLMIN", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        // vcgmax
+        SetParam("vcgmax", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vcgmax", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcgmax", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcgmax", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
 
-        // TROWMAX
-        SetParam("TROWMAX", DataType::FP16, 13.0, 31.0, 4.0, 18.0, 1.0, 0.0);
-        SetParam("TROWMAX", DataType::FP32, 13.0, 29.0, 4.0, 18.0, 1.0, 0.0);
-
-        // TROWMIN
-        SetParam("TROWMIN", DataType::FP16, 13.0, 31.0, 4.0, 18.0, 1.0, 0.0);
-        SetParam("TROWMIN", DataType::FP32, 13.0, 29.0, 4.0, 18.0, 1.0, 0.0);
-
-        // TROWEXPAND
-        SetParam("TROWEXPAND", DataType::INT8, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TROWEXPAND", DataType::UINT8, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("TROWEXPAND", DataType::INT16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TROWEXPAND", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TROWEXPAND", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TROWEXPAND", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("TROWEXPAND", DataType::BF16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        // vcmax
+        SetParam("vcmax", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vcmax", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcmax", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcmax", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
     }
 
     // TBinOp
@@ -189,7 +183,7 @@ public:
     {
         using T = typename TileDataDst::DType;
         CostModelStats stats = runBinaryOp(dst, src0, src1);
-        float resultCycles = PredictCycle<T>(instr_name, stats);
+        float resultCycles = PredictCycle<T>(stats);
         dst.SetCycle(resultCycles);
     }
 
@@ -200,7 +194,7 @@ public:
     {
         using T = typename TileDataSrc::DType;
         CostModelStats stats = runBinaryScalarOp(dst, src);
-        float resultCycles = PredictCycle<T>(instr_name, stats);
+        float resultCycles = PredictCycle<T>(stats);
         dst.SetCycle(resultCycles);
     }
 
@@ -210,7 +204,7 @@ public:
     {
         using T = typename TileDataDst::DType;
         CostModelStats stats = runUnaryOp(dst, src);
-        float resultCycles = PredictCycle<T>(instr_name, stats);
+        float resultCycles = PredictCycle<T>(stats);
         dst.SetCycle(resultCycles);
     }
 
@@ -220,7 +214,7 @@ public:
     {
         using T = typename TileDataIn::DType;
         CostModelStats stats = runColReduceOp(dst, src);
-        float resultCycles = PredictCycle<T>(instr_name, stats);
+        float resultCycles = PredictCycle<T>(stats);
         dst.SetCycle(resultCycles);
     }
 
@@ -230,7 +224,7 @@ public:
     {
         using T = typename TileDataIn::DType;
         CostModelStats stats = runRowReduceOp(dst, src);
-        float resultCycles = PredictCycle<T>(instr_name, stats);
+        float resultCycles = PredictCycle<T>(stats);
         dst.SetCycle(resultCycles);
     }
 
@@ -240,9 +234,12 @@ public:
     {
         using T = typename TileDataIn::DType;
         std::vector<CostModelStats> stats = runRowReduceOps<T, Op, TileDataOut, TileDataIn, TileDataTmp>(instr_name, dst, src, tmp);
-        float resultCycles = PredictCycle<T>(instr_name, stats[0]);
-        dst.SetCycle(resultCycles);
-        std::cout << "Instr: " << instr_name << " Cycles: " << resultCycles << std::endl;
+        float totalCycles = 0.0f;
+        for (auto &stat : stats) {
+            totalCycles += PredictCycle<T>(stat);
+        }
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
 
     // TRowExpand
@@ -251,13 +248,14 @@ public:
     {
         using T = typename TileDataDst::DType;
         CostModelStats stats = runRowExpandOp(dst, src);
-        float resultCycles = PredictCycle<T>(instr_name, stats);
+        float resultCycles = PredictCycle<T>(stats);
         dst.SetCycle(resultCycles);
     }
 
     template <typename T>
-    float PredictCycle(const std::string &instr_name, const CostModelStats &stats)
+    float PredictCycle(const CostModelStats &stats)
     {
+        std::string instr_name = stats.cceInstName;
         DataType dtype = GetDataTypeEnum<T>();
         auto key = std::make_pair(instr_name, dtype);
 
@@ -273,6 +271,12 @@ public:
         float sum_cycles = params.startup_cycles + params.completion_cycles +
                            (effective_repeats * params.per_repeat_cycles) +
                            (stats.masked_repeats * masked_repeat_penalty) + params.bank_conflict_cycles;
+
+        fprintf(stdout, "[CostModel] caculation details: inst_name =  <%s>, startup_cycles = %.2f, completion_cycles = %.2f, per_repeat_cycles = %.2f, masked_repeat_penalty = %.2f, bank_conflict_cycles = %.2f\n",
+                instr_name.c_str(), params.startup_cycles, params.completion_cycles, params.per_repeat_cycles,
+                masked_repeat_penalty, params.bank_conflict_cycles);
+
+        fprintf(stdout, "[CostModel] Predict Cycles: <%s> <%f> \n", instr_name.c_str(), sum_cycles);
 
         return sum_cycles;
     }

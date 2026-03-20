@@ -32,9 +32,9 @@ struct CostModelStats {
     int dstRepeatStride;
     int src0RepeatStride;
     int src1RepeatStride;
+    bool pipe_barrier = false;
     int order;  // vcmax/vcmin专用
 
-    int sid = 0;
     int nBurst;
     int lenBurst;
     int srcGap;
@@ -55,7 +55,7 @@ struct CostModelStats {
     maskCount(maskCount_), order(order_) {}
 
     // pipe_barrier
-    CostModelStats(const std::string cceInstName_) :
+    CostModelStats(const std::string cceInstName_ = "PIPE_V") :
     cceInstName(cceInstName_) {}
 
     // move
@@ -73,6 +73,10 @@ struct CostModelStats {
                     int srcRepeatStride_, int maskCount_) :
     cceInstName(cceInstName_), repeats(repeats_), dstRepeatStride(dstRepeatStride_), src0BlockStride(srcBlockStride_),
     src0RepeatStride(srcRepeatStride_), maskCount(maskCount_) {}
+
+    // simple mode
+    CostModelStats(const std::string cceInstName_, int repeats_) :
+    cceInstName(cceInstName_), repeats(repeats_) {}
 
     void AddRepeat(unsigned repeats, bool isMasked = false, bool isStrided = false)
     {
