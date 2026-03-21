@@ -177,7 +177,9 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolprod
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trowprod
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolmax
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolargmax
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolmin
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolargmin
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trem
     python3 tests/script/run_st.py $ARGS -w -v a3 -t trems
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tfmod
@@ -397,7 +399,9 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolexpandmax
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolexpandmin
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolmax
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolargmax
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolmin
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolargmin
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolsum
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcolprod
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcvt
