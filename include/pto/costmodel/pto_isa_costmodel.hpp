@@ -22,7 +22,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TBinSOp.hpp"
 #include "pto/costmodel/a2a3/TUnaryOp.hpp"
 #include "pto/costmodel/a2a3/TColReduceOp.hpp"
-#include "pto/costmodel/a2a3/TRowReduceOp.hpp"
 #include "pto/costmodel/a2a3/TRowExpandOp.hpp"
 #include "pto/costmodel/a2a3/TRowReduceOps.hpp"
 #include "pto/costmodel/a2a3/TColReduceOps.hpp"
@@ -313,12 +312,6 @@ public:
         float sum_cycles = params.startup_cycles + params.completion_cycles +
                            (effective_repeats * params.per_repeat_cycles) +
                            (stats.masked_repeats * masked_repeat_penalty) + params.bank_conflict_cycles;
-
-        fprintf(stdout, "[CostModel] caculation details: inst_name =  <%s>, startup_cycles = %.2f, completion_cycles = %.2f, per_repeat_cycles = %.2f, masked_repeat_penalty = %.2f, bank_conflict_cycles = %.2f\n",
-                instr_name.c_str(), params.startup_cycles, params.completion_cycles, params.per_repeat_cycles,
-                masked_repeat_penalty, params.bank_conflict_cycles);
-
-        fprintf(stdout, "[CostModel] Predict Cycles: <%s> <%f> \n", instr_name.c_str(), sum_cycles);
 
         return sum_cycles;
     }
