@@ -22,9 +22,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TBinSOp.hpp"
 #include "pto/costmodel/a2a3/TUnaryOp.hpp"
 #include "pto/costmodel/a2a3/TColReduceOp.hpp"
-#include "pto/costmodel/a2a3/TRowExpandOp.hpp"
-#include "pto/costmodel/a2a3/TRowReduceOps.hpp"
-#include "pto/costmodel/a2a3/TColReduceOps.hpp"
+#include "pto/costmodel/a2a3/TRowReduceOp.hpp"
+#include "pto/costmodel/a2a3/TRowExpand.hpp"
 
 namespace pto {
 
@@ -181,42 +180,80 @@ public:
         SetParam("vcgmax", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
         SetParam("vcgmax", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
 
+        // vcgmin
+        SetParam("vcgmin", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vcgmin", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcgmin", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcgmin", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+
+        // vcgadd
+        SetParam("vcgadd", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vcgadd", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcgadd", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcgadd", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+
         // vcmax
         SetParam("vcmax", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
         SetParam("vcmax", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
         SetParam("vcmax", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
         SetParam("vcmax", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+
+        // vcmin
+        SetParam("vcmin", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vcmin", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcmin", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcmin", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+
+        // vcadd
+        SetParam("vcadd", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vcadd", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcadd", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcadd", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+
+        // copy_ubuf_to_ubuf (memory copy, 0-cycle placeholder)
+        SetParam("copy_ubuf_to_ubuf", DataType::INT16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("copy_ubuf_to_ubuf", DataType::INT32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("copy_ubuf_to_ubuf", DataType::FP16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("copy_ubuf_to_ubuf", DataType::FP32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+
+        // mask (mask set instruction, 0-cycle placeholder)
+        SetParam("mask", DataType::INT16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("mask", DataType::INT32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("mask", DataType::FP16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("mask", DataType::FP32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     }
 
     // TBinOp
-    template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
+    template <typename Op, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
     void BinOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
     {
         using T = typename TileDataDst::DType;
-        CostModelStats stats = runBinaryOp(dst, src0, src1);
-        float resultCycles = PredictCycle<T>(stats);
-        dst.SetCycle(resultCycles);
+        std::vector<CostModelStats> stats = runBinaryOp<Op>(dst, src0, src1);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
 
     // TBinSOp
-    template <typename TileDataDst, typename TileDataSrc>
-    void BinSOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src,
-                            TileDataSrc::DType scalar)
+    template <typename Op, typename TileDataDst, typename TileDataSrc>
+    void BinSOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
     {
-        using T = typename TileDataSrc::DType;
-        CostModelStats stats = runBinaryScalarOp(dst, src);
-        float resultCycles = PredictCycle<T>(stats);
-        dst.SetCycle(resultCycles);
+        using T = typename TileDataDst::DType;
+        std::vector<CostModelStats> stats = runBinaryScalarOp<Op>(dst, src);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
 
     // TUnaryOp
-    template <typename TileDataDst, typename TileDataSrc>
+    template <typename Op, typename TileDataDst, typename TileDataSrc>
     void UnaryOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
     {
         using T = typename TileDataDst::DType;
-        CostModelStats stats = runUnaryOp(dst, src);
-        float resultCycles = PredictCycle<T>(stats);
-        dst.SetCycle(resultCycles);
+        std::vector<CostModelStats> stats = runUnaryOp<Op>(dst, src);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
 
     // TColMax / TColMin
@@ -239,16 +276,13 @@ public:
         dst.SetCycle(resultCycles);
     }
 
-    // TRowReduceOp
+    // TRowReduceOpPredict
     template <typename Op, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
     void RowReduceOpPredictCycle(const std::string& instr_name, TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
     {
         using T = typename TileDataIn::DType;
         std::vector<CostModelStats> stats = runRowReduceOps<T, Op, TileDataOut, TileDataIn, TileDataTmp>(instr_name, dst, src, tmp);
-        float totalCycles = 0.0f;
-        for (auto &stat : stats) {
-            totalCycles += PredictCycle<T>(stat);
-        }
+        float totalCycles = PredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
         std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
@@ -259,10 +293,7 @@ public:
     {
         using T = typename TileDataIn::DType;
         std::vector<CostModelStats> stats = runColReduceOps<T, Op, TileDataOut, TileDataIn>(dst, src);
-        float totalCycles = 0.0f;
-        for (auto &stat : stats) {
-            totalCycles += PredictCycle<T>(stat);
-        }
+        float totalCycles = PredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
         std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
@@ -275,10 +306,7 @@ public:
         using T = typename TileDataSrc::DType;
         std::vector<CostModelStats> stats = runColSumOp<T, TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp,
                                                                                                   IsBinary);
-        float totalCycles = 0.0f;
-        for (auto &stat : stats) {
-            totalCycles += PredictCycle<T>(stat);
-        }
+        float totalCycles = PredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
         std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
@@ -288,32 +316,47 @@ public:
     void RowExpandPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
     {
         using T = typename TileDataDst::DType;
-        CostModelStats stats = runRowExpandOp(dst, src);
-        float resultCycles = PredictCycle<T>(stats);
-        dst.SetCycle(resultCycles);
+        std::vector<CostModelStats> stats = runRowExpandOp(dst, src);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
 
     template <typename T>
-    float PredictCycle(const CostModelStats &stats)
+    float PredictCycle(const std::vector<CostModelStats> stats)
     {
-        std::string instr_name = stats.cceInstName;
-        DataType dtype = GetDataTypeEnum<T>();
-        auto key = std::make_pair(instr_name, dtype);
 
-        if (!CheckParamExist(key)) {
-            fprintf(stderr, "[CostModel] Error: <%s> <%d> \n", instr_name.c_str(), static_cast<int>(dtype));
-            return 0.0f;
+        float total_cycles = 0.0f;
+        bool pipe = true;
+        bool first = true;
+        for (auto &stat : stats) {
+            std::string instr_name = stat.cceInstName;
+            DataType dtype = GetDataTypeEnum<T>();
+            auto key = std::make_pair(instr_name, dtype);
+
+            if (!CheckParamExist(key)) {
+                fprintf(stderr, "[CostModel] Error: <%s> <%d> \n", instr_name.c_str(), static_cast<int>(dtype));
+                return 0.0f;
+            }
+
+            const CostModelParams &params = params_map_.at(key);
+            float masked_repeat_penalty = params.per_repeat_cycles * (params.mask_effect - 1.0f);
+            int effective_repeats = stat.total_repeats > 0 ? stat.total_repeats - 1 : 0;
+
+            if (first){
+                total_cycles += params.startup_cycles;
+            }
+
+            if (pipe){
+                total_cycles += params.completion_cycles;
+            }
+
+            total_cycles += effective_repeats * params.per_repeat_cycles + stat.masked_repeats * masked_repeat_penalty + params.bank_conflict_cycles;
+
+            fprintf(stdout, "[CostModel] Instr: %s Cycles: %f\n", instr_name.c_str(), total_cycles);
         }
 
-        const CostModelParams &params = params_map_.at(key);
-        float masked_repeat_penalty = params.per_repeat_cycles * (params.mask_effect - 1.0f);
-        int effective_repeats = stats.total_repeats > 0 ? stats.total_repeats - 1 : 0;
-
-        float sum_cycles = params.startup_cycles + params.completion_cycles +
-                           (effective_repeats * params.per_repeat_cycles) +
-                           (stats.masked_repeats * masked_repeat_penalty) + params.bank_conflict_cycles;
-
-        return sum_cycles;
+        return total_cycles;
     }
 
 private:

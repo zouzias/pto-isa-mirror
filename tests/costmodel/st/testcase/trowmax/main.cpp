@@ -63,17 +63,17 @@ void test_trowmax()
 
 TEST_F(TROWMAXTest, case_float_64x64)
 {
-    test_trowmax<float, 64, 64, 64, 64, 42.0f, 1.0f>();
+    test_trowmax<float, 64, 64, 64, 64, 32.0f, 1.0f>();
 }
 TEST_F(TROWMAXTest, case_float_16x256)
 {
-    test_trowmax<float, 16, 256, 16, 256, 54.0f, 1.0f>();
+    test_trowmax<float, 16, 256, 16, 256, 125.0f, 1.0f>();
 }
 TEST_F(TROWMAXTest, case_half_64x128)
 {
-    test_trowmax<aclFloat16, 64, 128, 64, 128, 44.0f, 1.0f>();
+    test_trowmax<aclFloat16, 64, 128, 64, 128, 34.0f, 1.0f>();
 }
 TEST_F(TROWMAXTest, case_half_16x256)
 {
-    test_trowmax<aclFloat16, 16, 256, 16, 256, 48.0f, 1.0f>();
+    test_trowmax<aclFloat16, 16, 256, 16, 256, 65.0f, 1.0f>();
 }

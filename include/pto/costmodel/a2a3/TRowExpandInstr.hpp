@@ -7,17 +7,17 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TCOLMIN_HPP
-#define TCOLMIN_HPP
+#ifndef TROWEXPAND_INSTR_HPP
+#define TROWEXPAND_INSTR_HPP
 
 #include "pto/costmodel/pto_isa_costmodel.hpp"
 
 namespace pto {
 
-template <typename TileDataOut, typename TileDataIn>
-PTO_INTERNAL void TCOLMIN_IMPL(TileDataOut &dst, TileDataIn &src)
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TROWEXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
 {
-    pto::CostModel::GetInstance().ColReduceOpPredictCycle<COLMINOp, TileDataOut, TileDataIn>("TCOLMIN", dst, src);
+    pto::CostModel::GetInstance().RowExpandPredictCycle("TROWEXPAND", dst, src);
 }
 
 } // namespace pto

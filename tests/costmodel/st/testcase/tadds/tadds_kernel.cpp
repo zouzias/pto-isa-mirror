@@ -61,19 +61,19 @@ extern "C" __global__ AICORE void launchTADDSCase2(__gm__ aclFloat16 *out, __gm_
 }
 extern "C" __global__ AICORE void launchTADDSCase3(__gm__ int32_t *out, __gm__ int32_t *src, int32_t scalar)
 {
-    runTAddS<int32_t, 31, 31, 128, 128, 92.0f, 1.0f>(out, src, scalar);
+    runTAddS<int32_t, 31, 31, 128, 128, 122.0f, 1.0f>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTADDSCase4(__gm__ int16_t *out, __gm__ int16_t *src, int16_t scalar)
 {
-    runTAddS<int16_t, 15, 15, 192, 192, 60.0f, 1.0f>(out, src, scalar);
+    runTAddS<int16_t, 15, 15, 192, 192, 90.0f, 1.0f>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTADDSCase5(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTAddS<float, 7, 7, 448, 448, 81.0f, 1.0f>(out, src, scalar);
+    runTAddS<float, 7, 7, 448, 448, 273.0f, 1.0f>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTADDSCase6(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTAddS<float, 256, 256, 16, 16, 288.0f, 1.0f>(out, src, scalar);
+    runTAddS<float, 256, 256, 16, 16, 320.0f, 1.0f>(out, src, scalar);
 }
 
 template <uint32_t caseId>

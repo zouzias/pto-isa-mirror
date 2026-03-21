@@ -63,17 +63,17 @@ void test_trowexpand()
 
 TEST_F(TROWEXPANDTest, case_float_64x64)
 {
-    test_trowexpand<float, 64, 64, 64, 64, 158.0f, 1.0f>();
+    test_trowexpand<float, 64, 64, 64, 64, 91.0f, 1.0f>();
 }
 TEST_F(TROWEXPANDTest, case_half_64x64)
 {
-    test_trowexpand<aclFloat16, 64, 64, 64, 64, 96.0f, 1.0f>();
+    test_trowexpand<aclFloat16, 64, 64, 64, 64, 59.0f, 1.0f>();
 }
 TEST_F(TROWEXPANDTest, case_int16_64x64)
 {
-    test_trowexpand<int16_t, 64, 64, 64, 64, 96.0f, 1.0f>();
+    test_trowexpand<int16_t, 64, 64, 64, 64, 59.0f, 1.0f>();
 }
 TEST_F(TROWEXPANDTest, case_half_16x256)
 {
-    test_trowexpand<aclFloat16, 16, 256, 16, 256, 96.0f, 1.0f>();
+    test_trowexpand<aclFloat16, 16, 256, 16, 256, 59.0f, 1.0f>();
 }

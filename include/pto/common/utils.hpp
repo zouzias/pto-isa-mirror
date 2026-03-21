@@ -23,6 +23,7 @@ struct LoadTypeBySize {
 template <typename T>
 using LoadTypeBySize_t = typename LoadTypeBySize<T>::type;
 
+#ifndef __COSTMODEL
 PTO_INTERNAL void SetContinuousMask(unsigned n)
 {
     set_vector_mask(
@@ -54,12 +55,12 @@ PTO_INTERNAL void SetFullVecMaskByDType()
 {
     set_vector_mask(-1, -1);
 }
-
 template <typename T>
 PTO_INTERNAL void SetContMaskByDType(unsigned n)
 {
     SetContinuousMask(n);
 }
+#endif // __COSTMODEL
 
 PTO_INTERNAL int32_t CeilDivision(int32_t num1, int32_t num2)
 {

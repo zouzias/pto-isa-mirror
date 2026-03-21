@@ -61,19 +61,19 @@ extern "C" __global__ AICORE void launchTMULSCase2(__gm__ aclFloat16 *out, __gm_
 }
 extern "C" __global__ AICORE void launchTMULSCase3(__gm__ int32_t *out, __gm__ int32_t *src, float scalar)
 {
-    runTMulS<int32_t, 31, 31, 128, 128, 93.0f, 1.0f>(out, src, scalar);
+    runTMulS<int32_t, 31, 31, 128, 128, 124.0f, 1.0f>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTMULSCase4(__gm__ int16_t *out, __gm__ int16_t *src, float scalar)
 {
-    runTMulS<int16_t, 15, 15, 192, 192, 61.0f, 1.0f>(out, src, scalar);
+    runTMulS<int16_t, 15, 15, 192, 192, 92.0f, 1.0f>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTMULSCase5(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTMulS<float, 7, 7, 448, 448, 82.0f, 1.0f>(out, src, scalar);
+    runTMulS<float, 7, 7, 448, 448, 280.0f, 1.0f>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTMULSCase6(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTMulS<float, 256, 256, 16, 16, 289.0f, 1.0f>(out, src, scalar);
+    runTMulS<float, 256, 256, 16, 16, 322.0f, 1.0f>(out, src, scalar);
 }
 
 template <uint32_t caseId>

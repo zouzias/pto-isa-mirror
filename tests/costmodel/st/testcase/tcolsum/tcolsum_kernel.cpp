@@ -48,6 +48,7 @@ AICORE inline void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src)
     float costResult = dstTile.GetCycle();
     float precision = 1 - fabs(profiling - costResult) / profiling;
     bool ret = precision >= accuracy;
+    printf("profiling: %f, costResult: %f, precision: %f, ret: %d\n", profiling, costResult, precision,  ret);
     EXPECT_TRUE(ret);
 }
 
@@ -61,5 +62,5 @@ void LaunchTCOLSUM(T *out, T *src, void *stream)
     }
 }
 
-template void LaunchTCOLSUM<float, 64, 64, 64, 64, true, 156.0f, 1.0f>(float *out, float *src, void *stream);
-template void LaunchTCOLSUM<aclFloat16, 16, 256, 16, 256, false, 92.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTCOLSUM<float, 64, 64, 64, 64, true, 2079.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTCOLSUM<aclFloat16, 16, 256, 16, 256, false, 495.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);

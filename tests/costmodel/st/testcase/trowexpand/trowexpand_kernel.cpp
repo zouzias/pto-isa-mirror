@@ -56,12 +56,8 @@ void LaunchTRowExpand(T *out, T *src, void *stream)
         runTRowExpand<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(out, src);
 }
 
-// float 64x64: nElem=4096, elemPerRpt=64, head=64, tail=0 → effective=63 → 13+19+63*2=158
-template void LaunchTRowExpand<float, 64, 64, 64, 64, 158.0f, 1.0f>(float *out, float *src, void *stream);
-// half 64x64: nElem=4096, elemPerRpt=128, head=32, tail=0 → effective=31 → 13+21+31*2=96
-template void LaunchTRowExpand<aclFloat16, 64, 64, 64, 64, 96.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
-// int16 64x64: same as half 64x64 → 96
-template void LaunchTRowExpand<int16_t, 64, 64, 64, 64, 96.0f, 1.0f>(int16_t *out, int16_t *src, void *stream);
-// half 16x256: same nElem=4096 → effective=31 → 96
-template void LaunchTRowExpand<aclFloat16, 16, 256, 16, 256, 96.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src,
+template void LaunchTRowExpand<float, 64, 64, 64, 64, 91.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTRowExpand<aclFloat16, 64, 64, 64, 64, 59.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTRowExpand<int16_t, 64, 64, 64, 64, 59.0f, 1.0f>(int16_t *out, int16_t *src, void *stream);
+template void LaunchTRowExpand<aclFloat16, 16, 256, 16, 256, 59.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src,
                                                                            void *stream);

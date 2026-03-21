@@ -7,17 +7,44 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TROWEXPAND_COSTMODEL_HPP
-#define TROWEXPAND_COSTMODEL_HPP
 
-#include "pto/costmodel/pto_isa_costmodel.hpp"
+#ifndef TROW_EXPAND_OP_HPP
+#define TROW_EXPAND_OP_HPP
+
+#include <pto/common/utils.hpp>
+#include "pto/costmodel/costmodel_types.hpp"
 
 namespace pto {
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TROWEXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
+template <typename TileDataOut, typename TileDataIn>
+PTO_INTERNAL std::vector<CostModelStats> TRowExpand(int validCol, int validRow)
 {
-    pto::CostModel::GetInstance().RowExpandPredictCycle("TROWEXPAND", dst, src);
+    std::vector<CostModelStats> stats;
+
+    using T = typename TileDataOut::DType;
+    using TRANS = B82B16Trait<T>;
+    int transValidCol = TRANS::TransSize(validCol);
+    constexpr int elemPerRpt = REPEAT_BYTE / static_cast<int>(sizeof(T));
+    int totalRepeats = validRow * validCol / elemPerRpt;
+    if (totalRepeats < 1) totalRepeats = 1;
+
+    stats.emplace_back("mask", 0, transValidCol);
+    stats.emplace_back("vector_dup", 1, 1, 0, 1, 1, BLOCK_MAX_PER_REPEAT, 0);
+    RecordRepeat(stats.back(), totalRepeats);
+    return stats;
+}
+
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL std::vector<CostModelStats> runRowExpandOp(TileDataDst &dst, TileDataSrc &src)
+{
+    int validCol = src.GetValidCol();
+    int validRow = src.GetValidRow();
+    std::vector<CostModelStats> stats;
+    if (validCol == 0 || validRow == 0) {
+        return stats;
+    }
+
+    return TRowExpand<TileDataDst, TileDataSrc>(validCol, validRow);
 }
 
 } // namespace pto

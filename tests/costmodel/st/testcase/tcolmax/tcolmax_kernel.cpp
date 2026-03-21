@@ -44,6 +44,7 @@ AICORE void runTColMax(__gm__ T __out__ *out, __gm__ T __in__ *src)
     float costResult = dstTile.GetCycle();
     float precision = 1 - fabs(profiling - costResult) / profiling;
     bool ret = precision >= accuracy;
+    printf("profiling: %f, costResult: %f, precision: %f, ret: %d\n", profiling, costResult, precision,  ret);
     EXPECT_TRUE(ret);
 }
 
@@ -56,11 +57,7 @@ void LaunchTColMax(T *out, T *src, void *stream)
         runTColMax<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(out, src);
 }
 
-// float 64x64: numRepeatPerLine=1, (64-1)*1=63 repeats → effective=62 → 13+19+62*2=156
-template void LaunchTColMax<float, 64, 64, 64, 64, 156.0f, 1.0f>(float *out, float *src, void *stream);
-// half 64x64: numRepeatPerLine=0, numRemain=64 → (64-1)=63 masked → effective=62 → 13+21+62*2=158
-template void LaunchTColMax<aclFloat16, 64, 64, 64, 64, 158.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
-// int16 64x64: same repeat count as half → effective=62 → 13+17+62*1=92
-template void LaunchTColMax<int16_t, 64, 64, 64, 64, 92.0f, 1.0f>(int16_t *out, int16_t *src, void *stream);
-// half 16x256: numRepeatPerLine=2, (16-1)*2=30 repeats → effective=29 → 13+21+29*2=92
-template void LaunchTColMax<aclFloat16, 16, 256, 16, 256, 92.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTColMax<float, 64, 64, 64, 64, 1953.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTColMax<aclFloat16, 64, 64, 64, 64, 1953.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTColMax<int16_t, 64, 64, 64, 64, 1953.0f, 1.0f>(int16_t *out, int16_t *src, void *stream);
+template void LaunchTColMax<aclFloat16, 16, 256, 16, 256, 465.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);

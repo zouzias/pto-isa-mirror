@@ -51,6 +51,7 @@ tmuls
 trowexpand
 trowmax
 trowmin
+trowsum
 tsqrt
 tsub
 )

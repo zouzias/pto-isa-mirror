@@ -58,11 +58,7 @@ void LaunchTRowMax(T *out, T *src, void *stream)
         runTRowMax<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(out, src);
 }
 
-// float 64x64: validCol=64=elemPerRpt(64) → 1 repeat → effective=0 → 13+29=42
-template void LaunchTRowMax<float, 64, 64, 64, 64, 42.0f, 1.0f>(float *out, float *src, void *stream);
-// float 16x256: srcRptPerRow=4 → 4 repeats → effective=3 → 13+29+3*4=54
-template void LaunchTRowMax<float, 16, 256, 16, 256, 54.0f, 1.0f>(float *out, float *src, void *stream);
-// half 64x128: validCol=128=elemPerRpt(128) → 1 repeat → effective=0 → 13+31=44
-template void LaunchTRowMax<aclFloat16, 64, 128, 64, 128, 44.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
-// half 16x256: srcRptPerRow=2 → 2 repeats → effective=1 → 13+31+1*4=48
-template void LaunchTRowMax<aclFloat16, 16, 256, 16, 256, 48.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTRowMax<float, 64, 64, 64, 64, 32.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTRowMax<float, 16, 256, 16, 256, 125.0f, 1.0f>(float *out, float *src, void *stream);
+template void LaunchTRowMax<aclFloat16, 64, 128, 64, 128, 34.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTRowMax<aclFloat16, 16, 256, 16, 256, 65.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);

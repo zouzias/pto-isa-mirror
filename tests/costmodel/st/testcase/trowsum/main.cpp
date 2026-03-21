@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-class TCOLMINTest : public testing::Test {
+class TROWSUMTest : public testing::Test {
 protected:
     void SetUp() override
     {}
@@ -24,10 +24,10 @@ protected:
 };
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTColMin(T *out, T *src, void *stream);
+void LaunchTRowSum(T *out, T *src, void *stream);
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_tcolmin()
+void test_trowsum()
 {
     size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
 
@@ -46,7 +46,7 @@ void test_tcolmin()
     aclrtMalloc((void **)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTColMin<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, srcDevice, stream);
+    LaunchTRowSum<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -61,19 +61,19 @@ void test_tcolmin()
     aclFinalize();
 }
 
-TEST_F(TCOLMINTest, case_float_64x64)
+TEST_F(TROWSUMTest, case_float_64x64)
 {
-    test_tcolmin<float, 64, 64, 64, 64, 156.0f, 1.0f>();
+    test_trowsum<float, 64, 64, 64, 64, 32.0f, 0.0f>();
 }
-TEST_F(TCOLMINTest, case_half_64x64)
+TEST_F(TROWSUMTest, case_float_16x256)
 {
-    test_tcolmin<aclFloat16, 64, 64, 64, 64, 158.0f, 1.0f>();
+    test_trowsum<float, 16, 256, 16, 256, 131.0f, 0.0f>();
 }
-TEST_F(TCOLMINTest, case_int16_64x64)
+TEST_F(TROWSUMTest, case_half_64x128)
 {
-    test_tcolmin<int16_t, 64, 64, 64, 64, 92.0f, 1.0f>();
+    test_trowsum<aclFloat16, 64, 128, 64, 128, 34.0f, 0.0f>();
 }
-TEST_F(TCOLMINTest, case_half_16x256)
+TEST_F(TROWSUMTest, case_half_16x256)
 {
-    test_tcolmin<aclFloat16, 16, 256, 16, 256, 92.0f, 1.0f>();
+    test_trowsum<aclFloat16, 16, 256, 16, 256, 67.0f, 0.0f>();
 }
