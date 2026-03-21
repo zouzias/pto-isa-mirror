@@ -146,7 +146,9 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolprod
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trowprod
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmax
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolargmax
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolmin
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolargmin
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trem
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t trems
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tfmod
@@ -431,6 +433,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t mgather
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t mscatter
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tquant
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolargmax
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tcolargmin
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdequant
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tconcat
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpack
