@@ -17,28 +17,30 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <type_traits>
 #include <pto/common/pto_tile.hpp>
+#include "pto/costmodel/op_struct.hpp"
 #include "pto/costmodel/costmodel_types.hpp"
 #include "pto/costmodel/a2a3/TBinOp.hpp"
 #include "pto/costmodel/a2a3/TBinSOp.hpp"
 #include "pto/costmodel/a2a3/TUnaryOp.hpp"
+#include "pto/costmodel/a2a3/TColReduceOp.hpp"
+#include "pto/costmodel/a2a3/TRowReduceOp.hpp"
+#include "pto/costmodel/a2a3/TRowExpand.hpp"
 
 namespace pto {
-constexpr float HEAD_CYCLE_13 = 13.0;
-constexpr float HEAD_CYCLE_14 = 14.0;
-constexpr float COMPLETE_CYCLE_17 = 17.0;
-constexpr float COMPLETE_CYCLE_18 = 18.0;
-constexpr float COMPLETE_CYCLE_19 = 19.0;
-constexpr float COMPLETE_CYCLE_20 = 20.0;
-constexpr float COMPLETE_CYCLE_26 = 26.0;
-constexpr float COMPLETE_CYCLE_27 = 27.0;
-constexpr float COMPLETE_CYCLE_28 = 28.0;
-constexpr float COMPLETE_CYCLE_29 = 29.0;
-constexpr float COMPUTING_CYCLE_1 = 1.0;
-constexpr float COMPUTING_CYCLE_2 = 2.0;
-constexpr float COMPUTING_CYCLE_4 = 4.0;
-constexpr float INTERVAL_CYCLE_18 = 18.0;
-constexpr float MASK_1 = 1.0;
-constexpr float BANK_CONFLICT_0 = 0.0;
+constexpr float NUM_13 = 13.0;
+constexpr float NUM_14 = 14.0;
+constexpr float NUM_17 = 17.0;
+constexpr float NUM_18 = 18.0;
+constexpr float NUM_19 = 19.0;
+constexpr float NUM_20 = 20.0;
+constexpr float NUM_26 = 26.0;
+constexpr float NUM_27 = 27.0;
+constexpr float NUM_28 = 28.0;
+constexpr float NUM_29 = 29.0;
+constexpr float NUM_1 = 1.0;
+constexpr float NUM_2 = 2.0;
+constexpr float NUM_4 = 4.0;
+constexpr float NUM_0 = 0.0;
 
 enum class DataType
 {
@@ -109,149 +111,268 @@ public:
 
     void InitDefaultParams()
     {
+        SetParam("PIPE_V", DataType::INT16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("PIPE_V", DataType::INT32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("PIPE_V", DataType::FP16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("PIPE_V", DataType::FP32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+
+        SetParam("vector_dup", DataType::INT16, NUM_14, NUM_14, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vector_dup", DataType::INT32, NUM_14, NUM_14, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vector_dup", DataType::FP16, NUM_14, NUM_14, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vector_dup", DataType::FP32, NUM_14, NUM_14, NUM_1, NUM_18, NUM_1, NUM_0);
+
         // TADD
-        SetParam("TADD", DataType::INT16, HEAD_CYCLE_14, COMPLETE_CYCLE_17, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TADD", DataType::INT32, HEAD_CYCLE_14, COMPLETE_CYCLE_17, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TADD", DataType::FP16, HEAD_CYCLE_14, COMPLETE_CYCLE_19, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18, MASK_1,
-                 BANK_CONFLICT_0);
-        SetParam("TADD", DataType::FP32, HEAD_CYCLE_14, COMPLETE_CYCLE_19, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18, MASK_1,
-                 BANK_CONFLICT_0);
+        SetParam("vadd", DataType::INT16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vadd", DataType::INT32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vadd", DataType::FP16, NUM_14, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vadd", DataType::FP32, NUM_14, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // TMUL
-        SetParam("TMUL", DataType::INT16, HEAD_CYCLE_14, COMPLETE_CYCLE_18, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TMUL", DataType::INT32, HEAD_CYCLE_14, COMPLETE_CYCLE_18, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TMUL", DataType::FP16, HEAD_CYCLE_14, COMPLETE_CYCLE_20, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18, MASK_1,
-                 BANK_CONFLICT_0);
-        SetParam("TMUL", DataType::FP32, HEAD_CYCLE_14, COMPLETE_CYCLE_20, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18, MASK_1,
-                 BANK_CONFLICT_0);
+        SetParam("vmul", DataType::INT16, NUM_14, NUM_18, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmul", DataType::INT32, NUM_14, NUM_18, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmul", DataType::FP16, NUM_14, NUM_20, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmul", DataType::FP32, NUM_14, NUM_20, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // TSUB
-        SetParam("TSUB", DataType::INT16, HEAD_CYCLE_14, COMPLETE_CYCLE_17, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TSUB", DataType::INT32, HEAD_CYCLE_14, COMPLETE_CYCLE_17, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TSUB", DataType::FP16, HEAD_CYCLE_14, COMPLETE_CYCLE_19, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18, MASK_1,
-                 BANK_CONFLICT_0);
-        SetParam("TSUB", DataType::FP32, HEAD_CYCLE_14, COMPLETE_CYCLE_19, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18, MASK_1,
-                 BANK_CONFLICT_0);
+        SetParam("vsub", DataType::INT16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vsub", DataType::INT32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vsub", DataType::FP16, NUM_14, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vsub", DataType::FP32, NUM_14, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // TEXP
-        SetParam("TEXP", DataType::FP16, HEAD_CYCLE_13, COMPLETE_CYCLE_28, COMPUTING_CYCLE_4, INTERVAL_CYCLE_18, MASK_1,
-                 BANK_CONFLICT_0);
-        SetParam("TEXP", DataType::FP32, HEAD_CYCLE_13, COMPLETE_CYCLE_26, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18, MASK_1,
-                 BANK_CONFLICT_0);
+        SetParam("vexp", DataType::FP16, NUM_13, NUM_28, NUM_4, NUM_18, NUM_1, NUM_0);
+        SetParam("vexp", DataType::FP32, NUM_13, NUM_26, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // TSQRT
-        SetParam("TSQRT", DataType::FP16, HEAD_CYCLE_13, COMPLETE_CYCLE_29, COMPUTING_CYCLE_4, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TSQRT", DataType::FP32, HEAD_CYCLE_13, COMPLETE_CYCLE_27, COMPUTING_CYCLE_2, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
+        SetParam("vsqrt", DataType::FP16, NUM_13, NUM_29, NUM_4, NUM_18, NUM_1, NUM_0);
+        SetParam("vsqrt", DataType::FP32, NUM_13, NUM_27, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // TADDS
-        SetParam("TADDS", DataType::INT16, HEAD_CYCLE_14, COMPLETE_CYCLE_17, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TADDS", DataType::INT32, HEAD_CYCLE_14, COMPLETE_CYCLE_17, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TADDS", DataType::FP16, HEAD_CYCLE_14, COMPLETE_CYCLE_19, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TADDS", DataType::FP32, HEAD_CYCLE_14, COMPLETE_CYCLE_19, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
+        SetParam("vadds", DataType::INT16, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vadds", DataType::INT32, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vadds", DataType::FP16, NUM_14, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vadds", DataType::FP32, NUM_14, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
 
         // TABS
-        SetParam("TABS", DataType::INT16, HEAD_CYCLE_13, COMPLETE_CYCLE_19, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TABS", DataType::INT32, HEAD_CYCLE_13, COMPLETE_CYCLE_19, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TABS", DataType::FP16, HEAD_CYCLE_13, COMPLETE_CYCLE_19, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18, MASK_1,
-                 BANK_CONFLICT_0);
-        SetParam("TABS", DataType::FP32, HEAD_CYCLE_13, COMPLETE_CYCLE_19, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18, MASK_1,
-                 BANK_CONFLICT_0);
+        SetParam("vabs", DataType::INT16, NUM_13, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vabs", DataType::INT32, NUM_13, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vabs", DataType::FP16, NUM_13, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vabs", DataType::FP32, NUM_13, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
 
         // TMINS
-        SetParam("TMINS", DataType::INT16, HEAD_CYCLE_14, COMPLETE_CYCLE_17, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TMINS", DataType::INT32, HEAD_CYCLE_14, COMPLETE_CYCLE_17, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TMINS", DataType::FP16, HEAD_CYCLE_14, COMPLETE_CYCLE_17, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TMINS", DataType::FP32, HEAD_CYCLE_14, COMPLETE_CYCLE_17, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
+        SetParam("vmins", DataType::INT16, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmins", DataType::INT32, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmins", DataType::FP16, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmins", DataType::FP32, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
 
         // TMULS
-        SetParam("TMULS", DataType::INT16, HEAD_CYCLE_14, COMPLETE_CYCLE_18, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TMULS", DataType::INT32, HEAD_CYCLE_14, COMPLETE_CYCLE_18, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TMULS", DataType::FP16, HEAD_CYCLE_14, COMPLETE_CYCLE_20, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TMULS", DataType::FP32, HEAD_CYCLE_14, COMPLETE_CYCLE_20, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
+        SetParam("vmuls", DataType::INT16, NUM_14, NUM_18, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmuls", DataType::INT32, NUM_14, NUM_18, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmuls", DataType::FP16, NUM_14, NUM_20, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmuls", DataType::FP32, NUM_14, NUM_20, NUM_1, NUM_18, NUM_1, NUM_0);
 
         // TDIVS
-        SetParam("TDIVS", DataType::INT16, HEAD_CYCLE_14, COMPLETE_CYCLE_18, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TDIVS", DataType::INT32, HEAD_CYCLE_14, COMPLETE_CYCLE_18, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TDIVS", DataType::FP16, HEAD_CYCLE_14, COMPLETE_CYCLE_20, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
-        SetParam("TDIVS", DataType::FP32, HEAD_CYCLE_14, COMPLETE_CYCLE_20, COMPUTING_CYCLE_1, INTERVAL_CYCLE_18,
-                 MASK_1, BANK_CONFLICT_0);
+        SetParam("vdivs", DataType::INT16, NUM_14, NUM_18, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vdivs", DataType::INT32, NUM_14, NUM_18, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vdivs", DataType::FP16, NUM_14, NUM_20, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vdivs", DataType::FP32, NUM_14, NUM_20, NUM_1, NUM_18, NUM_1, NUM_0);
+
+        // vmax
+        SetParam("vmax", DataType::INT16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmax", DataType::INT32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmax", DataType::FP16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmax", DataType::FP32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+
+        // vmin
+        SetParam("vmin", DataType::INT16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmin", DataType::INT32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmin", DataType::FP16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmin", DataType::FP32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+
+        // vcgmax
+        SetParam("vcgmax", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmax", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmax", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmax", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+
+        // vcgmin
+        SetParam("vcgmin", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmin", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmin", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmin", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+
+        // vcgadd
+        SetParam("vcgadd", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgadd", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgadd", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgadd", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+
+        // vcmax
+        SetParam("vcmax", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmax", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmax", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmax", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+
+        // vcmin
+        SetParam("vcmin", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmin", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmin", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmin", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+
+        // vcadd
+        SetParam("vcadd", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcadd", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcadd", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcadd", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+
+        // copy_ubuf_to_ubuf (memory copy, 0-cycle placeholder)
+        SetParam("copy_ubuf_to_ubuf", DataType::INT16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("copy_ubuf_to_ubuf", DataType::INT32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("copy_ubuf_to_ubuf", DataType::FP16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("copy_ubuf_to_ubuf", DataType::FP32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+
+        // mask (mask set instruction, 0-cycle placeholder)
+        SetParam("mask", DataType::INT16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("mask", DataType::INT32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("mask", DataType::FP16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("mask", DataType::FP32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
     }
 
     // TBinOp
-    template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
+    template <typename Op, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
     void BinOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
     {
         using T = typename TileDataDst::DType;
-        CostModelStats stats = runBinaryOp(dst, src0, src1);
-        float resultCycles = PredictCycle<T>(instr_name, stats);
-        dst.SetCycle(resultCycles);
+        std::vector<CostModelStats> stats = runBinaryOp<Op>(dst, src0, src1);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
 
     // TBinSOp
-    template <typename TileDataDst, typename TileDataSrc>
-    void BinSOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src,
-                            TileDataSrc::DType scalar)
+    template <typename Op, typename TileDataDst, typename TileDataSrc>
+    void BinSOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
     {
-        using T = typename TileDataSrc::DType;
-        CostModelStats stats = runBinaryScalarOp(dst, src);
-        float resultCycles = PredictCycle<T>(instr_name, stats);
-        dst.SetCycle(resultCycles);
+        using T = typename TileDataDst::DType;
+        std::vector<CostModelStats> stats = runBinaryScalarOp<Op>(dst, src);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
     }
 
     // TUnaryOp
-    template <typename TileDataDst, typename TileDataSrc>
+    template <typename Op, typename TileDataDst, typename TileDataSrc>
     void UnaryOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
     {
         using T = typename TileDataDst::DType;
-        CostModelStats stats = runUnaryOp(dst, src);
-        float resultCycles = PredictCycle<T>(instr_name, stats);
+        std::vector<CostModelStats> stats = runUnaryOp<Op>(dst, src);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
+    }
+
+    // TColMax / TColMin
+    template <typename TileDataOut, typename TileDataIn>
+    void ColReducePredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src)
+    {
+        using T = typename TileDataIn::DType;
+        CostModelStats stats = runColReduceOp(dst, src);
+        float resultCycles = PredictCycle<T>(stats);
         dst.SetCycle(resultCycles);
     }
 
-    template <typename T>
-    float PredictCycle(const std::string &instr_name, const CostModelStats &stats)
+    // TRowMax / TRowMin
+    template <typename TileDataOut, typename TileDataIn>
+    void RowReducePredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src)
     {
-        DataType dtype = GetDataTypeEnum<T>();
-        auto key = std::make_pair(instr_name, dtype);
-        if (!CheckParamExist(key)) {
-            fprintf(stderr, "[CostModel] Error: <%s> <%d> \n", instr_name.c_str(), static_cast<int>(dtype));
-            return 0.0f;
+        using T = typename TileDataIn::DType;
+        CostModelStats stats = runRowReduceOp(dst, src);
+        float resultCycles = PredictCycle<T>(stats);
+        dst.SetCycle(resultCycles);
+    }
+
+    // TRowReduceOpPredict
+    template <typename Op, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
+    void RowReduceOpPredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
+    {
+        using T = typename TileDataIn::DType;
+        std::vector<CostModelStats> stats =
+            runRowReduceOps<T, Op, TileDataOut, TileDataIn, TileDataTmp>(instr_name, dst, src, tmp);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
+    }
+
+    // TColMax / TColMin
+    template <typename Op, typename TileDataOut, typename TileDataIn>
+    void ColReduceOpPredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src)
+    {
+        using T = typename TileDataIn::DType;
+        std::vector<CostModelStats> stats = runColReduceOps<T, Op, TileDataOut, TileDataIn>(dst, src);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
+    }
+
+    // TColSum
+    template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
+    void ColSumOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp,
+                              bool IsBinary)
+    {
+        using T = typename TileDataSrc::DType;
+        std::vector<CostModelStats> stats =
+            runColSumOp<T, TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp, IsBinary);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
+    }
+
+    // TRowExpand
+    template <typename TileDataDst, typename TileDataSrc>
+    void RowExpandPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
+    {
+        using T = typename TileDataDst::DType;
+        std::vector<CostModelStats> stats = runRowExpandOp(dst, src);
+        float totalCycles = PredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+        std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
+    }
+
+    template <typename T>
+    float PredictCycle(const std::vector<CostModelStats> stats)
+    {
+        float total_cycles = 0.0f;
+        bool pipe = true;
+        bool first = true;
+        for (auto &stat : stats) {
+            std::string instr_name = stat.cceInstName;
+            DataType dtype = GetDataTypeEnum<T>();
+            auto key = std::make_pair(instr_name, dtype);
+
+            if (!CheckParamExist(key)) {
+                fprintf(stderr, "[CostModel] Error: <%s> <%d> \n", instr_name.c_str(), static_cast<int>(dtype));
+                return 0.0f;
+            }
+
+            const CostModelParams &params = params_map_.at(key);
+            float masked_repeat_penalty = params.per_repeat_cycles * (params.mask_effect - 1.0f);
+            int effective_repeats = stat.total_repeats > 0 ? stat.total_repeats - 1 : 0;
+
+            if (first) {
+                total_cycles += params.startup_cycles;
+            }
+
+            if (pipe) {
+                total_cycles += params.completion_cycles;
+            }
+
+            total_cycles += effective_repeats * params.per_repeat_cycles + stat.masked_repeats * masked_repeat_penalty +
+                            params.bank_conflict_cycles;
+
+            fprintf(stdout, "[CostModel] Instr: %s Cycles: %f\n", instr_name.c_str(), total_cycles);
         }
 
-        const CostModelParams &params = params_map_.at(key);
-        float masked_repeat_penalty = params.per_repeat_cycles * (params.mask_effect - 1.0f);
-        int effective_repeats = stats.total_repeats > 0 ? stats.total_repeats - 1 : 0;
-
-        float sum_cycles = params.startup_cycles + params.completion_cycles +
-                           (effective_repeats * params.per_repeat_cycles) +
-                           (stats.masked_repeats * masked_repeat_penalty) + params.bank_conflict_cycles;
-
-        return sum_cycles;
+        return total_cycles;
     }
 
 private:

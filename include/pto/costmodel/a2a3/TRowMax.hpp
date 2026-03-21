@@ -7,19 +7,19 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TSQRT_HPP
-#define TSQRT_HPP
+#ifndef TROWMAX_HPP
+#define TROWMAX_HPP
 
 #include "pto/costmodel/pto_isa_costmodel.hpp"
 
 namespace pto {
 
-template <typename DstTile, typename SrcTile>
-PTO_INTERNAL void TSQRT_IMPL(DstTile &dst, SrcTile &src)
+template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
+PTO_INTERNAL void TROWMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
-    pto::CostModel::GetInstance().UnaryOpPredictCycle<SqrtOp, DstTile, SrcTile>("TSQRT", dst, src);
+    pto::CostModel::GetInstance().RowReduceOpPredictCycle<TRowMaxOp, TileDataOut, TileDataIn, TileDataTmp>(
+        "TROWMAX", dst, src, tmp);
 }
 
 } // namespace pto
-
 #endif

@@ -95,11 +95,11 @@ extern "C" __global__ AICORE void launchTDIVSCase2(__gm__ aclFloat16 *out, __gm_
 }
 extern "C" __global__ AICORE void launchTDIVSCase3(__gm__ int32_t *out, __gm__ int32_t *src, float scalar)
 {
-    runTDivS<int32_t, 31, 31, 128, 128, 93.0f, 1.0f>(out, src, scalar);
+    runTDivS<int32_t, 31, 31, 128, 128, 124.0f, 1.0f>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTDIVSCase4(__gm__ int16_t *out, __gm__ int16_t *src, int16_t scalar)
 {
-    runTDivS<int16_t, 15, 15, 192, 192, 61.0f, 1.0f>(out, src, scalar);
+    runTDivS<int16_t, 15, 15, 192, 192, 92.0f, 1.0f>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTDIVSCase5(__gm__ float *out, __gm__ float *src, float scalar)
 {
@@ -111,11 +111,11 @@ extern "C" __global__ AICORE void launchTDIVSCase6(__gm__ aclFloat16 *out, __gm_
 }
 extern "C" __global__ AICORE void launchTDIVSCase7(__gm__ int32_t *out, __gm__ int32_t *src, float scalar)
 {
-    runSTDivS<int32_t, 31, 31, 128, 128, 93.0f, 1.0f>(out, src, scalar);
+    runSTDivS<int32_t, 31, 31, 128, 128, 124.0f, 1.0f>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTDIVSCase8(__gm__ int16_t *out, __gm__ int16_t *src, int16_t scalar)
 {
-    runSTDivS<int16_t, 15, 15, 192, 192, 61.0f, 1.0f>(out, src, scalar);
+    runSTDivS<int16_t, 15, 15, 192, 192, 92.0f, 1.0f>(out, src, scalar);
 }
 
 template <uint32_t caseId>

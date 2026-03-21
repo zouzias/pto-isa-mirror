@@ -80,36 +80,36 @@ bool TMulSTestFramework()
 
 TEST_F(TMULSTest, case1)
 {
-    bool ret = TMulSTestFramework<1, float, 32, 32, 64, 64, 128.0f, 1.0f>();
+    bool ret = TMulSTestFramework<1, float, 32, 32, 64, 64, 65.0f, 1.0f>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TMULSTest, case2)
 {
-    bool ret = TMulSTestFramework<2, aclFloat16, 63, 63, 64, 64, 128.0f, 1.0f>();
+    bool ret = TMulSTestFramework<2, aclFloat16, 63, 63, 64, 64, 96.0f, 1.0f>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TMULSTest, case3)
 {
-    bool ret = TMulSTestFramework<3, int32_t, 31, 31, 128, 128, 128.0f, 1.0f>();
+    bool ret = TMulSTestFramework<3, int32_t, 31, 31, 128, 128, 124.0f, 1.0f>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TMULSTest, case4)
 {
-    bool ret = TMulSTestFramework<4, int16_t, 15, 15, 192, 192, 128.0f, 1.0f>();
+    bool ret = TMulSTestFramework<4, int16_t, 15, 15, 192, 192, 92.0f, 1.0f>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TMULSTest, case5)
 {
-    bool ret = TMulSTestFramework<5, float, 7, 7, 448, 448, 128.0f, 1.0f>();
+    bool ret = TMulSTestFramework<5, float, 7, 7, 448, 448, 280.0f, 1.0f>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TMULSTest, case6)
 {
-    bool ret = TMulSTestFramework<6, float, 256, 256, 16, 16, 256.0f, 1.0f>();
+    bool ret = TMulSTestFramework<6, float, 256, 256, 16, 16, 322.0f, 1.0f>();
     EXPECT_TRUE(ret);
 }

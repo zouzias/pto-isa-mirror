@@ -12,6 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_COSTMODEL_TYPES_HPP
 
 #include <cstdint>
+#include <iostream>
 
 namespace pto {
 
@@ -20,6 +21,93 @@ struct CostModelStats {
     int masked_repeats = 0;
     int strided_repeats = 0;
     int count_mode_calls = 0;
+
+    std::string cceInstName;
+    int repeats;
+    int mask1;
+    int mask0;
+    int dstBlockStride;
+    int src0BlockStride;
+    int src1BlockStride;
+    int dstRepeatStride;
+    int src0RepeatStride;
+    int src1RepeatStride;
+    std::string order; // vcmax/vcmin专用,取值VALUE_INDEX/INDEX_VALUE/ONLY_VALUE/ONLY_INDEX
+    bool mode;         // vcadd专用
+
+    int nBurst;
+    int lenBurst;
+    int srcGap;
+    int dstGap;
+
+    void setCceInstName(std::string cceInstName_)
+    {
+        cceInstName = cceInstName_;
+    }
+
+    // BinOp
+    CostModelStats(const std::string cceInstName_, int repeats_, int dstBlockStride_, int src0BlockStride_,
+                   int src1BlockStride_, int dstRepeatStride_, int src0RepeatStride_, int src1RepeatStride_)
+        : cceInstName(cceInstName_),
+          repeats(repeats_),
+          dstBlockStride(dstBlockStride_),
+          src0BlockStride(src0BlockStride_),
+          src1BlockStride(src1BlockStride_),
+          dstRepeatStride(dstRepeatStride_),
+          src0RepeatStride(src0RepeatStride_),
+          src1RepeatStride(src1RepeatStride_)
+    {}
+
+    // pipe_barrier
+    CostModelStats(const std::string cceInstName_ = "PIPE_V") : cceInstName(cceInstName_)
+    {}
+
+    // move
+    CostModelStats(const std::string cceInstName_, int nBurst_, int lenBurst_, int srcGap_, int dstGap_)
+        : cceInstName(cceInstName_), nBurst(nBurst_), lenBurst(lenBurst_), srcGap(srcGap_), dstGap(dstGap_)
+    {}
+
+    // BinSOp UnaryOp
+    CostModelStats(const std::string cceInstName_, int repeats_, int dstBlockStride_, int srcBlockStride_,
+                   int dstRepeatStride_, int srcRepeatStride_)
+        : cceInstName(cceInstName_),
+          repeats(repeats_),
+          dstBlockStride(dstBlockStride_),
+          src0BlockStride(srcBlockStride_),
+          dstRepeatStride(dstRepeatStride_),
+          src0RepeatStride(srcRepeatStride_)
+    {}
+
+    // vcmax/vcmin/vcgadd/vcgmax/vcgmin/vcpadd
+    CostModelStats(const std::string cceInstName_, int repeats_, int dstRepeatStride_, int srcBlockStride_,
+                   int srcRepeatStride_, const std::string order_)
+        : cceInstName(cceInstName_),
+          repeats(repeats_),
+          dstRepeatStride(dstRepeatStride_),
+          src0BlockStride(srcBlockStride_),
+          src0RepeatStride(srcRepeatStride_),
+          order(order_)
+    {}
+
+    // vcadd
+    CostModelStats(const std::string cceInstName_, int repeats_, int dstRepeatStride_, int srcBlockStride_,
+                   int srcRepeatStride_, bool mode_)
+        : cceInstName(cceInstName_),
+          repeats(repeats_),
+          dstRepeatStride(dstRepeatStride_),
+          src0BlockStride(srcBlockStride_),
+          src0RepeatStride(srcRepeatStride_),
+          mode(mode_)
+    {}
+
+    // simple mode
+    CostModelStats(const std::string cceInstName_, int repeats_) : cceInstName(cceInstName_), repeats(repeats_)
+    {}
+
+    // mask
+    CostModelStats(const std::string cceInstName_, int mask1_, int mask0_)
+        : cceInstName(cceInstName_), mask1(mask1_), mask0(mask0_)
+    {}
 
     void AddRepeat(unsigned repeats, bool isMasked = false, bool isStrided = false)
     {
@@ -55,6 +143,18 @@ inline void RecordCountMode(CostModelStats &stats)
 inline void RecordRepeat(CostModelStats &stats, unsigned repeats, bool isMasked = false, bool isStrided = false)
 {
     stats.AddRepeat(repeats, isMasked, isStrided);
+}
+
+inline uint64_t GetContinuousMask1(unsigned n)
+{
+    return static_cast<uint64_t>(
+        (n > MASK_LEN) ? (((static_cast<uint64_t>(1)) << static_cast<uint32_t>(n - MASK_LEN)) - 1) : 0);
+}
+
+inline uint64_t GetContinuousMask0(unsigned n)
+{
+    return static_cast<uint64_t>((n >= MASK_LEN) ? 0xffffffffffffffff :
+                                                   (((static_cast<uint64_t>(1)) << static_cast<uint32_t>(n)) - 1));
 }
 
 } // namespace pto

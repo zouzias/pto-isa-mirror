@@ -7,19 +7,20 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TSQRT_HPP
-#define TSQRT_HPP
+
+#ifndef TROWSUM_HPP
+#define TROWSUM_HPP
 
 #include "pto/costmodel/pto_isa_costmodel.hpp"
 
 namespace pto {
 
-template <typename DstTile, typename SrcTile>
-PTO_INTERNAL void TSQRT_IMPL(DstTile &dst, SrcTile &src)
+template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
+PTO_INTERNAL void TROWSUM_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
-    pto::CostModel::GetInstance().UnaryOpPredictCycle<SqrtOp, DstTile, SrcTile>("TSQRT", dst, src);
+    pto::CostModel::GetInstance().RowReduceOpPredictCycle<TRowSumOp, TileDataOut, TileDataIn, TileDataTmp>(
+        "TROWSUM", dst, src, tmp);
 }
 
 } // namespace pto
-
 #endif
