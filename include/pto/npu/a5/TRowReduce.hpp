@@ -22,7 +22,7 @@ full text of the License.
 namespace pto {
 template <typename T>
 struct ROWSUM {
-    static constexpr T InitVal = Padding<T>::Zero;
+    static constexpr typename Padding<T>::Type InitVal = Padding<T>::Zero;
     using TIN = T;
     using TOUT = std::conditional_t<std::is_same_v<T, int16_t>, int32_t, T>;
     static PTO_INTERNAL void Accumulate(RegTensor<TOUT> &dst, RegTensor<TOUT> &src0, RegTensor<TOUT> &src1,
@@ -38,7 +38,7 @@ struct ROWSUM {
 
 template <typename T>
 struct ROWMAX {
-    static constexpr T InitVal = Padding<T>::Min;
+    static constexpr typename Padding<T>::Type InitVal = Padding<T>::Min;
     using TIN = T;
     using TOUT = T;
     static PTO_INTERNAL void Accumulate(RegTensor<TOUT> &dst, RegTensor<TOUT> &src0, RegTensor<TOUT> &src1,
@@ -54,7 +54,7 @@ struct ROWMAX {
 
 template <typename T>
 struct ROWMIN {
-    static constexpr T InitVal = Padding<T>::Max;
+    static constexpr typename Padding<T>::Type InitVal = Padding<T>::Max;
     using TIN = T;
     using TOUT = T;
     static PTO_INTERNAL void Accumulate(RegTensor<TOUT> &dst, RegTensor<TOUT> &src0, RegTensor<TOUT> &src1,
@@ -127,7 +127,7 @@ PTO_INTERNAL void TRowReduceImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
         MaskReg pregdst = CreatePredicate<TIN>(destItems);
         if (version == VFIMPL_2D_NO_POST_UPDATE) {
             for (uint16_t i = 0; i < (uint16_t)rows; ++i) {
-                vbr(vregdst, ReduceOp::InitVal);
+                vbr((RegTensor<typename Padding<typename ReduceOp::TIN>::Type> &)vregdst, ReduceOp::InitVal);
                 uint32_t sreg = cols;
                 for (uint16_t j = 0; j < (uint16_t)repeatTimes; j++) {
                     MaskReg preg = CreatePredicate<TIN>(sreg);
@@ -147,7 +147,7 @@ PTO_INTERNAL void TRowReduceImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
             }
         } else {
             for (uint16_t i = 0; i < (uint16_t)rows; ++i) {
-                vbr(vregdst, ReduceOp::InitVal);
+                vbr((RegTensor<typename Padding<typename ReduceOp::TIN>::Type> &)vregdst, ReduceOp::InitVal);
                 __ubuf__ TIN *row_ptr = srcPtr + i * TileDataIn::RowStride;
                 uint32_t sreg = cols;
                 for (uint16_t j = 0; j < (uint16_t)repeatTimes; j++) {
