@@ -42,7 +42,7 @@ pto.txors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TXORS(TileDataDst& dst, TileDataSrc& src0, typename TileDataSrc::DType scalar, typename TileDataTmp &tmp, WaitEvents&... events);
+PTO_INST RecordEvent TXORS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## 约束
@@ -94,7 +94,7 @@ void example() {
 
 ```text
 %dst = txors %src, %scalar : !pto.tile<...>, i32
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.txors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 

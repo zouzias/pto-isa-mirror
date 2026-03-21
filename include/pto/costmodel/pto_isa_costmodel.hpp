@@ -18,6 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <type_traits>
 #include <pto/common/pto_tile.hpp>
 #include "pto/costmodel/op_struct.hpp"
+#include "pto/costmodel/costmodel_types.hpp"
 #include "pto/costmodel/a2a3/TBinOp.hpp"
 #include "pto/costmodel/a2a3/TBinSOp.hpp"
 #include "pto/costmodel/a2a3/TUnaryOp.hpp"
@@ -26,6 +27,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TRowExpand.hpp"
 
 namespace pto {
+constexpr float HEAD_CYCLE_13 = 13.0;
+constexpr float HEAD_CYCLE_14 = 14.0;
+constexpr float COMPLETE_CYCLE_17 = 17.0;
+constexpr float COMPLETE_CYCLE_18 = 18.0;
+constexpr float COMPLETE_CYCLE_19 = 19.0;
+constexpr float COMPLETE_CYCLE_20 = 20.0;
+constexpr float COMPLETE_CYCLE_26 = 26.0;
+constexpr float COMPLETE_CYCLE_27 = 27.0;
+constexpr float COMPLETE_CYCLE_28 = 28.0;
+constexpr float COMPLETE_CYCLE_29 = 29.0;
+constexpr float COMPUTING_CYCLE_1 = 1.0;
+constexpr float COMPUTING_CYCLE_2 = 2.0;
+constexpr float COMPUTING_CYCLE_4 = 4.0;
+constexpr float INTERVAL_CYCLE_18 = 18.0;
+constexpr float MASK_1 = 1.0;
+constexpr float BANK_CONFLICT_0 = 0.0;
 
 enum class DataType
 {

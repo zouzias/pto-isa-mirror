@@ -42,7 +42,7 @@ pto.tands ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TANDS(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, WaitEvents&... events);
+PTO_INST RecordEvent TANDS(TileDataDst &dst, TileDataSrc &src, typename TileDataDst::DType scalar, WaitEvents &... events);
 ```
 
 ## 约束
@@ -90,7 +90,7 @@ void example() {
 
 ```text
 %dst = tands %src, %scalar : !pto.tile<...>, i32
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tands ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 

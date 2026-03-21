@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifdef PTO_NPU_ARCH_A2A3
 #include "pto/npu/a2a3/TAssign.hpp"
+#include "pto/npu/a2a3/TAlias.hpp"
 #include "pto/npu/a2a3/TSync.hpp"
 #include "pto/npu/a2a3/TAdd.hpp"
 #include "pto/npu/a2a3/TAnd.hpp"
@@ -26,6 +27,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TShr.hpp"
 #include "pto/npu/a2a3/TMins.hpp"
 #include "pto/npu/a2a3/TAddS.hpp"
+#include "pto/npu/a2a3/TAxpy.hpp"
 #include "pto/npu/a2a3/TSubS.hpp"
 #include "pto/npu/a2a3/TRem.hpp"
 #include "pto/npu/a2a3/TRemS.hpp"
@@ -70,6 +72,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TSetFmatrix.hpp"
 #include "pto/npu/a2a3/TSetImg2colRpt.hpp"
 #include "pto/npu/a2a3/TSetImg2colPadding.hpp"
+#include "pto/npu/a2a3/TSubView.hpp"
 #ifdef _DEBUG
 #include "pto/npu/a2a3/TPrint.hpp"
 #endif
@@ -111,6 +114,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifdef PTO_NPU_ARCH_A5
 #include "pto/npu/a5/TAssign.hpp"
+#include "pto/npu/a5/TAlias.hpp"
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/TAdd.hpp"
 #include "pto/npu/a5/TAnd.hpp"
@@ -129,6 +133,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TFMod.hpp"
 #include "pto/npu/a5/TRem.hpp"
 #include "pto/npu/a5/TAddS.hpp"
+#include "pto/npu/a5/TAxpy.hpp"
 #include "pto/npu/a5/TSubS.hpp"
 #include "pto/npu/a5/TDivS.hpp"
 #include "pto/npu/a5/TMulS.hpp"
@@ -136,6 +141,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TMin.hpp"
 #include "pto/npu/a5/TMax.hpp"
 #include "pto/npu/a5/TLoad.hpp"
+#include "pto/npu/a5/TSubView.hpp"
 #ifdef __DAV_VEC__
 #include "pto/npu/a5/TCvt.hpp"
 #endif
@@ -184,6 +190,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TSetImg2colRpt.hpp"
 #include "pto/npu/a5/TSetImg2colPadding.hpp"
 #include "pto/npu/a5/TPack.hpp"
+#include "pto/npu/a5/THistogram.hpp"
 #ifdef _DEBUG
 #include "pto/npu/a5/TPrint.hpp"
 #endif

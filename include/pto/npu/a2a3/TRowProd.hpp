@@ -37,15 +37,7 @@ __tf__ PTO_INTERNAL void TRowProd(typename TileDataOut::TileDType __out__ dst,
     for (unsigned row = 0; row < validRow; ++row, dstPtr += dstRowStride, srcPtr += srcRowStride) {
         set_vector_mask(0, elemsPerBlock);
 
-        if constexpr (std::is_same_v<T, float>) {
-            vector_dup(tmpPtr, (T)1.0f, 1, 1, 1, 0, 0);
-        } else if constexpr (std::is_same_v<T, int32_t>) {
-            vector_dup(tmpPtr, (T)1, 1, 1, 1, 0, 0);
-        } else if constexpr (std::is_same_v<T, int16_t>) {
-            vector_dup(tmpPtr, (T)1, 1, 1, 1, 0, 0);
-        } else if constexpr (std::is_same_v<T, half>) {
-            vector_dup(tmpPtr, (T)1.0f, 1, 1, 1, 0, 0);
-        }
+        vector_dup(tmpPtr, (T)1.0f, 1, 1, 1, 0, 0);
         pipe_barrier(PIPE_V);
 
         for (unsigned block = 0; block < blocksPerRow; ++block) {

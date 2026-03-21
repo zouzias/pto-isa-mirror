@@ -52,6 +52,7 @@ fi
 if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/build_st.py -r $RUN_TYPE -v a3 -t all
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t taxpy -g TAXPYTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolexpand -g TCOLEXPANDTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolsum -g TCOLSUMTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolprod -g TCOLPRODTest.case1
@@ -141,6 +142,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py -r $RUN_TYPE -v a3 -t all
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t taxpy
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolexpand
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolsum
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a3 -t tcolprod
@@ -223,6 +225,7 @@ fi
 if [ "$ENABLE_A5" = "true" ]; then
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/build_st.py -r $RUN_TYPE -v a5 -t all
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t taxpy -g TAXPYTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdequant -g TDEQUANTTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfmods -g TFMODSTest.case1
@@ -257,7 +260,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t texpands_mat -g TEXPANDSTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t textract -g TEXTRACTTest.case1
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfillpad -g TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX
-    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tgather -g TGATHERTest.case1_float
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tgather -g TGATHERTest.case1_float_32x1024_16x64
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tgatherb -g TGATHERBTest.case_float_2x128_2x16_2x128
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tload -g TLOADTest.case_float_GT_2_2_2_256_60_VT_256_64_BLK8_PADMAX
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tload_mix -g TLOADMIXTest.1_1_1_59_119_1_1_1_64_128_64_128_int8_t_ND2NZ
@@ -333,9 +336,15 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpack -g TPACKTEST.case_fp32_fp8_128x128
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpack -g TPACKTEST.case_fp16_fp8_128x128
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t thistogram -g THISTOGRAMTest.case_8x128_LSB_k104
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tinsert -g TInsertTest.case_acc2mat_1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tinsert -g TInsertTest.case_nz_1
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tinsert -g TInsertTest.case_nd_1
+
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py -r $RUN_TYPE -v a5 -t all
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t taxpy
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdequant
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfmod
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tfmods
@@ -434,6 +443,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tdequant
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tconcat
     python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tpack
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t thistogram
+    python3 tests/script/$RUN_MODE -r $RUN_TYPE -v a5 -t tinsert
   fi
 fi
 

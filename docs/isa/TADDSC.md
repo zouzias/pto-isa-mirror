@@ -25,13 +25,13 @@ Synchronous form:
 %dst = taddsc %src0, %scalar, %src1 : !pto.tile<...>, f32, !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.taddsc %src0, %scalar, %src1 : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.taddsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -48,7 +48,19 @@ PTO_INST RecordEvent TADDSC(TileData& dst, TileData& src0, typename TileData::DT
 
 ## Constraints
 
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+- **Implementation checks (A2A3)**:
+    - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
+- **Implementation checks (A5)**:
+    - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
+- **Common constraints**:
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `dst`, `src0` and `src1` must have the same valid row/col.
+    - Scalar type must match the Tile data type.
+- **Valid region**:
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
@@ -87,7 +99,7 @@ void example() {
 
 ```text
 %dst = taddsc %src0, %scalar, %src1 : !pto.tile<...>, f32, !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.taddsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
