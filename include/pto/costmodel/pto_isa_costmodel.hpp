@@ -27,22 +27,20 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TRowExpand.hpp"
 
 namespace pto {
-constexpr float HEAD_CYCLE_13 = 13.0;
-constexpr float HEAD_CYCLE_14 = 14.0;
-constexpr float COMPLETE_CYCLE_17 = 17.0;
-constexpr float COMPLETE_CYCLE_18 = 18.0;
-constexpr float COMPLETE_CYCLE_19 = 19.0;
-constexpr float COMPLETE_CYCLE_20 = 20.0;
-constexpr float COMPLETE_CYCLE_26 = 26.0;
-constexpr float COMPLETE_CYCLE_27 = 27.0;
-constexpr float COMPLETE_CYCLE_28 = 28.0;
-constexpr float COMPLETE_CYCLE_29 = 29.0;
-constexpr float COMPUTING_CYCLE_1 = 1.0;
-constexpr float COMPUTING_CYCLE_2 = 2.0;
-constexpr float COMPUTING_CYCLE_4 = 4.0;
-constexpr float INTERVAL_CYCLE_18 = 18.0;
-constexpr float MASK_1 = 1.0;
-constexpr float BANK_CONFLICT_0 = 0.0;
+constexpr float NUM_13 = 13.0;
+constexpr float NUM_14 = 14.0;
+constexpr float NUM_17 = 17.0;
+constexpr float NUM_18 = 18.0;
+constexpr float NUM_19 = 19.0;
+constexpr float NUM_20 = 20.0;
+constexpr float NUM_26 = 26.0;
+constexpr float NUM_27 = 27.0;
+constexpr float NUM_28 = 28.0;
+constexpr float NUM_29 = 29.0;
+constexpr float NUM_1 = 1.0;
+constexpr float NUM_2 = 2.0;
+constexpr float NUM_4 = 4.0;
+constexpr float NUM_0 = 0.0;
 
 enum class DataType
 {
@@ -113,131 +111,131 @@ public:
 
     void InitDefaultParams()
     {
-        SetParam("PIPE_V", DataType::INT16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        SetParam("PIPE_V", DataType::INT32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        SetParam("PIPE_V", DataType::FP16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        SetParam("PIPE_V", DataType::FP32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("PIPE_V", DataType::INT16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("PIPE_V", DataType::INT32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("PIPE_V", DataType::FP16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("PIPE_V", DataType::FP32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
 
-        SetParam("vector_dup", DataType::INT16, 14.0, 14.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vector_dup", DataType::INT32, 14.0, 14.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vector_dup", DataType::FP16, 14.0, 14.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vector_dup", DataType::FP32, 14.0, 14.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vector_dup", DataType::INT16, NUM_14, NUM_14, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vector_dup", DataType::INT32, NUM_14, NUM_14, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vector_dup", DataType::FP16, NUM_14, NUM_14, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vector_dup", DataType::FP32, NUM_14, NUM_14, NUM_1, NUM_18, NUM_1, NUM_0);
 
         // TADD
-        SetParam("vadd", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vadd", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vadd", DataType::FP16, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vadd", DataType::FP32, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vadd", DataType::INT16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vadd", DataType::INT32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vadd", DataType::FP16, NUM_14, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vadd", DataType::FP32, NUM_14, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // TMUL
-        SetParam("vmul", DataType::INT16, 14.0, 18.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmul", DataType::INT32, 14.0, 18.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmul", DataType::FP16, 14.0, 20.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmul", DataType::FP32, 14.0, 20.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmul", DataType::INT16, NUM_14, NUM_18, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmul", DataType::INT32, NUM_14, NUM_18, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmul", DataType::FP16, NUM_14, NUM_20, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmul", DataType::FP32, NUM_14, NUM_20, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // TSUB
-        SetParam("vsub", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vsub", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vsub", DataType::FP16, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vsub", DataType::FP32, 14.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vsub", DataType::INT16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vsub", DataType::INT32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vsub", DataType::FP16, NUM_14, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vsub", DataType::FP32, NUM_14, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // TEXP
-        SetParam("vexp", DataType::FP16, 13.0, 28.0, 4.0, 18.0, 1.0, 0.0);
-        SetParam("vexp", DataType::FP32, 13.0, 26.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vexp", DataType::FP16, NUM_13, NUM_28, NUM_4, NUM_18, NUM_1, NUM_0);
+        SetParam("vexp", DataType::FP32, NUM_13, NUM_26, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // TSQRT
-        SetParam("vsqrt", DataType::FP16, 13.0, 29.0, 4.0, 18.0, 1.0, 0.0);
-        SetParam("vsqrt", DataType::FP32, 13.0, 27.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vsqrt", DataType::FP16, NUM_13, NUM_29, NUM_4, NUM_18, NUM_1, NUM_0);
+        SetParam("vsqrt", DataType::FP32, NUM_13, NUM_27, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // TADDS
-        SetParam("vadds", DataType::INT16, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vadds", DataType::INT32, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vadds", DataType::FP16, 14.0, 19.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vadds", DataType::FP32, 14.0, 19.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vadds", DataType::INT16, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vadds", DataType::INT32, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vadds", DataType::FP16, NUM_14, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vadds", DataType::FP32, NUM_14, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
 
         // TABS
-        SetParam("vabs", DataType::INT16, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vabs", DataType::INT32, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vabs", DataType::FP16, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vabs", DataType::FP32, 13.0, 19.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vabs", DataType::INT16, NUM_13, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vabs", DataType::INT32, NUM_13, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vabs", DataType::FP16, NUM_13, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vabs", DataType::FP32, NUM_13, NUM_19, NUM_1, NUM_18, NUM_1, NUM_0);
 
         // TMINS
-        SetParam("vmins", DataType::INT16, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vmins", DataType::INT32, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vmins", DataType::FP16, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vmins", DataType::FP32, 14.0, 17.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmins", DataType::INT16, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmins", DataType::INT32, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmins", DataType::FP16, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmins", DataType::FP32, NUM_14, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
 
         // TMULS
-        SetParam("vmuls", DataType::INT16, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vmuls", DataType::INT32, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vmuls", DataType::FP16, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vmuls", DataType::FP32, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vmuls", DataType::INT16, NUM_14, NUM_18, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmuls", DataType::INT32, NUM_14, NUM_18, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmuls", DataType::FP16, NUM_14, NUM_20, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vmuls", DataType::FP32, NUM_14, NUM_20, NUM_1, NUM_18, NUM_1, NUM_0);
 
         // TDIVS
-        SetParam("vdivs", DataType::INT16, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vdivs", DataType::INT32, 14.0, 18.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vdivs", DataType::FP16, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vdivs", DataType::FP32, 14.0, 20.0, 1.0, 18.0, 1.0, 0.0);
+        SetParam("vdivs", DataType::INT16, NUM_14, NUM_18, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vdivs", DataType::INT32, NUM_14, NUM_18, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vdivs", DataType::FP16, NUM_14, NUM_20, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vdivs", DataType::FP32, NUM_14, NUM_20, NUM_1, NUM_18, NUM_1, NUM_0);
 
         // vmax
-        SetParam("vmax", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmax", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmax", DataType::FP16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmax", DataType::FP32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmax", DataType::INT16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmax", DataType::INT32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmax", DataType::FP16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmax", DataType::FP32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // vmin
-        SetParam("vmin", DataType::INT16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmin", DataType::INT32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmin", DataType::FP16, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vmin", DataType::FP32, 14.0, 17.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vmin", DataType::INT16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmin", DataType::INT32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmin", DataType::FP16, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vmin", DataType::FP32, NUM_14, NUM_17, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // vcgmax
-        SetParam("vcgmax", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vcgmax", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcgmax", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcgmax", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcgmax", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmax", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmax", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmax", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // vcgmin
-        SetParam("vcgmin", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vcgmin", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcgmin", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcgmin", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcgmin", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmin", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmin", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgmin", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // vcgadd
-        SetParam("vcgadd", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vcgadd", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcgadd", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcgadd", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcgadd", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgadd", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgadd", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcgadd", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // vcmax
-        SetParam("vcmax", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vcmax", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcmax", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcmax", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcmax", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmax", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmax", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmax", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // vcmin
-        SetParam("vcmin", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vcmin", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcmin", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcmin", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcmin", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmin", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmin", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcmin", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // vcadd
-        SetParam("vcadd", DataType::INT16, 13.0, 17.0, 1.0, 18.0, 1.0, 0.0);
-        SetParam("vcadd", DataType::INT32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcadd", DataType::FP16, 13.0, 21.0, 2.0, 18.0, 1.0, 0.0);
-        SetParam("vcadd", DataType::FP32, 13.0, 19.0, 2.0, 18.0, 1.0, 0.0);
+        SetParam("vcadd", DataType::INT16, NUM_13, NUM_17, NUM_1, NUM_18, NUM_1, NUM_0);
+        SetParam("vcadd", DataType::INT32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcadd", DataType::FP16, NUM_13, 21.0, NUM_2, NUM_18, NUM_1, NUM_0);
+        SetParam("vcadd", DataType::FP32, NUM_13, NUM_19, NUM_2, NUM_18, NUM_1, NUM_0);
 
         // copy_ubuf_to_ubuf (memory copy, 0-cycle placeholder)
-        SetParam("copy_ubuf_to_ubuf", DataType::INT16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        SetParam("copy_ubuf_to_ubuf", DataType::INT32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        SetParam("copy_ubuf_to_ubuf", DataType::FP16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        SetParam("copy_ubuf_to_ubuf", DataType::FP32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("copy_ubuf_to_ubuf", DataType::INT16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("copy_ubuf_to_ubuf", DataType::INT32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("copy_ubuf_to_ubuf", DataType::FP16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("copy_ubuf_to_ubuf", DataType::FP32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
 
         // mask (mask set instruction, 0-cycle placeholder)
-        SetParam("mask", DataType::INT16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        SetParam("mask", DataType::INT32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        SetParam("mask", DataType::FP16, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
-        SetParam("mask", DataType::FP32, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        SetParam("mask", DataType::INT16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("mask", DataType::INT32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("mask", DataType::FP16, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
+        SetParam("mask", DataType::FP32, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0, NUM_0);
     }
 
     // TBinOp

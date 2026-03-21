@@ -61,10 +61,10 @@ template <typename Op>
 PTO_INTERNAL void BinS2LNormModeHead(std::vector<CostModelStats> &stats, unsigned validRow, unsigned numRepeatPerLine)
 {
     if (numRepeatPerLine > 0) {
-        unsigned numLoop = numRepeatPerLine / REPEAT_MAX;
+        unsigned loopNum = numRepeatPerLine / REPEAT_MAX;
         unsigned remainAfterLoop = numRepeatPerLine % REPEAT_MAX;
         for (int i = 0; i < validRow; i++) {
-            for (int j = 0; j < numLoop; j++) {
+            for (int j = 0; j < loopNum; j++) {
                 Op::BinSInstr(stats, 0);
                 RecordRepeat(stats.back(), REPEAT_MAX);
             }
@@ -81,11 +81,11 @@ PTO_INTERNAL void BinS2LNormModeTail(std::vector<CostModelStats> &stats, unsigne
 {
     constexpr bool strideOverFlag =
         (dstStride / blockSizeElem > REPEAT_STRIDE_MAX) || (srcStride / blockSizeElem > REPEAT_STRIDE_MAX);
-    unsigned numLoop = 0;
+    unsigned loopNum = 0;
     unsigned remainAfterLoop = validRow;
     if constexpr (Rows > pto::REPEAT_MAX) {
-        numLoop = validRow / REPEAT_MAX;
-        for (int i = 0; i < numLoop; i++) {
+        loopNum = validRow / REPEAT_MAX;
+        for (int i = 0; i < loopNum; i++) {
             if constexpr (strideOverFlag) {
                 for (uint64_t j = 0; j < REPEAT_MAX; j++) {
                     Op::BinSInstr(stats, 0);
@@ -120,9 +120,9 @@ PTO_INTERNAL void BinS2LNormModeRowRpt(std::vector<CostModelStats> &stats, unsig
     constexpr bool condRowRpt =
         ((Rows <= pto::REPEAT_MAX) && (dstRepeatStride <= REPEAT_STRIDE_MAX) && (srcRepeatStride <= REPEAT_STRIDE_MAX));
     if constexpr (condRowRpt) {
-        unsigned numLoop = validCol / elementsPerRepeat;
+        unsigned loopNum = validCol / elementsPerRepeat;
         unsigned tailElements = validCol % elementsPerRepeat;
-        for (unsigned i = 0; i < numLoop; i++) {
+        for (unsigned i = 0; i < loopNum; i++) {
             Op::BinSInstr(stats, 0);
             RecordRepeat(stats.back(), static_cast<uint8_t>(validRow), false, true);
         }

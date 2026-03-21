@@ -67,10 +67,10 @@ template <typename Op>
 PTO_INTERNAL void Bin2LNormModeHead(std::vector<CostModelStats> &stats, unsigned validRow, unsigned numRepeatPerLine)
 {
     if (numRepeatPerLine > 0) {
-        unsigned numLoop = numRepeatPerLine / REPEAT_MAX;
+        unsigned loopNum = numRepeatPerLine / REPEAT_MAX;
         unsigned remainAfterLoop = numRepeatPerLine % REPEAT_MAX;
         for (int i = 0; i < validRow; i++) {
-            for (int j = 0; j < numLoop; j++) {
+            for (int j = 0; j < loopNum; j++) {
                 Op::BinInstr(stats, 0);
                 RecordRepeat(stats.back(), REPEAT_MAX);
             }
@@ -85,11 +85,11 @@ PTO_INTERNAL void Bin2LNormModeHead(std::vector<CostModelStats> &stats, unsigned
 template <typename Op, bool strideOverFlag, unsigned Rows>
 PTO_INTERNAL void RecordTailLoopRepeats(std::vector<CostModelStats> &stats, unsigned validRow)
 {
-    unsigned numLoop = 0;
+    unsigned loopNum = 0;
     unsigned remainAfterLoop = validRow;
     if constexpr (Rows > pto::REPEAT_MAX) {
-        numLoop = validRow / REPEAT_MAX;
-        for (int i = 0; i < numLoop; i++) {
+        loopNum = validRow / REPEAT_MAX;
+        for (int i = 0; i < loopNum; i++) {
             if constexpr (strideOverFlag) {
                 for (uint64_t j = 0; j < REPEAT_MAX; j++) {
                     Op::BinInstr(stats, 0);
@@ -118,9 +118,9 @@ PTO_INTERNAL void RecordTailLoopRepeats(std::vector<CostModelStats> &stats, unsi
 template <typename Op, unsigned elementsPerRepeat>
 PTO_INTERNAL void RecordRowRptLoopRepeats(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
-    unsigned numLoop = validCol / elementsPerRepeat;
+    unsigned loopNum = validCol / elementsPerRepeat;
     unsigned tailElements = validCol % elementsPerRepeat;
-    for (unsigned i = 0; i < numLoop; i++) {
+    for (unsigned i = 0; i < loopNum; i++) {
         Op::BinInstr(stats, 0);
         RecordRepeat(stats.back(), static_cast<uint8_t>(validRow), false, true);
     }
@@ -223,12 +223,12 @@ PTO_INTERNAL void BinaryInstr(std::vector<CostModelStats> &stats, unsigned valid
 template <typename Op, unsigned elemPerBlk, unsigned dstStride, unsigned src0Stride, unsigned src1Stride>
 PTO_INTERNAL void Bin2LNormModeTail(std::vector<CostModelStats> &stats, unsigned validRow, unsigned remain)
 {
-    unsigned numLoop = validRow / REPEAT_MAX;
+    unsigned loopNum = validRow / REPEAT_MAX;
     unsigned remainAfterLoop = validRow % REPEAT_MAX;
     constexpr bool src0StrideOverFlag = (src0Stride / elemPerBlk > REPEAT_STRIDE_MAX);
     constexpr bool src1StrideOverFlag = (src1Stride / elemPerBlk > REPEAT_STRIDE_MAX);
     constexpr bool dstStrideOverFlag = (dstStride / elemPerBlk > REPEAT_STRIDE_MAX);
-    for (int i = 0; i < numLoop; i++) {
+    for (int i = 0; i < loopNum; i++) {
         if constexpr (src0StrideOverFlag || src1StrideOverFlag || dstStrideOverFlag) {
             for (uint64_t j = 0; j < REPEAT_MAX; j++) {
                 Op::BinInstr(stats, 0);
