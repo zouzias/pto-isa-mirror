@@ -278,10 +278,11 @@ public:
 
     // TRowReduceOpPredict
     template <typename Op, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
-    void RowReduceOpPredictCycle(const std::string& instr_name, TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
+    void RowReduceOpPredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
     {
         using T = typename TileDataIn::DType;
-        std::vector<CostModelStats> stats = runRowReduceOps<T, Op, TileDataOut, TileDataIn, TileDataTmp>(instr_name, dst, src, tmp);
+        std::vector<CostModelStats> stats =
+            runRowReduceOps<T, Op, TileDataOut, TileDataIn, TileDataTmp>(instr_name, dst, src, tmp);
         float totalCycles = PredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
         std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
@@ -289,7 +290,7 @@ public:
 
     // TColMax / TColMin
     template <typename Op, typename TileDataOut, typename TileDataIn>
-    void ColReduceOpPredictCycle(const std::string& instr_name, TileDataOut &dst, TileDataIn &src)
+    void ColReduceOpPredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src)
     {
         using T = typename TileDataIn::DType;
         std::vector<CostModelStats> stats = runColReduceOps<T, Op, TileDataOut, TileDataIn>(dst, src);
@@ -300,12 +301,12 @@ public:
 
     // TColSum
     template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
-    void ColSumOpPredictCycle(const std::string& instr_name, TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp,
+    void ColSumOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp,
                               bool IsBinary)
     {
         using T = typename TileDataSrc::DType;
-        std::vector<CostModelStats> stats = runColSumOp<T, TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp,
-                                                                                                  IsBinary);
+        std::vector<CostModelStats> stats =
+            runColSumOp<T, TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp, IsBinary);
         float totalCycles = PredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
         std::cout << "Instr: " << instr_name << " Cycles: " << totalCycles << std::endl;
@@ -325,7 +326,6 @@ public:
     template <typename T>
     float PredictCycle(const std::vector<CostModelStats> stats)
     {
-
         float total_cycles = 0.0f;
         bool pipe = true;
         bool first = true;
@@ -343,15 +343,16 @@ public:
             float masked_repeat_penalty = params.per_repeat_cycles * (params.mask_effect - 1.0f);
             int effective_repeats = stat.total_repeats > 0 ? stat.total_repeats - 1 : 0;
 
-            if (first){
+            if (first) {
                 total_cycles += params.startup_cycles;
             }
 
-            if (pipe){
+            if (pipe) {
                 total_cycles += params.completion_cycles;
             }
 
-            total_cycles += effective_repeats * params.per_repeat_cycles + stat.masked_repeats * masked_repeat_penalty + params.bank_conflict_cycles;
+            total_cycles += effective_repeats * params.per_repeat_cycles + stat.masked_repeats * masked_repeat_penalty +
+                            params.bank_conflict_cycles;
 
             fprintf(stdout, "[CostModel] Instr: %s Cycles: %f\n", instr_name.c_str(), total_cycles);
         }

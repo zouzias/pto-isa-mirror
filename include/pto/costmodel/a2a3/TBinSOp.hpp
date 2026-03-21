@@ -18,13 +18,13 @@ namespace pto {
 constexpr unsigned PTO_SMALL_RPT = 4;
 
 template <typename Op>
-PTO_INTERNAL void BinS1LCountMode(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void BinS1LCountMode(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     Op::BinSInstr(stats, 0);
 }
 
 template <typename Op, unsigned elementsPerRepeat>
-PTO_INTERNAL void BinS1LNormMode(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void BinS1LNormMode(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     unsigned numElements = validRow * validCol;
     unsigned headRepeats = numElements / elementsPerRepeat;
@@ -40,7 +40,7 @@ PTO_INTERNAL void BinS1LNormMode(std::vector<CostModelStats>& stats, unsigned va
 }
 
 template <typename Op>
-PTO_INTERNAL void BinS2LCountMode(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void BinS2LCountMode(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     for (unsigned i = 0; i < validRow; i++) {
         Op::BinSInstr(stats, 0);
@@ -48,7 +48,7 @@ PTO_INTERNAL void BinS2LCountMode(std::vector<CostModelStats>& stats, unsigned v
 }
 
 template <typename Op, unsigned elementsPerRepeat>
-PTO_INTERNAL void BinS2LNormModeColVLAlign(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void BinS2LNormModeColVLAlign(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     unsigned headRepeats = validCol / elementsPerRepeat;
     for (uint32_t i = 0; i < validRow; i++) {
@@ -58,7 +58,7 @@ PTO_INTERNAL void BinS2LNormModeColVLAlign(std::vector<CostModelStats>& stats, u
 }
 
 template <typename Op>
-PTO_INTERNAL void BinS2LNormModeHead(std::vector<CostModelStats>& stats, unsigned validRow, unsigned numRepeatPerLine)
+PTO_INTERNAL void BinS2LNormModeHead(std::vector<CostModelStats> &stats, unsigned validRow, unsigned numRepeatPerLine)
 {
     if (numRepeatPerLine > 0) {
         unsigned numLoop = numRepeatPerLine / REPEAT_MAX;
@@ -77,7 +77,7 @@ PTO_INTERNAL void BinS2LNormModeHead(std::vector<CostModelStats>& stats, unsigne
 }
 
 template <typename Op, unsigned Rows, unsigned blockSizeElem, unsigned dstStride, unsigned srcStride>
-PTO_INTERNAL void BinS2LNormModeTail(std::vector<CostModelStats>& stats, unsigned validRow, unsigned numRemainPerLine)
+PTO_INTERNAL void BinS2LNormModeTail(std::vector<CostModelStats> &stats, unsigned validRow, unsigned numRemainPerLine)
 {
     constexpr bool strideOverFlag =
         (dstStride / blockSizeElem > REPEAT_STRIDE_MAX) || (srcStride / blockSizeElem > REPEAT_STRIDE_MAX);
@@ -113,7 +113,7 @@ PTO_INTERNAL void BinS2LNormModeTail(std::vector<CostModelStats>& stats, unsigne
 
 template <typename Op, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstStride,
           unsigned srcStride>
-PTO_INTERNAL void BinS2LNormModeRowRpt(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void BinS2LNormModeRowRpt(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned dstRepeatStride = dstStride / blockSizeElem;
     constexpr unsigned srcRepeatStride = srcStride / blockSizeElem;
@@ -145,7 +145,7 @@ PTO_INTERNAL void BinS2LNormModeRowRpt(std::vector<CostModelStats>& stats, unsig
 
 template <typename Op, typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
           unsigned dstStride, unsigned srcStride>
-PTO_INTERNAL void TBinSInstrNonContinuousPath(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void TBinSInstrNonContinuousPath(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned normColRepeat = TileDataDst::Cols / elementsPerRepeat;
     constexpr bool countMode = (normColRepeat > 1) && ((TileDataDst::Rows * normColRepeat) < PTO_SMALL_RPT) &&
@@ -168,7 +168,7 @@ PTO_INTERNAL void TBinSInstrNonContinuousPath(std::vector<CostModelStats>& stats
 
 template <typename Op, typename TileDataDst, typename TileDataSrc, unsigned elementsPerRepeat, unsigned blockSizeElem,
           unsigned dstStride, unsigned srcStride>
-PTO_INTERNAL void TBinSInstr(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void TBinSInstr(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     constexpr bool tileDataContinue =
         ((TileDataDst::Cols == TileDataDst::ValidCol) && (TileDataSrc::Cols == TileDataSrc::ValidCol)) ||

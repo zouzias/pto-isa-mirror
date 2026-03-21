@@ -21,15 +21,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-
 // BinOp
 struct AddOp {
-    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats>& stats, uint8_t repeats)
+    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats> &stats, uint8_t repeats)
     {
         stats.emplace_back("vadd", repeats);
     }
 
-    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
                                       uint8_t src0RepeatStride, uint8_t src1RepeatStride)
     {
         stats.emplace_back("vadd", repeats);
@@ -37,12 +36,12 @@ struct AddOp {
 };
 
 struct MulOp {
-    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats>& stats, uint8_t repeats)
+    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats> &stats, uint8_t repeats)
     {
         stats.emplace_back("vmul", repeats);
     }
 
-    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
                                       uint8_t src0RepeatStride, uint8_t src1RepeatStride)
     {
         stats.emplace_back("vmul", repeats);
@@ -50,12 +49,12 @@ struct MulOp {
 };
 
 struct SubOp {
-    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats>& stats, uint8_t repeats)
+    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats> &stats, uint8_t repeats)
     {
         stats.emplace_back("vsub", repeats);
     }
 
-    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
                                       uint8_t src0RepeatStride, uint8_t src1RepeatStride)
     {
         stats.emplace_back("vsub", repeats);
@@ -64,12 +63,12 @@ struct SubOp {
 
 // BinSOp
 struct AddSOp {
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats>& stats, uint8_t repeats)
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats)
     {
         stats.emplace_back("vadds", repeats);
     }
 
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
                                        uint8_t srcRepeatStride)
     {
         stats.emplace_back("vadds", repeats);
@@ -77,40 +76,38 @@ struct AddSOp {
 };
 
 struct MulSOp {
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats>& stats, uint8_t repeats)
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats)
     {
         stats.emplace_back("vmuls", repeats);
     }
 
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
                                        uint8_t srcRepeatStride)
     {
         stats.emplace_back("vmuls", repeats);
     }
 };
-
 
 struct MinSOp {
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats>& stats, uint8_t repeats)
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats)
     {
         stats.emplace_back("vmin", repeats);
     }
 
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
                                        uint8_t srcRepeatStride)
     {
         stats.emplace_back("vmin", repeats);
     }
 };
 
-
 struct SDivOp {
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats>& stats, uint8_t repeats)
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats)
     {
         stats.emplace_back("vdivs", repeats);
     }
 
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
                                        uint8_t srcRepeatStride)
     {
         stats.emplace_back("vdivs", repeats);
@@ -118,22 +115,21 @@ struct SDivOp {
 };
 
 struct DivSOp {
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats>& stats, uint8_t repeats)
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats)
     {
         stats.emplace_back("vdivs", repeats);
     }
 
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
                                        uint8_t srcRepeatStride)
     {
         stats.emplace_back("vdivs", repeats);
     }
 };
 
-
 // UnaryOp
 struct AbsOp {
-    PTO_INTERNAL static void UnaryInstr(std::vector<CostModelStats>& stats, uint8_t repeats,
+    PTO_INTERNAL static void UnaryInstr(std::vector<CostModelStats> &stats, uint8_t repeats,
                                         uint8_t dstStride = BLOCK_MAX_PER_REPEAT,
                                         uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
@@ -142,7 +138,7 @@ struct AbsOp {
 };
 
 struct ExpOp {
-    PTO_INTERNAL static void UnaryInstr(std::vector<CostModelStats>& stats, uint8_t repeats,
+    PTO_INTERNAL static void UnaryInstr(std::vector<CostModelStats> &stats, uint8_t repeats,
                                         uint8_t dstStride = BLOCK_MAX_PER_REPEAT,
                                         uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
@@ -151,7 +147,7 @@ struct ExpOp {
 };
 
 struct SqrtOp {
-    PTO_INTERNAL static void UnaryInstr(std::vector<CostModelStats>& stats, uint8_t repeats,
+    PTO_INTERNAL static void UnaryInstr(std::vector<CostModelStats> &stats, uint8_t repeats,
                                         uint8_t dstStride = BLOCK_MAX_PER_REPEAT,
                                         uint8_t srcStride = BLOCK_MAX_PER_REPEAT)
     {
@@ -159,25 +155,23 @@ struct SqrtOp {
     }
 };
 
-
 // Reduce Op Backend logistic
 template <typename InstrOp>
 struct TRowReduceOp {
-    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats>& stats, uint8_t rptTimes,
-                                      uint16_t dstRptStride, uint16_t src0RptStride, uint16_t src1RptStride)
+    PTO_INTERNAL static void BinInstr(std::vector<CostModelStats> &stats, uint8_t rptTimes, uint16_t dstRptStride,
+                                      uint16_t src0RptStride, uint16_t src1RptStride)
     {
         InstrOp::BinInstrImpl(stats, rptTimes, dstRptStride, src0RptStride, src1RptStride);
-
     }
 
-    PTO_INTERNAL static void ReduceInstr(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
+    PTO_INTERNAL static void ReduceInstr(std::vector<CostModelStats> &stats, uint8_t rptTimes, uint16_t dstRptStride,
                                          uint16_t srcBlkStride, uint16_t srcRptStride)
     {
         InstrOp::ReduceInstrImpl(stats, rptTimes, dstRptStride, srcBlkStride, srcRptStride);
     }
 
     template <int Rows, int ValidRow, int Cols, int ValidCol>
-    PTO_INTERNAL static void ReduceOptFP32_64x128(std::vector<CostModelStats>& stats)
+    PTO_INTERNAL static void ReduceOptFP32_64x128(std::vector<CostModelStats> &stats)
     {
         InstrOp::GroupReduceInstrImpl(stats, ValidRow * 2, 1, 1, 8);
         stats.emplace_back("PIPE_V");
@@ -189,7 +183,7 @@ struct TRowReduceOp {
     }
 
     template <int Rows, int ValidRow, int Cols, int ValidCol>
-    PTO_INTERNAL static void ReduceOptFP32_32x256(std::vector<CostModelStats>& stats)
+    PTO_INTERNAL static void ReduceOptFP32_32x256(std::vector<CostModelStats> &stats)
     {
         InstrOp::GroupReduceInstrImpl(stats, ValidRow * 4, 1, 1, 8);
         stats.emplace_back("PIPE_V");
@@ -203,7 +197,7 @@ struct TRowReduceOp {
     }
 
     template <int Rows, int ValidRow, int Cols, int ValidCol>
-    PTO_INTERNAL static void ReduceOptFP32_16x512(std::vector<CostModelStats>& stats)
+    PTO_INTERNAL static void ReduceOptFP32_16x512(std::vector<CostModelStats> &stats)
     {
         InstrOp::GroupReduceInstrImpl(stats, ValidRow * 8, 1, 1, 8);
         stats.emplace_back("PIPE_V");
@@ -215,7 +209,7 @@ struct TRowReduceOp {
     }
 
     template <int Rows, int ValidRow, int Cols, int ValidCol>
-    PTO_INTERNAL static void ReduceOptFP32_8x1024(std::vector<CostModelStats>& stats)
+    PTO_INTERNAL static void ReduceOptFP32_8x1024(std::vector<CostModelStats> &stats)
     {
         InstrOp::GroupReduceInstrImpl(stats, ValidRow * 16, 1, 1, 8);
         stats.emplace_back("PIPE_V");
@@ -229,7 +223,7 @@ struct TRowReduceOp {
     }
 
     template <bool CntModeEn, int Cols, uint32_t DstStride, uint32_t SrcStride, uint8_t ElemPerRpt>
-    PTO_INTERNAL static void ReduceInstrByMode(std::vector<CostModelStats>& stats, unsigned rptTimes)
+    PTO_INTERNAL static void ReduceInstrByMode(std::vector<CostModelStats> &stats, unsigned rptTimes)
     {
         if constexpr (DstStride > B16_REPEAT_MAX) {
             for (int i = 0; i < rptTimes; i++) {
@@ -244,7 +238,7 @@ struct TRowReduceOp {
 
     template <bool CntModeEn, int DstCols, int Src0Cols, int Src1Cols, uint32_t DstStride, uint32_t Src0RptStride,
               uint32_t Src1RptStride, uint8_t ElemPerRpt>
-    PTO_INTERNAL static void BinInstrByMode(std::vector<CostModelStats>& stats, unsigned rptTimes)
+    PTO_INTERNAL static void BinInstrByMode(std::vector<CostModelStats> &stats, unsigned rptTimes)
     {
         if constexpr (DstStride > REPEAT_MAX || Src0RptStride > REPEAT_MAX || Src1RptStride > REPEAT_MAX) {
             for (int i = 0; i < rptTimes; i++) {
@@ -258,30 +252,29 @@ struct TRowReduceOp {
     }
 
     template <int TmpCols, int SrcCols, uint32_t TmpStride, uint32_t SrcStride, uint8_t ElemPerRpt>
-    PTO_INTERNAL static void FillTmp(std::vector<CostModelStats>& stats, int srcRptPerRow, int validRow, int validCol)
+    PTO_INTERNAL static void FillTmp(std::vector<CostModelStats> &stats, int srcRptPerRow, int validRow, int validCol)
     {
         if (validCol >= 2 * ElemPerRpt) {
-            BinInstrByMode<true, TmpCols, SrcCols, SrcCols, TmpStride, SrcStride, SrcStride, ElemPerRpt>(
-                stats, validRow);
+            BinInstrByMode<true, TmpCols, SrcCols, SrcCols, TmpStride, SrcStride, SrcStride, ElemPerRpt>(stats,
+                                                                                                         validRow);
             stats.emplace_back("PIPE_V");
         }
     }
 
     template <int TmpCols, int SrcCols, uint32_t TmpStride, uint32_t SrcStride, uint8_t ElemPerRpt>
-    PTO_INTERNAL static void TmpProc(std::vector<CostModelStats>& stats, int srcRptPerRow, int validRow)
+    PTO_INTERNAL static void TmpProc(std::vector<CostModelStats> &stats, int srcRptPerRow, int validRow)
     {
         for (int i = 2; i < srcRptPerRow; ++i) {
-            BinInstrByMode<true, TmpCols, TmpCols, SrcCols, TmpStride, TmpStride, SrcStride, ElemPerRpt>(
-                stats, validRow);
+            BinInstrByMode<true, TmpCols, TmpCols, SrcCols, TmpStride, TmpStride, SrcStride, ElemPerRpt>(stats,
+                                                                                                         validRow);
             stats.emplace_back("PIPE_V");
         }
     }
 };
 
-
 // RowSum Op Backend logistic
 struct TRowSumOp : TRowReduceOp<TRowSumOp> {
-    PTO_INTERNAL static void BinInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
+    PTO_INTERNAL static void BinInstrImpl(std::vector<CostModelStats> &stats, uint8_t rptTimes, uint16_t dstRptStride,
                                           uint16_t src0RptStride, uint16_t src1RptStride, uint8_t dstBlockStride = 1,
                                           uint8_t src0BlockStride = 1, uint8_t src1BlockStride = 1)
     {
@@ -289,23 +282,22 @@ struct TRowSumOp : TRowReduceOp<TRowSumOp> {
                            src0RptStride, src1RptStride);
     }
 
-    PTO_INTERNAL static void ReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
-                                             uint16_t srcBlkStride, uint16_t srcRptStride)
+    PTO_INTERNAL static void ReduceInstrImpl(std::vector<CostModelStats> &stats, uint8_t rptTimes,
+                                             uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
         stats.emplace_back("vcadd", rptTimes, dstRptStride, srcBlkStride, srcRptStride, "ONLY_VALUE");
     }
 
-    PTO_INTERNAL static void GroupReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes,
+    PTO_INTERNAL static void GroupReduceInstrImpl(std::vector<CostModelStats> &stats, uint8_t rptTimes,
                                                   uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
         stats.emplace_back("vcgadd", rptTimes, dstRptStride, srcBlkStride, srcRptStride, "None");
     }
 };
 
-
 // RowMax Op Backend logistic
 struct TRowMaxOp : TRowReduceOp<TRowMaxOp> {
-    PTO_INTERNAL static void BinInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
+    PTO_INTERNAL static void BinInstrImpl(std::vector<CostModelStats> &stats, uint8_t rptTimes, uint16_t dstRptStride,
                                           uint16_t src0RptStride, uint16_t src1RptStride, uint8_t dstBlockStride = 1,
                                           uint8_t src0BlockStride = 1, uint8_t src1BlockStride = 1)
     {
@@ -313,13 +305,13 @@ struct TRowMaxOp : TRowReduceOp<TRowMaxOp> {
                            src0RptStride, src1RptStride);
     }
 
-    PTO_INTERNAL static void ReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
-                                             uint16_t srcBlkStride, uint16_t srcRptStride)
+    PTO_INTERNAL static void ReduceInstrImpl(std::vector<CostModelStats> &stats, uint8_t rptTimes,
+                                             uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
         stats.emplace_back("vcmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride, "ONLY_VALUE");
     }
 
-    PTO_INTERNAL static void GroupReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes,
+    PTO_INTERNAL static void GroupReduceInstrImpl(std::vector<CostModelStats> &stats, uint8_t rptTimes,
                                                   uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
         stats.emplace_back("vcgmax", rptTimes, dstRptStride, srcBlkStride, srcRptStride, "None");
@@ -327,7 +319,7 @@ struct TRowMaxOp : TRowReduceOp<TRowMaxOp> {
 };
 
 struct TRowMinOp : TRowReduceOp<TRowMinOp> {
-    PTO_INTERNAL static void BinInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
+    PTO_INTERNAL static void BinInstrImpl(std::vector<CostModelStats> &stats, uint8_t rptTimes, uint16_t dstRptStride,
                                           uint16_t src0RptStride, uint16_t src1RptStride, uint8_t dstBlockStride = 1,
                                           uint8_t src0BlockStride = 1, uint8_t src1BlockStride = 1)
     {
@@ -335,23 +327,21 @@ struct TRowMinOp : TRowReduceOp<TRowMinOp> {
                            src0RptStride, src1RptStride);
     }
 
-    PTO_INTERNAL static void ReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
-                                             uint16_t srcBlkStride, uint16_t srcRptStride)
+    PTO_INTERNAL static void ReduceInstrImpl(std::vector<CostModelStats> &stats, uint8_t rptTimes,
+                                             uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
         stats.emplace_back("vcmin", rptTimes, dstRptStride, srcBlkStride, srcRptStride, "ONLY_VALUE");
     }
 
-    PTO_INTERNAL static void GroupReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes,
+    PTO_INTERNAL static void GroupReduceInstrImpl(std::vector<CostModelStats> &stats, uint8_t rptTimes,
                                                   uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
         stats.emplace_back("vcgmin", rptTimes, dstRptStride, srcBlkStride, srcRptStride, "None");
     }
 };
 
-
-
 struct COLMAXOp {
-    PTO_INTERNAL static void ReduceInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void ReduceInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
                                          uint8_t src0RepeatStride, uint8_t src1RepeatStride)
     {
         stats.emplace_back("vmax", repeats, 1, 1, 1, dstRepeatStride, src0RepeatStride, src1RepeatStride);
@@ -359,7 +349,7 @@ struct COLMAXOp {
 };
 
 struct COLMINOp {
-    PTO_INTERNAL static void ReduceInstr(std::vector<CostModelStats>& stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void ReduceInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
                                          uint8_t src0RepeatStride, uint8_t src1RepeatStride)
     {
         stats.emplace_back("vmin", repeats, 1, 1, 1, dstRepeatStride, src0RepeatStride, src1RepeatStride);
@@ -369,7 +359,7 @@ struct COLMINOp {
 template <typename InstrOp>
 struct TColReduceOp {
     template <int dupSrcStride>
-    PTO_INTERNAL static void ColReduceInstrByMode(std::vector<CostModelStats>& stats, int numRepeatPerLine,
+    PTO_INTERNAL static void ColReduceInstrByMode(std::vector<CostModelStats> &stats, int numRepeatPerLine,
                                                   int numRemainPerLine, int elementsPerLine, int validRow)
     {
         if (numRepeatPerLine > 0) {
@@ -378,7 +368,6 @@ struct TColReduceOp {
                 InstrOp::ReduceInstr(stats, 0, 8, 8, 8);
                 stats.emplace_back("PIPE_V");
             }
-
         }
 
         if (numRemainPerLine > 0) {
@@ -393,6 +382,5 @@ struct TColReduceOp {
 };
 
 } // namespace pto
-
 
 #endif // PTO_ISA_COSTMODEL_OP_STRUCT_HPP

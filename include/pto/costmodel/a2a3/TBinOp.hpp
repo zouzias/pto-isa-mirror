@@ -18,13 +18,13 @@ namespace pto {
 constexpr unsigned SMALL_RPT_BINOP = 4;
 
 template <typename Op>
-PTO_INTERNAL void Bin1LCountMode(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Bin1LCountMode(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     Op::BinInstr(stats, 0);
 }
 
 template <typename Op>
-PTO_INTERNAL void Bin2LCountMode(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Bin2LCountMode(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     for (unsigned i = 0; i < validRow; i++) {
         Op::BinInstr(stats, 0);
@@ -32,14 +32,14 @@ PTO_INTERNAL void Bin2LCountMode(std::vector<CostModelStats>& stats, unsigned va
 }
 
 template <typename Op>
-PTO_INTERNAL void Bin1LNormModeSmall(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Bin1LNormModeSmall(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     Op::BinInstr(stats, 0);
     RecordRepeat(stats.back(), static_cast<uint8_t>(validRow), false, true);
 }
 
 template <typename Op, unsigned elementsPerRepeat>
-PTO_INTERNAL void Bin1LNormMode(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Bin1LNormMode(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     unsigned numElements = validRow * validCol;
     unsigned headRepeats = numElements / elementsPerRepeat;
@@ -54,7 +54,7 @@ PTO_INTERNAL void Bin1LNormMode(std::vector<CostModelStats>& stats, unsigned val
 }
 
 template <typename Op, unsigned elementsPerRepeat>
-PTO_INTERNAL void Bin2LNormModeColVLAlign(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Bin2LNormModeColVLAlign(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     unsigned headRepeats = validCol / elementsPerRepeat;
     for (unsigned i = 0; i < validRow; i++) {
@@ -64,7 +64,7 @@ PTO_INTERNAL void Bin2LNormModeColVLAlign(std::vector<CostModelStats>& stats, un
 }
 
 template <typename Op>
-PTO_INTERNAL void Bin2LNormModeHead(std::vector<CostModelStats>& stats, unsigned validRow, unsigned numRepeatPerLine)
+PTO_INTERNAL void Bin2LNormModeHead(std::vector<CostModelStats> &stats, unsigned validRow, unsigned numRepeatPerLine)
 {
     if (numRepeatPerLine > 0) {
         unsigned numLoop = numRepeatPerLine / REPEAT_MAX;
@@ -83,7 +83,7 @@ PTO_INTERNAL void Bin2LNormModeHead(std::vector<CostModelStats>& stats, unsigned
 }
 
 template <typename Op, bool strideOverFlag, unsigned Rows>
-PTO_INTERNAL void RecordTailLoopRepeats(std::vector<CostModelStats>& stats, unsigned validRow)
+PTO_INTERNAL void RecordTailLoopRepeats(std::vector<CostModelStats> &stats, unsigned validRow)
 {
     unsigned numLoop = 0;
     unsigned remainAfterLoop = validRow;
@@ -116,7 +116,7 @@ PTO_INTERNAL void RecordTailLoopRepeats(std::vector<CostModelStats>& stats, unsi
 }
 
 template <typename Op, unsigned elementsPerRepeat>
-PTO_INTERNAL void RecordRowRptLoopRepeats(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void RecordRowRptLoopRepeats(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     unsigned numLoop = validCol / elementsPerRepeat;
     unsigned tailElements = validCol % elementsPerRepeat;
@@ -131,14 +131,14 @@ PTO_INTERNAL void RecordRowRptLoopRepeats(std::vector<CostModelStats>& stats, un
 }
 
 template <typename Op, unsigned Rows, unsigned blockSizeElem, unsigned stride>
-PTO_INTERNAL void Bin2LNormModeTail(std::vector<CostModelStats>& stats, unsigned validRow, unsigned numRemainPerLine)
+PTO_INTERNAL void Bin2LNormModeTail(std::vector<CostModelStats> &stats, unsigned validRow, unsigned numRemainPerLine)
 {
     constexpr bool strideOverFlag = (stride / blockSizeElem > REPEAT_STRIDE_MAX);
     RecordTailLoopRepeats<Op, strideOverFlag, Rows>(stats, validRow);
 }
 
 template <typename Op, unsigned Rows, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
-PTO_INTERNAL void Bin2LNormModeRowRpt(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Bin2LNormModeRowRpt(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned repeatStride = rowStride / blockSizeElem;
     constexpr bool condRowRpt = ((Rows <= pto::REPEAT_MAX) && (repeatStride <= REPEAT_STRIDE_MAX));
@@ -158,7 +158,7 @@ PTO_INTERNAL void Bin2LNormModeRowRpt(std::vector<CostModelStats>& stats, unsign
 }
 
 template <typename Op, typename TileData, unsigned elementsPerRepeat>
-PTO_INTERNAL void BinaryInstrFastPath(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void BinaryInstrFastPath(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned totalRepeats = (TileData::Rows * TileData::Cols + elementsPerRepeat - 1) / elementsPerRepeat;
     constexpr bool nonVLAligned = (((TileData::Cols % elementsPerRepeat) != 0) && (TileData::Cols > elementsPerRepeat));
@@ -170,7 +170,7 @@ PTO_INTERNAL void BinaryInstrFastPath(std::vector<CostModelStats>& stats, unsign
 }
 
 template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
-PTO_INTERNAL void BinaryInstrGeneralPath(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void BinaryInstrGeneralPath(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     // Continuous check in runtime(merge axis)
     if ((TileData::Cols == validCol) || (validRow == 1))
@@ -199,13 +199,13 @@ PTO_INTERNAL void BinaryInstrGeneralPath(std::vector<CostModelStats>& stats, uns
             }
         } else {
             Bin2LNormModeRowRpt<Op, TileData::Rows, elementsPerRepeat, blockSizeElem, rowStride>(stats, validRow,
-                                                                                                  validCol);
+                                                                                                 validCol);
         }
     }
 }
 
 template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
-PTO_INTERNAL void BinaryInstr(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void BinaryInstr(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     // Small shape optimization
     if constexpr ((TileData::Rows <= pto::REPEAT_MAX) && (TileData::Cols < elementsPerRepeat)) {
@@ -221,7 +221,7 @@ PTO_INTERNAL void BinaryInstr(std::vector<CostModelStats>& stats, unsigned valid
 }
 
 template <typename Op, unsigned elemPerBlk, unsigned dstStride, unsigned src0Stride, unsigned src1Stride>
-PTO_INTERNAL void Bin2LNormModeTail(std::vector<CostModelStats>& stats, unsigned validRow, unsigned remain)
+PTO_INTERNAL void Bin2LNormModeTail(std::vector<CostModelStats> &stats, unsigned validRow, unsigned remain)
 {
     unsigned numLoop = validRow / REPEAT_MAX;
     unsigned remainAfterLoop = validRow % REPEAT_MAX;
@@ -255,7 +255,7 @@ PTO_INTERNAL void Bin2LNormModeTail(std::vector<CostModelStats>& stats, unsigned
 
 template <typename Op, unsigned elemPerRpt, unsigned elemPerBlk, unsigned dstStride, unsigned src0Stride,
           unsigned src1Stride>
-PTO_INTERNAL void Bin2LNormModeRowRpt(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Bin2LNormModeRowRpt(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     unsigned rptPerLine = validCol / elemPerRpt;
     unsigned remain = validCol % elemPerRpt;
@@ -267,7 +267,7 @@ PTO_INTERNAL void Bin2LNormModeRowRpt(std::vector<CostModelStats>& stats, unsign
 
 template <typename Op, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned dstRowStride,
           unsigned src0RowStride, unsigned src1RowStride>
-PTO_INTERNAL void BinaryInstr(std::vector<CostModelStats>& stats, unsigned validRows, unsigned validCols)
+PTO_INTERNAL void BinaryInstr(std::vector<CostModelStats> &stats, unsigned validRows, unsigned validCols)
 {
     Bin2LNormModeRowRpt<Op, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
         stats, validRows, validCols);
@@ -303,8 +303,8 @@ PTO_INTERNAL std::vector<CostModelStats> runBinaryOp(TileDataDst &dst, TileDataS
         constexpr unsigned src0RowStride = TileDataSrc0::RowStride;
         constexpr unsigned src1RowStride = TileDataSrc1::RowStride;
 
-        return TBinaryOp<Op, TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride,
-                         src1RowStride>(dst.GetValidRow(), dst.GetValidCol());
+        return TBinaryOp<Op, TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
+            dst.GetValidRow(), dst.GetValidCol());
     }
 }
 

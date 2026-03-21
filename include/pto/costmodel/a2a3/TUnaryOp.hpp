@@ -18,13 +18,13 @@ namespace pto {
 #define SMALL_RPT (4)
 
 template <typename Op>
-PTO_INTERNAL void Unary1LCountMode(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Unary1LCountMode(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     Op::UnaryInstr(stats, 0);
 }
 
 template <typename Op, unsigned nRepeatElem>
-PTO_INTERNAL void Unary1LNormMode(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Unary1LNormMode(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     unsigned nElem = validRow * validCol;
     unsigned headRepeats = nElem / nRepeatElem;
@@ -39,7 +39,7 @@ PTO_INTERNAL void Unary1LNormMode(std::vector<CostModelStats>& stats, unsigned v
 }
 
 template <typename Op>
-PTO_INTERNAL void Unary2LCountMode(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Unary2LCountMode(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     for (uint32_t i = 0; i < validRow; i++) {
         Op::UnaryInstr(stats, 0);
@@ -47,7 +47,7 @@ PTO_INTERNAL void Unary2LCountMode(std::vector<CostModelStats>& stats, unsigned 
 }
 
 template <typename Op, unsigned nRepeatElem>
-PTO_INTERNAL void Unary2LNormModeColVLAlign(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Unary2LNormModeColVLAlign(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     unsigned headRepeats = validCol / nRepeatElem;
     for (uint32_t i = 0; i < validRow; i++) {
@@ -57,7 +57,7 @@ PTO_INTERNAL void Unary2LNormModeColVLAlign(std::vector<CostModelStats>& stats, 
 }
 
 template <typename Op>
-PTO_INTERNAL void Unary2LNormModeHead(std::vector<CostModelStats>& stats, unsigned validRow, unsigned nRepeatPerLine)
+PTO_INTERNAL void Unary2LNormModeHead(std::vector<CostModelStats> &stats, unsigned validRow, unsigned nRepeatPerLine)
 {
     if (nRepeatPerLine) {
         unsigned loop = nRepeatPerLine / REPEAT_MAX;
@@ -76,7 +76,7 @@ PTO_INTERNAL void Unary2LNormModeHead(std::vector<CostModelStats>& stats, unsign
 }
 
 template <typename Op, typename DstTile, typename SrcTile, unsigned blockSizeElem>
-PTO_INTERNAL void Unary2LNormModeTail(std::vector<CostModelStats>& stats, unsigned validRow, unsigned nRemainPerLine)
+PTO_INTERNAL void Unary2LNormModeTail(std::vector<CostModelStats> &stats, unsigned validRow, unsigned nRemainPerLine)
 {
     constexpr unsigned dstStride = DstTile::RowStride / blockSizeElem;
     constexpr unsigned srcStride = SrcTile::RowStride / blockSizeElem;
@@ -112,7 +112,7 @@ PTO_INTERNAL void Unary2LNormModeTail(std::vector<CostModelStats>& stats, unsign
 }
 
 template <typename Op, typename DstTile, typename SrcTile, unsigned nRepeatElem>
-PTO_INTERNAL void Unary2LNormModeRowRpt(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Unary2LNormModeRowRpt(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     using T = typename DstTile::DType;
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
@@ -144,7 +144,7 @@ PTO_INTERNAL void Unary2LNormModeRowRpt(std::vector<CostModelStats>& stats, unsi
 }
 
 template <typename Op, typename DstTile, typename SrcTile, unsigned nRepeatElem>
-PTO_INTERNAL void Unary2LProcess(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void Unary2LProcess(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     constexpr unsigned normColRepeat = DstTile::Cols / nRepeatElem;
     if constexpr ((normColRepeat > 1) && ((DstTile::Rows * normColRepeat) < SMALL_RPT)) {
@@ -162,7 +162,7 @@ PTO_INTERNAL void Unary2LProcess(std::vector<CostModelStats>& stats, unsigned va
 }
 
 template <typename Op, typename DstTile, typename SrcTile>
-PTO_INTERNAL void TUnaryOp(std::vector<CostModelStats>& stats, unsigned validRow, unsigned validCol)
+PTO_INTERNAL void TUnaryOp(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
 {
     using T = typename DstTile::DType;
     constexpr unsigned nRepeatElem = REPEAT_BYTE / sizeof(T);

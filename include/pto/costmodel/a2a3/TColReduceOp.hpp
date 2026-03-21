@@ -16,7 +16,7 @@
 namespace pto {
 
 template <typename InstrOp, typename T, typename TileDataOut, typename TileDataIn, unsigned srcstride>
-PTO_INTERNAL void ColReduceInstr(std::vector<CostModelStats>& stats, int validRow, int validCol)
+PTO_INTERNAL void ColReduceInstr(std::vector<CostModelStats> &stats, int validRow, int validCol)
 {
     using ReduceOp = TColReduceOp<InstrOp>;
     constexpr int DTypeSize = sizeof(T);
@@ -57,7 +57,7 @@ PTO_INTERNAL std::vector<CostModelStats> runColReduceOps(TileDataOut &dst, TileD
 }
 
 template <typename T, int SrcStride, int DstStride>
-PTO_INTERNAL void BinarySum(std::vector<CostModelStats>& stats, int validRow, int validCol)
+PTO_INTERNAL void BinarySum(std::vector<CostModelStats> &stats, int validRow, int validCol)
 {
     stats.emplace_back("mask", 0, validCol);
     for (uint32_t i = 0; i < validRow / 2; i++) {
@@ -73,7 +73,7 @@ PTO_INTERNAL void BinarySum(std::vector<CostModelStats>& stats, int validRow, in
 }
 
 template <typename T, int SrcStride, int DstStride>
-PTO_INTERNAL void SequentialSum(std::vector<CostModelStats>& stats, int validRow, int validCol)
+PTO_INTERNAL void SequentialSum(std::vector<CostModelStats> &stats, int validRow, int validCol)
 {
     stats.emplace_back("mask", 0, validCol);
     for (int i = 1; i < validRow; i++) {
@@ -81,12 +81,11 @@ PTO_INTERNAL void SequentialSum(std::vector<CostModelStats>& stats, int validRow
         stats.emplace_back("PIPE_V");
     }
     stats.emplace_back("mask", -1, -1);
-
 }
 
 template <typename T, typename TileDataDst, typename TileDataSrc, typename TileDataTmp, int srcStride, int dstStride,
           int tmpStride, bool IsBinary>
-PTO_INTERNAL void TColSum(std::vector<CostModelStats>& stats, int validRow, int validCol)
+PTO_INTERNAL void TColSum(std::vector<CostModelStats> &stats, int validRow, int validCol)
 {
     constexpr int DTypeSize = sizeof(T);
     int lenBurst = (validCol * DTypeSize + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
@@ -116,7 +115,8 @@ PTO_INTERNAL void TColSum(std::vector<CostModelStats>& stats, int validRow, int 
 }
 
 template <typename T, typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
-PTO_INTERNAL std::vector<CostModelStats> runColSumOp(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, bool IsBinary)
+PTO_INTERNAL std::vector<CostModelStats> runColSumOp(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp,
+                                                     bool IsBinary)
 {
     std::vector<CostModelStats> stats;
     int validRow = src.GetValidRow();

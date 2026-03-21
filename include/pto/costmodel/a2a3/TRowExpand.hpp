@@ -26,7 +26,8 @@ PTO_INTERNAL std::vector<CostModelStats> TRowExpand(int validCol, int validRow)
     int transValidCol = TRANS::TransSize(validCol);
     constexpr int elemPerRpt = REPEAT_BYTE / static_cast<int>(sizeof(T));
     int totalRepeats = validRow * validCol / elemPerRpt;
-    if (totalRepeats < 1) totalRepeats = 1;
+    if (totalRepeats < 1)
+        totalRepeats = 1;
 
     stats.emplace_back("mask", 0, transValidCol);
     stats.emplace_back("vector_dup", 1, 1, 0, 1, 1, BLOCK_MAX_PER_REPEAT, 0);
