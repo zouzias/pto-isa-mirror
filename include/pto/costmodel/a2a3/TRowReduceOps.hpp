@@ -163,6 +163,8 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
                     stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1);
                 } else if (instr_name == "TROWMIN") {
                     stats.emplace_back("vmin", 1, 0, 0, 1, 0, 0, 1);
+                } else if (instr_name == "TROWSUM") {
+                    stats.emplace_back("vadd", 1, 0, 0, 1, 0, 0, 1);
                 }
                 //pipe_barrier(PIPE_V);
             }
@@ -176,6 +178,8 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
                     stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1);
                 } else if (instr_name == "TROWMIN") {
                     stats.emplace_back("vmin", 1, 0, 0, 1, 0, 0, 1);
+                } else if (instr_name == "TROWSUM") {
+                    stats.emplace_back("vadd", 1, 0, 0, 1, 0, 0, 1);
                 }
                 //pipe_barrier(PIPE_V);
                 stats.emplace_back("PIPE_V");

@@ -293,6 +293,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TMul.hpp"
 #include "pto/costmodel/a2a3/TMulS.hpp"
 #include "pto/costmodel/a2a3/TRowExpand.hpp"
+#include "pto/costmodel/a2a3/TRowSum.hpp"
 #include "pto/costmodel/a2a3/TRowMax.hpp"
 #include "pto/costmodel/a2a3/TRowMin.hpp"
 #include "pto/costmodel/a2a3/TSqrt.hpp"
