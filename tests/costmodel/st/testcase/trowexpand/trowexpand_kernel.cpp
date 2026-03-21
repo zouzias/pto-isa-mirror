@@ -60,4 +60,4 @@ template void LaunchTRowExpand<float, 64, 64, 64, 64, 91.0f, 1.0f>(float *out, f
 template void LaunchTRowExpand<aclFloat16, 64, 64, 64, 64, 59.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
 template void LaunchTRowExpand<int16_t, 64, 64, 64, 64, 59.0f, 1.0f>(int16_t *out, int16_t *src, void *stream);
 template void LaunchTRowExpand<aclFloat16, 16, 256, 16, 256, 59.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src,
-                                                                           void *stream);
+                                                                          void *stream);

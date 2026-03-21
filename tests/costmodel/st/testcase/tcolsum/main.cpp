@@ -32,10 +32,12 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling,
+          float accuracy>
 void LaunchTCOLSUM(T *out, T *src, void *stream);
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling,
+          float accuracy>
 void test_tcolsum()
 {
     size_t dstFileSize = kTCols_ * sizeof(T);

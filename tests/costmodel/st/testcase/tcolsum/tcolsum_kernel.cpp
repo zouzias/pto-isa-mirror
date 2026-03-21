@@ -14,7 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling,
+          float accuracy>
 AICORE inline void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src)
 {
     using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
@@ -48,11 +49,11 @@ AICORE inline void runTCOLSUM(__gm__ T __out__ *out, __gm__ T __in__ *src)
     float costResult = dstTile.GetCycle();
     float precision = 1 - fabs(profiling - costResult) / profiling;
     bool ret = precision >= accuracy;
-    printf("profiling: %f, costResult: %f, precision: %f, ret: %d\n", profiling, costResult, precision,  ret);
     EXPECT_TRUE(ret);
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling, float accuracy>
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, bool IsBinary, float profiling,
+          float accuracy>
 void LaunchTCOLSUM(T *out, T *src, void *stream)
 {
     if constexpr (std::is_same_v<T, aclFloat16>) {
@@ -63,4 +64,5 @@ void LaunchTCOLSUM(T *out, T *src, void *stream)
 }
 
 template void LaunchTCOLSUM<float, 64, 64, 64, 64, true, 2079.0f, 1.0f>(float *out, float *src, void *stream);
-template void LaunchTCOLSUM<aclFloat16, 16, 256, 16, 256, false, 495.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src, void *stream);
+template void LaunchTCOLSUM<aclFloat16, 16, 256, 16, 256, false, 495.0f, 1.0f>(aclFloat16 *out, aclFloat16 *src,
+                                                                               void *stream);

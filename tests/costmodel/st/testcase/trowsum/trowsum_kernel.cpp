@@ -46,7 +46,6 @@ AICORE void runTRowSum(__gm__ T __out__ *out, __gm__ T __in__ *src)
     float costResult = dstTile.GetCycle();
     float precision = 1 - fabs(profiling - costResult) / profiling;
     bool ret = precision >= accuracy;
-    printf("profiling: %f, costResult: %f, precision: %f, ret: %d\n", profiling, costResult, precision, ret);
     EXPECT_TRUE(ret);
 }
 

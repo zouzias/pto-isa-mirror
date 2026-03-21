@@ -142,23 +142,8 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
         constexpr unsigned elemsPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
         unsigned blocksPerRow = validCol / elemsPerBlock;
 
-        // set_mask_count();
-
         for (unsigned row = 0; row < validRow;) {
-            // set_vector_mask(0, elemsPerBlock);
-
-            // Initialize tmp with minimum value
-            if constexpr (std::is_same_v<T, int32_t>) {
-                // vector_dup(tmp, (T)std::numeric_limits<int32_t>::min(), 1, 1, 1, 0, 0);
-
-            } else {
-                // vector_dup(tmp, (T)std::numeric_limits<int16_t>::min(), 1, 1, 1, 0, 0);
-            }
-            // pipe_barrier(PIPE_V);
-
-            // Accumulate using vmax
             for (unsigned block = 0; block < blocksPerRow; ++block) {
-                // vmax(tmp, tmp, src + block * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
                 if (instr_name == "TROWMAX") {
                     stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1);
                 } else if (instr_name == "TROWMIN") {
@@ -166,14 +151,10 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
                 } else if (instr_name == "TROWSUM") {
                     stats.emplace_back("vadd", 1, 0, 0, 1, 0, 0, 1);
                 }
-                // pipe_barrier(PIPE_V);
             }
 
-            // Handle remaining elements
             unsigned elemsLessThanBlock = validCol % elemsPerBlock;
             if (elemsLessThanBlock > 0) {
-                // set_vector_mask(0, elemsLessThanBlock);
-
                 if (instr_name == "TROWMAX") {
                     stats.emplace_back("vmax", 1, 0, 0, 1, 0, 0, 1);
                 } else if (instr_name == "TROWMIN") {
@@ -181,17 +162,9 @@ PTO_INTERNAL std::vector<CostModelStats> TRowReduce(const std::string &instr_nam
                 } else if (instr_name == "TROWSUM") {
                     stats.emplace_back("vadd", 1, 0, 0, 1, 0, 0, 1);
                 }
-                // pipe_barrier(PIPE_V);
                 stats.emplace_back("PIPE_V");
             }
-
-            // pipe_barrier(PIPE_ALL);
-
-            // Final scalar reduction, no vector
         }
-
-        // set_mask_norm();
-        // set_vector_mask(-1, -1);
     } else {
         // Float/Half implementation (original vcmax-based)
         TRowReduceInstr<Op, T, TileDataOut, TileDataIn, TileDataTmp>(stats, validCol, validRow);

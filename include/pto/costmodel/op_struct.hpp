@@ -115,15 +115,15 @@ struct SDivOp {
 };
 
 struct DivSOp {
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats)
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t rpt)
     {
-        stats.emplace_back("vdivs", repeats);
+        stats.emplace_back("vdivs", rpt);
     }
 
-    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t repeats, uint8_t dstRepeatStride,
+    PTO_INTERNAL static void BinSInstr(std::vector<CostModelStats> &stats, uint8_t rpt, uint8_t dstRepeatStride,
                                        uint8_t srcRepeatStride)
     {
-        stats.emplace_back("vdivs", repeats);
+        stats.emplace_back("vdivs", rpt);
     }
 };
 
