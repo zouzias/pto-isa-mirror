@@ -11,32 +11,39 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TROW_EXPAND_OP_HPP
 #define TROW_EXPAND_OP_HPP
 
-#include <pto/common/constants.hpp>
+#include <pto/common/utils.hpp>
 #include "pto/costmodel/costmodel_types.hpp"
 
 namespace pto {
 
-// Models TROWEXPAND by treating the operation as filling all dst elements.
-// Total elements = validRow * validCol; divided into full repeats plus an optional masked tail.
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL CostModelStats runRowExpandOp(TileDataDst &dst, TileDataSrc &src)
+template <typename TileDataOut, typename TileDataIn>
+PTO_INTERNAL std::vector<CostModelStats> TRowExpand(int validCol, int validRow)
 {
-    using T = typename TileDataDst::DType;
-    CostModelStats stats;
-    constexpr unsigned elemPerRpt = REPEAT_BYTE / sizeof(T);
-    unsigned validRow = dst.GetValidRow();
-    unsigned validCol = dst.GetValidCol();
-    if (validRow == 0 || validCol == 0) {
-        return stats;
-    }
-    unsigned nElem = validRow * validCol;
-    unsigned headRepeats = nElem / elemPerRpt;
-    unsigned tailElements = nElem % elemPerRpt;
-    RecordRepeat(stats, headRepeats);
-    if (tailElements > 0) {
-        RecordRepeat(stats, 1, true);
+    std::vector<CostModelStats> stats;
+
+    using TRANS = B82B16Trait<typename TileDataOut::DType>;
+    int transValidCol = TRANS::TransSize(validCol);
+    // int transValidCol = validCol;
+    stats.emplace_back("mask", 0, transValidCol);
+    for (int i = 0; i < validRow; i++) {
+        stats.emplace_back("PIPE_V");
+        // vector_dup(dstPtr + i * dstStride, tempValue, 0, 1, 1, BLOCK_MAX_PER_REPEAT, 0);
+        stats.emplace_back("vector_dup", 1, 1, 0, 1, 1, BLOCK_MAX_PER_REPEAT, 0);
     }
     return stats;
+}
+
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL std::vector<CostModelStats> runRowExpandOp(TileDataDst &dst, TileDataSrc &src)
+{
+    int validCol = src.GetValidCol();
+    int validRow = src.GetValidRow();
+    std::vector<CostModelStats> stats;
+    if (validCol == 0 || validRow == 0) {
+        return stats;
+    }
+
+    return TRowExpand<TileDataDst, TileDataSrc>(validCol, validRow);
 }
 
 } // namespace pto

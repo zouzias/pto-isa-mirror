@@ -276,6 +276,28 @@ struct TRowReduceOp {
     }
 };
 
+struct TRowSumOp : TRowReduceOp<TRowSumOp> {
+    PTO_INTERNAL static void BinInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
+                                          uint16_t src0RptStride, uint16_t src1RptStride, uint8_t dstBlockStride = 1,
+                                          uint8_t src0BlockStride = 1, uint8_t src1BlockStride = 1)
+    {
+        stats.emplace_back("vadd", rptTimes, dstBlockStride, src0BlockStride, src1BlockStride, dstRptStride,
+                           src0RptStride, src1RptStride);
+    }
+
+    PTO_INTERNAL static void ReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
+                                             uint16_t srcBlkStride, uint16_t srcRptStride)
+    {
+        stats.emplace_back("vcadd", rptTimes, dstRptStride, srcBlkStride, srcRptStride, "ONLY_VALUE");
+    }
+
+    PTO_INTERNAL static void GroupReduceInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes,
+                                                  uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
+    {
+        stats.emplace_back("vcgadd", rptTimes, dstRptStride, srcBlkStride, srcRptStride, "None");
+    }
+};
+
 struct TRowMaxOp : TRowReduceOp<TRowMaxOp> {
     PTO_INTERNAL static void BinInstrImpl(std::vector<CostModelStats>& stats, uint8_t rptTimes, uint16_t dstRptStride,
                                           uint16_t src0RptStride, uint16_t src1RptStride, uint8_t dstBlockStride = 1,
