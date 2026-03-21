@@ -127,7 +127,9 @@ set(ALL_TESTCASES
     tcolsum
     tcolprod
     tcolmax
+    tcolargmax
     tcolmin
+    tcolargmin
     tsort32
     trowexpand
     trowexpandadd
