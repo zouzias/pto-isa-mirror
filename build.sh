@@ -198,13 +198,13 @@ run_all_st() {
   chmod +x ./tests/run_st.sh
   ARGS=" "
   if [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "FALSE" ]; then
-    ARGS+="a3 "
+    ARGS+="--a3 "
   elif [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ARGS+="a5 "
+    ARGS+="--a5 "
   elif [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ARGS+="a3_a5 "
+    ARGS+="--a3_a5 "
   else
-    ARGS+="a3 "
+    ARGS+="--a3 "
   fi
   ARGS+="--$RUN_TYPE --all "
   if [ "$AUTO_MODE" == "TRUE" ]; then
