@@ -241,6 +241,9 @@ TEST_F(TInsertTest, case_nd_2)
 template <int32_t testKey>
 void launchTInsertNDVec(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
 
+template <int32_t testKey>
+void launchTInsertNDVecScalar(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
+
 template <int32_t testKey, typename dType>
 void testTInsertNDVec(int32_t srcRows, int32_t srcCols, int32_t dstRows, int32_t dstCols)
 {
@@ -320,4 +323,86 @@ TEST_F(TInsertTest, case_nd_vec_5)
 TEST_F(TInsertTest, case_nd_vec_6)
 {
     testTInsertNDVec<6, float>(8, 8, 16, 24);
+}
+
+TEST_F(TInsertTest, case_nd_vec_7)
+{
+    testTInsertNDVec<7, float>(8, 8, 16, 24);
+}
+
+TEST_F(TInsertTest, case_nd_vec_8)
+{
+    testTInsertNDVec<8, uint16_t>(8, 16, 16, 48);
+}
+
+TEST_F(TInsertTest, case_nd_vec_9)
+{
+    testTInsertNDVec<9, int8_t>(32, 32, 64, 64);
+}
+
+template <int32_t testKey, typename dType>
+void testTInsertNDVecScalar(int32_t dstRows, int32_t dstCols)
+{
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    constexpr size_t minAlignedCols = 32 / sizeof(dType);
+    size_t srcByteSize = 1 * minAlignedCols * sizeof(dType);
+    size_t dstByteSize = dstRows * dstCols * sizeof(dType);
+    uint8_t *outHost, *srcHost, *dstInitHost;
+    uint8_t *outDevice, *srcDevice, *dstInitDevice;
+
+    aclrtMallocHost((void **)(&outHost), dstByteSize);
+    aclrtMallocHost((void **)(&srcHost), srcByteSize);
+    aclrtMallocHost((void **)(&dstInitHost), dstByteSize);
+
+    aclrtMalloc((void **)&outDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dstInitDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/src_input.bin", srcByteSize, srcHost, srcByteSize);
+    ReadFile(GetGoldenDir() + "/dst_init.bin", dstByteSize, dstInitHost, dstByteSize);
+
+    aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(dstInitDevice, dstByteSize, dstInitHost, dstByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    launchTInsertNDVecScalar<testKey>(outDevice, srcDevice, dstInitDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(outHost, dstByteSize, outDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    WriteFile(GetGoldenDir() + "/output.bin", outHost, dstByteSize);
+
+    aclrtFree(outDevice);
+    aclrtFree(srcDevice);
+    aclrtFree(dstInitDevice);
+    aclrtFreeHost(outHost);
+    aclrtFreeHost(srcHost);
+    aclrtFreeHost(dstInitHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<dType> golden(dstByteSize / sizeof(dType));
+    std::vector<dType> devFinal(dstByteSize / sizeof(dType));
+    ReadFile(GetGoldenDir() + "/golden_output.bin", dstByteSize, golden.data(), dstByteSize);
+    ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
+    bool ret = ResultCmp(golden, devFinal, 0.0f);
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TInsertTest, case_nd_vec_10)
+{
+    testTInsertNDVecScalar<1, float>(16, 16);
+}
+
+TEST_F(TInsertTest, case_nd_vec_11)
+{
+    testTInsertNDVecScalar<2, uint16_t>(32, 32);
+}
+
+TEST_F(TInsertTest, case_nd_vec_12)
+{
+    testTInsertNDVecScalar<3, int8_t>(64, 64);
 }

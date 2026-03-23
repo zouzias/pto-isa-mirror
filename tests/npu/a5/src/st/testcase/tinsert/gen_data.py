@@ -120,6 +120,9 @@ if __name__ == "__main__":
         "TInsertTest.case_nd_vec_4",
         "TInsertTest.case_nd_vec_5",
         "TInsertTest.case_nd_vec_6",
+        "TInsertTest.case_nd_vec_7",
+        "TInsertTest.case_nd_vec_8",
+        "TInsertTest.case_nd_vec_9",
     ]
 
     # (dtype, src_rows, src_cols, dst_rows, dst_cols, idx_row, idx_col)
@@ -130,6 +133,9 @@ if __name__ == "__main__":
         (np.int8, 32, 32, 64, 64, 0, 32),
         (np.float16, 16, 16, 32, 48, 4, 16),
         (np.float32, 8, 8, 16, 24, 3, 8),
+        (np.float32, 8, 8, 16, 24, 0, 3),
+        (np.float16, 8, 16, 16, 48, 2, 5),
+        (np.int8, 32, 32, 64, 64, 0, 7),
     ]
 
     for i, case_name in enumerate(nd_vec_case_names):
@@ -154,6 +160,38 @@ if __name__ == "__main__":
 
         golden = dst_init.copy()
         golden[idx_row : idx_row + src_rows, idx_col : idx_col + src_cols] = src_data
+        golden.tofile("golden_output.bin")
+
+        os.chdir(original_dir)
+
+    scalar_case_names = ["TInsertTest.case_nd_vec_10", "TInsertTest.case_nd_vec_11", "TInsertTest.case_nd_vec_12"]
+
+    scalar_params = [(np.float32, 16, 16, 5, 7), (np.float16, 32, 32, 10, 15), (np.int8, 64, 64, 20, 30)]
+
+    for i, case_name in enumerate(scalar_case_names):
+        if not os.path.exists(case_name):
+            os.makedirs(case_name)
+        original_dir = os.getcwd()
+        os.chdir(case_name)
+        dtype, dst_rows, dst_cols, idx_row, idx_col = scalar_params[i]
+
+        min_aligned_cols = 32 // np.dtype(dtype).itemsize
+
+        if dtype == np.int8:
+            src_data = np.random.randint(-128, 127, size=(1, min_aligned_cols)).astype(dtype)
+            dst_init = np.random.randint(-128, 127, size=(dst_rows, dst_cols)).astype(dtype)
+        elif dtype == np.float16:
+            src_data = np.random.uniform(-10, 10, size=(1, min_aligned_cols)).astype(dtype)
+            dst_init = np.random.uniform(-10, 10, size=(dst_rows, dst_cols)).astype(dtype)
+        else:
+            src_data = np.random.uniform(-10, 10, size=(1, min_aligned_cols)).astype(dtype)
+            dst_init = np.random.uniform(-10, 10, size=(dst_rows, dst_cols)).astype(dtype)
+
+        src_data.tofile("src_input.bin")
+        dst_init.tofile("dst_init.bin")
+
+        golden = dst_init.copy()
+        golden[idx_row, idx_col] = src_data[0, 0]
         golden.tofile("golden_output.bin")
 
         os.chdir(original_dir)

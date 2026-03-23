@@ -265,6 +265,91 @@ __tf__ AICORE void TInsertVecToVecNDImpl(typename DstTileData::TileDType __out__
     }
 }
 
+// vlds+vsts path: strides + indexCol are 32B-aligned, ValidCol may not be.
+template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TInsertVecToVecNDAlignedImpl(typename DstTileData::TileDType __out__ dst,
+                                                typename SrcTileData::TileDType __in__ src, uint16_t validRow,
+                                                uint16_t validCol, uint32_t indexRow, uint32_t indexCol)
+{
+    __ubuf__ T *dstAddr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    constexpr uint32_t dstRowStride = DstTileData::RowStride;
+    constexpr uint32_t srcRowStride = SrcTileData::RowStride;
+    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+
+    __VEC_SCOPE__
+    {
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+        RegTensor<T> vreg;
+        MaskReg preg;
+        uint16_t repeatTimes = CeilDivision(static_cast<uint32_t>(validCol), elementsPerRepeat);
+
+        for (uint16_t i = 0; i < validRow; ++i) {
+            uint32_t sreg = static_cast<uint32_t>(validCol);
+            uint32_t srcRowOff = static_cast<uint32_t>(i) * srcRowStride;
+            uint32_t dstRowOff = (indexRow + static_cast<uint32_t>(i)) * dstRowStride + indexCol;
+            for (uint16_t j = 0; j < repeatTimes; ++j) {
+                preg = CreatePredicate<T>(sreg);
+                vlds(vreg, srcAddr, srcRowOff + static_cast<uint32_t>(j) * elementsPerRepeat, NORM);
+                vsts(vreg, dstAddr, dstRowOff + static_cast<uint32_t>(j) * elementsPerRepeat, distValue, preg);
+            }
+        }
+    }
+}
+
+// vlds+vstus path: strides or indexCol NOT 32B-aligned.
+template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TInsertVecToVecNDVectorImpl(typename DstTileData::TileDType __out__ dst,
+                                               typename SrcTileData::TileDType __in__ src, uint16_t validRow,
+                                               uint16_t validCol, uint32_t indexRow, uint32_t indexCol)
+{
+    __ubuf__ T *dstAddr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    constexpr uint32_t dstRowStride = DstTileData::RowStride;
+    constexpr uint32_t srcRowStride = SrcTileData::RowStride;
+    constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+    constexpr uint32_t kValidCol = SrcTileData::ValidCol;
+    constexpr uint16_t kFullRepeats = static_cast<uint16_t>(kValidCol / elementsPerRepeat);
+    constexpr uint32_t kRemainder = kValidCol % elementsPerRepeat;
+
+    __VEC_SCOPE__
+    {
+        RegTensor<T> vreg;
+        UnalignReg ureg;
+
+        for (uint16_t i = 0; i < validRow; ++i) {
+            uint32_t srcRowOff = static_cast<uint32_t>(i) * srcRowStride;
+            __ubuf__ T *pdst = dstAddr + (indexRow + static_cast<uint32_t>(i)) * dstRowStride + indexCol;
+            for (uint16_t j = 0; j < kFullRepeats; ++j) {
+                vlds(vreg, srcAddr, srcRowOff + static_cast<uint32_t>(j) * elementsPerRepeat, NORM);
+                vstus(ureg, elementsPerRepeat, vreg, pdst, POST_UPDATE);
+            }
+            if constexpr (kRemainder > 0) {
+                vlds(vreg, srcAddr, srcRowOff + static_cast<uint32_t>(kFullRepeats) * elementsPerRepeat, NORM);
+                vstus(ureg, kRemainder, vreg, pdst, POST_UPDATE);
+            }
+            vstas(ureg, pdst, 0, POST_UPDATE);
+        }
+    }
+}
+
+// Scalar path: ValidRow==1, ValidCol==1 — Scalar array element copy.
+template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TInsertVecToVecNDScalarImpl(typename DstTileData::TileDType __out__ dst,
+                                               typename SrcTileData::TileDType __in__ src, uint32_t indexRow,
+                                               uint32_t indexCol)
+{
+    __ubuf__ T *dstAddr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    constexpr uint32_t dstRowStride = DstTileData::RowStride;
+    set_flag(PIPE_V, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_S, EVENT_ID0);
+    dstAddr[indexRow * dstRowStride + indexCol] = srcAddr[0];
+    set_flag(PIPE_S, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
+}
+
 template <TInsertMode mode = TInsertMode::NZ, typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0)
 {
@@ -281,14 +366,6 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t inde
                       "TINSERT ND_VEC : Source rows must not exceed destination rows");
         static_assert(SrcTileData::Cols <= DstTileData::Cols,
                       "TINSERT ND_VEC : Source cols must not exceed destination cols");
-        static_assert(SrcTileData::Cols * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                      "TINSERT ND_VEC : Source cols * sizeof(T) must be 32-byte aligned");
-        static_assert(DstTileData::Cols * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                      "TINSERT ND_VEC : Destination cols * sizeof(T) must be 32-byte aligned");
-        static_assert(SrcTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                      "TINSERT ND_VEC : Source row stride * sizeof(T) must be 32-byte aligned");
-        static_assert(DstTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                      "TINSERT ND_VEC : Destination row stride * sizeof(T) must be 32-byte aligned");
         static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
                           (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
                           (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
@@ -296,17 +373,46 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t inde
                           (std::is_same<T, float8_e8m0_t>::value),
                       "TINSERT ND_VEC : Unsupported data type.");
 
-        PTO_ASSERT(indexRow + SrcTileData::Rows <= DstTileData::Rows,
-                   "TINSERT ND_VEC : indexRow + srcRows exceeds dstRows!");
-        PTO_ASSERT(indexCol + SrcTileData::Cols <= DstTileData::Cols,
-                   "TINSERT ND_VEC : indexCol + srcCols exceeds dstCols!");
-        PTO_ASSERT(indexCol * sizeof(T) % BLOCK_BYTE_SIZE == 0,
-                   "TINSERT ND_VEC : indexCol offset must be 32-byte aligned");
+        if constexpr (SrcTileData::ValidRow == 1 && SrcTileData::ValidCol == 1) {
+            PTO_ASSERT(indexRow < DstTileData::Rows, "TINSERT ND_VEC : indexRow exceeds dstRows!");
+            PTO_ASSERT(indexCol < DstTileData::Cols, "TINSERT ND_VEC : indexCol exceeds dstCols!");
+            TInsertVecToVecNDScalarImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol);
+        } else {
+            uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
+            uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
 
-        uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
-        uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
-        TInsertVecToVecNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, indexRow,
-                                                           indexCol);
+            PTO_ASSERT(indexRow + SrcTileData::ValidRow <= DstTileData::Rows,
+                       "TINSERT ND_VEC : indexRow + srcValidRows exceeds dstRows!");
+            PTO_ASSERT(indexCol + SrcTileData::ValidCol <= DstTileData::Cols,
+                       "TINSERT ND_VEC : indexCol + srcValidCols exceeds dstCols!");
+
+            constexpr bool kStridesAligned = (SrcTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0) &&
+                                             (DstTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0);
+            constexpr bool kValidColAligned = (SrcTileData::ValidCol * sizeof(T) % BLOCK_BYTE_SIZE == 0);
+
+            if constexpr (kStridesAligned) {
+                if (indexCol * sizeof(T) % BLOCK_BYTE_SIZE == 0) {
+                    // strides + indexCol 32B-aligned
+                    if constexpr (kValidColAligned) {
+                        // All aligned → DMA (copy_ubuf_to_ubuf)
+                        TInsertVecToVecNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
+                                                                           indexRow, indexCol);
+                    } else {
+                        // ValidCol not aligned → vlds+vsts with predicate
+                        TInsertVecToVecNDAlignedImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow,
+                                                                                  validCol, indexRow, indexCol);
+                    }
+                } else {
+                    // indexCol not 32B-aligned → vlds+vstus
+                    TInsertVecToVecNDVectorImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
+                                                                             indexRow, indexCol);
+                }
+            } else {
+                // strides not 32B-aligned → vlds+vstus
+                TInsertVecToVecNDVectorImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
+                                                                         indexRow, indexCol);
+            }
+        }
     } else {
         static_assert(DstTileData::Loc == TileType::Mat, "TINSERT : Destination must be Mat tile (L1/cbuf)");
         static_assert(SrcTileData::Loc == TileType::Vec, "TINSERT : Source must be Vec tile (UB/ubuf)");
