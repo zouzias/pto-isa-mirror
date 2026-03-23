@@ -12,8 +12,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TARGET_DIR="${SCRIPT_DIR}/.."
 
-# 需要执行的测试用例列表（可按需添加/删除）
-TESTCASES=("tmatmul")
+# ST 测试用例目录
+TESTCASE_DIR="${SCRIPT_DIR}/costmodel/st/testcase"
+
+# 需要执行的测试用例列表（留空则自动发现 TESTCASE_DIR 下所有子目录）
+TESTCASES=()
 
 # 测试命令的固定参数
 TEST_ARGS="--clean --verbose"
@@ -37,6 +40,17 @@ FAILED_CASES=()
 # 1. 检查目标目录是否存在
 if [ ! -d "${TARGET_DIR}" ]; then
     error_exit "Dir not exists：${TARGET_DIR}"
+fi
+
+# 若 TESTCASES 为空，自动发现 TESTCASE_DIR 下所有子目录
+if [ ${#TESTCASES[@]} -eq 0 ]; then
+    if [ ! -d "${TESTCASE_DIR}" ]; then
+        error_exit "Testcase dir not exists：${TESTCASE_DIR}"
+    fi
+    while IFS= read -r -d '' dir; do
+        TESTCASES+=("$(basename "${dir}")")
+    done < <(find "${TESTCASE_DIR}" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+    echo -e "${YELLOW}[INFO] Auto-discovered testcases: ${TESTCASES[*]}${NC}"
 fi
 
 # 2. 进入目标目录
