@@ -41,8 +41,8 @@ pto.tlrelu ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TLRELU(TileData& dst, TileData& src0, typename TileData::DType scalar, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TLRELU(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, WaitEvents&... events);
 ```
 
 ## 约束
@@ -51,7 +51,7 @@ PTO_INST RecordEvent TLRELU(TileData& dst, TileData& src0, typename TileData::DT
     - `TileData::DType` 必须是以下之一：`half`、`float16_t`、`float`、`float32_t`（仅浮点类型）。
     - Tile 布局必须是行主序（`TileData::isRowMajor`）。
 - **实现检查 (A5)**:
-    - `TileData::DType` 必须是以下之一：`half`、`float16_t`、`float`、`float32_t`（仅浮点类型）。
+    - `TileData::DType` 必须是以下之一：`half`、`float`（仅浮点类型）。
     - Tile 布局必须是行主序（`TileData::isRowMajor`）。
 - **通用约束**:
     - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。

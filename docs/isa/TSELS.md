@@ -53,15 +53,17 @@ PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &sr
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-    - `TileData::DType` must be one of: `half`, `float16_t`, `float`, `float32_t`.
+    - `sizeof(TileDataDst::DType)` must be `2` or `4` bytes.
+    - Supported data types are `half`, `float16_t`, `float`, and `float32_t`.
+    - `dst` and `src` must use the same element type.
+    - `dst` and `src` must be row-major.
+    - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
 - **Implementation checks (A5)**:
-    - `TileData::DType` must be one of: `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, `float`.
-- **Common constraints**:
-    - Tile layout must be row-major (`TileData::isRowMajor`).
-    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-    - Runtime: `dst`, `src0` and `src1` must have the same valid row/col.
-    - Scalar type must match the Tile data type.
+    - `sizeof(TileDataDst::DType)` may be `1`, `2`, or `4` bytes.
+    - Supported data types are `int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `half`, and `float`.
+    - `dst` and `src` must use the same element type.
+    - `dst`, `mask`, and `src` must be row-major.
+    - Runtime: `src.GetValidRow()/GetValidCol()` must match `dst.GetValidRow()/GetValidCol()`.
 - **Valid region**:
     - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 - **Mask encoding**:

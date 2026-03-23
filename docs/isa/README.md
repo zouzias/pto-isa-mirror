@@ -130,7 +130,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 ## Complex
 - [TPRINT](TPRINT.md) - Debug/print elements from a tile (implementation-defined).
 - [TMRGSORT](TMRGSORT.md) - Merge sort for multiple sorted lists (implementation-defined element format and layout).
-- [TSORT32](TSORT32.md) - Sort a fixed-size 32-element block and produce an index mapping.
+- [TSORT32](TSORT32.md) - Sort each 32-element block of `src` together with the corresponding indices from `idx`, and write the sorted value-index pairs into `dst`.
 - [TGATHER](TGATHER.md) - Gather/select elements using either an index tile or a compile-time mask pattern.
 - [TCI](TCI.md) - Generate a contiguous integer sequence into a destination tile.
 - [TTRI](TTRI.md) - Generate a triangular (lower/upper) mask tile.
