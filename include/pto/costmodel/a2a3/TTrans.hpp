@@ -21,7 +21,7 @@ PTO_INTERNAL void TTRANS_IMPL(DstTile &dst, SrcTile &src, TmpTile &tmp)
 {
     using T = typename SrcTile::DType;
     auto stats = runTransOp(dst, src, tmp);
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 } // namespace pto

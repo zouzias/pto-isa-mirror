@@ -28,7 +28,7 @@ PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
 {
     using T = typename TileData::DType;
     auto stats = runLoadOp(dst, src);
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 } // namespace pto

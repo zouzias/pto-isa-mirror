@@ -20,7 +20,7 @@ PTO_INTERNAL void TSCATTER_IMPL(TileDataD &dst, TileDataS &src, TileDataI &idx)
 {
     using T = typename TileDataD::DType;
     auto stats = runScatterOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 } // namespace pto

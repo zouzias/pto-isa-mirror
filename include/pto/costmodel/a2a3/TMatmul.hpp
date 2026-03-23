@@ -21,17 +21,13 @@ namespace pto {
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
-    using T = typename TileRes::DType;
-    auto stats = runTMatmulOp(aMatrix, bMatrix);
-    cMatrix.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    pto::CostModel::GetInstance().MatmulPredictCycle<TileRes, TileLeft, TileRight>(cMatrix, aMatrix, bMatrix);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TMATMUL_ACC_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
-    using T = typename TileRes::DType;
-    auto stats = runTMatmulOp(aMatrix, bMatrix);
-    cOutMatrix.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    pto::CostModel::GetInstance().MatmulPredictCycle<TileRes, TileLeft, TileRight>(cOutMatrix, aMatrix, bMatrix);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
@@ -44,34 +40,26 @@ template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename Til
           typename TileBias>
 PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData)
 {
-    using T = typename TileRes::DType;
-    auto stats = runTMatmulOp(aMatrix, bMatrix);
-    cMatrix.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    pto::CostModel::GetInstance().MatmulPredictCycle<TileRes, TileLeft, TileRight>(cMatrix, aMatrix, bMatrix);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TGEMV_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
-    using T = typename TileRes::DType;
-    auto stats = runTGemvOp(bMatrix);
-    cMatrix.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    pto::CostModel::GetInstance().MatmulPredictCycle<TileRes, TileLeft, TileRight>(cMatrix, aMatrix, bMatrix);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TGEMV_ACC_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
-    using T = typename TileRes::DType;
-    auto stats = runTGemvOp(bMatrix);
-    cOutMatrix.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    pto::CostModel::GetInstance().MatmulPredictCycle<TileRes, TileLeft, TileRight>(cOutMatrix, aMatrix, bMatrix);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
           typename TileBias>
 PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData)
 {
-    using T = typename TileRes::DType;
-    auto stats = runTGemvOp(bMatrix);
-    cMatrix.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    pto::CostModel::GetInstance().MatmulBiasPredictCycle<TileRes, TileLeft, TileRight>(cMatrix, aMatrix, bMatrix);
 }
 
 } // namespace pto

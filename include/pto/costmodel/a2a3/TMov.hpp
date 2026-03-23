@@ -24,7 +24,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
     using T = typename DstTileData::DType;
     auto stats = runMovVecOp(dst, src);
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 // TMOV with ReluPreMode (Acc→Mat path: copy_matrix_cc_to_cbuf, PIPE_M).
@@ -33,7 +32,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
     using T = typename DstTileData::DType;
     auto stats = runMovCubeOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 // TMOV with AccToVecMode (Acc→Vec path, PIPE_M).
@@ -43,7 +41,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
     using T = typename DstTileData::DType;
     auto stats = runMovCubeOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 // TMOV with FpTileData (vector-quant path: set_fpc + copy_matrix_cc_to_cbuf, PIPE_M).
@@ -53,7 +50,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp)
 {
     using T = typename DstTileData::DType;
     auto stats = runMovCubeOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 // TMOV with FpTileData + AccToVecMode (vector-quant AccToVec, PIPE_M).
@@ -63,7 +59,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp)
 {
     using T = typename DstTileData::DType;
     auto stats = runMovCubeOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 // TMOV with scalar preQuantScalar (scalar-quant path: set_quant_pre + copy_matrix_cc_to_cbuf, PIPE_M).
@@ -72,7 +67,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQuan
 {
     using T = typename DstTileData::DType;
     auto stats = runMovCubeOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 // TMOV with AccToVecMode + scalar preQuantScalar (PIPE_M).
@@ -82,7 +76,6 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQuan
 {
     using T = typename DstTileData::DType;
     auto stats = runMovCubeOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 } // namespace pto

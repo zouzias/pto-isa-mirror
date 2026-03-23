@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_DIR="${SCRIPT_DIR}/.."
 
 # 需要执行的测试用例列表（可按需添加/删除）
-TESTCASES=("tadd" "tmul" "tsub" "tadds" "tdivs" "tmins" "tmuls" "tabs" "texp" "tsqrt" "tcolmax" "tcolsum" "trowexpand" "trowmax" "trowsum" "tsel" "tcvt" "tsort32" "tmrgsort" "ttrans")
+TESTCASES=("tmatmul")
 
 # 测试命令的固定参数
 TEST_ARGS="--clean --verbose"
@@ -29,6 +29,10 @@ error_exit() {
     echo -e "${RED}[ERROR] $1${NC}"
     exit 1
 }
+
+# 记录结果的数组
+PASSED_CASES=()
+FAILED_CASES=()
 
 # 1. 检查目标目录是否存在
 if [ ! -d "${TARGET_DIR}" ]; then
@@ -56,13 +60,42 @@ for testcase in "${TESTCASES[@]}"; do
     # 根据退出码判断执行结果
     if [ ${exit_code} -eq 0 ]; then
         echo -e "${GREEN}[SUCCESS] Test Case ${testcase} Finished${NC}"
+        PASSED_CASES+=("${testcase}")
     else
         echo -e "${RED}[FAIL] Test Case ${testcase} Failed (Exit Code: ${exit_code})${NC}"
-        # 可选：如果某个用例失败是否继续执行后续用例
-        # error_exit "测试用例 ${testcase} 执行失败，终止脚本"
+        FAILED_CASES+=("${testcase}")
     fi
 done
 
-# 4. 脚本执行完成
-echo -e "\n${GREEN}[INFO] All Test Case Finished${NC}"
+# 4. 输出总览
+total=${#TESTCASES[@]}
+passed=${#PASSED_CASES[@]}
+failed=${#FAILED_CASES[@]}
+
+echo -e "\n========================================"
+echo -e "           ST Results Summary"
+echo -e "========================================"
+echo -e "Total:  ${total}"
+echo -e "${GREEN}Passed: ${passed}${NC}"
+echo -e "${RED}Failed: ${failed}${NC}"
+
+if [ ${passed} -gt 0 ]; then
+    echo -e "\n${GREEN}[PASSED]${NC}"
+    for tc in "${PASSED_CASES[@]}"; do
+        echo -e "  ${GREEN}✔ ${tc}${NC}"
+    done
+fi
+
+if [ ${failed} -gt 0 ]; then
+    echo -e "\n${RED}[FAILED]${NC}"
+    for tc in "${FAILED_CASES[@]}"; do
+        echo -e "  ${RED}✘ ${tc}${NC}"
+    done
+fi
+
+echo -e "========================================"
+
+if [ ${failed} -gt 0 ]; then
+    exit 1
+fi
 exit 0

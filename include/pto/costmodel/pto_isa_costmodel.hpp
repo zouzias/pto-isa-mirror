@@ -37,6 +37,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TSelOp.hpp"
 #include "pto/costmodel/a2a3/TCvtOp.hpp"
 #include "pto/costmodel/a2a3/TSort32Op.hpp"
+#include "pto/costmodel/a2a3/TMatmulOp.hpp"
 
 namespace pto {
 
@@ -78,6 +79,19 @@ enum class DataType
     BF16
 };
 
+constexpr int getDataTypeBytes(DataType type) {
+    switch (type) {
+        case DataType::FP16:  return 2;
+        case DataType::FP32:  return 4;
+        case DataType::INT8:  return 1;
+        case DataType::INT16: return 2;
+        case DataType::UINT8: return 1;
+        case DataType::INT32: return 4;
+        case DataType::BF16:  return 2;
+        default:              return 0;
+    }
+}
+
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 struct TileInfo {
 public:
@@ -108,7 +122,7 @@ public:
         cycle = cycle_;
     }
 
-    float GetCycle()
+    [[nodiscard]] float GetCycle()const
     {
         return cycle;
     }
@@ -117,8 +131,8 @@ public:
 struct InstrTypeHash {
     size_t operator()(const std::pair<std::string, DataType> &key) const
     {
-        auto hash_instr = std::hash<std::string>()(key.first);
-        auto hash_dtype = std::hash<int>()(static_cast<int>(key.second));
+        const auto hash_instr = std::hash<std::string>()(key.first);
+        const auto hash_dtype = std::hash<int>()(static_cast<int>(key.second));
         return hash_instr ^ (hash_dtype << 1);
     }
 };
@@ -400,6 +414,16 @@ public:
                  A2A3_INTERVAL, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
         SetParam("scatter_vnchwconv", DataType::UINT8, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_2,
                  A2A3_INTERVAL, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+
+        // mmad
+        SetParam("mad", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_1,
+            A2A3_BANK_NONE, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("mad", DataType::INT8, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_1,
+            A2A3_BANK_NONE, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("mad", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_1,
+            A2A3_BANK_NONE, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("mad", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_2,
+            A2A3_BANK_NONE, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
     }
 
     // TBinOp
@@ -408,7 +432,7 @@ public:
     {
         using T = typename TileDataDst::DType;
         std::vector<CostModelStats> stats = runBinaryOp<Op>(dst, src0, src1);
-        dst.SetCycle(PredictCycle<T>(stats));
+        dst.SetCycle(VecInstPredictCycle<T>(stats));
     }
 
     // TBinSOp
@@ -417,7 +441,7 @@ public:
     {
         using T = typename TileDataDst::DType;
         std::vector<CostModelStats> stats = runBinaryScalarOp<Op>(dst, src);
-        dst.SetCycle(PredictCycle<T>(stats));
+        dst.SetCycle(VecInstPredictCycle<T>(stats));
     }
 
     // TUnaryOp
@@ -426,7 +450,7 @@ public:
     {
         using T = typename TileDataDst::DType;
         std::vector<CostModelStats> stats = runUnaryOp<Op>(dst, src);
-        dst.SetCycle(PredictCycle<T>(stats));
+        dst.SetCycle(VecInstPredictCycle<T>(stats));
     }
 
     // TRowReduceOpPredict
@@ -436,7 +460,7 @@ public:
         using T = typename TileDataIn::DType;
         std::vector<CostModelStats> stats =
             runRowReduceOps<T, Op, TileDataOut, TileDataIn, TileDataTmp>(instr_name, dst, src, tmp);
-        float totalCycles = PredictCycle<T>(stats);
+        float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
     }
 
@@ -444,21 +468,21 @@ public:
     template <typename Op, typename TileDataOut, typename TileDataIn>
     void ColReduceOpPredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src)
     {
-        using T = typename TileDataIn::DType;
+        using T =  TileDataIn::DType;
         std::vector<CostModelStats> stats = runColReduceOps<T, Op, TileDataOut, TileDataIn>(dst, src);
-        float totalCycles = PredictCycle<T>(stats);
+        float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
     }
 
     // TColSum
     template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
-    void ColSumOpPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp,
-                              bool IsBinary)
+    void ColSumOpPredictCycle( TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp,
+                              const bool IsBinary)
     {
-        using T = typename TileDataSrc::DType;
-        std::vector<CostModelStats> stats =
+        using T =  TileDataSrc::DType;
+        const std::vector<CostModelStats> stats =
             runColSumOp<T, TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp, IsBinary);
-        float totalCycles = PredictCycle<T>(stats);
+        float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
     }
 
@@ -466,14 +490,32 @@ public:
     template <typename TileDataDst, typename TileDataSrc>
     void RowExpandPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
     {
-        using T = typename TileDataDst::DType;
-        std::vector<CostModelStats> stats = runRowExpandOp<TileDataDst, TileDataSrc>(dst, src);
-        float totalCycles = PredictCycle<T>(stats);
+        using T = TileDataDst::DType;
+            std::vector<CostModelStats> stats = runRowExpandOp<TileDataDst, TileDataSrc>(dst, src);
+        float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
     }
 
+    template <typename TileRes, typename TileLeft, typename TileRight>
+    void MatmulPredictCycle(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
+    {
+        using T = typename TileLeft::DType;
+        auto stats = runMatmulOp(aMatrix, bMatrix);
+        float total_cycles = CubeInstPredictCycle<T>(stats);
+        cMatrix.SetCycle(total_cycles);
+    }
+
+    template <typename TileRes, typename TileLeft, typename TileRight>
+    void MatmulBiasPredictCycle(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
+    {
+        using T = typename TileLeft::DType;
+        auto stats = runMatmulBiasOp(aMatrix, bMatrix);
+        float total_cycles = CubeInstPredictCycle<T>(stats);
+        cMatrix.SetCycle(total_cycles);
+    }
+
     template <typename T>
-    float PredictCycle(const std::vector<CostModelStats> &stats)
+    [[nodiscard]] float VecInstPredictCycle(const std::vector<CostModelStats> &stats)const
     {
         float total_cycles = 0.0f;
         // first: next real instruction starts a new pipeline segment (pays startup_cycles once)
@@ -512,7 +554,36 @@ public:
             }
             total_cycles += stat.repeats * params.per_repeat_cycles;
         }
-        fprintf(stdout, "[CostModel] PredictCycle: %.1f\n", total_cycles);
+        fprintf(stdout, "[CostModel] VecInstPredictCycle: %.1f\n", total_cycles);
+        return total_cycles;
+    }
+
+    template <typename T>
+    [[nodiscard]] float CubeInstPredictCycle(const std::vector<CostModelStats> &stats)const
+    {
+        float total_cycles = 0.0f;
+        bool first = true;
+        for (const auto &stat : stats) {
+            const std::string &instr_name = stat.cceInstName;
+            DataType dtype = GetDataTypeEnum<T>();
+            auto key = std::make_pair(instr_name, dtype);
+            if (!CheckParamExist(key)) {
+                fprintf(stderr, "[CostModel] Error: unknown instruction <%s> for dtype <%d>\n", instr_name.c_str(),
+                        static_cast<int>(dtype));
+                return 0.0f;
+            }
+            const CostModelParams &params = params_map_.at(key);
+
+            if (first) {
+                total_cycles += params.startup_cycles;
+                first = false;
+            }
+
+            const int baskK = 32/ getDataTypeBytes(dtype);
+            const int repeats = (stat.m + 15)/16 * ((stat.n + 15)/16) * ((stat.k + baskK - 1)/baskK) ;
+            total_cycles += repeats * params.per_repeat_cycles;
+        }
+
         return total_cycles;
     }
 
@@ -529,13 +600,13 @@ private:
             CostModelParams{head, complete, computing, interval, mask, bank_conflict};
     }
 
-    bool CheckParamExist(const std::pair<std::string, DataType> &key)
+    [[nodiscard]] bool CheckParamExist(const std::pair<std::string, DataType> &key)const
     {
-        return params_map_.count(key) > 0;
+        return params_map_.contains(key);
     }
 
     template <typename T>
-    DataType GetDataTypeEnum()
+    DataType GetDataTypeEnum()const
     {
         if constexpr (std::is_same_v<T, __bf16>) {
             return DataType::BF16;

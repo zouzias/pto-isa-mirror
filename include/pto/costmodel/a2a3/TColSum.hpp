@@ -18,8 +18,7 @@ namespace pto {
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
 PTO_INTERNAL void TCOLSUM_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, bool IsBinary)
 {
-    pto::CostModel::GetInstance().ColSumOpPredictCycle<TileDataDst, TileDataSrc, TileDataTmp>("TCOLSUM", dst, src, tmp,
-                                                                                              IsBinary);
+    pto::CostModel::GetInstance().ColSumOpPredictCycle<TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp, IsBinary);
 }
 } // namespace pto
 #endif

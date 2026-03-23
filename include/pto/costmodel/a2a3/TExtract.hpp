@@ -25,7 +25,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
 {
     using T = typename SrcTileData::DType;
     auto stats = runExtractOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 // 2. With dstValidCol (5 runtime args)
@@ -35,7 +35,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
 {
     using T = typename SrcTileData::DType;
     auto stats = runExtractOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 // 3. With ReluPreMode (4 runtime args)
@@ -44,7 +44,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
 {
     using T = typename SrcTileData::DType;
     auto stats = runExtractOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 // 4. With ReluPreMode + preQuantScalar (5 runtime args)
@@ -54,7 +54,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t pre
 {
     using T = typename SrcTileData::DType;
     auto stats = runExtractOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 // 5. With FpTileData + ReluPreMode
@@ -64,7 +64,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &
 {
     using T = typename SrcTileData::DType;
     auto stats = runExtractOp();
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 } // namespace pto

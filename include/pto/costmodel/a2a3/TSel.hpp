@@ -21,7 +21,7 @@ PTO_INTERNAL void TSEL_IMPL(DstTile &dst, MaskTile &selMask, Src0Tile &src0, Src
 {
     using T = typename DstTile::DType;
     auto stats = runSelOp(dst);
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 } // namespace pto

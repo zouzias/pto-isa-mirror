@@ -19,8 +19,8 @@ namespace pto {
 struct CostModelStats {
     std::string cceInstName;
     int repeats;
-    int mask1;
-    int mask0;
+    int mask1{};
+    int mask0{};
     int dstBlockStride;
     int src0BlockStride;
     int src1BlockStride;
@@ -28,17 +28,17 @@ struct CostModelStats {
     int src0RepeatStride;
     int src1RepeatStride;
     std::string order; // vcmax/vcmin专用,取值VALUE_INDEX/INDEX_VALUE/ONLY_VALUE/ONLY_INDEX
-    bool mode;         // vcadd专用
+    bool mode{};         // vcadd专用
 
-    int nBurst;
-    int lenBurst;
-    int srcGap;
-    int dstGap;
+    int nBurst{};
+    int lenBurst{};
+    int srcGap{};
+    int dstGap{};
 
     // mmad专用
-    int m;
-    int k;
-    int n;
+    int m{};
+    int k{};
+    int n{};
 
     void setCceInstName(std::string cceInstName_)
     {
@@ -109,11 +109,10 @@ struct CostModelStats {
         : cceInstName(cceInstName_), mask1(mask1_), mask0(mask0_)
     {}
 
-    // mmad专用工厂方法 (cube pipeline: instruction name, repeat count, M/K/N dimensions)
-    // Uses a factory to avoid constructor ambiguity with the "move" (nBurst/lenBurst/srcGap/dstGap) constructor.
-    static CostModelStats MakeMmad(const std::string &cceInstName_, int repeats_, int m_, int k_, int n_)
+    // mmad
+    static CostModelStats MakeMmad(const std::string &cceInstName_, int m_, int k_, int n_)
     {
-        CostModelStats s(cceInstName_, repeats_);
+        CostModelStats s(cceInstName_, 1);
         s.m = m_;
         s.k = k_;
         s.n = n_;

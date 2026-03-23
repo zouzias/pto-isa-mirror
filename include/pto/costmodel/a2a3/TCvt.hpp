@@ -24,7 +24,6 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src,
 {
     using DstT = typename TileDataD::DType;
     auto stats = runCvtOp(dst, src);
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<DstT>(stats));
 }
 
 } // namespace pto

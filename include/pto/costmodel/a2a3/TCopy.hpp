@@ -21,7 +21,6 @@ PTO_INTERNAL void TCOPY_IMPL(TileDataD &dst, TileDataS &src)
 {
     using T = typename TileDataD::DType;
     auto stats = runCopyOp(dst, src);
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 } // namespace pto

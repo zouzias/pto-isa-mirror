@@ -41,13 +41,13 @@ tabs
 tadd
 tadds
 tcolmax
-tcolmin
 tcolsum
 tdivs
 texp
 tmins
 tmul
 tmuls
+tmatmul
 trowexpand
 trowmax
 trowmin

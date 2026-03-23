@@ -21,7 +21,6 @@ PTO_INTERNAL void TSORT32_IMPL(DstTileData &dst, SrcTileData &src, IdxTileData &
 {
     using T = typename DstTileData::DType;
     auto stats = runSort32Op(dst, src);
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 template <typename DstTileData, typename SrcTileData, typename IdxTileData, typename TmpTileData>

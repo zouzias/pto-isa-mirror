@@ -15,31 +15,32 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-// TMATMUL / TMATMUL_ACC / TMATMUL_BIAS:
+// TMATMUL / TMATMUL_ACC / TMATMUL_BIAS/ TGEMV / TGEMV_ACC:
 //   CCE instruction: mad(c, a, b, m, k, n, ...) — PIPE_M cube pipeline.
 //   Records "mmad" with repeat=1 and the MKN dimensions.
 //   m = aMatrix.GetValidRow(), k = aMatrix.GetValidCol(), n = bMatrix.GetValidCol()
 template <typename TileLeft, typename TileRight>
-PTO_INTERNAL std::vector<CostModelStats> runTMatmulOp(TileLeft &aMatrix, TileRight &bMatrix)
+PTO_INTERNAL std::vector<CostModelStats> runMatmulOp(TileLeft &aMatrix, TileRight &bMatrix)
 {
     std::vector<CostModelStats> stats;
     int m = static_cast<int>(aMatrix.GetValidRow());
     int k = static_cast<int>(aMatrix.GetValidCol());
     int n = static_cast<int>(bMatrix.GetValidCol());
-    stats.push_back(CostModelStats::MakeMmad("mmad", 1, m, k, n));
+    stats.push_back(CostModelStats::MakeMmad("mad", m, k, n));
     return stats;
 }
 
-// TGEMV / TGEMV_ACC / TGEMV_BIAS:
+//  TGEMV_BIAS:
 //   Same mad instruction but m is forced to 1 (GEMV mode).
 //   k = bMatrix.GetValidRow(), n = bMatrix.GetValidCol()
-template <typename TileRight>
-PTO_INTERNAL std::vector<CostModelStats> runTGemvOp(TileRight &bMatrix)
+template <typename TileRight, typename TileLeft>
+PTO_INTERNAL std::vector<CostModelStats> runMatmulBiasOp(TileLeft &aMatrix, TileRight &bMatrix)
 {
     std::vector<CostModelStats> stats;
+    int m = static_cast<int>(aMatrix.GetValidRow());
     int k = static_cast<int>(bMatrix.GetValidRow());
     int n = static_cast<int>(bMatrix.GetValidCol());
-    stats.push_back(CostModelStats::MakeMmad("mmad", 1, 1, k, n));
+    stats.push_back(CostModelStats::MakeMmad("mad", m, k, n));
     return stats;
 }
 
