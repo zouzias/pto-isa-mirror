@@ -102,9 +102,11 @@ PTO_INTERNAL void THISTOGRAM_IMPL(TileDst &dst, TileSrc &src, TileIdx &idx)
     static_assert(std::is_same<SrcT, uint16_t>::value, "Fix: THISTOGRAM source must be uint16_t.");
     static_assert(std::is_same<DstT, uint32_t>::value, "Fix: THISTOGRAM destination must be uint32_t.");
     static_assert(std::is_same<IdxT, uint8_t>::value, "Fix: THISTOGRAM index must be uint8_t.");
-    static_assert(TileSrc::isRowMajor, "Fix: THISTOGRAM only supports row major layout.");
-    static_assert(TileDst::isRowMajor, "Fix: THISTOGRAM only supports row major layout.");
-    static_assert(TileIdx::isRowMajor, "Fix: THISTOGRAM only supports row major layout.");
+    static_assert(TileSrc::isRowMajor, "Fix: THISTOGRAM source should only follow row major layout.");
+    static_assert(TileDst::isRowMajor, "Fix: THISTOGRAM destination should only follow row major layout.");
+    static_assert((!TileIdx::isBoxedLayout && !TileIdx::isRowMajor && TileIdx::Cols == 1),
+                  "Fix: THISTOGRAM index should use DN layout with exactly one column: "
+                  "BLayout::ColMajor + SLayout::NoneBox + Cols=1.");
 
     THistogram<TileDst, TileSrc, TileIdx, MSBorLSB>(dst.data(), src.data(), idx.data(), src.GetValidRow(),
                                                     src.GetValidCol());

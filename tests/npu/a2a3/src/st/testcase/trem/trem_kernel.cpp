@@ -41,11 +41,15 @@ __global__ AICORE void runTRem(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
 
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TREM<TileDataDst, TileDataSrc0, TileDataSrc1>(dstTile, src0Tile, src1Tile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
@@ -67,8 +71,4 @@ template void LaunchTREM<float, 16, 64, 16, 128, 16, 128, 16, 63>(float *out, fl
 template void LaunchTREM<float, 2, 32, 2, 64, 2, 32, 2, 31>(float *out, float *src0, float *src1, void *stream);
 template void LaunchTREM<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>(int32_t *out, int32_t *src0, int32_t *src1,
                                                                   void *stream);
-template void LaunchTREM<int16_t, 16, 32, 16, 64, 16, 32, 16, 31>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                  void *stream);
-template void LaunchTREM<int16_t, 16, 64, 16, 128, 16, 128, 16, 63>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                    void *stream);
 template void LaunchTREM<float, 1, 8192, 1, 8192, 1, 8192, 1, 8192>(float *out, float *src0, float *src1, void *stream);
