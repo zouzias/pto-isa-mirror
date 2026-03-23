@@ -7,29 +7,23 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-
-#ifndef TLOAD_HPP
-#define TLOAD_HPP
+#ifndef TCOPY_COSTMODEL_HPP
+#define TCOPY_COSTMODEL_HPP
 
 #include "pto/costmodel/pto_isa_costmodel.hpp"
 
 namespace pto {
 
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
-
-// TLOAD: copy_gm_to_ubuf / copy_gm_to_cbuf (MTE2 pipeline).
-template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
+// TCOPY: copy_ubuf_to_ubuf (MTE1 pipeline).
+// See TCopyOp.hpp for parameter derivation.
+template <typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCOPY_IMPL(TileDataD &dst, TileDataS &src)
 {
-    using T = typename TileData::DType;
-    auto stats = runLoadOp(dst, src);
+    using T = typename TileDataD::DType;
+    auto stats = runCopyOp(dst, src);
     dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 } // namespace pto
-#endif // TLOAD_HPP
+
+#endif // TCOPY_COSTMODEL_HPP

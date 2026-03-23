@@ -7,29 +7,26 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+#ifndef TCVT_COSTMODEL_HPP
+#define TCVT_COSTMODEL_HPP
 
-#ifndef TLOAD_HPP
-#define TLOAD_HPP
-
+#include <pto/common/type.hpp>
 #include "pto/costmodel/pto_isa_costmodel.hpp"
 
 namespace pto {
 
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
-
-// TLOAD: copy_gm_to_ubuf / copy_gm_to_cbuf (MTE2 pipeline).
-template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
+// TCVT: vconv_* (type conversion, PIPE_V vector pipeline).
+// See TCvtOp.hpp for cycle formula details.
+template <typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src,
+                             RoundMode mode = RoundMode::CAST_NONE,
+                             SaturationMode satMode = SaturationMode::ON)
 {
-    using T = typename TileData::DType;
-    auto stats = runLoadOp(dst, src);
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    using DstT = typename TileDataD::DType;
+    auto stats = runCvtOp(dst, src);
+    dst.SetCycle(CostModel::GetInstance().PredictCycle<DstT>(stats));
 }
 
 } // namespace pto
-#endif // TLOAD_HPP
+
+#endif // TCVT_COSTMODEL_HPP

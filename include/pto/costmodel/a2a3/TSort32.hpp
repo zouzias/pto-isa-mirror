@@ -7,29 +7,29 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-
-#ifndef TLOAD_HPP
-#define TLOAD_HPP
+#ifndef TSORT32_COSTMODEL_HPP
+#define TSORT32_COSTMODEL_HPP
 
 #include "pto/costmodel/pto_isa_costmodel.hpp"
 
 namespace pto {
 
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
-
-// TLOAD: copy_gm_to_ubuf / copy_gm_to_cbuf (MTE2 pipeline).
-template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
+// TSORT32: vbitsort(repeatNumPerRow) + PIPE_V per row.
+// See TSort32Op.hpp for cycle formula details.
+template <typename DstTileData, typename SrcTileData, typename IdxTileData>
+PTO_INTERNAL void TSORT32_IMPL(DstTileData &dst, SrcTileData &src, IdxTileData &idx)
 {
-    using T = typename TileData::DType;
-    auto stats = runLoadOp(dst, src);
+    using T = typename DstTileData::DType;
+    auto stats = runSort32Op(dst, src);
     dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
+template <typename DstTileData, typename SrcTileData, typename IdxTileData, typename TmpTileData>
+PTO_INTERNAL void TSORT32_IMPL(DstTileData &dst, SrcTileData &src, IdxTileData &idx, TmpTileData &tmp)
+{
+    TSORT32_IMPL(dst, src, idx);
+}
+
 } // namespace pto
-#endif // TLOAD_HPP
+
+#endif // TSORT32_COSTMODEL_HPP

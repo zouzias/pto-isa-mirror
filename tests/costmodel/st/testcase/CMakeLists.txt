@@ -54,6 +54,11 @@ trowmin
 trowsum
 tsqrt
 tsub
+tcvt
+tmrgsort
+tsel
+tsort32
+ttrans
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})

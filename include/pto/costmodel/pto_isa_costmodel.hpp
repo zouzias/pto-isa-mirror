@@ -26,6 +26,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TColReduceOp.hpp"
 #include "pto/costmodel/a2a3/TRowReduceOp.hpp"
 #include "pto/costmodel/a2a3/TRowExpandOp.hpp"
+#include "pto/costmodel/a2a3/TLoadOp.hpp"
+#include "pto/costmodel/a2a3/TMovOp.hpp"
+#include "pto/costmodel/a2a3/TCopyOp.hpp"
+#include "pto/costmodel/a2a3/TExtractOp.hpp"
+#include "pto/costmodel/a2a3/TScatterOp.hpp"
+#include "pto/costmodel/a2a3/TMatmulOp.hpp"
+#include "pto/costmodel/a2a3/TTransOp.hpp"
+#include "pto/costmodel/a2a3/TMrgSortOp.hpp"
+#include "pto/costmodel/a2a3/TSelOp.hpp"
+#include "pto/costmodel/a2a3/TCvtOp.hpp"
+#include "pto/costmodel/a2a3/TSort32Op.hpp"
 
 namespace pto {
 
@@ -334,6 +345,61 @@ public:
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
         SetParam("mask", DataType::FP32, A2A3_BANK_NONE, A2A3_BANK_NONE, A2A3_BANK_NONE, A2A3_BANK_NONE,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+
+        // TSEL: vsel (element-wise select, 1 cycle/repeat, startup=14)
+        SetParam("vsel", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vsel", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vsel", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vsel", DataType::INT32, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+
+        // TCVT: vconv (type conversion, startup=13 like reduce ops)
+        SetParam("vconv", DataType::FP16, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv", DataType::FP32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv", DataType::INT16, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv", DataType::INT32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+
+        // TSORT32: vbitsort (bitonic sort, 2 cycles/repeat)
+        SetParam("vbitsort", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vbitsort", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+
+        // TMRGSORT: vmrgsort4 (merge sort, 2 cycles/repeat)
+        SetParam("vmrgsort4", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vmrgsort4", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+
+        // TMATMUL / TGEMV: mmad (PIPE_M cube pipeline — recorded, cycle model TBD)
+        SetParam("mmad", DataType::FP32, A2A3_BANK_NONE, A2A3_BANK_NONE, A2A3_BANK_NONE, A2A3_BANK_NONE,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("mmad", DataType::INT32, A2A3_BANK_NONE, A2A3_BANK_NONE, A2A3_BANK_NONE, A2A3_BANK_NONE,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+
+        // TTRANS: scatter_vnchwconv_b8/b16/b32 (vector-pipeline layout-transpose, startup=14, 2 cycles/repeat)
+        // B16 types (sizeof=2): half, int16
+        SetParam("scatter_vnchwconv", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2,
+                 A2A3_INTERVAL, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("scatter_vnchwconv", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_2,
+                 A2A3_INTERVAL, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        // B32 types (sizeof=4): float, int32
+        SetParam("scatter_vnchwconv", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2,
+                 A2A3_INTERVAL, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("scatter_vnchwconv", DataType::INT32, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_2,
+                 A2A3_INTERVAL, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        // B8 types (sizeof=1): int8, uint8
+        SetParam("scatter_vnchwconv", DataType::INT8, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_2,
+                 A2A3_INTERVAL, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("scatter_vnchwconv", DataType::UINT8, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_2,
+                 A2A3_INTERVAL, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
     }
 
     // TBinOp

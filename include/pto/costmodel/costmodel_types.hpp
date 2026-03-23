@@ -35,6 +35,11 @@ struct CostModelStats {
     int srcGap;
     int dstGap;
 
+    // mmad专用
+    int m;
+    int k;
+    int n;
+
     void setCceInstName(std::string cceInstName_)
     {
         cceInstName = cceInstName_;
@@ -103,6 +108,17 @@ struct CostModelStats {
     CostModelStats(const std::string cceInstName_, int mask1_, int mask0_)
         : cceInstName(cceInstName_), mask1(mask1_), mask0(mask0_)
     {}
+
+    // mmad专用工厂方法 (cube pipeline: instruction name, repeat count, M/K/N dimensions)
+    // Uses a factory to avoid constructor ambiguity with the "move" (nBurst/lenBurst/srcGap/dstGap) constructor.
+    static CostModelStats MakeMmad(const std::string &cceInstName_, int repeats_, int m_, int k_, int n_)
+    {
+        CostModelStats s(cceInstName_, repeats_);
+        s.m = m_;
+        s.k = k_;
+        s.n = n_;
+        return s;
+    }
 };
 
 struct CostModelParams {

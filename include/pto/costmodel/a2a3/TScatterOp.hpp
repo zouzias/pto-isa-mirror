@@ -7,29 +7,19 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+#ifndef TSCATTER_OP_HPP
+#define TSCATTER_OP_HPP
 
-#ifndef TLOAD_HPP
-#define TLOAD_HPP
-
-#include "pto/costmodel/pto_isa_costmodel.hpp"
+#include <vector>
+#include "pto/costmodel/costmodel_types.hpp"
 
 namespace pto {
 
-struct MrgSortExecutedNumList {
-    uint16_t mrgSortList0;
-    uint16_t mrgSortList1;
-    uint16_t mrgSortList2;
-    uint16_t mrgSortList3;
-};
-
-// TLOAD: copy_gm_to_ubuf / copy_gm_to_cbuf (MTE2 pipeline).
-template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
+// TSCATTER: pure scalar element-wise loop — no CCE pipeline instructions issued.
+PTO_INTERNAL std::vector<CostModelStats> runScatterOp()
 {
-    using T = typename TileData::DType;
-    auto stats = runLoadOp(dst, src);
-    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
+    return {}; // no CCE pipeline instructions
 }
 
 } // namespace pto
-#endif // TLOAD_HPP
+#endif // TSCATTER_OP_HPP
