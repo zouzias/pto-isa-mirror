@@ -105,6 +105,7 @@ trowprod
 trowmax
 trowmin
 trowcmax
+trowcmin
 textract
 timg2col
 tmov
