@@ -14,6 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+constexpr unsigned BLOCK_SIZE = 32;
+
 // TSORT32: vbitsort(repeatNumPerRow) + PIPE_V per row.
 // See TSort32Op.hpp for cycle formula details.
 template <typename DstTileData, typename SrcTileData, typename IdxTileData>
@@ -27,7 +29,14 @@ PTO_INTERNAL void TSORT32_IMPL(DstTileData &dst, SrcTileData &src, IdxTileData &
 template <typename DstTileData, typename SrcTileData, typename IdxTileData, typename TmpTileData>
 PTO_INTERNAL void TSORT32_IMPL(DstTileData &dst, SrcTileData &src, IdxTileData &idx, TmpTileData &tmp)
 {
-    TSORT32_IMPL(dst, src, idx);
+    using T = typename DstTileData::DType;
+    std::vector<CostModelStats> stats;
+    if (src.GetValidCol() % BLOCK_SIZE > 0) {
+        stats = runSort32OpWithTmp(dst, src, tmp);
+    } else {
+        stats = runSort32Op(dst, src);
+    }
+    dst.SetCycle(CostModel::GetInstance().PredictCycle<T>(stats));
 }
 
 } // namespace pto

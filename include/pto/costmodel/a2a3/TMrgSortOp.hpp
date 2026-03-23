@@ -37,8 +37,8 @@ PTO_INTERNAL std::vector<CostModelStats> runMrgSortMultiOp()
 {
     std::vector<CostModelStats> stats;
     stats.emplace_back("vmrgsort4", 1);
-    stats.emplace_back("PIPE_V");
-    stats.emplace_back("copy_ubuf_to_ubuf", 1, 1, 0, 0); // copy sorted result (MTE1)
+    stats.emplace_back("pipe_barrier");
+    stats.emplace_back("copy_ubuf_to_ubuf", 1); // copy sorted result (MTE1)
     return stats;
 }
 
