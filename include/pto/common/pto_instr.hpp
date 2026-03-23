@@ -1521,11 +1521,11 @@ PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &...events)
     return {};
 }
 
-template <typename Pipe, typename TileProd, typename TileCons, typename... WaitEvents>
-PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &...events)
+template <typename TileData, typename Pipe, typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(TileData &tile, Pipe &pipe, WaitEvents &...events)
 {
     TSYNC(events...);
-    TPUSH_IMPL<Pipe, TileProd, TileCons>(pipe, tile);
+    TPUSH_IMPL<TileData, Pipe>(tile, pipe);
     return {};
 }
 
@@ -1537,11 +1537,11 @@ PTO_INST RecordEvent TPOP(Pipe &pipe, TileCons &tile, WaitEvents &...events)
     return {};
 }
 
-template <typename Pipe, typename TileProd, typename TileCons, typename... WaitEvents>
-PTO_INST RecordEvent TPOP(Pipe &pipe, TileCons &tile, WaitEvents &...events)
+template <typename TileData, typename Pipe, typename... WaitEvents>
+PTO_INST RecordEvent TPOP(TileData &tile, Pipe &pipe, WaitEvents &...events)
 {
     TSYNC(events...);
-    TPOP_IMPL<Pipe, TileProd, TileCons>(pipe, tile);
+    TPOP_IMPL<TileData, Pipe>(tile, pipe);
     return {};
 }
 
@@ -1550,6 +1550,14 @@ PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &...events)
 {
     TSYNC(events...);
     TFREE_IMPL<Pipe, Split>(pipe);
+    return {};
+}
+
+template <typename Pipe, typename... WaitEvents>
+PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &...events)
+{
+    TSYNC(events...);
+    TFREE_IMPL<Pipe>(pipe);
     return {};
 }
 
