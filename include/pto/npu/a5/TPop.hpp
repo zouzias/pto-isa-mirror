@@ -44,18 +44,28 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
     }
 }
 
-template <typename Pipe, typename TileProd, typename TileCons>
-PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
+template <typename Pipe, TileSplitAxis Split>
+PTO_INTERNAL void TFREE_IMPL(Pipe &pipe)
 {
-    // // 1. Cross-Core: Wait for Data
+    bool isFree = pipe.cons.getFreeStatus();
+    if (isFree) {
+        pipe.cons.template free<Split>();
+    }
+}
+
+//------------------------solution 2------------------------
+template <typename TileData, typename Pipe>
+PTO_INTERNAL void TPOP_IMPL(TileData &tile, Pipe &pipe)
+{
+    // 1. Cross-Core: Wait for Data
     bool isWait = pipe.cons.getWaitStatus();
     if (isWait) {
         pipe.cons.wait();
     }
 
     // 2. Address Calculation & Pop
-    bool reqFree = pipe.cons.template pop<TileProd, TileCons>(pipe.fifo, tile);
-    pipe.cons.tileIndex++;
+    bool reqFree = pipe.cons.pop(fifo, tile);
+    pipe.cons.tile_id++;
 
     // 3. Cross-Core: Free Space
     bool isFree = reqFree && pipe.cons.getFreeStatus();
@@ -64,12 +74,12 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
     }
 }
 
-template <typename Pipe, TileSplitAxis Split>
+template <typename Pipe>
 PTO_INTERNAL void TFREE_IMPL(Pipe &pipe)
 {
     bool isFree = pipe.cons.getFreeStatus();
     if (isFree) {
-        pipe.cons.template free<Split>();
+        pipe.cons.free();
     }
 }
 
