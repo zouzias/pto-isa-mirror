@@ -11,28 +11,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TTRANS_OP_HPP
 
 #include <vector>
-#include <pto/common/constants.hpp>
 #include "pto/costmodel/costmodel_types.hpp"
+#include "pto/costmodel/op_struct.hpp"
 
 namespace pto {
-
-// TTRANS cycle model — scatter_vnchwconv_b8/b16/b32 (PIPE_V vector pipeline)
-// followed by pipe_barrier(PIPE_V) + copy_ubuf_to_ubuf (MTE1).
-//
-// Layout parameters (element size determines B8/B16/B32 path):
-//   blockSizeElem  = 32 / sizeof(T)   (32→B8, 16→B16, 8→B32)
-//   yTileSizeElem  = 32 for B8, 16 for B16/B32
-//
-// Instruction counts:
-//   numSubTileX = ceil(validCol / blockSizeElem)
-//   numSubTileY = validRow / yTileSizeElem        (full Y-tiles)
-//   remainY     = validRow % yTileSizeElem         (tail rows)
-//
-//   B16/B32: numSubTileX calls of scatter_vnchwconv(numSubTileY)  [full tiles]
-//            1 call of scatter_vnchwconv(numSubTileX)              [Y-tail, if remainY > 0]
-//   B8:      numSubTileX × 4 calls of scatter_vnchwconv(numSubTileY)
-//            4 calls of scatter_vnchwconv(numSubTileX)             [Y-tail, if remainY > 0]
-//   Then PIPE_V + PIPE_V (copy_ubuf_to_ubuf, MTE1).
+constexpr int Y_ELEM_B8 = 32;
+constexpr int Y_ELEM_OTHER = 16;
 
 template <typename DstTile, typename SrcTile, typename TmpTile>
 PTO_INTERNAL std::vector<CostModelStats> runTransOp(DstTile & /*dst*/, SrcTile &src, TmpTile & /*tmp*/)
@@ -55,13 +39,27 @@ PTO_INTERNAL std::vector<CostModelStats> runTransOp(DstTile & /*dst*/, SrcTile &
     if (numSubTileY > 0) {
         if constexpr (sizeof(T) == 1u) {
             for (unsigned i = 0; i < numSubTileX; i++) {
-                for (int k = 0; k < 4; k++) {
-                    stats.emplace_back("scatter_vnchwconv", static_cast<int>(numSubTileY));
+                if (numSubTileY == 1) {
+                    TransOp::TransB8Instr(stats, 1);
+                } else {
+                    TransOp::TransB8Instr(stats, numSubTileY);
                 }
             }
         } else {
             for (unsigned i = 0; i < numSubTileX; i++) {
-                stats.emplace_back("scatter_vnchwconv", static_cast<int>(numSubTileY));
+                if constexpr (sizeof(T) == 2u) {
+                    if (numSubTileY == 1) {
+                        TransOp::TransB16Instr(stats, 1);
+                    } else {
+                        TransOp::TransB16Instr(stats, numSubTileY);
+                    }
+                } else {
+                    if (numSubTileY == 1) {
+                        TransOp::TransB32Instr(stats, 1);
+                    } else {
+                        TransOp::TransB32Instr(stats, numSubTileY);
+                    }
+                }
             }
         }
     }
@@ -69,20 +67,29 @@ PTO_INTERNAL std::vector<CostModelStats> runTransOp(DstTile & /*dst*/, SrcTile &
     // Y-tail (partial last block of rows)
     if (remainY > 0) {
         if constexpr (sizeof(T) == 1u) {
-            for (int k = 0; k < 4; k++) {
-                stats.emplace_back("scatter_vnchwconv", static_cast<int>(numSubTileX));
+            if (numSubTileX == 1) {
+                TransOp::TransB8Instr(stats, 1);
+            } else {
+                TransOp::TransB8Instr(stats, numSubTileX);
+            }
+        } else if constexpr (sizeof(T) == 2u) {
+            if (numSubTileX == 1) {
+                TransOp::TransB16Instr(stats, 1);
+            } else {
+                TransOp::TransB16Instr(stats, numSubTileX);
             }
         } else {
-            stats.emplace_back("scatter_vnchwconv", static_cast<int>(numSubTileX));
+            if (numSubTileX == 1) {
+                TransOp::TransB32Instr(stats, 1);
+            } else {
+                TransOp::TransB32Instr(stats, numSubTileX);
+            }
         }
     }
 
     // pipe_barrier(PIPE_V) then copy_ubuf_to_ubuf (MTE1) to copy the transposed result
-    stats.emplace_back("PIPE_V");
-    {
-        unsigned blockLen = (validRow * validCol * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
-        stats.emplace_back("copy_ubuf_to_ubuf", 1, static_cast<int>(blockLen), 1, 1);
-    }
+    stats.emplace_back("pipe_barrier");
+    stats.emplace_back("copy_ubuf_to_ubuf", 1);
 
     return stats;
 }
