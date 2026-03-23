@@ -123,6 +123,8 @@ if __name__ == "__main__":
         "TInsertTest.case_nd_vec_7",
         "TInsertTest.case_nd_vec_8",
         "TInsertTest.case_nd_vec_9",
+        "TInsertTest.case_nd_vec_19",
+        "TInsertTest.case_nd_vec_20",
     ]
 
     # (dtype, src_rows, src_cols, dst_rows, dst_cols, idx_row, idx_col)
@@ -136,6 +138,8 @@ if __name__ == "__main__":
         (np.float32, 8, 8, 16, 24, 0, 3),
         (np.float16, 8, 16, 16, 48, 2, 5),
         (np.int8, 32, 32, 64, 64, 0, 7),
+        (np.float16, 4, 128, 8, 144, 0, 5),
+        (np.float16, 4, 144, 8, 160, 0, 3),
     ]
 
     for i, case_name in enumerate(nd_vec_case_names):
@@ -192,6 +196,50 @@ if __name__ == "__main__":
 
         golden = dst_init.copy()
         golden[idx_row, idx_col] = src_data[0, 0]
+        golden.tofile("golden_output.bin")
+
+        os.chdir(original_dir)
+
+    valid_shape_case_names = [
+        "TInsertTest.case_nd_vec_13",
+        "TInsertTest.case_nd_vec_14",
+        "TInsertTest.case_nd_vec_15",
+        "TInsertTest.case_nd_vec_16",
+        "TInsertTest.case_nd_vec_17",
+        "TInsertTest.case_nd_vec_18",
+    ]
+
+    valid_shape_params = [
+        (np.float32, 4, 8, 5, 16, 16, 0, 0),
+        (np.float16, 8, 16, 10, 16, 32, 0, 0),
+        (np.int8, 16, 32, 20, 32, 64, 0, 0),
+        (np.float32, 4, 8, 5, 16, 16, 2, 3),
+        (np.float16, 8, 16, 10, 16, 32, 4, 5),
+        (np.int8, 16, 32, 20, 32, 64, 8, 7),
+    ]
+
+    for i, case_name in enumerate(valid_shape_case_names):
+        if not os.path.exists(case_name):
+            os.makedirs(case_name)
+        original_dir = os.getcwd()
+        os.chdir(case_name)
+        dtype, src_rows, padded_cols, valid_cols, dst_rows, dst_cols, idx_row, idx_col = valid_shape_params[i]
+
+        if dtype == np.int8:
+            src_data = np.random.randint(-128, 127, size=(src_rows, padded_cols)).astype(dtype)
+            dst_init = np.random.randint(-128, 127, size=(dst_rows, dst_cols)).astype(dtype)
+        elif dtype == np.float16:
+            src_data = np.random.uniform(-10, 10, size=(src_rows, padded_cols)).astype(dtype)
+            dst_init = np.random.uniform(-10, 10, size=(dst_rows, dst_cols)).astype(dtype)
+        else:
+            src_data = np.random.uniform(-10, 10, size=(src_rows, padded_cols)).astype(dtype)
+            dst_init = np.random.uniform(-10, 10, size=(dst_rows, dst_cols)).astype(dtype)
+
+        src_data.tofile("src_input.bin")
+        dst_init.tofile("dst_init.bin")
+
+        golden = dst_init.copy()
+        golden[idx_row : idx_row + src_rows, idx_col : idx_col + valid_cols] = src_data[:, :valid_cols]
         golden.tofile("golden_output.bin")
 
         os.chdir(original_dir)

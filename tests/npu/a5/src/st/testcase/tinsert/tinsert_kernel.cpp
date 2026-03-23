@@ -404,6 +404,12 @@ void launchTInsertNDVec(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stre
     } else if constexpr (testKey == 9) {
         RunTInsertNDVec<int8_t, 32, 32, 64, 64, 0, 7><<<1, nullptr, stream>>>(
             reinterpret_cast<int8_t *>(out), reinterpret_cast<int8_t *>(srcIn), reinterpret_cast<int8_t *>(dstIn));
+    } else if constexpr (testKey == 10) {
+        RunTInsertNDVec<half, 4, 128, 8, 144, 0, 5><<<1, nullptr, stream>>>(
+            reinterpret_cast<half *>(out), reinterpret_cast<half *>(srcIn), reinterpret_cast<half *>(dstIn));
+    } else if constexpr (testKey == 11) {
+        RunTInsertNDVec<half, 4, 144, 8, 160, 0, 3><<<1, nullptr, stream>>>(
+            reinterpret_cast<half *>(out), reinterpret_cast<half *>(srcIn), reinterpret_cast<half *>(dstIn));
     }
 }
 
@@ -416,6 +422,84 @@ template void launchTInsertNDVec<6>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn
 template void launchTInsertNDVec<7>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
 template void launchTInsertNDVec<8>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
 template void launchTInsertNDVec<9>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
+template void launchTInsertNDVec<10>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
+template void launchTInsertNDVec<11>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
+
+template <typename T, uint32_t SrcRows, uint32_t SrcCols, uint32_t SrcValidCols, uint32_t DstRows, uint32_t DstCols,
+          uint32_t IdxRow, uint32_t IdxCol>
+__global__ AICORE void RunTInsertNDVecValid(__gm__ T *out, __gm__ T *srcIn, __gm__ T *dstIn)
+{
+    using SrcShape = pto::Shape<1, 1, 1, SrcRows, SrcCols>;
+    using SrcStride = pto::Stride<SrcRows * SrcCols, SrcRows * SrcCols, SrcRows * SrcCols, SrcCols, 1>;
+    using SrcGlobal = GlobalTensor<T, SrcShape, SrcStride>;
+
+    using DstShape = pto::Shape<1, 1, 1, DstRows, DstCols>;
+    using DstStride = pto::Stride<DstRows * DstCols, DstRows * DstCols, DstRows * DstCols, DstCols, 1>;
+    using DstGlobal = GlobalTensor<T, DstShape, DstStride>;
+
+    using SrcLoadVec = Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::RowMajor>;
+    using SrcInsertVec = Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::RowMajor, SrcRows, SrcValidCols>;
+    using DstVec = Tile<TileType::Vec, T, DstRows, DstCols, BLayout::RowMajor>;
+
+    SrcLoadVec srcLoad;
+    SrcInsertVec srcInsert;
+    DstVec dstTile;
+
+    TASSIGN(srcLoad, 0x0);
+    TASSIGN(srcInsert, 0x0);
+    constexpr uint32_t srcSize = SrcRows * SrcCols * sizeof(T);
+    constexpr uint32_t dstAssignAddr = ((srcSize + 0xFF) / 0x100) * 0x100;
+    TASSIGN(dstTile, dstAssignAddr);
+
+    SrcGlobal srcGlobal(srcIn);
+    DstGlobal dstInitGlobal(dstIn);
+    DstGlobal outGlobal(out);
+
+#if defined(__DAV_VEC__)
+    TLOAD(srcLoad, srcGlobal);
+    TLOAD(dstTile, dstInitGlobal);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+    TINSERT<pto::TInsertMode::ND_VEC>(dstTile, srcInsert, static_cast<uint32_t>(IdxRow), static_cast<uint32_t>(IdxCol));
+
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+    TSTORE(outGlobal, dstTile);
+#endif
+}
+
+template <int32_t testKey>
+void launchTInsertNDVecValidShape(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream)
+{
+    if constexpr (testKey == 1) {
+        RunTInsertNDVecValid<float, 4, 8, 5, 16, 16, 0, 0><<<1, nullptr, stream>>>(
+            reinterpret_cast<float *>(out), reinterpret_cast<float *>(srcIn), reinterpret_cast<float *>(dstIn));
+    } else if constexpr (testKey == 2) {
+        RunTInsertNDVecValid<half, 8, 16, 10, 16, 32, 0, 0><<<1, nullptr, stream>>>(
+            reinterpret_cast<half *>(out), reinterpret_cast<half *>(srcIn), reinterpret_cast<half *>(dstIn));
+    } else if constexpr (testKey == 3) {
+        RunTInsertNDVecValid<int8_t, 16, 32, 20, 32, 64, 0, 0><<<1, nullptr, stream>>>(
+            reinterpret_cast<int8_t *>(out), reinterpret_cast<int8_t *>(srcIn), reinterpret_cast<int8_t *>(dstIn));
+    } else if constexpr (testKey == 4) {
+        RunTInsertNDVecValid<float, 4, 8, 5, 16, 16, 2, 3><<<1, nullptr, stream>>>(
+            reinterpret_cast<float *>(out), reinterpret_cast<float *>(srcIn), reinterpret_cast<float *>(dstIn));
+    } else if constexpr (testKey == 5) {
+        RunTInsertNDVecValid<half, 8, 16, 10, 16, 32, 4, 5><<<1, nullptr, stream>>>(
+            reinterpret_cast<half *>(out), reinterpret_cast<half *>(srcIn), reinterpret_cast<half *>(dstIn));
+    } else if constexpr (testKey == 6) {
+        RunTInsertNDVecValid<int8_t, 16, 32, 20, 32, 64, 8, 7><<<1, nullptr, stream>>>(
+            reinterpret_cast<int8_t *>(out), reinterpret_cast<int8_t *>(srcIn), reinterpret_cast<int8_t *>(dstIn));
+    }
+}
+
+template void launchTInsertNDVecValidShape<1>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
+template void launchTInsertNDVecValidShape<2>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
+template void launchTInsertNDVecValidShape<3>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
+template void launchTInsertNDVecValidShape<4>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
+template void launchTInsertNDVecValidShape<5>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
+template void launchTInsertNDVecValidShape<6>(uint8_t *out, uint8_t *srcIn, uint8_t *dstIn, void *stream);
 
 template <typename T, uint32_t DstRows, uint32_t DstCols, uint32_t IdxRow, uint32_t IdxCol>
 __global__ AICORE void RunTInsertNDVecScalar(__gm__ T *out, __gm__ T *srcIn, __gm__ T *dstIn)

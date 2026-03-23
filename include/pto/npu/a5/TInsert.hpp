@@ -350,6 +350,40 @@ __tf__ AICORE void TInsertVecToVecNDScalarImpl(typename DstTileData::TileDType _
     wait_flag(PIPE_S, PIPE_V, EVENT_ID0);
 }
 
+template <typename T, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TInsertVecToVecNDDispatch(DstTileData &dst, SrcTileData &src, uint32_t indexRow, uint32_t indexCol)
+{
+    uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
+    uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
+
+    PTO_ASSERT(indexRow + SrcTileData::ValidRow <= DstTileData::Rows,
+               "TINSERT ND_VEC : indexRow + srcValidRows exceeds dstRows!");
+    PTO_ASSERT(indexCol + SrcTileData::ValidCol <= DstTileData::Cols,
+               "TINSERT ND_VEC : indexCol + srcValidCols exceeds dstCols!");
+
+    constexpr bool kStridesAligned = (SrcTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0) &&
+                                     (DstTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0);
+    constexpr bool kValidColAligned = (SrcTileData::ValidCol * sizeof(T) % BLOCK_BYTE_SIZE == 0);
+
+    if constexpr (kStridesAligned) {
+        if (indexCol * sizeof(T) % BLOCK_BYTE_SIZE == 0) {
+            if constexpr (kValidColAligned) {
+                TInsertVecToVecNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, indexRow,
+                                                                   indexCol);
+            } else {
+                TInsertVecToVecNDAlignedImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
+                                                                          indexRow, indexCol);
+            }
+        } else {
+            TInsertVecToVecNDVectorImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
+                                                                     indexRow, indexCol);
+        }
+    } else {
+        TInsertVecToVecNDVectorImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, indexRow,
+                                                                 indexCol);
+    }
+}
+
 template <TInsertMode mode = TInsertMode::NZ, typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0)
 {
@@ -378,40 +412,7 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t inde
             PTO_ASSERT(indexCol < DstTileData::Cols, "TINSERT ND_VEC : indexCol exceeds dstCols!");
             TInsertVecToVecNDScalarImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol);
         } else {
-            uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
-            uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
-
-            PTO_ASSERT(indexRow + SrcTileData::ValidRow <= DstTileData::Rows,
-                       "TINSERT ND_VEC : indexRow + srcValidRows exceeds dstRows!");
-            PTO_ASSERT(indexCol + SrcTileData::ValidCol <= DstTileData::Cols,
-                       "TINSERT ND_VEC : indexCol + srcValidCols exceeds dstCols!");
-
-            constexpr bool kStridesAligned = (SrcTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0) &&
-                                             (DstTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0);
-            constexpr bool kValidColAligned = (SrcTileData::ValidCol * sizeof(T) % BLOCK_BYTE_SIZE == 0);
-
-            if constexpr (kStridesAligned) {
-                if (indexCol * sizeof(T) % BLOCK_BYTE_SIZE == 0) {
-                    // strides + indexCol 32B-aligned
-                    if constexpr (kValidColAligned) {
-                        // All aligned → DMA (copy_ubuf_to_ubuf)
-                        TInsertVecToVecNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
-                                                                           indexRow, indexCol);
-                    } else {
-                        // ValidCol not aligned → vlds+vsts with predicate
-                        TInsertVecToVecNDAlignedImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow,
-                                                                                  validCol, indexRow, indexCol);
-                    }
-                } else {
-                    // indexCol not 32B-aligned → vlds+vstus
-                    TInsertVecToVecNDVectorImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
-                                                                             indexRow, indexCol);
-                }
-            } else {
-                // strides not 32B-aligned → vlds+vstus
-                TInsertVecToVecNDVectorImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
-                                                                         indexRow, indexCol);
-            }
+            TInsertVecToVecNDDispatch<T>(dst, src, indexRow, indexCol);
         }
     } else {
         static_assert(DstTileData::Loc == TileType::Mat, "TINSERT : Destination must be Mat tile (L1/cbuf)");
