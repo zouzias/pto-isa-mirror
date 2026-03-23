@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TINSERT_HPP
 #define TINSERT_HPP
 #include "common.hpp"
+#include "utils.hpp"
 
 #ifndef COPY_CC_TO_CUBF
 #define COPY_CC_TO_CUBF(dst, src, nSize, srcRow, dstStride, srcStride, QuantPre, reluMode, channelSplitEnable) \
@@ -28,6 +29,7 @@ enum class TInsertMode : uint8_t
     SPLIT2_NZ_PLUS_1 = 2,
     SPLIT4_NZ_PLUS_1 = 3,
     ND = 4,
+    ND_VEC = 5,
 };
 #endif
 
@@ -234,55 +236,122 @@ __tf__ AICORE void TInsertNDImpl(typename DstTileData::TileDType __out__ dst,
     }
 }
 
+template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TInsertVecToVecNDImpl(typename DstTileData::TileDType __out__ dst,
+                                         typename SrcTileData::TileDType __in__ src, uint16_t validRow,
+                                         uint16_t validCol, uint32_t indexRow, uint32_t indexCol)
+{
+    __ubuf__ T *dstAddr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+
+    constexpr uint32_t dstRowStride = DstTileData::RowStride;
+    constexpr uint32_t srcRowStride = SrcTileData::RowStride;
+
+    uint32_t dstOffset = indexRow * dstRowStride + indexCol;
+    __ubuf__ T *dstStart = dstAddr + dstOffset;
+
+    uint32_t rowBytes = static_cast<uint32_t>(validCol) * sizeof(T);
+    uint32_t totalBytes = static_cast<uint32_t>(validRow) * rowBytes;
+    uint16_t rowBurstLen = static_cast<uint16_t>(rowBytes / BLOCK_BYTE_SIZE);
+
+    if (validCol == srcRowStride && validCol == dstRowStride && totalBytes >= BLOCK_BYTE_SIZE) {
+        uint16_t burstLen = static_cast<uint16_t>(totalBytes / BLOCK_BYTE_SIZE);
+        copy_ubuf_to_ubuf((__ubuf__ void *)dstStart, (__ubuf__ void *)srcAddr, 0, 1, burstLen, 0, 0);
+    } else {
+        uint16_t srcGap = static_cast<uint16_t>((srcRowStride - validCol) * sizeof(T) / BLOCK_BYTE_SIZE);
+        uint16_t dstGap = static_cast<uint16_t>((dstRowStride - validCol) * sizeof(T) / BLOCK_BYTE_SIZE);
+        copy_ubuf_to_ubuf((__ubuf__ void *)dstStart, (__ubuf__ void *)srcAddr, 0, validRow, rowBurstLen, srcGap,
+                          dstGap);
+    }
+}
+
 template <TInsertMode mode = TInsertMode::NZ, typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0)
 {
     using T = typename SrcTileData::DType;
-    static_assert(DstTileData::Loc == TileType::Mat, "TINSERT : Destination must be Mat tile (L1/cbuf)");
-    static_assert(SrcTileData::Loc == TileType::Vec, "TINSERT : Source must be Vec tile (UB/ubuf)");
     static_assert(std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
                   "TINSERT : Source and destination data types must match");
 
-    PTO_ASSERT(indexRow + SrcTileData::Rows <= DstTileData::Rows,
-               "TINSERT : The sum of indexRow and srcRow should be less than dstRow!");
-    PTO_ASSERT(indexCol + SrcTileData::Cols <= DstTileData::Cols,
-               "TINSERT : The sum of indexCol and srcCol should be less than dstCol!");
-
-    uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
-    uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
-
-    if constexpr (mode == TInsertMode::ND) {
-        static_assert(SrcTileData::isRowMajor, "TINSERT ND : Source must be RowMajor (ND format)");
+    if constexpr (mode == TInsertMode::ND_VEC) {
+        static_assert(DstTileData::Loc == TileType::Vec, "TINSERT ND_VEC : Destination must be Vec tile (UB/ubuf)");
+        static_assert(SrcTileData::Loc == TileType::Vec, "TINSERT ND_VEC : Source must be Vec tile (UB/ubuf)");
+        static_assert(DstTileData::isRowMajor, "TINSERT ND_VEC : Destination must be RowMajor (ND format)");
+        static_assert(SrcTileData::isRowMajor, "TINSERT ND_VEC : Source must be RowMajor (ND format)");
+        static_assert(SrcTileData::Rows <= DstTileData::Rows,
+                      "TINSERT ND_VEC : Source rows must not exceed destination rows");
+        static_assert(SrcTileData::Cols <= DstTileData::Cols,
+                      "TINSERT ND_VEC : Source cols must not exceed destination cols");
+        static_assert(SrcTileData::Cols * sizeof(T) % BLOCK_BYTE_SIZE == 0,
+                      "TINSERT ND_VEC : Source cols * sizeof(T) must be 32-byte aligned");
+        static_assert(DstTileData::Cols * sizeof(T) % BLOCK_BYTE_SIZE == 0,
+                      "TINSERT ND_VEC : Destination cols * sizeof(T) must be 32-byte aligned");
+        static_assert(SrcTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0,
+                      "TINSERT ND_VEC : Source row stride * sizeof(T) must be 32-byte aligned");
+        static_assert(DstTileData::RowStride * sizeof(T) % BLOCK_BYTE_SIZE == 0,
+                      "TINSERT ND_VEC : Destination row stride * sizeof(T) must be 32-byte aligned");
         static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
                           (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
                           (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
                           (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
                           (std::is_same<T, float8_e8m0_t>::value),
-                      "TINSERT ND : Unsupported data type.");
-        uint16_t dstCols = static_cast<uint16_t>(DstTileData::Cols);
-        TInsertNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstCols, indexRow,
-                                                   indexCol);
+                      "TINSERT ND_VEC : Unsupported data type.");
+
+        PTO_ASSERT(indexRow + SrcTileData::Rows <= DstTileData::Rows,
+                   "TINSERT ND_VEC : indexRow + srcRows exceeds dstRows!");
+        PTO_ASSERT(indexCol + SrcTileData::Cols <= DstTileData::Cols,
+                   "TINSERT ND_VEC : indexCol + srcCols exceeds dstCols!");
+        PTO_ASSERT(indexCol * sizeof(T) % BLOCK_BYTE_SIZE == 0,
+                   "TINSERT ND_VEC : indexCol offset must be 32-byte aligned");
+
+        uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
+        uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
+        TInsertVecToVecNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, indexRow,
+                                                           indexCol);
     } else {
-        static_assert(!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::RowMajor),
-                      "TINSERT NZ : Source must be NZ format (column-major, RowMajor fractal)");
-        static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
-                          (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
-                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
-                          (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
-                          (std::is_same<T, float8_e8m0_t>::value),
-                      "TINSERT NZ : Unsupported data type.");
+        static_assert(DstTileData::Loc == TileType::Mat, "TINSERT : Destination must be Mat tile (L1/cbuf)");
+        static_assert(SrcTileData::Loc == TileType::Vec, "TINSERT : Source must be Vec tile (UB/ubuf)");
 
-        uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
+        PTO_ASSERT(indexRow + SrcTileData::Rows <= DstTileData::Rows,
+                   "TINSERT : The sum of indexRow and srcRow should be less than dstRow!");
+        PTO_ASSERT(indexCol + SrcTileData::Cols <= DstTileData::Cols,
+                   "TINSERT : The sum of indexCol and srcCol should be less than dstCol!");
 
-        if constexpr (mode == TInsertMode::SPLIT2_NZ_PLUS_1) {
-            TInsertSplitImpl<2, T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, indexRow,
-                                                             indexCol);
-        } else if constexpr (mode == TInsertMode::SPLIT4_NZ_PLUS_1) {
-            TInsertSplitImpl<4, T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, indexRow,
-                                                             indexCol);
+        uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
+        uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
+
+        if constexpr (mode == TInsertMode::ND) {
+            static_assert(SrcTileData::isRowMajor, "TINSERT ND : Source must be RowMajor (ND format)");
+            static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
+                              (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+                              (std::is_same<T, float8_e8m0_t>::value),
+                          "TINSERT ND : Unsupported data type.");
+            uint16_t dstCols = static_cast<uint16_t>(DstTileData::Cols);
+            TInsertNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstCols, indexRow,
+                                                       indexCol);
         } else {
-            TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, dstRow, indexRow,
-                                                     indexCol);
+            static_assert(!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::RowMajor),
+                          "TINSERT NZ : Source must be NZ format (column-major, RowMajor fractal)");
+            static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
+                              (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+                              (std::is_same<T, float8_e8m0_t>::value),
+                          "TINSERT NZ : Unsupported data type.");
+
+            uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
+
+            if constexpr (mode == TInsertMode::SPLIT2_NZ_PLUS_1) {
+                TInsertSplitImpl<2, T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol,
+                                                                 indexRow, indexCol);
+            } else if constexpr (mode == TInsertMode::SPLIT4_NZ_PLUS_1) {
+                TInsertSplitImpl<4, T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol,
+                                                                 indexRow, indexCol);
+            } else {
+                TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, dstRow,
+                                                         indexRow, indexCol);
+            }
         }
     }
 }
