@@ -50,8 +50,9 @@ struct TSyncTraits {
                   "Producer must be TSTORE_C2GM, TMOV_C2UB (Cube) or TSTORE_V2GM, TINSERT_V2L1 (Vector)");
 };
 
-template <uint16_t FlagID, typename DataFIFO, TSyncOpType ProducerOp, TSyncOpType ConsumerOp>
-struct TFIFOSync {
+template <uint8_t FlagID, typename DataType, FIFOType FifoType, int Depth, int Period, int LocalDepth,
+          TSyncOpType ProducerOp, TSyncOpType ConsumerOp>
+struct TPipe {
     using Traits = TSyncTraits<ProducerOp, ConsumerOp>;
     // static constexpr bool is_c2v = Traits::is_cube_to_vec;
     // static constexpr bool is_c2v_gm = Traits::is_cube_to_vec_gm;
@@ -61,8 +62,7 @@ struct TFIFOSync {
     // static constexpr bool is_v2c_ub = Traits::is_vec_to_cube_ub;
     // static constexpr int VEC_CORE_ID_OFFSET = 16;
 
-    static constexpr int fifoSize = DataFIFO::fifoDepth;
-    static constexpr int syncPeriod = DataFIFO::fifoPeriod;
+    using DataFiFo = DataFIFO<DataType, FifoType, Depth, Period, LocalDepth>;
 
     // -------------------------------------------------------------------------
     // Producer Interface
@@ -92,7 +92,7 @@ struct TFIFOSync {
 
         PTO_INTERNAL void record()
         {
-            tile_id = (tile_id + 1) % fifoSize;
+            tile_id = (tile_id + 1) % Depth;
             // Add notification routine from producer to notifier for multithreaded scenario
         }
     };
@@ -126,20 +126,29 @@ struct TFIFOSync {
 
         PTO_INTERNAL void free()
         {
-            tile_id = (tile_id + 1) % fifoSize;
+            tile_id = (tile_id + 1) % Depth;
             // Add notification to producer that will notify that particular block in FIFO is free now
         }
     };
+
+    DataFiFo fifo;
+    Producer prod;
+    Consumer cons;
+
+    PTO_INTERNAL explicit TPipe(DataType *fifoBase, uint32_t localFiFoBase)
+        : fifo(fifoBase, localFiFoBase), prod(), cons()
+    {}
 };
 
-template <typename PipeProd, typename TileData, typename DataFiFo>
-PTO_INTERNAL void TPUSH_IMPL(PipeProd &prod, TileData &tile, DataFiFo &fifo)
+template <typename TileData, typename Pipe>
+PTO_INTERNAL void TPUSH_IMPL(TileData &tile, Pipe &pipe)
 {
     // 1. Cross-Core: Wait for space
-    prod.allocate();
+    pipe.prod.allocate();
 
     // 2. Address Calculation
-    __gm__ typename DataFiFo::DType *addr = fifo.getBasePtr() + TileData::Numel * (prod.get_tile_id() % fifo.fifoDepth);
+    __gm__ typename Pipe::DataFiFo::DType *addr =
+        pipe.fifo.getBasePtr() + TileData::Numel * (pipe.prod.get_tile_id() % Pipe::DataFiFo::fifoDepth);
     constexpr unsigned int cols = TileData::Cols;
     constexpr unsigned int rows = TileData::Rows;
     GlobalTensor<typename TileData::DType, Shape<1, 1, 1, rows, cols>,
@@ -148,7 +157,7 @@ PTO_INTERNAL void TPUSH_IMPL(PipeProd &prod, TileData &tile, DataFiFo &fifo)
     TLOAD(tile, gt);
 
     // 3. Cross-Core: Commit & Signal
-    prod.record();
+    pipe.prod.record();
 }
 
 } // namespace pto

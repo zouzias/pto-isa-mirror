@@ -1586,11 +1586,11 @@ PTO_INST RecordEvent TFMOD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &s
     return {};
 }
 
-template <typename PipeProd, typename TileData, typename DataFifo, typename... WaitEvents>
-PTO_INST RecordEvent TPUSH(PipeProd &prod, TileData &tile, DataFifo &fifo, WaitEvents &... events)
+template <typename Pipe, typename TileProd, TileSplitAxis Split, typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPUSH, prod, tile, fifo);
+    TPUSH_IMPL<Pipe, TileProd, Split>(pipe, tile);
     return {};
 }
 
@@ -1598,15 +1598,15 @@ template <typename TileData, typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TPUSH(TileData &tile, Pipe &pipe, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPUSH, tile, pipe);
+    TPUSH_IMPL<TileData, Pipe>(tile, pipe);
     return {};
 }
 
-template <typename PipeCon, typename TileData, typename DataFifo, typename... WaitEvents>
-PTO_INST RecordEvent TPOP(PipeCon &cons, TileData &tile, DataFifo &fifo, WaitEvents &... events)
+template <typename Pipe, typename TileCons, TileSplitAxis Split, typename... WaitEvents>
+PTO_INST RecordEvent TPOP(Pipe &pipe, TileCons &tile, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPOP, cons, tile, fifo);
+    TPOP_IMPL<Pipe, TileCons, Split>(pipe, tile);
     return {};
 }
 
@@ -1614,7 +1614,15 @@ template <typename TileData, typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TPOP(TileData &tile, Pipe &pipe, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPOP, tile, pipe);
+    TPOP_IMPL<TileData, Pipe>(tile, pipe);
+    return {};
+}
+
+template <typename Pipe, TileSplitAxis Split, typename... WaitEvents>
+PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TFREE_IMPL<Pipe, Split>(pipe);
     return {};
 }
 
@@ -1622,7 +1630,7 @@ template <typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TFREE, pipe);
+    TFREE_IMPL<Pipe>(pipe);
     return {};
 }
 
