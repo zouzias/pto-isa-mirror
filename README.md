@@ -297,6 +297,13 @@ If you install to `install-path`, use:
 source ${install-path}/cann/bin/setenv.bash
 ```
 
+### Communication Instruction Software Dependencies
+
+| Instruction type | CANN version | MPI | Other dependencies |
+| --- | --- | --- | --- |
+| Synchronous instructions | 8.5.0 or later | 3.2.1 or later | None |
+| Asynchronous instructions | 9.0.0 or later | 3.2.1 or later | ops-legacy package required |
+
 ### Installing MPI Dependency (Optional)
 
 Communication instruction test cases depend on MPI. Recommended version >= 3.2.1.
@@ -319,6 +326,13 @@ make && make install
 export MPI_HOME=/usr/local/mpich
 export PATH=${MPI_HOME}/bin:${PATH}
 ```
+
+### Installing ops-legacy Package (Optional)
+
+- [A2 x86_64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-x86_64.run)
+- [A2 aarch64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-aarch64.run)
+- [A3 x86_64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-x86_64.run)
+- [A3 aarch64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-aarch64.run)
 
 ### One-click Build and Run
 

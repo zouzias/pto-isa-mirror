@@ -297,6 +297,13 @@ python3 tests/run_cpu.py --verbose
 source ${install-path}/cann/bin/setenv.bash
 ```
 
+### 通信指令软件依赖说明
+
+| 指令类型 | CANN 版本 | MPI | 其他依赖 |
+| --- | --- | --- | --- |
+| 同步指令 | 8.5.0 及以上 | 3.2.1 及以上 | 不涉及 |
+| 异步指令 | 9.0.0 及以上 | 3.2.1 及以上 | 需要安装 ops-legacy 包 |
+
 ### 安装 MPI 依赖（可选）
 
 通信指令的测试用例依赖 MPI，推荐版本 >= 3.2.1。
@@ -319,6 +326,13 @@ make && make install
 export MPI_HOME=/usr/local/mpich
 export PATH=${MPI_HOME}/bin:${PATH}
 ```
+
+### 安装 ops-legacy 包（可选）
+
+- [A2 x86_64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-x86_64.run)
+- [A2 aarch64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-aarch64.run)
+- [A3 x86_64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-x86_64.run)
+- [A3 aarch64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-aarch64.run)
 
 ### 一键构建与运行
 
