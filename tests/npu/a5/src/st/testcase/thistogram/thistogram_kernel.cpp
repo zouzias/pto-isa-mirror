@@ -32,15 +32,15 @@ __global__ AICORE void runTHistogram(__gm__ uint16_t *src, __gm__ uint32_t __out
     using GlobalDataSrc =
         GlobalTensor<uint16_t, Shape<1, 1, 1, validRows, validCols>, pto::Stride<1, 1, 1, validCols, 1>>;
     using GlobalDataDst = GlobalTensor<uint32_t, Shape<1, 1, 1, validRows, 256>, pto::Stride<1, 1, 1, 256, 1>>;
-    using GlobalDataIdx = GlobalTensor<uint8_t, Shape<1, 1, 1, 1, validRows>, pto::Stride<1, 1, 1, 1, 1>>;
+    using GlobalDataIdx = GlobalTensor<uint8_t, Shape<1, 1, 1, validRows, 1>, pto::Stride<1, 1, 1, 1, 1>, Layout::DN>;
 
     using TileDataSrc = Tile<TileType::Vec, uint16_t, validRows, alignedSrcCol, BLayout::RowMajor, -1, -1>;
     using TileDataDst = Tile<TileType::Vec, uint32_t, validRows, 256, BLayout::RowMajor, -1, -1>;
-    using TileDataIdx = Tile<TileType::Vec, uint8_t, validRows, 32, BLayout::RowMajor, -1, -1>;
+    using TileDataIdx = Tile<TileType::Vec, uint8_t, alignedIdxBytes, 1, BLayout::ColMajor, -1, -1>;
 
     TileDataSrc srcTile(validRows, validCols);
     TileDataDst dstTile(validRows, 256);
-    TileDataIdx idxTile(1, validRows);
+    TileDataIdx idxTile(validRows, 1);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);

@@ -83,6 +83,18 @@ struct B82B16Trait {
     static constexpr bool isB8 = (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>);
     using TransType = std::conditional_t<isB8, int16_t, T>;
 
+    PTO_INTERNAL static TransType TransValue(T value)
+    {
+        if constexpr (isB8) {
+            // convert signed int to unsigned int to avoid sign extension
+            uint16_t u16 = static_cast<uint8_t>(value);
+            // duplicate the 8-bit value into both lower and upper bytes of a 16-bit integer
+            return u16 | (u16 << B8_DATA_TYPE_OFFSET);
+        } else {
+            return value;
+        }
+    }
+
     PTO_INTERNAL static uint64_t TransSize(uint64_t size)
     {
         if constexpr (isB8) {
