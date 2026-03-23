@@ -1,0 +1,1447 @@
+target_dir: /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st
+[  1%] Building CXX object testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/tmrgsort_kernel.cpp.o
+
+[  2%] Building CXX object testcase/tload/CMakeFiles/tload_kernel.dir/tload_kernel.cpp.o
+
+[  3%] Building CXX object testcase/ttrans/CMakeFiles/ttrans_kernel.dir/ttrans_kernel.cpp.o
+
+[  3%] Building CXX object testcase/tstore/CMakeFiles/tstore_kernel.dir/tstore_kernel.cpp.o
+
+[  4%] Building CXX object testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/tmatmul_kernel.cpp.o
+
+[  5%] Building CXX object testcase/trowsum/CMakeFiles/trowsum_kernel.dir/trowsum_kernel.cpp.o
+
+[  6%] Building CXX object testcase/textract/CMakeFiles/textract_kernel.dir/textract_kernel.cpp.o
+
+[  7%] Building CXX object testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/tcolsum_kernel.cpp.o
+
+In file included from In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:44: error: use of undeclared identifier 'float8_e4m3_t'
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:44: error: use of undeclared identifier 'float8_e4m3_t'
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:44: error: use of undeclared identifier 'float8_e4m3_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                           ^
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                           ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:87: error: use of undeclared identifier 'float8_e5m2_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                      ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:87: error: use of undeclared identifier 'float8_e5m2_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                      ^
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                           ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:406:44: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                          (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                           ^~~~~~~~~~
+
+                                           float_t
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:87: error: use of undeclared identifier 'float8_e5m2_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                      ^
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp:12:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:406:44: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+                          (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                           ^~~~~~~~~~
+
+                                           float_t
+
+In file included from /usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp
+
+              ^
+
+:405:44: error: use of undeclared identifier 'float8_e4m3_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                           ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:407:44: error: use of undeclared identifier 'float8_e8m0_t'
+
+                          (std::is_same<T, float8_e8m0_t>::value),
+
+                                           ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:87: error: use of undeclared identifier 'float8_e5m2_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                      ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:406:44: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                          (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                           ^~~~~~~~~~
+
+                                           float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:406:44: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                          (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                           ^~~~~~~~~~
+
+                                           float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:407:44: error: use of undeclared identifier 'float8_e8m0_t'
+
+                          (std::is_same<T, float8_e8m0_t>::value),
+
+                                           ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:407:44: error: use of undeclared identifier 'float8_e8m0_t'
+
+                          (std::is_same<T, float8_e8m0_t>::value),
+
+                                           ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp:12:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:407:44: error: use of undeclared identifier 'float8_e8m0_t'
+
+                          (std::is_same<T, float8_e8m0_t>::value),
+
+                                           ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:434:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:435:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+:433:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:434:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+In file included from                                                ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:434:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:44: error: use of undeclared identifier 'float8_e4m3_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                           ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cppIn file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:44: error: use of undeclared identifier 'float8_e4m3_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                           ^
+
+:12:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:435:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:446:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:87: error: use of undeclared identifier 'float8_e5m2_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                      ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:435:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:87: error: use of undeclared identifier 'float8_e5m2_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                      ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:406:44: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+
+
+                          (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                           ^~~~~~~~~~
+
+                                           float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:447:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:406:44: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                          (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                           ^~~~~~~~~~
+
+                                           float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:407:44: error: use of undeclared identifier 'float8_e8m0_t'
+
+                          (std::is_same<T, float8_e8m0_t>::value),
+
+                                           ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:434:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:446:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: In file included from note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:407:44: error: use of undeclared identifier 'float8_e8m0_t'
+
+                          (std::is_same<T, float8_e8m0_t>::value),
+
+                                           ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:446:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:435:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp:12:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:447:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:447:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:434:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:434:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:435:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/textract/textract_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:709:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:435:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:717:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:886:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:44: error: use of undeclared identifier 'float8_e4m3_t'
+
+:
+
+In file included from                           (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:44: error: use of undeclared identifier 'float8_e4m3_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                           ^
+
+
+
+                                           ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:87: error: use of undeclared identifier 'float8_e5m2_t'
+
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                      ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:405:87: error: use of undeclared identifier 'float8_e5m2_t'
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||:446:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+
+
+                                                                                      ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:446:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmrgsort/tmrgsort_kernel.cpp:/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:406:44: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                          (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                           ^~~~~~~~~~
+
+                                           float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+12:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:709:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:717:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:406:44: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:447:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+                          (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                           ^~~~~~~~~~/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:446:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+
+
+                                           float_t                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:447/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+:886:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1674:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/ttrans/ttrans_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hppIn file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:407:44: error: use of undeclared identifier 'float8_e8m0_t'
+
+                          (std::is_same<T, float8_e8m0_t>::value),:23:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:709:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:717:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+
+
+                                           ^
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:407:44: error: use of undeclared identifier 'float8_e8m0_t'
+
+                          (std::is_same<T, float8_e8m0_t>::value),
+
+                                           ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:447:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:886:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1674:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:433:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1674:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:434:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:434:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:435:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:435:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tstore/tstore_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:709:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:717:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:48: error: use of undeclared identifier 'float8_e4m3_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:886:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/trowsum/trowsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:709:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:717:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:445:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+:91: error: use of undeclared identifier 'float8_e5m2_t'
+
+                              (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+
+                                                                                          ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:886:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tcolsum/tcolsum_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:709:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:717:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:446:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:446:48: error: unknown type name 'hifloat8_t'; did you mean 'float_t'?
+
+163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:886:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:                              (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+
+                                               ^~~~~~~~~~
+
+                                               float_t
+
+/usr/include/math.h:163:15: note: 'float_t' declared here
+
+typedef float float_t;
+
+              ^
+
+11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:447:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1674:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:17:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr_impl.hpp:222:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/header.hpp:43:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/kirin9030/TInsert.hpp:17:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/npu/a5/TInsert.hpp:447:48: error: use of undeclared identifier 'float8_e8m0_t'
+
+                              (std::is_same<T, float8_e8m0_t>::value),
+
+                                               ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1674:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1674:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tload/tload_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:709:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:717:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:886:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1674:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/testcase/tmatmul/tmatmul_kernel.cpp:11:
+
+In file included from /root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/pto-inst.hpp:23:
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:709:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TIMG2COL_IMPL<TileData, ConvTileData, FmatrixMode>(dst, src, posM, posK);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:717:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TSETFMATRIX_IMPL<ConvTileData, FmatrixMode>(src);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:886:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TTRI_IMPL<TileData, isUpperOrLower>(dst, diagonal);
+
+    ^
+
+/root/workspace/daily/2026-03-24-00/pto-isa/tests/npu/kirin9030/src/st/../../../../../include/pto/common/pto_instr.hpp:1674:5: warning: use of function template name with no prior declaration in function call with explicit template arguments is a C++20 extension [-Wc++20-extensions]
+
+    TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
+
+    ^
+
+4 warnings and 12 errors generated.
+
+4 warnings and 12 errors generated.
+
+make[2]: *** [testcase/textract/CMakeFiles/textract_kernel.dir/build.make:76: testcase/textract/CMakeFiles/textract_kernel.dir/textract_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:995: testcase/textract/CMakeFiles/textract_kernel.dir/all] Error 2
+
+make[1]: *** Waiting for unfinished jobs....
+
+make[2]: *** [testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/build.make:76: testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/tcolsum_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:1099: testcase/tcolsum/CMakeFiles/tcolsum_kernel.dir/all] Error 2
+
+4 warnings and 12 errors generated.
+
+4 warnings and 12 errors generated.
+
+make[2]: *** [testcase/trowsum/CMakeFiles/trowsum_kernel.dir/build.make:76: testcase/trowsum/CMakeFiles/trowsum_kernel.dir/trowsum_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:1047: testcase/trowsum/CMakeFiles/trowsum_kernel.dir/all] Error 2
+
+make[2]: *** [testcase/ttrans/CMakeFiles/ttrans_kernel.dir/build.make:76: testcase/ttrans/CMakeFiles/ttrans_kernel.dir/ttrans_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:891: testcase/ttrans/CMakeFiles/ttrans_kernel.dir/all] Error 2
+
+4 warnings and 12 errors generated.
+
+make[2]: *** [testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/build.make:76: testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/tmatmul_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:735: testcase/tmatmul/CMakeFiles/tmatmul_kernel.dir/all] Error 2
+
+4 warnings and 12 errors generated.
+
+make[2]: *** [testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/build.make:76: testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/tmrgsort_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:839: testcase/tmrgsort/CMakeFiles/tmrgsort_kernel.dir/all] Error 2
+
+4 warnings and 12 errors generated.
+
+4 warnings and 12 errors generated.
+
+run failed: build failed
+make[2]: *** [testcase/tstore/CMakeFiles/tstore_kernel.dir/build.make:76: testcase/tstore/CMakeFiles/tstore_kernel.dir/tstore_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:943: testcase/tstore/CMakeFiles/tstore_kernel.dir/all] Error 2
+
+make[2]: *** [testcase/tload/CMakeFiles/tload_kernel.dir/build.make:76: testcase/tload/CMakeFiles/tload_kernel.dir/tload_kernel.cpp.o] Error 1
+
+make[1]: *** [CMakeFiles/Makefile2:787: testcase/tload/CMakeFiles/tload_kernel.dir/all] Error 2
+
+make: *** [Makefile:91: all] Error 2
+
+build failed
