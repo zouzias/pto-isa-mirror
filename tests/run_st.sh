@@ -321,7 +321,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowexpanddiv -g TRowExpandDivTest.case_fp32_40_64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowmax -g TROWMAXTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowmin -g TROWMINTest.case1
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t trowsum -g TROWSUMTest.test1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t trowsum -g TROWSUMTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowprod -g TROWPRODTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trsqrt -g TRSQRTTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tsel -g TSELTest.case1
