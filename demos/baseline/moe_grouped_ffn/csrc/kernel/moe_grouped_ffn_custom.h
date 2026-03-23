@@ -15,10 +15,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 constexpr int kMoeHiddenSize = 4096;
-constexpr int kMoeInterSize = 1920;
+constexpr int kMoeInterSize = 4096;
 constexpr int kMoeBaseM = 64;
 constexpr int kMoeBaseK = 64;
-constexpr int kMoeBaseN = 192;
+constexpr int kMoeBaseN = 256;
 constexpr int kMoeNumNTiles = kMoeInterSize / kMoeBaseN;
 constexpr int kMoeFifoDepth = 2;
 constexpr int kMoeStepKa = 4;
