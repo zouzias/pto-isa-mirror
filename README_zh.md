@@ -8,6 +8,7 @@ PTO（Parallel Tile Operation）是昇腾 CANN 定义的一套面向 tile 的虚
 
 ## 新闻
 
+* **2026-02-28**：PTO 通信 ISA 发布。
 * **2025-12-27**：PTO Tile Library 正式开源发布。
 
 ## 概览
@@ -17,6 +18,14 @@ PTO ISA 基于昇腾底层硬件与软件抽象，定义 90+ 条标准 tile 指�
 昇腾硬件架构随代际演进发生了显著变化，导致指令集也产生了较大差异。PTO 指令集通过提升抽象层级来桥接这些差异。我们保证在固定 tile shape 下，这些 PTO 指令能够跨平台正确工作并保持向后兼容。同时，这种抽象并不会屏蔽性能调优空间：用户仍然可以通过调整 tile size、tile shape、指令顺序等进行精细化优化，从而对内部流水线具备足够控制力。
 
 目标是在提升抽象层级的同时保留调参空间：既方便跨代迁移，也不牺牲性能优化手感。
+
+除计算与数据搬运指令外，PTO ISA 还提供了一组**通信指令**，用于 NPU 间的数据传输与同步，涵盖三大类：
+
+* **点对点通信**：`TPUT`（远程写）和 `TGET`（远程读）通过 GM 在 NPU 之间传输 tile 数据，支持原子操作与 ping-pong 双缓冲。异步指令 `TPUT_ASYNC` 和 `TGET_ASYNC` 通过 SDMA 引擎直接进行 GM 到 GM 的数据传输，无需 UB 中转，可实现通信与计算的重叠。
+* **信号同步**：`TNOTIFY`（发送信号）、`TWAIT`（阻塞等待）和 `TTEST`（非阻塞测试）通过可配置的比较条件在 NPU 间协调执行。
+* **集合通信**：`TBROADCAST`、`TGATHER`、`TSCATTER` 和 `TREDUCE` 基于 `ParallelGroup` 实现多 NPU 间的广播、聚集、分发和归约操作。
+
+这些通信原语遵循与计算指令相同的 tile 级抽象和跨平台设计，用户可在昇腾硬件上构建计算-通信融合 kernel（如 GEMM + AllReduce）。
 
 目前，PTO 指令已集成到以下框架中：
 
@@ -71,7 +80,7 @@ PTO Tile Lib 并不面向入门级用户，主要面向：
 | PTO Tile Fusion | BiSheng 编译器支持：自动融合 tile 操作。 | 编译器 / 工具链 |
 | PTO-AS | PTO ISA 的字节码（Byte Code）支持。 | 编译器 / 工具链 |
 | **卷积扩展** | PTO ISA 对卷积 kernel 的支持。 | ISA 扩展 |
-| **集合通信扩展** | PTO ISA 对集合通信 kernel 的支持。 | ISA 扩展 |
+| ~~**集合通信扩展**~~ | ~~PTO ISA 对集合通信 kernel 的支持。~~ | ~~ISA 扩展~~（**已发布 2026-02-28**） |
 | **系统调度扩展** | PTO ISA 对 SPMD/MPMD 编程的调度支持。 | ISA 扩展 |
 
 
@@ -230,6 +239,31 @@ chmod +x ./tests/run_st.sh
 ./tests/run_st.sh a3 sim all
 ```
 
+### 运行通信 ST 测试
+
+通信测试需要多 NPU 环境（2/4/8 NPU），并依赖 HCCL 和 MPI。
+
+```bash
+# 在项目根目录下执行：
+chmod +x ./tests/run_comm_test.sh
+
+# 使用 8 NPU 在 A3 上运行所有通信测试（默认）
+./tests/run_comm_test.sh
+
+# 仅运行 2 卡测试
+./tests/run_comm_test.sh -n 2
+
+# 在 A5 上使用 2 NPU 运行指定测试（如 tput）
+./tests/run_comm_test.sh -v a5 -n 2 -t tput
+
+# 开启调试输出
+./tests/run_comm_test.sh -d -t treduce
+```
+
+**注意：** 异步通信指令当前仅支持 A2/A3，且需要安装 CANN 9.0 软件包及对应的 OPS 包。
+
+各通信指令详情参见 [docs/isa/comm/README.md](docs/isa/comm/README.md)。
+
 ### 运行 CPU 仿真测试
 
 ```bash
@@ -263,6 +297,29 @@ python3 tests/run_cpu.py --verbose
 source ${install-path}/cann/bin/setenv.bash
 ```
 
+### 安装 MPI 依赖（可选）
+
+通信指令的测试用例依赖 MPI，推荐版本 >= 3.2.1。
+
+**从源码安装：**
+
+```bash
+# 以 3.2.1 版本为例
+version='3.2.1'
+wget https://www.mpich.org/static/downloads/${version}/mpich-${version}.tar.gz
+tar -xzf mpich-${version}.tar.gz
+cd mpich-${version}
+./configure --prefix=/usr/local/mpich --disable-fortran
+make && make install
+```
+
+**设置环境变量：**
+
+```bash
+export MPI_HOME=/usr/local/mpich
+export PATH=${MPI_HOME}/bin:${PATH}
+```
+
 ### 一键构建与运行
 
 * 运行完整 ST 测试：
@@ -288,6 +345,7 @@ source ${install-path}/cann/bin/setenv.bash
 
 * ISA 指南与导航：[docs/README_zh.md](docs/README_zh.md)
 * ISA 指令索引：[docs/isa/README_zh.md](docs/isa/README_zh.md)
+* 通信 ISA 指令索引：[docs/isa/comm/README_zh.md](docs/isa/comm/README_zh.md)
 * 开发者文档索引：[docs/coding/README_zh.md](docs/coding/README_zh.md)
 * 入门指南（建议先 CPU，再 NPU）：[docs/getting-started_zh.md](docs/getting-started_zh.md)
 * 安全与披露流程：[SECURITY_zh.md](SECURITY_zh.md)
