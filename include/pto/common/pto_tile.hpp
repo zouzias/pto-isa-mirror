@@ -20,16 +20,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 namespace pto {
-#ifdef __PTO_AUTO__
-// Not really a standand way to call tile function, but... this is a temp
-// hack for auto mode to allocate memory for tiles without a TLOAD,
-// should be removed after we fix the compiler design
-template <typename TileData>
-__tf__ PTO_INTERNAL void TInit(typename TileData::TileDType __out__ tile)
-{
-    return;
-}
-#endif
 
 constexpr int DYNAMIC = -1;
 
@@ -998,7 +988,17 @@ public:
 #endif
     }
 
+#ifdef __PTO_AUTO__
+    PTO_INTERNAL ConvTile()
+    {
+        // we need to dummy-initialize the data_ member,
+        // otherwise in auto mode this will remain uninitialized
+        // and end up being an undef value after SROA pass
+        data_ = __cce_tinit(data_);
+    }
+#else
     PTO_INTERNAL ConvTile() = default;
+#endif
 
     template <typename... Ints>
     PTO_INTERNAL void SetDynamicShape(Ints... vals)
@@ -1019,6 +1019,12 @@ public:
     template <typename... Ints>
     PTO_INTERNAL explicit ConvTile(Ints... dynamicVals)
     {
+#ifdef __PTO_AUTO__
+        // we need to dummy-initialize the data_ member,
+        // otherwise in auto mode this will remain uninitialized
+        // and end up being an undef value after SROA pass
+        data_ = __cce_tinit(data_);
+#endif
         SetDynamicShape(dynamicVals...);
     }
 
@@ -1298,14 +1304,15 @@ public:
     }
     // constructor for static shape
 #ifdef __CPU_SIM
-    AICORE Tile() : data_(internalStorage_){};
+    AICORE Tile() : data_(internalStorage_) {};
 #else
     AICORE Tile()
     {
 #ifdef __PTO_AUTO__
-        if constexpr (Loc != TileType::Bias) {
-            TInit<std::remove_reference_t<decltype(*this)>>(data_);
-        }
+        // we need to dummy-initialize the data_ member,
+        // otherwise in auto mode this will remain uninitialized
+        // and end up being an undef value after SROA pass
+        data_ = __cce_tinit(data_);
 #endif
     };
 #endif
@@ -1318,6 +1325,12 @@ public:
         : data_(internalStorage_)
 #endif
     {
+#ifdef __PTO_AUTO__
+        // we need to dummy-initialize the data_ member,
+        // otherwise in auto mode this will remain uninitialized
+        // and end up being an undef value after SROA pass
+        data_ = __cce_tinit(data_);
+#endif
         RowMaskInternal = VR;
         ColMaskInternal = VC;
     }
@@ -1329,6 +1342,12 @@ public:
         : data_(internalStorage_)
 #endif
     {
+#ifdef __PTO_AUTO__
+        // we need to dummy-initialize the data_ member,
+        // otherwise in auto mode this will remain uninitialized
+        // and end up being an undef value after SROA pass
+        data_ = __cce_tinit(data_);
+#endif
         RowMaskInternal = VR;
     }
 
@@ -1339,8 +1358,19 @@ public:
         : data_(internalStorage_)
 #endif
     {
+#ifdef __PTO_AUTO__
+        // we need to dummy-initialize the data_ member,
+        // otherwise in auto mode this will remain uninitialized
+        // and end up being an undef value after SROA pass
+        data_ = __cce_tinit(data_);
+#endif
         ColMaskInternal = VC;
     }
+
+#ifdef __PTO_AUTO__
+    Tile &operator=(const Tile &) = delete;
+    Tile &operator=(Tile &&) = delete;
+#endif
 
     static constexpr bool isBoxedLayout = (SFractal != SLayout::NoneBox);
     static constexpr bool isInnerRowMajor = (SFractal == SLayout::RowMajor);
