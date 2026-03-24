@@ -18,7 +18,9 @@ namespace pto {
 // TSCATTER: pure scalar element-wise loop — no CCE pipeline instructions issued.
 PTO_INTERNAL std::vector<CostModelStats> runScatterOp()
 {
-    return {}; // no CCE pipeline instructions
+    std::vector<CostModelStats> stats;
+    stats.emplace_back("scatter", 1);
+    return stats; // no CCE pipeline instructions
 }
 
 } // namespace pto

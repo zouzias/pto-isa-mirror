@@ -62,6 +62,7 @@ constexpr float A2A3_COMPL_FP16_SQRT = 29.0f; // fp16 sqrt
 constexpr float A2A3_RPT_1 = 1.0f; // scalar/unary/single-pass ops
 constexpr float A2A3_RPT_2 = 2.0f; // binary vector ops
 constexpr float A2A3_RPT_4 = 4.0f; // transcendental ops (exp/sqrt fp16)
+constexpr float A2A3_RPT_6 = 6.0f; // merge_sort op
 
 // Pipeline configuration
 constexpr float A2A3_INTERVAL = 18.0f;   // interval cycles between instruction groups
@@ -381,19 +382,28 @@ public:
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
         // TSORT32: vbitsort (bitonic sort, 2 cycles/repeat)
-        SetParam("vbitsort", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+        SetParam("vbitsort", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_4, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("vbitsort", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+        SetParam("vbitsort", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_4, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("vbitsort", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+        SetParam("vbitsort", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_4, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("vbitsort", DataType::INT32, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+        SetParam("vbitsort", DataType::INT32, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_4, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
         // TMRGSORT: vmrgsort4 (merge sort, 2 cycles/repeat)
-        SetParam("vmrgsort4", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+        SetParam("vmrgsort4", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_6, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("vmrgsort4", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+        SetParam("vmrgsort4", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_6, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+
+        SetParam("scatter", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("scatter", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("scatter", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("scatter", DataType::INT32, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_1, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
         // TMATMUL / TGEMV: mmad (PIPE_M cube pipeline — recorded, cycle model TBD)
