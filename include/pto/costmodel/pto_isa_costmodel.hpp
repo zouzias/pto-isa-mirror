@@ -563,7 +563,7 @@ public:
     void SelOpPredictCycle(const std::string &instr_name, DstTile &dst)
     {
         using T = typename DstTile::DType;
-        std::vector<CostModelStats> stats = runTSelOp<TileDataD, MaskTile, Src0Tile, Src1Tile, TmpTile>(dst);
+        std::vector<CostModelStats> stats = runTSelOp<DstTile, MaskTile, Src0Tile, Src1Tile, TmpTile>(dst);
         float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
     }
@@ -580,7 +580,7 @@ public:
     }
 
 	// TMov with mode
-	template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
+	template <typename DstTileData, typename SrcTileData, QuantMode_t quantPre, ReluPreMode reluMode>
     void MovModeOpPredictCycle(const std::string &instr_name, DstTileData &dst, SrcTileData &src)
     {
         using T = typename DstTileData::DType;
@@ -727,18 +727,18 @@ public:
 		int srcType;
 		uint16_t m;
 		uint16_t n;
-		if (std::is_same<SrcTileData, GlobalTensor>::value)
-		{
-			m = dst.GetValidRow();
-    		n = dst.GetValidCol();
-			srcType = -1;
-			dstType =  getTileType(DstTileData::Loc);
-		} else {
+		//if (std::is_same<SrcTileData, GlobalTensor>::value)
+		//{
+		//	m = dst.GetValidRow();
+    	//	n = dst.GetValidCol();
+		//	srcType = -1;
+		//	dstType =  getTileType(DstTileData::Loc);
+		//} else {
 			m = src.GetValidRow();
     		n = src.GetValidCol();
 			srcType = getTileType(SrcTileData::Loc);
 			dstType =  getTileType(DstTileData::Loc);
-		}
+		//}
         auto key = std::make_pair(srcType, dstType);
 		if (!data_trans_params_map_.contains(key))
 		{
