@@ -272,7 +272,7 @@ struct TPipe {
                 if constexpr (isNZPlus1) { // NZ + 1 mode
                     TINSERT_IMPL<TInsertMode::NZ_PLUS_1>(matTile, tile, row_offset, 0);
                 } else { // NZ mode
-                    TINSERT_IMPL(matTile, tile, static_cast<uint32_t>(row_offset), static_cast<uint32_t>(0));
+                    TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(row_offset), static_cast<uint16_t>(0));
                 }
             } else if constexpr (isSplitN) {
                 // split N between vectors
@@ -285,7 +285,7 @@ struct TPipe {
                 if constexpr (isNZPlus1) { // NZ+1 mode for bank conflict optimization
                     TINSERT_IMPL<TInsertMode::NZ_PLUS_1>(matTile, tile, 0, col_index);
                 } else {
-                    TINSERT_IMPL(matTile, tile, static_cast<uint32_t>(0), static_cast<uint32_t>(col_index));
+                    TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(col_index));
                 }
             } else if constexpr (nonSplit) {
                 // single vector core
@@ -297,7 +297,7 @@ struct TPipe {
                 if constexpr (isNZPlus1) { // NZ+1 mode
                     TINSERT_IMPL<TInsertMode::NZ_PLUS_1>(matTile, tile, 0, 0);
                 } else {
-                    TINSERT_IMPL(matTile, tile, static_cast<uint32_t>(0), static_cast<uint32_t>(0));
+                    TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
                 }
             } else {
                 static_assert(isSplitM || isSplitN || nonSplit,

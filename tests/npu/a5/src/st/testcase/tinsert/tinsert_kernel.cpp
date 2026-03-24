@@ -210,7 +210,7 @@ AICORE void runTInsertNZ(__gm__ T *out, __gm__ T *src)
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-    TINSERT(matTile, tmpTile, static_cast<uint32_t>(0), static_cast<uint32_t>(0));
+    TINSERT(matTile, tmpTile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
     set_intra_block(PIPE_MTE3, syncId);
 #endif
 
@@ -372,7 +372,7 @@ AICORE void runTInsertND(__gm__ int8_t *out, __gm__ int8_t *src)
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TINSERT(insertDst, insertSrc, static_cast<uint32_t>(0), static_cast<uint32_t>(0));
+    TINSERT(insertDst, insertSrc, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
     set_intra_block(PIPE_MTE3, syncId);
 #endif
 
@@ -437,7 +437,7 @@ __global__ AICORE void RunTInsertNDVec(__gm__ T *out, __gm__ T *srcIn, __gm__ T 
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    TINSERT(dstTile, srcTile, static_cast<uint32_t>(IdxRow), static_cast<uint32_t>(IdxCol));
+    TINSERT(dstTile, srcTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -533,7 +533,7 @@ __global__ AICORE void RunTInsertNDVecValid(__gm__ T *out, __gm__ T *srcIn, __gm
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    TINSERT(dstTile, srcInsert, static_cast<uint32_t>(IdxRow), static_cast<uint32_t>(IdxCol));
+    TINSERT(dstTile, srcInsert, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -609,7 +609,7 @@ __global__ AICORE void RunTInsertNDVecScalar(__gm__ T *out, __gm__ T *srcIn, __g
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    TINSERT(dstTile, srcInsert, static_cast<uint32_t>(IdxRow), static_cast<uint32_t>(IdxCol));
+    TINSERT(dstTile, srcInsert, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
