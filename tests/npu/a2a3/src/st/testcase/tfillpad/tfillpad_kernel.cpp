@@ -197,8 +197,12 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
         t0 = get_syscnt();
-        if constexpr (inplace)
+        if constexpr (inplace) {
+#ifdef __PTO_AUTO__
+            TRESHAPE(vecTileP, vecTile);
+#endif
             TFILLPAD_INPLACE(vecTileP, vecTile);
+        }
         else
             TFILLPAD(vecTileP, vecTile);
     }
