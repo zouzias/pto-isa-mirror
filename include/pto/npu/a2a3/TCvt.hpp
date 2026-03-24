@@ -371,42 +371,63 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(__ubuf__ typename TileDataD
     bool isHead = (dstRepeatStride == BLOCK_MAX_PER_REPEAT);
 
     // Stride calculations for two-step conversion
-    uint8_t step1Repeat = isHead ? static_cast<uint8_t>(2 * repeatNum) : repeatNum;
+    // When isHead: fp16→int32 doubles repeats (128 fp16 elements needs 2 hw repeats of 64)
+    // When !isHead: repeats stay the same (each repeat covers one row)
+    const uint16_t totalRepeats = isHead ? static_cast<uint16_t>(2 * static_cast<uint16_t>(repeatNum)) : repeatNum;
     uint16_t step1DstRepeatStride = isHead ? BLOCK_MAX_PER_REPEAT : static_cast<uint16_t>(srcRepeatStride * 2);
     uint16_t step1SrcRepeatStride = isHead ? static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2) : srcRepeatStride;
     uint16_t step2DstRepeatStride = isHead ? static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2) : dstRepeatStride;
     uint16_t step2SrcRepeatStride = isHead ? BLOCK_MAX_PER_REPEAT : static_cast<uint16_t>(srcRepeatStride * 2);
 
-    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
+    constexpr uint16_t fp16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(half);
+    constexpr uint16_t int16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int16_t);
 
-    // Step 1: fp16 -> int32
-    switch (static_cast<RoundMode>(mode)) {
-        case RoundMode::CAST_RINT:
-            vconv_f162s32r(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-                           step1SrcRepeatStride);
-            break;
-        case RoundMode::CAST_ROUND:
-            vconv_f162s32a(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-                           step1SrcRepeatStride);
-            break;
-        case RoundMode::CAST_FLOOR:
-            vconv_f162s32f(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-                           step1SrcRepeatStride);
-            break;
-        case RoundMode::CAST_CEIL:
-            vconv_f162s32c(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-                           step1SrcRepeatStride);
-            break;
-        default:
-            vconv_f162s32z(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-                           step1SrcRepeatStride);
+    // Loop over chunks of at most REPEAT_MAX to stay within hardware limits.
+    // The temp buffer is reused each iteration; only src and dst pointers advance.
+    uint16_t repeatsDone = 0;
+    while (repeatsDone < totalRepeats) {
+        const uint8_t chunkRepeats = (totalRepeats - repeatsDone > REPEAT_MAX)
+                                         ? static_cast<uint8_t>(REPEAT_MAX)
+                                         : static_cast<uint8_t>(totalRepeats - repeatsDone);
+
+        __ubuf__ half *chunkSrc = src +
+            static_cast<uint32_t>(repeatsDone) * step1SrcRepeatStride * fp16ElemsPerBlock;
+        __ubuf__ int16_t *chunkDst = dst +
+            static_cast<uint32_t>(repeatsDone) * step2DstRepeatStride * int16ElemsPerBlock;
+
+        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
+
+        // Step 1: fp16 -> int32
+        switch (static_cast<RoundMode>(mode)) {
+            case RoundMode::CAST_RINT:
+                vconv_f162s32r(tempInt32Buf, chunkSrc, chunkRepeats, 1, srcBlockStride, step1DstRepeatStride,
+                               step1SrcRepeatStride);
+                break;
+            case RoundMode::CAST_ROUND:
+                vconv_f162s32a(tempInt32Buf, chunkSrc, chunkRepeats, 1, srcBlockStride, step1DstRepeatStride,
+                               step1SrcRepeatStride);
+                break;
+            case RoundMode::CAST_FLOOR:
+                vconv_f162s32f(tempInt32Buf, chunkSrc, chunkRepeats, 1, srcBlockStride, step1DstRepeatStride,
+                               step1SrcRepeatStride);
+                break;
+            case RoundMode::CAST_CEIL:
+                vconv_f162s32c(tempInt32Buf, chunkSrc, chunkRepeats, 1, srcBlockStride, step1DstRepeatStride,
+                               step1SrcRepeatStride);
+                break;
+            default:
+                vconv_f162s32z(tempInt32Buf, chunkSrc, chunkRepeats, 1, srcBlockStride, step1DstRepeatStride,
+                               step1SrcRepeatStride);
+        }
+        pipe_barrier(PIPE_V);
+
+        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
+        // Step 2: int32 -> int16 (same repeat count as step 1)
+        vconv_s322s16(chunkDst, tempInt32Buf, chunkRepeats, dstBlockStride, 1, step2DstRepeatStride,
+                      step2SrcRepeatStride);
+
+        repeatsDone += chunkRepeats;
     }
-    pipe_barrier(PIPE_V);
-
-    set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
-    // Step 2: int32 -> int16
-    vconv_s322s16(dst, tempInt32Buf, static_cast<uint8_t>(2 * repeatNum), dstBlockStride, 1, step2DstRepeatStride,
-                  step2SrcRepeatStride);
 }
 
 // FP16 -> INT8 conversion
