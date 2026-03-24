@@ -27,7 +27,7 @@ __global__ AICORE void runTRowCMin(__gm__ TDst __out__ *out, __gm__ TSrc __in__ 
                             DynStride(srcTileH * srcTileW, srcTileH * srcTileW, srcTileH * srcTileW, srcTileW, 1));
     using TileDataDst = Tile<TileType::Vec, TDst, dstTileH, dstTileW, BLayout::ColMajor, -1, -1>;
     using TileDataSrc = Tile<TileType::Vec, TSrc, srcTileH, srcTileW, BLayout::RowMajor, -1, -1>;
-    using TileDataTmp = Tile<TileType::Vec, uint32_t, srcTileH, 192, BLayout::RowMajor, -1, -1>;
+    using TileDataTmp = Tile<TileType::Vec, uint32_t, 1, 8, BLayout::RowMajor, -1, -1>;
     TileDataDst dstTile(vRows, vCols);
     TileDataSrc srcTile(vRows, vCols);
     TileDataTmp tmpTile(vRows, vCols);
@@ -57,7 +57,7 @@ void LaunchTRowCMin(TDst *out, TSrc *src, void *stream)
 }
 
 template <typename TDst, int dstTileH, int dstTileW, int srcTileH, int srcTileW, int vRows, int vCols>
-void LaunchTRowCMinHalf(aclFloat16 *out, aclFloat16 *src, void *stream)
+void LaunchTRowCMinHalf(TDst *out, aclFloat16 *src, void *stream)
 {
     runTRowCMin<TDst, half, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols><<<1, nullptr, stream>>>(out, (half *)src);
 }
@@ -73,3 +73,9 @@ template void LaunchTRowCMin<uint32_t, float, 8, 1, 1, 128, 1, 128>(uint32_t *ou
 template void LaunchTRowCMin<uint32_t, float, 64, 1, 32, 128, 32, 128>(uint32_t *out, float *src, void *stream);
 template void LaunchTRowCMin<uint32_t, float, 8, 1, 3, 4096, 3, 4095>(uint32_t *out, float *src, void *stream);
 template void LaunchTRowCMin<uint32_t, float, 8, 1, 2, 16384, 2, 16381>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowCMinHalf<uint32_t, 16, 1, 2, 16, 2, 16>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowCMinHalf<uint32_t, 16, 1, 13, 16, 13, 13>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowCMinHalf<uint32_t, 272, 1, 260, 64, 260, 64>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowCMinHalf<uint32_t, 16, 1, 3, 8192, 3, 8191>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowCMinHalf<uint32_t, 16, 1, 1, 16384, 1, 16381>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowCMinHalf<uint32_t, 16, 1, 1, 32768, 1, 32761>(uint32_t *out, aclFloat16 *src, void *stream);

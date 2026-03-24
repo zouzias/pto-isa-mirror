@@ -145,3 +145,27 @@ TEST_F(TROWCMINTest, case_uint32_float_8x1_2x16384_2x16381)
 {
     this->Launch<uint32_t, float, 8, 1, 2, 16384, 2, 16381>();
 }
+TEST_F(TROWCMINTest, case_uint32_half_16x1_2x16_2x16)
+{
+    this->Launch<uint32_t, aclFloat16, 16, 1, 2, 16, 2, 16, true>();
+}
+TEST_F(TROWCMINTest, case_uint32_half_16x1_13x16_13x13)
+{
+    this->Launch<uint32_t, aclFloat16, 16, 1, 13, 16, 13, 13, true>();
+}
+TEST_F(TROWCMINTest, case_uint32_half_272x1_260x64_260x64)
+{
+    this->Launch<uint32_t, aclFloat16, 272, 1, 260, 64, 260, 64, true>();
+}
+TEST_F(TROWCMINTest, case_uint32_half_16x1_3x8192_3x8191)
+{
+    this->Launch<uint32_t, aclFloat16, 16, 1, 3, 8192, 3, 8191, true>();
+}
+TEST_F(TROWCMINTest, case_uint32_half_16x1_1x16384_1x16381)
+{
+    this->Launch<uint32_t, aclFloat16, 16, 1, 1, 16384, 1, 16381, true>();
+}
+TEST_F(TROWCMINTest, case_uint32_half_16x1_1x32768_1x32761)
+{
+    this->Launch<uint32_t, aclFloat16, 16, 1, 1, 32768, 1, 32761, true>();
+}

@@ -83,6 +83,12 @@ if __name__ == "__main__":
         TRowCMinParams(np.uint32, np.float32, 64, 1, 32, 128, 32, 128),
         TRowCMinParams(np.uint32, np.float32, 8, 1, 3, 4096, 3, 4095),
         TRowCMinParams(np.uint32, np.float32, 8, 1, 2, 16384, 2, 16381),
+        TRowCMinParams(np.uint32, np.float16, 16, 1, 2, 16, 2, 16),
+        TRowCMinParams(np.uint32, np.float16, 16, 1, 13, 16, 13, 13),
+        TRowCMinParams(np.uint32, np.float16, 272, 1, 260, 64, 260, 64),
+        TRowCMinParams(np.uint32, np.float16, 16, 1, 3, 8192, 3, 8191),
+        TRowCMinParams(np.uint32, np.float16, 16, 1, 1, 16384, 1, 16381),
+        TRowCMinParams(np.uint32, np.float16, 16, 1, 1, 32768, 1, 32761),
     ]
 
     for case in case_list:
