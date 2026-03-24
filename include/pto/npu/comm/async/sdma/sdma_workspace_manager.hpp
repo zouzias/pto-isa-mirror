@@ -197,6 +197,10 @@ private:
         pRtStreamGetSqid_ = reinterpret_cast<detail::RtStreamGetSqidFn>(dlsym(rtHandle_, "rtStreamGetSqid"));
         pRtStreamGetCqid_ = reinterpret_cast<detail::RtStreamGetCqidFn>(dlsym(rtHandle_, "rtStreamGetCqid"));
         pRtGetDeviceInfo_ = reinterpret_cast<detail::RtGetDeviceInfoFn>(dlsym(rtHandle_, "rtGetDeviceInfo"));
+<<<<<<< HEAD
+=======
+
+>>>>>>> oldBranch/async_a5
         if (!pRtsStreamCreate_ || !pRtStreamGetSqid_ || !pRtStreamGetCqid_ || !pRtGetDeviceInfo_) {
             std::cerr << "[SDMA] Failed to resolve runtime symbols: " << dlerror() << std::endl;
             return false;
