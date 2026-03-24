@@ -90,13 +90,24 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src)
         std::conditional_t<useDynamicTile, Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>,
                            Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor>>;
 
-    TileDataSrc srcTile;
-    TileDataDst dstTile;
-
-    if constexpr (useDynamicTile) {
-        srcTile = TileDataSrc(kValidRows_, kValidCols_);
-        dstTile = TileDataDst(kValidRows_, kValidCols_);
+    TileDataSrc srcTile = []() __attribute((cce_aicore))
+    {
+        if constexpr (useDynamicTile) {
+            return TileDataSrc(kValidRows_, kValidCols_);
+        } else {
+            return TileDataSrc();
+        }
     }
+    ();
+    TileDataDst dstTile = []() __attribute((cce_aicore))
+    {
+        if constexpr (useDynamicTile) {
+            return TileDataDst(kValidRows_, kValidCols_);
+        } else {
+            return TileDataDst();
+        }
+    }
+    ();
 
     TASSIGN(srcTile, 0x0 + 0x400 * block_idx);
     TASSIGN(dstTile, 0x20000 + 0x400 * block_idx);
