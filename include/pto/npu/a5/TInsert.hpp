@@ -417,11 +417,11 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t inde
         uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
         uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
 
-        if constexpr (SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox)) {
+        if constexpr (SrcTileData::isRowMajor) {
             uint16_t dstCols = static_cast<uint16_t>(DstTileData::Cols);
             TInsertNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstCols, indexRow,
                                                        indexCol);
-        } else if constexpr (!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::RowMajor)) {
+        } else {
             uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
             TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), TInsertMode::NZ, validRow, validCol,
                                                      dstRow, indexRow, indexCol);
