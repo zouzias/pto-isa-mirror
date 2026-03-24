@@ -47,9 +47,21 @@ PTO_INST RecordEvent TSHLS(TileDataDst &dst, TileDataSrc &src, typename TileData
 
 ## Constraints
 
-- Intended for integral element types.
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
-- Scalar only support zero and positive value.
+- **Implementation checks (A2A3)**:
+    - Supported element types are `int32_t`, `int`, `int16_t`, `uint32_t`, `unsigned int`, and `uint16_t`.
+    - `dst` and `src` must use the same element type.
+    - `dst` and `src` must be vector tiles.
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
+    - Scalar only supports zero and positive values.
+- **Implementation checks (A5)**:
+    - Supported element types are `int32_t`, `int16_t`, `int8_t`, `uint32_t`, `uint16_t`, and `uint8_t`.
+    - `dst` and `src` must use the same element type.
+    - `dst` and `src` must be vector tiles.
+    - Static valid bounds must satisfy `ValidRow <= Rows` and `ValidCol <= Cols` for both tiles.
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
+    - Scalar only supports zero and positive values.
+- **Valid region**:
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 

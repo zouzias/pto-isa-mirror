@@ -47,11 +47,16 @@ PTO_INST RecordEvent TXORS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
 
 ## Constraints
 
-- Intended for integral element types.
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
-- Individual temporary space is required by A3 for calculation, while not used by A5.
-- Setting the source Tile and destination Tile to the same memory is **Unsupported**.
-- For A3, do not set temporary space to the same memory as source Tile or destination Tile.
+- **Implementation checks (A2A3)**:
+    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, and `int16_t`.
+    - `dst`, `src`, and `tmp` must use the same element type.
+    - In manual mode, source, destination, and temporary storage must not overlap in memory.
+- **Implementation checks (A5)**:
+    - Supported element types are `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, and `int32_t`.
+    - `dst` and `src` element types must match.
+    - `src.GetValidRow()/GetValidCol()` must match `dst`.
+- **Valid region**:
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 

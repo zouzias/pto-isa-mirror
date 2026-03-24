@@ -24,30 +24,54 @@ namespace pto {
  * 2. [Load]    Load data from GM
  * 3. [Free]    Release GM space (Cross-Core)
  */
-template <typename PipeCons, typename TileDataSrc, typename DataFiFo>
-PTO_INTERNAL void TPOP_IMPL(PipeCons &cons, TileDataSrc &tile, DataFiFo &fifo)
+template <typename Pipe, typename TileCons, TileSplitAxis Split>
+PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
 {
     // // 1. Cross-Core: Wait for Data
-    bool isWait = cons.getWaitStatus();
+    bool isWait = pipe.cons.getWaitStatus();
     if (isWait) {
-        cons.wait();
+        pipe.cons.template wait<Split>();
     }
 
     // 2. Address Calculation & Pop
-    bool reqFree = cons.pop(fifo, tile);
-    cons.tile_id++;
+    bool reqFree = pipe.cons.template pop<TileCons, Split>(pipe.fifo, tile);
+    pipe.cons.tileIndex++;
 
     // 3. Cross-Core: Free Space
-    bool isFree = reqFree && cons.getFreeStatus();
+    bool isFree = reqFree && pipe.cons.getFreeStatus();
     if (isFree) {
-        cons.free();
+        pipe.cons.template free<Split>();
     }
 }
 
+template <typename Pipe, TileSplitAxis Split>
+PTO_INTERNAL void TFREE_IMPL(Pipe &pipe)
+{
+    bool isFree = pipe.cons.getFreeStatus();
+    if (isFree) {
+        pipe.cons.template free<Split>();
+    }
+}
+
+//------------------------------------------------
 template <typename TileData, typename Pipe>
 PTO_INTERNAL void TPOP_IMPL(TileData &tile, Pipe &pipe)
 {
-    TPOP_IMPL(pipe.cons, tile, pipe.fifo);
+    // 1. Cross-Core: Wait for Data
+    bool isWait = pipe.cons.getWaitStatus();
+    if (isWait) {
+        pipe.cons.wait();
+    }
+
+    // 2. Address Calculation & Pop
+    bool reqFree = pipe.cons.pop(pipe.fifo, tile);
+    pipe.cons.tile_id++;
+
+    // 3. Cross-Core: Free Space
+    bool isFree = reqFree && pipe.cons.getFreeStatus();
+    if (isFree) {
+        pipe.cons.free();
+    }
 }
 
 template <typename Pipe>

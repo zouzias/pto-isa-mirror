@@ -121,7 +121,7 @@ This page is the source-synchronized ISA index generated from `docs/isa/manifest
 | Data Movement / Layout | [`TTRANS`](isa/TTRANS.md) | Transpose with an implementation-defined temporary tile. |
 | Complex | [`TPRINT`](isa/TPRINT.md) | Debug/print elements from a tile (implementation-defined). |
 | Complex | [`TMRGSORT`](isa/TMRGSORT.md) | Merge sort for multiple sorted lists (implementation-defined element format and layout). |
-| Complex | [`TSORT32`](isa/TSORT32.md) | Sort a fixed-size 32-element block and produce an index mapping. |
+| Complex | [`TSORT32`](isa/TSORT32.md) | Sort 32-element blocks of `src` with accompanying `idx` entries and output sorted value-index pairs. |
 | Complex | [`TGATHER`](isa/TGATHER.md) | Gather/select elements using either an index tile or a compile-time mask pattern. |
 | Complex | [`TCI`](isa/TCI.md) | Generate a contiguous integer sequence into a destination tile. |
 | Complex | [`TTRI`](isa/TTRI.md) | Generate a triangular (lower/upper) mask tile. |

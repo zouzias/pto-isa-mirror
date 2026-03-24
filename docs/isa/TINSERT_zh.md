@@ -52,11 +52,27 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexR
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+#ifdef PTO_NPU_ARCH_A5
+template <TInsertMode mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0, WaitEvents &... events);
+#endif
 ```
 
 ## 约束
 
-- 运行时边界必须满足 `indexRow + src.Rows <= dst.Rows` 且 `indexCol + src.Cols <= dst.Cols`（确切的检查取决于目标）。
+- **A2/A3**:
+    - 文档中列出的这些重载对应 `Acc -> Mat` 插入路径，包括普通形式、`reluMode` 形式、标量预量化形式以及向量预量化（`TINSERT_FP`）形式。
+    - 运行时边界必须满足 `indexRow + src.Rows <= dst.Rows` 且 `indexCol + src.Cols <= dst.Cols`。
+- **A5**:
+    - 除了上面的 `Acc -> Mat` 插入路径外，A5 还额外提供 `template <TInsertMode mode, ...> TINSERT(...)`，用于 `Vec -> Mat` 与 `Vec -> Vec` 插入变体。
+    - `mode == TInsertMode::ND` 要求源向量 tile 为行优先，并以 ND 布局插入到矩阵 tile。
+    - `mode == TInsertMode::ND_VEC` 要求源和目的都为行优先向量 tile。
+    - NZ 系列模式（`NZ`、`NZ_PLUS_1`、`SPLIT2_NZ_PLUS_1`、`SPLIT4_NZ_PLUS_1`）要求源向量 tile 为 NZ 格式，目的为矩阵 tile。
 
 ## 示例
 

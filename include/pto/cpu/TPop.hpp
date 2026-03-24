@@ -23,24 +23,24 @@ namespace pto {
  * 2. [Load]    Load data from GM
  * 3. [Free]    Release GM space (Cross-Core)
  */
-template <typename PipeCons, typename TileData, typename DataFiFo>
-PTO_INTERNAL void TPOP_IMPL(PipeCons &cons, TileData &tile, DataFiFo &fifo)
+template <typename TileData, typename Pipe>
+PTO_INTERNAL void TPOP_IMPL(TileData &tile, Pipe &pipe)
 {
-    // // 1. Cross-Core: Wait for Data
-    cons.wait();
+    // 1. Cross-Core: Wait for Data
+    pipe.cons.wait();
 
     // 2. Address Calculation & Load
-    typename DataFiFo::DType *addr;
-    addr = fifo.getBasePtr() + TileData::Numel * (cons.get_tile_id() % fifo.fifoDepth);
+    typename Pipe::DataFiFo::DType *addr;
+    addr = pipe.fifo.getBasePtr() + TileData::Numel * (pipe.cons.get_tile_id() % Pipe::DataFiFo::fifoDepth);
     constexpr unsigned int cols = TileData::Cols;
     constexpr unsigned int rows = TileData::Rows;
-    GlobalTensor<typename DataFiFo::DType, Shape<1, 1, 1, rows, cols>,
+    GlobalTensor<typename Pipe::DataFiFo::DType, Shape<1, 1, 1, rows, cols>,
                  Stride<rows * cols, rows * cols, rows * cols, cols, 1>>
         gt(addr);
     TSTORE(gt, tile);
 
     // 3. Cross-Core: Free Space
-    cons.free();
+    pipe.cons.free();
 }
 
 } // namespace pto
