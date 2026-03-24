@@ -1028,6 +1028,19 @@ public:
     using TileDType = typename MemoryQualifier<Loc_, DType>::type;
 #endif
 
+#ifdef __COSTMODEL
+    float cycle;
+    AICORE void SetCycle(const float cycle_)
+    {
+        cycle = cycle_;
+    }
+
+    AICORE float GetCycle()
+    {
+        return cycle;
+    }
+#endif
+
 #ifdef __CPU_SIM
     // For CPU sim, return reference to pointer (allows TASSIGN to modify)
     AICORE TileDType &data()

@@ -11,7 +11,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TMOVOP_HPP
 #define TMOVOP_HPP
 #include "common.hpp"
-#include "TExtract.hpp"
 #include "TCopy.hpp"
 
 namespace pto {

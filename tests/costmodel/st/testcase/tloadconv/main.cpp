@@ -40,6 +40,8 @@ inline size_t GetFileSize(const std::string &filename)
 template <int32_t testKey, typename T>
 void tload_test()
 {
+    uint32_t M = 1024;
+    uint32_t N = 1024;
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
@@ -47,6 +49,8 @@ void tload_test()
 
     T *srcHost, *goldHost, *dstHost;
     void *srcDevice, *dstDevice, *logDevice = nullptr;
+    int in_byteSize = M * N * sizeof(float);
+    int out_byteSize = M * N * sizeof(float);
 
     aclrtMallocHost((void **)&srcHost, in_byteSize);
     aclrtMallocHost((void **)&goldHost, gold_byteSize);

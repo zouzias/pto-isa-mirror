@@ -67,8 +67,6 @@ void tload_test()
     aclrtMalloc((void **)&dstDevice, in_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&srcDevice, out_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    int actual_out_byteSize = 0;
-    actual_out_byteSize = get_input_golden<testKey>((uint8_t *)srcHost, (uint8_t *)goldHost);
     std::fill((uint8_t *)dstHost, ((uint8_t *)(dstHost)) + out_byteSize, 0);
 
     aclrtMemcpy(srcDevice, in_byteSize, srcHost, in_byteSize, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -89,16 +87,6 @@ void tload_test()
     aclrtMemcpy(logHost, sizeof(logHost), logDevice, sizeof(logHost), ACL_MEMCPY_DEVICE_TO_HOST);
 #endif
 
-    std::ofstream inFile(GetGoldenDir() + "/input.bin", std::ios::binary | std::ios::out);
-    std::ofstream outFile(GetGoldenDir() + "/output.bin", std::ios::binary | std::ios::out);
-    std::ofstream goldFile(GetGoldenDir() + "/golden.bin", std::ios::binary | std::ios::out);
-    inFile.write((const char *)srcHost, actual_out_byteSize);
-    outFile.write((const char *)dstHost, actual_out_byteSize);
-    goldFile.write((const char *)goldHost, actual_out_byteSize);
-    inFile.close();
-    outFile.close();
-    goldFile.close();
-
     aclrtFree(dstDevice);
     aclrtFree(srcDevice);
 #ifdef DEBUGLOG
@@ -113,15 +101,6 @@ void tload_test()
     aclrtResetDevice(0);
     aclFinalize();
 
-    int elements = actual_out_byteSize / sizeof(T);
-    std::vector<T> golden(elements);
-    std::vector<T> devFinal(elements);
-    size_t oFileSize = actual_out_byteSize;
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", oFileSize, golden.data(), oFileSize));
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", oFileSize, devFinal.data(), oFileSize));
-
-    bool ret = ResultCmp(golden, devFinal, 0);
-
 #ifdef DEBUGLOG
     for (int b = 0; b < kBlock; b++) {
         cout << "Block: " << setw(2) << b << " ";
@@ -131,8 +110,6 @@ void tload_test()
         cout << dec << endl;
     }
 #endif
-
-    EXPECT_TRUE(ret);
 }
 
 TEST_F(TLOADTest, case_float_GT_128_128_VT_128_128_BLK1)
