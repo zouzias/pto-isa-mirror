@@ -18,7 +18,7 @@ namespace pto {
 template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile>
 PTO_INTERNAL void TSEL_IMPL(DstTile &dst, MaskTile &selMask, Src0Tile &src0, Src1Tile &src1, TmpTile &tmp)
 {
-    pto::CostModel::GetInstance().SelOpPredictCycle<TileDataD, MaskTile, Src0Tile, Src1Tile, TmpTile>("TSEL", dst);
+    pto::CostModel::GetInstance().SelOpPredictCycle<DstTile, MaskTile, Src0Tile, Src1Tile, TmpTile>("TSEL", dst);
 }
 } // namespace pto
 #endif

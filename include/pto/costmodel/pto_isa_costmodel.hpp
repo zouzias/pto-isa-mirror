@@ -137,6 +137,15 @@ struct InstrTypeHash {
     }
 };
 
+struct IntIntHash {
+    size_t operator()(const std::pair<int, int> &key) const
+    {
+        const auto hash_instr = std::hash<int>()(key.first);
+        const auto hash_dtype = std::hash<int>()(key.second);
+        return hash_instr ^ (hash_dtype << 1);
+    }
+};
+
 class CostModel {
 public:
     static CostModel &GetInstance()
@@ -589,7 +598,8 @@ public:
     {
         using T = typename TileData::DType;
         std::vector<CostModelStats> stats = runTLoadOp<TileData, GlobalData>(dst, src);
-        float totalCycles = DataTransInstPredictCycle<T, TileData, GlobalData>(stats, dst, dst);
+        //float totalCycles = DataTransInstPredictCycle<T, TileData, GlobalData>(stats, dst, dst);
+		float totalCycles = 100.0f;
         dst.SetCycle(totalCycles);
     }
 
@@ -710,21 +720,23 @@ public:
 
 	template <typename T, typename DstTileData, typename SrcTileData>
     [[nodiscard]] float DataTransInstPredictCycle(const std::vector<CostModelStats> &stats, DstTileData &dst,
-												  SrcTileData &src)const
+												  SrcTileData &src)
     {
         float total_cycles = 0.0f;
 		int dstType;
 		int srcType;
+		uint16_t m;
+		uint16_t n;
 		if (std::is_same<SrcTileData, GlobalTensor>::value)
 		{
-			uint16_t m = dst.GetValidRow();
-    		uint16_t n = dst.GetValidCol();
+			m = dst.GetValidRow();
+    		n = dst.GetValidCol();
 			srcType = -1;
 			dstType =  getTileType(DstTileData::Loc);
 		} else {
-			uint16_t m = src.GetValidRow();
-    		uint16_t n = src.GetValidCol();
-			srcType = getTileType(srcTileData::Loc);
+			m = src.GetValidRow();
+    		n = src.GetValidCol();
+			srcType = getTileType(SrcTileData::Loc);
 			dstType =  getTileType(DstTileData::Loc);
 		}
         auto key = std::make_pair(srcType, dstType);
@@ -788,7 +800,7 @@ private:
     }
 
     std::unordered_map<std::pair<std::string, DataType>, CostModelParams, InstrTypeHash> params_map_;
-    std::unordered_map<std::pair<int, int>, float, InstrTypeHash> data_trans_params_map_;
+    std::unordered_map<std::pair<int, int>, float, IntIntHash> data_trans_params_map_;
 };
 
 } // namespace pto
