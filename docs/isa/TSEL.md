@@ -56,13 +56,15 @@ PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, Tile
 - **Implementation checks (A2A3)**:
     - `sizeof(TileData::DType)` must be `2` or `4` bytes.
     - `TileData::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
-    - No explicit assertions are enforced on the mask tile type/shape; mask encoding is target-defined.
-    - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
+    - `dst`, `src0`, and `src1` must use the same element type.
+    - `dst`, `src0`, and `src1` must be row-major.
+    - The selection domain is `dst.GetValidRow()` / `dst.GetValidCol()`.
 - **Implementation checks (A5)**:
     - `sizeof(TileData::DType)` must be `2` or `4` bytes.
     - `TileData::DType` must be `int16_t` or `uint16_t` or `int32_t` or `uint32_t` or `half` or `bfloat16_t` or `float`.
-    - No explicit `static_assert`/`PTO_ASSERT` checks are enforced by `TSEL_IMPL`.
-    - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` for the selection domain.
+    - `dst`, `src0`, and `src1` must use the same element type.
+    - `dst`, `src0`, and `src1` must be row-major.
+    - The selection domain is `dst.GetValidRow()` / `dst.GetValidCol()`.
 - **Mask encoding**:
     - The mask tile is interpreted as packed predicate bits in a target-defined layout.
 
@@ -78,9 +80,11 @@ using namespace pto;
 void example_auto() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   using MaskT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
+  using TmpT = Tile<TileType::Vec, uint32_t, 1, 16>;
   TileT src0, src1, dst;
   MaskT mask(16, 2);
-  TSEL(dst, mask, src0, src1);
+  TmpT tmp;
+  TSEL(dst, mask, src0, src1, tmp);
 }
 ```
 
@@ -94,13 +98,16 @@ using namespace pto;
 void example_manual() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   using MaskT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
+  using TmpT = Tile<TileType::Vec, uint32_t, 1, 16>;
   TileT src0, src1, dst;
   MaskT mask(16, 2);
+  TmpT tmp;
   TASSIGN(src0, 0x1000);
   TASSIGN(src1, 0x2000);
   TASSIGN(dst,  0x3000);
   TASSIGN(mask, 0x4000);
-  TSEL(dst, mask, src0, src1);
+  TASSIGN(tmp,  0x5000);
+  TSEL(dst, mask, src0, src1, tmp);
 }
 ```
 

@@ -56,13 +56,15 @@ PTO_INST RecordEvent TSEL(TileData &dst, MaskTile &selMask, TileData &src0, Tile
 - **实现检查 (A2A3)**:
     - `sizeof(TileData::DType)` 必须是 `2` 或 `4` 字节。
     - `TileData::DType` 必须是 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
-    - 掩码 tile 类型/形状不强制执行显式断言；掩码编码由目标定义。
-    - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
+    - `dst`、`src0` 和 `src1` 必须使用相同的元素类型。
+    - `dst`、`src0` 和 `src1` 必须是行主序。
+    - 选择域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
 - **实现检查 (A5)**:
     - `sizeof(TileData::DType)` 必须是 `2` 或 `4` 字节。
     - `TileData::DType` 必须是 `int16_t` 或 `uint16_t` 或 `int32_t` 或 `uint32_t` 或 `half` 或 `bfloat16_t` 或 `float`。
-    - `TSEL_IMPL` 不强制执行显式的 `static_assert`/`PTO_ASSERT` 检查。
-    - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
+    - `dst`、`src0` 和 `src1` 必须使用相同的元素类型。
+    - `dst`、`src0` 和 `src1` 必须是行主序。
+    - 选择域由 `dst.GetValidRow()` / `dst.GetValidCol()` 决定。
 - **掩码编码**:
     - 掩码 tile 被解释为目标定义布局中的打包谓词位。
 
@@ -78,9 +80,11 @@ using namespace pto;
 void example_auto() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   using MaskT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
+  using TmpT = Tile<TileType::Vec, uint32_t, 1, 16>;
   TileT src0, src1, dst;
   MaskT mask(16, 2);
-  TSEL(dst, mask, src0, src1);
+  TmpT tmp;
+  TSEL(dst, mask, src0, src1, tmp);
 }
 ```
 
@@ -94,13 +98,16 @@ using namespace pto;
 void example_manual() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   using MaskT = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
+  using TmpT = Tile<TileType::Vec, uint32_t, 1, 16>;
   TileT src0, src1, dst;
   MaskT mask(16, 2);
+  TmpT tmp;
   TASSIGN(src0, 0x1000);
   TASSIGN(src1, 0x2000);
   TASSIGN(dst,  0x3000);
   TASSIGN(mask, 0x4000);
-  TSEL(dst, mask, src0, src1);
+  TASSIGN(tmp,  0x5000);
+  TSEL(dst, mask, src0, src1, tmp);
 }
 ```
 

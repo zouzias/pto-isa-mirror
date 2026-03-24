@@ -47,9 +47,19 @@ PTO_INST RecordEvent TORS(TileDataDst &dst, TileDataSrc &src, typename TileDataD
 
 ## Constraints
 
-- Intended for integral element types.
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
-- Setting the source Tile and destination Tile to the same memory is **Unsupported**.
+- **Implementation checks (A2A3)**:
+    - Intended for integral element types.
+    - `dst` and `src` must use the same element type.
+    - `dst` and `src` must be vector tiles.
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
+    - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
+- **Implementation checks (A5)**:
+    - Intended for integral element types supported by `TEXPANDS` and `TOR`.
+    - `dst` and `src` must use the same element type.
+    - `dst` and `src` must be vector tiles.
+    - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
+- **Valid region**:
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
