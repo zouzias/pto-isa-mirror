@@ -1664,7 +1664,7 @@ inline AICORE void castFp4toBf16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t 
     for (uint16_t row = 0; row < validRows; row++) {
         int32_t rowSrcByteOffset = (row * srcCols) >> 1;
         int32_t rowDstOffset = row * dstCols;
-        uint32_t sreg = validCols & ~1u; // round down to even (FP4 byte-pair boundary)
+        uint32_t sreg = validCols;
         uint16_t repeatTimes = CeilDivision(sreg, static_cast<uint32_t>(ELE_CNT_B16 * 2));
         uint32_t next_len = (sreg > ELE_CNT_B16) ? sreg - ELE_CNT_B16 : 0;
 
@@ -1697,7 +1697,7 @@ template <typename SRC_VEC, typename DST, typename SRC>
 inline AICORE void castFp4toBf16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows,
                                                  uint32_t validCols, uint32_t dstCols, uint32_t srcCols)
 {
-    uint32_t totalElements = (validRows * validCols) & ~1u; // round down to even (FP4 byte-pair boundary)
+    uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, static_cast<uint32_t>(ELE_CNT_B16 * 2));
     uint32_t sReg = totalElements;
     uint32_t next_len = (sReg > ELE_CNT_B16) ? sReg - ELE_CNT_B16 : 0;
