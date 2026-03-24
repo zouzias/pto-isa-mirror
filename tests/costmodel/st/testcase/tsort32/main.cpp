@@ -9,11 +9,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include "test_common.h"
-#include <gtest/gtest.h>
 #include <pto/pto-inst.hpp>
+#include <gtest/gtest.h>
 
 using namespace std;
 using namespace PtoTestCommon;
+
+template <typename T0, typename T1, int kGRows, int kGCols, int kTRows, int kTCols, int validRow, int validCol,
+          float profiling, float accuracy>
+void launchTSort32(void *stream);
 
 class TSORT32Test : public testing::Test {
 protected:
@@ -23,36 +27,41 @@ protected:
     {}
 };
 
-template <typename T, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTSort32(void *stream);
-
-template <typename T, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_tsort32()
+template <typename T0, typename T1, int kGRows, int kGCols, int kTRows, int kTCols, int validRow, int validCol,
+          float profiling, float accuracy>
+void TSort32Test()
 {
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
-    LaunchTSort32<T, kTRows_, kTCols_, profiling, accuracy>(stream);
+    launchTSort32<T0, T1, kGRows, kGCols, kTRows, kTCols, validRow, validCol, profiling, accuracy>(stream);
     aclrtSynchronizeStream(stream);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
 }
 
-// 16 + 3*20 = 76
-TEST_F(TSORT32Test, case_half_4x32)
+// test0: int16_t, 16x16, R=0: 14 + 15*18 = 284
+TEST_F(TSORT32Test, test0)
 {
-    test_tsort32<aclFloat16, 4, 32, 76.0f, 1.0f>();
+    TSort32Test<int16_t, uint32_t, 16, 16, 16, 16, 16, 16, 284.0f, 1.0f>();
 }
 
-// 16
-TEST_F(TSORT32Test, case_half_1x32)
+// test1: float, 8x32, R=1: 16 + 7*20 = 156
+TEST_F(TSORT32Test, test1)
 {
-    test_tsort32<aclFloat16, 1, 32, 16.0f, 1.0f>();
+    TSort32Test<float, uint32_t, 8, 32, 8, 32, 8, 32, 156.0f, 1.0f>();
 }
 
-TEST_F(TSORT32Test, case_float_4x32)
+// test2: int32_t, 7x32, R=1: 16 + 6*20 = 136
+TEST_F(TSORT32Test, test2)
 {
-    test_tsort32<float, 4, 32, 76.0f, 1.0f>();
+    TSort32Test<int32_t, uint32_t, 7, 32, 7, 32, 7, 32, 136.0f, 1.0f>();
+}
+
+// test3: aclFloat16->half, 32x16, R=0: 14 + 31*18 = 572
+TEST_F(TSORT32Test, test3)
+{
+    TSort32Test<aclFloat16, uint32_t, 32, 16, 32, 16, 32, 16, 572.0f, 1.0f>();
 }

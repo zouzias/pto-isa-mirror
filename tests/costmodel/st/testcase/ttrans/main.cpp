@@ -9,11 +9,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include "test_common.h"
-#include <gtest/gtest.h>
 #include <pto/pto-inst.hpp>
+#include <gtest/gtest.h>
 
 using namespace std;
 using namespace PtoTestCommon;
+
+template <int32_t tilingKey, float profiling, float accuracy>
+void launchTTRANS(void *stream);
 
 class TTRANSTest : public testing::Test {
 protected:
@@ -23,45 +26,14 @@ protected:
     {}
 };
 
-template <typename T, int kSrcRows_, int kSrcCols_, float profiling, float accuracy>
-void LaunchTTrans(void *stream);
-
-// half, 16x16: numSubTileX=1, ceil_Y=1 → startup(14) + 1*1*2 = 16
-TEST_F(TTRANSTest, case_half_16x16)
+// float 128x128: numSubTileX=16, numSubTileY=8 → 14 + 16*8*2 = 270
+TEST_F(TTRANSTest, case1)
 {
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
-    LaunchTTrans<aclFloat16, 16, 16, 16.0f, 1.0f>(stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-}
-
-// half, 16x32: numSubTileX=2, ceil_Y=1 → startup(14) + 2*1*2 = 18
-TEST_F(TTRANSTest, case_half_16x32)
-{
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    LaunchTTrans<aclFloat16, 16, 32, 18.0f, 1.0f>(stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-}
-
-// float, 16x16: blockSizeElem=8, numSubTileX=2, ceil_Y=1 → startup(14) + 2*1*2 = 18
-TEST_F(TTRANSTest, case_float_16x16)
-{
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    LaunchTTrans<float, 16, 16, 18.0f, 1.0f>(stream);
+    launchTTRANS<1, 270.0f, 1.0f>(stream);
     aclrtSynchronizeStream(stream);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);

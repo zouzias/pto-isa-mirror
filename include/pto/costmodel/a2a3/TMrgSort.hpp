@@ -22,6 +22,7 @@ PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t blo
 {
     using T = typename DstTileData::DType;
     auto stats = runMrgSortSingleOp(dst, src, blockLen);
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 // Multi-src TMRGSORT (2 sources)
@@ -31,6 +32,7 @@ PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, MrgSortExecutedNumList &execut
 {
     using T = typename DstTileData::DType;
     auto stats = runMrgSortMultiOp();
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 // Multi-src TMRGSORT (3 sources)
@@ -41,6 +43,7 @@ PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, MrgSortExecutedNumList &execut
 {
     using T = typename DstTileData::DType;
     auto stats = runMrgSortMultiOp();
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 // Multi-src TMRGSORT (4 sources)
@@ -51,6 +54,7 @@ PTO_INTERNAL void TMRGSORT_IMPL(DstTileData &dst, MrgSortExecutedNumList &execut
 {
     using T = typename DstTileData::DType;
     auto stats = runMrgSortMultiOp();
+    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
 }
 
 } // namespace pto

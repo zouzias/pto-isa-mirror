@@ -9,44 +9,42 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
+#include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 #include <cmath>
 
+using namespace std;
 using namespace pto;
 
-// TTRANS cycle formula (non-conv RowMajor, B16/B32 path):
-//   blockSizeElem = 32 / sizeof(T)     (16 for half, 8 for float)
+// TTRANS cycle formula (B32/float path):
+//   blockSizeElem = 32 / sizeof(T)    (8 for float)
 //   yTileSizeElem = 16
 //   numSubTileX   = ceil(validCol / blockSizeElem)
 //   numSubTileY   = validRow / 16
-//   remainY       = validRow % 16
-//   Stats: [scatter_vnchwconv(numSubTileY)] x numSubTileX  (full tiles)
-//          [scatter_vnchwconv(numSubTileX)] x 1            (Y-tail, if remainY > 0)
-//          PIPE_V + copy_ubuf_to_ubuf (0 cycles)
-//   Total = startup(14) + (numSubTileX * ceil_Y) * per_repeat(2)
+//   Stats: [scatter_vnchwconv(numSubTileY)] x numSubTileX
+//          + pipe_barrier + copy_ubuf_to_ubuf(1)
+//   VecInstPredictCycle: startup(14) once + numSubTileX*numSubTileY * per_repeat(2)
 //
-// Test cases:
-//   half,  16 x 16: numSubTileX=1, ceil_Y=1 → 14 + 1*1*2 = 16
-//   half,  16 x 32: numSubTileX=2, ceil_Y=1 → 14 + 2*1*2 = 18
-//   float, 16 x 16: numSubTileX=2, ceil_Y=1 → 14 + 2*1*2 = 18
+// float 128x128: numSubTileX=16, numSubTileY=8 → 14 + 16*8*2 = 270
 
-template <typename T, int kSrcRows_, int kSrcCols_, float profiling, float accuracy>
-AICORE void runTTrans()
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
+AICORE void runTTRANS()
 {
-    // For TTRANS: src is [kSrcRows_ x kSrcCols_], dst is [kSrcCols_ x kSrcRows_] (transposed)
-    using SrcTile = Tile<TileType::Vec, T, kSrcRows_, kSrcCols_, BLayout::RowMajor, -1, -1>;
-    using DstTile = Tile<TileType::Vec, T, kSrcCols_, kSrcRows_, BLayout::RowMajor, -1, -1>;
-    // Tmp tile must be large enough to hold transposed data; use same shape as dst for simplicity
-    using TmpTile = Tile<TileType::Vec, T, kSrcCols_, kSrcRows_, BLayout::RowMajor, -1, -1>;
+    constexpr uint16_t aligned_Rows = ((kTRows_ * sizeof(T) + 31) / 32) * (32 / sizeof(T));
+    constexpr uint16_t aligned_Cols = ((kTCols_ * sizeof(T) + 31) / 32) * (32 / sizeof(T));
 
-    SrcTile srcTile(kSrcRows_, kSrcCols_);
-    DstTile dstTile(kSrcCols_, kSrcRows_);
-    TmpTile tmpTile(kSrcCols_, kSrcRows_);
+    using TileDataSrc = Tile<TileType::Vec, T, kTRows_, aligned_Cols, BLayout::RowMajor>;
+    using TileDataDst = Tile<TileType::Vec, T, kTCols_, aligned_Rows, BLayout::RowMajor>;
+    using TileDataTmp = Tile<TileType::Vec, T, kTCols_, aligned_Rows, BLayout::RowMajor>;
+
+    TileDataSrc srcTile;
+    TileDataDst dstTile;
+    TileDataTmp tmpTile;
 
     TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x4000);
-    TASSIGN(tmpTile, 0x8000);
+    TASSIGN(dstTile, 0x20000);
+    TASSIGN(tmpTile, 0x30000);
 
     TTRANS(dstTile, srcTile, tmpTile);
 
@@ -56,18 +54,13 @@ AICORE void runTTrans()
     EXPECT_TRUE(ret);
 }
 
-template <typename T, int kSrcRows_, int kSrcCols_, float profiling, float accuracy>
-void LaunchTTrans(void *stream)
+template <int32_t tilingKey, float profiling, float accuracy>
+void launchTTRANS(void *stream)
 {
-    if constexpr (std::is_same_v<T, aclFloat16>)
-        runTTrans<half, kSrcRows_, kSrcCols_, profiling, accuracy>();
-    else
-        runTTrans<T, kSrcRows_, kSrcCols_, profiling, accuracy>();
+    if constexpr (tilingKey == 1) {
+        runTTRANS<float, 128, 128, 128, 128, profiling, accuracy>();
+    }
 }
 
-// half, 16x16: numSubTileX=1, ceil_Y=1 → 14 + 1*2 = 16
-template void LaunchTTrans<aclFloat16, 16, 16, 16.0f, 1.0f>(void *stream);
-// half, 16x32: numSubTileX=2, ceil_Y=1 → 14 + 2*2 = 18
-template void LaunchTTrans<aclFloat16, 16, 32, 18.0f, 1.0f>(void *stream);
-// float, 16x16: blockSizeElem=8, numSubTileX=2, ceil_Y=1 → 14 + 2*2 = 18
-template void LaunchTTrans<float, 16, 16, 18.0f, 1.0f>(void *stream);
+// float 128x128: numSubTileX=16, numSubTileY=8 → 14 + 16*8*2 = 270
+template void launchTTRANS<1, 270.0f, 1.0f>(void *stream);

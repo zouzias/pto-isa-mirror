@@ -15,6 +15,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kTCols_src1, int kTCols_src2,
+          int kTCols_src3, int TOPK, int LISTNUM, bool EXHAUSTED, float profiling, float accuracy>
+void LanchTMrgsortMulti(void *stream);
+
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, uint32_t blockLen, float profiling,
+          float accuracy>
+void LanchTMrgsortSingle(void *stream);
+
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int topk, float profiling, float accuracy>
+void LanchTMrgsortTopK(void *stream);
+
 class TMRGSORTTest : public testing::Test {
 protected:
     void SetUp() override
@@ -23,31 +34,105 @@ protected:
     {}
 };
 
-template <typename T, int kTCols_, uint32_t blockLen, float profiling, float accuracy>
-void LaunchTMrgSort(void *stream);
-
-template <typename T, int kTCols_, uint32_t blockLen, float profiling, float accuracy>
-void test_tmrgsort()
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kTCols_src1, int kTCols_src2,
+          int kTCols_src3, int TOPK, int LISTNUM, bool EXHAUSTED, float profiling, float accuracy>
+void TMrgsortMulti()
 {
     aclInit(nullptr);
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
-    LaunchTMrgSort<T, kTCols_, blockLen, profiling, accuracy>(stream);
+    LanchTMrgsortMulti<T, kGRows_, kGCols_, kTRows_, kTCols_, kTCols_src1, kTCols_src2, kTCols_src3, TOPK, LISTNUM,
+                       EXHAUSTED, profiling, accuracy>(stream);
     aclrtSynchronizeStream(stream);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
 }
 
-// srcCol=256, blockLen=64, repeatTimes=1: 14 + 1*2 = 16
-TEST_F(TMRGSORTTest, case_half_256_blocklen64)
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, uint32_t blockLen, float profiling,
+          float accuracy>
+void TMrgsortSingle()
 {
-    test_tmrgsort<aclFloat16, 256, 64, 16.0f, 1.0f>();
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+    LanchTMrgsortSingle<T, kGRows_, kGCols_, kTRows_, kTCols_, blockLen, profiling, accuracy>(stream);
+    aclrtSynchronizeStream(stream);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
 }
 
-// srcCol=512, blockLen=64, repeatTimes=2: 14 + 2*2 = 18
-TEST_F(TMRGSORTTest, case_half_512_blocklen64)
+template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int topk, float profiling, float accuracy>
+void TMrgsortTopk()
 {
-    test_tmrgsort<aclFloat16, 512, 64, 18.0f, 1.0f>();
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+    LanchTMrgsortTopK<T, kGRows_, kGCols_, kTRows_, kTCols_, topk, profiling, accuracy>(stream);
+    aclrtSynchronizeStream(stream);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+}
+
+// multi case: vmrgsort4(1) = 16
+TEST_F(TMRGSORTTest, case_multi1)
+{
+    TMrgsortMulti<float, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 16.0f, 1.0f>();
+}
+
+TEST_F(TMRGSORTTest, case_multi2)
+{
+    TMrgsortMulti<uint16_t, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 16.0f, 1.0f>();
+}
+
+TEST_F(TMRGSORTTest, case_exhausted1)
+{
+    TMrgsortMulti<float, 1, 64, 1, 64, 64, 0, 0, 128, 2, true, 16.0f, 1.0f>();
+}
+
+TEST_F(TMRGSORTTest, case_exhausted2)
+{
+    TMrgsortMulti<uint16_t, 1, 256, 1, 256, 256, 256, 0, 768, 3, true, 16.0f, 1.0f>();
+}
+
+// single case: profiling = 14 + R*2, R = effectiveCols / (effectiveBlockLen * 4)
+TEST_F(TMRGSORTTest, case_single1)
+{
+    TMrgsortSingle<float, 1, 256, 1, 256, 64, 16.0f, 1.0f>();
+}
+
+TEST_F(TMRGSORTTest, case_single3)
+{
+    TMrgsortSingle<float, 1, 512, 1, 512, 64, 18.0f, 1.0f>();
+}
+
+TEST_F(TMRGSORTTest, case_single5)
+{
+    TMrgsortSingle<uint16_t, 1, 256, 1, 256, 64, 16.0f, 1.0f>();
+}
+
+TEST_F(TMRGSORTTest, case_single7)
+{
+    TMrgsortSingle<uint16_t, 1, 512, 1, 512, 64, 18.0f, 1.0f>();
+}
+
+TEST_F(TMRGSORTTest, case_single8)
+{
+    TMrgsortSingle<uint16_t, 1, 1024, 1, 1024, 256, 16.0f, 1.0f>();
+}
+
+// topk case: final TMRGSORT on dstTile is multi-src → 16
+TEST_F(TMRGSORTTest, case_topk2)
+{
+    TMrgsortTopk<float, 1, 2048, 1, 2048, 2048, 16.0f, 1.0f>();
+}
+
+TEST_F(TMRGSORTTest, case_topk5)
+{
+    TMrgsortTopk<uint16_t, 1, 2048, 1, 2048, 2048, 16.0f, 1.0f>();
 }

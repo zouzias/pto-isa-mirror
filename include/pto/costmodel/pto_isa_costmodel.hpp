@@ -385,6 +385,10 @@ public:
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
         SetParam("vbitsort", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vbitsort", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vbitsort", DataType::INT32, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
         // TMRGSORT: vmrgsort4 (merge sort, 2 cycles/repeat)
         SetParam("vmrgsort4", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_2, A2A3_INTERVAL,
@@ -528,7 +532,7 @@ public:
             DataType dtype = GetDataTypeEnum<T>();
             auto key = std::make_pair(instr_name, dtype);
 
-            if (instr_name == "PIPE_V") {
+            if (instr_name == "PIPE_V" || instr_name == "pipe_barrier") {
                 pipe = true;
                 continue;
             }
