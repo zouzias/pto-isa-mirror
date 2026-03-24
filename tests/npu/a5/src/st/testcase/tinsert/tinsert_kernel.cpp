@@ -239,7 +239,7 @@ void launchTInsertNZ(uint64_t *out, uint64_t *src, void *stream)
     } else if constexpr (testKey == 2) {
         launchTInsertNZKernel<float, 16, 32, pto::TInsertMode::NZ_PLUS_1><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 3) {
-        launchTInsertNZKernel<float, 32, 64, pto::TInsertMode::NZ_PLUS_1><<<1, nullptr, stream>>>(out, src);
+        launchTInsertNZKernel<float, 32, 64, pto::TInsertMode::NZ><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 4) {
         launchTInsertNZKernel<int32_t, 32, 32, pto::TInsertMode::NZ_PLUS_1><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 5) {
@@ -247,7 +247,7 @@ void launchTInsertNZ(uint64_t *out, uint64_t *src, void *stream)
     } else if constexpr (testKey == 6) {
         launchTInsertNZKernel<float, 32, 32, pto::TInsertMode::SPLIT4_NZ_PLUS_1><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 7) {
-        launchTInsertNZKernel<float, 64, 64, pto::TInsertMode::SPLIT4_NZ_PLUS_1><<<1, nullptr, stream>>>(out, src);
+        launchTInsertNZKernel<float, 64, 64, pto::TInsertMode::NZ><<<1, nullptr, stream>>>(out, src);
     }
 }
 
