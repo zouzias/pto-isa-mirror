@@ -11,7 +11,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/constants.hpp>
-#include <pto/npu/a5/TExtract.hpp>
 
 using namespace pto;
 
@@ -48,7 +47,7 @@ __global__ AICORE void RunTExtractNDVec(__gm__ T *out, __gm__ T *srcIn, __gm__ T
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    TEXTRACT<pto::TExtractMode::ND_VEC>(dstTile, srcTile, static_cast<uint32_t>(IdxRow), static_cast<uint32_t>(IdxCol));
+    TEXTRACT(dstTile, srcTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -136,8 +135,7 @@ __global__ AICORE void RunTExtractNDVecScalar(__gm__ T *out, __gm__ T *srcIn, __
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    TEXTRACT<pto::TExtractMode::ND_VEC>(dstExtract, srcTile, static_cast<uint32_t>(IdxRow),
-                                        static_cast<uint32_t>(IdxCol));
+    TEXTRACT(dstExtract, srcTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);

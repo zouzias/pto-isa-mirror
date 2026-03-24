@@ -26,11 +26,6 @@ constexpr const int SHIFT_MX_ROW = 4; // 2^4 = 16
 constexpr const int CO_SIZE_SCALE = 2;
 constexpr const int SCALE_CUBE_BLOCK_SIZE = 32;
 
-enum class TExtractMode : uint8_t
-{
-    ND_VEC = 0
-};
-
 template <typename DstTileData, typename SrcTileData>
 __tf__ AICORE void TExtractToAmx(typename DstTileData::TileDType __out__ dst,
                                  typename SrcTileData::TileDType __in__ src, uint16_t indexRow, uint16_t indexCol,
@@ -737,41 +732,35 @@ PTO_INTERNAL void TExtractVecToVecNDDispatch(DstTileData &dst, SrcTileData &src,
     }
 }
 
-template <TExtractMode mode, typename DstTileData, typename SrcTileData>
-PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0)
-{
-    using T = typename DstTileData::DType;
-    static_assert(mode == TExtractMode::ND_VEC, "TEXTRACT : Only ND_VEC mode supported in this overload.");
-    static_assert(DstTileData::Loc == TileType::Vec, "TEXTRACT ND_VEC : Destination must be Vec tile (UB/ubuf)");
-    static_assert(SrcTileData::Loc == TileType::Vec, "TEXTRACT ND_VEC : Source must be Vec tile (UB/ubuf)");
-    static_assert(DstTileData::isRowMajor, "TEXTRACT ND_VEC : Destination must be RowMajor (ND format)");
-    static_assert(SrcTileData::isRowMajor, "TEXTRACT ND_VEC : Source must be RowMajor (ND format)");
-    static_assert(DstTileData::Rows <= SrcTileData::Rows,
-                  "TEXTRACT ND_VEC : Destination rows must not exceed source rows");
-    static_assert(DstTileData::Cols <= SrcTileData::Cols,
-                  "TEXTRACT ND_VEC : Destination cols must not exceed source cols");
-    static_assert(std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
-                  "TEXTRACT ND_VEC : Source and destination data types must match");
-    static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
-                      (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
-                      (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
-                      (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
-                      (std::is_same<T, float8_e8m0_t>::value),
-                  "TEXTRACT ND_VEC : Unsupported data type.");
-
-    if constexpr (DstTileData::ValidRow == 1 && DstTileData::ValidCol == 1) {
-        PTO_ASSERT(indexRow < SrcTileData::Rows, "TEXTRACT ND_VEC : indexRow exceeds srcRows!");
-        PTO_ASSERT(indexCol < SrcTileData::Cols, "TEXTRACT ND_VEC : indexCol exceeds srcCols!");
-        TExtractVecToVecNDScalarImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol);
-    } else {
-        TExtractVecToVecNDDispatch<T>(dst, src, indexRow, indexCol);
-    }
-}
-
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
-    if constexpr (is_conv_tile_v<SrcTileData>) {
+    if constexpr (DstTileData::Loc == TileType::Vec && SrcTileData::Loc == TileType::Vec) {
+        using T = typename DstTileData::DType;
+        static_assert(std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
+                      "TEXTRACT : Source and destination data types must match");
+        static_assert(DstTileData::isRowMajor, "TEXTRACT : Destination must be RowMajor (ND format)");
+        static_assert(SrcTileData::isRowMajor, "TEXTRACT : Source must be RowMajor (ND format)");
+        static_assert(DstTileData::Rows <= SrcTileData::Rows,
+                      "TEXTRACT : Destination rows must not exceed source rows");
+        static_assert(DstTileData::Cols <= SrcTileData::Cols,
+                      "TEXTRACT : Destination cols must not exceed source cols");
+        static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
+                          (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
+                          (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
+                          (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
+                          (std::is_same<T, float8_e8m0_t>::value),
+                      "TEXTRACT : Unsupported data type.");
+        uint32_t idxRow = static_cast<uint32_t>(indexRow);
+        uint32_t idxCol = static_cast<uint32_t>(indexCol);
+        if constexpr (DstTileData::ValidRow == 1 && DstTileData::ValidCol == 1) {
+            PTO_ASSERT(idxRow < SrcTileData::Rows, "TEXTRACT : indexRow exceeds srcRows!");
+            PTO_ASSERT(idxCol < SrcTileData::Cols, "TEXTRACT : indexCol exceeds srcCols!");
+            TExtractVecToVecNDScalarImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), idxRow, idxCol);
+        } else {
+            TExtractVecToVecNDDispatch<T>(dst, src, idxRow, idxCol);
+        }
+    } else if constexpr (is_conv_tile_v<SrcTileData>) {
         TEXTRACT_CONVTILE_IMPL(dst, src, indexRow, indexCol);
     } else {
         TEXTRACT_TILE_IMPL(dst, src, indexRow, indexCol);
