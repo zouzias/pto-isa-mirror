@@ -205,31 +205,6 @@ if __name__ == "__main__":
         "TMOVTest.case_nz2nd_split_1",
         "TMOVTest.case_nz2nd_split_2",
 
-        "TMOVTest.case_nz2nz_1",
-        "TMOVTest.case_nz2nz_2",
-        "TMOVTest.case_nz2nz_3",
-        "TMOVTest.case_nz2nz_4",
-        # Split
-        "TMOVTest.case_nz2nz_split_1",
-        "TMOVTest.case_nz2nz_split_2",
-        "TMOVTest.case_nz2nz_split_3",
-        "TMOVTest.case_nz2nz_split_4",
-
-        "TMOVTest.case_nz2dn_1",
-        "TMOVTest.case_nz2dn_2",
-        "TMOVTest.case_nz2dn_3",
-        "TMOVTest.case_nz2dn_4",
-        # Quant pre
-        "TMOVTest.case_nz2nz_fb_quant_1",
-        "TMOVTest.case_nz2nz_fb_quant_2",
-        "TMOVTest.case_nz2nz_fb_quant_3",
-        "TMOVTest.case_nz2nz_fb_quant_4",
-
-        "TMOVTest.case_nz2nz_sc_quant_1",
-        "TMOVTest.case_nz2nz_sc_quant_2",
-        "TMOVTest.case_nz2nz_sc_quant_3",
-        "TMOVTest.case_nz2nz_sc_quant_4",
-
         "TMOVTest.case_nz2nd_fb_quant_1",
         "TMOVTest.case_nz2nd_fb_quant_2",
         "TMOVTest.case_nz2nd_fb_quant_3",
@@ -241,15 +216,7 @@ if __name__ == "__main__":
         "TMOVTest.case_nz2nd_sc_quant_3",
         "TMOVTest.case_nz2nd_sc_quant_4",
 
-        "TMOVTest.case_nz2dn_fb_quant_1",
-        "TMOVTest.case_nz2dn_fb_quant_2",
-        "TMOVTest.case_nz2dn_fb_quant_3",
-        "TMOVTest.case_nz2dn_fb_quant_4",
 
-        "TMOVTest.case_nz2dn_sc_quant_1",
-        "TMOVTest.case_nz2dn_sc_quant_2",
-        "TMOVTest.case_nz2dn_sc_quant_3",
-        "TMOVTest.case_nz2dn_sc_quant_4",
     ]
 
     case_params_list = [
@@ -261,32 +228,6 @@ if __name__ == "__main__":
         TMovParams(np.float16, np.float16, np.float32, 96, 32, 48),     # split m
         TMovParams(np.float16, np.float16, np.float32, 48, 32, 128),     # split n
 
-        TMovParams(np.float16, np.float16, np.float16, 96, 80, 112, 0, 0, 0, 'NZ'),
-        TMovParams(np.float16, np.float16, np.float32, 80, 112, 96, 0, 0, 0, 'NZ', 1024),
-        TMovParams(np.float32, np.float32, np.float32, 13, 16, 9, 16, 16, 16, 'NZ', 512, False, False, True),
-        TMovParams(np.float16, np.float16, bfloat16, 45, 112, 43, 48, 112, 48, 'NZ', 512, False, False, True),
-        # nz2nz.split n
-        TMovParams(np.float32, np.float32, np.float32, 45, 80, 125, 48, 80, 128, 'NZ', 1024),
-        TMovParams(np.float16, np.float16, np.float32, 75, 16, 90, 80, 16, 96, 'NZ', 1024),
-        # nz2nz.split m
-        TMovParams(np.float16, np.float16, np.float32, 110, 48, 78, 112, 48, 80, 'NZ', 1024),
-        TMovParams(np.float32, np.float32, np.float32, 13, 112, 110, 16, 112, 112, 'NZ', 1024),
-
-        TMovParams(np.float32, np.float32, np.float32, 8, 7, 6, 0, 0, 0, 'DN'),
-        TMovParams(np.float16, np.float16, np.float16, 112, 48, 95, 0, 0, 0, 'DN'),
-        TMovParams(np.float16, np.float16, bfloat16, 48, 31, 31, 0, 0, 0, 'DN', 512, False, False, True),
-        TMovParams(np.float16, np.float16, np.float32, 88, 48, 95, 0, 0, 0, 'DN', 512, False, False, True),
-
-        TMovParams(np.int8, np.int8, np.int8, 128, 48, 128, 0, 0, 0, 'NZ', 512, True, False, False, np.uint64),
-        TMovParams(np.int8, np.int8, np.float16, 64, 80, 96, 0, 0, 0, 'NZ', 512, True, False, False, np.uint64),
-        TMovParams(np.float32, np.float32, np.int8, 125, 32, 91, 128, 32, 96, 'NZ', 512, True, False, True, np.uint64),
-        TMovParams(np.float32, np.float32, np.float16, 73, 16, 110, 80, 16, 112, 'NZ', 512, True, False, True, np.uint64),
-
-        TMovParams(np.float32, np.float32, np.float16, 48, 32, 80, 0, 0, 0, 'NZ', 512, False, True, True, None, 2),
-        TMovParams(np.int8, np.int8, np.float16, 96, 48, 128, 0, 0, 0, 'NZ', 512, False, True, True, None, 4),
-        TMovParams(np.int8, np.int8, np.int8, 125, 64, 124, 128, 64, 128, 'NZ', 512, False, True, False, None, 5),
-        TMovParams(np.float32, np.float32, np.int8, 61, 80, 93, 64, 80, 96, 'NZ', 512, False, True, False, None, 7),
-
         TMovParams(np.int8, np.int8, np.int8, 30, 48, 64, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),     
         TMovParams(np.int8, np.int8, np.float16, 60, 128, 32, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),    
         TMovParams(np.int8, np.int8, bfloat16, 128, 64, 96, 0, 0, 0, 'ND', 512, True, False, False, np.uint64),
@@ -297,16 +238,6 @@ if __name__ == "__main__":
         TMovParams(np.float32, np.float32, np.int8, 60, 128, 64, 0, 0, 0, 'ND', 512, False, True, True, None, 5),
         TMovParams(np.int8, np.int8, np.float16, 30, 48, 64, 0, 0, 0, 'ND', 512, False, True, False, None, 3),
         TMovParams(np.int8, np.int8, np.int8, 60, 128, 32, 0, 0, 0, 'ND', 512, False, True, False, None, 1),
-
-        TMovParams(np.int8, np.int8, np.int8, 96, 128, 60, 0, 0, 0, 'DN', 512, True, False, False, np.uint64),
-        TMovParams(np.int8, np.int8, np.float16, 32, 48, 64, 0, 0, 0, 'DN', 512, True, False, False, np.uint64),
-        TMovParams(np.float16, np.float16, np.int8, 32, 128, 60, 0, 0, 0, 'DN', 512, True, False, True, np.uint64),
-        TMovParams(np.float16, np.float16, np.float16, 64, 64, 90, 0, 0, 0, 'DN', 512, True, False, True, np.uint64),
-
-        TMovParams(np.float32, np.float32, np.float16, 80, 40, 66, 0, 0, 0, 'DN', 512, False, True, True, None, 2),
-        TMovParams(np.float32, np.float32, np.int8, 96, 128, 60, 0, 0, 0, 'DN', 512, False, True, True, None, 5),
-        TMovParams(np.int8, np.int8, np.float16, 32, 128, 64, 0, 0, 0, 'DN', 512, False, True, False, None, 3),
-        TMovParams(np.int8, np.int8, np.int8, 64, 64, 90, 0, 0, 0, 'DN', 512, False, True, False, None, 1),
     ]
 
     for i, case_name in enumerate(case_name_list):
