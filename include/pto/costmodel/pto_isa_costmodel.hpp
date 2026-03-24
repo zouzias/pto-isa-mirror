@@ -518,6 +518,88 @@ public:
         cMatrix.SetCycle(total_cycles);
     }
 
+	// TCvt
+    template <typename TileDataD, typename TileDataS>
+    void CvtOpPredictCycle(const std::string &instr_name, TileDataD &dst, TileDataS &src, RoundMode mode,
+						 SaturationMode satMode)
+    {
+        using T = typename TileDataD::DType;  // conv的类型需单独考虑
+        std::vector<CostModelStats> stats;
+		if (satMode == nullPtr)
+		runTCvtOp<TileDataD, TileDataS>(stats, dst, src, mode, satMode);
+        float totalCycles = VecInstPredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+    }
+
+	// TSel
+	template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile>
+    void SelOpPredictCycle(const std::string &instr_name, DstTile &dst)
+    {
+        using T = typename TileDataD::DType;
+        std::vector<CostModelStats> stats = runTSelOp<TileDataD, MaskTile, Src0Tile, Src1Tile, TmpTile>(dst);
+        float totalCycles = VecInstPredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+    }
+
+	// TMov
+	template <typename DstTileData, typename SrcTileData>
+    void MovOpPredictCycle(const std::string &instr_name, DstTileData &dst, SrcTileData &src)
+    {
+        using T = typename TileDataD::DType;
+        std::vector<CostModelStats> stats;
+		runTMovOp<DstTileData, SrcTileData>(stats, dst, src);
+        float totalCycles = VecInstPredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+    }
+
+	// TMov with mode
+	template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
+    void MovModeOpPredictCycle(const std::string &instr_name, DstTileData &dst, SrcTileData &src)
+    {
+        using T = typename TileDataD::DType;
+		uint16_t m = src.GetValidRow();
+    	uint16_t n = src.GetValidCol();
+        std::vector<CostModelStats> stats;
+		TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode>(stats, m, n);
+        float totalCycles = VecInstPredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+    }
+
+	// TLoad
+	template <typename TileData, typename GlobalData>
+    void LoadOpPredictCycle(const std::string &instr_name, TileData &dst, GlobalData &src)
+    {
+        using T = typename TileDataD::DType;
+        std::vector<CostModelStats> stats = runTLoadOp<TileData, GlobalData>(dst, src);
+        float totalCycles = VecInstPredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+    }
+
+	// TExtract
+	template <typename DstTileData, typename SrcTileData>
+    void ExtractOpPredictCycle(const std::string &instr_name, DstTileData &dst, SrcTileData &src, uint16_t indexRow,
+							   uint16_t indexCol)
+    {
+        using T = typename TileDataD::DType;
+        std::vector<CostModelStats> stats;
+		runTExtractOp<DstTileData, SrcTileData>(stats, dst, src, indexRow, indexCol);
+        float totalCycles = VecInstPredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+    }
+
+	// TExtract with mode
+	template <typename DstTileData, typename SrcTileData, QuantMode_t QuantPre, ReluPreMode reluMode>
+    void ExtractModeOpPredictCycle(const std::string &instr_name, DstTileData &dst, SrcTileData &src, uint16_t indexRow,
+							   uint16_t indexCol)
+    {
+        using T = typename TileDataD::DType;
+        std::vector<CostModelStats> stats;
+		TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(stats, dst.GetValidRow(), dst.GetValidCol(),
+																	   indexRow, indexCol);
+        float totalCycles = VecInstPredictCycle<T>(stats);
+        dst.SetCycle(totalCycles);
+    }
+
     template <typename T>
     [[nodiscard]] float VecInstPredictCycle(const std::vector<CostModelStats> &stats)const
     {

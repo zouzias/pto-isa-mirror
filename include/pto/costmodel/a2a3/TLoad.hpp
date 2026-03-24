@@ -22,14 +22,10 @@ struct MrgSortExecutedNumList {
     uint16_t mrgSortList3;
 };
 
-// TLOAD: copy_gm_to_ubuf / copy_gm_to_cbuf (MTE2 pipeline).
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
 {
-    using T = typename TileData::DType;
-    auto stats = runLoadOp(dst, src);
-    dst.SetCycle(CostModel::GetInstance().VecInstPredictCycle<T>(stats));
+    pto::CostModel::GetInstance().LoadOpPredictCycle<TileData, GlobalData>("TCVT", dst, src);
 }
-
 } // namespace pto
 #endif // TLOAD_HPP

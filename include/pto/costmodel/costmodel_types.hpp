@@ -32,8 +32,14 @@ struct CostModelStats {
 
     int nBurst{};
     int lenBurst{};
+	int leftPaddingNum;
+    int rightPaddingNum;
+    int convControl;
     int srcGap{};
     int dstGap{};
+	int padMode;
+    int padConfig; // set_mov_pad_val参数，即存入copy_gm_to_ubuf_align接口的填充值
+    int byteMode;
 
     // mmad专用
     int m{};
@@ -117,6 +123,66 @@ struct CostModelStats {
         s.k = k_;
         s.n = n_;
         return s;
+    }
+
+	void setLeftPaddingNum(int paddingNum_)
+    {
+        leftPaddingNum = paddingNum_;
+    }
+
+    int getLeftPaddingNum()
+    {
+        return leftPaddingNum;
+    }
+
+    void setRightPaddingNum(int paddingNum_)
+    {
+        rightPaddingNum = paddingNum_;
+    }
+
+    int getRightPaddingNum()
+    {
+        return rightPaddingNum;
+    }
+
+    void setPadMode(int mode_)
+    {
+        padMode = mode_;
+    }
+
+    int getPadMode()
+    {
+        return padMode;
+    }
+
+    void setByteMode(int mode_)
+    {
+        byteMode = mode_;
+    }
+
+    int getByteMode()
+    {
+        return byteMode;
+    }
+
+    void setPadConfig(int padConfig_)
+    {
+        padConfig = padConfig_;
+    }
+
+    int getPadConfig()
+    {
+        return padConfig;
+    }
+
+    void  setConvControl(int convControl_)
+    {
+        convControl = convControl_;
+    }
+
+    int getConvControl()
+    {
+        return convControl;
     }
 };
 

@@ -7,22 +7,45 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TCOPY_COSTMODEL_HPP
-#define TCOPY_COSTMODEL_HPP
 
-#include "pto/costmodel/pto_isa_costmodel.hpp"
+#ifndef TCOPY_HPP
+#define TCOPY_HPP
+
+#include <pto/common/constants.hpp>
 
 namespace pto {
-
-// TCOPY: copy_ubuf_to_ubuf (MTE1 pipeline).
-// See TCopyOp.hpp for parameter derivation.
-template <typename TileDataD, typename TileDataS>
-PTO_INTERNAL void TCOPY_IMPL(TileDataD &dst, TileDataS &src)
+template <typename TileDataDst, typename TileDataSrc, unsigned blockSizeElem, unsigned srcStride, unsigned dstStride>
+PTO_INTERNAL void TCopy(std::vector<CostModelStats> &stats, uint64_t validRow, uint64_t validCol)
 {
-    using T = typename TileDataD::DType;
-    auto stats = runCopyOp(dst, src);
-}
+    if (validRow == 0 || validCol == 0) {
+        return;
+    }
+    using T = typename TileDataSrc::DType;
+    using U = typename TileDataDst::DType;
 
+    static_assert(sizeof(T) == sizeof(U), "TMOV: src and dst data type is different!");
+    if constexpr (TileDataDst::Cols == TileDataSrc::Cols || TileDataDst::Rows == 1) {
+        unsigned blockLen = (TileDataDst::Cols * validRow * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+        if constexpr (TileDataDst::Cols == TileDataDst::ValidCol) {
+            stats.emplace_back("copy_ubuf_to_ubuf", 1, blockLen, 1, 1);
+        } else {
+            if (TileDataDst::Cols == validCol) {
+                stats.emplace_back("copy_ubuf_to_ubuf", 1, blockLen, 1, 1);
+            } else {
+                unsigned blockLen = (validCol * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+                for (int i = 0; i < validRow; i++) {
+                    stats.emplace_back("copy_ubuf_to_ubuf", 1, blockLen, 1, 1);
+                }
+            }
+        }
+    } else {
+        unsigned blockLen = (validCol * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+        unsigned srcGap = (TileDataSrc::Cols * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE - blockLen;
+        unsigned dstGap = (TileDataDst::Cols * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE - blockLen;
+        for (int i = 0; i < validRow; i++) {
+            stats.emplace_back("copy_ubuf_to_ubuf", 1, blockLen, srcGap, dstGap);
+        }
+    }
+} // end of tf
 } // namespace pto
-
-#endif // TCOPY_COSTMODEL_HPP
+#endif

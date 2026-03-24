@@ -7,28 +7,66 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TSEL_OP_HPP
-#define TSEL_OP_HPP
 
-#include <vector>
-#include "pto/costmodel/costmodel_types.hpp"
+#ifndef TSELOP_HPP
+#define TSELOP_HPP
+
+#include <pto/common/constants.hpp>
 
 namespace pto {
-
-// TSEL per-row pattern: vector_dup(1) + PIPE_V + vsel(1)
-// Per row: vector_dup loads the compare-mask, then vsel selects elements.
-template <typename DstTile>
-PTO_INTERNAL std::vector<CostModelStats> runSelOp(DstTile &dst)
+enum class SELMODE : uint8_t
 {
-    unsigned validRow = dst.GetValidRow();
-    std::vector<CostModelStats> stats;
+    VSEL_CMPMASK_SPR = 0,
+    VSEL_TENSOR_SCALAR_MODE = 1,
+    VSEL_TENSOR_TENSOR_MODE = 2,
+};
+
+template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile>
+PTO_INTERNAL void TSel(std::vector<CostModelStats> &stats, unsigned validRow, unsigned validCol)
+{
+    using T = std::conditional_t<sizeof(typename DstTile::DType) == 4, float, half>;
+    using MaskT = typename MaskTile::DType;
+
+    constexpr unsigned dstRowStride = DstTile::RowStride;
+    constexpr unsigned src0RowStride = Src0Tile::RowStride;
+    constexpr unsigned src1RowStride = Src1Tile::RowStride;
+    constexpr unsigned maskRowStride = MaskTile::RowStride;
+    constexpr unsigned cmpmaskLen = sizeof(T) == 2 ? 4 : 2; // 128bit for B16 and 64bit for B32
+
+    uint32_t maskAddr;
+    //set_mask_count();
     for (unsigned i = 0; i < validRow; i++) {
-        stats.emplace_back("vector_dup", 1);
-        stats.emplace_back("PIPE_V");
-        stats.emplace_back("vsel", 1);
+        //set_vector_mask(0, cmpmaskLen);
+        maskAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(maskPtr + i * maskRowStride));
+        //vector_dup(cmpMaskPtr, maskAddr, 1, 1, 1, 8, 0);
+        //pipe_barrier(PIPE_V);
+        //set_cmpmask(cmpMaskPtr);
+        //pipe_barrier(PIPE_V);
+        //set_vector_mask(0, validCol);
+        //vsel((__ubuf__ T *)(dstPtr + i * dstRowStride), (__ubuf__ T *)(src0Ptr + i * src0RowStride),
+        //     (__ubuf__ T *)(src1Ptr + i * src1RowStride), 1, 1, 1, 1, 8, 8, 8, SELMODE::VSEL_TENSOR_TENSOR_MODE);
+
     }
-    return stats;
+    //set_mask_norm();
+    //set_vector_mask(-1, -1);
 }
 
+template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile>
+PTO_INTERNAL std::vector<CostModelStats> runTSelOp(DstTile &dst)
+{
+    std::vector<CostModelStats> stats;
+    static_assert(sizeof(typename DstTile::DType) == 4 || sizeof(typename DstTile::DType) == 2,
+                  "Fix: TSEL only support 16B and 32B data type.");
+    static_assert(std::is_same_v<typename DstTile::DType, typename Src0Tile::DType> ||
+                      std::is_same_v<typename DstTile::DType, typename Src1Tile::DType>,
+                  "Fix: TSEL only support same data type between dst, src0, and src1.");
+    static_assert(DstTile::isRowMajor && Src0Tile::isRowMajor && Src1Tile::isRowMajor,
+                  "Fix: TSEL only support RowMajor layout type.");
+    unsigned validRow = dst.GetValidRow();
+    unsigned validCol = dst.GetValidCol();
+
+    TSel<DstTile, MaskTile, Src0Tile, Src1Tile, TmpTile>(stats, validRow, validCol);
+    return stats;
+}
 } // namespace pto
-#endif // TSEL_OP_HPP
+#endif
