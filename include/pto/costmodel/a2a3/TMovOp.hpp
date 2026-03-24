@@ -10,7 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef TMOVOP_HPP
 #define TMOVOP_HPP
-#include "pto/npu/a2a3/common.hpp"
+#include "common.hpp"
 #include "TExtract.hpp"
 #include "TCopy.hpp"
 
@@ -95,7 +95,7 @@ AICORE void TMovCcToCb(std::vector<CostModelStats> &stats, uint16_t validRow, ui
     validCol = CeilDivision(validCol, c0Size) * c0Size;
     //copy_matrix_cc_to_cbuf(dstAddr, srcAddr, 0, validCol, SrcTileData::Rows, dstStride_dst_D, srcStride, 0, QuantPre,
                            //reluMode, false, false);
-
+	stats.emplace
 }
 
 template <typename DstTileData, typename SrcTileData>

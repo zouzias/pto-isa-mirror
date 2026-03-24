@@ -59,6 +59,10 @@ tmrgsort
 tsel
 tsort32
 ttrans
+tload
+tloadconv
+tmov
+textract
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})

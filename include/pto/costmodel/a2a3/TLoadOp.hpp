@@ -53,19 +53,19 @@ PTO_INTERNAL void TLoadNd2nzInstr(std::vector<CostModelStats> &stats, uint16_t n
     // stats, sid, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
     // dstNzC0Stride, dstNzNStride, dstNzMatrixStride
     if constexpr (sizeof(typename TileData::DType) == 1) {
-        copy_gm_to_cbuf_multi_nd2nz_b8(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue, dstNzC0Stride,
-                                       dstNzNStride, dstNzMatrixStride);
+        //copy_gm_to_cbuf_multi_nd2nz_b8(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue, dstNzC0Stride,
+        //                               dstNzNStride, dstNzMatrixStride);
     } else if constexpr (sizeof(typename TileData::DType) == 2) {
-        copy_gm_to_cbuf_multi_nd2nz_b16(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue, dstNzC0Stride,
-                                        dstNzNStride, dstNzMatrixStride);
+        //copy_gm_to_cbuf_multi_nd2nz_b16(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue, dstNzC0Stride,
+        //                                dstNzNStride, dstNzMatrixStride);
     } else if constexpr (sizeof(typename TileData::DType) == 4) {
-        copy_gm_to_cbuf_multi_nd2nz_b32s(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
-                                         dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
+        //copy_gm_to_cbuf_multi_nd2nz_b32s(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
+        //                                 dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
     } else if constexpr (sizeof(typename TileData::DType) == 8) {
         uint16_t dValueb64 = dValue * 2;
         uint16_t srcDValueb64 = srcDValue * 2;
-        copy_gm_to_cbuf_multi_nd2nz_b32s(stats, 0, ndNum, nValue, dValueb64, srcNdMatrixStride, srcDValueb64,
-                                         dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
+        //copy_gm_to_cbuf_multi_nd2nz_b32s(stats, 0, ndNum, nValue, dValueb64, srcNdMatrixStride, srcDValueb64,
+        //                                 dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
     }
 }
 
@@ -99,8 +99,7 @@ PTO_INTERNAL void TLoadGm2ubNd2nd(std::vector<CostModelStats> &stats, int gShape
     uint32_t ubPad = 0;
     if constexpr (TileData::PadVal != PadValue::Null) {
         ubPad = ubGapElement % blockSizeElem;
-        //set_mov_pad_val(GetPadValue<TileData>());
-        // TODO 如何处理？
+
     }
     int64_t dstStride2 = gShape3 * TileData::Cols;
     int64_t dstStride1 = gShape2 * dstStride2;
@@ -322,7 +321,7 @@ PTO_INTERNAL void TLoadGm2L1(std::vector<CostModelStats> &stats, int gShape0, in
 }
 
 template <typename TileData, typename GlobalData>
-INTERNAL void TLoadGm2L1Nd2nz(std::vector<CostModelStats> &stats, int gShape0, int gShape1, int gShape2,int gShape3,
+PTO_INTERNAL void TLoadGm2L1Nd2nz(std::vector<CostModelStats> &stats, int gShape0, int gShape1, int gShape2,int gShape3,
                               int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
                               int validRow, int validCol)
 {

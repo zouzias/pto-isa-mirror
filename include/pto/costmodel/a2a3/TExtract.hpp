@@ -12,7 +12,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TEXTRACT_HPP
 #define TEXTRACT_HPP
 
-#include "pto/npu/a2a3/common.hpp"
+#include "common.hpp"
 #include "pto/costmodel/pto_isa_costmodel.hpp"
 
 namespace pto {

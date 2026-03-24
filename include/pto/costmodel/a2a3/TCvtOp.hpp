@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TCVTOP_HPP
 #define TCVTOP_HPP
 
-#include "pto/npu/a2a3/common.hpp"
+#include "common.hpp"
 
 namespace pto {
 // ============================================================================
