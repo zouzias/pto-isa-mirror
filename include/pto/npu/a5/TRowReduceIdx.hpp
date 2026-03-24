@@ -22,7 +22,7 @@ full text of the License.
 namespace pto {
 
 template <typename T>
-struct ROWCMAX {
+struct ROWIDXMAX {
     static constexpr typename Padding<T>::Type InitVal = Padding<T>::Min;
     using PaddingType = typename Padding<T>::Type;
     using RegType = typename TypeGet<T>::T;
@@ -37,7 +37,7 @@ struct ROWCMAX {
 };
 
 template <typename T>
-struct ROWCMIN {
+struct ROWIDXMIN {
     static constexpr typename Padding<T>::Type InitVal = Padding<T>::Max;
     using PaddingType = typename Padding<T>::Type;
     using RegType = typename TypeGet<T>::T;
@@ -115,8 +115,8 @@ PTO_INTERNAL void TRowReduceIdxImpl(__ubuf__ typename TileDataOut::DType *dstPtr
 }
 
 template <typename TileDataOut, typename TileDataIn>
-__tf__ PTO_INTERNAL OP_NAME(TROWCMAX) OP_TYPE(reduce)
-void TRowCMax(typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src,
+__tf__ PTO_INTERNAL OP_NAME(TROWARGMAX) OP_TYPE(reduce)
+void TRowArgMax(typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src,
               uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow,
               unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
@@ -125,18 +125,18 @@ void TRowCMax(typename TileDataOut::TileDType __out__ dst, typename TileDataIn::
     TRowReduceCheck<TileDataOut, TileDataIn, true>(srcValidRows, srcValidCols, dstValidRow);
     __ubuf__ TDst *dstPtr = __cce_get_tile_ptr(dst);
     __ubuf__ TSrc *srcPtr = __cce_get_tile_ptr(src);
-    TRowReduceIdxImpl<ROWCMAX<TSrc>, TileDataOut, TileDataIn>(dstPtr, srcPtr, srcValidRows, srcValidCols, version);
+    TRowReduceIdxImpl<ROWIDXMAX<TSrc>, TileDataOut, TileDataIn>(dstPtr, srcPtr, srcValidRows, srcValidCols, version);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
-PTO_INTERNAL void TROWCMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
+PTO_INTERNAL void TROWARGMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
-    TRowCMax<TileDataOut, TileDataIn>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
+    TRowArgMax<TileDataOut, TileDataIn>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
 }
 
 template <typename TileDataOut, typename TileDataIn>
-__tf__ PTO_INTERNAL OP_NAME(TROWCMIN) OP_TYPE(reduce)
-void TRowCMin(typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src,
+__tf__ PTO_INTERNAL OP_NAME(TROWARGMIN) OP_TYPE(reduce)
+void TRowArgMin(typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src,
               uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow,
               unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
@@ -145,13 +145,13 @@ void TRowCMin(typename TileDataOut::TileDType __out__ dst, typename TileDataIn::
     TRowReduceCheck<TileDataOut, TileDataIn, true>(srcValidRows, srcValidCols, dstValidRow);
     __ubuf__ TDst *dstPtr = __cce_get_tile_ptr(dst);
     __ubuf__ TSrc *srcPtr = __cce_get_tile_ptr(src);
-    TRowReduceIdxImpl<ROWCMIN<TSrc>, TileDataOut, TileDataIn>(dstPtr, srcPtr, srcValidRows, srcValidCols, version);
+    TRowReduceIdxImpl<ROWIDXMIN<TSrc>, TileDataOut, TileDataIn>(dstPtr, srcPtr, srcValidRows, srcValidCols, version);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
-PTO_INTERNAL void TROWCMIN_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
+PTO_INTERNAL void TROWARGMIN_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
-    TRowCMin<TileDataOut, TileDataIn>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
+    TRowArgMin<TileDataOut, TileDataIn>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
 }
 } // namespace pto
 
