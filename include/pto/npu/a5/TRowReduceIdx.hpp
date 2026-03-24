@@ -15,6 +15,7 @@ full text of the License.
 
 #include "common.hpp"
 #include "pto/common/pto_tile.hpp"
+#include "TPartBinOps.hpp"
 #include <math.h>
 #include <type_traits>
 
@@ -22,7 +23,8 @@ namespace pto {
 
 template <typename T>
 struct ROWCMAX {
-    static constexpr T InitVal = -FloatLimits<T>::max();
+    static constexpr typename Padding<T>::Type InitVal = Padding<T>::Min;
+    using PaddingType = typename Padding<T>::Type;
     using RegType = typename TypeGet<T>::T;
     static PTO_INTERNAL void Reduce(RegType &dst, RegType &src, MaskReg &preg)
     {
@@ -36,7 +38,8 @@ struct ROWCMAX {
 
 template <typename T>
 struct ROWCMIN {
-    static constexpr T InitVal = FloatLimits<T>::max();
+    static constexpr typename Padding<T>::Type InitVal = Padding<T>::Max;
+    using PaddingType = typename Padding<T>::Type;
     using RegType = typename TypeGet<T>::T;
     static PTO_INTERNAL void Reduce(RegType &dst, RegType &src, MaskReg &preg)
     {
@@ -65,33 +68,33 @@ PTO_INTERNAL void TRowReduceIdxImpl(__ubuf__ typename TileDataOut::DType *dstPtr
         vbr(vregZero, 0);
         RegTensor<TSrc> vregSrc;
         RegTensor<TSrc> vregValOrig;
-        RegTensor<TSrc> vregIdxOrig;
         RegTensor<TSrc> vregVal;
-        RegTensor<TSrc> vregIdx;
+        RegTensor<TDst> vregIdxOrig;
+        RegTensor<TDst> vregIdx;
 
         uint32_t dstDup = 1;
         MaskReg pRegOneElem = CreatePredicate<TSrc>(dstDup);
         MaskReg pregCmp;
         if (version == VFIMPL_2D_NO_POST_UPDATE) {
             for (uint16_t i = 0; i < (uint16_t)rows; ++i) {
-                vbr(vregValOrig, ReduceIdxOp::InitVal);
+                vdup((RegTensor<typename ReduceIdxOp::PaddingType>&)vregValOrig, ReduceIdxOp::InitVal, pRegOneElem, MODE_ZEROING);
                 vbr(vregIdxOrig, 0);
                 uint32_t sregCol = cols;
                 for (uint16_t j = 0; j < (uint16_t)repeatTimes; j++) {
                     MaskReg pRegSrc = CreatePredicate<TSrc>(sregCol);
                     vlds(vregSrc, srcPtr, i * TileDataIn::RowStride + j * elementsPerRepeat, NORM);
                     ReduceIdxOp::Reduce(vregVal, vregSrc, pRegSrc);
-                    vdintlv(vregVal, vregIdx, vregVal, vregZero);
-                    vadds((RegTensor<TDst>&)vregIdx, (RegTensor<TDst>&)vregIdx, j * elementsPerRepeat, pRegOneElem, MODE_ZEROING);
+                    vdintlv(vregVal, (RegTensor<TSrc>&)vregIdx, vregVal, vregZero);
+                    vadds(vregIdx, vregIdx, j * elementsPerRepeat, pRegOneElem, MODE_ZEROING);
                     ReduceIdxOp::Compare(pregCmp, vregValOrig, vregVal, pRegOneElem);
                     vsel(vregValOrig, vregVal, vregValOrig, pregCmp);
                     vsel(vregIdxOrig, vregIdx, vregIdxOrig, pregCmp);
                 }
-                vsts((RegTensor<TDst>&)vregIdxOrig, dstPtr, i * TileDataOut::RowStride, distValue, pRegOneElem);
+                vsts(vregIdxOrig, dstPtr, i * TileDataOut::RowStride, distValue, pRegOneElem);
             }
         } else {
             for (uint16_t i = 0; i < (uint16_t)rows; ++i) {
-                vbr(vregValOrig, ReduceIdxOp::InitVal);
+                vdup((RegTensor<typename ReduceIdxOp::PaddingType>&)vregValOrig, ReduceIdxOp::InitVal, pRegOneElem, MODE_ZEROING);
                 vbr(vregIdxOrig, 0);
                 __ubuf__ TSrc *rowPtr = srcPtr + i * TileDataIn::RowStride;
                 uint32_t sregCol = cols;
@@ -99,13 +102,13 @@ PTO_INTERNAL void TRowReduceIdxImpl(__ubuf__ typename TileDataOut::DType *dstPtr
                     MaskReg pRegSrc = CreatePredicate<TSrc>(sregCol);
                     vlds(vregSrc, rowPtr, elementsPerRepeat, NORM, POST_UPDATE);
                     ReduceIdxOp::Reduce(vregVal, vregSrc, pRegSrc);
-                    vdintlv(vregVal, vregIdx, vregVal, vregZero);
-                    vadds((RegTensor<TDst>&)vregIdx, (RegTensor<TDst>&)vregIdx, j * elementsPerRepeat, pRegOneElem, MODE_ZEROING);
+                    vdintlv(vregVal, (RegTensor<TSrc>&)vregIdx, vregVal, vregZero);
+                    vadds(vregIdx, vregIdx, j * elementsPerRepeat, pRegOneElem, MODE_ZEROING);
                     ReduceIdxOp::Compare(pregCmp, vregValOrig, vregVal, pRegOneElem);
                     vsel(vregValOrig, vregVal, vregValOrig, pregCmp);
                     vsel(vregIdxOrig, vregIdx, vregIdxOrig, pregCmp);
                 }
-                vsts((RegTensor<TDst>&)vregIdxOrig, dstPtr, TileDataOut::RowStride, distValue, pRegOneElem, POST_UPDATE);
+                vsts(vregIdxOrig, dstPtr, TileDataOut::RowStride, distValue, pRegOneElem, POST_UPDATE);
             }
         }
     }
