@@ -27,7 +27,7 @@ __global__ AICORE void runTRowCMax(__gm__ TDst __out__ *out, __gm__ TSrc __in__ 
                             DynStride(srcTileH * srcTileW, srcTileH * srcTileW, srcTileH * srcTileW, srcTileW, 1));
     using TileDataDst = Tile<TileType::Vec, TDst, dstTileH, dstTileW, BLayout::ColMajor, -1, -1>;
     using TileDataSrc = Tile<TileType::Vec, TSrc, srcTileH, srcTileW, BLayout::RowMajor, -1, -1>;
-    using TileDataTmp = Tile<TileType::Vec, uint32_t, srcTileH, srcTileW, BLayout::RowMajor, -1, -1>;
+    using TileDataTmp = Tile<TileType::Vec, uint32_t, 1, 8, BLayout::RowMajor, -1, -1>;
     TileDataDst dstTile(vRows, vCols);
     TileDataSrc srcTile(vRows, vCols);
     TileDataTmp tmpTile(vRows, vCols);
