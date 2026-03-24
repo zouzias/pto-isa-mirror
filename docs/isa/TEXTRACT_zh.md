@@ -52,6 +52,10 @@ PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint16_t index
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
           typename... WaitEvents>
 PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
 ```
 
 ## 约束
@@ -66,7 +70,8 @@ PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint64_t preQu
 - **实现检查 (A5)**:
     - `DstTileData::DType` 必须等于 `SrcTileData::DType` 且必须是以下之一：`int8_t`、`hifloat8_t`、`float8_e5m2_t`、`float8_e4m3_t`、`half`、`bfloat16_t`、`float`、`float4_e2m1x2_t`、`float4_e1m2x2_t`、`float8_e8m0_t`。
     - 源分形必须满足：对于 Left/Right 为 `(SFractal == ColMajor && isRowMajor)` 或 `(SFractal == RowMajor && !isRowMajor)`，GEMV场景中，目标为Left时，源分形满足`(SrcTileData::Rows == 1 && SrcTileData::isRowMajor)`；对于 ScaleLeft 为 `(SFractal == RowMajor && isRowMajor)`，对于 ScaleRight 为 `(SFractal == ColMajor && !isRowMajor)`。
-    - 目标支持 `Mat -> Left/Right/Scale`，也支持特定 tile 位置的 `Vec -> Mat`（此目标的 `TEXTRACT_IMPL` 中不强制执行显式运行时边界断言）。
+    - 目标支持 `Mat -> Left/Right/Scale`、`Acc -> Mat`（含 relu / 标量量化 / 向量量化形式），也支持特定 tile 位置的 `Vec -> Mat` 提取路径。
+    - 向量量化形式额外要求提供 `FpTileData` 缩放操作数，对应上文展示的 `TEXTRACT_FP(...)` 接口。
 
 ## 示例
 

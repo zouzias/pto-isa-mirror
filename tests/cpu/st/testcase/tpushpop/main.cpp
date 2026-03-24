@@ -21,15 +21,18 @@ using namespace PtoTestCommon;
 template <typename T, int rows, int cols, TileType srcLoc>
 void testPushPop()
 {
-    using PPDataFIFO = DataFIFO<T, FIFOType::GM_FIFO, 8, 1>;
-    using PPSync = TFIFOSync<0, PPDataFIFO, TSyncOpType::TSTORE_C2GM, TSyncOpType::TLOAD>;
+    constexpr int FiFoDepth = 8;
+    constexpr int FiFoPeriod = 1;
+    constexpr int LocalDepth = 2;
+    using PPipe =
+        TPipe<0, T, FIFOType::GM_FIFO, FiFoDepth, FiFoPeriod, LocalDepth, TSyncOpType::TSTORE_C2GM, TSyncOpType::TLOAD>;
     using PPTile = Tile<srcLoc, T, rows, cols>;
     using PPGlobal =
         GlobalTensor<T, Shape<1, 1, 1, rows, cols>, Stride<rows * cols, rows * cols, rows * cols, cols, 1>>;
 
     T *srcDevice;
-    aclrtMalloc((void **)&srcDevice, PPTile::Numel * PPDataFIFO::fifoDepth, ACL_MEM_MALLOC_HUGE_FIRST);
-    PPDataFIFO gmFIFO(srcDevice);
+    aclrtMalloc((void **)&srcDevice, PPTile::Numel * FiFoDepth, ACL_MEM_MALLOC_HUGE_FIRST);
+    PPipe pipe(srcDevice, 0x0);
     PPTile src;
     PPTile dst;
 
@@ -46,11 +49,8 @@ void testPushPop()
     PPGlobal srcTensor(srcData.data());
     PPGlobal dstTensor(dstData.data());
 
-    typename PPSync::Producer prod;
-    typename PPSync::Consumer cons;
-
-    TPUSH(prod, src, gmFIFO);
-    TPOP(cons, dst, gmFIFO);
+    TPUSH(src, pipe);
+    TPOP(dst, pipe);
 
     EXPECT_TRUE(ResultCmp(srcData, dstData.data(), 0));
 

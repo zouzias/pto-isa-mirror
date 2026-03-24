@@ -102,6 +102,6 @@ include_directories(
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )
 
-option(HIGH_PRECISION_IMPL "Use high-precision algorithms (usually slower) for some operations" OFF)
+option(STRAIGHT_INTRINSICS_IMPL "Use straight intrinsics-based implementation for some operations" OFF)
 
 add_subdirectory(testcase)

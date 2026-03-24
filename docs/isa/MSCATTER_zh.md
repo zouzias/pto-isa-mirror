@@ -49,8 +49,28 @@ PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, W
 
 ## 约束
 
-- 索引解释由目标定义。CPU 模拟器将索引视为 `dst.data()` 中的线性元素索引。
-- CPU 模拟器不对 `indexes` 强制执行边界检查。
+- **支持的数据类型**：
+    - `src`/`dst` 的元素类型必须是以下之一：`int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half`、`bfloat16_t`、`float`。
+    - 在 AICore 目标上，还支持 `float8_e4m3_t` 和 `float8_e5m2_t`。
+    - `indexes` 的元素类型必须是 `int32_t` 或 `uint32_t`。
+- **Tile 与内存类型约束**：
+    - `src` 必须是向量 Tile（`TileType::Vec`）。
+    - `indexes` 必须是向量 Tile（`TileType::Vec`）。
+    - `src` 和 `indexes` 必须使用行主序布局。
+    - `dst` 必须是位于 GM 内存中的 `GlobalTensor`。
+    - `dst` 必须使用 `ND` 布局。
+- **原子操作约束**：
+    - 非原子 scatter 对所有受支持元素类型都可用。
+    - `Add` 原子模式要求元素类型为 `int32_t`、`uint32_t`、`float` 或 `half`。
+    - `Max`/`Min` 原子模式要求元素类型为 `int32_t` 或 `float`。
+- **形状约束**：
+    - `src.Rows == indexes.Rows`。
+    - `indexes` 的形状必须为 `[N, 1]`（按行 scatter）或 `[N, M]`（按元素 scatter）。
+    - `src` 的行宽必须满足 32 字节对齐，即 `src.Cols * sizeof(DType)` 必须是 32 的倍数。
+    - `dst` 的静态 shape 必须满足 `Shape<1, 1, 1, TableRows, RowWidth>`。
+- **索引解释**：
+    - 索引解释由目标定义。CPU 模拟器将索引视为 `dst.data()` 中的线性元素索引。
+    - CPU 模拟器不对 `indexes` 强制执行边界检查。
 
 ## 示例
 
