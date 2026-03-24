@@ -39,6 +39,9 @@ void testPushPop()
     std::vector<T> srcData(PPTile::Numel, 0);
     std::vector<T> dstData(PPTile::Numel, 0);
 
+    TASSIGN(src,0);
+    TASSIGN(dst,rows*cols*sizeof(T));
+
     for (int i = 0; i < src.Numel; i++) {
         src.data()[i] = std::rand() / 1000.0;
     }
