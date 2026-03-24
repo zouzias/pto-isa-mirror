@@ -15,7 +15,7 @@ using namespace pto;
 
 template <typename TDst, typename TSrc, int dstTileH, int dstTileW, int srcTileH, int srcTileW,
     int tmpTileH, int tmpTileW, int vRows, int vCols>
-__global__ AICORE void runTRowCMin(__gm__ TDst __out__ *out, __gm__ TSrc __in__ *src)
+__global__ AICORE void runTRowArgMin(__gm__ TDst __out__ *out, __gm__ TSrc __in__ *src)
 {
     using DynShape = pto::Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<-1, -1, -1, -1, -1>;
@@ -44,7 +44,7 @@ __global__ AICORE void runTRowCMin(__gm__ TDst __out__ *out, __gm__ TSrc __in__ 
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TROWCMIN(dstTile, srcTile, tmpTile);
+    TROWARGMIN(dstTile, srcTile, tmpTile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
@@ -53,31 +53,31 @@ __global__ AICORE void runTRowCMin(__gm__ TDst __out__ *out, __gm__ TSrc __in__ 
 
 template <typename TDst, typename TSrc, int dstTileH, int dstTileW, int srcTileH, int srcTileW,
     int tmpTileH, int tmpTileW, int vRows, int vCols>
-void LaunchTRowCMin(TDst *out, TSrc *src, void *stream)
+void LaunchTRowArgMin(TDst *out, TSrc *src, void *stream)
 {
-    runTRowCMin<TDst, TSrc, dstTileH, dstTileW, srcTileH, srcTileW, tmpTileH, tmpTileW, vRows, vCols><<<1, nullptr, stream>>>(out, src);
+    runTRowArgMin<TDst, TSrc, dstTileH, dstTileW, srcTileH, srcTileW, tmpTileH, tmpTileW, vRows, vCols><<<1, nullptr, stream>>>(out, src);
 }
 
 template <typename TDst, int dstTileH, int dstTileW, int srcTileH, int srcTileW,
     int tmpTileH, int tmpTileW, int vRows, int vCols>
-void LaunchTRowCMinHalf(TDst *out, aclFloat16 *src, void *stream)
+void LaunchTRowArgMinHalf(TDst *out, aclFloat16 *src, void *stream)
 {
-    runTRowCMin<TDst, half, dstTileH, dstTileW, srcTileH, srcTileW, tmpTileH, tmpTileW, vRows, vCols><<<1, nullptr, stream>>>(out, (half *)src);
+    runTRowArgMin<TDst, half, dstTileH, dstTileW, srcTileH, srcTileW, tmpTileH, tmpTileW, vRows, vCols><<<1, nullptr, stream>>>(out, (half *)src);
 }
 
 // Dest column must be 32b aligned, rows should always be 1
-template void LaunchTRowCMin<uint32_t, float, 8, 1, 8, 8, 1, 8, 8, 8>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMin<uint32_t, float, 1024, 1, 1024, 8, 1, 8, 1024, 8>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMin<uint32_t, float, 16, 1, 13, 16, 1, 8, 13, 13>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMin<uint32_t, float, 1024, 1, 1023, 24, 1, 8, 1023, 17>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMin<uint32_t, float, 8, 1, 8, 64, 1, 8, 8, 64>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMin<uint32_t, float, 264, 1, 260, 64, 1, 8, 260, 64>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMin<uint32_t, float, 64, 1, 32, 128, 32, 24, 32, 128>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMin<uint32_t, float, 8, 1, 3, 4096, 3, 192, 3, 4095>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMin<uint32_t, float, 8, 1, 1, 16384, 1, 768, 1, 16381>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMinHalf<uint32_t, 16, 1, 2, 16, 2, 16, 2, 16>(uint32_t *out, aclFloat16 *src, void *stream);
-template void LaunchTRowCMinHalf<uint32_t, 16, 1, 13, 16, 1, 16, 13, 13>(uint32_t *out, aclFloat16 *src, void *stream);
-template void LaunchTRowCMinHalf<uint32_t, 272, 1, 260, 64, 1, 16, 260, 64>(uint32_t *out, aclFloat16 *src, void *stream);
-template void LaunchTRowCMinHalf<uint32_t, 16, 1, 3, 8192, 3, 384, 3, 8191>(uint32_t *out, aclFloat16 *src, void *stream);
-template void LaunchTRowCMinHalf<uint32_t, 16, 1, 1, 16384, 1, 768, 1, 16381>(uint32_t *out, aclFloat16 *src, void *stream);
-template void LaunchTRowCMinHalf<uint32_t, 16, 1, 1, 32768, 1, 768, 1, 32761>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 8, 1, 8, 8, 1, 8, 8, 8>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 1024, 1, 1024, 8, 1, 8, 1024, 8>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 16, 1, 13, 16, 1, 8, 13, 13>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 1024, 1, 1023, 24, 1, 8, 1023, 17>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 8, 1, 8, 64, 1, 8, 8, 64>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 264, 1, 260, 64, 1, 8, 260, 64>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 64, 1, 32, 128, 32, 24, 32, 128>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 8, 1, 3, 4096, 3, 192, 3, 4095>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 8, 1, 1, 16384, 1, 768, 1, 16381>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMinHalf<uint32_t, 16, 1, 2, 16, 2, 16, 2, 16>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMinHalf<uint32_t, 16, 1, 13, 16, 1, 16, 13, 13>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMinHalf<uint32_t, 272, 1, 260, 64, 1, 16, 260, 64>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMinHalf<uint32_t, 16, 1, 3, 8192, 3, 384, 3, 8191>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMinHalf<uint32_t, 16, 1, 1, 16384, 1, 768, 1, 16381>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMinHalf<uint32_t, 16, 1, 1, 32768, 1, 768, 1, 32761>(uint32_t *out, aclFloat16 *src, void *stream);

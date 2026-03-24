@@ -39,7 +39,7 @@ def gen_golden_data(param):
     golden.tofile("golden.bin")
 
 
-class TRowCMinParams:
+class TRowArgMinParams:
     DTYPE_STR_TABLE = {
         np.float32: 'float',
         np.float16: 'half',
@@ -59,7 +59,7 @@ class TRowCMinParams:
         self.src_tile_col = src_tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
-        self.name = f"TROWCMINTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"\
+        self.name = f"TROWARGMINTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"\
             f"{dst_tile_row}x{dst_tile_col}_{src_tile_row}x{src_tile_col}_{valid_row}x{valid_col}"
 
 
@@ -73,22 +73,22 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_list = [
-        TRowCMinParams(np.uint32, np.float32, 8, 1, 8, 8, 8, 8),
-        TRowCMinParams(np.uint32, np.float32, 1024, 1, 1024, 8, 1024, 8),
-        TRowCMinParams(np.uint32, np.float32, 16, 1, 13, 16, 13, 13),
-        TRowCMinParams(np.uint32, np.float32, 1024, 1, 1023, 24, 1023, 17),
-        TRowCMinParams(np.uint32, np.float32, 8, 1, 8, 64, 8, 64),
-        TRowCMinParams(np.uint32, np.float32, 264, 1, 260, 64, 260, 64),
-        TRowCMinParams(np.uint32, np.float32, 8, 1, 1, 128, 1, 128),
-        TRowCMinParams(np.uint32, np.float32, 64, 1, 32, 128, 32, 128),
-        TRowCMinParams(np.uint32, np.float32, 8, 1, 3, 4096, 3, 4095),
-        TRowCMinParams(np.uint32, np.float32, 8, 1, 2, 16384, 2, 16381),
-        TRowCMinParams(np.uint32, np.float16, 16, 1, 2, 16, 2, 16),
-        TRowCMinParams(np.uint32, np.float16, 16, 1, 13, 16, 13, 13),
-        TRowCMinParams(np.uint32, np.float16, 272, 1, 260, 64, 260, 64),
-        TRowCMinParams(np.uint32, np.float16, 16, 1, 3, 8192, 3, 8191),
-        TRowCMinParams(np.uint32, np.float16, 16, 1, 1, 16384, 1, 16381),
-        TRowCMinParams(np.uint32, np.float16, 16, 1, 1, 32768, 1, 32761),
+        TRowArgMinParams(np.uint32, np.float32, 8, 1, 8, 8, 8, 8),
+        TRowArgMinParams(np.uint32, np.float32, 1024, 1, 1024, 8, 1024, 8),
+        TRowArgMinParams(np.uint32, np.float32, 16, 1, 13, 16, 13, 13),
+        TRowArgMinParams(np.uint32, np.float32, 1024, 1, 1023, 24, 1023, 17),
+        TRowArgMinParams(np.uint32, np.float32, 8, 1, 8, 64, 8, 64),
+        TRowArgMinParams(np.uint32, np.float32, 264, 1, 260, 64, 260, 64),
+        TRowArgMinParams(np.uint32, np.float32, 8, 1, 1, 128, 1, 128),
+        TRowArgMinParams(np.uint32, np.float32, 64, 1, 32, 128, 32, 128),
+        TRowArgMinParams(np.uint32, np.float32, 8, 1, 3, 4096, 3, 4095),
+        TRowArgMinParams(np.uint32, np.float32, 8, 1, 2, 16384, 2, 16381),
+        TRowArgMinParams(np.uint32, np.float16, 16, 1, 2, 16, 2, 16),
+        TRowArgMinParams(np.uint32, np.float16, 16, 1, 13, 16, 13, 13),
+        TRowArgMinParams(np.uint32, np.float16, 272, 1, 260, 64, 260, 64),
+        TRowArgMinParams(np.uint32, np.float16, 16, 1, 3, 8192, 3, 8191),
+        TRowArgMinParams(np.uint32, np.float16, 16, 1, 1, 16384, 1, 16381),
+        TRowArgMinParams(np.uint32, np.float16, 16, 1, 1, 32768, 1, 32761),
     ]
 
     for case in case_list:
