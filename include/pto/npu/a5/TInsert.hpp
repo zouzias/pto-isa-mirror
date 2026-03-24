@@ -421,7 +421,7 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t inde
             uint16_t dstCols = static_cast<uint16_t>(DstTileData::Cols);
             TInsertNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstCols, indexRow,
                                                        indexCol);
-        } else {
+        } else if constexpr (!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::RowMajor)) {
             uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
             TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), TInsertMode::NZ, validRow, validCol,
                                                      dstRow, indexRow, indexCol);
@@ -454,16 +454,20 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t inde
     uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
     uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
 
-    if constexpr (mode == TInsertMode::SPLIT2_NZ_PLUS_1) {
+    if constexpr (mode == TInsertMode::NZ) {
+        uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
+        TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, dstRow, indexRow,
+                                                 indexCol);
+    } else if constexpr (mode == TInsertMode::NZ_PLUS_1) {
+        uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
+        TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, dstRow, indexRow,
+                                                 indexCol);
+    } else if constexpr (mode == TInsertMode::SPLIT2_NZ_PLUS_1) {
         TInsertSplitImpl<2, T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, indexRow,
                                                          indexCol);
     } else if constexpr (mode == TInsertMode::SPLIT4_NZ_PLUS_1) {
         TInsertSplitImpl<4, T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, indexRow,
                                                          indexCol);
-    } else {
-        uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
-        TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), mode, validRow, validCol, dstRow, indexRow,
-                                                 indexCol);
     }
 }
 
