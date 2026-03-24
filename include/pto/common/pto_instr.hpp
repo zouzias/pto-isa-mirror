@@ -800,6 +800,15 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint32_t indexR
     TINSERT_IMPL<mode>(dst, src, indexRow, indexCol);
     return {};
 }
+
+template <TExtractMode mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TEXTRACT(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0,
+                              WaitEvents &... events)
+{
+    TSYNC(events...);
+    TEXTRACT_IMPL<mode>(dst, src, indexRow, indexCol);
+    return {};
+}
 #endif
 
 template <typename TileData, PadValue PadVal = PadValue::Zero,
