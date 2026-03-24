@@ -530,7 +530,7 @@ PTO_INTERNAL void TEXTRACT_TILE_IMPL(std::vector<CostModelStats> &stats, DstTile
 }
 
 template <typename DstTileData, typename SrcTileData>
-PTO_INTERNAL void runTExtractOp(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
+PTO_INTERNAL void runTExtractOp(std::vector<CostModelStats> &stats, DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
 {
     if constexpr (is_conv_tile_v<SrcTileData>) {
         TEXTRACT_CONVTILE_IMPL(stats, dst, src, indexRow, indexCol);

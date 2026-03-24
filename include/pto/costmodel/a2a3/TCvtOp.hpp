@@ -325,23 +325,23 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(std::vector<CostModelStats>
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
             //vconv_f162s32r(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-                           step1SrcRepeatStride);
+             //              step1SrcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
             //vconv_f162s32a(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-                           step1SrcRepeatStride);
+             //              step1SrcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
             //vconv_f162s32f(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-                           step1SrcRepeatStride);
+              //             step1SrcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
             //vconv_f162s32c(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-                           step1SrcRepeatStride);
+             //              step1SrcRepeatStride);
             break;
         default:
             //vconv_f162s32z(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-                           step1SrcRepeatStride);
+             //              step1SrcRepeatStride);
     }
     //pipe_barrier(PIPE_V);
 
@@ -467,17 +467,17 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(std::vector<CostModelStats> 
     // Step 2: int32 -> int16 (narrow to low 16 bits) into tempAndBuf
     // After this, tempInt32Buf [+0..+4095] is fully consumed and available for reuse.
     //vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
-                  hwInt32Stride);
+    //              hwInt32Stride);
     //pipe_barrier(PIPE_V);
 
     // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (reuses tempInt32Buf [+0..+2047])
     //vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
-               hwInt16Stride);
+    //           hwInt16Stride);
     //pipe_barrier(PIPE_V);
 
     // Step 4: vand int16 & 255 to extract low 8 bits
     //vand(tempAndBuf, tempAndBuf, tempMaskBuf, hwRepeatCount, srcBlockStride, srcBlockStride, srcBlockStride,
-         hwInt16Stride, hwInt16Stride, hwInt16Stride);
+         //hwInt16Stride, hwInt16Stride, hwInt16Stride);
     //pipe_barrier(PIPE_V);
 
     // Step 5: int16 -> fp16, writing into tempFp16Buf (reuses tempInt32Buf [+0..+2047])
@@ -661,7 +661,7 @@ PTO_INTERNAL void GenCastCallSpecialCases(std::vector<CostModelStats> &stats, ui
         //vconv_s322s16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, half>::value &&
                          std::is_same<typename TileDataS::DType, int32_t>::value) { // int32 to half
-        set_deqscale(static_cast<half>(1.0));
+        //set_deqscale(static_cast<half>(1.0));
         //pipe_barrier(PIPE_V);
         //vconv_deq(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     }
@@ -693,7 +693,9 @@ AICORE void GenCastCall(std::vector<CostModelStats> &stats, uint8_t repeatNum, R
     } else if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                          std::is_same<typename TileDataS::DType, float>::value) { // fp32 to int16
         // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
-        bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
+        bool isSatOn = (
+            //get_ctrl() &
+            (1ULL << SAT_MODE_BIT)) == 0;
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
             // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
@@ -721,7 +723,9 @@ AICORE void GenCastCall(std::vector<CostModelStats> &stats, uint8_t repeatNum, R
     } else if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                          std::is_same<typename TileDataS::DType, half>::value) { // half to int16
         // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
-        bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
+        bool isSatOn = (
+            //get_ctrl() &
+            (1ULL << SAT_MODE_BIT)) == 0;
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
             // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
@@ -741,7 +745,9 @@ AICORE void GenCastCall(std::vector<CostModelStats> &stats, uint8_t repeatNum, R
     } else if constexpr (std::is_same<typename TileDataD::DType, int8_t>::value &&
                          std::is_same<typename TileDataS::DType, half>::value) { // half to int8
         // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
-        bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
+        bool isSatOn = (
+            //get_ctrl() &
+            (1ULL << SAT_MODE_BIT)) == 0;
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
             // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
@@ -845,8 +851,10 @@ AICORE void TCvt(std::vector<CostModelStats> &stats, RoundMode mode, SaturationM
                  unsigned srcRepeatStride)
 {
     // Save the original saturation mode state
-    uint64_t originalCtrl = get_ctrl();
-    bool originalSatMode = (originalCtrl & (1ULL << SAT_MODE_BIT)) == 0;
+    //uint64_t originalCtrl = get_ctrl();
+    bool originalSatMode = (
+        //originalCtrl &
+        (1ULL << SAT_MODE_BIT)) == 0;
 
     // Apply saturation mode
     if (satMode == SaturationMode::OFF) {

@@ -33,11 +33,11 @@ PTO_INTERNAL void TSel(std::vector<CostModelStats> &stats, unsigned validRow, un
     constexpr unsigned maskRowStride = MaskTile::RowStride;
     constexpr unsigned cmpmaskLen = sizeof(T) == 2 ? 4 : 2; // 128bit for B16 and 64bit for B32
 
-    uint32_t maskAddr;
+    //uint32_t maskAddr;
     //set_mask_count();
     for (unsigned i = 0; i < validRow; i++) {
         //set_vector_mask(0, cmpmaskLen);
-        maskAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(maskPtr + i * maskRowStride));
+        //maskAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(maskPtr + i * maskRowStride));
         //vector_dup(cmpMaskPtr, maskAddr, 1, 1, 1, 8, 0);
         //pipe_barrier(PIPE_V);
         //set_cmpmask(cmpMaskPtr);
