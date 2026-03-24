@@ -158,11 +158,11 @@ inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *
     uint32_t totalElements = validRows * validCols;
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B64);
     uint32_t sReg = totalElements;
+    uint32_t len64 = sReg * 2;
+    uint32_t len_even = sReg * 2;
 
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<DST> v_output;
-        uint32_t len64 = sReg * 2;
-        uint32_t len_even = sReg * 2;
         MaskReg preg_b64 = CreatePredicate<float>(len64);
         MaskReg preg_b32 = CreatePredicate<float>(len_even);
 
@@ -275,11 +275,11 @@ inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ S
     uint32_t sReg = totalElements;
     uint32_t len32 = ELE_CNT_B32;
     MaskReg preg_b32 = CreatePredicate<float>(len32);
+    uint32_t len64 = sReg * 2;
 
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<SRC> v_input_0;
         vector_s64 v_output;
-        uint32_t len64 = sReg * 2;
         MaskReg preg_b64 = CreatePredicate<float>(len64);
 
         vlds(v_input_0, src, i * ELE_CNT_B64, UNPK_B32);
@@ -547,6 +547,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
     uint32_t sReg = totalElements;
     MaskReg preg_idx = pset_b8(PAT_ALL);
+    uint32_t cur_len = sReg;
 
     DST_VEC v_idx;
     vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
@@ -555,7 +556,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<SRC> v_input;
         DST_VEC v_output_p0, v_output;
-        uint32_t cur_len = sReg;
+        
         MaskReg preg_b32 = CreatePredicate<float>(sReg);
         MaskReg preg_b8 = CreatePredicate<uint8_t>(cur_len);
 
@@ -594,11 +595,12 @@ inline AICORE void cast32toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
     vector_hif8 v_idx;
     vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
     vmuls((RegTensor<int16_t> &)v_idx, (RegTensor<int16_t> &)v_idx, (int16_t)4, preg_idx);
+    uint32_t cur_len = sReg;
 
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         vector_f32 v_input;
         vector_hif8 v_output_p0, v_output;
-        uint32_t cur_len = sReg;
+        
         MaskReg preg_b32 = CreatePredicate<float>(sReg);
         MaskReg preg_b8 = CreatePredicate<uint8_t>(cur_len);
 
@@ -660,10 +662,10 @@ inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t va
     FOR_ROWS
     uint32_t len64 = sreg * 2; // As we operate with 64bit blocks using 32bit operations
     MaskReg preg_b64 = CreatePredicate<float>(len64);
+    uint32_t len_even = sreg * 2; // As only the even part is taken
 
     FOR_ELEMENTS(ELE_CNT_B64)
     RegTensor<DST> v_output;
-    uint32_t len_even = sreg * 2; // As only the even part is taken
     MaskReg preg_b32 = CreatePredicate<float>(len_even);
 
     vlds(v_input_0, src, srcOffset, NORM);
@@ -818,10 +820,11 @@ inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_
     MaskReg preg_b32 = CreatePredicate<float>(len32);
 
     FOR_ROWS
+    uint32_t len64 = sreg * 2; // As we operate with 64bit blocks using 32bit operations
     FOR_ELEMENTS(ELE_CNT_B64)
     RegTensor<SRC> v_input_0;
     vector_s64 v_output;
-    uint32_t len64 = sreg * 2; // As we operate with 64bit blocks using 32bit operations
+   
     MaskReg preg_b64 = CreatePredicate<float>(len64);
 
     vlds(v_input_0, src, srcOffset, UNPK_B32);
@@ -1083,10 +1086,10 @@ inline AICORE void cast8to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
 
     FOR_ROWS
     int32_t rowDstOffset = row * dstCols;
+    uint32_t next_len = (sreg > ELE_CNT_B32) ? sreg - ELE_CNT_B32 : 0;
     FOR_ELEMENTS(ELE_CNT_B16)
     SRC_VEC v_input_0, v_input_1, v_input_2;
     RegTensor<DST> v_output_0, v_output_1;
-    uint32_t next_len = (sreg > ELE_CNT_B32) ? sreg - ELE_CNT_B32 : 0;
     MaskReg preg_b16_cur = CreatePredicate<half>(sreg);
     MaskReg preg_b16_next = CreatePredicate<half>(next_len);
     MaskReg preg_b32;
