@@ -40,7 +40,18 @@ void testMov()
     TensorType srcTensor(srcData.data());
     TensorType dstTensor(dstData.data());
 
-    TLOAD(src, srcTensor);
+    if constexpr (srcBL == BLayout::RowMajor && srcSL == SLayout::NoneBox) {
+        // ND tile: ND2ND TLOAD
+        TLOAD(src, srcTensor);
+    } else if constexpr (srcBL == BLayout::ColMajor && srcSL == SLayout::NoneBox) {
+        // DN tile: DN2DN TLOAD
+        using DnTensorType = GlobalTensor<T, Shape<1, 1, 1, validRow, validCol>,
+                                          Stride<validRow * validCol, validRow * validCol, validRow * validCol, 1, validRow>,
+                                          Layout::DN>;
+        DnTensorType srcTensorDN(srcData.data());
+        TLOAD(src, srcTensorDN);
+    }
+    // For NZ and other tile layouts, skip TLOAD (dst.GetCycle() measures TMOV, not TLOAD)
     TMOV(dst, src);
     TSTORE(dstTensor, dst);
 
@@ -63,7 +74,7 @@ protected:
         TMOVTest,                                                                                                      \
         T##_##rows##_##cols##_##validRow##_##validCol##_##srcLoc##_##srcBL##_##srcSL##_##dstLoc##_##dstBL##_##dstSL)   \
     {                                                                                                                  \
-        testMov<T, rows, cols, validRow, validCol, TileType::srcLoc, BLayout::srcBL, SLayout::srcSL, TileType::dstLoc, \
+        testMov<T, rows, cols, validRow, validCol, profiling, accuracy, TileType::srcLoc, BLayout::srcBL, SLayout::srcSL, TileType::dstLoc, \
                 BLayout::dstBL, SLayout::dstSL>();                                                                     \
     }
 

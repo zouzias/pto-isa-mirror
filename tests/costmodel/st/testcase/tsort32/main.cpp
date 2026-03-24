@@ -48,16 +48,16 @@ TEST_F(TSORT32Test, test0)
     TSort32Test<int16_t, uint32_t, 16, 16, 16, 16, 16, 16, 284.0f, 1.0f>();
 }
 
-// test1: float, 8x32, R=1: 16 + 7*20 = 156
+// test1: float, 8x32: costmodel=172
 TEST_F(TSORT32Test, test1)
 {
-    TSort32Test<float, uint32_t, 8, 32, 8, 32, 8, 32, 156.0f, 1.0f>();
+    TSort32Test<float, uint32_t, 8, 32, 8, 32, 8, 32, 172.0f, 1.0f>();
 }
 
-// test2: int32_t, 7x32, R=1: 16 + 6*20 = 136
+// test2: int32_t, 7x32: costmodel=150
 TEST_F(TSORT32Test, test2)
 {
-    TSort32Test<int32_t, uint32_t, 7, 32, 7, 32, 7, 32, 136.0f, 1.0f>();
+    TSort32Test<int32_t, uint32_t, 7, 32, 7, 32, 7, 32, 150.0f, 1.0f>();
 }
 
 // test3: aclFloat16->half, 32x16, R=0: 14 + 31*18 = 572

@@ -121,22 +121,22 @@ void runTloadFractalZ5D(__gm__ T *out, __gm__ T *src)
 
 extern "C" __global__ AICORE void launch_1(__gm__ uint8_t *o, __gm__ uint8_t *s)
 {
-    runTloadDynamic<half, 1, 2, 4, 4, Layout::NC1HWC0, 10.0f, 1.0f>((__gm__ half *)o, (__gm__ half *)s);
+    runTloadDynamic<half, 1, 2, 4, 4, Layout::NC1HWC0, 100.0f, 1.0f>((__gm__ half *)o, (__gm__ half *)s);
 }
 
 extern "C" __global__ AICORE void launch_2(__gm__ uint8_t *o, __gm__ uint8_t *s)
 {
-    runTloadDynamic<float, 1, 4, 10, 10, Layout::NC1HWC0, 10.0f, 1.0f>((__gm__ float *)o, (__gm__ float *)s);
+    runTloadDynamic<float, 1, 4, 10, 10, Layout::NC1HWC0, 100.0f, 1.0f>((__gm__ float *)o, (__gm__ float *)s);
 }
 
 extern "C" __global__ AICORE void launch_3(__gm__ uint8_t *o, __gm__ uint8_t *s)
 {
-    runTloadDynamic<half, 16, 2, 1, 18, Layout::FRACTAL_Z, 10.0f, 1.0f>((__gm__ half *)o, (__gm__ half *)s);
+    runTloadDynamic<half, 16, 2, 1, 18, Layout::FRACTAL_Z, 100.0f, 1.0f>((__gm__ half *)o, (__gm__ half *)s);
 }
 
 extern "C" __global__ AICORE void launch_4(__gm__ uint8_t *o, __gm__ uint8_t *s)
 {
-    runTloadFractalZ5D<int8_t, 4, 2, 6, 16, 10.0f, 1.0f>((__gm__ int8_t *)o, (__gm__ int8_t *)s);
+    runTloadFractalZ5D<int8_t, 4, 2, 6, 16, 100.0f, 1.0f>((__gm__ int8_t *)o, (__gm__ int8_t *)s);
 }
 
 // Unified Dispatcher for GTest

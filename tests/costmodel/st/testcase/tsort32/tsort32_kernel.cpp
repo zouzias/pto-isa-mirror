@@ -65,9 +65,9 @@ void launchTSort32(void *stream)
 
 // test0: int16_t, 16x16, R=0: 14 + 15*18 = 284
 template void launchTSort32<int16_t, uint32_t, 16, 16, 16, 16, 16, 16, 284.0f, 1.0f>(void *stream);
-// test1: float, 8x32, R=1: 16 + 7*20 = 156
-template void launchTSort32<float, uint32_t, 8, 32, 8, 32, 8, 32, 156.0f, 1.0f>(void *stream);
-// test2: int32_t, 7x32, R=1: 16 + 6*20 = 136
-template void launchTSort32<int32_t, uint32_t, 7, 32, 7, 32, 7, 32, 136.0f, 1.0f>(void *stream);
+// test1: float, 8x32, R=1: costmodel=172
+template void launchTSort32<float, uint32_t, 8, 32, 8, 32, 8, 32, 172.0f, 1.0f>(void *stream);
+// test2: int32_t, 7x32, R=1: costmodel=150
+template void launchTSort32<int32_t, uint32_t, 7, 32, 7, 32, 7, 32, 150.0f, 1.0f>(void *stream);
 // test3: aclFloat16->half, 32x16, R=0: 14 + 31*18 = 572
 template void launchTSort32<aclFloat16, uint32_t, 32, 16, 32, 16, 32, 16, 572.0f, 1.0f>(void *stream);

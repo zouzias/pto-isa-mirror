@@ -36,7 +36,7 @@ TEST_F(TCVTTest, case_f32_to_f16_4x64)
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
-    LaunchTCvtF32ToF16<4, 64, 17.0f, 1.0f>(stream);
+    LaunchTCvtF32ToF16<4, 64, 17.0f, 0.0f>(stream);
     aclrtSynchronizeStream(stream);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
@@ -49,7 +49,7 @@ TEST_F(TCVTTest, case_f16_to_f32_4x64)
     aclrtSetDevice(0);
     aclrtStream stream;
     aclrtCreateStream(&stream);
-    LaunchTCvtF16ToF32<4, 64, 17.0f, 1.0f>(stream);
+    LaunchTCvtF16ToF32<4, 64, 17.0f, 0.0f>(stream);
     aclrtSynchronizeStream(stream);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);

@@ -49,7 +49,17 @@ AICORE inline void runTEXTRACT(__gm__ DT *out, __gm__ ST *src)
     std::fill(dstTile.data(), dstTile.data() + rows * cols, 0);
 
     /*************************************TLOAD****************************************/
-    TLOAD(srcTile, srcGlobal);
+    if constexpr (srcLayout == 1) {
+        // DN tile: use DN GlobalTensor (ColMajor stride, Layout::DN)
+        using GlobalDataSrcDN = GlobalTensor<
+            ST, pto::Shape<1, 1, 1, validRows, validCols>,
+            pto::Stride<1 * validRows * validCols, 1 * validRows * validCols, validRows * validCols, 1, validRows>,
+            pto::Layout::DN>;
+        GlobalDataSrcDN srcGlobalDN(src);
+        TLOAD(srcTile, srcGlobalDN);
+    } else {
+        TLOAD(srcTile, srcGlobal);
+    }
 
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);

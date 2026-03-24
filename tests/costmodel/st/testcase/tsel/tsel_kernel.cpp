@@ -59,6 +59,6 @@ void LaunchTSel(void *stream)
 }
 
 // Instantiate used templates
-template void LaunchTSel<aclFloat16, 4, 128, 94.0f, 1.0f>(void *stream);
-template void LaunchTSel<aclFloat16, 1, 128, 34.0f, 1.0f>(void *stream);
-template void LaunchTSel<float, 4, 64, 94.0f, 1.0f>(void *stream);
+template void LaunchTSel<aclFloat16, 4, 128, 94.0f, 0.0f>(void *stream);
+template void LaunchTSel<aclFloat16, 1, 128, 34.0f, 0.0f>(void *stream);
+template void LaunchTSel<float, 4, 64, 94.0f, 0.0f>(void *stream);

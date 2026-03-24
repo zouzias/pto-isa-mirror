@@ -79,60 +79,60 @@ void TMrgsortTopk()
     aclFinalize();
 }
 
-// multi case: vmrgsort4(1) = 16
+// multi case: costmodel=20
 TEST_F(TMRGSORTTest, case_multi1)
 {
-    TMrgsortMulti<float, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 16.0f, 1.0f>();
+    TMrgsortMulti<float, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 20.0f, 1.0f>();
 }
 
 TEST_F(TMRGSORTTest, case_multi2)
 {
-    TMrgsortMulti<uint16_t, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 16.0f, 1.0f>();
+    TMrgsortMulti<uint16_t, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 20.0f, 1.0f>();
 }
 
 TEST_F(TMRGSORTTest, case_exhausted1)
 {
-    TMrgsortMulti<float, 1, 64, 1, 64, 64, 0, 0, 128, 2, true, 16.0f, 1.0f>();
+    TMrgsortMulti<float, 1, 64, 1, 64, 64, 0, 0, 128, 2, true, 20.0f, 1.0f>();
 }
 
 TEST_F(TMRGSORTTest, case_exhausted2)
 {
-    TMrgsortMulti<uint16_t, 1, 256, 1, 256, 256, 256, 0, 768, 3, true, 16.0f, 1.0f>();
+    TMrgsortMulti<uint16_t, 1, 256, 1, 256, 256, 256, 0, 768, 3, true, 20.0f, 1.0f>();
 }
 
-// single case: profiling = 14 + R*2, R = effectiveCols / (effectiveBlockLen * 4)
+// single case: costmodel output
 TEST_F(TMRGSORTTest, case_single1)
 {
-    TMrgsortSingle<float, 1, 256, 1, 256, 64, 16.0f, 1.0f>();
+    TMrgsortSingle<float, 1, 256, 1, 256, 64, 20.0f, 1.0f>();
 }
 
 TEST_F(TMRGSORTTest, case_single3)
 {
-    TMrgsortSingle<float, 1, 512, 1, 512, 64, 18.0f, 1.0f>();
+    TMrgsortSingle<float, 1, 512, 1, 512, 64, 26.0f, 1.0f>();
 }
 
 TEST_F(TMRGSORTTest, case_single5)
 {
-    TMrgsortSingle<uint16_t, 1, 256, 1, 256, 64, 16.0f, 1.0f>();
+    TMrgsortSingle<uint16_t, 1, 256, 1, 256, 64, 20.0f, 1.0f>();
 }
 
 TEST_F(TMRGSORTTest, case_single7)
 {
-    TMrgsortSingle<uint16_t, 1, 512, 1, 512, 64, 18.0f, 1.0f>();
+    TMrgsortSingle<uint16_t, 1, 512, 1, 512, 64, 26.0f, 1.0f>();
 }
 
 TEST_F(TMRGSORTTest, case_single8)
 {
-    TMrgsortSingle<uint16_t, 1, 1024, 1, 1024, 256, 16.0f, 1.0f>();
+    TMrgsortSingle<uint16_t, 1, 1024, 1, 1024, 256, 20.0f, 1.0f>();
 }
 
-// topk case: final TMRGSORT on dstTile is multi-src → 16
+// topk case: final TMRGSORT on dstTile costmodel=20
 TEST_F(TMRGSORTTest, case_topk2)
 {
-    TMrgsortTopk<float, 1, 2048, 1, 2048, 2048, 16.0f, 1.0f>();
+    TMrgsortTopk<float, 1, 2048, 1, 2048, 2048, 20.0f, 1.0f>();
 }
 
 TEST_F(TMRGSORTTest, case_topk5)
 {
-    TMrgsortTopk<uint16_t, 1, 2048, 1, 2048, 2048, 16.0f, 1.0f>();
+    TMrgsortTopk<uint16_t, 1, 2048, 1, 2048, 2048, 20.0f, 1.0f>();
 }

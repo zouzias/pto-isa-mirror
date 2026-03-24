@@ -43,17 +43,17 @@ void test_tsel()
 // 34 + (4-1)*20 = 94
 TEST_F(TSELTest, case_half_4x128)
 {
-    test_tsel<aclFloat16, 4, 128, 94.0f, 1.0f>();
+    test_tsel<aclFloat16, 4, 128, 94.0f, 0.0f>();
 }
 
 // 34 + (1-1)*20 = 34
 TEST_F(TSELTest, case_half_1x128)
 {
-    test_tsel<aclFloat16, 1, 128, 34.0f, 1.0f>();
+    test_tsel<aclFloat16, 1, 128, 34.0f, 0.0f>();
 }
 
 // 34 + (4-1)*20 = 94  (same formula, FP32 vsel has same per_repeat)
 TEST_F(TSELTest, case_float_4x64)
 {
-    test_tsel<float, 4, 64, 94.0f, 1.0f>();
+    test_tsel<float, 4, 64, 94.0f, 0.0f>();
 }

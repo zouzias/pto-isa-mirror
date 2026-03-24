@@ -62,6 +62,6 @@ void LaunchTCvtF16ToF32(void *stream)
 
 // Instantiate used templates
 // FP32->FP16: startup=13 + 4*1 = 17
-template void LaunchTCvtF32ToF16<4, 64, 17.0f, 1.0f>(void *stream);
+template void LaunchTCvtF32ToF16<4, 64, 17.0f, 0.0f>(void *stream);
 // FP16->FP32: startup=13 + 4*1 = 17
-template void LaunchTCvtF16ToF32<4, 64, 17.0f, 1.0f>(void *stream);
+template void LaunchTCvtF16ToF32<4, 64, 17.0f, 0.0f>(void *stream);

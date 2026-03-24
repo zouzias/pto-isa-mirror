@@ -20,7 +20,7 @@ using namespace pto;
 
 #define LOGSIZE 128
 #define PRINTLOG 4
-#define DEBUGLOG
+// #define DEBUGLOG
 #ifdef DEBUGLOG
 #define LOG(x) (*(gLog++) = x)
 #else
@@ -56,7 +56,7 @@ AICORE __inline__ auto getOptDynShape(int gShape0, int gShape1, int gShape2, int
 
 // case shape is static, but testing would do dynamic or static test
 template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4, int tRows, int tCols, BLayout major,
-          int dyn>
+          int dyn, Layout Layout_ = Layout::ND>
 AICORE __inline__ auto getGlobalTensor(__gm__ T *addr, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4)
 {
     if constexpr (dyn) {
@@ -67,7 +67,7 @@ AICORE __inline__ auto getGlobalTensor(__gm__ T *addr, int gShape0, int gShape1,
         using DynStrideDim5 = pto::Stride<-1, -1, -1, -1, -1>;
         auto dynShape =
             getOptDynShape<shape0, shape1, shape2, shape3, shape4>(gShape0, gShape1, gShape2, gShape3, gShape4);
-        using GlobalData = GlobalTensor<T, decltype(dynShape), DynStrideDim5>;
+        using GlobalData = GlobalTensor<T, decltype(dynShape), DynStrideDim5, Layout_>;
 
         if constexpr (major == BLayout::RowMajor) {
             GlobalData srcGlobal(addr, dynShape, DynStrideDim5(stride0, stride1, stride2, shape4, 1));
@@ -85,12 +85,12 @@ AICORE __inline__ auto getGlobalTensor(__gm__ T *addr, int gShape0, int gShape1,
 
         if constexpr (major == BLayout::RowMajor) {
             using StaticStrideDim5 = pto::Stride<stride0, stride1, stride2, shape4, 1>;
-            using GlobalData = GlobalTensor<T, StaticShapeDim5, StaticStrideDim5>;
+            using GlobalData = GlobalTensor<T, StaticShapeDim5, StaticStrideDim5, Layout_>;
             GlobalData srcGlobal(addr);
             return srcGlobal;
         } else {
             using StaticStrideDim5 = pto::Stride<stride0, stride1, stride2, 1, shape4>;
-            using GlobalData = GlobalTensor<T, StaticShapeDim5, StaticStrideDim5>;
+            using GlobalData = GlobalTensor<T, StaticShapeDim5, StaticStrideDim5, Layout_>;
             GlobalData srcGlobal(addr);
             return srcGlobal;
         }
@@ -137,7 +137,7 @@ AICORE void runTLOADDN(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
 
     constexpr int kGTCols = kTCols_ / shape0 / shape1 / shape2; // Dst Tile Rows, merged all shape0*shape1*shape2 row
     auto srcGlobal =
-        getGlobalTensor<T, shape0, shape1, shape2, shape3, kGTCols, shape3, kGTCols, BLayout::RowMajor, dyn_>(
+        getGlobalTensor<T, shape0, shape1, shape2, shape3, kGTCols, shape3, kGTCols, BLayout::ColMajor, dyn_, Layout::DN>(
             src, gShape0, gShape1, gShape2, shape3, kGTCols);
 
     TLOAD(vecTile, srcGlobal);
@@ -147,6 +147,7 @@ AICORE void runTLOADDN(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
 
     float costResult = vecTile.GetCycle();
     float precision = 1 - fabs(profiling - costResult) / profiling;
+    std::cout << "cost result: " << costResult << " precision: " << precision << " accuracy: " << accuracy << "\n" << std::endl;
     bool ret = precision >= accuracy;
     EXPECT_TRUE(ret);
 }

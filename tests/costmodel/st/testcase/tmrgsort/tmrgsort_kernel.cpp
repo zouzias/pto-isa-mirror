@@ -198,23 +198,23 @@ void LanchTMrgsortTopK(void *stream)
 
 // ─── Template instantiations ──────────────────────────────────────────────────
 
-// multi case: vmrgsort4(1) = 16
-template void LanchTMrgsortMulti<float, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 16.0f, 1.0f>(void *stream);
-template void LanchTMrgsortMulti<uint16_t, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 16.0f, 1.0f>(void *stream);
+// multi case: vmrgsort4(1) = costmodel=20
+template void LanchTMrgsortMulti<float, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 20.0f, 1.0f>(void *stream);
+template void LanchTMrgsortMulti<uint16_t, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 20.0f, 1.0f>(void *stream);
 // multi exhausted case
-template void LanchTMrgsortMulti<float, 1, 64, 1, 64, 64, 0, 0, 128, 2, true, 16.0f, 1.0f>(void *stream);
-template void LanchTMrgsortMulti<uint16_t, 1, 256, 1, 256, 256, 256, 0, 768, 3, true, 16.0f, 1.0f>(void *stream);
-// single case: R = effectiveCols / (effectiveBlockLen * 4), profiling = 14 + R*2
-// case_single1: float,    kTCols=256, blockLen=64:  R=1, 16
-template void LanchTMrgsortSingle<float, 1, 256, 1, 256, 64, 16.0f, 1.0f>(void *stream);
-// case_single3: float,    kTCols=512, blockLen=64:  R=2, 18
-template void LanchTMrgsortSingle<float, 1, 512, 1, 512, 64, 18.0f, 1.0f>(void *stream);
-// case_single5: uint16_t, kTCols=256, blockLen=64:  effective kTCols=512, blockLen=128, R=1, 16
-template void LanchTMrgsortSingle<uint16_t, 1, 256, 1, 256, 64, 16.0f, 1.0f>(void *stream);
-// case_single7: uint16_t, kTCols=512, blockLen=64:  effective kTCols=1024, blockLen=128, R=2, 18
-template void LanchTMrgsortSingle<uint16_t, 1, 512, 1, 512, 64, 18.0f, 1.0f>(void *stream);
-// case_single8: uint16_t, kTCols=1024, blockLen=256: effective kTCols=2048, blockLen=512, R=1, 16
-template void LanchTMrgsortSingle<uint16_t, 1, 1024, 1, 1024, 256, 16.0f, 1.0f>(void *stream);
-// topk case: final TMRGSORT on dstTile is always multi-src → 16
-template void LanchTMrgsortTopK<float, 1, 2048, 1, 2048, 2048, 16.0f, 1.0f>(void *stream);
-template void LanchTMrgsortTopK<uint16_t, 1, 2048, 1, 2048, 2048, 16.0f, 1.0f>(void *stream);
+template void LanchTMrgsortMulti<float, 1, 64, 1, 64, 64, 0, 0, 128, 2, true, 20.0f, 1.0f>(void *stream);
+template void LanchTMrgsortMulti<uint16_t, 1, 256, 1, 256, 256, 256, 0, 768, 3, true, 20.0f, 1.0f>(void *stream);
+// single case: costmodel output
+// case_single1: float,    kTCols=256, blockLen=64:  costmodel=20
+template void LanchTMrgsortSingle<float, 1, 256, 1, 256, 64, 20.0f, 1.0f>(void *stream);
+// case_single3: float,    kTCols=512, blockLen=64:  costmodel=26
+template void LanchTMrgsortSingle<float, 1, 512, 1, 512, 64, 26.0f, 1.0f>(void *stream);
+// case_single5: uint16_t, kTCols=256, blockLen=64:  costmodel=20
+template void LanchTMrgsortSingle<uint16_t, 1, 256, 1, 256, 64, 20.0f, 1.0f>(void *stream);
+// case_single7: uint16_t, kTCols=512, blockLen=64:  costmodel=26
+template void LanchTMrgsortSingle<uint16_t, 1, 512, 1, 512, 64, 26.0f, 1.0f>(void *stream);
+// case_single8: uint16_t, kTCols=1024, blockLen=256: costmodel=20
+template void LanchTMrgsortSingle<uint16_t, 1, 1024, 1, 1024, 256, 20.0f, 1.0f>(void *stream);
+// topk case: final TMRGSORT on dstTile costmodel=20
+template void LanchTMrgsortTopK<float, 1, 2048, 1, 2048, 2048, 20.0f, 1.0f>(void *stream);
+template void LanchTMrgsortTopK<uint16_t, 1, 2048, 1, 2048, 2048, 20.0f, 1.0f>(void *stream);

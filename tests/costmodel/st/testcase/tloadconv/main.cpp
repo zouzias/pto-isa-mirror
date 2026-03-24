@@ -53,13 +53,13 @@ void tload_test()
     int out_byteSize = M * N * sizeof(float);
 
     aclrtMallocHost((void **)&srcHost, in_byteSize);
-    aclrtMallocHost((void **)&goldHost, gold_byteSize);
-    aclrtMallocHost((void **)&dstHost, gold_byteSize);
+    aclrtMallocHost((void **)&goldHost, out_byteSize);
+    aclrtMallocHost((void **)&dstHost, out_byteSize);
     aclrtMalloc((void **)&srcDevice, in_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&dstDevice, gold_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dstDevice, out_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     aclrtMemcpy(srcDevice, in_byteSize, srcHost, in_byteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(dstDevice, gold_byteSize, dstHost, gold_byteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(dstDevice, out_byteSize, dstHost, out_byteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
 #ifdef DEBUGLOG
     aclrtMalloc((void **)&logDevice, MAXBLOCK * LOGSIZE * 8, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -68,7 +68,7 @@ void tload_test()
     launchTLOAD<testKey>((uint8_t *)dstDevice, (uint8_t *)srcDevice, (uint64_t *)logDevice, stream);
     aclrtSynchronizeStream(stream);
 
-    aclrtMemcpy(dstHost, gold_byteSize, dstDevice, gold_byteSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(dstHost, out_byteSize, dstDevice, out_byteSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     aclrtFreeHost(srcHost);
     aclrtFreeHost(goldHost);
