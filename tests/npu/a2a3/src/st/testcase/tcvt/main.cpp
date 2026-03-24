@@ -15,12 +15,18 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
+          int kValidCols_ = kTCols_>
 void launchTCVT(D *dst, S *src, void *stream);
 
 // Saturation mode test launcher
 template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void launchTCVTSaturationTest(D *dstSaturated, D *dstTruncated, D *dstDefault, S *src, void *stream);
+
+// NonSatTorch test launcher (with explicit tmp tile)
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
+          int kValidCols_ = kTCols_>
+void launchTCVTNonSatTorch(D *dst, S *src, void *stream);
 
 class TCVTTest : public testing::Test {
 protected:
@@ -39,7 +45,8 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
+          int kValidCols_ = kTCols_>
 void test_tcvt()
 {
     uint32_t M = kGRows_;
@@ -65,7 +72,7 @@ void test_tcvt()
     ReadFile(GetGoldenDir() + "/x1_gm.bin", srcFileSize, srcHost, srcFileSize);
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_>(dstDevice, srcDevice, stream);
+    launchTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -87,36 +94,65 @@ void test_tcvt()
     ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
     ReadFile(GetGoldenDir() + "/output_z.bin", dstFileSize, devFinal.data(), dstFileSize);
 
-    bool ret = ResultCmp<D>(golden, devFinal, 0.001f);
-
-    EXPECT_TRUE(ret);
+    // For partial tiles, only compare the valid region
+    constexpr bool isPartialTile = (kValidRows_ != kTRows_) || (kValidCols_ != kTCols_);
+    if constexpr (isPartialTile) {
+        bool ret = true;
+        for (uint32_t r = 0; r < kValidRows_; r++) {
+            std::vector<D> goldenRow(golden.data() + r * N, golden.data() + r * N + kValidCols_);
+            std::vector<D> devRow(devFinal.data() + r * N, devFinal.data() + r * N + kValidCols_);
+            if (!ResultCmp<D>(goldenRow, devRow, 0.001f)) {
+                ret = false;
+            }
+        }
+        EXPECT_TRUE(ret);
+    } else {
+        bool ret = ResultCmp<D>(golden, devFinal, 0.001f);
+        EXPECT_TRUE(ret);
+    }
 }
 
 // Macro to generate test cases for all shapes for a given type pair
-#define GENERATE_TCVT_TESTS(dst_type, src_type, type_name) \
-    TEST_F(TCVTTest, case_##type_name##_1x32)              \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 1, 32, 1, 32>();     \
-    }                                                      \
-    TEST_F(TCVTTest, case_##type_name##_2x64)              \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 2, 64, 2, 64>();     \
-    }                                                      \
-    TEST_F(TCVTTest, case_##type_name##_4x32)              \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 4, 32, 4, 32>();     \
-    }                                                      \
-    TEST_F(TCVTTest, case_##type_name##_8x64)              \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 8, 64, 8, 64>();     \
-    }                                                      \
-    TEST_F(TCVTTest, case_##type_name##_1x256)             \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 1, 256, 1, 256>();   \
-    }                                                      \
-    TEST_F(TCVTTest, case_##type_name##_8x128)             \
-    {                                                      \
-        test_tcvt<dst_type, src_type, 8, 128, 8, 128>();   \
+#define GENERATE_TCVT_TESTS(dst_type, src_type, type_name)       \
+    TEST_F(TCVTTest, case_##type_name##_1x32)                    \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 1, 32, 1, 32>();           \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_2x64)                    \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 2, 64, 2, 64>();           \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_4x32)                    \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 4, 32, 4, 32>();           \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_8x64)                    \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 8, 64, 8, 64>();           \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_1x256)                   \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 1, 256, 1, 256>();         \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_8x128)                   \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 8, 128, 8, 128>();         \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_4x128_4x65)              \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 4, 128, 4, 128, 4, 65>();  \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_4x256_4x200)             \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 4, 256, 4, 256, 4, 200>(); \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_1x256_1x129)             \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 1, 256, 1, 256, 1, 129>(); \
+    }                                                            \
+    TEST_F(TCVTTest, case_##type_name##_2x32_2x16)               \
+    {                                                            \
+        test_tcvt<dst_type, src_type, 2, 32, 2, 32, 2, 16>();    \
     }
 
 // FP32 Source → fp16, int16, int32, int64
@@ -271,3 +307,120 @@ TEST_F(TCVTTest, saturation_int32_int16_1x32)
     test_tcvt_saturation<int16_t, int32_t, 1, 32, 1, 32>();
 }
 #endif // ENABLE_SATURATION_TESTS
+
+// ============================================================================
+// NonSatTorch Tests (with explicit tmp tile)
+// ============================================================================
+
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kValidRows_ = kTRows_,
+          int kValidCols_ = kTCols_>
+void test_tcvt_nonsattorch()
+{
+    uint32_t M = kGRows_;
+    uint32_t N = kGCols_;
+
+    size_t srcFileSize = M * N * sizeof(S);
+    size_t dstFileSize = M * N * sizeof(D);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    D *dstHost, *dstDevice;
+    S *srcHost, *srcDevice;
+
+    aclrtMallocHost((void **)(&dstHost), dstFileSize);
+    aclrtMallocHost((void **)(&srcHost), srcFileSize);
+
+    aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/x1_gm.bin", srcFileSize, srcHost, srcFileSize);
+
+    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    launchTCVTNonSatTorch<D, S, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>(dstDevice, srcDevice,
+                                                                                              stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output_truncated.bin", dstHost, dstFileSize);
+
+    std::vector<D> golden(dstFileSize);
+    std::vector<D> devFinal(dstFileSize);
+    ReadFile(GetGoldenDir() + "/golden_truncated.bin", dstFileSize, golden.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/output_truncated.bin", dstFileSize, devFinal.data(), dstFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    constexpr bool isPartialTile = (kValidRows_ != kTRows_) || (kValidCols_ != kTCols_);
+    if constexpr (isPartialTile) {
+        bool ret = true;
+        for (uint32_t r = 0; r < kValidRows_; r++) {
+            std::vector<D> goldenRow(golden.data() + r * N, golden.data() + r * N + kValidCols_);
+            std::vector<D> devRow(devFinal.data() + r * N, devFinal.data() + r * N + kValidCols_);
+            if (!ResultCmp<D>(goldenRow, devRow, 0.001f)) {
+                ret = false;
+            }
+        }
+        EXPECT_TRUE(ret) << "NonSatTorch output mismatch (partial tile)";
+    } else {
+        bool ret = ResultCmp<D>(golden, devFinal, 0.001f);
+        EXPECT_TRUE(ret) << "NonSatTorch output mismatch";
+    }
+}
+
+TEST_F(TCVTTest, nonsattorch_fp16_int8_1x32)
+{
+    test_tcvt_nonsattorch<int8_t, aclFloat16, 1, 32, 1, 32>();
+}
+
+TEST_F(TCVTTest, nonsattorch_fp16_int8_2x64)
+{
+    test_tcvt_nonsattorch<int8_t, aclFloat16, 2, 64, 2, 64>();
+}
+
+TEST_F(TCVTTest, nonsattorch_fp16_int8_8x128)
+{
+    test_tcvt_nonsattorch<int8_t, aclFloat16, 8, 128, 8, 128>();
+}
+
+TEST_F(TCVTTest, nonsattorch_fp16_int16_1x32)
+{
+    test_tcvt_nonsattorch<int16_t, aclFloat16, 1, 32, 1, 32>();
+}
+
+TEST_F(TCVTTest, nonsattorch_fp32_int16_1x32)
+{
+    test_tcvt_nonsattorch<int16_t, float, 1, 32, 1, 32>();
+}
+
+TEST_F(TCVTTest, nonsattorch_fp16_int8_4x128_4x65)
+{
+    test_tcvt_nonsattorch<int8_t, aclFloat16, 4, 128, 4, 128, 4, 65>();
+}
+
+TEST_F(TCVTTest, nonsattorch_fp16_int8_2x32_2x16)
+{
+    test_tcvt_nonsattorch<int8_t, aclFloat16, 2, 32, 2, 32, 2, 16>();
+}
+
+TEST_F(TCVTTest, nonsattorch_fp16_int16_4x128_4x65)
+{
+    test_tcvt_nonsattorch<int16_t, aclFloat16, 4, 128, 4, 128, 4, 65>();
+}
+
+TEST_F(TCVTTest, nonsattorch_fp32_int16_4x128_4x65)
+{
+    test_tcvt_nonsattorch<int16_t, float, 4, 128, 4, 128, 4, 65>();
+}
