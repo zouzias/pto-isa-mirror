@@ -208,7 +208,7 @@ PTO_INTERNAL void TRowReduceIdxInstr(__ubuf__ typename TileDataOut::DType *dst,
 }
 
 template <typename TDst, typename TSrc>
-struct TRowCMaxOp : TRowReduceIdxOp<TDst, TSrc, TRowCMaxOp<TDst, TSrc>> {
+struct TRowArgMaxOp : TRowReduceIdxOp<TDst, TSrc, TRowArgMaxOp<TDst, TSrc>> {
     PTO_INTERNAL static void ReduceIdxInstrImpl(__ubuf__ TSrc *dst, __ubuf__ TSrc *src, uint8_t rptTimes,
                                                 uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
@@ -233,12 +233,12 @@ __tf__ PTO_INTERNAL void TRowIdxMax(typename TileDataOut::TileDType __out__ dstD
     __ubuf__ TDst *dst = (__ubuf__ TDst *)__cce_get_tile_ptr(dstData);
     __ubuf__ TSrc *src = (__ubuf__ TSrc *)__cce_get_tile_ptr(srcData);
     __ubuf__ TSrc *tmp = (__ubuf__ TSrc *)__cce_get_tile_ptr(tmpData);
-    TRowReduceIdxInstr<TRowCMaxOp<TDst, TSrc>, TileDataOut, TileDataIn, TileDataTmp>(dst, src, tmp, validRow, validCol,
+    TRowReduceIdxInstr<TRowArgMaxOp<TDst, TSrc>, TileDataOut, TileDataIn, TileDataTmp>(dst, src, tmp, validRow, validCol,
                                                                                      dstValidRow);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
-PTO_INTERNAL void TROWCMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
+PTO_INTERNAL void TROWARGMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
     int validCol = src.GetValidCol();
     int validRow = src.GetValidRow();
@@ -248,7 +248,7 @@ PTO_INTERNAL void TROWCMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &
 }
 
 template <typename TDst, typename TSrc>
-struct TRowCMinOp : TRowReduceIdxOp<TDst, TSrc, TRowCMinOp<TDst, TSrc>> {
+struct TRowArgMinOp : TRowReduceIdxOp<TDst, TSrc, TRowArgMinOp<TDst, TSrc>> {
     PTO_INTERNAL static void ReduceIdxInstrImpl(__ubuf__ TSrc *dst, __ubuf__ TSrc *src, uint8_t rptTimes,
                                                 uint16_t dstRptStride, uint16_t srcBlkStride, uint16_t srcRptStride)
     {
@@ -273,12 +273,12 @@ __tf__ PTO_INTERNAL void TRowIdxMin(typename TileDataOut::TileDType __out__ dstD
     __ubuf__ TDst *dst = (__ubuf__ TDst *)__cce_get_tile_ptr(dstData);
     __ubuf__ TSrc *src = (__ubuf__ TSrc *)__cce_get_tile_ptr(srcData);
     __ubuf__ TSrc *tmp = (__ubuf__ TSrc *)__cce_get_tile_ptr(tmpData);
-    TRowReduceIdxInstr<TRowCMinOp<TDst, TSrc>, TileDataOut, TileDataIn, TileDataTmp>(dst, src, tmp, validRow, validCol,
+    TRowReduceIdxInstr<TRowArgMinOp<TDst, TSrc>, TileDataOut, TileDataIn, TileDataTmp>(dst, src, tmp, validRow, validCol,
                                                                                      dstValidRow);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
-PTO_INTERNAL void TROWCMIN_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
+PTO_INTERNAL void TROWARGMIN_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
     int validCol = src.GetValidCol();
     int validRow = src.GetValidRow();

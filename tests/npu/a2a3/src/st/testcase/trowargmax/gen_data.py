@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+np.random.seed(19)
 
 
 def gen_golden_data(param):
@@ -38,7 +39,7 @@ def gen_golden_data(param):
     golden.tofile("golden.bin")
 
 
-class TRowCMaxParams:
+class TRowArgMaxParams:
     DTYPE_STR_TABLE = {
         np.float32: 'float',
         np.float16: 'half',
@@ -49,17 +50,20 @@ class TRowCMaxParams:
         np.int8: 'int8',
         np.uint8: 'uint8',
     }
-    def __init__(self, dst_dtype, src_dtype, dst_tile_row, dst_tile_col, src_tile_row, src_tile_col, valid_row, valid_col):
+    def __init__(self, dst_dtype, src_dtype, dst_tile_row, dst_tile_col, src_tile_row, src_tile_col,
+        tmp_tile_row, tmp_tile_col, valid_row, valid_col):
         self.dst_dtype = dst_dtype
         self.src_dtype = src_dtype
         self.dst_tile_row = dst_tile_row
         self.dst_tile_col = dst_tile_col
         self.src_tile_row = src_tile_row
         self.src_tile_col = src_tile_col
+        self.tmp_tile_row = tmp_tile_row
+        self.tmp_tile_col = tmp_tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
-        self.name = f"TROWCMAXTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"\
-            f"{dst_tile_row}x{dst_tile_col}_{src_tile_row}x{src_tile_col}_{valid_row}x{valid_col}"
+        self.name = f"TROWARGMAXTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"\
+            f"{dst_tile_row}x{dst_tile_col}_{src_tile_row}x{src_tile_col}_{tmp_tile_row}x{tmp_tile_col}_{valid_row}x{valid_col}"
 
 
 if __name__ == "__main__":
@@ -72,22 +76,21 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_list = [
-        TRowCMaxParams(np.uint32, np.float32, 8, 1, 8, 8, 8, 8),
-        TRowCMaxParams(np.uint32, np.float32, 1024, 1, 1024, 8, 1024, 8),
-        TRowCMaxParams(np.uint32, np.float32, 16, 1, 13, 16, 13, 13),
-        TRowCMaxParams(np.uint32, np.float32, 1024, 1, 1023, 24, 1023, 17),
-        TRowCMaxParams(np.uint32, np.float32, 8, 1, 8, 64, 8, 64),
-        TRowCMaxParams(np.uint32, np.float32, 264, 1, 260, 64, 260, 64),
-        TRowCMaxParams(np.uint32, np.float32, 8, 1, 1, 128, 1, 128),
-        TRowCMaxParams(np.uint32, np.float32, 64, 1, 32, 128, 32, 128),
-        TRowCMaxParams(np.uint32, np.float32, 8, 1, 3, 4096, 3, 4095),
-        TRowCMaxParams(np.uint32, np.float32, 8, 1, 2, 16384, 2, 16381),
-        TRowCMaxParams(np.uint32, np.float16, 16, 1, 2, 16, 2, 16),
-        TRowCMaxParams(np.uint32, np.float16, 16, 1, 13, 16, 13, 13),
-        TRowCMaxParams(np.uint32, np.float16, 272, 1, 260, 64, 260, 64),
-        TRowCMaxParams(np.uint32, np.float16, 16, 1, 3, 8192, 3, 8191),
-        TRowCMaxParams(np.uint32, np.float16, 16, 1, 1, 16384, 1, 16381),
-        TRowCMaxParams(np.uint32, np.float16, 16, 1, 1, 32768, 1, 32761),
+        TRowArgMaxParams(np.uint32, np.float32, 8, 1, 8, 8, 1, 8, 8, 8),
+        TRowArgMaxParams(np.uint32, np.float32, 1024, 1, 1024, 8, 1, 8, 1024, 8),
+        TRowArgMaxParams(np.uint32, np.float32, 16, 1, 13, 16, 1, 8, 13, 13),
+        TRowArgMaxParams(np.uint32, np.float32, 1024, 1, 1023, 24, 1, 8, 1023, 17),
+        TRowArgMaxParams(np.uint32, np.float32, 8, 1, 8, 64, 1, 8, 8, 64),
+        TRowArgMaxParams(np.uint32, np.float32, 264, 1, 260, 64, 1, 8, 260, 64),
+        TRowArgMaxParams(np.uint32, np.float32, 64, 1, 32, 128, 32, 24, 32, 128),
+        TRowArgMaxParams(np.uint32, np.float32, 8, 1, 3, 4096, 3, 192, 3, 4095),
+        TRowArgMaxParams(np.uint32, np.float32, 8, 1, 1, 16384, 1, 768, 1, 16381),
+        TRowArgMaxParams(np.uint32, np.float16, 16, 1, 2, 16, 2, 16, 2, 16),
+        TRowArgMaxParams(np.uint32, np.float16, 16, 1, 13, 16, 1, 16, 13, 13),
+        TRowArgMaxParams(np.uint32, np.float16, 272, 1, 260, 64, 1, 16, 260, 64),
+        TRowArgMaxParams(np.uint32, np.float16, 16, 1, 3, 8192, 3, 384, 3, 8191),
+        TRowArgMaxParams(np.uint32, np.float16, 16, 1, 1, 16384, 1, 768, 1, 16381),
+        TRowArgMaxParams(np.uint32, np.float16, 16, 1, 1, 32768, 1, 768, 1, 32761),
     ]
 
     for case in case_list:

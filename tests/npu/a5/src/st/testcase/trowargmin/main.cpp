@@ -16,11 +16,11 @@ using namespace std;
 using namespace PtoTestCommon;
 
 template <typename TDst, typename TSrc, int dstTileH, int dstTileW, int srcTileH, int srcTileW, int vRows, int vCols>
-void LaunchTRowCMin(TDst *out, TSrc *src, void *stream);
+void LaunchTRowArgMin(TDst *out, TSrc *src, void *stream);
 template <typename TDst, int dstTileH, int dstTileW, int srcTileH, int srcTileW, int vRows, int vCols>
-void LaunchTRowCMinHalf(TDst *out, aclFloat16 *src, void *stream);
+void LaunchTRowArgMinHalf(TDst *out, aclFloat16 *src, void *stream);
 
-class TROWCMINTest : public testing::Test {
+class TROWARGMINTest : public testing::Test {
 private:
     aclrtStream stream;
     void *dstHost;
@@ -94,10 +94,10 @@ protected:
     {
         this->BeforeLaunch<TDst, TSrc, dstTileH, dstTileW, srcTileH, srcTileW>();
         if constexpr (isHalf) {
-            LaunchTRowCMinHalf<TDst, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols>(
+            LaunchTRowArgMinHalf<TDst, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols>(
                 (TDst *)this->dstDevice, (TSrc *)this->srcDevice, this->stream);
         } else {
-            LaunchTRowCMin<TDst, TSrc, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols>(
+            LaunchTRowArgMin<TDst, TSrc, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols>(
                 (TDst *)this->dstDevice, (TSrc *)this->srcDevice, this->stream);
         }
         bool res = this->AfterLaunch<TDst>();
@@ -105,67 +105,67 @@ protected:
     }
 };
 
-TEST_F(TROWCMINTest, case_uint32_float_8x1_8x8_8x8)
+TEST_F(TROWARGMINTest, case_uint32_float_8x1_8x8_8x8)
 {
     this->Launch<uint32_t, float, 8, 1, 8, 8, 8, 8>();
 }
-TEST_F(TROWCMINTest, case_uint32_float_1024x1_1024x8_1024x8)
+TEST_F(TROWARGMINTest, case_uint32_float_1024x1_1024x8_1024x8)
 {
     this->Launch<uint32_t, float, 1024, 1, 1024, 8, 1024, 8>();
 }
-TEST_F(TROWCMINTest, case_uint32_float_16x1_13x16_13x13)
+TEST_F(TROWARGMINTest, case_uint32_float_16x1_13x16_13x13)
 {
     this->Launch<uint32_t, float, 16, 1, 13, 16, 13, 13>();
 }
-TEST_F(TROWCMINTest, case_uint32_float_1024x1_1023x24_1023x17)
+TEST_F(TROWARGMINTest, case_uint32_float_1024x1_1023x24_1023x17)
 {
     this->Launch<uint32_t, float, 1024, 1, 1023, 24, 1023, 17>();
 }
-TEST_F(TROWCMINTest, case_uint32_float_8x1_8x64_8x64)
+TEST_F(TROWARGMINTest, case_uint32_float_8x1_8x64_8x64)
 {
     this->Launch<uint32_t, float, 8, 1, 8, 64, 8, 64>();
 }
-TEST_F(TROWCMINTest, case_uint32_float_264x1_260x64_260x64)
+TEST_F(TROWARGMINTest, case_uint32_float_264x1_260x64_260x64)
 {
     this->Launch<uint32_t, float, 264, 1, 260, 64, 260, 64>();
 }
-TEST_F(TROWCMINTest, case_uint32_float_8x1_1x128_1x128)
+TEST_F(TROWARGMINTest, case_uint32_float_8x1_1x128_1x128)
 {
     this->Launch<uint32_t, float, 8, 1, 1, 128, 1, 128>();
 }
-TEST_F(TROWCMINTest, case_uint32_float_64x1_32x128_32x128)
+TEST_F(TROWARGMINTest, case_uint32_float_64x1_32x128_32x128)
 {
     this->Launch<uint32_t, float, 64, 1, 32, 128, 32, 128>();
 }
-TEST_F(TROWCMINTest, case_uint32_float_8x1_3x4096_3x4095)
+TEST_F(TROWARGMINTest, case_uint32_float_8x1_3x4096_3x4095)
 {
     this->Launch<uint32_t, float, 8, 1, 3, 4096, 3, 4095>();
 }
-TEST_F(TROWCMINTest, case_uint32_float_8x1_2x16384_2x16381)
+TEST_F(TROWARGMINTest, case_uint32_float_8x1_2x16384_2x16381)
 {
     this->Launch<uint32_t, float, 8, 1, 2, 16384, 2, 16381>();
 }
-TEST_F(TROWCMINTest, case_uint32_half_16x1_2x16_2x16)
+TEST_F(TROWARGMINTest, case_uint32_half_16x1_2x16_2x16)
 {
     this->Launch<uint32_t, aclFloat16, 16, 1, 2, 16, 2, 16, true>();
 }
-TEST_F(TROWCMINTest, case_uint32_half_16x1_13x16_13x13)
+TEST_F(TROWARGMINTest, case_uint32_half_16x1_13x16_13x13)
 {
     this->Launch<uint32_t, aclFloat16, 16, 1, 13, 16, 13, 13, true>();
 }
-TEST_F(TROWCMINTest, case_uint32_half_272x1_260x64_260x64)
+TEST_F(TROWARGMINTest, case_uint32_half_272x1_260x64_260x64)
 {
     this->Launch<uint32_t, aclFloat16, 272, 1, 260, 64, 260, 64, true>();
 }
-TEST_F(TROWCMINTest, case_uint32_half_16x1_3x8192_3x8191)
+TEST_F(TROWARGMINTest, case_uint32_half_16x1_3x8192_3x8191)
 {
     this->Launch<uint32_t, aclFloat16, 16, 1, 3, 8192, 3, 8191, true>();
 }
-TEST_F(TROWCMINTest, case_uint32_half_16x1_1x16384_1x16381)
+TEST_F(TROWARGMINTest, case_uint32_half_16x1_1x16384_1x16381)
 {
     this->Launch<uint32_t, aclFloat16, 16, 1, 1, 16384, 1, 16381, true>();
 }
-TEST_F(TROWCMINTest, case_uint32_half_16x1_1x32768_1x32761)
+TEST_F(TROWARGMINTest, case_uint32_half_16x1_1x32768_1x32761)
 {
     this->Launch<uint32_t, aclFloat16, 16, 1, 1, 32768, 1, 32761, true>();
 }

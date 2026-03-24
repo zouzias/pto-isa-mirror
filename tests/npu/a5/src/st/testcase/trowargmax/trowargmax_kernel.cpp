@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename TDst, typename TSrc, int dstTileH, int dstTileW, int srcTileH, int srcTileW, int vRows, int vCols>
-__global__ AICORE void runTRowCMax(__gm__ TDst __out__ *out, __gm__ TSrc __in__ *src)
+__global__ AICORE void runTRowArgMax(__gm__ TDst __out__ *out, __gm__ TSrc __in__ *src)
 {
     using DynShape = pto::Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<-1, -1, -1, -1, -1>;
@@ -43,7 +43,7 @@ __global__ AICORE void runTRowCMax(__gm__ TDst __out__ *out, __gm__ TSrc __in__ 
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TROWCMAX(dstTile, srcTile, tmpTile);
+    TROWARGMAX(dstTile, srcTile, tmpTile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
@@ -51,31 +51,31 @@ __global__ AICORE void runTRowCMax(__gm__ TDst __out__ *out, __gm__ TSrc __in__ 
 }
 
 template <typename TDst, typename TSrc, int dstTileH, int dstTileW, int srcTileH, int srcTileW, int vRows, int vCols>
-void LaunchTRowCMax(TDst *out, TSrc *src, void *stream)
+void LaunchTRowArgMax(TDst *out, TSrc *src, void *stream)
 {
-    runTRowCMax<TDst, TSrc, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols><<<1, nullptr, stream>>>(out, src);
+    runTRowArgMax<TDst, TSrc, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols><<<1, nullptr, stream>>>(out, src);
 }
 
 template <typename TDst, int dstTileH, int dstTileW, int srcTileH, int srcTileW, int vRows, int vCols>
-void LaunchTRowCMaxHalf(TDst *out, aclFloat16 *src, void *stream)
+void LaunchTRowArgMaxHalf(TDst *out, aclFloat16 *src, void *stream)
 {
-    runTRowCMax<TDst, half, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols><<<1, nullptr, stream>>>(out, (half *)src);
+    runTRowArgMax<TDst, half, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols><<<1, nullptr, stream>>>(out, (half *)src);
 }
 
 // Dest column must be 32b aligned, rows should always be 1
-template void LaunchTRowCMax<uint32_t, float, 8, 1, 8, 8, 8, 8>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMax<uint32_t, float, 1024, 1, 1024, 8, 1024, 8>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMax<uint32_t, float, 16, 1, 13, 16, 13, 13>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMax<uint32_t, float, 1024, 1, 1023, 24, 1023, 17>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMax<uint32_t, float, 8, 1, 8, 64, 8, 64>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMax<uint32_t, float, 264, 1, 260, 64, 260, 64>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMax<uint32_t, float, 8, 1, 1, 128, 1, 128>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMax<uint32_t, float, 64, 1, 32, 128, 32, 128>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMax<uint32_t, float, 8, 1, 3, 4096, 3, 4095>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMax<uint32_t, float, 8, 1, 2, 16384, 2, 16381>(uint32_t *out, float *src, void *stream);
-template void LaunchTRowCMaxHalf<uint32_t, 16, 1, 2, 16, 2, 16>(uint32_t *out, aclFloat16 *src, void *stream);
-template void LaunchTRowCMaxHalf<uint32_t, 16, 1, 13, 16, 13, 13>(uint32_t *out, aclFloat16 *src, void *stream);
-template void LaunchTRowCMaxHalf<uint32_t, 272, 1, 260, 64, 260, 64>(uint32_t *out, aclFloat16 *src, void *stream);
-template void LaunchTRowCMaxHalf<uint32_t, 16, 1, 3, 8192, 3, 8191>(uint32_t *out, aclFloat16 *src, void *stream);
-template void LaunchTRowCMaxHalf<uint32_t, 16, 1, 1, 16384, 1, 16381>(uint32_t *out, aclFloat16 *src, void *stream);
-template void LaunchTRowCMaxHalf<uint32_t, 16, 1, 1, 32768, 1, 32761>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 8, 1, 8, 8, 8, 8>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 1024, 1, 1024, 8, 1024, 8>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 16, 1, 13, 16, 13, 13>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 1024, 1, 1023, 24, 1023, 17>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 8, 1, 8, 64, 8, 64>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 264, 1, 260, 64, 260, 64>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 8, 1, 1, 128, 1, 128>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 64, 1, 32, 128, 32, 128>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 8, 1, 3, 4096, 3, 4095>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 8, 1, 2, 16384, 2, 16381>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMaxHalf<uint32_t, 16, 1, 2, 16, 2, 16>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMaxHalf<uint32_t, 16, 1, 13, 16, 13, 13>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMaxHalf<uint32_t, 272, 1, 260, 64, 260, 64>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMaxHalf<uint32_t, 16, 1, 3, 8192, 3, 8191>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMaxHalf<uint32_t, 16, 1, 1, 16384, 1, 16381>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMaxHalf<uint32_t, 16, 1, 1, 32768, 1, 32761>(uint32_t *out, aclFloat16 *src, void *stream);

@@ -1,4 +1,4 @@
-# TROWCMIN
+# TROWARGMIN
 
 ## 指令示意图
 
@@ -21,20 +21,20 @@ PTO-AS 形式：参见 `docs/grammar/PTO-AS.md`.
 同步形式：
 
 ```text
-%dst = trowcmin %src : !pto.tile<...> -> !pto.tile<...>
+%dst = trowargmin %src : !pto.tile<...> -> !pto.tile<...>
 ```
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
 
 ### IR Level 1（SSA）
 
 ```text
-%dst = pto.trowcmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### IR Level 2（DPS）
 
 ```text
-pto.trowcmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
@@ -43,7 +43,7 @@ pto.trowcmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst 
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TROWCMIN(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
+PTO_INST RecordEvent TROWARGMIN(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
 ```
 
 ## 约束
@@ -81,7 +81,7 @@ void example_auto() {
   SrcT src;
   DstT dst;
   TmpT tmp;
-  TROWCMIN(dst, src, tmp);
+  TROWARGMIN(dst, src, tmp);
 }
 ```
 
@@ -102,7 +102,7 @@ void example_manual() {
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);
   TASSIGN(tmp, 0x3000);
-  TROWCMIN(dst, src, tmp);
+  TROWARGMIN(dst, src, tmp);
 }
 ```
 
@@ -112,7 +112,7 @@ void example_manual() {
 
 ```text
 # 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.trowcmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### 手动模式
@@ -122,14 +122,14 @@ void example_manual() {
 # 可选（当该指令包含 tile 操作数时）：
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trowcmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### PTO 汇编形式
 
 ```text
-%dst = trowcmin %src : !pto.tile<...> -> !pto.tile<...>
+%dst = trowargmin %src : !pto.tile<...> -> !pto.tile<...>
 # IR Level 2 (DPS)
-pto.trowcmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

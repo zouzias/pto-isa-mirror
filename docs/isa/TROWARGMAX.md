@@ -1,9 +1,9 @@
-# TROWCMAX
+# TROWARGMAX
 
 
 ## Tile Operation Diagram
 
-![TROWMAX tile operation](../figures/isa/TROWMAX.svg)
+![TROWARGMAX tile operation](../figures/isa/TROWMAX.svg)
 
 ## Introduction
 
@@ -22,20 +22,20 @@ PTO-AS form: see `docs/grammar/PTO-AS.md`.
 Synchronous form:
 
 ```text
-%dst = trowcmax %src : !pto.tile<...> -> !pto.tile<...>
+%dst = trowargmax %src : !pto.tile<...> -> !pto.tile<...>
 ```
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
 
 ### IR Level 1 (SSA)
 
 ```text
-%dst = pto.trowcmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.trowargmax %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### IR Level 2 (DPS)
 
 ```text
-pto.trowcmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.trowargmax ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -43,7 +43,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TROWCMAX(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
+PTO_INST RecordEvent TROWARGMAX(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -81,7 +81,7 @@ void example_auto() {
   SrcT src;
   DstT dst;
   TmpT tmp;
-  TROWCMAX(dst, src, tmp);
+  TROWARGMAX(dst, src, tmp);
 }
 ```
 
@@ -102,7 +102,7 @@ void example_manual() {
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);
   TASSIGN(tmp, 0x3000);
-  TROWCMAX(dst, src, tmp);
+  TROWARGMAX(dst, src, tmp);
 }
 ```
 

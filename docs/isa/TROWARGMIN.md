@@ -1,4 +1,4 @@
-# TROWCMIN
+# TROWARGMIN
 
 
 ## Tile Operation Diagram
@@ -22,20 +22,20 @@ PTO-AS form: see `docs/grammar/PTO-AS.md`.
 Synchronous form:
 
 ```text
-%dst = trowcmin %src : !pto.tile<...> -> !pto.tile<...>
+%dst = trowargmin %src : !pto.tile<...> -> !pto.tile<...>
 ```
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
 
 ### IR Level 1 (SSA)
 
 ```text
-%dst = pto.trowcmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### IR Level 2 (DPS)
 
 ```text
-pto.trowcmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -43,7 +43,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TROWCMIN(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
+PTO_INST RecordEvent TROWARGMIN(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
 ```
 
 ## Constraints
@@ -81,7 +81,7 @@ void example_auto() {
   SrcT src;
   DstT dst;
   TmpT tmp;
-  TROWCMIN(dst, src, tmp);
+  TROWARGMIN(dst, src, tmp);
 }
 ```
 
@@ -102,7 +102,7 @@ void example_manual() {
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);
   TASSIGN(tmp, 0x3000);
-  TROWCMIN(dst, src, tmp);
+  TROWARGMIN(dst, src, tmp);
 }
 ```
 
@@ -112,7 +112,7 @@ void example_manual() {
 
 ```text
 # Auto mode: compiler/runtime-managed placement and scheduling.
-%dst = pto.trowcmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### Manual Mode
@@ -122,14 +122,14 @@ void example_manual() {
 # Optional for tile operands:
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-%dst = pto.trowcmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%dst = pto.trowargmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 ### PTO Assembly Form
 
 ```text
-%dst = trowcmin %src : !pto.tile<...> -> !pto.tile<...>
+%dst = trowargmin %src : !pto.tile<...> -> !pto.tile<...>
 # IR Level 2 (DPS)
-pto.trowcmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+pto.trowargmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
