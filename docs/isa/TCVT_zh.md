@@ -55,7 +55,9 @@ PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEv
 - `dst` 和 `src` 必须在形状/有效区域方面兼容，如实现所要求的。
 - 对于给定的 `RoundMode`，转换 `(src 元素类型) -> (dst 元素类型)` 必须被目标支持。
 - **实现说明 (A2A3/A5)**:
-    - `TCVT_IMPL` 不对类型对强制执行额外的 `static_assert`/`PTO_ASSERT` 检查；不支持的转换由目标定义。
+    - 一种形式接受显式的 `SaturationMode`，指定的饱和行为会直接传递给实现。
+    - 另一种形式不显式给出 `SaturationMode`；此时实现会针对具体类型对选择目标定义的默认饱和行为。
+    - 在 CPU 实现中，目前仅实现了不显式传入 `SaturationMode` 的形式。
 
 ## 示例
 

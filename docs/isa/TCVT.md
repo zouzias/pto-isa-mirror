@@ -55,7 +55,9 @@ PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEv
 - `dst` and `src` must be compatible in shape/valid region as required by the implementation.
 - The conversion `(src element type) -> (dst element type)` must be supported by the target for the given `RoundMode`.
 - **Implementation notes (A2A3/A5)**:
-    - `TCVT_IMPL` does not enforce additional `static_assert`/`PTO_ASSERT` checks on the type pair; unsupported conversions are target-defined.
+    - One form accepts an explicit `SaturationMode`, and the specified saturation behavior is forwarded directly to the implementation.
+    - The other form omits `SaturationMode`; in that case, the implementation chooses a target-defined default saturation behavior for the specific type pair.
+    - On CPU, only the form without explicit `SaturationMode` is currently implemented.
 
 ## Examples
 

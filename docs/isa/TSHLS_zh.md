@@ -47,9 +47,21 @@ PTO_INST RecordEvent TSHLS(TileDataDst &dst, TileDataSrc &src, typename TileData
 
 ## 约束
 
-- 适用于整数元素类型。
-- 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
-- 标量仅支持零和正值。
+- **实现检查 (A2A3)**:
+    - 支持的元素类型为 `int32_t`、`int`、`int16_t`、`uint32_t`、`unsigned int` 和 `uint16_t`。
+    - `dst` 和 `src` 必须使用相同的元素类型。
+    - `dst` 和 `src` 必须是向量 Tile。
+    - 运行时：`src.GetValidRow() == dst.GetValidRow()` 且 `src.GetValidCol() == dst.GetValidCol()`。
+    - 标量仅支持零和正值。
+- **实现检查 (A5)**:
+    - 支持的元素类型为 `int32_t`、`int16_t`、`int8_t`、`uint32_t`、`uint16_t` 和 `uint8_t`。
+    - `dst` 和 `src` 必须使用相同的元素类型。
+    - `dst` 和 `src` 必须是向量 Tile。
+    - 两个 Tile 的静态有效边界都必须满足 `ValidRow <= Rows` 且 `ValidCol <= Cols`。
+    - 运行时：`src.GetValidRow() == dst.GetValidRow()` 且 `src.GetValidCol() == dst.GetValidCol()`。
+    - 标量仅支持零和正值。
+- **有效区域**:
+    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 
 ## 示例
 
