@@ -489,71 +489,92 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
     // When srcRepeatStride < 4, the mask already limits the active elements; use as-is.
     const uint16_t hwFp16Stride = (srcRepeatStride >= 4) ? (uint16_t)4 : srcRepeatStride;
     const uint16_t factor = srcRepeatStride / hwFp16Stride; // = 2 for S=8, = 1 for S<=4
-    const uint16_t hwRepeatCount = static_cast<uint16_t>(repeatNum) * factor;
+    const uint16_t totalHwRepeats = static_cast<uint16_t>(repeatNum) * factor;
     const uint16_t hwInt32Stride = hwFp16Stride * 2; // int32 is 2x wider than fp16 in blocks
     const uint16_t hwInt16Stride = hwFp16Stride;     // int16 same width as fp16 in blocks
-    const uint16_t hwDstStride = hwFp16Stride / 2;   // int8 is half as wide as fp16 in blocks
+    const uint16_t hwDstStride = (hwFp16Stride + 1) / 2; // int8 is half as wide as fp16 in blocks (ceiling division, min 1)
 
-    // Mask buffer placed in the freed upper half of the int32 region (after in-place int32->int16)
     constexpr uint16_t int16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int16_t);
-    __ubuf__ int16_t *tempMaskBuf = tempAndBuf +
-        static_cast<uint32_t>(hwRepeatCount) * hwInt16Stride * int16ElemsPerBlock;
+    constexpr uint16_t fp16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(half);
+    constexpr uint16_t int8ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int8_t);
 
-    set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
+    // Loop over chunks of at most REPEAT_MAX hardware repeats to stay within hardware limits.
+    // The temp buffer is reused each iteration; only src and dst pointers advance.
+    uint16_t hwRepeatsDone = 0;
+    while (hwRepeatsDone < totalHwRepeats) {
+        const uint16_t hwRepeatCount = (totalHwRepeats - hwRepeatsDone > REPEAT_MAX)
+                                           ? static_cast<uint16_t>(REPEAT_MAX)
+                                           : static_cast<uint16_t>(totalHwRepeats - hwRepeatsDone);
 
-    // Step 1: fp16 -> int32
-    switch (static_cast<RoundMode>(mode)) {
-        case RoundMode::CAST_RINT:
-            vconv_f162s32r(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                           hwFp16Stride);
-            break;
-        case RoundMode::CAST_ROUND:
-            vconv_f162s32a(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                           hwFp16Stride);
-            break;
-        case RoundMode::CAST_FLOOR:
-            vconv_f162s32f(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                           hwFp16Stride);
-            break;
-        case RoundMode::CAST_CEIL:
-            vconv_f162s32c(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                           hwFp16Stride);
-            break;
-        case RoundMode::CAST_TRUNC:
-            vconv_f162s32z(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                           hwFp16Stride);
-            break;
-        default:
-            vconv_f162s32z(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                           hwFp16Stride);
-            break;
+        __ubuf__ half *chunkSrc = src +
+            static_cast<uint32_t>(hwRepeatsDone) * hwFp16Stride * fp16ElemsPerBlock;
+        __ubuf__ int8_t *chunkDst = dst +
+            static_cast<uint32_t>(hwRepeatsDone) * hwDstStride * int8ElemsPerBlock;
+
+        // Mask buffer placed in the freed upper half of the int32 region (after in-place int32->int16)
+        __ubuf__ int16_t *tempMaskBuf = tempAndBuf +
+            static_cast<uint32_t>(hwRepeatCount) * hwInt16Stride * int16ElemsPerBlock;
+
+        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
+
+        // Step 1: fp16 -> int32
+        switch (static_cast<RoundMode>(mode)) {
+            case RoundMode::CAST_RINT:
+                vconv_f162s32r(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+                               hwFp16Stride);
+                break;
+            case RoundMode::CAST_ROUND:
+                vconv_f162s32a(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+                               hwFp16Stride);
+                break;
+            case RoundMode::CAST_FLOOR:
+                vconv_f162s32f(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+                               hwFp16Stride);
+                break;
+            case RoundMode::CAST_CEIL:
+                vconv_f162s32c(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+                               hwFp16Stride);
+                break;
+            case RoundMode::CAST_TRUNC:
+                vconv_f162s32z(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+                               hwFp16Stride);
+                break;
+            default:
+                vconv_f162s32z(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+                               hwFp16Stride);
+                break;
+        }
+        pipe_barrier(PIPE_V);
+        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
+
+        // Step 2: int32 -> int16 in-place (narrowing: output half the size of input)
+        // Safe because dest repeat k writes to [k*hwInt16Stride] while src reads from [k*hwInt32Stride=2k*hwInt16Stride].
+        vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
+                      hwInt32Stride);
+        pipe_barrier(PIPE_V);
+
+        // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (freed upper half of int32 region)
+        vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride,
+                   hwInt16Stride, hwInt16Stride);
+        pipe_barrier(PIPE_V);
+
+        // Step 4: vand int16 & 255 to extract low 8 bits
+        vand(tempAndBuf, tempAndBuf, tempMaskBuf, hwRepeatCount, srcBlockStride, srcBlockStride, srcBlockStride,
+             hwInt16Stride, hwInt16Stride, hwInt16Stride);
+        pipe_barrier(PIPE_V);
+
+        // Step 5: int16 -> fp16, writing into tempMaskBuf region (mask is consumed, region is free)
+        __ubuf__ half *tempFp16Out = (__ubuf__ half *)tempMaskBuf;
+        vconv_s162f16(tempFp16Out, tempAndBuf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
+                      hwInt16Stride);
+        pipe_barrier(PIPE_V);
+
+        // Step 6: fp16 -> int8 (hwDstStride = hwFp16Stride / 2 since int8 is half the width of fp16)
+        vconv_f162s8z(chunkDst, tempFp16Out, hwRepeatCount, dstBlockStride, srcBlockStride, hwDstStride,
+                      hwFp16Stride);
+
+        hwRepeatsDone += hwRepeatCount;
     }
-    pipe_barrier(PIPE_V);
-    set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
-
-    // Step 2: int32 -> int16 in-place (narrowing: output half the size of input)
-    // Safe because dest repeat k writes to [k*hwInt16Stride] while src reads from [k*hwInt32Stride=2k*hwInt16Stride].
-    vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
-                  hwInt32Stride);
-    pipe_barrier(PIPE_V);
-
-    // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (freed upper half of int32 region)
-    vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
-               hwInt16Stride);
-    pipe_barrier(PIPE_V);
-
-    // Step 4: vand int16 & 255 to extract low 8 bits
-    vand(tempAndBuf, tempAndBuf, tempMaskBuf, hwRepeatCount, srcBlockStride, srcBlockStride, srcBlockStride,
-         hwInt16Stride, hwInt16Stride, hwInt16Stride);
-    pipe_barrier(PIPE_V);
-
-    // Step 5: int16 -> fp16, writing into tempMaskBuf region (mask is consumed, region is free)
-    __ubuf__ half *tempFp16Out = (__ubuf__ half *)tempMaskBuf;
-    vconv_s162f16(tempFp16Out, tempAndBuf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride, hwInt16Stride);
-    pipe_barrier(PIPE_V);
-
-    // Step 6: fp16 -> int8 (hwDstStride = hwFp16Stride / 2 since int8 is half the width of fp16)
-    vconv_f162s8z(dst, tempFp16Out, hwRepeatCount, dstBlockStride, srcBlockStride, hwDstStride, hwFp16Stride);
 }
 
 // FP16 -> UINT8 conversion
