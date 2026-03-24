@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <iomanip>
+#include <memory>
 #endif
 
 namespace pto {
@@ -1022,11 +1023,12 @@ public:
         SetDynamicShape(dynamicVals...);
     }
 
-#ifdef __PTO_AUTO__
+#if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
     using TileDType = typename MemoryQualifier<Loc_, DType>::type tile_size(bufferSize);
 #else
     using TileDType = typename MemoryQualifier<Loc_, DType>::type;
 #endif
+
 
 #ifdef __COSTMODEL
     float cycle;
@@ -1041,17 +1043,6 @@ public:
     }
 #endif
 
-#ifdef __CPU_SIM
-    // For CPU sim, return reference to pointer (allows TASSIGN to modify)
-    AICORE TileDType &data()
-    {
-        return data_;
-    }
-    AICORE TileDType data() const
-    {
-        return data_;
-    }
-#else
     AICORE TileDType &data()
     {
         return data_;
@@ -1060,7 +1051,7 @@ public:
     {
         return data_;
     }
-#endif
+
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
@@ -1310,29 +1301,22 @@ public:
         return *(ptr + offset);
     }
     // constructor for static shape
-#if defined(__CPU_SIM) || defined(__COSTMODEL)
-    AICORE Tile() : data_(internalStorage_){};
-#else
     AICORE Tile()
     {
-#ifdef __PTO_AUTO__
+#if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
         // we need to dummy-initialize the data_ member,
         // otherwise in auto mode this will remain uninitialized
         // and end up being an undef value after SROA pass
         data_ = __cce_tinit(data_);
 #endif
     };
-#endif
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VR,
                 std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VC)
-#if defined(__CPU_SIM) || defined(__COSTMODEL)
-        : data_(internalStorage_)
-#endif
     {
-#ifdef __PTO_AUTO__
+#if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
         data_ = __cce_tinit(data_);
 #endif
         RowMaskInternal = VR;
@@ -1342,9 +1326,6 @@ public:
     // constructor for row dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), size_t> VR)
-#if defined(__CPU_SIM) || defined(__COSTMODEL)
-        : data_(internalStorage_)
-#endif
     {
 #ifdef __PTO_AUTO__
         data_ = __cce_tinit(data_);
@@ -1355,9 +1336,6 @@ public:
     // constructor for col dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), size_t> VC)
-#if defined(__CPU_SIM) || defined(__COSTMODEL)
-        : data_(internalStorage_)
-#endif
     {
 #ifdef __PTO_AUTO__
         data_ = __cce_tinit(data_);
@@ -1404,12 +1382,6 @@ public:
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
     // CPU Sim: data_ is a pointer that TASSIGN can redirect to shared NPU memory
     using TileDType = Tile::DType *;
-
-private:
-    // Internal storage for tiles not explicitly TASSIGN'd
-    Tile::DType internalStorage_[Rows * Cols] = {};
-
-public:
 #else
 #ifdef __PTO_AUTO__
 #if defined(PTO_NPU_ARCH_A2A3)
@@ -1424,14 +1396,13 @@ public:
 #endif
 #endif
 
-#ifdef __CPU_SIM
-    // For CPU sim, return reference to pointer (allows TASSIGN to modify)
-    AICORE TileDType &data()
+#if (defined(__CPU_SIM) && defined(__PTO_AUTO__)) || defined(__COSTMODEL)
+    TileDType &data()
     {
-        return data_;
-    }
-    AICORE TileDType data() const
-    {
+        if(!data_) {
+            internalBuffer.reset(new DType[Rows * Cols]);
+            data_ = internalBuffer.get();
+        }
         return data_;
     }
 #else
@@ -1548,8 +1519,12 @@ private:
     {
         data_ = data;
     }
-    TileDType data_;
+    TileDType data_ = nullptr;
     bool isKAligned_; // K-Alignedment for A3
+
+#ifdef __CPU_SIM
+    std::unique_ptr<DType> internalBuffer;
+#endif
 };
 
 #ifdef PTO_NPU_ARCH_A2A3
