@@ -1315,6 +1315,18 @@
       ],
       "notes": []
     },
+      {
+      "instruction": "TSUBVIEW",
+      "category": "Data Movement / Layout",
+      "summary_en": "Reinterpret a tile as a subtile of another tile.",
+      "summary_zh": "TODO ",
+      "diagram_template": "reshape_move",
+      "operands": [
+        "dst",
+        "src"
+      ],
+      "notes": []
+    },
     {
       "instruction": "TPRINT",
       "category": "Complex",
