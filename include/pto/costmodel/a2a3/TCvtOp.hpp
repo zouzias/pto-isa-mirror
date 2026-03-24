@@ -11,6 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TCVTOP_HPP
 #define TCVTOP_HPP
 
+#include <algorithm>
 #include "common.hpp"
 
 namespace pto {
@@ -905,7 +906,7 @@ PTO_INTERNAL void runTCvtOp(std::vector<CostModelStats> &stats, TileDataD &dst,
 {
     // Determine repeat width as max of source/destination element sizes
     uint64_t repeatWidth =
-        static_cast<uint64_t>(max(sizeof(typename TileDataD::DType), sizeof(typename TileDataS::DType)));
+        static_cast<uint64_t>(std::max(sizeof(typename TileDataD::DType), sizeof(typename TileDataS::DType)));
     unsigned dstRepeatStride =
         repeatWidth == sizeof(typename TileDataD::DType) ?
             BLOCK_MAX_PER_REPEAT :
