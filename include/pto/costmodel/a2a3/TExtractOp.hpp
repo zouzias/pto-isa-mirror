@@ -20,7 +20,7 @@ PTO_INTERNAL void TExtractToANonTranspose(std::vector<CostModelStats> &stats, ui
     constexpr int config = srcRow | (1u << 16);
     //set_fmatrix(config);
     //img2colv2_cbuf_to_ca(dstAddr, srcAddr, dstCol, dstRow, indexCol, indexRow, 1, 1, 1, 1, 1, 1, false, false, false,
-                         false, srcCol);
+                         //false, srcCol);
 
 }
 
@@ -457,7 +457,7 @@ AICORE void TExtractAccToMat(std::vector<CostModelStats> &stats, uint16_t validR
 }
 
 template <typename DstTileData, typename SrcTileData>
-AICORE void TExtractToLeft(std::vector<CostModelStats> &stats, uint16_t indexRow, uint16_t indexCol)
+AICORE void TExtractToLeft(std::vector<CostModelStats> &stats, DstTileData &dst, uint16_t indexRow, uint16_t indexCol)
 {
     static_assert((SrcTileData::SFractal == SLayout::ColMajor && SrcTileData::isRowMajor) ||
                       (SrcTileData::SFractal == SLayout::RowMajor && !SrcTileData::isRowMajor) ||
@@ -485,7 +485,7 @@ AICORE void TExtractToLeft(std::vector<CostModelStats> &stats, uint16_t indexRow
 }
 
 template <typename DstTileData, typename SrcTileData>
-AICORE void TExtractToRight(std::vector<CostModelStats> &stats, uint16_t indexRow, uint16_t indexCol)
+AICORE void TExtractToRight(std::vector<CostModelStats> &stats, DstTileData &dst, uint16_t indexRow, uint16_t indexCol)
 {
     static_assert((SrcTileData::SFractal == SLayout::ColMajor && SrcTileData::isRowMajor) ||
                       (SrcTileData::SFractal == SLayout::RowMajor && !SrcTileData::isRowMajor),
@@ -518,9 +518,9 @@ PTO_INTERNAL void TEXTRACT_TILE_IMPL(std::vector<CostModelStats> &stats, DstTile
     PTO_ASSERT(indexCol + DstTileData::Cols <= SrcTileData::Cols,
                "The sum of indexCol and dstCol should be less than srcCol!");
     if constexpr (DstTileData::Loc == TileType::Left) {
-        TExtractToLeft<DstTileData, SrcTileData>(stats, indexRow, indexCol);
+        TExtractToLeft<DstTileData, SrcTileData>(stats, dst, indexRow, indexCol);
     } else if constexpr (DstTileData::Loc == TileType::Right) {
-        TExtractToRight<DstTileData, SrcTileData>(stats, indexRow, indexCol);
+        TExtractToRight<DstTileData, SrcTileData>(stats, dst, indexRow, indexCol);
     } else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
         constexpr QuantMode_t quantPre =
             GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();

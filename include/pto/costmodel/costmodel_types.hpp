@@ -207,6 +207,14 @@ inline uint64_t GetContinuousMask0(unsigned n)
                                                    (((static_cast<uint64_t>(1)) << static_cast<uint32_t>(n)) - 1));
 }
 
+inline int32_t CeilDivision(int32_t num1, int32_t num2)
+{
+    if (num2 == 0) {
+        return 0;
+    }
+    return (num1 + num2 - 1) / num2;
+}
+
 } // namespace pto
 
 #endif

@@ -95,7 +95,7 @@ AICORE void TMovCcToCb(std::vector<CostModelStats> &stats, uint16_t validRow, ui
     validCol = CeilDivision(validCol, c0Size) * c0Size;
     //copy_matrix_cc_to_cbuf(dstAddr, srcAddr, 0, validCol, SrcTileData::Rows, dstStride_dst_D, srcStride, 0, QuantPre,
                            //reluMode, false, false);
-	stats.emplace
+	stats.emplace_back("copy_matrix_cc_to_cbuf");
 }
 
 template <typename DstTileData, typename SrcTileData>

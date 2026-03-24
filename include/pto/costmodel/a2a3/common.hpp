@@ -14,6 +14,24 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 
 namespace pto {
+
+enum QuantMode_t
+{
+    NoQuant = 0,      // 不使能量化功能
+    F322F16 = 1,      // float量化成half, scalar量化
+    F322BF16 = 16,     // float量化成bfloat16_t, scalar量化
+    DEQF16 = 5,       // int32_t量化成half, scalar量化
+    VDEQF16 = 4,      // int32_t量化成half，tensor量化
+    QF322B8_PRE = 24,  // float量化成int8_t/uint8_t，scalar量化
+    QF322F16_PRE = 32,  // float量化成half，scalar量化
+    QF322BF16_PRE = 34,  // float量化成bfloat16_t，scalar量化
+    VQF322B8_PRE = 23, // float量化成int8_t/uint8_t，tensor量化
+    REQ8 = 3,         // int32_t量化成int8_t/uint8_t，scalar量化
+    VREQ8 = 2,        // int32_t量化成int8_t/uint8_t，tensor量化
+    VSHIFTS322S16 = 12,
+    SHIFTS322S16 = 13,
+};
+
 template <typename SrcType, typename DstType>
 PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantMode()
 {
