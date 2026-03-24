@@ -547,7 +547,6 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B32);
     uint32_t sReg = totalElements;
     MaskReg preg_idx = pset_b8(PAT_ALL);
-    uint32_t cur_len = sReg;
 
     DST_VEC v_idx;
     vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
@@ -556,7 +555,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         RegTensor<SRC> v_input;
         DST_VEC v_output_p0, v_output;
-        
+        uint32_t cur_len = sReg;
         MaskReg preg_b32 = CreatePredicate<float>(sReg);
         MaskReg preg_b8 = CreatePredicate<uint8_t>(cur_len);
 
@@ -595,12 +594,11 @@ inline AICORE void cast32toH8_1D_NoPostUpdate(__ubuf__ hifloat8_t *dst, __ubuf__
     vector_hif8 v_idx;
     vci((RegTensor<int8_t> &)v_idx, (int8_t)0, INC_ORDER);
     vmuls((RegTensor<int16_t> &)v_idx, (RegTensor<int16_t> &)v_idx, (int16_t)4, preg_idx);
-    uint32_t cur_len = sReg;
 
     for (uint16_t i = 0; i < repeatTimes; ++i) {
         vector_f32 v_input;
         vector_hif8 v_output_p0, v_output;
-        
+        uint32_t cur_len = sReg;
         MaskReg preg_b32 = CreatePredicate<float>(sReg);
         MaskReg preg_b8 = CreatePredicate<uint8_t>(cur_len);
 
