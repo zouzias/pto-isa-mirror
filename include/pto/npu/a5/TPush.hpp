@@ -269,10 +269,10 @@ struct TPipe {
                 uint64_t fifoBase = (fifo.tilePtr != nullptr) ? (uint64_t)fifo.tilePtr->data() : fifo.fifoBase;
                 TASSIGN_IMPL(matTile, fifoBase + entryBase);
                 constexpr bool isNZPlus1 = (ConsM / ProdM) != 2;
-                if constexpr (isNZPlus1) {
+                if constexpr (isNZPlus1) { // NZ + 1 mode
                     TINSERT_IMPL<TInsertMode::NZ_PLUS_1>(matTile, tile, row_offset, 0);
-                } else {
-                    TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(row_offset), static_cast<uint16_t>(0));
+                } else { // NZ mode
+                    TINSERT_IMPL(matTile, tile, static_cast<uint32_t>(row_offset), static_cast<uint32_t>(0));
                 }
             } else if constexpr (isSplitN) {
                 // split N between vectors
@@ -282,10 +282,10 @@ struct TPipe {
                 uint64_t fifoBase = (fifo.tilePtr != nullptr) ? (uint64_t)fifo.tilePtr->data() : fifo.fifoBase;
                 TASSIGN_IMPL(matTile, fifoBase + entryBase);
                 constexpr bool isNZPlus1 = (ConsM / ProdM) != 2;
-                if constexpr (isNZPlus1) {
+                if constexpr (isNZPlus1) { // NZ+1 mode for bank conflict optimization
                     TINSERT_IMPL<TInsertMode::NZ_PLUS_1>(matTile, tile, 0, col_index);
                 } else {
-                    TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(col_index));
+                    TINSERT_IMPL(matTile, tile, static_cast<uint32_t>(0), static_cast<uint32_t>(col_index));
                 }
             } else if constexpr (nonSplit) {
                 // single vector core
@@ -294,10 +294,10 @@ struct TPipe {
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
                 TASSIGN_IMPL(matTile, fifoBase + entryBase);
                 constexpr bool isNZPlus1 = (ProdM > ConsM);
-                if constexpr (isNZPlus1) {
+                if constexpr (isNZPlus1) { // NZ+1 mode
                     TINSERT_IMPL<TInsertMode::NZ_PLUS_1>(matTile, tile, 0, 0);
                 } else {
-                    TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+                    TINSERT_IMPL(matTile, tile, static_cast<uint32_t>(0), static_cast<uint32_t>(0));
                 }
             } else {
                 static_assert(isSplitM || isSplitN || nonSplit,
