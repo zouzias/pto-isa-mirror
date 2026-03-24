@@ -20,6 +20,7 @@ CPU 模拟器是最简单的入门方式。它可以在 macOS、Linux 和 Window
 ### 先决条件
 
 **必需项：**
+
 - Git
 - Python `>= 3.8`（推荐 3.10+）
 - CMake `>= 3.16`
@@ -32,6 +33,7 @@ CPU 模拟器是最简单的入门方式。它可以在 macOS、Linux 和 Window
 `run_cpu.py` 可以自动安装 `numpy`（除非您传递 `--no-install` 参数）。
 
 **可选项（用于加速构建）：**
+
 - Ninja (CMake 生成器)
 - 互联网连接（如果未在系统范围内安装 GoogleTest，CMake 可能需要获取它）
 
@@ -63,6 +65,7 @@ sudo apt-get install -y build-essential cmake ninja-build python3 python3-pip py
 #### Windows
 
 安装以下软件：
+
 - Git for Windows
 - Python 3（并确保其在 `PATH` 中）
 - CMake
@@ -82,6 +85,7 @@ winget install --id Microsoft.VisualStudio.2022.BuildTools -e
 **替代方案：手动安装编译器**
 
 如果您不想使用 Visual Studio：
+
 - [WinLibs](https://winlibs.com)
 - [MSYS2](https://www.msys2.org)
 
@@ -191,6 +195,7 @@ Windows 特定选项（如需要）：
 ### 先决条件
 
 **系统要求：**
+
 - Linux（推荐 Ubuntu 20.04+）
 - Python >= 3.8.0
 - GCC >= 7.3.0
@@ -225,7 +230,7 @@ sudo make install
 
 完整的安装指南（包括驱动、固件和 toolkit）：
 
-https://www.hiascend.com/cann/download
+<https://www.hiascend.com/cann/download>
 
 此方法会自动处理所有依赖项。
 
@@ -252,11 +257,13 @@ chmod +x Ascend-cann-toolkit_${cann_version}_linux-${arch}.run
 ```
 
 参数说明：
+
 - `${cann_version}`：CANN toolkit 版本
 - `${arch}`：CPU 架构（`aarch64` 或 `x86_64`）
 - `${install_path}`：安装路径（可选）
 
 默认路径：
+
 - Root 用户安装：`/usr/local/Ascend/cann`
 - 非 root 用户安装：`$HOME/Ascend/cann`
 
@@ -294,10 +301,10 @@ cd pto-isa
 **运行单个 ST 测试用例：**
 
   ```bash
-  python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]
+  python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] [-a] -t [TEST_CASE] -g [GTEST_FILTER_CASE]
   ```
 
-注意：`a3` 后端覆盖 A2/A3 系列（`include/pto/npu/a2a3`）。
+注意：`a3` 后端覆盖 A2/A3 系列（`include/pto/npu/a2a3`）；`-a`使能auto模式。
 
   示例：
 
