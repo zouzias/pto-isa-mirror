@@ -134,6 +134,18 @@ PTO_INTERNAL void TGather(__ubuf__ typename TileDataD::DType *dst, __ubuf__ type
     }
 }
 
+template <typename T>
+PTO_INTERNAL void PIntlvWithType(MaskReg &dst0_, MaskReg &dst1_, MaskReg src0_, MaskReg src1_)
+{
+    if constexpr (sizeof(T) == sizeof(float)) {
+        pintlv_b32(dst0_, dst1_, src0_, src1_);
+    } else if constexpr (sizeof(T) == sizeof(half)) {
+        pintlv_b16(dst0_, dst1_, src0_, src1_);
+    } else if constexpr (sizeof(T) == sizeof(uint8_t)) {
+        pintlv_b8(dst0_, dst1_, src0_, src1_);
+    }
+}
+
 template <typename TileDataD, typename TileDataS0, typename TileDataS1, typename TileDataTmp>
 PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src1, TileDataTmp &tmp)
 {
@@ -145,53 +157,41 @@ PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS0 &src0, TileDataS1 &src
     TGather<TileDataD, TileDataS0, TileDataS1>(dst.data(), src0.data(), src1.data(), kValidCols, kValidRows);
 }
 
-template <typename T>
-PTO_INTERNAL void PIntlvWithType(MaskReg &dst0, MaskReg &dst1, MaskReg src0, MaskReg src1)
-{
-    if constexpr (sizeof(T) == sizeof(float)) {
-        pintlv_b32(dst0, dst1, src0, src1);
-    } else if constexpr (sizeof(T) == sizeof(half)) {
-        pintlv_b16(dst0, dst1, src0, src1);
-    } else if constexpr (sizeof(T) == sizeof(uint8_t)) {
-        pintlv_b8(dst0, dst1, src0, src1);
-    }
-}
-
 template <typename T, MaskPattern maskPattern>
 PTO_INTERNAL MaskReg GetMaskVal()
 {
-    MaskReg pg0;
-    MaskReg pg1;
+    MaskReg pg0_;
+    MaskReg pg1_;
     MaskReg dstPg0;
     MaskReg dstPg1;
     if constexpr (maskPattern == MaskPattern::P0101) {
-        pg0 = PSetWithType<T>(PAT_ALL);
-        pg1 = PSetWithType<T>(PAT_ALLF);
-        PIntlvWithType<T>(dstPg0, dstPg1, pg0, pg1);
+        pg0_ = PSetWithType<T>(PAT_ALL);
+        pg1_ = PSetWithType<T>(PAT_ALLF);
+        PIntlvWithType<T>(dstPg0, dstPg1, pg0_, pg1_);
     } else if constexpr (maskPattern == MaskPattern::P1010) {
-        pg0 = PSetWithType<T>(PAT_ALL);
-        pg1 = PSetWithType<T>(PAT_ALLF);
-        PIntlvWithType<T>(dstPg0, dstPg1, pg1, pg0);
+        pg0_ = PSetWithType<T>(PAT_ALL);
+        pg1_ = PSetWithType<T>(PAT_ALLF);
+        PIntlvWithType<T>(dstPg0, dstPg1, pg1_, pg0_);
     } else if constexpr (maskPattern == MaskPattern::P0001) {
-        pg0 = PSetWithType<T>(PAT_ALL);
-        pg1 = PSetWithType<T>(PAT_ALLF);
-        PIntlvWithType<T>(dstPg0, dstPg1, pg0, pg1);
-        PIntlvWithType<T>(dstPg0, dstPg1, dstPg0, pg1);
+        pg0_ = PSetWithType<T>(PAT_ALL);
+        pg1_ = PSetWithType<T>(PAT_ALLF);
+        PIntlvWithType<T>(dstPg0, dstPg1, pg0_, pg1_);
+        PIntlvWithType<T>(dstPg0, dstPg1, dstPg0, pg1_);
     } else if constexpr (maskPattern == MaskPattern::P0010) {
-        pg0 = PSetWithType<T>(PAT_ALL);
-        pg1 = PSetWithType<T>(PAT_ALLF);
-        PIntlvWithType<T>(dstPg0, dstPg1, pg0, pg1);
-        PIntlvWithType<T>(dstPg0, dstPg1, pg1, dstPg0);
+        pg0_ = PSetWithType<T>(PAT_ALL);
+        pg1_ = PSetWithType<T>(PAT_ALLF);
+        PIntlvWithType<T>(dstPg0, dstPg1, pg0_, pg1_);
+        PIntlvWithType<T>(dstPg0, dstPg1, pg1_, dstPg0);
     } else if constexpr (maskPattern == MaskPattern::P0100) {
-        pg0 = PSetWithType<T>(PAT_ALL);
-        pg1 = PSetWithType<T>(PAT_ALLF);
-        PIntlvWithType<T>(dstPg0, dstPg1, pg1, pg0);
-        PIntlvWithType<T>(dstPg0, dstPg1, dstPg0, pg1);
+        pg0_ = PSetWithType<T>(PAT_ALL);
+        pg1_ = PSetWithType<T>(PAT_ALLF);
+        PIntlvWithType<T>(dstPg0, dstPg1, pg1_, pg0_);
+        PIntlvWithType<T>(dstPg0, dstPg1, dstPg0, pg1_);
     } else if constexpr (maskPattern == MaskPattern::P1000) {
-        pg0 = PSetWithType<T>(PAT_ALL);
-        pg1 = PSetWithType<T>(PAT_ALLF);
-        PIntlvWithType<T>(dstPg0, dstPg1, pg1, pg0);
-        PIntlvWithType<T>(dstPg0, dstPg1, pg1, dstPg0);
+        pg0_ = PSetWithType<T>(PAT_ALL);
+        pg1_ = PSetWithType<T>(PAT_ALLF);
+        PIntlvWithType<T>(dstPg0, dstPg1, pg1_, pg0_);
+        PIntlvWithType<T>(dstPg0, dstPg1, pg1_, dstPg0);
     } else if constexpr (maskPattern == MaskPattern::P1111) {
         dstPg0 = PSetWithType<T>(PAT_ALL);
     }
@@ -199,25 +199,25 @@ PTO_INTERNAL MaskReg GetMaskVal()
 }
 
 template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern>
-__tf__ AICORE void TGather(typename DstTileData::TileDType __out__ dst, typename SrcTileData::TileDType __in__ src,
+__tf__ AICORE void TGather(typename DstTileData::TileDType __out__ dst_, typename SrcTileData::TileDType __in__ src_,
                            uint16_t validRow, uint16_t validCol)
 {
     using T = typename DstTileData::DType;
     constexpr unsigned rowStride = SrcTileData::RowStride;
-    __ubuf__ typename DstTileData::DType *dstPtr = (__ubuf__ typename DstTileData::DType *)__cce_get_tile_ptr(dst);
-    __ubuf__ typename DstTileData::DType *srcPtr = (__ubuf__ typename DstTileData::DType *)__cce_get_tile_ptr(src);
+    __ubuf__ typename DstTileData::DType *dstPtr_ = (__ubuf__ typename DstTileData::DType *)__cce_get_tile_ptr(dst_);
+    __ubuf__ typename DstTileData::DType *srcPtr_ = (__ubuf__ typename DstTileData::DType *)__cce_get_tile_ptr(src_);
     __VEC_SCOPE__
     {
         constexpr uint8_t SPR_AR_VALUE = 74;
         constexpr auto sprValue = std::integral_constant<::Spr, static_cast<::Spr>(SPR_AR_VALUE)>();
         sprclr(sprValue);
 
-        MaskReg dstPg0 = GetMaskVal<T, maskPattern>();
-        RegTensor<T> dstReg;
-        RegTensor<T> srcReg;
-        MaskReg loadMask;
-        MaskReg executeMask;
-        UnalignReg ureg;
+        RegTensor<T> dstReg_;
+        RegTensor<T> srcReg_;
+        MaskReg loadMask_;
+        MaskReg executeMask_;
+        UnalignReg ureg_;
+        MaskReg dstPg0_ = GetMaskVal<T, maskPattern>();
 
         constexpr unsigned elementsPerRepeat = CCE_VL / sizeof(T);
         uint16_t innerRepeatTimes = CeilDivision(validCol, elementsPerRepeat);
@@ -225,22 +225,22 @@ __tf__ AICORE void TGather(typename DstTileData::TileDType __out__ dst, typename
         for (uint16_t i = 0; i < validRow; ++i) {
             uint32_t maskValue = validCol;
             for (uint16_t j = 0; j < innerRepeatTimes; ++j) {
-                loadMask = CreatePredicate<T>(maskValue);
-                vlds(srcReg, srcPtr + i * rowStride, j * elementsPerRepeat, NORM);
-                pand(executeMask, dstPg0, loadMask, loadMask);
-                vsqz(dstReg, srcReg, executeMask, MODE_STORED);
-                vstur(ureg, dstReg, dstPtr, POST_UPDATE);
+                loadMask_ = CreatePredicate<T>(maskValue);
+                vlds(srcReg_, srcPtr_ + i * rowStride, j * elementsPerRepeat, NORM);
+                pand(executeMask_, dstPg0_, loadMask_, loadMask_);
+                vsqz(dstReg_, srcReg_, executeMask_, MODE_STORED);
+                vstur(ureg_, dstReg_, dstPtr_, POST_UPDATE);
             }
         }
-        vstar(ureg, dstPtr);
+        vstar(ureg_, dstPtr_);
     }
 }
 
 template <typename DstTileData, typename SrcTileData, MaskPattern maskPattern>
 PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
 {
-    using T = typename SrcTileData::DType;
     using U = typename DstTileData::DType;
+    using T = typename SrcTileData::DType;
     static_assert(std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t> || std::is_same_v<T, int16_t> ||
                       std::is_same_v<T, uint16_t> || std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> ||
                       std::is_same_v<T, half> || std::is_same_v<T, float>,
