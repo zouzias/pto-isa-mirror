@@ -17,6 +17,7 @@ ENABLE_KIRIN9030=false
 ENABLE_KIRINX90=false
 ENABLE_SIMPLE=false
 ENABLE_ALL=false
+ENABLE_COMM=false
 ARGS=" "
 IS_AUTO_MODE=false
 
@@ -50,6 +51,10 @@ checkopts() {
         ;;
       --npu)
         ARGS+="-r npu "
+        shift
+        ;;
+      --comm)
+        ENABLE_COMM=true
         shift
         ;;
       --simple)
@@ -519,4 +524,8 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t ttrans
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tstore
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t trowexpand
+fi
+
+if [ "$ENABLE_COMM" == "true" ]; then
+  python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput
 fi
