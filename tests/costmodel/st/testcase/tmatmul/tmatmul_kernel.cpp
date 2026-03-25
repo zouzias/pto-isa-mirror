@@ -177,8 +177,8 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
     } else if constexpr (tilingKey == 2) {
         // int8 A[6x7] * int8 B[7x8]: baskK=32, repeats=1*1*1=1, cycles=14+1*1=15
         RunTMATMUL<int32_t, int8_t, int8_t, int8_t, 6, 7, 8, false, 15.0f, 1.0f>(
-            reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0),
-            reinterpret_cast<int8_t *>(src1), nullptr);
+            reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0), reinterpret_cast<int8_t *>(src1),
+            nullptr);
     } else if constexpr (tilingKey == 3) {
         // half A[128x128] * half B[128x64]: baskK=16, repeats=8*4*8=256, cycles=14+256*1=270
         RunTMATMUL_SPLIT_K<float, half, half, 128, 128, 64, 270.0f, 1.0f>(
@@ -186,8 +186,7 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
     } else if constexpr (tilingKey == 4) {
         // float A[120x110] * float B[110x50]: baskK=8, repeats=8*4*14=448, cycles=14+448*2=910
         RunTMATMUL<float, float, float, float, 120, 110, 50, false, 910.0f, 1.0f>(
-            reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0),
-            reinterpret_cast<float *>(src1), nullptr);
+            reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1), nullptr);
     }
 }
 

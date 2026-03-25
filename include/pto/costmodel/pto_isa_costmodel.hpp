@@ -68,15 +68,15 @@ constexpr float A2A3_MASK_EFFECT = 1.0f; // mask penalty multiplier (1.0 = no ex
 constexpr float A2A3_BANK_NONE = 0.0f;   // no bank conflict penalty
 
 // A2A3 data transfer bandwidth constants (B/Cycle), named as SRC_DST using TileType names
-constexpr float A2A3_BW_GM_VEC      = 128.0f;
-constexpr float A2A3_BW_VEC_VEC     = 128.0f;
-constexpr float A2A3_BW_GM_MAT      = 256.0f;
-constexpr float A2A3_BW_MAT_LEFT    = 256.0f;
-constexpr float A2A3_BW_MAT_RIGHT   = 128.0f;
-constexpr float A2A3_BW_MAT_BIAS    = 128.0f;
+constexpr float A2A3_BW_GM_VEC = 128.0f;
+constexpr float A2A3_BW_VEC_VEC = 128.0f;
+constexpr float A2A3_BW_GM_MAT = 256.0f;
+constexpr float A2A3_BW_MAT_LEFT = 256.0f;
+constexpr float A2A3_BW_MAT_RIGHT = 128.0f;
+constexpr float A2A3_BW_MAT_BIAS = 128.0f;
 constexpr float A2A3_BW_MAT_SCALING = 128.0f;
-constexpr float A2A3_BW_ACC_MAT     = 128.0f;
-constexpr float A2A3_BW_MAT_MAT     = 32.0f;  // l12l1 (TEXTRACT Mat→Mat)
+constexpr float A2A3_BW_ACC_MAT = 128.0f;
+constexpr float A2A3_BW_MAT_MAT = 32.0f; // l12l1 (TEXTRACT Mat→Mat)
 
 enum class DataType
 {
@@ -466,25 +466,24 @@ public:
         SetParam("mad", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_2, A2A3_BANK_NONE,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
-		// gm2ub
-		SetParam(-1, static_cast<int>(TileType::Vec), A2A3_BW_GM_VEC);
-		// ub2ub
-		SetParam(static_cast<int>(TileType::Vec), static_cast<int>(TileType::Vec), A2A3_BW_VEC_VEC);
-		// gm2l1
-		SetParam(-1, static_cast<int>(TileType::Mat), A2A3_BW_GM_MAT);
-		// l12l0A
-		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Left), A2A3_BW_MAT_LEFT);
-		// l12l0B
-		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Right), A2A3_BW_MAT_RIGHT);
-		// l12BT
-		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Bias), A2A3_BW_MAT_BIAS);
-		// l12FP
-		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Scaling), A2A3_BW_MAT_SCALING);
-		// l0C2l1
-		SetParam(static_cast<int>(TileType::Acc), static_cast<int>(TileType::Mat), A2A3_BW_ACC_MAT);
-		// l12l1 (TEXTRACT Mat→Mat)
-		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Mat), A2A3_BW_MAT_MAT);
-
+        // gm2ub
+        SetParam(-1, static_cast<int>(TileType::Vec), A2A3_BW_GM_VEC);
+        // ub2ub
+        SetParam(static_cast<int>(TileType::Vec), static_cast<int>(TileType::Vec), A2A3_BW_VEC_VEC);
+        // gm2l1
+        SetParam(-1, static_cast<int>(TileType::Mat), A2A3_BW_GM_MAT);
+        // l12l0A
+        SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Left), A2A3_BW_MAT_LEFT);
+        // l12l0B
+        SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Right), A2A3_BW_MAT_RIGHT);
+        // l12BT
+        SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Bias), A2A3_BW_MAT_BIAS);
+        // l12FP
+        SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Scaling), A2A3_BW_MAT_SCALING);
+        // l0C2l1
+        SetParam(static_cast<int>(TileType::Acc), static_cast<int>(TileType::Mat), A2A3_BW_ACC_MAT);
+        // l12l1 (TEXTRACT Mat→Mat)
+        SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Mat), A2A3_BW_MAT_MAT);
     }
 
     // TBinOp
@@ -529,7 +528,7 @@ public:
     template <typename Op, typename TileDataOut, typename TileDataIn>
     void ColReduceOpPredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src)
     {
-        using T =  TileDataIn::DType;
+        using T = TileDataIn::DType;
         std::vector<CostModelStats> stats = runColReduceOps<T, Op, TileDataOut, TileDataIn>(dst, src);
         float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
@@ -729,85 +728,86 @@ public:
         return total_cycles;
     }
 
-	// TLoad专用
-	template <typename T, typename DstTileData>
+    // TLoad专用
+    template <typename T, typename DstTileData>
     [[nodiscard]] float DataTransInstPredictCycle(const std::vector<CostModelStats> &stats, DstTileData &dst)
-	{
-		int srcType = -1;
-		int dstType = -1;
+    {
+        int srcType = -1;
+        int dstType = -1;
 
-		//gm2ub
-		if constexpr (DstTileData::Loc == TileType::Vec) {
-			dstType = static_cast<int>(TileType::Vec);
-    	} else if constexpr (DstTileData::Loc == TileType::Mat) { // gm2l1
-			dstType = static_cast<int>(TileType::Mat);
-		}
+        // gm2ub
+        if constexpr (DstTileData::Loc == TileType::Vec) {
+            dstType = static_cast<int>(TileType::Vec);
+        } else if constexpr (DstTileData::Loc == TileType::Mat) { // gm2l1
+            dstType = static_cast<int>(TileType::Mat);
+        }
 
         fprintf(stdout, "[CostModel3] SrcTileData::Loc: %d, DstTileData::Loc: %d\n", srcType, dstType);
 
-		if constexpr (is_conv_tile_v<DstTileData>) {
-			return DataTransInstPredictCycle(srcType, dstType, DstTileData::bufferSize);
-		} else {
-			return DataTransInstPredictCycle(srcType, dstType, dst.GetValidRow() * dst.GetValidCol() * sizeof(T));
-		}
-	}
+        if constexpr (is_conv_tile_v<DstTileData>) {
+            return DataTransInstPredictCycle(srcType, dstType, DstTileData::bufferSize);
+        } else {
+            return DataTransInstPredictCycle(srcType, dstType, dst.GetValidRow() * dst.GetValidCol() * sizeof(T));
+        }
+    }
 
-	// TMov/TExtract
-	template <typename T, typename DstTileData, typename SrcTileData>
+    // TMov/TExtract
+    template <typename T, typename DstTileData, typename SrcTileData>
     [[nodiscard]] float DataTransInstPredictCycle(const std::vector<CostModelStats> &stats, DstTileData &dst,
-												  SrcTileData &src)
+                                                  SrcTileData &src)
     {
-		int srcType = -1;
-		int dstType = -1;
-		if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left) {
-        	srcType = static_cast<int>(TileType::Mat);
-        	dstType = static_cast<int>(TileType::Left);
-    	} else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Right) {
-        	srcType = static_cast<int>(TileType::Mat);
-        	dstType = static_cast<int>(TileType::Right);
-    	} else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Bias) {
-      		srcType = static_cast<int>(TileType::Mat);
-        	dstType = static_cast<int>(TileType::Bias);
-    	} else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Scaling) {
-        	srcType = static_cast<int>(TileType::Mat);
-        	dstType = static_cast<int>(TileType::Scaling);
-    	} else if constexpr (SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Vec) {
-        	srcType = static_cast<int>(TileType::Vec);
-        	dstType = static_cast<int>(TileType::Vec);
-    	} else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
-        	srcType = static_cast<int>(TileType::Acc);
-        	dstType = static_cast<int>(TileType::Mat);
-    	} else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Mat) {
-        	srcType = static_cast<int>(TileType::Mat);
-        	dstType = static_cast<int>(TileType::Mat);
-    	}
+        int srcType = -1;
+        int dstType = -1;
+        if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left) {
+            srcType = static_cast<int>(TileType::Mat);
+            dstType = static_cast<int>(TileType::Left);
+        } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Right) {
+            srcType = static_cast<int>(TileType::Mat);
+            dstType = static_cast<int>(TileType::Right);
+        } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Bias) {
+            srcType = static_cast<int>(TileType::Mat);
+            dstType = static_cast<int>(TileType::Bias);
+        } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Scaling) {
+            srcType = static_cast<int>(TileType::Mat);
+            dstType = static_cast<int>(TileType::Scaling);
+        } else if constexpr (SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Vec) {
+            srcType = static_cast<int>(TileType::Vec);
+            dstType = static_cast<int>(TileType::Vec);
+        } else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
+            srcType = static_cast<int>(TileType::Acc);
+            dstType = static_cast<int>(TileType::Mat);
+        } else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Mat) {
+            srcType = static_cast<int>(TileType::Mat);
+            dstType = static_cast<int>(TileType::Mat);
+        }
 
-		if constexpr (is_conv_tile_v<SrcTileData>) {
-		    fprintf(stdout, "[CostModel1] SrcTileData::Loc: %d, DstTileData::Loc: %d\n", static_cast<int>(SrcTileData::Loc), static_cast<int>(DstTileData::Loc));
-			return DataTransInstPredictCycle(srcType, dstType, DstTileData::bufferSize);
-		} else {
-		    fprintf(stdout, "[CostModel2] SrcTileData::Loc: %d, DstTileData::Loc: %d\n", static_cast<int>(SrcTileData::Loc), static_cast<int>(DstTileData::Loc));
-			return DataTransInstPredictCycle(srcType, dstType, src.GetValidRow() * src.GetValidCol() * sizeof(T));
-		}
+        if constexpr (is_conv_tile_v<SrcTileData>) {
+            fprintf(stdout, "[CostModel1] SrcTileData::Loc: %d, DstTileData::Loc: %d\n",
+                    static_cast<int>(SrcTileData::Loc), static_cast<int>(DstTileData::Loc));
+            return DataTransInstPredictCycle(srcType, dstType, DstTileData::bufferSize);
+        } else {
+            fprintf(stdout, "[CostModel2] SrcTileData::Loc: %d, DstTileData::Loc: %d\n",
+                    static_cast<int>(SrcTileData::Loc), static_cast<int>(DstTileData::Loc));
+            return DataTransInstPredictCycle(srcType, dstType, src.GetValidRow() * src.GetValidCol() * sizeof(T));
+        }
     }
 
     [[nodiscard]] float DataTransInstPredictCycle(int srcType, int dstType, uint32_t bufferSize)
     {
-		float total_cycles = 0.0f;
-		auto key = std::make_pair(srcType, dstType);
-		if (!data_trans_params_map_.contains(key))
-		{
-			fprintf(stderr, "[CostModel] Error: unknown data transfer instruction, srcType: <%d>,  dstType: <%d>\n",
-					srcType, dstType);
-			return total_cycles;
-		}
+        float total_cycles = 0.0f;
+        auto key = std::make_pair(srcType, dstType);
+        if (!data_trans_params_map_.contains(key)) {
+            fprintf(stderr, "[CostModel] Error: unknown data transfer instruction, srcType: <%d>,  dstType: <%d>\n",
+                    srcType, dstType);
+            return total_cycles;
+        }
 
         float bandWidth = data_trans_params_map_.at(key);
         total_cycles = static_cast<int>(bufferSize / bandWidth);
 
         fprintf(stdout, "[CostModel] DataTransInstPredictCycle: %.1f\n", total_cycles);
         return total_cycles;
-	}
+    }
 
 private:
     CostModel()

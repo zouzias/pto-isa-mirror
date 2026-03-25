@@ -45,9 +45,10 @@ void testMov()
         TLOAD(src, srcTensor);
     } else if constexpr (srcBL == BLayout::ColMajor && srcSL == SLayout::NoneBox) {
         // DN tile: DN2DN TLOAD
-        using DnTensorType = GlobalTensor<T, Shape<1, 1, 1, validRow, validCol>,
-                                          Stride<validRow * validCol, validRow * validCol, validRow * validCol, 1, validRow>,
-                                          Layout::DN>;
+        using DnTensorType =
+            GlobalTensor<T, Shape<1, 1, 1, validRow, validCol>,
+                         Stride<validRow * validCol, validRow * validCol, validRow * validCol, 1, validRow>,
+                         Layout::DN>;
         DnTensorType srcTensorDN(srcData.data());
         TLOAD(src, srcTensorDN);
     }
@@ -69,13 +70,13 @@ protected:
     {}
 };
 
-#define TMOV_TEST(T, rows, cols, validRow, validCol, profiling, accuracy, srcLoc, srcBL, srcSL, dstLoc, dstBL, dstSL)                       \
-    TEST_F(                                                                                                            \
-        TMOVTest,                                                                                                      \
-        T##_##rows##_##cols##_##validRow##_##validCol##_##srcLoc##_##srcBL##_##srcSL##_##dstLoc##_##dstBL##_##dstSL)   \
-    {                                                                                                                  \
-        testMov<T, rows, cols, validRow, validCol, profiling, accuracy, TileType::srcLoc, BLayout::srcBL, SLayout::srcSL, TileType::dstLoc, \
-                BLayout::dstBL, SLayout::dstSL>();                                                                     \
+#define TMOV_TEST(T, rows, cols, validRow, validCol, profiling, accuracy, srcLoc, srcBL, srcSL, dstLoc, dstBL, dstSL) \
+    TEST_F(                                                                                                           \
+        TMOVTest,                                                                                                     \
+        T##_##rows##_##cols##_##validRow##_##validCol##_##srcLoc##_##srcBL##_##srcSL##_##dstLoc##_##dstBL##_##dstSL)  \
+    {                                                                                                                 \
+        testMov<T, rows, cols, validRow, validCol, profiling, accuracy, TileType::srcLoc, BLayout::srcBL,             \
+                SLayout::srcSL, TileType::dstLoc, BLayout::dstBL, SLayout::dstSL>();                                  \
     }
 
 TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, RowMajor, NoneBox)

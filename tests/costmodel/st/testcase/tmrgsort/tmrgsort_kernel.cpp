@@ -168,8 +168,7 @@ void LanchTMrgsortMulti(void *stream)
         RunTMrgsort<half, kTCols_ * TYPE_COEF, kTCols_src1 * TYPE_COEF, kTCols_src2 * TYPE_COEF,
                     kTCols_src3 * TYPE_COEF, TOPK * TYPE_COEF, LISTNUM, EXHAUSTED, profiling, accuracy>();
     } else {
-        RunTMrgsort<T, kTCols_, kTCols_src1, kTCols_src2, kTCols_src3, TOPK, LISTNUM, EXHAUSTED, profiling,
-                    accuracy>();
+        RunTMrgsort<T, kTCols_, kTCols_src1, kTCols_src2, kTCols_src3, TOPK, LISTNUM, EXHAUSTED, profiling, accuracy>();
     }
 }
 
