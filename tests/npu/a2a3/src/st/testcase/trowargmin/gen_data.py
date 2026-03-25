@@ -93,6 +93,10 @@ if __name__ == "__main__":
         TRowArgMinParams(np.uint32, np.float16, 16, 1, 3, 8192, 3, 384, 3, 8191),
         TRowArgMinParams(np.uint32, np.float16, 16, 1, 1, 16384, 1, 768, 1, 16381),
         TRowArgMinParams(np.uint32, np.float16, 16, 1, 1, 32768, 1, 768, 1, 32761),
+        TRowArgMinParams(np.int32, np.float32, 16, 1, 13, 16, 1, 8, 13, 13),
+        TRowArgMinParams(np.int32, np.float16, 16, 1, 13, 16, 1, 16, 13, 13),
+        TRowArgMaxParams(np.uint32, np.float32, 3, 8, 3, 3480, 3, 168, 3, 3473),
+        TRowArgMaxParams(np.uint32, np.float32, 1024, 8, 1023, 24, 1, 8, 1023, 17),
     ]
 
     for case in case_list:
