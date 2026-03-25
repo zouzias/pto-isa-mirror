@@ -15,12 +15,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-// TSCATTER: pure scalar element-wise loop — no CCE pipeline instructions issued.
-PTO_INTERNAL std::vector<CostModelStats> runScatterOp()
+template <typename TileDataD, typename TileDataS, typename TileDataI>
+PTO_INTERNAL std::vector<CostModelStats> runScatterOp(TileDataD &dst, TileDataS &src, TileDataI &idx)
 {
+    unsigned validRow = idx.GetValidRow();
+    unsigned validCol = idx.GetValidCol();
+    unsigned totalElements = validRow * validCol;
+
     std::vector<CostModelStats> stats;
-    stats.emplace_back("scatter", 1);
-    return stats; // no CCE pipeline instructions
+    stats.emplace_back("scatter", static_cast<int>(totalElements));
+    return stats;
 }
 
 } // namespace pto
