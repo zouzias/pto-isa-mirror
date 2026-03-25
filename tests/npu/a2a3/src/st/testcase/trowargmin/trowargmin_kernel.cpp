@@ -88,9 +88,19 @@ template void LaunchTRowArgMinHalf<uint32_t, 16, 1, 13, 16, 1, 16, 13, 13>(uint3
                                                                            void *stream);
 template void LaunchTRowArgMinHalf<uint32_t, 272, 1, 260, 64, 1, 16, 260, 64>(uint32_t *out, aclFloat16 *src,
                                                                               void *stream);
+template void LaunchTRowArgMinHalf<uint32_t, 272, 1, 260, 128, 1, 16, 260, 128>(uint32_t *out, aclFloat16 *src,
+                                                                                void *stream);
 template void LaunchTRowArgMinHalf<uint32_t, 16, 1, 3, 8192, 3, 384, 3, 8191>(uint32_t *out, aclFloat16 *src,
                                                                               void *stream);
 template void LaunchTRowArgMinHalf<uint32_t, 16, 1, 1, 16384, 1, 768, 1, 16381>(uint32_t *out, aclFloat16 *src,
                                                                                 void *stream);
 template void LaunchTRowArgMinHalf<uint32_t, 16, 1, 1, 32768, 1, 768, 1, 32761>(uint32_t *out, aclFloat16 *src,
                                                                                 void *stream);
+template void LaunchTRowArgMin<int32_t, float, 16, 1, 13, 16, 1, 8, 13, 13>(int32_t *out, float *src, void *stream);
+template void LaunchTRowArgMinHalf<int32_t, 16, 1, 13, 16, 1, 16, 13, 13>(int32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 3, 8, 3, 3480, 3, 168, 3, 3473>(uint32_t *out, float *src,
+                                                                                void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 260, 8, 260, 64, 1, 8, 260, 64>(uint32_t *out, float *src,
+                                                                                void *stream);
+template void LaunchTRowArgMin<uint32_t, float, 1024, 8, 1023, 24, 1, 8, 1023, 17>(uint32_t *out, float *src,
+                                                                                   void *stream);
