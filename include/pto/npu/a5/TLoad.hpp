@@ -319,7 +319,7 @@ PTO_INTERNAL void TLoadCubeND2NZ(__cbuf__ typename TileData::DType *dst, typenam
     uint32_t dValue = validCol;
     if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
                   std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
-        dValue = dValue >> 1; // move fp4 as b8, need to be divided by 2
+        dValue = (dValue + 1) >> 1; // move fp4 as b8, ceil division to include last nibble for odd counts
     }
 
     uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride3);
@@ -489,7 +489,7 @@ PTO_INTERNAL void TLoadCubeDN2ZN(__cbuf__ typename TileData::DType *dst, typenam
     uint32_t dValue = validRow;
     if constexpr (std::is_same<typename TileData::DType, float4_e1m2x2_t>::value ||
                   std::is_same<typename TileData::DType, float4_e2m1x2_t>::value) {
-        dValue = dValue >> 1; // move fp4 as b8, need to be divided by 2
+        dValue = (dValue + 1) >> 1; // move fp4 as b8, ceil division to include last nibble for odd counts
     }
 
     uint64_t loop1SrcStride = GetByteSize<typename TileData::DType>(gStride4);

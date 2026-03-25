@@ -18,6 +18,7 @@ ENABLE_KIRINX90=false
 ENABLE_SIMPLE=false
 ENABLE_ALL=false
 ARGS=" "
+IS_AUTO_MODE=false
 
 checkopts() {
   while true; do
@@ -61,6 +62,7 @@ checkopts() {
         ;;
       --auto_mode)
         ARGS+="-a "
+        IS_AUTO_MODE=true
         shift
         ;;
       --)
@@ -121,6 +123,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpandmin -g TColExpandMinTest.case_fp16_4_256_1_256
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tgather -g TGATHERTest.case1_float_P0101
     python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans -g TTRANSTest.case1_float_16_8_16_8
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_conv -g TTRANSConvTest.int8_1_63_2_128
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsels -g TSELSTest.case_uint16_uint8_2x16_2x32_2x16_2x16
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsels -g TSELSTest.case_float_uint16_2x8_2x16_2x8_2x8
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsort32 -g TSort32Test.case1
@@ -167,6 +170,12 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcat -g TCONCATTest.case_int16_32x256_32x128_32x128_32x127_32x128
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcat -g TCONCATTest.case_int32_64x128_64x64_64x64_64x64_64x64
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmax -g TROWARGMAXTest.case_uint32_float_16x1_13x16_13x13
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmax -g TROWARGMAXTest.case_uint32_float_8x1_3x4096_3x4095
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmax -g TROWARGMAXTest.case_uint32_float_8x1_2x16384_2x16381
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin -g TROWARGMINTest.case_uint32_float_16x1_13x16_13x13
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin -g TROWARGMINTest.case_uint32_float_8x1_3x4096_3x4095
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin -g TROWARGMINTest.case_uint32_float_8x1_2x16384_2x16381
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py $ARGS -v a3 -t all
@@ -207,6 +216,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpandmin
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tgather
     python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t ttrans_conv
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tsort32
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartadd
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tpartmul
@@ -246,6 +256,8 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tquant
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tdequant
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcat
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmax
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t trowargmin
   fi
 fi
 
@@ -284,7 +296,11 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdivs -g TDIVSTest.case5
     python3 tests/script/run_st.py $ARGS -w -v a5 -t texp -g TEXPTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands -g TEXPANDSTest.case_float_64x64_64x64_64x64_PAD_VALUE_NULL
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands_mat -g TEXPANDSTest.case1
+    if [ "$IS_AUTO_MODE" = "false" ]; then
+      # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
+      # besides, auto-sync doesn't work with CCE intrisics
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands_mat -g TEXPANDSTest.case1
+    fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract -g TEXTRACTTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tfillpad -g TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tgather -g TGATHERTest.case1_float_32x1024_16x64
@@ -321,6 +337,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowexpanddiv -g TRowExpandDivTest.case_fp32_40_64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowmax -g TROWMAXTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowmin -g TROWMINTest.case1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t trowargmax -g TROWARGMAXTest.case_uint32_float_64x1_32x128_32x128
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t trowargmin -g TROWARGMINTest.case_uint32_float_64x1_32x128_32x128
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowsum -g TROWSUMTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowprod -g TROWPRODTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trsqrt -g TRSQRTTest.case1
@@ -334,6 +352,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tstore -g TStoreTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tstore_acc2gm -g TStoreAcc2gmTest.case7
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttrans -g TTRANSTest.case_float_8x8_2x8_2x8
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t ttrans_conv -g TTRANSConvTest.uint8_11_2_7_7_32
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp -g TCMPTest.case_half_32x32_32x32_32x32
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tadd_tdiv -g TADD_TDIVTest.case_float_64x64_64x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmul_tadds -g TMUL_TADDSTest.case_float_64x64_64x64
@@ -401,7 +420,11 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tdivs
     python3 tests/script/run_st.py $ARGS -w -v a5 -t texp
     python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands_mat
+    if [ "$IS_AUTO_MODE" = "false" ]; then
+      # this testcase has to directly call CCE intrinsics now, which won't compile for auto mode;
+      # besides, auto-sync doesn't work with CCE intrisics
+      python3 tests/script/run_st.py $ARGS -w -v a5 -t texpands_mat
+    fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tfillpad
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tgather
@@ -435,6 +458,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowexpanddiv
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowmax
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowmin
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t trowargmax
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t trowargmin
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowsum
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trowprod
     python3 tests/script/run_st.py $ARGS -w -v a5 -t trsqrt
@@ -447,6 +472,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tstore
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tstore_acc2gm
     python3 tests/script/run_st.py $ARGS -w -v a5 -t ttrans
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t ttrans_conv
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tcmp
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tadd_tdiv
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tmul_tadds

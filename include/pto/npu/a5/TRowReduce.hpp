@@ -24,6 +24,8 @@ full text of the License.
  * @note A5架构特殊说明：
  *   - vcadd 对 int16 输入产生 int32 输出（需要类型转换）
  *   - vcmax/vcmin 对 int16 输入输出均为 int16（无需类型转换）
+ *   - int16 ROWSUM: int32中间结果转int16时采用回绕溢出（wrap-around），
+ *     即截断高16位，剩余16位解释为有符号int16，与numpy行为一致
  */
 
 #ifndef __ROW_REDUCE__
@@ -150,8 +152,9 @@ struct ROWMIN {
  * @brief 编译期和运行期参数校验
  * @tparam TileDataOut 输出Tile类型
  * @tparam TileDataIn 输入Tile类型
+ * @tparam idx 是否是输出idx场景
  */
-template <typename TileDataOut, typename TileDataIn>
+template <typename TileDataOut, typename TileDataIn, bool idx = false>
 PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow)
 {
     using T = typename TileDataIn::DType;
@@ -159,9 +162,11 @@ PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, 
         std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t>,
         "Row reduction only supports 'half', 'float', 'int32', or 'int16' data types. "
         "Fix: Define TileDataIn with DType = half, float, int32, or int16.");
-    static_assert(std::is_same_v<T, typename TileDataOut::DType>,
+    static_assert(idx || std::is_same_v<T, typename TileDataOut::DType>,
                   "Input and output tile data types must match. "
                   "Fix: Ensure TileDataOut uses the same DType as TileDataIn.");
+    static_assert(!idx || std::is_same_v<uint32_t, typename TileDataOut::DType>,
+                  "Output tile data type must be uint32_t. ");
     static_assert(TileDataOut::Loc == pto::TileType::Vec && TileDataIn::Loc == pto::TileType::Vec,
                   "Row reduction only works on vector tiles (TileType::Vec). "
                   "Fix: Instantiate TileDataIn and TileDataOut with Loc_ = TileType::Vec.");
@@ -225,6 +230,22 @@ PTO_INTERNAL void TRowReduceImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
     using TOUT = typename ReduceOp::TOUT;     ///< 归约中间结果类型
     using TDST = typename TileDataOut::DType; ///< 最终输出类型
 
+    // 对于int32→int16转换，需要设置CTRL寄存器以启用非饱和（回绕溢出）模式
+    // CTRL[60]=1, CTRL[59]=1: 非饱和模式（截断高16位）
+    constexpr int SAT_MODE_BIT_60 = 60;
+    constexpr int SAT_MODE_BIT_59 = 59;
+    constexpr bool needsNonSatMode = std::is_same_v<TOUT, int32_t> && std::is_same_v<TDST, int16_t>;
+    bool originalCtrl60 = false;
+    bool originalCtrl59 = false;
+
+    if constexpr (needsNonSatMode) {
+        uint64_t originalCtrl = get_ctrl();
+        originalCtrl60 = (originalCtrl & (1ULL << SAT_MODE_BIT_60)) != 0;
+        originalCtrl59 = (originalCtrl & (1ULL << SAT_MODE_BIT_59)) != 0;
+        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_60));
+        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_59));
+    }
+
     uint16_t repeatTimes = CeilDivision(cols, elementsPerRepeat);
     __VEC_SCOPE__
     {
@@ -259,7 +280,8 @@ PTO_INTERNAL void TRowReduceImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
 
                 // Step 5: 存储结果（必要时类型转换）
                 if constexpr (!std::is_same_v<TOUT, TDST>) {
-                    // int16 ROWSUM: int32 → int16 饱和转换
+                    // int16 ROWSUM: int32 → int16 回绕溢出转换（截断高16位）
+                    // CTRL寄存器已设置为非饱和模式
                     vcvt(vreg_result, vregdst, pregdst, RS_DISABLE, PART_EVEN);
                     vsts(vreg_result, dstPtr, i * TileDataOut::RowStride, distValue, pregdst);
                 } else {
@@ -281,6 +303,8 @@ PTO_INTERNAL void TRowReduceImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
                 }
 
                 if constexpr (!std::is_same_v<TOUT, TDST>) {
+                    // int16 ROWSUM: int32 → int16 回绕溢出转换（截断高16位）
+                    // CTRL寄存器已设置为非饱和模式
                     vcvt(vreg_result, vregdst, pregdst, RS_DISABLE, PART_EVEN);
                     vsts(vreg_result, dstPtr, TileDataOut::RowStride, distValue, pregdst, POST_UPDATE);
                 } else {
@@ -289,6 +313,20 @@ PTO_INTERNAL void TRowReduceImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
             }
         }
     } // end VF
+
+    // 恢复原始CTRL寄存器状态
+    if constexpr (needsNonSatMode) {
+        if (originalCtrl60) {
+            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_60));
+        } else {
+            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_60));
+        }
+        if (originalCtrl59) {
+            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT_59));
+        } else {
+            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT_59));
+        }
+    }
 }
 
 //=============================================================================
@@ -304,7 +342,7 @@ PTO_INTERNAL void TRowReduceImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
 template <typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat>
 __tf__ PTO_INTERNAL OP_NAME(TROWMAX)
     OP_TYPE(reduce) void TRowMax(typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src,
-                                 uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow,
+                                 uint32_t dstValidRow, uint32_t srcValidRows, uint32_t srcValidCols,
                                  unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
     TRowReduceCheck<TileDataOut, TileDataIn>(srcValidRows, srcValidCols, dstValidRow);
@@ -327,7 +365,7 @@ __tf__ PTO_INTERNAL OP_NAME(TROWMAX)
 template <typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat>
 __tf__ PTO_INTERNAL OP_NAME(TROWSUM)
     OP_TYPE(reduce) void TRowSum(typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src,
-                                 uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow,
+                                 uint32_t dstValidRow, uint32_t srcValidRows, uint32_t srcValidCols,
                                  unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
     TRowReduceCheck<TileDataOut, TileDataIn>(srcValidRows, srcValidCols, dstValidRow);
@@ -350,7 +388,7 @@ __tf__ PTO_INTERNAL OP_NAME(TROWSUM)
 template <typename TileDataOut, typename TileDataIn, unsigned elementsPerRepeat>
 __tf__ PTO_INTERNAL OP_NAME(TROWMIN)
     OP_TYPE(reduce) void TRowMin(typename TileDataOut::TileDType __out__ dst, typename TileDataIn::TileDType __in__ src,
-                                 uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow,
+                                 uint32_t dstValidRow, uint32_t srcValidRows, uint32_t srcValidCols,
                                  unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
     TRowReduceCheck<TileDataOut, TileDataIn>(srcValidRows, srcValidCols, dstValidRow);
@@ -376,7 +414,7 @@ PTO_INTERNAL void TROWMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &t
     unsigned rows = src.GetValidRow();
     unsigned cols = src.GetValidCol();
 
-    TRowMax<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), rows, cols, dst.GetValidRow());
+    TRowMax<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), dst.GetValidRow(), rows, cols);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
@@ -387,7 +425,7 @@ PTO_INTERNAL void TROWSUM_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &t
     unsigned rows = src.GetValidRow();
     unsigned cols = src.GetValidCol();
 
-    TRowSum<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), rows, cols, dst.GetValidRow());
+    TRowSum<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), dst.GetValidRow(), rows, cols);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
@@ -398,7 +436,7 @@ PTO_INTERNAL void TROWMIN_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &t
     unsigned rows = src.GetValidRow();
     unsigned cols = src.GetValidCol();
 
-    TRowMin<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), rows, cols, dst.GetValidRow());
+    TRowMin<TileDataOut, TileDataIn, elementsPerRepeat>(dst.data(), src.data(), dst.GetValidRow(), rows, cols);
 }
 
 } // namespace pto
