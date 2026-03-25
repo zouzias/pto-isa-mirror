@@ -80,3 +80,11 @@ template void LaunchTRowArgMaxHalf<uint32_t, 272, 1, 260, 64, 260, 64>(uint32_t 
 template void LaunchTRowArgMaxHalf<uint32_t, 16, 1, 3, 8192, 3, 8191>(uint32_t *out, aclFloat16 *src, void *stream);
 template void LaunchTRowArgMaxHalf<uint32_t, 16, 1, 1, 16384, 1, 16381>(uint32_t *out, aclFloat16 *src, void *stream);
 template void LaunchTRowArgMaxHalf<uint32_t, 16, 1, 1, 32768, 1, 32761>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMax<int32_t, float, 16, 1, 13, 16, 13, 13>(int32_t *out, float *src, void *stream);
+template void LaunchTRowArgMaxHalf<int32_t, 16, 1, 13, 16, 13, 13>(int32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 3, 8, 3, 3480, 3, 3473>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 260, 8, 260, 64, 260, 64>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 1023, 8, 1023, 24, 1023, 17>(uint32_t *out, float *src, void *stream);
+template void LaunchTRowArgMaxHalf<uint32_t, 3, 16, 3, 3488, 3, 3473>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMaxHalf<uint32_t, 260, 16, 260, 64, 260, 64>(uint32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMaxHalf<uint32_t, 1023, 26, 1023, 32, 1023, 17>(uint32_t *out, aclFloat16 *src, void *stream);
