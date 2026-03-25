@@ -43,25 +43,25 @@ PTO_INTERNAL void GenCastCallFp32ToFp16(std::vector<CostModelStats> &stats, uint
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f322f16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f322f16a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f16a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f322f16f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f16f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f322f16c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f16c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f322f16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ODD:
-            //vconv_f322f16o(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f16o(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_f322f16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -74,22 +74,22 @@ PTO_INTERNAL void GenCastCallFp32ToFp32(std::vector<CostModelStats> &stats, uint
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f322f32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f322f32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f322f32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f322f32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f322f32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_f322f32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322f32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -102,22 +102,22 @@ PTO_INTERNAL void GenCastCallFp32ToInt64(std::vector<CostModelStats> &stats, uin
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f322s64r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s64r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f322s64a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s64a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f322s64f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s64f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f322s64c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s64c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f322s64z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s64z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_f322s64z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s64z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -130,22 +130,22 @@ PTO_INTERNAL void GenCastCallFp32ToInt32(std::vector<CostModelStats> &stats, uin
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f322s32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f322s32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f322s32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f322s32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f322s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_f322s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -158,22 +158,22 @@ PTO_INTERNAL void GenCastCallFp32ToInt16(std::vector<CostModelStats> &stats, uin
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f322s16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f322s16a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s16a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f322s16f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s16f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f322s16c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s16c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f322s16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_f322s16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322s16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -186,37 +186,37 @@ PTO_INTERNAL void GenCastCallFp32ToInt16_NonSatTorch(std::vector<CostModelStats>
                                                      uint16_t dstRepeatStride, uint16_t srcRepeatStride,
                                                      __ubuf__ int32_t *tempInt32Buf)
 {
-    //set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
+    // set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f322s32r(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            // vconv_f322s32r(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
             //               srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f322s32a(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            // vconv_f322s32a(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
             //               srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f322s32f(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            // vconv_f322s32f(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
             //               srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f322s32c(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            // vconv_f322s32c(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
             //               srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f322s32z(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            // vconv_f322s32z(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
             //               srcRepeatStride);
             break;
         default:
-            //vconv_f322s32z(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
+            // vconv_f322s32z(tempInt32Buf, src, repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
             //               srcRepeatStride);
             break;
     }
 
-    //pipe_barrier(PIPE_V);
-    //set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
-    //vconv_s322s16(dst, tempInt32Buf, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+    // pipe_barrier(PIPE_V);
+    // set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
+    // vconv_s322s16(dst, tempInt32Buf, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
 }
 
 // FP32 -> BF16 conversion
@@ -228,22 +228,22 @@ PTO_INTERNAL void GenCastCallFp32ToBf16(std::vector<CostModelStats> &stats, uint
     // fp32 to bf16 - Convert floating point to bfloat16 format
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f322bf16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322bf16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f322bf16a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322bf16a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f322bf16f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322bf16f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f322bf16c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322bf16c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f322bf16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322bf16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_f322bf16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f322bf16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -256,22 +256,22 @@ PTO_INTERNAL void GenCastCallFp16ToInt32(std::vector<CostModelStats> &stats, uin
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f162s32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f162s32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f162s32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f162s32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f162s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_f162s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -284,22 +284,22 @@ PTO_INTERNAL void GenCastCallFp16ToInt16(std::vector<CostModelStats> &stats, uin
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f162s16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f162s16a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s16a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f162s16f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s16f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f162s16c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s16c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f162s16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_f162s16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -320,35 +320,35 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(std::vector<CostModelStats>
     uint16_t step2DstRepeatStride = isHead ? static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2) : dstRepeatStride;
     uint16_t step2SrcRepeatStride = isHead ? BLOCK_MAX_PER_REPEAT : static_cast<uint16_t>(srcRepeatStride * 2);
 
-    //set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
+    // set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
 
     // Step 1: fp16 -> int32
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f162s32r(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-             //              step1SrcRepeatStride);
+            // vconv_f162s32r(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
+            //              step1SrcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f162s32a(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-             //              step1SrcRepeatStride);
+            // vconv_f162s32a(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
+            //              step1SrcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f162s32f(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-              //             step1SrcRepeatStride);
+            // vconv_f162s32f(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
+            //             step1SrcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f162s32c(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-             //              step1SrcRepeatStride);
+            // vconv_f162s32c(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
+            //              step1SrcRepeatStride);
             break;
         default:
-            //vconv_f162s32z(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
-             //              step1SrcRepeatStride);
+            // vconv_f162s32z(tempInt32Buf, src, step1Repeat, 1, srcBlockStride, step1DstRepeatStride,
+            //              step1SrcRepeatStride);
     }
-    //pipe_barrier(PIPE_V);
+    // pipe_barrier(PIPE_V);
 
-    //set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
+    // set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
     // Step 2: int32 -> int16
-    //vconv_s322s16(dst, tempInt32Buf, static_cast<uint8_t>(2 * repeatNum), dstBlockStride, 1, step2DstRepeatStride,
+    // vconv_s322s16(dst, tempInt32Buf, static_cast<uint8_t>(2 * repeatNum), dstBlockStride, 1, step2DstRepeatStride,
     //              step2SrcRepeatStride);
 }
 
@@ -362,22 +362,22 @@ PTO_INTERNAL void GenCastCallFp16ToInt8(std::vector<CostModelStats> &stats, uint
     // Note: Saturation mode is now controlled globally by TCvt kernel
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f162s8r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s8r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f162s8a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s8a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f162s8f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s8f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f162s8c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s8c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f162s8z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s8z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_f162s8z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162s8z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -433,60 +433,60 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(std::vector<CostModelStats> 
     const uint16_t hwInt16Stride = hwFp16Stride;     // int16 same width as fp16 in blocks
     const uint16_t hwDstStride = hwFp16Stride / 2;   // int8 is half as wide as fp16 in blocks
 
-    //set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
+    // set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
 
     // Step 1: fp16 -> int32
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f162s32r(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+            // vconv_f162s32r(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
             //               hwFp16Stride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f162s32a(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+            // vconv_f162s32a(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
             //               hwFp16Stride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f162s32f(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+            // vconv_f162s32f(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
             //               hwFp16Stride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f162s32c(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+            // vconv_f162s32c(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
             //               hwFp16Stride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f162s32z(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+            // vconv_f162s32z(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
             //               hwFp16Stride);
             break;
         default:
-            //vconv_f162s32z(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
+            // vconv_f162s32z(tempInt32Buf, src, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
             //               hwFp16Stride);
             break;
     }
-    //pipe_barrier(PIPE_V);
-    //set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
+    // pipe_barrier(PIPE_V);
+    // set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
 
     // Step 2: int32 -> int16 (narrow to low 16 bits) into tempAndBuf
     // After this, tempInt32Buf [+0..+4095] is fully consumed and available for reuse.
-    //vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
+    // vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
     //              hwInt32Stride);
-    //pipe_barrier(PIPE_V);
+    // pipe_barrier(PIPE_V);
 
     // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (reuses tempInt32Buf [+0..+2047])
-    //vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
+    // vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
     //           hwInt16Stride);
-    //pipe_barrier(PIPE_V);
+    // pipe_barrier(PIPE_V);
 
     // Step 4: vand int16 & 255 to extract low 8 bits
-    //vand(tempAndBuf, tempAndBuf, tempMaskBuf, hwRepeatCount, srcBlockStride, srcBlockStride, srcBlockStride,
-         //hwInt16Stride, hwInt16Stride, hwInt16Stride);
-    //pipe_barrier(PIPE_V);
+    // vand(tempAndBuf, tempAndBuf, tempMaskBuf, hwRepeatCount, srcBlockStride, srcBlockStride, srcBlockStride,
+    // hwInt16Stride, hwInt16Stride, hwInt16Stride);
+    // pipe_barrier(PIPE_V);
 
     // Step 5: int16 -> fp16, writing into tempFp16Buf (reuses tempInt32Buf [+0..+2047])
-    //vconv_s162f16(tempFp16Buf, tempAndBuf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride, hwInt16Stride);
-    //pipe_barrier(PIPE_V);
+    // vconv_s162f16(tempFp16Buf, tempAndBuf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
+    // hwInt16Stride); pipe_barrier(PIPE_V);
 
     // Step 6: fp16 -> int8 (hwDstStride = hwFp16Stride / 2 since int8 is half the width of fp16)
-    //vconv_f162s8z(dst, tempFp16Buf, hwRepeatCount, dstBlockStride, srcBlockStride, hwDstStride, hwFp16Stride);
+    // vconv_f162s8z(dst, tempFp16Buf, hwRepeatCount, dstBlockStride, srcBlockStride, hwDstStride, hwFp16Stride);
 }
 
 // FP16 -> UINT8 conversion
@@ -497,22 +497,22 @@ PTO_INTERNAL void GenCastCallFp16ToUint8(std::vector<CostModelStats> &stats, uin
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_f162u8r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162u8r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_f162u8a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162u8a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_f162u8f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162u8f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_f162u8c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162u8c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_f162u8z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162u8z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_f162u8z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_f162u8z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -525,22 +525,22 @@ PTO_INTERNAL void GenCastCallBf16ToInt32(std::vector<CostModelStats> &stats, uin
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_bf162s32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_bf162s32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_bf162s32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_bf162s32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_bf162s32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_bf162s32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_bf162s32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_bf162s32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_bf162s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_bf162s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_bf162s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_bf162s32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -553,22 +553,22 @@ PTO_INTERNAL void GenCastCallInt16ToFp16(std::vector<CostModelStats> &stats, uin
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_s162f16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s162f16r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_s162f16a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s162f16a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_s162f16f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s162f16f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_s162f16c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s162f16c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_s162f16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s162f16z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_s162f16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s162f16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -581,22 +581,22 @@ PTO_INTERNAL void GenCastCallInt32ToFp32(std::vector<CostModelStats> &stats, uin
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_s322f32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s322f32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_s322f32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s322f32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_s322f32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s322f32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_s322f32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s322f32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_s322f32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s322f32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_s322f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s322f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -609,22 +609,22 @@ PTO_INTERNAL void GenCastCallInt64ToFp32(std::vector<CostModelStats> &stats, uin
 {
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
-            //vconv_s642f32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s642f32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_ROUND:
-            //vconv_s642f32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s642f32a(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_FLOOR:
-            //vconv_s642f32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s642f32f(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_CEIL:
-            //vconv_s642f32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s642f32c(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         case RoundMode::CAST_TRUNC:
-            //vconv_s642f32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s642f32z(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
         default:
-            //vconv_s642f32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+            // vconv_s642f32r(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
             break;
     }
 }
@@ -638,33 +638,33 @@ PTO_INTERNAL void GenCastCallSpecialCases(std::vector<CostModelStats> &stats, ui
 {
     if constexpr (std::is_same<typename TileDataD::DType, float>::value &&
                   std::is_same<typename TileDataS::DType, half>::value) { // half to fp32
-        //vconv_f162f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+        // vconv_f162f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, float>::value &&
                          std::is_same<typename TileDataS::DType, bfloat16_t>::value) { // bfloat16 to float
-        //vconv_bf162f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+        // vconv_bf162f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, half>::value &&
                          std::is_same<typename TileDataS::DType, uint8_t>::value) { // uint8 to half
-        //vconv_u82f16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+        // vconv_u82f16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, half>::value &&
                          std::is_same<typename TileDataS::DType, int8_t>::value) { // int8 to half
-        //vconv_s82f16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+        // vconv_s82f16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, float>::value &&
                          std::is_same<typename TileDataS::DType, int16_t>::value) { // int16 to float32
-        //vconv_s162f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+        // vconv_s162f32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, int32_t>::value &&
                          std::is_same<typename TileDataS::DType, int64_t>::value) { // int64 to int32
-        //vconv_s642s32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+        // vconv_s642s32(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, int64_t>::value &&
                          std::is_same<typename TileDataS::DType, int32_t>::value) { // int32 to int64
-        //vconv_s322s64(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+        // vconv_s322s64(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                          std::is_same<typename TileDataS::DType, int32_t>::value) { // int32 to int16
-        //vconv_s322s16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+        // vconv_s322s16(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     } else if constexpr (std::is_same<typename TileDataD::DType, half>::value &&
                          std::is_same<typename TileDataS::DType, int32_t>::value) { // int32 to half
-        //set_deqscale(static_cast<half>(1.0));
-        //pipe_barrier(PIPE_V);
-        //vconv_deq(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
+        // set_deqscale(static_cast<half>(1.0));
+        // pipe_barrier(PIPE_V);
+        // vconv_deq(dst, src, repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
     }
 }
 
@@ -695,15 +695,14 @@ AICORE void GenCastCall(std::vector<CostModelStats> &stats, uint8_t repeatNum, R
                          std::is_same<typename TileDataS::DType, float>::value) { // fp32 to int16
         // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
         bool isSatOn = (
-            //get_ctrl() &
-            (1ULL << SAT_MODE_BIT)) == 0;
+                           // get_ctrl() &
+                           (1ULL << SAT_MODE_BIT)) == 0;
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
             // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
 
-            GenCastCallFp32ToInt16_NonSatTorch<TileDataD, TileDataS>(stats, repeatNum, mode, dstBlockStride,
-                                                                     srcBlockStride, dstRepeatStride, srcRepeatStride,
-                                                                     tempInt32Buf);
+            GenCastCallFp32ToInt16_NonSatTorch<TileDataD, TileDataS>(
+                stats, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tempInt32Buf);
         } else {
             GenCastCallFp32ToInt16<TileDataD, TileDataS>(stats, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                          dstRepeatStride, srcRepeatStride);
@@ -725,15 +724,14 @@ AICORE void GenCastCall(std::vector<CostModelStats> &stats, uint8_t repeatNum, R
                          std::is_same<typename TileDataS::DType, half>::value) { // half to int16
         // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
         bool isSatOn = (
-            //get_ctrl() &
-            (1ULL << SAT_MODE_BIT)) == 0;
+                           // get_ctrl() &
+                           (1ULL << SAT_MODE_BIT)) == 0;
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
             // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
 
-            GenCastCallFp16ToInt16_NonSatTorch<TileDataD, TileDataS>(stats, repeatNum, mode, dstBlockStride,
-                                                                     srcBlockStride, dstRepeatStride, srcRepeatStride,
-                                                                     tempInt32Buf);
+            GenCastCallFp16ToInt16_NonSatTorch<TileDataD, TileDataS>(
+                stats, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tempInt32Buf);
         } else {
             GenCastCallFp16ToInt16<TileDataD, TileDataS>(stats, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                          dstRepeatStride, srcRepeatStride);
@@ -747,8 +745,8 @@ AICORE void GenCastCall(std::vector<CostModelStats> &stats, uint8_t repeatNum, R
                          std::is_same<typename TileDataS::DType, half>::value) { // half to int8
         // Select implementation based on current saturation mode (CTRL[59]) and edge case alignment
         bool isSatOn = (
-            //get_ctrl() &
-            (1ULL << SAT_MODE_BIT)) == 0;
+                           // get_ctrl() &
+                           (1ULL << SAT_MODE_BIT)) == 0;
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
             // Use PyTorch-aligned implementation when saturation is OFF and edge case alignment is enabled
@@ -852,16 +850,16 @@ AICORE void TCvt(std::vector<CostModelStats> &stats, RoundMode mode, SaturationM
                  unsigned srcRepeatStride)
 {
     // Save the original saturation mode state
-    //uint64_t originalCtrl = get_ctrl();
+    // uint64_t originalCtrl = get_ctrl();
     bool originalSatMode = (
-        //originalCtrl &
-        (1ULL << SAT_MODE_BIT)) == 0;
+                               // originalCtrl &
+                               (1ULL << SAT_MODE_BIT)) == 0;
 
     // Apply saturation mode
     if (satMode == SaturationMode::OFF) {
-        //set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
+        // set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
     } else {
-        //set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation (default)
+        // set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation (default)
     }
 
     // Get buffer pointers and block size
@@ -878,7 +876,7 @@ AICORE void TCvt(std::vector<CostModelStats> &stats, RoundMode mode, SaturationM
     if (numRemainPerLine > 0) {
         unsigned numLoop = validRow / REPEAT_MAX;
         unsigned remainAfterLoop = validRow % REPEAT_MAX;
-        //SetContinuousMask(numRemainPerLine);
+        // SetContinuousMask(numRemainPerLine);
         if (numLoop > 0) {
             for (uint32_t j = 0; j < numLoop; j++) {
                 GenCastCall<TileDataD, TileDataS>(stats, (uint8_t)REPEAT_MAX, mode, 1, 1,
@@ -889,20 +887,20 @@ AICORE void TCvt(std::vector<CostModelStats> &stats, RoundMode mode, SaturationM
             GenCastCall<TileDataD, TileDataS>(stats, (uint8_t)remainAfterLoop, mode, 1, 1,
                                               (uint16_t)DS / dstNElemPerBlock, (uint16_t)SS / srcNElemPerBlock);
         }
-        //set_vector_mask(-1, -1);
+        // set_vector_mask(-1, -1);
     }
 
     // Restore original saturation mode to avoid affecting subsequent instructions
     if (originalSatMode) {
-        //set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
+        // set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
     } else {
-        //set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
+        // set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
     }
 }
 
 template <typename TileDataD, typename TileDataS>
-PTO_INTERNAL void runTCvtOp(std::vector<CostModelStats> &stats, TileDataD &dst,
-                            TileDataS &src, RoundMode mode, SaturationMode satMode)
+PTO_INTERNAL void runTCvtOp(std::vector<CostModelStats> &stats, TileDataD &dst, TileDataS &src, RoundMode mode,
+                            SaturationMode satMode)
 {
     // Determine repeat width as max of source/destination element sizes
     uint64_t repeatWidth =
@@ -940,13 +938,12 @@ PTO_INTERNAL void runTCvtOp(std::vector<CostModelStats> &stats, TileDataD &dst,
         // INT32→INT16
         (std::is_same<typename TileDataD::DType, int16_t>::value &&
          std::is_same<typename TileDataS::DType, int32_t>::value)) {
-        TCvt<TileDataD, TileDataS, SS, DS>(stats, mode, satMode, numRepeatPerLine, numRemainPerLine,
-                                           validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
+        TCvt<TileDataD, TileDataS, SS, DS>(stats, mode, satMode, numRepeatPerLine, numRemainPerLine, validRow,
+                                           elementsPerRepeat, dstRepeatStride, srcRepeatStride);
     } else {
         // For all other conversions, default to saturation ON (native TCVT behavior)
-        TCvt<TileDataD, TileDataS, SS, DS>(stats, mode, SaturationMode::ON, numRepeatPerLine,
-                                           numRemainPerLine, validRow, elementsPerRepeat, dstRepeatStride,
-                                           srcRepeatStride);
+        TCvt<TileDataD, TileDataS, SS, DS>(stats, mode, SaturationMode::ON, numRepeatPerLine, numRemainPerLine,
+                                           validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
     }
 }
 } // namespace pto

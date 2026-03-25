@@ -18,10 +18,9 @@ template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol, in
 PTO_INTERNAL void TExtractToANonTranspose(std::vector<CostModelStats> &stats, uint16_t indexRow, uint16_t indexCol)
 {
     constexpr int config = srcRow | (1u << 16);
-    //set_fmatrix(config);
-    //img2colv2_cbuf_to_ca(dstAddr, srcAddr, dstCol, dstRow, indexCol, indexRow, 1, 1, 1, 1, 1, 1, false, false, false,
-                         //false, srcCol);
-
+    // set_fmatrix(config);
+    // img2colv2_cbuf_to_ca(dstAddr, srcAddr, dstCol, dstRow, indexCol, indexRow, 1, 1, 1, 1, 1, 1, false, false, false,
+    // false, srcCol);
 }
 
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol, int32_t dstRow, int32_t dstCol>
@@ -42,25 +41,23 @@ PTO_INTERNAL void TExtractToATranspose(std::vector<CostModelStats> &stats, uint1
             dstGap = fractNum * dstColNum - 1;
             dstFracGap = dstColNum - 1;
             for (uint16_t i = 0; i < dstColNum; i++) {
-                //load_cbuf_to_ca_transpose(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, false,
+                // load_cbuf_to_ca_transpose(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, false,
                 //                          dstFracGap);
-
             }
         } else {
             dstFracGap = dstColNum - 1;
             for (uint16_t i = 0; i < dstRowNum; i++) {
-                //load_cbuf_to_ca_transpose(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, false,
+                // load_cbuf_to_ca_transpose(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, false,
                 //                          dstFracGap);
-
             }
         }
     } else {
         // b16和b32采用load3DV2转置，减少scalar次数
         constexpr int config = srcCol | (1u << 16);
-        //set_fmatrix(config);
-        //img2colv2_cbuf_to_ca(dstAddr, srcAddr, dstRow, dstCol, indexRow, indexCol, 1, 1, 1, 1, 1, 1, false, false, true,
+        // set_fmatrix(config);
+        // img2colv2_cbuf_to_ca(dstAddr, srcAddr, dstRow, dstCol, indexRow, indexCol, 1, 1, 1, 1, 1, 1, false, false,
+        // true,
         //                     false, srcRow);
-
     }
 }
 template <typename DstTileData, typename SrcTileData, bool Transpose>
@@ -99,7 +96,7 @@ AICORE void TExtractToA(std::vector<CostModelStats> &stats, uint16_t indexRow, u
 
 template <typename DstTileData, typename SrcTileData>
 AICORE void TExtractToAVector(std::vector<CostModelStats> &stats, uint16_t indexRow, uint16_t indexCol,
-							  uint16_t dstValidCol)
+                              uint16_t dstValidCol)
 {
     using DataType = typename SrcTileData::DType;
 
@@ -114,8 +111,7 @@ AICORE void TExtractToAVector(std::vector<CostModelStats> &stats, uint16_t index
     int32_t kAlign = (dstValidCol + fractalSize - 1) & ~(fractalSize - 1);
     uint16_t baseIdx = indexCol * sizeof(DataType) >> SHIFT_FRACTAL_BYTE;
     uint8_t repeatTimes = kAlign / fractalSize;
-    //load_cbuf_to_ca(dstAddr, srcAddr, baseIdx, repeatTimes, 1, 0, false);
-
+    // load_cbuf_to_ca(dstAddr, srcAddr, baseIdx, repeatTimes, 1, 0, false);
 }
 
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol, int32_t dstRow, int32_t dstCol>
@@ -132,14 +128,13 @@ PTO_INTERNAL void TExtractToBNonTranspose(std::vector<CostModelStats> &stats, ui
     if constexpr (dstRowNum >= dstColNum) {
         dstGap = dstColNum - 1;
         for (uint16_t i = 0; i < dstColNum; i++) {
-            //load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, 0, false,
+            // load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, 0, false,
             //                addr_cal_mode_t(0));
-
         }
     } else {
         for (uint16_t i = 0; i < dstRowNum; i++) {
-            //load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, 0, false, addr_cal_mode_t(0));
-
+            // load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, 0, false,
+            // addr_cal_mode_t(0));
         }
     }
 }
@@ -161,23 +156,21 @@ PTO_INTERNAL void TExtractToBTranspose(std::vector<CostModelStats> &stats, uint1
         if constexpr (dstRowNum >= dstColNum) {
             dstGap = fractNum * dstColNum - 1;
             for (uint16_t i = 0; i < dstColNum; i++) {
-                //load_cbuf_to_cb_transpose(dstAddr, srcAddr, startIdx0 + i * srcRowNum, dstRowNum, 1, dstGap, false, 0);
-
+                // load_cbuf_to_cb_transpose(dstAddr, srcAddr, startIdx0 + i * srcRowNum, dstRowNum, 1, dstGap, false,
+                // 0);
             }
         } else {
             dstGap = fractNum - 1;
             for (uint16_t i = 0; i < dstRowNum; i++) {
-                //load_cbuf_to_cb_transpose(dstAddr, srcAddr, startIdx0 + i, dstColNum, srcRowNum, dstGap, false, 0);
-
+                // load_cbuf_to_cb_transpose(dstAddr, srcAddr, startIdx0 + i, dstColNum, srcRowNum, dstGap, false, 0);
             }
         }
     } else {
         // b16&b32使用Load3DV2
         constexpr int config = srcRow | (1u << 16);
-        //set_fmatrix_b(config);
-        //img2colv2_cbuf_to_cb(dstAddr, srcAddr, dstCol, dstRow, indexCol, indexRow, 1, 1, 1, 1, 1, 1, false, false,
+        // set_fmatrix_b(config);
+        // img2colv2_cbuf_to_cb(dstAddr, srcAddr, dstCol, dstRow, indexCol, indexRow, 1, 1, 1, 1, 1, 1, false, false,
         //                     false, true, srcCol);
-
     }
 }
 
@@ -219,15 +212,14 @@ PTO_INTERNAL void TExtractToANonTransposeCompact(std::vector<CostModelStats> &st
                                                  uint16_t dstValidColAlign)
 {
     constexpr int config = srcRow | (1u << 16);
-    //set_fmatrix(config);
-    //img2colv2_cbuf_to_ca(dstAddr, srcAddr, dstValidColAlign, dstValidRowAlign, indexCol, indexRow, 1, 1, 1, 1, 1, 1,
+    // set_fmatrix(config);
+    // img2colv2_cbuf_to_ca(dstAddr, srcAddr, dstValidColAlign, dstValidRowAlign, indexCol, indexRow, 1, 1, 1, 1, 1, 1,
     //                     false, false, false, false, srcCol);
-
 }
 
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol>
 PTO_INTERNAL void TExtractToATransposeCompact(std::vector<CostModelStats> &stats, uint16_t indexRow, uint16_t indexCol,
-											  uint16_t dstValidRowAlign, uint16_t dstValidColAlign)
+                                              uint16_t dstValidRowAlign, uint16_t dstValidColAlign)
 {
     // b8   Load2D
     if constexpr (sizeof(SrcType) == 1) {
@@ -243,23 +235,22 @@ PTO_INTERNAL void TExtractToATransposeCompact(std::vector<CostModelStats> &stats
             dstGap = fractNum * dstColNum - 1;
             dstFracGap = dstColNum - 1;
             for (uint16_t i = 0; i < dstColNum; i++) {
-                //load_cbuf_to_ca_transpose(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, false,
+                // load_cbuf_to_ca_transpose(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, false,
                 //                         dstFracGap);
-
             }
         } else {
             dstFracGap = dstColNum - 1;
             for (uint16_t i = 0; i < dstRowNum; i++) {
-                //load_cbuf_to_ca_transpose(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, false,
+                // load_cbuf_to_ca_transpose(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, false,
                 //                          dstFracGap);
-
             }
         }
     } else {
         // b16&b32 Load3D
         constexpr int config = srcCol | (1u << 16);
-        //set_fmatrix(config);
-        //img2colv2_cbuf_to_ca(dstAddr, srcAddr, dstValidRowAlign, dstValidColAlign, indexRow, indexCol, 1, 1, 1, 1, 1, 1,
+        // set_fmatrix(config);
+        // img2colv2_cbuf_to_ca(dstAddr, srcAddr, dstValidRowAlign, dstValidColAlign, indexRow, indexCol, 1, 1, 1, 1, 1,
+        // 1,
         //                     false, false, true, false, srcRow);
     }
 }
@@ -315,21 +306,20 @@ PTO_INTERNAL void TExtractToBNonTransposeCompact(std::vector<CostModelStats> &st
     if (dstRowNum >= dstColNum) {
         dstGap = dstColNum - 1;
         for (uint16_t i = 0; i < dstColNum; i++) {
-            //load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, 0, false,
+            // load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, 0, false,
             //               addr_cal_mode_t(0));
-
         }
     } else {
         for (uint16_t i = 0; i < dstRowNum; i++) {
-            //load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, 0, false, addr_cal_mode_t(0));
-
+            // load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, 0, false,
+            // addr_cal_mode_t(0));
         }
     }
 }
 
 template <typename DstType, typename SrcType, int32_t srcRow, int32_t srcCol>
 PTO_INTERNAL void TExtractToBTransposeCompact(std::vector<CostModelStats> &stats, uint16_t indexRow, uint16_t indexCol,
-											  uint16_t dstValidRowAlign, uint16_t dstValidColAlign,
+                                              uint16_t dstValidRowAlign, uint16_t dstValidColAlign,
                                               uint16_t dstValidCol)
 {
     // b8 Load2D
@@ -344,14 +334,14 @@ PTO_INTERNAL void TExtractToBTransposeCompact(std::vector<CostModelStats> &stats
                              (indexCol * sizeof(SrcType) * srcRowNum >> SHIFT_BLOCK_BYTE);
         uint16_t dstAddrStride = CeilDivision(dstValidCol, FRACTAL_NZ_ROW) * CUBE_BLOCK_SIZE;
         for (uint16_t i = 0; i < dstRowNum; i++) {
-            //load_cbuf_to_cb_transpose(dstAddr, srcAddr, startIdx0 + i, dstColNum, srcRowNum, dstGap, false, 0);
-
+            // load_cbuf_to_cb_transpose(dstAddr, srcAddr, startIdx0 + i, dstColNum, srcRowNum, dstGap, false, 0);
         }
     } else {
         // b16&b32 Load3DV2
         constexpr int config = srcRow | (1u << 16);
-        //set_fmatrix_b(config);
-        //img2colv2_cbuf_to_cb(dstAddr, srcAddr, dstValidColAlign, dstValidRowAlign, indexCol, indexRow, 1, 1, 1, 1, 1, 1,
+        // set_fmatrix_b(config);
+        // img2colv2_cbuf_to_cb(dstAddr, srcAddr, dstValidColAlign, dstValidRowAlign, indexCol, indexRow, 1, 1, 1, 1, 1,
+        // 1,
         //                     false, false, false, true, srcCol);
     }
 }
@@ -403,14 +393,13 @@ AICORE void TExtractToBConv(std::vector<CostModelStats> &stats, uint16_t srcCol,
     uint16_t blockNum = CUBE_BLOCK_SIZE / sizeof(SrcType);
     uint16_t startIdx0 = (indexRow * sizeof(SrcType) * srcColNum >> SHIFT_BLOCK_BYTE) + (indexCol >> SHIFT_BLOCK_LEN);
     for (uint16_t i = 0; i < dstRowNum; i++) {
-        //load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, 0, false, addr_cal_mode_t(0));
-
+        // load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, 0, false, addr_cal_mode_t(0));
     }
 }
 
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_CONVTILE_IMPL(std::vector<CostModelStats> &stats, DstTileData &dst, SrcTileData &src,
-										 uint16_t indexRow, uint16_t indexCol)
+                                         uint16_t indexRow, uint16_t indexCol)
 {
     static_assert(SrcTileData::Loc == pto::TileType::Mat, "Fix: Src TileType must be Mat!");
     static_assert(DstTileData::Loc == pto::TileType::Right, "Fix: Dst TileType must be Right!");
@@ -430,11 +419,11 @@ PTO_INTERNAL void TEXTRACT_CONVTILE_IMPL(std::vector<CostModelStats> &stats, Dst
     constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename SrcTileData::DType);
     if constexpr (SrcTileData::totalDimCount == 4) { // ConvTile layout is [C1HW,N/16,16,C0]
         int srcCol = src.GetShape(1) * src.GetShape(2);
-        TExtractToBConv<DstTileData, SrcTileData>(stats, srcCol, dst.GetValidRow(), dst.GetValidCol(),
-                                                  indexRow, indexCol);
+        TExtractToBConv<DstTileData, SrcTileData>(stats, srcCol, dst.GetValidRow(), dst.GetValidCol(), indexRow,
+                                                  indexCol);
     } else { //  [C1,H,W,N,C0]
-        TExtractToBConv<DstTileData, SrcTileData>(stats, src.GetShape(3), dst.GetValidRow(),
-                                                  dst.GetValidCol(), indexRow, indexCol);
+        TExtractToBConv<DstTileData, SrcTileData>(stats, src.GetShape(3), dst.GetValidRow(), dst.GetValidCol(),
+                                                  indexRow, indexCol);
     }
 }
 
@@ -451,9 +440,8 @@ AICORE void TExtractAccToMat(std::vector<CostModelStats> &stats, uint16_t validR
     constexpr uint32_t dstStrideD = DstTileData::Rows;
     constexpr uint16_t srcStride = SrcTileData::Rows;
     uint16_t nSize = CeilDivision(validCol, c0Size) * c0Size;
-    //copy_matrix_cc_to_cbuf(dstAddr, srcAddr, 0, nSize, validRow, dstStrideD, srcStride, 0, QuantPre, reluMode, false,
+    // copy_matrix_cc_to_cbuf(dstAddr, srcAddr, 0, nSize, validRow, dstStrideD, srcStride, 0, QuantPre, reluMode, false,
     //                       false);
-
 }
 
 template <typename DstTileData, typename SrcTileData>
@@ -469,15 +457,15 @@ AICORE void TExtractToLeft(std::vector<CostModelStats> &stats, DstTileData &dst,
         TExtractToAVector<DstTileData, SrcTileData>(stats, indexRow, indexCol, dst.GetValidCol());
     } else if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
         if constexpr (DstTileData::Compact == CompactMode::Normal) {
-            TExtractToACompact<DstTileData, SrcTileData, false>(
-                stats, indexRow, indexCol, dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
+            TExtractToACompact<DstTileData, SrcTileData, false>(stats, indexRow, indexCol, dst.GetValidRow(),
+                                                                dst.GetValidCol(), dst.GetKAligned());
         } else {
             TExtractToA<DstTileData, SrcTileData, false>(stats, indexRow, indexCol);
         }
     } else {
         if constexpr (DstTileData::Compact == CompactMode::Normal) {
-            TExtractToACompact<DstTileData, SrcTileData, true>(stats, indexRow, indexCol,
-                                                               dst.GetValidRow(), dst.GetValidCol(), dst.GetKAligned());
+            TExtractToACompact<DstTileData, SrcTileData, true>(stats, indexRow, indexCol, dst.GetValidRow(),
+                                                               dst.GetValidCol(), dst.GetKAligned());
         } else {
             TExtractToA<DstTileData, SrcTileData, true>(stats, indexRow, indexCol);
         }
@@ -494,15 +482,15 @@ AICORE void TExtractToRight(std::vector<CostModelStats> &stats, DstTileData &dst
                   "TExtract: RightTile Invalid Fractal.");
     if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
         if constexpr (DstTileData::Compact == CompactMode::Normal) {
-            TExtractToBCompact<DstTileData, SrcTileData, false>(stats, indexRow, indexCol,
-                                                                dst.GetValidRow(), dst.GetValidCol());
+            TExtractToBCompact<DstTileData, SrcTileData, false>(stats, indexRow, indexCol, dst.GetValidRow(),
+                                                                dst.GetValidCol());
         } else {
             TExtractToB<DstTileData, SrcTileData, false>(stats, indexRow, indexCol);
         }
     } else {
         if constexpr (DstTileData::Compact == CompactMode::Normal) {
-            TExtractToBCompact<DstTileData, SrcTileData, true>(stats, indexRow, indexCol,
-                                                               dst.GetValidRow(), dst.GetValidCol());
+            TExtractToBCompact<DstTileData, SrcTileData, true>(stats, indexRow, indexCol, dst.GetValidRow(),
+                                                               dst.GetValidCol());
         } else {
             TExtractToB<DstTileData, SrcTileData, true>(stats, indexRow, indexCol);
         }
@@ -511,7 +499,7 @@ AICORE void TExtractToRight(std::vector<CostModelStats> &stats, DstTileData &dst
 
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_TILE_IMPL(std::vector<CostModelStats> &stats, DstTileData &dst, SrcTileData &src,
-									 uint16_t indexRow = 0, uint16_t indexCol = 0)
+                                     uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
     PTO_ASSERT(indexRow + DstTileData::Rows <= SrcTileData::Rows,
                "The sum of indexRow and dstRow should be less than srcRow!");
@@ -530,7 +518,8 @@ PTO_INTERNAL void TEXTRACT_TILE_IMPL(std::vector<CostModelStats> &stats, DstTile
 }
 
 template <typename DstTileData, typename SrcTileData>
-PTO_INTERNAL void runTExtractOp(std::vector<CostModelStats> &stats, DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
+PTO_INTERNAL void runTExtractOp(std::vector<CostModelStats> &stats, DstTileData &dst, SrcTileData &src,
+                                uint16_t indexRow, uint16_t indexCol)
 {
     if constexpr (is_conv_tile_v<SrcTileData>) {
         TEXTRACT_CONVTILE_IMPL(stats, dst, src, indexRow, indexCol);

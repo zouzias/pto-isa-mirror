@@ -19,8 +19,7 @@ namespace pto {
 // Single-src TMRGSORT: vmrgsort4(repeatTimes)
 //   repeatTimes = srcCol / (blockLen * 4)
 template <typename DstTileData, typename SrcTileData>
-PTO_INTERNAL std::vector<CostModelStats> runMrgSortSingleOp(DstTileData & /*dst*/, SrcTileData &src,
-                                                             uint32_t blockLen)
+PTO_INTERNAL std::vector<CostModelStats> runMrgSortSingleOp(DstTileData & /*dst*/, SrcTileData &src, uint32_t blockLen)
 {
     constexpr unsigned BLOCK_NUM = 4;
     uint32_t srcCol = src.GetValidCol();

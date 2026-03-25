@@ -33,7 +33,7 @@ template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = Rel
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar)
 {
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
-	pto::CostModel::GetInstance().MovModeOpPredictCycle<DstTileData, SrcTileData, quantPre, reluMode>("TMOV", dst, src);
+    pto::CostModel::GetInstance().MovModeOpPredictCycle<DstTileData, SrcTileData, quantPre, reluMode>("TMOV", dst, src);
 }
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>

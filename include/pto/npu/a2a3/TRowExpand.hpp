@@ -21,22 +21,25 @@ template <typename TileDataDst, typename TileDataSrc>
 __tf__ PTO_INTERNAL void TRowExpand(typename TileDataDst::TileDType __out__ dst,
                                     typename TileDataSrc::TileDType __in__ src, int validRow, int validCol)
 {
-    using TRANS = B82B16Trait<typename TileDataDst::DType>;
-    using T = typename TRANS::TransType;
+    using T = typename TileDataSrc::DType;
+    using TRANS = B82B16Trait<T>;
+    using TRANSTYPE = typename TRANS::TransType;
     int transValidCol = TRANS::TransSize(validCol);
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
 
     constexpr int dstStride = TRANS::template TransStride<TileDataDst::RowStride>();
-    constexpr int srcStride = TRANS::template TransStride<TileDataSrc::RowStride>();
+    constexpr int srcStride = TileDataSrc::RowStride;
+    __ubuf__ TRANSTYPE *transDst = (__ubuf__ TRANSTYPE *)dstPtr;
 
     set_mask_count();
     set_vector_mask(0, transValidCol);
     for (int i = 0; i < validRow; i++) {
         PtoSetWaitFlag<PIPE_V, PIPE_S>();
         T tempValue = (T)(*(srcPtr + i * srcStride));
+        typename TRANS::TransType transValue = TRANS::TransValue(tempValue);
         PtoSetWaitFlag<PIPE_S, PIPE_V>();
-        vector_dup(dstPtr + i * dstStride, tempValue, 0, 1, 1, BLOCK_MAX_PER_REPEAT, 0);
+        vector_dup(transDst + i * dstStride, transValue, 0, 1, 1, BLOCK_MAX_PER_REPEAT, 0);
     }
     set_mask_norm();
     set_vector_mask(-1, -1);

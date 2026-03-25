@@ -6,8 +6,6 @@
 
 ## 简介
 
-在 Tile 之间移动/复制，可选应用实现定义的转换模式。
-
 在 Tile 之间移动/复制，可选通过模板参数和重载选择实现定义的转换模式。
 
 `TMOV` 用于：
@@ -82,21 +80,23 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantS
 ## 约束
 
 - **实现检查 (A2A3)**:
-    - 形状必须匹配：`SrcTileData::Rows == DstTileData::Rows` 且 `SrcTileData::Cols == DstTileData::Cols`。
+    - 形状规则：
+        - 形状必须匹配：`SrcTileData::Rows == DstTileData::Rows` 且 `SrcTileData::Cols == DstTileData::Cols`。
     - 支持的位置对（编译时检查）：
-    - `Mat -> Left/Right/Bias/Scaling`
-    - `Vec -> Vec`
-    - `Acc -> Mat`（包括通过重载的可选预量化/relu/fp 变体）
-    - 对于 `Acc -> Mat`，强制执行额外的分形/类型约束（例如，`Acc` 使用类 NZ 分形，`Mat` 使用 512B 分形，且仅允许特定的数据类型转换）。
+        - `Mat -> Left/Right/Bias/Scaling`
+        - `Vec -> Vec`
+        - `Acc -> Mat`
+    - 按路径附加检查如下：
+        - `Acc -> Mat`：会额外检查分形与数据类型约束（例如 `Acc` 使用类 NZ 分形，`Mat` 使用 512B 分形，且仅允许特定的数据类型转换）。
 - **实现检查 (A5)**:
-    - 对于 `Mat -> *`，形状必须匹配；对于某些 `Vec` 移动，有效复制大小是 src/dst 有效行/列的最小值。
+    - 形状规则：
+        - 对于 `Mat -> Left/Right/Bias/Scaling/Scale`，形状必须匹配。
+        - 对于 `Vec -> Vec` 和 `Vec -> Mat`，实际复制区域可能由源和目的的有效行/列共同决定。
     - 支持的位置对包括（取决于目标）：
-    - `Mat -> Left/Right/Bias/Scaling/Scale`
-    - `Vec -> Vec` 和 `Vec -> Mat`
-    - `Acc -> Vec` 和 `Acc -> Mat`（包括通过重载的可选预量化/relu/fp 变体）
-    - 对于 `Mat -> Left/Right`，通过 `CommonCheck` 强制执行额外的分形和数据类型约束（源分形必须兼容且元素类型必须匹配）。
-    - 对于 `Acc -> Vec/Mat`，通过 `CheckTMovAccValid` 强制执行额外的分形/类型/对齐约束。
-    - 对于 `Mat -> Scale`，通过 `CommonCheckMX` 强制执行额外的分形和数据类型约束（源分形必须兼容且元素类型必须匹配）。
+        - `Mat -> Left/Right/Bias/Scaling/Scale`
+        - `Vec -> Vec/Mat`
+        - `Acc -> Vec/Mat`
+    - `Acc -> Vec` 还支持额外的 `AccToVecMode` 形式；其中部分形式还会结合 `FpTileData` 或 `preQuantScalar` 使用。
 
 ## 示例
 

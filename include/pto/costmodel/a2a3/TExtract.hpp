@@ -30,8 +30,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
     PTO_ASSERT(indexCol + DstTileData::Cols <= SrcTileData::Cols,
                "The sum of indexCol and dstCol should be less than srcCol!");
     constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
-	pto::CostModel::GetInstance().ExtractModeOpPredictCycle<DstTileData, SrcTileData, quantPre, reluMode>("TEXT", dst, src,
- 	    indexRow, indexCol);
+    pto::CostModel::GetInstance().ExtractModeOpPredictCycle<DstTileData, SrcTileData, quantPre, reluMode>(
+        "TEXT", dst, src, indexRow, indexCol);
 }
 
 // scalar quant
@@ -44,8 +44,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t pre
     PTO_ASSERT(indexCol + DstTileData::Cols <= SrcTileData::Cols,
                "The sum of indexCol and dstCol should be less than srcCol!");
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
-    pto::CostModel::GetInstance().ExtractModeOpPredictCycle<DstTileData, SrcTileData, quantPre, reluMode>("TEXT", dst, src,
- 	    indexRow, indexCol);
+    pto::CostModel::GetInstance().ExtractModeOpPredictCycle<DstTileData, SrcTileData, quantPre, reluMode>(
+        "TEXT", dst, src, indexRow, indexCol);
 }
 
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
@@ -58,8 +58,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &
                "The sum of indexCol and dstCol should be less than srcCol!");
     static_assert(FpTileData::Loc == TileType::Scaling, "Fp only support Scaling.");
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
-    pto::CostModel::GetInstance().ExtractModeOpPredictCycle<DstTileData, SrcTileData, quantPre, reluMode>("TEXT", dst, src,
- 	    indexRow, indexCol);
+    pto::CostModel::GetInstance().ExtractModeOpPredictCycle<DstTileData, SrcTileData, quantPre, reluMode>(
+        "TEXT", dst, src, indexRow, indexCol);
 }
 } // namespace pto
 #endif

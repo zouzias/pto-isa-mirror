@@ -79,16 +79,25 @@ enum class DataType
     BF16
 };
 
-constexpr int getDataTypeBytes(DataType type) {
+constexpr int getDataTypeBytes(DataType type)
+{
     switch (type) {
-        case DataType::FP16:  return 2;
-        case DataType::FP32:  return 4;
-        case DataType::INT8:  return 1;
-        case DataType::INT16: return 2;
-        case DataType::UINT8: return 1;
-        case DataType::INT32: return 4;
-        case DataType::BF16:  return 2;
-        default:              return 0;
+        case DataType::FP16:
+            return 2;
+        case DataType::FP32:
+            return 4;
+        case DataType::INT8:
+            return 1;
+        case DataType::INT16:
+            return 2;
+        case DataType::UINT8:
+            return 1;
+        case DataType::INT32:
+            return 4;
+        case DataType::BF16:
+            return 2;
+        default:
+            return 0;
     }
 }
 
@@ -122,7 +131,7 @@ public:
         cycle = cycle_;
     }
 
-    [[nodiscard]] float GetCycle()const
+    [[nodiscard]] float GetCycle() const
     {
         return cycle;
     }
@@ -438,24 +447,23 @@ public:
                  A2A3_INTERVAL, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
         // mmad
-        SetParam("mad", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_1,
-            A2A3_BANK_NONE, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("mad", DataType::INT8, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_1,
-            A2A3_BANK_NONE, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("mad", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_1,
-            A2A3_BANK_NONE, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("mad", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_2,
-            A2A3_BANK_NONE, A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("mad", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_1, A2A3_BANK_NONE,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("mad", DataType::INT8, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_1, A2A3_BANK_NONE,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("mad", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_1, A2A3_BANK_NONE,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("mad", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_BANK_NONE, A2A3_RPT_2, A2A3_BANK_NONE,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
-		// gm2ub
-		SetParam(-1, 0, 54.54f);
-		// gm2l1
-		SetParam(-1, 1, 72.97f);
-		// l12l0A
-		SetParam(-1, 0, 238.38f);
-		// l12l0B
-		SetParam(-1, 0, 119.19f);
-
+        // gm2ub
+        SetParam(-1, 0, 54.54f);
+        // gm2l1
+        SetParam(-1, 1, 72.97f);
+        // l12l0A
+        SetParam(-1, 0, 238.38f);
+        // l12l0B
+        SetParam(-1, 0, 119.19f);
     }
 
     // TBinOp
@@ -500,7 +508,7 @@ public:
     template <typename Op, typename TileDataOut, typename TileDataIn>
     void ColReduceOpPredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src)
     {
-        using T =  TileDataIn::DType;
+        using T = TileDataIn::DType;
         std::vector<CostModelStats> stats = runColReduceOps<T, Op, TileDataOut, TileDataIn>(dst, src);
         float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
@@ -508,10 +516,9 @@ public:
 
     // TColSum
     template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
-    void ColSumOpPredictCycle( TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp,
-                              const bool IsBinary)
+    void ColSumOpPredictCycle(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, const bool IsBinary)
     {
-        using T =  TileDataSrc::DType;
+        using T = TileDataSrc::DType;
         const std::vector<CostModelStats> stats =
             runColSumOp<T, TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp, IsBinary);
         float totalCycles = VecInstPredictCycle<T>(stats);
@@ -523,7 +530,7 @@ public:
     void RowExpandPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
     {
         using T = TileDataDst::DType;
-            std::vector<CostModelStats> stats = runRowExpandOp<TileDataDst, TileDataSrc>(dst, src);
+        std::vector<CostModelStats> stats = runRowExpandOp<TileDataDst, TileDataSrc>(dst, src);
         float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
     }
@@ -546,20 +553,20 @@ public:
         cMatrix.SetCycle(total_cycles);
     }
 
-	// TCvt
+    // TCvt
     template <typename TileDataD, typename TileDataS>
     void CvtOpPredictCycle(const std::string &instr_name, TileDataD &dst, TileDataS &src, RoundMode mode,
-						 SaturationMode satMode)
+                           SaturationMode satMode)
     {
-        using T = typename TileDataD::DType;  // conv的类型需单独考虑
+        using T = typename TileDataD::DType; // conv的类型需单独考虑
         std::vector<CostModelStats> stats;
-		runTCvtOp<TileDataD, TileDataS>(stats, dst, src, mode, satMode);
+        runTCvtOp<TileDataD, TileDataS>(stats, dst, src, mode, satMode);
         float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
     }
 
-	// TSel
-	template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile>
+    // TSel
+    template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile>
     void SelOpPredictCycle(const std::string &instr_name, DstTile &dst)
     {
         using T = typename DstTile::DType;
@@ -568,68 +575,68 @@ public:
         dst.SetCycle(totalCycles);
     }
 
-	// TMov
-	template <typename DstTileData, typename SrcTileData>
+    // TMov
+    template <typename DstTileData, typename SrcTileData>
     void MovOpPredictCycle(const std::string &instr_name, DstTileData &dst, SrcTileData &src)
     {
         using T = typename DstTileData::DType;
         std::vector<CostModelStats> stats;
-		runTMovOp<DstTileData, SrcTileData>(stats, dst, src);
+        runTMovOp<DstTileData, SrcTileData>(stats, dst, src);
         float totalCycles = DataTransInstPredictCycle<T, DstTileData, SrcTileData>(stats, dst, src);
         dst.SetCycle(totalCycles);
     }
 
-	// TMov with mode
-	template <typename DstTileData, typename SrcTileData, QuantMode_t quantPre, ReluPreMode reluMode>
+    // TMov with mode
+    template <typename DstTileData, typename SrcTileData, QuantMode_t quantPre, ReluPreMode reluMode>
     void MovModeOpPredictCycle(const std::string &instr_name, DstTileData &dst, SrcTileData &src)
     {
         using T = typename DstTileData::DType;
-		uint16_t m = src.GetValidRow();
-    	uint16_t n = src.GetValidCol();
+        uint16_t m = src.GetValidRow();
+        uint16_t n = src.GetValidCol();
         std::vector<CostModelStats> stats;
-		TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode>(stats, m, n);
+        TMovCcToCb<DstTileData, SrcTileData, quantPre, reluMode>(stats, m, n);
         float totalCycles = DataTransInstPredictCycle<T, DstTileData, SrcTileData>(stats, dst, src);
         dst.SetCycle(totalCycles);
     }
 
-	// TLoad
-	template <typename TileData, typename GlobalData>
+    // TLoad
+    template <typename TileData, typename GlobalData>
     void LoadOpPredictCycle(const std::string &instr_name, TileData &dst, GlobalData &src)
     {
         using T = typename TileData::DType;
         std::vector<CostModelStats> stats = runTLoadOp<TileData, GlobalData>(dst, src);
-        //float totalCycles = DataTransInstPredictCycle<T, TileData, GlobalData>(stats, dst, dst);
-		float totalCycles = 100.0f;
+        // float totalCycles = DataTransInstPredictCycle<T, TileData, GlobalData>(stats, dst, dst);
+        float totalCycles = 100.0f;
         dst.SetCycle(totalCycles);
     }
 
-	// TExtract
-	template <typename DstTileData, typename SrcTileData>
+    // TExtract
+    template <typename DstTileData, typename SrcTileData>
     void ExtractOpPredictCycle(const std::string &instr_name, DstTileData &dst, SrcTileData &src, uint16_t indexRow,
-							   uint16_t indexCol)
+                               uint16_t indexCol)
     {
         using T = typename DstTileData::DType;
         std::vector<CostModelStats> stats;
-		runTExtractOp<DstTileData, SrcTileData>(stats, dst, src, indexRow, indexCol);
+        runTExtractOp<DstTileData, SrcTileData>(stats, dst, src, indexRow, indexCol);
         float totalCycles = DataTransInstPredictCycle<T, DstTileData, SrcTileData>(stats, dst, src);
         dst.SetCycle(totalCycles);
     }
 
-	// TExtract with mode
-	template <typename DstTileData, typename SrcTileData, QuantMode_t quantPre, ReluPreMode reluMode>
+    // TExtract with mode
+    template <typename DstTileData, typename SrcTileData, QuantMode_t quantPre, ReluPreMode reluMode>
     void ExtractModeOpPredictCycle(const std::string &instr_name, DstTileData &dst, SrcTileData &src, uint16_t indexRow,
-							   uint16_t indexCol)
+                                   uint16_t indexCol)
     {
         using T = typename DstTileData::DType;
         std::vector<CostModelStats> stats;
-		TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(stats, dst.GetValidRow(), dst.GetValidCol(),
-																	   indexRow, indexCol);
+        TExtractAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(stats, dst.GetValidRow(), dst.GetValidCol(),
+                                                                       indexRow, indexCol);
         float totalCycles = DataTransInstPredictCycle<T, DstTileData, SrcTileData>(stats, dst, src);
         dst.SetCycle(totalCycles);
     }
 
     template <typename T>
-    [[nodiscard]] float VecInstPredictCycle(const std::vector<CostModelStats> &stats)const
+    [[nodiscard]] float VecInstPredictCycle(const std::vector<CostModelStats> &stats) const
     {
         float total_cycles = 0.0f;
         // first: next real instruction starts a new pipeline segment (pays startup_cycles once)
@@ -673,7 +680,7 @@ public:
     }
 
     template <typename T>
-    [[nodiscard]] float CubeInstPredictCycle(const std::vector<CostModelStats> &stats)const
+    [[nodiscard]] float CubeInstPredictCycle(const std::vector<CostModelStats> &stats) const
     {
         float total_cycles = 0.0f;
         bool first = true;
@@ -693,59 +700,55 @@ public:
                 first = false;
             }
 
-            const int baskK = 32/ getDataTypeBytes(dtype);
-            const int repeats = (stat.m + 15)/16 * ((stat.n + 15)/16) * ((stat.k + baskK - 1)/baskK) ;
+            const int baskK = 32 / getDataTypeBytes(dtype);
+            const int repeats = (stat.m + 15) / 16 * ((stat.n + 15) / 16) * ((stat.k + baskK - 1) / baskK);
             total_cycles += repeats * params.per_repeat_cycles;
         }
 
         return total_cycles;
     }
 
-	int getTileType(TileType tileType) {
-		if (tileType == TileType::Vec)
-		{
-			return 0;
-		} else if (tileType == TileType::Mat)
-		{
-			return 1;
-		} else if (tileType == TileType::Left)
-		{
-			return 2;
-		} else if (tileType == TileType::Right)
-		{
-			return 3;
-		}
-		return 4;
-	}
+    int getTileType(TileType tileType)
+    {
+        if (tileType == TileType::Vec) {
+            return 0;
+        } else if (tileType == TileType::Mat) {
+            return 1;
+        } else if (tileType == TileType::Left) {
+            return 2;
+        } else if (tileType == TileType::Right) {
+            return 3;
+        }
+        return 4;
+    }
 
-	template <typename T, typename DstTileData, typename SrcTileData>
+    template <typename T, typename DstTileData, typename SrcTileData>
     [[nodiscard]] float DataTransInstPredictCycle(const std::vector<CostModelStats> &stats, DstTileData &dst,
-												  SrcTileData &src)
+                                                  SrcTileData &src)
     {
         float total_cycles = 0.0f;
-		int dstType;
-		int srcType;
-		uint16_t m;
-		uint16_t n;
-		//if (std::is_same<SrcTileData, GlobalTensor>::value)
-		//{
-		//	m = dst.GetValidRow();
-    	//	n = dst.GetValidCol();
-		//	srcType = -1;
-		//	dstType =  getTileType(DstTileData::Loc);
-		//} else {
-			m = src.GetValidRow();
-    		n = src.GetValidCol();
-			srcType = getTileType(SrcTileData::Loc);
-			dstType =  getTileType(DstTileData::Loc);
-		//}
+        int dstType;
+        int srcType;
+        uint16_t m;
+        uint16_t n;
+        // if (std::is_same<SrcTileData, GlobalTensor>::value)
+        //{
+        //	m = dst.GetValidRow();
+        //	n = dst.GetValidCol();
+        //	srcType = -1;
+        //	dstType =  getTileType(DstTileData::Loc);
+        //} else {
+        m = src.GetValidRow();
+        n = src.GetValidCol();
+        srcType = getTileType(SrcTileData::Loc);
+        dstType = getTileType(DstTileData::Loc);
+        //}
         auto key = std::make_pair(srcType, dstType);
-		if (!data_trans_params_map_.contains(key))
-		{
-			fprintf(stderr, "[CostModel] Error: unknown data transfer instruction, srcType: <%d>,  dstType: <%d>\n",
-					srcType, dstType);
-			return total_cycles;
-		}
+        if (!data_trans_params_map_.contains(key)) {
+            fprintf(stderr, "[CostModel] Error: unknown data transfer instruction, srcType: <%d>,  dstType: <%d>\n",
+                    srcType, dstType);
+            return total_cycles;
+        }
 
         float bandWidth = data_trans_params_map_.at(key);
         total_cycles = m * n * sizeof(T) / bandWidth;
@@ -767,18 +770,18 @@ private:
             CostModelParams{head, complete, computing, interval, mask, bank_conflict};
     }
 
-	void SetParam(int srcType, int dstType, float bandWidth)
+    void SetParam(int srcType, int dstType, float bandWidth)
     {
         data_trans_params_map_[std::make_pair(srcType, dstType)] = bandWidth;
     }
 
-    [[nodiscard]] bool CheckParamExist(const std::pair<std::string, DataType> &key)const
+    [[nodiscard]] bool CheckParamExist(const std::pair<std::string, DataType> &key) const
     {
         return params_map_.contains(key);
     }
 
     template <typename T>
-    DataType GetDataTypeEnum()const
+    DataType GetDataTypeEnum() const
     {
         if constexpr (std::is_same_v<T, __bf16>) {
             return DataType::BF16;

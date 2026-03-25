@@ -18,25 +18,25 @@ PTO_INTERNAL void TLoadInstrGm2ub(std::vector<CostModelStats> &stats, uint16_t n
                                   uint32_t gmGap, uint32_t ubGap, uint32_t ubPad)
 {
     if constexpr (sizeof(typename TileData::DType) == 1) {
-        //copy_gm_to_ubuf_align_b8(dst, src, 0, nBurst, lenBurst, 0, ubPad, gmGap, ubGap);
+        // copy_gm_to_ubuf_align_b8(dst, src, 0, nBurst, lenBurst, 0, ubPad, gmGap, ubGap);
         CostModelStats costModelStats("copy_gm_to_ubuf_align_b8", nBurst, lenBurst, gmGap, ubGap);
         costModelStats.setLeftPaddingNum(0);
         costModelStats.setRightPaddingNum(ubPad);
         stats.emplace_back(costModelStats);
     } else if constexpr (sizeof(typename TileData::DType) == 2) {
-        //copy_gm_to_ubuf_align_b16(dst, src, 0, nBurst, lenBurst, 0, ubPad, gmGap, ubGap);
+        // copy_gm_to_ubuf_align_b16(dst, src, 0, nBurst, lenBurst, 0, ubPad, gmGap, ubGap);
         CostModelStats costModelStats("copy_gm_to_ubuf_align_b16", nBurst, lenBurst, gmGap, ubGap);
         costModelStats.setLeftPaddingNum(0);
         costModelStats.setRightPaddingNum(ubPad);
         stats.emplace_back(costModelStats);
     } else if constexpr (sizeof(typename TileData::DType) == 4) {
-        //copy_gm_to_ubuf_align_b32(dst, src, 0, nBurst, lenBurst, 0, ubPad, gmGap, ubGap);
+        // copy_gm_to_ubuf_align_b32(dst, src, 0, nBurst, lenBurst, 0, ubPad, gmGap, ubGap);
         CostModelStats costModelStats("copy_gm_to_ubuf_align_b32", nBurst, lenBurst, gmGap, ubGap);
         costModelStats.setLeftPaddingNum(0);
         costModelStats.setRightPaddingNum(ubPad);
         stats.emplace_back(costModelStats);
     } else if constexpr (sizeof(typename TileData::DType) == 8) {
-        //copy_gm_to_ubuf_align_b32(dst, src, 0, nBurst, lenBurst, 0, ubPad * 2, gmGap, ubGap);
+        // copy_gm_to_ubuf_align_b32(dst, src, 0, nBurst, lenBurst, 0, ubPad * 2, gmGap, ubGap);
         CostModelStats costModelStats("copy_gm_to_ubuf_align_b32", nBurst, lenBurst, gmGap, ubGap);
         costModelStats.setLeftPaddingNum(0);
         costModelStats.setRightPaddingNum(ubPad * 2);
@@ -53,18 +53,18 @@ PTO_INTERNAL void TLoadNd2nzInstr(std::vector<CostModelStats> &stats, uint16_t n
     // stats, sid, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
     // dstNzC0Stride, dstNzNStride, dstNzMatrixStride
     if constexpr (sizeof(typename TileData::DType) == 1) {
-        //copy_gm_to_cbuf_multi_nd2nz_b8(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue, dstNzC0Stride,
+        // copy_gm_to_cbuf_multi_nd2nz_b8(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue, dstNzC0Stride,
         //                               dstNzNStride, dstNzMatrixStride);
     } else if constexpr (sizeof(typename TileData::DType) == 2) {
-        //copy_gm_to_cbuf_multi_nd2nz_b16(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue, dstNzC0Stride,
+        // copy_gm_to_cbuf_multi_nd2nz_b16(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue, dstNzC0Stride,
         //                                dstNzNStride, dstNzMatrixStride);
     } else if constexpr (sizeof(typename TileData::DType) == 4) {
-        //copy_gm_to_cbuf_multi_nd2nz_b32s(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
+        // copy_gm_to_cbuf_multi_nd2nz_b32s(stats, 0, ndNum, nValue, dValue, srcNdMatrixStride, srcDValue,
         //                                 dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
     } else if constexpr (sizeof(typename TileData::DType) == 8) {
         uint16_t dValueb64 = dValue * 2;
         uint16_t srcDValueb64 = srcDValue * 2;
-        //copy_gm_to_cbuf_multi_nd2nz_b32s(stats, 0, ndNum, nValue, dValueb64, srcNdMatrixStride, srcDValueb64,
+        // copy_gm_to_cbuf_multi_nd2nz_b32s(stats, 0, ndNum, nValue, dValueb64, srcNdMatrixStride, srcDValueb64,
         //                                 dstNzC0Stride, dstNzNStride, dstNzMatrixStride);
     }
 }
@@ -73,7 +73,7 @@ template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLoadInstrGm2L1(std::vector<CostModelStats> &stats, uint16_t nBurst, uint16_t lenBurst,
                                   uint16_t gmGap, uint16_t l1Gap)
 {
-    //copy_gm_to_cbuf(dst, src, (uint8_t)0, nBurst, lenBurst, gmGap, l1Gap, (pad_t)0);
+    // copy_gm_to_cbuf(dst, src, (uint8_t)0, nBurst, lenBurst, gmGap, l1Gap, (pad_t)0);
     CostModelStats costModelStats("copy_gm_to_cbuf", nBurst, lenBurst, gmGap, l1Gap);
     costModelStats.setPadMode(0);
     stats.emplace_back(costModelStats);
@@ -99,7 +99,6 @@ PTO_INTERNAL void TLoadGm2ubNd2nd(std::vector<CostModelStats> &stats, int gShape
     uint32_t ubPad = 0;
     if constexpr (TileData::PadVal != PadValue::Null) {
         ubPad = ubGapElement % blockSizeElem;
-
     }
     int64_t dstStride2 = gShape3 * TileData::Cols;
     int64_t dstStride1 = gShape2 * dstStride2;
@@ -133,7 +132,7 @@ PTO_INTERNAL void TLoadGm2ubDn2dn(std::vector<CostModelStats> &stats, int gShape
     uint32_t ubPad = 0;
     if constexpr (TileData::PadVal != PadValue::Null) {
         ubPad = ubGapElement % blockSizeElem;
-        //set_mov_pad_val(GetPadValue<TileData>());
+        // set_mov_pad_val(GetPadValue<TileData>());
     }
 
     int64_t dstStride2 = gShape4 * TileData::Rows;
@@ -164,19 +163,19 @@ PTO_INTERNAL void TLoadGm2ubNz2nz(std::vector<CostModelStats> &stats, int gShape
 }
 
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLoadGm2ub(std::vector<CostModelStats> &stats, int gShape0, int gShape1, int gShape2,
-                             int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3,
-                             int gStride4, int validRow, int validCol)
+PTO_INTERNAL void TLoadGm2ub(std::vector<CostModelStats> &stats, int gShape0, int gShape1, int gShape2, int gShape3,
+                             int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
+                             int validRow, int validCol)
 {
     if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::ND) {
-        TLoadGm2ubNd2nd<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
-                                              gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+        TLoadGm2ubNd2nd<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
+                                              gStride2, gStride3, gStride4, validRow, validCol);
     } else if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::DN) {
-        TLoadGm2ubDn2dn<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
-                                              gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+        TLoadGm2ubDn2dn<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
+                                              gStride2, gStride3, gStride4, validRow, validCol);
     } else if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::NZ) {
-        TLoadGm2ubNz2nz<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
-                                              gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+        TLoadGm2ubNz2nz<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
+                                              gStride2, gStride3, gStride4, validRow, validCol);
     }
 }
 
@@ -292,38 +291,36 @@ PTO_INTERNAL void TLoadGm2L1VectorInDn(std::vector<CostModelStats> &stats, int g
 }
 
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLoadGm2L1(std::vector<CostModelStats> &stats, int gShape0, int gShape1, int gShape2,
-                             int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3,
-                             int gStride4, int validRow, int validCol)
+PTO_INTERNAL void TLoadGm2L1(std::vector<CostModelStats> &stats, int gShape0, int gShape1, int gShape2, int gShape3,
+                             int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
+                             int validRow, int validCol)
 {
     if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::ND) {
         if constexpr (TileData::Rows == 1) {
-            TLoadGm2L1VectorInND<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4,
-                                                       gStride0, gStride1, gStride2, gStride3, gStride4, validRow,
-                                                       validCol);
+            TLoadGm2L1VectorInND<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                                                       gStride1, gStride2, gStride3, gStride4, validRow, validCol);
         } else {
-            TLoadGm2L1Nd2nd<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4,
-                                                  gStride0, gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+            TLoadGm2L1Nd2nd<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                                                  gStride1, gStride2, gStride3, gStride4, validRow, validCol);
         }
     } else if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::DN) {
         if constexpr (TileData::Cols == 1) {
-            TLoadGm2L1VectorInDn<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4,
-                                                       gStride0, gStride1, gStride2, gStride3, gStride4, validRow,
-                                                       validCol);
+            TLoadGm2L1VectorInDn<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                                                       gStride1, gStride2, gStride3, gStride4, validRow, validCol);
         } else {
-            TLoadGm2L1Dn2dn<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4,
-                                                  gStride0, gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+            TLoadGm2L1Dn2dn<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
+                                                  gStride1, gStride2, gStride3, gStride4, validRow, validCol);
         }
     } else if constexpr (GetTileLayoutCustom<TileData>() == TileLayoutCustom::NZ) {
-        TLoadGm2L1Nz2nz<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0,
-                                              gStride1, gStride2, gStride3, gStride4, validRow, validCol);
+        TLoadGm2L1Nz2nz<TileData, GlobalData>(stats, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
+                                              gStride2, gStride3, gStride4, validRow, validCol);
     }
 }
 
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLoadGm2L1Nd2nz(std::vector<CostModelStats> &stats, int gShape0, int gShape1, int gShape2,int gShape3,
-                              int gShape4, int gStride0, int gStride1, int gStride2, int gStride3, int gStride4,
-                              int validRow, int validCol)
+PTO_INTERNAL void TLoadGm2L1Nd2nz(std::vector<CostModelStats> &stats, int gShape0, int gShape1, int gShape2,
+                                  int gShape3, int gShape4, int gStride0, int gStride1, int gStride2, int gStride3,
+                                  int gStride4, int validRow, int validCol)
 {
     static_assert(GlobalData::staticShape[0] == 1 && GlobalData::staticShape[1] == 1 && GlobalData::staticShape[2] == 1,
                   "Fix: GlobalTensor ony support 2 dim when ND2NZ!");
@@ -373,12 +370,12 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(std::vector<CostModelStats> &stats, TileData &
     if constexpr (TileData::Loc == pto::TileType::Vec) {
         static_assert(isSameLayout, "Fix: TLOAD(VecTile, GlobalTensor) only support ND2ND/DN2DN/NZ2NZ!");
         TLoadGm2ub<TileData, GlobalData>(
-            stats, src.GetShape(pto::GlobalTensorDim::DIM_0),
-            src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
-            src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
-            src.GetStride(pto::GlobalTensorDim::DIM_0), src.GetStride(pto::GlobalTensorDim::DIM_1),
-            src.GetStride(pto::GlobalTensorDim::DIM_2), src.GetStride(pto::GlobalTensorDim::DIM_3),
-            src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
+            stats, src.GetShape(pto::GlobalTensorDim::DIM_0), src.GetShape(pto::GlobalTensorDim::DIM_1),
+            src.GetShape(pto::GlobalTensorDim::DIM_2), src.GetShape(pto::GlobalTensorDim::DIM_3),
+            src.GetShape(pto::GlobalTensorDim::DIM_4), src.GetStride(pto::GlobalTensorDim::DIM_0),
+            src.GetStride(pto::GlobalTensorDim::DIM_1), src.GetStride(pto::GlobalTensorDim::DIM_2),
+            src.GetStride(pto::GlobalTensorDim::DIM_3), src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(),
+            dst.GetValidCol());
     } else if constexpr (TileData::Loc == pto::TileType::Mat) {
         static_assert(
             isSameLayout ||
@@ -387,38 +384,38 @@ PTO_INTERNAL void TLOAD_TILE_IMPL(std::vector<CostModelStats> &stats, TileData &
             "Fix: TLOAD(MatTile, GlobalTensor) only support ND2ND/DN2DN/NZ2NZ/ND2NZ/DN2ZN!");
         if constexpr (isSameLayout) {
             TLoadGm2L1<TileData, GlobalData>(
-                stats, src.GetShape(pto::GlobalTensorDim::DIM_0),
-                src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
-                src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
-                src.GetStride(pto::GlobalTensorDim::DIM_0), src.GetStride(pto::GlobalTensorDim::DIM_1),
-                src.GetStride(pto::GlobalTensorDim::DIM_2), src.GetStride(pto::GlobalTensorDim::DIM_3),
-                src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
+                stats, src.GetShape(pto::GlobalTensorDim::DIM_0), src.GetShape(pto::GlobalTensorDim::DIM_1),
+                src.GetShape(pto::GlobalTensorDim::DIM_2), src.GetShape(pto::GlobalTensorDim::DIM_3),
+                src.GetShape(pto::GlobalTensorDim::DIM_4), src.GetStride(pto::GlobalTensorDim::DIM_0),
+                src.GetStride(pto::GlobalTensorDim::DIM_1), src.GetStride(pto::GlobalTensorDim::DIM_2),
+                src.GetStride(pto::GlobalTensorDim::DIM_3), src.GetStride(pto::GlobalTensorDim::DIM_4),
+                dst.GetValidRow(), dst.GetValidCol());
         } else if constexpr (GlobalData::layout == pto::Layout::ND &&
                              GetTileLayoutCustom<TileData>() == TileLayoutCustom::NZ) {
             TLoadGm2L1Nd2nz<TileData, GlobalData>(
-                stats, src.GetShape(pto::GlobalTensorDim::DIM_0),
-                src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
-                src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
-                src.GetStride(pto::GlobalTensorDim::DIM_0), src.GetStride(pto::GlobalTensorDim::DIM_1),
-                src.GetStride(pto::GlobalTensorDim::DIM_2), src.GetStride(pto::GlobalTensorDim::DIM_3),
-                src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
+                stats, src.GetShape(pto::GlobalTensorDim::DIM_0), src.GetShape(pto::GlobalTensorDim::DIM_1),
+                src.GetShape(pto::GlobalTensorDim::DIM_2), src.GetShape(pto::GlobalTensorDim::DIM_3),
+                src.GetShape(pto::GlobalTensorDim::DIM_4), src.GetStride(pto::GlobalTensorDim::DIM_0),
+                src.GetStride(pto::GlobalTensorDim::DIM_1), src.GetStride(pto::GlobalTensorDim::DIM_2),
+                src.GetStride(pto::GlobalTensorDim::DIM_3), src.GetStride(pto::GlobalTensorDim::DIM_4),
+                dst.GetValidRow(), dst.GetValidCol());
         } else if constexpr (GlobalData::layout == pto::Layout::DN &&
                              GetTileLayoutCustom<TileData>() == TileLayoutCustom::ZN) {
             TLoadGm2L1Dn2zn<TileData, GlobalData>(
-                stats, src.GetShape(pto::GlobalTensorDim::DIM_0),
-                src.GetShape(pto::GlobalTensorDim::DIM_1), src.GetShape(pto::GlobalTensorDim::DIM_2),
-                src.GetShape(pto::GlobalTensorDim::DIM_3), src.GetShape(pto::GlobalTensorDim::DIM_4),
-                src.GetStride(pto::GlobalTensorDim::DIM_0), src.GetStride(pto::GlobalTensorDim::DIM_1),
-                src.GetStride(pto::GlobalTensorDim::DIM_2), src.GetStride(pto::GlobalTensorDim::DIM_3),
-                src.GetStride(pto::GlobalTensorDim::DIM_4), dst.GetValidRow(), dst.GetValidCol());
+                stats, src.GetShape(pto::GlobalTensorDim::DIM_0), src.GetShape(pto::GlobalTensorDim::DIM_1),
+                src.GetShape(pto::GlobalTensorDim::DIM_2), src.GetShape(pto::GlobalTensorDim::DIM_3),
+                src.GetShape(pto::GlobalTensorDim::DIM_4), src.GetStride(pto::GlobalTensorDim::DIM_0),
+                src.GetStride(pto::GlobalTensorDim::DIM_1), src.GetStride(pto::GlobalTensorDim::DIM_2),
+                src.GetStride(pto::GlobalTensorDim::DIM_3), src.GetStride(pto::GlobalTensorDim::DIM_4),
+                dst.GetValidRow(), dst.GetValidCol());
         }
     }
 }
 
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TLoad5HD(std::vector<CostModelStats> &stats, int srcN, int srcC1, int srcH, int srcW,
-                                  int gStride0, int gStride1, int gStride2, int gStride3, int gStride4, int dstN,
-                                  int dstC1, int dstH, int dstW)
+PTO_INTERNAL void TLoad5HD(std::vector<CostModelStats> &stats, int srcN, int srcC1, int srcH, int srcW, int gStride0,
+                           int gStride1, int gStride2, int gStride3, int gStride4, int dstN, int dstC1, int dstH,
+                           int dstW)
 {
     constexpr uint32_t c0ElemCount = C0_SIZE_BYTE / sizeof(typename TileData::DType);
     constexpr uint32_t maxSupportBurst = 4095;
@@ -493,15 +490,15 @@ template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_CONVTILE_IMPL(std::vector<CostModelStats> &stats, TileData &dst, GlobalData &src)
 {
     if constexpr (GlobalData::layout == pto::Layout::NC1HWC0) { // layout is NC1HWC0, dst dim4 is c0Size
-        TLoad5HD<TileData, GlobalData>(stats, src.GetShape(0), src.GetShape(1), src.GetShape(2),
-                                       src.GetShape(3), src.GetStride(0), src.GetStride(1), src.GetStride(2),
-                                       src.GetStride(3), src.GetStride(4), dst.GetShape(0), dst.GetShape(1),
-                                       dst.GetShape(2), dst.GetShape(3));
+        TLoad5HD<TileData, GlobalData>(stats, src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
+                                       src.GetStride(0), src.GetStride(1), src.GetStride(2), src.GetStride(3),
+                                       src.GetStride(4), dst.GetShape(0), dst.GetShape(1), dst.GetShape(2),
+                                       dst.GetShape(3));
     } else if constexpr (GlobalData::layout == pto::Layout::FRACTAL_Z) { // C1HWNC0, dst dim4 is c0Size
-        TLoadFractalZ<TileData, GlobalData>(stats, src.GetShape(0), src.GetShape(1), src.GetShape(2),
-                                            src.GetShape(3), src.GetShape(4), src.GetStride(0), src.GetStride(1),
-                                            src.GetStride(2), src.GetStride(3), src.GetStride(4), dst.GetShape(0),
-                                            dst.GetShape(1), dst.GetShape(2), dst.GetShape(3));
+        TLoadFractalZ<TileData, GlobalData>(stats, src.GetShape(0), src.GetShape(1), src.GetShape(2), src.GetShape(3),
+                                            src.GetShape(4), src.GetStride(0), src.GetStride(1), src.GetStride(2),
+                                            src.GetStride(3), src.GetStride(4), dst.GetShape(0), dst.GetShape(1),
+                                            dst.GetShape(2), dst.GetShape(3));
     }
 }
 

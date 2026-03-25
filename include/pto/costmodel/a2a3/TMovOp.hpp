@@ -92,9 +92,9 @@ AICORE void TMovCcToCb(std::vector<CostModelStats> &stats, uint16_t validRow, ui
     constexpr uint32_t dstStride_dst_D = DstTileData::Rows;
     constexpr uint16_t srcStride = SrcTileData::Rows;
     validCol = CeilDivision(validCol, c0Size) * c0Size;
-    //copy_matrix_cc_to_cbuf(dstAddr, srcAddr, 0, validCol, SrcTileData::Rows, dstStride_dst_D, srcStride, 0, QuantPre,
-                           //reluMode, false, false);
-	stats.emplace_back("copy_matrix_cc_to_cbuf");
+    // copy_matrix_cc_to_cbuf(dstAddr, srcAddr, 0, validCol, SrcTileData::Rows, dstStride_dst_D, srcStride, 0, QuantPre,
+    // reluMode, false, false);
+    stats.emplace_back("copy_matrix_cc_to_cbuf");
 }
 
 template <typename DstTileData, typename SrcTileData>
@@ -104,15 +104,15 @@ PTO_INTERNAL void TMovToLeft(std::vector<CostModelStats> &stats, DstTileData &ds
         TExtractToAVector<DstTileData, SrcTileData>(stats, 0, 0, dst.GetValidCol());
     } else if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
         if constexpr (DstTileData::Compact == CompactMode::Normal) {
-            TExtractToACompact<DstTileData, SrcTileData, false>(stats, 0, 0, dst.GetValidRow(),
-                                                                dst.GetValidCol(), dst.GetKAligned());
+            TExtractToACompact<DstTileData, SrcTileData, false>(stats, 0, 0, dst.GetValidRow(), dst.GetValidCol(),
+                                                                dst.GetKAligned());
         } else {
             TExtractToA<DstTileData, SrcTileData, false>(stats, 0, 0);
         }
     } else {
         if constexpr (DstTileData::Compact == CompactMode::Normal || sizeof(typename SrcTileData::DType) == 1) {
-            TExtractToACompact<DstTileData, SrcTileData, true>(stats, 0, 0, dst.GetValidRow(),
-                                                               dst.GetValidCol(), dst.GetKAligned());
+            TExtractToACompact<DstTileData, SrcTileData, true>(stats, 0, 0, dst.GetValidRow(), dst.GetValidCol(),
+                                                               dst.GetKAligned());
         } else {
             TExtractToA<DstTileData, SrcTileData, true>(stats, src.data(), 0, 0);
         }
@@ -124,15 +124,13 @@ PTO_INTERNAL void TMovToRight(std::vector<CostModelStats> &stats, DstTileData &d
 {
     if constexpr (DstTileData::SFractal == SrcTileData::SFractal) {
         if constexpr (DstTileData::Compact == CompactMode::Normal) {
-            TExtractToBCompact<DstTileData, SrcTileData, false>(stats, 0, 0, dst.GetValidRow(),
-                                                                dst.GetValidCol());
+            TExtractToBCompact<DstTileData, SrcTileData, false>(stats, 0, 0, dst.GetValidRow(), dst.GetValidCol());
         } else {
             TExtractToB<DstTileData, SrcTileData, false>(stats, 0, 0);
         }
     } else {
         if constexpr (DstTileData::Compact == CompactMode::Normal || sizeof(typename SrcTileData::DType) == 1) {
-            TExtractToBCompact<DstTileData, SrcTileData, true>(stats, 0, 0, dst.GetValidRow(),
-                                                               dst.GetValidCol());
+            TExtractToBCompact<DstTileData, SrcTileData, true>(stats, 0, 0, dst.GetValidRow(), dst.GetValidCol());
         } else {
             TExtractToB<DstTileData, SrcTileData, true>(stats, 0, 0);
         }
@@ -143,8 +141,7 @@ template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TMOV_CONVTILE_IMPL(std::vector<CostModelStats> &stats, DstTileData &dst, SrcTileData &src)
 {
     if constexpr (SrcTileData::layout == pto::Layout::FRACTAL_Z) { // C1HWNC0, dst dim4 is c0Size
-        TExtractToBConv<DstTileData, SrcTileData>(stats, src.GetShape(3), dst.GetValidRow(),
-                                                  dst.GetValidCol(), 0, 0);
+        TExtractToBConv<DstTileData, SrcTileData>(stats, src.GetShape(3), dst.GetValidRow(), dst.GetValidCol(), 0, 0);
     }
 }
 

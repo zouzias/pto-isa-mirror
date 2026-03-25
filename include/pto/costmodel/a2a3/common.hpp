@@ -17,17 +17,17 @@ namespace pto {
 
 enum QuantMode_t
 {
-    NoQuant = 0,      // 不使能量化功能
-    F322F16 = 1,      // float量化成half, scalar量化
-    F322BF16 = 16,     // float量化成bfloat16_t, scalar量化
-    DEQF16 = 5,       // int32_t量化成half, scalar量化
-    VDEQF16 = 4,      // int32_t量化成half，tensor量化
-    QF322B8_PRE = 24,  // float量化成int8_t/uint8_t，scalar量化
+    NoQuant = 0,        // 不使能量化功能
+    F322F16 = 1,        // float量化成half, scalar量化
+    F322BF16 = 16,      // float量化成bfloat16_t, scalar量化
+    DEQF16 = 5,         // int32_t量化成half, scalar量化
+    VDEQF16 = 4,        // int32_t量化成half，tensor量化
+    QF322B8_PRE = 24,   // float量化成int8_t/uint8_t，scalar量化
     QF322F16_PRE = 32,  // float量化成half，scalar量化
-    QF322BF16_PRE = 34,  // float量化成bfloat16_t，scalar量化
-    VQF322B8_PRE = 23, // float量化成int8_t/uint8_t，tensor量化
-    REQ8 = 3,         // int32_t量化成int8_t/uint8_t，scalar量化
-    VREQ8 = 2,        // int32_t量化成int8_t/uint8_t，tensor量化
+    QF322BF16_PRE = 34, // float量化成bfloat16_t，scalar量化
+    VQF322B8_PRE = 23,  // float量化成int8_t/uint8_t，tensor量化
+    REQ8 = 3,           // int32_t量化成int8_t/uint8_t，scalar量化
+    VREQ8 = 2,          // int32_t量化成int8_t/uint8_t，tensor量化
     VSHIFTS322S16 = 12,
     SHIFTS322S16 = 13,
 };
@@ -39,8 +39,7 @@ PTO_INTERNAL constexpr QuantMode_t GetCastPreQuantMode()
     if constexpr (std::is_same<SrcType, float>::value) {
         if constexpr ((std::is_same<DstType, half>::value) || (std::is_same<DstType, half>::value)) {
             quantPre = QuantMode_t::F322F16;
-        } else if constexpr ((std::is_same<DstType, bfloat16_t>::value) ||
-                             (std::is_same<DstType, bfloat16_t>::value)) {
+        } else if constexpr ((std::is_same<DstType, bfloat16_t>::value) || (std::is_same<DstType, bfloat16_t>::value)) {
             quantPre = QuantMode_t::F322BF16;
         }
     }
@@ -57,8 +56,7 @@ PTO_INTERNAL constexpr QuantMode_t GetScalarPreQuantMode()
             quantPre = QuantMode_t::QF322B8_PRE;
         } else if constexpr ((std::is_same<DstType, half>::value) || (std::is_same<DstType, half>::value)) {
             quantPre = QuantMode_t::QF322F16_PRE;
-        } else if constexpr ((std::is_same<DstType, bfloat16_t>::value) ||
-                             (std::is_same<DstType, bfloat16_t>::value)) {
+        } else if constexpr ((std::is_same<DstType, bfloat16_t>::value) || (std::is_same<DstType, bfloat16_t>::value)) {
             quantPre = QuantMode_t::QF322BF16_PRE;
         }
     } else if constexpr (std::is_same<SrcType, int32_t>::value) {
@@ -67,8 +65,7 @@ PTO_INTERNAL constexpr QuantMode_t GetScalarPreQuantMode()
             quantPre = QuantMode_t::REQ8;
         } else if constexpr ((std::is_same<DstType, half>::value) || (std::is_same<DstType, half>::value)) {
             quantPre = QuantMode_t::DEQF16;
-        } else if constexpr ((std::is_same<DstType, int16_t>::value) ||
-                             (std::is_same<DstType, int16_t>::value)) {
+        } else if constexpr ((std::is_same<DstType, int16_t>::value) || (std::is_same<DstType, int16_t>::value)) {
             quantPre = QuantMode_t::SHIFTS322S16;
         }
     }
@@ -90,8 +87,7 @@ PTO_INTERNAL constexpr QuantMode_t GetVectorPreQuantMode()
             quantPre = QuantMode_t::VREQ8;
         } else if constexpr ((std::is_same<DstType, half>::value) || (std::is_same<DstType, half>::value)) {
             quantPre = QuantMode_t::VDEQF16;
-        } else if constexpr ((std::is_same<DstType, int16_t>::value) ||
-                             (std::is_same<DstType, int16_t>::value)) {
+        } else if constexpr ((std::is_same<DstType, int16_t>::value) || (std::is_same<DstType, int16_t>::value)) {
             quantPre = QuantMode_t::VSHIFTS322S16;
         }
     }

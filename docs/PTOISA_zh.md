@@ -121,7 +121,7 @@
 | 数据搬运 / 布局 | [`TTRANS`](isa/TTRANS_zh.md) | 使用实现定义的临时 Tile 进行转置。 |
 | 复杂指令 | [`TPRINT`](isa/TPRINT_zh.md) | 调试/打印 Tile 中的元素（实现定义）。 |
 | 复杂指令 | [`TMRGSORT`](isa/TMRGSORT_zh.md) | 用于多个已排序列表的归并排序（实现定义的元素格式和布局）。 |
-| 复杂指令 | [`TSORT32`](isa/TSORT32_zh.md) | 对固定大小的 32 元素块进行排序并生成索引映射。 |
+| 复杂指令 | [`TSORT32`](isa/TSORT32_zh.md) | 对 `src` 的每个 32 元素块连同对应的 `idx` 条目一起排序，并输出排序后的 value-index 对。 |
 | 复杂指令 | [`TGATHER`](isa/TGATHER_zh.md) | 使用索引 Tile 或编译时掩码模式来收集/选择元素。 |
 | 复杂指令 | [`TCI`](isa/TCI_zh.md) | 生成连续整数序列到目标 Tile 中。 |
 | 复杂指令 | [`TTRI`](isa/TTRI_zh.md) | 生成三角（下/上）掩码 Tile。 |

@@ -44,10 +44,12 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
         // INT32→INT16
         (std::is_same<typename TileDataD::DType, int16_t>::value &&
          std::is_same<typename TileDataS::DType, int32_t>::value)) {
-        pto::CostModel::GetInstance().CvtOpPredictCycle<TileDataD, TileDataS>("TCVT", dst, src, mode, SaturationMode::OFF);
+        pto::CostModel::GetInstance().CvtOpPredictCycle<TileDataD, TileDataS>("TCVT", dst, src, mode,
+                                                                              SaturationMode::OFF);
     } else {
         // All other conversions: default to ON (native TCVT saturation)
-        pto::CostModel::GetInstance().CvtOpPredictCycle<TileDataD, TileDataS>("TCVT", dst, src, mode, SaturationMode::ON);
+        pto::CostModel::GetInstance().CvtOpPredictCycle<TileDataD, TileDataS>("TCVT", dst, src, mode,
+                                                                              SaturationMode::ON);
     }
 }
 } // namespace pto

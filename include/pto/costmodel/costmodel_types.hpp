@@ -28,16 +28,16 @@ struct CostModelStats {
     int src0RepeatStride;
     int src1RepeatStride;
     std::string order; // vcmax/vcmin专用,取值VALUE_INDEX/INDEX_VALUE/ONLY_VALUE/ONLY_INDEX
-    bool mode{};         // vcadd专用
+    bool mode{};       // vcadd专用
 
     int nBurst{};
     int lenBurst{};
-	int leftPaddingNum;
+    int leftPaddingNum;
     int rightPaddingNum;
     int convControl;
     int srcGap{};
     int dstGap{};
-	int padMode;
+    int padMode;
     int padConfig; // set_mov_pad_val参数，即存入copy_gm_to_ubuf_align接口的填充值
     int byteMode;
 
@@ -125,7 +125,7 @@ struct CostModelStats {
         return s;
     }
 
-	void setLeftPaddingNum(int paddingNum_)
+    void setLeftPaddingNum(int paddingNum_)
     {
         leftPaddingNum = paddingNum_;
     }
@@ -175,7 +175,7 @@ struct CostModelStats {
         return padConfig;
     }
 
-    void  setConvControl(int convControl_)
+    void setConvControl(int convControl_)
     {
         convControl = convControl_;
     }
