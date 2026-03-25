@@ -20,7 +20,7 @@ template <typename T>
 PTO_INTERNAL uint32_t GetByteSize(const uint32_t value)
 {
     if constexpr (std::is_same<T, float4_e1m2x2_t>::value || std::is_same<T, float4_e2m1x2_t>::value) {
-        return value >> 1; // fp4 4bits
+        return (value + 1) >> 1; // fp4 4bits, ceil division to include last nibble for odd counts
     }
     return sizeof(T) * value;
 }

@@ -206,8 +206,8 @@ INSTANTIATE_TCVT(fp4_e1m2x2_wrapper, bf16_wrapper)
 INSTANTIATE_TCVT(fp4_e2m1x2_wrapper, bf16_wrapper)
 
 // FP4 Source → bf16
-// INSTANTIATE_TCVT(bf16_wrapper, fp4_e1m2x2_wrapper)
-// INSTANTIATE_TCVT(bf16_wrapper, fp4_e2m1x2_wrapper)
+INSTANTIATE_TCVT(bf16_wrapper, fp4_e1m2x2_wrapper)
+INSTANTIATE_TCVT(bf16_wrapper, fp4_e2m1x2_wrapper)
 
 // U8 Source → half, uint16
 INSTANTIATE_TCVT(aclFloat16, uint8_t)
