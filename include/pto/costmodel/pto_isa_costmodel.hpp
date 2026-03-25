@@ -416,11 +416,11 @@ public:
 
         SetParam("scatter", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_1, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("scatter", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_1, A2A3_INTERVAL,
+        SetParam("scatter", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_2, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
         SetParam("scatter", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_1, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("scatter", DataType::INT32, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_1, A2A3_INTERVAL,
+        SetParam("scatter", DataType::INT32, A2A3_STARTUP_BINARY, A2A3_COMPL_DUP, A2A3_RPT_2, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
         // TMATMUL / TGEMV: mmad (PIPE_M cube pipeline — recorded, cycle model TBD)
