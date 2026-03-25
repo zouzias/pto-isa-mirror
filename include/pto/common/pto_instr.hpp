@@ -78,17 +78,6 @@ PTO_INST RecordEvent TAND(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     return {};
 }
 
-#ifdef __PTO_AUTO__
-// temp hack: needed by auto mode to support aliasing right now
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TALIAS(TileDataDst &original, TileDataSrc &alias, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TALIAS, original, alias);
-    return {};
-}
-#endif
-
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
@@ -500,6 +489,13 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
     return {};
 }
 
+template <uint16_t Rounds = 10, typename DstTile, typename... WaitEvents>
+PTO_INST RecordEvent TRANDOM(DstTile &dst, TRandomKey &key, TRandomCounter &counter, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TRANDOM_IMPL<Rounds, DstTile>(dst, key, counter);
+    return {};
+}
 #endif
 
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
@@ -793,7 +789,7 @@ PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &
 
 #ifdef PTO_NPU_ARCH_A5
 template <TInsertMode mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0,
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0,
                              WaitEvents &... events)
 {
     TSYNC(events...);
@@ -924,6 +920,23 @@ PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TPARTMIN, dst, src0, src1);
+    return {};
+}
+
+template <typename TileDataD, typename TileDataS, typename TmpTileData, typename... WaitEvents>
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode,
+                          WaitEvents &... events)
+{
+    TSYNC(events...);
+    TCVT_IMPL(dst, src, tmp, mode, satMode);
+    return {};
+}
+
+template <typename TileDataD, typename TileDataS, typename TmpTileData, typename... WaitEvents>
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TCVT_IMPL(dst, src, tmp, mode);
     return {};
 }
 
@@ -1061,6 +1074,14 @@ PTO_INST RecordEvent TROWMAX(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
     return {};
 }
 
+template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TROWARGMAX(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWARGMAX, dst, src, tmp);
+    return {};
+}
+
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
 PTO_INST RecordEvent TRESHAPE(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
 {
@@ -1074,6 +1095,14 @@ PTO_INST RecordEvent TROWMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWMIN, dst, src, tmp);
+    return {};
+}
+
+template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TROWARGMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWARGMIN, dst, src, tmp);
     return {};
 }
 
@@ -1711,18 +1740,13 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
     return {};
 }
-template <typename TileDataDst, typename TileDataSrc>
-__tf__ PTO_INTERNAL OP_NAME(TGET_SCALE_ADDR)
-    OP_TYPE(element_wise) void TGetScaleAddr(typename TileDataDst::TileDType __out__ dst,
-                                             typename TileDataSrc::TileDType __in__ src)
-{
-    return;
-}
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TGET_SCALE_ADDR(TileDataDst &dst, TileDataSrc &src)
+template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
+PTO_INST RecordEvent TGET_SCALE_ADDR(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
 {
-    TGetScaleAddr<TileDataDst, TileDataSrc>(dst.data(), src.data());
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TGET_SCALE_ADDR, dst, src);
+    return {};
 }
 
 } // namespace pto

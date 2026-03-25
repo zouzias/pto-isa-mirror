@@ -202,11 +202,11 @@ def gen_golden(case_name, param):
                 golden_f32[r, c] = val
         golden_bf16_bits = _float32_to_bf16_bits(golden_f32)
         # Apply valid region mask
-        # FP4 nibbles are processed in byte-pairs; round valid_n to even (truncate odd boundary nibble)
-        valid_n_adj = valid_n & ~1
-        if valid_m < m or valid_n_adj < n:
+        # The hardware correctly handles odd valid_n: the boundary nibble (low nibble of
+        # the last partial byte) is converted and stored individually via predicate masking.
+        if valid_m < m or valid_n < n:
             full = np.zeros([m, n], dtype=np.uint16)
-            full[:valid_m, :valid_n_adj] = golden_bf16_bits[:valid_m, :valid_n_adj]
+            full[:valid_m, :valid_n] = golden_bf16_bits[:valid_m, :valid_n]
             golden_bf16_bits = full
         x1_gm.tofile("./x1_gm.bin")
         golden_bf16_bits.tofile("./golden.bin")
