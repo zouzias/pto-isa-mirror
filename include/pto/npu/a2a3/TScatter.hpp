@@ -64,6 +64,13 @@ PTO_INTERNAL void TSCATTER_IMPL(TileDataD &dst, TileDataS &src, TileDataI &idx)
 
     unsigned validRow = idx.GetValidRow();
     unsigned validCol = idx.GetValidCol();
+
+    // Initialize dst UB buffer
+    __ubuf__ TD* dstPtr = dst.data();
+    for (int i = 0; i < TileDataD::Rows * TileDataD::Cols; ++i) {
+        dstPtr[i] = static_cast<TD>(0);
+    }
+
     TScatterImpl<TileDataD, TileDataS, TileDataI>(dst.data(), src.data(), idx.data(), validRow, validCol);
 }
 } // namespace pto
