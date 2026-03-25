@@ -95,5 +95,6 @@ template void LaunchTRowArgMaxHalf<uint32_t, 16, 1, 1, 16384, 1, 768, 1, 16381>(
 template void LaunchTRowArgMaxHalf<uint32_t, 16, 1, 1, 32768, 1, 768, 1, 32761>(uint32_t *out, aclFloat16 *src,
                                                                                 void *stream);
 template void LaunchTRowArgMax<int32_t, float, 16, 1, 13, 16, 1, 8, 13, 13>(int32_t *out, float *src, void *stream);
-template void LaunchTRowArgMaxHalf<int32_t, 16, 1, 13, 16, 1, 16, 13, 13>(int32_t *out, aclFloat16 *src,
-                                                                          void *stream);
+template void LaunchTRowArgMaxHalf<int32_t, 16, 1, 13, 16, 1, 16, 13, 13>(int32_t *out, aclFloat16 *src, void *stream);
+template void LaunchTRowArgMax<uint32_t, float, 8, 1, 3, 3480, 3, 168, 3, 3473>(uint32_t *out, float *src,
+                                                                                void *stream);
