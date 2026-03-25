@@ -33,7 +33,10 @@ TEST(TGetAsync, Vec_Uint8Small)
 
 int main(int argc, char **argv)
 {
-    CommMpiInit(&argc, &argv);
+    if (!CommMpiInit(&argc, &argv)) {
+        std::cerr << "[FATAL] CommMpiInit failed. Ensure the binary is launched via mpirun." << std::endl;
+        return 1;
+    }
     ::testing::InitGoogleTest(&argc, argv);
     int ret = RUN_ALL_TESTS();
     CommMpiFinalize();
