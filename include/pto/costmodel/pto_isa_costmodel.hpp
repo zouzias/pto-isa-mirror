@@ -76,6 +76,7 @@ constexpr float A2A3_BW_MAT_RIGHT   = 128.0f;
 constexpr float A2A3_BW_MAT_BIAS    = 128.0f;
 constexpr float A2A3_BW_MAT_SCALING = 128.0f;
 constexpr float A2A3_BW_ACC_MAT     = 128.0f;
+constexpr float A2A3_BW_MAT_MAT     = 32.0f;  // l12l1 (TEXTRACT Mat→Mat)
 
 enum class DataType
 {
@@ -481,6 +482,8 @@ public:
 		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Scaling), A2A3_BW_MAT_SCALING);
 		// l0C2l1
 		SetParam(static_cast<int>(TileType::Acc), static_cast<int>(TileType::Mat), A2A3_BW_ACC_MAT);
+		// l12l1 (TEXTRACT Mat→Mat)
+		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Mat), A2A3_BW_MAT_MAT);
 
     }
 
@@ -773,6 +776,9 @@ public:
         	dstType = static_cast<int>(TileType::Vec);
     	} else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
         	srcType = static_cast<int>(TileType::Acc);
+        	dstType = static_cast<int>(TileType::Mat);
+    	} else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Mat) {
+        	srcType = static_cast<int>(TileType::Mat);
         	dstType = static_cast<int>(TileType::Mat);
     	}
 

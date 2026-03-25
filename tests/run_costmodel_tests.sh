@@ -16,7 +16,7 @@ TARGET_DIR="${SCRIPT_DIR}/.."
 TESTCASE_DIR="${SCRIPT_DIR}/costmodel/st/testcase"
 
 # 需要执行的测试用例列表（留空则自动发现 TESTCASE_DIR 下所有子目录）
-TESTCASES=("textract")
+TESTCASES=()
 
 # 测试命令的固定参数
 TEST_ARGS="--clean --verbose"
