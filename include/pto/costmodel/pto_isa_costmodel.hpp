@@ -730,10 +730,7 @@ public:
 		}
 
 		if constexpr (is_conv_tile_v<DstTileData>) {
-			constexpr int C0 = 32 / sizeof(T);
-    		constexpr uint32_t totalElements = C1 * H * W * N * C0;
-    		constexpr uint32_t bufferSize = totalElements * sizeof(T);
-			return DataTransInstPredictCycle(srcType, dstType, bufferSize);
+			return DataTransInstPredictCycle(srcType, dstType, DstTileData::bufferSize);
 		} else {
 			return DataTransInstPredictCycle(srcType, dstType, dst.GetValidRow() * dst.GetValidCol() * sizeof(T));
 		}
@@ -766,10 +763,7 @@ public:
         	dstType = static_cast<int>(TileType::Mat);
     	}
 		if constexpr (is_conv_tile_v<SrcTileData>) {
-			constexpr int C0 = 32 / sizeof(T);
-    		constexpr uint32_t totalElements = C1 * H * W * N * C0;
-    		constexpr uint32_t bufferSize = totalElements * sizeof(T);
-			return DataTransInstPredictCycle(srcType, dstType, bufferSize);
+			return DataTransInstPredictCycle(srcType, dstType, DstTileData::bufferSize);
 		} else {
 			return DataTransInstPredictCycle(srcType, dstType, src.GetValidRow() * src.GetValidCol() * sizeof(T));
 		}
