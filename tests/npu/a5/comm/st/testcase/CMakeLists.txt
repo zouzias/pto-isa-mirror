@@ -11,19 +11,13 @@
 function(pto_comm_st NAME)
     add_library(${NAME}_kernel SHARED ${NAME}_kernel.cpp)
 
-    # Determine aicore arch and memory model from SOC_VERSION.
-    # Default: A2A3-compatible (works on A5 hardware via backward compat).
+    # Align comm ST kernels with the A5 vec ST configuration by default.
+    # Allow external override when a different arch or memory model is needed.
     if(NOT DEFINED CCE_AICORE_ARCH)
-        if(SOC_VERSION STREQUAL "Ascend910_9599")
-            set(CCE_AICORE_ARCH "dav-c310-vec")
-            set(CCE_MEMORY_MODEL "REGISTER_BASE")
-        else()
-            set(CCE_AICORE_ARCH "dav-c220-vec")
-            set(CCE_MEMORY_MODEL "MEMORY_BASE")
-        endif()
+        set(CCE_AICORE_ARCH "dav-c310-vec")
     endif()
     if(NOT DEFINED CCE_MEMORY_MODEL)
-        set(CCE_MEMORY_MODEL "MEMORY_BASE")
+        set(CCE_MEMORY_MODEL "REGISTER_BASE")
     endif()
 
     target_compile_options(${NAME}_kernel PRIVATE ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=${CCE_AICORE_ARCH} -D${CCE_MEMORY_MODEL} -std=c++17

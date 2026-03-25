@@ -186,13 +186,13 @@ struct TPipe {
             TASSIGN_IMPL(matTile, (uint64_t)(fifo.V2C_CONSUMER_BUF + entryBase + entryOffset));
             if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
                 // single vector core
-                TINSERT<TInsertMode::NZ>(matTile, tile, 0, 0);
+                TINSERT_IMPL<TInsertMode::NZ>(matTile, tile, 0, 0);
             } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
                 int rowIndex = ProdM * static_cast<size_t>(get_subblockid());
-                TINSERT<TInsertMode::NZ>(matTile, tile, rowIndex, 0);
+                TINSERT_IMPL<TInsertMode::NZ>(matTile, tile, rowIndex, 0);
             } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
                 constexpr uint32_t colIndex = ProdN * static_cast<size_t>(get_subblockid());
-                TINSERT<TInsertMode::NZ>(matTile, tile, 0, colIndex);
+                TINSERT_IMPL<TInsertMode::NZ>(matTile, tile, 0, colIndex);
             }
         }
 
@@ -788,7 +788,7 @@ struct TMPipe {
                 if constexpr (isNZPlus1) { // NZ + 1 mode
                     TINSERT_IMPL<TInsertMode::NZ_PLUS_1>(matTile, tile, row_offset, 0);
                 } else { // NZ mode
-                    TINSERT_IMPL<TInsertMode::NZ>(matTile, tile, row_offset, 0);
+                    TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(row_offset), static_cast<uint16_t>(0));
                 }
             } else if constexpr (isSplitN) {
                 // split N between vectors
@@ -800,7 +800,7 @@ struct TMPipe {
                 if constexpr (isNZPlus1) { // NZ+1 mode for bank conflict optimization
                     TINSERT_IMPL<TInsertMode::NZ_PLUS_1>(matTile, tile, 0, col_index);
                 } else {
-                    TINSERT_IMPL<TInsertMode::NZ>(matTile, tile, 0, col_index);
+                    TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(col_index));
                 }
             } else if constexpr (nonSplit) {
                 // single vector core
@@ -811,7 +811,7 @@ struct TMPipe {
                 if constexpr (isNZPlus1) { // NZ+1 mode
                     TINSERT_IMPL<TInsertMode::NZ_PLUS_1>(matTile, tile, 0, 0);
                 } else {
-                    TINSERT_IMPL<TInsertMode::NZ>(matTile, tile, 0, 0);
+                    TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
                 }
             } else {
                 static_assert(isSplitM || isSplitN || nonSplit,
