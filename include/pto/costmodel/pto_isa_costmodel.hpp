@@ -15,7 +15,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <cstdint>
 #include <type_traits>
 #include <pto/common/pto_tile.hpp>
 #include "pto/costmodel/op_struct.hpp"
@@ -67,6 +66,16 @@ constexpr float A2A3_RPT_6 = 6.0f; // merge_sort op
 constexpr float A2A3_INTERVAL = 18.0f;   // interval cycles between instruction groups
 constexpr float A2A3_MASK_EFFECT = 1.0f; // mask penalty multiplier (1.0 = no extra penalty)
 constexpr float A2A3_BANK_NONE = 0.0f;   // no bank conflict penalty
+
+// A2A3 data transfer bandwidth constants (B/Cycle), named as SRC_DST using TileType names
+constexpr float A2A3_BW_GM_VEC      = 128.0f;
+constexpr float A2A3_BW_VEC_VEC     = 128.0f;
+constexpr float A2A3_BW_GM_MAT      = 256.0f;
+constexpr float A2A3_BW_MAT_LEFT    = 256.0f;
+constexpr float A2A3_BW_MAT_RIGHT   = 128.0f;
+constexpr float A2A3_BW_MAT_BIAS    = 128.0f;
+constexpr float A2A3_BW_MAT_SCALING = 128.0f;
+constexpr float A2A3_BW_ACC_MAT     = 128.0f;
 
 enum class DataType
 {
@@ -457,21 +466,21 @@ public:
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
 		// gm2ub
-		SetParam(-1, 0, 54.54f);
+		SetParam(-1, static_cast<int>(TileType::Vec), A2A3_BW_GM_VEC);
 		// ub2ub
-		SetParam(0, 0, 256.0f);
+		SetParam(static_cast<int>(TileType::Vec), static_cast<int>(TileType::Vec), A2A3_BW_VEC_VEC);
 		// gm2l1
-		SetParam(-1, 1, 72.97f);
+		SetParam(-1, static_cast<int>(TileType::Mat), A2A3_BW_GM_MAT);
 		// l12l0A
-		SetParam(1, 2, 238.38f);
+		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Left), A2A3_BW_MAT_LEFT);
 		// l12l0B
-		SetParam(1, 3, 119.19f);
+		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Right), A2A3_BW_MAT_RIGHT);
 		// l12BT
-		SetParam(1, 5, 119.19f);
+		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Bias), A2A3_BW_MAT_BIAS);
 		// l12FP
-		SetParam(1, 6, 119.19f);
+		SetParam(static_cast<int>(TileType::Mat), static_cast<int>(TileType::Scaling), A2A3_BW_MAT_SCALING);
 		// l0C2l1
-		SetParam(4, 1, 37.84f);
+		SetParam(static_cast<int>(TileType::Acc), static_cast<int>(TileType::Mat), A2A3_BW_ACC_MAT);
 
     }
 
@@ -615,6 +624,7 @@ public:
         using T = typename TileData::DType;
         std::vector<CostModelStats> stats = runTLoadOp<TileData, GlobalData>(dst, src);
         float totalCycles = DataTransInstPredictCycle<T, TileData>(stats, dst);
+        fprintf(stdout, "[CostModel4] cycles: %f\n", totalCycles);
         dst.SetCycle(totalCycles);
     }
 
@@ -722,12 +732,15 @@ public:
 	{
 		int srcType = -1;
 		int dstType = -1;
+
 		//gm2ub
 		if constexpr (DstTileData::Loc == TileType::Vec) {
 			dstType = static_cast<int>(TileType::Vec);
     	} else if constexpr (DstTileData::Loc == TileType::Mat) { // gm2l1
 			dstType = static_cast<int>(TileType::Mat);
 		}
+
+        fprintf(stdout, "[CostModel3] SrcTileData::Loc: %d, DstTileData::Loc: %d\n", srcType, dstType);
 
 		if constexpr (is_conv_tile_v<DstTileData>) {
 			return DataTransInstPredictCycle(srcType, dstType, DstTileData::bufferSize);
@@ -762,9 +775,12 @@ public:
         	srcType = static_cast<int>(TileType::Acc);
         	dstType = static_cast<int>(TileType::Mat);
     	}
+
 		if constexpr (is_conv_tile_v<SrcTileData>) {
+		    fprintf(stdout, "[CostModel1] SrcTileData::Loc: %d, DstTileData::Loc: %d\n", static_cast<int>(SrcTileData::Loc), static_cast<int>(DstTileData::Loc));
 			return DataTransInstPredictCycle(srcType, dstType, DstTileData::bufferSize);
 		} else {
+		    fprintf(stdout, "[CostModel2] SrcTileData::Loc: %d, DstTileData::Loc: %d\n", static_cast<int>(SrcTileData::Loc), static_cast<int>(DstTileData::Loc));
 			return DataTransInstPredictCycle(srcType, dstType, src.GetValidRow() * src.GetValidCol() * sizeof(T));
 		}
     }
@@ -781,7 +797,7 @@ public:
 		}
 
         float bandWidth = data_trans_params_map_.at(key);
-        total_cycles = bufferSize / bandWidth;
+        total_cycles = static_cast<int>(bufferSize / bandWidth);
 
         fprintf(stdout, "[CostModel] DataTransInstPredictCycle: %.1f\n", total_cycles);
         return total_cycles;

@@ -127,115 +127,115 @@ void textract_test()
 
 TEST_F(TEXTRACTTest, case_half_half_32_32_32_32_IDX_0_0_L_0_0)
 {
-    textract_test<half, half, 32, 32, 32, 32, 0, 0, 0, 0, 64.0f, 0.0f>();
+    textract_test<half, half, 32, 32, 32, 32, 0, 0, 0, 0, 64.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_half_float_32_32_32_32_IDX_0_0_L_0_0)
 {
-    textract_test<half, float, 32, 32, 32, 32, 0, 0, 0, 0, 128.0f, 0.0f>();
+    textract_test<half, float, 32, 32, 32, 32, 0, 0, 0, 0, 128.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_128_96_IDX_0_0_L_0_0)
 {
-    textract_test<float, float, 128, 96, 128, 96, 0, 0, 0, 0, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 128, 96, 0, 0, 0, 0, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_int32_t_float_128_96_128_96_IDX_0_0_L_0_0)
 {
-    textract_test<int32_t, float, 128, 96, 128, 96, 0, 0, 0, 0, 1536.0f, 0.0f>();
+    textract_test<int32_t, float, 128, 96, 128, 96, 0, 0, 0, 0, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_int8_t_int32_t_128_64_128_64_IDX_0_0_L_0_0)
 {
-    textract_test<int8_t, int32_t, 128, 64, 128, 64, 0, 0, 0, 0, 1024.0f, 0.0f>();
+    textract_test<int8_t, int32_t, 128, 64, 128, 64, 0, 0, 0, 0, 1024.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_half_half_32_32_32_32_IDX_8_16_L_0_0)
 {
-    textract_test<half, half, 32, 32, 32, 32, 8, 16, 0, 0, 64.0f, 0.0f>();
+    textract_test<half, half, 32, 32, 32, 32, 8, 16, 0, 0, 64.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_half_float_32_32_32_32_IDX_8_16_L_0_0)
 {
-    textract_test<half, float, 32, 32, 32, 32, 8, 16, 0, 0, 64.0f, 0.0f>();
+    textract_test<half, float, 32, 32, 32, 32, 8, 16, 0, 0, 64.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_128_96_IDX_8_16_L_0_0)
 {
-    textract_test<float, float, 128, 96, 128, 96, 8, 16, 0, 0, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 128, 96, 8, 16, 0, 0, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_int32_t_float_128_96_128_96_IDX_8_16_L_0_0)
 {
-    textract_test<int32_t, float, 128, 96, 128, 96, 8, 16, 0, 0, 1536.0f, 0.0f>();
+    textract_test<int32_t, float, 128, 96, 128, 96, 8, 16, 0, 0, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_int8_t_int32_t_128_64_128_64_IDX_8_16_L_0_0)
 {
-    textract_test<int8_t, int32_t, 128, 64, 128, 64, 8, 16, 0, 0, 1024.0f, 0.0f>();
+    textract_test<int8_t, int32_t, 128, 64, 128, 64, 8, 16, 0, 0, 1024.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_half_half_32_32_31_31_IDX_8_16_L_0_0)
 {
-    textract_test<half, half, 32, 32, 31, 31, 8, 16, 0, 0, 64.0f, 0.0f>();
+    textract_test<half, half, 32, 32, 31, 31, 8, 16, 0, 0, 64.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_half_float_32_32_31_31_IDX_8_16_L_0_0)
 {
-    textract_test<half, float, 32, 32, 31, 31, 8, 16, 0, 0, 64.0f, 0.0f>();
+    textract_test<half, float, 32, 32, 31, 31, 8, 16, 0, 0, 64.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_0_0)
 {
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 0, 0, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 125, 93, 8, 16, 0, 0, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_int32_t_float_128_96_125_93_IDX_8_16_L_0_0)
 {
-    textract_test<int32_t, float, 128, 96, 125, 93, 8, 16, 0, 0, 1536.0f, 0.0f>();
+    textract_test<int32_t, float, 128, 96, 125, 93, 8, 16, 0, 0, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_int8_t_int32_t_128_64_125_61_IDX_8_16_L_0_0)
 {
-    textract_test<int8_t, int32_t, 128, 64, 125, 61, 8, 16, 0, 0, 1024.0f, 0.0f>();
+    textract_test<int8_t, int32_t, 128, 64, 125, 61, 8, 16, 0, 0, 1024.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_0_1)
 {
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 0, 1, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 125, 93, 8, 16, 0, 1, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_0_2)
 {
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 0, 2, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 125, 93, 8, 16, 0, 2, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_1_0)
 {
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 1, 0, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 125, 93, 8, 16, 1, 0, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_1_1)
 {
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 1, 1, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 125, 93, 8, 16, 1, 1, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_1_2)
 {
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 1, 2, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 125, 93, 8, 16, 1, 2, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_2_0)
 {
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 0, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 0, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_2_1)
 {
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 1, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 1, 1536.0f, 1.0f>();
 }
 
 TEST_F(TEXTRACTTest, case_float_float_128_96_125_93_IDX_8_16_L_2_2)
 {
-    textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 2, 1536.0f, 0.0f>();
+    textract_test<float, float, 128, 96, 125, 93, 8, 16, 2, 2, 1536.0f, 1.0f>();
 }
