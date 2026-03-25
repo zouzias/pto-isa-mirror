@@ -720,14 +720,23 @@ public:
 	template <typename T, typename DstTileData>
     [[nodiscard]] float DataTransInstPredictCycle(const std::vector<CostModelStats> &stats, DstTileData &dst)
 	{
-		int dstType;
+		int srcType = -1;
+		int dstType = -1;
 		//gm2ub
 		if constexpr (DstTileData::Loc == TileType::Vec) {
 			dstType = static_cast<int>(TileType::Vec);
     	} else if constexpr (DstTileData::Loc == TileType::Mat) { // gm2l1
 			dstType = static_cast<int>(TileType::Mat);
 		}
-		return DataTransInstPredictCycle<T>(-1, dstType, dst.GetValidRow(), dst.GetValidCol());
+
+		if constexpr (is_conv_tile_v<DstTileData>) {
+			constexpr int C0 = 32 / sizeof(T);
+    		constexpr uint32_t totalElements = C1 * H * W * N * C0;
+    		constexpr uint32_t bufferSize = totalElements * sizeof(T);
+			return DataTransInstPredictCycle(srcType, dstType, bufferSize);
+		} else {
+			return DataTransInstPredictCycle(srcType, dstType, dst.GetValidRow() * dst.GetValidCol() * sizeof(T));
+		}
 	}
 
 	// TMov/TExtract
@@ -735,8 +744,8 @@ public:
     [[nodiscard]] float DataTransInstPredictCycle(const std::vector<CostModelStats> &stats, DstTileData &dst,
 												  SrcTileData &src)
     {
-		int dstType;
-		int srcType;
+		int srcType = -1;
+		int dstType = -1;
 		if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left) {
         	srcType = static_cast<int>(TileType::Mat);
         	dstType = static_cast<int>(TileType::Left);
@@ -756,11 +765,17 @@ public:
         	srcType = static_cast<int>(TileType::Acc);
         	dstType = static_cast<int>(TileType::Mat);
     	}
-		return DataTransInstPredictCycle<T>(srcType, dstType, src.GetValidRow(), src.GetValidCol());
+		if constexpr (is_conv_tile_v<SrcTileData>) {
+			constexpr int C0 = 32 / sizeof(T);
+    		constexpr uint32_t totalElements = C1 * H * W * N * C0;
+    		constexpr uint32_t bufferSize = totalElements * sizeof(T);
+			return DataTransInstPredictCycle(srcType, dstType, bufferSize);
+		} else {
+			return DataTransInstPredictCycle(srcType, dstType, src.GetValidRow() * src.GetValidCol() * sizeof(T));
+		}
     }
 
-	template <typename T>
-    [[nodiscard]] float DataTransInstPredictCycle(int srcType, int dstType, uint16_t validRow, uint16_t validCol)
+    [[nodiscard]] float DataTransInstPredictCycle(int srcType, int dstType, uint32_t bufferSize)
     {
 		float total_cycles = 0.0f;
 		auto key = std::make_pair(srcType, dstType);
@@ -772,7 +787,7 @@ public:
 		}
 
         float bandWidth = data_trans_params_map_.at(key);
-        total_cycles = validRow * validCol * sizeof(T) / bandWidth;
+        total_cycles = bufferSize / bandWidth;
 
         fprintf(stdout, "[CostModel] DataTransInstPredictCycle: %.1f\n", total_cycles);
         return total_cycles;

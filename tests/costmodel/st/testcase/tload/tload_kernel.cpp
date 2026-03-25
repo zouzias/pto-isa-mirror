@@ -156,21 +156,21 @@ extern "C" __global__ AICORE void launchTLOAD_1(__gm__ uint8_t *out, __gm__ uint
                                                 int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
 {
     runTLOADND<float, 1, 1, 1, 128, 128, 128, 128, 1, PadValue::Null>((__gm__ float *)out, (__gm__ float *)src, gShape0,
-                                                                      gShape1, gShape2, gRows, gCols, gLog, 100.0f, 1.0f);
+                                                                      gShape1, gShape2, gRows, gCols, gLog, 2048.0f, 0.0f);
 }
 
 extern "C" __global__ AICORE void launchTLOAD_2(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
                                                 int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
 {
     runTLOADND<float, 2, 2, 2, 256, 64, 256, 64, 1, PadValue::Null>((__gm__ float *)out, (__gm__ float *)src, gShape0,
-                                                                    gShape1, gShape2, gRows, gCols, gLog, 100.0f, 1.0f);
+                                                                    gShape1, gShape2, gRows, gCols, gLog, 16384.0f, 0.0f);
 }
 
 extern "C" __global__ AICORE void launchTLOAD_3(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
                                                 int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
 {
     runTLOADND<float, 1, 1, 1, 128, 127, 128, 128, 1, PadValue::Max>((__gm__ float *)out, (__gm__ float *)src, gShape0,
-                                                                     gShape1, gShape2, gRows, gCols, gLog, 100.0f, 1.0f);
+                                                                     gShape1, gShape2, gRows, gCols, gLog, 2032.0f, 0.0f);
 }
 
 extern "C" __global__ AICORE void launchTLOAD_4(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
@@ -178,7 +178,7 @@ extern "C" __global__ AICORE void launchTLOAD_4(__gm__ uint8_t *out, __gm__ uint
 {
     runTLOADND<int16_t, 1, 1, 1, 128, 127, 128, 128, 1, PadValue::Max>((__gm__ int16_t *)out, (__gm__ int16_t *)src,
                                                                        gShape0, gShape1, gShape2, gRows, gCols, gLog,
-                                                                       100.0f, 1.0f);
+                                                                       1016.0f, 0.0f);
 }
 
 extern "C" __global__ AICORE void launchTLOAD_5(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
@@ -186,7 +186,7 @@ extern "C" __global__ AICORE void launchTLOAD_5(__gm__ uint8_t *out, __gm__ uint
 {
     runTLOADND<uint8_t, 1, 1, 1, 128, 127, 128, 128, 1, PadValue::Min>((__gm__ uint8_t *)out, (__gm__ uint8_t *)src,
                                                                        gShape0, gShape1, gShape2, gRows, gCols, gLog,
-                                                                       100.0f, 1.0f);
+                                                                       508.0f, 0.0f);
 }
 
 extern "C" __global__ AICORE void launchTLOAD_6(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
@@ -194,7 +194,7 @@ extern "C" __global__ AICORE void launchTLOAD_6(__gm__ uint8_t *out, __gm__ uint
 {
     runTLOADND<int16_t, 1, 1, 32, 64, 128, 64, 128, 1, PadValue::Null>((__gm__ int16_t *)out, (__gm__ int16_t *)src,
                                                                        gShape0, gShape1, gShape2, gRows, gCols, gLog,
-                                                                       100.0f, 1.0f);
+                                                                       16384.0f, 0.0f);
 }
 
 extern "C" __global__ AICORE void launchTLOAD_7(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
@@ -202,7 +202,7 @@ extern "C" __global__ AICORE void launchTLOAD_7(__gm__ uint8_t *out, __gm__ uint
 {
     runTLOADND<int16_t, 1, 1, 32, 64, 128, 64, 128, 0, PadValue::Null>((__gm__ int16_t *)out, (__gm__ int16_t *)src,
                                                                        gShape0, gShape1, gShape2, gRows, gCols, gLog,
-                                                                       100.0f, 1.0f);
+                                                                       16384.0f, 0.0f);
 }
 
 extern "C" __global__ AICORE void launchTLOAD_8(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
@@ -210,21 +210,21 @@ extern "C" __global__ AICORE void launchTLOAD_8(__gm__ uint8_t *out, __gm__ uint
 {
     runTLOADND<float, 2, 2, 2, 256, 60, 256, 64, 1, PadValue::Max>((__gm__ float *)out, (__gm__ float *)src, gShape0,
                                                                    gShape1, gShape2, gRows, gCols, gLog,
-                                                                   100.0f, 1.0f);
+                                                                   15360.0f, 0.0f);
 }
 
 extern "C" __global__ AICORE void launchTLOAD_9(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
                                                 int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
 {
     runTLOADDN<float, 1, 1, 32, 64, 128, 64, 128, 1, PadValue::Null>((__gm__ float *)out, (__gm__ float *)src, gShape0,
-                                                                     gShape1, gShape2, gRows, gCols, gLog, 100.0f, 1.0f);
+                                                                     gShape1, gShape2, gRows, gCols, gLog, 32768.0f, 0.0f);
 }
 
 extern "C" __global__ AICORE void launchTLOAD_10(__gm__ uint8_t *out, __gm__ uint8_t *src, int gShape0, int gShape1,
                                                  int gShape2, int gRows, int gCols, __gm__ uint64_t *gLog)
 {
     runTLOADDN<float, 2, 2, 2, 255, 60, 256, 64, 1, PadValue::Null>((__gm__ float *)out, (__gm__ float *)src, gShape0,
-                                                                    gShape1, gShape2, gRows, gCols, gLog, 100.0f, 1.0f);
+                                                                    gShape1, gShape2, gRows, gCols, gLog, 15300.0f, 0.0f);
 }
 
 template <int32_t testKey>
