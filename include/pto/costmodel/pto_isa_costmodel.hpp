@@ -723,12 +723,11 @@ public:
 		int dstType;
 		//gm2ub
 		if constexpr (DstTileData::Loc == TileType::Vec) {
-			dstType = TileType::Vec;
+			dstType = static_cast<int>(TileType::Vec);
     	} else if constexpr (DstTileData::Loc == TileType::Mat) { // gm2l1
-			dstType = TileType::Mat;
+			dstType = static_cast<int>(TileType::Mat);
 		}
-		auto key = std::make_pair(-1, dstType);
-		return DataTransInstPredictCycle<T>(key, dst.GetValidRow(), dst.GetValidCol());
+		return DataTransInstPredictCycle<T>(-1, dstType, dst.GetValidRow(), dst.GetValidCol());
 	}
 
 	// TMov/TExtract
@@ -739,36 +738,36 @@ public:
 		int dstType;
 		int srcType;
 		if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Left) {
-        	srcType = TileType::Mat;
-        	dstType = TileType::Left;
+        	srcType = static_cast<int>(TileType::Mat);
+        	dstType = static_cast<int>(TileType::Left);
     	} else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Right) {
-        	srcType = TileType::Mat;
-        	dstType = TileType::Right;
+        	srcType = static_cast<int>(TileType::Mat);
+        	dstType = static_cast<int>(TileType::Right);
     	} else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Bias) {
-      		srcType = TileType::Mat;
-        	dstType = TileType::Bias;
+      		srcType = static_cast<int>(TileType::Mat);
+        	dstType = static_cast<int>(TileType::Bias);
     	} else if constexpr (SrcTileData::Loc == TileType::Mat && DstTileData::Loc == TileType::Scaling) {
-        	srcType = TileType::Mat;
-        	dstType = TileType::Scaling;
+        	srcType = static_cast<int>(TileType::Mat);
+        	dstType = static_cast<int>(TileType::Scaling);
     	} else if constexpr (SrcTileData::Loc == TileType::Vec && DstTileData::Loc == TileType::Vec) {
-        	srcType = TileType::Vec;
-        	dstType = TileType::Vec;
+        	srcType = static_cast<int>(TileType::Vec);
+        	dstType = static_cast<int>(TileType::Vec);
     	} else if constexpr (SrcTileData::Loc == TileType::Acc && DstTileData::Loc == TileType::Mat) {
-        	srcType = TileType::Acc;
-        	dstType = TileType::Mat;
+        	srcType = static_cast<int>(TileType::Acc);
+        	dstType = static_cast<int>(TileType::Mat);
     	}
-		auto key = std::make_pair(srcType, dstType);
-		return DataTransInstPredictCycle<T>(key, src.GetValidRow(), src.GetValidCol());
+		return DataTransInstPredictCycle<T>(srcType, dstType, src.GetValidRow(), src.GetValidCol());
     }
 
 	template <typename T>
-    [[nodiscard]] float DataTransInstPredictCycle(std::make_pair<int, int> key, uint16_t validRow, uint16_t validCol)
+    [[nodiscard]] float DataTransInstPredictCycle(int srcType, int dstType, uint16_t validRow, uint16_t validCol)
     {
 		float total_cycles = 0.0f;
+		auto key = std::make_pair(srcType, dstType);
 		if (!data_trans_params_map_.contains(key))
 		{
 			fprintf(stderr, "[CostModel] Error: unknown data transfer instruction, srcType: <%d>,  dstType: <%d>\n",
-					key.first, key.second);
+					srcType, dstType);
 			return total_cycles;
 		}
 
