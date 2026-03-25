@@ -109,6 +109,8 @@ enum class Op : uint16_t
 
 // opPipeList maps each operation in Op enum to its corresponding pipeline type.
 // This array is used to determine which hardware pipeline should be used for each operation.
+// Guarded: pipe constants (PIPE_FIX etc.) are CCE compiler built-ins or defined in cpu_stub.hpp.
+#if defined(__CCE_AICORE__) || defined(__CPU_SIM) || defined(__COSTMODEL)
 constexpr pipe_t opPipeList[] = {
     PIPE_MTE2 /* TLOAD */,
     PIPE_MTE3 /* TSTORE_VEC */,
@@ -198,6 +200,7 @@ constexpr pipe_t opPipeList[] = {
     PIPE_V /* TDEQUANT */,
     PIPE_ALL /* OP_COUNT */,
 };
+#endif // defined(__CCE_AICORE__) || defined(__CPU_SIM) || defined(__COSTMODEL)
 
 struct RecordEvent {
 };
