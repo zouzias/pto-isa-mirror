@@ -110,7 +110,7 @@ void test_tcvt()
 {
     auto res = SetupTcvtTest<D, S, kGRows_, kGCols_>();
     launchTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>(res.dstDevice, res.srcDevice,
-                                                                                    res.stream);
+                                                                                   res.stream);
     aclrtSynchronizeStream(res.stream);
     aclrtMemcpy(res.dstHost, res.dstFileSize, res.dstDevice, res.dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
     WriteFile(GetGoldenDir() + "/output_z.bin", res.dstHost, res.dstFileSize);
@@ -330,9 +330,8 @@ template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTC
 void test_tcvt_nonsattorch()
 {
     auto res = SetupTcvtTest<D, S, kGRows_, kGCols_>();
-    launchTCVTNonSatTorch<D, S, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>(res.dstDevice,
-                                                                                              res.srcDevice,
-                                                                                              res.stream);
+    launchTCVTNonSatTorch<D, S, kGRows_, kGCols_, kTRows_, kTCols_, kValidRows_, kValidCols_>(
+        res.dstDevice, res.srcDevice, res.stream);
     aclrtSynchronizeStream(res.stream);
     aclrtMemcpy(res.dstHost, res.dstFileSize, res.dstDevice, res.dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
     WriteFile(GetGoldenDir() + "/output_truncated.bin", res.dstHost, res.dstFileSize);
