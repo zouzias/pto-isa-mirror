@@ -304,9 +304,6 @@ __global__ AICORE void runTCVTNonSatTorch(__gm__ T *outTruncated, __gm__ S *src)
         TASSIGN(dstTile, 0x1800);
         TASSIGN(tmpTile, 0x800);
 
-        GlobalData_src srcGlobal(src);
-        GlobalData_dst dstGlobal(outTruncated);
-
         TLOAD(srcTile, srcGlobal);
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);

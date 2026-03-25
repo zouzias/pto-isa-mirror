@@ -976,6 +976,59 @@ PTO_INST void TCvtHead(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ type
 }
 
 // ============================================================================
+// Saturation Mode Helpers
+// ============================================================================
+PTO_INST bool ApplySatMode(SaturationMode satMode)
+{
+    uint64_t originalCtrl = get_ctrl();
+    bool originalSatMode = (originalCtrl & (1ULL << SAT_MODE_BIT)) == 0;
+    if (satMode == SaturationMode::OFF) {
+        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
+    } else {
+        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
+    }
+    return originalSatMode;
+}
+
+PTO_INST void RestoreSatMode(bool originalSatMode)
+{
+    if (originalSatMode) {
+        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
+    } else {
+        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
+    }
+}
+
+// ============================================================================
+// Tile Conversion Helper: Process Remainder Data Block
+// ============================================================================
+// TCvtTail processes the remainder (unaligned) portion of data that doesn't
+// fit evenly into repeat boundaries, using vector masking.
+template <typename TileDataD, typename TileDataS, unsigned SS, unsigned DS, typename... Args>
+PTO_INST void TCvtTail(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ typename TileDataS::DType *srcPtr,
+                       RoundMode mode, unsigned validRow, unsigned numRemainPerLine, Args... args)
+{
+    constexpr unsigned dstNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataD::DType);
+    constexpr unsigned srcNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataS::DType);
+    unsigned numLoop = validRow / REPEAT_MAX;
+    unsigned remainAfterLoop = validRow % REPEAT_MAX;
+    SetContinuousMask(numRemainPerLine);
+    if (numLoop > 0) {
+        for (uint32_t j = 0; j < numLoop; j++) {
+            GenCastCall<TileDataD, TileDataS>(dstPtr + j * DS * REPEAT_MAX, srcPtr + j * SS * REPEAT_MAX,
+                                              (uint8_t)REPEAT_MAX, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
+                                              (uint16_t)SS / srcNElemPerBlock, args...);
+        }
+    }
+    if (remainAfterLoop > 0) {
+        GenCastCall<TileDataD, TileDataS>(dstPtr + numLoop * DS * REPEAT_MAX, srcPtr + numLoop * SS * REPEAT_MAX,
+                                          (uint8_t)remainAfterLoop, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
+                                          (uint16_t)SS / srcNElemPerBlock, args...);
+    }
+    set_vector_mask(-1, -1);
+}
+
+// ============================================================================
 // Core Tile Conversion Kernel
 // ============================================================================
 // TCvt orchestrates the complete tile conversion process by handling both:
@@ -1004,58 +1057,23 @@ __tf__ AICORE void TCvt(typename TileDataD::TileDType __out__ dst, typename Tile
                         unsigned validRow, unsigned elementsPerRepeat, unsigned dstRepeatStride,
                         unsigned srcRepeatStride)
 {
-    // Save the original saturation mode state
-    uint64_t originalCtrl = get_ctrl();
-    bool originalSatMode = (originalCtrl & (1ULL << SAT_MODE_BIT)) == 0;
+    bool originalSatMode = ApplySatMode(satMode);
 
-    // Apply saturation mode
-    if (satMode == SaturationMode::OFF) {
-        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
-    } else {
-        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation (default)
-    }
-
-    // Get buffer pointers and block size
     __ubuf__ typename TileDataD::DType *dstPtr = (__ubuf__ typename TileDataD::DType *)__cce_get_tile_ptr(dst);
     __ubuf__ typename TileDataS::DType *srcPtr = (__ubuf__ typename TileDataS::DType *)__cce_get_tile_ptr(src);
-    constexpr unsigned dstNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataD::DType);
-    constexpr unsigned srcNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataS::DType);
 
-    // Process main aligned region with complete repeat units
     if (numRepeatPerLine > 0) {
         TCvtHead<TileDataD, TileDataS, SS, DS>(dstPtr, srcPtr, mode, numRepeatPerLine, validRow, elementsPerRepeat,
                                                dstRepeatStride, srcRepeatStride);
     }
-    // Advance pointers to unaligned remainder region
     dstPtr += numRepeatPerLine * elementsPerRepeat;
     srcPtr += numRepeatPerLine * elementsPerRepeat;
 
-    // Process remainder region with partial repeats (requires vector masking)
     if (numRemainPerLine > 0) {
-        unsigned numLoop = validRow / REPEAT_MAX;
-        unsigned remainAfterLoop = validRow % REPEAT_MAX;
-        SetContinuousMask(numRemainPerLine);
-        if (numLoop > 0) {
-            for (uint32_t j = 0; j < numLoop; j++) {
-                GenCastCall<TileDataD, TileDataS>(dstPtr + j * DS * REPEAT_MAX, srcPtr + j * SS * REPEAT_MAX,
-                                                  (uint8_t)REPEAT_MAX, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
-                                                  (uint16_t)SS / srcNElemPerBlock);
-            }
-        }
-        if (remainAfterLoop > 0) {
-            GenCastCall<TileDataD, TileDataS>(dstPtr + numLoop * DS * REPEAT_MAX, srcPtr + numLoop * SS * REPEAT_MAX,
-                                              (uint8_t)remainAfterLoop, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
-                                              (uint16_t)SS / srcNElemPerBlock);
-        }
-        set_vector_mask(-1, -1);
+        TCvtTail<TileDataD, TileDataS, SS, DS>(dstPtr, srcPtr, mode, validRow, numRemainPerLine);
     }
 
-    // Restore original saturation mode to avoid affecting subsequent instructions
-    if (originalSatMode) {
-        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
-    } else {
-        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
-    }
+    RestoreSatMode(originalSatMode);
 }
 
 // TCvt overload with explicit TmpTileData parameter.
@@ -1067,59 +1085,24 @@ __tf__ AICORE void TCvt(typename TileDataD::TileDType __out__ dst, typename Tile
                         unsigned numRepeatPerLine, unsigned numRemainPerLine, unsigned validRow,
                         unsigned elementsPerRepeat, unsigned dstRepeatStride, unsigned srcRepeatStride)
 {
-    // Save the original saturation mode state
-    uint64_t originalCtrl = get_ctrl();
-    bool originalSatMode = (originalCtrl & (1ULL << SAT_MODE_BIT)) == 0;
+    bool originalSatMode = ApplySatMode(satMode);
 
-    // Apply saturation mode
-    if (satMode == SaturationMode::OFF) {
-        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
-    } else {
-        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation (default)
-    }
-
-    // Get buffer pointers and block size
     __ubuf__ typename TileDataD::DType *dstPtr = (__ubuf__ typename TileDataD::DType *)__cce_get_tile_ptr(dst);
     __ubuf__ typename TileDataS::DType *srcPtr = (__ubuf__ typename TileDataS::DType *)__cce_get_tile_ptr(src);
     __ubuf__ int32_t *tmpPtr = (__ubuf__ int32_t *)__cce_get_tile_ptr(tmp);
-    constexpr unsigned dstNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataD::DType);
-    constexpr unsigned srcNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataS::DType);
 
-    // Process main aligned region with complete repeat units
     if (numRepeatPerLine > 0) {
         TCvtHead<TileDataD, TileDataS, SS, DS>(dstPtr, srcPtr, mode, numRepeatPerLine, validRow, elementsPerRepeat,
                                                dstRepeatStride, srcRepeatStride, tmpPtr);
     }
-    // Advance pointers to unaligned remainder region
     dstPtr += numRepeatPerLine * elementsPerRepeat;
     srcPtr += numRepeatPerLine * elementsPerRepeat;
 
-    // Process remainder region with partial repeats (requires vector masking)
     if (numRemainPerLine > 0) {
-        unsigned numLoop = validRow / REPEAT_MAX;
-        unsigned remainAfterLoop = validRow % REPEAT_MAX;
-        SetContinuousMask(numRemainPerLine);
-        if (numLoop > 0) {
-            for (uint32_t j = 0; j < numLoop; j++) {
-                GenCastCall<TileDataD, TileDataS>(dstPtr + j * DS * REPEAT_MAX, srcPtr + j * SS * REPEAT_MAX,
-                                                  (uint8_t)REPEAT_MAX, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
-                                                  (uint16_t)SS / srcNElemPerBlock, tmpPtr);
-            }
-        }
-        if (remainAfterLoop > 0) {
-            GenCastCall<TileDataD, TileDataS>(dstPtr + numLoop * DS * REPEAT_MAX, srcPtr + numLoop * SS * REPEAT_MAX,
-                                              (uint8_t)remainAfterLoop, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
-                                              (uint16_t)SS / srcNElemPerBlock, tmpPtr);
-        }
-        set_vector_mask(-1, -1);
+        TCvtTail<TileDataD, TileDataS, SS, DS>(dstPtr, srcPtr, mode, validRow, numRemainPerLine, tmpPtr);
     }
 
-    // Restore original saturation mode to avoid affecting subsequent instructions
-    if (originalSatMode) {
-        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT));
-    } else {
-        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT));
-    }
+    RestoreSatMode(originalSatMode);
 }
 
 // ============================================================================
