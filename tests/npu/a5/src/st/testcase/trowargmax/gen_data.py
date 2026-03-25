@@ -91,6 +91,7 @@ if __name__ == "__main__":
         TRowArgMaxParams(np.uint32, np.float16, 16, 1, 3, 8192, 3, 8191),
         TRowArgMaxParams(np.uint32, np.float16, 16, 1, 1, 16384, 1, 16381),
         TRowArgMaxParams(np.uint32, np.float16, 16, 1, 1, 32768, 1, 32761),
+        TRowArgMaxParams(np.uint32, np.float32, 8, 1, 3, 3480, 3, 3473),
     ]
 
     for case in case_list:
