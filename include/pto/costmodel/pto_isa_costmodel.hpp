@@ -723,7 +723,7 @@ public:
 				char lastChar = instr_name.back();
 				if (lastChar == 'a' || lastChar == 'c' || lastChar == 'f' || lastChar == 'r' || lastChar == 'z'
 					|| lastChar == 'o') {
-					new_instr_name = instr_name.substring(0, instr_name.length() - 1);
+					new_instr_name = instr_name.substr(0, instr_name.length() - 1);
 				}
 			}
             DataType dtype = GetDataTypeEnum<T>();
