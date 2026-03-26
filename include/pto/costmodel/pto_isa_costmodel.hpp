@@ -717,16 +717,17 @@ public:
 
         for (const auto &stat : stats) {
             const std::string &instr_name = stat.cceInstName;
+            std::string new_instr_name = stat.cceInstName;
 			// vconv指令名称特殊处理
 			if (!instr_name.empty() && instr_name.substr(0, 5) == "vconv") {
 				char lastChar = instr_name.back();
 				if (lastChar == 'a' || lastChar == 'c' || lastChar == 'f' || lastChar == 'r' || lastChar == 'z'
 					|| lastChar == 'o') {
-					instr_name.erase(instr_name.length() - 1, instr_name.length());
+					new_instr_name = instr_name.substring(0, instr_name.length() - 1);
 				}
 			}
             DataType dtype = GetDataTypeEnum<T>();
-            auto key = std::make_pair(instr_name, dtype);
+            auto key = std::make_pair(new_instr_name, dtype);
 
             if (instr_name == "PIPE_V" || instr_name == "pipe_barrier") {
                 first = true;
