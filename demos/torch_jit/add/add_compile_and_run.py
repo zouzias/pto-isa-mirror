@@ -14,20 +14,23 @@ import torch
 import torch_npu
 
 from jit_util_add import jit_compile
+from util.device import get_test_device
+
+_DEVICE = get_test_device()
+torch.npu.set_device(_DEVICE)
 
 
 def test_add():
-    device = "npu"
     dtype = torch.float16
 
     shape = [20, 2048]
-    x = torch.rand(shape, device=device, dtype=dtype)
-    y = torch.rand(shape, device=device, dtype=dtype)
-    z = torch.empty(shape, device=device, dtype=dtype)
+    x = torch.rand(shape, device=_DEVICE, dtype=dtype)
+    y = torch.rand(shape, device=_DEVICE, dtype=dtype)
+    z = torch.empty(shape, device=_DEVICE, dtype=dtype)
 
     add_func = jit_compile("add_custom.cpp")
     add_func(x, y, z)
-    torch.npu.synchronize()
+    torch_npu.npu.synchronize()
 
     z_ref = x + y
     torch.testing.assert_close(z, z_ref)

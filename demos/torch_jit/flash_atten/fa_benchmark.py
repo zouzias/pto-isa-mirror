@@ -18,6 +18,11 @@ import csv
 import torch
 import torch_npu
 from jit_util_flash import jit_compile_flash
+from util.device import get_test_device
+from util.bench import do_bench
+
+_DEVICE = get_test_device()
+torch.npu.set_device(_DEVICE)
 
 NUM_ITERATIONS = 50
 WARMUP = 10
@@ -69,23 +74,6 @@ def tflops(flops, ms):
     return flops / (ms * 1e-3) / 1e12
 
 
-def time_npu(fn, iters=NUM_ITERATIONS, warmup=WARMUP):
-    for _ in range(warmup):
-        _ = fn()
-    torch.npu.synchronize()
-
-    start = torch.npu.Event(enable_timing=True)
-    end = torch.npu.Event(enable_timing=True)
-
-    start.record()
-    for _ in range(iters):
-        _ = fn()
-    torch.npu.synchronize()
-    end.record()
-
-    return start.elapsed_time(end) / iters
-
-
 # ---------------------------
 # 2) Reference attention (npu_fused_infer_attention_score)
 # ---------------------------
@@ -113,8 +101,6 @@ def bench(
     rtol=1e-3,
     atol=1e-3,
 ):
-    device = "npu:0"
-    torch.npu.set_device(device)
     dtype = torch.float16
     batch_size = 1
 
@@ -151,14 +137,24 @@ def bench(
             )
             flops_total = flops_dict["total"]
 
-            ms_fused = time_npu(lambda: fused_fa_reference(q, k, v))
-            ms_jit = time_npu(lambda: flash(q, k, v))
+            ms_fused = do_bench(
+                lambda: fused_fa_reference(q, k, v),
+                warmup_iters=WARMUP,
+                benchmark_iters=NUM_ITERATIONS,
+                unit="ms",
+            )
+            ms_jit = do_bench(
+                lambda: flash(q, k, v),
+                warmup_iters=WARMUP,
+                benchmark_iters=NUM_ITERATIONS,
+                unit="ms",
+            )
 
             # Correctness check: fused vs flash (run once per shape, not timed)
             if check:
                 o_out = flash(q, k, v)
                 fused_out = fused_fa_reference(q, k, v).to(torch.float32)
-                torch.npu.synchronize()
+                torch_npu.npu.synchronize()
                 torch.testing.assert_close(o_out, fused_out, rtol=rtol, atol=atol)
 
             speedup = ms_fused / ms_jit
