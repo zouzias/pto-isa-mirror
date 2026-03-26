@@ -61,26 +61,21 @@ AICORE constexpr bool isCustomPadValue(PadValue pv)
 // Extract the 32-bit value from a custom PadValue (returns the float bits)
 AICORE constexpr uint32_t getCustomPadBits(PadValue pv)
 {
-    return static_cast<uint32_t>(static_cast<uint64_t>(pv) >> PAD_SHIFT_LENGTH);
+    return static_cast<uint32_t>(static_cast<uint64_t>(pv) & 0xFFFFFFFFULL);
 }
 
 // Helper to create a custom PadValue from a compile-time float/int constant
 // Usage: PadCustom<-1.0f>, PadCustom<0.5f>, PadCustom<42>
 namespace detail {
+// Use union for compile-time float-to-bits (works on NPU compilers)
 template <auto V>
 constexpr uint32_t floatToBits()
 {
     if constexpr (std::is_same_v<decltype(V), float>) {
-        union {
-            float f;
-            uint32_t u;
-        } conv = {V};
+        union { float f; uint32_t u; } conv = {V};
         return conv.u;
     } else if constexpr (std::is_same_v<decltype(V), double>) {
-        union {
-            float f;
-            uint32_t u;
-        } conv = {static_cast<float>(V)};
+        union { float f; uint32_t u; } conv = {static_cast<float>(V)};
         return conv.u;
     } else if constexpr (std::is_integral_v<decltype(V)>) {
         return static_cast<uint32_t>(V);
@@ -92,29 +87,16 @@ constexpr uint32_t floatToBits()
 
 template <auto V>
 inline constexpr PadValue PadCustom = static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
-                                                            (static_cast<uint64_t>(detail::floatToBits<V>()) << 32));
+                                                            static_cast<uint64_t>(detail::floatToBits<V>()));
 
 // Helper constexpr function to create custom PadValue from float
+// Works on both CPU_SIM and NPU (host + device) using __builtin_bit_cast
 // Usage: constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
-#ifdef __CPU_SIM
-constexpr PadValue PadValueCustom(float value)
+AICORE constexpr PadValue PadValueCustom(float value)
 {
     return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
-                                 (static_cast<uint64_t>(std::bit_cast<uint32_t>(value)) << PAD_SHIFT_LENGTH));
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint32_t, value)));
 }
-#else
-// NPU compiler: use union-based conversion (not constexpr but works at runtime)
-inline PadValue PadValueCustom(float value)
-{
-    union {
-        float f;
-        uint32_t u;
-    } conv;
-    conv.f = value;
-    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
-                                 (static_cast<uint64_t>(conv.u) << PAD_SHIFT_LENGTH));
-}
-#endif
 
 template <typename DType, PadValue PadVal>
 struct PadValueMap {
@@ -324,7 +306,13 @@ PTO_INTERNAL constexpr auto GetPadValue()
         constexpr uint32_t bits = getCustomPadBits(PadVal);
         if constexpr (std::is_same_v<DType, float>) {
             return bits; // float uses raw bits directly
+#if !defined(__CPU_SIM) && !defined(__COSTMODEL)
+        } else if constexpr (std::is_same_v<DType, bfloat16_t>) {
+            // bf16 uses upper 16 bits of float32
+            return static_cast<uint32_t>(bits >> 16);
+#endif
         } else if constexpr (sizeof(DType) == 2) {
+            // fp16 and other 16-bit types use lower 16 bits
             return static_cast<uint32_t>(bits & 0xFFFF);
         } else if constexpr (sizeof(DType) == 1) {
             return static_cast<uint32_t>(bits & 0xFF);
