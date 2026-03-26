@@ -579,7 +579,7 @@ public:
     template <typename Op, typename TileDataOut, typename TileDataIn>
     void ColReduceOpPredictCycle(const std::string &instr_name, TileDataOut &dst, TileDataIn &src)
     {
-        using T = TileDataIn::DType;
+        using T = typename TileDataIn::DType;
         std::vector<CostModelStats> stats = runColReduceOps<T, Op, TileDataOut, TileDataIn>(dst, src);
         float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
@@ -589,7 +589,7 @@ public:
     template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
     void ColSumOpPredictCycle(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, const bool IsBinary)
     {
-        using T = TileDataSrc::DType;
+        using T = typename TileDataSrc::DType;
         const std::vector<CostModelStats> stats =
             runColSumOp<T, TileDataDst, TileDataSrc, TileDataTmp>(dst, src, tmp, IsBinary);
         float totalCycles = VecInstPredictCycle<T>(stats);
@@ -600,7 +600,7 @@ public:
     template <typename TileDataDst, typename TileDataSrc>
     void RowExpandPredictCycle(const std::string &instr_name, TileDataDst &dst, TileDataSrc &src)
     {
-        using T = TileDataDst::DType;
+        using T = typename TileDataDst::DType;
         std::vector<CostModelStats> stats = runRowExpandOp<TileDataDst, TileDataSrc>(dst, src);
         float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
@@ -714,7 +714,6 @@ public:
         // first: next real instruction starts a new pipeline segment (pays startup_cycles once)
         // pipe:  previous instruction was a PIPE_V barrier (next real instruction pays interval_cycles)
         bool first = true;
-        bool pipe = false;
 
         for (const auto &stat : stats) {
             const std::string &instr_name = stat.cceInstName;
@@ -730,7 +729,7 @@ public:
             auto key = std::make_pair(instr_name, dtype);
 
             if (instr_name == "PIPE_V" || instr_name == "pipe_barrier") {
-                pipe = true;
+                first = true;
                 continue;
             }
 
@@ -745,14 +744,10 @@ public:
             // Startup: paid once for the very first instruction in the sequence
             if (first) {
                 total_cycles += params.startup_cycles;
+                total_cycles += params.completion_cycles;
                 first = false;
             }
 
-            // Interval: paid for any instruction that immediately follows a PIPE_V barrier
-            if (pipe) {
-                total_cycles += params.completion_cycles;
-                pipe = false;
-            }
             total_cycles += stat.repeats * params.per_repeat_cycles;
         }
         fprintf(stdout, "[CostModel] VecInstPredictCycle: %.1f\n", total_cycles);
