@@ -216,17 +216,17 @@ inline int32_t CeilDivision(int32_t num1, int32_t num2)
 }
 
 inline uint64_t ctrl_value = 0;
-PTO_INTERNAL constexpr void set_ctrl1(uint64_t &ctrl_value, int bitPosition)
+inline void set_ctrl1(uint64_t &ctrl_value, int bitPosition)
 {
 	ctrl_value |= (1ULL << bitPosition); // 直接使用或操作将指定位置为1
 }
 
-PTO_INTERNAL constexpr void set_ctrl0(uint64_t &ctrl_value, int bitPosition)
+inline void set_ctrl0(uint64_t &ctrl_value, int bitPosition)
 {
 	ctrl_value &= ~(1ULL << bitPosition); // 先将第bitPosition位置为1，然后取反并与原值进行与操作，将指定位置为0
 }
 
-PTO_INTERNAL constexpr uint64_t get_ctrl()
+inline uint64_t get_ctrl()
 {
 	return ctrl_value; // 直接使用或操作将指定位置为1
 }

@@ -46,7 +46,7 @@ PTO_INTERNAL void GenCastCallFp32ToFp16(std::vector<CostModelStats> &stats, uint
 			stats.emplace_back("vconv_f322f16r", repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride,
 							   srcRepeatStride);
             break;
-        case RoundMode::CAST_ROUND
+        case RoundMode::CAST_ROUND:
 			stats.emplace_back("vconv_f322f16a", repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride,
 							   srcRepeatStride);
             break;
@@ -218,7 +218,7 @@ PTO_INTERNAL void GenCastCallFp32ToInt16_NonSatTorch(std::vector<CostModelStats>
                                                      __ubuf__ int32_t *tempInt32Buf)
 {
 	ctrl_value = get_ctrl();
-	set_ctrl0(ctrl_value, SAT_MODE_BIT));
+	set_ctrl0(ctrl_value, SAT_MODE_BIT);
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
 			stats.emplace_back("vconv_f322s32r", repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
@@ -310,7 +310,7 @@ PTO_INTERNAL void GenCastCallFp16ToInt32(std::vector<CostModelStats> &stats, uin
 			stats.emplace_back("vconv_f162s32c", repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride,
 							   srcRepeatStride);
             break;
-        case RoundMode::CAST_TRUNC
+        case RoundMode::CAST_TRUNC:
 			stats.emplace_back("vconv_f162s32z", repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride,
 							   srcRepeatStride);
             break;
