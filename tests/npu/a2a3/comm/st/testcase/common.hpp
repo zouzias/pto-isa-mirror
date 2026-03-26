@@ -450,8 +450,6 @@ struct TestContext {
             rtStreamDestroy(stream);
             stream = nullptr;
         }
-        aclStatus |= aclrtResetDevice(deviceId);
-        aclStatus |= aclFinalize();
         return (aclStatus == 0);
     }
 
@@ -600,6 +598,49 @@ private:
 // Rank 0 generates HcclRootInfo and broadcasts it to all ranks via MPI_Bcast.
 // MPI_Barrier ensures all ranks are synchronized before HCCL operations.
 // ============================================================================
+// One-time ACL/device initialization guard.
+// Ensures aclInit + aclrtSetDevice run only once per process,
+// and registers atexit cleanup so driver resources (Notify pool etc.)
+// are released cleanly at process exit instead of between test cases.
+inline bool EnsureAclDeviceInit(int mpiRank, int deviceId)
+{
+    static bool initialized = false;
+    static int cachedDeviceId = -1;
+    if (initialized && cachedDeviceId == deviceId)
+        return true;
+
+    constexpr int kAclRepeatInit = 100002;
+    aclError aRet = aclInit(nullptr);
+    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
+        std::cerr << "[ERROR] Rank " << mpiRank << ": aclInit failed: " << static_cast<int>(aRet) << std::endl;
+        return false;
+    }
+
+    if (mpiRank == 0) {
+        int32_t rtRet = rtSetDevice(deviceId);
+        COMM_LOG("[INIT] Rank 0: rtSetDevice(" << deviceId << ") -> " << rtRet);
+    }
+
+    aRet = aclrtSetDevice(deviceId);
+    if (aRet != ACL_SUCCESS) {
+        std::cerr << "[ERROR] Rank " << mpiRank << ": aclrtSetDevice(" << deviceId
+                  << ") failed: " << static_cast<int>(aRet) << std::endl;
+        return false;
+    }
+
+    cachedDeviceId = deviceId;
+    if (!initialized) {
+        initialized = true;
+        std::atexit([]() {
+            if (cachedDeviceId >= 0) {
+                aclrtResetDevice(cachedDeviceId);
+                aclFinalize();
+            }
+        });
+    }
+    return true;
+}
+
 template <typename Func>
 inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDeviceId, Func &&perRankFn)
 {
@@ -620,24 +661,8 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     }
     int deviceId = rankId % nRanks + firstDeviceId;
 
-    constexpr int kAclRepeatInit = 100002;
-    aclError aRet = aclInit(nullptr);
-    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
-        std::cerr << "[ERROR] Rank " << mpiRank << ": aclInit failed: " << static_cast<int>(aRet) << std::endl;
+    if (!EnsureAclDeviceInit(mpiRank, deviceId))
         return false;
-    }
-
-    if (mpiRank == 0) {
-        int32_t rtRet = rtSetDevice(deviceId);
-        COMM_LOG("[INIT] Rank 0: rtSetDevice(" << deviceId << ") -> " << rtRet);
-    }
-
-    aRet = aclrtSetDevice(deviceId);
-    if (aRet != ACL_SUCCESS) {
-        std::cerr << "[ERROR] Rank " << mpiRank << ": aclrtSetDevice(" << deviceId
-                  << ") failed: " << static_cast<int>(aRet) << std::endl;
-        return false;
-    }
 
     HcclRootInfo rootInfo{};
     if (mpiRank == 0) {
