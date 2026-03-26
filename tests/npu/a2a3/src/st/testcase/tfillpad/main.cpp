@@ -44,15 +44,9 @@ std::string GetGoldenDir()
 #define MAXBLOCK 64
 
 template <typename T>
-constexpr auto getGoldenZero()
+constexpr T getGoldenZero()
 {
-    if constexpr (sizeof(T) == 4) {
-        return (uint32_t)0;
-    } else if constexpr (sizeof(T) == 2) {
-        return (uint16_t)0;
-    } else if constexpr (sizeof(T) == 1) {
-        return (uint8_t)0;
-    }
+    return T{0};
 }
 
 template <int32_t testKey, typename T, int32_t kBlock>
