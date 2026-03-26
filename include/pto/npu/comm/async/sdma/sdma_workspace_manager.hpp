@@ -26,6 +26,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "acl/acl.h"
 
+#ifndef ACL_STREAM_DEVICE_USE_ONLY
+#define ACL_STREAM_DEVICE_USE_ONLY 0x00000020U
+#endif
+
 // aclnn tensor API (from aclnn/acl_meta.h, linked via libnnopbase).
 // Forward-declared to avoid pulling in aclnn headers that may conflict.
 struct aclTensor;
@@ -54,30 +58,8 @@ namespace sdma {
 
 namespace detail {
 
-constexpr uint32_t kSdmaMaxChan = 40;
+constexpr uint32_t kSdmaMaxChan = 48;
 constexpr size_t kSdmaWorkspaceBytes = 16 * 1024;
-
-enum RtStreamCreateAttrId
-{
-    RT_STREAM_CREATE_ATTR_FLAGS = 1,
-    RT_STREAM_CREATE_ATTR_PRIORITY = 2,
-};
-
-union RtStreamCreateAttrValue {
-    uint32_t flags;
-    uint32_t priority;
-    uint32_t rsv[4];
-};
-
-struct RtStreamCreateAttr {
-    RtStreamCreateAttrId id;
-    RtStreamCreateAttrValue value;
-};
-
-struct RtStreamCreateConfig {
-    RtStreamCreateAttr *attrs;
-    size_t numAttrs;
-};
 
 struct HostStreamInfo {
     uint64_t stream_;
@@ -93,12 +75,13 @@ struct HostStreamInfo {
 static_assert(sizeof(HostStreamInfo) == 64, "HostStreamInfo must be 64 bytes");
 
 struct SdmaOpResInfo {
-    HostStreamInfo streams[kSdmaMaxChan];
+    uint64_t size;
+    uint64_t streams_addr;
     uint64_t workspace_addr;
-    uint8_t reserved[56];
+    uint8_t reserved[40];
 };
+static_assert(sizeof(SdmaOpResInfo) == 64, "SdmaOpResInfo must be 64 bytes");
 
-using RtsStreamCreateFn = int32_t (*)(void **, RtStreamCreateConfig *);
 using RtStreamGetSqidFn = int32_t (*)(const void *, uint32_t *);
 using RtStreamGetCqidFn = int32_t (*)(const void *, uint32_t *, uint32_t *);
 using RtGetDeviceInfoFn = int32_t (*)(uint32_t, int32_t, int32_t, int64_t *);
@@ -144,6 +127,10 @@ public:
     {
         if (!inited_)
             return;
+        if (streamsDevicePtr_) {
+            aclrtFree(streamsDevicePtr_);
+            streamsDevicePtr_ = nullptr;
+        }
         if (opResDevicePtr_) {
             aclrtFree(opResDevicePtr_);
             opResDevicePtr_ = nullptr;
@@ -152,12 +139,13 @@ public:
             aclrtFree(reinterpret_cast<void *>(opResInfo_.workspace_addr));
             opResInfo_.workspace_addr = 0;
         }
-        for (uint32_t i = 0; i < detail::kSdmaMaxChan; ++i) {
-            if (opResInfo_.streams[i].stream_) {
-                aclrtDestroyStream(reinterpret_cast<aclrtStream>(opResInfo_.streams[i].stream_));
-                opResInfo_.streams[i].stream_ = 0;
+        for (auto &s : streams_) {
+            if (s.stream_) {
+                aclrtDestroyStream(reinterpret_cast<aclrtStream>(s.stream_));
+                s.stream_ = 0;
             }
         }
+        streams_.clear();
         opResInfo_ = {};
         CloseDynamicLibs();
         inited_ = false;
@@ -172,11 +160,12 @@ private:
     bool inited_{false};
     detail::SdmaOpResInfo opResInfo_{};
     void *opResDevicePtr_{nullptr};
+    std::vector<detail::HostStreamInfo> streams_;
+    void *streamsDevicePtr_{nullptr};
 
     void *rtHandle_{nullptr};
     void *opapiHandle_{nullptr};
 
-    detail::RtsStreamCreateFn pRtsStreamCreate_{nullptr};
     detail::RtStreamGetSqidFn pRtStreamGetSqid_{nullptr};
     detail::RtStreamGetCqidFn pRtStreamGetCqid_{nullptr};
     detail::RtGetDeviceInfoFn pRtGetDeviceInfo_{nullptr};
@@ -193,11 +182,10 @@ private:
             return false;
         }
 
-        pRtsStreamCreate_ = reinterpret_cast<detail::RtsStreamCreateFn>(dlsym(rtHandle_, "rtsStreamCreate"));
         pRtStreamGetSqid_ = reinterpret_cast<detail::RtStreamGetSqidFn>(dlsym(rtHandle_, "rtStreamGetSqid"));
         pRtStreamGetCqid_ = reinterpret_cast<detail::RtStreamGetCqidFn>(dlsym(rtHandle_, "rtStreamGetCqid"));
         pRtGetDeviceInfo_ = reinterpret_cast<detail::RtGetDeviceInfoFn>(dlsym(rtHandle_, "rtGetDeviceInfo"));
-        if (!pRtsStreamCreate_ || !pRtStreamGetSqid_ || !pRtStreamGetCqid_ || !pRtGetDeviceInfo_) {
+        if (!pRtStreamGetSqid_ || !pRtStreamGetCqid_ || !pRtGetDeviceInfo_) {
             std::cerr << "[SDMA] Failed to resolve runtime symbols: " << dlerror() << std::endl;
             return false;
         }
@@ -221,7 +209,6 @@ private:
 
     void CloseDynamicLibs()
     {
-        pRtsStreamCreate_ = nullptr;
         pRtStreamGetSqid_ = nullptr;
         pRtStreamGetCqid_ = nullptr;
         pRtGetDeviceInfo_ = nullptr;
@@ -253,22 +240,17 @@ private:
             return false;
         }
 
+        streams_.resize(channelNum);
         for (int32_t i = 0; i < channelNum; ++i) {
-            opResInfo_.streams[i].stream_ = 0;
+            streams_[i].stream_ = 0;
 
-            detail::RtStreamCreateAttr attrs[2];
-            attrs[0].id = detail::RT_STREAM_CREATE_ATTR_PRIORITY;
-            attrs[0].value.priority = 0;
-            attrs[1].id = detail::RT_STREAM_CREATE_ATTR_FLAGS;
-            attrs[1].value.flags = 0x800;
-
-            detail::RtStreamCreateConfig config{attrs, 2};
             void *stream = nullptr;
-            if (pRtsStreamCreate_(&stream, &config) != 0) {
-                std::cerr << "[SDMA] rtsStreamCreate channel " << i << " failed" << std::endl;
+            if (aclrtCreateStreamWithConfig(reinterpret_cast<aclrtStream *>(&stream), 0, ACL_STREAM_DEVICE_USE_ONLY) !=
+                0) {
+                std::cerr << "[SDMA] aclrtCreateStreamWithConfig channel " << i << " failed" << std::endl;
                 return false;
             }
-            opResInfo_.streams[i].stream_ = reinterpret_cast<uint64_t>(stream);
+            streams_[i].stream_ = reinterpret_cast<uint64_t>(stream);
 
             int32_t streamId = 0;
             if (aclrtStreamGetId(reinterpret_cast<aclrtStream>(stream), &streamId) != 0) {
@@ -294,12 +276,12 @@ private:
                 return false;
             }
 
-            opResInfo_.streams[i].ctx_ = reinterpret_cast<uint64_t>(ctx);
-            opResInfo_.streams[i].stream_id = streamId;
-            opResInfo_.streams[i].sq_id = sqId;
-            opResInfo_.streams[i].cq_id = cqId;
-            opResInfo_.streams[i].logic_cq_id = logicCqId;
-            opResInfo_.streams[i].dev_id = static_cast<int32_t>(dieId);
+            streams_[i].ctx_ = reinterpret_cast<uint64_t>(ctx);
+            streams_[i].stream_id = streamId;
+            streams_[i].sq_id = sqId;
+            streams_[i].cq_id = cqId;
+            streams_[i].logic_cq_id = logicCqId;
+            streams_[i].dev_id = static_cast<int32_t>(dieId);
         }
 
         std::cerr << "[SDMA] Created " << channelNum << " STARS streams OK" << std::endl;
@@ -324,14 +306,28 @@ private:
 
     bool CopyOpResToDevice()
     {
-        size_t size = sizeof(opResInfo_);
-        if (aclrtMalloc(&opResDevicePtr_, size, ACL_MEM_MALLOC_HUGE_FIRST) != 0) {
+        size_t streamsBytes = streams_.size() * sizeof(detail::HostStreamInfo);
+        if (aclrtMalloc(&streamsDevicePtr_, streamsBytes, ACL_MEM_MALLOC_HUGE_FIRST) != 0) {
+            std::cerr << "[SDMA] aclrtMalloc streams device failed" << std::endl;
+            return false;
+        }
+        if (aclrtMemcpy(streamsDevicePtr_, streamsBytes, streams_.data(), streamsBytes, ACL_MEMCPY_HOST_TO_DEVICE) !=
+            0) {
+            std::cerr << "[SDMA] CopyOpResToDevice streams memcpy failed" << std::endl;
+            return false;
+        }
+
+        opResInfo_.size = streams_.size();
+        opResInfo_.streams_addr = reinterpret_cast<uint64_t>(streamsDevicePtr_);
+
+        size_t opResSize = sizeof(opResInfo_);
+        if (aclrtMalloc(&opResDevicePtr_, opResSize, ACL_MEM_MALLOC_HUGE_FIRST) != 0) {
             std::cerr << "[SDMA] aclrtMalloc opResDevice failed" << std::endl;
             return false;
         }
-        if (aclrtMemset(opResDevicePtr_, size, 0, size) != 0 ||
-            aclrtMemcpy(opResDevicePtr_, size, &opResInfo_, size, ACL_MEMCPY_HOST_TO_DEVICE) != 0) {
-            std::cerr << "[SDMA] CopyOpResToDevice memset/memcpy failed" << std::endl;
+        if (aclrtMemset(opResDevicePtr_, opResSize, 0, opResSize) != 0 ||
+            aclrtMemcpy(opResDevicePtr_, opResSize, &opResInfo_, opResSize, ACL_MEMCPY_HOST_TO_DEVICE) != 0) {
+            std::cerr << "[SDMA] CopyOpResToDevice opRes memset/memcpy failed" << std::endl;
             return false;
         }
         return true;

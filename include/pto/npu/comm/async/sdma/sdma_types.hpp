@@ -22,7 +22,7 @@ namespace sdma {
 constexpr uint64_t kRtStarsSqeTypeSdma = 11ULL;
 constexpr uint64_t kCreditTimeDefault = 240ULL;
 constexpr uint32_t kSqDepth = 2048U;
-constexpr uint32_t kSdmaMaxChannel = 40U;
+constexpr uint32_t kSdmaMaxChannel = 48U;
 
 constexpr uint64_t RT_STARS_SQE_TYPE_SDMA = kRtStarsSqeTypeSdma;
 constexpr uint64_t K_CREDIT_TIME_DEFAULT = kCreditTimeDefault;
