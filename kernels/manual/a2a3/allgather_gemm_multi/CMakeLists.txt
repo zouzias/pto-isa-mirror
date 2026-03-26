@@ -14,27 +14,8 @@ else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 endif()
 
-if(NOT DEFINED ENV{SHMEM_HOME_PATH})
-    message(FATAL_ERROR "Cannot find SHMEM_HOME_PATH, please export SHMEM_HOME_PATH to shmem install root.")
-else()
-    set(SHMEM_HOME_PATH $ENV{SHMEM_HOME_PATH})
-    message(STATUS "SHMEM_HOME_PATH: ${SHMEM_HOME_PATH}")
-endif()
-
-# Auto-detect SHMEM backend
-if(DEFINED ENV{SHMEM_BACKEND})
-    set(SHMEM_BACKEND $ENV{SHMEM_BACKEND})
-endif()
-if(NOT DEFINED SHMEM_BACKEND)
-    if(EXISTS "${SHMEM_HOME_PATH}/shmem/include/shmem.h")
-        set(SHMEM_BACKEND "CANN_SHMEM")
-    elseif(EXISTS "${SHMEM_HOME_PATH}/shmem/include/shmem_api.h")
-        set(SHMEM_BACKEND "ASCEND_SHMEM")
-    else()
-        message(FATAL_ERROR "Cannot find shmem headers in ${SHMEM_HOME_PATH}/shmem/include/")
-    endif()
-endif()
-message(STATUS "SHMEM_BACKEND: ${SHMEM_BACKEND}")
+# HCCL backend (replaces SHMEM)
+message(STATUS "Using HCCL backend for communication")
 
 # =============================================================================
 # GEMM Size Configuration
@@ -103,26 +84,10 @@ set(CMAKE_CPP_COMPILE_OPTIONS
 )
 
 include_directories(
-    ${PROJECT_SOURCE_DIR}/../../../include
+    ${PROJECT_SOURCE_DIR}/../../../../include
     ${ASCEND_HOME_PATH}/include
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )
-
-# SHMEM include paths and definitions
-if(SHMEM_BACKEND STREQUAL "ASCEND_SHMEM")
-    add_compile_definitions(ASCEND_SHMEM)
-    include_directories(
-        ${SHMEM_HOME_PATH}/shmem/include
-        ${SHMEM_HOME_PATH}/memfabric_hybrid/include/smem/device
-    )
-else()
-    add_compile_definitions(CANN_SHMEM)
-    include_directories(
-        ${SHMEM_HOME_PATH}/shmem/include
-        ${SHMEM_HOME_PATH}/shmem/include/device
-        ${SHMEM_HOME_PATH}/../src/device
-    )
-endif()
 
 # =============================================================================
 # 1. Compute Kernel (Cube arch) - GEMM consumer
@@ -136,8 +101,8 @@ target_compile_options(allgather_gemm_compute_kernel PRIVATE
     -DCONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
 )
 target_include_directories(allgather_gemm_compute_kernel PRIVATE
-    ${PROJECT_SOURCE_DIR}/../../../include/
-    ${PROJECT_SOURCE_DIR}/../../../tests/npu/a2a3/comm/st/testcase/
+    ${PROJECT_SOURCE_DIR}/../../../../include/
+    ${PROJECT_SOURCE_DIR}/../../../../tests/npu/a2a3/comm/st/testcase/
 )
 target_link_options(allgather_gemm_compute_kernel PRIVATE --cce-fatobj-link)
 
@@ -155,9 +120,9 @@ target_compile_options(allgather_gemm_comm_kernel PRIVATE
     -DCONFIG_COMM_BLOCK_NUM=${COMM_BLOCK_NUM}
 )
 target_include_directories(allgather_gemm_comm_kernel PRIVATE
-    ${PROJECT_SOURCE_DIR}/../../../include/
-    ${PROJECT_SOURCE_DIR}/../../../tests/npu/a2a3/comm/st/testcase/
-    ${PROJECT_SOURCE_DIR}/../../../tests/common
+    ${PROJECT_SOURCE_DIR}/../../../../include/
+    ${PROJECT_SOURCE_DIR}/../../../../tests/npu/a2a3/comm/st/testcase/
+    ${PROJECT_SOURCE_DIR}/../../../../tests/common
     $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc
     $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include
     $ENV{ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api
@@ -168,15 +133,11 @@ target_include_directories(allgather_gemm_comm_kernel PRIVATE
     $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include/utils
 )
 target_link_directories(allgather_gemm_comm_kernel PRIVATE
-    ${SHMEM_HOME_PATH}/shmem/lib
-    ${SHMEM_HOME_PATH}/memfabric_hybrid/lib
     ${ASCEND_HOME_PATH}/lib64
 )
-# 显式依赖 compute_kernel，以便解析 launchAllGatherGemmComputeStreaming 等符号
 target_link_libraries(allgather_gemm_comm_kernel PRIVATE
     allgather_gemm_compute_kernel
-    shmem
-    runtime
+    hccl hcomm runtime nnopbase
 )
 target_link_options(allgather_gemm_comm_kernel PRIVATE --cce-fatobj-link)
 
@@ -186,9 +147,9 @@ target_link_options(allgather_gemm_comm_kernel PRIVATE --cce-fatobj-link)
 add_executable(allgather_gemm main.cpp)
 target_compile_options(allgather_gemm PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
 target_include_directories(allgather_gemm PRIVATE
-    ${PROJECT_SOURCE_DIR}/../../../include/
-    ${PROJECT_SOURCE_DIR}/../../../tests/common
-    ${PROJECT_SOURCE_DIR}/../../../tests/comm/st/testcase/
+    ${PROJECT_SOURCE_DIR}/../../../../include/
+    ${PROJECT_SOURCE_DIR}/../../../../tests/common
+    ${PROJECT_SOURCE_DIR}/../../../../tests/npu/a2a3/comm/st/testcase/
 )
 target_compile_definitions(allgather_gemm PRIVATE
     CONFIG_SIZE_NAME="${SIZE_NAME}"
@@ -196,8 +157,6 @@ target_compile_definitions(allgather_gemm PRIVATE
 
 target_link_directories(allgather_gemm PUBLIC
     ${ASCEND_HOME_PATH}/lib64
-    ${SHMEM_HOME_PATH}/shmem/lib
-    ${SHMEM_HOME_PATH}/memfabric_hybrid/lib
     ${ASCEND_HOME_PATH}/simulator/${SOC_VERSION}/lib
     ${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib
 )
@@ -207,5 +166,5 @@ target_link_libraries(allgather_gemm PRIVATE
     allgather_gemm_comm_kernel
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
-    stdc++ ascendcl m tiling_api platform c_sec dl nnopbase shmem pthread
+    stdc++ ascendcl hccl hcomm m tiling_api platform c_sec dl nnopbase pthread
 )

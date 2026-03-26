@@ -1,5 +1,5 @@
 /**
- * AllGather GEMM Demo - Main Entry Point
+ * AllGather GEMM Demo - Main Entry Point (HCCL backend)
  *
  * Multi-card AllGather then GEMM: each card first gathers all portions of A
  * via AllGather, then computes the full C = A * B.
@@ -11,21 +11,34 @@
  * This is the producer-consumer mirror of gemm_allgather:
  *   gemm_allgather:  GEMM (producer) → AllGather (consumer)
  *   allgather_gemm:  AllGather (producer) → GEMM (consumer)
+ *
+ * Launch with: mpirun -n <N_RANKS> ./allgather_gemm
  */
 
 #include <cstdio>
 #include <cstdlib>
+#include "comm_mpi.h"
 
-// Launcher function defined in allgather_gemm_comm_kernel.cpp
 extern bool RunAllGatherGemm();
 
-int main()
+int main(int argc, char** argv)
 {
-    bool ok = RunAllGatherGemm();
-    if (ok) {
-        printf("AllGather GEMM demo completed successfully.\n");
-    } else {
-        printf("AllGather GEMM demo FAILED.\n");
+    if (!CommMpiInit(&argc, &argv)) {
+        fprintf(stderr, "[FATAL] CommMpiInit failed. Launch with: mpirun -n <N> ./allgather_gemm\n");
+        return 1;
     }
+
+    bool ok = RunAllGatherGemm();
+
+    int rank = CommMpiRank();
+    if (rank == 0) {
+        if (ok) {
+            printf("AllGather GEMM demo completed successfully.\n");
+        } else {
+            printf("AllGather GEMM demo FAILED.\n");
+        }
+    }
+
+    CommMpiFinalize();
     return ok ? 0 : 1;
 }

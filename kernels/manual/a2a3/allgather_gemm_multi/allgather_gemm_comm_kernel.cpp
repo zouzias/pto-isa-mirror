@@ -12,9 +12,14 @@
 #include <cmath>
 #include <algorithm>
 #include <tuple>
+#include <thread>
 
+#include <pto/pto-inst.hpp>
+
+#ifdef __CCE_AICORE__
 #include "pto/comm/pto_comm_inst.hpp"
 #include "pto/common/pto_tile.hpp"
+#endif
 #include "common.hpp"
 #include "ready_queue.hpp"
 
@@ -27,8 +32,6 @@
 #define DT_UNDEFINED DT_UNDEFINED_SAVED
 #undef DT_UNDEFINED_SAVED
 #endif
-
-#include <pto/pto-inst.hpp>
 
 #ifndef CONFIG_G_M
 #define CONFIG_G_M 2048
@@ -68,12 +71,6 @@ constexpr int COMM_BLOCK_NUM = CONFIG_COMM_BLOCK_NUM;
 constexpr int WARMUP_ITERS = 5;
 constexpr int MEASURE_ITERS = 100;
 
-// 多 AIV 时 ShmemDeviceQuiet() 易设备级死锁，可改为不调 Quiet，仅依赖 TPUT 与后续写 flag 的序
-// （若运行时保证同 block 内 TPUT 先于远程写完成则正确；否则可能偶发 AIC 读到未写完的数据）
-#ifndef AIV_SKIP_DEVICE_QUIET
-#define AIV_SKIP_DEVICE_QUIET 1
-#endif
-
 // ============================================================================
 // CommAIVRoleStreamingParallel（M-slice）
 //
@@ -83,11 +80,12 @@ constexpr int MEASURE_ITERS = 100;
 AICORE inline void CommAIVRoleStreamingParallel(
     __gm__ half* shmem_input,
     __gm__ TileFlagMatrix* tile_flags,
+    __gm__ HcclDeviceContext* hcclCtx,
     int block_idx,
     int num_blocks)
 {
-    int my_rank = shmem_my_pe();
-    int n_ranks = shmem_n_pes();
+    int my_rank = static_cast<int>(hcclCtx->rankId);
+    int n_ranks = static_cast<int>(hcclCtx->rankNum);
     int num_remote_ranks = n_ranks - 1;
 
     int m_tiles = static_cast<int>(G_M / G_BASE_M);
@@ -135,9 +133,9 @@ AICORE inline void CommAIVRoleStreamingParallel(
 
             int dest_rank = (dest_idx < my_rank) ? dest_idx : (dest_idx + 1);
             __gm__ TileFlagMatrix* remote_tile_flags =
-                reinterpret_cast<__gm__ TileFlagMatrix*>(ShmemPtr(tile_flags, dest_rank));
+                reinterpret_cast<__gm__ TileFlagMatrix*>(HcclRemotePtr(hcclCtx, tile_flags, dest_rank));
             __gm__ int32_t* remote_summary_src =
-                reinterpret_cast<__gm__ int32_t*>(reinterpret_cast<__gm__ uint8_t*>(ShmemPtr(tile_flags, dest_rank)) + TileFlagMatrixBytes(flags))
+                reinterpret_cast<__gm__ int32_t*>(reinterpret_cast<__gm__ uint8_t*>(HcclRemotePtr(hcclCtx, tile_flags, dest_rank)) + TileFlagMatrixBytes(flags))
                 + my_rank;
 
             int tile_start = tile_idx * TILE_SIZE;
@@ -153,13 +151,10 @@ AICORE inline void CommAIVRoleStreamingParallel(
                 uint64_t row_off = static_cast<uint64_t>(mi_global) * G_BASE_M;
                 uint64_t offset = row_off * G_K + col_off;
                 Global srcG(shmem_input + offset, tileShape, tileStride);
-                __gm__ half* remote_input = ShmemPtr(shmem_input, dest_rank);
+                __gm__ half* remote_input = HcclRemotePtr(hcclCtx, shmem_input, dest_rank);
                 Global dstG(remote_input + offset, tileShape, tileStride);
                 pto::comm::TPUT(dstG, srcG, pingTile, pongTile);
             }
-#if !AIV_SKIP_DEVICE_QUIET
-            ShmemDeviceQuiet();
-#endif
             if (tile_idx < num_tiles) {
                 SetRemoteTileFlagReady(remote_tile_flags, my_rank, tile_idx, remote_summary_src);
             }
@@ -180,9 +175,9 @@ AICORE inline void CommAIVRoleStreamingParallel(
 
     int dest_rank = (dest_idx < my_rank) ? dest_idx : (dest_idx + 1);
     __gm__ TileFlagMatrix* remote_tile_flags =
-        reinterpret_cast<__gm__ TileFlagMatrix*>(ShmemPtr(tile_flags, dest_rank));
+        reinterpret_cast<__gm__ TileFlagMatrix*>(HcclRemotePtr(hcclCtx, tile_flags, dest_rank));
     __gm__ int32_t* remote_summary_base =
-        reinterpret_cast<__gm__ int32_t*>(reinterpret_cast<__gm__ uint8_t*>(ShmemPtr(tile_flags, dest_rank)) + TileFlagMatrixBytes(flags));
+        reinterpret_cast<__gm__ int32_t*>(reinterpret_cast<__gm__ uint8_t*>(HcclRemotePtr(hcclCtx, tile_flags, dest_rank)) + TileFlagMatrixBytes(flags));
     __gm__ int32_t* remote_summary_src = remote_summary_base + my_rank;
 
     int tiles_per_block = (num_tiles + blocks_per_dest - 1) / blocks_per_dest;
@@ -206,13 +201,10 @@ AICORE inline void CommAIVRoleStreamingParallel(
             uint64_t row_off = static_cast<uint64_t>(mi_global) * G_BASE_M;
             uint64_t offset = row_off * G_K + col_off;
             Global srcG(shmem_input + offset, tileShape, tileStride);
-            __gm__ half* remote_input = ShmemPtr(shmem_input, dest_rank);
+            __gm__ half* remote_input = HcclRemotePtr(hcclCtx, shmem_input, dest_rank);
             Global dstG(remote_input + offset, tileShape, tileStride);
             pto::comm::TPUT(dstG, srcG, pingTile, pongTile);
         }
-#if !AIV_SKIP_DEVICE_QUIET
-        ShmemDeviceQuiet();
-#endif
         SetRemoteTileFlagReady(remote_tile_flags, my_rank, tile_idx, remote_summary_src);
     }
 }
@@ -223,10 +215,12 @@ AICORE inline void CommAIVRoleStreamingParallel(
 __global__ AICORE void RingCommStreamingKernel(
     __gm__ uint8_t* shmem_input,
     __gm__ uint8_t* tile_flags,
+    __gm__ uint8_t* hccl_ctx_raw,
     int block_num)
 {
     int block_idx = get_block_idx();
-    int n_ranks = shmem_n_pes();
+    __gm__ HcclDeviceContext* hcclCtx = reinterpret_cast<__gm__ HcclDeviceContext*>(hccl_ctx_raw);
+    int n_ranks = static_cast<int>(hcclCtx->rankNum);
     int num_remote_ranks = n_ranks - 1;
 
     if (num_remote_ranks <= 0) {
@@ -236,6 +230,7 @@ __global__ AICORE void RingCommStreamingKernel(
     CommAIVRoleStreamingParallel(
         reinterpret_cast<__gm__ half*>(shmem_input),
         reinterpret_cast<__gm__ TileFlagMatrix*>(tile_flags),
+        hcclCtx,
         block_idx,
         block_num);
 }
@@ -243,6 +238,7 @@ __global__ AICORE void RingCommStreamingKernel(
 static void launchRingCommStreaming(
     uint8_t* shmem_input,
     uint8_t* tile_flags,
+    uint8_t* hccl_ctx,
     int n_ranks,
     void* stream)
 {
@@ -256,7 +252,7 @@ static void launchRingCommStreaming(
     }
     int total_blocks = num_remote_ranks * blocks_per_dest;
     RingCommStreamingKernel<<<total_blocks, nullptr, stream>>>(
-        shmem_input, tile_flags, total_blocks);
+        shmem_input, tile_flags, hccl_ctx, total_blocks);
 }
 
 extern void launchAllGatherGemmComputeStreaming(
@@ -267,7 +263,8 @@ extern void launchAllGatherGemmComputeStreaming(
     void* stream,
     int block_num);
 
-static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
+static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
+                                    const HcclRootInfo* rootInfo)
 {
     if (G_M % G_BASE_M != 0 || G_N % G_BASE_N != 0 ||
         G_M % n_ranks != 0 || (G_M / n_ranks) % G_BASE_M != 0 ||
@@ -278,53 +275,35 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         return false;
     }
 
-    int32_t ret = ShmemSetConfStoreTls(false, nullptr, 0);
-    if (ret != 0) {
-        std::cerr << "[ERROR] Rank " << rank_id << ": Failed to init shmem tls\n";
+    int status = 0;
+
+    TestContext hcclTestCtx;
+    if (!hcclTestCtx.Init(rank_id, n_ranks, n_ranks, 0, rootInfo)) {
+        std::cerr << "[ERROR] Rank " << rank_id << ": HCCL TestContext Init failed\n";
         return false;
     }
 
-    int status = 0;
     aclrtStream computeStream = nullptr;
     aclrtStream commStream = nullptr;
-
-    status |= aclInit(nullptr);
-    status |= aclrtSetDevice(device_id);
     status |= aclrtCreateStream(&computeStream);
     status |= aclrtCreateStream(&commStream);
 
     size_t inputShmemBytes = static_cast<size_t>(G_M) * G_K * sizeof(uint16_t);
-    size_t heapBytes = 64ULL * 1024 * 1024;
-    while (heapBytes < inputShmemBytes * 2) {
-        heapBytes *= 2;
-    }
-
-    ShmemEnv env;
-    env.rank = rank_id;
-    env.size = n_ranks;
-    env.ipPort = "tcp://127.0.0.1:8780";
-    env.heapBytes = heapBytes;
-    if (!ShmemInitFromEnv(env)) {
-        std::cerr << "[ERROR] Rank " << rank_id << ": ShmemInitFromEnv failed\n";
-        return false;
-    }
-
-    void* shmem_input = ShmemMalloc(inputShmemBytes);
-    if (shmem_input == nullptr) {
-        std::cerr << "[ERROR] Rank " << rank_id << ": ShmemMalloc input failed\n";
-        return false;
-    }
-    aclrtMemset(shmem_input, inputShmemBytes, 0, inputShmemBytes);
 
     int m_tiles = static_cast<int>(G_M / G_BASE_M);
     int m_tiles_local = m_tiles / n_ranks;
     int k_chunks = static_cast<int>(G_K / G_BASE_N);
     int num_blocks_per_src = m_tiles_local * k_chunks;
 
-    // Tile-based flag matrix + per-src summary (doorbell) for two-level polling
     size_t tileFlagMatrixSize = TileFlagMatrixSize(n_ranks, num_blocks_per_src, TILE_SIZE);
     size_t tileFlagWithSummarySize = TileFlagMatrixWithSummarySize(n_ranks, num_blocks_per_src, TILE_SIZE);
-    void* tile_flag_shmem = ShmemMalloc(tileFlagWithSummarySize);
+
+    uint64_t localWinBase = hcclTestCtx.hostCtx.windowsIn[rank_id];
+    size_t winOffset = 0;
+    void* shmem_input = WindowAlloc(localWinBase, winOffset, inputShmemBytes);
+    aclrtMemset(shmem_input, inputShmemBytes, 0, inputShmemBytes);
+
+    void* tile_flag_shmem = WindowAlloc(localWinBase, winOffset, tileFlagWithSummarySize);
     TileFlagMatrix* tile_flag_host = nullptr;
     aclrtMallocHost(reinterpret_cast<void**>(&tile_flag_host), tileFlagWithSummarySize);
     TileFlagMatrixInit(tile_flag_host, n_ranks, num_blocks_per_src, TILE_SIZE);
@@ -368,7 +347,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
     aclrtFreeHost(a_local_host);
     aclrtFreeHost(b_host);
 
-    ShmemBarrierAll();
+    HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
     // ------------------------------------------------------------------
     // Helper lambdas (streaming only)
@@ -402,17 +381,18 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         resetStreamingState();
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         launchRingCommStreaming(
             reinterpret_cast<uint8_t*>(shmem_input),
             reinterpret_cast<uint8_t*>(tile_flag_shmem),
+            reinterpret_cast<uint8_t*>(hcclTestCtx.deviceCtx),
             n_ranks,
             commStream);
         aclrtSynchronizeStream(commStream);
 
         if (rank_id == 0) std::cout << "  Comm warmup " << i << " done" << std::endl;
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
     }
 
     // ------------------------------------------------------------------
@@ -425,7 +405,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         resetStreamingState();
         prePopulateTileFlags();
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         launchAllGatherGemmComputeStreaming(
             reinterpret_cast<uint8_t*>(output_dev),
@@ -437,7 +417,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         aclrtSynchronizeStream(computeStream);
 
         if (rank_id == 0) std::cout << "  Compute warmup " << i << " done" << std::endl;
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
     }
 
     // ------------------------------------------------------------------
@@ -449,15 +429,16 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         resetStreamingState();
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         launchRingCommStreaming(
             reinterpret_cast<uint8_t*>(shmem_input),
             reinterpret_cast<uint8_t*>(tile_flag_shmem),
+            reinterpret_cast<uint8_t*>(hcclTestCtx.deviceCtx),
             n_ranks,
             commStream);
         aclrtSynchronizeStream(commStream);
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         launchAllGatherGemmComputeStreaming(
             reinterpret_cast<uint8_t*>(output_dev),
@@ -469,7 +450,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         aclrtSynchronizeStream(computeStream);
 
         if (rank_id == 0) std::cout << "  Sequential warmup " << i << " done" << std::endl;
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
     }
 
     // ------------------------------------------------------------------
@@ -481,11 +462,12 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
 
     for (int i = 0; i < WARMUP_ITERS; ++i) {
         resetStreamingState();
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         launchRingCommStreaming(
             reinterpret_cast<uint8_t*>(shmem_input),
             reinterpret_cast<uint8_t*>(tile_flag_shmem),
+            reinterpret_cast<uint8_t*>(hcclTestCtx.deviceCtx),
             n_ranks,
             commStream);
         launchAllGatherGemmComputeStreaming(
@@ -499,7 +481,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         aclrtSynchronizeStream(commStream);
 
         if (rank_id == 0) std::cout << "  Streaming pipelined warmup " << i << " done" << std::endl;
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
     }
 
     // ------------------------------------------------------------------
@@ -539,11 +521,12 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
             std::cout << "\n[VERIFY] Running functional verification (all ranks)..." << std::endl;
         }
         resetStreamingState();
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         launchRingCommStreaming(
             reinterpret_cast<uint8_t*>(shmem_input),
             reinterpret_cast<uint8_t*>(tile_flag_shmem),
+            reinterpret_cast<uint8_t*>(hcclTestCtx.deviceCtx),
             n_ranks,
             commStream);
         launchAllGatherGemmComputeStreaming(
@@ -555,10 +538,10 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
             COMPUTE_BLOCK_NUM);
         aclrtSynchronizeStream(computeStream);
         aclrtSynchronizeStream(commStream);
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         is_ok = verifyAgainstGolden("post-warmup");
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         if (!is_ok) {
             std::cerr << "[ERROR] Rank " << rank_id << ": Functional verification failed, aborting performance measurement." << std::endl;
@@ -572,26 +555,27 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         std::cout << "[PERF] Starting measurement (" << MEASURE_ITERS << " iterations)..." << std::endl;
     }
 
-    ShmemBarrierAll();
+    HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
     // Measure comm kernel time (streaming, standalone)
     std::vector<double> comm_times_us;
     for (int iter = 0; iter < MEASURE_ITERS; ++iter) {
         resetStreamingState();
         aclrtSynchronizeStream(commStream);
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         auto comm_start = std::chrono::high_resolution_clock::now();
         launchRingCommStreaming(
             reinterpret_cast<uint8_t*>(shmem_input),
             reinterpret_cast<uint8_t*>(tile_flag_shmem),
+            reinterpret_cast<uint8_t*>(hcclTestCtx.deviceCtx),
             n_ranks,
             commStream);
         aclrtSynchronizeStream(commStream);
         auto comm_end = std::chrono::high_resolution_clock::now();
         double comm_time = std::chrono::duration<double, std::micro>(comm_end - comm_start).count();
         comm_times_us.push_back(comm_time);
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
     }
 
     // Measure compute kernel time (standalone, pre-populated tile flags)
@@ -600,7 +584,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         resetStreamingState();
         prePopulateTileFlags();
         aclrtSynchronizeStream(computeStream);
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         auto compute_start = std::chrono::high_resolution_clock::now();
         launchAllGatherGemmComputeStreaming(
@@ -614,7 +598,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         auto compute_end = std::chrono::high_resolution_clock::now();
         double compute_time = std::chrono::duration<double, std::micro>(compute_end - compute_start).count();
         compute_times_us.push_back(compute_time);
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
     }
 
     // Measure sequential execution (streaming comm then streaming compute)
@@ -623,12 +607,13 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         resetStreamingState();
         aclrtSynchronizeStream(commStream);
         aclrtSynchronizeStream(computeStream);
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         auto seq_start = std::chrono::high_resolution_clock::now();
         launchRingCommStreaming(
             reinterpret_cast<uint8_t*>(shmem_input),
             reinterpret_cast<uint8_t*>(tile_flag_shmem),
+            reinterpret_cast<uint8_t*>(hcclTestCtx.deviceCtx),
             n_ranks,
             commStream);
         aclrtSynchronizeStream(commStream);
@@ -643,7 +628,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         auto seq_end = std::chrono::high_resolution_clock::now();
         double seq_time_us = std::chrono::duration<double, std::micro>(seq_end - seq_start).count();
         sequential_times_us.push_back(seq_time_us);
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
     }
 
     // ------------------------------------------------------------------
@@ -654,12 +639,13 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         resetStreamingState();
         aclrtSynchronizeStream(commStream);
         aclrtSynchronizeStream(computeStream);
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
         auto stream_start = std::chrono::high_resolution_clock::now();
         launchRingCommStreaming(
             reinterpret_cast<uint8_t*>(shmem_input),
             reinterpret_cast<uint8_t*>(tile_flag_shmem),
+            reinterpret_cast<uint8_t*>(hcclTestCtx.deviceCtx),
             n_ranks,
             commStream);
         launchAllGatherGemmComputeStreaming(
@@ -674,13 +660,13 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         auto stream_end = std::chrono::high_resolution_clock::now();
         double stream_time_us = std::chrono::duration<double, std::micro>(stream_end - stream_start).count();
         streaming_times_us.push_back(stream_time_us);
-        ShmemBarrierAll();
+        HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
     }
 
     // ------------------------------------------------------------------
     // Final verification against golden data (all ranks)
     // ------------------------------------------------------------------
-    ShmemBarrierAll();
+    HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
     is_ok = verifyAgainstGolden("final");
 
@@ -820,20 +806,16 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id)
         std::cout << "================================================================\n" << std::endl;
     }
 
-    ShmemFree(shmem_input);
-    ShmemFree(tile_flag_shmem);
     aclrtFree(src1_dev);
     aclrtFree(output_dev);
     aclrtFreeHost(tile_flag_host);
 
-    ShmemFinalize();
-
     status |= aclrtDestroyStream(computeStream);
     status |= aclrtDestroyStream(commStream);
-    status |= aclrtResetDevice(device_id);
-    status |= aclFinalize();
 
-    return (status == 0) && is_ok;
+    bool hcclOk = hcclTestCtx.Finalize();
+
+    return (status == 0) && is_ok && hcclOk;
 }
 
 bool RunAllGatherGemm()
@@ -849,6 +831,50 @@ bool RunAllGatherGemm()
         return false;
     }
 
+    int mpiRank = CommMpiRank();
+    int mpiSize = CommMpiSize();
+
+    if (mpiSize != n_ranks) {
+        if (mpiRank == 0) {
+            std::cerr << "[ERROR] MPI world size (" << mpiSize << ") != expected N_RANKS (" << n_ranks
+                      << "). Launch with: mpirun -n " << n_ranks << " ./allgather_gemm" << std::endl;
+        }
+        return false;
+    }
+
+    int rank_id = mpiRank;
+    int device_id = rank_id;
+
+    constexpr int kAclRepeatInit = 100002;
+    aclError aRet = aclInit(nullptr);
+    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
+        std::cerr << "[ERROR] Rank " << rank_id << ": aclInit failed: " << static_cast<int>(aRet) << std::endl;
+        return false;
+    }
+
+    if (rank_id == 0) {
+        rtSetDevice(device_id);
+    }
+
+    aRet = aclrtSetDevice(device_id);
+    if (aRet != ACL_SUCCESS) {
+        std::cerr << "[ERROR] Rank " << rank_id << ": aclrtSetDevice(" << device_id
+                  << ") failed: " << static_cast<int>(aRet) << std::endl;
+        return false;
+    }
+
+    HcclRootInfo rootInfo{};
+    if (rank_id == 0) {
+        HcclResult hret = HcclGetRootInfo(&rootInfo);
+        if (hret != HCCL_SUCCESS) {
+            std::cerr << "[ERROR] HcclGetRootInfo failed: " << hret << std::endl;
+            return false;
+        }
+    }
+
+    CommMpiBcast(&rootInfo, HCCL_ROOT_INFO_BYTES, COMM_MPI_CHAR, 0);
+    CommMpiBarrier();
+
     int m_tiles = static_cast<int>(G_M / G_BASE_M);
     int n_tiles = static_cast<int>(G_N / G_BASE_N);
     int m_local = static_cast<int>(G_M) / n_ranks;
@@ -856,58 +882,35 @@ bool RunAllGatherGemm()
     int num_blocks_per_src = (m_tiles / n_ranks) * k_chunks;
     int num_tiles = m_tiles * n_tiles;
 
-    std::cout << "\n================================================================" << std::endl;
-    std::cout << "  AllGather GEMM (M-slice) Performance Test Suite" << std::endl;
-    std::cout << "  (AllGather=producer, GEMM=consumer, M-dimension partitioning)" << std::endl;
-    std::cout << "  Signaling: TileFlagMatrix + TNOTIFY AtomicAdd + Polling (M-slice streaming)" << std::endl;
-    std::cout << "================================================================" << std::endl;
+    if (rank_id == 0) {
+        std::cout << "\n================================================================" << std::endl;
+        std::cout << "  AllGather GEMM (M-slice) Performance Test Suite (HCCL backend)" << std::endl;
+        std::cout << "  (AllGather=producer, GEMM=consumer, M-dimension partitioning)" << std::endl;
+        std::cout << "  Signaling: TileFlagMatrix + TNOTIFY AtomicAdd + Polling (M-slice streaming)" << std::endl;
+        std::cout << "================================================================" << std::endl;
 
-    std::cout << "  Current compiled configuration:" << std::endl;
-    std::cout << "    M=" << G_M << ", K=" << G_K << ", N=" << G_N << std::endl;
-    std::cout << "    n_ranks=" << n_ranks << ", M_local=" << m_local << " per rank" << std::endl;
-    std::cout << "    Base tile: " << G_BASE_M << "x" << G_BASE_K << "x" << G_BASE_N << std::endl;
-    std::cout << "    Total blocks per source rank: " << num_blocks_per_src
-              << " (" << (m_tiles / n_ranks) << " M-tiles x " << k_chunks << " K-blocks)" << std::endl;
-    std::cout << "    Total compute tiles (per rank): " << num_tiles
-              << " (" << m_tiles << "x" << n_tiles << ")" << std::endl;
+        std::cout << "  Current compiled configuration:" << std::endl;
+        std::cout << "    M=" << G_M << ", K=" << G_K << ", N=" << G_N << std::endl;
+        std::cout << "    n_ranks=" << n_ranks << ", M_local=" << m_local << " per rank" << std::endl;
+        std::cout << "    Base tile: " << G_BASE_M << "x" << G_BASE_K << "x" << G_BASE_N << std::endl;
+        std::cout << "    Total blocks per source rank: " << num_blocks_per_src
+                  << " (" << (m_tiles / n_ranks) << " M-tiles x " << k_chunks << " K-blocks)" << std::endl;
+        std::cout << "    Total compute tiles (per rank): " << num_tiles
+                  << " (" << m_tiles << "x" << n_tiles << ")" << std::endl;
 
-    int num_remote_ranks = n_ranks - 1;
-    int blocks_per_dest = (num_remote_ranks > 0) ? (COMM_BLOCK_NUM / num_remote_ranks) : 0;
-    if (blocks_per_dest < 1) blocks_per_dest = 1;
-    int actual_comm_blocks = num_remote_ranks * blocks_per_dest;
-    std::cout << "  Parallelization:" << std::endl;
-    std::cout << "    Comm kernel blocks: " << actual_comm_blocks << " (streaming AllGather M-slice, CONFIG=" << COMM_BLOCK_NUM << ")" << std::endl;
-    std::cout << "    Compute kernel blocks: " << COMPUTE_BLOCK_NUM << " (GEMM consumer)" << std::endl;
-    std::cout << "  Performance test config:" << std::endl;
-    std::cout << "    Warmup iterations: " << WARMUP_ITERS << std::endl;
-    std::cout << "    Measurement iterations: " << MEASURE_ITERS << std::endl;
-    std::cout << "================================================================" << std::endl;
-
-    int n_devices = n_ranks;
-    constexpr int first_device_id = 0;
-
-    std::vector<pid_t> pids;
-    for (int r = 0; r < n_ranks; ++r) {
-        pid_t pid = fork();
-        if (pid == 0) {
-            int device_id = r % n_devices + first_device_id;
-            const bool ok = RunAllGatherGemmPerRank(r, n_ranks, device_id);
-            _exit(ok ? 0 : 1);
-        } else if (pid > 0) {
-            pids.push_back(pid);
-        } else {
-            std::cerr << "[ERROR] fork() failed\n";
-            return false;
-        }
+        int num_remote_ranks = n_ranks - 1;
+        int blocks_per_dest = (num_remote_ranks > 0) ? (COMM_BLOCK_NUM / num_remote_ranks) : 0;
+        if (blocks_per_dest < 1) blocks_per_dest = 1;
+        int actual_comm_blocks = num_remote_ranks * blocks_per_dest;
+        std::cout << "  Parallelization:" << std::endl;
+        std::cout << "    Comm kernel blocks: " << actual_comm_blocks << " (streaming AllGather M-slice, CONFIG=" << COMM_BLOCK_NUM << ")" << std::endl;
+        std::cout << "    Compute kernel blocks: " << COMPUTE_BLOCK_NUM << " (GEMM consumer)" << std::endl;
+        std::cout << "  Performance test config:" << std::endl;
+        std::cout << "    Warmup iterations: " << WARMUP_ITERS << std::endl;
+        std::cout << "    Measurement iterations: " << MEASURE_ITERS << std::endl;
+        std::cout << "================================================================" << std::endl;
     }
 
-    bool success = true;
-    for (pid_t p : pids) {
-        int wstatus = 0;
-        waitpid(p, &wstatus, 0);
-        if (!(WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0)) {
-            success = false;
-        }
-    }
-    return success;
+    bool ok = RunAllGatherGemmPerRank(rank_id, n_ranks, device_id, &rootInfo);
+    return ok;
 }

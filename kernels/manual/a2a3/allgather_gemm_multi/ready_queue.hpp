@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-#ifndef __CCE_KT_TEST__
+#if !defined(__CCE_KT_TEST__) && defined(__CCE_AICORE__)
 #include "pto/comm/pto_comm_inst.hpp"
 #endif
 
@@ -106,7 +106,7 @@ inline void TileFlagMatrixSetLocalReady(TileFlagMatrix* flags, int my_rank)
     }
 }
 
-#ifndef __CCE_KT_TEST__
+#if !defined(__CCE_KT_TEST__) && defined(__CCE_AICORE__)
 // ============================================================================
 // TileFlagMatrix device-side functions
 // ============================================================================

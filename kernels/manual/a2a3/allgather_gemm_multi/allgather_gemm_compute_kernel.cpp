@@ -2,8 +2,6 @@
 #include <pto/pto-inst.hpp>
 #include "ready_queue.hpp"
 
-using namespace pto;
-
 constexpr uint32_t BUFFER_NUM = 2;
 constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024;
 
@@ -34,7 +32,9 @@ static_assert(G_BASE_N == G_BASE_K * G_STEP_KA, "Expect one comm K-block equals 
 #endif
 constexpr int COMPUTE_BLOCK_NUM = CONFIG_COMPUTE_BLOCK_NUM;
 
-// Type aliases for tiles (shared across functions)
+#ifdef __CCE_AICORE__
+using namespace pto;
+
 using TileMatAData = Tile<TileType::Mat, half, G_BASE_M, G_BASE_K * G_STEP_KA,
                           BLayout::ColMajor, G_BASE_M, G_BASE_K * G_STEP_KA, SLayout::RowMajor>;
 using TileMatBData = Tile<TileType::Mat, half, G_BASE_K * G_STEP_KB, G_BASE_N,
@@ -43,7 +43,6 @@ using LeftTile = TileLeft<half, G_BASE_M, G_BASE_K, G_BASE_M, G_BASE_K>;
 using RightTile = TileRight<half, G_BASE_K, G_BASE_N, G_BASE_K, G_BASE_N>;
 using ResTile = TileAcc<float, G_BASE_M, G_BASE_N, G_BASE_M, G_BASE_N>;
 
-// Output GlobalTensor types
 using NDValidShapeC = TileShape2D<float, G_BASE_M, G_BASE_N>;
 using NDWholeShapeC = BaseShape2D<float, G_M, G_N>;
 using GlobalDataOut = GlobalTensor<float, NDValidShapeC, NDWholeShapeC>;
@@ -302,6 +301,8 @@ AICORE inline void AllGatherGemmComputeStreamingImpl(
     }
 }
 
+#endif // __CCE_AICORE__
+
 __global__ AICORE void AllGatherGemmComputeStreamingKernel(
     __gm__ uint8_t *output,
     __gm__ uint8_t *shmem_input,
@@ -309,12 +310,14 @@ __global__ AICORE void AllGatherGemmComputeStreamingKernel(
     __gm__ uint8_t *tile_flags,
     int block_num)
 {
+#ifdef __CCE_AICORE__
     AllGatherGemmComputeStreamingImpl(
         reinterpret_cast<__gm__ float *>(output),
         reinterpret_cast<__gm__ half *>(shmem_input),
         reinterpret_cast<__gm__ half *>(src1),
         reinterpret_cast<__gm__ TileFlagMatrix *>(tile_flags),
         block_num);
+#endif
 }
 
 void launchAllGatherGemmComputeStreaming(

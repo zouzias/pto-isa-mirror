@@ -2,7 +2,6 @@
 
 # Source environment scripts
 source /home/ntlab/qifeng/pypto/env.sh
-source /home/ntlab/qifeng/pypto/third_party_path/shmem/install/set_env.sh
 
 # Default size configuration
 SIZE="large"
@@ -172,7 +171,10 @@ fi
 COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM:-24}
 COMM_BLOCK_NUM=${COMM_BLOCK_NUM:-48}
 
-cmake -DRUN_MODE=${CMAKE_RUN_MODE} -DSOC_VERSION=${SOC_VERSION} \
+# Clear conda-injected flags that conflict with bisheng compiler
+unset CXXFLAGS CFLAGS LDFLAGS
+
+CC=bisheng CXX=bisheng cmake -DRUN_MODE=${CMAKE_RUN_MODE} -DSOC_VERSION=${SOC_VERSION} \
       -DG_M=${G_M} -DG_K=${G_K} -DG_N=${G_N} \
       -DSIZE_NAME=${SIZE} \
       -DCOMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM} \
@@ -181,6 +183,19 @@ make -j16
 
 # Export N_RANKS environment variable for the executable
 export N_RANKS=${N_RANKS}
-# Set default timeout to 60 seconds
-TIMEOUT=${TIMEOUT:-60}
-timeout ${TIMEOUT}s ./allgather_gemm
+# Set default timeout to 120 seconds (HCCL init may take longer)
+TIMEOUT=${TIMEOUT:-120}
+
+# Find MPI
+MPI_BIN=""
+if command -v mpirun &>/dev/null; then
+    MPI_BIN="mpirun"
+elif [ -f /usr/local/mpich/bin/mpirun ]; then
+    MPI_BIN="/usr/local/mpich/bin/mpirun"
+else
+    echo "[ERROR] mpirun not found. Please install MPI or set PATH."
+    exit 1
+fi
+
+echo "[INFO] Launching with: ${MPI_BIN} -n ${N_RANKS} ./allgather_gemm"
+timeout ${TIMEOUT}s ${MPI_BIN} -n ${N_RANKS} ./allgather_gemm
