@@ -63,6 +63,7 @@ tload
 tloadconv
 tmov
 textract
+tscatter
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})

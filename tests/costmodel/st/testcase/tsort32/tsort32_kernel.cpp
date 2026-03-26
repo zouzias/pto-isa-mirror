@@ -25,8 +25,7 @@ using namespace pto;
 // test2: int32_t, 7x32,  R=1:  16 + 6*20  = 136
 // test3: half,   32x16,  R=0:  14 + 31*18 = 572
 
-template <typename T0, typename T1, int kTRows, int kTCols, int validRow, int validCol,
-          float profiling, float accuracy>
+template <typename T0, typename T1, int kTRows, int kTCols, int validRow, int validCol, float profiling, float accuracy>
 AICORE void runTSort32()
 {
     const int totalByte = 8;

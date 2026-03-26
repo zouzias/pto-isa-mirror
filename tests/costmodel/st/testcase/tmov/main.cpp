@@ -45,9 +45,10 @@ void testMov()
         TLOAD(src, srcTensor);
     } else if constexpr (srcBL == BLayout::ColMajor && srcSL == SLayout::NoneBox) {
         // DN tile: DN2DN TLOAD
-        using DnTensorType = GlobalTensor<T, Shape<1, 1, 1, validRow, validCol>,
-                                          Stride<validRow * validCol, validRow * validCol, validRow * validCol, 1, validRow>,
-                                          Layout::DN>;
+        using DnTensorType =
+            GlobalTensor<T, Shape<1, 1, 1, validRow, validCol>,
+                         Stride<validRow * validCol, validRow * validCol, validRow * validCol, 1, validRow>,
+                         Layout::DN>;
         DnTensorType srcTensorDN(srcData.data());
         TLOAD(src, srcTensorDN);
     }
@@ -69,29 +70,29 @@ protected:
     {}
 };
 
-#define TMOV_TEST(T, rows, cols, validRow, validCol, profiling, accuracy, srcLoc, srcBL, srcSL, dstLoc, dstBL, dstSL)                       \
-    TEST_F(                                                                                                            \
-        TMOVTest,                                                                                                      \
-        T##_##rows##_##cols##_##validRow##_##validCol##_##srcLoc##_##srcBL##_##srcSL##_##dstLoc##_##dstBL##_##dstSL)   \
-    {                                                                                                                  \
-        testMov<T, rows, cols, validRow, validCol, profiling, accuracy, TileType::srcLoc, BLayout::srcBL, SLayout::srcSL, TileType::dstLoc, \
-                BLayout::dstBL, SLayout::dstSL>();                                                                     \
+#define TMOV_TEST(T, rows, cols, validRow, validCol, profiling, accuracy, srcLoc, srcBL, srcSL, dstLoc, dstBL, dstSL) \
+    TEST_F(                                                                                                           \
+        TMOVTest,                                                                                                     \
+        T##_##rows##_##cols##_##validRow##_##validCol##_##srcLoc##_##srcBL##_##srcSL##_##dstLoc##_##dstBL##_##dstSL)  \
+    {                                                                                                                 \
+        testMov<T, rows, cols, validRow, validCol, profiling, accuracy, TileType::srcLoc, BLayout::srcBL,             \
+                SLayout::srcSL, TileType::dstLoc, BLayout::dstBL, SLayout::dstSL>();                                  \
     }
 
-TMOV_TEST(float, 64, 128, 64, 128, 1024.0f, 0.0f, Vec, RowMajor, NoneBox, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 64, 128, 1024.0f, 0.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 64, 128, 1024.0f, 0.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 64, 128, 1024.0f, 0.0f, Vec, ColMajor, NoneBox, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 64, 128, 1024.0f, 0.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, RowMajor)
-TMOV_TEST(float, 64, 128, 64, 128, 1024.0f, 0.0f, Vec, ColMajor, RowMajor, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 64, 128, 1024.0f, 0.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, RowMajor)
-TMOV_TEST(float, 64, 128, 64, 128, 1024.0f, 0.0f, Vec, ColMajor, RowMajor, Vec, ColMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, RowMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, RowMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, RowMajor)
+TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, ColMajor, RowMajor, Vec, RowMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, RowMajor)
+TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, ColMajor, RowMajor, Vec, ColMajor, NoneBox)
 
-TMOV_TEST(float, 16, 24, 15, 23, 48.0f, 0.0f, Vec, RowMajor, NoneBox, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 63, 125, 1024.0f, 0.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 63, 125, 1024.0f, 0.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 63, 125, 1024.0f, 0.0f, Vec, ColMajor, NoneBox, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 63, 125, 1024.0f, 0.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, RowMajor)
-TMOV_TEST(float, 64, 128, 63, 125, 1024.0f, 0.0f, Vec, ColMajor, RowMajor, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 63, 125, 1024.0f, 0.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, RowMajor)
-TMOV_TEST(float, 64, 128, 63, 125, 1024.0f, 0.0f, Vec, ColMajor, RowMajor, Vec, ColMajor, NoneBox)
+TMOV_TEST(float, 16, 24, 15, 23, 10.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, RowMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, RowMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, RowMajor)
+TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, ColMajor, RowMajor, Vec, RowMajor, NoneBox)
+TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, RowMajor)
+TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, ColMajor, RowMajor, Vec, ColMajor, NoneBox)
