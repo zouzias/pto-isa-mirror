@@ -1,0 +1,330 @@
+#include <pto/common/constants.hpp>
+#include <pto/pto-inst.hpp>
+#include "ready_queue.hpp"
+
+using namespace pto;
+
+constexpr uint32_t BUFFER_NUM = 2;
+constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024;
+
+#ifndef CONFIG_G_M
+#define CONFIG_G_M 2048
+#endif
+#ifndef CONFIG_G_K
+#define CONFIG_G_K 2048
+#endif
+#ifndef CONFIG_G_N
+#define CONFIG_G_N 1024
+#endif
+
+constexpr uint32_t G_M = CONFIG_G_M;
+constexpr uint32_t G_K = CONFIG_G_K;
+constexpr uint32_t G_N = CONFIG_G_N;
+
+constexpr uint32_t G_BASE_M = 128;
+constexpr uint32_t G_BASE_K = 64;
+constexpr uint32_t G_BASE_N = 256;
+constexpr uint32_t G_STEP_KA = 4;
+constexpr uint32_t G_STEP_KB = 4;
+
+static_assert(G_BASE_N == G_BASE_K * G_STEP_KA, "Expect one comm K-block equals one compute step pack");
+
+#ifndef CONFIG_COMPUTE_BLOCK_NUM
+#define CONFIG_COMPUTE_BLOCK_NUM 24
+#endif
+constexpr int COMPUTE_BLOCK_NUM = CONFIG_COMPUTE_BLOCK_NUM;
+
+// Type aliases for tiles (shared across functions)
+using TileMatAData = Tile<TileType::Mat, half, G_BASE_M, G_BASE_K * G_STEP_KA,
+                          BLayout::ColMajor, G_BASE_M, G_BASE_K * G_STEP_KA, SLayout::RowMajor>;
+using TileMatBData = Tile<TileType::Mat, half, G_BASE_K * G_STEP_KB, G_BASE_N,
+                          BLayout::RowMajor, G_BASE_K * G_STEP_KB, G_BASE_N, SLayout::ColMajor>;
+using LeftTile = TileLeft<half, G_BASE_M, G_BASE_K, G_BASE_M, G_BASE_K>;
+using RightTile = TileRight<half, G_BASE_K, G_BASE_N, G_BASE_K, G_BASE_N>;
+using ResTile = TileAcc<float, G_BASE_M, G_BASE_N, G_BASE_M, G_BASE_N>;
+
+// Output GlobalTensor types
+using NDValidShapeC = TileShape2D<float, G_BASE_M, G_BASE_N>;
+using NDWholeShapeC = BaseShape2D<float, G_M, G_N>;
+using GlobalDataOut = GlobalTensor<float, NDValidShapeC, NDWholeShapeC>;
+
+// ============================================================================
+// ProcessKIterationContinuous: K-loop iteration for continuous pipeline
+// ============================================================================
+template <typename T, typename U, typename S, int M, int K, int N,
+          uint32_t baseM, uint32_t baseK, uint32_t baseN,
+          uint32_t stepKa, uint32_t stepKb>
+AICORE inline void ProcessKIterationContinuous(
+    uint32_t localKIter,
+    uint32_t globalKIter,
+    __gm__ U *currentSrc0, __gm__ S *currentSrc1,
+    Tile<TileType::Mat, U, baseM, baseK * stepKa,
+         BLayout::ColMajor, baseM, baseK * stepKa, SLayout::RowMajor> aMatTile[BUFFER_NUM],
+    Tile<TileType::Mat, S, baseK * stepKb, baseN,
+         BLayout::RowMajor, baseK * stepKb, baseN, SLayout::ColMajor> bMatTile[BUFFER_NUM],
+    TileLeft<U, baseM, baseK, baseM, baseK> aTile[BUFFER_NUM],
+    TileRight<S, baseK, baseN, baseK, baseN> bTile[BUFFER_NUM],
+    TileAcc<T, baseM, baseN, baseM, baseN> &cTile,
+    uint8_t &mte2DBFlag, uint8_t &mte1DBFlag)
+{
+    using NDValidShapeA = TileShape2D<U, baseM, baseK * stepKa, Layout::ND>;
+    using NDsingleCoreShapeA = BaseShape2D<U, M, K, Layout::ND>;
+    using GlobalDataSrcA = GlobalTensor<U, NDValidShapeA, NDsingleCoreShapeA, Layout::ND>;
+
+    using NDValidShapeB = TileShape2D<U, baseK * stepKb, baseN, Layout::DN>;
+    using NDsingleCoreShapeB = BaseShape2D<U, K, N, Layout::DN>;
+    using GlobalDataSrcB = GlobalTensor<U, NDValidShapeB, NDsingleCoreShapeB, Layout::DN>;
+
+    const uint32_t kModStepKa = localKIter % stepKa;
+
+    // Load new L1 block when starting new stepK group
+    if (kModStepKa == 0) {
+        GlobalDataSrcA gmA(currentSrc0 + localKIter * baseK);
+        GlobalDataSrcB gmB(currentSrc1 + localKIter * baseK);
+
+        wait_flag(PIPE_MTE1, PIPE_MTE2, (event_t)mte2DBFlag);
+        TLOAD(aMatTile[mte2DBFlag], gmA);
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        TLOAD(bMatTile[mte2DBFlag], gmB);
+        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+        mte2DBFlag = (mte2DBFlag == 0) ? 1 : 0;
+    }
+
+    const uint32_t currMte2Idx = (mte2DBFlag == 0) ? 1 : 0;
+
+    wait_flag(PIPE_M, PIPE_MTE1, (event_t)mte1DBFlag);
+
+    if (kModStepKa == 0) {
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+    }
+    TEXTRACT(aTile[mte1DBFlag], aMatTile[currMte2Idx], 0, kModStepKa * baseK);
+
+    if (kModStepKa == 0) {
+        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
+    }
+    TEXTRACT(bTile[mte1DBFlag], bMatTile[currMte2Idx], (localKIter % stepKb) * baseK, 0);
+
+    if ((localKIter + 1) % stepKa == 0) {
+        set_flag(PIPE_MTE1, PIPE_MTE2, (event_t)currMte2Idx);
+    }
+
+    // TMATMUL with continuous accumulation
+    set_flag(PIPE_MTE1, PIPE_M, (event_t)mte1DBFlag);
+    wait_flag(PIPE_MTE1, PIPE_M, (event_t)mte1DBFlag);
+
+    if (globalKIter == 0) {
+        TMATMUL(cTile, aTile[mte1DBFlag], bTile[mte1DBFlag]);
+    } else {
+        TMATMUL_ACC(cTile, cTile, aTile[mte1DBFlag], bTile[mte1DBFlag]);
+    }
+
+    set_flag(PIPE_M, PIPE_MTE1, (event_t)mte1DBFlag);
+    mte1DBFlag = (mte1DBFlag == 0) ? 1 : 0;
+}
+
+// ============================================================================
+// ComputeRowGroupStreaming (M-slice):
+// 每个 row-group mi 只依赖其 owner rank 的 tile 就绪信号。
+// ============================================================================
+AICORE inline void ComputeRowGroupStreaming(
+    __gm__ float *output,
+    __gm__ half *shmem_input,
+    __gm__ half *src1,
+    __gm__ TileFlagMatrix *tile_flags,
+    int mi,
+    int m_tiles_per_rank,
+    int k_chunks,
+    TileMatAData aMatTile[BUFFER_NUM],
+    TileMatBData bMatTile[BUFFER_NUM],
+    LeftTile aTile[BUFFER_NUM],
+    RightTile bTile[BUFFER_NUM],
+    ResTile &cTile)
+{
+    constexpr uint32_t n_tiles = G_N / G_BASE_N;
+    constexpr uint32_t k_iters_per_block = G_BASE_N / G_BASE_K;  // = 4
+
+    volatile __gm__ TileFlagMatrix *flags =
+        reinterpret_cast<volatile __gm__ TileFlagMatrix *>(tile_flags);
+    volatile __gm__ int32_t *summary_base = GetSummaryBase(flags);
+
+    // M 切分下：row-group mi 只由 owner src_rank 提供
+    int src_rank = mi / m_tiles_per_rank;
+    int mi_local = mi % m_tiles_per_rank;
+    int block_start = mi_local * k_chunks;
+    int block_end = (mi_local + 1) * k_chunks;
+
+    int num_tiles_per_src = flags->num_tiles_per_src;
+    int first_streaming_tile = 0;
+    int last_streaming_tile = -1;
+    if (block_end > block_start && num_tiles_per_src > 0) {
+        first_streaming_tile = block_start / TILE_SIZE;
+        last_streaming_tile = (block_end - 1) / TILE_SIZE;  // inclusive
+        if (last_streaming_tile >= num_tiles_per_src) {
+            last_streaming_tile = num_tiles_per_src - 1;
+        }
+    }
+
+    __gm__ half *aRowBase = shmem_input + static_cast<uint64_t>(mi) * G_BASE_M * G_K;
+    __gm__ float *outRowBase = output + static_cast<uint64_t>(mi * G_BASE_M) * G_N;
+
+    for (uint32_t ni = 0; ni < n_tiles; ++ni) {
+        __gm__ float *tileDst = outRowBase + ni * G_BASE_N;
+        __gm__ half *bColBase = src1 + static_cast<uint64_t>(ni) * G_BASE_N * G_K;
+
+        uint8_t mte2DBFlag = 0;
+        uint8_t mte1DBFlag = 0;
+
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+
+        uint32_t globalKIter = 0;
+        int num_st = (first_streaming_tile <= last_streaming_tile)
+                         ? (last_streaming_tile - first_streaming_tile + 1)
+                         : 0;
+
+        uint64_t done = 0;
+        int processed_count = 0;
+        int next_st = first_streaming_tile;
+        while (processed_count < num_st) {
+            // 等待至少有一个新 tile 到达，避免纯 busy-spin 空转。
+            int32_t ready_count = GetReadyCountFromSrc(summary_base, src_rank);
+            if (ready_count <= processed_count) {
+                WaitReadyCountFromSrc(summary_base, src_rank, processed_count + 1);
+            }
+
+            // 使用游标增量扫描，避免每次从 first_streaming_tile 全量重扫。
+            for (int scan_cnt = 0; scan_cnt < num_st && processed_count < num_st; ++scan_cnt) {
+                int st = next_st;
+                next_st++;
+                if (next_st > last_streaming_tile) {
+                    next_st = first_streaming_tile;
+                }
+                int idx = st - first_streaming_tile;
+                if ((done & (1ULL << idx)) != 0) {
+                    continue;
+                }
+                if (!IsTileReady(flags, src_rank, st)) {
+                    continue;
+                }
+                done |= (1ULL << idx);
+                processed_count++;
+
+                int tile_start = st * TILE_SIZE;
+                int tile_end = tile_start + TILE_SIZE;
+                if (tile_end > block_end) {
+                    tile_end = block_end;
+                }
+                int kb_start = (tile_start > block_start) ? (tile_start - block_start) : 0;
+                int kb_end = tile_end - block_start;
+                if (kb_end <= kb_start) {
+                    continue;
+                }
+
+                for (int kb = kb_start; kb < kb_end; ++kb) {
+                    int k_col_offset = kb * static_cast<int>(G_BASE_N);
+                    __gm__ half *aSrcForKBlock = aRowBase + k_col_offset;
+                    __gm__ half *bSrcForKBlock = bColBase + k_col_offset;
+                    for (uint32_t kIter = 0; kIter < k_iters_per_block; ++kIter) {
+                        ProcessKIterationContinuous<float, half, half, G_M, G_K, G_N,
+                                                    G_BASE_M, G_BASE_K, G_BASE_N, G_STEP_KA, G_STEP_KB>(
+                            kIter, globalKIter,
+                            aSrcForKBlock, bSrcForKBlock,
+                            aMatTile, bMatTile, aTile, bTile, cTile,
+                            mte2DBFlag, mte1DBFlag);
+                        globalKIter++;
+                    }
+                }
+            }
+        }
+
+        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+
+        GlobalDataOut dstGlobal(tileDst);
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        TSTORE(dstGlobal, cTile);
+        set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    }
+
+    pipe_barrier(PIPE_ALL);
+}
+
+// ============================================================================
+// AllGatherGemmComputeStreamingImpl (M-slice streaming)
+// ============================================================================
+AICORE inline void AllGatherGemmComputeStreamingImpl(
+    __gm__ float *output,
+    __gm__ half *shmem_input,
+    __gm__ half *src1,
+    __gm__ TileFlagMatrix *tile_flags,
+    int block_num)
+{
+    const int block_idx = get_block_idx();
+
+    volatile __gm__ TileFlagMatrix *flags =
+        reinterpret_cast<volatile __gm__ TileFlagMatrix *>(tile_flags);
+
+    int n_ranks = flags->num_ranks;
+    int m_tiles = static_cast<int>(G_M / G_BASE_M);
+    int m_tiles_per_rank = m_tiles / n_ranks;
+    int k_chunks = static_cast<int>(G_K / G_BASE_N);
+
+    TileMatAData aMatTile[BUFFER_NUM];
+    TileMatBData bMatTile[BUFFER_NUM];
+
+    constexpr size_t l1ASize = G_BASE_M * G_BASE_K * G_STEP_KA * sizeof(half);
+    constexpr size_t l1BSize = G_BASE_K * G_STEP_KB * G_BASE_N * sizeof(half);
+    TASSIGN(aMatTile[0], 0x0);
+    TASSIGN(aMatTile[1], 0x0 + l1ASize);
+    TASSIGN(bMatTile[0], 0x0 + BUFFER_NUM * l1ASize);
+    TASSIGN(bMatTile[1], 0x0 + BUFFER_NUM * l1ASize + l1BSize);
+
+    LeftTile aTile[BUFFER_NUM];
+    RightTile bTile[BUFFER_NUM];
+    ResTile cTile;
+
+    TASSIGN(aTile[0], 0x0);
+    TASSIGN(aTile[1], 0x0 + L0_PINGPONG_BYTES);
+    TASSIGN(bTile[0], 0x0);
+    TASSIGN(bTile[1], 0x0 + L0_PINGPONG_BYTES);
+    TASSIGN(cTile, 0x0);
+
+    for (int mi = block_idx; mi < m_tiles; mi += block_num) {
+        ComputeRowGroupStreaming(output, shmem_input, src1, tile_flags,
+                                 mi, m_tiles_per_rank, k_chunks,
+                                 aMatTile, bMatTile, aTile, bTile, cTile);
+    }
+}
+
+__global__ AICORE void AllGatherGemmComputeStreamingKernel(
+    __gm__ uint8_t *output,
+    __gm__ uint8_t *shmem_input,
+    __gm__ uint8_t *src1,
+    __gm__ uint8_t *tile_flags,
+    int block_num)
+{
+    AllGatherGemmComputeStreamingImpl(
+        reinterpret_cast<__gm__ float *>(output),
+        reinterpret_cast<__gm__ half *>(shmem_input),
+        reinterpret_cast<__gm__ half *>(src1),
+        reinterpret_cast<__gm__ TileFlagMatrix *>(tile_flags),
+        block_num);
+}
+
+void launchAllGatherGemmComputeStreaming(
+    uint8_t *output,
+    uint8_t *shmem_input,
+    uint8_t *src1,
+    uint8_t *tile_flags,
+    void *stream,
+    int block_num = COMPUTE_BLOCK_NUM)
+{
+    AllGatherGemmComputeStreamingKernel<<<block_num, nullptr, stream>>>(
+        output, shmem_input, src1, tile_flags, block_num);
+}
