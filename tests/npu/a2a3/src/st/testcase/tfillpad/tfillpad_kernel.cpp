@@ -18,7 +18,7 @@ using namespace pto;
 
 // Custom pad value for test case 12
 // -1.0f has bit pattern 0xBF800000
-constexpr PadValue PadCustomNeg1 = static_cast<PadValue>(0xBF80000000000001ULL);
+constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
 
 #define LOGSIZE 128
 #define PRINTLOG 4
@@ -160,6 +160,8 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
             out + dstOffset, gShape0, gShape1, gShape2, kGTRows, kTCols_); // dst TStore GlobalTensor just use static
 
     volatile uint64_t t0, t1, t2;
+    constexpr PadValue PadCustomNeg1_Test = PadValueCustom(-1.0f);  // Test device usage
+
 
     using TileDataP =
         Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, FillPadVal_>;
@@ -347,15 +349,9 @@ void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
 }
 
 template <typename T>
-constexpr auto getGoldenZero()
+constexpr T getGoldenZero()
 {
-    if constexpr (sizeof(T) == 4) {
-        return (uint32_t)0;
-    } else if constexpr (sizeof(T) == 2) {
-        return (uint16_t)0;
-    } else if constexpr (sizeof(T) == 1) {
-        return (uint8_t)0;
-    }
+    return T{0};
 }
 
 template <typename U, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_,
@@ -374,9 +370,9 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden)
     int out_byteSize = out_capacity * sizeof(T);
 
     U u_padVal[1] = {0};
-    if constexpr ((static_cast<uint64_t>(PadVal_) & 0xFFFFFFFFULL) == 0x00000001ULL) {
+    if constexpr (static_cast<uint64_t>(PadVal_) >= static_cast<uint64_t>(PadValue::CustomBase)) {
         // Custom pad value - extract float bits
-        uint32_t bits = static_cast<uint32_t>(static_cast<uint64_t>(PadVal_) >> 32);
+        uint32_t bits = static_cast<uint32_t>(static_cast<uint64_t>(PadVal_) & 0xFFFFFFFFULL);
         u_padVal[0] = *reinterpret_cast<const U *>(&bits);
     } else if (std::numeric_limits<U>::has_infinity) {
         if (PadVal_ == PadValue::Max)
