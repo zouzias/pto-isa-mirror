@@ -17,6 +17,11 @@ import math
 import torch
 import torch_npu
 from jit_util_flash import jit_compile_flash
+from util.device import get_test_device
+from util.bench import do_bench
+
+_DEVICE = get_test_device()
+torch.npu.set_device(_DEVICE)
 
 NUM_ITERATIONS = 50
 WARMUP = 10
@@ -57,35 +62,8 @@ def fused_attention(q, k, v, is_causal=False):
     return out.squeeze(0)
 
 
-def time_op_npu(fn):
-    """
-    Accurate device timing:
-    - warmup to stabilize
-    - synchronize around measurement
-    - measure average per-iter ms
-    """
-    for _ in range(WARMUP):
-        _ = fn()
-    torch.npu.synchronize()
-
-    start = torch.npu.Event(enable_timing=True)
-    end = torch.npu.Event(enable_timing=True)
-
-    start.record()
-    for _ in range(NUM_ITERATIONS):
-        _ = fn()
-    end.record()
-    torch.npu.synchronize()
-
-    total_ms = start.elapsed_time(end)
-    return total_ms / NUM_ITERATIONS
-
-
 def test_flash():
     s0, s1, head = 128, 2048, 128
-
-    device = "npu:0"
-    torch.npu.set_device(device)
 
     dtype = torch.float16
 
@@ -104,9 +82,24 @@ def test_flash():
     # ==========================
     # Benchmark reference ops
     # ==========================
-    ref_ms = time_op_npu(lambda: fa_reference(q2d, k2d, v2d))
-    npu_ms = time_op_npu(lambda: fused_attention(q2d, k2d, v2d))
-    flash_ms = time_op_npu(lambda: flash(q2d, k2d, v2d))
+    ref_ms = do_bench(
+        lambda: fa_reference(q2d, k2d, v2d),
+        warmup_iters=WARMUP,
+        benchmark_iters=NUM_ITERATIONS,
+        unit="ms",
+    )
+    npu_ms = do_bench(
+        lambda: fused_attention(q2d, k2d, v2d),
+        warmup_iters=WARMUP,
+        benchmark_iters=NUM_ITERATIONS,
+        unit="ms",
+    )
+    flash_ms = do_bench(
+        lambda: flash(q2d, k2d, v2d),
+        warmup_iters=WARMUP,
+        benchmark_iters=NUM_ITERATIONS,
+        unit="ms",
+    )
 
     # ==========================
     # Correctness check
