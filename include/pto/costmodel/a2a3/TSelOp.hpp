@@ -33,21 +33,16 @@ PTO_INTERNAL void TSel(std::vector<CostModelStats> &stats, unsigned validRow, un
     constexpr unsigned maskRowStride = MaskTile::RowStride;
     constexpr unsigned cmpmaskLen = sizeof(T) == 2 ? 4 : 2; // 128bit for B16 and 64bit for B32
 
-    // uint32_t maskAddr;
-    // set_mask_count();
     for (unsigned i = 0; i < validRow; i++) {
-        // set_vector_mask(0, cmpmaskLen);
-        // maskAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(maskPtr + i * maskRowStride));
-        // vector_dup(cmpMaskPtr, maskAddr, 1, 1, 1, 8, 0);
-        // pipe_barrier(PIPE_V);
-        // set_cmpmask(cmpMaskPtr);
-        // pipe_barrier(PIPE_V);
-        // set_vector_mask(0, validCol);
-        // vsel((__ubuf__ T *)(dstPtr + i * dstRowStride), (__ubuf__ T *)(src0Ptr + i * src0RowStride),
-        //     (__ubuf__ T *)(src1Ptr + i * src1RowStride), 1, 1, 1, 1, 8, 8, 8, SELMODE::VSEL_TENSOR_TENSOR_MODE);
+		stats.emplace_back("mask", 0, cmpmaskLen);
+        stats.emplace_back("vector_dup", 1, 1, 1, 8, 0);
+		stats.emplace_back("PIPE_V");
+		stats.emplace_back("PIPE_V");
+
+		stats.emplace_back("mask", 0, validCol);
+		stats.emplace_back("vsel", 1, 1, 1, 1, 8, 8, 8);
     }
-    // set_mask_norm();
-    // set_vector_mask(-1, -1);
+	stats.emplace_back("mask", -1, -1);
 }
 
 template <typename DstTile, typename MaskTile, typename Src0Tile, typename Src1Tile, typename TmpTile>

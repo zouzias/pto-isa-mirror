@@ -76,7 +76,8 @@ enum class DataType
     INT16,
     UINT8,
     INT32,
-    BF16
+    BF16,
+	INT64
 };
 
 constexpr int getDataTypeBytes(DataType type)
@@ -96,6 +97,8 @@ constexpr int getDataTypeBytes(DataType type)
             return 4;
         case DataType::BF16:
             return 2;
+		case DataType::INT64:
+			return 8;
         default:
             return 0;
     }
@@ -389,13 +392,61 @@ public:
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
         // TCVT: vconv (type conversion, startup=13 like reduce ops)
-        SetParam("vconv", DataType::FP16, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+        SetParam("vconv_f322f16", DataType::FP16, A2A3_STARTUP_REDUCE, A2A3_COMPL_DUP, A2A3_RPT_1, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("vconv", DataType::FP32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+        SetParam("vconv_s162f16", DataType::FP16, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("vconv", DataType::INT16, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+        SetParam("vconv_f162f32", DataType::FP32, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
-        SetParam("vconv", DataType::INT32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+        SetParam("vconv_f322f32", DataType::FP32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_s322f32", DataType::FP32, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_s642f32", DataType::FP32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_f322s64", DataType::INT64, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_s322s64", DataType::INT64, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_f322s32", DataType::INT32, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_MUL, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+		SetParam("vconv_f322bf16", DataType::BF16, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_bf162s32", DataType::INT32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_bf162f32", DataType::FP32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_s162f32", DataType::FP32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_f322s16", DataType::INT16, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_s322s16", DataType::INT16, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_f162s16", DataType::INT16, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_f162s32", DataType::INT32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_s642s32", DataType::INT32, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_f162s8", DataType::INT8, A2A3_STARTUP_REDUCE, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_f162u8", DataType::UINT8, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_u82f16", DataType::FP16, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_s82f16", DataType::FP16, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vconv_deqs322f16", DataType::FP16, A2A3_STARTUP_REDUCE, A2A3_COMPL_FP_CGOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+
+		// TAnd: vand
+        SetParam("vand", DataType::FP16, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vand", DataType::FP32, A2A3_STARTUP_BINARY, A2A3_COMPL_FP_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vand", DataType::INT16, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
+                 A2A3_MASK_EFFECT, A2A3_BANK_NONE);
+        SetParam("vand", DataType::INT32, A2A3_STARTUP_BINARY, A2A3_COMPL_INT_BINOP, A2A3_RPT_1, A2A3_INTERVAL,
                  A2A3_MASK_EFFECT, A2A3_BANK_NONE);
 
         // TSORT32: vbitsort (bitonic sort, 2 cycles/repeat)
@@ -569,6 +620,7 @@ public:
     {
         using T = typename TileDataD::DType; // conv的类型需单独考虑
         std::vector<CostModelStats> stats;
+		ctrl_value = 0;
         runTCvtOp<TileDataD, TileDataS>(stats, dst, src, mode, satMode);
         float totalCycles = VecInstPredictCycle<T>(stats);
         dst.SetCycle(totalCycles);
@@ -678,7 +730,7 @@ public:
 
             // Interval: paid for any instruction that immediately follows a PIPE_V barrier
             if (pipe) {
-                total_cycles += params.interval_cycles;
+                total_cycles += params.completion_cycles;
                 pipe = false;
             }
             total_cycles += stat.repeats * params.per_repeat_cycles;
@@ -705,6 +757,7 @@ public:
 
             if (first) {
                 total_cycles += params.startup_cycles;
+				total_cycles += params.completion_cycles;
                 first = false;
             }
 
