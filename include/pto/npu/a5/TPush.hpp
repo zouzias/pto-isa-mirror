@@ -22,12 +22,12 @@ template <uint8_t FlagID, uint8_t DirType, uint32_t SlotSize, uint32_t SlotNum, 
 struct TPipe {
     static constexpr uint8_t DIR_MASK = 0x7;
     static constexpr uint8_t DIR_TYPE = DIR_MASK & DirType;
-    static constexpr bool is_c2v_ub = (DIR_TYPE == Direction::DIR_C2V);
-    static constexpr bool is_v2c_mat = (DIR_TYPE == Direction::DIR_V2C);
-    static constexpr bool is_c2v_gm = (DIR_TYPE == Direction::DIR_C2V_GM);
+    static constexpr bool is_c2v_ub = ((DIR_TYPE & Direction::DIR_C2V) == Direction::DIR_C2V);
+    static constexpr bool is_v2c_mat = ((DIR_TYPE & Direction::DIR_V2C) == Direction::DIR_V2C);
+    static constexpr bool is_c2v_gm = ((DIR_TYPE & Direction::DIR_C2V_GM) == Direction::DIR_C2V_GM);
     static constexpr bool is_c2v = is_c2v_gm || is_c2v_ub;
-    static constexpr bool is_v2c_gm = (DIR_TYPE == Direction::DIR_V2C_GM);
-    static constexpr bool is_v2c_ctrl = (DIR_TYPE == Direction::DIR_V2C_CTRL);
+    static constexpr bool is_v2c_gm = ((DIR_TYPE & Direction::DIR_V2C_GM) == Direction::DIR_V2C_GM);
+    static constexpr bool is_v2c_ctrl = ((DIR_TYPE & Direction::DIR_V2C_CTRL) == Direction::DIR_V2C_CTRL);
     static constexpr bool is_v2c = is_v2c_gm || is_v2c_mat || is_v2c_ctrl;
     static_assert(is_c2v || is_v2c, "Fix: TPipe only supports C2V or V2C communication with specified tile");
     static constexpr uint8_t VEC_CORE_ID_OFFSET = 16;
