@@ -718,6 +718,14 @@ public:
 
         for (const auto &stat : stats) {
             const std::string &instr_name = stat.cceInstName;
+			// vconv指令名称特殊处理
+			if (!instr_name.empty() && instr_name.substr(0, 5) == "vconv") {
+				char lastChar = instr_name.back();
+				if (lastChar == 'a' || lastChar == 'c' || lastChar == 'f' || lastChar == 'r' || lastChar == 'z'
+					|| lastChar == 'o') {
+					instr_name = instr_name.substr(0, instr_name.length() - 1);
+				}
+			}
             DataType dtype = GetDataTypeEnum<T>();
             auto key = std::make_pair(instr_name, dtype);
 

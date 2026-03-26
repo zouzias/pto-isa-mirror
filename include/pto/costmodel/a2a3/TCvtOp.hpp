@@ -217,7 +217,8 @@ PTO_INTERNAL void GenCastCallFp32ToInt16_NonSatTorch(std::vector<CostModelStats>
                                                      uint16_t dstRepeatStride, uint16_t srcRepeatStride,
                                                      __ubuf__ int32_t *tempInt32Buf)
 {
-	set_ctrl0(get_ctrl(), SAT_MODE_BIT));
+	ctrl_value = get_ctrl();
+	set_ctrl0(ctrl_value, SAT_MODE_BIT));
     switch (static_cast<RoundMode>(mode)) {
         case RoundMode::CAST_RINT:
 			stats.emplace_back("vconv_f322s32r", repeatNum, srcBlockStride, srcBlockStride, srcRepeatStride,
@@ -245,8 +246,9 @@ PTO_INTERNAL void GenCastCallFp32ToInt16_NonSatTorch(std::vector<CostModelStats>
             break;
     }
 
-	stats.emplace_back("");
-	set_ctrl0(get_ctrl(), SAT_MODE_BIT);
+	stats.emplace_back("PIPE_V");
+	ctrl_value = get_ctrl();
+	set_ctrl0(ctrl_value, SAT_MODE_BIT);
 	stats.emplace_back("vconv_s322s16", repeatNum, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
 }
 
@@ -368,8 +370,8 @@ PTO_INTERNAL void GenCastCallFp16ToInt16_NonSatTorch(std::vector<CostModelStats>
     uint16_t step1SrcRepeatStride = isHead ? static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2) : srcRepeatStride;
     uint16_t step2DstRepeatStride = isHead ? static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2) : dstRepeatStride;
     uint16_t step2SrcRepeatStride = isHead ? BLOCK_MAX_PER_REPEAT : static_cast<uint16_t>(srcRepeatStride * 2);
-
-	set_ctrl0(get_ctrl(), SAT_MODE_BIT);
+	ctrl_value = get_ctrl();
+	set_ctrl0(ctrl_value, SAT_MODE_BIT);
 
     // Step 1: fp16 -> int32
     switch (static_cast<RoundMode>(mode)) {
@@ -485,8 +487,8 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(std::vector<CostModelStats> 
     const uint16_t hwInt32Stride = hwFp16Stride * 2; // int32 is 2x wider than fp16 in blocks
     const uint16_t hwInt16Stride = hwFp16Stride;     // int16 same width as fp16 in blocks
     const uint16_t hwDstStride = hwFp16Stride / 2;   // int8 is half as wide as fp16 in blocks
-
-    set_ctrl0(get_ctrl(), SAT_MODE_BIT);
+	ctrl_value = get_ctrl();
+    set_ctrl0(ctrl_value, SAT_MODE_BIT);
 
     // Step 1: fp16 -> int32
     switch (static_cast<RoundMode>(mode)) {
@@ -516,7 +518,8 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(std::vector<CostModelStats> 
             break;
     }
 	stats.emplace_back("PIPE_V");
-	set_ctrl1(get_ctrl(), SAT_MODE_BIT);
+	ctrl_value = get_ctrl();
+	set_ctrl1(ctrl_value, SAT_MODE_BIT);
     // Step 2: int32 -> int16 (narrow to low 16 bits) into tempAndBuf
     // After this, tempInt32Buf [+0..+4095] is fully consumed and available for reuse.
 	stats.emplace_back("vconv_s322s16", hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride, hwInt32Stride);
@@ -936,10 +939,11 @@ AICORE void TCvt(std::vector<CostModelStats> &stats, RoundMode mode, SaturationM
     bool originalSatMode = (originalCtrl & (1ULL << SAT_MODE_BIT)) == 0;
 
     // Apply saturation mode
+	ctrl_value = get_ctrl();
     if (satMode == SaturationMode::OFF) {
-        set_ctrl1(get_ctrl(), SAT_MODE_BIT); // Turn off saturation
+        set_ctrl1(ctrl_value, SAT_MODE_BIT); // Turn off saturation
     } else {
-        set_ctrl0(get_ctrl(), SAT_MODE_BIT); // Turn on saturation (default)
+        set_ctrl0(ctrl_value, SAT_MODE_BIT); // Turn on saturation (default)
     }
 
     // Get buffer pointers and block size
@@ -971,10 +975,11 @@ AICORE void TCvt(std::vector<CostModelStats> &stats, RoundMode mode, SaturationM
     }
 
     // Restore original saturation mode to avoid affecting subsequent instructions
+	ctrl_value = get_ctrl();
     if (originalSatMode) {
-        set_ctrl0(get_ctrl(), SAT_MODE_BIT);
+        set_ctrl0(ctrl_value, SAT_MODE_BIT);
     } else {
-        set_ctrl1(get_ctrl(), SAT_MODE_BIT);
+        set_ctrl1(ctrl_value, SAT_MODE_BIT);
     }
 }
 
