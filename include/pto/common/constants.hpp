@@ -15,6 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 #include <pto/common/type.hpp>
 #include <pto/common/memory.hpp>
+#include <pto/common/constexpr_bitcast.hpp>
 
 namespace pto {
 constexpr int REPEAT_BYTE = 256;
@@ -115,6 +116,57 @@ inline PadValue PadValueCustom(float value)
                                  (static_cast<uint64_t>(conv.u) << PAD_SHIFT_LENGTH));
 }
 #endif
+
+// ============================================================================
+// Custom pad value helpers for uint64_t-based PadValue enum
+// ============================================================================
+// PadValue uses uint64_t underlying type:
+// - Values 0-3 are standard enum cases (Null, Zero, Max, Min)
+// - Custom values have bit 32 set, with the float bit pattern in bits [32:63]
+
+// Check if a PadValue is a custom value (bit 32+ set)
+AICORE constexpr bool isCustomPadValue(PadValue pv)
+{
+    return static_cast<uint64_t>(pv) >= static_cast<uint64_t>(PadValue::CustomBase);
+}
+
+// Extract the 32-bit value from a custom PadValue (returns the float bits)
+AICORE constexpr uint32_t getCustomPadBits(PadValue pv)
+{
+    return static_cast<uint32_t>(static_cast<uint64_t>(pv) & 0xFFFFFFFFULL);
+}
+
+// Helper to create a custom PadValue from a compile-time float/int constant
+// Usage: PadCustom<-1.0f>, PadCustom<0.5f>, PadCustom<42>
+namespace detail {
+// Use constexpr_bitcast for compile-time float-to-bits conversion
+template <auto V>
+constexpr uint32_t floatToBits()
+{
+    if constexpr (std::is_same_v<decltype(V), float>) {
+        return constexpr_float_to_bits(V);
+    } else if constexpr (std::is_same_v<decltype(V), double>) {
+        return constexpr_float_to_bits(static_cast<float>(V));
+    } else if constexpr (std::is_integral_v<decltype(V)>) {
+        return static_cast<uint32_t>(V);
+    } else {
+        return 0;
+    }
+}
+} // namespace detail
+
+template <auto V>
+inline constexpr PadValue PadCustom = static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                                            static_cast<uint64_t>(detail::floatToBits<V>()));
+
+// Helper constexpr function to create custom PadValue from float
+// Works on both CPU_SIM and NPU at compile time
+// Usage: constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
+constexpr PadValue PadValueCustom(float value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(constexpr_float_to_bits(value)));
+}
 
 template <typename DType, PadValue PadVal>
 struct PadValueMap {
