@@ -1,5 +1,0 @@
-/mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/build/CMakeFiles/gemm_compute_kernel.dir
-/mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/build/CMakeFiles/comm_kernel.dir
-/mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/build/CMakeFiles/gemm_allreduce.dir
-/mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/build/CMakeFiles/edit_cache.dir
-/mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/build/CMakeFiles/rebuild_cache.dir
