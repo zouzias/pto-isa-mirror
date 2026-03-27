@@ -54,8 +54,8 @@ Implementation checks (NPU):
   - Tile location: `dst` and `src` must be `TileType::Vec`.
   - Tile layout of `src`: ND fractal (`isRowMajor` and `SLayout::NoneBox`).
   - Tile layout of `dst`:
-    - Only support DN layout Tile of 1D, e.g., `Tile<TileType::Vec, T, ROWS, 1, BLayout::ColMajor, ValidRows, 1>`
-    - ROWS muse be 32b aligned.
+    - **Compact Mode**: DN layout Tile of 1D, e.g., `Tile<TileType::Vec, T, ROWS, 1, BLayout::ColMajor, ValidRows, 1>`, ROWS must be 32b aligned.
+    - **Traditional Mode**: ND layout Tile of 2D, e.g., `Tile<TileType::Vec, T, ROWS, COLS, BLayout::RowMajor, ValidRows, 1>`.
   - Source data types: `half` or `float`.
   - Destination data types: `uint32_t` or `int32_t`.
   - Runtime valid checks:
