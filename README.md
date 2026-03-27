@@ -80,24 +80,172 @@ The following features will be released in the future:
 
 ## How to Use PTO Tile Library
 
-PTO instructions support two modes: **Auto Mode (Available only in CPU simulation)** (where the user does not allocate buffers or manage pipelining) and **Manual Mode** (where the user must allocate buffer addresses and manage pipelining). We recommend the following steps for optimizing operators:
+PTO instructions support two development modes:
 
-1. Develop the operator based on Auto Mode, generating PTO instruction sequences according to the algorithm logic.
-2. Verify functionality and correctness in CPU simulation.
-3. Port the code to Ascend hardware to ensure correctness and collect performance data.
-4. Identify performance bottlenecks (CUBE Bound, MTE Bound, Vector Bound) and begin optimization and tuning.
+- **Auto Mode** (recommended for beginners): No need to manually allocate buffers or manage pipelines; the compiler/runtime handles this automatically. Currently available in CPU simulation only.
+- **Manual Mode**: Explicitly manage buffer addresses (`TASSIGN`) and pipeline synchronization (Events), used for performance tuning.
 
-We ensure that each PTO instruction, when implemented within a fixed tile shape, fully leverages the capabilities of the underlying hardware. We encapsulate low-level hardware implementations into the tile abstractions and utilize expert knowledge to create a variety of tile templates. During static compilation, the compiler selects the best assembly implementation for the current shape based on template parameters. By merging different PTO instructions, we achieve optimal performance.
+Recommended development path:
 
-In this repository, we demonstrate how standard tile operations can be mapped to various pipelines through template parameters:
+1. Develop the operator in Auto Mode and verify correctness in CPU simulation → see [Quickstart Guide](#quickstart-guide)
+2. Port to Ascend hardware to verify correctness and collect performance data
+3. Identify bottlenecks (CUBE Bound / MTE Bound / Vector Bound) and switch to Manual Mode for tuning
 
-* Static tile Shape (Row, Col)
-* Dynamic tile Mask (Valid Mask)
-* Event Record & Wait (Set wait flag)
-* Specialized Fixed Function (SFU)
-* Fixed Pipeline (FIXP)
+### 3.1 Enabling PTO
 
-PTO ISA defines over 90 standard operations. This repository implements a growing subset of them, with ongoing efforts to add more.
+| Scenario | Framework | Description | Reference |
+| --- | --- | --- | --- |
+| CPU Simulation | None required | Cross-platform, no CANN/driver dependency, recommended first step | [Quickstart → CPU Simulator](#run-cpu-simulator-recommended-first-step) |
+| AclNN Direct Call | CANN AclNN | Dispatch kernel directly via AclRT, without a training framework | [demos/baseline/add](demos/baseline/add/README.md) |
+| PyTorch Training/Inference | torch_npu | Register as `torch.ops.npu.<op>` via `TORCH_LIBRARY`, callable from Python | [demos/baseline/add](demos/baseline/add/README.md), [demos/torch_jit/](demos/torch_jit/) |
+
+#### AclNN Direct Call Example
+
+```cpp
+// host side: dispatch kernel via ACLRT_LAUNCH_KERNEL
+#include "aclrtlaunch_add_custom.h"
+void run(float* out, const float* x, const float* y, uint32_t len) {
+    EXEC_KERNEL_CMD(add_custom, /*blockDim=*/20, x, y, out, len);
+}
+```
+
+> Full end-to-end example (with CMakeLists and build scripts): [demos/baseline/add/README.md](demos/baseline/add/README.md)
+
+#### PyTorch (torch_npu) Example
+
+```cpp
+// Declare operator schema
+TORCH_LIBRARY_FRAGMENT(npu, m) {
+    m.def("my_add(Tensor x, Tensor y) -> Tensor");
+}
+// Register implementation (NPU dispatch key is PrivateUse1)
+TORCH_LIBRARY_IMPL(npu, PrivateUse1, m) {
+    m.impl("my_add", TORCH_FN(run_add_custom));
+}
+```
+
+```python
+import torch, torch_npu
+out = torch.ops.npu.my_add(x, y)  # call from Python
+```
+
+> Full example (with setup.py wheel packaging): [demos/baseline/add/README.md](demos/baseline/add/README.md)  
+> JIT compilation example (no pre-built wheel needed): [demos/torch_jit/](demos/torch_jit/)
+
+### 3.2 Overall Design
+
+#### 3.2.1 Supported Data Types
+
+The data type is specified via the C++ template parameter `DType`. Using templates is recommended to support multiple types:
+
+```cpp
+template <typename T>  // T can be float / half / int32_t / etc.
+__global__ __aicore__ void MyKernel(__gm__ T* out, __gm__ const T* in) {
+    using TileT = Tile<TileType::Vec, T, 16, 256>;
+    // ...
+}
+```
+
+Common data types and typical supported instructions:
+
+| Data Type | Description | Typical Instructions |
+| --- | --- | --- |
+| `float` (FP32) | Single-precision float | Almost all vector/matrix instructions |
+| `half` (FP16) | Half-precision float | Vector and matrix instructions |
+| `int32_t` | 32-bit integer | Integer arithmetic, comparison, shift |
+| `int8_t` / `uint8_t` | 8-bit integer | Quantization instructions (`TQUANT`, `TDEQUANT`, etc.) |
+| `bfloat16` (BF16) | Brain float (requires GCC >= 14) | Select vector instructions |
+
+> For per-instruction `DType` constraints, see the "Constraints" section of each instruction: [docs/isa/README.md](docs/isa/README.md)
+
+#### 3.2.2 Host-Side Design
+
+The host side is responsible for: allocating output tensors/workspace → setting kernel parameters → dispatching kernel execution.
+
+```cpp
+// 1. Allocate output
+at::Tensor output = at::empty_like(input);
+
+// 2. Set parallel parameters
+uint32_t blockDim    = 20;              // number of cores (A2/A3 max 24, A5 max 20)
+uint32_t totalLength = input.numel();
+
+// 3. Dispatch
+EXEC_KERNEL_CMD(my_kernel, blockDim, input, output, totalLength);
+```
+
+Key notes:
+- `EXEC_KERNEL_CMD` / `ACLRT_LAUNCH_KERNEL`: auto-generated by the build system from kernel source; the host only passes GM pointers and shape parameters
+- Multi-core parallelism uses SPMD mode; each core computes its data offset via `get_block_idx()`
+
+> Full implementation reference: [demos/baseline/add/README.md](demos/baseline/add/README.md)  
+> Operator fusion (reducing kernel launches and GM accesses): [kernels/custom/fused_add_relu_mul/README.md](kernels/custom/fused_add_relu_mul/README.md)
+
+#### 3.2.3 Kernel-Side Design
+
+The standard kernel skeleton: `GlobalTensor` (GM view) → `Tile` (on-chip buffer) → `TLOAD` → compute instructions → `TSTORE`.
+
+**Auto Mode skeleton** (recommended for beginners; compiler manages buffers and sync):
+
+```cpp
+#include <pto/pto-inst.hpp>
+using namespace pto;
+
+template <typename T, int kRows, int kCols>
+__global__ __aicore__ void MyKernel(__gm__ T* out, __gm__ const T* in) {
+    GlobalTensor<T, /*...*/ > gin(in), gout(out);
+    Tile<TileType::Vec, T, kRows, kCols> src, dst;
+
+    TLOAD(src, gin);
+    TADD(dst, src, src);   // example: element-wise add
+    TSTORE(gout, dst);
+}
+```
+
+**Manual Mode skeleton** (explicit address binding + Events, for performance tuning):
+
+```cpp
+Tile<TileType::Vec, T, kRows, kCols> src, dst;
+TASSIGN(src, 0x0000);  // bind on-chip address explicitly
+TASSIGN(dst, 0x4000);
+
+Event<Op::TLOAD, Op::TADD> e_load;
+e_load = TLOAD(src, gin);                       // async load
+TSTORE(gout, dst, TADD(dst, src, src, e_load)); // wait for e_load, then compute
+```
+
+> Getting started tutorial (vector add / row-softmax / GEMM skeleton): [docs/coding/tutorial.md](docs/coding/tutorial.md)  
+> Programming model (Auto vs Manual / SPMD vs MPMD): [docs/coding/ProgrammingModel.md](docs/coding/ProgrammingModel.md)  
+> Tile abstraction and layout rules: [docs/coding/Tile.md](docs/coding/Tile.md)  
+> Event and synchronization model: [docs/coding/Event.md](docs/coding/Event.md)
+
+### 3.3 Supported Hardware
+
+| Platform | Chip | Notes |
+| --- | --- | --- |
+| Ascend A2 | Ascend 910B | A2/A3 share `include/pto/npu/a2a3/` implementation |
+| Ascend A3 | Ascend 910C | Same as above |
+| Ascend A5 | Ascend 950 | `include/pto/npu/a5/`; larger L1, supports bigger Tiles |
+| CPU Simulation | x86_64 / AArch64 | Cross-platform, for functional verification, no CANN required |
+
+> Hardware differences in Tile size and data type support vary per instruction — see each instruction's constraints.  
+> More details: [include/README.md](include/README.md)
+
+### 3.4 Operator Constraints
+
+Common constraints when using PTO Tile instructions:
+
+- **Tile size alignment**: Tile width (`Cols`) must be a multiple of 16 (or 32), otherwise a compile-time error is raised
+- **Valid region bounds**: `ValidRow <= Rows` and `ValidCol <= Cols`; src/dst valid regions must match at runtime
+- **src/dst must not alias**: Some instructions (e.g. `TRECIP`) do not support src and dst pointing to the same on-chip buffer
+- **No overlapping buffers in Manual Mode**: When using explicit `TASSIGN`, address ranges of different Tiles must not overlap
+- **TileType must match**: Each instruction strictly requires specific `TileType` (Vec/Mat/Left/Right/Acc) for its operands; mixing types causes a compile error
+- **Layout constraint**: Most vector instructions require RowMajor layout
+
+> Per-instruction constraints: [docs/isa/README.md](docs/isa/README.md)  
+> Common issues and debugging: [docs/coding/debug.md](docs/coding/debug.md)
+
+
 
 ## Platform Support
 

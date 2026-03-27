@@ -80,24 +80,180 @@ PTO Tile Lib 并不面向入门级用户，主要面向：
 
 ## 如何使用 PTO Tile Library
 
-PTO 指令支持两种模式：**Auto Mode（仅在 CPU 仿真中可用）**（无需手动分配 buffer/管理流水线），以及 **Manual Mode**（需要显式管理 buffer 地址与流水线）。推荐按以下路径推进算子优化：
+PTO 指令支持两种开发模式：
 
-1. 基于 Auto Mode 开发算子，根据算法逻辑生成 PTO 指令序列。
-2. 在 CPU 仿真中验证功能与正确性。
-3. 将代码移植到昇腾硬件上验证正确性并采集性能数据。
-4. 定位性能瓶颈（CUBE Bound / MTE Bound / Vector Bound），开始优化与调参。
+- **Auto Mode**（推荐入门）：无需手动分配 buffer 和管理流水线，编译器/运行时自动处理，当前仅在 CPU 仿真中可用。
+- **Manual Mode**：显式管理 buffer 地址（`TASSIGN`）与流水线同步（Events），用于性能调优。
 
-每条 PTO 指令会在固定 tile shape 下映射到对应的底层实现（通常由模板与静态选择完成）。通过组合不同 PTO 指令并调整 tile 参数/顺序，可以做端到端的性能调优。
+推荐的开发路径：
 
-本仓库也展示了标准 tile 操作如何通过模板参数映射到不同流水线实现：
+1. 基于 Auto Mode 开发算子，在 CPU 仿真中验证功能正确性 → 见[快速开始](#快速开始)
+2. 移植到昇腾硬件验证正确性并采集性能数据
+3. 定位性能瓶颈（CUBE Bound / MTE Bound / Vector Bound），切换 Manual Mode 进行调优
 
-- 静态 tile shape（Row/Col）
-- 动态 tile mask（valid mask）
-- 事件记录与等待（set/wait flag）
-- 专用固定功能（SFU）
-- 固定流水线（FIXP）
+### 3.1 使能方式
 
-PTO ISA 定义了 90+ 条标准操作。本仓库实现了其中不断增长的一部分，并持续补充更多指令实现。
+| 场景 | 框架 | 说明 | 参考 |
+| --- | --- | --- | --- |
+| CPU 仿真 | 无需框架 | 跨平台，不依赖 CANN/驱动，推荐入门第一步 | [快速开始 → CPU Simulator](#运行-cpu-simulator建议第一步) |
+| AclNN 直调 | CANN AclNN | 直接通过 AclRT 调度 kernel，不依赖训练框架 | [demos/baseline/add](demos/baseline/add/README_zh.md) |
+| PyTorch 训练/推理 | torch_npu | 通过 `TORCH_LIBRARY` 注册为 `torch.ops.npu.<op>`，供 Python 侧调用 | [demos/baseline/add](demos/baseline/add/README_zh.md)、[demos/torch_jit/](demos/torch_jit/) |
+
+#### AclNN 直调用例
+
+```cpp
+// kernel 侧（add_custom.cpp）：标准 PTO kernel
+__global__ __aicore__ void add_custom(__gm__ float* out,
+                                      __gm__ const float* x,
+                                      __gm__ const float* y,
+                                      uint32_t len) { /* ... */ }
+
+// host 侧：通过 ACLRT_LAUNCH_KERNEL 调度
+#include "aclrtlaunch_add_custom.h"
+void run(float* out, const float* x, const float* y, uint32_t len) {
+    EXEC_KERNEL_CMD(add_custom, /*blockDim=*/20, x, y, out, len);
+}
+```
+
+> 完整端到端示例（含 CMakeLists、构建脚本）：[demos/baseline/add/README_zh.md](demos/baseline/add/README_zh.md)
+
+#### PyTorch（torch_npu）用例
+
+```cpp
+// 声明算子 schema
+TORCH_LIBRARY_FRAGMENT(npu, m) {
+    m.def("my_add(Tensor x, Tensor y) -> Tensor");
+}
+// 注册实现（NPU dispatch key 为 PrivateUse1）
+TORCH_LIBRARY_IMPL(npu, PrivateUse1, m) {
+    m.impl("my_add", TORCH_FN(run_add_custom));
+}
+```
+
+```python
+import torch, torch_npu
+out = torch.ops.npu.my_add(x, y)  # Python 侧直接调用
+```
+
+> 完整示例（含 setup.py wheel 打包）：[demos/baseline/add/README_zh.md](demos/baseline/add/README_zh.md)  
+> JIT 编译示例（无需预先构建 wheel）：[demos/torch_jit/](demos/torch_jit/README.md)
+
+### 3.2 总体设计
+
+#### 3.2.1 算子支持的数据类型
+
+PTO Tile 的数据类型通过 C++ 模板参数 `DType` 指定，推荐使用模板以支持多类型：
+
+```cpp
+template <typename T>  // T 可以是 float / half / int32_t 等
+__global__ __aicore__ void MyKernel(__gm__ T* out, __gm__ const T* in) {
+    using TileT = Tile<TileType::Vec, T, 16, 256>;
+    // ...
+}
+```
+
+常用数据类型与典型支持指令：
+
+| 数据类型 | 说明 | 典型支持指令 |
+| --- | --- | --- |
+| `float`（FP32） | 单精度浮点 | 几乎所有向量/矩阵指令 |
+| `half`（FP16） | 半精度浮点 | 向量指令、矩阵指令 |
+| `int32_t` | 32 位整数 | 整数算术、比较、移位指令 |
+| `int8_t` / `uint8_t` | 8 位整数 | 量化相关指令（`TQUANT`、`TDEQUANT` 等）|
+| `bfloat16`（BF16） | 脑浮点（需 GCC >= 14） | 部分向量指令 |
+
+> 每条指令对 `DType` 的具体约束见各指令"约束"小节：[docs/isa/README_zh.md](docs/isa/README_zh.md)
+
+#### 3.2.2 Host 侧设计
+
+Host 侧职责：分配输出张量/工作区 → 设置 kernel 参数 → 调度 kernel 执行。
+
+```cpp
+// 1. 分配输出
+at::Tensor output = at::empty_like(input);
+
+// 2. 计算并行参数
+uint32_t blockDim    = 20;              // 并行核心数（A2/A3 最多 24，A5 最多 20）
+uint32_t totalLength = input.numel();   // 元素总数
+
+// 3. 调度执行
+EXEC_KERNEL_CMD(my_kernel, blockDim, input, output, totalLength);
+```
+
+关键说明：
+- `EXEC_KERNEL_CMD` / `ACLRT_LAUNCH_KERNEL`：由构建系统从 kernel 源码自动生成，host 侧只需传递 GM 指针和 shape 参数
+- 多核并行采用 SPMD 模式，每个核心通过 `get_block_idx()` 自行计算数据偏移
+
+> 完整实现参考：[demos/baseline/add/README_zh.md](demos/baseline/add/README_zh.md)  
+> 算子融合（减少 kernel 启动和 GM 访问）：[kernels/custom/fused_add_relu_mul/README_zh.md](kernels/custom/fused_add_relu_mul/README_zh.md)
+
+#### 3.2.3 Kernel 侧设计
+
+Kernel 侧的标准骨架：`GlobalTensor`（GM 视图）→ `Tile`（片上缓冲）→ `TLOAD` → 计算指令 → `TSTORE`。
+
+**Auto Mode 骨架**（推荐入门，编译器管理 buffer 和同步）：
+
+```cpp
+#include <pto/pto-inst.hpp>
+using namespace pto;
+
+template <typename T, int kRows, int kCols>
+__global__ __aicore__ void MyKernel(__gm__ T* out, __gm__ const T* in) {
+    // 1. 定义 GM 视图
+    GlobalTensor<T, /*...*/ > gin(in), gout(out);
+
+    // 2. 定义片上 Tile
+    Tile<TileType::Vec, T, kRows, kCols> src, dst;
+
+    // 3. 数据流：TLOAD → 计算 → TSTORE
+    TLOAD(src, gin);
+    TADD(dst, src, src);   // 示例：逐元素加法
+    TSTORE(gout, dst);
+}
+```
+
+**Manual Mode 骨架**（显式绑定地址 + Events，用于性能调优）：
+
+```cpp
+Tile<TileType::Vec, T, kRows, kCols> src, dst;
+TASSIGN(src, 0x0000);   // 显式绑定片上地址
+TASSIGN(dst, 0x4000);
+
+Event<Op::TLOAD, Op::TADD> e_load;
+e_load = TLOAD(src, gin);          // 异步加载
+TSTORE(gout, dst, TADD(dst, src, src, e_load)); // 依赖 e_load 完成后执行
+```
+
+> 完整入门教程（向量加法 / row-softmax / GEMM 骨架）：[docs/coding/tutorial_zh.md](docs/coding/tutorial_zh.md)  
+> 编程模型（Auto vs Manual / SPMD vs MPMD）：[docs/coding/ProgrammingModel_zh.md](docs/coding/ProgrammingModel_zh.md)  
+> Tile 抽象与布局规则：[docs/coding/Tile_zh.md](docs/coding/Tile_zh.md)  
+> 事件与同步模型：[docs/coding/Event_zh.md](docs/coding/Event_zh.md)
+
+### 3.3 支持硬件
+
+| 硬件平台 | 芯片型号 | 备注 |
+| --- | --- | --- |
+| Ascend A2 | Ascend 910B | A2/A3 共用 `include/pto/npu/a2a3/` 实现 |
+| Ascend A3 | Ascend 910C | 同上 |
+| Ascend A5 | Ascend 950 | `include/pto/npu/a5/`，L1 容量更大，支持更大 Tile |
+| CPU 仿真 | x86_64 / AArch64 | 跨平台，用于功能验证，不依赖 CANN |
+
+> 不同硬件对 Tile 尺寸和数据类型的支持存在差异，详见各指令文档约束小节。  
+> 更多细节：[include/README_zh.md](include/README_zh.md)
+
+### 3.4 算子约束限制
+
+使用 PTO Tile 指令时需注意以下通用约束：
+
+- **Tile 尺寸对齐**：Tile 宽度（`Cols`）须是 16（或 32）的倍数，否则编译期报错
+- **有效区域边界**：`ValidRow <= Rows`，`ValidCol <= Cols`，运行时 src/dst 的有效区域须保持一致
+- **src/dst 不可同址**：部分指令（如 `TRECIP`）不支持 src 与 dst 指向同一片上 buffer
+- **Manual 模式 buffer 不重叠**：显式 `TASSIGN` 时，不同 Tile 的地址区间不得重叠
+- **TileType 匹配**：各指令对操作数的 `TileType`（Vec/Mat/Left/Right/Acc）有严格要求，混用会导致编译失败
+- **布局约束**：大多数向量指令要求 RowMajor 布局
+
+> 详见各指令"约束"小节：[docs/isa/README_zh.md](docs/isa/README_zh.md)  
+> 常见错误与调试方法：[docs/coding/debug_zh.md](docs/coding/debug_zh.md)
 
 ## 平台支持
 
