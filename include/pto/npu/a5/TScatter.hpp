@@ -21,7 +21,7 @@ template <typename TileDataD>
 __tf__ AICORE void InitUBBuffer(TileDataD &dst)
 {
     using TD = typename TileDataD::DType;
-    __ubuf__ TD *dstPtr = dst.data();
+    __ubuf__ TD *dstPtr = (__ubuf__ TD *)__cce_get_tile_ptr(dst);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TD);
     unsigned numRepeatPerRow = CeilDivision(TileDataD::Cols, elementsPerRepeat);
     __VEC_SCOPE__
