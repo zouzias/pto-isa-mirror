@@ -274,6 +274,27 @@ struct TestContext {
     }
 };
 
+// Query the number of physical NPUs available on this machine.
+// Caches the result after the first successful call.
+inline int GetAvailableDeviceCount()
+{
+    static int cachedCount = -1;
+    if (cachedCount >= 0)
+        return cachedCount;
+    constexpr int kAclRepeatInit = 100002;
+    aclError aRet = aclInit(nullptr);
+    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
+        return 0;
+    }
+    uint32_t count = 0;
+    aRet = aclrtGetDeviceCount(&count);
+    if (aRet != ACL_SUCCESS) {
+        return 0;
+    }
+    cachedCount = static_cast<int>(count);
+    return cachedCount;
+}
+
 // ============================================================================
 // ForkAndRunWithHcclRootInfo: MPI-based multi-rank test execution.
 //
@@ -287,6 +308,11 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
 {
     int mpiRank = CommMpiRank();
     int mpiSize = CommMpiSize();
+    int rankId = firstRankId + mpiRank;
+
+    if (nRanks <= 0) {
+        return false;
+    }
 
     if (mpiSize != nRanks) {
         if (mpiRank == 0) {
@@ -296,16 +322,23 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
         return false;
     }
 
-    int rankId = firstRankId + mpiRank;
-    if (nRanks <= 0) {
-        return false;
+    int deviceCount = GetAvailableDeviceCount();
+    int requiredDevices = nRanks + firstDeviceId;
+    if (deviceCount < requiredDevices) {
+        if (mpiRank == 0) {
+            std::cerr << "[SKIP] Test requires " << requiredDevices << " NPU(s) (nRanks=" << nRanks
+                      << ", firstDeviceId=" << firstDeviceId << ") but only " << deviceCount << " available. Skipping."
+                      << std::endl;
+        }
+        return true;
     }
+
     int deviceId = rankId % nRanks + firstDeviceId;
 
     constexpr int kAclRepeatInit = 100002;
-    aclError aRet = aclInit(nullptr);
-    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
-        std::cerr << "[ERROR] Rank " << mpiRank << ": aclInit failed: " << static_cast<int>(aRet) << std::endl;
+    aclError aclRet = aclInit(nullptr);
+    if (aclRet != ACL_SUCCESS && static_cast<int>(aclRet) != kAclRepeatInit) {
+        std::cerr << "[ERROR] Rank " << mpiRank << ": aclInit failed: " << static_cast<int>(aclRet) << std::endl;
         return false;
     }
 
@@ -314,28 +347,28 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
         COMM_LOG("[INIT] Rank 0: rtSetDevice(" << deviceId << ") -> " << rtRet);
     }
 
-    aRet = aclrtSetDevice(deviceId);
-    if (aRet != ACL_SUCCESS) {
+    aclRet = aclrtSetDevice(deviceId);
+    if (aclRet != ACL_SUCCESS) {
         std::cerr << "[ERROR] Rank " << mpiRank << ": aclrtSetDevice(" << deviceId
-                  << ") failed: " << static_cast<int>(aRet) << std::endl;
+                  << ") failed: " << static_cast<int>(aclRet) << std::endl;
         return false;
     }
 
-    HcclRootInfo rootInfo{};
+    HcclRootInfo hcclRootInfo{};
     if (mpiRank == 0) {
         COMM_LOG("[INIT] Rank 0: calling HcclGetRootInfo ...");
-        HcclResult hret = HcclGetRootInfo(&rootInfo);
-        COMM_LOG("[INIT] Rank 0: HcclGetRootInfo -> " << (int)hret);
-        if (hret != HCCL_SUCCESS) {
-            std::cerr << "[ERROR] HcclGetRootInfo failed: " << hret << std::endl;
+        HcclResult hcclRet = HcclGetRootInfo(&hcclRootInfo);
+        COMM_LOG("[INIT] Rank 0: HcclGetRootInfo -> " << (int)hcclRet);
+        if (hcclRet != HCCL_SUCCESS) {
+            std::cerr << "[ERROR] HcclGetRootInfo failed: " << hcclRet << std::endl;
             return false;
         }
     }
 
-    CommMpiBcast(&rootInfo, HCCL_ROOT_INFO_BYTES, COMM_MPI_CHAR, 0);
+    CommMpiBcast(&hcclRootInfo, HCCL_ROOT_INFO_BYTES, COMM_MPI_CHAR, 0);
     CommMpiBarrier();
 
     COMM_LOG("[INIT] Rank " << mpiRank << ": rootInfo broadcast complete, proceeding to test");
 
-    return perRankFn(rankId, &rootInfo);
+    return perRankFn(rankId, &hcclRootInfo);
 }
