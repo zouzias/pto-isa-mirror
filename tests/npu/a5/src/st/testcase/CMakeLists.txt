@@ -231,6 +231,7 @@ set(ALL_TESTCASES
     tinsert
     textract_nd_vec
     tmov_zz
+    textract_acc2vec
 )
 
 if(NOT AUTO_MODE)
