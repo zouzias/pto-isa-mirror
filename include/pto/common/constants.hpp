@@ -72,10 +72,16 @@ template <auto V>
 constexpr uint32_t floatToBits()
 {
     if constexpr (std::is_same_v<decltype(V), float>) {
-        union { float f; uint32_t u; } conv = {V};
+        union {
+            float f;
+            uint32_t u;
+        } conv = {V};
         return conv.u;
     } else if constexpr (std::is_same_v<decltype(V), double>) {
-        union { float f; uint32_t u; } conv = {static_cast<float>(V)};
+        union {
+            float f;
+            uint32_t u;
+        } conv = {static_cast<float>(V)};
         return conv.u;
     } else if constexpr (std::is_integral_v<decltype(V)>) {
         return static_cast<uint32_t>(V);
@@ -99,12 +105,10 @@ AICORE constexpr PadValue PadValueCustom(float value)
                                  static_cast<uint64_t>(__builtin_bit_cast(uint32_t, value)));
 }
 
-// Usage: constexpr PadValue PadCustomNeg1_Half = PadValueCustom16(0xBC00);  // fp16 -1.0
 // For fp16/bf16, pass the raw 16-bit representation directly
 AICORE constexpr PadValue PadValueCustom16(uint16_t bits16)
 {
-    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
-                                 static_cast<uint64_t>(bits16));
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) | static_cast<uint64_t>(bits16));
 }
 
 #if !defined(__CPU_SIM) && !defined(__COSTMODEL)
