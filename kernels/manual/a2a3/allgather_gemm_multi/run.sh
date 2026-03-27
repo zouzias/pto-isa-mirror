@@ -126,6 +126,18 @@ case "${SIZE}" in
         ;;
 esac
 
+# Auto-compute HCCL_BUFFSIZE based on shared-window memory requirement.
+# AllGather puts the full M×K matrix (fp16) into the HCCL window, plus a small
+# TileFlagMatrix.  Default HCCL window is 200 MB which is too small for large
+# sizes.  We round up to the nearest 256 MB with some headroom.
+SHMEM_INPUT_MB=$(( (G_M * G_K * 2 + 1048575) / 1048576 ))
+REQUIRED_MB=$(( SHMEM_INPUT_MB + 64 ))          # headroom for tile flags + alignment
+REQUIRED_MB=$(( ((REQUIRED_MB + 255) / 256) * 256 ))  # round up to 256 MB
+if [ -z "${HCCL_BUFFSIZE:-}" ] || [ "${HCCL_BUFFSIZE:-0}" -lt "${REQUIRED_MB}" ]; then
+    export HCCL_BUFFSIZE=${REQUIRED_MB}
+fi
+echo "[INFO] HCCL_BUFFSIZE=${HCCL_BUFFSIZE} MB (shmem_input=${SHMEM_INPUT_MB} MB)"
+
 echo "[INFO] Using size: ${SIZE} (M=${G_M}, K=${G_K}, N=${G_N}), n_ranks=${N_RANKS}"
 
 if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then

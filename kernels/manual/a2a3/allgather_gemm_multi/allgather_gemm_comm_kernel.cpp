@@ -1,6 +1,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
@@ -494,14 +496,86 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
 
         std::string output_dir = std::string("../output/") + SIZE_NAME;
         std::string output_file = output_dir + "/output_rank" + std::to_string(rank_id) + ".bin";
-        PtoTestCommon::WriteFile(output_file, verify_host, outputSize);
+        {
+            int fd = open(output_file.c_str(), O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+            if (fd >= 0) {
+                const char* ptr = reinterpret_cast<const char*>(verify_host);
+                size_t remaining = outputSize;
+                while (remaining > 0) {
+                    ssize_t written = write(fd, ptr, remaining);
+                    if (written <= 0) break;
+                    ptr += written;
+                    remaining -= static_cast<size_t>(written);
+                }
+                close(fd);
+                if (remaining > 0) {
+                    std::cerr << "[WARN] Rank " << rank_id << ": output file write incomplete ("
+                              << (outputSize - remaining) << "/" << outputSize << " bytes): "
+                              << output_file << std::endl;
+                }
+            } else {
+                std::cerr << "[WARN] Rank " << rank_id << ": cannot open output file: "
+                          << output_file << std::endl;
+            }
+        }
 
         std::string golden_file = output_dir + "/golden.bin";
-        std::vector<float> golden(outputSize / sizeof(float));
+        size_t numElements = outputSize / sizeof(float);
+        std::vector<float> golden(numElements);
         size_t golden_file_size = 0;
         bool rank_ok = false;
         if (PtoTestCommon::ReadFile(golden_file, golden_file_size, golden.data(), outputSize) && golden_file_size == outputSize) {
-            rank_ok = PtoTestCommon::ResultCmp(golden, verify_host, 0.001f);
+            constexpr float eps = 0.001f;
+            float maxDiff = 0.0f;
+            float maxRelRatio = 0.0f;
+            size_t errCount = 0;
+            size_t zeroCount = 0;
+            size_t actAllZeroCount = 0;
+            size_t goldenNonZeroCount = 0;
+            size_t firstErrIdx = 0;
+            constexpr size_t zeroCountThreshold = 1000;
+
+            for (size_t i = 0; i < numElements; ++i) {
+                float expVal = golden[i];
+                float actVal = verify_host[i];
+                float diff = std::abs(expVal - actVal);
+                float relRatio = (std::abs(expVal) > 1e-8f) ? (diff / std::abs(expVal)) : 0.0f;
+                maxDiff = std::max(maxDiff, diff);
+                maxRelRatio = std::max(maxRelRatio, relRatio);
+                if (std::abs(actVal) <= 1e-6f) ++actAllZeroCount;
+                if (std::abs(expVal) > 1e-6f) ++goldenNonZeroCount;
+                if (std::abs(actVal) <= 1e-6f && std::abs(expVal) > 1e-6f) {
+                    ++zeroCount;
+                }
+                if (diff > eps && relRatio > eps) {
+                    if (errCount == 0) firstErrIdx = i;
+                    ++errCount;
+                }
+            }
+
+            size_t errThreshold = static_cast<size_t>(numElements * eps);
+            bool allActZero = (actAllZeroCount == numElements) && (goldenNonZeroCount > 0);
+            rank_ok = (errCount <= errThreshold) && (zeroCount <= zeroCountThreshold) && !allActZero;
+
+            std::cout << "[VERIFY] Rank " << rank_id << " " << phase_name
+                      << ": checked " << numElements << " elements, max diff: " << maxDiff
+                      << ", max rel ratio: " << maxRelRatio
+                      << ", err count: " << errCount << "/" << errThreshold
+                      << ", zero count: " << zeroCount << "/" << zeroCountThreshold
+                      << ", act_zero: " << actAllZeroCount << "/" << numElements
+                      << ", golden_nonzero: " << goldenNonZeroCount
+                      << std::endl;
+            if (allActZero) {
+                std::cerr << "[ERROR] Rank " << rank_id << " " << phase_name
+                          << ": output is ALL ZERO but golden has " << goldenNonZeroCount
+                          << " non-zero elements — compute likely did not execute!" << std::endl;
+            }
+            if (errCount > 0) {
+                std::cout << "  first error at idx " << firstErrIdx
+                          << ": golden=" << golden[firstErrIdx]
+                          << ", actual=" << verify_host[firstErrIdx] << std::endl;
+            }
+
             if (rank_ok) {
                 std::cout << "[INFO] Rank " << rank_id << " " << phase_name << " verification passed!" << std::endl;
             } else {
@@ -509,7 +583,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
             }
         } else {
             std::cerr << "[ERROR] Rank " << rank_id << ": golden file not available or size mismatch: "
-                      << golden_file << std::endl;
+                      << golden_file << " (read " << golden_file_size << " bytes, expected " << outputSize << ")" << std::endl;
             rank_ok = false;
         }
         aclrtFreeHost(verify_host);
