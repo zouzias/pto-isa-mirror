@@ -11,11 +11,18 @@
 
 # GEMM AllReduce Demo — Build and Run (HCCL backend)
 
-source /usr/local/Ascend/cann-8.5.0/set_env.sh
+# Ascend CANN environment: honor ASCEND_CANN_PATH or auto-detect
+: "${ASCEND_CANN_PATH:=$(ls -1d /usr/local/Ascend/cann-*/set_env.sh 2>/dev/null | sort -V | tail -1)}"
+if [ -z "${ASCEND_CANN_PATH}" ]; then
+    echo "[ERROR] Cannot find CANN set_env.sh. Set ASCEND_CANN_PATH to <cann-install>/set_env.sh"
+    exit 1
+fi
+source "${ASCEND_CANN_PATH}"
 export CMAKE_PREFIX_PATH="$HOME/.local/lib64/cmake:$CMAKE_PREFIX_PATH"
 
 # MPI setup: search common mpich install locations
-for d in /usr/local/mpich/bin /home/ntlab/zhouzhe/mpich/bin /home/ntlab/qifeng/mpich/bin; do
+MPI_SEARCH_DIRS="${MPI_SEARCH_DIRS:-/usr/local/mpich/bin}"
+for d in ${MPI_SEARCH_DIRS}; do
     if [ -x "$d/mpirun" ]; then
         export PATH="$d:$PATH"
         MPI_LIB_DIR="$(dirname "$d")/lib"
@@ -104,8 +111,6 @@ export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:${
 
 if [ -n "${CONDA_PREFIX:-}" ]; then
     export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:${CONDA_PREFIX}/aarch64-conda-linux-gnu/lib:${LD_LIBRARY_PATH}
-elif [ -d "${HOME}/miniconda3/envs/pypto_haoran/lib" ]; then
-    export LD_LIBRARY_PATH=${HOME}/miniconda3/envs/pypto_haoran/lib:${HOME}/miniconda3/envs/pypto_haoran/aarch64-conda-linux-gnu/lib:${LD_LIBRARY_PATH}
 fi
 
 set -euo pipefail

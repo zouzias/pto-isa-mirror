@@ -38,7 +38,11 @@ else()
     set(ASCEND_HOME_PATH $ENV{ASCEND_HOME_PATH})
 endif()
 
-set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
+if(DEFINED ENV{ASCEND_DRIVER_PATH})
+    set(ASCEND_DRIVER_PATH $ENV{ASCEND_DRIVER_PATH})
+else()
+    set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
+endif()
 
 add_compile_options(
     -D_FORTIFY_SOURCE=2

@@ -1,0 +1,59 @@
+---
+description: Build/run/debug workflow and environment setup for gemm_ar operator
+globs: "**/*gemm_ar/**"
+alwaysApply: false
+---
+
+# GEMM AllReduce — Workflow & Environment
+
+## Environment Setup
+
+```bash
+conda activate <your-conda-env>
+source /usr/local/Ascend/cann-*/set_env.sh   # or set ASCEND_CANN_PATH
+export CMAKE_PREFIX_PATH="$HOME/.local/lib64/cmake:$CMAKE_PREFIX_PATH"
+export MPI_SEARCH_DIRS="/path/to/mpich/bin"  # if not in /usr/local/mpich
+```
+
+MPI discovery: `run.sh` searches directories listed in `MPI_SEARCH_DIRS` (default: `/usr/local/mpich/bin`).
+
+## Build & Run
+
+```bash
+cd pto-comm-isa/kernels/manual/a2a3/gemm_ar
+./run.sh --nranks 8 --soc-version Ascend910B1
+```
+
+`run.sh` does: clean build → cmake → make → `mpirun -n $NRANKS ./gemm_allreduce`.
+
+## Changing Matrix Dimensions
+
+1. Update `CONFIG_G_M`, `CONFIG_G_K`, `CONFIG_G_N` in **all 3 files**: `comm_kernel.cpp`, `gemm_compute_kernel.cpp`, `main.cpp`
+2. `HCCL_BUFFSIZE` is auto-calculated in `run.sh` — no manual adjustment needed
+3. K must be divisible by nranks
+
+## Execution Flow
+
+1. All 8 ranks generate identical random A/B matrices (seed=42)
+2. Each rank computes CPU golden reference (slow — ~100s for 16384×16384×4096)
+3. HCCL communicator init (MPI broadcasts root info)
+4. Warmup (2 iters) → Compute-only (3 iters) → Sequential (5 iters) → Pipelined (5 iters)
+5. Final verification run + golden comparison
+
+## Debugging Tips
+
+- **"HCCL window too small"**: Check `HCCL_BUFFSIZE`. Formula: `(nranks+1) × M × N × 4 bytes + margin`
+- **"HcclGetRootInfo failed: 7"**: Previous run left dirty state. Run `rm -rf /dev/shm/sem.hccl*` or just retry after ~30s.
+- **Hang after HCCL init**: Usually rank synchronization issue. Check all ranks reach `CommMpiBarrier`.
+- **Segfault in comm kernel**: Often means window address is invalid. Verify `windowsIn[]` values are non-zero.
+- **"aclInit repeat init" (100002)**: Harmless — guarded in code. Only call `aclInit` once per process.
+
+## Performance Report Fields
+
+| Metric | Meaning |
+|---|---|
+| Compute-only | Pure GEMM time (no communication) |
+| Sequential | Compute then comm, no overlap |
+| Pipelined | Compute ‖ comm on separate streams |
+| Speedup | Sequential / Pipelined |
+| Overlap eff | How much compute/comm overlapped vs the shorter phase |

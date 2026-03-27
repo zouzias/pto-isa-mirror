@@ -57,13 +57,13 @@ inline void *LoadMpiLibrary()
         }
     }
 
-    static const char *candidates[] = {"/usr/local/mpich/lib/libmpi.so",
+    static const char *candidates[] = {"libmpi.so",
+                                       "libmpich.so",
+                                       "/usr/local/mpich/lib/libmpi.so",
                                        "/lib/aarch64-linux-gnu/libmpich.so",
                                        "/lib/x86_64-linux-gnu/libmpich.so",
                                        "/usr/lib/libmpi.so",
                                        "/usr/lib/libmpich.so",
-                                       "libmpi.so",
-                                       "libmpich.so",
                                        nullptr};
     for (int i = 0; candidates[i]; ++i) {
         h = dlopen(candidates[i], RTLD_NOW);

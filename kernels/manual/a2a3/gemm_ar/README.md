@@ -12,8 +12,8 @@
 
 ```bash
 # 1. 环境准备
-conda activate pypto_haoran
-source /usr/local/Ascend/cann-8.5.0/set_env.sh
+conda activate <your-conda-env>          # 需含 Python + NumPy
+source /usr/local/Ascend/cann-*/set_env.sh  # 或设置 ASCEND_CANN_PATH
 
 # 2. 构建并运行（8 卡）
 cd pto-comm-isa/kernels/manual/a2a3/gemm_ar
