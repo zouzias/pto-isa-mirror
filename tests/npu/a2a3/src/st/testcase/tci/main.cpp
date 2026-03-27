@@ -15,22 +15,30 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-template <uint32_t descending>
+template <uint32_t descending, uint32_t mode>
 void launchTCI_demo_b32_case1(int32_t *out, void *stream);
-template <uint32_t descending>
+template <uint32_t descending, uint32_t mode>
 void launchTCI_demo_b32_case2(int32_t *out, void *stream);
-template <uint32_t descending>
+template <uint32_t descending, uint32_t mode>
 void launchTCI_demo_b32_case3(int32_t *out, void *stream);
-template <uint32_t descending>
+template <uint32_t descending, uint32_t mode>
 void launchTCI_demo_b32_case4(int32_t *out, void *stream);
-template <uint32_t descending>
+template <uint32_t descending, uint32_t mode>
+void launchTCI_demo_b32_case5(int32_t *out, void *stream);
+template <uint32_t descending, uint32_t mode>
+void launchTCI_demo_b32_case6(int32_t *out, void *stream);
+template <uint32_t descending, uint32_t mode>
 void launchTCI_demo_b16_case1(int16_t *out, void *stream);
-template <uint32_t descending>
+template <uint32_t descending, uint32_t mode>
 void launchTCI_demo_b16_case2(int16_t *out, void *stream);
-template <uint32_t descending>
+template <uint32_t descending, uint32_t mode>
 void launchTCI_demo_b16_case3(int16_t *out, void *stream);
-template <uint32_t descending>
+template <uint32_t descending, uint32_t mode>
 void launchTCI_demo_b16_case4(int16_t *out, void *stream);
+template <uint32_t descending, uint32_t mode>
+void launchTCI_demo_b16_case5(int16_t *out, void *stream);
+template <uint32_t descending, uint32_t mode>
+void launchTCI_demo_b16_case6(int16_t *out, void *stream);
 
 class TCITest : public testing::Test {
 protected:
@@ -50,7 +58,7 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, uint32_t ROW, uint32_t COL, uint32_t descending, uint32_t start>
+template <typename T, uint32_t ROW, uint32_t COL, uint32_t descending, uint32_t start, uint32_t mode>
 void test_vci_b32()
 {
     aclInit(nullptr);
@@ -67,13 +75,13 @@ void test_vci_b32()
     aclrtMalloc((void **)&dstDevice, FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     if (COL == FLOAT_T1_COL) {
-        launchTCI_demo_b32_case1<descending>(dstDevice, stream);
+        launchTCI_demo_b32_case1<descending, mode>(dstDevice, stream);
     } else if (COL == FLOAT_T2_COL) {
-        launchTCI_demo_b32_case2<descending>(dstDevice, stream);
+        launchTCI_demo_b32_case2<descending, mode>(dstDevice, stream);
     } else if (COL == FLOAT_T3_COL) {
-        launchTCI_demo_b32_case3<descending>(dstDevice, stream);
+        launchTCI_demo_b32_case3<descending, mode>(dstDevice, stream);
     } else {
-        launchTCI_demo_b32_case4<descending>(dstDevice, stream);
+        launchTCI_demo_b32_case4<descending, mode>(dstDevice, stream);
     }
 
     aclrtSynchronizeStream(stream);
@@ -97,7 +105,7 @@ void test_vci_b32()
     EXPECT_TRUE(ret);
 }
 
-template <typename T, uint32_t ROW, uint32_t COL, uint32_t descending, uint32_t start>
+template <typename T, uint32_t ROW, uint32_t COL, uint32_t descending, uint32_t start, uint32_t mode>
 void test_vci_b16()
 {
     aclInit(nullptr);
@@ -114,13 +122,13 @@ void test_vci_b16()
     aclrtMalloc((void **)&dstDevice, FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     if (COL == HALF_T1_COL) {
-        launchTCI_demo_b16_case1<descending>(dstDevice, stream);
+        launchTCI_demo_b16_case1<descending, mode>(dstDevice, stream);
     } else if (COL == HALF_T2_COL) {
-        launchTCI_demo_b16_case2<descending>(dstDevice, stream);
+        launchTCI_demo_b16_case2<descending, mode>(dstDevice, stream);
     } else if (COL == HALF_T3_COL) {
-        launchTCI_demo_b16_case3<descending>(dstDevice, stream);
+        launchTCI_demo_b16_case3<descending, mode>(dstDevice, stream);
     } else {
-        launchTCI_demo_b16_case4<descending>(dstDevice, stream);
+        launchTCI_demo_b16_case4<descending, mode>(dstDevice, stream);
     }
 
     aclrtSynchronizeStream(stream);
@@ -146,40 +154,60 @@ void test_vci_b16()
 
 TEST_F(TCITest, case1_int32)
 {
-    test_vci_b32<int32_t, FLOAT_ROW, FLOAT_T1_COL, ASCEND, START>();
+    test_vci_b32<int32_t, FLOAT_ROW, FLOAT_T1_COL, ASCEND, START, SCALAR>();
 }
 
 TEST_F(TCITest, case2_int32)
 {
-    test_vci_b32<int32_t, FLOAT_ROW, FLOAT_T2_COL, ASCEND, START>();
+    test_vci_b32<int32_t, FLOAT_ROW, FLOAT_T2_COL, ASCEND, START, SCALAR>();
 }
 
 TEST_F(TCITest, case3_int32)
 {
-    test_vci_b32<int32_t, FLOAT_ROW, FLOAT_T3_COL, DESCEND, START>();
+    test_vci_b32<int32_t, FLOAT_ROW, FLOAT_T3_COL, DESCEND, START, SCALAR>();
 }
 
 TEST_F(TCITest, case4_int32)
 {
-    test_vci_b32<int32_t, FLOAT_ROW, FLOAT_T4_COL, DESCEND, START>();
+    test_vci_b32<int32_t, FLOAT_ROW, FLOAT_T4_COL, DESCEND, START, SCALAR>();
 }
 
 TEST_F(TCITest, case5_int16)
 {
-    test_vci_b16<int16_t, HALF_ROW, HALF_T1_COL, ASCEND, START>();
+    test_vci_b16<int16_t, HALF_ROW, HALF_T1_COL, ASCEND, START, SCALAR>();
 }
 
 TEST_F(TCITest, case6_int16)
 {
-    test_vci_b16<int16_t, HALF_ROW, HALF_T2_COL, DESCEND, START>();
+    test_vci_b16<int16_t, HALF_ROW, HALF_T2_COL, DESCEND, START, SCALAR>();
 }
 
 TEST_F(TCITest, case7_int16)
 {
-    test_vci_b16<int16_t, HALF_ROW, HALF_T3_COL, ASCEND, START>();
+    test_vci_b16<int16_t, HALF_ROW, HALF_T3_COL, ASCEND, START, SCALAR>();
 }
 
 TEST_F(TCITest, case8_int16)
 {
-    test_vci_b16<int16_t, HALF_ROW, HALF_T4_COL, DESCEND, START>();
+    test_vci_b16<int16_t, HALF_ROW, HALF_T4_COL, DESCEND, START, SCALAR>();
+}
+
+TEST_F(TCITest, case9_int32)
+{
+    test_vci_b32<int32_t, FLOAT_ROW, FLOAT_T1_COL, ASCEND, START, SIMD>();
+}
+
+TEST_F(TCITest, case10_int32)
+{
+    test_vci_b32<int32_t, FLOAT_ROW, FLOAT_T3_COL, DESCEND, START, SIMD>();
+}
+
+TEST_F(TCITest, case11_int16)
+{
+    test_vci_b16<int16_t, HALF_ROW, HALF_T1_COL, ASCEND, START, SIMD>();
+}
+
+TEST_F(TCITest, case12_int16)
+{
+    test_vci_b16<int16_t, HALF_ROW, HALF_T2_COL, DESCEND, START, SIMD>();
 }
