@@ -15,6 +15,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/type.hpp>
 
+#ifndef PIPE_FIX
+constexpr pipe_t PIPE_FIX = 7;
+#endif
+
 namespace pto {
 enum class Op : uint16_t
 {

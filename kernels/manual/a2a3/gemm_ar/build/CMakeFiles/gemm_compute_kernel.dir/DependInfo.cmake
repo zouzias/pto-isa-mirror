@@ -1,0 +1,19 @@
+
+# Consider dependencies only in project.
+set(CMAKE_DEPENDS_IN_PROJECT_ONLY OFF)
+
+# The set of languages for which implicit dependencies are needed:
+set(CMAKE_DEPENDS_LANGUAGES
+  )
+
+# The set of dependency files which are needed:
+set(CMAKE_DEPENDS_DEPENDENCY_FILES
+  "/mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/gemm_compute_kernel.cpp" "CMakeFiles/gemm_compute_kernel.dir/gemm_compute_kernel.cpp.o" "gcc" "CMakeFiles/gemm_compute_kernel.dir/gemm_compute_kernel.cpp.o.d"
+  )
+
+# Targets to which this target links.
+set(CMAKE_TARGET_LINKED_INFO_FILES
+  )
+
+# Fortran module output directory.
+set(CMAKE_Fortran_TARGET_MODULE_DIR "")
