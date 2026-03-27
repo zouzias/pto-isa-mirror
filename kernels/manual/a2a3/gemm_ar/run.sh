@@ -1,0 +1,128 @@
+#!/bin/bash
+# --------------------------------------------------------------------------------
+# Copyright (c) 2025 Huawei Technologies Co., Ltd.
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
+# Please refer to the License for details. You may not use this file except in compliance with the License.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# See LICENSE in the root of the software repository for the full text of the License.
+# --------------------------------------------------------------------------------
+
+# GEMM AllReduce Demo — Build and Run (HCCL backend)
+
+source /usr/local/Ascend/cann-8.5.0/set_env.sh
+export CMAKE_PREFIX_PATH="$HOME/.local/lib64/cmake:$CMAKE_PREFIX_PATH"
+
+# MPI setup: search common mpich install locations
+for d in /usr/local/mpich/bin /home/ntlab/zhouzhe/mpich/bin /home/ntlab/qifeng/mpich/bin; do
+    if [ -x "$d/mpirun" ]; then
+        export PATH="$d:$PATH"
+        MPI_LIB_DIR="$(dirname "$d")/lib"
+        export LD_LIBRARY_PATH="$MPI_LIB_DIR:${LD_LIBRARY_PATH:-}"
+        export MPI_LIB_PATH="$MPI_LIB_DIR/libmpi.so"
+        break
+    fi
+done
+
+SHORT=r:,v:,n:,d:
+LONG=run-mode:,soc-version:,nranks:,ndevices:,compute-blocks:,comm-blocks:,
+OPTS=$(getopt -a --options $SHORT --longoptions $LONG -- "$@")
+eval set -- "$OPTS"
+while :
+do
+    case "$1" in
+        (-r | --run-mode )
+            RUN_MODE="$2"
+            shift 2;;
+        (-v | --soc-version )
+            SOC_VERSION="$2"
+            shift 2;;
+        (-n | --nranks )
+            NRANKS="$2"
+            shift 2;;
+        (-d | --ndevices )
+            NDEVICES="$2"
+            shift 2;;
+        (--compute-blocks )
+            COMPUTE_BLOCKS="$2"
+            shift 2;;
+        (--comm-blocks )
+            COMM_BLOCKS="$2"
+            shift 2;;
+        (--)
+            shift;
+            break;;
+        (*)
+            echo "[ERROR] Unexpected option: $1";
+            break;;
+    esac
+done
+
+: "${NRANKS:=2}"
+: "${NDEVICES:=2}"
+: "${RUN_MODE:=npu}"
+: "${SOC_VERSION:=Ascend910B1}"
+
+# Clean stale HCCL shared-memory state from any previous crashed run
+rm -rf /dev/shm/sem.hccl* 2>/dev/null
+ipcrm -a 2>/dev/null
+
+if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
+    echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
+    exit 1
+fi
+
+if [[ "${SOC_VERSION}" =~ ^Ascend910B4-1 ]] && [ "${RUN_MODE}" == "sim" ]; then
+    echo "[ERROR] SocVersion: ${SOC_VERSION} can not support sim mode, please use Ascend910B4."
+    exit 1
+fi
+
+: "${G_M:=16384}"
+: "${G_N:=4096}"
+
+# HCCL window = recv_buffers (nranks*M*N*4) + reduced_output (M*N*4) + margin
+NEEDED_MB=$(( (NRANKS + 1) * G_M * G_N * 4 / 1024 / 1024 + 64 ))
+CURRENT_BUFFSIZE="${HCCL_BUFFSIZE:-200}"
+if [ "${CURRENT_BUFFSIZE}" -lt "${NEEDED_MB}" ]; then
+    echo "[INFO] Raising HCCL_BUFFSIZE from ${CURRENT_BUFFSIZE} to ${NEEDED_MB} MB for M=${G_M} N=${G_N} nranks=${NRANKS}"
+    export HCCL_BUFFSIZE="${NEEDED_MB}"
+fi
+
+echo "=== GEMM AllReduce Demo (HCCL) ==="
+echo "  RUN_MODE: ${RUN_MODE}  SOC_VERSION: ${SOC_VERSION}"
+echo "  NRANKS: ${NRANKS}  NDEVICES: ${NDEVICES}"
+echo "  HCCL_BUFFSIZE: ${HCCL_BUFFSIZE:-200} MB"
+echo "  COMPUTE_BLOCKS: ${COMPUTE_BLOCKS:-default}  COMM_BLOCKS: ${COMM_BLOCKS:-default}"
+echo "==========================="
+
+rm -rf build
+mkdir build
+cd build
+
+export LD_LIBRARY_PATH=${ASCEND_HOME_PATH}/tools/simulator/${SOC_VERSION}/lib:${LD_LIBRARY_PATH:-}
+
+if [ -n "${CONDA_PREFIX:-}" ]; then
+    export LD_LIBRARY_PATH=${CONDA_PREFIX}/lib:${CONDA_PREFIX}/aarch64-conda-linux-gnu/lib:${LD_LIBRARY_PATH}
+elif [ -d "${HOME}/miniconda3/envs/pypto_haoran/lib" ]; then
+    export LD_LIBRARY_PATH=${HOME}/miniconda3/envs/pypto_haoran/lib:${HOME}/miniconda3/envs/pypto_haoran/aarch64-conda-linux-gnu/lib:${LD_LIBRARY_PATH}
+fi
+
+set -euo pipefail
+
+BLOCK_OPTS=""
+if [ -n "${COMPUTE_BLOCKS:-}" ]; then
+    BLOCK_OPTS="$BLOCK_OPTS -DCOMPUTE_BLOCKS=${COMPUTE_BLOCKS}"
+fi
+if [ -n "${COMM_BLOCKS:-}" ]; then
+    BLOCK_OPTS="$BLOCK_OPTS -DCOMM_BLOCKS=${COMM_BLOCKS}"
+fi
+
+cmake -DRUN_MODE=${RUN_MODE} -DSOC_VERSION=${SOC_VERSION} ${BLOCK_OPTS} ..
+make -j16
+
+echo ""
+echo "=== Running GEMM AllReduce (HCCL, mpirun) ==="
+
+FIRST_DEVICE="${FIRST_DEVICE:-0}"
+mpirun -n ${NRANKS} ./gemm_allreduce --first-device ${FIRST_DEVICE}
