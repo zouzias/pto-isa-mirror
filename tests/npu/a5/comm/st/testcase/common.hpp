@@ -274,6 +274,27 @@ struct TestContext {
     }
 };
 
+// Query the number of physical NPUs available on this machine.
+// Caches the result after the first successful call.
+inline int GetAvailableDeviceCount()
+{
+    static int cachedCount = -1;
+    if (cachedCount >= 0)
+        return cachedCount;
+    constexpr int kAclRepeatInit = 100002;
+    aclError aRet = aclInit(nullptr);
+    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
+        return 0;
+    }
+    uint32_t count = 0;
+    aRet = aclrtGetDeviceCount(&count);
+    if (aRet != ACL_SUCCESS) {
+        return 0;
+    }
+    cachedCount = static_cast<int>(count);
+    return cachedCount;
+}
+
 // ============================================================================
 // ForkAndRunWithHcclRootInfo: MPI-based multi-rank test execution.
 //
@@ -300,6 +321,18 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
     if (nRanks <= 0) {
         return false;
     }
+
+    int requiredDevices = nRanks + firstDeviceId;
+    int availableDevices = GetAvailableDeviceCount();
+    if (availableDevices < requiredDevices) {
+        if (mpiRank == 0) {
+            std::cerr << "[SKIP] Test requires " << requiredDevices << " NPU(s) (nRanks=" << nRanks
+                      << ", firstDeviceId=" << firstDeviceId << ") but only " << availableDevices
+                      << " available. Skipping." << std::endl;
+        }
+        return true;
+    }
+
     int deviceId = rankId % nRanks + firstDeviceId;
 
     constexpr int kAclRepeatInit = 100002;

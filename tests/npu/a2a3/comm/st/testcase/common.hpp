@@ -450,8 +450,6 @@ struct TestContext {
             rtStreamDestroy(stream);
             stream = nullptr;
         }
-        aclStatus |= aclrtResetDevice(deviceId);
-        aclStatus |= aclFinalize();
         return (aclStatus == 0);
     }
 
@@ -600,25 +598,38 @@ private:
 // Rank 0 generates HcclRootInfo and broadcasts it to all ranks via MPI_Bcast.
 // MPI_Barrier ensures all ranks are synchronized before HCCL operations.
 // ============================================================================
-template <typename Func>
-inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDeviceId, Func &&perRankFn)
+// Query the number of physical NPUs available on this machine.
+// Caches the result after the first successful call.
+inline int GetAvailableDeviceCount()
 {
-    int mpiRank = CommMpiRank();
-    int mpiSize = CommMpiSize();
-
-    if (mpiSize != nRanks) {
-        if (mpiRank == 0) {
-            std::cerr << "[ERROR] MPI world size (" << mpiSize << ") != expected nRanks (" << nRanks
-                      << "). Launch with: mpirun -n " << nRanks << " ./test_binary" << std::endl;
-        }
-        return false;
+    static int cachedCount = -1;
+    if (cachedCount >= 0)
+        return cachedCount;
+    constexpr int kAclRepeatInit = 100002;
+    aclError aRet = aclInit(nullptr);
+    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
+        return 0;
     }
-
-    int rankId = firstRankId + mpiRank;
-    if (nRanks <= 0) {
-        return false;
+    uint32_t count = 0;
+    aRet = aclrtGetDeviceCount(&count);
+    if (aRet != ACL_SUCCESS) {
+        return 0;
     }
-    int deviceId = rankId % nRanks + firstDeviceId;
+    cachedCount = static_cast<int>(count);
+    return cachedCount;
+}
+
+// One-time ACL/device initialization guard.
+// Ensures aclInit + aclrtSetDevice run only once per process, avoiding
+// repeated init/finalize cycles that exhaust driver Notify resources.
+// Cleanup (aclrtResetDevice / aclFinalize) is intentionally omitted:
+// the OS and driver reclaim all resources when the process exits.
+inline bool EnsureAclDeviceInit(int mpiRank, int deviceId)
+{
+    static int cachedDeviceId = -1;
+    static bool initialized = false;
+    if (initialized && cachedDeviceId == deviceId)
+        return true;
 
     constexpr int kAclRepeatInit = 100002;
     aclError aRet = aclInit(nullptr);
@@ -638,6 +649,46 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
                   << ") failed: " << static_cast<int>(aRet) << std::endl;
         return false;
     }
+
+    cachedDeviceId = deviceId;
+    initialized = true;
+    return true;
+}
+
+template <typename Func>
+inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDeviceId, Func &&perRankFn)
+{
+    int mpiSize = CommMpiSize();
+    int mpiRank = CommMpiRank();
+
+    if (mpiSize != nRanks) {
+        if (mpiRank == 0) {
+            std::cerr << "[ERROR] MPI world size (" << mpiSize << ") != expected nRanks (" << nRanks
+                      << "). Launch with: mpirun -n " << nRanks << " ./test_binary" << std::endl;
+        }
+        return false;
+    }
+
+    int rankId = firstRankId + mpiRank;
+    if (nRanks <= 0) {
+        return false;
+    }
+
+    int availableDevices = GetAvailableDeviceCount();
+    int requiredDevices = nRanks + firstDeviceId;
+    if (availableDevices < requiredDevices) {
+        if (mpiRank == 0) {
+            std::cerr << "[SKIP] Test requires " << requiredDevices << " NPU(s) (nRanks=" << nRanks
+                      << ", firstDeviceId=" << firstDeviceId << ") but only " << availableDevices
+                      << " available. Skipping." << std::endl;
+        }
+        return true;
+    }
+
+    int deviceId = rankId % nRanks + firstDeviceId;
+
+    if (!EnsureAclDeviceInit(mpiRank, deviceId))
+        return false;
 
     HcclRootInfo rootInfo{};
     if (mpiRank == 0) {
