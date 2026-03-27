@@ -110,6 +110,39 @@ inline void TileFlagMatrixSetLocalReady(TileFlagMatrix* flags, int my_rank)
 
 #if !defined(__CCE_KT_TEST__) && defined(__CCE_AICORE__)
 // ============================================================================
+// dcci compatibility layer
+//
+// dcci (data cache cache invalidate) is a dav-c220 L2 cache inline operation.
+// A5 (dav-c310) with REGISTER_BASE mode has hardware-managed cache coherence
+// for shared memory, making explicit dcci unnecessary. Under REGISTER_BASE,
+// TNOTIFY AtomicAdd already provides hardware coherence for remote writes.
+// If dcci is not available, compile calls as no-ops.
+// ============================================================================
+
+#ifndef SINGLE_CACHE_LINE
+#define SINGLE_CACHE_LINE 0
+#endif
+
+// A5 (REGISTER_BASE): dcci may not be available; use memory barrier only.
+// A2/A3 (MEMORY_BASE): dcci is required for L2 cache invalidation of shared memory.
+#if defined(REGISTER_BASE) && !defined(DCCI_AVAILABLE)
+#define DCCI_NOOP 1
+#else
+#define DCCI_NOOP 0
+#endif
+
+AICORE inline void dcci_compat(__gm__ void* addr, int lines)
+{
+#if DCCI_NOOP
+    // REGISTER_BASE: hardware guarantees coherence; barrier is sufficient.
+    __asm__ __volatile__("" ::: "memory");
+#else
+    // MEMORY_BASE: explicit L2 cache invalidation required.
+    dcci(addr, lines);
+    __asm__ __volatile__("" ::: "memory");
+#endif
+}
+
 // TileFlagMatrix device-side functions
 // ============================================================================
 
@@ -178,10 +211,10 @@ AICORE inline void SetLocalSummaryReady(volatile __gm__ int32_t* summary_base, i
 {
     if (summary_base == nullptr || src_rank < 0) return;
     volatile __gm__ int32_t* ptr = summary_base + src_rank;
-    dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
+    dcci_compat((__gm__ void*)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
     *ptr = value;
-    dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
+    dcci_compat((__gm__ void*)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
 }
 
@@ -192,7 +225,7 @@ AICORE inline bool IsTileReady(
     int32_t tile_idx)
 {
     volatile __gm__ int32_t* ptr = GetTileFlagPtr(flags, src_rank, tile_idx);
-    dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
+    dcci_compat((__gm__ void*)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
     return (*ptr >= 1);
 }
@@ -202,7 +235,7 @@ AICORE inline bool IsAnyReadyFromSrc(volatile __gm__ int32_t* summary_base, int3
 {
     if (summary_base == nullptr || src_rank < 0) return false;
     volatile __gm__ int32_t* ptr = summary_base + src_rank;
-    dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
+    dcci_compat((__gm__ void*)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
     return (*ptr >= 1);
 }
@@ -212,7 +245,7 @@ AICORE inline int32_t GetReadyCountFromSrc(volatile __gm__ int32_t* summary_base
 {
     if (summary_base == nullptr || src_rank < 0) return 0;
     volatile __gm__ int32_t* ptr = summary_base + src_rank;
-    dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
+    dcci_compat((__gm__ void*)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
     return *ptr;
 }
