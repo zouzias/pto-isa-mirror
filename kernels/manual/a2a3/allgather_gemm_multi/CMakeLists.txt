@@ -18,6 +18,25 @@ endif()
 message(STATUS "Using HCCL backend for communication")
 
 # =============================================================================
+# Architecture Selection (SOC_VERSION driven)
+# =============================================================================
+if(SOC_VERSION MATCHES "^Ascend950")
+    set(CCE_AICORE_ARCH_CUBE "dav-c310-cube")
+    set(CCE_AICORE_ARCH_VEC  "dav-c310-vec")
+    set(CCE_MEMORY_MODEL     "REGISTER_BASE")
+    set(COMPUTE_BLOCK_NUM_DEFAULT 32)
+    set(COMM_BLOCK_NUM_DEFAULT 64)
+    message(STATUS "A5 (Ascend 950): arch=${CCE_AICORE_ARCH_CUBE}/${CCE_AICORE_ARCH_VEC}, memory=${CCE_MEMORY_MODEL}")
+else()
+    set(CCE_AICORE_ARCH_CUBE "dav-c220-cube")
+    set(CCE_AICORE_ARCH_VEC  "dav-c220-vec")
+    set(CCE_MEMORY_MODEL     "MEMORY_BASE")
+    set(COMPUTE_BLOCK_NUM_DEFAULT 24)
+    set(COMM_BLOCK_NUM_DEFAULT 48)
+    message(STATUS "A2/A3: arch=${CCE_AICORE_ARCH_CUBE}/${CCE_AICORE_ARCH_VEC}, memory=${CCE_MEMORY_MODEL}")
+endif()
+
+# =============================================================================
 # GEMM Size Configuration
 # =============================================================================
 if(NOT DEFINED G_M)
@@ -33,10 +52,10 @@ if(NOT DEFINED SIZE_NAME)
     set(SIZE_NAME "large")
 endif()
 if(NOT DEFINED COMPUTE_BLOCK_NUM)
-    set(COMPUTE_BLOCK_NUM 24)  # Max AIC blocks on Ascend 910B
+    set(COMPUTE_BLOCK_NUM ${COMPUTE_BLOCK_NUM_DEFAULT})
 endif()
 if(NOT DEFINED COMM_BLOCK_NUM)
-    set(COMM_BLOCK_NUM 48)     # Max AIV blocks on Ascend 910B (2 AIV per AICORE)
+    set(COMM_BLOCK_NUM ${COMM_BLOCK_NUM_DEFAULT})
 endif()
 message(STATUS "GEMM Size: M=${G_M}, K=${G_K}, N=${G_N}, Size Name: ${SIZE_NAME}")
 message(STATUS "Block Configuration: COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}, COMM_BLOCK_NUM=${COMM_BLOCK_NUM}")
@@ -95,8 +114,8 @@ include_directories(
 add_library(allgather_gemm_compute_kernel SHARED allgather_gemm_compute_kernel.cpp)
 target_compile_options(allgather_gemm_compute_kernel PRIVATE
     ${CMAKE_CCE_COMPILE_OPTIONS}
-    --cce-aicore-arch=dav-c220-cube
-    -DMEMORY_BASE -std=c++17
+    --cce-aicore-arch=${CCE_AICORE_ARCH_CUBE}
+    -D${CCE_MEMORY_MODEL} -std=c++17
     -DCONFIG_G_M=${G_M} -DCONFIG_G_K=${G_K} -DCONFIG_G_N=${G_N}
     -DCONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
 )
@@ -112,25 +131,45 @@ target_link_options(allgather_gemm_compute_kernel PRIVATE --cce-fatobj-link)
 add_library(allgather_gemm_comm_kernel SHARED allgather_gemm_comm_kernel.cpp)
 target_compile_options(allgather_gemm_comm_kernel PRIVATE
     ${CMAKE_CCE_COMPILE_OPTIONS}
-    --cce-aicore-arch=dav-c220-vec
-    -DMEMORY_BASE -std=c++17
+    --cce-aicore-arch=${CCE_AICORE_ARCH_VEC}
+    -D${CCE_MEMORY_MODEL} -std=c++17
     -DCONFIG_G_M=${G_M} -DCONFIG_G_K=${G_K} -DCONFIG_G_N=${G_N}
     -DCONFIG_SIZE_NAME="${SIZE_NAME}"
     -DCONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
     -DCONFIG_COMM_BLOCK_NUM=${COMM_BLOCK_NUM}
 )
+# Host-arch aware include root: x86_64 first, fallback aarch64.
+set(PTO_TOOLKIT_DIR "${ASCEND_HOME_PATH}/x86_64-linux")
+if(NOT EXISTS "${PTO_TOOLKIT_DIR}")
+    set(PTO_TOOLKIT_DIR "${ASCEND_HOME_PATH}/aarch64-linux")
+endif()
+
+# Newer CANN may place AscendC kernel headers under tikcpp.
+set(PTO_ASCENDC_KERNEL_INCLUDE "")
+if(EXISTS "${ASCEND_HOME_PATH}/tools/tikcpp/ascendc_kernel/include")
+    set(PTO_ASCENDC_KERNEL_INCLUDE "${ASCEND_HOME_PATH}/tools/tikcpp/ascendc_kernel/include")
+elseif(EXISTS "${ASCEND_HOME_PATH}/compiler/tikcpp/ascendc_kernel/include")
+    set(PTO_ASCENDC_KERNEL_INCLUDE "${ASCEND_HOME_PATH}/compiler/tikcpp/ascendc_kernel/include")
+endif()
+
 target_include_directories(allgather_gemm_comm_kernel PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../include/
     ${PROJECT_SOURCE_DIR}/../../../../tests/npu/a2a3/comm/st/testcase/
     ${PROJECT_SOURCE_DIR}/../../../../tests/common
-    $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc
-    $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include
-    $ENV{ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api
-    $ENV{ASCEND_HOME_PATH}/aarch64-linux/include/ascendc/basic_api
-    $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/impl/basic_api
-    $ENV{ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api/impl
-    $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include/interface
-    $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include/utils
+    ${ASCEND_HOME_PATH}/pkg_inc/
+    ${ASCEND_HOME_PATH}/pkg_inc/profiling/
+    ${ASCEND_HOME_PATH}/pkg_inc/runtime/runtime
+    ${PTO_TOOLKIT_DIR}/asc
+    ${PTO_TOOLKIT_DIR}/asc/include
+    ${PTO_TOOLKIT_DIR}/ascendc/include
+    ${PTO_TOOLKIT_DIR}/ascendc/include/basic_api
+    ${PTO_TOOLKIT_DIR}/include/ascendc
+    ${PTO_TOOLKIT_DIR}/include/ascendc/basic_api
+    ${PTO_TOOLKIT_DIR}/asc/impl/basic_api
+    ${PTO_TOOLKIT_DIR}/ascendc/include/basic_api/impl
+    ${PTO_TOOLKIT_DIR}/asc/include/interface
+    ${PTO_TOOLKIT_DIR}/asc/include/utils
+    ${PTO_ASCENDC_KERNEL_INCLUDE}
 )
 target_link_directories(allgather_gemm_comm_kernel PRIVATE
     ${ASCEND_HOME_PATH}/lib64
