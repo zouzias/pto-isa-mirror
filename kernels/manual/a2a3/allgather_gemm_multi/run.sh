@@ -170,18 +170,26 @@ fi
 #   - In pipelined mode, AIV blocks run TPUT while AIC blocks run TMATMUL
 #     achieving true overlap.
 #
-# AICORE Architecture (Ascend 910B):
-#   - Each AICORE contains: 1 AIC + 2 AIV (independently schedulable)
-#   - 24 AICOREs → 24 AIC + 48 AIV available
-#   - AIC and AIV do NOT compete for resources
+# AICORE Architecture:
+#   Ascend 910B (A2/A3): 24 AICOREs → 24 AIC + 48 AIV (2 per AICORE)
+#   Ascend 950  (A5):    32 AICOREs → 32 AIC + 64 AIV (2 per AICORE)
 #
 # Maximum parallel configuration:
-#   - COMPUTE_BLOCK_NUM = 24 (all AIC units)
-#   - COMM_BLOCK_NUM = 48 (all AIV units)
+#   A2/A3: COMPUTE_BLOCK_NUM=24, COMM_BLOCK_NUM=48
+#   A5:    COMPUTE_BLOCK_NUM=32, COMM_BLOCK_NUM=64
 #
 # TPUT/TGET support atomic operations for lock-free signaling.
-COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM:-24}
-COMM_BLOCK_NUM=${COMM_BLOCK_NUM:-48}
+
+case "${SOC_VERSION}" in
+    Ascend950*)
+        COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM:-32}
+        COMM_BLOCK_NUM=${COMM_BLOCK_NUM:-64}
+        ;;
+    *)
+        COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM:-24}
+        COMM_BLOCK_NUM=${COMM_BLOCK_NUM:-48}
+        ;;
+esac
 
 # Clear conda-injected flags that conflict with bisheng compiler
 unset CXXFLAGS CFLAGS LDFLAGS
