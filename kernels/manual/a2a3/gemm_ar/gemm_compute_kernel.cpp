@@ -18,6 +18,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 //   L0 (MTE1):  TEXTRACT individual K-slices from cached L1 panel
 //   Cube (M):   TMATMUL / TMATMUL_ACC accumulation
 
+#ifndef PIPE_FIX
+#define PIPE_FIX static_cast<pipe_t>(10)
+#endif
+
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 #include "ready_queue.hpp"
@@ -101,28 +105,11 @@ AICORE inline void ProcessKIteration(
 }
 
 // ============================================================================
-// Global GEMM parameters
+// Global GEMM parameters (shared across kernel and host code)
 // ============================================================================
-#ifndef CONFIG_G_M
-#define CONFIG_G_M 16384
-#endif
-#ifndef CONFIG_G_K
-#define CONFIG_G_K 16384
-#endif
-#ifndef CONFIG_G_N
-#define CONFIG_G_N 4096
-#endif
+#include "gemm_ar_config.h"
 
-constexpr uint32_t G_M = CONFIG_G_M;
-constexpr uint32_t G_K = CONFIG_G_K;
-constexpr uint32_t G_N = CONFIG_G_N;
-constexpr uint32_t G_BASE_M = 128;
-constexpr uint32_t G_BASE_K = 64;
-constexpr uint32_t G_BASE_N = 256;
-constexpr uint32_t G_M_TILES = G_M / G_BASE_M;
-constexpr uint32_t G_N_TILES = G_N / G_BASE_N;
 constexpr uint32_t G_K_LOOP = G_K / G_BASE_K;
-constexpr uint32_t G_NUM_TILES = G_M_TILES * G_N_TILES;
 
 // L1 caching: load stepK K-slices per TLOAD
 // L1 usage: 2×64KB(A) + 2×128KB(B) = 384KB ≤ 1024KB L1 capacity
@@ -132,11 +119,6 @@ static_assert(G_K_LOOP % G_STEP_KA == 0, "G_K_LOOP must be divisible by G_STEP_K
 static_assert(G_K_LOOP % G_STEP_KB == 0, "G_K_LOOP must be divisible by G_STEP_KB");
 static_assert(G_STEP_KA == G_STEP_KB, "Current implementation assumes stepKa == stepKb");
 static_assert(G_K_LOOP >= G_STEP_KA, "K_LOOP must be >= stepKa for L1 caching");
-
-#ifndef CONFIG_COMPUTE_BLOCK_NUM
-#define CONFIG_COMPUTE_BLOCK_NUM 24
-#endif
-constexpr int COMPUTE_BLOCK_NUM = CONFIG_COMPUTE_BLOCK_NUM;
 
 // ============================================================================
 // GemmComputeImpl: Core compute logic

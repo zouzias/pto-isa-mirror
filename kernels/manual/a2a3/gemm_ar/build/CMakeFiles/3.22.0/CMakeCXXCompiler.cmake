@@ -77,7 +77,7 @@ endif()
 
 
 
-set(CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "/home/ntlab/miniconda3/envs/pypto_haoran/include;/usr/include/c++/12;/usr/include/c++/12/aarch64-openEuler-linux;/usr/include/c++/12/backward;/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include;/usr/local/include;/usr/include")
+set(CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "/home/ntlab/miniconda3/include;/usr/include/c++/12;/usr/include/c++/12/aarch64-openEuler-linux;/usr/include/c++/12/backward;/usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include;/usr/local/include;/usr/include")
 set(CMAKE_CXX_IMPLICIT_LINK_LIBRARIES "gcc;gcc_s;c;gcc;gcc_s")
-set(CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES "/home/ntlab/miniconda3/envs/pypto_haoran/lib;/usr/lib/gcc/aarch64-openEuler-linux/12;/usr/lib64;/lib64;/lib;/usr/lib")
+set(CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES "/home/ntlab/miniconda3/lib;/usr/lib/gcc/aarch64-openEuler-linux/12;/usr/lib64;/lib64;/lib;/usr/lib")
 set(CMAKE_CXX_IMPLICIT_LINK_FRAMEWORK_DIRECTORIES "")

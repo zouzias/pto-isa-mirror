@@ -92,7 +92,6 @@ comm_kernel_EXTERNAL_OBJECTS =
 
 lib/libcomm_kernel.so: CMakeFiles/comm_kernel.dir/comm_kernel.cpp.o
 lib/libcomm_kernel.so: CMakeFiles/comm_kernel.dir/build.make
-lib/libcomm_kernel.so: lib/libgemm_compute_kernel.so
 lib/libcomm_kernel.so: CMakeFiles/comm_kernel.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX shared library lib/libcomm_kernel.so"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/comm_kernel.dir/link.txt --verbose=$(VERBOSE)

@@ -184,7 +184,6 @@ CMakeFiles/gemm_allreduce.dir/main.cpp.o: \
   /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/bits/stl_heap.h \
   /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/bits/stl_tempbuf.h \
   /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/pstl/glue_algorithm_defs.h \
-  /mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/comm_mpi.h \
   /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/iostream \
   /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/ostream \
   /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/ios \
@@ -213,5 +212,66 @@ CMakeFiles/gemm_allreduce.dir/main.cpp.o: \
   /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/bits/ostream.tcc \
   /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/istream \
   /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/bits/istream.tcc \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/iomanip \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/locale \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/bits/locale_facets_nonio.h \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/aarch64-openEuler-linux/bits/time_members.h \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/aarch64-openEuler-linux/bits/messages_members.h \
+  /usr/include/libintl.h \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/bits/codecvt.h \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/bits/locale_facets_nonio.tcc \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/bits/locale_conv.h \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/bits/quoted_string.h \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/sstream \
+  /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/bits/sstream.tcc \
+  /usr/include/sys/wait.h /usr/include/signal.h \
+  /usr/include/bits/signum-generic.h /usr/include/bits/signum-arch.h \
+  /usr/include/bits/types/sig_atomic_t.h \
+  /usr/include/bits/types/siginfo_t.h \
+  /usr/include/bits/types/__sigval_t.h /usr/include/bits/siginfo-arch.h \
+  /usr/include/bits/siginfo-consts.h \
+  /usr/include/bits/siginfo-consts-arch.h \
+  /usr/include/bits/types/sigval_t.h \
+  /usr/include/bits/types/sigevent_t.h \
+  /usr/include/bits/sigevent-consts.h /usr/include/bits/sigaction.h \
+  /usr/include/bits/sigcontext.h /usr/include/asm/sigcontext.h \
+  /usr/include/linux/types.h /usr/include/asm/types.h \
+  /usr/include/asm-generic/types.h /usr/include/asm-generic/int-ll64.h \
+  /usr/include/asm/bitsperlong.h /usr/include/asm-generic/bitsperlong.h \
+  /usr/include/linux/posix_types.h /usr/include/linux/stddef.h \
+  /usr/include/asm/posix_types.h /usr/include/asm-generic/posix_types.h \
+  /usr/include/asm/sve_context.h /usr/include/bits/types/stack_t.h \
+  /usr/include/sys/ucontext.h /usr/include/sys/procfs.h \
+  /usr/include/sys/time.h /usr/include/sys/user.h \
+  /usr/include/bits/procfs.h /usr/include/bits/procfs-id.h \
+  /usr/include/bits/procfs-prregset.h /usr/include/bits/procfs-extra.h \
+  /usr/include/bits/sigstack.h /usr/include/bits/sigstksz.h \
+  /usr/include/unistd.h /usr/include/bits/posix_opt.h \
+  /usr/include/bits/environments.h /usr/include/bits/confname.h \
+  /usr/include/bits/getopt_posix.h /usr/include/bits/getopt_core.h \
+  /usr/include/bits/unistd.h /usr/include/bits/unistd-decl.h \
+  /usr/include/bits/unistd_ext.h /usr/include/linux/close_range.h \
+  /usr/include/bits/ss_flags.h /usr/include/bits/types/struct_sigstack.h \
+  /usr/include/bits/sigthread.h /usr/include/bits/signal_ext.h \
+  /usr/include/bits/types/idtype_t.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/acl.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/acl_rt.h \
+  /usr/local/Ascend/cann-8.5.0/tools/bisheng_compiler/lib/clang/15.0.5/include/stdbool.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/acl_base.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/acl_base_rt.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/acl_base_mdl.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/error_codes/rt_error_codes.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/error_codes/ge_error_codes.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/acl_rt_allocator.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/acl_op.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/acl_dump.h \
+  /usr/local/Ascend/cann-8.5.0/include/acl/acl_mdl.h \
+  /usr/local/Ascend/cann-8.5.0/include/hccl/hccl.h \
+  /usr/local/Ascend/cann-8.5.0/include/hccl/hccl_types.h \
+  /usr/local/Ascend/cann-8.5.0/include/hccl/hccl_comm.h \
+  /mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/comm_mpi.h \
   /usr/include/dlfcn.h /usr/include/bits/dlfcn.h \
-  /usr/include/bits/dl_find_object.h
+  /usr/include/bits/dl_find_object.h \
+  /mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/hccl_context.h \
+  /mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/ready_queue.hpp \
+  /mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/gemm_ar_config.h

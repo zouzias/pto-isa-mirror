@@ -150,14 +150,14 @@ target_compile_options(comm_kernel PRIVATE
 )
 target_include_directories(comm_kernel PRIVATE ${KERNEL_INCLUDE_DIRS})
 target_link_directories(comm_kernel PRIVATE ${ASCEND_HOME_PATH}/lib64)
-target_link_libraries(comm_kernel PRIVATE gemm_compute_kernel hcomm runtime)
+target_link_libraries(comm_kernel PRIVATE runtime)
 target_link_options(comm_kernel PRIVATE --cce-fatobj-link)
 
 # ============================================================================
 # Host Executable
 # ============================================================================
 add_executable(gemm_allreduce main.cpp)
-target_compile_options(gemm_allreduce PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
+target_compile_options(gemm_allreduce PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS} ${BLOCK_DEFS_ALL})
 target_include_directories(gemm_allreduce PRIVATE ${HOST_INCLUDE_DIRS})
 target_link_directories(gemm_allreduce PUBLIC ${HOST_LINK_DIRS})
 target_link_libraries(gemm_allreduce PRIVATE

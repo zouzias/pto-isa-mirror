@@ -37,4 +37,6 @@ docs/mkdocs/src/manual/isa-reference.md
 docs/mkdocs/src/manual/isa-reference_zh.md
 docs/mkdocs/src/scripts/
 docs/mkdocs/src/tests/
+kernels/manual/a2a3/gemm_ar/.cursor/
+kernels/manual/a2a3/gemm_ar/build/
 PROF*/

@@ -52,4 +52,5 @@ CMakeFiles/gemm_compute_kernel.dir/gemm_compute_kernel.cpp.o: \
   /mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/../../../../include/pto/npu/comm/async/sdma/sdma_async_intrin.hpp \
   /mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/../../../../include/pto/npu/comm/async/sdma/sdma_types.hpp \
   /usr/lib/gcc/aarch64-openEuler-linux/12/../../../../include/c++/12/cstddef \
-  /mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/../../../../include/pto/common/event.hpp
+  /mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/../../../../include/pto/common/event.hpp \
+  /mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/gemm_ar_config.h

@@ -92,8 +92,8 @@ gemm_allreduce_EXTERNAL_OBJECTS =
 
 gemm_allreduce: CMakeFiles/gemm_allreduce.dir/main.cpp.o
 gemm_allreduce: CMakeFiles/gemm_allreduce.dir/build.make
-gemm_allreduce: lib/libcomm_kernel.so
 gemm_allreduce: lib/libgemm_compute_kernel.so
+gemm_allreduce: lib/libcomm_kernel.so
 gemm_allreduce: CMakeFiles/gemm_allreduce.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/mnt/data/ntlab/haoran/pto-comm-isa/kernels/manual/a2a3/gemm_ar/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable gemm_allreduce"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/gemm_allreduce.dir/link.txt --verbose=$(VERBOSE)
