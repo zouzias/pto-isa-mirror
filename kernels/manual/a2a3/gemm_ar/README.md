@@ -35,7 +35,7 @@ FIRST_DEVICE=0 ./run.sh --nranks 8 --soc-version Ascend910B1
 | 环境变量 | 用途 | 默认行为 |
 |---------|------|---------|
 | `ASCEND_CANN_PATH` | CANN `set_env.sh` 的完整路径 | 自动 glob `/usr/local/Ascend/cann-*/set_env.sh` 取最新版 |
-| `MPI_SEARCH_DIRS` | MPI `bin/` 目录搜索路径（空格分隔） | 搜索 `/usr/local/mpich/bin` 和 `/home/*/mpich/bin` |
+| `MPI_SEARCH_DIRS` | MPI `bin/` 目录搜索路径（空格分隔） | 搜索 `/usr/local/mpich/bin`、`/home/mpich/bin`、`/home/*/mpich/bin`、`/home/*/*/mpich/bin` |
 | `ASCEND_DRIVER_PATH` | Ascend driver 路径（CMake 使用） | 默认 `/usr/local/Ascend/driver` |
 | `MPI_LIB_PATH` | `libmpi.so` 绝对路径（运行时动态加载） | 由 `run.sh` 根据找到的 MPI 自动设置 |
 | `CONDA_PREFIX` | Conda 环境路径（自动由 `conda activate` 设置） | 激活 conda 环境后自动生效 |

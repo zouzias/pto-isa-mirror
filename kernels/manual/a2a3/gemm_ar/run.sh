@@ -23,9 +23,9 @@ export CMAKE_PREFIX_PATH="$HOME/.local/lib64/cmake:$CMAKE_PREFIX_PATH"
 # MPI setup: search common mpich install locations.
 # Override with MPI_SEARCH_DIRS (space-separated list of bin/ directories).
 if [ -z "${MPI_SEARCH_DIRS:-}" ]; then
-    MPI_SEARCH_DIRS="/usr/local/mpich/bin"
-    for candidate in /home/*/mpich/bin; do
-        [ -x "$candidate/mpirun" ] && MPI_SEARCH_DIRS="$MPI_SEARCH_DIRS $candidate"
+    MPI_SEARCH_DIRS="/usr/local/mpich/bin /home/mpich/bin"
+    for candidate in /home/*/mpich/bin /home/*/*/mpich/bin; do
+        [ -d "$candidate" ] && MPI_SEARCH_DIRS="$MPI_SEARCH_DIRS $candidate"
     done
 fi
 for d in ${MPI_SEARCH_DIRS}; do
