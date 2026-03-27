@@ -81,11 +81,11 @@ winget install --id Microsoft.VisualStudio.2022.BuildTools -e
 
 **替代方案：手动安装编译器**
 
-如果您不想使用 Visual Studio：
+如果您不想使用 Visual Studio，可以通过下列方式之一手动安装GCC/Clang编译器：
 - [WinLibs](https://winlibs.com)
 - [MSYS2](https://www.msys2.org)
 
-安装后，将 `path_to_compiler/bin` 目录添加到 `PATH` 环境变量中（在 PowerShell 中使用 `gcc -v` 验证）。
+安装后，将 `{COMPILER_INSTALLATION_PATH}/bin` 目录添加到 `PATH` 环境变量中（在 PowerShell 中使用 `gcc -v/clang -v` 验证）。
 
 ### 获取代码
 
