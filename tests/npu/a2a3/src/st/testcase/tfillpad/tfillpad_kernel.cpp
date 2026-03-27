@@ -18,7 +18,7 @@ using namespace pto;
 
 // Custom pad value for test case 12
 // -1.0f has bit pattern 0xBF800000
-constexpr PadValue PadCustomNeg1 = static_cast<PadValue>(0xBF80000000000001ULL);
+constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
 
 #define LOGSIZE 128
 #define PRINTLOG 4
@@ -160,6 +160,26 @@ AICORE void runTFILLPAD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, 
             out + dstOffset, gShape0, gShape1, gShape2, kGTRows, kTCols_); // dst TStore GlobalTensor just use static
 
     volatile uint64_t t0, t1, t2;
+    constexpr PadValue PadCustomNeg1_Test = PadValueCustom(-1.0f); // Test device usage
+    static_assert(PadCustomNeg1_Test == static_cast<PadValue>(0x00000001BF800000ULL),
+                  "PadValueCustom float device test");
+    constexpr PadValue PadCustomNeg1_Half_Test = PadValueCustom((half)-1.0); // fp16 using half type
+    static_assert(PadCustomNeg1_Half_Test == static_cast<PadValue>(0x000000010000BC00ULL),
+                  "PadValueCustom16 fp16 device test");
+    constexpr PadValue PadCustomNeg1_Bf16_Test = PadValueCustom((bfloat16_t)-1.0); // bf16 using bfloat16_t type
+    static_assert(PadCustomNeg1_Bf16_Test == static_cast<PadValue>(0x000000010000BF80ULL),
+                  "PadValueCustom bf16 encoding test");
+    // Verify decoding: getCustomPadBits should return 0xBF80 (bf16 -1.0), NOT 0 from bits >> 16
+    static_assert(getCustomPadBits(PadCustomNeg1_Bf16_Test) == 0xBF80U, "PadValueCustom bf16 decoding test");
+
+    // Test custom pad bits extraction for each type (catches decode bugs!)
+    // For 16-bit types, bits & 0xFFFF must return the correct fp16/bf16 bits
+    constexpr uint32_t float_bits = getCustomPadBits(PadCustomNeg1_Test);
+    constexpr uint32_t half_bits = getCustomPadBits(PadCustomNeg1_Half_Test) & 0xFFFF;
+    constexpr uint32_t bf16_bits = getCustomPadBits(PadCustomNeg1_Bf16_Test) & 0xFFFF;
+    static_assert(float_bits == 0xBF800000U, "Custom pad float: expected -1.0f bits");
+    static_assert(half_bits == 0xBC00U, "Custom pad half: expected fp16 -1.0 bits (0xBC00)");
+    static_assert(bf16_bits == 0xBF80U, "Custom pad bf16: expected bf16 -1.0 bits (0xBF80)");
 
     using TileDataP =
         Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, FillPadVal_>;
@@ -347,15 +367,9 @@ void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
 }
 
 template <typename T>
-constexpr auto getGoldenZero()
+constexpr T getGoldenZero()
 {
-    if constexpr (sizeof(T) == 4) {
-        return (uint32_t)0;
-    } else if constexpr (sizeof(T) == 2) {
-        return (uint16_t)0;
-    } else if constexpr (sizeof(T) == 1) {
-        return (uint8_t)0;
-    }
+    return T{0};
 }
 
 template <typename U, int Shape0, int Shape1, int Shape2, int Shape3, int Shape4, int kTRows_, int kTCols_,
@@ -374,9 +388,9 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden)
     int out_byteSize = out_capacity * sizeof(T);
 
     U u_padVal[1] = {0};
-    if constexpr ((static_cast<uint64_t>(PadVal_) & 0xFFFFFFFFULL) == 0x00000001ULL) {
+    if constexpr (static_cast<uint64_t>(PadVal_) >= static_cast<uint64_t>(PadValue::CustomBase)) {
         // Custom pad value - extract float bits
-        uint32_t bits = static_cast<uint32_t>(static_cast<uint64_t>(PadVal_) >> 32);
+        uint32_t bits = static_cast<uint32_t>(static_cast<uint64_t>(PadVal_) & 0xFFFFFFFFULL);
         u_padVal[0] = *reinterpret_cast<const U *>(&bits);
     } else if (std::numeric_limits<U>::has_infinity) {
         if (PadVal_ == PadValue::Max)
