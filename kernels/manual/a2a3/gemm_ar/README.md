@@ -12,8 +12,8 @@
 
 ```bash
 # 1. 环境准备
-conda activate <your-conda-env>          # 需含 Python + NumPy
-source /usr/local/Ascend/cann-*/set_env.sh  # 或设置 ASCEND_CANN_PATH
+conda activate <your-conda-env>                    # 需含 Python + NumPy
+source /usr/local/Ascend/cann-*/set_env.sh         # run.sh 也会自动检测
 
 # 2. 构建并运行（8 卡）
 cd pto-comm-isa/kernels/manual/a2a3/gemm_ar
@@ -27,6 +27,18 @@ FIRST_DEVICE=0 ./run.sh --nranks 8 --soc-version Ascend910B1
 ```
 
 `run.sh` 会自动完成：清理构建 → cmake → make → 计算 HCCL_BUFFSIZE → `mpirun -n $NRANKS ./gemm_allreduce`。
+
+### 环境变量说明
+
+`run.sh` 通过环境变量适配不同服务器环境，均有自动检测逻辑，大多数情况无需手动设置：
+
+| 环境变量 | 用途 | 默认行为 |
+|---------|------|---------|
+| `ASCEND_CANN_PATH` | CANN `set_env.sh` 的完整路径 | 自动 glob `/usr/local/Ascend/cann-*/set_env.sh` 取最新版 |
+| `MPI_SEARCH_DIRS` | MPI `bin/` 目录搜索路径（空格分隔） | 搜索 `/usr/local/mpich/bin` 和 `/home/*/mpich/bin` |
+| `ASCEND_DRIVER_PATH` | Ascend driver 路径（CMake 使用） | 默认 `/usr/local/Ascend/driver` |
+| `MPI_LIB_PATH` | `libmpi.so` 绝对路径（运行时动态加载） | 由 `run.sh` 根据找到的 MPI 自动设置 |
+| `CONDA_PREFIX` | Conda 环境路径（自动由 `conda activate` 设置） | 激活 conda 环境后自动生效 |
 
 ## 数据并行策略（K 维切分）
 

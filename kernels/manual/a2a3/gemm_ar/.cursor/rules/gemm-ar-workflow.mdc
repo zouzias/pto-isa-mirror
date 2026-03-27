@@ -12,10 +12,9 @@ alwaysApply: false
 conda activate <your-conda-env>
 source /usr/local/Ascend/cann-*/set_env.sh   # or set ASCEND_CANN_PATH
 export CMAKE_PREFIX_PATH="$HOME/.local/lib64/cmake:$CMAKE_PREFIX_PATH"
-export MPI_SEARCH_DIRS="/path/to/mpich/bin"  # if not in /usr/local/mpich
 ```
 
-MPI discovery: `run.sh` searches directories listed in `MPI_SEARCH_DIRS` (default: `/usr/local/mpich/bin`).
+MPI discovery: `run.sh` auto-searches `/usr/local/mpich/bin` and `/home/*/mpich/bin`. Override with `MPI_SEARCH_DIRS` if needed.
 
 ## Build & Run
 
