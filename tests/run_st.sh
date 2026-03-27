@@ -86,6 +86,7 @@ checkopts "$@"
 if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
   if [ "$ENABLE_SIMPLE" = "true" ]; then           # 单个用例
     python3 tests/script/build_st.py $ARGS -v a3 -t all
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcatidx -g TCONCATTest.case_int16_16x32_16x16_16x16_8x16_8x16
     python3 tests/script/run_st.py $ARGS -w -v a3 -t taxpy -g TAXPYTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpand -g TCOLEXPANDTest.case1
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolsum -g TCOLSUMTest.case1
@@ -185,6 +186,7 @@ if [ "$ENABLE_A3" = "true" ]; then                 # A2A3
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py $ARGS -v a3 -t all
+    python3 tests/script/run_st.py $ARGS -w -v a3 -t tconcatidx
     python3 tests/script/run_st.py $ARGS -w -v a3 -t taxpy
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolexpand
     python3 tests/script/run_st.py $ARGS -w -v a3 -t tcolsum
