@@ -81,11 +81,11 @@ After installation, open a **Developer Command Prompt for VS 2022** (or ensure `
 
 **Alternative: Manual compiler installation**
 
-If you prefer not to use Visual Studio:
+If you prefer not to use Visual Studio, you can manually install the GCC/Clang compiler through one of the following methods:
 - [WinLibs](https://winlibs.com)
 - [MSYS2](https://www.msys2.org)
 
-After installation, add `path_to_compiler/bin` to `PATH` (verify with `gcc -v` in PowerShell).
+After installation, add `{COMPILER_INSTALLATION_PATH}/bin` to `PATH` (verify with `gcc -v/clang -v` in PowerShell).
 
 ### Get The Code
 
