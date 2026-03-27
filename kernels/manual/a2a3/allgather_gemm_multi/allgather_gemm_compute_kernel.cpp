@@ -255,7 +255,76 @@ AICORE inline void ComputeRowGroupStreaming(
 }
 
 // ============================================================================
-// AllGatherGemmComputeStreamingImpl (M-slice streaming)
+// ComputeRowGroupDirect (M-slice, no flag check):
+// 用于本地 rank 的数据，数据已就绪，直接计算，不检查任何 flag。
+// ============================================================================
+AICORE inline void ComputeRowGroupDirect(
+    __gm__ float *output,
+    __gm__ half *shmem_input,
+    __gm__ half *src1,
+    int mi,
+    int k_chunks,
+    TileMatAData aMatTile[BUFFER_NUM],
+    TileMatBData bMatTile[BUFFER_NUM],
+    LeftTile aTile[BUFFER_NUM],
+    RightTile bTile[BUFFER_NUM],
+    ResTile &cTile)
+{
+    constexpr uint32_t n_tiles = G_N / G_BASE_N;
+    constexpr uint32_t k_iters_per_block = G_BASE_N / G_BASE_K;
+
+    __gm__ half *aRowBase = shmem_input + static_cast<uint64_t>(mi) * G_BASE_M * G_K;
+    __gm__ float *outRowBase = output + static_cast<uint64_t>(mi * G_BASE_M) * G_N;
+
+    for (uint32_t ni = 0; ni < n_tiles; ++ni) {
+        __gm__ float *tileDst = outRowBase + ni * G_BASE_N;
+        __gm__ half *bColBase = src1 + static_cast<uint64_t>(ni) * G_BASE_N * G_K;
+
+        uint8_t mte2DBFlag = 0;
+        uint8_t mte1DBFlag = 0;
+
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+
+        uint32_t globalKIter = 0;
+        for (int kb = 0; kb < k_chunks; ++kb) {
+            int k_col_offset = kb * static_cast<int>(G_BASE_N);
+            __gm__ half *aSrcForKBlock = aRowBase + k_col_offset;
+            __gm__ half *bSrcForKBlock = bColBase + k_col_offset;
+            for (uint32_t kIter = 0; kIter < k_iters_per_block; ++kIter) {
+                ProcessKIterationContinuous<float, half, half, G_M, G_K, G_N,
+                                            G_BASE_M, G_BASE_K, G_BASE_N, G_STEP_KA, G_STEP_KB>(
+                    kIter, globalKIter,
+                    aSrcForKBlock, bSrcForKBlock,
+                    aMatTile, bMatTile, aTile, bTile, cTile,
+                    mte2DBFlag, mte1DBFlag);
+                globalKIter++;
+            }
+        }
+
+        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+
+        GlobalDataOut dstGlobal(tileDst);
+        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+        TSTORE(dstGlobal, cTile);
+        set_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+        wait_flag(PIPE_FIX, PIPE_M, EVENT_ID0);
+    }
+
+    pipe_barrier(PIPE_ALL);
+}
+
+// ============================================================================
+// AllGatherGemmComputeStreamingImpl (M-slice streaming, optimized)
+//
+// Phase 1: 本地 rank 的 row-group 直接计算（零等待，数据已在 shmem_input 中）
+// Phase 2: 远程 rank 的 row-group 用 streaming 方式等待通信完成后计算
 // ============================================================================
 AICORE inline void AllGatherGemmComputeStreamingImpl(
     __gm__ float *output,
@@ -294,7 +363,25 @@ AICORE inline void AllGatherGemmComputeStreamingImpl(
     TASSIGN(bTile[1], 0x0 + L0_PINGPONG_BYTES);
     TASSIGN(cTile, 0x0);
 
+    int my_rank = flags->my_rank;
+
+    // Phase 1: 本地 rank 的 row-group — 数据已就绪，直接计算，不查任何 flag
+    if (my_rank >= 0 && my_rank < n_ranks) {
+        int local_mi_start = my_rank * m_tiles_per_rank;
+        int local_mi_end = local_mi_start + m_tiles_per_rank;
+        for (int mi = local_mi_start + block_idx; mi < local_mi_end; mi += block_num) {
+            ComputeRowGroupDirect(output, shmem_input, src1,
+                                  mi, k_chunks,
+                                  aMatTile, bMatTile, aTile, bTile, cTile);
+        }
+    }
+
+    // Phase 2: 远程 rank 的 row-group — 用 streaming 方式等待通信完成
     for (int mi = block_idx; mi < m_tiles; mi += block_num) {
+        int src_rank = mi / m_tiles_per_rank;
+        if (src_rank == my_rank) {
+            continue;  // 本地数据已在 Phase 1 处理
+        }
         ComputeRowGroupStreaming(output, shmem_input, src1, tile_flags,
                                  mi, m_tiles_per_rank, k_chunks,
                                  aMatTile, bMatTile, aTile, bTile, cTile);

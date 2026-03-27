@@ -39,7 +39,8 @@ struct alignas(64) TileFlagMatrix {
     int32_t num_blocks_per_src;
     int32_t tile_size;
     int32_t stride;              // Aligned stride for each rank's tile flags
-    int32_t padding[11];         // Pad header to 64 bytes
+    int32_t my_rank;             // Local rank id, set at init for compute kernel optimization
+    int32_t padding[10];         // Pad header to 64 bytes
     // Followed by int32_t tile_flags[num_ranks * stride]
 };
 
@@ -72,7 +73,8 @@ inline void TileFlagMatrixInit(TileFlagMatrix* flags, int num_ranks, int num_blo
     flags->num_blocks_per_src = num_blocks_per_src;
     flags->tile_size = tile_size;
     flags->stride = stride;
-    for (int i = 0; i < 11; i++) flags->padding[i] = 0;
+    flags->my_rank = -1;  // Will be set by host before kernel launch
+    for (int i = 0; i < 10; i++) flags->padding[i] = 0;
     
     int32_t* base = reinterpret_cast<int32_t*>(
         reinterpret_cast<uint8_t*>(flags) + sizeof(TileFlagMatrix));
