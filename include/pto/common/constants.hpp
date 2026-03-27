@@ -61,12 +61,13 @@ AICORE constexpr bool isCustomPadValue(PadValue pv)
 // Extract the 32-bit value from a custom PadValue (returns the float bits)
 AICORE constexpr uint32_t getCustomPadBits(PadValue pv)
 {
-    return static_cast<uint32_t>(static_cast<uint64_t>(pv) >> PAD_SHIFT_LENGTH);
+    return static_cast<uint32_t>(static_cast<uint64_t>(pv) & 0xFFFFFFFFULL);
 }
 
 // Helper to create a custom PadValue from a compile-time float/int constant
 // Usage: PadCustom<-1.0f>, PadCustom<0.5f>, PadCustom<42>
 namespace detail {
+// Use union for compile-time float-to-bits (works on NPU compilers)
 template <auto V>
 constexpr uint32_t floatToBits()
 {
@@ -92,28 +93,59 @@ constexpr uint32_t floatToBits()
 
 template <auto V>
 inline constexpr PadValue PadCustom = static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
-                                                            (static_cast<uint64_t>(detail::floatToBits<V>()) << 32));
+                                                            static_cast<uint64_t>(detail::floatToBits<V>()));
 
 // Helper constexpr function to create custom PadValue from float
+// Works on both CPU_SIM and NPU (host + device) using __builtin_bit_cast
 // Usage: constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
-#ifdef __CPU_SIM
-constexpr PadValue PadValueCustom(float value)
+// Note: For fp16/bf16, use PadValueCustomHalf()/PadValueCustomBf16() or pass fp16/bf16 bits directly
+AICORE constexpr PadValue PadValueCustom(float value)
 {
     return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
-                                 (static_cast<uint64_t>(std::bit_cast<uint32_t>(value)) << PAD_SHIFT_LENGTH));
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint32_t, value)));
 }
-#else
-// NPU compiler: use union-based conversion (not constexpr but works at runtime)
-inline PadValue PadValueCustom(float value)
+
+// For fp16/bf16, pass the raw 16-bit representation directly
+AICORE constexpr PadValue PadValueCustom16(uint16_t bits16)
 {
-    union {
-        float f;
-        uint32_t u;
-    } conv;
-    conv.f = value;
-    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
-                                 (static_cast<uint64_t>(conv.u) << PAD_SHIFT_LENGTH));
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) | static_cast<uint64_t>(bits16));
 }
+
+#if !defined(__CPU_SIM) && !defined(__COSTMODEL)
+// Usage: constexpr PadValue PadCustomNeg1_Half = PadValueCustom((half)-1.0);
+// NPU aicore compiler has half as built-in type
+AICORE constexpr PadValue PadValueCustom(half value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint16_t, value)));
+}
+
+// NPU aicore compiler has bfloat16_t as built-in type
+AICORE constexpr PadValue PadValueCustom(bfloat16_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint16_t, value)));
+}
+#endif
+
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
+// Usage: constexpr PadValue PadCustomNeg1_Half = PadValueCustom((_Float16)-1.0);
+// Or with f16 suffix: PadValueCustom(-1.0f16)
+constexpr PadValue PadValueCustom(_Float16 value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint16_t, value)));
+}
+
+#ifdef CPU_SIM_BFLOAT_ENABLED
+// Usage: constexpr PadValue PadCustomNeg1_Bf16 = PadValueCustom((bfloat16_t)-1.0);
+// Requires C++23 with std::bfloat16_t support
+constexpr PadValue PadValueCustom(bfloat16_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(__builtin_bit_cast(uint16_t, value)));
+}
+#endif
 #endif
 
 template <typename DType, PadValue PadVal>
@@ -325,6 +357,8 @@ PTO_INTERNAL constexpr auto GetPadValue()
         if constexpr (std::is_same_v<DType, float>) {
             return bits; // float uses raw bits directly
         } else if constexpr (sizeof(DType) == 2) {
+            // fp16 and bf16 both use lower 16 bits
+            // (PadValueCustom(half) and PadValueCustom(bfloat16_t) store native bits)
             return static_cast<uint32_t>(bits & 0xFFFF);
         } else if constexpr (sizeof(DType) == 1) {
             return static_cast<uint32_t>(bits & 0xFF);
