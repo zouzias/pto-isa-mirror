@@ -44,9 +44,8 @@ PTO_INST RecordEvent TSUBVIEW(TileDataDst &dst, TileDataSrc &src, uint16_t rowId
 Enforced by `TSUBVIEW_IMPL`:
 
 - **Tile type must match**: `TileDataSrc::Loc == TileDataDst::Loc`.
-- **Both tiles must have the same static capacity**: `TileDataSrc::Rows == TileDataDst::Rows` and `TileDataSrc::Cols == TileDataDst::Cols`.
 - **Both tiles must have the same BLayout**: `TileDataSrc::BFractal == TileDataDst::BFractal`.
-- **The source tile's validRow (validCol) is at least as big as the destination tile's validRow (validCol)**
+- The entire static memory region of `dst` tile must be inside the static memory region of `src` tile.
 
 ## Examples
 

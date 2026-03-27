@@ -21,23 +21,21 @@ PTO_INTERNAL void TSUBVIEW_IMPL(TileDataDst &dst, TileDataSrc &src, uint16_t row
     constexpr int kRowStride = TileDataSrc::RowStride;
     constexpr int kColStride = TileDataSrc::ColStride;
     const uint64_t totalOffset = rowIdx * kRowStride + colIdx * kColStride;
+    const uint64_t byteOffset = totalOffset * sizeof(typename TileDataSrc::DType);
 
     static_assert(TileDataDst::Loc == TileDataSrc::Loc,
                   "The destination and source tiles must have the same TileType!");
+    static_assert(TileDataDst::BFractal == TileDataSrc::BFractal,
+                  "The destination and source tiles must have the same BFractal");
+
+    constexpr size_t kSrcBufferSize = TileDataSrc::Numel * sizeof(typename TileDataSrc::DType); 
+    constexpr size_t kDstBufferSize = TileDataDst::Numel * sizeof(typename TileDataDst::DType); 
+    PTO_ASSERT(kDstBufferSize + byteOffset <= kSrcBufferSize,
+               "dst tile's memory range must fully overlap with src tile!");
 
 #ifndef __PTO_AUTO__
     TASSIGN_IMPL(dst, (uint64_t)(src.data() + totalOffset));
 #else
-    static_assert(TileDataDst::BFractal == TileDataSrc::BFractal,
-                  "The destination and source tiles must have the same BFractal");
-    PTO_ASSERT(src.GetValidRow() >= dst.GetValidRow(),
-               "The source tile's validRow must be at least as big as the destination "
-               "tile's validRow!");
-    PTO_ASSERT(src.GetValidCol() >= dst.GetValidCol(),
-               "The source tile's validCol must be at least as big as the destination "
-               "tile's validCol!");
-
-    const uint64_t byteOffset = totalOffset * sizeof(typename TileDataSrc::DType);
     __cce_alias(dst.data(), src.data(), byteOffset);
 #endif
 }
