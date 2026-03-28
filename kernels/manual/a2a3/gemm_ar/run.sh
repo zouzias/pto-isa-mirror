@@ -94,11 +94,15 @@ fi
 : "${G_M:=16384}"
 : "${G_N:=4096}"
 
+# Pad M/N up to tile alignment (BASE_M=128, BASE_N=256) — must match gemm_ar_config.h
+PAD_M=$(( ((G_M + 127) / 128) * 128 ))
+PAD_N=$(( ((G_N + 255) / 256) * 256 ))
+
 # HCCL window = recv_buffers (nranks*M*N*4) + reduced_output (M*N*4) + margin
-NEEDED_MB=$(( (NRANKS + 1) * G_M * G_N * 4 / 1024 / 1024 + 64 ))
+NEEDED_MB=$(( (NRANKS + 1) * PAD_M * PAD_N * 4 / 1024 / 1024 + 64 ))
 CURRENT_BUFFSIZE="${HCCL_BUFFSIZE:-200}"
 if [ "${CURRENT_BUFFSIZE}" -lt "${NEEDED_MB}" ]; then
-    echo "[INFO] Raising HCCL_BUFFSIZE from ${CURRENT_BUFFSIZE} to ${NEEDED_MB} MB for M=${G_M} N=${G_N} nranks=${NRANKS}"
+    echo "[INFO] Raising HCCL_BUFFSIZE from ${CURRENT_BUFFSIZE} to ${NEEDED_MB} MB for M=${G_M}(pad=${PAD_M}) N=${G_N}(pad=${PAD_N}) nranks=${NRANKS}"
     export HCCL_BUFFSIZE="${NEEDED_MB}"
 fi
 
