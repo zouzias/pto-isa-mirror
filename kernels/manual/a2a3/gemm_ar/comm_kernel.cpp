@@ -186,7 +186,11 @@ AICORE inline void GemmCommReduceImpl(
 
     StrideDyn tileStride(G_BASE_M * G_N, G_BASE_M * G_N, G_BASE_M * G_N, G_N, 1);
 
-    const int tiles_per_owner = G_NUM_TILES / nranks;
+    const int total_tiles = G_NUM_TILES;
+    const int tiles_per_owner = (total_tiles + nranks - 1) / nranks;
+    const int my_tile_count = (my_rank < total_tiles % nranks || total_tiles % nranks == 0)
+                              ? tiles_per_owner
+                              : (total_tiles / nranks);
     {
         using HalfTile = pto::Tile<pto::TileType::Vec, float, G_BASE_M / 2, G_BASE_N,
                                    pto::BLayout::RowMajor, -1, -1>;
@@ -201,13 +205,14 @@ AICORE inline void GemmCommReduceImpl(
 
         ShapeDyn halfShape(1, 1, 1, G_BASE_M / 2, G_BASE_N);
 
-        int reduce_per_block = (tiles_per_owner + num_comm_blocks - 1) / num_comm_blocks;
+        int reduce_per_block = (my_tile_count + num_comm_blocks - 1) / num_comm_blocks;
         int oi_start = comm_block_idx * reduce_per_block;
         int oi_end = (comm_block_idx + 1) * reduce_per_block;
-        if (oi_end > tiles_per_owner) oi_end = tiles_per_owner;
+        if (oi_end > my_tile_count) oi_end = my_tile_count;
 
         for (int oi = oi_start; oi < oi_end; oi++) {
             int t = my_rank + oi * nranks;
+            if (t >= total_tiles) break;
             uint32_t mi = t / G_N_TILES;
             uint32_t ni = t % G_N_TILES;
 
@@ -265,15 +270,20 @@ AICORE inline void GemmCommAGImpl(
     ShapeDyn tileShape(1, 1, 1, G_BASE_M, G_BASE_N);
     StrideDyn tileStride(G_BASE_M * G_N, G_BASE_M * G_N, G_BASE_M * G_N, G_N, 1);
 
-    const int tiles_per_owner = G_NUM_TILES / nranks;
+    const int total_tiles = G_NUM_TILES;
+    const int tiles_per_owner = (total_tiles + nranks - 1) / nranks;
+    const int my_tile_count = (my_rank < total_tiles % nranks || total_tiles % nranks == 0)
+                              ? tiles_per_owner
+                              : (total_tiles / nranks);
     {
-        int reduce_per_block = (tiles_per_owner + num_comm_blocks - 1) / num_comm_blocks;
+        int reduce_per_block = (my_tile_count + num_comm_blocks - 1) / num_comm_blocks;
         int oi_start = comm_block_idx * reduce_per_block;
         int oi_end = (comm_block_idx + 1) * reduce_per_block;
-        if (oi_end > tiles_per_owner) oi_end = tiles_per_owner;
+        if (oi_end > my_tile_count) oi_end = my_tile_count;
 
         for (int oi = oi_start; oi < oi_end; oi++) {
             int t = my_rank + oi * nranks;
+            if (t >= total_tiles) break;
             uint32_t mi = t / G_N_TILES;
             uint32_t ni = t % G_N_TILES;
             uint64_t tile_offset = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;

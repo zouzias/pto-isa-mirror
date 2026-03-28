@@ -13,21 +13,28 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 #ifndef CONFIG_G_M
-#define CONFIG_G_M 16384
+#define CONFIG_G_M 5416
 #endif
 #ifndef CONFIG_G_K
-#define CONFIG_G_K 16384
+#define CONFIG_G_K 6144
 #endif
 #ifndef CONFIG_G_N
-#define CONFIG_G_N 4096
+#define CONFIG_G_N 1408
 #endif
 
-static constexpr uint32_t G_M = CONFIG_G_M;
-static constexpr uint32_t G_K = CONFIG_G_K;
-static constexpr uint32_t G_N = CONFIG_G_N;
+static constexpr uint32_t G_ORIG_M = CONFIG_G_M;
+static constexpr uint32_t G_ORIG_K = CONFIG_G_K;
+static constexpr uint32_t G_ORIG_N = CONFIG_G_N;
 static constexpr uint32_t G_BASE_M = 128;
 static constexpr uint32_t G_BASE_K = 64;
 static constexpr uint32_t G_BASE_N = 256;
+
+static constexpr uint32_t CeilDiv(uint32_t a, uint32_t b) { return (a + b - 1) / b; }
+static constexpr uint32_t AlignUp(uint32_t a, uint32_t b) { return CeilDiv(a, b) * b; }
+
+static constexpr uint32_t G_M = AlignUp(G_ORIG_M, G_BASE_M);
+static constexpr uint32_t G_K = G_ORIG_K;
+static constexpr uint32_t G_N = AlignUp(G_ORIG_N, G_BASE_N);
 static constexpr uint32_t G_M_TILES = G_M / G_BASE_M;
 static constexpr uint32_t G_N_TILES = G_N / G_BASE_N;
 static constexpr uint32_t G_NUM_TILES = G_M_TILES * G_N_TILES;

@@ -764,24 +764,29 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     bool is_ok = true;
     if (rank_id == 0) {
         const float eps = 0.001f;
-        const size_t num_elements = outputSize / sizeof(float);
+        const size_t valid_elements = (size_t)G_ORIG_M * G_ORIG_N;
         float max_diff = 0.0f, max_diff_ratio = 0.0f;
         size_t err_count = 0, zero_count = 0;
-        const size_t err_threshold = static_cast<size_t>(num_elements * eps);
+        const size_t err_threshold = static_cast<size_t>(valid_elements * eps);
         const size_t zero_threshold = 0x1000;
 
-        for (size_t i = 0; i < num_elements; ++i) {
-            float exp_val = golden[i], act_val = output_host[i];
-            float diff = std::abs(exp_val - act_val);
-            float rel = (std::abs(exp_val) > 1e-6f) ? (diff / std::abs(exp_val)) : diff;
-            if (diff > max_diff) max_diff = diff;
-            if (rel > max_diff_ratio) max_diff_ratio = rel;
-            if (std::abs(act_val) <= 1e-6f && std::abs(exp_val) > 1e-6f) zero_count++;
-            if ((diff > eps && rel > eps) || zero_count > zero_threshold) err_count++;
+        for (size_t row = 0; row < G_ORIG_M; ++row) {
+            for (size_t col = 0; col < G_ORIG_N; ++col) {
+                size_t padded_idx = row * G_N + col;
+                size_t golden_idx = row * G_N + col;
+                float exp_val = golden[golden_idx], act_val = output_host[padded_idx];
+                float diff = std::abs(exp_val - act_val);
+                float rel = (std::abs(exp_val) > 1e-6f) ? (diff / std::abs(exp_val)) : diff;
+                if (diff > max_diff) max_diff = diff;
+                if (rel > max_diff_ratio) max_diff_ratio = rel;
+                if (std::abs(act_val) <= 1e-6f && std::abs(exp_val) > 1e-6f) zero_count++;
+                if ((diff > eps && rel > eps) || zero_count > zero_threshold) err_count++;
+            }
         }
 
         is_ok = (err_count <= err_threshold) && (zero_count <= zero_threshold);
-        std::cout << "[VERIFY] max_diff=" << max_diff << " max_ratio=" << max_diff_ratio
+        std::cout << "[VERIFY] valid_region=" << G_ORIG_M << "x" << G_ORIG_N
+                  << " max_diff=" << max_diff << " max_ratio=" << max_diff_ratio
                   << " err=" << err_count << "/" << err_threshold
                   << " zeros=0x" << std::hex << zero_count << std::dec
                   << " -> " << (is_ok ? "PASS" : "FAIL") << std::endl;
@@ -800,12 +805,12 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
         PerfStats pipe_comp_s = calcStats(pipe_compute_us);
         PerfStats pipe_comm_s = calcStats(pipe_comm_us);
 
-        double flops_per_rank = 2.0 * G_M * (double)k_per_rank * G_N;
-        double flops_total    = 2.0 * G_M * (double)G_K * G_N;
+        double flops_per_rank = 2.0 * G_ORIG_M * (double)k_per_rank * G_ORIG_N;
+        double flops_total    = 2.0 * G_ORIG_M * (double)G_K * G_ORIG_N;
         auto gflops = [](double flops, double us) { return (us > 0) ? (flops / (us * 1e-6) / 1e9) : 0.0; };
 
         size_t tileBytes = static_cast<size_t>(G_BASE_M) * G_BASE_N * sizeof(float);
-        int tiles_per_owner = G_NUM_TILES / n_ranks;
+        int tiles_per_owner = (G_NUM_TILES + n_ranks - 1) / n_ranks;
         double rs_bytes = static_cast<double>(G_NUM_TILES - tiles_per_owner) * tileBytes;
         double ag_bytes = static_cast<double>(tiles_per_owner) * (n_ranks - 1) * tileBytes;
         double data_gb = (rs_bytes + ag_bytes) / (1024.0 * 1024.0 * 1024.0);
@@ -818,8 +823,10 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
         std::cout << std::fixed << std::setprecision(1);
         std::cout << "\n================================================================" << std::endl;
         std::cout << (is_ok ? "[SUCCESS]" : "[FAILED]") << " GEMM AllReduce (HCCL)" << std::endl;
-        std::cout << "  M=" << G_M << " K=" << G_K << " N=" << G_N
-                  << "  ranks=" << n_ranks
+        std::cout << "  M=" << G_ORIG_M << " K=" << G_K << " N=" << G_ORIG_N;
+        if (G_M != G_ORIG_M || G_N != G_ORIG_N)
+            std::cout << "  (padded " << G_M << "x" << G_K << "x" << G_N << ")";
+        std::cout << "  ranks=" << n_ranks
                   << "  compute_blocks=" << COMPUTE_BLOCK_NUM
                   << "  comm_blocks=" << COMM_BLOCK_NUM << std::endl;
         std::cout << "  tiles=" << G_NUM_TILES << " (" << G_M_TILES << "x" << G_N_TILES << ")"
@@ -890,8 +897,10 @@ static bool RunGemmAllReduce(int n_ranks, int first_device_id,
     if (mpiRank == 0) {
         std::cout << "\n================================================================" << std::endl;
         std::cout << "  GEMM AllReduce (ReduceScatter + AllGather) — HCCL backend" << std::endl;
-        std::cout << "  M=" << G_M << " K=" << G_K << " N=" << G_N
-                  << "  tile=" << G_BASE_M << "x" << G_BASE_K << "x" << G_BASE_N
+        std::cout << "  M=" << G_ORIG_M << " K=" << G_K << " N=" << G_ORIG_N;
+        if (G_M != G_ORIG_M || G_N != G_ORIG_N)
+            std::cout << "  (padded " << G_M << "x" << G_N << ")";
+        std::cout << "  tile=" << G_BASE_M << "x" << G_BASE_K << "x" << G_BASE_N
                   << "  tiles=" << G_NUM_TILES << std::endl;
         std::cout << "  ranks=" << n_ranks
                   << "  devices=[" << first_device_id << "," << (first_device_id + n_ranks) << ")"
@@ -1022,44 +1031,54 @@ static bool generateData(int nranks,
     }
 
     printf("Data Parallel: K=%d split into %d ranks, %d per rank\n", G_K, nranks, k_per_rank);
+    if (G_M != G_ORIG_M || G_N != G_ORIG_N) {
+        printf("  Padded: M %d->%d, N %d->%d (tile alignment)\n",
+               G_ORIG_M, G_M, G_ORIG_N, G_N);
+    }
 
     std::mt19937 gen(42);
     std::uniform_int_distribution<int> dist(1, 4);
 
-    size_t A_elems = (size_t)G_M * G_K;
-    size_t B_elems = (size_t)G_K * G_N;
-    std::vector<float> A_fp32(A_elems), B_fp32(B_elems);
+    size_t A_orig_elems = (size_t)G_ORIG_M * G_K;
+    size_t B_orig_elems = (size_t)G_K * G_ORIG_N;
+    std::vector<float> A_fp32(A_orig_elems), B_fp32(B_orig_elems);
 
     for (auto &v : A_fp32) v = (float)dist(gen);
     for (auto &v : B_fp32) v = (float)dist(gen);
 
-    printf("  Computing golden reference (CPU GEMM %d×%d×%d)...\n", G_M, G_K, G_N);
+    printf("  Computing golden reference (CPU GEMM %d×%d×%d)...\n", G_ORIG_M, G_K, G_ORIG_N);
     auto t0 = std::chrono::high_resolution_clock::now();
-    golden.resize((size_t)G_M * G_N);
-    computeGolden(A_fp32.data(), B_fp32.data(), golden.data(), G_M, G_K, G_N);
+    std::vector<float> golden_orig((size_t)G_ORIG_M * G_ORIG_N);
+    computeGolden(A_fp32.data(), B_fp32.data(), golden_orig.data(), G_ORIG_M, G_K, G_ORIG_N);
     auto t1 = std::chrono::high_resolution_clock::now();
     double secs = std::chrono::duration<double>(t1 - t0).count();
     printf("  Golden computed in %.1f s\n", secs);
 
+    golden.assign((size_t)G_M * G_N, 0.0f);
+    for (int i = 0; i < (int)G_ORIG_M; i++)
+        std::memcpy(&golden[(size_t)i * G_N],
+                    &golden_orig[(size_t)i * G_ORIG_N],
+                    G_ORIG_N * sizeof(float));
+
     size_t a_rank_elems = (size_t)G_M * k_per_rank;
     size_t b_rank_elems = (size_t)G_N * k_per_rank;
-    a_parts.resize((size_t)nranks * a_rank_elems);
-    b_parts.resize((size_t)nranks * b_rank_elems);
+    a_parts.assign((size_t)nranks * a_rank_elems, 0);
+    b_parts.assign((size_t)nranks * b_rank_elems, 0);
 
     for (int r = 0; r < nranks; r++) {
         int k_start = r * k_per_rank;
         uint16_t *a_dst = a_parts.data() + (size_t)r * a_rank_elems;
         uint16_t *b_dst = b_parts.data() + (size_t)r * b_rank_elems;
 
-        for (int i = 0; i < (int)G_M; i++)
+        for (int i = 0; i < (int)G_ORIG_M; i++)
             for (int j = 0; j < k_per_rank; j++)
                 a_dst[(size_t)i * k_per_rank + j] =
                     floatToHalf(A_fp32[(size_t)i * G_K + k_start + j]);
 
-        for (int i = 0; i < (int)G_N; i++)
+        for (int i = 0; i < (int)G_ORIG_N; i++)
             for (int j = 0; j < k_per_rank; j++)
                 b_dst[(size_t)i * k_per_rank + j] =
-                    floatToHalf(B_fp32[(size_t)(k_start + j) * G_N + i]);
+                    floatToHalf(B_fp32[(size_t)(k_start + j) * G_ORIG_N + i]);
 
         printf("  Rank %d: A[%d×%d] cols[%d:%d], B[%d×%d] rows[%d:%d]\n",
                r, G_M, k_per_rank, k_start, k_start + k_per_rank,
@@ -1067,8 +1086,8 @@ static bool generateData(int nranks,
     }
 
     double gsum = 0.0;
-    for (auto v : golden) gsum += v;
-    printf("  Golden: shape=(%d, %d), sum=%.2f\n", G_M, G_N, gsum);
+    for (auto v : golden_orig) gsum += v;
+    printf("  Golden: shape=(%d, %d), sum=%.2f\n", G_ORIG_M, G_ORIG_N, gsum);
     return true;
 }
 
