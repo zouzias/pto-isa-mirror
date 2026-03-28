@@ -92,13 +92,15 @@ AICORE inline void CommAIVRoleStreamingParallel(
     int m_tiles_local = m_tiles / n_ranks;
     int k_chunks = static_cast<int>(G_K / G_BASE_N);
     int num_blocks_per_src = m_tiles_local * k_chunks;
-    int num_tiles = (num_blocks_per_src + TILE_SIZE - 1) / TILE_SIZE;
 
     if (num_remote_ranks <= 0 || num_blocks <= 0) {
         return;
     }
 
     volatile __gm__ TileFlagMatrix* flags = reinterpret_cast<volatile __gm__ TileFlagMatrix*>(tile_flags);
+    // 从 tile_flags 结构体读取动态计算的 tile_size 和 num_tiles
+    int tile_size = flags->tile_size;
+    int num_tiles = flags->num_tiles_per_src;
     volatile __gm__ int32_t* summary_base = GetSummaryBase(flags);
 
     // Block 0 负责置本 rank 的 local tile 就绪，并写本地 summary[my_rank]=num_tiles 供 AIC 先轮询 summary
@@ -138,12 +140,12 @@ AICORE inline void CommAIVRoleStreamingParallel(
                 reinterpret_cast<__gm__ int32_t*>(reinterpret_cast<__gm__ uint8_t*>(HcclRemotePtr(hcclCtx, tile_flags, dest_rank)) + TileFlagMatrixBytes(flags))
                 + my_rank;
 
-            int tile_start = tile_idx * TILE_SIZE;
-            int tile_end = tile_start + TILE_SIZE;
-            if (tile_end > num_blocks_per_src) {
-                tile_end = num_blocks_per_src;
+            int tile_start_blk = tile_idx * tile_size;
+            int tile_end_blk = tile_start_blk + tile_size;
+            if (tile_end_blk > num_blocks_per_src) {
+                tile_end_blk = num_blocks_per_src;
             }
-            for (int b = tile_start; b < tile_end; ++b) {
+            for (int b = tile_start_blk; b < tile_end_blk; ++b) {
                 int mi_local = b / k_chunks;
                 int kb = b % k_chunks;
                 int mi_global = my_rank * m_tiles_local + mi_local;
@@ -188,8 +190,8 @@ AICORE inline void CommAIVRoleStreamingParallel(
     }
 
     for (int tile_idx = tile_start; tile_idx < tile_end; ++tile_idx) {
-        int blk_start = tile_idx * TILE_SIZE;
-        int blk_end = blk_start + TILE_SIZE;
+        int blk_start = tile_idx * tile_size;
+        int blk_end = blk_start + tile_size;
         if (blk_end > num_blocks_per_src) {
             blk_end = num_blocks_per_src;
         }
@@ -295,8 +297,10 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
     int k_chunks = static_cast<int>(G_K / G_BASE_N);
     int num_blocks_per_src = m_tiles_local * k_chunks;
 
-    size_t tileFlagMatrixSize = TileFlagMatrixSize(n_ranks, num_blocks_per_src, TILE_SIZE);
-    size_t tileFlagWithSummarySize = TileFlagMatrixWithSummarySize(n_ranks, num_blocks_per_src, TILE_SIZE);
+    // 使用动态计算的最优 tile size（传 0 表示自动计算）
+    int optimal_tile_size = ComputeOptimalTileSize(num_blocks_per_src);
+    size_t tileFlagMatrixSize = TileFlagMatrixSize(n_ranks, num_blocks_per_src, optimal_tile_size);
+    size_t tileFlagWithSummarySize = TileFlagMatrixWithSummarySize(n_ranks, num_blocks_per_src, optimal_tile_size);
 
     uint64_t localWinBase = hcclTestCtx.hostCtx.windowsIn[rank_id];
     size_t winOffset = 0;
@@ -306,7 +310,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
     void* tile_flag_shmem = WindowAlloc(localWinBase, winOffset, tileFlagWithSummarySize);
     TileFlagMatrix* tile_flag_host = nullptr;
     aclrtMallocHost(reinterpret_cast<void**>(&tile_flag_host), tileFlagWithSummarySize);
-    TileFlagMatrixInit(tile_flag_host, n_ranks, num_blocks_per_src, TILE_SIZE);
+    TileFlagMatrixInit(tile_flag_host, n_ranks, num_blocks_per_src, optimal_tile_size);
     tile_flag_host->my_rank = rank_id;  // Set local rank for compute kernel optimization
     int32_t* summary_host = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(tile_flag_host) + tileFlagMatrixSize);
     TileFlagMatrixSummaryInit(summary_host, n_ranks);
@@ -366,7 +370,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         for (int src = 0; src < n_ranks; ++src) {
             TileFlagMatrixSetLocalReady(tile_flag_host, src);
         }
-        int num_tiles = (num_blocks_per_src + TILE_SIZE - 1) / TILE_SIZE;
+        int num_tiles = tile_flag_host->num_tiles_per_src;
         for (int src = 0; src < n_ranks; ++src) {
             summary_host[src] = num_tiles;
         }
@@ -759,7 +763,8 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         std::cout << "    Throughput: " << seq_tflops << " TFLOPS" << std::endl;
 
         std::cout << "\n  *** STREAMING Pipelined (Tile-based, fine-grained overlap): ***" << std::endl;
-        std::cout << "    Tile size: " << TILE_SIZE << " blocks" << std::endl;
+        std::cout << "    Tile size: " << optimal_tile_size << " blocks (dynamic)" << std::endl;
+        std::cout << "    Actual tiles per src: " << tile_flag_host->num_tiles_per_src << std::endl;
         std::cout << "    Avg Time:  " << stream_avg << " us" << std::endl;
         std::cout << "    Min Time:  " << stream_min << " us" << std::endl;
         std::cout << "    Max Time:  " << stream_max << " us" << std::endl;

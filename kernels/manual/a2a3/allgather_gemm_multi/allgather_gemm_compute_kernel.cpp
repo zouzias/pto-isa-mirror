@@ -152,12 +152,13 @@ AICORE inline void ComputeRowGroupStreaming(
     int block_start = mi_local * k_chunks;
     int block_end = (mi_local + 1) * k_chunks;
 
+    int tile_size = flags->tile_size;
     int num_tiles_per_src = flags->num_tiles_per_src;
     int first_streaming_tile = 0;
     int last_streaming_tile = -1;
     if (block_end > block_start && num_tiles_per_src > 0) {
-        first_streaming_tile = block_start / TILE_SIZE;
-        last_streaming_tile = (block_end - 1) / TILE_SIZE;  // inclusive
+        first_streaming_tile = block_start / tile_size;
+        last_streaming_tile = (block_end - 1) / tile_size;  // inclusive
         if (last_streaming_tile >= num_tiles_per_src) {
             last_streaming_tile = num_tiles_per_src - 1;
         }
@@ -210,13 +211,13 @@ AICORE inline void ComputeRowGroupStreaming(
                 done |= (1ULL << idx);
                 processed_count++;
 
-                int tile_start = st * TILE_SIZE;
-                int tile_end = tile_start + TILE_SIZE;
-                if (tile_end > block_end) {
-                    tile_end = block_end;
+                int tile_start_blk = st * tile_size;
+                int tile_end_blk = tile_start_blk + tile_size;
+                if (tile_end_blk > block_end) {
+                    tile_end_blk = block_end;
                 }
-                int kb_start = (tile_start > block_start) ? (tile_start - block_start) : 0;
-                int kb_end = tile_end - block_start;
+                int kb_start = (tile_start_blk > block_start) ? (tile_start_blk - block_start) : 0;
+                int kb_end = tile_end_blk - block_start;
                 if (kb_end <= kb_start) {
                     continue;
                 }

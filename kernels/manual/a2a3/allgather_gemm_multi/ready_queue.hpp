@@ -17,8 +17,44 @@ constexpr int MAX_RING_RANKS = 16;
 // ============================================================================
 // Streaming Pipeline Configuration
 // ============================================================================
+// 动态 TILE_SIZE：根据 num_blocks_per_src 自动计算最优值
+// 目标：保持 tile 数量在合理范围内，平衡流水线深度和轮询开销
+// 
+// 经验值：
+// - kv_7b_16k (256 blocks): tile_size=4, tiles=64, 效率 89.6%
+// - kv_7b_128k (2048 blocks): tile_size=4, tiles=512, 效率 42.9% (轮询开销大)
+// 
+// 优化策略：保持 tile 数量在 64-128 范围内
+constexpr int TARGET_TILES_MIN = 64;
+constexpr int TARGET_TILES_MAX = 128;
+constexpr int MIN_TILE_SIZE = 4;
+constexpr int MAX_TILE_SIZE = 64;
+
+inline int ComputeOptimalTileSize(int num_blocks_per_src)
+{
+    if (num_blocks_per_src <= 0) return MIN_TILE_SIZE;
+    
+    // 计算使 tile 数量落在目标范围内的 tile_size
+    // tile_count = num_blocks_per_src / tile_size
+    // 目标: TARGET_TILES_MIN <= tile_count <= TARGET_TILES_MAX
+    
+    int tile_size = MIN_TILE_SIZE;
+    int tile_count = (num_blocks_per_src + tile_size - 1) / tile_size;
+    
+    // 如果 tile 数量超过上限，增大 tile_size
+    if (tile_count > TARGET_TILES_MAX) {
+        tile_size = (num_blocks_per_src + TARGET_TILES_MAX - 1) / TARGET_TILES_MAX;
+        // 对齐到 4 的倍数
+        tile_size = ((tile_size + 3) / 4) * 4;
+        if (tile_size > MAX_TILE_SIZE) tile_size = MAX_TILE_SIZE;
+    }
+    
+    return tile_size;
+}
+
+// 编译时默认值
 #ifndef STREAMING_TILE_SIZE
-#define STREAMING_TILE_SIZE 4  // Number of blocks per tile for streaming
+#define STREAMING_TILE_SIZE 4
 #endif
 constexpr int TILE_SIZE = STREAMING_TILE_SIZE;
 
@@ -46,7 +82,9 @@ struct alignas(64) TileFlagMatrix {
 
 inline size_t TileFlagMatrixSize(int num_ranks, int num_blocks_per_src, int tile_size)
 {
-    int num_tiles = (num_blocks_per_src + tile_size - 1) / tile_size;
+    // 如果 tile_size <= 0，使用动态计算的最优值
+    int actual_tile_size = (tile_size > 0) ? tile_size : ComputeOptimalTileSize(num_blocks_per_src);
+    int num_tiles = (num_blocks_per_src + actual_tile_size - 1) / actual_tile_size;
     // Align stride to cache line (16 int32_t = 64 bytes)
     int stride = ((num_tiles + 15) / 16) * 16;
     return sizeof(TileFlagMatrix) + static_cast<size_t>(num_ranks) * stride * sizeof(int32_t);
@@ -65,13 +103,15 @@ inline size_t TileFlagMatrixWithSummarySize(int num_ranks, int num_blocks_per_sr
 
 inline void TileFlagMatrixInit(TileFlagMatrix* flags, int num_ranks, int num_blocks_per_src, int tile_size)
 {
-    int num_tiles = (num_blocks_per_src + tile_size - 1) / tile_size;
+    // 如果 tile_size <= 0，使用动态计算的最优值
+    int actual_tile_size = (tile_size > 0) ? tile_size : ComputeOptimalTileSize(num_blocks_per_src);
+    int num_tiles = (num_blocks_per_src + actual_tile_size - 1) / actual_tile_size;
     int stride = ((num_tiles + 15) / 16) * 16;
     
     flags->num_ranks = num_ranks;
     flags->num_tiles_per_src = num_tiles;
     flags->num_blocks_per_src = num_blocks_per_src;
-    flags->tile_size = tile_size;
+    flags->tile_size = actual_tile_size;
     flags->stride = stride;
     flags->my_rank = -1;  // Will be set by host before kernel launch
     for (int i = 0; i < 10; i++) flags->padding[i] = 0;
