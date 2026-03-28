@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef __CPU_SIM
 #include "pto/comm/async/async_event_impl.hpp"
 #endif
+
 #include "pto/common/event.hpp"
 
 namespace pto {
