@@ -26,8 +26,8 @@ __global__ AICORE void runTShlS(__gm__ T *out, __gm__ T *src0, T scalar)
     using TileDataSrc = Tile<TileType::Vec, T, srcTileH, srcTileW, BLayout::RowMajor, -1, -1>;
     TileDataDst dstTile(vRows, vCols);
     TileDataSrc src0Tile(vRows, vCols);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(dstTile, 0x20000);
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<0x20000>(dstTile);
 
     TLOAD(src0Tile, src0Global);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);

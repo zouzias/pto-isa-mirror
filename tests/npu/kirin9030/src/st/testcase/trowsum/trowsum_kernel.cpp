@@ -30,9 +30,9 @@ PTO_INTERNAL void runTRowSum(__gm__ T *out, __gm__ T *src)
     srcTileData srcTile;
     srcTileData tmpTile;
     dstTileData dstTile;
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, row * srcCol * sizeof(T));
-    TASSIGN(dstTile, 2 * row * srcCol * sizeof(T));
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<row * srcCol * sizeof(T)>(tmpTile);
+    TASSIGN<2 * row * srcCol * sizeof(T)>(dstTile);
 
     // 搬运数据
     TLOAD(srcTile, srcGlobal);
@@ -63,9 +63,9 @@ PTO_INTERNAL void runTRowSumDNDst(__gm__ T *out, __gm__ T *src)
     srcTileData srcTile;
     srcTileData tmpTile;
     dstTileDataDN dstTile;
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, row * srcCol * sizeof(T));
-    TASSIGN(dstTile, 2 * row * srcCol * sizeof(T));
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<row * srcCol * sizeof(T)>(tmpTile);
+    TASSIGN<2 * row * srcCol * sizeof(T)>(dstTile);
 
     // 搬运数据
     TLOAD(srcTile, srcGlobal);

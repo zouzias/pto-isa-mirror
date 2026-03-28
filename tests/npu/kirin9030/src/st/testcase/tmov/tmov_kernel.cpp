@@ -46,18 +46,18 @@ __global__ AICORE void runTMovL12Bias(__gm__ cType *out, __gm__ aType *src0, __g
     TileMatAData aMatTile;
     TileMatBData bMatTile;
     TileMatBiasData biasMatTile;
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, M * K * sizeof(aType));
-    TASSIGN(biasMatTile, M * K * sizeof(aType) + K * N * sizeof(bType));
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<M * K * sizeof(aType)>(bMatTile);
+    TASSIGN<M * K * sizeof(aType) + K * N * sizeof(bType)>(biasMatTile);
 
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
     BiasTile biasTile;
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
-    TASSIGN(biasTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
+    TASSIGN<0x0>(biasTile);
 
     /******************************TLOAD*****************************/
     TLOAD(aMatTile, src0Global);
@@ -108,18 +108,18 @@ __global__ AICORE void runTMovL12Fb(__gm__ cType *out, __gm__ aType *src0, __gm_
     TileMatAData aMatTile;
     TileMatBData bMatTile;
     TileMatFbData fbMatTile;
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, M * K * sizeof(aType));
-    TASSIGN(fbMatTile, M * K * sizeof(aType) + K * N * sizeof(bType));
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<M * K * sizeof(aType)>(bMatTile);
+    TASSIGN<M * K * sizeof(aType) + K * N * sizeof(bType)>(fbMatTile);
 
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
     FbTile fbTile;
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
-    TASSIGN(fbTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
+    TASSIGN<0x0>(fbTile);
 
     Event<Op::TLOAD, Op::TMOV_M2L> evtLoad_Mov2Left = TLOAD(aMatTile, src0Global);
     Event<Op::TLOAD, Op::TMOV_M2R> evtLoad_Mov2Right = TLOAD(bMatTile, src1Global);
@@ -170,18 +170,18 @@ __global__ AICORE void runTMovAcc2Vec(__gm__ cType *out, __gm__ aType *src0, __g
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, M * K * sizeof(aType));
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<M * K * sizeof(aType)>(bMatTile);
 
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
     VecTile dstTile;
 
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
-    TASSIGN(dstTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
+    TASSIGN<0x0>(dstTile);
 
     /******************************TLOAD*****************************/
     Event<Op::TLOAD, Op::TMOV_M2L> evtLoad_MovL = TLOAD(aMatTile, src0Global);

@@ -42,8 +42,8 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src)
         dstTile = TileDataDst(kValidRows_, kValidCols_);
     }
 
-    TASSIGN(srcTile, 0x0 + 0x400 * block_idx);
-    TASSIGN(dstTile, 0x20000 + 0x400 * block_idx);
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<TileDataSrc::Numel * sizeof(S)>(dstTile);
 
     GlobalData_src srcGlobal(src);
 
