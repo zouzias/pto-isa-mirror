@@ -124,6 +124,10 @@ AICORE inline void GemmCommAllImpl(
 
     // ========================================================================
     // Phase 1: ReduceScatter — TPUT each tile to its owner rank
+    //
+    // Cross-tile ping-pong: overlap TSTORE[i] (MTE3) with TLOAD[i+1] (MTE2)
+    // across consecutive remote tiles using alternating UB buffers.
+    // Ping buffer uses EVENT_ID0, pong uses EVENT_ID1.
     // ========================================================================
     {
         volatile __gm__ MultiBlockQueueSet *qset = (volatile __gm__ MultiBlockQueueSet *)queue_set;
@@ -159,6 +163,9 @@ AICORE inline void GemmCommAllImpl(
 
         int next_queue_offset = 0;
 
+        int pp_count = 0;
+        Global pp_pending_dst(gemm_output, tileShape, tileStride);
+
         while (tiles_sent < my_expected_tiles) {
             int32_t tile_idx = -1;
             for (int i = 0; i < my_queue_count; i++) {
@@ -190,7 +197,28 @@ AICORE inline void GemmCommAllImpl(
                     __gm__ half *dst_ptr = HcclRemotePtr(hcclCtx, recv_buffers, owner)
                                           + (uint64_t)my_rank * output_size + tile_offset;
                     Global dstG(dst_ptr, tileShape, tileStride);
-                    pto::comm::TPUT(dstG, srcG, pingTile, pongTile);
+
+                    bool use_ping = (pp_count % 2 == 0);
+                    TileData &curTile = use_ping ? pingTile : pongTile;
+                    event_t curEv = use_ping ? EVENT_ID0 : EVENT_ID1;
+
+                    if (pp_count == 0) {
+                        TLOAD(curTile, srcG);
+                        set_flag(PIPE_MTE2, PIPE_MTE3, curEv);
+                    } else {
+                        TileData &prevTile = use_ping ? pongTile : pingTile;
+                        event_t prevEv = use_ping ? EVENT_ID1 : EVENT_ID0;
+
+                        wait_flag(PIPE_MTE2, PIPE_MTE3, prevEv);
+                        TSTORE_IMPL<TileData, Global, pto::AtomicType::AtomicNone>(pp_pending_dst, prevTile);
+                        TLOAD(curTile, srcG);
+                        set_flag(PIPE_MTE3, PIPE_MTE2, prevEv);
+                        set_flag(PIPE_MTE2, PIPE_MTE3, curEv);
+                        wait_flag(PIPE_MTE3, PIPE_MTE2, prevEv);
+                    }
+
+                    pp_pending_dst = dstG;
+                    pp_count++;
                 }
 
                 tiles_sent++;
@@ -211,6 +239,16 @@ AICORE inline void GemmCommAllImpl(
                     pto::comm::TWAIT(sig, heads[wait_queue] + 1, pto::comm::WaitCmp::GE);
                 }
             }
+        }
+
+        if (pp_count > 0) {
+            bool last_was_ping = ((pp_count - 1) % 2 == 0);
+            TileData &lastTile = last_was_ping ? pingTile : pongTile;
+            event_t lastEv = last_was_ping ? EVENT_ID0 : EVENT_ID1;
+            wait_flag(PIPE_MTE2, PIPE_MTE3, lastEv);
+            TSTORE_IMPL<TileData, Global, pto::AtomicType::AtomicNone>(pp_pending_dst, lastTile);
+            set_flag(PIPE_MTE3, PIPE_MTE2, lastEv);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, lastEv);
         }
 
         pipe_barrier(PIPE_ALL);
@@ -278,7 +316,11 @@ AICORE inline void GemmCommAllImpl(
     DeviceBarrier(hcclCtx, signal_matrix, 1, my_rank, nranks, block_idx);
 
     // ========================================================================
-    // Phase 3: AllGather — TPUT reduced tiles to all ranks
+    // Phase 3: AllGather — send reduced tiles to all other ranks
+    //
+    // Optimization: TLOAD the source tile once into UB, then issue
+    // (nranks-1) TSTOREs to different remote destinations. This
+    // eliminates (nranks-2) redundant TLOADs per tile.
     // ========================================================================
     {
         const int total_tiles = G_NUM_TILES;
@@ -301,11 +343,17 @@ AICORE inline void GemmCommAllImpl(
 
             Global srcG(reduced_output + tile_offset, tileShape, tileStride);
 
+            TLOAD(pingTile, srcG);
+            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+
             for (int r = 0; r < nranks; r++) {
                 if (r == my_rank) continue;
                 __gm__ half *dst_ptr = HcclRemotePtr(hcclCtx, reduced_output, r) + tile_offset;
                 Global dstG(dst_ptr, tileShape, tileStride);
-                pto::comm::TPUT(dstG, srcG, pingTile, pongTile);
+                TSTORE_IMPL<TileData, Global, pto::AtomicType::AtomicNone>(dstG, pingTile);
+                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             }
         }
 
