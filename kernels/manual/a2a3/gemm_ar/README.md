@@ -4,7 +4,12 @@
 
 本项目在昇腾 910B (A2/A3) NPU 上实现了一个 **GEMM + AllReduce 融合算子**，采用双流（Compute Stream + Comm Stream）计算通信重叠设计，通过 PTO 通信指令集在 HCCL RDMA 窗口上完成 AllReduce。
 
-核心思路：将全局矩阵乘法 C\[M×N\] = A\[M×K\] × B\[K×N\] 沿 K 维度拆分到多张卡上，每张卡独立计算局部 GEMM 后，通过 **ReduceScatter + AllGather** 三阶段通信完成 AllReduce 归约，每张卡最终得到完整的 C\_final。
+核心思路：将全局矩阵乘法 C\[M×N\] = A\[M×K\] × B\[K×N\] 沿 K 维度拆分到多张卡上，每张卡独立计算局部 GEMM 后，通过 **ReduceScatter + Reduce + AllGather** 三阶段通信完成 AllReduce 归约，每张卡最终得到完整的 C\_final。
+
+**关键优化**：
+- **全链路 FP16**：MatMul L0C FP32 累加器输出经 FixPipe 硬件自动 cast 为 FP16 写入 GM，通信数据和最终输出均为 FP16，通信量比 FP32 方案减半
+- **零 Host Barrier**：三阶段通信合并为单次 kernel launch，阶段间同步通过 device-side `TNOTIFY`/`TWAIT` 信号完成，完全消除 `HcclHostBarrier` 的 host-device 往返开销
+- **两级设备端同步**：跨 rank 同步（block 0 执行 RDMA 窗口原子操作）+ rank 内跨 block 同步（block 0 通过 GM flag 广播给其他 block）
 
 **平台要求**：Ascend 910B (A2/A3)、CANN 8.5、bisheng 编译器、MPICH
 
@@ -45,16 +50,16 @@ FIRST_DEVICE=0 ./run.sh --nranks 8 --soc-version Ascend910B1
 ```
 全局矩阵乘法：C[M×N] = A[M×K] × B[K×N]
 
-默认参数: M=16384, K=16384, N=4096, 8 ranks
+默认参数: M=5416, K=6144, N=1408, 8 ranks
 
 K 维按 rank 均分，每个 rank 持有:
-  A_part [M × (K/r)] = [16384 × 2048]
-  B_part [(K/r) × N] = [2048 × 4096]
+  A_part [M × (K/r)] = [5416 × 768]    (FP16)
+  B_part [(K/r) × N] = [768 × 1408]    (FP16)
 
 每个 rank 独立计算局部 GEMM:
-  C_rank [M × N] = A_part × B_part
+  C_rank [M × N] = A_part × B_part     (L0C FP32 累加，GM 输出 FP16)
 
-AllReduce 归约:
+AllReduce 归约 (全 FP16):
   C_final = C_rank_0 + C_rank_1 + ... + C_rank_7
 
 数学原理:
@@ -69,23 +74,24 @@ AllReduce 归约:
 │  Compute Stream (Cube)                  Comm Stream (Vector)        │
 │                                                                     │
 │  ┌──────────────────────┐                                           │
-│  │ Compute Tile → TSTORE│──┐                                        │
-│  │ pipe_barrier(PIPE_ALL)│  │                                       │
-│  │ Enqueue tile_idx      │  │ Ready Queue                           │
-│  └──────────────────────┘  │                                        │
-│  ┌──────────────────────┐  │     ┌─────────────────────────────┐   │
-│  │ Compute Tile → TSTORE│──┼────→│ Phase 1: ReduceScatter TPUT │   │
-│  └──────────────────────┘  │     │   每 tile 只发给 owner rank  │   │
-│  ┌──────────────────────┐  │     │     ↓ HcclHostBarrier        │   │
-│  │ Compute Tile → TSTORE│──┘     │ Phase 2: Local TREDUCE      │   │
-│  └──────────────────────┘        │   仅对 owned tiles 归约      │   │
-│         ...                      │     ↓ HcclHostBarrier        │   │
-│                                  │ Phase 3: AllGather TPUT      │   │
-│                                  │   归约结果广播到所有 rank     │   │
+│  │ Compute Tile → TSTORE│──┐     ┌─────────────────────────────┐   │
+│  │ (L0C FP32→GM FP16)   │  │     │ Single Kernel:              │   │
+│  │ pipe_barrier(PIPE_ALL)│  │     │   GemmCommAllKernel         │   │
+│  │ Enqueue tile_idx      │  │     │                             │   │
+│  └──────────────────────┘  │     │ Phase 1: ReduceScatter      │   │
+│  ┌──────────────────────┐  │     │   TPUT FP16 tile→owner rank │   │
+│  │ Compute Tile → TSTORE│──┼────→│     ↓ DeviceBarrier (phase0)│   │
+│  └──────────────────────┘  │     │ Phase 2: Local TREDUCE      │   │
+│  ┌──────────────────────┐  │     │   owned tiles FP16 归约     │   │
+│  │ Compute Tile → TSTORE│──┘     │     ↓ DeviceBarrier (phase1)│   │
+│  └──────────────────────┘        │ Phase 3: AllGather TPUT     │   │
+│         ...                      │   FP16 归约结果广播全 rank   │   │
 │                                  └─────────────────────────────┘   │
 │                                                                     │
 │  关键特性:                                                           │
-│  - 双流并行：Cube 计算流 + Vector 通信流，计算与通信重叠执行          │
+│  - 全链路 FP16：GEMM→通信→输出全程 FP16，通信量比 FP32 减半          │
+│  - 单次 kernel launch：三阶段合并，阶段间用 DeviceBarrier 同步        │
+│  - 零 Host Barrier：跨 rank 同步由 TNOTIFY/TWAIT 在设备端完成        │
 │  - 逐 tile 信号：计算完一个 tile 即可被通信侧消费                    │
 │  - 通信量降低 4×：ReduceScatter 只发 owner，AllGather 只由 owner 广播 │
 └──────────────────────────────────────────────────────────────────────┘
@@ -93,59 +99,86 @@ AllReduce 归约:
 
 ## 三阶段通信流水线
 
-AllReduce 被拆分为 3 次 kernel launch，中间通过 host 端 HcclHostBarrier 同步：
+AllReduce 的三个阶段合并在单次 `GemmCommAllKernel` launch 中，阶段间通过 device-side `DeviceBarrier` 同步：
 
 ```
-Phase 1 (ReduceScatter):  GemmCommRSKernel
-  ↓ 轮询 Ready Queue，取到就绪 tile 后 TPUT 到 owner rank 的 recv_buffers
-  ↓ HcclHostBarrier + aclrtSynchronizeStream
+GemmCommAllKernel (单次 launch):
+  Phase 1 (ReduceScatter):
+    轮询 Ready Queue，取到就绪 tile 后 TPUT(FP16) 到 owner rank 的 recv_buffers
+    ↓ DeviceBarrier(phase=0)  — 跨 rank + rank 内同步
 
-Phase 2 (Reduce):         GemmCommReduceKernel
-  ↓ 每个 rank 对自己 owned 的 tile 做 nranks-way TREDUCE 求和
-  ↓ HcclHostBarrier + aclrtSynchronizeStream
+  Phase 2 (Reduce):
+    每个 rank 对自己 owned 的 tile 做 nranks-way TREDUCE(FP16) 求和
+    ↓ DeviceBarrier(phase=1)  — 跨 rank + rank 内同步
 
-Phase 3 (AllGather):      GemmCommAGKernel
-  ↓ 每个 rank 将归约结果 TPUT 到所有其他 rank 的 reduced_output
-  ↓ HcclHostBarrier + aclrtSynchronizeStream
+  Phase 3 (AllGather):
+    每个 rank 将归约结果 TPUT(FP16) 到所有其他 rank 的 reduced_output
 ```
 
-为何需要 3 次 launch：HCCL 不提供 device 端跨 rank barrier，`HcclHostBarrier`（= `HcclBarrier` + `aclrtSynchronizeStream`）是唯一的同步原语，而它要求 kernel 已经返回。
+### DeviceBarrier：两级设备端同步
+
+```
+DeviceBarrier(phase):
+  pipe_barrier(PIPE_ALL)                    // 确保本 block 流水线刷完
+
+  if block_idx == 0:                        // 只有 block 0 做跨 rank 信号
+    for each remote rank r:
+      TNOTIFY(remote signal_matrix[phase][my_rank], 1, AtomicAdd)   // 写远端
+    for each remote rank r:
+      TWAIT(local signal_matrix[phase][r], 1, GE)                   // 等远端
+    TNOTIFY(local_broadcast_flag[phase], 1, Set)                    // 通知本 rank 其他 block
+  else:
+    TWAIT(local_broadcast_flag[phase], 1, GE)                       // 等 block 0 广播
+
+  pipe_barrier(PIPE_ALL)
+```
+
+**为何需要两级同步**：`pipe_barrier(PIPE_ALL)` 只同步单个 AI Core 内部的流水线，无法同步同一 kernel 中不同 block（AI Core）之间的执行。block 0 完成跨 rank 信号交换后，通过 GM flag + `TNOTIFY/TWAIT` 广播给同 rank 的其他 block。
+
+**Signal Matrix 布局**（位于 HCCL RDMA 窗口内）：
+```
+[0 .. MAX_RANKS-1]           Phase 0 跨 rank 计数器（RS 完成）
+[MAX_RANKS .. 2*MAX_RANKS-1] Phase 1 跨 rank 计数器（Reduce 完成）
+[2*MAX_RANKS]                Phase 0 rank 内广播 flag
+[2*MAX_RANKS+1]              Phase 1 rank 内广播 flag
+```
+总计 `(2 * MAX_RANKS + 2) * sizeof(int32_t)` = 72 字节（对齐到 128 字节）。
 
 ### Tile 分配与归约
 
 ```
 输出矩阵 C[M×N] 被划分为 tile:
-  tile 大小: 128 × 256 (128 KB/tile)
-  M 方向: 16384/128 = 128 块
-  N 方向: 4096/256  = 16 块
-  总 tile 数: 128 × 16 = 2048
+  tile 大小: 128 × 256 × FP16 = 64 KB/tile
+  M 方向: M_padded / 128 块
+  N 方向: N_padded / 256 块
+
+示例 (M=5416, N=1408, padded 5504x1536, 8 ranks):
+  tile 数: 43 × 6 = 258
 
 Owner 分配 (round-robin):
   owner(tile_idx) = tile_idx % nranks
-  → Rank 0 拥有: tile 0, 8, 16, ..., 2040 (256 个)
-  → Rank 1 拥有: tile 1, 9, 17, ..., 2041 (256 个)
-  → ...
 
-通信量 (每 rank):
-  ReduceScatter: 1792 tiles × 128KB = 224 MB (只发给 owner)
-  AllGather:     256 tiles × 7 ranks × 128KB = 224 MB (owner 广播)
-  合计: 448 MB/rank (相比广播方案的 1.75 GB 降低 ~4×)
+通信量 (每 rank, FP16):
+  ReduceScatter: (total - owned) tiles × 64KB
+  AllGather:     owned tiles × (nranks-1) × 64KB
+  通信量比 FP32 方案减半
 ```
 
 ## 内存布局与 HCCL 窗口
 
-只有被远端 TPUT 写入的 buffer 需要放在 HCCL RDMA 窗口中，本地读写的 buffer 使用普通 `aclrtMalloc`。
+只有被远端 TPUT/TNOTIFY 写入的 buffer 需要放在 HCCL RDMA 窗口中，本地读写的 buffer 使用普通 `aclrtMalloc`。
 
 | 缓冲区 | 大小 | 位置 | 原因 |
 |--------|------|------|------|
-| `recv_buffers` | nranks × M × N × 4B | **HCCL 窗口** | Phase 1 远端写入 |
-| `reduced_output` | M × N × 4B | **HCCL 窗口** | Phase 3 远端写入 |
-| `gemm_output` | M × N × 4B | **aclrtMalloc** | 仅本地读写 |
-| `src0_dev`, `src1_dev` | 输入矩阵 | **aclrtMalloc** | 仅本地读写 |
+| `recv_buffers` | nranks × M × N × 2B | **HCCL 窗口** | Phase 1 远端 TPUT 写入（FP16） |
+| `reduced_output` | M × N × 2B | **HCCL 窗口** | Phase 3 远端 TPUT 写入（FP16） |
+| `signal_matrix` | (2\*MAX\_RANKS+2) × 4B, 对齐 64B | **HCCL 窗口** | DeviceBarrier 跨 rank TNOTIFY 写入 |
+| `gemm_output` | M × N × 2B | **aclrtMalloc** | 仅本地读写（FP16） |
+| `src0_dev`, `src1_dev` | 输入矩阵（FP16） | **aclrtMalloc** | 仅本地读写 |
 
-窗口大小由 `HCCL_BUFFSIZE` 环境变量控制，`run.sh` 自动计算：`(nranks + 1) × M × N × 4 / 1MB + 64MB`。
+窗口大小由 `HCCL_BUFFSIZE` 环境变量控制，`run.sh` 自动计算：`(nranks + 1) × M × N × 2 / 1MB + 64MB`。
 
-所有窗口内 buffer 必须在每个 rank 上分配在相同偏移处（通过 `WindowAlloc` 顺序递增分配器），以保证 `HcclRemotePtr` 地址转换的正确性。
+所有窗口内 buffer 必须在每个 rank 上分配在相同偏移处（通过 `WindowAlloc` 顺序递增分配器），以保证 `HcclRemotePtr` 地址转换的正确性。`signal_matrix` 在每轮迭代开始前通过 `aclrtMemset` 清零。
 
 ## 计算内核
 
@@ -153,15 +186,19 @@ Owner 分配 (round-robin):
 
 | 参数 | 默认值 | 说明 |
 |------|-------|------|
-| G\_M | 16384 | 矩阵 M 维度 |
-| G\_K | 16384 | 矩阵 K 维度（全局，须整除 nranks） |
-| G\_N | 4096 | 矩阵 N 维度 |
+| G\_M | 5416 | 矩阵 M 维度（自动 pad 到 128 对齐） |
+| G\_K | 6144 | 矩阵 K 维度（全局，须整除 nranks） |
+| G\_N | 1408 | 矩阵 N 维度（自动 pad 到 256 对齐） |
 | G\_BASE\_M | 128 | Tile M 维度 |
 | G\_BASE\_K | 64 | Tile K 维度 |
 | G\_BASE\_N | 256 | Tile N 维度 |
 | G\_STEP\_KA/KB | 4 | L1 缓存 K-slice 数（4× 减少 DMA 次数） |
 | COMPUTE\_BLOCK\_NUM | 24 | 计算 block 数（可通过 `--compute-blocks` 配置） |
 | COMM\_BLOCK\_NUM | 24 | 通信 block 数（可通过 `--comm-blocks` 配置） |
+
+### FP16 输出
+
+MatMul 计算在 L0C 使用 FP32 累加器，最终通过 `TSTORE` 写入 GM 时，FixPipe 硬件自动执行 FP32→FP16 cast（`copy_matrix_cc_to_gm` 指令的 `quantizationMode` 字段控制）。输入 A/B 仍为 FP16，无需手动精度转换。
 
 ### 两级双缓冲流水线
 
@@ -189,16 +226,19 @@ Cube (M):             [TMATMUL k0] [ACC k1] [ACC k2] [ACC k3] [TMATMUL k0'] ...
 ## 执行流程
 
 ```
-1. MPI 初始化 → Rank 0 生成随机矩阵 (seed=42) + CPU golden reference
+1. MPI 初始化 → Rank 0 生成随机矩阵 (seed=42) + CPU golden reference (FP32)
 2. MPI Broadcast 输入数据到所有 rank
 3. HCCL 通信器初始化（MPI 广播 root info，自动检测 MESH/RING 拓扑）
-4. Warmup (5 iter)
-5. Compute-only 测量 (5 iter) — 纯 GEMM 性能基准
-6. Sequential 测量 (10 iter)  — 计算→通信串行执行
-7. Pipelined 测量 (10 iter)   — 计算‖通信双流重叠
-8. 验证运行 + golden 对比
-9. 输出性能报告
+4. 分配 HCCL 窗口内存 (recv_buffers + reduced_output + signal_matrix)
+5. Warmup (5 iter)
+6. Compute-only 测量 (5 iter) — 纯 GEMM 性能基准
+7. Sequential 测量 (10 iter)  — 计算→通信串行执行
+8. Pipelined 测量 (10 iter)   — 计算‖通信双流重叠
+9. 验证运行：FP16 输出转 FP32 后与 golden 对比 (eps=0.01)
+10. 输出性能报告
 ```
+
+每轮迭代前通过 `resetState` 清零所有缓冲区（含 `signal_matrix`），确保 DeviceBarrier 计数器归零。
 
 ## 性能报告说明
 
@@ -217,10 +257,12 @@ Cube (M):             [TMATMUL k0] [ACC k1] [ACC k2] [ACC k3] [TMATMUL k0'] ...
 gemm_ar/
 ├── CMakeLists.txt              # 构建配置（3 个 target：cube kernel, vec kernel, host exe）
 ├── run.sh                      # 一键构建+运行脚本（自动计算 HCCL_BUFFSIZE、发现 MPI 路径）
-├── main.cpp                    # 入口：MPI 初始化、数据生成、CPU golden 计算、数据广播
-├── gemm_compute_kernel.cpp     # GEMM 计算内核（Cube 架构，L1 缓存 + ready queue 信号）
-├── comm_kernel.cpp             # 通信内核（Vector 架构，3 阶段 AllReduce）
-│                               #   + host 端编排、HCCL 初始化、性能测量、验证
+├── gemm_ar_config.h            # 全局参数配置（矩阵维度、tile 大小、block 数量）
+├── main.cpp                    # 入口：MPI 初始化、数据生成、HCCL 初始化、
+│                               #   窗口分配（含 signal_matrix）、性能测量、FP16 验证
+├── gemm_compute_kernel.cpp     # GEMM 计算内核（Cube 架构，L0C FP32→GM FP16 自动 cast）
+├── comm_kernel.cpp             # 通信内核（Vector 架构，单 kernel 三阶段 AllReduce）
+│                               #   包含 DeviceBarrier（两级设备端同步）
 ├── common.hpp                  # HcclRemotePtr 设备端包装（RDMA 窗口地址转换）
 ├── hccl_context.h              # HcclDeviceContext 结构体（每 rank 的 RDMA 窗口地址）
 ├── ready_queue.hpp             # 多 block 无锁 tile 队列（compute→comm 信号机制）
@@ -229,24 +271,24 @@ gemm_ar/
 
 ## 修改矩阵维度
 
-1. 在 `comm_kernel.cpp`、`gemm_compute_kernel.cpp`、`main.cpp` 三个文件中同步修改 `CONFIG_G_M`、`CONFIG_G_K`、`CONFIG_G_N`
-2. K 必须能被 nranks 整除
-3. `HCCL_BUFFSIZE` 由 `run.sh` 自动计算，无需手动调整
-
-也可以通过 CMake 参数传入，无需修改源码：
+修改 `gemm_ar_config.h` 中的 `CONFIG_G_M`、`CONFIG_G_K`、`CONFIG_G_N` 即可，所有源文件通过 include 共享配置。也可通过 CMake 参数传入：
 
 ```bash
 cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 ```
 
+约束：K 必须能被 nranks 整除。`HCCL_BUFFSIZE` 由 `run.sh` 自动计算。
+
 ## 常见问题
 
 | 问题 | 原因与解决 |
 |------|-----------|
-| `HCCL window too small` | 窗口不够大。检查 `HCCL_BUFFSIZE`，公式：`(nranks+1) × M × N × 4 bytes + margin` |
+| `HCCL window too small` | 窗口不够大。检查 `HCCL_BUFFSIZE`，公式：`(nranks+1) × M × N × 2 bytes + margin` |
 | `HcclGetRootInfo failed: 7` | 上次运行残留脏状态。执行 `rm -rf /dev/shm/sem.hccl*; ipcrm -a` 或等待 ~30s 重试 |
 | HCCL 初始化后挂死 | rank 同步问题，检查所有 rank 是否到达 `CommMpiBarrier` |
 | 通信 kernel 段错误 | 通常是窗口地址无效，验证 `windowsIn[]` 值非零 |
+| DeviceBarrier 死锁 | signal\_matrix 未在迭代间清零，检查 `resetState` 是否 memset 了 signal\_matrix |
+| 验证失败 max\_diff 较大 | FP16 精度有限，验证容差为 eps=0.01；若 diff 异常大，检查 DeviceBarrier 同步逻辑 |
 | `aclInit repeat init` (100002) | 无害，代码已做保护，同一进程只调用一次 `aclInit` |
 | `--allow-run-as-root` 失败 | 本项目使用 MPICH，此选项是 OpenMPI 专用 |
 
@@ -259,13 +301,44 @@ cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 - AllGather 阶段只有 owner 广播归约结果
 - 不同 rank 写入 owner 的不同 slot，无写冲突，因此可用 plain TPUT 代替 TPUT\<AtomicAdd\>
 
-### TREDUCE\_PINGPONG 防止事件计数器溢出
+### 为何使用 FP16 而非 FP32 通信
 
-V 流水线事件计数器只有 2-bit 容量。普通 TREDUCE 在循环中持续使用 EVENT\_ID1 会导致溢出，TREDUCE\_PINGPONG 交替使用 EVENT\_ID1/EVENT\_ID2，每个计数器最大值始终为 1。
+MatMul 累加器在 L0C 使用 FP32，但最终输出经 TSTORE 写入 GM 时由 FixPipe 硬件自动 cast 为 FP16。全链路 FP16 使通信数据量减半，直接降低 RS 和 AG 阶段的 DMA 传输时间。FP16 精度对于大多数深度学习推理/训练场景已足够。
+
+### 为何消除 Host Barrier
+
+原设计中每个 `HcclHostBarrier` = `HcclBarrier` + `aclrtSynchronizeStream`，涉及 host-device 往返 + 跨 rank host 端同步，单次约 100-150 us。三次 barrier + 三次 kernel launch 共计约 300-600 us 纯开销。通过 `TNOTIFY`/`TWAIT` 在设备端完成跨 rank 同步，并合并为单次 kernel launch，消除了这些开销。
+
+### 两级 DeviceBarrier 设计
+
+`pipe_barrier(PIPE_ALL)` 只同步单个 AI Core 的流水线，无法同步同一 kernel 中不同 AI Core（block）。因此 DeviceBarrier 采用两级设计：
+1. block 0 通过 HCCL RDMA 窗口的 `TNOTIFY`/`TWAIT` 完成跨 rank 同步
+2. block 0 通过 GM flag 的 `TNOTIFY(Set)` 广播给同 rank 其他 block，其他 block 通过 `TWAIT` 等待
 
 ### 头文件包含顺序
 
 `common.hpp`（通过 `kernel_operator.h`）必须在 `<iostream>` 之前包含，否则 `std::dec` 与 AscendC 宏冲突。
+
+## 性能实测
+
+8 卡 Ascend 910B，M=5416, K=6144, N=1408（padded 5504x1536），258 tiles：
+
+```
+Compute-only:   109 us  (107 TFLOPS)
+
+Sequential:     707 us
+  compute:      110 us
+  comm:         597 us  (46.7 GB/s)
+
+Pipelined:      687 us
+  compute done: 200 us
+  comm done:    687 us  (40.5 GB/s)
+
+Speedup:        1.03x
+Overlap eff:    18.2%
+```
+
+流水线重叠效率较低的原因：K 轴 8 卡切分后每 rank 仅 K=768，Cube 计算约 110 us 即完成，而通信约 597 us，计算时间远短于通信时间，理论重叠上限 = min(compute, comm) / max(compute, comm) ≈ 18.4%。
 
 ## 构建系统
 
