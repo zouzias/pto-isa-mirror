@@ -71,6 +71,7 @@ tpartmin
 trsqrt
 tsel
 tsort32
+tdiv
 trem
 tshl
 tshr
@@ -78,6 +79,7 @@ tand
 tor
 txor
 tmin
+tmax
 tcmp
 tlog
 tneg
@@ -116,7 +118,16 @@ tnotify
 twait
 tloadconv
 treduce
+treshape
 tpushpop
+trandom
+thistogram
+timg2col
+tquant
+tgatherb
+tmul
+tsub
+tisa_coverage
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
