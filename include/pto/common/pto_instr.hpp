@@ -55,7 +55,7 @@ PTO_INST void TSYNC(WaitEvents &... events)
     WaitAllEvents(events...);
 }
 
-#ifdef _DEBUG
+#if defined(_DEBUG) || defined(__CPU_SIM)
 template <typename TileData>
 PTO_INST void TPRINT(TileData &src)
 {
@@ -385,7 +385,7 @@ PTO_INST RecordEvent TSUBC(TileData &dst, TileData &src0, TileData &src1, TileDa
     return {};
 }
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
 template <typename TileRes, typename TileLeft, typename TileLeftScale, typename TileRight, typename TileRightScale,
           typename... WaitEvents>
 PTO_INST RecordEvent TGEMV_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
@@ -710,7 +710,7 @@ PTO_INST RecordEvent TEXTRACT_FP(DstTileData &dst, SrcTileData &src, FpTileData 
                                  uint16_t indexCol, WaitEvents &... events)
 {
     TSYNC(events...);
-    TEXTRACT_IMPL<DstTileData, SrcTileData, FpTileData, reluMode>(dst, src, fp, indexRow, indexCol);
+    TEXTRACT_IMPL<DstTileData, SrcTileData>(dst, src, indexRow, indexCol);
     return {};
 }
 
@@ -749,7 +749,7 @@ PTO_INST RecordEvent TSET_IMG2COL_PADDING(ConvTileData &src, WaitEvents &... eve
     return {};
 }
 #endif
-#if defined PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
 template <typename ConvTileData, SetFmatrixMode FmatrixMode = SetFmatrixMode::FMATRIX_A_MANUAL, typename... WaitEvents>
 PTO_INST RecordEvent TSET_IMG2COL_RPT(ConvTileData &src, WaitEvents &... events)
 {
@@ -959,8 +959,7 @@ PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, Roun
 }
 
 template <typename TileDataD, typename TileDataS, typename... WaitEvents>
-PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode,
-                          WaitEvents &... events)
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode, WaitEvents &... events)
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCVT, dst, src, mode, satMode);
@@ -1458,8 +1457,7 @@ PTO_INST RecordEvent TANDS(TileDataDst &dst, TileDataSrc &src, typename TileData
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TORS(TileDataDst &dst, TileDataSrc &src, typename TileDataDst::DType scalar,
-                          WaitEvents &... events)
+PTO_INST RecordEvent TORS(TileDataDst &dst, TileDataSrc &src, typename TileDataDst::DType scalar, WaitEvents &... events)
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TORS, dst, src, scalar);
@@ -1728,7 +1726,7 @@ PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &... events)
     return {};
 }
 
-#ifdef PTO_NPU_ARCH_A5
+#if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TPACK(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
