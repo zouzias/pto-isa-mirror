@@ -126,7 +126,7 @@ static_assert(G_K_LOOP >= G_STEP_KA, "K_LOOP must be >= stepKa for L1 caching");
 // Each block handles a subset of tiles (no contention — sole producer per queue).
 // ============================================================================
 AICORE inline void GemmComputeImpl(
-    __gm__ float *gemm_output,
+    __gm__ half *gemm_output,
     __gm__ half *src0,
     __gm__ half *src1,
     __gm__ MultiBlockQueueSet *queue_set,
@@ -136,9 +136,9 @@ AICORE inline void GemmComputeImpl(
 {
     const int block_idx = get_block_idx();
 
-    using NDValidShapeC = TileShape2D<float, G_BASE_M, G_BASE_N>;
-    using NDWholeShapeC = BaseShape2D<float, G_M, G_N>;
-    using GlobalDataOut = GlobalTensor<float, NDValidShapeC, NDWholeShapeC>;
+    using NDValidShapeC = TileShape2D<half, G_BASE_M, G_BASE_N>;
+    using NDWholeShapeC = BaseShape2D<half, G_M, G_N>;
+    using GlobalDataOut = GlobalTensor<half, NDValidShapeC, NDWholeShapeC>;
 
     using TileMatAData = Tile<TileType::Mat, half, G_BASE_M, G_BASE_K * G_STEP_KA,
                               BLayout::ColMajor, G_BASE_M, G_BASE_K * G_STEP_KA, SLayout::RowMajor>;
@@ -207,7 +207,7 @@ AICORE inline void GemmComputeImpl(
         wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
 
         uint64_t outOffset = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;
-        __gm__ float *tileDst = gemm_output + outOffset;
+        __gm__ half *tileDst = gemm_output + outOffset;
 
         set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
         wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
@@ -235,7 +235,7 @@ __global__ AICORE void GemmComputeKernel(
     uint32_t k_per_rank)
 {
     GemmComputeImpl(
-        reinterpret_cast<__gm__ float *>(gemm_output),
+        reinterpret_cast<__gm__ half *>(gemm_output),
         reinterpret_cast<__gm__ half *>(src0),
         reinterpret_cast<__gm__ half *>(src1),
         reinterpret_cast<__gm__ MultiBlockQueueSet *>(queue_set),
