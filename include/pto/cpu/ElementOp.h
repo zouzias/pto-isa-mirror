@@ -59,6 +59,7 @@ enum class ElementOp
     OP_SUBS,
     OP_MULS,
     OP_DIVS,
+    OP_RDIVS,
     OP_REMS,
     OP_MAXS,
     OP_MINS,
@@ -423,8 +424,16 @@ template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_DIVS> {
     static void apply(DType &dst, DType &src, DType &scalar, size_t)
     {
-        if (scalar != static_cast<DType>(0)) {
-            dst = src / scalar;
+        dst = src / scalar;
+    }
+};
+
+template <typename DType>
+struct ElementOpCal<DType, ElementOp::OP_RDIVS> {
+    static void apply(DType &dst, DType &src, DType &scalar, size_t)
+    {
+        if (src != static_cast<DType>(0)) {
+            dst = scalar / src;
         } else {
             PTO_ASSERT(false, "illegal src is zero");
         }
@@ -452,6 +461,14 @@ struct ElementOpCal<DType, ElementOp::OP_MAXS> {
     static void apply(DType &dst, DType &src, DType &scalar, size_t)
     {
         dst = std::max(src, scalar);
+    }
+};
+
+template <typename DType>
+struct ElementOpCal<DType, ElementOp::OP_MINS> {
+    static void apply(DType &dst, DType &src, DType &scalar, size_t)
+    {
+        dst = std::min(src, scalar);
     }
 };
 
