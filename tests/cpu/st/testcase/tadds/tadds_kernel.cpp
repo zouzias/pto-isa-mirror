@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
-template <typename T, int row, int validRow, int col, int validCol>
+template <typename T, int validRow, int validCol, int row=validRow, int col=validCol>
 PTO_INTERNAL void runTAddS(__gm__ T *out, __gm__ T *src, T scalar)
 {
     using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
@@ -45,27 +45,27 @@ PTO_INTERNAL void runTAddS(__gm__ T *out, __gm__ T *src, T scalar)
 
 extern "C" __global__ AICORE void launchTADDSCase1(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTAddS<float, 32, 32, 64, 64>(out, src, scalar);
+    runTAddS<float, 32, 64>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTADDSCase2(__gm__ aclFloat16 *out, __gm__ aclFloat16 *src, float scalar)
 {
-    runTAddS<half, 63, 63, 64, 64>((__gm__ half *)out, (__gm__ half *)src, (half)scalar);
+    runTAddS<half, 63, 64>((__gm__ half *)out, (__gm__ half *)src, (half)scalar);
 }
 extern "C" __global__ AICORE void launchTADDSCase3(__gm__ int32_t *out, __gm__ int32_t *src, int32_t scalar)
 {
-    runTAddS<int32_t, 31, 31, 128, 128>(out, src, scalar);
+    runTAddS<int32_t, 31, 128>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTADDSCase4(__gm__ int16_t *out, __gm__ int16_t *src, int16_t scalar)
 {
-    runTAddS<int16_t, 15, 15, 192, 192>(out, src, scalar);
+    runTAddS<int16_t, 15, 192>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTADDSCase5(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTAddS<float, 7, 7, 448, 448>(out, src, scalar);
+    runTAddS<float, 7, 448>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTADDSCase6(__gm__ float *out, __gm__ float *src, float scalar)
 {
-    runTAddS<float, 256, 256, 16, 16>(out, src, scalar);
+    runTAddS<float, 256, 16>(out, src, scalar);
 }
 
 template <uint32_t caseId>
