@@ -280,15 +280,10 @@ inline void *WindowAlloc(uint64_t windowBase, size_t &offset, size_t bytes)
 // ============================================================================
 // Extern kernel launcher declarations (defined in comm_kernel.cpp / gemm_compute_kernel.cpp)
 // ============================================================================
-extern void launchGemmCommRS(uint8_t *gemm_output, uint8_t *recv_buffers,
-                             uint8_t *queue_set, uint8_t *hcclCtx,
-                             int rank, int nranks, void *stream, int num_compute_blocks);
-
-extern void launchGemmCommReduce(uint8_t *gemm_output, uint8_t *recv_buffers, uint8_t *reduced_output,
-                                 uint8_t *hcclCtx, int rank, int nranks, void *stream);
-
-extern void launchGemmCommAG(uint8_t *reduced_output, uint8_t *hcclCtx,
-                             int rank, int nranks, void *stream);
+extern void launchGemmCommAll(uint8_t *gemm_output, uint8_t *recv_buffers,
+                              uint8_t *reduced_output, uint8_t *signal_matrix,
+                              uint8_t *queue_set, uint8_t *hcclCtx,
+                              int rank, int nranks, void *stream, int num_compute_blocks);
 
 extern void launchGemmCompute(uint8_t *gemm_output, uint8_t *src0, uint8_t *src1,
                               uint8_t *queue_set, int rank, void *stream, int block_num, uint32_t k_per_rank);
@@ -550,8 +545,10 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     //   recv_buffers   — remote-written in Phase 1 (ReduceScatter)
     //   reduced_output — remote-written in Phase 3 (AllGather)
     //   gemm_output    — local-only (compute kernel writes, comm kernel reads)
-    size_t outputSize = static_cast<size_t>(G_M) * G_N * sizeof(float);
+    size_t outputSize = static_cast<size_t>(G_M) * G_N * sizeof(uint16_t);
     size_t recvBuffersSize = static_cast<size_t>(n_ranks) * outputSize;
+    size_t signalMatrixSize = static_cast<size_t>(2 * MAX_RANKS + 2) * sizeof(int32_t);
+    signalMatrixSize = ((signalMatrixSize + 63) / 64) * 64;
 
     void *gemm_output = nullptr;
     aclrtMalloc(&gemm_output, outputSize, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -564,12 +561,14 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     size_t winOffset = 0;
     void *recv_buffers = WindowAlloc(windowBase, winOffset, recvBuffersSize);
     void *reduced_output = WindowAlloc(windowBase, winOffset, outputSize);
+    void *signal_matrix = WindowAlloc(windowBase, winOffset, signalMatrixSize);
 
     if (rank_id == 0) {
         std::cout << "[INFO] HCCL window: winSize=" << hctx.hostCtx.winSize
                   << " used=" << winOffset
                   << " (recv=" << (recvBuffersSize / (1024 * 1024)) << "MB"
-                  << ", reduced=" << (outputSize / (1024 * 1024)) << "MB)"
+                  << ", reduced=" << (outputSize / (1024 * 1024)) << "MB"
+                  << ", signals=" << signalMatrixSize << "B)"
                   << "  gemm_output=" << (outputSize / (1024 * 1024)) << "MB (device mem)" << std::endl;
     }
 
@@ -583,6 +582,7 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     aclrtMemset(gemm_output, outputSize, 0, outputSize);
     aclrtMemset(recv_buffers, recvBuffersSize, 0, recvBuffersSize);
     aclrtMemset(reduced_output, outputSize, 0, outputSize);
+    aclrtMemset(signal_matrix, signalMatrixSize, 0, signalMatrixSize);
 
     uint32_t k_per_rank = G_K / n_ranks;
     if (G_K % n_ranks != 0) {
@@ -628,6 +628,7 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
         aclrtMemset(gemm_output, outputSize, 0, outputSize);
         aclrtMemset(recv_buffers, recvBuffersSize, 0, recvBuffersSize);
         aclrtMemset(reduced_output, outputSize, 0, outputSize);
+        aclrtMemset(signal_matrix, signalMatrixSize, 0, signalMatrixSize);
     };
 
     auto launchCompute = [&](aclrtStream s) {
@@ -642,27 +643,15 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     uint8_t *hcclCtxPtr = reinterpret_cast<uint8_t *>(hctx.deviceCtx);
 
     auto launchComm = [&](aclrtStream s) {
-        launchGemmCommRS(
+        launchGemmCommAll(
             reinterpret_cast<uint8_t *>(gemm_output),
             reinterpret_cast<uint8_t *>(recv_buffers),
+            reinterpret_cast<uint8_t *>(reduced_output),
+            reinterpret_cast<uint8_t *>(signal_matrix),
             reinterpret_cast<uint8_t *>(queueSet_dev),
             hcclCtxPtr,
             rank_id, n_ranks, s, COMPUTE_BLOCK_NUM);
-        HcclHostBarrier(hctx.comm, s);
-
-        launchGemmCommReduce(
-            reinterpret_cast<uint8_t *>(gemm_output),
-            reinterpret_cast<uint8_t *>(recv_buffers),
-            reinterpret_cast<uint8_t *>(reduced_output),
-            hcclCtxPtr,
-            rank_id, n_ranks, s);
-        HcclHostBarrier(hctx.comm, s);
-
-        launchGemmCommAG(
-            reinterpret_cast<uint8_t *>(reduced_output),
-            hcclCtxPtr,
-            rank_id, n_ranks, s);
-        HcclHostBarrier(hctx.comm, s);
+        aclrtSynchronizeStream(s);
     };
 
     auto syncAll = [&]() {
@@ -756,14 +745,30 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     launchComm(commStream);
     syncAll();
 
-    // ------ Verification ------
-    float *output_host = nullptr;
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host), outputSize);
-    aclrtMemcpy(output_host, outputSize, reduced_output, outputSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    // ------ Verification (FP16 output -> convert to FP32 for comparison) ------
+    uint16_t *output_host_fp16 = nullptr;
+    aclrtMallocHost(reinterpret_cast<void **>(&output_host_fp16), outputSize);
+    aclrtMemcpy(output_host_fp16, outputSize, reduced_output, outputSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    auto halfToFloat = [](uint16_t h) -> float {
+        uint32_t sign = ((uint32_t)h & 0x8000) << 16;
+        uint32_t exp  = ((uint32_t)h >> 10) & 0x1F;
+        uint32_t mant = (uint32_t)h & 0x03FF;
+        if (exp == 0) {
+            if (mant == 0) { union { uint32_t u; float f; } r; r.u = sign; return r.f; }
+            while (!(mant & 0x0400)) { mant <<= 1; exp--; }
+            exp++; mant &= ~0x0400;
+        } else if (exp == 31) {
+            union { uint32_t u; float f; } r; r.u = sign | 0x7F800000 | (mant << 13); return r.f;
+        }
+        exp = exp + (127 - 15);
+        uint32_t bits = sign | (exp << 23) | (mant << 13);
+        union { uint32_t u; float f; } r; r.u = bits; return r.f;
+    };
 
     bool is_ok = true;
     if (rank_id == 0) {
-        const float eps = 0.001f;
+        const float eps = 0.01f;
         const size_t valid_elements = (size_t)G_ORIG_M * G_ORIG_N;
         float max_diff = 0.0f, max_diff_ratio = 0.0f;
         size_t err_count = 0, zero_count = 0;
@@ -774,7 +779,8 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
             for (size_t col = 0; col < G_ORIG_N; ++col) {
                 size_t padded_idx = row * G_N + col;
                 size_t golden_idx = row * G_N + col;
-                float exp_val = golden[golden_idx], act_val = output_host[padded_idx];
+                float exp_val = golden[golden_idx];
+                float act_val = halfToFloat(output_host_fp16[padded_idx]);
                 float diff = std::abs(exp_val - act_val);
                 float rel = (std::abs(exp_val) > 1e-6f) ? (diff / std::abs(exp_val)) : diff;
                 if (diff > max_diff) max_diff = diff;
@@ -792,7 +798,7 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
                   << " -> " << (is_ok ? "PASS" : "FAIL") << std::endl;
     }
 
-    aclrtFreeHost(output_host);
+    aclrtFreeHost(output_host_fp16);
     aclrtFreeHost(queueSet_reset_host);
 
     // ------ Performance report ------
@@ -809,7 +815,7 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
         double flops_total    = 2.0 * G_ORIG_M * (double)G_K * G_ORIG_N;
         auto gflops = [](double flops, double us) { return (us > 0) ? (flops / (us * 1e-6) / 1e9) : 0.0; };
 
-        size_t tileBytes = static_cast<size_t>(G_BASE_M) * G_BASE_N * sizeof(float);
+        size_t tileBytes = static_cast<size_t>(G_BASE_M) * G_BASE_N * sizeof(uint16_t);
         int tiles_per_owner = (G_NUM_TILES + n_ranks - 1) / n_ranks;
         double rs_bytes = static_cast<double>(G_NUM_TILES - tiles_per_owner) * tileBytes;
         double ag_bytes = static_cast<double>(tiles_per_owner) * (n_ranks - 1) * tileBytes;
