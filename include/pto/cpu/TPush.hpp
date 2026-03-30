@@ -392,7 +392,7 @@ PTO_INTERNAL void TPush_v2c(Pipe &pipe, TileProd &tile, size_t entryBase)
     TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.V2C_CONSUMER_BUF + entryBase));
     cpu_pipe::FillTile(slotTile, static_cast<T>(0));
     cpu_pipe::InsertTileWindow(slotTile, tile, cpu_pipe::GetSplitRowOffset<Split, SlotTile>(),
-                              cpu_pipe::GetSplitColOffset<Split, SlotTile>());
+                               cpu_pipe::GetSplitColOffset<Split, SlotTile>());
 }
 
 template <typename Pipe, typename TileProd, TileSplitAxis Split>
