@@ -17,7 +17,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <uint8_t FlagID, uint8_t DirType, uint32_t SlotSize, uint32_t SlotNum, uint32_t LocalSlotNum = 2,
+template <uint8_t FlagID, uint8_t DirType, uint32_t SlotSize, uint32_t SlotNum,
+          TileSplitAxis DefaultSplit = TileSplitAxis::TILE_UP_DOWN, uint32_t LocalSlotNum = 2,
           bool EN_UNIT_FLAG = false>
 struct TPipe {
     static constexpr uint8_t DIR_MASK = 0x7;
@@ -511,13 +512,13 @@ struct TPipe {
     PTO_INTERNAL explicit TPipe(__gm__ void *GM_SLOT_BUFFER, uint32_t C2V_CONSUMER_BUF, uint32_t V2C_CONSUMER_BUF)
         : fifo(GM_SLOT_BUFFER, C2V_CONSUMER_BUF, V2C_CONSUMER_BUF), prod(), cons()
     {
-        cons.template free<TileSplitAxis::TILE_UP_DOWN>();
+        cons.template free<DefaultSplit>();
     }
 
     // Destructor for TPipe
     PTO_INTERNAL ~TPipe()
     {
-        prod.template allocate<TileSplitAxis::TILE_UP_DOWN>();
+        prod.template allocate<DefaultSplit>();
     }
 };
 
