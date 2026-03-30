@@ -22,19 +22,6 @@ constexpr uint32_t kConst1 = 0xCD9E8D57u;
 constexpr uint32_t kKeyAdd0 = 0x9E3779B9u;
 constexpr uint32_t kKeyAdd1 = 0xBB67AE85u;
 
-void IncrementCounter(std::array<uint32_t, 4> &counter, uint32_t value)
-{
-    uint64_t bit_carry = value;
-    for (size_t i = 0; i < counter.size(); ++i) {
-        bit_carry += static_cast<uint64_t>(counter[i]);
-        counter[i] = static_cast<uint32_t>(bit_carry);
-        bit_carry >>= 32;
-        if (bit_carry == 0) {
-            break;
-        }
-    }
-}
-
 template <uint16_t Rounds>
 std::array<uint32_t, 4> RunRounds(std::array<uint32_t, 4> counter, std::array<uint32_t, 2> key)
 {
@@ -62,13 +49,13 @@ std::vector<uint32_t> BuildExpected(int rows, int cols, std::array<uint32_t, 2> 
     for (int row = 0; row < rows; ++row) {
         for (uint32_t lane = 0; lane < elementsPerRepeat; ++lane) {
             auto laneCounter = rowCounter;
-            IncrementCounter(laneCounter, lane);
+            cpu_random::IncrementCounter(laneCounter, lane);
             const auto values = RunRounds<Rounds>(laneCounter, key);
             for (uint32_t repeat = 0; repeat < 4; ++repeat) {
                 out[row * cols + repeat * elementsPerRepeat + lane] = values[repeat];
             }
         }
-        IncrementCounter(rowCounter, rowStrideChunks);
+        cpu_random::IncrementCounter(rowCounter, rowStrideChunks);
     }
     return out;
 }

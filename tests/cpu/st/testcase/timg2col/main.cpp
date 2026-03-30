@@ -44,13 +44,13 @@ std::vector<typename TileData::DType> BuildExpected(const ConvTileData &src, uin
     const int64_t padTop = src.GetPadList(2);
 
     if (strideH == 0) {
-        throw std::invalid_argument("strideH (divisor) can't be null!")
+        throw std::invalid_argument("strideH (divisor) can't be null!");
     }
     if (strideW == 0) {
-        throw std::invalid_argument("strideW (divisor) can't be null!")
+        throw std::invalid_argument("strideW (divisor) can't be null!");
     }
     if (filterW == 0) {
-        throw std::invalid_argument("filterW (divisor) can't be null!")
+        throw std::invalid_argument("filterW (divisor) can't be null!");
     }
 
     const int64_t outH = (fmapH + src.GetPadList(2) + src.GetPadList(3) - dilationH * (filterH - 1) - 1) / strideH + 1;
