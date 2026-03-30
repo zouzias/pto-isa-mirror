@@ -72,3 +72,6 @@ python3 tests/script/build_st.py -r npu -v a5 -t tmov -g TMOVTest.case_fixpipe1
 python3 tests/script/build_st.py -r npu -v a5 -t tstore_acc2gm -g TStoreAcc2gmTest.case1
 python3 tests/script/build_st.py -r npu -v a5 -t tstore_acc2gm -g TStoreAcc2gmTest.case17
 python3 tests/script/build_st.py -r npu -v a5 -t texpands_mat -g TEXPANDSTest.case1
+python3 tests/script/build_st.py -r npu -v a5 -t tpushpop_cv -g TPushPopCvTest.case1
+python3 tests/script/build_st.py -r npu -v a5 -t tpushpop_vc -g TPushPopVcTest.case1
+python3 tests/script/build_st.py -r npu -v a5 -t tpushpop_cv_nosplit -g TPushPopCvNoSplitTest.case1
