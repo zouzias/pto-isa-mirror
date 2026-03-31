@@ -85,6 +85,11 @@ if(DEBUG_MODE)
     set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-enable-print")
 endif()
 
+if(AUTO_MODE)
+    message(STATUS "Auto Mode Enabled, Add Auto Mode Options")
+    set(CMAKE_CCE_COMPILE_OPTIONS "${CMAKE_CCE_COMPILE_OPTIONS} --cce-enable-pto-passes")
+endif()
+
 set(CMAKE_CPP_COMPILE_OPTIONS
     -xc++
     "SHELL:-include stdint.h"
@@ -97,6 +102,6 @@ include_directories(
     ${ASCEND_DRIVER_PATH}/kernel/inc
 )
 
-option(HIGH_PRECISION_IMPL "Use high-precision algorithms (usually slower) for some operations" OFF)
+option(STRAIGHT_INTRINSICS_IMPL "Use straight intrinsics-based implementation for some operations" OFF)
 
 add_subdirectory(testcase)

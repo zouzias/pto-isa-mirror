@@ -109,22 +109,22 @@ void test_gather_index()
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TGATHERTest, case1_float)
+TEST_F(TGATHERTest, case1_float_32x1024_16x64)
 {
     test_gather_index<float, int32_t, float, 32, 1024, 16, 64>();
 }
 
-TEST_F(TGATHERTest, case2_int32)
+TEST_F(TGATHERTest, case2_int32_32x512_16x256)
 {
     test_gather_index<int32_t, int32_t, int32_t, 32, 512, 16, 256>();
 }
 
-TEST_F(TGATHERTest, case3_half)
+TEST_F(TGATHERTest, case3_half_16x1024_16x128)
 {
     test_gather_index<int16_t, int16_t, int16_t, 16, 1024, 16, 128>();
 }
 
-TEST_F(TGATHERTest, case4_int16)
+TEST_F(TGATHERTest, case4_int16_32x256_32x64)
 {
     test_gather_index<int16_t, int16_t, int16_t, 32, 256, 32, 64>();
 }
@@ -373,8 +373,8 @@ void test_gather_cmp()
     aclrtResetDevice(0);
     aclFinalize();
 
-    std::vector<dstT> golden(dstsize);
-    std::vector<dstT> devFinal(dstsize);
+    std::vector<float> golden(dstsize);
+    std::vector<float> devFinal(dstsize);
     ReadFile(GetGoldenDir() + "/golden.bin", dstsize, golden.data(), dstsize);
     ReadFile(GetGoldenDir() + "/output.bin", dstsize, devFinal.data(), dstsize);
 

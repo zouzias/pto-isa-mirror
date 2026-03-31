@@ -27,13 +27,13 @@ Synchronous form:
 %dst = tinsert %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tinsert %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tinsert ins(%src[%r0, %r1] : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -44,13 +44,35 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src,
-                            uint16_t indexRow, uint16_t indexCol, WaitEvents&... events);
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          typename... WaitEvents>
+PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint16_t indexRow, uint16_t indexCol, WaitEvents &... events);
+
+#ifdef PTO_NPU_ARCH_A5
+template <TInsertMode mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0, WaitEvents &... events);
+#endif
 ```
 
 ## Constraints
 
-- Runtime bounds must satisfy `indexRow + src.Rows <= dst.Rows` and `indexCol + src.Cols <= dst.Cols` (exact checks are target-dependent).
+- **A2/A3**:
+    - The documented overloads map to `Acc -> Mat` insertion paths, including plain, `reluMode`, scalar pre-quant, and vector pre-quant (`TINSERT_FP`) forms.
+    - Runtime bounds must satisfy `indexRow + src.Rows <= dst.Rows` and `indexCol + src.Cols <= dst.Cols`.
+- **A5**:
+    - In addition to the `Acc -> Mat` insertion paths above, A5 also exposes `template <TInsertMode mode, ...> TINSERT(...)` for `Vec -> Mat` and `Vec -> Vec` insertion variants.
+    - `mode == TInsertMode::ND` requires a row-major source vector tile and inserts into a matrix tile in ND layout.
+    - `mode == TInsertMode::ND_VEC` requires both source and destination to be row-major vector tiles.
+    - NZ-family modes (`NZ`, `NZ_PLUS_1`, `SPLIT2_NZ_PLUS_1`, `SPLIT4_NZ_PLUS_1`) require an NZ-format source vector tile and a matrix destination tile.
 
 ## Examples
 
@@ -79,7 +101,7 @@ See related examples in `docs/isa/` and `docs/coding/tutorials/`.
 
 ```text
 %dst = tinsert %src[%r0, %r1] : !pto.tile<...> -> !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tinsert ins(%src[%r0, %r1] : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

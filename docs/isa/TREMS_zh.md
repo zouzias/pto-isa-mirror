@@ -42,14 +42,27 @@ pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
-                           WaitEvents &... events);
+PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, WaitEvents &... events);
 ```
 
 ## 约束
 
-- 除零行为由目标定义；CPU 模拟器在调试构建中会断言。
-- 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+- **实现检查 (A2A3)**:
+    - `dst` 和 `src` 必须使用相同的元素类型。
+    - 支持的元素类型为 `float`、`float32_t` 和 `int32_t`。
+    - `dst` 和 `src` 必须是向量 Tile。
+    - `dst` 和 `src` 必须是行主序。
+    - 运行时：`dst.GetValidRow() == src.GetValidRow() > 0` 且 `dst.GetValidCol() == src.GetValidCol() > 0`。
+- **实现检查 (A5)**:
+    - `dst` 和 `src` 必须使用相同的元素类型。
+    - 支持的元素类型为目标实现支持的 2 字节或 4 字节类型。
+    - `dst` 和 `src` 必须是向量 Tile。
+    - 两个 Tile 的静态有效边界都必须满足 `ValidRow <= Rows` 且 `ValidCol <= Cols`。
+    - 运行时：`dst.GetValidRow() == src.GetValidRow()` 且 `dst.GetValidCol() == src.GetValidCol()`。
+- **除零**:
+    - 行为由目标定义；CPU 模拟器在调试构建中会断言。
+- **有效区域**:
+    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 
 ## 示例
 
@@ -88,7 +101,7 @@ void example() {
 
 ```text
 %dst = trems %src, %scalar : !pto.tile<...>, f32
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 

@@ -1,0 +1,1 @@
+/usr/bin/g++ -O3 -DNDEBUG CMakeFiles/gemm_demo.dir/gemm_demo.cpp.o -o gemm_demo

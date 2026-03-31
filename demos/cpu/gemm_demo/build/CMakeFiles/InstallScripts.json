@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/chao/codex_projects/pto-isa/demos/cpu/gemm_demo/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

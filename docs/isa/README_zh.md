@@ -1,5 +1,5 @@
 ﻿<p align="center">
-  <img src="../../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />
+  <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />
 </p>
 
 # PTO ISA 参考
@@ -51,7 +51,7 @@
 ## Tile-标量 / Tile-立即数
 - [TEXPANDS](TEXPANDS_zh.md) - 将标量广播到目标 Tile 中。
 - [TCMPS](TCMPS_zh.md) - 将 Tile 与标量比较并写入逐元素比较结果。
-- [TSELS](TSELS_zh.md) - 使用掩码Tile在源Tile和标量之间进行选择（源Tile逐元素选择）。
+- [TSELS](TSELS_zh.md) - 使用掩码 Tile 在源 Tile 和标量之间进行选择（源 Tile 逐元素选择）。
 - [TMINS](TMINS_zh.md) - Tile 与标量的逐元素最小值。
 - [TADDS](TADDS_zh.md) - Tile 与标量的逐元素加法。
 - [TSUBS](TSUBS_zh.md) - 从 Tile 中逐元素减去一个标量。
@@ -77,6 +77,8 @@
 - [TCOLMAX](TCOLMAX_zh.md) - 通过取行间最大值来归约每一列。
 - [TROWMAX](TROWMAX_zh.md) - 通过取列间最大值来归约每一行。
 - [TROWMIN](TROWMIN_zh.md) - 通过取列间最小值来归约每一行。
+- [TROWARGMAX](TROWARGMAX_zh.md) - 获取每行最大值对应列索引。
+- [TROWARGMIN](TROWARGMIN_zh.md) - 获取每行最小值对应列索引。
 - [TROWEXPAND](TROWEXPAND_zh.md) - 将每个源行的第一个元素广播到目标行中。
 - [TROWEXPANDDIV](TROWEXPANDDIV_zh.md) - 行广播除法：将 `src0` 的每一行除以一个每行标量向量 `src1`。
 - [TROWEXPANDMUL](TROWEXPANDMUL_zh.md) - 行广播乘法：将 `src0` 的每一行乘以一个每行标量向量 `src1`。
@@ -130,7 +132,7 @@
 ## 复杂指令
 - [TPRINT](TPRINT_zh.md) - 调试/打印 Tile 中的元素（实现定义）。
 - [TMRGSORT](TMRGSORT_zh.md) - 用于多个已排序列表的归并排序（实现定义的元素格式和布局）。
-- [TSORT32](TSORT32_zh.md) - 对固定大小的 32 元素块进行排序并生成索引映射。
+- [TSORT32](TSORT32_zh.md) - 对 `src` 的每个 32 元素块，与 `idx` 中对应的索引一起进行排序，并将排序后的值-索引对写入 `dst`。
 - [TGATHER](TGATHER_zh.md) - 使用索引 Tile 或编译时掩码模式来收集/选择元素。
 - [TCI](TCI_zh.md) - 生成连续整数序列到目标 Tile 中。
 - [TTRI](TTRI_zh.md) - 生成三角（下/上）掩码 Tile。
@@ -141,3 +143,7 @@
 - [TGATHERB](TGATHERB_zh.md) - 使用字节偏移量收集元素。
 - [TSCATTER](TSCATTER_zh.md) - 使用逐元素行索引将源 Tile 的行散播到目标 Tile 中。
 - [TQUANT](TQUANT_zh.md) - 量化 Tile（例如 FP32 到 FP8），生成指数/缩放/最大值输出。
+
+## 通信
+
+完整的通信 ISA 指令参考（点对点、异步、同步原语及集合通信）见 [comm/README_zh.md](comm/README_zh.md)。

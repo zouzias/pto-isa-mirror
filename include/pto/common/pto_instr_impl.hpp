@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifdef PTO_NPU_ARCH_A2A3
 #include "pto/npu/a2a3/TAssign.hpp"
+#include "pto/npu/a2a3/TAlias.hpp"
 #include "pto/npu/a2a3/TSync.hpp"
 #include "pto/npu/a2a3/TAdd.hpp"
 #include "pto/npu/a2a3/TAnd.hpp"
@@ -26,6 +27,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TShr.hpp"
 #include "pto/npu/a2a3/TMins.hpp"
 #include "pto/npu/a2a3/TAddS.hpp"
+#include "pto/npu/a2a3/TAxpy.hpp"
 #include "pto/npu/a2a3/TSubS.hpp"
 #include "pto/npu/a2a3/TRem.hpp"
 #include "pto/npu/a2a3/TRemS.hpp"
@@ -49,6 +51,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TRowProd.hpp"
 #include "pto/npu/a2a3/TRowMax.hpp"
 #include "pto/npu/a2a3/TRowMin.hpp"
+#include "pto/npu/a2a3/TRowReduceIdxOps.hpp"
 #include "pto/npu/a2a3/TFillPad.hpp"
 #include "pto/npu/a2a3/TColMax.hpp"
 #include "pto/npu/a2a3/TMatmul.hpp"
@@ -70,6 +73,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TSetFmatrix.hpp"
 #include "pto/npu/a2a3/TSetImg2colRpt.hpp"
 #include "pto/npu/a2a3/TSetImg2colPadding.hpp"
+#include "pto/npu/a2a3/TSubView.hpp"
 #ifdef _DEBUG
 #include "pto/npu/a2a3/TPrint.hpp"
 #endif
@@ -110,6 +114,39 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 #ifdef PTO_NPU_ARCH_A5
+#ifdef __COSTMODEL
+#include "pto/npu/a5/TAssign.hpp"
+#include "pto/npu/a5/TSync.hpp"
+#include "pto/npu/a5/TAdd.hpp"
+#include "pto/npu/a5/TAddS.hpp"
+#include "pto/npu/a5/TSub.hpp"
+#include "pto/npu/a5/TSubS.hpp"
+#include "pto/npu/a5/TMul.hpp"
+#include "pto/npu/a5/TMulS.hpp"
+#include "pto/npu/a5/TMin.hpp"
+#include "pto/npu/a5/TMax.hpp"
+#include "pto/npu/a5/TMins.hpp"
+#include "pto/npu/a5/TMaxs.hpp"
+#include "pto/npu/a5/TAnd.hpp"
+#include "pto/npu/a5/TAndS.hpp"
+#include "pto/npu/a5/TOr.hpp"
+#include "pto/npu/a5/TOrS.hpp"
+#include "pto/npu/a5/TXor.hpp"
+#include "pto/npu/a5/TXorS.hpp"
+#include "pto/npu/a5/TShl.hpp"
+#include "pto/npu/a5/TShlS.hpp"
+#include "pto/npu/a5/TShr.hpp"
+#include "pto/npu/a5/TShrS.hpp"
+#include "pto/npu/a5/TDiv.hpp"
+#include "pto/npu/a5/TDivS.hpp"
+#include "pto/npu/a5/TExpandS.hpp"
+#include "pto/npu/a5/TAxpy.hpp"
+#include "pto/npu/a5/TLoad.hpp"
+#include "pto/npu/a5/TUnaryOp.hpp"
+#include "pto/npu/a5/TLRelu.hpp"
+#include "pto/npu/a5/TRsqrt.hpp"
+#include "pto/npu/a5/TStore.hpp"
+#else
 #include "pto/npu/a5/TAssign.hpp"
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/TAdd.hpp"
@@ -129,6 +166,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TFMod.hpp"
 #include "pto/npu/a5/TRem.hpp"
 #include "pto/npu/a5/TAddS.hpp"
+#include "pto/npu/a5/TAxpy.hpp"
 #include "pto/npu/a5/TSubS.hpp"
 #include "pto/npu/a5/TDivS.hpp"
 #include "pto/npu/a5/TMulS.hpp"
@@ -136,6 +174,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TMin.hpp"
 #include "pto/npu/a5/TMax.hpp"
 #include "pto/npu/a5/TLoad.hpp"
+#include "pto/npu/a5/TSubView.hpp"
+#include "pto/npu/a5/TGetScaleAddr.hpp"
 #ifdef __DAV_VEC__
 #include "pto/npu/a5/TCvt.hpp"
 #endif
@@ -152,6 +192,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TConcat.hpp"
 #include "pto/npu/a5/TReshape.hpp"
 #include "pto/npu/a5/TRowReduce.hpp"
+#include "pto/npu/a5/TRowReduceIdx.hpp"
 #include "pto/npu/a5/TRowProd.hpp"
 #include "pto/npu/a5/TFillPad.hpp"
 #include "pto/npu/a5/TTrans.hpp"
@@ -184,6 +225,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TSetImg2colRpt.hpp"
 #include "pto/npu/a5/TSetImg2colPadding.hpp"
 #include "pto/npu/a5/TPack.hpp"
+#include "pto/npu/a5/THistogram.hpp"
 #ifdef _DEBUG
 #include "pto/npu/a5/TPrint.hpp"
 #endif
@@ -209,6 +251,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TInsert.hpp"
 #include "pto/npu/a5/TPush.hpp"
 #include "pto/npu/a5/TPop.hpp"
+#endif
 #endif
 
 #ifdef PTO_NPU_ARCH_KIRIN9030

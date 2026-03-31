@@ -25,14 +25,14 @@ Synchronous form:
 %dst = mgather %mem, %idx : !pto.memref<...>, !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.mgather %mem, %idx : (!pto.partition_tensor_view<MxNxdtype>, pto.tile<...>)
 -> !pto.tile<loc, dtype, rows, cols, blayout, slayout, fractal, pad>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.mgather ins(%mem, %idx : !pto.partition_tensor_view<MxNxdtype>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -43,13 +43,29 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
-PTO_INST RecordEvent MGATHER(TileDst& dst, GlobalData& src, TileInd& indexes, WaitEvents&... events);
+PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &... events);
 ```
 
 ## Constraints
 
-- Index interpretation is target-defined. The CPU simulator treats indices as linear element indices into `src.data()`.
-- No bounds checks are enforced on `indexes` by the CPU simulator.
+- **Supported data types**:
+    - `dst`/`src` element type must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `bfloat16_t`, `float`.
+    - On AICore targets, `float8_e4m3_t` and `float8_e5m2_t` are also supported.
+    - `indexes` element type must be `int32_t` or `uint32_t`.
+- **Tile and memory types**:
+    - `dst` must be a vector tile (`TileType::Vec`).
+    - `indexes` must be a vector tile (`TileType::Vec`).
+    - `dst` and `indexes` must use row-major layout.
+    - `src` must be a `GlobalTensor` in GM memory.
+    - `src` must use `ND` layout.
+- **Shape constraints**:
+    - `dst.Rows == indexes.Rows`.
+    - `indexes` must be shaped as `[N, 1]` for row-indexed gather or `[N, M]` for element-indexed gather.
+    - `dst` row width must be 32-byte aligned, that is, `dst.Cols * sizeof(DType)` must be a multiple of 32.
+    - `src` static shape must satisfy `Shape<1, 1, 1, TableRows, RowWidth>`.
+- **Index interpretation**:
+    - Index interpretation is target-defined. The CPU simulator treats indices as linear element indices into `src.data()`.
+    - The CPU simulator does not enforce bounds checks on `indexes`.
 
 ## Examples
 
@@ -78,7 +94,7 @@ See related examples in `docs/isa/` and `docs/coding/tutorials/`.
 
 ```text
 %dst = mgather %mem, %idx : !pto.memref<...>, !pto.tile<...> -> !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.mgather ins(%mem, %idx : !pto.partition_tensor_view<MxNxdtype>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

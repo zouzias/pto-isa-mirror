@@ -16,6 +16,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_DEBUG_H
 #define PTO_DEBUG_H
 
+#include "pto/common/type.hpp"
+
 #define DEBUG_CHECK(condition, message)                                               \
     do {                                                                              \
         if (!(condition)) {                                                           \
@@ -35,7 +37,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_ASSERT(condition, message) ((void)0)
 #endif
 
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
 #include <algorithm>
 #include <climits>
 #include <iomanip>
@@ -43,7 +45,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <string>
 #include <type_traits>
 #include "pto/cpu/tile_offsets.hpp"
-#include "pto/common/type.hpp"
 
 template <typename GT>
 void printRawGT(GT &tensor, const std::string name = "", int elementWidth = 5, int maxR = INT32_MAX,

@@ -1,0 +1,9 @@
+/home/lc/pto-isa/tests/costmodel/build/a5/CMakeFiles/edit_cache.dir
+/home/lc/pto-isa/tests/costmodel/build/a5/CMakeFiles/rebuild_cache.dir
+/home/lc/pto-isa/tests/costmodel/build/a5/a5/CMakeFiles/edit_cache.dir
+/home/lc/pto-isa/tests/costmodel/build/a5/a5/CMakeFiles/rebuild_cache.dir
+/home/lc/pto-isa/tests/costmodel/build/a5/a5/testcase/CMakeFiles/edit_cache.dir
+/home/lc/pto-isa/tests/costmodel/build/a5/a5/testcase/CMakeFiles/rebuild_cache.dir
+/home/lc/pto-isa/tests/costmodel/build/a5/a5/testcase/tadd/CMakeFiles/tadd.dir
+/home/lc/pto-isa/tests/costmodel/build/a5/a5/testcase/tadd/CMakeFiles/edit_cache.dir
+/home/lc/pto-isa/tests/costmodel/build/a5/a5/testcase/tadd/CMakeFiles/rebuild_cache.dir

@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/type.hpp>
 #include <pto/common/constants.hpp>
 #include "pto/common/debug.h"
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
 #include <iomanip>
 #endif
 
@@ -945,7 +945,11 @@ struct ConvTileShape {
     }
 
 public:
+#ifdef __PTO_AUTO__
+    int64_t shape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)];
+#else
     int64_t shape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)] = {1};
+#endif
 };
 
 template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
@@ -975,10 +979,23 @@ public:
         if (dim < 0 || dim >= totalDimCount) {
             return -1;
         }
+
+#ifdef __PTO_AUTO__
+        // auto mode only supports static shapes
+        return staticShape[dim];
+#else
         return isDynamicDim[dim] ? shape[dim] : staticShape[dim];
+#endif
     }
 
+#ifdef __PTO_AUTO__
+    PTO_INTERNAL ConvTile()
+    {
+        data_ = __cce_tinit(data_);
+    }
+#else
     PTO_INTERNAL ConvTile() = default;
+#endif
 
     template <typename... Ints>
     PTO_INTERNAL void SetDynamicShape(Ints... vals)
@@ -999,6 +1016,9 @@ public:
     template <typename... Ints>
     PTO_INTERNAL explicit ConvTile(Ints... dynamicVals)
     {
+#ifdef __PTO_AUTO__
+        data_ = __cce_tinit(data_);
+#endif
         SetDynamicShape(dynamicVals...);
     }
 
@@ -1008,7 +1028,7 @@ public:
     using TileDType = typename MemoryQualifier<Loc_, DType>::type;
 #endif
 
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
     // For CPU sim, return reference to pointer (allows TASSIGN to modify)
     AICORE TileDType &data()
     {
@@ -1277,20 +1297,31 @@ public:
         return *(ptr + offset);
     }
     // constructor for static shape
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
     AICORE Tile() : data_(internalStorage_){};
 #else
-    AICORE Tile(){};
+    AICORE Tile()
+    {
+#ifdef __PTO_AUTO__
+        // we need to dummy-initialize the data_ member,
+        // otherwise in auto mode this will remain uninitialized
+        // and end up being an undef value after SROA pass
+        data_ = __cce_tinit(data_);
+#endif
+    };
 #endif
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VR,
                 std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VC)
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
         : data_(internalStorage_)
 #endif
     {
+#ifdef __PTO_AUTO__
+        data_ = __cce_tinit(data_);
+#endif
         RowMaskInternal = VR;
         ColMaskInternal = VC;
     }
@@ -1298,22 +1329,33 @@ public:
     // constructor for row dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), size_t> VR)
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
         : data_(internalStorage_)
 #endif
     {
+#ifdef __PTO_AUTO__
+        data_ = __cce_tinit(data_);
+#endif
         RowMaskInternal = VR;
     }
 
     // constructor for col dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), size_t> VC)
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
         : data_(internalStorage_)
 #endif
     {
+#ifdef __PTO_AUTO__
+        data_ = __cce_tinit(data_);
+#endif
         ColMaskInternal = VC;
     }
+
+#ifdef __PTO_AUTO__
+    Tile &operator=(const Tile &) = delete;
+    Tile &operator=(Tile &&) = delete;
+#endif
 
     static constexpr bool isBoxedLayout = (SFractal != SLayout::NoneBox);
     static constexpr bool isInnerRowMajor = (SFractal == SLayout::RowMajor);
@@ -1346,7 +1388,7 @@ public:
                       SFractalSize_ == TileConfig::fractalMxSize,
                   "SFractalSize_ illegal");
 
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
     // CPU Sim: data_ is a pointer that TASSIGN can redirect to shared NPU memory
     using TileDType = Tile::DType *;
 
@@ -1357,13 +1399,19 @@ private:
 public:
 #else
 #ifdef __PTO_AUTO__
+#if defined(PTO_NPU_ARCH_A2A3)
     using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows *Cols);
+#else
+    using TileDType = std::conditional_t<Loc == TileType::Bias,
+                                         typename MemoryQualifier<Loc, DType>::type, // special handling for Bias Tile
+                                         typename MemoryQualifier<Loc, DType>::type tile_size(Rows *Cols)>;
+#endif
 #else
     using TileDType = typename MemoryQualifier<Loc, DType>::type;
 #endif
 #endif
 
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
     // For CPU sim, return reference to pointer (allows TASSIGN to modify)
     AICORE TileDType &data()
     {

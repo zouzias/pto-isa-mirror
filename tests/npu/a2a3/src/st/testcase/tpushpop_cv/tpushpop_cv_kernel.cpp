@@ -57,8 +57,8 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
     using BiasTile = Tile<TileType::Vec, OutT, VEC_M, TILE_N, BLayout::RowMajor, VEC_M, TILE_N>;
     using OutTile = Tile<TileType::Vec, OutT, VEC_M, TILE_N, BLayout::RowMajor, VEC_M, TILE_N>;
 
-    using MatPipe = TPipe<FLAG_ID, FIFOType::GM_FIFO, FIFO_DEPTH, FIFO_PERIOD, AccTile, VecTileHalf>;
-    MatPipe mPipe(fifoMem, localFiFoBase);
+    using MatPipe = TPipe<FLAG_ID, Direction::DIR_C2V, CASE_TILE_M * TILE_N * sizeof(OutT), FIFO_DEPTH>;
+    MatPipe mPipe((__gm__ void *)(uint64_t)fifoMem, 0x0, localFiFoBase);
 
     constexpr uint32_t blockAlign = C0_SIZE_BYTE / sizeof(InT);
     constexpr uint32_t ALIGNED_M = CeilAlign<uint32_t>(CASE_TILE_M, 16);
@@ -129,7 +129,7 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
             set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
             wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 
-            TPUSH(accTile, mPipe);
+            TPUSH<MatPipe, AccTile, TileSplitAxis::TILE_UP_DOWN>(mPipe, accTile);
 
             set_flag(PIPE_FIX, PIPE_M, EVENT_ID1);
         }
@@ -156,9 +156,7 @@ __global__ AICORE void runTPushPopMatmulAdd(__gm__ uint64_t *ffts_addr, __gm__ O
         for (int m_tile = 0; m_tile < NUM_M_TILES; m_tile++) {
             wait_flag(PIPE_V, PIPE_MTE2, EVENT_ID1);
 
-            size_t entryOffset = subBlockIdx * VEC_M * TILE_N * sizeof(OutT);
-            mPipe.cons.setEntryOffset(entryOffset);
-            TPOP(vecTileHalf, mPipe);
+            TPOP<MatPipe, VecTileHalf, TileSplitAxis::TILE_UP_DOWN>(mPipe, vecTileHalf);
 
             size_t biasOffset = static_cast<size_t>(m_tile * CASE_TILE_M + subBlockIdx * VEC_M) * TILE_N;
             GlobalBias globalBias(bias + biasOffset);

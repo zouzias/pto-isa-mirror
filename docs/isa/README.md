@@ -1,5 +1,5 @@
 ﻿<p align="center">
-  <img src="../../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />
+  <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="180" />
 </p>
 
 # PTO ISA Reference
@@ -51,7 +51,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 ## Tile-Scalar / Tile-Immediate
 - [TEXPANDS](TEXPANDS.md) - Broadcast a scalar into a destination tile.
 - [TCMPS](TCMPS.md) - Compare a tile against a scalar and write per-element comparison results.
-- [TSELS](TSELS.md) - Select one of two source tiles using a scalar `selectMode` (global select).
+- [TSELS](TSELS.md) - Select between source tile and scalar using a mask tile (per-element selection for source tile).
 - [TMINS](TMINS.md) - Elementwise minimum of a tile and a scalar.
 - [TADDS](TADDS.md) - Elementwise add a scalar to a tile.
 - [TSUBS](TSUBS.md) - Elementwise subtract a scalar from a tile.
@@ -77,6 +77,8 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TCOLMAX](TCOLMAX.md) - Reduce each column by taking the maximum across rows.
 - [TROWMAX](TROWMAX.md) - Reduce each row by taking the maximum across columns.
 - [TROWMIN](TROWMIN.md) - Reduce each row by taking the minimum across columns.
+- [TROWARGMAX](TROWARGMAX.md) - Get the column index of the maximum element for each row.
+- [TROWARGMIN](TROWARGMIN.md) - Get the column index of the minimum element for each row.
 - [TROWEXPAND](TROWEXPAND.md) - Broadcast the first element of each source row across the destination row.
 - [TROWEXPANDDIV](TROWEXPANDDIV.md) - Row-wise broadcast divide: divide each row of `src0` by a per-row scalar vector `src1`.
 - [TROWEXPANDMUL](TROWEXPANDMUL.md) - Row-wise broadcast multiply: multiply each row of `src0` by a per-row scalar vector `src1`.
@@ -130,7 +132,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 ## Complex
 - [TPRINT](TPRINT.md) - Debug/print elements from a tile (implementation-defined).
 - [TMRGSORT](TMRGSORT.md) - Merge sort for multiple sorted lists (implementation-defined element format and layout).
-- [TSORT32](TSORT32.md) - Sort a fixed-size 32-element block and produce an index mapping.
+- [TSORT32](TSORT32.md) - Sort each 32-element block of `src` together with the corresponding indices from `idx`, and write the sorted value-index pairs into `dst`.
 - [TGATHER](TGATHER.md) - Gather/select elements using either an index tile or a compile-time mask pattern.
 - [TCI](TCI.md) - Generate a contiguous integer sequence into a destination tile.
 - [TTRI](TTRI.md) - Generate a triangular (lower/upper) mask tile.
@@ -141,3 +143,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TGATHERB](TGATHERB.md) - Gather elements using byte offsets.
 - [TSCATTER](TSCATTER.md) - Scatter rows of a source tile into a destination tile using per-element row indices.
 - [TQUANT](TQUANT.md) - Quantize a tile (e.g. FP32 to FP8) producing exponent/scaling/max outputs.
+
+## Communication
+
+See [comm/README.md](comm/README.md) for the full per-instruction communication ISA reference (point-to-point, async, synchronization, and collective operations).

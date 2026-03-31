@@ -45,30 +45,34 @@ pto.ttrans ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TTRANS(TileDataDst& dst, TileDataSrc& src, TileDataTmp& tmp, WaitEvents&... events);
+PTO_INST RecordEvent TTRANS(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`。
-  - 源布局必须是行主序（`TileDataSrc::isRowMajor`）。
-  - 元素大小必须是 `1`、`2` 或 `4` 字节。
-  - 支持的元素类型按元素宽度限制如下：
+    - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`。
+    - 源布局必须是行主序（`TileDataSrc::isRowMajor`）。
+    - 元素大小必须是 `1`、`2` 或 `4` 字节。
+    - 支持的元素类型按元素宽度限制如下：
     - 4 字节：`uint32_t`、`int32_t`、`float`
     - 2 字节：`uint16_t`、`int16_t`、`half`、`bfloat16_t`
     - 1 字节：`uint8_t`、`int8_t`
-  - 转置大小取自 `src.GetValidRow()` / `src.GetValidCol()`。
+    - 转置大小取自 `src.GetValidRow()` / `src.GetValidCol()`。
 - **实现检查 (A5)**:
-  - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`。
-  - 对输入和输出的主维度强制执行 32 字节对齐约束（行主序检查 `Cols * sizeof(T) % 32 == 0`，列主序检查 `Rows * sizeof(T) % 32 == 0`）。
-  - 支持的元素类型按元素宽度限制如下：
+    - `sizeof(TileDataSrc::DType) == sizeof(TileDataDst::DType)`。
+    - 对输入和输出的主维度强制执行 32 字节对齐约束（行主序检查 `Cols * sizeof(T) % 32 == 0`，列主序检查 `Rows * sizeof(T) % 32 == 0`）。
+    - 支持的元素类型按元素宽度限制如下：
     - 4 字节：`uint32_t`、`int32_t`、`float`
     - 2 字节：`uint16_t`、`int16_t`、`half`、`bfloat16_t`
     - 1 字节：`uint8_t`、`int8_t`
-  - 实现在静态 Tile 形状（`TileDataSrc::Rows/Cols`）上运算，不参考 `GetValidRow/GetValidCol`。
+    - 实现在静态 Tile 形状（`TileDataSrc::Rows/Cols`）上运算，不参考 `GetValidRow/GetValidCol`。
 - **临时 Tile**:
-  - C++ API 需要 `tmp`，但某些实现可能不使用它。
+    - C++ API 需要 `tmp`，但某些实现可能不使用它。
+- **ConvTile**:
+    - 支持在`TileType::Vec`上的ConvTile的格式转换。其元素大小必须是 `1`、`2` 或 `4` 字节。元素类型限制为`uint32_t`、`int32_t`、`float`、`uint16_t`、`int16_t`、`half`、`bfloat16_t`、`uint8_t`、`int8_t`。
+    - 支持ConvTile从`NCHW`到`NC1HWC0`的变换，其中`C1 == (C + C0 - 1)/C0`，HW满足对齐要求，即`H*W*sizeof(T)==0`. C0对应`c0_size`, 即`C0 * sizeof(T) == 32`。C0也可以为4。
+    - 支持ConvTile从`NC1HWC0`到`FRACTAL_Z`的变换, 其中`N1 == (N + N0 - 1)/N0`。N0为16。
 
 ## 示例
 
@@ -134,7 +138,7 @@ void example_manual() {
 
 ```text
 %dst = ttrans %src : !pto.tile<...> -> !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.ttrans ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

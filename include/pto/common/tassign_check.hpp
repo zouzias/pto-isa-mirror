@@ -14,8 +14,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstddef>
 #include <pto/common/pto_tile.hpp>
 
-// CPUSIM does not model on-chip buffer capacities, so skip all static checks.
-#ifdef __CPU_SIM
+// Host runtime modes do not model on-chip buffer capacities, so skip all static checks.
+#ifdef PTO_HOST_RUNTIME
 
 namespace pto {
 namespace detail {
@@ -180,6 +180,6 @@ struct tassign_static_check {
 } // namespace detail
 } // namespace pto
 
-#endif // __CPU_SIM
+#endif // PTO_HOST_RUNTIME
 
 #endif // PTO_COMMON_TASSIGN_CHECK_HPP

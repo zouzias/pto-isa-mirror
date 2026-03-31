@@ -25,13 +25,13 @@ Synchronous form:
 %dst = tands %src, %scalar : !pto.tile<...>, i32
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tands %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tands ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
@@ -42,14 +42,24 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TANDS(TileDataDst& dst, TileDataSrc& src, typename TileDataSrc::DType scalar, WaitEvents&... events);
+PTO_INST RecordEvent TANDS(TileDataDst &dst, TileDataSrc &src, typename TileDataDst::DType scalar, WaitEvents &... events);
 ```
 
 ## Constraints
 
-- Intended for integral element types.
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
-- Setting the source Tile and destination Tile to the same memory is **Unsupported**.
+- **Implementation checks (A2A3)**:
+    - Intended for integral element types.
+    - `dst` and `src` must use the same element type.
+    - `dst` and `src` must be vector tiles.
+    - Runtime: `src.GetValidRow() == dst.GetValidRow()` and `src.GetValidCol() == dst.GetValidCol()`.
+    - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
+- **Implementation checks (A5)**:
+    - Intended for integral element types supported by `TEXPANDS` and `TAND`.
+    - `dst` and `src` must use the same element type.
+    - `dst` and `src` must be vector tiles.
+    - In manual mode, setting the source tile and destination tile to the same memory is unsupported.
+- **Valid region**:
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 
 ## Examples
 
@@ -90,7 +100,7 @@ void example() {
 
 ```text
 %dst = tands %src, %scalar : !pto.tile<...>, i32
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tands ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 

@@ -10,10 +10,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef CONSTANTS_HPP
 #define CONSTANTS_HPP
-#ifdef __CPU_SIM
+#include <pto/common/type.hpp>
+#ifdef PTO_HOST_RUNTIME
 #include <bit>
 #endif
-#include <pto/common/type.hpp>
 #include <pto/common/memory.hpp>
 
 namespace pto {
@@ -43,11 +43,12 @@ constexpr const int MAD_MODE_BIT = 46;
 constexpr const int MAD_ROUND_MODE_BIT = 47;
 constexpr const int TROW_PROD_LOOP_B16 = 7;
 constexpr const int TROW_PROD_LOOP_B32 = 6;
+constexpr const int PAD_SHIFT_LENGTH = 32;
 
 // ============================================================================
 // Custom pad value helpers for uint64_t-based PadValue enum
 // ============================================================================
-// PadValue uses uint64_t underlying type:
+// PadValue uses uint64_t underlying type
 // - Values 0-3 are standard enum cases (Null, Zero, Max, Min)
 // - Custom values have bit 32 set, with the float bit pattern in bits [32:63]
 
@@ -60,7 +61,7 @@ AICORE constexpr bool isCustomPadValue(PadValue pv)
 // Extract the 32-bit value from a custom PadValue (returns the float bits)
 AICORE constexpr uint32_t getCustomPadBits(PadValue pv)
 {
-    return static_cast<uint32_t>(static_cast<uint64_t>(pv) >> 32);
+    return static_cast<uint32_t>(static_cast<uint64_t>(pv) >> PAD_SHIFT_LENGTH);
 }
 
 // Helper to create a custom PadValue from a compile-time float/int constant
@@ -95,11 +96,11 @@ inline constexpr PadValue PadCustom = static_cast<PadValue>(static_cast<uint64_t
 
 // Helper constexpr function to create custom PadValue from float
 // Usage: constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
 constexpr PadValue PadValueCustom(float value)
 {
     return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
-                                 (static_cast<uint64_t>(std::bit_cast<uint32_t>(value)) << 32));
+                                 (static_cast<uint64_t>(std::bit_cast<uint32_t>(value)) << PAD_SHIFT_LENGTH));
 }
 #else
 // NPU compiler: use union-based conversion (not constexpr but works at runtime)
@@ -110,7 +111,8 @@ inline PadValue PadValueCustom(float value)
         uint32_t u;
     } conv;
     conv.f = value;
-    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) | (static_cast<uint64_t>(conv.u) << 32));
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 (static_cast<uint64_t>(conv.u) << PAD_SHIFT_LENGTH));
 }
 #endif
 
@@ -179,7 +181,7 @@ struct PadValueMap<uint32_t, PadValue::Max> {
     static constexpr auto value = uint32_t(0xffffffffUL);
 };
 
-#ifndef __CPU_SIM
+#if !defined(PTO_HOST_RUNTIME) || !defined(PTO_HOST_BFLOAT_IS_HALF)
 template <>
 struct PadValueMap<bfloat16_t, PadValue::Null> {
     static constexpr auto value = uint16_t(0);

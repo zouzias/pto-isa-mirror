@@ -13,7 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <pto/common/pto_tile.hpp>
 
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
 #include <pto/cpu/NPUMemoryModel.hpp>
 #endif
 
@@ -23,7 +23,7 @@ template <typename T, typename AddrType>
 PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
 {
     if constexpr (is_tile_data_v<T>) {
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
         using DType = typename T::DType;
         constexpr TileType tileType = T::Loc;
 
@@ -63,7 +63,7 @@ PTO_INTERNAL void TASSIGN_IMPL(T &obj, AddrType addr)
     }
 }
 
-#ifdef __CPU_SIM
+#ifdef PTO_HOST_RUNTIME
 // Initialize NPU memory model with specific architecture
 // Call once at program start (optional, defaults to A2A3)
 // Sets the default arch for all threads, and initializes the calling thread's instance.

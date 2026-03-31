@@ -1,0 +1,3 @@
+/home/chao/codex_projects/pto-isa/demos/cpu/gemm_demo/build/CMakeFiles/gemm_demo.dir
+/home/chao/codex_projects/pto-isa/demos/cpu/gemm_demo/build/CMakeFiles/edit_cache.dir
+/home/chao/codex_projects/pto-isa/demos/cpu/gemm_demo/build/CMakeFiles/rebuild_cache.dir

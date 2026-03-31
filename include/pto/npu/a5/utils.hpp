@@ -88,4 +88,6 @@ PTO_INTERNAL uint64_t GetScaleAddr(T *dst)
 
 } // namespace pto
 
+using DistVST = pto::DistVST;
+
 #endif

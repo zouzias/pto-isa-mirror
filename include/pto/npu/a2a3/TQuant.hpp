@@ -46,12 +46,16 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataPara &
 
     TileDataCvtF16 src_f16(src.GetValidRow(), src.GetValidCol());
     TileDataCvtS32 src_s32(src.GetValidRow(), src.GetValidCol());
+#ifndef __PTO_AUTO__
     TASSIGN_IMPL(src_f16, reinterpret_cast<uintptr_t>(src.data()));
     TASSIGN_IMPL(src_s32, reinterpret_cast<uintptr_t>(src.data()));
+#else
+    TRESHAPE_IMPL(src_f16, src);
+    TRESHAPE_IMPL(src_s32, src);
+#endif
     TCVT_IMPL(src_s32, src, RoundMode::CAST_RINT);     // fp32->s32
     TCVT_IMPL(src_f16, src_s32, RoundMode::CAST_RINT); // s32->fp16 (exact since values are now integers)
     TCVT_IMPL(dst, src_f16, RoundMode::CAST_RINT, SaturationMode::ON);
 }
-
 } // namespace pto
 #endif // TQUANT_HPP

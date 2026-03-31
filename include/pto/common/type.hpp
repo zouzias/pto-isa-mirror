@@ -10,7 +10,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef _PTO_INCLUDE_NPU_TYPE_H_
 #define _PTO_INCLUDE_NPU_TYPE_H_
-#ifndef __CPU_SIM
+
+#include <bit>
+#include <cstdint>
+#include <type_traits>
+
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
+#define PTO_HOST_RUNTIME
+#endif
+
+#ifndef PTO_HOST_RUNTIME
 #define AICORE [aicore]
 #else
 #define AICORE
@@ -60,7 +69,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_DETAIL_GET_MACRO(_1, _2, NAME, ...) NAME
 #define PTO_STATIC_ASSERT(...) PTO_DETAIL_GET_MACRO(__VA_ARGS__, PTO_STATIC_ASSERT_2, PTO_STATIC_ASSERT_1)(__VA_ARGS__)
 
-#if defined(__CPU_SIM)
+#ifdef PTO_HOST_RUNTIME
 #include <cstdio>
 #include <cstdlib>
 
@@ -259,9 +268,106 @@ constexpr int TOTAL_DIM = 5;
 
 } // namespace pto
 
-#if defined(__CPU_SIM)
+#ifdef PTO_HOST_RUNTIME
+#if defined(__clang__) && !defined(__FLT16_MANT_DIG__)
+typedef __fp16 half;
+typedef __fp16 aclFloat16;
+#elif defined(__FLT16_MANT_DIG__)
 typedef _Float16 half;
 typedef _Float16 aclFloat16;
+#else
+inline uint16_t PtoHostFloatToHalfBits(float value)
+{
+    const uint32_t bits = std::bit_cast<uint32_t>(value);
+    const uint32_t sign = (bits >> 16) & 0x8000u;
+    uint32_t mantissa = bits & 0x007fffffu;
+    int32_t exponent = static_cast<int32_t>((bits >> 23) & 0xffu);
+
+    if (exponent == 0xff) {
+        return static_cast<uint16_t>(sign | (mantissa == 0 ? 0x7c00u : 0x7e00u));
+    }
+
+    exponent = exponent - 127 + 15;
+    if (exponent >= 0x1f) {
+        return static_cast<uint16_t>(sign | 0x7c00u);
+    }
+
+    if (exponent <= 0) {
+        if (exponent < -10) {
+            return static_cast<uint16_t>(sign);
+        }
+        mantissa |= 0x00800000u;
+        const uint32_t shift = static_cast<uint32_t>(14 - exponent);
+        uint32_t halfMantissa = mantissa >> shift;
+        const uint32_t roundBit = (mantissa >> (shift - 1u)) & 1u;
+        halfMantissa += roundBit;
+        return static_cast<uint16_t>(sign | halfMantissa);
+    }
+
+    uint32_t halfMantissa = mantissa >> 13;
+    if ((mantissa & 0x00001000u) != 0) {
+        ++halfMantissa;
+        if (halfMantissa == 0x0400u) {
+            halfMantissa = 0;
+            ++exponent;
+            if (exponent >= 0x1f) {
+                return static_cast<uint16_t>(sign | 0x7c00u);
+            }
+        }
+    }
+
+    return static_cast<uint16_t>(sign | (static_cast<uint32_t>(exponent) << 10) | (halfMantissa & 0x03ffu));
+}
+
+inline float PtoHostHalfBitsToFloat(uint16_t value)
+{
+    const uint32_t sign = static_cast<uint32_t>(value & 0x8000u) << 16;
+    uint32_t exponent = (value >> 10) & 0x1fu;
+    uint32_t mantissa = value & 0x03ffu;
+    uint32_t bits = 0;
+
+    if (exponent == 0) {
+        if (mantissa == 0) {
+            bits = sign;
+        } else {
+            int32_t adjustedExponent = -14;
+            while ((mantissa & 0x0400u) == 0) {
+                mantissa <<= 1;
+                --adjustedExponent;
+            }
+            mantissa &= 0x03ffu;
+            bits = sign | (static_cast<uint32_t>(adjustedExponent + 127) << 23) | (mantissa << 13);
+        }
+    } else if (exponent == 0x1f) {
+        bits = sign | 0x7f800000u | (mantissa << 13);
+    } else {
+        bits = sign | ((exponent + 112u) << 23) | (mantissa << 13);
+    }
+
+    return std::bit_cast<float>(bits);
+}
+
+struct alignas(2) half {
+    uint16_t storage;
+
+    constexpr half() : storage(0) {}
+    constexpr half(const half &) = default;
+    constexpr half &operator=(const half &) = default;
+
+    template <typename T, typename = std::enable_if_t<std::is_arithmetic_v<T> && !std::is_same_v<T, half>>>
+    half(T value) : storage(PtoHostFloatToHalfBits(static_cast<float>(value)))
+    {}
+
+    operator float() const
+    {
+        return PtoHostHalfBitsToFloat(storage);
+    }
+};
+
+using aclFloat16 = half;
+#endif
+typedef half float16_t;
+typedef float float32_t;
 // Note: clang version should be >=15 and gcc version should be >=14
 #if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L
 #include <stdfloat>
@@ -270,7 +376,8 @@ typedef std::bfloat16_t bfloat16_t;
 #else
 // macOS libc++ (and some other toolchains) may not ship <stdfloat> yet.
 // For CPU simulation, a best-effort 16-bit float type is sufficient.
-typedef _Float16 bfloat16_t;
+typedef half bfloat16_t;
+#define PTO_HOST_BFLOAT_IS_HALF
 #endif
 #endif
 

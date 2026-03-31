@@ -145,6 +145,9 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
     using TileDataP = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, kTCols_>;
     TileDataP vecTileP(kTRows_);
     TASSIGN(vecTileP, (uint64_t)ubaddr1);
+#ifdef __PTO_AUTO__
+    TRESHAPE(vecTileP, vecTile);
+#endif
 
     constexpr int kGTRows = kTRows_ / shape0 / shape1 / shape2; // Dst Tile Rows, merged all shape0*shape1*shape2 row
     constexpr int shape4_aligned = align_to_32B(shape4, T);
@@ -163,11 +166,15 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
     t0 = get_syscnt();
     TLOAD(vecTile, srcGlobal);
     t1 = get_syscnt();
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, vecTileP);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+#endif
     t2 = get_syscnt(); /*FIXME: compile would insert a dcci at above set/wait t2 timing may not be very correct*/
     LOG(t0);
     LOG(t1 - t0);

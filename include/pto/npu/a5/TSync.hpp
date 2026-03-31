@@ -14,97 +14,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/event.hpp>
 
 namespace pto {
-// opPipeList maps each operation in Op enum to its corresponding pipeline type.
-// This array is used to determine which hardware pipeline should be used for each operation.
-constexpr pipe_t opPipeList[] = {
-    PIPE_MTE2 /* TLOAD */,
-    PIPE_MTE3 /* TSTORE_VEC */,
-    PIPE_S /* SCALAR */,
-    PIPE_S /* TRESHAPE */,
-    PIPE_V /* VECTOR */,
-    PIPE_V /* TADD */,
-    PIPE_V /* TADDS */,
-    PIPE_V /* TSUB */,
-    PIPE_V /* TMUL */,
-    PIPE_V /* TMULS */,
-    PIPE_V /* TDIV */,
-    PIPE_V /* TDIVS */,
-    PIPE_V /* TMIN */,
-    PIPE_V /* TMINS */,
-    PIPE_V /* TMAX */,
-    PIPE_V /* TAND */,
-    PIPE_V /* TOR */,
-    PIPE_V /* TSEL */,
-    PIPE_V /* TSHL */,
-    PIPE_V /* TSHR */,
-    PIPE_V /* TEXP */,
-    PIPE_V /* TSELS */,
-    PIPE_V /* TSQRT */,
-    PIPE_V /* TRSQRT */,
-    PIPE_V /* TEXPANDS */,
-    PIPE_MTE2 /* TEXPANDS_MAT */,
-    PIPE_V /* TPARTADD */,
-    PIPE_V /* TPARTMUL */,
-    PIPE_V /* TPARTMAX */,
-    PIPE_V /* TPARTMIN */,
-    PIPE_V /* TCMPS */,
-    PIPE_V /* TMRGSORT */,
-    PIPE_V /* TSORT32 */,
-    PIPE_S /* TCI */,
-    PIPE_V /* TGATHER */,
-    PIPE_V /* TGATHERB */,
-    PIPE_V /* TCVT */,
-    PIPE_V /* TROWSUM */,
-    PIPE_V /* TROWPROD */,
-    PIPE_V /* TROWMAX */,
-    PIPE_V /* TROWMIN */,
-    PIPE_V /* TROWEXPAND */,
-    PIPE_V /* TCOLSUM */,
-    PIPE_V /* TCOLPROD */,
-    PIPE_V /* TCOLMAX */,
-    PIPE_V /* TCOLMIN */,
-    PIPE_V /* TTRANS */,
-    PIPE_V /* TTRI */,
-    PIPE_V /* TREM */,
-    PIPE_V /* TFMOD */,
-    PIPE_V /* TREMS */,
-    PIPE_V /* TFMODS */,
-    PIPE_V /* TSUBS */,
-    PIPE_V /* TMAXS */,
-    PIPE_V /* TLRELU */,
-    PIPE_V /* TPRELU */,
-    PIPE_V /* TMOV_V2V */,
-    PIPE_FIX /* TMOV_V2M */,
-    PIPE_FIX /* TEXTRACT_V2M */,
-    PIPE_MTE1 /* TMOV_M2B */,
-    PIPE_MTE1 /* TMOV_M2L */,
-    PIPE_MTE1 /* TMOV_M2R */,
-    PIPE_FIX /* TMOV_M2S */,
-    PIPE_FIX /* TMOV_A2V */,
-    PIPE_FIX /* TMOV_A2M */,
-    PIPE_FIX /* TSTORE_ACC */,
-    PIPE_MTE3 /* TSTORE_MAT */,
-    PIPE_M /* TMATMUL */,
-    PIPE_M /* TGEMV */,
-    PIPE_M /* TMATMUL_MX */,
-    PIPE_MTE1 /* TEXTRACT_M2LR */,
-    PIPE_V /* TANDS */,
-    PIPE_V /* TORS */,
-    PIPE_V /* TSHLS */,
-    PIPE_V /* TSHRS */,
-    PIPE_V /* TXOR */,
-    PIPE_V /* TXORS */,
-    PIPE_FIX /* TEXTRACT_A2M */,
-    PIPE_FIX /* TINSERT_A2M */,
-    PIPE_MTE1 /* TIMG2COL */,
-    PIPE_S /* TSETFMATRIX */,
-    PIPE_S /* TSET_IMG2COL_RPT */,
-    PIPE_S /* TSET_IMG2COL_PADDING */,
-    PIPE_V /* TCONCAT */,
-    PIPE_V /* TDEQUANT */,
-    PIPE_ALL /* OP_COUNT */,
-};
-
 template <Op OpCode>
 PTO_INTERNAL static constexpr pipe_t GetPipeByOp()
 {
@@ -120,8 +29,8 @@ PTO_INTERNAL void TSYNC_IMPL()
 {
 #ifndef __PTO_AUTO__
     constexpr pipe_t pipe = GetPipeByOp<OpCode>();
-    PTO_STATIC_ASSERT(pipe == PIPE_MTE3 || OpCode == Op::OP_COUNT,
-                      "Single Op TSYNC only supports MTE3 or ALL pipeline.");
+    PTO_STATIC_ASSERT((pipe == PIPE_MTE2) || (pipe == PIPE_MTE3) || (pipe == PIPE_ALL),
+                      "Single Op TSYNC only supports MTE2 / MTE3 / ALL pipeline.");
     pipe_barrier((pipe_t)pipe);
 #endif
 }
@@ -133,6 +42,9 @@ struct Event {
     static constexpr Op srcOp = SrcOp;
     static constexpr pipe_t dstPipe = GetPipeByOp<dstOp>();
     static constexpr pipe_t srcPipe = GetPipeByOp<srcOp>();
+    static constexpr bool isSamePipe = (srcPipe == dstPipe);
+    static constexpr bool isValidBarrierPipe =
+        ((srcPipe == PIPE_MTE2) || (dstPipe == PIPE_MTE3) || (dstPipe == PIPE_ALL));
     PTO_STATIC_ASSERT(SrcOp != DstOp, "SrcOp is not allowed to be equal to DstOp.");
     PTO_STATIC_ASSERT(dstPipe != srcPipe, "SrcPipe is not allowed to be equal to dstPipe.");
 
@@ -167,11 +79,17 @@ struct Event {
                               "The cross-core id must be assigned by user when the event is a cross-core event.");
             wait_intra_block(srcPipe, CrossCoreId);
         } else {
+            if constexpr (isSamePipe) {
+                if constexpr (isValidBarrierPipe) {
+                    pipe_barrier((pipe_t)srcPipe);
+                }
+            } else {
 #ifdef PTO_FLAG_TEST
-            __pto_wait_flag((pipe_t)srcPipe, (pipe_t)dstPipe, token);
+                __pto_wait_flag((pipe_t)srcPipe, (pipe_t)dstPipe, token);
 #else
-            wait_flag((pipe_t)srcPipe, (pipe_t)dstPipe, token);
+                wait_flag((pipe_t)srcPipe, (pipe_t)dstPipe, token);
 #endif
+            }
         }
 #endif
         return *this;
@@ -186,7 +104,7 @@ struct Event {
                               "The cross-core id must be assigned by user when the event is a cross-core event.");
             set_intra_block(srcPipe, CrossCoreId);
             set_intra_block(srcPipe, CrossCoreId + 16);
-        } else {
+        } else if constexpr (!isSamePipe) {
 #ifdef PTO_FLAG_TEST
             token = __pto_set_flag((pipe_t)srcPipe, (pipe_t)dstPipe);
 #else
@@ -195,6 +113,16 @@ struct Event {
         }
 #endif
         return *this;
+    }
+
+    PTO_INTERNAL Event() = default;
+    PTO_INTERNAL Event(RecordEvent)
+    {
+#ifndef __PTO_AUTO__
+        PTO_STATIC_ASSERT(!IsCrossCore,
+                          "Fix: The cross-core event must be manually initialized and specify the cross-core ID.");
+#endif
+        Init();
     }
 
     PTO_INTERNAL Event &operator=(RecordEvent)

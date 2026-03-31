@@ -142,7 +142,7 @@ void DoPrintHalfData(const aclFloat16 *data, size_t count, size_t elementsPerRow
     assert(elementsPerRow != 0);
     for (size_t i = 0; i < count; ++i) {
         std::cout << std::setw(5) << std::setprecision(6) <<
-#ifdef __CPU_SIM
+#if defined(__CPU_SIM)
             (float)data[i];
 #else
             aclFloat16ToFloat(data[i]);

@@ -46,18 +46,18 @@ PTO_INST RecordEvent TBROADCAST(ParallelGroupType &parallelGroup, GlobalSrcData 
 ## Constraints
 
 - **Type constraints**:
-  - `ParallelGroup::value_type::RawDType` must equal `GlobalSrcData::RawDType`.
-  - `TileData::DType` must equal `GlobalSrcData::RawDType`.
+    - `ParallelGroup::value_type::RawDType` must equal `GlobalSrcData::RawDType`.
+    - `TileData::DType` must equal `GlobalSrcData::RawDType`.
 - **Memory constraints**:
-  - `srcGlobalData` must point to local memory (current NPU).
-  - `stagingTileData` (or `pingTile` / `pongTile`) must be pre-allocated in UB.
+    - `srcGlobalData` must point to local memory (current NPU).
+    - `stagingTileData` (or `pingTile` / `pongTile`) must be pre-allocated in UB.
 - **ParallelGroup constraints**:
-  - `parallelGroup.tensors[k]` must refer to rank `k`'s destination buffer (remote GM as seen by the root).
-  - `parallelGroup.GetRootIdx()` identifies the calling NPU as the broadcast root.
-  - All destination tensors are assumed to have the same shape and strides.
+    - `parallelGroup.tensors[k]` must refer to rank `k`'s destination buffer (remote GM as seen by the root).
+    - `parallelGroup.GetRootIdx()` identifies the calling NPU as the broadcast root.
+    - All destination tensors are assumed to have the same shape and strides.
 - **Chunked mode constraints** (when data exceeds a single UB tile):
-  - If `TileData` has static `ValidRow`, `GetShape(DIM_3)` must be divisible by `ValidRow`. Use a Tile with `DYNAMIC` ValidRow for partial row support.
-  - If `TileData` has static `ValidCol`, `GetShape(DIM_4)` must be divisible by `ValidCol`. Use a Tile with `DYNAMIC` ValidCol for partial column support.
+    - If `TileData` has static `ValidRow`, `GetShape(DIM_3)` must be divisible by `ValidRow`. Use a Tile with `DYNAMIC` ValidRow for partial row support.
+    - If `TileData` has static `ValidCol`, `GetShape(DIM_4)` must be divisible by `ValidCol`. Use a Tile with `DYNAMIC` ValidCol for partial column support.
 
 ## Examples
 

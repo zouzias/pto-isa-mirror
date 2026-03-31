@@ -10,21 +10,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "test_common.h"
 #include <gtest/gtest.h>
+#include <acl/acl.h>
 
 using namespace std;
 using namespace PtoTestCommon;
 
-namespace TRowSumTest {
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-void launchTROWSUMTest(T *out, T *src, aclrtStream stream);
-
-class TROWSUMTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+template <uint32_t caseId>
+void launchTROWSUMTestCase(void *out, void *src, aclrtStream stream);
 
 std::string GetGoldenDir()
 {
@@ -35,77 +27,187 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
-bool TRowSumTest()
-{
-    size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
-    size_t inputFileSize = fileSize;
-    size_t outputFileSize = fileSize;
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-
+class TROWSUMTest : public testing::Test {
+public:
     aclrtStream stream;
-    aclrtCreateStream(&stream);
+    void *dstHost;
+    void *srcHost;
+    void *dstDevice;
+    void *srcDevice;
 
-    T *dstHost;
-    T *srcHost;
-    T *dstDevice;
-    T *srcDevice;
+protected:
+    void SetUp() override
+    {
+        aclInit(nullptr);
+        aclrtSetDevice(0);
+        aclrtCreateStream(&stream);
+    }
 
-    aclrtMallocHost((void **)&dstHost, outputFileSize);
-    aclrtMallocHost((void **)&srcHost, inputFileSize);
+    void TearDown() override
+    {
+        aclrtDestroyStream(stream);
+        aclrtResetDevice(0);
+        aclFinalize();
+    }
 
-    aclrtMalloc((void **)&dstDevice, outputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, inputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    template <typename T>
+    bool CompareGolden(size_t dstByteSize, bool printAllEn = false)
+    {
+        std::vector<T> golden(dstByteSize);
+        std::vector<T> result(dstByteSize);
+        float eps = sizeof(T) == 4 ? 0.001f : 0.005f;
+        ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
+        ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, result.data(), dstByteSize);
+        if (printAllEn) {
+            return ResultCmp(golden, result, eps, 0, 1000, true);
+        }
+        return ResultCmp(golden, result, eps, 0, 1000, false, true);
+    }
 
-    ReadFile(GetGoldenDir() + "/input0.bin", inputFileSize, srcHost, inputFileSize);
+    template <uint32_t caseId, typename T, int row, int vaildRow, int srcCol, int srcVaildCol, int dstCol>
+    bool TRowSumTestFramework()
+    {
+        size_t dstByteSize = row * dstCol * sizeof(T);
+        size_t srcByteSize = row * srcCol * sizeof(T);
+        aclrtMallocHost(&dstHost, dstByteSize);
+        aclrtMallocHost(&srcHost, srcByteSize);
+        aclrtMalloc(&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    aclrtMemcpy(srcDevice, inputFileSize, srcHost, inputFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTROWSUMTest<T, kGRows_, kGCols_, kTRows_, kTCols_>(dstDevice, srcDevice, stream);
+        ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
+        aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, outputFileSize, dstDevice, outputFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+        launchTROWSUMTestCase<caseId>(dstDevice, srcDevice, stream);
+        aclrtSynchronizeStream(stream);
 
-    WriteFile(GetGoldenDir() + "/output.bin", dstHost, outputFileSize);
+        aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
+        WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstByteSize);
 
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
+        aclrtFree(dstDevice);
+        aclrtFree(srcDevice);
+        aclrtFreeHost(dstHost);
+        aclrtFreeHost(srcHost);
 
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
+        return CompareGolden<T>(dstByteSize);
+    }
+};
 
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-    std::vector<float> golden(outputFileSize);
-    std::vector<float> devFinal(outputFileSize);
-    ReadFile(GetGoldenDir() + "/golden.bin", outputFileSize, golden.data(), outputFileSize);
-    ReadFile(GetGoldenDir() + "/output.bin", outputFileSize, devFinal.data(), outputFileSize);
-
-    return ResultCmp(golden, devFinal, 0.001f);
-}
-
-constexpr int smallSize = 16;
-constexpr int bigSize666 = 666;
-constexpr int bigSizeAligned = 672;
-
-TEST_F(TROWSUMTest, test1)
+TEST_F(TROWSUMTest, case1)
 {
-    bool res = TRowSumTest<float, smallSize, smallSize, smallSize, smallSize>();
-    EXPECT_TRUE(res);
+    bool ret = TRowSumTestFramework<1, float, 127, 127, 64, 63, 1>();
+    EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, test2)
+TEST_F(TROWSUMTest, case2)
 {
-    bool res = TRowSumTest<uint16_t, smallSize, smallSize, smallSize, smallSize>();
-    EXPECT_TRUE(res);
+    bool ret = TRowSumTestFramework<2, float, 63, 63, 64, 64, 1>();
+    EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWSUMTest, test3)
+TEST_F(TROWSUMTest, case3)
 {
-    bool res = TRowSumTest<float, bigSize666, bigSize666, bigSize666, bigSizeAligned>();
-    EXPECT_TRUE(res);
+    bool ret = TRowSumTestFramework<3, float, 31, 31, 128, 127, 1>();
+    EXPECT_TRUE(ret);
 }
-} // namespace TRowSumTest
+
+TEST_F(TROWSUMTest, case4)
+{
+    bool ret = TRowSumTestFramework<4, float, 15, 15, 192, 192, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case5)
+{
+    bool ret = TRowSumTestFramework<5, float, 7, 7, 448, 448, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case6)
+{
+    bool ret = TRowSumTestFramework<6, aclFloat16, 256, 256, 16, 15, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case7)
+{
+    bool ret = TRowSumTestFramework<7, float, 64, 64, 128, 128, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case8)
+{
+    bool ret = TRowSumTestFramework<8, float, 32, 32, 256, 256, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case9)
+{
+    bool ret = TRowSumTestFramework<9, float, 16, 16, 512, 512, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case10)
+{
+    bool ret = TRowSumTestFramework<10, float, 8, 8, 1024, 1024, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case11)
+{
+    bool ret = TRowSumTestFramework<11, int32_t, 127, 127, 64, 63, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case12)
+{
+    bool ret = TRowSumTestFramework<12, int32_t, 63, 63, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case13)
+{
+    bool ret = TRowSumTestFramework<13, int32_t, 31, 31, 128, 127, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case14)
+{
+    bool ret = TRowSumTestFramework<14, int32_t, 15, 15, 192, 192, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case15)
+{
+    bool ret = TRowSumTestFramework<15, int32_t, 7, 7, 448, 447, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case16)
+{
+    bool ret = TRowSumTestFramework<16, int16_t, 128, 128, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case17)
+{
+    bool ret = TRowSumTestFramework<17, int16_t, 64, 64, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case18)
+{
+    bool ret = TRowSumTestFramework<18, int16_t, 32, 32, 128, 128, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case19)
+{
+    bool ret = TRowSumTestFramework<19, int16_t, 16, 16, 192, 192, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWSUMTest, case20)
+{
+    bool ret = TRowSumTestFramework<20, int16_t, 8, 8, 448, 448, 1>();
+    EXPECT_TRUE(ret);
+}

@@ -27,13 +27,13 @@ Synchronous form:
 %dst = tcvt %src {rmode = #pto.round_mode<CAST_RINT>} : !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tcvt %src{rmode = #pto<round_mode xx>}: !pto.tile<...> -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -44,7 +44,10 @@ Declared in `include/pto/common/pto_instr.hpp` and `include/pto/common/constants
 
 ```cpp
 template <typename TileDataD, typename TileDataS, typename... WaitEvents>
-PTO_INST RecordEvent TCVT(TileDataD& dst, TileDataS& src, RoundMode mode, WaitEvents&... events);
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode, WaitEvents &... events);
+
+template <typename TileDataD, typename TileDataS, typename... WaitEvents>
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, RoundMode mode, WaitEvents &... events);
 ```
 
 ## Constraints
@@ -52,7 +55,9 @@ PTO_INST RecordEvent TCVT(TileDataD& dst, TileDataS& src, RoundMode mode, WaitEv
 - `dst` and `src` must be compatible in shape/valid region as required by the implementation.
 - The conversion `(src element type) -> (dst element type)` must be supported by the target for the given `RoundMode`.
 - **Implementation notes (A2A3/A5)**:
-  - `TCVT_IMPL` does not enforce additional `static_assert`/`PTO_ASSERT` checks on the type pair; unsupported conversions are target-defined.
+    - One form accepts an explicit `SaturationMode`, and the specified saturation behavior is forwarded directly to the implementation.
+    - The other form omits `SaturationMode`; in that case, the implementation chooses a target-defined default saturation behavior for the specific type pair.
+    - On CPU, only the form without explicit `SaturationMode` is currently implemented.
 
 ## Examples
 
@@ -113,7 +118,7 @@ void example_manual() {
 
 ```text
 %dst = tcvt %src {rmode = #pto.round_mode<CAST_RINT>} : !pto.tile<...> -> !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tcvt ins(%src{rmode = #pto<round_mode xx>}: !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

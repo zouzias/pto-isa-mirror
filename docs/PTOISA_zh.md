@@ -52,7 +52,7 @@
 | 逐元素（Tile-Tile） | [`TFMOD`](isa/TFMOD_zh.md) | 两个 Tile 的逐元素余数，余数符号与被除数相同。 |
 | Tile-标量 / Tile-立即数 | [`TEXPANDS`](isa/TEXPANDS_zh.md) | 将标量广播到目标 Tile 中。 |
 | Tile-标量 / Tile-立即数 | [`TCMPS`](isa/TCMPS_zh.md) | 将 Tile 与标量比较并写入逐元素比较结果。 |
-| Tile-标量 / Tile-立即数 | [`TSELS`](isa/TSELS_zh.md) | 使用掩码Tile在源Tile和标量之间进行选择（源Tile逐元素选择）。 |
+| Tile-标量 / Tile-立即数 | [`TSELS`](isa/TSELS_zh.md) | 使用掩码 Tile 在源 Tile 和标量之间进行选择（源 Tile 逐元素选择）。 |
 | Tile-标量 / Tile-立即数 | [`TMINS`](isa/TMINS_zh.md) | Tile 与标量的逐元素最小值。 |
 | Tile-标量 / Tile-立即数 | [`TADDS`](isa/TADDS_zh.md) | Tile 与标量的逐元素加法。 |
 | Tile-标量 / Tile-立即数 | [`TSUBS`](isa/TSUBS_zh.md) | 从 Tile 中逐元素减去一个标量。 |
@@ -76,6 +76,8 @@
 | 轴归约 / 扩展 | [`TCOLMAX`](isa/TCOLMAX_zh.md) | 通过取行间最大值来归约每一列。 |
 | 轴归约 / 扩展 | [`TROWMAX`](isa/TROWMAX_zh.md) | 通过取列间最大值来归约每一行。 |
 | 轴归约 / 扩展 | [`TROWMIN`](isa/TROWMIN_zh.md) | 通过取列间最小值来归约每一行。 |
+| 轴归约 / 扩展 | [`TROWARGMAX`](isa/TROWARGMAX_zh.md) | 获取每行最大值对应列索引。 |
+| 轴归约 / 扩展 | [`TROWARGMIN`](isa/TROWARGMIN_zh.md) | 获取每行最小值对应列索引。 |
 | 轴归约 / 扩展 | [`TROWEXPAND`](isa/TROWEXPAND_zh.md) | 将每个源行的第一个元素广播到目标行中。 |
 | 轴归约 / 扩展 | [`TROWEXPANDDIV`](isa/TROWEXPANDDIV_zh.md) | 行广播除法：将 `src0` 的每一行除以一个每行标量向量 `src1`。 |
 | 轴归约 / 扩展 | [`TROWEXPANDMUL`](isa/TROWEXPANDMUL_zh.md) | 行广播乘法：将 `src0` 的每一行乘以一个每行标量向量 `src1`。 |
@@ -121,7 +123,7 @@
 | 数据搬运 / 布局 | [`TTRANS`](isa/TTRANS_zh.md) | 使用实现定义的临时 Tile 进行转置。 |
 | 复杂指令 | [`TPRINT`](isa/TPRINT_zh.md) | 调试/打印 Tile 中的元素（实现定义）。 |
 | 复杂指令 | [`TMRGSORT`](isa/TMRGSORT_zh.md) | 用于多个已排序列表的归并排序（实现定义的元素格式和布局）。 |
-| 复杂指令 | [`TSORT32`](isa/TSORT32_zh.md) | 对固定大小的 32 元素块进行排序并生成索引映射。 |
+| 复杂指令 | [`TSORT32`](isa/TSORT32_zh.md) | 对 `src` 的每个 32 元素块连同对应的 `idx` 条目一起排序，并输出排序后的 value-index 对。 |
 | 复杂指令 | [`TGATHER`](isa/TGATHER_zh.md) | 使用索引 Tile 或编译时掩码模式来收集/选择元素。 |
 | 复杂指令 | [`TCI`](isa/TCI_zh.md) | 生成连续整数序列到目标 Tile 中。 |
 | 复杂指令 | [`TTRI`](isa/TTRI_zh.md) | 生成三角（下/上）掩码 Tile。 |
@@ -132,3 +134,14 @@
 | 复杂指令 | [`TGATHERB`](isa/TGATHERB_zh.md) | 使用字节偏移量收集元素。 |
 | 复杂指令 | [`TSCATTER`](isa/TSCATTER_zh.md) | 使用逐元素行索引将源 Tile 的行散播到目标 Tile 中。 |
 | 复杂指令 | [`TQUANT`](isa/TQUANT_zh.md) | 量化 Tile（例如 FP32 到 FP8），生成指数/缩放/最大值输出。 |
+| 通信 | [`TPUT`](isa/comm/TPUT_zh.md) | 远程写：将本地数据传输到远端 NPU 内存（GM → UB → GM）。 |
+| 通信 | [`TGET`](isa/comm/TGET_zh.md) | 远程读：将远端 NPU 数据读取到本地内存（GM → UB → GM）。 |
+| 通信 | [`TPUT_ASYNC`](isa/comm/TPUT_ASYNC_zh.md) | 异步远程写（本地 GM → DMA 引擎 → 远端 GM）。 |
+| 通信 | [`TGET_ASYNC`](isa/comm/TGET_ASYNC_zh.md) | 异步远程读（远端 GM → DMA 引擎 → 本地 GM）。 |
+| 通信 | [`TNOTIFY`](isa/comm/TNOTIFY_zh.md) | 向远端 NPU 发送标志通知。 |
+| 通信 | [`TWAIT`](isa/comm/TWAIT_zh.md) | 阻塞等待，直到信号满足比较条件。 |
+| 通信 | [`TTEST`](isa/comm/TTEST_zh.md) | 非阻塞检测信号是否满足比较条件。 |
+| 通信 | [`TGATHER`](isa/comm/TGATHER_zh.md) | 从所有 rank 收集数据并沿 DIM_3 拼接。 |
+| 通信 | [`TSCATTER`](isa/comm/TSCATTER_zh.md) | 将数据沿 DIM_3 拆分并分发到所有 rank。 |
+| 通信 | [`TREDUCE`](isa/comm/TREDUCE_zh.md) | 从所有 rank 收集数据并逐元素归约到本地。 |
+| 通信 | [`TBROADCAST`](isa/comm/TBROADCAST_zh.md) | 将当前 NPU 的数据广播到所有 rank。 |
