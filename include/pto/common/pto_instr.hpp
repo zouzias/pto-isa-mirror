@@ -290,11 +290,12 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+template <uint8_t PrecisionType = DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+          typename... WaitEvents>
 PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TDIV, dst, src0, src1);
+    TDIV_IMPL<PrecisionType, ileDataDst, TileDataSrc0, TileDataSrc1>(TDIV, dst, src0, src1);
     return {};
 }
 
