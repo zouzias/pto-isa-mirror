@@ -38,7 +38,7 @@ def gen_golden_data(case_name, param):
 
 
 class TDivParams:
-    def __init__(self, dtype, dstH, dstW, src0H, src0W, src1H, src1W, vRow, vCol):
+    def __init__(self, dtype, dstH, dstW, src0H, src0W, src1H, src1W, vRow, vCol, highPrecision=False):
         self.dtype = dtype
         self.dst_tile_row = dstH
         self.dst_tile_col = dstW
@@ -48,6 +48,7 @@ class TDivParams:
         self.src1_tile_col = src1W
         self.valid_row = vRow
         self.valid_col = vCol
+        self.high_precision = highPrecision
 
 
 def generate_case_name(param):
@@ -58,6 +59,8 @@ def generate_case_name(param):
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
+    if param.high_precision:
+        dtype_str += '_hp'
     return f"TDIVTest.case_{dtype_str}_{param.dst_tile_row}x{param.dst_tile_col}_\
 {param.src0_tile_row}x{param.src0_tile_col}_{param.src1_tile_row}x{param.src1_tile_col}_\
 {param.valid_row}x{param.valid_col}"
@@ -84,6 +87,8 @@ if __name__ == "__main__":
         TDivParams(np.float32, 16, 32, 16, 64, 16, 32, 16, 31),
         TDivParams(np.int16, 32, 128, 32, 128, 32, 256, 32, 127),
         TDivParams(np.int32, 16, 32, 16, 64, 16, 32, 16, 31),
+        TDivParams(np.float32, 2, 16, 2, 16, 2, 16, 2, 16, True),
+        TDivParams(np.float16, 2, 32, 2, 32, 2, 32, 2, 32, True),
     ]
 
     for param in case_params_list:
