@@ -20,9 +20,10 @@ namespace pto_path {
 
 #define DEVICE_TYPE c10::DeviceType::PrivateUse1
 
-inline void *ConvertType(const at::Tensor &at_tensor)
+template <typename... Ts>
+constexpr auto ConvertTypes(Ts &... args)
 {
-    return const_cast<void *>(at_tensor.storage().data());
+    return std::make_tuple(ConvertType(args)...);
 }
 
 template <typename T>
@@ -31,10 +32,9 @@ T ConvertType(T value)
     return value;
 }
 
-template <typename... Ts>
-constexpr auto ConvertTypes(Ts &... args)
+inline void *ConvertType(const at::Tensor &at_tensor)
 {
-    return std::make_tuple(ConvertType(args)...);
+    return const_cast<void *>(at_tensor.storage().data());
 }
 
 #define EXEC_KERNEL_CMD(kernel_name, blockdim, ...)                                                                  \
