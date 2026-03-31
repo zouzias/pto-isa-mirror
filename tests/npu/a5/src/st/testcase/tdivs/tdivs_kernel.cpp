@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
-template <typename T, int dstTileRow, int dstTileCol, int row, int validRow, int col, int validCol>
+template <typename T, int dstTileRow, int dstTileCol, int row, int validRow, int col, int validCol, bool highPrecision = false>
 PTO_INTERNAL void runTDivS(__gm__ T *out, __gm__ T *src, T scalar)
 {
     using DynDim2Shape = Shape<1, 1, 1, -1, -1>;
@@ -34,7 +34,8 @@ PTO_INTERNAL void runTDivS(__gm__ T *out, __gm__ T *src, T scalar)
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    TDIVS(dstTile, srcTile, scalar);
+    constexpr auto precisionType = highPrecision ? DivAlgorithm::HIGH_PRECISION : DivAlgorithm::DEFAULT;
+    TDIVS<precisionType>(dstTile, srcTile, scalar);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -67,6 +68,14 @@ extern "C" __global__ AICORE void launchTDIVSCase6(__gm__ float *out, __gm__ flo
 {
     runTDivS<float, 256, 32, 256, 256, 16, 16>(out, src, scalar);
 }
+extern "C" __global__ AICORE void launchTDIVSCaseHP1(__gm__ float *out, __gm__ float *src, float scalar)
+{
+    runTDivS<float, 2, 16, 2, 2, 16, 16, true>(out, src, scalar);
+}
+extern "C" __global__ AICORE void launchTDIVSCaseHP2(__gm__ aclFloat16 *out, __gm__ aclFloat16 *src, aclFloat16 scalar)
+{
+    runTDivS<half, 2, 32, 2, 2, 32, 32, true>(out, src, scalar);
+}
 
 template <uint32_t caseId>
 void launchTDIVSTestCase(void *out, void *src, float scalar, aclrtStream stream)
@@ -96,6 +105,14 @@ void launchTDIVSTestCase(void *out, void *src, float scalar, aclrtStream stream)
             launchTDIVSCase6<<<1, nullptr, stream>>>((float *)out, (float *)src, scalar);
             break;
         }
+        case 7: {
+            launchTDIVSCaseHP1<<<1, nullptr, stream>>>((float *)out, (float *)src, scalar);
+            break;
+        }
+        case 8: {
+            launchTDIVSCaseHP2<<<1, nullptr, stream>>>((aclFloat16 *)out, (aclFloat16 *)src, scalar);
+            break;
+        }
         default: {
         }
     }
@@ -107,3 +124,5 @@ template void launchTDIVSTestCase<3>(void *out, void *src, float scalar, aclrtSt
 template void launchTDIVSTestCase<4>(void *out, void *src, float scalar, aclrtStream stream);
 template void launchTDIVSTestCase<5>(void *out, void *src, float scalar, aclrtStream stream);
 template void launchTDIVSTestCase<6>(void *out, void *src, float scalar, aclrtStream stream);
+template void launchTDIVSTestCase<7>(void *out, void *src, float scalar, aclrtStream stream);
+template void launchTDIVSTestCase<8>(void *out, void *src, float scalar, aclrtStream stream);
