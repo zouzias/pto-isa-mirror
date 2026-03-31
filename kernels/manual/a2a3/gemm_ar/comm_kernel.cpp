@@ -10,12 +10,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Communication Kernel (Vec Arch) for GEMM + AllReduce — HCCL backend
 //
-// Single merged kernel: RS → device barrier → Reduce → device barrier → AG
-// All data in FP16. Device-side barriers via TNOTIFY/TWAIT replace host barriers.
+// Two-phase kernel: RS (AtomicAdd) → device barrier → AG
+// RS uses TPUT<AtomicAdd> to accumulate directly at the owner's reduced_output,
+// eliminating the separate Reduce phase and its barrier.
 //
 // Signal matrix layout in HCCL window (per rank):
-//   signal_matrix[0..MAX_RANKS-1]  — Phase 0 (RS complete) counters
-//   signal_matrix[MAX_RANKS..2*MAX_RANKS-1] — Phase 1 (Reduce complete) counters
+//   [0 .. MAX_RANKS-1]   Phase 0 cross-rank counters (RS done)
+//   [MAX_RANKS]           Phase 0 local broadcast flag
 //
 // Only block_idx==0 performs cross-rank TNOTIFY/TWAIT signaling.
 
@@ -37,10 +38,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 // Signal matrix layout (per rank, in HCCL RDMA window):
 //   [0 .. MAX_RANKS-1]              Phase 0 cross-rank counters (RS done)
-//   [MAX_RANKS .. 2*MAX_RANKS-1]    Phase 1 cross-rank counters (Reduce done)
-//   [2*MAX_RANKS]                   Phase 0 local broadcast flag (block 0 -> all blocks)
-//   [2*MAX_RANKS+1]                 Phase 1 local broadcast flag
-static constexpr int SIGNAL_LOCAL_FLAG_OFFSET = 2 * MAX_RANKS;
+//   [MAX_RANKS]                     Phase 0 local broadcast flag (block 0 -> all blocks)
+static constexpr int SIGNAL_LOCAL_FLAG_OFFSET = MAX_RANKS;
 
 // ============================================================================
 // Device-side cross-rank barrier using TNOTIFY/TWAIT
@@ -54,7 +53,8 @@ AICORE inline void DeviceBarrier(
     int phase,
     int my_rank,
     int nranks,
-    int block_idx)
+    int block_idx,
+    int32_t expected = 1)
 {
     pipe_barrier(PIPE_ALL);
 
@@ -71,27 +71,26 @@ AICORE inline void DeviceBarrier(
         for (int r = 0; r < nranks; r++) {
             if (r == my_rank) continue;
             pto::comm::Signal sig(phase_base + r);
-            pto::comm::TWAIT(sig, (int32_t)1, pto::comm::WaitCmp::GE);
+            pto::comm::TWAIT(sig, expected, pto::comm::WaitCmp::GE);
         }
 
         __gm__ int32_t *local_flag = signal_base + SIGNAL_LOCAL_FLAG_OFFSET + phase;
         pto::comm::Signal localSig(local_flag);
-        pto::comm::TNOTIFY(localSig, (int32_t)1, pto::comm::NotifyOp::Set);
+        pto::comm::TNOTIFY(localSig, expected, pto::comm::NotifyOp::Set);
     } else {
         __gm__ int32_t *local_flag = signal_base + SIGNAL_LOCAL_FLAG_OFFSET + phase;
         pto::comm::Signal localSig(local_flag);
-        pto::comm::TWAIT(localSig, (int32_t)1, pto::comm::WaitCmp::GE);
+        pto::comm::TWAIT(localSig, expected, pto::comm::WaitCmp::GE);
     }
 
     pipe_barrier(PIPE_ALL);
 }
 
 // ============================================================================
-// Merged AllReduce kernel: RS + Reduce + AG in a single kernel launch
+// Two-phase AllReduce kernel: RS (AtomicAdd) + AG in a single kernel launch
 // ============================================================================
 AICORE inline void GemmCommAllImpl(
     __gm__ half *gemm_output,
-    __gm__ half *recv_buffers,
     __gm__ half *reduced_output,
     __gm__ int32_t *signal_matrix,
     __gm__ MultiBlockQueueSet *queue_set,
@@ -103,7 +102,6 @@ AICORE inline void GemmCommAllImpl(
     int num_comm_blocks)
 {
     int my_rank = hcclCtx->rankId;
-    const uint64_t output_size = (uint64_t)G_M * G_N;
 
     using ShapeDyn  = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -123,11 +121,13 @@ AICORE inline void GemmCommAllImpl(
     StrideDyn tileStride(G_BASE_M * G_N, G_BASE_M * G_N, G_BASE_M * G_N, G_N, 1);
 
     // ========================================================================
-    // Phase 1: ReduceScatter — TPUT each tile to its owner rank
+    // Phase 1: ReduceScatter — TPUT with AtomicAdd to owner's reduced_output
     //
-    // Cross-tile ping-pong: overlap TSTORE[i] (MTE3) with TLOAD[i+1] (MTE2)
-    // across consecutive remote tiles using alternating UB buffers.
-    // Ping buffer uses EVENT_ID0, pong uses EVENT_ID1.
+    // For tiles owned by other ranks: TPUT<AtomicAdd> to remote reduced_output.
+    // For tiles owned by this rank: copy own data to local reduced_output
+    // (the owner's contribution is the "base" that remote AtomicAdds accumulate onto).
+    //
+    // Cross-tile ping-pong for remote TPUT: overlap TSTORE[i] with TLOAD[i+1].
     // ========================================================================
     {
         volatile __gm__ MultiBlockQueueSet *qset = (volatile __gm__ MultiBlockQueueSet *)queue_set;
@@ -187,39 +187,41 @@ AICORE inline void GemmCommAllImpl(
 
             if (tile_idx >= 0) {
                 int owner = tile_idx % nranks;
+                uint32_t mi = tile_idx / G_N_TILES;
+                uint32_t ni = tile_idx % G_N_TILES;
+                uint64_t tile_offset = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;
 
-                if (owner != my_rank) {
-                    uint32_t mi = tile_idx / G_N_TILES;
-                    uint32_t ni = tile_idx % G_N_TILES;
-                    uint64_t tile_offset = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;
+                Global srcG(gemm_output + tile_offset, tileShape, tileStride);
 
-                    Global srcG(gemm_output + tile_offset, tileShape, tileStride);
-                    __gm__ half *dst_ptr = HcclRemotePtr(hcclCtx, recv_buffers, owner)
-                                          + (uint64_t)my_rank * output_size + tile_offset;
-                    Global dstG(dst_ptr, tileShape, tileStride);
-
-                    bool use_ping = (pp_count % 2 == 0);
-                    TileData &curTile = use_ping ? pingTile : pongTile;
-                    event_t curEv = use_ping ? EVENT_ID0 : EVENT_ID1;
-
-                    if (pp_count == 0) {
-                        TLOAD(curTile, srcG);
-                        set_flag(PIPE_MTE2, PIPE_MTE3, curEv);
-                    } else {
-                        TileData &prevTile = use_ping ? pongTile : pingTile;
-                        event_t prevEv = use_ping ? EVENT_ID1 : EVENT_ID0;
-
-                        wait_flag(PIPE_MTE2, PIPE_MTE3, prevEv);
-                        TSTORE_IMPL<TileData, Global, pto::AtomicType::AtomicNone>(pp_pending_dst, prevTile);
-                        TLOAD(curTile, srcG);
-                        set_flag(PIPE_MTE3, PIPE_MTE2, prevEv);
-                        set_flag(PIPE_MTE2, PIPE_MTE3, curEv);
-                        wait_flag(PIPE_MTE3, PIPE_MTE2, prevEv);
-                    }
-
-                    pp_pending_dst = dstG;
-                    pp_count++;
+                __gm__ half *dst_ptr;
+                if (owner == my_rank) {
+                    dst_ptr = reduced_output + tile_offset;
+                } else {
+                    dst_ptr = HcclRemotePtr(hcclCtx, reduced_output, owner) + tile_offset;
                 }
+                Global dstG(dst_ptr, tileShape, tileStride);
+
+                bool use_ping = (pp_count % 2 == 0);
+                TileData &curTile = use_ping ? pingTile : pongTile;
+                event_t curEv = use_ping ? EVENT_ID0 : EVENT_ID1;
+
+                if (pp_count == 0) {
+                    TLOAD(curTile, srcG);
+                    set_flag(PIPE_MTE2, PIPE_MTE3, curEv);
+                } else {
+                    TileData &prevTile = use_ping ? pongTile : pingTile;
+                    event_t prevEv = use_ping ? EVENT_ID1 : EVENT_ID0;
+
+                    wait_flag(PIPE_MTE2, PIPE_MTE3, prevEv);
+                    TSTORE_IMPL<TileData, Global, pto::AtomicType::AtomicAdd>(pp_pending_dst, prevTile);
+                    TLOAD(curTile, srcG);
+                    set_flag(PIPE_MTE3, PIPE_MTE2, prevEv);
+                    set_flag(PIPE_MTE2, PIPE_MTE3, curEv);
+                    wait_flag(PIPE_MTE3, PIPE_MTE2, prevEv);
+                }
+
+                pp_pending_dst = dstG;
+                pp_count++;
 
                 tiles_sent++;
             } else {
@@ -246,7 +248,7 @@ AICORE inline void GemmCommAllImpl(
             TileData &lastTile = last_was_ping ? pingTile : pongTile;
             event_t lastEv = last_was_ping ? EVENT_ID0 : EVENT_ID1;
             wait_flag(PIPE_MTE2, PIPE_MTE3, lastEv);
-            TSTORE_IMPL<TileData, Global, pto::AtomicType::AtomicNone>(pp_pending_dst, lastTile);
+            TSTORE_IMPL<TileData, Global, pto::AtomicType::AtomicAdd>(pp_pending_dst, lastTile);
             set_flag(PIPE_MTE3, PIPE_MTE2, lastEv);
             wait_flag(PIPE_MTE3, PIPE_MTE2, lastEv);
         }
@@ -260,7 +262,7 @@ AICORE inline void GemmCommAllImpl(
     DeviceBarrier(hcclCtx, signal_matrix, 0, my_rank, nranks, block_idx);
 
     // ========================================================================
-    // Phase 2: Local Reduce for owned tiles (full 128x256 FP16 tiles)
+    // Phase 2: AllGather — each rank sends its owned reduced tiles to all others
     // ========================================================================
     {
         const int total_tiles = G_NUM_TILES;
@@ -269,69 +271,9 @@ AICORE inline void GemmCommAllImpl(
                                   ? tiles_per_owner
                                   : (total_tiles / nranks);
 
-        TileData accTile(G_BASE_M, G_BASE_N);
-        TileData pingReduceTile(G_BASE_M, G_BASE_N);
-        TileData pongReduceTile(G_BASE_M, G_BASE_N);
-        TASSIGN(accTile,          0x0);
-        TASSIGN(pingReduceTile,   tileUBBytes);
-        TASSIGN(pongReduceTile,   tileUBBytes * 2);
-
-        ShapeDyn fullShape(1, 1, 1, G_BASE_M, G_BASE_N);
-
-        int reduce_per_block = (my_tile_count + num_comm_blocks - 1) / num_comm_blocks;
-        int oi_start = block_idx * reduce_per_block;
-        int oi_end = (block_idx + 1) * reduce_per_block;
-        if (oi_end > my_tile_count) oi_end = my_tile_count;
-
-        for (int oi = oi_start; oi < oi_end; oi++) {
-            int t = my_rank + oi * nranks;
-            if (t >= total_tiles) break;
-            uint32_t mi = t / G_N_TILES;
-            uint32_t ni = t % G_N_TILES;
-
-            uint64_t toff = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;
-
-            Global tensors[MAX_RANKS];
-            for (int r = 0; r < nranks; ++r) {
-                if (r == my_rank) {
-                    tensors[r] = Global(gemm_output + toff, fullShape, tileStride);
-                } else {
-                    tensors[r] = Global(recv_buffers + (uint64_t)r * output_size + toff,
-                                        fullShape, tileStride);
-                }
-            }
-            pto::comm::ParallelGroup<Global> pg(tensors, nranks, my_rank);
-
-            Global dstG(reduced_output + toff, fullShape, tileStride);
-            pto::comm::TREDUCE(pg, dstG, accTile, pingReduceTile, pongReduceTile,
-                               pto::comm::ReduceOp::Sum);
-        }
-
-        pipe_barrier(PIPE_ALL);
-    }
-
-    // ========================================================================
-    // Device-side barrier: wait for all ranks to complete Reduce
-    // ========================================================================
-    DeviceBarrier(hcclCtx, signal_matrix, 1, my_rank, nranks, block_idx);
-
-    // ========================================================================
-    // Phase 3: AllGather — send reduced tiles to all other ranks
-    //
-    // Optimization: TLOAD the source tile once into UB, then issue
-    // (nranks-1) TSTOREs to different remote destinations. This
-    // eliminates (nranks-2) redundant TLOADs per tile.
-    // ========================================================================
-    {
-        const int total_tiles = G_NUM_TILES;
-        const int tiles_per_owner = (total_tiles + nranks - 1) / nranks;
-        const int my_tile_count = (my_rank < total_tiles % nranks || total_tiles % nranks == 0)
-                                  ? tiles_per_owner
-                                  : (total_tiles / nranks);
-
-        int reduce_per_block = (my_tile_count + num_comm_blocks - 1) / num_comm_blocks;
-        int oi_start = block_idx * reduce_per_block;
-        int oi_end = (block_idx + 1) * reduce_per_block;
+        int tiles_per_block = (my_tile_count + num_comm_blocks - 1) / num_comm_blocks;
+        int oi_start = block_idx * tiles_per_block;
+        int oi_end = (block_idx + 1) * tiles_per_block;
         if (oi_end > my_tile_count) oi_end = my_tile_count;
 
         for (int oi = oi_start; oi < oi_end; oi++) {
@@ -366,7 +308,6 @@ AICORE inline void GemmCommAllImpl(
 // ============================================================================
 __global__ AICORE void GemmCommAllKernel(
     __gm__ uint8_t *gemm_output,
-    __gm__ uint8_t *recv_buffers,
     __gm__ uint8_t *reduced_output,
     __gm__ uint8_t *signal_matrix,
     __gm__ uint8_t *queue_set,
@@ -378,7 +319,6 @@ __global__ AICORE void GemmCommAllKernel(
 {
     GemmCommAllImpl(
         reinterpret_cast<__gm__ half *>(gemm_output),
-        reinterpret_cast<__gm__ half *>(recv_buffers),
         reinterpret_cast<__gm__ half *>(reduced_output),
         reinterpret_cast<__gm__ int32_t *>(signal_matrix),
         reinterpret_cast<__gm__ MultiBlockQueueSet *>(queue_set),
@@ -389,12 +329,12 @@ __global__ AICORE void GemmCommAllKernel(
 // ============================================================================
 // Host-side kernel launcher
 // ============================================================================
-void launchGemmCommAll(uint8_t *gemm_output, uint8_t *recv_buffers,
+void launchGemmCommAll(uint8_t *gemm_output,
                        uint8_t *reduced_output, uint8_t *signal_matrix,
                        uint8_t *queue_set, uint8_t *hcclCtx,
                        int rank, int nranks, void *stream, int num_compute_blocks)
 {
     GemmCommAllKernel<<<COMM_BLOCK_NUM, nullptr, stream>>>(
-        gemm_output, recv_buffers, reduced_output, signal_matrix,
+        gemm_output, reduced_output, signal_matrix,
         queue_set, hcclCtx, rank, nranks, num_compute_blocks, COMM_BLOCK_NUM);
 }

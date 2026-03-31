@@ -4,11 +4,11 @@
 
 本项目在昇腾 910B (A2/A3) NPU 上实现了一个 **GEMM + AllReduce 融合算子**，采用双流（Compute Stream + Comm Stream）计算通信重叠设计，通过 PTO 通信指令集在 HCCL RDMA 窗口上完成 AllReduce。
 
-核心思路：每张卡持有独立的输入矩阵 A\_i\[M×K\] 和共享的权重矩阵 B\[K×N\]，各自计算完整 GEMM C\_i = A\_i × B，然后通过 **ReduceScatter + Reduce + AllGather** 三阶段通信完成 AllReduce 归约，每张卡最终得到 C\_final = Σ C\_i。典型应用场景为分布式训练中的梯度聚合。
+核心思路：每张卡持有独立的输入矩阵 A\_i\[M×K\] 和共享的权重矩阵 B\[K×N\]，各自计算完整 GEMM C\_i = A\_i × B，然后通过 **ReduceScatter (AtomicAdd) + AllGather** 两阶段通信完成 AllReduce 归约，每张卡最终得到 C\_final = Σ C\_i。典型应用场景为分布式训练中的梯度聚合。
 
 **关键优化**：
 - **全链路 FP16**：MatMul L0C FP32 累加器输出经 FixPipe 硬件自动 cast 为 FP16 写入 GM，通信数据和最终输出均为 FP16，通信量比 FP32 方案减半
-- **零 Host Barrier**：三阶段通信合并为单次 kernel launch，阶段间同步通过 device-side `TNOTIFY`/`TWAIT` 信号完成，完全消除 `HcclHostBarrier` 的 host-device 往返开销
+- **零 Host Barrier**：两阶段通信（RS + AG）合并为单次 kernel launch，阶段间同步通过 device-side `TNOTIFY`/`TWAIT` 信号完成，完全消除 `HcclHostBarrier` 的 host-device 往返开销
 - **两级设备端同步**：跨 rank 同步（block 0 执行 RDMA 窗口原子操作）+ rank 内跨 block 同步（block 0 通过 GM flag 广播给其他 block）
 
 **平台要求**：Ascend 910B (A2/A3)、CANN 8.5、bisheng 编译器、MPICH
@@ -91,28 +91,25 @@ AllReduce 归约 (全 FP16):
 │  关键特性:                                                           │
 │  - 独立 A + 共享 B：每 rank 全量 K 计算，Cube 利用率高               │
 │  - 全链路 FP16：GEMM→通信→输出全程 FP16，通信量比 FP32 减半          │
-│  - 单次 kernel launch：三阶段合并，阶段间用 DeviceBarrier 同步        │
+│  - 单次 kernel launch：两阶段合并，阶段间用 DeviceBarrier 同步        │
 │  - 零 Host Barrier：跨 rank 同步由 TNOTIFY/TWAIT 在设备端完成        │
 │  - 逐 tile 信号：计算完一个 tile 即可被通信侧消费                    │
 │  - 通信量降低 4×：ReduceScatter 只发 owner，AllGather 只由 owner 广播 │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-## 三阶段通信流水线
+## 两阶段通信流水线
 
-AllReduce 的三个阶段合并在单次 `GemmCommAllKernel` launch 中，阶段间通过 device-side `DeviceBarrier` 同步：
+AllReduce 的两个阶段合并在单次 `GemmCommAllKernel` launch 中，阶段间通过 device-side `DeviceBarrier` 同步：
 
 ```
 GemmCommAllKernel (单次 launch):
-  Phase 1 (ReduceScatter):
-    轮询 Ready Queue，取到就绪 tile 后 TPUT(FP16) 到 owner rank 的 recv_buffers
+  Phase 1 (ReduceScatter with AtomicAdd):
+    轮询 Ready Queue，取到就绪 tile 后 TPUT<AtomicAdd>(FP16) 到 owner rank 的 reduced_output
+    硬件原子加在目标侧完成归约，无需独立 Reduce 阶段
     ↓ DeviceBarrier(phase=0)  — 跨 rank + rank 内同步
 
-  Phase 2 (Reduce):
-    每个 rank 对自己 owned 的 tile 做 nranks-way TREDUCE(FP16) 求和
-    ↓ DeviceBarrier(phase=1)  — 跨 rank + rank 内同步
-
-  Phase 3 (AllGather):
+  Phase 2 (AllGather):
     每个 rank 将归约结果 TPUT(FP16) 到所有其他 rank 的 reduced_output
 ```
 
@@ -171,13 +168,12 @@ Owner 分配 (round-robin):
 
 | 缓冲区 | 大小 | 位置 | 原因 |
 |--------|------|------|------|
-| `recv_buffers` | nranks × M × N × 2B | **HCCL 窗口** | Phase 1 远端 TPUT 写入（FP16） |
-| `reduced_output` | M × N × 2B | **HCCL 窗口** | Phase 3 远端 TPUT 写入（FP16） |
-| `signal_matrix` | (2\*MAX\_RANKS+2) × 4B, 对齐 64B | **HCCL 窗口** | DeviceBarrier 跨 rank TNOTIFY 写入 |
+| `reduced_output` | M × N × 2B | **HCCL 窗口** | RS AtomicAdd + AG 远端 TPUT 写入（FP16） |
+| `signal_matrix` | (MAX\_RANKS+1) × 4B, 对齐 64B | **HCCL 窗口** | DeviceBarrier 跨 rank TNOTIFY 写入 |
 | `gemm_output` | M × N × 2B | **aclrtMalloc** | 仅本地读写（FP16） |
 | `src0_dev`, `src1_dev` | 输入矩阵（FP16） | **aclrtMalloc** | 仅本地读写 |
 
-窗口大小由 `HCCL_BUFFSIZE` 环境变量控制，`run.sh` 自动计算：`(nranks + 1) × M × N × 2 / 1MB + 64MB`。
+窗口大小由 `HCCL_BUFFSIZE` 环境变量控制，`run.sh` 自动计算：`M × N × 2 / 1MB + 64MB`。
 
 所有窗口内 buffer 必须在每个 rank 上分配在相同偏移处（通过 `WindowAlloc` 顺序递增分配器），以保证 `HcclRemotePtr` 地址转换的正确性。`signal_matrix` 在每轮迭代开始前通过 `aclrtMemset` 清零。
 
@@ -233,7 +229,7 @@ Cube (M):             [TMATMUL k0] [ACC k1] [ACC k2] [ACC k3] [TMATMUL k0'] ...
    - CPU golden reference = Σ(A_i × B) (FP32)
 2. MPI Broadcast 输入数据到所有 rank
 3. HCCL 通信器初始化（MPI 广播 root info，自动检测 MESH/RING 拓扑）
-4. 分配 HCCL 窗口内存 (recv_buffers + reduced_output + signal_matrix)
+4. 分配 HCCL 窗口内存 (reduced_output + signal_matrix)
 5. Warmup (5 iter)
 6. Compute-only 测量 (5 iter) — 纯 GEMM 性能基准
 7. Sequential 测量 (10 iter)  — 计算→通信串行执行
@@ -265,7 +261,7 @@ gemm_ar/
 ├── main.cpp                    # 入口：MPI 初始化、数据生成（独立 A + 共享 B）、HCCL 初始化、
 │                               #   窗口分配（含 signal_matrix）、性能测量、FP16 验证
 ├── gemm_compute_kernel.cpp     # GEMM 计算内核（Cube 架构，L0C FP32→GM FP16 自动 cast）
-├── comm_kernel.cpp             # 通信内核（Vector 架构，单 kernel 三阶段 AllReduce）
+├── comm_kernel.cpp             # 通信内核（Vector 架构，单 kernel 两阶段 AllReduce）
 │                               #   包含 DeviceBarrier（两级设备端同步）
 ├── common.hpp                  # HcclRemotePtr 设备端包装（RDMA 窗口地址转换）
 ├── hccl_context.h              # HcclDeviceContext 结构体（每 rank 的 RDMA 窗口地址）
@@ -325,9 +321,45 @@ MatMul 累加器在 L0C 使用 FP32，但最终输出经 TSTORE 写入 GM 时由
 
 ## 性能实测
 
-8 卡 Ascend 910B，M=5416, K=6144, N=1408（padded 5504x1536），258 tiles。每 rank 计算完整 GEMM C\_i = A\_i × B，AllReduce 对 8 个 C\_i 求和。
+8 卡 Ascend 910B，M=5416, K=6144, N=1408（padded 5504×1536），258 tiles (43×6)。每 rank 计算完整 GEMM C\_i = A\_i × B，AllReduce 对 8 个 C\_i 求和。
 
-性能数据待实测更新。
+### 最终性能（Swizzle + RS AtomicAdd + AG）
+
+| 指标 | 值 |
+|------|------|
+| Compute-only | 365 us (257 TFLOPS, 98%) |
+| Sequential | 855 us (compute 366 us + comm 489 us @ 57 GB/s) |
+| Pipelined | **736 us** (speedup 1.16x, overlap 33%) |
+| Throughput | 1019 TFLOPS (total) |
+
+### 优化历程
+
+三项优化按序测试，每项独立评估。
+
+| 优化 | 修改 | Pipelined (us) | 增益 | 结论 |
+|------|------|----------------|------|------|
+| 基线 (修改语义后) | — | 808 | — | — |
+| Opt 3: Block Swizzle | `gemm_compute_kernel.cpp` zigzag tile 调度 | 793 | -1.8% | **保留** |
+| Opt 1: AG Ping-Pong (v1: batch TSTORE) | `comm_kernel.cpp` AG 去除逐 rank 同步 | 830 | +4.7% 退化 | **回退** |
+| Opt 1: AG Ping-Pong (v2: prefetch TLOAD) | `comm_kernel.cpp` cross-tile prefetch | 843 | +6.3% 退化 | **回退** |
+| Opt 5: Round-based Reduce+AG (TPR=2) | `comm_kernel.cpp` round loop, per-round barrier | 815 | +2.7% 退化 | 回退此参数 |
+| Opt 5: Round-based Reduce+AG (TPR=4) | 同上 | 790 | -2.3% | — |
+| Opt 5: Round-based Reduce+AG (**TPR=8**) | 同上 | **788** | **-2.5%** | **保留** |
+| Opt 5: Round-based Reduce+AG (TPR=16) | 同上 | 794 | -1.7% | — |
+| Opt 6: RS AtomicAdd 消除 Reduce | `comm_kernel.cpp` RS 用 `TPUT<AtomicAdd>` 直接累加到 owner 的 `reduced_output`，删除 Reduce 阶段、`recv_buffers` 和相关 barrier | **736** | **-6.6%** | **保留** |
+
+### 优化分析
+
+**Opt 3 (Block Swizzle, 保留)**: zigzag 遍历使相邻 tile 在 M-row 边界共享 HBM 读取位置（行末 ni=5 与下一行首 ni=5 相邻），改善 L2 locality。增益小但无副作用。
+
+**Opt 1 (AG Ping-Pong, 回退)**: 两种方案均导致退化。
+- v1（去除逐 rank 同步后并发 TSTORE）：多个 RDMA 写同时竞争 HCCS 链路，触发拥塞，sequential comm 从 540 增至 713 us。
+- v2（cross-tile TLOAD prefetch）：MTE2 prefetch 与当前 tile 的 MTE3 TSTORE 竞争内存带宽，overlap 从 30% 降至 20%。
+- **结论**：在 128×256 FP16 tile (64KB) 粒度下，serial TSTORE + per-rank sync 已是 AG 的最优模式，MTE3 单元带宽被单次 RDMA 写满。
+
+**Opt 5 (Round-based Pipeline, 保留 TPR=8)**: 将 Reduce 和 AG 拆分为多轮，每轮独立 barrier。TPR 太小（2）时 barrier 开销显著；TPR 太大（16）时接近单轮无流水化。TPR=8 在 barrier 开销与流水深度间取最优平衡，sequential comm 仅增加 ~5 us 而 pipelined time 降低 ~20 us。
+
+**Opt 6 (RS AtomicAdd, 保留)**: 用 `TPUT<AtomicAdd>` 将每个 rank 的 tile 直接原子累加到 owner rank 的 `reduced_output`，硬件原子加在目标侧完成归约，完全消除了独立的 Reduce 阶段（TREDUCE）及其前后的 DeviceBarrier。同时删除了 `recv_buffers`（nranks × M × N × 2B），HCCL 窗口占用从 ~145 MB 降至 ~16 MB。Sequential comm 从 538 降至 489 us (-9.1%)，pipelined time 从 788 降至 736 us (-6.6%)。三阶段 RS→Reduce→AG 简化为两阶段 RS(AtomicAdd)→AG，信号矩阵也相应简化。
 
 ## 构建系统
 
