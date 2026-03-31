@@ -46,7 +46,7 @@ __global__ AICORE void runTGATHERB(__gm__ T __out__ *out, __gm__ T __in__ *src, 
     GlobalDataDst dstGlobal(out);
 
     TASSIGN(srcTile, 0);
-    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+    TASSIGN(dstTile, srcS1 * srcS0 * sizeof(typename TileData::DType));
 
     TLOAD(srcTile, srcGlobal);
     TLOAD(offsetTile, offsetGlobal);
