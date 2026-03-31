@@ -290,11 +290,12 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1,
+          typename... WaitEvents>
 PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TDIV, dst, src0, src1);
+    TDIV_IMPL<PrecisionType, TileDataDst, TileDataSrc0, TileDataSrc1>(dst, src0, src1);
     return {};
 }
 
@@ -1402,12 +1403,12 @@ PTO_INST RecordEvent TSUBS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TDIVS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar,
                            WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TDIVS, dst, src0, scalar);
+    TDIVS_IMPL<PrecisionType>(dst, src0, scalar);
     return {};
 }
 
@@ -1420,12 +1421,12 @@ PTO_INST RecordEvent TMULS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar, TileDataSrc &src0,
                            WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TDIVS, dst, scalar, src0);
+    TDIVS_IMPL<PrecisionType>(dst, scalar, src0);
     return {};
 }
 

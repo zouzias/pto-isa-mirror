@@ -12,7 +12,6 @@
 
 import os
 import numpy as np
-np.random.seed(19)
 
 
 def gen_golden_data(case_name, param):
@@ -24,8 +23,18 @@ def gen_golden_data(case_name, param):
     h_valid, w_valid = param.valid_row, param.valid_col
 
     # Generate random input arrays
-    input1 = np.random.randint(1, 10, size=[src0_tile_row, src0_tile_col]).astype(dtype)
-    input2 = np.random.randint(1, 10, size=[src1_tile_row, src1_tile_col]).astype(dtype)
+    if dtype in (np.int8, np.uint8, np.int16, np.uint16, np.int32, np.uint32):
+        dtype_info = np.iinfo(dtype)
+        input1 = np.random.randint(dtype_info.min, dtype_info.max,
+            size=[src0_tile_row, src0_tile_col]).astype(dtype)
+        input2 = np.random.randint(dtype_info.min, dtype_info.max,
+            size=[src1_tile_row, src1_tile_col]).astype(dtype)
+    else:
+        dtype_info = np.finfo(dtype)
+        input1 = np.random.uniform(low=dtype_info.min, high=dtype_info.max,
+            size=[src0_tile_row, src0_tile_col]).astype(dtype)
+        input2 = np.random.uniform(low=dtype_info.min, high=dtype_info.max,
+            size=[src1_tile_row, src1_tile_col]).astype(dtype)
 
     # Perform the operation
     golden = np.zeros([dst_tile_row, dst_tile_col]).astype(dtype)
@@ -38,7 +47,7 @@ def gen_golden_data(case_name, param):
 
 
 class TDivParams:
-    def __init__(self, dtype, dstH, dstW, src0H, src0W, src1H, src1W, vRow, vCol):
+    def __init__(self, dtype, dstH, dstW, src0H, src0W, src1H, src1W, vRow, vCol, highPrecision=False):
         self.dtype = dtype
         self.dst_tile_row = dstH
         self.dst_tile_col = dstW
@@ -48,6 +57,7 @@ class TDivParams:
         self.src1_tile_col = src1W
         self.valid_row = vRow
         self.valid_col = vCol
+        self.high_precision = highPrecision
 
 
 def generate_case_name(param):
@@ -58,6 +68,8 @@ def generate_case_name(param):
         np.int32: 'int32',
         np.int16: 'int16'
     }[param.dtype]
+    if param.high_precision:
+        dtype_str += '_hp'
     return f"TDIVTest.case_{dtype_str}_{param.dst_tile_row}x{param.dst_tile_col}_\
 {param.src0_tile_row}x{param.src0_tile_col}_{param.src1_tile_row}x{param.src1_tile_col}_\
 {param.valid_row}x{param.valid_col}"
@@ -84,6 +96,8 @@ if __name__ == "__main__":
         TDivParams(np.float32, 16, 32, 16, 64, 16, 32, 16, 31),
         TDivParams(np.int16, 32, 128, 32, 128, 32, 256, 32, 127),
         TDivParams(np.int32, 16, 32, 16, 64, 16, 32, 16, 31),
+        TDivParams(np.float32, 2, 16, 2, 16, 2, 16, 2, 16, True),
+        TDivParams(np.float16, 2, 32, 2, 32, 2, 32, 2, 32, True),
     ]
 
     for param in case_params_list:
