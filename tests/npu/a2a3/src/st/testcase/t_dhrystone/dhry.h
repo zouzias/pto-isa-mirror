@@ -6,6 +6,14 @@ Please refer to the License for details. You may not use this file except in com
 THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
+
+The code snippet comes from wujian100_open.
+
+Copyright (c) 2019 T-head-Semi. All rights reserved.
+
+This file is part of wujian100_open, which is released under the MIT License.
+See the LICENSE file in the root directory of this source tree
+or at https://opensource.org/licenses/MIT for details.
 */
 #include <stdio.h>
 #include <pto/common/constants.hpp>
