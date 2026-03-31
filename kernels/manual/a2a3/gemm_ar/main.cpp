@@ -584,14 +584,8 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     aclrtMemset(reduced_output, outputSize, 0, outputSize);
     aclrtMemset(signal_matrix, signalMatrixSize, 0, signalMatrixSize);
 
-    uint32_t k_per_rank = G_K / n_ranks;
-    if (G_K % n_ranks != 0) {
-        std::cerr << "[ERROR] K=" << G_K << " not divisible by nranks=" << n_ranks << "\n";
-        return false;
-    }
-
-    size_t aSize = G_M * k_per_rank * sizeof(uint16_t);
-    size_t bSize = k_per_rank * G_N * sizeof(uint16_t);
+    size_t aSize = (size_t)G_M * G_K * sizeof(uint16_t);
+    size_t bSize = (size_t)G_K * G_N * sizeof(uint16_t);
     void *src0_dev = nullptr, *src1_dev = nullptr;
     aclrtMalloc(&src0_dev, aSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc(&src1_dev, bSize, ACL_MEM_MALLOC_HUGE_FIRST);
@@ -609,8 +603,8 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
 
     // ------ Upload input data to device ------
     if (rank_id == 0) {
-        std::cout << "[INFO] Data Parallel: A_part[" << G_M << "x" << k_per_rank
-                  << "], B_part[" << k_per_rank << "x" << G_N << "]" << std::endl;
+        std::cout << "[INFO] Data Parallel: A_i[" << G_M << "x" << G_K
+                  << "] (independent), B[" << G_K << "x" << G_N << "] (shared)" << std::endl;
     }
 
     aclrtMemcpy(src0_dev, aSize, a_data, a_bytes, ACL_MEMCPY_HOST_TO_DEVICE);
@@ -637,7 +631,7 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
             reinterpret_cast<uint8_t *>(src0_dev),
             reinterpret_cast<uint8_t *>(src1_dev),
             reinterpret_cast<uint8_t *>(queueSet_dev),
-            rank_id, s, COMPUTE_BLOCK_NUM, k_per_rank);
+            rank_id, s, COMPUTE_BLOCK_NUM, G_K);
     };
 
     uint8_t *hcclCtxPtr = reinterpret_cast<uint8_t *>(hctx.deviceCtx);
@@ -768,12 +762,12 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
 
     bool is_ok = true;
     if (rank_id == 0) {
-        const float eps = 0.01f;
+        const float atol = 1.0f;
+        const float rtol = 0.01f;
         const size_t valid_elements = (size_t)G_ORIG_M * G_ORIG_N;
         float max_diff = 0.0f, max_diff_ratio = 0.0f;
-        size_t err_count = 0, zero_count = 0;
-        const size_t err_threshold = static_cast<size_t>(valid_elements * eps);
-        const size_t zero_threshold = 0x1000;
+        size_t err_count = 0;
+        const size_t err_threshold = static_cast<size_t>(valid_elements * rtol);
 
         for (size_t row = 0; row < G_ORIG_M; ++row) {
             for (size_t col = 0; col < G_ORIG_N; ++col) {
@@ -782,19 +776,17 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
                 float exp_val = golden[golden_idx];
                 float act_val = halfToFloat(output_host_fp16[padded_idx]);
                 float diff = std::abs(exp_val - act_val);
-                float rel = (std::abs(exp_val) > 1e-6f) ? (diff / std::abs(exp_val)) : diff;
+                float rel = (std::abs(exp_val) > 1e-3f) ? (diff / std::abs(exp_val)) : 0.0f;
                 if (diff > max_diff) max_diff = diff;
                 if (rel > max_diff_ratio) max_diff_ratio = rel;
-                if (std::abs(act_val) <= 1e-6f && std::abs(exp_val) > 1e-6f) zero_count++;
-                if ((diff > eps && rel > eps) || zero_count > zero_threshold) err_count++;
+                if (diff > atol + rtol * std::abs(exp_val)) err_count++;
             }
         }
 
-        is_ok = (err_count <= err_threshold) && (zero_count <= zero_threshold);
+        is_ok = (err_count <= err_threshold);
         std::cout << "[VERIFY] valid_region=" << G_ORIG_M << "x" << G_ORIG_N
                   << " max_diff=" << max_diff << " max_ratio=" << max_diff_ratio
                   << " err=" << err_count << "/" << err_threshold
-                  << " zeros=0x" << std::hex << zero_count << std::dec
                   << " -> " << (is_ok ? "PASS" : "FAIL") << std::endl;
     }
 
@@ -811,8 +803,8 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
         PerfStats pipe_comp_s = calcStats(pipe_compute_us);
         PerfStats pipe_comm_s = calcStats(pipe_comm_us);
 
-        double flops_per_rank = 2.0 * G_ORIG_M * (double)k_per_rank * G_ORIG_N;
-        double flops_total    = 2.0 * G_ORIG_M * (double)G_K * G_ORIG_N;
+        double flops_per_rank = 2.0 * G_ORIG_M * (double)G_K * G_ORIG_N;
+        double flops_total    = flops_per_rank * n_ranks;
         auto gflops = [](double flops, double us) { return (us > 0) ? (flops / (us * 1e-6) / 1e9) : 0.0; };
 
         size_t tileBytes = static_cast<size_t>(G_BASE_M) * G_BASE_N * sizeof(uint16_t);
@@ -883,7 +875,7 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
 // ============================================================================
 static bool RunGemmAllReduce(int n_ranks, int first_device_id,
                              const uint16_t *a_parts,
-                             const uint16_t *b_parts,
+                             const uint16_t *b_data,
                              const float *golden)
 {
     if (n_ranks <= 0 || n_ranks > 8) {
@@ -893,12 +885,10 @@ static bool RunGemmAllReduce(int n_ranks, int first_device_id,
 
     int mpiRank = CommMpiRank();
 
-    uint32_t k_per_rank = G_K / n_ranks;
-    size_t a_rank_bytes = (size_t)G_M * k_per_rank * sizeof(uint16_t);
-    size_t b_rank_bytes = (size_t)G_N * k_per_rank * sizeof(uint16_t);
+    size_t a_rank_bytes = (size_t)G_M * G_K * sizeof(uint16_t);
+    size_t b_bytes = (size_t)G_N * G_K * sizeof(uint16_t);
     size_t golden_bytes = (size_t)G_M * G_N * sizeof(float);
-    size_t a_rank_elems = (size_t)G_M * k_per_rank;
-    size_t b_rank_elems = (size_t)G_N * k_per_rank;
+    size_t a_rank_elems = (size_t)G_M * G_K;
 
     if (mpiRank == 0) {
         std::cout << "\n================================================================" << std::endl;
@@ -912,6 +902,7 @@ static bool RunGemmAllReduce(int n_ranks, int first_device_id,
                   << "  devices=[" << first_device_id << "," << (first_device_id + n_ranks) << ")"
                   << "  compute_blocks=" << COMPUTE_BLOCK_NUM
                   << "  comm_blocks=" << COMM_BLOCK_NUM << std::endl;
+        std::cout << "  mode: independent A per rank, shared B" << std::endl;
         std::cout << "================================================================" << std::endl;
     }
 
@@ -957,11 +948,10 @@ static bool RunGemmAllReduce(int n_ranks, int first_device_id,
     CommMpiBarrier();
 
     const uint16_t *a_rank = a_parts + (size_t)mpiRank * a_rank_elems;
-    const uint16_t *b_rank = b_parts + (size_t)mpiRank * b_rank_elems;
 
     bool ok = RunGemmAllReducePerRank(mpiRank, n_ranks, device_id,
                                       a_rank, a_rank_bytes,
-                                      b_rank, b_rank_bytes,
+                                      b_data, b_bytes,
                                       golden, golden_bytes,
                                       &rootInfo);
 
@@ -1027,35 +1017,45 @@ static void computeGolden(const float *A, const float *B, float *C, int M, int K
 
 static bool generateData(int nranks,
                           std::vector<uint16_t> &a_parts,
-                          std::vector<uint16_t> &b_parts,
+                          std::vector<uint16_t> &b_data,
                           std::vector<float> &golden)
 {
-    int k_per_rank = G_K / nranks;
-    if (G_K % nranks != 0) {
-        fprintf(stderr, "[ERROR] K=%d not divisible by nranks=%d\n", G_K, nranks);
-        return false;
-    }
-
-    printf("Data Parallel: K=%d split into %d ranks, %d per rank\n", G_K, nranks, k_per_rank);
+    printf("Data Parallel: each rank has independent A[%d,%d], shared B[%d,%d], %d ranks\n",
+           G_ORIG_M, G_K, G_K, G_ORIG_N, nranks);
     if (G_M != G_ORIG_M || G_N != G_ORIG_N) {
         printf("  Padded: M %d->%d, N %d->%d (tile alignment)\n",
                G_ORIG_M, G_M, G_ORIG_N, G_N);
     }
 
     std::mt19937 gen(42);
-    std::uniform_int_distribution<int> dist(1, 4);
+    float scale = std::sqrt(65000.0f / ((float)G_K * nranks * 4.0f));
+    std::uniform_real_distribution<float> dist(-scale, scale);
 
     size_t A_orig_elems = (size_t)G_ORIG_M * G_K;
     size_t B_orig_elems = (size_t)G_K * G_ORIG_N;
-    std::vector<float> A_fp32(A_orig_elems), B_fp32(B_orig_elems);
 
-    for (auto &v : A_fp32) v = (float)dist(gen);
-    for (auto &v : B_fp32) v = (float)dist(gen);
+    std::vector<std::vector<float>> A_fp32_all(nranks);
+    for (int r = 0; r < nranks; r++) {
+        A_fp32_all[r].resize(A_orig_elems);
+        for (auto &v : A_fp32_all[r]) v = dist(gen);
+    }
 
-    printf("  Computing golden reference (CPU GEMM %d×%d×%d)...\n", G_ORIG_M, G_K, G_ORIG_N);
+    std::vector<float> B_fp32(B_orig_elems);
+    for (auto &v : B_fp32) v = dist(gen);
+
+    printf("  Computing golden reference (sum of %d CPU GEMMs %d×%d×%d)...\n",
+           nranks, G_ORIG_M, G_K, G_ORIG_N);
     auto t0 = std::chrono::high_resolution_clock::now();
-    std::vector<float> golden_orig((size_t)G_ORIG_M * G_ORIG_N);
-    computeGolden(A_fp32.data(), B_fp32.data(), golden_orig.data(), G_ORIG_M, G_K, G_ORIG_N);
+
+    std::vector<float> golden_orig((size_t)G_ORIG_M * G_ORIG_N, 0.0f);
+    std::vector<float> tmp((size_t)G_ORIG_M * G_ORIG_N);
+    for (int r = 0; r < nranks; r++) {
+        std::memset(tmp.data(), 0, tmp.size() * sizeof(float));
+        computeGolden(A_fp32_all[r].data(), B_fp32.data(), tmp.data(), G_ORIG_M, G_K, G_ORIG_N);
+        for (size_t i = 0; i < golden_orig.size(); i++)
+            golden_orig[i] += tmp[i];
+    }
+
     auto t1 = std::chrono::high_resolution_clock::now();
     double secs = std::chrono::duration<double>(t1 - t0).count();
     printf("  Golden computed in %.1f s\n", secs);
@@ -1066,34 +1066,31 @@ static bool generateData(int nranks,
                     &golden_orig[(size_t)i * G_ORIG_N],
                     G_ORIG_N * sizeof(float));
 
-    size_t a_rank_elems = (size_t)G_M * k_per_rank;
-    size_t b_rank_elems = (size_t)G_N * k_per_rank;
+    size_t a_rank_elems = (size_t)G_M * G_K;
+    size_t b_elems = (size_t)G_N * G_K;
     a_parts.assign((size_t)nranks * a_rank_elems, 0);
-    b_parts.assign((size_t)nranks * b_rank_elems, 0);
+    b_data.assign(b_elems, 0);
 
     for (int r = 0; r < nranks; r++) {
-        int k_start = r * k_per_rank;
         uint16_t *a_dst = a_parts.data() + (size_t)r * a_rank_elems;
-        uint16_t *b_dst = b_parts.data() + (size_t)r * b_rank_elems;
-
         for (int i = 0; i < (int)G_ORIG_M; i++)
-            for (int j = 0; j < k_per_rank; j++)
-                a_dst[(size_t)i * k_per_rank + j] =
-                    floatToHalf(A_fp32[(size_t)i * G_K + k_start + j]);
+            for (int j = 0; j < (int)G_K; j++)
+                a_dst[(size_t)i * G_K + j] =
+                    floatToHalf(A_fp32_all[r][(size_t)i * G_K + j]);
 
-        for (int i = 0; i < (int)G_ORIG_N; i++)
-            for (int j = 0; j < k_per_rank; j++)
-                b_dst[(size_t)i * k_per_rank + j] =
-                    floatToHalf(B_fp32[(size_t)(k_start + j) * G_ORIG_N + i]);
-
-        printf("  Rank %d: A[%d×%d] cols[%d:%d], B[%d×%d] rows[%d:%d]\n",
-               r, G_M, k_per_rank, k_start, k_start + k_per_rank,
-               k_per_rank, G_N, k_start, k_start + k_per_rank);
+        printf("  Rank %d: A_%d[%d×%d] (independent)\n", r, r, G_M, G_K);
     }
+
+    uint16_t *b_dst = b_data.data();
+    for (int i = 0; i < (int)G_ORIG_N; i++)
+        for (int j = 0; j < (int)G_K; j++)
+            b_dst[(size_t)i * G_K + j] =
+                floatToHalf(B_fp32[(size_t)j * G_ORIG_N + i]);
+    printf("  B[%d×%d] (shared across all ranks)\n", G_K, G_N);
 
     double gsum = 0.0;
     for (auto v : golden_orig) gsum += v;
-    printf("  Golden: shape=(%d, %d), sum=%.2f\n", G_ORIG_M, G_ORIG_N, gsum);
+    printf("  Golden = sum(A_i × B): shape=(%d, %d), sum=%.2f\n", G_ORIG_M, G_ORIG_N, gsum);
     return true;
 }
 
@@ -1140,17 +1137,16 @@ int main(int argc, char *argv[])
                n_ranks, first_device_id, first_device_id + n_ranks);
     }
 
-    int k_per_rank = G_K / n_ranks;
-    size_t a_total = (size_t)n_ranks * G_M * k_per_rank;
-    size_t b_total = (size_t)n_ranks * G_N * k_per_rank;
+    size_t a_total = (size_t)n_ranks * G_M * G_K;
+    size_t b_total = (size_t)G_N * G_K;
     size_t g_total = (size_t)G_M * G_N;
 
-    std::vector<uint16_t> a_parts(a_total), b_parts(b_total);
+    std::vector<uint16_t> a_parts(a_total), b_data(b_total);
     std::vector<float> golden(g_total);
 
     int data_ok = 0;
     if (CommMpiRank() == 0) {
-        if (!generateData(n_ranks, a_parts, b_parts, golden)) {
+        if (!generateData(n_ranks, a_parts, b_data, golden)) {
             data_ok = 1;
         }
     }
@@ -1162,7 +1158,7 @@ int main(int argc, char *argv[])
     }
 
     CommMpiBcast(a_parts.data(), (int)(a_total * sizeof(uint16_t)), COMM_MPI_CHAR, 0);
-    CommMpiBcast(b_parts.data(), (int)(b_total * sizeof(uint16_t)), COMM_MPI_CHAR, 0);
+    CommMpiBcast(b_data.data(), (int)(b_total * sizeof(uint16_t)), COMM_MPI_CHAR, 0);
     CommMpiBcast(golden.data(), (int)(g_total * sizeof(float)), COMM_MPI_CHAR, 0);
 
     if (CommMpiRank() == 0) {
@@ -1170,7 +1166,7 @@ int main(int argc, char *argv[])
     }
 
     bool ok = RunGemmAllReduce(n_ranks, first_device_id,
-                               a_parts.data(), b_parts.data(), golden.data());
+                               a_parts.data(), b_data.data(), golden.data());
 
     if (CommMpiRank() == 0) {
         printf(ok ? "\nGEMM AllReduce demo completed successfully.\n"

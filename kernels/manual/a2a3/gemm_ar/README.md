@@ -4,7 +4,7 @@
 
 本项目在昇腾 910B (A2/A3) NPU 上实现了一个 **GEMM + AllReduce 融合算子**，采用双流（Compute Stream + Comm Stream）计算通信重叠设计，通过 PTO 通信指令集在 HCCL RDMA 窗口上完成 AllReduce。
 
-核心思路：将全局矩阵乘法 C\[M×N\] = A\[M×K\] × B\[K×N\] 沿 K 维度拆分到多张卡上，每张卡独立计算局部 GEMM 后，通过 **ReduceScatter + Reduce + AllGather** 三阶段通信完成 AllReduce 归约，每张卡最终得到完整的 C\_final。
+核心思路：每张卡持有独立的输入矩阵 A\_i\[M×K\] 和共享的权重矩阵 B\[K×N\]，各自计算完整 GEMM C\_i = A\_i × B，然后通过 **ReduceScatter + Reduce + AllGather** 三阶段通信完成 AllReduce 归约，每张卡最终得到 C\_final = Σ C\_i。典型应用场景为分布式训练中的梯度聚合。
 
 **关键优化**：
 - **全链路 FP16**：MatMul L0C FP32 累加器输出经 FixPipe 硬件自动 cast 为 FP16 写入 GM，通信数据和最终输出均为 FP16，通信量比 FP32 方案减半
@@ -45,26 +45,26 @@ FIRST_DEVICE=0 ./run.sh --nranks 8 --soc-version Ascend910B1
 | `MPI_LIB_PATH` | `libmpi.so` 绝对路径（运行时动态加载） | 由 `run.sh` 根据找到的 MPI 自动设置 |
 | `CONDA_PREFIX` | Conda 环境路径（自动由 `conda activate` 设置） | 激活 conda 环境后自动生效 |
 
-## 数据并行策略（K 维切分）
+## 数据并行策略（独立 A，共享 B）
 
 ```
-全局矩阵乘法：C[M×N] = A[M×K] × B[K×N]
+语义: C_final = Σ (A_i × B)    for i in [0, nranks)
 
 默认参数: M=5416, K=6144, N=1408, 8 ranks
 
-K 维按 rank 均分，每个 rank 持有:
-  A_part [M × (K/r)] = [5416 × 768]    (FP16)
-  B_part [(K/r) × N] = [768 × 1408]    (FP16)
+每个 rank i 持有:
+  A_i [M × K] = [5416 × 6144]    (FP16, 每 rank 独立)
+  B   [K × N] = [6144 × 1408]    (FP16, 所有 rank 共享)
 
-每个 rank 独立计算局部 GEMM:
-  C_rank [M × N] = A_part × B_part     (L0C FP32 累加，GM 输出 FP16)
+每个 rank 独立计算完整 GEMM:
+  C_i [M × N] = A_i × B          (L0C FP32 累加，GM 输出 FP16)
 
 AllReduce 归约 (全 FP16):
-  C_final = C_rank_0 + C_rank_1 + ... + C_rank_7
+  C_final = C_0 + C_1 + ... + C_7
 
-数学原理:
-  A × B = [A_0 | A_1 | ... | A_{r-1}] × [B_0; B_1; ...; B_{r-1}]
-        = Σ A_i × B_i
+典型应用场景:
+  分布式训练中，每个 rank 持有不同 batch 的梯度 A_i，
+  乘以共享权重 B，然后 AllReduce 聚合结果。
 ```
 
 ## 整体架构
@@ -89,6 +89,7 @@ AllReduce 归约 (全 FP16):
 │                                  └─────────────────────────────┘   │
 │                                                                     │
 │  关键特性:                                                           │
+│  - 独立 A + 共享 B：每 rank 全量 K 计算，Cube 利用率高               │
 │  - 全链路 FP16：GEMM→通信→输出全程 FP16，通信量比 FP32 减半          │
 │  - 单次 kernel launch：三阶段合并，阶段间用 DeviceBarrier 同步        │
 │  - 零 Host Barrier：跨 rank 同步由 TNOTIFY/TWAIT 在设备端完成        │
@@ -187,7 +188,7 @@ Owner 分配 (round-robin):
 | 参数 | 默认值 | 说明 |
 |------|-------|------|
 | G\_M | 5416 | 矩阵 M 维度（自动 pad 到 128 对齐） |
-| G\_K | 6144 | 矩阵 K 维度（全局，须整除 nranks） |
+| G\_K | 6144 | 矩阵 K 维度（每 rank 使用全量 K，须整除 G\_BASE\_K × G\_STEP\_KA） |
 | G\_N | 1408 | 矩阵 N 维度（自动 pad 到 256 对齐） |
 | G\_BASE\_M | 128 | Tile M 维度 |
 | G\_BASE\_K | 64 | Tile K 维度 |
@@ -226,7 +227,10 @@ Cube (M):             [TMATMUL k0] [ACC k1] [ACC k2] [ACC k3] [TMATMUL k0'] ...
 ## 执行流程
 
 ```
-1. MPI 初始化 → Rank 0 生成随机矩阵 (seed=42) + CPU golden reference (FP32)
+1. MPI 初始化 → Rank 0 生成随机矩阵 (seed=42):
+   - 每 rank 一个独立的 A_i[M×K]
+   - 所有 rank 共享 B[K×N]
+   - CPU golden reference = Σ(A_i × B) (FP32)
 2. MPI Broadcast 输入数据到所有 rank
 3. HCCL 通信器初始化（MPI 广播 root info，自动检测 MESH/RING 拓扑）
 4. 分配 HCCL 窗口内存 (recv_buffers + reduced_output + signal_matrix)
@@ -258,7 +262,7 @@ gemm_ar/
 ├── CMakeLists.txt              # 构建配置（3 个 target：cube kernel, vec kernel, host exe）
 ├── run.sh                      # 一键构建+运行脚本（自动计算 HCCL_BUFFSIZE、发现 MPI 路径）
 ├── gemm_ar_config.h            # 全局参数配置（矩阵维度、tile 大小、block 数量）
-├── main.cpp                    # 入口：MPI 初始化、数据生成、HCCL 初始化、
+├── main.cpp                    # 入口：MPI 初始化、数据生成（独立 A + 共享 B）、HCCL 初始化、
 │                               #   窗口分配（含 signal_matrix）、性能测量、FP16 验证
 ├── gemm_compute_kernel.cpp     # GEMM 计算内核（Cube 架构，L0C FP32→GM FP16 自动 cast）
 ├── comm_kernel.cpp             # 通信内核（Vector 架构，单 kernel 三阶段 AllReduce）
@@ -277,7 +281,7 @@ gemm_ar/
 cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 ```
 
-约束：K 必须能被 nranks 整除。`HCCL_BUFFSIZE` 由 `run.sh` 自动计算。
+约束：K 必须能被 `G_BASE_K × G_STEP_KA`（默认 64×4=256）整除。`HCCL_BUFFSIZE` 由 `run.sh` 自动计算。
 
 ## 常见问题
 
@@ -296,7 +300,7 @@ cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 
 ### 为何选择 ReduceScatter + AllGather
 
-相比直接广播（TPUT\<AtomicAdd\>到所有 rank），ReduceScatter + AllGather 的通信量降低 4×：
+每个 rank 计算的是完整的 C\_i = A\_i × B，AllReduce 对所有 C\_i 求和。相比直接广播（TPUT\<AtomicAdd\>到所有 rank），ReduceScatter + AllGather 的通信量降低 4×：
 - 每个 tile 在 ReduceScatter 阶段只发送给唯一 owner（1 次 TPUT vs 7 次）
 - AllGather 阶段只有 owner 广播归约结果
 - 不同 rank 写入 owner 的不同 slot，无写冲突，因此可用 plain TPUT 代替 TPUT\<AtomicAdd\>
@@ -321,24 +325,9 @@ MatMul 累加器在 L0C 使用 FP32，但最终输出经 TSTORE 写入 GM 时由
 
 ## 性能实测
 
-8 卡 Ascend 910B，M=5416, K=6144, N=1408（padded 5504x1536），258 tiles：
+8 卡 Ascend 910B，M=5416, K=6144, N=1408（padded 5504x1536），258 tiles。每 rank 计算完整 GEMM C\_i = A\_i × B，AllReduce 对 8 个 C\_i 求和。
 
-```
-Compute-only:   109 us  (107 TFLOPS)
-
-Sequential:     707 us
-  compute:      110 us
-  comm:         597 us  (46.7 GB/s)
-
-Pipelined:      687 us
-  compute done: 200 us
-  comm done:    687 us  (40.5 GB/s)
-
-Speedup:        1.03x
-Overlap eff:    18.2%
-```
-
-流水线重叠效率较低的原因：K 轴 8 卡切分后每 rank 仅 K=768，Cube 计算约 110 us 即完成，而通信约 597 us，计算时间远短于通信时间，理论重叠上限 = min(compute, comm) / max(compute, comm) ≈ 18.4%。
+性能数据待实测更新。
 
 ## 构建系统
 
