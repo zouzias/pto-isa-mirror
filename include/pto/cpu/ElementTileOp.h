@@ -207,7 +207,7 @@ PTO_INTERNAL void TNOT_IMPL(tile_shape &dst, tile_shape &src)
     UnaryElementTileOp_Impl<tile_shape, ElementOp::OP_NOT>(dst.data(), src.data(), row, col);
 }
 
-template <typename tile_shape>
+template <auto PrecisionType = RecipAlgorithm::DEFAULT, typename tile_shape>
 PTO_INTERNAL void TRECIP_IMPL(tile_shape &dst, tile_shape &src)
 {
     unsigned row = dst.GetValidRow();
