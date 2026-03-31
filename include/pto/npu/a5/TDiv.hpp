@@ -23,30 +23,25 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 namespace pto {
 
-template <typename T>
+template <uint8_t PrecisionType = DIV_ALGO_DEFAULT, typename T>
 struct DivOp {
 #ifdef STRAIGHT_INTRINSICS_IMPL
     PTO_INTERNAL static void BinInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, RegTensor<T> &reg_src1,
                                       MaskReg &preg)
     {
-        vdiv(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
-    }
-#else
-    PTO_INTERNAL static void BinInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, RegTensor<T> &reg_src1,
-                                      MaskReg &preg)
-    {
-        if constexpr (std::is_same_v<T, float>) {
+        if constexpr (PrecisionType == DIV_ALGO_HIGH_PRECISION && std::is_same_v<T, float>) {
             DivIEEE754FloatImpl<T, RegTensor<T> >(reg_dst, reg_src0, reg_src1, preg);
-        } else if constexpr (std::is_same_v<T, half>) {
+        } else if constexpr (PrecisionType == DIV_ALGO_HIGH_PRECISION && std::is_same_v<T, half>) {
             DivIEEE754HalfImpl<T, RegTensor<T> >(reg_dst, reg_src0, reg_src1, preg);
-        } else {
+        } else if constexpr (PrecisionType == DIV_ALGO_DEFAULT){
             vdiv(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
+        } else {
+            static_assert(false, "Unsupported precision type and data type combination.");
         }
     }
-#endif
 };
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, unsigned ElementsPerRepeat,
+template <uint8_t PrecisionType = DIV_ALGO_DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, unsigned ElementsPerRepeat,
           unsigned BlockSizeElem>
 __tf__ PTO_INTERNAL OP_NAME(TDIV)
     OP_TYPE(element_wise) void TDiv(typename TileDataDst::TileDType __out__ dst,
@@ -59,7 +54,7 @@ __tf__ PTO_INTERNAL OP_NAME(TDIV)
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
 
-    BinaryInstr<DivOp<T>, TileDataDst, TileDataSrc0, TileDataSrc1, ElementsPerRepeat, BlockSizeElem>(
+    BinaryInstr<DivOp<PrecisionType, T>, TileDataDst, TileDataSrc0, TileDataSrc1, ElementsPerRepeat, BlockSizeElem>(
         dstPtr, src0Ptr, src1Ptr, validRows, validCols, version);
     return;
 }
@@ -84,7 +79,7 @@ PTO_INTERNAL void TDivCheck(const TileDataDst &dst, const TileDataSrc0 &src0, co
                "Fix: TDIV input tile src1 valid shape mismatch with output tile dst shape.");
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
+template <uint8_t PrecisionType = DEFAULT, typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
 PTO_INTERNAL void TDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
     using T = typename TileDataDst::DType;
@@ -92,7 +87,7 @@ PTO_INTERNAL void TDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
 
-    TDiv<TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem>(
+    TDiv<PrecisionType, TileDataDst, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem>(
         dst.data(), src0.data(), src1.data(), dst.GetValidRow(), dst.GetValidCol());
 }
 } // namespace pto

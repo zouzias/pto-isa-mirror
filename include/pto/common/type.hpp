@@ -249,6 +249,12 @@ enum class TileLayoutCustom : uint8_t
     NONE,
 };
 
+enum class DivAlgorithm : uint8_t
+{
+    DIV_ALGO_DEFAULT,
+    DIV_ALGO_HIGH_PRECISION
+};
+
 namespace GlobalTensorDim {
 constexpr int DIM_0 = 0;
 constexpr int DIM_1 = 1;
