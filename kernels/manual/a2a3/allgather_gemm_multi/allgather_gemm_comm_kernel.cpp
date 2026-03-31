@@ -723,6 +723,13 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         double seq_tflops = (seq_avg > 0.0) ? (gemm_flops / (seq_avg * 1e-6) / 1e12) : 0.0;
         double stream_tflops = (stream_avg > 0.0) ? (gemm_flops / (stream_avg * 1e-6) / 1e12) : 0.0;
 
+        // MFU (Model FLOPs Utilization) = actual TFLOPS / peak TFLOPS
+        // Ascend 910B FP16 Cube peak: 320 TFLOPS per chip
+        constexpr double PEAK_TFLOPS_FP16 = 320.0;
+        double compute_mfu = compute_tflops / PEAK_TFLOPS_FP16 * 100.0;
+        double seq_mfu = seq_tflops / PEAK_TFLOPS_FP16 * 100.0;
+        double stream_mfu = stream_tflops / PEAK_TFLOPS_FP16 * 100.0;
+
         // Communication bandwidth calculation (M-slice AllGather)
         double m_local = static_cast<double>(G_M) / n_ranks;
         double comm_bytes = m_local * static_cast<double>(G_K) * sizeof(uint16_t) * (n_ranks - 1);
@@ -769,6 +776,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         std::cout << "    Max Time:  " << compute_max << " us" << std::endl;
         std::cout << "    Std Dev:   " << compute_std << " us" << std::endl;
         std::cout << "    Throughput: " << compute_tflops << " TFLOPS (per rank)" << std::endl;
+        std::cout << "    MFU:       " << compute_mfu << "% (vs " << PEAK_TFLOPS_FP16 << " TFLOPS peak)" << std::endl;
 
         std::cout << "\n  Component Summary:" << std::endl;
         std::cout << "    Comm Avg:          " << comm_avg << " us" << std::endl;
@@ -781,6 +789,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         std::cout << "    Max Time:  " << seq_max << " us" << std::endl;
         std::cout << "    Std Dev:   " << seq_std << " us" << std::endl;
         std::cout << "    Throughput: " << seq_tflops << " TFLOPS" << std::endl;
+        std::cout << "    MFU:       " << seq_mfu << "%" << std::endl;
 
         std::cout << "\n  *** STREAMING Pipelined (Tile-based, fine-grained overlap): ***" << std::endl;
         std::cout << "    Tile size: " << optimal_tile_size << " blocks (dynamic)" << std::endl;
@@ -790,12 +799,18 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         std::cout << "    Max Time:  " << stream_max << " us" << std::endl;
         std::cout << "    Std Dev:   " << stream_std << " us" << std::endl;
         std::cout << "    Throughput: " << stream_tflops << " TFLOPS" << std::endl;
+        std::cout << "    MFU:       " << stream_mfu << "%" << std::endl;
 
         double speedup_stream = seq_avg / stream_avg;
         std::cout << "\n  Performance Comparison:" << std::endl;
         std::cout << "    Speedup (Streaming vs Sequential):  " << speedup_stream << "x" << std::endl;
         std::cout << "    Time Saved (Streaming): " << (seq_avg - stream_avg) << " us ("
                   << ((seq_avg - stream_avg) / seq_avg * 100.0) << "%)" << std::endl;
+
+        std::cout << "\n  MFU Summary (vs " << PEAK_TFLOPS_FP16 << " TFLOPS FP16 peak):" << std::endl;
+        std::cout << "    Compute-only MFU:  " << compute_mfu << "%" << std::endl;
+        std::cout << "    Sequential MFU:    " << seq_mfu << "%" << std::endl;
+        std::cout << "    Streaming MFU:     " << stream_mfu << "%" << std::endl;
 
         double theoretical_min = std::max(compute_avg, comm_avg);
         double max_possible_saved = seq_avg - theoretical_min;
