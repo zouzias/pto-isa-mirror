@@ -35,9 +35,6 @@ do
     esac
 done
 
-# Generate input and golden data (same format as gemm_allgather)
-python ./scripts/gen_data.py ${SIZE} --n-ranks ${N_RANKS}
-
 # Size configurations (same as gemm_allgather_multi)
 case "${SIZE}" in
     small)
@@ -115,6 +112,9 @@ case "${SIZE}" in
     xxlarge)
         G_M=8192; G_K=8192; G_N=4096
         ;;
+    5416_6144_1408)
+        G_M=5416; G_K=6144; G_N=1408
+        ;;
     *)
         echo "[ERROR] Unsupported size: ${SIZE}"
         echo "Available sizes:"
@@ -122,9 +122,35 @@ case "${SIZE}" in
         echo "  KV-cache 7B:  kv_7b_2k, kv_7b_4k, kv_7b_8k, kv_7b_16k, kv_7b_32k, kv_7b_64k, kv_7b_128k, kv_7b_256k"
         echo "  KV-cache 13B: kv_13b_4k, kv_13b_8k, kv_13b_16k, kv_13b_32k, kv_13b_64k, kv_13b_128k"
         echo "  KV-cache 70B: kv_70b_4k, kv_70b_8k, kv_70b_16k, kv_70b_32k, kv_70b_64k, kv_70b_128k"
+        echo "  Custom:       5416_6144_1408"
         exit 1
         ;;
 esac
+
+# Save original (unpadded) dimensions
+ORIG_M=${G_M}; ORIG_K=${G_K}; ORIG_N=${G_N}
+
+# Pad dimensions to tile-aligned sizes for kernel execution:
+#   M must satisfy: M % BASE_M == 0, M % N_RANKS == 0, (M/N_RANKS) % BASE_M == 0
+#   This requires M to be a multiple of BASE_M * N_RANKS.
+#   K must be divisible by BASE_N (256) — used as k_chunk size
+#   N must be divisible by BASE_N (256) — used as n_tile size
+BASE_M=128; BASE_N=256
+
+M_ALIGN=$(( BASE_M * N_RANKS ))
+
+G_M=$(( ((ORIG_M + M_ALIGN - 1) / M_ALIGN) * M_ALIGN ))
+G_K=$(( ((ORIG_K + BASE_N - 1) / BASE_N) * BASE_N ))
+G_N=$(( ((ORIG_N + BASE_N - 1) / BASE_N) * BASE_N ))
+
+if [ ${G_M} -ne ${ORIG_M} ] || [ ${G_K} -ne ${ORIG_K} ] || [ ${G_N} -ne ${ORIG_N} ]; then
+    echo "[INFO] Padded dimensions for tile alignment: M=${ORIG_M}->${G_M}, K=${ORIG_K}->${G_K}, N=${ORIG_N}->${G_N}"
+fi
+
+# Generate input and golden data with padded dimensions
+# Remove stale data if dimensions changed (padded sizes affect binary layout)
+rm -rf input/${SIZE} output/${SIZE}
+python ./scripts/gen_data.py ${SIZE} --n-ranks ${N_RANKS} --padded-m ${G_M} --padded-k ${G_K} --padded-n ${G_N}
 
 # Auto-compute HCCL_BUFFSIZE based on shared-window memory requirement.
 # AllGather puts the full M×K matrix (fp16) into the HCCL window, plus a small
@@ -138,7 +164,7 @@ if [ -z "${HCCL_BUFFSIZE:-}" ] || [ "${HCCL_BUFFSIZE:-0}" -lt "${REQUIRED_MB}" ]
 fi
 echo "[INFO] HCCL_BUFFSIZE=${HCCL_BUFFSIZE} MB (shmem_input=${SHMEM_INPUT_MB} MB)"
 
-echo "[INFO] Using size: ${SIZE} (M=${G_M}, K=${G_K}, N=${G_N}), n_ranks=${N_RANKS}"
+echo "[INFO] Using size: ${SIZE} (orig M=${ORIG_M}, K=${ORIG_K}, N=${ORIG_N}) (padded M=${G_M}, K=${G_K}, N=${G_N}), n_ranks=${N_RANKS}"
 
 if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
     echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}"
@@ -188,6 +214,7 @@ unset CXXFLAGS CFLAGS LDFLAGS
 
 CC=bisheng CXX=bisheng cmake -DRUN_MODE=${CMAKE_RUN_MODE} -DSOC_VERSION=${SOC_VERSION} \
       -DG_M=${G_M} -DG_K=${G_K} -DG_N=${G_N} \
+      -DORIG_M=${ORIG_M} -DORIG_K=${ORIG_K} -DORIG_N=${ORIG_N} \
       -DSIZE_NAME=${SIZE} \
       -DCOMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM} \
       -DCOMM_BLOCK_NUM=${COMM_BLOCK_NUM} ..

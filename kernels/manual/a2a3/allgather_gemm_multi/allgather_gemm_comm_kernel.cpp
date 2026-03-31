@@ -47,6 +47,20 @@ constexpr uint32_t G_M = CONFIG_G_M;
 constexpr uint32_t G_K = CONFIG_G_K;
 constexpr uint32_t G_N = CONFIG_G_N;
 
+#ifndef CONFIG_ORIG_M
+#define CONFIG_ORIG_M CONFIG_G_M
+#endif
+#ifndef CONFIG_ORIG_K
+#define CONFIG_ORIG_K CONFIG_G_K
+#endif
+#ifndef CONFIG_ORIG_N
+#define CONFIG_ORIG_N CONFIG_G_N
+#endif
+
+constexpr uint32_t ORIG_M = CONFIG_ORIG_M;
+constexpr uint32_t ORIG_K = CONFIG_ORIG_K;
+constexpr uint32_t ORIG_N = CONFIG_ORIG_N;
+
 #ifndef CONFIG_SIZE_NAME
 #define CONFIG_SIZE_NAME "large"
 #endif
@@ -268,15 +282,6 @@ extern void launchAllGatherGemmComputeStreaming(
 static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
                                     const HcclRootInfo* rootInfo)
 {
-    if (G_M % G_BASE_M != 0 || G_N % G_BASE_N != 0 ||
-        G_M % n_ranks != 0 || (G_M / n_ranks) % G_BASE_M != 0 ||
-        G_K % G_BASE_N != 0) {
-        if (rank_id == 0) {
-            std::cerr << "[ERROR] Shape not aligned for ring-streaming path." << std::endl;
-        }
-        return false;
-    }
-
     int status = 0;
 
     TestContext hcclTestCtx;
@@ -502,11 +507,23 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         PtoTestCommon::WriteFile(output_file, verify_host, outputSize);
 
         std::string golden_file = output_dir + "/golden.bin";
-        std::vector<float> golden(outputSize / sizeof(float));
+        size_t goldenSize = static_cast<size_t>(ORIG_M) * ORIG_N * sizeof(float);
+        std::vector<float> golden(goldenSize / sizeof(float));
         size_t golden_file_size = 0;
         bool rank_ok = false;
-        if (PtoTestCommon::ReadFile(golden_file, golden_file_size, golden.data(), outputSize) && golden_file_size == outputSize) {
-            rank_ok = PtoTestCommon::ResultCmp(golden, verify_host, 0.001f);
+        if (PtoTestCommon::ReadFile(golden_file, golden_file_size, golden.data(), goldenSize) && golden_file_size == goldenSize) {
+            if (ORIG_M == G_M && ORIG_N == G_N) {
+                rank_ok = PtoTestCommon::ResultCmp(golden, verify_host, 0.001f);
+            } else {
+                // Extract the valid [ORIG_M, ORIG_N] region from padded [G_M, G_N] output
+                std::vector<float> valid_output(static_cast<size_t>(ORIG_M) * ORIG_N);
+                for (uint32_t row = 0; row < ORIG_M; ++row) {
+                    std::memcpy(valid_output.data() + row * ORIG_N,
+                                verify_host + row * G_N,
+                                ORIG_N * sizeof(float));
+                }
+                rank_ok = PtoTestCommon::ResultCmp(golden, valid_output.data(), 0.001f);
+            }
             if (rank_ok) {
                 std::cout << "[INFO] Rank " << rank_id << " " << phase_name << " verification passed!" << std::endl;
             } else {
@@ -514,7 +531,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
             }
         } else {
             std::cerr << "[ERROR] Rank " << rank_id << ": golden file not available or size mismatch: "
-                      << golden_file << std::endl;
+                      << golden_file << " (expected " << goldenSize << " bytes, got " << golden_file_size << ")" << std::endl;
             rank_ok = false;
         }
         aclrtFreeHost(verify_host);
@@ -717,7 +734,10 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         } else {
             std::cout << "[FAILED] AllGather GEMM (M-slice) test FAILED!" << std::endl;
         }
-        std::cout << "  Matrix dimensions: M=" << G_M << ", K=" << G_K << ", N=" << G_N << std::endl;
+        std::cout << "  Matrix dimensions (padded): M=" << G_M << ", K=" << G_K << ", N=" << G_N << std::endl;
+        if (ORIG_M != G_M || ORIG_K != G_K || ORIG_N != G_N) {
+            std::cout << "  Matrix dimensions (original): M=" << ORIG_M << ", K=" << ORIG_K << ", N=" << ORIG_N << std::endl;
+        }
         std::cout << "  Size configuration: " << SIZE_NAME << std::endl;
         std::cout << "  Ranks: " << n_ranks << ", M_local per rank: " << static_cast<int>(m_local) << std::endl;
         std::cout << "  Signaling: TileFlagMatrix (M-slice streaming)" << std::endl;
@@ -896,7 +916,11 @@ bool RunAllGatherGemm()
         std::cout << "================================================================" << std::endl;
 
         std::cout << "  Current compiled configuration:" << std::endl;
-        std::cout << "    M=" << G_M << ", K=" << G_K << ", N=" << G_N << std::endl;
+        std::cout << "    M=" << G_M << ", K=" << G_K << ", N=" << G_N;
+        if (ORIG_M != G_M || ORIG_K != G_K || ORIG_N != G_N) {
+            std::cout << " (padded from " << ORIG_M << "x" << ORIG_K << "x" << ORIG_N << ")";
+        }
+        std::cout << std::endl;
         std::cout << "    n_ranks=" << n_ranks << ", M_local=" << m_local << " per rank" << std::endl;
         std::cout << "    Base tile: " << G_BASE_M << "x" << G_BASE_K << "x" << G_BASE_N << std::endl;
         std::cout << "    Total blocks per source rank: " << num_blocks_per_src

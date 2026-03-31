@@ -17,14 +17,22 @@ import numpy as np
 np.random.seed(19)
 
 
-def gen_golden_data(m, k, n, size_name, n_ranks=2):
+def gen_golden_data(m, k, n, size_name, n_ranks=2, padded_m=None, padded_k=None, padded_n=None):
     """
     Generate input and golden data for AllGather GEMM demo (multi-card version).
     
-    Each card processes G_M/n_ranks rows of A matrix.
+    Each card processes padded_M/n_ranks rows of A matrix.
     B matrix is shared across cards (stored transposed: Layout::DN).
-    Output C is [G_M, G_N] = A_full @ B.
+    Golden output C is [orig_M, orig_N] = A_orig @ B_orig (unpadded).
+    
+    When padded dimensions differ from original, input matrices are zero-padded
+    so the kernel can operate on tile-aligned sizes. The golden output only
+    covers the original [M, N] region.
     """
+    pm = padded_m if padded_m is not None else m
+    pk = padded_k if padded_k is not None else k
+    pn = padded_n if padded_n is not None else n
+
     input_dir = f"input/{size_name}"
     output_dir = f"output/{size_name}"
     os.makedirs(input_dir, exist_ok=True)
@@ -42,38 +50,42 @@ def gen_golden_data(m, k, n, size_name, n_ranks=2):
     src_type = np.float16
     dst_type = np.float32
     
-    m_local = m // n_ranks
+    m_local_padded = pm // n_ranks
     
-    # Generate global A matrix [M, K]
-    a_global = np.random.randint(1, 5, [m, k]).astype(src_type)
+    # Generate original A matrix [M, K] with random data, then pad to [pm, pk]
+    a_orig = np.random.randint(1, 5, [m, k]).astype(src_type)
+    a_global = np.zeros([pm, pk], dtype=src_type)
+    a_global[:m, :k] = a_orig
     
-    # Generate global B matrix [K, N]
-    b_global = np.random.randint(1, 5, [k, n]).astype(src_type)
+    # Generate original B matrix [K, N] with random data, then pad to [pk, pn]
+    b_orig = np.random.randint(1, 5, [k, n]).astype(src_type)
+    b_global = np.zeros([pk, pn], dtype=src_type)
+    b_global[:k, :n] = b_orig
     
-    # Compute golden output: C = A @ B
-    golden = np.matmul(a_global.astype(dst_type), b_global.astype(dst_type)).astype(dst_type)
+    # Golden output uses original dimensions: C = A_orig @ B_orig
+    golden = np.matmul(a_orig.astype(dst_type), b_orig.astype(dst_type)).astype(dst_type)
     
-    # Split A matrix for each rank
+    # Split padded A matrix for each rank (padded M is evenly divisible by n_ranks)
     for rank in range(n_ranks):
-        start_row = rank * m_local
-        end_row = (rank + 1) * m_local if rank < n_ranks - 1 else m
+        start_row = rank * m_local_padded
+        end_row = (rank + 1) * m_local_padded
         a_rank = a_global[start_row:end_row, :].astype(src_type)
         a_rank_file = f"{input_dir}/a_rank{rank}.bin"
         a_rank.tofile(a_rank_file)
         print(f"  - A rank{rank}: {a_rank.shape} -> {a_rank_file}")
     
-    # B matrix needs to be transposed (Layout::DN)
+    # B matrix needs to be transposed (Layout::DN), using padded dimensions
     b_transposed = b_global.transpose().astype(src_type)
     b_file = f"{input_dir}/b.bin"
     b_transposed.tofile(b_file)
     
-    # Write golden output
+    # Write golden output (original unpadded dimensions)
     golden_file = f"{output_dir}/golden.bin"
     golden.tofile(golden_file)
     
-    print(f"[INFO] Generated data for {size_name}: M={m}, K={k}, N={n}, n_ranks={n_ranks}")
-    print(f"  - B (transposed): {b_transposed.shape} -> {b_file}")
-    print(f"  - Golden C: {golden.shape} -> {golden_file}")
+    print(f"[INFO] Generated data for {size_name}: orig=({m},{k},{n}), padded=({pm},{pk},{pn}), n_ranks={n_ranks}")
+    print(f"  - B (transposed, padded): {b_transposed.shape} -> {b_file}")
+    print(f"  - Golden C (orig): {golden.shape} -> {golden_file}")
 
 
 def main():
@@ -106,15 +118,28 @@ def main():
         "kv_70b_128k": (131072, 8192, 8192),
         "mla_prefill": (4096, 7168, 512),
         "mla_decode": (128, 7168, 512),
+        "5416_6144_1408": (5416, 6144, 1408),
     }
     
     n_ranks = 2
+    padded_m = None
+    padded_k = None
+    padded_n = None
     requested_size = None
     
     i = 1
     while i < len(sys.argv):
         if sys.argv[i] == "--n-ranks" and i + 1 < len(sys.argv):
             n_ranks = int(sys.argv[i + 1])
+            i += 2
+        elif sys.argv[i] == "--padded-m" and i + 1 < len(sys.argv):
+            padded_m = int(sys.argv[i + 1])
+            i += 2
+        elif sys.argv[i] == "--padded-k" and i + 1 < len(sys.argv):
+            padded_k = int(sys.argv[i + 1])
+            i += 2
+        elif sys.argv[i] == "--padded-n" and i + 1 < len(sys.argv):
+            padded_n = int(sys.argv[i + 1])
             i += 2
         elif requested_size is None:
             requested_size = sys.argv[i]
@@ -125,7 +150,7 @@ def main():
     if requested_size:
         if requested_size in size_configs:
             m, k, n = size_configs[requested_size]
-            gen_golden_data(m, k, n, requested_size, n_ranks)
+            gen_golden_data(m, k, n, requested_size, n_ranks, padded_m, padded_k, padded_n)
             print(f"\n[INFO] Data generation for {requested_size} (n_ranks={n_ranks}) completed!")
         else:
             print(f"[ERROR] Unknown size: {requested_size}")

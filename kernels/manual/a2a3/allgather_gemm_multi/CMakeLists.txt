@@ -38,7 +38,17 @@ endif()
 if(NOT DEFINED COMM_BLOCK_NUM)
     set(COMM_BLOCK_NUM 48)     # Max AIV blocks on Ascend 910B (2 AIV per AICORE)
 endif()
-message(STATUS "GEMM Size: M=${G_M}, K=${G_K}, N=${G_N}, Size Name: ${SIZE_NAME}")
+# Original (unpadded) dimensions for golden verification
+if(NOT DEFINED ORIG_M)
+    set(ORIG_M ${G_M})
+endif()
+if(NOT DEFINED ORIG_K)
+    set(ORIG_K ${G_K})
+endif()
+if(NOT DEFINED ORIG_N)
+    set(ORIG_N ${G_N})
+endif()
+message(STATUS "GEMM Size: M=${G_M}, K=${G_K}, N=${G_N} (orig: ${ORIG_M}x${ORIG_K}x${ORIG_N}), Size Name: ${SIZE_NAME}")
 message(STATUS "Block Configuration: COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}, COMM_BLOCK_NUM=${COMM_BLOCK_NUM}")
 
 set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
@@ -115,6 +125,7 @@ target_compile_options(allgather_gemm_comm_kernel PRIVATE
     --cce-aicore-arch=dav-c220-vec
     -DMEMORY_BASE -std=c++17
     -DCONFIG_G_M=${G_M} -DCONFIG_G_K=${G_K} -DCONFIG_G_N=${G_N}
+    -DCONFIG_ORIG_M=${ORIG_M} -DCONFIG_ORIG_K=${ORIG_K} -DCONFIG_ORIG_N=${ORIG_N}
     -DCONFIG_SIZE_NAME="${SIZE_NAME}"
     -DCONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
     -DCONFIG_COMM_BLOCK_NUM=${COMM_BLOCK_NUM}
