@@ -68,6 +68,7 @@ tflashattn
 tgather
 tgatherb
 tget
+tinsert
 tload
 tloadconv
 tlog
