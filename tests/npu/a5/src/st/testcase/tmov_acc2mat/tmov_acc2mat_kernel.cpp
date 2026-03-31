@@ -797,15 +797,15 @@ void LaunchTMOVAcc2MatFBQuantNZ2NZ(uint8_t *out, uint8_t *src0, uint8_t *src1, u
                                      reinterpret_cast<int8_t *>(src1), reinterpret_cast<uint64_t *>(src2),
                                      reinterpret_cast<int8_t *>(src3));
     } else if constexpr (tilingKey == 5) {
-        RunTMOVFBQuant<int8_t, half, half, uint64_t, 128, 64, 128, 128, 128, false, false, Layout::NZ, 512, 32, 32>
-            <<<1, nullptr, stream>>>(reinterpret_cast<int8_t *>(out), reinterpret_cast<half *>(src0),
+        RunTMOVFBQuant<half, half, half, uint64_t, 128, 64, 128, 128, 128, false, false, Layout::NZ, 512, 32, 32>
+            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0),
                                      reinterpret_cast<half *>(src1), reinterpret_cast<uint64_t *>(src2),
-                                     reinterpret_cast<int8_t *>(src3));
+                                     reinterpret_cast<half *>(src3));
     } else if constexpr (tilingKey == 6) {
-        RunTMOVFBQuant<int8_t, half, half, uint64_t, 128, 64, 128, 128, 128, false, false, Layout::NZ, 512, 32, 32,
-                       true, 256, 256><<<1, nullptr, stream>>>(
-            reinterpret_cast<int8_t *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1),
-            reinterpret_cast<uint64_t *>(src2), reinterpret_cast<int8_t *>(src3));
+        RunTMOVFBQuant<half, half, half, uint64_t, 128, 64, 128, 128, 128, false, false, Layout::NZ, 512, 32, 32, true,
+                       256, 256><<<1, nullptr, stream>>>(
+            reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1),
+            reinterpret_cast<uint64_t *>(src2), reinterpret_cast<half *>(src3));
     }
 }
 

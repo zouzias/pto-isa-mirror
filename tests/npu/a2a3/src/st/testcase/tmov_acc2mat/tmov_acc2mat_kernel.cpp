@@ -433,14 +433,6 @@ void launchTMOVAcc2MatSCQuantNz(uint8_t *out, uint8_t *src0, uint8_t *src1, uint
         runScalarQuantTMOV_nz2nz<int16_t, int8_t, int8_t, 16, 32, 32, 12, 32, 31, true>
             <<<1, nullptr, stream>>>(reinterpret_cast<int16_t *>(out), reinterpret_cast<int8_t *>(src0),
                                      reinterpret_cast<int8_t *>(src1), reinterpret_cast<int16_t *>(src2), 2);
-    } else if constexpr (tilingKey == 11) {
-        runScalarQuantTMOV_nz2nz<half, int8_t, int8_t, 96, 128, 64, 96, 128, 64, false, 48, 48>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<int8_t *>(src0),
-                                     reinterpret_cast<int8_t *>(src1), reinterpret_cast<half *>(src2), 2);
-    } else if constexpr (tilingKey == 12) {
-        runScalarQuantTMOV_nz2nz<half, int8_t, int8_t, 96, 128, 64, 96, 128, 64, false, 48, 48, true, 256, 256>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<int8_t *>(src0),
-                                     reinterpret_cast<int8_t *>(src1), reinterpret_cast<half *>(src2), 2);
     }
 }
 

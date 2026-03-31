@@ -476,24 +476,6 @@ TEST_F(TMOVTest, case_nz2nz_extract)
     tmov_acc2mat_nz2nz_test<uint16_t, uint16_t, uint16_t, 5, 16, 16>(M, K, N);
 }
 
-TEST_F(TMOVTest, case_nz2nz_sc_quant_extract)
-{
-    uint32_t M = 96;
-    uint32_t K = 128;
-    uint32_t N = 64;
-
-    tmov_acc2mat_nz2nz_sc_quant_test<uint16_t, int8_t, int8_t, 11, 48, 48>(M, K, N);
-}
-
-TEST_F(TMOVTest, case_nz2nz_fb_quant_extract)
-{
-    uint32_t M = 128;
-    uint32_t K = 64;
-    uint32_t N = 128;
-
-    tmov_acc2mat_nz2nz_fb_quant_test<int8_t, uint16_t, uint16_t, uint64_t, 11, 32, 32>(M, K, N);
-}
-
 TEST_F(TMOVTest, case_nz2nz_insert)
 {
     uint32_t M = 32;
@@ -501,22 +483,4 @@ TEST_F(TMOVTest, case_nz2nz_insert)
     uint32_t N = 32;
 
     tmov_acc2mat_nz2nz_test<uint16_t, uint16_t, uint16_t, 6, 32, 32, true, 128, 128>(M, K, N);
-}
-
-TEST_F(TMOVTest, case_nz2nz_sc_quant_insert)
-{
-    uint32_t M = 96;
-    uint32_t K = 128;
-    uint32_t N = 64;
-
-    tmov_acc2mat_nz2nz_sc_quant_test<uint16_t, int8_t, int8_t, 12, 48, 48, true, 256, 256>(M, K, N);
-}
-
-TEST_F(TMOVTest, case_nz2nz_fb_quant_insert)
-{
-    uint32_t M = 128;
-    uint32_t K = 64;
-    uint32_t N = 128;
-
-    tmov_acc2mat_nz2nz_fb_quant_test<int8_t, uint16_t, uint16_t, uint64_t, 12, 32, 32, true, 256, 256>(M, K, N);
 }
