@@ -98,8 +98,8 @@ fi
 PAD_M=$(( ((G_M + 127) / 128) * 128 ))
 PAD_N=$(( ((G_N + 255) / 256) * 256 ))
 
-# HCCL window = recv_buffers (nranks*M*N*2) + reduced_output (M*N*2) + signal_matrix (64B) + margin
-NEEDED_MB=$(( (NRANKS + 1) * PAD_M * PAD_N * 2 / 1024 / 1024 + 64 ))
+# HCCL window = reduced_output (M*N*2) + signal_matrix (64B) + margin
+NEEDED_MB=$(( PAD_M * PAD_N * 2 / 1024 / 1024 + 64 ))
 CURRENT_BUFFSIZE="${HCCL_BUFFSIZE:-200}"
 if [ "${CURRENT_BUFFSIZE}" -lt "${NEEDED_MB}" ]; then
     echo "[INFO] Raising HCCL_BUFFSIZE from ${CURRENT_BUFFSIZE} to ${NEEDED_MB} MB for M=${G_M}(pad=${PAD_M}) N=${G_N}(pad=${PAD_N}) nranks=${NRANKS}"
@@ -140,4 +140,5 @@ echo ""
 echo "=== Running GEMM AllReduce (HCCL, mpirun) ==="
 
 FIRST_DEVICE="${FIRST_DEVICE:-0}"
+export GEMM_AR_DIR="$(cd .. && pwd)"
 mpirun -n ${NRANKS} ./gemm_allreduce --first-device ${FIRST_DEVICE}

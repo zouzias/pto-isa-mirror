@@ -22,7 +22,9 @@
 #include <string>
 #include <iostream>
 #include <iomanip>
+#include <fstream>
 
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <signal.h>
 #include <unistd.h>
@@ -280,7 +282,7 @@ inline void *WindowAlloc(uint64_t windowBase, size_t &offset, size_t bytes)
 // ============================================================================
 // Extern kernel launcher declarations (defined in comm_kernel.cpp / gemm_compute_kernel.cpp)
 // ============================================================================
-extern void launchGemmCommAll(uint8_t *gemm_output, uint8_t *recv_buffers,
+extern void launchGemmCommAll(uint8_t *gemm_output,
                               uint8_t *reduced_output, uint8_t *signal_matrix,
                               uint8_t *queue_set, uint8_t *hcclCtx,
                               int rank, int nranks, void *stream, int num_compute_blocks);
@@ -542,12 +544,10 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     // reside in the HCCL RDMA window.  gemm_output is only read locally by the
     // comm kernel, so it can live in normal device memory.
     //
-    //   recv_buffers   — remote-written in Phase 1 (ReduceScatter)
-    //   reduced_output — remote-written in Phase 3 (AllGather)
+    //   reduced_output — remote-written in RS (AtomicAdd) and AG (TPUT)
     //   gemm_output    — local-only (compute kernel writes, comm kernel reads)
     size_t outputSize = static_cast<size_t>(G_M) * G_N * sizeof(uint16_t);
-    size_t recvBuffersSize = static_cast<size_t>(n_ranks) * outputSize;
-    size_t signalMatrixSize = static_cast<size_t>(2 * MAX_RANKS + 2) * sizeof(int32_t);
+    size_t signalMatrixSize = static_cast<size_t>(MAX_RANKS + 1) * sizeof(int32_t);
     signalMatrixSize = ((signalMatrixSize + 63) / 64) * 64;
 
     void *gemm_output = nullptr;
@@ -559,15 +559,13 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
 
     uint64_t windowBase = hctx.hostCtx.windowsIn[hctx.hostCtx.rankId];
     size_t winOffset = 0;
-    void *recv_buffers = WindowAlloc(windowBase, winOffset, recvBuffersSize);
     void *reduced_output = WindowAlloc(windowBase, winOffset, outputSize);
     void *signal_matrix = WindowAlloc(windowBase, winOffset, signalMatrixSize);
 
     if (rank_id == 0) {
         std::cout << "[INFO] HCCL window: winSize=" << hctx.hostCtx.winSize
                   << " used=" << winOffset
-                  << " (recv=" << (recvBuffersSize / (1024 * 1024)) << "MB"
-                  << ", reduced=" << (outputSize / (1024 * 1024)) << "MB"
+                  << " (reduced=" << (outputSize / (1024 * 1024)) << "MB"
                   << ", signals=" << signalMatrixSize << "B)"
                   << "  gemm_output=" << (outputSize / (1024 * 1024)) << "MB (device mem)" << std::endl;
     }
@@ -580,7 +578,6 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     }
 
     aclrtMemset(gemm_output, outputSize, 0, outputSize);
-    aclrtMemset(recv_buffers, recvBuffersSize, 0, recvBuffersSize);
     aclrtMemset(reduced_output, outputSize, 0, outputSize);
     aclrtMemset(signal_matrix, signalMatrixSize, 0, signalMatrixSize);
 
@@ -620,7 +617,6 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
         MultiBlockQueueSetInit(queueSet_reset_host, COMPUTE_BLOCK_NUM, G_NUM_TILES);
         aclrtMemcpy(queueSet_dev, queueSetSize, queueSet_reset_host, queueSetSize, ACL_MEMCPY_HOST_TO_DEVICE);
         aclrtMemset(gemm_output, outputSize, 0, outputSize);
-        aclrtMemset(recv_buffers, recvBuffersSize, 0, recvBuffersSize);
         aclrtMemset(reduced_output, outputSize, 0, outputSize);
         aclrtMemset(signal_matrix, signalMatrixSize, 0, signalMatrixSize);
     };
@@ -639,7 +635,6 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     auto launchComm = [&](aclrtStream s) {
         launchGemmCommAll(
             reinterpret_cast<uint8_t *>(gemm_output),
-            reinterpret_cast<uint8_t *>(recv_buffers),
             reinterpret_cast<uint8_t *>(reduced_output),
             reinterpret_cast<uint8_t *>(signal_matrix),
             reinterpret_cast<uint8_t *>(queueSet_dev),
@@ -1015,6 +1010,138 @@ static void computeGolden(const float *A, const float *B, float *C, int M, int K
     for (auto &th : threads) th.join();
 }
 
+// ============================================================================
+// Input file caching: save/load binary matrices to avoid regeneration
+// ============================================================================
+
+static std::string getInputDir()
+{
+    const char *envDir = getenv("GEMM_AR_DIR");
+    if (envDir && envDir[0] != '\0') {
+        return std::string(envDir) + "/input";
+    }
+    return "input";
+}
+
+static std::string getInputPrefix(int nranks)
+{
+    std::string dir = getInputDir();
+    return dir + "/M" + std::to_string(G_ORIG_M) +
+           "_K" + std::to_string(G_ORIG_K) +
+           "_N" + std::to_string(G_ORIG_N) +
+           "_R" + std::to_string(nranks);
+}
+
+static void ensureDirExists(const std::string &dir)
+{
+    mkdir(dir.c_str(), 0755);
+}
+
+template <typename T>
+static bool saveBinary(const std::string &path, const T *data, size_t count)
+{
+    std::ofstream ofs(path, std::ios::binary);
+    if (!ofs) return false;
+    ofs.write(reinterpret_cast<const char *>(data), count * sizeof(T));
+    return ofs.good();
+}
+
+template <typename T>
+static bool loadBinary(const std::string &path, T *data, size_t count)
+{
+    std::ifstream ifs(path, std::ios::binary);
+    if (!ifs) return false;
+    ifs.read(reinterpret_cast<char *>(data), count * sizeof(T));
+    return ifs.good();
+}
+
+static bool inputFilesExist(int nranks)
+{
+    std::string prefix = getInputPrefix(nranks);
+    std::string aFile = prefix + "_A.bin";
+    std::string bFile = prefix + "_B.bin";
+    std::string gFile = prefix + "_golden.bin";
+    struct stat st;
+    return (stat(aFile.c_str(), &st) == 0 &&
+            stat(bFile.c_str(), &st) == 0 &&
+            stat(gFile.c_str(), &st) == 0);
+}
+
+static bool loadInputFiles(int nranks,
+                           std::vector<uint16_t> &a_parts,
+                           std::vector<uint16_t> &b_data,
+                           std::vector<float> &golden)
+{
+    std::string prefix = getInputPrefix(nranks);
+    std::string aFile = prefix + "_A.bin";
+    std::string bFile = prefix + "_B.bin";
+    std::string gFile = prefix + "_golden.bin";
+
+    size_t a_total = (size_t)nranks * G_M * G_K;
+    size_t b_total = (size_t)G_N * G_K;
+    size_t g_total = (size_t)G_M * G_N;
+
+    a_parts.resize(a_total);
+    b_data.resize(b_total);
+    golden.resize(g_total);
+
+    printf("Loading cached input from: %s_*.bin\n", prefix.c_str());
+
+    if (!loadBinary(aFile, a_parts.data(), a_total)) {
+        fprintf(stderr, "[ERROR] Failed to load %s\n", aFile.c_str());
+        return false;
+    }
+    if (!loadBinary(bFile, b_data.data(), b_total)) {
+        fprintf(stderr, "[ERROR] Failed to load %s\n", bFile.c_str());
+        return false;
+    }
+    if (!loadBinary(gFile, golden.data(), g_total)) {
+        fprintf(stderr, "[ERROR] Failed to load %s\n", gFile.c_str());
+        return false;
+    }
+
+    printf("  Loaded A[%d ranks × %d × %d], B[%d × %d], golden[%d × %d]\n",
+           nranks, G_M, G_K, G_N, G_K, G_M, G_N);
+    return true;
+}
+
+static bool saveInputFiles(int nranks,
+                           const std::vector<uint16_t> &a_parts,
+                           const std::vector<uint16_t> &b_data,
+                           const std::vector<float> &golden)
+{
+    ensureDirExists(getInputDir());
+    std::string prefix = getInputPrefix(nranks);
+    std::string aFile = prefix + "_A.bin";
+    std::string bFile = prefix + "_B.bin";
+    std::string gFile = prefix + "_golden.bin";
+
+    size_t a_total = (size_t)nranks * G_M * G_K;
+    size_t b_total = (size_t)G_N * G_K;
+    size_t g_total = (size_t)G_M * G_N;
+
+    printf("Saving input data to: %s_*.bin\n", prefix.c_str());
+
+    if (!saveBinary(aFile, a_parts.data(), a_total)) {
+        fprintf(stderr, "[WARN] Failed to save %s\n", aFile.c_str());
+        return false;
+    }
+    if (!saveBinary(bFile, b_data.data(), b_total)) {
+        fprintf(stderr, "[WARN] Failed to save %s\n", bFile.c_str());
+        return false;
+    }
+    if (!saveBinary(gFile, golden.data(), g_total)) {
+        fprintf(stderr, "[WARN] Failed to save %s\n", gFile.c_str());
+        return false;
+    }
+
+    double a_mb = a_total * sizeof(uint16_t) / (1024.0 * 1024.0);
+    double b_mb = b_total * sizeof(uint16_t) / (1024.0 * 1024.0);
+    double g_mb = g_total * sizeof(float) / (1024.0 * 1024.0);
+    printf("  Saved: A=%.1f MB, B=%.1f MB, golden=%.1f MB\n", a_mb, b_mb, g_mb);
+    return true;
+}
+
 static bool generateData(int nranks,
                           std::vector<uint16_t> &a_parts,
                           std::vector<uint16_t> &b_data,
@@ -1141,14 +1268,30 @@ int main(int argc, char *argv[])
     size_t b_total = (size_t)G_N * G_K;
     size_t g_total = (size_t)G_M * G_N;
 
-    std::vector<uint16_t> a_parts(a_total), b_data(b_total);
-    std::vector<float> golden(g_total);
+    std::vector<uint16_t> a_parts, b_data;
+    std::vector<float> golden;
 
     int data_ok = 0;
     if (CommMpiRank() == 0) {
-        if (!generateData(n_ranks, a_parts, b_data, golden)) {
-            data_ok = 1;
+        if (inputFilesExist(n_ranks)) {
+            printf("[INFO] Found cached input files for M=%d K=%d N=%d R=%d, loading...\n",
+                   G_ORIG_M, G_ORIG_K, G_ORIG_N, n_ranks);
+            if (!loadInputFiles(n_ranks, a_parts, b_data, golden)) {
+                data_ok = 1;
+            }
+        } else {
+            printf("[INFO] No cached input files for M=%d K=%d N=%d R=%d, generating...\n",
+                   G_ORIG_M, G_ORIG_K, G_ORIG_N, n_ranks);
+            if (!generateData(n_ranks, a_parts, b_data, golden)) {
+                data_ok = 1;
+            } else {
+                saveInputFiles(n_ranks, a_parts, b_data, golden);
+            }
         }
+    } else {
+        a_parts.resize(a_total);
+        b_data.resize(b_total);
+        golden.resize(g_total);
     }
 
     CommMpiBcast(&data_ok, 1, COMM_MPI_INT, 0);

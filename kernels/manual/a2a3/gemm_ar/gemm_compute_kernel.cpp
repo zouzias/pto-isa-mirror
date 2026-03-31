@@ -177,9 +177,26 @@ AICORE inline void GemmComputeImpl(
         (volatile __gm__ MultiBlockQueueSet*)queue_set, block_idx);
     int32_t enqueue_slot = 0;
 
-    for (int tile_idx = my_start_tile; tile_idx < my_end_tile && tile_idx < total_tiles; tile_idx++) {
-        uint32_t mi = tile_idx / G_N_TILES;
-        uint32_t ni = tile_idx % G_N_TILES;
+    for (int linear_idx = my_start_tile; linear_idx < my_end_tile && linear_idx < total_tiles; linear_idx++) {
+        // Swizzle: remap linear index to column-major within N_TILES-wide groups
+        // to improve B-matrix L1 reuse (consecutive tiles share the same N column)
+        constexpr uint32_t SWIZZLE_GROUP = G_N_TILES;
+        uint32_t group = linear_idx / SWIZZLE_GROUP;
+        uint32_t local = linear_idx % SWIZZLE_GROUP;
+        uint32_t mi, ni;
+        if (group & 1) {
+            mi = group;
+            ni = SWIZZLE_GROUP - 1 - local;
+        } else {
+            mi = group;
+            ni = local;
+        }
+        if (mi >= G_M_TILES) {
+            mi = linear_idx / G_N_TILES;
+            ni = linear_idx % G_N_TILES;
+        }
+
+        int tile_idx = mi * G_N_TILES + ni;
 
         __gm__ half *currentSrc0 = src0 + mi * G_BASE_M * k_per_rank;
         __gm__ half *currentSrc1 = src1 + ni * G_BASE_N * k_per_rank;
