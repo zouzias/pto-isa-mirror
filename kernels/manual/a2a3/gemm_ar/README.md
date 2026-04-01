@@ -11,7 +11,7 @@
 - **零 Host Barrier**：两阶段通信（RS + AG）合并为单次 kernel launch，阶段间同步通过 device-side `TNOTIFY`/`TWAIT` 信号完成，完全消除 `HcclHostBarrier` 的 host-device 往返开销
 - **两级设备端同步**：跨 rank 同步（block 0 执行 RDMA 窗口原子操作）+ rank 内跨 block 同步（block 0 通过 GM flag 广播给其他 block）
 
-**平台要求**：Ascend 910B (A2/A3)、CANN 8.5、bisheng 编译器、MPICH
+**平台要求**：Ascend 910B (A2/A3)、CANN 8.5+（含 CANN 9.0）、bisheng 编译器、MPICH
 
 ## 快速开始
 
