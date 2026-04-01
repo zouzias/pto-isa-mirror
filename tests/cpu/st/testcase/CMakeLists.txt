@@ -122,6 +122,12 @@ ttri
 twait
 txor
 txors
+treshape
+trandom
+thistogram
+timg2col
+tquant
+tisa_coverage
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
