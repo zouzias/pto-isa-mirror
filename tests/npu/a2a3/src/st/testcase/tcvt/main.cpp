@@ -246,10 +246,10 @@ void test_tcvt_fp16_to_s4()
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
     WriteFile(GetGoldenDir() + "/output_z.bin", dstHost, dstFileSize);
 
-    aclrtFree(srcDevice);
     aclrtFree(dstDevice);
-    aclrtFreeHost(srcHost);
+    aclrtFree(srcDevice);
     aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();

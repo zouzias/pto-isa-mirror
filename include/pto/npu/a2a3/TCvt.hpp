@@ -1157,40 +1157,28 @@ __tf__ AICORE void TCvt(typename TileDataD::TileDType __out__ dst, typename Tile
 }
 
 // ============================================================================
-// High-Level Tile Conversion Interface
+// TCVT Helper: Compute Repeat Configuration
 // ============================================================================
-// TCVT_IMPL is the main entry point for tile data type conversion.
-// Calculates optimal repeat configuration and delegates to TCvt kernel.
-//
-// This is the main implementation with explicit satMode parameter.
+// Computes repeat stride and element count based on source/destination types.
+// Handles int4b_t packing (2 elements per byte) as a special case.
 template <typename TileDataD, typename TileDataS>
-PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
+PTO_INTERNAL void ComputeTCvtRepeatConfig(unsigned &elementsPerRepeat, unsigned &dstRepeatStride,
+                                          unsigned &srcRepeatStride)
 {
-    // Determine repeat width as max of source/destination element sizes
-    // Special handling for int4b_t: sizeof(int4b_t)==1 but each element is 4 bits (0.5 bytes).
-    // int4 is packed 2-per-byte, so stride = BLOCK_MAX_PER_REPEAT / 4 = 2 blocks per repeat.
     constexpr bool isDstInt4 = std::is_same<typename TileDataD::DType, int4b_t>::value;
     constexpr bool isSrcInt4 = std::is_same<typename TileDataS::DType, int4b_t>::value;
 
-    uint64_t repeatWidth;
-    unsigned dstRepeatStride;
-    unsigned srcRepeatStride;
-    unsigned elementsPerRepeat;
-
     if constexpr (isDstInt4) {
-        // fp16 -> int4: repeat is driven by fp16 (2 bytes per element)
-        repeatWidth = sizeof(half);
-        elementsPerRepeat = REPEAT_BYTE / repeatWidth; // 128
-        dstRepeatStride = BLOCK_MAX_PER_REPEAT / 4;    // 2 (64 bytes = 2 blocks for 128 packed int4 elements)
-        srcRepeatStride = BLOCK_MAX_PER_REPEAT;        // 8
+        elementsPerRepeat = REPEAT_BYTE / sizeof(half); // 128
+        dstRepeatStride = BLOCK_MAX_PER_REPEAT / 4;     // 2 (64 bytes = 2 blocks for 128 packed int4 elements)
+        srcRepeatStride = BLOCK_MAX_PER_REPEAT;         // 8
     } else if constexpr (isSrcInt4) {
-        // int4 -> fp16: repeat is driven by fp16 (2 bytes per element)
-        repeatWidth = sizeof(half);
-        elementsPerRepeat = REPEAT_BYTE / repeatWidth; // 128
-        dstRepeatStride = BLOCK_MAX_PER_REPEAT;        // 8
-        srcRepeatStride = BLOCK_MAX_PER_REPEAT / 4;    // 2 (64 bytes = 2 blocks for 128 packed int4 elements)
+        elementsPerRepeat = REPEAT_BYTE / sizeof(half); // 128
+        dstRepeatStride = BLOCK_MAX_PER_REPEAT;         // 8
+        srcRepeatStride = BLOCK_MAX_PER_REPEAT / 4;     // 2 (64 bytes = 2 blocks for 128 packed int4 elements)
     } else {
-        repeatWidth = static_cast<uint64_t>(max(sizeof(typename TileDataD::DType), sizeof(typename TileDataS::DType)));
+        uint64_t repeatWidth =
+            static_cast<uint64_t>(max(sizeof(typename TileDataD::DType), sizeof(typename TileDataS::DType)));
         dstRepeatStride =
             repeatWidth == sizeof(typename TileDataD::DType) ?
                 BLOCK_MAX_PER_REPEAT :
@@ -1201,6 +1189,33 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
                 (BLOCK_MAX_PER_REPEAT / sizeof(typename TileDataD::DType) * sizeof(typename TileDataS::DType));
         elementsPerRepeat = REPEAT_BYTE / repeatWidth;
     }
+}
+
+// Helper: Check if this is a narrowing conversion that defaults to non-saturating mode
+template <typename TileDataD, typename TileDataS>
+constexpr bool kIsNarrowingCvt =
+    (std::is_same<typename TileDataD::DType, uint8_t>::value && std::is_same<typename TileDataS::DType, half>::value) ||
+    (std::is_same<typename TileDataD::DType, int8_t>::value && std::is_same<typename TileDataS::DType, half>::value) ||
+    (std::is_same<typename TileDataD::DType, int16_t>::value &&
+     std::is_same<typename TileDataS::DType, float>::value) ||
+    (std::is_same<typename TileDataD::DType, int16_t>::value && std::is_same<typename TileDataS::DType, half>::value) ||
+    (std::is_same<typename TileDataD::DType, int32_t>::value &&
+     std::is_same<typename TileDataS::DType, int64_t>::value) ||
+    (std::is_same<typename TileDataD::DType, int16_t>::value &&
+     std::is_same<typename TileDataS::DType, int32_t>::value);
+
+// ============================================================================
+// High-Level Tile Conversion Interface
+// ============================================================================
+// TCVT_IMPL is the main entry point for tile data type conversion.
+// Calculates optimal repeat configuration and delegates to TCvt kernel.
+//
+// This is the main implementation with explicit satMode parameter.
+template <typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
+{
+    unsigned dstRepeatStride, srcRepeatStride, elementsPerRepeat;
+    ComputeTCvtRepeatConfig<TileDataD, TileDataS>(elementsPerRepeat, dstRepeatStride, srcRepeatStride);
 
     unsigned numRepeatPerLine = dst.GetValidCol() / elementsPerRepeat;
     unsigned numRemainPerLine = dst.GetValidCol() % elementsPerRepeat;
@@ -1212,25 +1227,7 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
     TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, SaturationMode::ON, numRepeatPerLine,
                                        numRemainPerLine, validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
 #else
-    if constexpr (
-        // FP16→UINT8
-        (std::is_same<typename TileDataD::DType, uint8_t>::value &&
-         std::is_same<typename TileDataS::DType, half>::value) ||
-        // FP16→INT8
-        (std::is_same<typename TileDataD::DType, int8_t>::value &&
-         std::is_same<typename TileDataS::DType, half>::value) ||
-        // FP32→INT16
-        (std::is_same<typename TileDataD::DType, int16_t>::value &&
-         std::is_same<typename TileDataS::DType, float>::value) ||
-        // FP16→INT16
-        (std::is_same<typename TileDataD::DType, int16_t>::value &&
-         std::is_same<typename TileDataS::DType, half>::value) ||
-        // INT64→INT32
-        (std::is_same<typename TileDataD::DType, int32_t>::value &&
-         std::is_same<typename TileDataS::DType, int64_t>::value) ||
-        // INT32→INT16
-        (std::is_same<typename TileDataD::DType, int16_t>::value &&
-         std::is_same<typename TileDataS::DType, int32_t>::value)) {
+    if constexpr (kIsNarrowingCvt<TileDataD, TileDataS>) {
         TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, satMode, numRepeatPerLine, numRemainPerLine,
                                            validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
     } else {
@@ -1247,36 +1244,9 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
 template <typename TileDataD, typename TileDataS, typename TmpTileData>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode)
 {
-    constexpr bool isDstInt4 = std::is_same<typename TileDataD::DType, int4b_t>::value;
-    constexpr bool isSrcInt4 = std::is_same<typename TileDataS::DType, int4b_t>::value;
+    unsigned dstRepeatStride, srcRepeatStride, elementsPerRepeat;
+    ComputeTCvtRepeatConfig<TileDataD, TileDataS>(elementsPerRepeat, dstRepeatStride, srcRepeatStride);
 
-    uint64_t repeatWidth;
-    unsigned dstRepeatStride;
-    unsigned srcRepeatStride;
-    unsigned elementsPerRepeat;
-
-    if constexpr (isDstInt4) {
-        repeatWidth = sizeof(half);
-        elementsPerRepeat = REPEAT_BYTE / repeatWidth;
-        dstRepeatStride = BLOCK_MAX_PER_REPEAT / 4;
-        srcRepeatStride = BLOCK_MAX_PER_REPEAT;
-    } else if constexpr (isSrcInt4) {
-        repeatWidth = sizeof(half);
-        elementsPerRepeat = REPEAT_BYTE / repeatWidth;
-        dstRepeatStride = BLOCK_MAX_PER_REPEAT;
-        srcRepeatStride = BLOCK_MAX_PER_REPEAT / 4;
-    } else {
-        repeatWidth = static_cast<uint64_t>(max(sizeof(typename TileDataD::DType), sizeof(typename TileDataS::DType)));
-        dstRepeatStride =
-            repeatWidth == sizeof(typename TileDataD::DType) ?
-                BLOCK_MAX_PER_REPEAT :
-                (BLOCK_MAX_PER_REPEAT / sizeof(typename TileDataS::DType) * sizeof(typename TileDataD::DType));
-        srcRepeatStride =
-            repeatWidth == sizeof(typename TileDataS::DType) ?
-                BLOCK_MAX_PER_REPEAT :
-                (BLOCK_MAX_PER_REPEAT / sizeof(typename TileDataD::DType) * sizeof(typename TileDataS::DType));
-        elementsPerRepeat = REPEAT_BYTE / repeatWidth;
-    }
     unsigned numRepeatPerLine = dst.GetValidCol() / elementsPerRepeat;
     unsigned numRemainPerLine = dst.GetValidCol() % elementsPerRepeat;
     constexpr unsigned SS = TileDataS::RowStride;
@@ -1291,25 +1261,7 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, Ro
 template <typename TileDataD, typename TileDataS, typename TmpTileData>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode)
 {
-    if constexpr (
-        // FP16→UINT8
-        (std::is_same<typename TileDataD::DType, uint8_t>::value &&
-         std::is_same<typename TileDataS::DType, half>::value) ||
-        // FP16→INT8
-        (std::is_same<typename TileDataD::DType, int8_t>::value &&
-         std::is_same<typename TileDataS::DType, half>::value) ||
-        // FP32→INT16
-        (std::is_same<typename TileDataD::DType, int16_t>::value &&
-         std::is_same<typename TileDataS::DType, float>::value) ||
-        // FP16→INT16
-        (std::is_same<typename TileDataD::DType, int16_t>::value &&
-         std::is_same<typename TileDataS::DType, half>::value) ||
-        // INT64→INT32
-        (std::is_same<typename TileDataD::DType, int32_t>::value &&
-         std::is_same<typename TileDataS::DType, int64_t>::value) ||
-        // INT32→INT16
-        (std::is_same<typename TileDataD::DType, int16_t>::value &&
-         std::is_same<typename TileDataS::DType, int32_t>::value)) {
+    if constexpr (kIsNarrowingCvt<TileDataD, TileDataS>) {
         TCVT_IMPL(dst, src, tmp, mode, SaturationMode::OFF);
     } else {
         TCVT_IMPL(dst, src, tmp, mode, SaturationMode::ON);
@@ -1327,29 +1279,9 @@ template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
 #if EDGE_CASE_ALIGN_ENABLE
-    // Without tmp buffer, NonSatTorch paths are unavailable; always use saturation ON
     TCVT_IMPL(dst, src, mode, SaturationMode::ON);
 #else
-    // Conversions that default to OFF for truncation behavior
-    if constexpr (
-        // FP16→UINT8
-        (std::is_same<typename TileDataD::DType, uint8_t>::value &&
-         std::is_same<typename TileDataS::DType, half>::value) ||
-        // FP16→INT8
-        (std::is_same<typename TileDataD::DType, int8_t>::value &&
-         std::is_same<typename TileDataS::DType, half>::value) ||
-        // FP32→INT16
-        (std::is_same<typename TileDataD::DType, int16_t>::value &&
-         std::is_same<typename TileDataS::DType, float>::value) ||
-        // FP16→INT16
-        (std::is_same<typename TileDataD::DType, int16_t>::value &&
-         std::is_same<typename TileDataS::DType, half>::value) ||
-        // INT64→INT32
-        (std::is_same<typename TileDataD::DType, int32_t>::value &&
-         std::is_same<typename TileDataS::DType, int64_t>::value) ||
-        // INT32→INT16
-        (std::is_same<typename TileDataD::DType, int16_t>::value &&
-         std::is_same<typename TileDataS::DType, int32_t>::value)) {
+    if constexpr (kIsNarrowingCvt<TileDataD, TileDataS>) {
         TCVT_IMPL(dst, src, mode, SaturationMode::OFF);
     } else {
         TCVT_IMPL(dst, src, mode, SaturationMode::ON);
