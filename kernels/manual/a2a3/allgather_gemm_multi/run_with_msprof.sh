@@ -230,15 +230,37 @@ else
     CMAKE_RUN_MODE="${RUN_MODE}"
 fi
 
-# Block configuration
-COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM:-24}
-COMM_BLOCK_NUM=${COMM_BLOCK_NUM:-48}
+# Block configuration (auto-detect from SoC variant)
+if [[ "${SOC_VERSION}" =~ ^Ascend910B[34] ]] || [[ "${SOC_VERSION}" =~ ^Ascend910_93[67] ]]; then
+    COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM:-20}
+    COMM_BLOCK_NUM=${COMM_BLOCK_NUM:-40}
+else
+    COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM:-24}
+    COMM_BLOCK_NUM=${COMM_BLOCK_NUM:-48}
+fi
+
+# Peak TFLOPS (FP16 Cube)
+if [ -z "${PEAK_TFLOPS_FP16:-}" ]; then
+    case "${SOC_VERSION}" in
+        Ascend910B1|Ascend910_939*)
+            PEAK_TFLOPS_FP16=320.0 ;;
+        Ascend910B2*|Ascend910_938*)
+            PEAK_TFLOPS_FP16=311.0 ;;
+        Ascend910B3|Ascend910_937*)
+            PEAK_TFLOPS_FP16=259.0 ;;
+        Ascend910B4*|Ascend910_936*)
+            PEAK_TFLOPS_FP16=216.0 ;;
+        *)
+            PEAK_TFLOPS_FP16=320.0 ;;
+    esac
+fi
 
 cmake -DRUN_MODE=${CMAKE_RUN_MODE} -DSOC_VERSION=${SOC_VERSION} \
       -DG_M=${G_M} -DG_K=${G_K} -DG_N=${G_N} \
       -DSIZE_NAME=${SIZE} \
       -DCOMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM} \
-      -DCOMM_BLOCK_NUM=${COMM_BLOCK_NUM} ..
+      -DCOMM_BLOCK_NUM=${COMM_BLOCK_NUM} \
+      -DPEAK_TFLOPS_FP16=${PEAK_TFLOPS_FP16} ..
 make -j16
 
 # Create output directory with proper permissions

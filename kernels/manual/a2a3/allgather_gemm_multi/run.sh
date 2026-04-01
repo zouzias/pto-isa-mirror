@@ -181,6 +181,10 @@ if [[ ! "${SOC_VERSION}" =~ ^Ascend ]]; then
     exit 1
 fi
 
+if [[ ! "${SOC_VERSION}" =~ ^Ascend910B ]] && [[ ! "${SOC_VERSION}" =~ ^Ascend910_93 ]]; then
+    echo "[WARN] SocVersion ${SOC_VERSION} is not a known A2/A3 chip. Proceeding anyway."
+fi
+
 if [[ "${SOC_VERSION}" =~ ^Ascend910B4-1 ]] && [ "${RUN_MODE}" == "sim" ]; then
     echo "[ERROR] SocVersion: ${SOC_VERSION} can not support sim mode, please use Ascend910B4."
     exit 1
@@ -206,18 +210,39 @@ fi
 #   - In pipelined mode, AIV blocks run TPUT while AIC blocks run TMATMUL
 #     achieving true overlap.
 #
-# AICORE Architecture (Ascend 910B):
+# AICORE Architecture (A2: Ascend910B / A3: Ascend910_93):
 #   - Each AICORE contains: 1 AIC + 2 AIV (independently schedulable)
-#   - 24 AICOREs → 24 AIC + 48 AIV available
+#   - 910B1/910_938x/910_939x: 24 AIC + 48 AIV
+#   - 910B3/910B4/910_936x/910_937x: 20 AIC + 40 AIV
 #   - AIC and AIV do NOT compete for resources
 #
-# Maximum parallel configuration:
-#   - COMPUTE_BLOCK_NUM = 24 (all AIC units)
-#   - COMM_BLOCK_NUM = 48 (all AIV units)
-#
 # TPUT/TGET support atomic operations for lock-free signaling.
-COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM:-24}
-COMM_BLOCK_NUM=${COMM_BLOCK_NUM:-48}
+if [[ "${SOC_VERSION}" =~ ^Ascend910B[34] ]] || [[ "${SOC_VERSION}" =~ ^Ascend910_93[67] ]]; then
+    COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM:-20}
+    COMM_BLOCK_NUM=${COMM_BLOCK_NUM:-40}
+else
+    COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM:-24}
+    COMM_BLOCK_NUM=${COMM_BLOCK_NUM:-48}
+fi
+
+# Compute peak TFLOPS based on SoC variant (FP16 Cube peak)
+# Formula: cube_core_cnt * cube_freq_MHz * 2 * 16^3 / 1e6
+# Simplified: cube_core_cnt * cube_freq_MHz * 8192 / 1e6
+if [ -z "${PEAK_TFLOPS_FP16:-}" ]; then
+    case "${SOC_VERSION}" in
+        Ascend910B1|Ascend910_939*)
+            PEAK_TFLOPS_FP16=320.0 ;;
+        Ascend910B2*|Ascend910_938*)
+            PEAK_TFLOPS_FP16=311.0 ;;
+        Ascend910B3|Ascend910_937*)
+            PEAK_TFLOPS_FP16=259.0 ;;
+        Ascend910B4*|Ascend910_936*)
+            PEAK_TFLOPS_FP16=216.0 ;;
+        *)
+            PEAK_TFLOPS_FP16=320.0 ;;
+    esac
+fi
+echo "[INFO] PEAK_TFLOPS_FP16=${PEAK_TFLOPS_FP16}, COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}, COMM_BLOCK_NUM=${COMM_BLOCK_NUM}"
 
 # Clear conda-injected flags that conflict with bisheng compiler
 unset CXXFLAGS CFLAGS LDFLAGS
@@ -227,7 +252,8 @@ CC=bisheng CXX=bisheng cmake -DRUN_MODE=${CMAKE_RUN_MODE} -DSOC_VERSION=${SOC_VE
       -DORIG_M=${ORIG_M} -DORIG_K=${ORIG_K} -DORIG_N=${ORIG_N} \
       -DSIZE_NAME=${SIZE} \
       -DCOMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM} \
-      -DCOMM_BLOCK_NUM=${COMM_BLOCK_NUM} ..
+      -DCOMM_BLOCK_NUM=${COMM_BLOCK_NUM} \
+      -DPEAK_TFLOPS_FP16=${PEAK_TFLOPS_FP16} ..
 make -j16
 
 # Export N_RANKS environment variable for the executable

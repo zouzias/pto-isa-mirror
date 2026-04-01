@@ -551,7 +551,10 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         double seq_tflops = (seq_avg > 0.0) ? (gemm_flops / (seq_avg * 1e-6) / 1e12) : 0.0;
         double stream_tflops = (stream_avg > 0.0) ? (gemm_flops / (stream_avg * 1e-6) / 1e12) : 0.0;
 
-        constexpr double PEAK_TFLOPS_FP16 = 320.0;
+#ifndef CONFIG_PEAK_TFLOPS_FP16
+#define CONFIG_PEAK_TFLOPS_FP16 320.0
+#endif
+        constexpr double PEAK_TFLOPS_FP16 = CONFIG_PEAK_TFLOPS_FP16;
         double compute_mfu = compute_tflops / PEAK_TFLOPS_FP16 * 100.0;
         double seq_mfu = seq_tflops / PEAK_TFLOPS_FP16 * 100.0;
         double stream_mfu = stream_tflops / PEAK_TFLOPS_FP16 * 100.0;

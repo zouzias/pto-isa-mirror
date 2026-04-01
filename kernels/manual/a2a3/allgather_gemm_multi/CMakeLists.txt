@@ -33,10 +33,21 @@ if(NOT DEFINED SIZE_NAME)
     set(SIZE_NAME "large")
 endif()
 if(NOT DEFINED COMPUTE_BLOCK_NUM)
-    set(COMPUTE_BLOCK_NUM 24)  # Max AIC blocks on Ascend 910B
+    if(DEFINED SOC_VERSION AND (SOC_VERSION MATCHES "Ascend910B[34]" OR SOC_VERSION MATCHES "Ascend910_93[67]"))
+        set(COMPUTE_BLOCK_NUM 20)
+    else()
+        set(COMPUTE_BLOCK_NUM 24)
+    endif()
 endif()
 if(NOT DEFINED COMM_BLOCK_NUM)
-    set(COMM_BLOCK_NUM 48)     # Max AIV blocks on Ascend 910B (2 AIV per AICORE)
+    if(DEFINED SOC_VERSION AND (SOC_VERSION MATCHES "Ascend910B[34]" OR SOC_VERSION MATCHES "Ascend910_93[67]"))
+        set(COMM_BLOCK_NUM 40)
+    else()
+        set(COMM_BLOCK_NUM 48)
+    endif()
+endif()
+if(NOT DEFINED PEAK_TFLOPS_FP16)
+    set(PEAK_TFLOPS_FP16 320.0)
 endif()
 # Original (unpadded) dimensions for golden verification
 if(NOT DEFINED ORIG_M)
@@ -167,6 +178,7 @@ target_compile_definitions(allgather_gemm PRIVATE
     CONFIG_SIZE_NAME="${SIZE_NAME}"
     CONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
     CONFIG_COMM_BLOCK_NUM=${COMM_BLOCK_NUM}
+    CONFIG_PEAK_TFLOPS_FP16=${PEAK_TFLOPS_FP16}
 )
 
 target_link_directories(allgather_gemm PUBLIC
