@@ -37,25 +37,25 @@ void test_tcolmax()
     aclrtCreateStream(&stream);
 
     T *dstHost, *srcHost;
-    T *dstDevice, *srcDevice;
+    T *dstD, *srcD;
 
     aclrtMallocHost((void **)(&dstHost), fileSize);
     aclrtMallocHost((void **)(&srcHost), fileSize);
 
-    aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dstD, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcD, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTColMax<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, srcDevice, stream);
+    aclrtMemcpy(srcD, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTColMax<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstD, srcD, stream);
 
     aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(dstHost, fileSize, dstD, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
+    aclrtFree(srcD);
+    aclrtFree(dstD);
 
-    aclrtFreeHost(dstHost);
     aclrtFreeHost(srcHost);
+    aclrtFreeHost(dstHost);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
     aclFinalize();
@@ -63,17 +63,21 @@ void test_tcolmax()
 
 TEST_F(TCOLMAXTest, case_float_64x64)
 {
-    test_tcolmax<float, 64, 64, 64, 64, 1116.0f, 1.0f>();
+    test_tcolmax<float, 64, 64, 64, 64, 1130.0f, 1.0f>();
 }
 TEST_F(TCOLMAXTest, case_half_64x64)
 {
-    test_tcolmax<aclFloat16, 64, 64, 64, 64, 1242.0f, 1.0f>();
+    test_tcolmax<aclFloat16, 64, 64, 64, 64, 1256.0f, 1.0f>();
 }
 TEST_F(TCOLMAXTest, case_int16_64x64)
 {
-    test_tcolmax<int16_t, 64, 64, 64, 64, 1242.0f, 1.0f>();
+    test_tcolmax<int16_t, 64, 64, 64, 64, 1256.0f, 1.0f>();
 }
 TEST_F(TCOLMAXTest, case_half_16x256)
 {
-    test_tcolmax<aclFloat16, 16, 256, 16, 256, 252.0f, 1.0f>();
+    test_tcolmax<aclFloat16, 16, 256, 16, 256, 266.0f, 1.0f>();
+}
+TEST_F(TCOLMAXTest, case_float_1x3072_1x3072_1x3072)
+{
+    test_tcolmax<float, 1, 3072, 1, 3072, 14.0f, 1.0f>();
 }
