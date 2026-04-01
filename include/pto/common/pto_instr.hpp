@@ -816,7 +816,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexR
 }
 #endif
 
-template <typename TileData, PadValue PadVal = PadValue::Zero,
+template <typename TileData, PadValue PadVal = PadValue::Zero, const CompactMode Compact_ = CompactMode::Null,
           std::enable_if_t<(TileData::Loc == TileType::Mat), int> = 0, typename... WaitEvents>
 PTO_INST RecordEvent TFILLPAD(TileData &dst, TileData &src, WaitEvents &... events)
 {
