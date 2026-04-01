@@ -111,6 +111,45 @@ AICORE constexpr PadValue PadValueCustom16(uint16_t bits16)
     return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) | static_cast<uint64_t>(bits16));
 }
 
+// ============================================================================
+// Integer type overloads for PadValueCustom
+// ============================================================================
+
+// 32-bit integers: store raw bits directly
+AICORE constexpr PadValue PadValueCustom(int32_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(static_cast<uint32_t>(value)));
+}
+
+AICORE constexpr PadValue PadValueCustom(uint32_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(value));
+}
+
+// 16-bit integers: store in lower 16 bits
+AICORE constexpr PadValue PadValueCustom(int16_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(static_cast<uint16_t>(value)));
+}
+
+// Note: uint16_t overload already exists as PadValueCustom16()
+
+// 8-bit integers: store in lower 8 bits
+AICORE constexpr PadValue PadValueCustom(int8_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(static_cast<uint8_t>(value)));
+}
+
+AICORE constexpr PadValue PadValueCustom(uint8_t value)
+{
+    return static_cast<PadValue>(static_cast<uint64_t>(PadValue::CustomBase) |
+                                 static_cast<uint64_t>(value));
+}
+
 #if !defined(__CPU_SIM) && !defined(__COSTMODEL)
 // Usage: constexpr PadValue PadCustomNeg1_Half = PadValueCustom((half)-1.0);
 // NPU aicore compiler has half as built-in type

@@ -16,6 +16,69 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
+// ============================================================================
+// Static assertions for PadValueCustom encoding/decoding verification
+// ============================================================================
+
+// --- Float (32-bit) ---
+static_assert(PadValueCustom(-1.0f) == static_cast<PadValue>(0x1BF800000ULL),
+              "PadValueCustom(-1.0f) encoding mismatch");
+static_assert(PadValueCustom(0.5f) == static_cast<PadValue>(0x13F000000ULL),
+              "PadValueCustom(0.5f) encoding mismatch");
+static_assert(getCustomPadBits(PadValueCustom(-1.0f)) == 0xBF800000U,
+              "getCustomPadBits for float decoding mismatch");
+
+// --- Int32 ---
+static_assert(PadValueCustom(int32_t(-1)) == static_cast<PadValue>(0x1FFFFFFFFULL),
+              "PadValueCustom(int32_t(-1)) encoding mismatch");
+static_assert(PadValueCustom(int32_t(42)) == static_cast<PadValue>(0x10000002AULL),
+              "PadValueCustom(int32_t(42)) encoding mismatch");
+static_assert(getCustomPadBits(PadValueCustom(int32_t(-1))) == 0xFFFFFFFFU,
+              "getCustomPadBits for int32 decoding mismatch");
+
+// --- UInt32 ---
+static_assert(PadValueCustom(uint32_t(0xDEADBEEF)) == static_cast<PadValue>(0x1DEADBEEFULL),
+              "PadValueCustom(uint32_t) encoding mismatch");
+static_assert(getCustomPadBits(PadValueCustom(uint32_t(0xDEADBEEF))) == 0xDEADBEEFU,
+              "getCustomPadBits for uint32 decoding mismatch");
+
+// --- Int16 ---
+static_assert(PadValueCustom(int16_t(-1)) == static_cast<PadValue>(0x10000FFFFULL),
+              "PadValueCustom(int16_t(-1)) encoding mismatch");
+static_assert(PadValueCustom(int16_t(-32768)) == static_cast<PadValue>(0x100008000ULL),
+              "PadValueCustom(int16_t MIN) encoding mismatch");
+static_assert((getCustomPadBits(PadValueCustom(int16_t(-1))) & 0xFFFF) == 0xFFFFU,
+              "getCustomPadBits for int16 decoding mismatch");
+
+// --- Int8 ---
+static_assert(PadValueCustom(int8_t(-1)) == static_cast<PadValue>(0x1000000FFULL),
+              "PadValueCustom(int8_t(-1)) encoding mismatch");
+static_assert(PadValueCustom(int8_t(-128)) == static_cast<PadValue>(0x100000080ULL),
+              "PadValueCustom(int8_t MIN) encoding mismatch");
+static_assert((getCustomPadBits(PadValueCustom(int8_t(-1))) & 0xFF) == 0xFFU,
+              "getCustomPadBits for int8 decoding mismatch");
+
+// --- UInt8 ---
+static_assert(PadValueCustom(uint8_t(255)) == static_cast<PadValue>(0x1000000FFULL),
+              "PadValueCustom(uint8_t(255)) encoding mismatch");
+static_assert(PadValueCustom(uint8_t(0x42)) == static_cast<PadValue>(0x100000042ULL),
+              "PadValueCustom(uint8_t) encoding mismatch");
+static_assert((getCustomPadBits(PadValueCustom(uint8_t(255))) & 0xFF) == 0xFFU,
+              "getCustomPadBits for uint8 decoding mismatch");
+
+// --- isCustomPadValue verification ---
+static_assert(isCustomPadValue(PadValueCustom(-1.0f)) == true,
+              "isCustomPadValue should return true for custom values");
+static_assert(isCustomPadValue(PadValue::Null) == false,
+              "isCustomPadValue should return false for standard values");
+static_assert(isCustomPadValue(PadValue::Zero) == false,
+              "isCustomPadValue should return false for Zero");
+static_assert(isCustomPadValue(PadValue::Max) == false,
+              "isCustomPadValue should return false for Max");
+static_assert(isCustomPadValue(PadValue::Min) == false,
+              "isCustomPadValue should return false for Min");
+
+
 // Custom pad value for test case 12
 // -1.0f has bit pattern 0xBF800000
 constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
