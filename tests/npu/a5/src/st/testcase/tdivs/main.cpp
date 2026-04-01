@@ -37,7 +37,7 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <uint32_t caseId, typename T, int dstTileRow, int dstTileCol, int row, int vaildRow, int col, int srcVaildCol>
+template <uint32_t caseId, typename T, int dstTileRow, int dstTileCol, int row, int vaildRow, int col, int srcVaildCol, bool highPrecision = false>
 bool TDivSTestFramework()
 {
     aclInit(nullptr);
@@ -88,7 +88,7 @@ bool TDivSTestFramework()
     ReadFile(GetGoldenDir() + "/golden.bin", dstByteSize, golden.data(), dstByteSize);
     ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
 
-    auto resPrecision = highPrecision ? 0x0000001f : 0.001f;
+    constexpr auto resPrecision = highPrecision ? 0.0000001f : 0.001f;
     return ResultCmp<T>(golden, devFinal, resPrecision);
 }
 
@@ -124,12 +124,12 @@ TEST_F(TDIVSTest, case6)
 
 TEST_F(TDIVSTest, caseHP1)
 {
-    bool ret = TDivSTestFramework<7, float, 2, 16, 2, 2, 16, 16>();
+    bool ret = TDivSTestFramework<7, float, 2, 16, 2, 2, 16, 16, true>();
     EXPECT_TRUE(ret);
 }
 
 TEST_F(TDIVSTest, caseHP2)
 {
-    bool ret = TDivSTestFramework<2, aclFloat16, 2, 32, 2, 2, 32, 32>();
+    bool ret = TDivSTestFramework<2, aclFloat16, 2, 32, 2, 2, 32, 32, true>();
     EXPECT_TRUE(ret);
 }

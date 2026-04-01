@@ -14,7 +14,6 @@ import os
 import struct
 import ctypes
 import numpy as np
-np.random.seed(23)
 
 
 def gen_golden_data(param):

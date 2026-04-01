@@ -72,9 +72,9 @@ extern "C" __global__ AICORE void launchTDIVSCaseHP1(__gm__ float *out, __gm__ f
 {
     runTDivS<float, 2, 16, 2, 2, 16, 16, true>(out, src, scalar);
 }
-extern "C" __global__ AICORE void launchTDIVSCaseHP2(__gm__ aclFloat16 *out, __gm__ aclFloat16 *src, aclFloat16 scalar)
+extern "C" __global__ AICORE void launchTDIVSCaseHP2(__gm__ aclFloat16 *out, __gm__ aclFloat16 *src, float scalar)
 {
-    runTDivS<half, 2, 32, 2, 2, 32, 32, true>(out, src, scalar);
+    runTDivS<half, 2, 32, 2, 2, 32, 32, true>((__gm__ half *)out, (__gm__ half *)src, scalar);
 }
 
 template <uint32_t caseId>

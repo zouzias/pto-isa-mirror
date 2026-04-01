@@ -12,7 +12,6 @@
 
 import os
 import numpy as np
-np.random.seed(19)
 
 
 def gen_golden_data(case_name, param):
@@ -24,8 +23,18 @@ def gen_golden_data(case_name, param):
     h_valid, w_valid = param.valid_row, param.valid_col
 
     # Generate random input arrays
-    input1 = np.random.randint(1, 10, size=[src0_tile_row, src0_tile_col]).astype(dtype)
-    input2 = np.random.randint(1, 10, size=[src1_tile_row, src1_tile_col]).astype(dtype)
+    if dtype in (np.int8, np.uint8, np.int16, np.uint16, np.int32, np.uint32):
+        dtype_info = np.iinfo(dtype)
+        input1 = np.random.randint(dtype_info.min, dtype_info.max,
+            size=[src0_tile_row, src0_tile_col]).astype(dtype)
+        input2 = np.random.randint(dtype_info.min, dtype_info.max,
+            size=[src1_tile_row, src1_tile_col]).astype(dtype)
+    else:
+        dtype_info = np.finfo(dtype)
+        input1 = np.random.uniform(low=dtype_info.min, high=dtype_info.max,
+            size=[src0_tile_row, src0_tile_col]).astype(dtype)
+        input2 = np.random.uniform(low=dtype_info.min, high=dtype_info.max,
+            size=[src1_tile_row, src1_tile_col]).astype(dtype)
 
     # Perform the operation
     golden = np.zeros([dst_tile_row, dst_tile_col]).astype(dtype)

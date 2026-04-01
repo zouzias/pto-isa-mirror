@@ -98,7 +98,7 @@ void test_tdiv()
     ReadFile(GetGoldenDir() + "/golden.bin", fileSizeDst, golden.data(), fileSizeDst);
     ReadFile(GetGoldenDir() + "/output.bin", fileSizeDst, devFinal.data(), fileSizeDst);
 
-    auto resPrecision = highPrecision ? 0x0000001f : 0.001f;
+    auto resPrecision = highPrecision ? 0.0000001f : 0.001f;
     bool ret = ResultCmp<T>(golden, devFinal, resPrecision);
 
     EXPECT_TRUE(ret);

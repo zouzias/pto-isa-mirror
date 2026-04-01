@@ -1403,12 +1403,12 @@ PTO_INST RecordEvent TSUBS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TDIVS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar,
                            WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TDIVS, dst, src0, scalar);
+    TDIVS_IMPL<PrecisionType>(dst, src0, scalar);
     return {};
 }
 
@@ -1421,12 +1421,12 @@ PTO_INST RecordEvent TMULS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar, TileDataSrc &src0,
                            WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TDIVS, dst, scalar, src0);
+    TDIVS_IMPL<PrecisionType>(dst, scalar, src0);
     return {};
 }
 
