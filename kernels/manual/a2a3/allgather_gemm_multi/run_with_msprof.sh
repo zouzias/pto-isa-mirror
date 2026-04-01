@@ -4,9 +4,18 @@
 # 使用华为昇腾性能分析工具 msprof 进行性能测试
 # --------------------------------------------------------------------------------
 
-# Source environment scripts
-source /home/ntlab/qifeng/pypto/env.sh
-source /home/ntlab/qifeng/pypto/third_party_path/shmem/install/set_env.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
+
+# Source CANN environment (user may override via ASCEND_HOME_PATH)
+if [ -z "${ASCEND_HOME_PATH}" ]; then
+    if [ -f /usr/local/Ascend/latest/set_env.sh ]; then
+        source /usr/local/Ascend/latest/set_env.sh
+    else
+        echo "[ERROR] ASCEND_HOME_PATH not set. Please source your CANN set_env.sh first."
+        exit 1
+    fi
+fi
 
 # Default configuration
 SIZE="large"
@@ -265,22 +274,12 @@ if command -v msprof &> /dev/null; then
     MSPROF_TOOL="msprof"
 elif [ -n "${ASCEND_HOME_PATH}" ] && [ -f "${ASCEND_HOME_PATH}/tools/profiler/bin/msprof" ]; then
     MSPROF_TOOL="${ASCEND_HOME_PATH}/tools/profiler/bin/msprof"
-elif [ -f "/usr/local/Ascend/cann-8.5.0/tools/profiler/bin/msprof" ]; then
-    MSPROF_TOOL="/usr/local/Ascend/cann-8.5.0/tools/profiler/bin/msprof"
 fi
 
 if command -v msopprof &> /dev/null; then
     MSOPPROF_TOOL="msopprof"
-else
-    for toolkit_dir in /usr/local/Ascend/ascend-toolkit/*/tools/msopt/bin/msopprof; do
-        if [ -f "$toolkit_dir" ]; then
-            MSOPPROF_TOOL="$toolkit_dir"
-            break
-        fi
-    done
-    if [ -z "$MSOPPROF_TOOL" ] && [ -n "${ASCEND_TOOLKIT_HOME}" ] && [ -f "${ASCEND_TOOLKIT_HOME}/tools/msopt/bin/msopprof" ]; then
-        MSOPPROF_TOOL="${ASCEND_TOOLKIT_HOME}/tools/msopt/bin/msopprof"
-    fi
+elif [ -n "${ASCEND_TOOLKIT_HOME}" ] && [ -f "${ASCEND_TOOLKIT_HOME}/tools/msopt/bin/msopprof" ]; then
+    MSOPPROF_TOOL="${ASCEND_TOOLKIT_HOME}/tools/msopt/bin/msopprof"
 fi
 
 if [ "${PROFILE_MODE}" == "application" ]; then
@@ -293,7 +292,7 @@ if [ "${PROFILE_MODE}" == "application" ]; then
         echo "  3. ASCEND_HOME_PATH 环境变量是否设置"
         echo ""
         echo "可以尝试手动查找工具："
-        echo "  find /usr/local/Ascend -name msprof 2>/dev/null"
+        echo "  find \${ASCEND_HOME_PATH} -name msprof 2>/dev/null"
         exit 1
     fi
     echo "[INFO] 找到性能分析工具: ${MSPROF_TOOL}"
@@ -303,10 +302,10 @@ else
         echo ""
         echo "请检查："
         echo "  1. ascend-toolkit 是否已正确安装"
-        echo "  2. 是否已 source 环境脚本（env.sh）"
+        echo "  2. 是否已 source 环境脚本（set_env.sh）"
         echo ""
         echo "可以尝试手动查找工具："
-        echo "  find /usr/local/Ascend -name msopprof 2>/dev/null"
+        echo "  find \${ASCEND_HOME_PATH} -name msopprof 2>/dev/null"
         exit 1
     fi
     echo "[INFO] 找到算子性能分析工具: ${MSOPPROF_TOOL}"

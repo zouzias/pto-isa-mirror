@@ -306,6 +306,7 @@ struct HcclOpResParam {
 // Device-side helper: convert a local window pointer to the equivalent address
 // on a remote rank.
 // ============================================================================
+#ifdef __CCE_AICORE__
 template <typename T>
 AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *localPtr, int pe)
 {
@@ -313,6 +314,7 @@ AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *l
     uint64_t offset = (uint64_t)localPtr - localBase;
     return (__gm__ T *)(ctx->windowsIn[pe] + offset);
 }
+#endif
 
 // ============================================================================
 // Host-side helpers

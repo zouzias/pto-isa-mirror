@@ -51,7 +51,11 @@ endif()
 message(STATUS "GEMM Size: M=${G_M}, K=${G_K}, N=${G_N} (orig: ${ORIG_M}x${ORIG_K}x${ORIG_N}), Size Name: ${SIZE_NAME}")
 message(STATUS "Block Configuration: COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}, COMM_BLOCK_NUM=${COMM_BLOCK_NUM}")
 
-set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
+if(NOT DEFINED ENV{ASCEND_DRIVER_PATH})
+    set(ASCEND_DRIVER_PATH /usr/local/Ascend/driver)
+else()
+    set(ASCEND_DRIVER_PATH $ENV{ASCEND_DRIVER_PATH})
+endif()
 
 set(CMAKE_COMPILER bisheng)
 set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
@@ -125,15 +129,11 @@ target_compile_options(allgather_gemm_comm_kernel PRIVATE
     --cce-aicore-arch=dav-c220-vec
     -DMEMORY_BASE -std=c++17
     -DCONFIG_G_M=${G_M} -DCONFIG_G_K=${G_K} -DCONFIG_G_N=${G_N}
-    -DCONFIG_ORIG_M=${ORIG_M} -DCONFIG_ORIG_K=${ORIG_K} -DCONFIG_ORIG_N=${ORIG_N}
-    -DCONFIG_SIZE_NAME="${SIZE_NAME}"
-    -DCONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
     -DCONFIG_COMM_BLOCK_NUM=${COMM_BLOCK_NUM}
 )
 target_include_directories(allgather_gemm_comm_kernel PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../include/
     ${PROJECT_SOURCE_DIR}/../../../../tests/npu/a2a3/comm/st/testcase/
-    ${PROJECT_SOURCE_DIR}/../../../../tests/common
     $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc
     $ENV{ASCEND_HOME_PATH}/aarch64-linux/asc/include
     $ENV{ASCEND_HOME_PATH}/aarch64-linux/ascendc/include/basic_api
@@ -147,7 +147,6 @@ target_link_directories(allgather_gemm_comm_kernel PRIVATE
     ${ASCEND_HOME_PATH}/lib64
 )
 target_link_libraries(allgather_gemm_comm_kernel PRIVATE
-    allgather_gemm_compute_kernel
     hccl hcomm runtime nnopbase
 )
 target_link_options(allgather_gemm_comm_kernel PRIVATE --cce-fatobj-link)
@@ -163,7 +162,11 @@ target_include_directories(allgather_gemm PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../tests/npu/a2a3/comm/st/testcase/
 )
 target_compile_definitions(allgather_gemm PRIVATE
+    CONFIG_G_M=${G_M} CONFIG_G_K=${G_K} CONFIG_G_N=${G_N}
+    CONFIG_ORIG_M=${ORIG_M} CONFIG_ORIG_K=${ORIG_K} CONFIG_ORIG_N=${ORIG_N}
     CONFIG_SIZE_NAME="${SIZE_NAME}"
+    CONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
+    CONFIG_COMM_BLOCK_NUM=${COMM_BLOCK_NUM}
 )
 
 target_link_directories(allgather_gemm PUBLIC

@@ -1,7 +1,17 @@
 #!/bin/bash
 
-# Source environment scripts
-source /home/ntlab/qifeng/pypto/env.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
+
+# Source CANN environment (user may override via ASCEND_HOME_PATH)
+if [ -z "${ASCEND_HOME_PATH}" ]; then
+    if [ -f /usr/local/Ascend/latest/set_env.sh ]; then
+        source /usr/local/Ascend/latest/set_env.sh
+    else
+        echo "[ERROR] ASCEND_HOME_PATH not set. Please source your CANN set_env.sh first."
+        exit 1
+    fi
+fi
 
 # Default size configuration
 SIZE="large"

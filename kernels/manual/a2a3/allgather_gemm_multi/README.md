@@ -114,10 +114,10 @@ Ascend 910B 上 AIC 与 AIV 可同时调度，因此 Comm 与 Compute 可真实�
 
 ```
 allgather_gemm_multi/
-├── allgather_gemm_comm_kernel.cpp     # 通信 Kernel (AIV) + Host 测速与打印
+├── main.cpp                           # 入口 + 测试框架（warmup、验证、性能测量、统计打印）
+├── allgather_gemm_comm_kernel.cpp     # 通信 Kernel (AIV) - AllGather TPUT
 ├── allgather_gemm_compute_kernel.cpp  # 计算 Kernel (AIC) - streaming GEMM
-├── ready_queue.hpp                    # Summary 计数器元数据
-├── main.cpp                           # 入口
+├── ready_queue.hpp                    # TileFlagMatrix / Summary 计数器元数据
 ├── run.sh                             # 构建运行
 ├── run_with_msprof.sh                 # msprof 分析
 ├── scripts/gen_data.py                # M 切分数据生成
