@@ -242,7 +242,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TLoad.hpp"
 #include "pto/cpu/TStore.hpp"
 #include "pto/cpu/TExpands.hpp"
-#include "pto/cpu/TExp.hpp"
 #include "pto/cpu/TGather.hpp"
 #include "pto/cpu/TGatherB.hpp"
 #include "pto/cpu/TRowMax.hpp"
@@ -313,7 +312,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TExtract.hpp"
 #include "pto/costmodel/a2a3/TMov.hpp"
 #include "pto/costmodel/a2a3/TScatter.hpp"
-#include "pto/costmodel/a2a3/TTrans.hpp"
+#include "pto/costmodel/a2a3/TTrans.hpp"Ha
 #include "pto/costmodel/a2a3/TMatmul.hpp"
 #include "pto/costmodel/a2a3/TSel.hpp"
 #include "pto/costmodel/a2a3/TCvt.hpp"
