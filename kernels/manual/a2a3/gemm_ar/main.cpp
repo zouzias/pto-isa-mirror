@@ -30,9 +30,8 @@
 #include <unistd.h>
 
 #include "acl/acl.h"
-#include "hccl/hccl.h"
-#include "hccl/hccl_comm.h"
 #include "hccl/hccl_types.h"
+#include "hccl/hccl_comm.h"
 #include "comm_mpi.h"
 
 #include "hccl_context.h"
