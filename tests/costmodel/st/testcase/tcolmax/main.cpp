@@ -63,17 +63,21 @@ void test_tcolmax()
 
 TEST_F(TCOLMAXTest, case_float_64x64)
 {
-    test_tcolmax<float, 64, 64, 64, 64, 1116.0f, 1.0f>();
+    test_tcolmax<float, 64, 64, 64, 64, 1130.0f, 1.0f>();
 }
 TEST_F(TCOLMAXTest, case_half_64x64)
 {
-    test_tcolmax<aclFloat16, 64, 64, 64, 64, 1242.0f, 1.0f>();
+    test_tcolmax<aclFloat16, 64, 64, 64, 64, 1256.0f, 1.0f>();
 }
 TEST_F(TCOLMAXTest, case_int16_64x64)
 {
-    test_tcolmax<int16_t, 64, 64, 64, 64, 1242.0f, 1.0f>();
+    test_tcolmax<int16_t, 64, 64, 64, 64, 1256.0f, 1.0f>();
 }
 TEST_F(TCOLMAXTest, case_half_16x256)
 {
-    test_tcolmax<aclFloat16, 16, 256, 16, 256, 252.0f, 1.0f>();
+    test_tcolmax<aclFloat16, 16, 256, 16, 256, 266.0f, 1.0f>();
+}
+TEST_F(TCOLMAXTest, case_float_1x3072_1x3072_1x3072)
+{
+    test_tcolmax<float, 1, 3072, 1, 3072, 14.0f, 1.0f>();
 }

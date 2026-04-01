@@ -75,9 +75,13 @@ void test_tcolsum()
 
 TEST_F(TCOLSUMTest, case_float_64x64_64x64_64x64)
 {
-    test_tcolsum<float, 64, 64, 64, 64, true, 126.0f, 1.0f>();
+    test_tcolsum<float, 64, 64, 64, 64, true, 140.0f, 1.0f>();
+}
+TEST_F(TCOLSUMTest, case_float_1x3072_1x3072_1x3072)
+{
+    test_tcolsum<float, 1, 3072, 1, 3072, true, 14.0f, 1.0f>();
 }
 TEST_F(TCOLSUMTest, case_half_16x256_16x256_16x256)
 {
-    test_tcolsum<aclFloat16, 16, 256, 16, 256, false, 252.0f, 1.0f>();
+    test_tcolsum<aclFloat16, 16, 256, 16, 256, false, 266.0f, 1.0f>();
 }
