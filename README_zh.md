@@ -73,6 +73,16 @@ PTO Tile Lib 并不面向入门级用户，主要面向：
 
 ![Flash Attention 归一化 TFLOPS（A2/A3）](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
 
+### 通信指令带宽（A2/A3 参考）
+
+- Kernel：`kernels/manual/a2a3/tget_bandwidth/`
+
+在 Ascend A2/A3 上测量 `TGET`（同步，通过 UB 中转）与 `TGET_ASYNC`（异步，SDMA 引擎直传）的点对点远程读带宽（float 类型，2 卡）：
+
+详细分析说明与构建运行指南：[TGET / TGET_ASYNC 带宽对比示例](kernels/manual/a2a3/tget_bandwidth/README_zh.md)。
+
+![TGET vs TGET_ASYNC 带宽对比（A2/A3）](docs/figures/performance/tget_bw_compare.png)
+
 ## 路线图（Roadmap）
 
 未来计划发布的特性：
@@ -263,7 +273,7 @@ chmod +x ./tests/run_comm_test.sh
 ./tests/run_comm_test.sh -d -t treduce
 ```
 
-**注意：** 异步通信指令当前仅支持 A2/A3，且需要安装 CANN 9.0 软件包及对应的 OPS 包。
+**注意：** 异步通信指令（Tput_async 和 Tget_async）需要安装 CANN 9.0 软件包及对应的 OPS 包。
 
 各通信指令详情参见 [docs/isa/comm/README.md](docs/isa/comm/README.md)。
 

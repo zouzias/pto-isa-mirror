@@ -73,6 +73,16 @@ Detailed analysis and tuning notes: [Flash Attention Kernel Implementation](kern
 
 ![Flash Attention normalized TFLOPS (A2/A3)](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
 
+### Communication Instruction Bandwidth (A2/A3 reference)
+
+- Kernel: `kernels/manual/a2a3/tget_bandwidth/`
+
+Point-to-point remote read bandwidth measured on Ascend A2/A3, comparing `TGET` (synchronous, via UB staging) and `TGET_ASYNC` (asynchronous, SDMA engine direct transfer). Measured with float dtype, 2 NPUs:
+
+Detailed analysis and build/run guide: [TGET / TGET_ASYNC Bandwidth Comparison Example](kernels/manual/a2a3/tget_bandwidth/README.md).
+
+![TGET vs TGET_ASYNC Bandwidth Comparison (A2/A3)](docs/figures/performance/tget_bw_compare.png)
+
 ## Coming Soon
 
 The following features will be released in the future:
