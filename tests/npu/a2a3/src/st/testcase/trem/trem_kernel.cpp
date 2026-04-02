@@ -32,20 +32,29 @@ __global__ AICORE void runTRem(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
     using TileDataDst = Tile<TileType::Vec, T, dstTileH, dstTileW, BLayout::RowMajor, -1, -1>;
     using TileDataSrc0 = Tile<TileType::Vec, T, src0TileH, src0TileW, BLayout::RowMajor, -1, -1>;
     using TileDataSrc1 = Tile<TileType::Vec, T, src1TileH, src1TileW, BLayout::RowMajor, -1, -1>;
+    // tmp buffer only needs 1 row since it's reused for each row iteration
+    using TileDataTmp = Tile<TileType::Vec, T, 1, dstTileW, BLayout::RowMajor, -1, -1>;
     TileDataDst dstTile(vRows, vCols);
     TileDataSrc0 src0Tile(vRows, vCols);
     TileDataSrc1 src1Tile(vRows, vCols);
+    TileDataTmp tmpTile(1, vCols);
     TASSIGN(src0Tile, 0x0);
     TASSIGN(src1Tile, src0TileH * src0TileW * sizeof(T));
     TASSIGN(dstTile, src0TileH * src0TileW * sizeof(T) + src1TileH * src1TileW * sizeof(T));
+    TASSIGN(tmpTile,
+            src0TileH * src0TileW * sizeof(T) + src1TileH * src1TileW * sizeof(T) + dstTileH * dstTileW * sizeof(T));
 
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TREM<TileDataDst, TileDataSrc0, TileDataSrc1>(dstTile, src0Tile, src1Tile);
+#endif
+    TREM<TileDataDst, TileDataSrc0, TileDataSrc1, TileDataTmp>(dstTile, src0Tile, src1Tile, tmpTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
@@ -54,28 +63,17 @@ template <typename T, int dstTileH, int dstTileW, int src0TileH, int src0TileW, 
           int vCols>
 void LaunchTREM(T *out, T *src0, T *src1, void *stream)
 {
-    if constexpr (std::is_same_v<T, aclFloat16>)
-        runTRem<half, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW>
-            <<<1, nullptr, stream>>>((half *)(out), (half *)(src0), (half *)(src1), vRows, vCols);
-    else
-        runTRem<T, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW>
-            <<<1, nullptr, stream>>>(out, src0, src1, vRows, vCols);
+    runTRem<T, dstTileH, dstTileW, src0TileH, src0TileW, src1TileH, src1TileW>
+        <<<1, nullptr, stream>>>(out, src0, src1, vRows, vCols);
 }
 
-template void LaunchTREM<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 64>(aclFloat16 *out, aclFloat16 *src0,
-                                                                       aclFloat16 *src1, void *stream);
+template void LaunchTREM<float, 16, 64, 16, 128, 16, 128, 16, 64>(float *out, float *src0, float *src1, void *stream);
 template void LaunchTREM<float, 16, 32, 16, 64, 16, 32, 16, 32>(float *out, float *src0, float *src1, void *stream);
 template void LaunchTREM<int32_t, 4, 32, 4, 32, 4, 32, 4, 32>(int32_t *out, int32_t *src0, int32_t *src1, void *stream);
 template void LaunchTREM<int32_t, 16, 32, 16, 64, 16, 32, 16, 32>(int32_t *out, int32_t *src0, int32_t *src1,
                                                                   void *stream);
-template void LaunchTREM<aclFloat16, 16, 64, 16, 128, 16, 128, 16, 63>(aclFloat16 *out, aclFloat16 *src0,
-                                                                       aclFloat16 *src1, void *stream);
+template void LaunchTREM<float, 16, 64, 16, 128, 16, 128, 16, 63>(float *out, float *src0, float *src1, void *stream);
 template void LaunchTREM<float, 2, 32, 2, 64, 2, 32, 2, 31>(float *out, float *src0, float *src1, void *stream);
 template void LaunchTREM<int32_t, 16, 32, 16, 64, 16, 32, 16, 31>(int32_t *out, int32_t *src0, int32_t *src1,
                                                                   void *stream);
-template void LaunchTREM<int16_t, 16, 32, 16, 64, 16, 32, 16, 31>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                  void *stream);
-template void LaunchTREM<int16_t, 16, 64, 16, 128, 16, 128, 16, 63>(int16_t *out, int16_t *src0, int16_t *src1,
-                                                                    void *stream);
-template void LaunchTREM<aclFloat16, 1, 8192, 1, 8192, 1, 8192, 1, 8192>(aclFloat16 *out, aclFloat16 *src0,
-                                                                         aclFloat16 *src1, void *stream);
+template void LaunchTREM<float, 1, 8192, 1, 8192, 1, 8192, 1, 8192>(float *out, float *src0, float *src1, void *stream);

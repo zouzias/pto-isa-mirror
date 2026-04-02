@@ -41,14 +41,16 @@ AICORE inline void runTIMG2COL(__gm__ T *out, __gm__ U *src0, __gm__ U *src1)
     GlobalDataSrc1 src1Global(src1);
     GlobalDataSrc0 src0Global(src0);
 
-    constexpr int bufferSizeA = fmapN * fmapC1 * fmapH * fmapW * fmapC0 * sizeof(U);
+    // for auto mode, bufferSize is a misleading variable name in convTile, it shouldn't be number of bytes it should be
+    // the number of elements
+    constexpr int bufferSizeA = fmapN * fmapC1 * fmapH * fmapW * fmapC0; // * sizeof(U);
     using TileMatAData = ConvTile<TileType::Mat, U, bufferSizeA, Layout::NC1HWC0,
                                   pto::ConvTileShape<fmapN, fmapC1, fmapH, fmapW, fmapC0>>;
     TileMatAData aMatTile;
     TASSIGN(aMatTile, 0x0);
     static_assert(aMatTile.totalDimCount == 5);
 
-    constexpr int bufferSizeB = filterC1 * filterH * filterW * filterN * filterC0 * sizeof(T);
+    constexpr int bufferSizeB = filterC1 * filterH * filterW * filterN * filterC0;
     using TileMatBData = ConvTile<TileType::Mat, U, bufferSizeB, Layout::FRACTAL_Z,
                                   pto::ConvTileShape<filterC1, filterH, filterW, filterN, filterC0>>;
     TileMatBData bMatTile;
@@ -67,35 +69,37 @@ AICORE inline void runTIMG2COL(__gm__ T *out, __gm__ U *src0, __gm__ U *src1)
 
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
+
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
-    Img2colTileConfig convcfg;
-    convcfg.channelSize = fmapC1 * fmapC0;
-    convcfg.dilationW = dilationW;
-    convcfg.dilationH = dilationH;
-    convcfg.filterH = filterH;
-    convcfg.filterW = filterW;
-    convcfg.fmapH = fmapH;
-    convcfg.fmapW = fmapW;
-    convcfg.strideW = strideW;
-    convcfg.strideH = strideH;
-    convcfg.padList[0] = padLeft;
-    convcfg.padList[1] = padRight;
-    convcfg.padList[2] = padTop;
-    convcfg.padList[3] = padBottom;
-    convcfg.padValue = 0;
-    convcfg.transpose = false;
+    uint8_t padList[] = {padLeft, padRight, padTop, padBottom};
+    aMatTile.SetFmapH(fmapH);
+    aMatTile.SetFmapW(fmapW);
+    aMatTile.SetPadListArray(padList);
+    aMatTile.SetDilationH(dilationH);
+    aMatTile.SetDilationW(dilationW);
+    aMatTile.SetFilterH(filterH);
+    aMatTile.SetFilterW(filterW);
+    aMatTile.SetStrideH(strideH);
+    aMatTile.SetStrideW(strideW);
+    aMatTile.SetChannelSize(fmapC1 * fmapC0);
 
-    TSETFMATRIX<SetFmatrixMode::FMATRIX_A_MANUAL>(convcfg);
-    TIMG2COL<LeftTile, TileMatAData>(aTile, aMatTile, 0, 0, convcfg);
+    TSETFMATRIX(aMatTile);
+    TIMG2COL(aTile, aMatTile, 0, 0);
     TMOV(bTile, bMatTile);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
     TMATMUL(cTile, aTile, bTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     if constexpr (std::is_same_v<T, int32_t>) {
         using GlobalDataOut =
             GlobalTensor<T, pto::Shape<1, 1, 1, M, N>, pto::Stride<1 * M * N, 1 * M * N, M * N, N, 1>>;
@@ -154,14 +158,14 @@ AICORE inline void runTIMG2COLSplitK(__gm__ T *out, __gm__ U *src0, __gm__ U *sr
     GlobalDataSrc0 src0Global(src0);
     GlobalDataSrc1 src1Global(src1);
 
-    constexpr int bufferSizeA = fmapN * fmapC1 * fmapH * fmapW * fmapC0 * sizeof(U);
+    constexpr int bufferSizeA = fmapN * fmapC1 * fmapH * fmapW * fmapC0;
     using TileMatAData = ConvTile<TileType::Mat, U, bufferSizeA, Layout::NC1HWC0,
                                   pto::ConvTileShape<fmapN, fmapC1, fmapH, fmapW, fmapC0>>;
     TileMatAData aMatTile;
     static_assert(aMatTile.totalDimCount == 5);
     TASSIGN(aMatTile, 0x0);
 
-    constexpr int bufferSizeB = filterC1 * filterH * filterW * filterN * filterC0 * sizeof(T);
+    constexpr int bufferSizeB = filterC1 * filterH * filterW * filterN * filterC0;
     using TileMatBData = ConvTile<TileType::Mat, U, bufferSizeB, Layout::FRACTAL_Z,
                                   pto::ConvTileShape<filterC1, filterH, filterW, filterN, filterC0>>;
     TileMatBData bMatTile;
@@ -180,43 +184,46 @@ AICORE inline void runTIMG2COLSplitK(__gm__ T *out, __gm__ U *src0, __gm__ U *sr
 
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
-    Img2colTileConfig<U> convcfg;
-    convcfg.channelSize = fmapC1 * fmapC0;
-    convcfg.dilationH = dilationH;
-    convcfg.dilationW = dilationW;
-    convcfg.filterH = filterH;
-    convcfg.filterW = filterW;
-    convcfg.fmapH = fmapH;
-    convcfg.fmapW = fmapW;
-    convcfg.strideH = strideH;
-    convcfg.strideW = strideW;
-    convcfg.transpose = false;
-    convcfg.padList[0] = padLeft;
-    convcfg.padList[1] = padRight;
-    convcfg.padList[2] = padTop;
-    convcfg.padList[3] = padBottom;
-    convcfg.padValue = 0;
+    uint8_t padList[] = {padLeft, padRight, padTop, padBottom};
+    aMatTile.SetFmapH(fmapH);
+    aMatTile.SetFmapW(fmapW);
+    aMatTile.SetPadListArray(padList);
+    aMatTile.SetDilationH(dilationH);
+    aMatTile.SetDilationW(dilationW);
+    aMatTile.SetFilterH(filterH);
+    aMatTile.SetFilterW(filterW);
+    aMatTile.SetStrideH(strideH);
+    aMatTile.SetStrideW(strideW);
+    aMatTile.SetChannelSize(fmapC1 * fmapC0);
 
-    TSETFMATRIX<SetFmatrixMode::FMATRIX_A_MANUAL, U>(convcfg);
+    TSETFMATRIX<TileMatAData, SetFmatrixMode::FMATRIX_B_MANUAL>(aMatTile);
     constexpr int iter = K / baseK;
     for (int i = 0; i < iter; i++) {
-        TIMG2COL<LeftTile, TileMatAData, SetFmatrixMode::FMATRIX_A_MANUAL, U>(aTile, aMatTile, 0, i * baseK, convcfg);
+        TIMG2COL<LeftTile, TileMatAData, SetFmatrixMode::FMATRIX_B_MANUAL>(aTile, aMatTile, 0, i * baseK);
         TEXTRACT(bTile, bMatTile, i * baseK, 0);
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
         if (i == 0) {
             TMATMUL(cTile, aTile, bTile);
         } else {
             TMATMUL_ACC(cTile, cTile, aTile, bTile);
         }
+#ifndef __PTO_AUTO__
         pipe_barrier(PIPE_ALL);
+#endif
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     if constexpr (std::is_same_v<T, int32_t>) {
         using GlobalDataOut =
             GlobalTensor<T, pto::Shape<1, 1, 1, validM, validN>,
@@ -274,7 +281,7 @@ AICORE inline void runTIMG2COLFractalZ4D(__gm__ T *out, __gm__ U *src0, __gm__ U
     static_assert(aMatTile.totalDimCount == 5);
     TASSIGN(aMatTile, 0x0);
 
-    constexpr int bufferSizeB = filterDim3 * filterDim2 * filterDim1 * filterDim0 * sizeof(T);
+    constexpr int bufferSizeB = filterDim3 * filterDim2 * filterDim1 * filterDim0;
     using TileMatBData = ConvTile<TileType::Mat, U, bufferSizeB, Layout::FRACTAL_Z,
                                   pto::ConvTileShape<filterDim3, filterDim2, filterDim1, filterDim0>>;
     TileMatBData bMatTile;
@@ -293,43 +300,46 @@ AICORE inline void runTIMG2COLFractalZ4D(__gm__ T *out, __gm__ U *src0, __gm__ U
 
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
-    Img2colTileConfig<U> convcfg;
-    convcfg.channelSize = fmapC1 * fmapC0;
-    convcfg.dilationH = dilationH;
-    convcfg.dilationW = dilationW;
-    convcfg.filterH = filterH;
-    convcfg.filterW = filterW;
-    convcfg.fmapH = fmapH;
-    convcfg.fmapW = fmapW;
-    convcfg.strideH = strideH;
-    convcfg.strideW = strideW;
-    convcfg.transpose = false;
-    convcfg.padList[0] = padLeft;
-    convcfg.padList[1] = padRight;
-    convcfg.padList[2] = padTop;
-    convcfg.padList[3] = padBottom;
-    convcfg.padValue = 0;
+    uint8_t padList[] = {padLeft, padRight, padTop, padBottom};
+    aMatTile.SetFmapH(fmapH);
+    aMatTile.SetFmapW(fmapW);
+    aMatTile.SetPadListArray(padList);
+    aMatTile.SetDilationH(dilationH);
+    aMatTile.SetDilationW(dilationW);
+    aMatTile.SetFilterH(filterH);
+    aMatTile.SetFilterW(filterW);
+    aMatTile.SetStrideH(strideH);
+    aMatTile.SetStrideW(strideW);
+    aMatTile.SetChannelSize(fmapC1 * fmapC0);
 
-    TSETFMATRIX<SetFmatrixMode::FMATRIX_A_MANUAL, U>(convcfg);
+    TSETFMATRIX(aMatTile);
     constexpr int iter = K / baseK;
     for (int i = 0; i < iter; i++) {
-        TIMG2COL<LeftTile, TileMatAData, SetFmatrixMode::FMATRIX_A_MANUAL, U>(aTile, aMatTile, 0, i * baseK, convcfg);
+        TIMG2COL<LeftTile, TileMatAData, SetFmatrixMode::FMATRIX_B_AUTO>(aTile, aMatTile, 0, i * baseK);
         TEXTRACT(bTile, bMatTile, i * baseK, 0);
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
         if (i == 0) {
             TMATMUL(cTile, aTile, bTile);
         } else {
             TMATMUL_ACC(cTile, cTile, aTile, bTile);
         }
+#ifndef __PTO_AUTO__
         pipe_barrier(PIPE_ALL);
+#endif
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     if constexpr (std::is_same_v<T, int32_t>) {
         using GlobalDataOut =
             GlobalTensor<T, pto::Shape<1, 1, 1, validM, validN>,

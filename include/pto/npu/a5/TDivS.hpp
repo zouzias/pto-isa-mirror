@@ -16,10 +16,30 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 #include "TBinSOp.hpp"
 
+#ifndef STRAIGHT_INTRINSICS_IMPL
+#include "custom/Div754.hpp"
+#endif
+
 namespace pto {
 
 template <typename T>
 struct DivSOp {
+#ifndef STRAIGHT_INTRINSICS_IMPL
+    PTO_INTERNAL static void BinSInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, T reg_src1, MaskReg &preg)
+    {
+        if constexpr (std::is_same_v<T, float>) {
+            vdup(reg_dst, reg_src1, preg, MODE_ZEROING);
+            DivIEEE754FloatImpl<T, RegTensor<T> >(reg_dst, reg_src0, reg_dst, preg);
+        } else if constexpr (std::is_same_v<T, half>) {
+            vdup(reg_dst, reg_src1, preg, MODE_ZEROING);
+            DivIEEE754HalfImpl<T, RegTensor<T> >(reg_dst, reg_src0, reg_dst, preg);
+        } else {
+            vdup(reg_dst, reg_src1, preg, MODE_ZEROING);
+            vdiv(reg_dst, reg_src0, reg_dst, preg, MODE_ZEROING);
+        }
+    }
+#else
+
     PTO_INTERNAL static void BinSInstr(RegTensor<T> &vregdst, RegTensor<T> &vregsrc, T src1, MaskReg &preg)
     {
         float divider = static_cast<float>(src1);
@@ -46,6 +66,7 @@ struct DivSOp {
             vcvt(vregdst, tempDst, preg, ROUND_Z, RS_ENABLE);
         }
     }
+#endif
 };
 
 template <typename T>
@@ -77,7 +98,10 @@ struct DivSOpS {
 template <typename T, unsigned DstCols, unsigned SrcCols>
 PTO_INTERNAL void TDivs_naive(__ubuf__ T *dst, __ubuf__ T *src0, T src1, unsigned validRow, unsigned validCol)
 {
+// auto mode adds in synchronization during compilation
+#ifndef __PTO_AUTO__
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
+#endif
     for (int i = 0; i < validRow; i++) {
         for (int j = 0; j < validCol; j++) {
             int dstOffset = i * DstCols + j;
@@ -90,7 +114,10 @@ PTO_INTERNAL void TDivs_naive(__ubuf__ T *dst, __ubuf__ T *src0, T src1, unsigne
 template <typename T, unsigned DstCols, unsigned SrcCols>
 PTO_INTERNAL void TSDiv_naive(__ubuf__ T *dst, __ubuf__ T *src0, T src1, unsigned validRow, unsigned validCol)
 {
+// auto mode adds in synchronization during compilation
+#ifndef __PTO_AUTO__
     PtoSetWaitFlag<PIPE_V, PIPE_S>();
+#endif
     for (int i = 0; i < validRow; i++) {
         for (int j = 0; j < validCol; j++) {
             int dstOffset = i * DstCols + j;
@@ -110,8 +137,8 @@ __tf__ PTO_INTERNAL OP_NAME(TDIVS)
     using T = typename TileDataDst::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
-    if constexpr (std::is_same<T, int16_t>::value) {
-        TDivs_naive<T, TileDataDst::Cols, TileDataSrc::Cols>(dst, src0, src1, validRow, validCol);
+    if constexpr (std::is_integral_v<T>) {
+        TDivs_naive<T, TileDataDst::Cols, TileDataSrc::Cols>(dstPtr, src0Ptr, src1, validRow, validCol);
     } else {
         BinaryInstr<DivSOp<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride,
                     srcRowStride>(dstPtr, src0Ptr, src1, validRow, validCol, version);
@@ -129,8 +156,8 @@ __tf__ PTO_INTERNAL OP_NAME(TDIVS)
     using T = typename TileDataDst::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
-    if constexpr (std::is_same<T, int16_t>::value) {
-        TSDiv_naive<T, TileDataDst::Cols, TileDataSrc::Cols>(dst, src0, src1, validRow, validCol);
+    if constexpr (std::is_integral_v<T>) {
+        TSDiv_naive<T, TileDataDst::Cols, TileDataSrc::Cols>(dstPtr, src0Ptr, src1, validRow, validCol);
     } else {
         BinaryInstr<DivSOpS<T>, TileDataDst, TileDataSrc, T, elementsPerRepeat, blockSizeElem, dstRowStride,
                     srcRowStride>(dstPtr, src0Ptr, src1, validRow, validCol, version);

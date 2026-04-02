@@ -48,10 +48,10 @@ __tf__ PTO_INTERNAL void TOr(typename TileDataDst::TileDType __out__ dst, typena
 
     if constexpr (dstRowStride == src0RowStride && dstRowStride == src1RowStride) {
         BinaryInstr<OrOp<T>, T, TileDataDst, elementsPerRepeat, blockSizeElem, dstRowStride>(dstPtr, src0Ptr, src1Ptr,
-                                                                                             validRows, validCols);
+                                                                                             validRows, transValidCol);
     } else {
         BinaryInstr<OrOp<T>, T, elementsPerRepeat, blockSizeElem, dstRowStride, src0RowStride, src1RowStride>(
-            dstPtr, src0Ptr, src1Ptr, validRows, validCols);
+            dstPtr, src0Ptr, src1Ptr, validRows, transValidCol);
     }
     return;
 }

@@ -11,14 +11,19 @@
 cmake_minimum_required(VERSION 3.16)
 project(pto_cpu_flash_attention_demo LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 23)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 14.0)
+    set(CMAKE_CXX_STANDARD 23)
+else()
+    set(CMAKE_CXX_STANDARD 20)
+endif()
+
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 get_filename_component(PTO_TILE_LIB_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
 
 add_executable(flash_attention_demo flash_attention_demo.cpp)
-target_compile_definitions(flash_attention_demo PRIVATE __CPU_SIM)
+target_compile_definitions(flash_attention_demo PRIVATE __CPU_SIM __PTO_AUTO__)
 target_include_directories(flash_attention_demo PRIVATE
     "${PTO_TILE_LIB_REPO_ROOT}/include"
 )

@@ -41,14 +41,11 @@ PTO_INTERNAL constexpr QuantMode_t GetScalarPreQuantModeGm()
             quantPre = QuantMode_t::QF322F16_PRE;
         } else if constexpr (std::is_same<DstType, __gm__ bfloat16_t>::value) {
             quantPre = QuantMode_t::QF322BF16_PRE;
-        }
-#ifdef __CCE_AICORE__
-        else if constexpr (std::is_same<DstType, __gm__ float8_e4m3_t>::value) {
+        } else if constexpr (std::is_same<DstType, __gm__ float8_e4m3_t>::value) {
             quantPre = QuantMode_t::QF322FP8_PRE;
         } else if constexpr (std::is_same<DstType, __gm__ float>::value) {
             quantPre = QuantMode_t::QF322F32_PRE;
         }
-#endif
     } else if constexpr (std::is_same<SrcType, int32_t>::value) {
         if constexpr ((std::is_same<DstType, __gm__ int8_t>::value) || (std::is_same<DstType, __gm__ uint8_t>::value)) {
             quantPre = QuantMode_t::REQ8;
@@ -74,14 +71,11 @@ PTO_INTERNAL constexpr QuantMode_t GetVectorPreQuantModeGm()
             quantPre = QuantMode_t::VQF322F16_PRE;
         } else if constexpr (std::is_same<DstType, __gm__ bfloat16_t>::value) {
             quantPre = QuantMode_t::VQF322BF16_PRE;
-        }
-#ifdef __CCE_AICORE__
-        else if constexpr (std::is_same<DstType, __gm__ float8_e4m3_t>::value) {
+        } else if constexpr (std::is_same<DstType, __gm__ float8_e4m3_t>::value) {
             quantPre = QuantMode_t::VQF322FP8_PRE;
         } else if constexpr (std::is_same<DstType, __gm__ float>::value) {
             quantPre = QuantMode_t::VQF322F32_PRE;
         }
-#endif
     } else if constexpr (std::is_same<SrcType, int32_t>::value) {
         if constexpr ((std::is_same<DstType, __gm__ int8_t>::value) || (std::is_same<DstType, __gm__ uint8_t>::value)) {
             quantPre = QuantMode_t::VREQ8;
@@ -122,15 +116,16 @@ PTO_INTERNAL void CheckStaticAcc()
     static_assert(std::is_same_v<typename TileData::DType, int32_t> || std::is_same_v<typename TileData::DType, float>,
                   "The input data type must be restricted to int32_t/float!");
     static_assert((GlobalData::layout == pto::Layout::ND) || (GlobalData::layout == pto::Layout::NZ) ||
-                      (GlobalData::layout == pto::Layout::NHWC) || (GlobalData::layout == pto::Layout::NCHW),
-                  "TSTORE(Acc2GM) only support NZ2ND / NZ2NZ / NZ2NHWC / NZ2NCHW.");
+                      (GlobalData::layout == pto::Layout::NHWC) || (GlobalData::layout == pto::Layout::NCHW) ||
+                      (GlobalData::layout == pto::Layout::NCDHW),
+                  "TSTORE(Acc2GM) only support NZ2ND / NZ2NZ / NZ2NHWC / NZ2NCHW / NZ2NCDHW.");
     static_assert(TileData::Cols >= 1 && TileData::Cols <= 4095, "The range of Cols is [1, 4095].");
     static_assert((GlobalData::layout == pto::Layout::ND && TileData::Rows >= 1 && TileData::Rows <= 8192) ||
                       ((GlobalData::layout == pto::Layout::NZ || (GlobalData::layout == pto::Layout::NHWC) ||
-                        (GlobalData::layout == pto::Layout::NCHW)) &&
+                        (GlobalData::layout == pto::Layout::NCHW) || (GlobalData::layout == pto::Layout::NCDHW)) &&
                        TileData::Rows >= 1 && TileData::Rows <= 65535 && TileData::Cols % 16 == 0),
                   "When GlobalData is ND format, the range of Rows is [1, 8192]."
-                  "When GlobalData is NZ/NHWC/NCHW format, the range of Rows is [1, 65535] and Cols"
+                  "When GlobalData is NZ/NHWC/NCHW/NCDHW format, the range of Rows is [1, 65535] and Cols"
                   "must be an integer multiple of 16.");
     if constexpr (!isQuant) {
         static_assert(std::is_same_v<typename GlobalData::DType, __gm__ int32_t> ||
@@ -344,12 +339,18 @@ PTO_INTERNAL void TStoreAccNHWC(typename GlobalData::DType *dstAddr, __cc__ type
 template <typename GlobalData, typename TileData, QuantMode_t quantPre = QuantMode_t::NoQuant,
           ReluPreMode reluPreMode = ReluPreMode::NoRelu, STPhase Phase = STPhase::Unspecified>
 PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ typename TileData::DType *srcAddr,
-                                int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
-                                int gStride3, int validRow, int validCol)
+                                int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride1,
+                                int gStride2, int validRow, int validCol)
 {
-    PTO_ASSERT(validRow == gShape1 * gShape3 * gShape4,
-               "The validRow of TileData must be equal to Shape1 * Shape3 * Shape4 of NCHW shape!");
-    PTO_ASSERT(validCol == gShape2, "The validCol of TileData must be equal to Shape2 of NCHW shape!");
+    if constexpr (GlobalData::layout == pto::Layout::NCHW) {
+        PTO_ASSERT(validRow == gShape1 * gShape3 * gShape4,
+                   "The validRow of TileData must be equal to Shape1 * Shape3 * Shape4 of NCHW shape!");
+        PTO_ASSERT(validCol == gShape2, "The validCol of TileData must be equal to Shape2 of NCHW shape!");
+    } else { // NCDHW
+        PTO_ASSERT(validRow == gShape0 * gShape3 * gShape4,
+                   "The validRow of TileData must be equal to Shape0 * Shape3 * Shape4 of NCDHW shape!");
+        PTO_ASSERT(validCol == gShape1, "The validCol of TileData must be equal to Shape1 of NCDHW shape!");
+    }
 
     uint16_t mSize = validRow;
     uint16_t nSize = validCol;
@@ -357,11 +358,10 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
     if constexpr (CompactMode::Normal == TileData::Compact) {
         srcStride = CeilAlignment(validRow, FRACTAL_NZ_ROW);
     }
-    uint32_t dstStride = gStride3;
-
-    uint16_t loop3Num = gShape0;
-    uint16_t loop3SrcStirde = srcStride * gShape2 / ACC_C0_SIZE;
-    uint16_t loop3DstStirde = gStride0;
+    uint32_t dstStride = (GlobalData::layout == pto::Layout::NCDHW) ? gStride1 : gStride2;
+    uint16_t loop3Num = 1;
+    uint16_t loop3SrcStirde = 0;
+    uint16_t loop3DstStirde = 0;
 
     constexpr uint8_t unitFlagCtrl = static_cast<uint8_t>(Phase);
     constexpr uint8_t nz2dnEn = 1;
@@ -375,14 +375,17 @@ PTO_INTERNAL void TStoreAccNCHW(typename GlobalData::DType *dstAddr, __cc__ type
                      (((quantPre >> SHIFT_BLOCK_BYTE) & 0x1) << 29) |
                      (static_cast<uint64_t>(quantPre & 0x1f) << 34) | // Xt[29], Xt[38:34] pre-stage quantization mode
                      ((static_cast<uint64_t>(reluPreMode) & 0x7) << 39) | //  Xt[41:39] relu pre mode
-                     (static_cast<uint64_t>(nz2dnEn & 0x1) << 63);        //  Xt[63] nz2dn control bit
+                     (static_cast<uint64_t>(nz2dnEn & 0x1) << 62);        //  Xt[62] nz2dn control bit
     uint64_t loop3Config = loop3Num |                                     // LOOP3_PARA[15:0] the number of source nd
                            (static_cast<uint64_t>(loop3SrcStirde & 0xffff)
                             << 16) | // LOOP3_PARA[31:16] the source stride of loop3 in uint of C0_SIZE
                            (static_cast<uint64_t>(loop3DstStirde & 0xffffffff)
                             << 32); // LOOP3_PARA[63:32] the dst stride of loop3 in uint of element
     set_loop3_para(loop3Config);
-
+    uint16_t loop0SrcStirde = 1; // loop0SrcStirde is 1 when src layout is NZ
+    uint64_t channelConfig = static_cast<uint64_t>(loop0SrcStirde & 0xffff)
+                             << 48; // CHANNEL_PARA[63:48] source stride of loop0 in unit of C0_SIZE
+    set_channel_para(channelConfig);
     copy_matrix_cc_to_gm(dstAddr, srcAddr, xmReg, xtReg);
 }
 
@@ -410,9 +413,9 @@ __tf__ AICORE void TStoreAccFp(typename GlobalData::DType __out__ *dst, typename
     } else if constexpr (GlobalData::layout == pto::Layout::NHWC) {
         TStoreAccNHWC<GlobalData, TileData, quantPre, reluPreMode>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3,
                                                                    gShape4, gStride0, gStride3, validRow, validCol);
-    } else if constexpr (GlobalData::layout == pto::Layout::NCHW) {
+    } else if constexpr (GlobalData::layout == pto::Layout::NCHW || GlobalData::layout == pto::Layout::NCDHW) {
         TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode>(dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3,
-                                                                   gShape4, gStride0, gStride3, validRow, validCol);
+                                                                   gShape4, gStride1, gStride2, validRow, validCol);
     }
 }
 
@@ -436,9 +439,9 @@ __tf__ AICORE void TStoreAcc(typename GlobalData::DType __out__ *dst, typename T
     } else if constexpr (GlobalData::layout == pto::Layout::NHWC) {
         TStoreAccNHWC<GlobalData, TileData, quantPre, reluPreMode, Phase>(
             dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride3, validRow, validCol);
-    } else if constexpr (GlobalData::layout == pto::Layout::NCHW) {
+    } else if constexpr (GlobalData::layout == pto::Layout::NCHW || GlobalData::layout == pto::Layout::NCDHW) {
         TStoreAccNCHW<GlobalData, TileData, quantPre, reluPreMode, Phase>(
-            dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride3, validRow, validCol);
+            dstAddr, srcAddr, gShape0, gShape1, gShape2, gShape3, gShape4, gStride1, gStride2, validRow, validCol);
     }
 }
 
@@ -454,6 +457,9 @@ PTO_INTERNAL void TStoreVecND(typename GlobalData::DType *dstAddr, __ubuf__ type
                               int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                               int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
+    PTO_ASSERT(validCol == gShape4, "The validCol of TileData must be equal to the 5th dim(Shape4) of ND shape!");
+    PTO_ASSERT(validRow == gShape0 * gShape1 * gShape2 * gShape3,
+               "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape3) of ND shape!");
     typename GlobalData::DType *dstGlobalAddr = dstAddr;
     __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
     uint32_t loop1SrcStride = GetByteSize<typename TileData::DType>(gShape3 * TileData::Cols);
@@ -498,6 +504,9 @@ PTO_INTERNAL void TStoreVecDN(typename GlobalData::DType *dstAddr, __ubuf__ type
                               int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                               int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
+    PTO_ASSERT(validRow == gShape3, "The validCol of TileData must be equal to the 4th dim(Shape3) of DN shape!");
+    PTO_ASSERT(validCol == gShape0 * gShape1 * gShape2 * gShape4,
+               "The validRow of TileData must be equal to (Shape0 * Shape1 * Shape2 * Shape4) of DN shape!");
     typename GlobalData::DType *dstGlobalAddr = dstAddr;
     __ubuf__ typename TileData::DType *srcTileAddr = srcAddr;
     uint32_t loop1SrcStride = GetByteSize<typename TileData::DType>(TileData::Rows * gShape4);

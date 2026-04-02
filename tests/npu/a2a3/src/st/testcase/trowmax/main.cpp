@@ -75,6 +75,9 @@ protected:
         aclrtMalloc(&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
         ReadFile(GetGoldenDir() + "/input.bin", srcByteSize, srcHost, srcByteSize);
+        aclrtMemset(dstHost, dstByteSize, 0, dstByteSize);
+
+        aclrtMemcpy(dstDevice, dstByteSize, dstHost, dstByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
         aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
         launchTROWMAXTestCase<caseId>(dstDevice, srcDevice, stream);
@@ -197,5 +200,65 @@ TEST_F(TROWMAXTest, case17)
 TEST_F(TROWMAXTest, case18)
 {
     bool ret = TRowMaxTestFramework<18, float, 8, 8, 1024, 1024, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case19)
+{
+    bool ret = TRowMaxTestFramework<19, int32_t, 127, 127, 64, 63, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case20)
+{
+    bool ret = TRowMaxTestFramework<20, int32_t, 63, 63, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case21)
+{
+    bool ret = TRowMaxTestFramework<21, int32_t, 31, 31, 128, 127, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case22)
+{
+    bool ret = TRowMaxTestFramework<22, int32_t, 15, 15, 192, 192, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case23)
+{
+    bool ret = TRowMaxTestFramework<23, int32_t, 7, 7, 448, 447, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case24)
+{
+    bool ret = TRowMaxTestFramework<24, int16_t, 128, 128, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case25)
+{
+    bool ret = TRowMaxTestFramework<25, int16_t, 64, 64, 64, 64, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case26)
+{
+    bool ret = TRowMaxTestFramework<26, int16_t, 32, 32, 128, 128, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case27)
+{
+    bool ret = TRowMaxTestFramework<27, int16_t, 16, 16, 192, 192, 1>();
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TROWMAXTest, case28)
+{
+    bool ret = TRowMaxTestFramework<28, int16_t, 8, 8, 448, 448, 1>();
     EXPECT_TRUE(ret);
 }

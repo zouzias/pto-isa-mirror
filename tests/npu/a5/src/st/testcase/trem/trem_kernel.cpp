@@ -24,22 +24,23 @@ __global__ AICORE void runTRem(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
     TileData src0Tile(vRows, vCols);
     TileData src1Tile(vRows, vCols);
     TileData dstTile(vRows, vCols);
+    TileData tmpTile(1, vCols);
     TASSIGN(src0Tile, 0x0);
     TASSIGN(src1Tile, kTRows_ * kTCols_ * sizeof(T));
     TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(T) * 2);
+    TASSIGN(tmpTile, kTRows_ * kTCols_ * sizeof(T) * 3);
 
     GlobalData src0Global(src0);
     GlobalData src1Global(src1);
     GlobalData dstGlobal(out);
 
+    Event<Op::TLOAD, Op::TREM> event0;
+    Event<Op::TREM, Op::TSTORE_VEC> event1;
+
     TLOAD(src0Tile, src0Global);
-    TLOAD(src1Tile, src1Global);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TREM(dstTile, src0Tile, src1Tile);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
-    TSTORE(dstGlobal, dstTile);
+    event0 = TLOAD(src1Tile, src1Global);
+    event1 = TREM(dstTile, src0Tile, src1Tile, tmpTile, event0);
+    TSTORE(dstGlobal, dstTile, event1);
     out = dstGlobal.data();
 }
 

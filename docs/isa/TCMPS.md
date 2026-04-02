@@ -1,4 +1,9 @@
-# TCMPS
+﻿# TCMPS
+
+
+## Tile Operation Diagram
+
+![TCMPS tile operation](../figures/isa/TCMPS.svg)
 
 ## Introduction
 
@@ -14,12 +19,24 @@ The encoding/type of `dst` is implementation-defined (often a mask-like tile).
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
 %dst = tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile<...> -> !pto.tile<...>
+```
+
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -33,14 +50,19 @@ PTO_INST RecordEvent TCMPS(TileDataDst& dst, TileDataSrc0& src0, T src1, CmpMode
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-  - `src0` and `dst` tile location must be vector (`TileType::Vec`).
-  - Static valid bounds: `TileDataSrc0::ValidRow <= TileDataSrc0::Rows` and `TileDataSrc0::ValidCol <= TileDataSrc0::Cols`.
-  - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
+    - `TileData::DType` must be one of: `int32_t`, `float`, `half`, `uint16_t`, `int16_t`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
 - **Implementation checks (A5)**:
-  - No explicit `static_assert`/`PTO_ASSERT` shape checks are enforced by `TCMPS_IMPL`.
-  - Effective support depends on `TileDataSrc0::DType` (only specific 1/2/4-byte integer/float types are dispatched in the implementation).
+    - `TileData::DType` must be one of: `int32_t`, `float`, `half`, `uint16_t`, `int16_t`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
+- **Common constraints**:
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src0` and `dst` must have the same valid row/col.
 - **Valid region**:
-  - The implementation uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+- **Comparison modes**:
+    - Supports `CmpMode::EQ`, `CmpMode::NE`, `CmpMode::LT`, `CmpMode::GT`, `CmpMode::LE`, `CmpMode::GE`.
 
 ## Examples
 
@@ -77,3 +99,31 @@ void example_manual() {
   TCMPS(dst, src, 0.0f, CmpMode::GT);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tcmps %src, %scalar {cmpMode = #pto.cmp<EQ>} : !pto.tile<...> -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+```
+

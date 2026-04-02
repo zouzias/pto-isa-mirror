@@ -8,9 +8,8 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+#include <type_traits>
 #include <pto/pto-inst.hpp>
-#include <pto/common/pto_tile.hpp>
-#include <pto/common/constants.hpp>
 #include <iostream>
 #include "acl/acl.h"
 #include "tgather_common.h"
@@ -18,11 +17,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace pto;
 
+#ifdef __CCE_AICORE__
 template <int rows, int cols>
 using StrideDim2 = pto::Stride<rows * cols, rows * cols, rows * cols, cols, 1>;
+#endif
 template <typename Tsrc0, typename Tsrc1, int kGRows0_, int kGCols0_, int kGRows1_, int kGCols1_, int kTRows_,
           int kTCols_>
-inline AICORE void runTGather(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *src0, __gm__ Tsrc1 __in__ *src1)
+inline AICORE void runTGather(__gm__ Tsrc0 *out, __gm__ Tsrc0 *src0, __gm__ Tsrc1 *src1)
 {
     using DynShapeDim5_src0 = pto::Shape<1, 1, 1, kGRows0_, kGCols0_>;
     using DynStridDim5_src0 = StrideDim2<kGRows0_, kGCols0_>;
@@ -47,10 +48,12 @@ inline AICORE void runTGather(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *sr
     TileData_src0 src0Tile(src0_row, src0_col);
     TileData_src1 src1Tile(src1_row, src1_col);
     TileData_dst dstTile(dst_row, dst_col);
+    TileData_dst tmpTile(dst_row, dst_col);
 
     TASSIGN(src0Tile, 0x0);
     TASSIGN(src1Tile, 0x20000);
     TASSIGN(dstTile, 0x28000);
+    TASSIGN(tmpTile, 0x28000);
 
     GlobalData_src0 src0Global(src0);
     GlobalData_src1 src1Global(src1);
@@ -60,7 +63,7 @@ inline AICORE void runTGather(__gm__ Tsrc0 __out__ *out, __gm__ Tsrc0 __in__ *sr
     TLOAD(src1Tile, src1Global);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    TGATHER(dstTile, src0Tile, src1Tile);
+    TGATHER(dstTile, src0Tile, src1Tile, tmpTile);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TSTORE(dstGlobal, dstTile);
@@ -116,7 +119,7 @@ void launchTGATHER_demo_int16(int16_t *out, int16_t *src0, int16_t *src1, aclrtS
 }
 
 template <typename srcT, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, MaskPattern maskPattern>
-__global__ AICORE void runTGATHER(__gm__ dstT __out__ *out, __gm__ srcT __in__ *src)
+__global__ AICORE void runTGATHER(__gm__ dstT *out, __gm__ srcT *src)
 {
     using DynShapeDim5 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = pto::Stride<1, 1, 1, kGCols_, 1>;

@@ -37,11 +37,15 @@ PTO_INTERNAL void runTColSum(__gm__ T __out__ *out, __gm__ T __in__ *src, bool i
     // 搬运数据
     TLOAD(srcTile, srcGlobal);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TCOLSUM(dstTile, srcTile, tmpTile, isBinary);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
 }
@@ -105,6 +109,10 @@ extern "C" __global__ AICORE void launchTCOLSUMCase24(__gm__ int8_t *out, __gm__
 extern "C" __global__ AICORE void launchTCOLSUMCase25(__gm__ int8_t *out, __gm__ int8_t *src)
 {
     runTColSum<int8_t, 64, 64, 1, 128, 128>(out, src, true);
+}
+extern "C" __global__ AICORE void launchTCOLSUMCase31(__gm__ float *out, __gm__ float *src)
+{
+    runTColSum<float, 1, 1, 1, 512, 511>(out, src, true);
 }
 
 template <uint32_t caseId>
@@ -171,6 +179,10 @@ void launchTCOLSUMTestCase(void *out, void *src, aclrtStream stream)
             launchTCOLSUMCase25<<<1, nullptr, stream>>>((int8_t *)out, (int8_t *)src);
             break;
         }
+        case 31: {
+            launchTCOLSUMCase31<<<1, nullptr, stream>>>((float *)out, (float *)src);
+            break;
+        }
         default: {
         }
     }
@@ -191,3 +203,4 @@ template void launchTCOLSUMTestCase<22>(void *out, void *src, aclrtStream stream
 template void launchTCOLSUMTestCase<23>(void *out, void *src, aclrtStream stream);
 template void launchTCOLSUMTestCase<24>(void *out, void *src, aclrtStream stream);
 template void launchTCOLSUMTestCase<25>(void *out, void *src, aclrtStream stream);
+template void launchTCOLSUMTestCase<31>(void *out, void *src, aclrtStream stream);

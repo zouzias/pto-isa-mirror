@@ -16,16 +16,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cassert>
 #include <cstdio>
 
-// CPU simulator assertion helper (always enabled).
-#define PTO_CPU_STUB_ASSERT(cond)                                                                                  \
-    do {                                                                                                           \
-        if (!(cond)) {                                                                                             \
-            std::fprintf(stderr, "[PTO][CA] Constraint violated. Condition: %s. Hint: see docs/coding/debug.md\n", \
-                         #cond);                                                                                   \
-            std::abort();                                                                                          \
-        }                                                                                                          \
-    } while (0)
-
 #define __global__
 #define AICORE
 #define __aicore__
@@ -49,6 +39,7 @@ const pipe_t PIPE_MTE2 = 3;
 const pipe_t PIPE_MTE3 = 4;
 const pipe_t PIPE_M = 5;
 const pipe_t PIPE_ALL = 6;
+const pipe_t PIPE_FIX = 7;
 inline void pipe_barrier(pipe_t pipe)
 {
     (void)pipe;
@@ -64,7 +55,7 @@ constexpr pipe_t opPipeList[] = {};
 
 static inline void aclrtMallocHost(void **p, size_t sz)
 {
-    PTO_CPU_STUB_ASSERT(sz != 0);
+    assert(sz != 0 && "[PTO][CA] Constraint violated. Condition: %s. Hint: see docs/coding/debug.md\n");
     *p = malloc(sz);
 }
 
@@ -85,8 +76,25 @@ static inline void aclrtMallocHost(void **p, size_t sz)
 #define set_flag(a, b, c)
 #define wait_flag(a, b, c)
 #define __cce_get_tile_ptr(x) x
+#define set_mask_norm(...)
+#define set_vector_mask(...)
 
 typedef int event_t;
 #define EVENT_ID0 0
+
+inline uint32_t get_block_idx()
+{
+    return 0;
+}
+
+inline uint32_t get_subblockid()
+{
+    return 0;
+}
+
+inline uint32_t get_subblockdim()
+{
+    return 1;
+}
 
 #endif

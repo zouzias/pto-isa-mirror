@@ -12,6 +12,7 @@
 
 import os
 import struct
+import ctypes
 import numpy as np
 np.random.seed(23)
 
@@ -22,9 +23,15 @@ def gen_golden_data(param):
     cols = param.col
     dst_tile_row = param.dst_tile_row
     dst_tile_col = param.dst_tile_col
+    if np.issubdtype(data_type, np.integer):
+        value_max = np.iinfo(data_type).max
+        value_min = np.iinfo(data_type).min
+    else:
+        value_max = np.finfo(data_type).max
+        value_min = np.finfo(data_type).min
 
-    input_arr = np.random.uniform(low=-8, high=8, size=(rows, cols)).astype(data_type)
-    divider = np.random.uniform(low=-8, high=8, size=(1, 1)).astype(data_type)
+    input_arr = np.random.uniform(low=value_min, high=value_max, size=(rows, cols)).astype(data_type)
+    divider = np.random.uniform(low=value_min, high=value_max, size=(1, 1)).astype(data_type)
     output_arr = np.zeros((dst_tile_row, dst_tile_col), dtype=data_type)
     for i in range(rows):
         for j in range(cols):
@@ -52,7 +59,11 @@ if __name__ == "__main__":
         taddsParams("TADDSTest.case3", np.int32, 31, 256, 31, 128),
         taddsParams("TADDSTest.case4", np.int16, 15, 192, 15, 64 * 3),
         taddsParams("TADDSTest.case5", np.float32, 7, 512, 7, 64 * 7),
-        taddsParams("TADDSTest.case6", np.float32, 256, 32, 256, 16)
+        taddsParams("TADDSTest.case6", np.float32, 256, 32, 256, 16),
+        taddsParams("TADDSTest.case7", np.uint32, 256, 32, 256, 16),
+        taddsParams("TADDSTest.case8", np.uint16, 256, 32, 256, 16),
+        taddsParams("TADDSTest.case9", np.int8, 256, 64, 256, 32),
+        taddsParams("TADDSTest.case10", np.uint8, 256, 64, 256, 32),
     ]
 
     for _, case in enumerate(case_params_list):

@@ -8,8 +8,6 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include <pto/common/constants.hpp>
-#include <pto/common/pto_tile.hpp>
 #include <pto/pto-inst.hpp>
 
 using namespace pto;
@@ -78,8 +76,11 @@ __global__ AICORE void RunTMATMUL_GEMV_CLOSE(__gm__ T *out, __gm__ U *src0, __gm
 
     /******************************TLOAD*****************************/
     TLOAD(aMatTile, src0Global);
+
+#ifndef __PTO_AUTO__
     // clear l1 buffer which exceed the valid shape
     TFILLPAD(aMatTile, aMatTile);
+#endif
 
     TLOAD(bMatTile, src1Global);
 
@@ -87,8 +88,10 @@ __global__ AICORE void RunTMATMUL_GEMV_CLOSE(__gm__ T *out, __gm__ U *src0, __gm
         TLOAD(biasDataTile, src2Global);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
     /**************************TMOV && TEXTRACT**************************/
     TMOV(aTile, aMatTile);
@@ -98,8 +101,10 @@ __global__ AICORE void RunTMATMUL_GEMV_CLOSE(__gm__ T *out, __gm__ U *src0, __gm
         TMOV(biasTile, biasDataTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
     if constexpr (isBias) {
         TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
@@ -107,8 +112,10 @@ __global__ AICORE void RunTMATMUL_GEMV_CLOSE(__gm__ T *out, __gm__ U *src0, __gm
         TMATMUL(cTile, aTile, bTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
 
     /********************************TSTORE****************************/
     TSTORE(dstGlobal, cTile);
@@ -173,8 +180,10 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
         TLOAD(biasDataTile, src2Global);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
     /**************************TMOV && TEXTRACT**************************/
     TMOV(aTile, aMatTile);
@@ -184,8 +193,10 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
         TMOV(biasTile, biasDataTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
     if constexpr (isBias) {
         TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
@@ -193,8 +204,10 @@ __global__ AICORE void RunTMATMUL(__gm__ T *out, __gm__ U *src0, __gm__ S *src1,
         TMATMUL(cTile, aTile, bTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
 
     /********************************TSTORE****************************/
     TSTORE(dstGlobal, cTile);
@@ -267,8 +280,10 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
             TLOAD(biasDataTile, src2Global);
         }
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
         /**************************TMOV && TEXTRACT**************************/
         TMOV(aTile, aMatTile);
@@ -278,8 +293,10 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
             TMOV(biasTile, biasDataTile);
         }
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
         if (i == 0) {
             if constexpr (isBias) {
@@ -290,11 +307,15 @@ __global__ AICORE void RunTMATMULSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S 
         } else {
             TMATMUL_ACC(cTile, cTile, aTile, bTile);
         }
+#ifndef __PTO_AUTO__
         set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
         wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+#endif
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, cTile);
     out = dstGlobal.data();
 }
@@ -359,8 +380,10 @@ __global__ AICORE void RunTGEMV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, _
         TLOAD(biasDataTile, src2Global);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
     /**************************TMOV && TEXTRACT**************************/
     TEXTRACT(aTile, aMatTileGemv, 0, 0);
@@ -370,8 +393,10 @@ __global__ AICORE void RunTGEMV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, _
         TMOV(biasTile, biasDataTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
     if constexpr (isBias) {
         TGEMV_BIAS(cTile, aTile, bTile, biasTile);
@@ -379,16 +404,18 @@ __global__ AICORE void RunTGEMV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, _
         TGEMV(cTile, aTile, bTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
 
     /********************************TSTORE****************************/
     TSTORE(dstGlobal, cTile);
     out = dstGlobal.data();
 }
 
-template <typename T, typename U, typename S, typename B, int validM, int validK, int validN, RoundMode hf32TransMode>
-__global__ AICORE void RunTMATMUL_HF32(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, __gm__ B *src2)
+template <typename T, typename U, typename S, typename B, int validM, int validK, int validN, RoundMode tf32TransMode>
+__global__ AICORE void RunTMATMUL_TF32(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, __gm__ B *src2)
 {
     constexpr int M = CeilAlign<int>(validM, 16);
     constexpr int N = CeilAlign<int>(validN, 16);
@@ -420,6 +447,7 @@ __global__ AICORE void RunTMATMUL_HF32(__gm__ T *out, __gm__ U *src0, __gm__ S *
     TASSIGN(bMatTile, 0x20000);
 
     LeftTile aTile;
+    aTile.SetMadTF32Mode(tf32TransMode);
     RightTile bTile;
     AccTile cTile;
     TASSIGN(aTile, 0x0);
@@ -430,22 +458,25 @@ __global__ AICORE void RunTMATMUL_HF32(__gm__ T *out, __gm__ U *src0, __gm__ S *
     TLOAD(aMatTile, src0Global);
     TLOAD(bMatTile, src1Global);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
     /**************************TMOV && TEXTRACT**************************/
     TMOV(aTile, aMatTile);
     TMOV(bTile, bMatTile);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-
-    TSETHF32MODE<true, hf32TransMode>();
+#endif
     TMATMUL(cTile, aTile, bTile);
-    TSETHF32MODE<false>();
-
+    aTile.ResetMadMode();
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
 
     /********************************TSTORE****************************/
     TSTORE(dstGlobal, cTile);
@@ -516,8 +547,10 @@ __global__ AICORE void RunTGEMVSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S *s
             TLOAD(biasDataTile, src2Global);
         }
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
         /**************************TMOV && TEXTRACT**************************/
         TMOV(aTile, aMatTile);
@@ -527,8 +560,10 @@ __global__ AICORE void RunTGEMVSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S *s
             TMOV(biasTile, biasDataTile);
         }
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
         if (i == 0) {
             if constexpr (isBias) {
@@ -539,11 +574,15 @@ __global__ AICORE void RunTGEMVSplitK(__gm__ T *out, __gm__ U *src0, __gm__ S *s
         } else {
             TGEMV_ACC(cTile, cTile, aTile, bTile);
         }
+#ifndef __PTO_AUTO__
         set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
         wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+#endif
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, cTile);
     out = dstGlobal.data();
 }
@@ -571,10 +610,10 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
         RunTGEMV<float, half, half, float, 1, 200, 32, false><<<1, nullptr, stream>>>(
             reinterpret_cast<float *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
     } else if constexpr (tilingKey == 7) {
-        RunTMATMUL_HF32<float, float, float, float, 16, 32, 64, RoundMode::CAST_RINT><<<1, nullptr, stream>>>(
+        RunTMATMUL_TF32<float, float, float, float, 16, 32, 64, RoundMode::CAST_RINT><<<1, nullptr, stream>>>(
             reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1), nullptr);
     } else if constexpr (tilingKey == 8) {
-        RunTMATMUL_HF32<float, float, float, float, 5, 75, 11, RoundMode::CAST_ROUND><<<1, nullptr, stream>>>(
+        RunTMATMUL_TF32<float, float, float, float, 5, 75, 11, RoundMode::CAST_ROUND><<<1, nullptr, stream>>>(
             reinterpret_cast<float *>(out), reinterpret_cast<float *>(src0), reinterpret_cast<float *>(src1), nullptr);
     }
 }

@@ -17,6 +17,30 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "utils.hpp"
 
 namespace pto {
+template <typename TileDataD>
+__tf__ AICORE void InitUBBuffer(TileDataD &dst)
+{
+    using TD = typename TileDataD::DType;
+    __ubuf__ TD *dstPtr = dst.data();
+    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TD);
+    unsigned numRepeatPerRow = CeilDivision(TileDataD::Cols, elementsPerRepeat);
+    __VEC_SCOPE__
+    {
+        constexpr auto distValue =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<TD, DistVST::DIST_NORM>())>();
+        RegTensor<TD> v_zeros;
+        vbr(v_zeros, (TD)0);
+        for (uint16_t i = 0; i < (uint16_t)TileDataD::Rows; ++i) {
+            uint32_t num_elements = TileDataD::Cols;
+            for (uint16_t j = 0; j < (uint16_t)numRepeatPerRow; ++j) {
+                vector_bool preg_st = CreatePredicate<TD>(num_elements);
+                vsts(v_zeros, dstPtr, i * TileDataD::Cols + j * elementsPerRepeat, distValue, preg_st);
+            }
+        }
+        mem_bar(VST_VLD);
+    }
+}
+
 template <typename TileDataD, typename TileDataS, typename TileDataI>
 __tf__ AICORE void TScatter_b32(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src0,
                                 typename TileDataI::TileDType __in__ src1, unsigned validRow, unsigned validCol)
@@ -30,7 +54,7 @@ __tf__ AICORE void TScatter_b32(typename TileDataD::TileDType __out__ dst, typen
     __VEC_SCOPE__
     {
         uint16_t batchSize = 256 / static_cast<uint16_t>(sizeof(TI));
-        uint16_t innerLoopNum = CEIL(validCol, batchSize);
+        uint16_t innerLoopNum = CeilDivision(validCol, batchSize);
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
             for (uint16_t j = 0; j < innerLoopNum; ++j) {
                 RegTensor<TI> index;
@@ -60,7 +84,7 @@ __tf__ AICORE void TScatter_b16(typename TileDataD::TileDType __out__ dst, typen
     __VEC_SCOPE__
     {
         uint16_t batchSize = 256 / static_cast<uint16_t>(sizeof(TI));
-        uint16_t innerLoopNum = CEIL(validCol, batchSize);
+        uint16_t innerLoopNum = CeilDivision(validCol, batchSize);
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
             for (uint16_t j = 0; j < innerLoopNum; ++j) {
                 RegTensor<TI> index;
@@ -90,7 +114,7 @@ __tf__ AICORE void TScatter_b8(typename TileDataD::TileDType __out__ dst, typena
     __VEC_SCOPE__
     {
         uint16_t batchSize = 256 / static_cast<uint16_t>(sizeof(TI));
-        uint16_t innerLoopNum = CEIL(validCol, batchSize);
+        uint16_t innerLoopNum = CeilDivision(validCol, batchSize);
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
             for (uint16_t j = 0; j < innerLoopNum; ++j) {
                 RegTensor<TI> index;
@@ -138,6 +162,9 @@ PTO_INTERNAL void TSCATTER_IMPL(TileDataD &dst, TileDataS &src, TileDataI &idx)
 
     unsigned validRow = idx.GetValidRow();
     unsigned validCol = idx.GetValidCol();
+
+    // Initialize dst UB buffer
+    InitUBBuffer(dst);
 
     if constexpr (sizeof(TD) == 4) {
         TScatter_b32<TileDataD, TileDataS, TileDataI>(dst.data(), src.data(), idx.data(), validRow, validCol);

@@ -18,15 +18,32 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/TBinOp.hpp>
 #include <pto/common/debug.h>
 
+#ifndef STRAIGHT_INTRINSICS_IMPL
+#include "custom/Div754.hpp"
+#endif
 namespace pto {
 
 template <typename T>
 struct DivOp {
+#ifdef STRAIGHT_INTRINSICS_IMPL
     PTO_INTERNAL static void BinInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, RegTensor<T> &reg_src1,
                                       MaskReg &preg)
     {
         vdiv(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
     }
+#else
+    PTO_INTERNAL static void BinInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, RegTensor<T> &reg_src1,
+                                      MaskReg &preg)
+    {
+        if constexpr (std::is_same_v<T, float>) {
+            DivIEEE754FloatImpl<T, RegTensor<T> >(reg_dst, reg_src0, reg_src1, preg);
+        } else if constexpr (std::is_same_v<T, half>) {
+            DivIEEE754HalfImpl<T, RegTensor<T> >(reg_dst, reg_src0, reg_src1, preg);
+        } else {
+            vdiv(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
+        }
+    }
+#endif
 };
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, unsigned ElementsPerRepeat,

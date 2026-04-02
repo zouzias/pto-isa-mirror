@@ -15,6 +15,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #pragma once
 
 namespace pto {
+template <typename T>
+struct LoadTypeBySize {
+    using type = std::conditional_t<sizeof(T) == sizeof(uint8_t), uint8_t,
+                                    std::conditional_t<sizeof(T) == sizeof(uint16_t), uint16_t, uint32_t>>;
+};
+template <typename T>
+using LoadTypeBySize_t = typename LoadTypeBySize<T>::type;
+
 PTO_INTERNAL void SetContinuousMask(unsigned n)
 {
     set_vector_mask(
@@ -74,6 +82,18 @@ template <typename T>
 struct B82B16Trait {
     static constexpr bool isB8 = (std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>);
     using TransType = std::conditional_t<isB8, int16_t, T>;
+
+    PTO_INTERNAL static TransType TransValue(T value)
+    {
+        if constexpr (isB8) {
+            // convert signed int to unsigned int to avoid sign extension
+            uint16_t u16 = static_cast<uint8_t>(value);
+            // duplicate the 8-bit value into both lower and upper bytes of a 16-bit integer
+            return u16 | (u16 << B8_DATA_TYPE_OFFSET);
+        } else {
+            return value;
+        }
+    }
 
     PTO_INTERNAL static uint64_t TransSize(uint64_t size)
     {

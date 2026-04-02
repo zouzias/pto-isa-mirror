@@ -1,4 +1,9 @@
-# TCOLEXPAND
+﻿# TCOLEXPAND
+
+
+## Tile Operation Diagram
+
+![TCOLEXPAND tile operation](../figures/isa/TCOLEXPAND.svg)
 
 ## Introduction
 
@@ -12,12 +17,24 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src}_{0,j} $$
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
 %dst = tcolexpand %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.tcolexpand %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tcolexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 ## C++ Intrinsic
 
@@ -25,7 +42,7 @@ Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TCOLEXPAND(TileDataDst& dst, TileDataSrc& src, WaitEvents&... events);
+PTO_INST RecordEvent TCOLEXPAND(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
 ## Constraints
@@ -45,3 +62,31 @@ void example() {
   TCOLEXPAND(dst, src);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tcolexpand %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tcolexpand %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tcolexpand %src : !pto.tile<...> -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tcolexpand ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+

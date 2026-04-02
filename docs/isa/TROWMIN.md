@@ -1,4 +1,9 @@
-# TROWMIN
+﻿# TROWMIN
+
+
+## Tile Operation Diagram
+
+![TROWMIN tile operation](../figures/isa/TROWMIN.svg)
 
 ## Introduction
 
@@ -12,7 +17,7 @@ $$ \mathrm{dst}_{i,0} = \min_{0 \le j < C} \mathrm{src}_{i,j} $$
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
@@ -21,13 +26,24 @@ Synchronous form:
 ```
 Lowering may introduce internal scratch tiles; the C++ intrinsic requires an explicit `tmp` operand.
 
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.trowmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.trowmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TROWMIN(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp, WaitEvents&... events);
+PTO_INST RecordEvent TROWMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## Constraints
@@ -35,20 +51,20 @@ PTO_INST RecordEvent TROWMIN(TileDataOut& dst, TileDataIn& src, TileDataTmp& tmp
 Implementation checks (NPU):
 
 - A2A3:
-  - Tile location: `dst` and `src` must be `TileType::Vec`.
-  - Tile layout of `src`: ND fractal (`isRowMajor` and `SLayout::NoneBox`).
-  - Tile layout of `dst`:
-    - **Recommended**: DN layout Tile of 1D, e.g., `Tile<TileType::Vec, T, ROWS, 1, BLayout::ColMajor, ValidRows, 1>`
-    - **To be removed**: ND layout Tile of 2D, e.g., `Tile<TileType::Vec, T, ROWS, COLS, BLayout::RowMajor, ValidRows, 1>`
-  - Data types: `half` or `float`.
-  - DType consistency: `dst.DType == src.DType`.
-  - Runtime valid checks:
+    - Tile location: `dst` and `src` must be `TileType::Vec`.
+    - Tile layout of `src`: ND fractal (`isRowMajor` and `SLayout::NoneBox`).
+    - Tile layout of `dst`:
+        - **Compact Mode**: DN layout Tile of 1D, e.g., `Tile<TileType::Vec, T, ROWS, 1, BLayout::ColMajor, ValidRows, 1>`, ROWS must be 32b aligned.
+        - **Traditional Mode**: ND layout Tile of 2D, e.g., `Tile<TileType::Vec, T, ROWS, COLS, BLayout::RowMajor, ValidRows, 1>`.
+    - Data types: `half` or `float`.
+    - DType consistency: `dst.DType == src.DType`.
+    - Runtime valid checks:
     - `srcValidCol != 0` and `srcValidRow != 0`.
     - `srcValidRow == dstValidRow` (the output valid row must match the input valid row).
 - A5:
-  - Data types: `half` or `float`.
-  - DType consistency: `dst.DType == src.DType`.
-  - No explicit runtime assertions on `validRow/validCol` in the implementation; the loops use `src.GetValidRow()` and `src.GetValidCol()`.
+    - Data types: `half` or `float`.
+    - DType consistency: `dst.DType == src.DType`.
+    - No explicit runtime assertions on `validRow/validCol` in the implementation; the loops use `src.GetValidRow()` and `src.GetValidCol()`.
 
 ## Examples
 
@@ -90,3 +106,31 @@ void example_manual() {
   TROWMIN(dst, src, tmp);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.trowmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.trowmin %src, %tmp : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = trowmin %src : !pto.tile<...> -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.trowmin ins(%src, %tmp : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+

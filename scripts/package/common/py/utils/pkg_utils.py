@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 # ----------------------------------------------------------------------------
-# This program is free software, you can redistribute it and/or modify it.
 # Copyright (c) 2025 Huawei Technologies Co., Ltd.
-# This file is a part of the CANN Open Software.
-# Licensed under CANN Open Software License Agreement Version 2.0 (the "License").
+# This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+# CANN Open Software License Agreement Version 2.0 (the "License").
 # Please refer to the License for details. You may not use this file except in compliance with the License.
-# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING
-# BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 # See LICENSE in the root of the software repository for the full text of the License.
 # ----------------------------------------------------------------------------
 
 """基础构件。"""
 
 import os 
+from functools import partial
 from itertools import chain, tee
+from operator import methodcaller
 from pathlib import Path
-from typing import Callable, Dict, Iterator, Optional, TypeVar, Set
+from typing import Callable, Dict, Iterator, List, Optional, TypeVar, Set
 
 TOP_DIR = str(Path(__file__).resolve().parents[5])
 TOP_SOURCE_DIR = TOP_DIR + '/scripts/'
@@ -89,6 +90,18 @@ class CompressError(PackageError):
     def __init__(self, package_name: Optional[str]):
         super().__init__(package_name)
         self.package_name = package_name
+
+
+class InstallScriptNotInPackageInfo(PackageError):
+    """package_info中没有配置install_script。"""
+
+
+class InstallScriptFormatError(PackageError):
+    """install_script配置格式错误。"""
+
+
+class VersionInfoNotExist(PackageError):
+    """version.info文件不存在。"""
 
 
 def flatten(list_of_lists):

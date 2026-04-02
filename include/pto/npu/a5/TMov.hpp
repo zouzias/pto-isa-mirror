@@ -39,7 +39,7 @@ __tf__ AICORE void TMovToBt(typename DstTileData::TileDType __out__ dst, typenam
     static_assert(dstCol * sizeof(DstType) <= BIAS_TABLE_SIZE,
                   "TMov: The memory occupation of BiasTile exceeds 4.0KB bias table size.");
 
-    __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)(src);
+    __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)__cce_get_tile_ptr(src);
     uint64_t dstAddrP = (uint64_t)dst;
 
     bool convControl = false;
@@ -73,8 +73,8 @@ __tf__ AICORE void TMovToFb(typename DstTileData::TileDType __out__ dst, typenam
     static_assert(dstCol * sizeof(DstType) <= FIXPIPE_BUFFER_SIZE,
                   "TMov: The memory occupation of FbTile exceeds 4.0KB fixpipe buffer size.");
 
-    __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)(src);
-    __fbuf__ DstType *dstAddrP = (__fbuf__ DstType *)(dst);
+    __cbuf__ SrcType *srcAddrP = (__cbuf__ SrcType *)__cce_get_tile_ptr(src);
+    __fbuf__ DstType *dstAddrP = (__fbuf__ DstType *)__cce_get_tile_ptr(dst);
 
     constexpr uint16_t burstNum = 1;
     constexpr int BURST_LEN_UNIT_SHIFT = 6; // BURST_LEN_UNIT = 64;
@@ -161,13 +161,13 @@ __tf__ AICORE void TMovCcToCb(typename DstTileData::TileDType __out__ dst, typen
         constexpr uint64_t channelPara = static_cast<uint64_t>(1) << 48;
         set_channel_para(channelPara);
     }
-
+    auto srcStride = (validRow + BLOCK_LEN - 1) / BLOCK_LEN * BLOCK_LEN;
     __cbuf__ dstType *dstAddr = (__cbuf__ dstType *)__cce_get_tile_ptr(dst);
-    __cc__ srcType *srcData = (__cc__ srcType *)(src);
+    __cc__ srcType *srcData = (__cc__ srcType *)__cce_get_tile_ptr(src);
 
-    copy_matrix_cc_to_cbuf(dstAddr, srcData, 0, validCol, validRow, dstStride, SrcTileData::Rows, 0, 0, 0, QuantPre,
-                           reluMode, channelSplitEnable, enableNz2Nd, 0, 0, false, false, 0, false, false, false, false,
-                           false, enableNz2Dn);
+    copy_matrix_cc_to_cbuf(dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, 0, 0, 0, QuantPre, reluMode,
+                           channelSplitEnable, enableNz2Nd, 0, 0, false, false, 0, false, false, false, false, false,
+                           enableNz2Dn);
 }
 
 template <typename DstTileData, typename SrcTileData, AccToVecMode mode, QuantMode_t quantPre, ReluPreMode reluMode>
@@ -213,11 +213,11 @@ __tf__ AICORE void TMovCcToUb(typename DstTileData::TileDType __out__ dst, typen
         constexpr uint64_t channelPara = static_cast<uint64_t>(1) << 48;
         set_channel_para(channelPara);
     }
-
+    auto srcStride = (validRow + BLOCK_LEN - 1) / BLOCK_LEN * BLOCK_LEN;
     __ubuf__ dstType *dstAddr = (__ubuf__ dstType *)__cce_get_tile_ptr(dst);
-    __cc__ srcType *srcData = (__cc__ srcType *)(src);
-    copy_matrix_cc_to_ub(dstAddr, srcData, 0, validCol, validRow, dstStride, SrcTileData::Rows, dualDstCtl, subBlockId,
-                         0, 0, quantPre, reluMode, channelSplitEnable, enableNz2Nd, 0, 0, false, false, 0, false, false,
+    __cc__ srcType *srcData = (__cc__ srcType *)__cce_get_tile_ptr(src);
+    copy_matrix_cc_to_ub(dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, dualDstCtl, subBlockId, 0, 0,
+                         quantPre, reluMode, channelSplitEnable, enableNz2Nd, 0, 0, false, false, 0, false, false,
                          false, false, false, enableNz2Dn);
 }
 
@@ -248,7 +248,8 @@ PTO_INTERNAL constexpr void CommonCheckMX()
 template <typename T, typename DstTileData, typename SrcTileData>
 __tf__ PTO_INTERNAL void TMovToVecNd2Nz(typename DstTileData::TileDType __out__ dst,
                                         typename SrcTileData::TileDType __in__ src, uint32_t validRow,
-                                        uint32_t validCol, unsigned version = VFImplKind::VFIMPL_DEFAULT)
+                                        uint32_t validCol, uint32_t srcValidRow,
+                                        unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
     static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
                       (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
@@ -264,7 +265,7 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(typename DstTileData::TileDType __out__ 
 
     constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
     uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
-    constexpr bool isOptForConflict = (dstByteSize >= (srcRow + 1) * srcCol * sizeof(T)) ? true : false;
+    constexpr bool isOptForConflict = DstTileData::Compact == CompactMode::RowPlusOne;
     uint32_t alignRow = (validRow + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW;
     uint32_t blockStride = isOptForConflict ? ((alignRow + 1) * C0_SIZE_BYTE) / BLOCK_BYTE_SIZE :
                                               (alignRow * C0_SIZE_BYTE) / BLOCK_BYTE_SIZE;
@@ -435,7 +436,7 @@ PTO_INTERNAL void TMOV_TILE_IMPL(DstTileData &dst, SrcTileData &src)
             if constexpr ((SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox)) &&
                           (!DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor))) {
                 TMovToVecNd2Nz<typename DstTileData::DType, DstTileData, SrcTileData>(
-                    dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
+                    dst.data(), src.data(), dst.GetValidRow(), dst.GetValidCol(), src.GetValidRow());
             } else {
                 TMovToVec<DstTileData, SrcTileData>(dst, src);
             }

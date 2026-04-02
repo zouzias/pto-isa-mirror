@@ -32,7 +32,7 @@ def run_command(command, cwd=None, check=True):
         raise
 
 
-def build_project(run_mode, soc_version, testcase = "all"):
+def build_project(run_mode, soc_version, auto_enable=False, testcase="all"):
     original_dir = os.getcwd()
     # 清理并创建build目录
     build_dir = "build"
@@ -49,6 +49,9 @@ def build_project(run_mode, soc_version, testcase = "all"):
             f"-DTEST_CASE={testcase}",
             ".."
         ]
+
+        if auto_enable:
+            cmake_cmd.append("-DAUTO_MODE=ON")
 
         subprocess.run(
             cmake_cmd,
@@ -84,7 +87,7 @@ def build_project(run_mode, soc_version, testcase = "all"):
     except subprocess.CalledProcessError as e:
         print(f"build failed: {e.stdout}")
         raise
-    except RuntimeError:
+    except RuntimeError as e:
         print("build failed")
         raise
     finally:
@@ -94,14 +97,19 @@ def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="执行st脚本")
     parser.add_argument("-r", "--run-mode", required=True, help="运行模式（如 sim or npu)")
-    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 or a5")
+    parser.add_argument("-v", "--soc-version", required=True, help="SOC版本 只支持 a3 / a5 / kirinX90 / kirin9030")
     parser.add_argument("-t", "--testcase", required=True, help="需要执行的用例")
     parser.add_argument("-g", "--gtest_filter", required=False, help="可选 需要执行的具体case名")
+    parser.add_argument("-a", "--auto-mode-enable", action='store_true', help="开启auto模式")
 
     args = parser.parse_args()
     default_soc_version = "Ascend910B1"
     if args.soc_version == "a5":
-        default_soc_version = "Ascend910_9599"
+        default_soc_version = "Ascend950PR_9599"
+    elif args.soc_version == "kirinX90":
+        default_soc_version = "KirinX90"
+    elif args.soc_version == "kirin9030":
+        default_soc_version = "Kirin9030"
     default_cases = "all"
     if args.gtest_filter != None:
         default_cases = args.gtest_filter
@@ -110,19 +118,20 @@ def main():
     try:
         # 获取当前脚本（run_st.py）的绝对路径
         script_path = os.path.abspath(__file__)
+        target_dir = os.path.dirname(os.path.dirname(script_path))
 
         if args.soc_version == "a3":
-            target_dir = os.path.dirname(os.path.dirname(script_path))
             target_dir = target_dir + "/npu/a2a3/src/st"
+        elif args.soc_version == "kirinX90" or args.soc_version == "kirin9030": # kirin9030 与 kirinX90 共享代码
+            target_dir = target_dir + "/npu/kirin9030/src/st"
         else : # a5
-            target_dir = os.path.dirname(os.path.dirname(script_path))
             target_dir = target_dir + "/npu/a5/src/st"
 
         print(f"target_dir: {target_dir}")
         os.chdir(target_dir)
 
         # 执行构建
-        build_project(args.run_mode, default_soc_version, args.testcase)
+        build_project(args.run_mode, default_soc_version, args.auto_mode_enable, args.testcase)
 
     except Exception as e:
         print(f"run failed: {str(e)}", file=sys.stderr)

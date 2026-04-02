@@ -136,7 +136,8 @@ def gen_golden_data(case_name, g_info):
 
     x1_gm, x2_gm, golden = gen_x1_x2_golden(g_info)
     if quant_mode == 1:
-        golden = golden * scalar
+        # multiplication like this in numpy upcasts golden type to float32, so cast it back to the original dst type
+        golden = (golden * scalar).astype(dst_data_type)
         if dst_data_type == np.int8:
             golden = saturation(golden, -128, 127, np.int8)
         elif dst_data_type == np.uint8:
@@ -165,10 +166,24 @@ def gen_golden_data(case_name, g_info):
     elif dst_format == 3:
         c0_size = 8
         golden = golden.reshape(int(m / 16), 16, int(n / c0_size), c0_size).transpose(2, 0, 1, 3).astype(dst_data_type)
-    elif dst_format == 4:
+    elif dst_format == 4: 
+        # NHWC
         shape = g_info.shape
         golden = golden.reshape(shape[0], shape[1], shape[2], shape[3]).astype(dst_data_type)
-
+    elif dst_format == 5: 
+        # NCHW
+        shape = g_info.shape
+        golden = golden.reshape(shape[0], shape[1], shape[2], shape[3]).transpose(0, 3, 1, 2).astype(dst_data_type)
+    elif dst_format == 6: 
+        # NCDHW:
+        shape_ncdhw = g_info.ncdhw_shape
+        golden_ncdhw = np.zeros(shape_ncdhw, dtype=dst_data_type)
+        shape_orig = g_info.shape
+        golden_nchw = golden.reshape(
+            shape_orig[0], shape_orig[1], shape_orig[2], shape_orig[3]
+        ).transpose(0, 3, 1, 2).astype(dst_data_type)
+        golden_ncdhw[:, :, 0, :, :] = golden_nchw
+        golden = golden_ncdhw
     if relu_mode == 1:
         golden = np.maximum(golden, 0)
     
@@ -181,7 +196,7 @@ def gen_golden_data(case_name, g_info):
 
 class TStoreAcc2gmParams:
     def __init__(self, dst_data_type, src_data_type, dst_format, m, n, k, quant_mode=0, scalar=1, relu_mode=0,
-        shape=(0, 0, 0, 0)):
+        shape=(0, 0, 0, 0), ncdhw_shape=(0, 0, 0, 0, 0)):
         self.src_data_type = src_data_type
         self.dst_data_type = dst_data_type
         self.dst_format = dst_format
@@ -192,6 +207,7 @@ class TStoreAcc2gmParams:
         self.scalar = scalar
         self.relu_mode = relu_mode
         self.shape = shape
+        self.ncdhw_shape = ncdhw_shape
 
 if __name__ == "__main__":
     # 用例名称
@@ -261,6 +277,20 @@ if __name__ == "__main__":
         "TStoreAcc2gmTest.case_nhwc_5",
         "TStoreAcc2gmTest.case_nhwc_6",
         "TStoreAcc2gmTest.case_nhwc_7",
+        "TStoreAcc2gmTest.case_nchw_1",
+        "TStoreAcc2gmTest.case_nchw_2",
+        "TStoreAcc2gmTest.case_nchw_3",
+        "TStoreAcc2gmTest.case_nchw_4",
+        "TStoreAcc2gmTest.case_nchw_5",
+        "TStoreAcc2gmTest.case_nchw_6",
+        "TStoreAcc2gmTest.case_nchw_7",
+        "TStoreAcc2gmTest.case_ncdhw_1",
+        "TStoreAcc2gmTest.case_ncdhw_2",
+        "TStoreAcc2gmTest.case_ncdhw_3",
+        "TStoreAcc2gmTest.case_ncdhw_4",
+        "TStoreAcc2gmTest.case_ncdhw_5",
+        "TStoreAcc2gmTest.case_ncdhw_6",
+        "TStoreAcc2gmTest.case_ncdhw_7",
     ]
 
     case_params_list = [
@@ -333,7 +363,7 @@ if __name__ == "__main__":
         TStoreAcc2gmParams(np.int8, np.float16, 1, 85, 77, 66, quant_mode=2, relu_mode=1),
         TStoreAcc2gmParams(np.int8, np.int8, 2, 128, 128, 123, quant_mode=2, relu_mode=1),
 
-        # NHWC/NCHW
+        # NHWC
         TStoreAcc2gmParams(np.float32, np.float32, 4, 128, 128, 16, quant_mode=0, scalar=1, 
             relu_mode=0, shape=(1, 16, 8, 128)),
         TStoreAcc2gmParams(np.int32, np.int8, 4, 512, 63, 31, quant_mode=0, scalar=1, 
@@ -348,7 +378,38 @@ if __name__ == "__main__":
             relu_mode=0, shape=(2, 8, 22, 64)),
         TStoreAcc2gmParams(np.float32, np.float16, 4, 256, 128, 32, quant_mode=2, scalar=1, 
             relu_mode=1, shape=(1, 64, 4, 128)),
+        
+        # NCHW
+        TStoreAcc2gmParams(np.float32, np.float32, 5, 128, 128, 16, quant_mode=0, scalar=1, 
+            relu_mode=0, shape=(1, 16, 8, 128)),
+        TStoreAcc2gmParams(np.int32, np.int8, 5, 512, 63, 31, quant_mode=0, scalar=1, 
+            relu_mode=0, shape=(1, 32, 16, 63)),
+        TStoreAcc2gmParams(bfloat16, np.float32, 5, 1024, 32, 8, quant_mode=0, scalar=1, 
+            relu_mode=0, shape=(1, 32, 32, 32)),
+        TStoreAcc2gmParams(np.float32, bfloat16, 5, 126, 43, 64, quant_mode=0, scalar=1, 
+            relu_mode=1, shape=(1, 2, 63, 43)),
+        TStoreAcc2gmParams(np.int8, hifloat8, 5, 640, 64, 96, quant_mode=1, scalar=3, 
+            relu_mode=1, shape=(1, 16, 40, 64)),
+        TStoreAcc2gmParams(np.float16, fp8_e4m3fn, 5, 352, 64, 32, quant_mode=2, scalar=1, 
+            relu_mode=0, shape=(1, 8, 44, 64)),
+        TStoreAcc2gmParams(np.float32, np.float16, 5, 256, 128, 32, quant_mode=2, scalar=1, 
+            relu_mode=1, shape=(1, 64, 4, 128)),
 
+        # NCDHW
+        TStoreAcc2gmParams(np.float32, np.float32, 6, 128, 128, 16, quant_mode=0, scalar=1, 
+            relu_mode=0, shape=(1, 16, 8, 128), ncdhw_shape=(1, 128, 2, 16, 8)),
+        TStoreAcc2gmParams(np.int32, np.int8, 6, 512, 63, 31, quant_mode=0, scalar=1, 
+            relu_mode=0, shape=(1, 32, 16, 63), ncdhw_shape=(1, 63, 3, 32, 16)),
+        TStoreAcc2gmParams(bfloat16, np.float32, 6, 1024, 32, 8, quant_mode=0, scalar=1, 
+            relu_mode=0, shape=(1, 32, 32, 32), ncdhw_shape=(1, 32, 4, 32, 32)),
+        TStoreAcc2gmParams(np.float32, bfloat16, 6, 126, 43, 64, quant_mode=0, scalar=1, 
+            relu_mode=1, shape=(1, 2, 63, 43), ncdhw_shape=(1, 43, 2, 2, 63)),
+        TStoreAcc2gmParams(np.int8, hifloat8, 6, 640, 64, 96, quant_mode=1, scalar=3, 
+            relu_mode=1, shape=(1, 16, 40, 64), ncdhw_shape=(1, 64, 4, 16, 40)),
+        TStoreAcc2gmParams(np.float16, fp8_e4m3fn, 6, 352, 64, 32, quant_mode=2, scalar=1, 
+            relu_mode=0, shape=(1, 8, 44, 64), ncdhw_shape=(1, 64, 3, 8, 44)),
+        TStoreAcc2gmParams(np.float32, np.float16, 6, 256, 128, 32, quant_mode=2, scalar=1, 
+            relu_mode=1, shape=(1, 64, 4, 128), ncdhw_shape=(1, 128, 4, 64, 4)),
     ]
 
     for i, case_name  in enumerate(case_name_list):

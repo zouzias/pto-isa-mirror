@@ -34,7 +34,7 @@ PTO Tile Lib is not aimed at beginner-level users. The intended audience include
 
 ## Performance
 
-This repository includes performance-oriented kernels with reference measurements and reproducible setups.
+This repository includes performance-oriented kernels with reference measurements and reproducible setups.For performance testing tools, please refer to the [msprof tool](https://www.hiascend.com/document/detail/zh/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html).
 
 ### GEMM (A2/A3 reference)
 
@@ -49,15 +49,18 @@ Measured on Ascend A3 (24 cores) with fp16 inputs → fp32 output:
 | `m=6144` `k=6144` `n=6144` | 86.7% | 68.1% | 95.2% | 3.1% | 1.5060 |
 | `m=7680` `k=7680` `n=7680` | 80.6% | 63.0% | 98.4% | 2.4% | 3.1680 |
 
-Detailed analysis and tuning notes: `kernels/manual/a2a3/gemm_performance/README.md`.
+Detailed analysis and tuning notes: [High-Performance GEMM Operator Example](kernels/manual/a2a3/gemm_performance/README.md).
 
 ![GEMM performance reference (Ascend A3, 24 cores)](docs/figures/performance/gemm_performance_a3.svg)
 
 ### Flash Attention (A2/A3 reference)
 
-- Kernel: `kernels/manual/a2a3/flash_atten/`
+- Kernel: `kernels/manual/common/flash_atten/`
 
-Detailed analysis and tuning notes: `kernels/manual/a2a3/flash_atten/README.md`.
+Detailed analysis and tuning notes: [Flash Attention Kernel Implementation](kernels/manual/common/flash_atten/README.md).
+
+- S0: query sequence length (number of rows in Q/O)
+- S1: key/value sequence length (number of rows in K/V)
 
 ![Flash Attention normalized TFLOPS (A2/A3)](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
 
@@ -111,27 +114,78 @@ For detailed, OS-specific setup (Windows / Linux / macOS), see: [docs/getting-st
 
 ### Build Documentation (MkDocs)
 
-This repository includes an MkDocs (Read the Docs theme) site under `docs/mkdocs/`.
+This repository includes comprehensive API documentation and ISA instruction references built with MkDocs (Material theme) under `docs/mkdocs/`. The documentation covers:
 
-Install mkdocs first:
+- Complete PTO ISA instruction reference
+- API usage guidelines and examples
+- Performance tuning guides
+- Architecture and design documentation
+
+**Option 1: Access Online Documentation (Recommended)**
+
+For the latest documentation, visit the [Documentation Center](https://pto-isa.gitcode.com).
+
+**Option 2: Build Documentation Locally**
+
+Build locally if you need offline access, are working on documentation changes, or want to view unreleased features.
+
+**Prerequisites:**
+- Python >= 3.8
+- pip (Python package manager)
+
+**Method 1: Quick Start with MkDocs CLI**
+
+1. Install MkDocs and dependencies:
 
 ```bash
 python -m pip install -r docs/mkdocs/requirements.txt
+```
+
+2. Choose one of the following options:
+
+**Option A: Serve documentation locally (for development/preview)**
+
+```bash
 python -m mkdocs serve -f docs/mkdocs/mkdocs.yml
 ```
 
-Build a static site:
+The documentation will be available at `http://127.0.0.1:8000`. The server watches for file changes and automatically reloads. Press `Ctrl+C` to stop the server.
+
+**Option B: Build static HTML site (for offline use/deployment)**
 
 ```bash
 python -m mkdocs build -f docs/mkdocs/mkdocs.yml
 ```
 
-Build via CMake:
+Output will be in `docs/mkdocs/site/`. Open `docs/mkdocs/site/index.html` in your browser.
+
+**Method 2: Build via CMake (Advanced)**
+
+This method is useful for CI/CD pipelines or when integrating documentation builds into your development workflow.
+
+1. Create a Python virtual environment (recommended):
+
+```bash
+python3 -m venv .venv-mkdocs
+source .venv-mkdocs/bin/activate  # On Windows: .venv-mkdocs\Scripts\Activate.ps1
+python -m pip install -r docs/mkdocs/requirements.txt
+```
+
+2. Configure and build with CMake:
 
 ```bash
 cmake -S docs -B build/docs -DPython3_EXECUTABLE=$PWD/.venv-mkdocs/bin/python
 cmake --build build/docs --target pto_docs
 ```
+
+On Windows (PowerShell):
+
+```powershell
+cmake -S docs -B build/docs -DPython3_EXECUTABLE="$PWD\.venv-mkdocs\Scripts\python.exe"
+cmake --build build/docs --target pto_docs
+```
+
+The built documentation will be in `build/docs/site/`.
 
 ### Run CPU Simulator (recommended first step)
 

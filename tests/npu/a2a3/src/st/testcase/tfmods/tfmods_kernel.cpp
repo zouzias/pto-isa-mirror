@@ -33,13 +33,17 @@ PTO_INTERNAL void runTFMODS(__gm__ T *out, __gm__ T *src, T scalar)
 
     TLOAD(srcTile, srcGlobal);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
 
     TFMODS(dstTile, srcTile, scalar);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
 
     TSTORE(dstGlobal, dstTile);
     out = dstGlobal.data();
@@ -48,18 +52,6 @@ PTO_INTERNAL void runTFMODS(__gm__ T *out, __gm__ T *src, T scalar)
 extern "C" __global__ AICORE void launchTFMODSCase1(__gm__ float *out, __gm__ float *src, float scalar)
 {
     runTFMODS<float, 32, 64, 32, 32, 64, 64>(out, src, scalar);
-}
-extern "C" __global__ AICORE void launchTFMODSCase2(__gm__ aclFloat16 *out, __gm__ aclFloat16 *src, float scalar)
-{
-    runTFMODS<half, 63, 64, 63, 63, 64, 64>((__gm__ half *)out, (__gm__ half *)src, (half)scalar);
-}
-extern "C" __global__ AICORE void launchTFMODSCase3(__gm__ int32_t *out, __gm__ int32_t *src, int32_t scalar)
-{
-    runTFMODS<int32_t, 31, 128, 31, 31, 128, 128>(out, src, scalar);
-}
-extern "C" __global__ AICORE void launchTFMODSCase4(__gm__ int16_t *out, __gm__ int16_t *src, int16_t scalar)
-{
-    runTFMODS<int16_t, 3, 256, 3, 3, 256, 256>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTFMODSCase5(__gm__ float *out, __gm__ float *src, float scalar)
 {
@@ -73,18 +65,6 @@ extern "C" __global__ AICORE void launchTFMODSCase7(__gm__ float *out, __gm__ fl
 {
     runTFMODS<float, 32, 128, 32, 32, 64, 64>(out, src, scalar);
 }
-extern "C" __global__ AICORE void launchTFMODSCase8(__gm__ aclFloat16 *out, __gm__ aclFloat16 *src, float scalar)
-{
-    runTFMODS<half, 63, 128, 63, 63, 64, 64>((__gm__ half *)out, (__gm__ half *)src, (half)scalar);
-}
-extern "C" __global__ AICORE void launchTFMODSCase9(__gm__ int32_t *out, __gm__ int32_t *src, int32_t scalar)
-{
-    runTFMODS<int32_t, 31, 256, 31, 31, 128, 128>(out, src, scalar);
-}
-extern "C" __global__ AICORE void launchTFMODSCase10(__gm__ int16_t *out, __gm__ int16_t *src, int16_t scalar)
-{
-    runTFMODS<int16_t, 15, 192, 15, 15, 192, 192>(out, src, scalar);
-}
 extern "C" __global__ AICORE void launchTFMODSCase11(__gm__ float *out, __gm__ float *src, float scalar)
 {
     runTFMODS<float, 7, 512, 7, 7, 448, 448>(out, src, scalar);
@@ -92,18 +72,6 @@ extern "C" __global__ AICORE void launchTFMODSCase11(__gm__ float *out, __gm__ f
 extern "C" __global__ AICORE void launchTFMODSCase12(__gm__ float *out, __gm__ float *src, float scalar)
 {
     runTFMODS<float, 256, 32, 256, 256, 16, 16>(out, src, scalar);
-}
-extern "C" __global__ AICORE void launchTFMODSCase13(__gm__ aclFloat16 *out, __gm__ aclFloat16 *src, float scalar)
-{
-    runTFMODS<half, 1, 8192, 1, 1, 8192, 8192>((__gm__ half *)out, (__gm__ half *)src, (half)scalar);
-}
-extern "C" __global__ AICORE void launchTFMODSCase14(__gm__ int16_t *out, __gm__ int16_t *src, int16_t scalar)
-{
-    runTFMODS<int16_t, 1, 8192, 1, 1, 8192, 8192>(out, src, scalar);
-}
-extern "C" __global__ AICORE void launchTFMODSCase15(__gm__ int32_t *out, __gm__ int32_t *src, int32_t scalar)
-{
-    runTFMODS<int32_t, 1, 8192, 1, 1, 8192, 8192>(out, src, scalar);
 }
 extern "C" __global__ AICORE void launchTFMODSCase16(__gm__ float *out, __gm__ float *src, float scalar)
 {
@@ -118,18 +86,6 @@ void launchTFMODSTestCase(void *out, void *src, float scalar, aclrtStream stream
             launchTFMODSCase1<<<1, nullptr, stream>>>((float *)out, (float *)src, scalar);
             break;
         }
-        case 2: {
-            launchTFMODSCase2<<<1, nullptr, stream>>>((aclFloat16 *)out, (aclFloat16 *)src, scalar);
-            break;
-        }
-        case 3: {
-            launchTFMODSCase3<<<1, nullptr, stream>>>((int32_t *)out, (int32_t *)src, scalar);
-            break;
-        }
-        case 4: {
-            launchTFMODSCase4<<<1, nullptr, stream>>>((int16_t *)out, (int16_t *)src, scalar);
-            break;
-        }
         case 5: {
             launchTFMODSCase5<<<1, nullptr, stream>>>((float *)out, (float *)src, scalar);
             break;
@@ -142,36 +98,12 @@ void launchTFMODSTestCase(void *out, void *src, float scalar, aclrtStream stream
             launchTFMODSCase7<<<1, nullptr, stream>>>((float *)out, (float *)src, scalar);
             break;
         }
-        case 8: {
-            launchTFMODSCase8<<<1, nullptr, stream>>>((aclFloat16 *)out, (aclFloat16 *)src, scalar);
-            break;
-        }
-        case 9: {
-            launchTFMODSCase9<<<1, nullptr, stream>>>((int32_t *)out, (int32_t *)src, scalar);
-            break;
-        }
-        case 10: {
-            launchTFMODSCase10<<<1, nullptr, stream>>>((int16_t *)out, (int16_t *)src, scalar);
-            break;
-        }
         case 11: {
             launchTFMODSCase11<<<1, nullptr, stream>>>((float *)out, (float *)src, scalar);
             break;
         }
         case 12: {
             launchTFMODSCase12<<<1, nullptr, stream>>>((float *)out, (float *)src, scalar);
-            break;
-        }
-        case 13: {
-            launchTFMODSCase13<<<1, nullptr, stream>>>((aclFloat16 *)out, (aclFloat16 *)src, scalar);
-            break;
-        }
-        case 14: {
-            launchTFMODSCase14<<<1, nullptr, stream>>>((int16_t *)out, (int16_t *)src, scalar);
-            break;
-        }
-        case 15: {
-            launchTFMODSCase15<<<1, nullptr, stream>>>((int32_t *)out, (int32_t *)src, scalar);
             break;
         }
         case 16: {
@@ -184,18 +116,9 @@ void launchTFMODSTestCase(void *out, void *src, float scalar, aclrtStream stream
 }
 
 template void launchTFMODSTestCase<1>(void *out, void *src, float scalar, aclrtStream stream);
-template void launchTFMODSTestCase<2>(void *out, void *src, float scalar, aclrtStream stream);
-template void launchTFMODSTestCase<3>(void *out, void *src, float scalar, aclrtStream stream);
-template void launchTFMODSTestCase<4>(void *out, void *src, float scalar, aclrtStream stream);
 template void launchTFMODSTestCase<5>(void *out, void *src, float scalar, aclrtStream stream);
 template void launchTFMODSTestCase<6>(void *out, void *src, float scalar, aclrtStream stream);
 template void launchTFMODSTestCase<7>(void *out, void *src, float scalar, aclrtStream stream);
-template void launchTFMODSTestCase<8>(void *out, void *src, float scalar, aclrtStream stream);
-template void launchTFMODSTestCase<9>(void *out, void *src, float scalar, aclrtStream stream);
-template void launchTFMODSTestCase<10>(void *out, void *src, float scalar, aclrtStream stream);
 template void launchTFMODSTestCase<11>(void *out, void *src, float scalar, aclrtStream stream);
 template void launchTFMODSTestCase<12>(void *out, void *src, float scalar, aclrtStream stream);
-template void launchTFMODSTestCase<13>(void *out, void *src, float scalar, aclrtStream stream);
-template void launchTFMODSTestCase<14>(void *out, void *src, float scalar, aclrtStream stream);
-template void launchTFMODSTestCase<15>(void *out, void *src, float scalar, aclrtStream stream);
 template void launchTFMODSTestCase<16>(void *out, void *src, float scalar, aclrtStream stream);

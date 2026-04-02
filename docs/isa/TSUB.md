@@ -1,4 +1,9 @@
-# TSUB
+﻿# TSUB
+
+
+## Tile Operation Diagram
+
+![TSUB tile operation](../figures/isa/TSUB.svg)
 
 ## Introduction
 
@@ -12,38 +17,50 @@ $$ \mathrm{dst}_{i,j} = \mathrm{src0}_{i,j} - \mathrm{src1}_{i,j} $$
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
 ```text
 %dst = tsub %src0, %src1 : !pto.tile<...>
 ```
+
+### AS Level 1 (SSA)
+
+```text
+%dst = pto.tsub %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSUB(TileData& dst, TileData& src0, TileData& src1, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TSUB(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-  - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
-  - Tile layout must be row-major (`TileData::isRowMajor`).
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-  - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
+    - `TileData::DType` must be one of: `int32_t`, `int16_t`, `half`, `float`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
 - **Implementation checks (A5)**:
-  - `TileData::DType` must be one of: `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`,  `int8_t`, `float`, `half`.
-  - Tile layout must be row-major (`TileData::isRowMajor`).
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-  - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
+    - `TileData::DType` must be one of: `uint32_t`, `int32_t`, `uint16_t`, `int16_t`, `uint8_t`,  `int8_t`, `float`, `half`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src0`, `src1` and `dst` tiles should have the same `validRow/validCol`.
 - **Valid region**:
-  - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain; `src0/src1` are assumed to be compatible (not validated by explicit runtime checks in this op).
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain; `src0/src1` are assumed to be compatible (not validated by explicit runtime checks in this op).
 
 ## Examples
 
@@ -77,3 +94,31 @@ void example_manual() {
   TSUB(dst, src0, src1);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%dst = pto.tsub %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%dst = pto.tsub %src0, %src1 : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%dst = tsub %src0, %src1 : !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tsub ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+

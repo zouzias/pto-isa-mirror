@@ -44,15 +44,9 @@ std::string GetGoldenDir()
 #define MAXBLOCK 64
 
 template <typename T>
-constexpr auto getGoldenZero()
+constexpr T getGoldenZero()
 {
-    if constexpr (sizeof(T) == 4) {
-        return (uint32_t)0;
-    } else if constexpr (sizeof(T) == 2) {
-        return (uint16_t)0;
-    } else if constexpr (sizeof(T) == 1) {
-        return (uint8_t)0;
-    }
+    return T{0};
 }
 
 template <int32_t testKey, typename T, int32_t kBlock>
@@ -130,7 +124,7 @@ void tfillpad_test()
     int elements = actual_out_byteSize / sizeof(T);
 
     auto zero = getGoldenZero<T>();
-    using CT = typeof(zero);
+    using CT = decltype(zero);
     std::vector<CT> golden(elements);
     std::vector<CT> devFinal(elements);
     size_t oFileSize = actual_out_byteSize;
@@ -205,4 +199,13 @@ TEST_F(TFILLPADTest, case_s16_GT_260_7_VT_260_32_BLK1_PADMIN_PADMIN)
 TEST_F(TFILLPADTest, case_s32_GT_260_7_VT_260_32_BLK1_PADMIN_PADMIN)
 {
     tfillpad_test<11, int32_t, 1>();
+}
+TEST_F(TFILLPADTest, case_float_GT_128_64_VT_128_128_PADCUSTOM_NEG1)
+{
+    tfillpad_test<12, float, 1>();
+}
+
+TEST_F(TFILLPADTest, case_float_GT_128_127_VT_128_160_BLK1_PADCUSTOM_NEG1_PADCUSTOM_NEG1)
+{
+    tfillpad_test<13, float, 1>();
 }

@@ -11,6 +11,8 @@
 # --------------------------------------------------------------------------------
 
 import os
+import struct
+import ctypes
 import numpy as np
 np.random.seed(2025)
 
@@ -63,6 +65,10 @@ if __name__ == "__main__":
         "TROWEXPANDADDTest.case12",
         "TROWEXPANDADDTest.case13",
         "TROWEXPANDADDTest.case14",
+        "TROWEXPANDADDTest.case15",
+        "TROWEXPANDADDTest.case16",
+        "TROWEXPANDADDTest.case17",
+        "TROWEXPANDADDTest.case18",
     ]
 
     case_params_list = [
@@ -80,6 +86,10 @@ if __name__ == "__main__":
         TRowExpandAdd(np.float32, 2048, 1, 2048, 8, True, True),
         TRowExpandAdd(np.float32, 16, 16, 16, 16, False, False),
         TRowExpandAdd(np.float32, 16, 16, 16, 16, False, True),
+        TRowExpandAdd(np.float32, 16, 16, 32, 32, True, False),
+        TRowExpandAdd(np.float16, 16, 16, 16, 16, True, False),
+        TRowExpandAdd(np.float32, 1, 16384, 1, 16384, True, False),
+        TRowExpandAdd(np.float32, 2048, 1, 2048, 8, True, False),
     ]
 
     for i, case_name in enumerate(case_name_list):

@@ -20,7 +20,7 @@ template <typename T>
 PTO_INTERNAL uint32_t GetByteSize(const uint32_t value)
 {
     if constexpr (std::is_same<T, float4_e1m2x2_t>::value || std::is_same<T, float4_e2m1x2_t>::value) {
-        return value >> 1; // fp4 4bits
+        return (value + 1) >> 1; // fp4 4bits, ceil division to include last nibble for odd counts
     }
     return sizeof(T) * value;
 }
@@ -96,14 +96,9 @@ PTO_INTERNAL constexpr QuantMode_t GetScalarPreQuantMode()
             quantPre = QuantMode_t::QF322F16_PRE;
         } else if constexpr (std::is_same<DstType, bfloat16_t>::value) {
             quantPre = QuantMode_t::QF322BF16_PRE;
+        } else if constexpr (std::is_same<DstType, float8_e4m3_t>::value) {
+            quantPre = QuantMode_t::QF322B8_PRE;
         }
-#ifdef __CCE_AICORE__
-        else if constexpr (std::is_same<DstType, float8_e4m3_t>::value) {
-            quantPre = QuantMode_t::QF322FP8_PRE;
-        } else if constexpr (std::is_same<DstType, float>::value) {
-            quantPre = QuantMode_t::QF322F32_PRE;
-        }
-#endif
     } else if constexpr (std::is_same<SrcType, int32_t>::value) {
         if constexpr ((std::is_same<DstType, int8_t>::value) || (std::is_same<DstType, uint8_t>::value)) {
             quantPre = QuantMode_t::REQ8;
@@ -129,14 +124,9 @@ PTO_INTERNAL constexpr QuantMode_t GetVectorPreQuantMode()
             quantPre = QuantMode_t::VQF322F16_PRE;
         } else if constexpr (std::is_same<DstType, bfloat16_t>::value) {
             quantPre = QuantMode_t::VQF322BF16_PRE;
+        } else if constexpr (std::is_same<DstType, float8_e4m3_t>::value) {
+            quantPre = QuantMode_t::VQF322B8_PRE;
         }
-#ifdef __CCE_AICORE__
-        else if constexpr (std::is_same<DstType, float8_e4m3_t>::value) {
-            quantPre = QuantMode_t::VQF322FP8_PRE;
-        } else if constexpr (std::is_same<DstType, float>::value) {
-            quantPre = QuantMode_t::VQF322F32_PRE;
-        }
-#endif
     } else if constexpr (std::is_same<SrcType, int32_t>::value) {
         if constexpr ((std::is_same<DstType, int8_t>::value) || (std::is_same<DstType, uint8_t>::value)) {
             quantPre = QuantMode_t::VREQ8;

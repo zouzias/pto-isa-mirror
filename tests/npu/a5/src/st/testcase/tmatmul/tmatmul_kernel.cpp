@@ -82,8 +82,10 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
         TLOAD(biasDataTile, src2Global);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
     /**********************************TMOV && TEXTRACT**********************************/
 
@@ -93,8 +95,10 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
         TMOV(biasTile, biasDataTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
     /**********************************TMATMUL**********************************/
     if constexpr (isBias) {
@@ -103,8 +107,10 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
         TMATMUL(cTile, aTile, bTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
 
     /**********************************TSTORE**********************************/
     TSTORE(dstGlobal, cTile);
@@ -166,8 +172,10 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(__gm__ OutType *out, __gm__ AType *src
             TLOAD(biasDataTile, src2Global);
         }
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
         /**********************************TMOV && TEXTRACT**********************************/
         TMOV(aTile, aMatTile);
@@ -176,8 +184,10 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(__gm__ OutType *out, __gm__ AType *src
             TMOV(biasTile, biasDataTile);
         }
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
         if (i == 0) {
             if constexpr (isBias) {
@@ -188,12 +198,16 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(__gm__ OutType *out, __gm__ AType *src
         } else {
             TMATMUL_ACC(cTile, cTile, aTile, bTile);
         }
+#ifndef __PTO_AUTO__
         set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
         wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+#endif
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, cTile);
 
     out = dstGlobal.data();
@@ -260,8 +274,10 @@ __global__ AICORE void RunTGEMV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, _
         TLOAD(biasDataTile, src2Global);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
     /**************************TMOV && TEXTRACT**************************/
     TEXTRACT(aTile, aMatTile, 0, 0);
@@ -271,8 +287,10 @@ __global__ AICORE void RunTGEMV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, _
         TMOV(biasTile, biasDataTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
     if constexpr (isBias) {
         TGEMV_BIAS(cTile, aTile, bTile, biasTile);
@@ -280,8 +298,10 @@ __global__ AICORE void RunTGEMV(__gm__ T *out, __gm__ U *src0, __gm__ S *src1, _
         TGEMV(cTile, aTile, bTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
 
     /********************************TSTORE****************************/
     TSTORE(dstGlobal, cTile);
@@ -330,6 +350,7 @@ __global__ AICORE void RunTMATMUL_TF32(__gm__ OutType *out, __gm__ AType *src0, 
     TASSIGN(biasDataTile, 0x20000);
 
     LeftTile aTile;
+    aTile.SetMadTF32Mode(tf32TransMode);
     RightTile bTile;
     AccTile cTile;
     BiasTile biasTile;
@@ -345,8 +366,10 @@ __global__ AICORE void RunTMATMUL_TF32(__gm__ OutType *out, __gm__ AType *src0, 
         TLOAD(biasDataTile, src2Global);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
     /**********************************TMOV && TEXTRACT**********************************/
 
@@ -356,23 +379,24 @@ __global__ AICORE void RunTMATMUL_TF32(__gm__ OutType *out, __gm__ AType *src0, 
         TMOV(biasTile, biasDataTile);
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
     /**********************************TMATMUL**********************************/
-    TSETTF32MODE<true, tf32TransMode>();
     if constexpr (isBias) {
         TMATMUL_BIAS(cTile, aTile, bTile, biasTile);
     } else {
         TMATMUL(cTile, aTile, bTile);
     }
-    TSETTF32MODE<false>();
+    aTile.ResetMadMode();
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-
+#endif
     /**********************************TSTORE**********************************/
     TSTORE(dstGlobal, cTile);
-
     out = dstGlobal.data();
 }
 
@@ -440,8 +464,10 @@ __global__ AICORE void RunTGEMV_SPLIT_K(__gm__ T *out, __gm__ U *src0, __gm__ S 
             TLOAD(biasDataTile, src2Global);
         }
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
         /**************************TMOV && TEXTRACT**************************/
         TMOV(aTile, aMatTile);
@@ -451,8 +477,10 @@ __global__ AICORE void RunTGEMV_SPLIT_K(__gm__ T *out, __gm__ U *src0, __gm__ S 
             TMOV(biasTile, biasDataTile);
         }
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
         if (i == 0) {
             if constexpr (isBias) {
@@ -465,8 +493,10 @@ __global__ AICORE void RunTGEMV_SPLIT_K(__gm__ T *out, __gm__ U *src0, __gm__ S 
         } else {
             TGEMV_ACC<AccPhase::Partial>(cTile, cTile, aTile, bTile);
         }
+#ifndef __PTO_AUTO__
         set_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
         wait_flag(PIPE_M, PIPE_MTE2, EVENT_ID0);
+#endif
     }
 
     TSTORE<STPhase::Final>(dstGlobal, cTile);

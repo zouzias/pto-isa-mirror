@@ -8,12 +8,14 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef LAYOUT_HPP
-#define LAYOUT_HPP
+#ifndef PTO_MEMORY_HPP
+#define PTO_MEMORY_HPP
 
 #include <stdint.h>
 #include <type_traits>
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/type.hpp>
+#include <pto/common/arch_macro.hpp>
 
 namespace pto {
 enum class TileType
@@ -27,6 +29,7 @@ enum class TileType
     Scaling,
     ScaleLeft,
     ScaleRight,
+    Ctrl,
 };
 
 enum class BLayout
@@ -95,7 +98,15 @@ struct MemoryQualifier<TileType::Acc, DType> {
 
 template <typename DType>
 struct MemoryQualifier<TileType::Bias, DType> {
+#if defined(__DAV_C220_CUBE__)
+#ifdef __PTO_AUTO__
+    using type = __biasbuf__ DType;
+#else
+    using type = __biasbuf__ DType *;
+#endif
+#else
     using type = uint64_t;
+#endif
 };
 
 template <typename DType>
@@ -125,6 +136,11 @@ struct MemoryQualifier<TileType::ScaleRight, DType> {
 #endif
 };
 
+template <typename DType>
+struct MemoryQualifier<TileType::Ctrl, DType> {
+    using type = uint64_t;
+};
+
 PTO_INTERNAL constexpr const __gm__ char *GetLayoutName(BLayout bType, SLayout sType) noexcept
 {
     switch (sType) {
@@ -134,6 +150,35 @@ PTO_INTERNAL constexpr const __gm__ char *GetLayoutName(BLayout bType, SLayout s
             return (bType == BLayout::RowMajor) ? "Zz" : "Nz";
         case SLayout::ColMajor:
             return (bType == BLayout::RowMajor) ? "Zn" : "Nn";
+        default:
+            return "Unknown";
+    }
+}
+
+template <TileType type>
+PTO_INTERNAL constexpr const __gm__ char *GetTileTypeName() noexcept
+{
+    switch (type) {
+        case TileType::Vec:
+            return "Vec";
+        case TileType::Mat:
+            return "Mat";
+        case TileType::Left:
+            return "Left";
+        case TileType::Right:
+            return "Right";
+        case TileType::Acc:
+            return "Acc";
+        case TileType::Bias:
+            return "Bias";
+        case TileType::Scaling:
+            return "Scaling";
+        case TileType::ScaleLeft:
+            return "ScaleLeft";
+        case TileType::ScaleRight:
+            return "ScaleRight";
+        case TileType::Ctrl:
+            return "Ctrl";
         default:
             return "Unknown";
     }

@@ -1,4 +1,9 @@
-# TPRINT
+﻿# TPRINT
+
+
+## Tile Operation Diagram
+
+![TPRINT tile operation](../figures/isa/TPRINT.svg)
 
 ## Introduction
 
@@ -14,21 +19,28 @@ The `TPRINT` instruction outputs the logical view of data stored in a Tile or Gl
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 ```text
 tprint %src : !pto.tile<...> | !pto.global<...>
 ```
 
+### AS Level 1 (SSA)
+
+```text
+pto.tprint %src : !pto.tile<...> | !pto.partition_tensor_view<MxNxdtype> -> ()
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>)
+```
 ## C++ Intrinsic
 Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
-template <typename T, typename... WaitEvents>
-PTO_INST RecordEvent TPRINT(T &src, WaitEvents&... events) {
-  TSYNC(events...);
-  MAP_INSTR_IMPL(TPRINT, src);
-  return {};
-}
+template <typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPRINT(TileData &src, WaitEvents &... events);
 ```
 
 ### Supported Types for T
@@ -38,9 +50,9 @@ PTO_INST RecordEvent TPRINT(T &src, WaitEvents&... events) {
 ## Constraints
 
 - **Supported element type**:
-  - Floating-point: `float`, `half`
-  - Signed integers: `int8_t`, `int16_t`, `int32_t`
-  - Unsigned integers: `uint8_t`, `uint16_t`, `uint32_t`
+    - Floating-point: `float`, `half`
+    - Signed integers: `int8_t`, `int16_t`, `int32_t`
+    - Unsigned integers: `uint8_t`, `uint16_t`, `uint32_t`
 - **For Tiles**: `TileData::Loc == TileType::Vec` (only vector tiles are printable).
 - **For GlobalTensor**: Layout must be one of `Layout::ND`, `Layout::DN`, or `Layout::NZ`.
 
@@ -59,10 +71,10 @@ PTO_INST RecordEvent TPRINT(T &src, WaitEvents&... events) {
 
 - **Formatting**:
 
-  - Floating-point values: printed as `%6.2f`
-  - Integer values: printed as `%6d`
-  - For `GlobalTensor`, due to data size and buffer limitations, only elements within its logical shape (defined by `Shape`) are printed.
-  - For `Tile`, invalid regions (beyond `validRows`/`validCols`) are still printed but marked with a `|` separator when partial validity is specified.
+    - Floating-point values: printed as `%6.2f`
+    - Integer values: printed as `%6d`
+    - For `GlobalTensor`, due to data size and buffer limitations, only elements within its logical shape (defined by `Shape`) are printed.
+    - For `Tile`, invalid regions (beyond `validRows`/`validCols`) are still printed but marked with a `|` separator when partial validity is specified.
 
 ## Examples
 
@@ -100,3 +112,35 @@ PTO_INTERNAL void DebugGlobalTensor(__gm__ float *src) {
   TPRINT(srcGlobal);
 }
 ```
+
+## Math Interpretation
+
+Unless otherwise specified, semantics are defined over the valid region and target-dependent behavior is marked as implementation-defined.
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+pto.tprint %src : !pto.tile<...> | !pto.partition_tensor_view<MxNxdtype> -> ()
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+pto.tprint %src : !pto.tile<...> | !pto.partition_tensor_view<MxNxdtype> -> ()
+```
+
+### PTO Assembly Form
+
+```text
+pto.tprint %src : !pto.tile<...> | !pto.partition_tensor_view<MxNxdtype> -> ()
+# AS Level 2 (DPS)
+pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>)
+```
+

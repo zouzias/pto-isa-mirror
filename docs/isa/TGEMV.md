@@ -1,4 +1,9 @@
-# TGEMV
+﻿# TGEMV
+
+
+## Tile Operation Diagram
+
+![TGEMV tile operation](../figures/isa/TGEMV.svg)
 
 ## Introduction
 
@@ -34,7 +39,7 @@ $$ \mathrm{C}_{0,j} = \mathrm{Bias}_{0,j} + \sum_{k=0}^{K-1} \mathrm{A}_{0,k} \c
 
 ## Assembly Syntax
 
-PTO-AS form: see `docs/grammar/PTO-AS.md`.
+PTO-AS form: see [PTO-AS Specification](../assembly/PTO-AS.md).
 
 Synchronous form:
 
@@ -46,6 +51,21 @@ Synchronous form:
 %acc = tgemv.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
 ```
 
+### AS Level 1 (SSA)
+
+```text
+%c = pto.tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%c_out = pto.tgemv.acc %c_in, %a, %b : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+%c = pto.tgemv.bias %a, %b, %bias : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### AS Level 2 (DPS)
+
+```text
+pto.tgemv ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
+pto.tgemv.acc ins(%c_in, %a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c_out : !pto.tile_buf<...>)
+pto.tgemv.bias ins(%a, %b, %bias : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
+```
 ## C++ Intrinsic
 
 Declared in `include/pto/common/pto_instr.hpp`:
@@ -63,34 +83,46 @@ PTO_INST RecordEvent TGEMV_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &
 
 ## Constraints
 
+### Common shape and location constraints
+
+These constraints apply to `TGEMV`, `TGEMV_ACC`, and `TGEMV_BIAS` unless otherwise noted.
+
+- Static shape constraints:
+    - `TileLeft::Rows == TileRes::Rows`
+    - `TileLeft::Cols == TileRight::Rows`
+    - `TileRight::Cols == TileRes::Cols`
+- Tile locations:
+    - `TileLeft::Loc == Left`
+    - `TileRight::Loc == Right`
+    - `TileRes::Loc == Acc`
+- Runtime valid-size constraints:
+    - `m` must be `1`
+    - `k` and `n` (taken from `bMatrix.GetValidRow()` and `bMatrix.GetValidCol()`) must be in `[1, 4095]`
+
+### TGEMV / TGEMV_ACC datatype constraints
+
 - **Implementation checks (A2A3)**:
-  - Supported `(CType, AType, BType)` triples:
-    - `(int32_t, int8_t, int8_t)`
-    - `(float, half, half)`
-    - `(float, float, float)`
-    - `(float, bfloat16_t, bfloat16_t)`
-  - Static shape constraints: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
-  - Tile locations: `TileLeft::Loc == Left`, `TileRight::Loc == Right`, `TileRes::Loc == Acc`.
-  - Runtime: `m` must be 1 ; `k/n` (taken from `bMatrix.GetValidRow()`, `bMatrix.GetValidCol()`) must be in `[1, 4095]`.
-  - Bias checks:
-    - The data type of the bias tile `TileBias::DType` must exactly match the data type of the result tile `(TileRes::DType)`.
-    - The bias tile must be configured as a single row.
-    - The bias tile's location must be `TileBias::Loc == TileType::Bias`.
+    - Supported `(CType, AType, BType)` triples:
+        - `(int32_t, int8_t, int8_t)`
+        - `(float, half, half)`
+        - `(float, float, float)`
+        - `(float, bfloat16_t, bfloat16_t)`
 - **Implementation checks (A5)**:
-  - Accumulator type must be `int32_t` or `float`.
+    - Accumulator type must be `int32_t` or `float`.
     - If `int32_t`: `AType == int8_t` and `BType == int8_t`.
-    - If `float`: supports `half/bfloat16_t/float` and selected fp8 pairs (target-defined).
-  - Static shape constraints: `TileLeft::Rows == TileRes::Rows`, `TileLeft::Cols == TileRight::Rows`, `TileRight::Cols == TileRes::Cols`.
-  - Fractal/layout constraints are enforced:
-    - Left: `Loc == Left`, `!isRowMajor`, `SFractal == RowMajor`
-    - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
-    - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
-  - No explicit runtime range checks on `m/k/n` are enforced in `TMATMUL_IMPL` on this target.
-  - Runtime: `m` must be 1 ; `k/n` (taken from `bMatrix.GetValidRow()`, `bMatrix.GetValidCol()`) must be in `[1, 4095]`.
-  - Bias checks:
-    - The data type of the bias tile `TileBias::DType` must exactly match the data type of the result tile `(TileRes::DType)`.
-    - The bias tile must be configured as a single row.
-    - The bias tile's location must be `TileBias::Loc == TileType::Bias`.
+    - If `float`: supports `half`, `bfloat16_t`, `float`, and selected fp8 pairs (target-defined).
+    - Fractal/layout constraints are enforced:
+        - Left: `Loc == Left`, `!isRowMajor`, `SFractal == RowMajor`
+        - Right: `Loc == Right`, `isRowMajor`, `SFractal == ColMajor`
+        - Acc: `Loc == Acc`, `!isRowMajor`, `SFractal == RowMajor`
+
+### TGEMV_BIAS additional constraints
+
+- Bias tile datatype must exactly match `TileRes::DType`.
+- Bias tile must be configured as a single row.
+- Bias tile location must be `TileType::Bias`.
+- **Additional A5 note**:
+    - No separate explicit `m/k/n` runtime assertions are enforced in the underlying A5 matmul implementation beyond the GEMV contract described above.
 
 ## Examples
 
@@ -128,7 +160,7 @@ void example_auto() {
   A a;
   B b;
   C c0, c1;
-  TGEMV_ACC(c, a, b);
+  TGEMV_ACC(c1, c0, a, b);
 }
 ```
 
@@ -220,3 +252,31 @@ void example_manual() {
   TGEMV_BIAS(c, a, b, bias);
 }
 ```
+
+## ASM Form Examples
+
+### Auto Mode
+
+```text
+# Auto mode: compiler/runtime-managed placement and scheduling.
+%c = pto.tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### Manual Mode
+
+```text
+# Manual mode: bind resources explicitly before issuing the instruction.
+# Optional for tile operands:
+# pto.tassign %arg0, @tile(0x1000)
+# pto.tassign %arg1, @tile(0x2000)
+%c = pto.tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+### PTO Assembly Form
+
+```text
+%acc = tgemv %a, %b : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tgemv ins(%a, %b : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%c : !pto.tile_buf<...>)
+```
+
