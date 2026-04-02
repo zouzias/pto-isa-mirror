@@ -261,14 +261,15 @@ export N_RANKS=${N_RANKS}
 # Set default timeout to 120 seconds (HCCL init may take longer)
 TIMEOUT=${TIMEOUT:-120}
 
-# Find MPI
+# Find MPI — prefer MPICH (comm_mpi.h hardcodes MPICH's MPI_COMM_WORLD value).
 MPI_BIN=""
-if command -v mpirun &>/dev/null; then
-    MPI_BIN="mpirun"
-elif [ -f /usr/local/mpich/bin/mpirun ]; then
+if [ -f /usr/local/mpich/bin/mpirun ]; then
     MPI_BIN="/usr/local/mpich/bin/mpirun"
+    export MPI_LIB_PATH="${MPI_LIB_PATH:-/usr/local/mpich/lib/libmpi.so}"
+elif command -v mpirun &>/dev/null; then
+    MPI_BIN="mpirun"
 else
-    echo "[ERROR] mpirun not found. Please install MPI or set PATH."
+    echo "[ERROR] mpirun not found. Please install MPICH or set PATH."
     exit 1
 fi
 
