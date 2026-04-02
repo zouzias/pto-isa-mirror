@@ -220,7 +220,7 @@ struct TPipe {
                 int rowIndex = ProdM * static_cast<size_t>(get_subblockid());
                 TINSERT_IMPL<TInsertMode::NZ>(matTile, tile, rowIndex, 0);
             } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
-                constexpr uint32_t colIndex = ProdN * static_cast<size_t>(get_subblockid());
+                uint32_t colIndex = ProdN * static_cast<size_t>(get_subblockid());
                 TINSERT_IMPL<TInsertMode::NZ>(matTile, tile, 0, colIndex);
             }
         }
