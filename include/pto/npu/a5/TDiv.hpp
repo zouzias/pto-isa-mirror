@@ -36,9 +36,9 @@ struct DivOp {
     PTO_INTERNAL static void BinInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, RegTensor<T> &reg_src1,
                                       MaskReg &preg)
     {
-        if constexpr (PrecisionType == DivAlgorithm::HIGH_PRECISION && std::is_same_v<T, float>) {
+        if constexpr (PrecisionType == DivAlgorithm::DIV_HIGH_PRECISION && std::is_same_v<T, float>) {
             DivIEEE754FloatImpl<T, RegTensor<T> >(reg_dst, reg_src0, reg_src1, preg);
-        } else if constexpr (PrecisionType == DivAlgorithm::HIGH_PRECISION && std::is_same_v<T, half>) {
+        } else if constexpr (PrecisionType == DivAlgorithm::DIV_HIGH_PRECISION && std::is_same_v<T, half>) {
             DivIEEE754HalfImpl<T, RegTensor<T> >(reg_dst, reg_src0, reg_src1, preg);
         } else {
             vdiv(reg_dst, reg_src0, reg_src1, preg, MODE_ZEROING);
@@ -47,7 +47,7 @@ struct DivOp {
 #endif
 };
 
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+template <auto PrecisionType = DivAlgorithm::DIV_DEFAULT, typename TileDataDst, typename TileDataSrc0,
           typename TileDataSrc1, unsigned ElementsPerRepeat, unsigned BlockSizeElem>
 __tf__ PTO_INTERNAL OP_NAME(TDIV)
     OP_TYPE(element_wise) void TDiv(typename TileDataDst::TileDType __out__ dst,
@@ -85,7 +85,7 @@ PTO_INTERNAL void TDivCheck(const TileDataDst &dst, const TileDataSrc0 &src0, co
                "Fix: TDIV input tile src1 valid shape mismatch with output tile dst shape.");
 }
 
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+template <auto PrecisionType = DivAlgorithm::DIV_DEFAULT, typename TileDataDst, typename TileDataSrc0,
           typename TileDataSrc1>
 PTO_INTERNAL void TDIV_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {

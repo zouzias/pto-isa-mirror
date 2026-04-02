@@ -267,10 +267,16 @@ enum class TileLayoutCustom : uint8_t
     NONE,
 };
 
-enum class DivAlgorithm : uint8_t
+enum DivAlgorithm : uint8_t
 {
-    DEFAULT,
-    HIGH_PRECISION
+    DIV_DEFAULT,
+    DIV_HIGH_PRECISION
+};
+
+enum RecipAlgorithm : uint8_t
+{
+    RECIP_DEFAULT,
+    RECIP_HIGH_PRECISION
 };
 
 namespace GlobalTensorDim {

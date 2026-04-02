@@ -46,7 +46,7 @@ __global__ AICORE void runTDIV(__gm__ T __out__ *out, __gm__ T __in__ *src0, __g
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    constexpr auto precisionType = highPrecision ? DivAlgorithm::HIGH_PRECISION : DivAlgorithm::DEFAULT;
+    constexpr auto precisionType = highPrecision ? DivAlgorithm::DIV_HIGH_PRECISION : DivAlgorithm::DIV_DEFAULT;
     TDIV<precisionType>(dstTile, src0Tile, src1Tile);
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);

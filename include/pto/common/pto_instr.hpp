@@ -290,7 +290,7 @@ PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, W
     return {};
 }
 
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+template <auto PrecisionType = DivAlgorithm::DIV_DEFAULT, typename TileDataDst, typename TileDataSrc0,
           typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
@@ -349,7 +349,7 @@ PTO_INST RecordEvent TLOG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... ev
     return {};
 }
 
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+template <auto PrecisionType = RecipAlgorithm::RECIP_DEFAULT, typename TileDataDst, typename TileDataSrc,
           typename... WaitEvents>
 PTO_INST RecordEvent TRECIP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
@@ -1404,7 +1404,7 @@ PTO_INST RecordEvent TSUBS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
     return {};
 }
 
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+template <auto PrecisionType = DivAlgorithm::DIV_DEFAULT, typename TileDataDst, typename TileDataSrc,
           typename... WaitEvents>
 PTO_INST RecordEvent TDIVS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar,
                            WaitEvents &... events)
@@ -1423,7 +1423,7 @@ PTO_INST RecordEvent TMULS(TileDataDst &dst, TileDataSrc &src0, typename TileDat
     return {};
 }
 
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+template <auto PrecisionType = DivAlgorithm::DIV_DEFAULT, typename TileDataDst, typename TileDataSrc,
           typename... WaitEvents>
 PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar, TileDataSrc &src0,
                            WaitEvents &... events)

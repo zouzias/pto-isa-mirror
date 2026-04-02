@@ -41,15 +41,15 @@ pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+template <auto PrecisionType = DivAlgorithm::DIV_DEFAULT, typename TileDataDst, typename TileDataSrc0,
           typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
 `PrecisionType`可指定以下值：
 
-* `DivAlgorithm::DEFAULT`：普通算法，速度快但精度较低。
-* `DivAlgorithm::HIGH_PRECISION`：高精度算法，速度较慢。
+* `DivAlgorithm::DIV_DEFAULT`：普通算法，速度快但精度较低。
+* `DivAlgorithm::DIV_HIGH_PRECISION`：高精度算法，速度较慢。
 
 ## 约束
 
@@ -85,7 +85,7 @@ void example_auto() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   TileT src0, src1, dst;
   TDIV(dst, src0, src1);
-  TDIV<DivAlgorithm::HIGH_PRECISION>(dst, src0, src1);  // A5 Only
+  TDIV<DivAlgorithm::DIV_HIGH_PRECISION>(dst, src0, src1);  // A5 Only
 }
 ```
 
@@ -103,7 +103,7 @@ void example_manual() {
   TASSIGN(src1, 0x2000);
   TASSIGN(dst,  0x3000);
   TDIV(dst, src0, src1);
-  TDIV<DivAlgorithm::HIGH_PRECISION>(dst, src0, src1);  // A5 Only
+  TDIV<DivAlgorithm::DIV_HIGH_PRECISION>(dst, src0, src1);  // A5 Only
 }
 ```
 

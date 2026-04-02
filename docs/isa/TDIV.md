@@ -41,15 +41,15 @@ pto.tdiv ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+template <auto PrecisionType = DivAlgorithm::DIV_DEFAULT, typename TileDataDst, typename TileDataSrc0,
           typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TDIV(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events);
 ```
 
 `PrecisionType` has the following values available:
 
-* `DivAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
-* `DivAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
+* `DivAlgorithm::DIV_DEFAULT`: Normal algorithm, faster but with lower precision.
+* `DivAlgorithm::DIV_HIGH_PRECISION`: High precision algorithm, but slower.
 
 ## Constraints
 
