@@ -29,9 +29,6 @@ endif()
 if(NOT DEFINED G_N)
     set(G_N 1024)
 endif()
-if(NOT DEFINED SIZE_NAME)
-    set(SIZE_NAME "large")
-endif()
 if(NOT DEFINED COMPUTE_BLOCK_NUM)
     if(DEFINED SOC_VERSION AND (SOC_VERSION MATCHES "Ascend910B[34]" OR SOC_VERSION MATCHES "Ascend910_93[67]"))
         set(COMPUTE_BLOCK_NUM 20)
@@ -59,7 +56,7 @@ endif()
 if(NOT DEFINED ORIG_N)
     set(ORIG_N ${G_N})
 endif()
-message(STATUS "GEMM Size: M=${G_M}, K=${G_K}, N=${G_N} (orig: ${ORIG_M}x${ORIG_K}x${ORIG_N}), Size Name: ${SIZE_NAME}")
+message(STATUS "GEMM Size: M=${G_M}, K=${G_K}, N=${G_N} (orig: ${ORIG_M}x${ORIG_K}x${ORIG_N})")
 message(STATUS "Block Configuration: COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}, COMM_BLOCK_NUM=${COMM_BLOCK_NUM}")
 
 if(NOT DEFINED ENV{ASCEND_DRIVER_PATH})
@@ -158,7 +155,7 @@ target_link_directories(allgather_gemm_comm_kernel PRIVATE
     ${ASCEND_HOME_PATH}/lib64
 )
 target_link_libraries(allgather_gemm_comm_kernel PRIVATE
-    hccl hcomm runtime nnopbase
+    hcomm runtime nnopbase
 )
 target_link_options(allgather_gemm_comm_kernel PRIVATE --cce-fatobj-link)
 
@@ -175,7 +172,6 @@ target_include_directories(allgather_gemm PRIVATE
 target_compile_definitions(allgather_gemm PRIVATE
     CONFIG_G_M=${G_M} CONFIG_G_K=${G_K} CONFIG_G_N=${G_N}
     CONFIG_ORIG_M=${ORIG_M} CONFIG_ORIG_K=${ORIG_K} CONFIG_ORIG_N=${ORIG_N}
-    CONFIG_SIZE_NAME="${SIZE_NAME}"
     CONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
     CONFIG_COMM_BLOCK_NUM=${COMM_BLOCK_NUM}
     CONFIG_PEAK_TFLOPS_FP16=${PEAK_TFLOPS_FP16}
@@ -192,5 +188,5 @@ target_link_libraries(allgather_gemm PRIVATE
     allgather_gemm_comm_kernel
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},sim>:runtime_camodel>>
     $<BUILD_INTERFACE:$<$<STREQUAL:${RUN_MODE},npu>:runtime>>
-    stdc++ ascendcl hccl hcomm m tiling_api platform c_sec dl nnopbase pthread
+    stdc++ ascendcl hcomm m tiling_api platform c_sec dl nnopbase pthread
 )
