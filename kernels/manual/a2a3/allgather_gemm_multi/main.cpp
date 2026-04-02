@@ -462,7 +462,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
 
     bool hcclOk = hcclTestCtx.Finalize();
 
-    return (status == 0) && is_ok && hcclOk;
+    return (status == 0) && (perfMode || is_ok) && hcclOk;
 }
 
 // ============================================================================

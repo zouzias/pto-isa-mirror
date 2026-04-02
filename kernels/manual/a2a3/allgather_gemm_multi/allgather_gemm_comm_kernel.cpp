@@ -119,6 +119,8 @@ AICORE inline void CommAIVRoleStreamingParallel(
                 Global dstG(remote_input + offset, tileShape, tileStride);
                 pto::comm::TPUT(dstG, srcG, pingTile, pongTile);
             }
+            pipe_barrier(PIPE_ALL);
+            dsb(DSB_DDR);
             if (tile_idx < num_tiles) {
                 SetRemoteTileFlagReady(remote_tile_flags, my_rank, tile_idx, remote_summary_src);
             }
@@ -169,6 +171,8 @@ AICORE inline void CommAIVRoleStreamingParallel(
             Global dstG(remote_input + offset, tileShape, tileStride);
             pto::comm::TPUT(dstG, srcG, pingTile, pongTile);
         }
+        pipe_barrier(PIPE_ALL);
+        dsb(DSB_DDR);
         SetRemoteTileFlagReady(remote_tile_flags, my_rank, tile_idx, remote_summary_src);
     }
 }
