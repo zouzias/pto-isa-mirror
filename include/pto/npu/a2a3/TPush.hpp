@@ -147,9 +147,20 @@ struct TPipe {
             constexpr int ConsM = (Split == TileSplitAxis::TILE_UP_DOWN) ? ProdM * splitNum : ProdM;
             constexpr int ConsN = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? ProdN * splitNum : ProdN;
             size_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // ConsM * ConsN * sizeof(T);
-            size_t subAIVOffset =
-                (Split == TileSplitAxis::TILE_NO_SPLIT) ? 0 : (get_subblockid() * ProdM * ProdN * sizeof(T));
-            using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ProdM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
+            // TILE_NO_SPLIT : single writer, no offset needed
+            // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = ProdM * ProdN * sizeof(T)
+            // TILE_LEFT_RIGHT: Vec1 starts at column ProdN within row 0 → offset = ProdN * sizeof(T)
+            size_t subAIVOffset;
+            if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+                subAIVOffset = 0;
+            } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+                subAIVOffset = get_subblockid() * ProdM * ProdN * sizeof(T);
+            } else { // TILE_LEFT_RIGHT
+                subAIVOffset = get_subblockid() * ProdN * sizeof(T);
+            }
+            // Use ConsN as the row stride so each Vec core's tile occupies its correct
+            // half of the full ConsM x ConsN slot (for TILE_UP_DOWN ConsN == ProdN, unchanged).
+            using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ProdM, ProdN>, pto::Stride<1, 1, 1, ConsN, 1>>;
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + subAIVOffset + entryOffset);
             GlobalData globalData(addr);
             TSTORE_IMPL(globalData, tile);
@@ -279,8 +290,17 @@ struct TPipe {
             // global tensor
             size_t entryBase = (static_cast<size_t>(tileIndex) % RingFiFo::SLOT_NUM) *
                                RingFiFo::SLOT_SIZE; // ProdM * ProdN * sizeof(T);
-            size_t subAIVOffset =
-                (Split == TileSplitAxis::TILE_NO_SPLIT) ? 0 : (get_subblockid() * ConsM * ConsN * sizeof(T));
+            // TILE_NO_SPLIT : single reader, no offset needed
+            // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = VEC_M * ProdN * sizeof(T)
+            // TILE_LEFT_RIGHT: Vec1 starts at column ConsN within row 0 → offset = ConsN * sizeof(T)
+            size_t subAIVOffset;
+            if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+                subAIVOffset = 0;
+            } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+                subAIVOffset = get_subblockid() * ConsM * ConsN * sizeof(T);
+            } else { // TILE_LEFT_RIGHT
+                subAIVOffset = get_subblockid() * ConsN * sizeof(T);
+            }
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + subAIVOffset + entryOffset);
             using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
             GlobalData globalTensor(addr);
