@@ -63,6 +63,7 @@ def gen_golden_data(case_name, case_params):
 
 if __name__ == "__main__":
     case_name_list = [
+        # TILE_UP_DOWN: vector cores split quantB along K rows
         "TPushPopVCTest.case1_int8_single_k_tile",
         "TPushPopVCTest.case2_int8_two_k_tiles",
         "TPushPopVCTest.case3_int8_four_k_tiles",
@@ -73,14 +74,14 @@ if __name__ == "__main__":
 
     # M=16 fixed, K varies for K-tiling test, TILE_K=64
     case_params_list = [
-        # int8 cases: M=16, K varies, TILE_K=64, InT=float
-        (16, 64, 32, np.int8, np.float32, np.float32),  # case1: K=64, NUM_K_TILES=1
+        # TILE_UP_DOWN, int8: M=16, K varies, TILE_K=64, InT=float
+        (16, 64, 32, np.int8, np.float32, np.float32),   # case1: K=64,  NUM_K_TILES=1
         (16, 128, 32, np.int8, np.float32, np.float32),  # case2: K=128, NUM_K_TILES=2
         (16, 256, 32, np.int8, np.float32, np.float32),  # case3: K=256, NUM_K_TILES=4 (FIFO wrapping)
-        # int16 cases: M=16, K varies, TILE_K=64, InT=float
-        (16, 64, 32, np.int16, np.float32, np.float32),  # case4: K=64, NUM_K_TILES=1
-        (16, 128, 32, np.int16, np.float32, np.float32),  # case5: K=128, NUM_K_TILES=2
-        (16, 256, 32, np.int16, np.float32, np.float32),  # case6: K=256, NUM_K_TILES=4 (FIFO wrapping)
+        # TILE_UP_DOWN, int16: M=16, K varies, TILE_K=64, InT=float
+        (16, 64, 32, np.int16, np.float32, np.float32),  # case4: K=64,  NUM_K_TILES=1
+        (16, 128, 32, np.int16, np.float32, np.float32), # case5: K=128, NUM_K_TILES=2
+        (16, 256, 32, np.int16, np.float32, np.float32), # case6: K=256, NUM_K_TILES=4 (FIFO wrapping)
     ]
 
     for i, case_name in enumerate(case_name_list):

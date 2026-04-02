@@ -32,6 +32,7 @@ def gen_golden_data(case_name, case_params):
 
 if __name__ == "__main__":
     case_name_list = [
+        # TILE_UP_DOWN: split along rows
         "TPushPopCVTest.case1_half_single_tile",
         "TPushPopCVTest.case2_half_split_m",
         "TPushPopCVTest.case3_float_single_tile",
@@ -39,6 +40,12 @@ if __name__ == "__main__":
     ]
 
     case_params_list = [
+        # TILE_UP_DOWN
+        (16, 32, 32, np.float16, np.float32),
+        (32, 32, 32, np.float16, np.float32),
+        (16, 32, 32, np.float32, np.float32),
+        (64, 32, 32, np.float16, np.float32),
+        # TILE_LEFT_RIGHT (same shapes, same math)
         (16, 32, 32, np.float16, np.float32),
         (32, 32, 32, np.float16, np.float32),
         (16, 32, 32, np.float32, np.float32),
