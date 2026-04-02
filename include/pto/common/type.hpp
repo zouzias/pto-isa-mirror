@@ -109,6 +109,33 @@ struct int4b_t {
 };
 
 namespace pto {
+enum class TileType
+{
+    Vec,
+    Mat,
+    Left,
+    Right,
+    Acc,
+    Bias,
+    Scaling,
+    ScaleLeft,
+    ScaleRight,
+    Ctrl,
+};
+
+enum class BLayout
+{
+    RowMajor = 0,
+    ColMajor = 1,
+};
+
+enum class SLayout
+{
+    NoneBox = 0,
+    RowMajor = 1,
+    ColMajor = 2,
+};
+
 // 01-bits patterns are read from right to left.
 // Right bits are low bits, corresponding to low index positions of data.
 enum class MaskPattern : uint8_t
