@@ -18,33 +18,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/arch_macro.hpp>
 
 namespace pto {
-enum class TileType
-{
-    Vec,
-    Mat,
-    Left,
-    Right,
-    Acc,
-    Bias,
-    Scaling,
-    ScaleLeft,
-    ScaleRight,
-    Ctrl,
-};
-
-enum class BLayout
-{
-    RowMajor = 0,
-    ColMajor = 1,
-};
-
-enum class SLayout
-{
-    NoneBox = 0,
-    RowMajor = 1,
-    ColMajor = 2,
-};
-
 // returns the memory qualifier for a given TileType and data type.
 // compilation errors occur if the TileType does not have a specialized version.
 template <TileType L, typename DType>

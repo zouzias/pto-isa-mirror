@@ -1,8 +1,8 @@
 # Complex
 
-This document describes complex operations including sorting, gathering, and quantization.
+This document describes complex operations including sorting, gathering, quantization, and random number generation.
 
-**Total Operations:** 15
+**Total Operations:** 16
 
 ---
 
@@ -111,6 +111,23 @@ For detailed instruction documentation, see [isa/TTRI](../isa/TTRI.md)
 **AS Level 2 (DPS):**
 ```text
 pto.ttri ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+---
+
+### TRANDOM
+
+For detailed instruction documentation, see [isa/TRANDOM](../isa/TRANDOM.md)
+
+
+**AS Level 1 (SSA):**
+```text
+%dst = pto.trandom %key, %counter : (!pto.tile<...>, !pto.tile<...>) -> !pto.tile<...>
+```
+
+**AS Level 2 (DPS):**
+```text
+pto.trandom ins(%key, %counter : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ---
