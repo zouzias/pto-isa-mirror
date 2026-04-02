@@ -41,15 +41,15 @@ pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+template <auto PrecisionType = RecipAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
           typename... WaitEvents>
 PTO_INST RecordEvent TRECIP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
 `PrecisionType` has the following values available:
 
-* `DivAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
-* `DivAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
+* `RecipAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
+* `RecipAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
 
 ## Constraints
 
@@ -78,7 +78,7 @@ void example() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   TileT x, out;
   TRECIP(out, x);
-  TRECIP<DivAlgorithm::HIGH_PRECISION>(out, x);
+  TRECIP<RecipAlgorithm::HIGH_PRECISION>(out, x);
 }
 ```
 
