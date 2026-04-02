@@ -24,7 +24,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <enum DivAlgorithm PrecisionType, typename T>
+template <DivAlgorithm PrecisionType, typename T>
 struct DivOp {
 #ifdef STRAIGHT_INTRINSICS_IMPL
     PTO_INTERNAL static void BinInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, RegTensor<T> &reg_src1,

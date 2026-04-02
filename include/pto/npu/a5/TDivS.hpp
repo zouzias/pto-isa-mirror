@@ -22,7 +22,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <enum DivAlgorithm PrecisionType, typename T>
+template <DivAlgorithm PrecisionType, typename T>
 struct DivSOp {
 #ifndef STRAIGHT_INTRINSICS_IMPL
     PTO_INTERNAL static void BinSInstr(RegTensor<T> &reg_dst, RegTensor<T> &reg_src0, T reg_src1, MaskReg &preg)
