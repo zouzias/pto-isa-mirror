@@ -206,3 +206,15 @@ TEST_F(TFILLPADTest, case_float_GT_128_64_VT_128_128_PADCUSTOM_NEG1)
 {
     tfillpad_test<10, float, 1>();
 }
+
+#ifdef CPU_SIM_BFLOAT_ENABLED
+TEST_F(TFILLPADTest, case_bf16_GT_128_64_VT_128_128_PADCUSTOM_NEG1)
+{
+    tfillpad_test<11, bfloat16_t, 1>();
+}
+#endif
+
+TEST_F(TFILLPADTest, case_half_GT_128_64_VT_128_128_PADCUSTOM_NEG1)
+{
+    tfillpad_test<12, half, 1>();
+}

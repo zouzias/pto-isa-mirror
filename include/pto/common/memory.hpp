@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <stdint.h>
 #include <type_traits>
+#include <pto/common/arch_macro.hpp>
 #include <pto/common/type.hpp>
 #include <pto/common/arch_macro.hpp>
 
@@ -149,6 +150,35 @@ PTO_INTERNAL constexpr const __gm__ char *GetLayoutName(BLayout bType, SLayout s
             return (bType == BLayout::RowMajor) ? "Zz" : "Nz";
         case SLayout::ColMajor:
             return (bType == BLayout::RowMajor) ? "Zn" : "Nn";
+        default:
+            return "Unknown";
+    }
+}
+
+template <TileType type>
+PTO_INTERNAL constexpr const __gm__ char *GetTileTypeName() noexcept
+{
+    switch (type) {
+        case TileType::Vec:
+            return "Vec";
+        case TileType::Mat:
+            return "Mat";
+        case TileType::Left:
+            return "Left";
+        case TileType::Right:
+            return "Right";
+        case TileType::Acc:
+            return "Acc";
+        case TileType::Bias:
+            return "Bias";
+        case TileType::Scaling:
+            return "Scaling";
+        case TileType::ScaleLeft:
+            return "ScaleLeft";
+        case TileType::ScaleRight:
+            return "ScaleRight";
+        case TileType::Ctrl:
+            return "Ctrl";
         default:
             return "Unknown";
     }

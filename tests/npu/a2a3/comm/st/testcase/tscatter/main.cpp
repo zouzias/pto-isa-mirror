@@ -19,7 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 // TSCATTER Tests - Basic: Root scatters data to all ranks
 // ============================================================================
-TEST(TScatter, FloatSmall)
+TEST(TScatter, FloatSmall_4Ranks)
 {
     SKIP_IF_RANKS_LT(4);
     ASSERT_TRUE((RunScatter<float, 256>(4, 4, 0, 0)));
@@ -91,7 +91,6 @@ TEST(TScatterPingPong, Float_256x64_tile32_2ranks)
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE(RunScatterPingPong_Float_256x64_tile32(2, 2, 0, 0));
 }
-
 int main(int argc, char **argv)
 {
     CommMpiInit(&argc, &argv);

@@ -80,21 +80,23 @@ PTO_INST RecordEvent TMOV(DstTileData &dst, SrcTileData &src, uint64_t preQuantS
 ## Constraints
 
 - **Implementation checks (A2A3)**:
-    - Shapes must match: `SrcTileData::Rows == DstTileData::Rows` and `SrcTileData::Cols == DstTileData::Cols`.
+    - Shape rules:
+        - Shapes must match: `SrcTileData::Rows == DstTileData::Rows` and `SrcTileData::Cols == DstTileData::Cols`.
     - Supported location pairs (compile-time checked):
-    - `Mat -> Left/Right/Bias/Scaling`
-    - `Vec -> Vec`
-    - `Acc -> Mat` (including optional pre-quant / relu / fp variants via overloads)
-    - For `Acc -> Mat`, additional fractal/type constraints are enforced (e.g., `Acc` uses NZ-like fractal, `Mat` uses 512B fractal, and only specific dtype conversions are allowed).
+        - `Mat -> Left/Right/Bias/Scaling`
+        - `Vec -> Vec`
+        - `Acc -> Mat`
+    - Additional checks by path:
+        - `Acc -> Mat`: additional fractal and dtype constraints are enforced (for example, `Acc` uses an NZ-like fractal, `Mat` uses a 512B fractal, and only specific dtype conversions are allowed).
 - **Implementation checks (A5)**:
-    - For `Mat -> *`, shapes must match; for some `Vec` moves, the effective copy size is the min of src/dst valid rows/cols.
+    - Shape rules:
+        - For `Mat -> Left/Right/Bias/Scaling/Scale`, shapes must match.
+        - For `Vec -> Vec` and `Vec -> Mat`, the effective copy region may be determined by the valid rows/cols of source and destination.
     - Supported location pairs include (target-dependent):
-    - `Mat -> Left/Right/Bias/Scaling/Scale`
-    - `Vec -> Vec` and `Vec -> Mat`
-    - `Acc -> Vec` and `Acc -> Mat` (including optional pre-quant / relu / fp variants via overloads)
-    - For `Mat -> Left/Right`, additional fractal and dtype constraints are enforced via `CommonCheck` (source fractal must be compatible and element types must match).
-    - For `Acc -> Vec/Mat`, additional fractal/type/alignment constraints are enforced via `CheckTMovAccValid`.
-    - For `Mat -> Scale`, additional fractal and dtype constraints are enforced via `CommonCheckMX` (source fractal must be compatible and element types must match).
+        - `Mat -> Left/Right/Bias/Scaling/Scale`
+        - `Vec -> Vec/Mat`
+        - `Acc -> Vec/Mat`
+    - `Acc -> Vec` supports additional `AccToVecMode` forms; some forms also take `FpTileData` or `preQuantScalar`.
 
 ## Examples
 

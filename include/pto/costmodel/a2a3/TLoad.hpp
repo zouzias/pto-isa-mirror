@@ -11,6 +11,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TLOAD_HPP
 #define TLOAD_HPP
 
+#include "pto/costmodel/pto_isa_costmodel.hpp"
+
 namespace pto {
 
 struct MrgSortExecutedNumList {
@@ -23,7 +25,7 @@ struct MrgSortExecutedNumList {
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TLOAD_IMPL(TileData &dst, GlobalData &src)
 {
-    return;
+    pto::CostModel::GetInstance().LoadOpPredictCycle<TileData, GlobalData>("TCVT", dst, src);
 }
 } // namespace pto
 #endif // TLOAD_HPP

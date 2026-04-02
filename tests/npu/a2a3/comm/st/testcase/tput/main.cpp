@@ -19,7 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 // 1D Vector Tile Tests
 // ============================================================================
-TEST(TPut, Vec_FloatSmall)
+TEST(TPut, Vec_FloatSmall_4Ranks)
 {
     SKIP_IF_RANKS_LT(4);
     ASSERT_TRUE((RunPutRing<float, 256>(4, 4, 0, 0)));
@@ -29,7 +29,7 @@ TEST(TPut, Vec_Int32Large)
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE((RunPutRing<int32_t, 4096>(2, 2, 0, 0)));
 }
-TEST(TPut, Vec_Uint8Small)
+TEST(TPut, Vec_Uint8Small_8Ranks)
 {
     SKIP_IF_RANKS_LT(8);
     ASSERT_TRUE((RunPutRing<uint8_t, 512>(8, 8, 0, 0)));
@@ -57,7 +57,7 @@ TEST(TPut, Shape2D_Int32_4x64)
 // ============================================================================
 // AtomicAdd Tests
 // ============================================================================
-TEST(TPut, AtomicAdd_Int32)
+TEST(TPut, AtomicAdd_Int32_4Ranks)
 {
     SKIP_IF_RANKS_LT(4);
     ASSERT_TRUE((RunPutAtomicAdd<int32_t, 256>(4, 4, 0, 0)));
@@ -214,10 +214,12 @@ TEST(TPut, PingPong_Irregular_Float_65x104_tile16x32)
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE((RunPutRingPingPong<float, 65, 104, 16, 32>(2, 2, 0, 0)));
 }
-
 int main(int argc, char **argv)
 {
-    CommMpiInit(&argc, &argv);
+    if (!CommMpiInit(&argc, &argv)) {
+        std::cerr << "[FATAL] CommMpiInit failed. Ensure the binary is launched via mpirun." << std::endl;
+        return 1;
+    }
     ::testing::InitGoogleTest(&argc, argv);
     int ret = RUN_ALL_TESTS();
     CommMpiFinalize();

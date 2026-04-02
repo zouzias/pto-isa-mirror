@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
+#include "pto/common/fifo.hpp"
 #include "pto/common/tassign_check.hpp"
 #include "pto/common/pto_instr_impl.hpp"
 #if !defined(__COSTMODEL) && !defined(PTO_COMM_NOT_SUPPORTED)
@@ -54,6 +55,20 @@ PTO_INST void TSYNC(WaitEvents &... events)
     WaitAllEvents(events...);
 }
 
+#ifdef _DEBUG
+template <typename TileData>
+PTO_INST void TPRINT(TileData &src)
+{
+    MAP_INSTR_IMPL(TPRINT, src);
+}
+
+template <typename TileData, typename GlobalData>
+PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp)
+{
+    MAP_INSTR_IMPL(TPRINT, src, tmp);
+}
+#endif
+
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
@@ -77,17 +92,6 @@ PTO_INST RecordEvent TAND(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     MAP_INSTR_IMPL(TAND, dst, src0, src1);
     return {};
 }
-
-#ifdef __PTO_AUTO__
-// temp hack: needed by auto mode to support aliasing right now
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TALIAS(TileDataDst &original, TileDataSrc &alias, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TALIAS, original, alias);
-    return {};
-}
-#endif
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
@@ -194,6 +198,17 @@ PTO_INST RecordEvent TCONCAT(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCONCAT, dst, src0, src1);
+    return {};
+}
+
+template <typename DstTile, typename Src0Tile, typename Src1Tile, typename Src0IdxTile, typename Src1IdxTile,
+          typename = std::void_t<typename Src0IdxTile::DType>, typename = std::void_t<typename Src1IdxTile::DType>,
+          typename... WaitEvents>
+PTO_INST RecordEvent TCONCAT(DstTile &dst, Src0Tile &src0, Src1Tile &src1, Src0IdxTile &src0Idx, Src1IdxTile &src1Idx,
+                             WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TCONCAT, dst, src0, src1, src0Idx, src1Idx);
     return {};
 }
 
@@ -355,14 +370,6 @@ PTO_INST RecordEvent TPRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
 }
 
 template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TPRINT(TileData &src, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TPRINT, src);
-    return {};
-}
-
-template <typename TileData, typename... WaitEvents>
 PTO_INST RecordEvent TADDC(TileData &dst, TileData &src0, TileData &src1, TileData &src2, WaitEvents &... events)
 {
     TSYNC(events...);
@@ -500,6 +507,13 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
     return {};
 }
 
+template <uint16_t Rounds = 10, typename DstTile, typename... WaitEvents>
+PTO_INST RecordEvent TRANDOM(DstTile &dst, TRandomKey &key, TRandomCounter &counter, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TRANDOM_IMPL<Rounds, DstTile>(dst, key, counter);
+    return {};
+}
 #endif
 
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
@@ -793,7 +807,7 @@ PTO_INST RecordEvent TINSERT_FP(DstTileData &dst, SrcTileData &src, FpTileData &
 
 #ifdef PTO_NPU_ARCH_A5
 template <TInsertMode mode, typename DstTileData, typename SrcTileData, typename... WaitEvents>
-PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint32_t indexRow = 0, uint32_t indexCol = 0,
+PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0,
                              WaitEvents &... events)
 {
     TSYNC(events...);
@@ -879,6 +893,14 @@ PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents &... events)
     return {};
 }
 
+template <typename TileData, typename TileDataTmp, typename T, int descending, typename... WaitEvents>
+PTO_INST RecordEvent TCI(TileData &dst, T start, TileDataTmp &tmp, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TCI_IMPL<TileData, TileDataTmp, T, descending>(dst, start, tmp);
+    return {};
+}
+
 template <typename TileData, int isUpperOrLower, typename... WaitEvents>
 PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events)
 {
@@ -924,6 +946,23 @@ PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TPARTMIN, dst, src0, src1);
+    return {};
+}
+
+template <typename TileDataD, typename TileDataS, typename TmpTileData, typename... WaitEvents>
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode,
+                          WaitEvents &... events)
+{
+    TSYNC(events...);
+    TCVT_IMPL(dst, src, tmp, mode, satMode);
+    return {};
+}
+
+template <typename TileDataD, typename TileDataS, typename TmpTileData, typename... WaitEvents>
+PTO_INST RecordEvent TCVT(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TCVT_IMPL(dst, src, tmp, mode);
     return {};
 }
 
@@ -1054,10 +1093,34 @@ PTO_INST RecordEvent TCOLMAX(TileDataOut &dst, TileDataIn &src, WaitEvents &... 
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TCOLARGMAX(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TCOLARGMAX, dst, src, tmp);
+    return {};
+}
+
+template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TCOLARGMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TCOLARGMIN, dst, src, tmp);
+    return {};
+}
+
+template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TROWMAX(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWMAX, dst, src, tmp);
+    return {};
+}
+
+template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TROWARGMAX(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWARGMAX, dst, src, tmp);
     return {};
 }
 
@@ -1074,6 +1137,14 @@ PTO_INST RecordEvent TROWMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TROWMIN, dst, src, tmp);
+    return {};
+}
+
+template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TROWARGMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWARGMIN, dst, src, tmp);
     return {};
 }
 
@@ -1367,12 +1438,12 @@ PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDat
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, TileDataTmp &tmp,
                            WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TREMS, dst, src, scalar);
+    MAP_INSTR_IMPL(TREMS, dst, src, scalar, tmp);
     return {};
 }
 
@@ -1489,6 +1560,16 @@ PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, Wa
     return {};
 }
 
+#ifdef PTO_NPU_ARCH_A5
+template <GatherOOB Mode, typename TileDst, typename GlobalData, typename TileInd, typename... WaitEvents>
+PTO_INST RecordEvent MGATHER(TileDst &dst, GlobalData &src, TileInd &indexes, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MGATHER_IMPL<Mode>(dst, src, indexes);
+    return {};
+}
+#endif
+
 template <typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
 PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &... events)
 {
@@ -1496,6 +1577,25 @@ PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, W
     MAP_INSTR_IMPL(MSCATTER, dst, src, indexes);
     return {};
 }
+
+#ifdef PTO_NPU_ARCH_A5
+template <ScatterAtomicOp Atomic, typename GlobalData, typename TileSrc, typename TileInd, typename... WaitEvents>
+PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MSCATTER_IMPL<Atomic>(dst, src, indexes);
+    return {};
+}
+
+template <ScatterAtomicOp Atomic, ScatterOOB Mode, typename GlobalData, typename TileSrc, typename TileInd,
+          typename... WaitEvents>
+PTO_INST RecordEvent MSCATTER(GlobalData &dst, TileSrc &src, TileInd &indexes, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MSCATTER_IMPL<Atomic, Mode>(dst, src, indexes);
+    return {};
+}
+#endif
 
 template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TNEG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
@@ -1570,11 +1670,13 @@ PTO_INST RecordEvent TDEQUANT(TileDataDst &dst, TileDataSrc &src, TileDataPara &
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
-PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
+          typename... WaitEvents>
+PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
+                          WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TREM, dst, src0, src1);
+    MAP_INSTR_IMPL(TREM, dst, src0, src1, tmp);
     return {};
 }
 
@@ -1586,11 +1688,11 @@ PTO_INST RecordEvent TFMOD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &s
     return {};
 }
 
-template <typename PipeProd, typename TileData, typename DataFifo, typename... WaitEvents>
-PTO_INST RecordEvent TPUSH(PipeProd &prod, TileData &tile, DataFifo &fifo, WaitEvents &... events)
+template <typename Pipe, typename TileProd, TileSplitAxis Split, typename... WaitEvents>
+PTO_INST RecordEvent TPUSH(Pipe &pipe, TileProd &tile, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPUSH, prod, tile, fifo);
+    TPUSH_IMPL<Pipe, TileProd, Split>(pipe, tile);
     return {};
 }
 
@@ -1598,15 +1700,15 @@ template <typename TileData, typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TPUSH(TileData &tile, Pipe &pipe, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPUSH, tile, pipe);
+    TPUSH_IMPL<TileData, Pipe>(tile, pipe);
     return {};
 }
 
-template <typename PipeCon, typename TileData, typename DataFifo, typename... WaitEvents>
-PTO_INST RecordEvent TPOP(PipeCon &cons, TileData &tile, DataFifo &fifo, WaitEvents &... events)
+template <typename Pipe, typename TileCons, TileSplitAxis Split, typename... WaitEvents>
+PTO_INST RecordEvent TPOP(Pipe &pipe, TileCons &tile, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPOP, cons, tile, fifo);
+    TPOP_IMPL<Pipe, TileCons, Split>(pipe, tile);
     return {};
 }
 
@@ -1614,7 +1716,15 @@ template <typename TileData, typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TPOP(TileData &tile, Pipe &pipe, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPOP, tile, pipe);
+    TPOP_IMPL<TileData, Pipe>(tile, pipe);
+    return {};
+}
+
+template <typename Pipe, TileSplitAxis Split, typename... WaitEvents>
+PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &... events)
+{
+    TSYNC(events...);
+    TFREE_IMPL<Pipe, Split>(pipe);
     return {};
 }
 
@@ -1622,7 +1732,7 @@ template <typename Pipe, typename... WaitEvents>
 PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TFREE, pipe);
+    TFREE_IMPL<Pipe>(pipe);
     return {};
 }
 
@@ -1674,18 +1784,13 @@ PTO_INST RecordEvent TQUANT(TileDataOut &dst, TileDataSrc &src, TileDataPara &sc
     TQUANT_IMPL<quant_type, TileDataOut, TileDataSrc, TileDataPara>(dst, src, scale, offset);
     return {};
 }
-template <typename TileDataDst, typename TileDataSrc>
-__tf__ PTO_INTERNAL OP_NAME(TGET_SCALE_ADDR)
-    OP_TYPE(element_wise) void TGetScaleAddr(typename TileDataDst::TileDType __out__ dst,
-                                             typename TileDataSrc::TileDType __in__ src)
-{
-    return;
-}
 
-template <typename TileDataDst, typename TileDataSrc>
-PTO_INTERNAL void TGET_SCALE_ADDR(TileDataDst &dst, TileDataSrc &src)
+template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
+PTO_INST RecordEvent TGET_SCALE_ADDR(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
 {
-    TGetScaleAddr<TileDataDst, TileDataSrc>(dst.data(), src.data());
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TGET_SCALE_ADDR, dst, src);
+    return {};
 }
 
 } // namespace pto

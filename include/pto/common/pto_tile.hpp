@@ -17,19 +17,10 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <iomanip>
+#include <vector>
 #endif
 
 namespace pto {
-#ifdef __PTO_AUTO__
-// Not really a standand way to call tile function, but... this is a temp
-// hack for auto mode to allocate memory for tiles without a TLOAD,
-// should be removed after we fix the compiler design
-template <typename TileData>
-__tf__ PTO_INTERNAL void TInit(typename TileData::TileDType __out__ tile)
-{
-    return;
-}
-#endif
 
 constexpr int DYNAMIC = -1;
 
@@ -998,7 +989,14 @@ public:
 #endif
     }
 
+#ifdef __PTO_AUTO__
+    PTO_INTERNAL ConvTile()
+    {
+        data_ = __cce_tinit(data_);
+    }
+#else
     PTO_INTERNAL ConvTile() = default;
+#endif
 
     template <typename... Ints>
     PTO_INTERNAL void SetDynamicShape(Ints... vals)
@@ -1019,26 +1017,31 @@ public:
     template <typename... Ints>
     PTO_INTERNAL explicit ConvTile(Ints... dynamicVals)
     {
+#ifdef __PTO_AUTO__
+        data_ = __cce_tinit(data_);
+#endif
         SetDynamicShape(dynamicVals...);
     }
 
-#ifdef __PTO_AUTO__
+#if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
     using TileDType = typename MemoryQualifier<Loc_, DType>::type tile_size(bufferSize);
 #else
     using TileDType = typename MemoryQualifier<Loc_, DType>::type;
 #endif
 
-#ifdef __CPU_SIM
-    // For CPU sim, return reference to pointer (allows TASSIGN to modify)
-    AICORE TileDType &data()
+#ifdef __COSTMODEL
+    float cycle;
+    AICORE void SetCycle(const float cycle_)
     {
-        return data_;
+        cycle = cycle_;
     }
-    AICORE TileDType data() const
+
+    AICORE float GetCycle()
     {
-        return data_;
+        return cycle;
     }
-#else
+#endif
+
     AICORE TileDType &data()
     {
         return data_;
@@ -1047,7 +1050,7 @@ public:
     {
         return data_;
     }
-#endif
+
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
@@ -1297,27 +1300,24 @@ public:
         return *(ptr + offset);
     }
     // constructor for static shape
-#ifdef __CPU_SIM
-    AICORE Tile() : data_(internalStorage_){};
-#else
     AICORE Tile()
     {
-#ifdef __PTO_AUTO__
-        if constexpr (Loc != TileType::Bias) {
-            TInit<std::remove_reference_t<decltype(*this)>>(data_);
-        }
+#if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
+        // we need to dummy-initialize the data_ member,
+        // otherwise in auto mode this will remain uninitialized
+        // and end up being an undef value after SROA pass
+        data_ = __cce_tinit(data_);
 #endif
     };
-#endif
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VR,
                 std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VC)
-#ifdef __CPU_SIM
-        : data_(internalStorage_)
-#endif
     {
+#if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
+        data_ = __cce_tinit(data_);
+#endif
         RowMaskInternal = VR;
         ColMaskInternal = VC;
     }
@@ -1325,22 +1325,27 @@ public:
     // constructor for row dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), size_t> VR)
-#ifdef __CPU_SIM
-        : data_(internalStorage_)
-#endif
     {
+#ifdef __PTO_AUTO__
+        data_ = __cce_tinit(data_);
+#endif
         RowMaskInternal = VR;
     }
 
     // constructor for col dimension is runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), size_t> VC)
-#ifdef __CPU_SIM
-        : data_(internalStorage_)
-#endif
     {
+#ifdef __PTO_AUTO__
+        data_ = __cce_tinit(data_);
+#endif
         ColMaskInternal = VC;
     }
+
+#ifdef __PTO_AUTO__
+    Tile &operator=(const Tile &) = delete;
+    Tile &operator=(Tile &&) = delete;
+#endif
 
     static constexpr bool isBoxedLayout = (SFractal != SLayout::NoneBox);
     static constexpr bool isInnerRowMajor = (SFractal == SLayout::RowMajor);
@@ -1376,12 +1381,6 @@ public:
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
     // CPU Sim: data_ is a pointer that TASSIGN can redirect to shared NPU memory
     using TileDType = Tile::DType *;
-
-private:
-    // Internal storage for tiles not explicitly TASSIGN'd
-    Tile::DType internalStorage_[Rows * Cols] = {};
-
-public:
 #else
 #ifdef __PTO_AUTO__
 #if defined(PTO_NPU_ARCH_A2A3)
@@ -1396,14 +1395,13 @@ public:
 #endif
 #endif
 
-#ifdef __CPU_SIM
-    // For CPU sim, return reference to pointer (allows TASSIGN to modify)
-    AICORE TileDType &data()
+#if (defined(__CPU_SIM) && defined(__PTO_AUTO__)) || defined(__COSTMODEL)
+    TileDType &data()
     {
-        return data_;
-    }
-    AICORE TileDType data() const
-    {
+        if (!data_) {
+            internalBuffer.resize(Rows * Cols);
+            data_ = internalBuffer.data();
+        }
         return data_;
     }
 #else
@@ -1520,8 +1518,14 @@ private:
     {
         data_ = data;
     }
-    TileDType data_;
     bool isKAligned_; // K-Alignedment for A3
+
+#if (defined(__CPU_SIM) && defined(__PTO_AUTO__)) || defined(__COSTMODEL)
+    std::vector<DType> internalBuffer;
+    TileDType data_ = nullptr;
+#else
+    TileDType data_;
+#endif
 };
 
 #ifdef PTO_NPU_ARCH_A2A3

@@ -22,8 +22,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // for pto internal implementation
 #define PTO_INTERNAL AICORE PTO_INLINE
 
+#ifdef __CPU_SIM
+#define OP_NAME(Name)
+#define OP_TYPE(TypeName)
+#else
 #define OP_NAME(Name) __attribute__((vf_name(#Name)))
 #define OP_TYPE(TypeName) __attribute__((vf_kind(#TypeName)))
+#endif
 
 // -----------------------------------------------------------------------------
 // PTO assertion helpers
@@ -89,6 +94,19 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Non-CPU builds should not depend on CPU-only assertion behavior.
 #define PTO_CPU_ASSERT(...) ((void)0)
 #endif
+
+// Signed 4-bit integer type (packed: 2 elements per byte using uint8_t storage).
+// Compatible with AscendC int4b_t. The vconv intrinsics use void* for the packed side.
+struct int4b_t {
+    uint8_t storage;
+    int4b_t() = default;
+    explicit int4b_t(int32_t value) : storage(static_cast<uint8_t>(value) & 0x0F)
+    {}
+    operator int8_t() const
+    {
+        return (storage & 0x08) ? static_cast<int8_t>(storage | 0xF0) : static_cast<int8_t>(storage & 0x0F);
+    }
+};
 
 namespace pto {
 // 01-bits patterns are read from right to left.
@@ -228,6 +246,7 @@ enum class CompactMode
 {
     Null,
     Normal,
+    RowPlusOne,
 };
 
 enum class SetFmatrixMode
@@ -257,13 +276,17 @@ constexpr int DIM_4 = 4;
 constexpr int TOTAL_DIM = 5;
 } // namespace GlobalTensorDim
 
+constexpr int PTO_RANDOM_KEY_SIZE = 2;
+constexpr int PTO_RANDOM_COUNTER_SIZE = 4;
+using TRandomKey = uint32_t[PTO_RANDOM_KEY_SIZE];
+using TRandomCounter = uint32_t[PTO_RANDOM_COUNTER_SIZE];
 } // namespace pto
 
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 typedef _Float16 half;
 typedef _Float16 aclFloat16;
 // Note: clang version should be >=15 and gcc version should be >=14
-#if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L
+#if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L && defined(__STDCPP_BFLOAT16_T__)
 #include <stdfloat>
 typedef std::bfloat16_t bfloat16_t;
 #define CPU_SIM_BFLOAT_ENABLED

@@ -32,6 +32,11 @@ np.random.seed(19)
 #   - All integer types: +inf → 0, -inf → 0
 USE_PYTORCH_GPU_BEHAVIOR = True  # Set to False to use CPU behavior
 
+# Mirror the C++ EDGE_CASE_ALIGN_ENABLE macro.
+# When True, TCVT_IMPL without a tmp buffer forces SaturationMode::ON for all types,
+# so the golden data for regular "case_" tests must use clamping (not truncation).
+EDGE_CASE_ALIGN_ENABLE = True
+
 
 def default_saturation_off(srctype, dsttype):
     """Check if this conversion's default saturation mode is OFF.
@@ -61,14 +66,13 @@ def gen_golden(case_name, param):
     dsttype = param.dsttype
     m, n = param.m, param.n
     is_saturation_test = "saturation_" in case_name
+    is_nonsattorch_test = "nonsattorch_" in case_name
 
     # Generate input data with reasonable ranges
-    if is_saturation_test:
-        # For saturation tests, use only special values: inf, -inf, nan, and 2 overflow values
-        # Pad to 32 elements to meet minimum shape requirement
+    if is_saturation_test or is_nonsattorch_test:
+        # For saturation/nonsattorch tests: special values + random fill for remaining elements
         if srctype == np.float32 or srctype == np.float16:
             if dsttype == np.int8:
-                # Special values: -inf, inf, nan, and 2 overflow values
                 special_values = [
                     -np.inf,  # -infinity
                     np.inf,  # +infinity
@@ -76,8 +80,9 @@ def gen_golden(case_name, param):
                     -200.0,  # Overflow below min (-128)
                     200.0,  # Overflow above max (127)
                 ]
-                # Pad with zeros to reach m*n elements
-                x1_gm = np.array(special_values + [0.0] * (m * n - len(special_values))).astype(srctype).reshape([m, n])
+                remaining = m * n - len(special_values)
+                fill = (np.random.random(remaining) * 200 - 100).tolist() if remaining > 0 else []
+                x1_gm = np.array(special_values + fill).astype(srctype).reshape([m, n])
             elif dsttype == np.uint8:
                 special_values = [
                     -np.inf,  # -infinity
@@ -86,7 +91,9 @@ def gen_golden(case_name, param):
                     -100.0,  # Overflow below min (0)
                     300.0,  # Overflow above max (255)
                 ]
-                x1_gm = np.array(special_values + [0.0] * (m * n - len(special_values))).astype(srctype).reshape([m, n])
+                remaining = m * n - len(special_values)
+                fill = (np.random.random(remaining) * 200 - 100).tolist() if remaining > 0 else []
+                x1_gm = np.array(special_values + fill).astype(srctype).reshape([m, n])
             elif dsttype == np.int16:
                 special_values = [
                     -np.inf,  # -infinity
@@ -95,7 +102,9 @@ def gen_golden(case_name, param):
                     -40000.0,  # Overflow below min (-32768)
                     40000.0,  # Overflow above max (32767)
                 ]
-                x1_gm = np.array(special_values + [0.0] * (m * n - len(special_values))).astype(srctype).reshape([m, n])
+                remaining = m * n - len(special_values)
+                fill = (np.random.random(remaining) * 200 - 100).tolist() if remaining > 0 else []
+                x1_gm = np.array(special_values + fill).astype(srctype).reshape([m, n])
             elif dsttype == np.int32:
                 special_values = [
                     -np.inf,  # -infinity
@@ -104,7 +113,9 @@ def gen_golden(case_name, param):
                     -3e9,  # Overflow below min
                     3e9,  # Overflow above max
                 ]
-                x1_gm = np.array(special_values + [0.0] * (m * n - len(special_values))).astype(srctype).reshape([m, n])
+                remaining = m * n - len(special_values)
+                fill = (np.random.random(remaining) * 200 - 100).tolist() if remaining > 0 else []
+                x1_gm = np.array(special_values + fill).astype(srctype).reshape([m, n])
             else:
                 x1_gm = (np.random.random([m, n]) * 200 - 100).astype(srctype)
         elif srctype == np.int64:
@@ -117,7 +128,9 @@ def gen_golden(case_name, param):
                     2147483647,  # At max boundary
                     0,  # Zero
                 ]
-                x1_gm = np.array(special_values + [0] * (m * n - len(special_values))).astype(srctype).reshape([m, n])
+                remaining = m * n - len(special_values)
+                fill = np.random.randint(-10000, 10000, remaining).tolist() if remaining > 0 else []
+                x1_gm = np.array(special_values + fill).astype(srctype).reshape([m, n])
             else:
                 x1_gm = np.random.randint(-10000, 10000, [m, n]).astype(srctype)
         elif srctype == np.int32:
@@ -130,7 +143,9 @@ def gen_golden(case_name, param):
                     32767,  # At max boundary
                     0,  # Zero
                 ]
-                x1_gm = np.array(special_values + [0] * (m * n - len(special_values))).astype(srctype).reshape([m, n])
+                remaining = m * n - len(special_values)
+                fill = np.random.randint(-10000, 10000, remaining).tolist() if remaining > 0 else []
+                x1_gm = np.array(special_values + fill).astype(srctype).reshape([m, n])
             else:
                 x1_gm = np.random.randint(-10000, 10000, [m, n]).astype(srctype)
         else:
@@ -210,6 +225,11 @@ def gen_golden(case_name, param):
         # Determine if this conversion has default saturation OFF (truncation) or ON (clamping)
         sat_off = default_saturation_off(srctype, dsttype)
 
+        # When EDGE_CASE_ALIGN_ENABLE is set and no tmp buffer is used (regular "case_" tests),
+        # TCVT_IMPL forces SaturationMode::ON for all types, overriding the default.
+        if EDGE_CASE_ALIGN_ENABLE and not is_saturation_test and not is_nonsattorch_test:
+            sat_off = False
+
         if sat_off:
             # OFF (truncation): bit extraction - wrap around using modulo
             golden_list = []
@@ -260,8 +280,16 @@ def gen_golden(case_name, param):
     x1_gm.tofile("./x1_gm.bin")
     golden.tofile("./golden.bin")
 
-    # For saturation tests, generate golden data using PyTorch behavior
-    if is_saturation_test:
+    # For partial tiles, apply valid region mask
+    valid_m, valid_n = param.valid_m, param.valid_n
+    if valid_m < m or valid_n < n:
+        output = np.zeros([m, n], dtype=dsttype)
+        output[:valid_m, :valid_n] = golden[:valid_m, :valid_n]
+        golden = output
+        golden.tofile("./golden.bin")
+
+    # For saturation/nonsattorch tests, generate golden data using PyTorch behavior
+    if is_saturation_test or is_nonsattorch_test:
         if np.issubdtype(dsttype, np.integer):
             info = np.iinfo(dsttype)
 
@@ -375,12 +403,70 @@ def gen_golden(case_name, param):
 
 
 class tcvtParams:
-    def __init__(self, srctype, dsttype, m, n, mode):
+    def __init__(self, srctype, dsttype, m, n, mode, valid_m=None, valid_n=None):
         self.srctype = srctype
         self.dsttype = dsttype
         self.m = m
         self.n = n
         self.mode = mode
+        self.valid_m = valid_m if valid_m is not None else m
+        self.valid_n = valid_n if valid_n is not None else n
+
+
+# Sentinel for int4 (s4) type - numpy doesn't have a native int4 type
+S4_TYPE = "s4"
+
+
+def pack_int4(values):
+    """Pack an array of int4 values [-8..7] into bytes (2 per byte, low nibble first)."""
+    values = np.asarray(values).flatten()
+    assert len(values) % 2 == 0, "Number of int4 elements must be even"
+    packed = np.zeros(len(values) // 2, dtype=np.uint8)
+    for i in range(0, len(values), 2):
+        lo = int(values[i]) & 0x0F
+        hi = int(values[i + 1]) & 0x0F
+        packed[i // 2] = lo | (hi << 4)
+    return packed
+
+
+def unpack_int4(packed):
+    """Unpack bytes into int4 values (2 per byte, low nibble first), returned as int8."""
+    packed = np.asarray(packed, dtype=np.uint8).flatten()
+    result = np.zeros(len(packed) * 2, dtype=np.int8)
+    for i, byte in enumerate(packed):
+        lo = byte & 0x0F
+        hi = (byte >> 4) & 0x0F
+        # Sign extend from 4-bit
+        result[2 * i] = lo if lo < 8 else lo - 16
+        result[2 * i + 1] = hi if hi < 8 else hi - 16
+    return result
+
+
+def gen_golden_fp16_to_s4(case_name, param):
+    """Generate golden data for FP16 → S4 conversion."""
+    m, n = param.m, param.n
+    # Generate fp16 input in int4 range [-8, 7]
+    x1_gm = np.random.randint(-8, 8, [m, n]).astype(np.float16)
+    x1_gm.tofile("./x1_gm.bin")
+
+    # Golden: round fp16 to nearest integer, clamp to [-8, 7], then pack as int4
+    rounded = np.rint(x1_gm).astype(np.int8)
+    rounded = np.clip(rounded, -8, 7)
+    golden_packed = pack_int4(rounded)
+    golden_packed.tofile("./golden.bin")
+
+
+def gen_golden_s4_to_fp16(case_name, param):
+    """Generate golden data for S4 → FP16 conversion."""
+    m, n = param.m, param.n
+    # Generate random int4 values [-8, 7] and pack them
+    int4_values = np.random.randint(-8, 8, [m, n]).astype(np.int8)
+    packed = pack_int4(int4_values)
+    packed.tofile("./x1_gm.bin")
+
+    # Golden: unpack int4 and convert to fp16
+    golden = int4_values.astype(np.float16)
+    golden.tofile("./golden.bin")
 
 
 if __name__ == "__main__":
@@ -426,6 +512,9 @@ if __name__ == "__main__":
         (8, 128),  # Larger batch (common ML size)
     ]
 
+    # Partial tiles (2D path: ValidCol != Cols)
+    partial_shapes = [(4, 128, 4, 65), (4, 256, 4, 200), (1, 256, 1, 129), (2, 32, 2, 16)]
+
     case_name_list = []
     case_params_list = []
 
@@ -435,6 +524,10 @@ if __name__ == "__main__":
             case_name = f"case_{type_name}_{m}x{n}"
             case_name_list.append(f"TCVTTest.{case_name}")
             case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT"))
+        for m, n, valid_m, valid_n in partial_shapes:
+            case_name = f"case_{type_name}_{m}x{n}_{valid_m}x{valid_n}"
+            case_name_list.append(f"TCVTTest.{case_name}")
+            case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT", valid_m, valid_n))
 
     # Add saturation mode test cases (only for supported conversions on A2A3)
     # Note: fp32→int8 is NOT supported on A2A3 hardware
@@ -452,6 +545,54 @@ if __name__ == "__main__":
         case_name_list.append(f"TCVTTest.{test_name}")
         case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT"))
 
+    # NonSatTorch test cases (with explicit tmp tile, saturation OFF)
+    # These exercise the GenCastCallFp16ToInt8_NonSatTorch and similar paths
+    nonsattorch_tests = [
+        ("nonsattorch_fp16_int8_1x32", np.float16, np.int8, 1, 32),
+        ("nonsattorch_fp16_int8_2x64", np.float16, np.int8, 2, 64),
+        ("nonsattorch_fp16_int8_8x128", np.float16, np.int8, 8, 128),
+        ("nonsattorch_fp16_int16_1x32", np.float16, np.int16, 1, 32),
+        ("nonsattorch_fp32_int16_1x32", np.float32, np.int16, 1, 32),
+    ]
+
+    for test_name, src, dst, m, n in nonsattorch_tests:
+        case_name_list.append(f"TCVTTest.{test_name}")
+        case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_TRUNC"))
+
+    # NonSatTorch partial tile test cases
+    nonsattorch_partial_tests = [
+        ("nonsattorch_fp16_int8_4x128_4x65", np.float16, np.int8, 4, 128, 4, 65),
+        ("nonsattorch_fp16_int8_2x32_2x16", np.float16, np.int8, 2, 32, 2, 16),
+        ("nonsattorch_fp16_int16_4x128_4x65", np.float16, np.int16, 4, 128, 4, 65),
+        ("nonsattorch_fp32_int16_4x128_4x65", np.float32, np.int16, 4, 128, 4, 65),
+    ]
+
+    for test_name, src, dst, m, n, valid_m, valid_n in nonsattorch_partial_tests:
+        case_name_list.append(f"TCVTTest.{test_name}")
+        case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_TRUNC", valid_m, valid_n))
+
+    # Int4 (S4) conversion test cases
+    # kGCols_ is the number of fp16/int4 elements (must be even, ≥64 for vconv alignment)
+    s4_shapes = [(1, 64), (1, 128), (1, 256), (2, 128), (4, 128), (8, 128)]
+
+    # S4 test case names and params (processed separately with specialized golden gen)
+    s4_case_names = []
+    s4_case_params = []
+    s4_case_directions = []  # "fp16_to_s4" or "s4_to_fp16"
+
+    for m, n in s4_shapes:
+        # FP16 → S4
+        case_name = f"case_fp16_s4_{m}x{n}"
+        s4_case_names.append(f"TCVTTest.{case_name}")
+        s4_case_params.append(tcvtParams(np.float16, S4_TYPE, m, n, "RoundMode::CAST_RINT"))
+        s4_case_directions.append("fp16_to_s4")
+
+        # S4 → FP16
+        case_name = f"case_s4_fp16_{m}x{n}"
+        s4_case_names.append(f"TCVTTest.{case_name}")
+        s4_case_params.append(tcvtParams(S4_TYPE, np.float16, m, n, "RoundMode::CAST_NONE"))
+        s4_case_directions.append("s4_to_fp16")
+
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):
             os.makedirs(case_name)
@@ -459,5 +600,19 @@ if __name__ == "__main__":
         os.chdir(case_name)
 
         gen_golden(case_name, case_params_list[i])
+
+        os.chdir(original_dir)
+
+    # Generate S4 conversion test data
+    for i, case_name in enumerate(s4_case_names):
+        if not os.path.exists(case_name):
+            os.makedirs(case_name)
+        original_dir = os.getcwd()
+        os.chdir(case_name)
+
+        if s4_case_directions[i] == "fp16_to_s4":
+            gen_golden_fp16_to_s4(case_name, s4_case_params[i])
+        else:
+            gen_golden_s4_to_fp16(case_name, s4_case_params[i])
 
         os.chdir(original_dir)

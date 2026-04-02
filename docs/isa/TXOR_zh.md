@@ -48,10 +48,18 @@ PTO_INST RecordEvent TXOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
 
 ## 约束
 
-- 适用于整数元素类型。
 - 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
-- A3 计算需要临时空间，而 A5 不使用。
-- 对于 A3，2 个源 Tile、目标 Tile、临时空间必须在不同的内存范围内且不重叠。
+- **实现检查 (A5)**:
+    - `dst`、`src0` 和 `src1` 的元素类型必须一致。
+    - 支持的元素类型为 `uint8_t`、`int8_t`、`uint16_t`、`int16_t`、`uint32_t` 和 `int32_t`。
+    - `dst`、`src0` 和 `src1` 必须是行主序。
+    - `src0.GetValidRow()/GetValidCol()` 和 `src1.GetValidRow()/GetValidCol()` 必须与 `dst` 一致。
+- **实现检查 (A2A3)**:
+    - `dst`、`src0`、`src1` 和 `tmp` 的元素类型必须一致。
+    - 支持的元素类型为 `uint8_t`、`int8_t`、`uint16_t` 和 `int16_t`。
+    - `dst`、`src0`、`src1` 和 `tmp` 必须是行主序。
+    - `src0`、`src1` 和 `tmp` 的有效形状必须与 `dst` 一致。
+    - 在手动模式下，`dst`、`src0`、`src1` 和 `tmp` 的内存区域不得重叠。
 
 ## 示例
 

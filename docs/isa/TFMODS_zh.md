@@ -47,8 +47,22 @@ PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDat
 
 ## 约束
 
-- 除零行为由目标定义；CPU 模拟器在调试构建中会断言。
-- 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+- **实现检查 (A2A3)**:
+    - `dst` 和 `src` 必须使用相同的元素类型。
+    - 支持的元素类型为 `float` 和 `float32_t`。
+    - `dst` 和 `src` 必须是向量 Tile。
+    - `dst` 和 `src` 必须是行主序。
+    - 运行时：`dst.GetValidRow() == src.GetValidRow() > 0` 且 `dst.GetValidCol() == src.GetValidCol() > 0`。
+- **实现检查 (A5)**:
+    - `dst` 和 `src` 必须使用相同的元素类型。
+    - 支持的元素类型为目标实现支持的 2 字节或 4 字节类型（包括 `half` 和 `float`）。
+    - `dst` 和 `src` 必须是向量 Tile。
+    - 两个 Tile 的静态有效边界都必须满足 `ValidRow <= Rows` 且 `ValidCol <= Cols`。
+    - 运行时：`dst.GetValidRow() == src.GetValidRow()` 且 `dst.GetValidCol() == src.GetValidCol()`。
+- **除零**:
+    - 行为由目标定义；CPU 模拟器在调试构建中会断言。
+- **有效区域**:
+    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 
 ## 示例
 

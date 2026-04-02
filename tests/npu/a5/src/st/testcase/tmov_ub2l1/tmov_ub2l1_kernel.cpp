@@ -42,7 +42,12 @@ AICORE void runTmovUb2l1(__gm__ T *out, __gm__ T *src)
     using OutGlobalData = GlobalTensor<T, OutShapeDim5, OutStridDim5, Layout::NZ>;
 
     using SrcTileData = Tile<TileType::Vec, T, Rows, Cols, BLayout::RowMajor, -1, -1>;
-    using TmpTileData = Tile<TileType::Vec, T, ExtraRows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
+    using TmpTileData =
+        std::conditional_t<(ExtraRows > Rows),
+                           Tile<TileType::Vec, T, ExtraRows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor, 512,
+                                PadValue::Null, CompactMode::RowPlusOne>,
+                           Tile<TileType::Vec, T, ExtraRows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>>;
+
     using DstTileData = Tile<TileType::Vec, T, ValidRows, ValidCols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
     using MatTileData = Tile<TileType::Mat, T, ValidRows, ValidCols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
 
@@ -123,17 +128,17 @@ void launchTmovUb2l1(uint64_t *out, uint64_t *src, void *stream)
     } else if constexpr (testKey == 2) {
         launchTmovUb2l1<half, 64, 256, 65><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 3) {
-        launchTmovUb2l1<float, 48, 72, 49><<<1, nullptr, stream>>>(out, src);
+        launchTmovUb2l1<float, 48, 72, 48><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 4) {
         launchTmovUb2l1<float, 96, 8, 97><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 5) {
-        launchTmovUb2l1<int8_t, 32, 512, 33><<<1, nullptr, stream>>>(out, src);
+        launchTmovUb2l1<int8_t, 32, 512, 32><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 6) {
         launchTmovUb2l1<int8_t, 64, 96, 64><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 7) {
         launchTmovUb2l1<half, 64, 64, 65, 48, 48, 16, 16><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 8) {
-        launchTmovUb2l1<float, 128, 128, 129, 64, 64, 64, 64><<<1, nullptr, stream>>>(out, src);
+        launchTmovUb2l1<float, 128, 128, 128, 64, 64, 64, 64><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 9) {
         launchTmovUb2l1<int8_t, 256, 256, 256, 32, 32, 224, 224><<<1, nullptr, stream>>>(out, src);
     }

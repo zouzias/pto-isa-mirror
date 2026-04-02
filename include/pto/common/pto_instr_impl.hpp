@@ -51,6 +51,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TRowProd.hpp"
 #include "pto/npu/a2a3/TRowMax.hpp"
 #include "pto/npu/a2a3/TRowMin.hpp"
+#include "pto/npu/a2a3/TRowReduceIdxOps.hpp"
 #include "pto/npu/a2a3/TFillPad.hpp"
 #include "pto/npu/a2a3/TColMax.hpp"
 #include "pto/npu/a2a3/TMatmul.hpp"
@@ -91,6 +92,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TBitwiseSOp.hpp"
 #include "pto/npu/a2a3/TGatherB.hpp"
 #include "pto/npu/a2a3/TColMin.hpp"
+#include "pto/npu/a2a3/TColReduceIdx.hpp"
 #include "pto/npu/a2a3/TScatter.hpp"
 #include "pto/npu/a2a3/TColExpand.hpp"
 #include "pto/npu/a2a3/TTri.hpp"
@@ -114,7 +116,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifdef PTO_NPU_ARCH_A5
 #include "pto/npu/a5/TAssign.hpp"
-#include "pto/npu/a5/TAlias.hpp"
 #include "pto/npu/a5/TSync.hpp"
 #include "pto/npu/a5/TAdd.hpp"
 #include "pto/npu/a5/TAnd.hpp"
@@ -142,6 +143,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TMax.hpp"
 #include "pto/npu/a5/TLoad.hpp"
 #include "pto/npu/a5/TSubView.hpp"
+#include "pto/npu/a5/TGetScaleAddr.hpp"
 #ifdef __DAV_VEC__
 #include "pto/npu/a5/TCvt.hpp"
 #endif
@@ -153,11 +155,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TColSum.hpp"
 #include "pto/npu/a5/TColProd.hpp"
 #include "pto/npu/a5/TColMax.hpp"
+#include "pto/npu/a5/TColReduceIdx.hpp"
 #include "pto/npu/a5/TColMin.hpp"
 #include "pto/npu/a5/TColExpand.hpp"
 #include "pto/npu/a5/TConcat.hpp"
 #include "pto/npu/a5/TReshape.hpp"
 #include "pto/npu/a5/TRowReduce.hpp"
+#include "pto/npu/a5/TRowReduceIdx.hpp"
 #include "pto/npu/a5/TRowProd.hpp"
 #include "pto/npu/a5/TFillPad.hpp"
 #include "pto/npu/a5/TTrans.hpp"
@@ -195,6 +199,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TPrint.hpp"
 #endif
 #include "pto/npu/a5/TGather.hpp"
+#include "pto/npu/a5/TRandom.hpp"
 #include "pto/npu/a5/TRsqrt.hpp"
 #include "pto/npu/a5/TUnaryOp.hpp"
 #include "pto/npu/a5/TGatherB.hpp"
@@ -305,6 +310,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/costmodel/a2a3/TSqrt.hpp"
 #include "pto/costmodel/a2a3/TStore.hpp"
 #include "pto/costmodel/a2a3/TSub.hpp"
+#include "pto/costmodel/a2a3/TExtract.hpp"
+#include "pto/costmodel/a2a3/TMov.hpp"
+#include "pto/costmodel/a2a3/TScatter.hpp"
+#include "pto/costmodel/a2a3/TTrans.hpp"
+#include "pto/costmodel/a2a3/TMatmul.hpp"
+#include "pto/costmodel/a2a3/TSel.hpp"
+#include "pto/costmodel/a2a3/TCvt.hpp"
+#include "pto/costmodel/a2a3/TSort32.hpp"
+#include "pto/costmodel/a2a3/TMrgSort.hpp"
+#include "pto/costmodel/a2a3/TCopy.hpp"
 #endif
 
 #endif
