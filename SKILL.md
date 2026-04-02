@@ -1,3 +1,9 @@
+---
+name: pdf
+description: Use this skill whenever the user wants to do anything with PDF files. This includes reading or extracting text/tables from PDFs, combining or merging multiple PDFs into one, splitting PDFs apart, rotating pages, adding watermarks, creating new PDFs, filling PDF forms, encrypting/decrypting PDFs, extracting images, and OCR on scanned PDFs to make them searchable. If the user mentions a .pdf file or asks to produce one, use this skill.
+license: Proprietary. LICENSE.txt has complete terms
+---
+
 # 融合算子开发指南
 
 本指南为在 PTO Tile Library 中开发融合算子提供全面指导。
@@ -20,6 +26,26 @@
 - 提高流水线效率
 - 最小化延迟
 - 优化硬件资源利用率
+
+### Host-Device 架构
+
+PTO 融合算子采用 Host-Device 分离架构：
+- **Host 侧**：负责调用 Device 函数，通过 `<<<1, nullptr, stream>>>` 启动
+- **Device 侧**：使用 `__global__ AICORE` 标注，同时定义于 host 和 device 侧
+
+### 数据流向
+
+数据流向遵循 **gm → ub → vector → ub → gm** 模式：
+- **gm (Global Memory)**：全局内存，通过 GlobalTensor 描述
+- **ub (Unified Buffer)**：片上缓冲区，通过 Tile 描述
+- **vector**：向量计算单元
+
+### 指令调用
+
+- **TLOAD**：gm → ub 数据搬运
+- **TSTORE**：ub → gm 数据搬运
+- **向量指令**：ub 上的计算操作
+- **Event 同步**：指令间必须使用 event 进行数据搬运等待
 
 常见的融合模式包括：
 - **TAXPY**: TLOAD + TADD + TSTORE
@@ -48,39 +74,92 @@ using namespace pto;
 
 namespace FusedOperatorName {
 
+// Device 函数：使用 __global__ AICORE 标注，同时定义于 host 和 device 侧
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
 __global__ AICORE void runFusedOp(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1)
 {
+    // Device 侧实现：gm → ub → vector → ub → gm
 }
 
+// Host 函数：负责调用 Device 函数
 template <typename T, int kTRows_, int kTCols_, int vRows, int vCols>
 void launchFusedOp(T *out, T *src0, T *src1, void *stream)
 {
+    // Host 侧通过 <<<1, nullptr, stream>>> 启动 Device 函数
+    runFusedOp<T, kTRows_, kTCTCols_, vRows, vCols><<<1, nullptr, stream>>>(out, src0, src1);
 }
 
+// 模板实例化
 template void launchFusedOp<float, 64, 64, 64, 64>(float *out, float *src0, float *src1, void *stream);
 
 } // namespace FusedOperatorName
 ```
 
+**关键点**：
+- Device 函数使用 `__global__ AICORE` 标注
+- Host 函数通过 `<<<1, nullptr, stream>>>` 启动 Device 函数
+- `<<<1, nullptr, stream>>>` 是固定的 host→device 调用样式
+- 第一个参数 `1` 表示 block 数量
+- 第二个参数 `nullptr` 表示共享内存大小
+- 第三个参数 `stream` 表示异步流
+
 ## 核心概念
 
 ### GlobalTensor 和 Tile 声明
-缺少DN排布
+
+GlobalTensor 用于描述 gm 上的数据布局，Tile 用于描述 ub 上的数据布局：
+
 ```cpp
+// GlobalTensor：描述全局内存上的数据，使用 Shape 和 Stride 指定布局
 using DynShapeDim5 = Shape<1, 1, 1, vRows, vCols>;
 using DynStridDim5 = Stride<vRows * vCols, vRows * vCols, vRows * vCols, vCols, 1>;
 using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
+
+// Tile：描述片上缓冲区，TileType::Vec 表示向量操作
 using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
 ```
 
+**关键点**：
+- GlobalTensor 必须指定 Shape 和 Stride 来描述数据在 gm 上的排布
+- Tile 使用 TileType::Vec 表示向量类型数据
+- Tile 地址分配为紧密排布，通过 TASSIGN 指定偏移量
+
+### Tile 对齐要求
+
+Tile 的 BLayout 决定了对齐要求：
+- **RowMajor**：cols 必须是 32byte 对齐
+- **ColMajor**：rows 必须是 32byte 对齐
+
+**对齐计算公式**：
+```cpp
+// RowMajor：cols 对齐
+constexpr int alignedCols = ((cols * sizeof(T) + 31) / 32) * (32 / sizeof(T));
+
+// ColMajor：rows 对齐
+constexpr int alignedRows = ((rows * sizeof(T) + 31) / 32) * (32 / sizeof(T));
+```
+
+**示例**：
+```cpp
+// RowMajor：cols 必须对齐
+constexpr int kTCols_ = ((64 * sizeof(float) + 31) / 32) * (32 / sizeof(float));  // 64
+using TileData = Tile<TileType::Vec, float, 64, kTCols_, BLayout::RowMajor, -1, -1>;
+
+// ColMajor：rows 必须对齐
+constexpr int kTRows_ = ((16 * sizeof(half) + 31) / 32) * (32 / sizeof(half));  // 16
+using TileData = Tile<TileType::Vec, half, kTRows_, 256, BLayout::ColMajor, -1, -1>;
+```
+
 ### 使用 TASSIGN 分配缓冲区
+
+Tile 地址分配为紧密排布，通过 TASSIGN 指定偏移量：
 
 ```cpp
 TileData src0Tile(vRows, vCols);
 TileData src1Tile(vRows, vCols);
 TileData dstTile(vRows, vCols);
 
+// 紧密排布：每个 tile 使用不同的偏移量
 TASSIGN(src0Tile, 0x0);
 TASSIGN(src1Tile, sizeof(T) * TileData::Numel);
 TASSIGN(dstTile, 2 * sizeof(T) * TileData::Numel);
@@ -88,16 +167,27 @@ TASSIGN(dstTile, 2 * sizeof(T) * TileData::Numel);
 
 **关键点**：
 - 每个 tile 必须有唯一的缓冲区地址
-- 使用递增偏移量sizeof(T) * TileData::Numel
+- 使用递增偏移量 sizeof(T) * TileData::Numel
 - 缓冲区大小由 tile 维度和数据类型决定
+- 紧密排布确保高效利用片上存储空间
 
 ### GlobalTensor 初始化
-补充动态shape/stride场景
+
+Host 传入的地址为 gm 上分配的空间，需要使用 GlobalTensor 来指定其分配的 shape 和 stride：
+
 ```cpp
+// host 传入的指针是 gm 上的地址
+// GlobalTensor 通过 shape 和 stride 描述该地址上的数据布局
 GlobalData src0Global(src0);
 GlobalData src1Global(src1);
 GlobalData dstGlobal(out);
 ```
+
+**关键点**：
+- Host 传入的指针指向 gm 上的内存空间
+- GlobalTensor 封装该指针，并通过 Shape 和 Stride 描述数据布局
+- Shape 描述数据的维度大小
+- Stride 描述数据在内存中的步长
 
 ## 融合模式
 
@@ -105,15 +195,28 @@ GlobalData dstGlobal(out);
 
 **使用场景**：具有清晰依赖关系的简单融合
 
+**数据流向**：gm → ub (TLOAD) → vector (TADD) → ub → gm (TSTORE)
+
 ```cpp
 Event<Op::TLOAD, Op::TADD> event0;
 Event<Op::TADD, Op::TSTORE_VEC> event1;
 
+// gm → ub：从全局内存加载到片上缓冲区
 TLOAD(src0Tile, src0Global);
 event0 = TLOAD(src1Tile, src1Global);
+
+// vector：在片上缓冲区进行计算，等待 TLOAD 完成
 event1 = TADD(dstTile, src0Tile, src1Tile, event0);
+
+// ub → gm：从片上缓冲区存储到全局内存，等待 TADD 完成
 TSTORE(dstGlobal, dstTile, event1);
 ```
+
+**关键点**：
+- 指令调用之间必须使用 event 进行数据搬运等待
+- Event<Producer, Consumer> 定义生产者和消费者的依赖关系
+- TLOAD 完成后才能执行 TADD
+- TADD 完成后才能执行 TSTORE
 
 **优势**：
 - 自动依赖跟踪
@@ -125,23 +228,40 @@ TSTORE(dstGlobal, dstTile, event1);
 
 **使用场景**：具有自定义流水线控制的复杂融合
 
+**数据流向**：gm → ub (TLOAD) → vector (TADD) → ub → gm (TSTORE)
+
 ```cpp
+// gm → ub：从全局内存加载到片上缓冲区
 TLOAD(src0Tile, src0Global);
 TLOAD(src1Tile, src1Global);
+
+// 等待 TLOAD 完成，然后执行 TADD
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
+
+// vector：在片上缓冲区进行计算
 TADD(dstTile, src0Tile, src1Tile);
+
+// 等待 TADD 完成，然后执行 TSTORE
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
+
+// ub → gm：从片上缓冲区存储到全局内存
 TSTORE(dstGlobal, dstTile);
 ```
 
+**关键点**：
+- 指令调用之间必须使用 event 进行数据搬运等待
+- set_flag/ wait_flag 实现流水线间的同步
+- PIPE_MTE2/PIPE_MTE3：内存传输引擎
+- PIPE_V：向量计算单元
+
 **何时使用**：
-- 需要对流水线阶段进行细粒度控制
+- 需要对流水线阶段进行进行细粒度控制
 - 复杂的多阶段融合
 - 需要手动优化的性能关键代码
 
@@ -149,41 +269,61 @@ TSTORE(dstGlobal, dstTile);
 
 **示例：TAXPY (Y = a*X + Y)**
 
+**数据流向**：gm → ub (TLOAD) → vector (TAXPY) → ub → gm (TSTORE)
+
 ```cpp
 Event<Op::TLOAD, Op::TAXPY> event0;
 Event<Op::TAXPY, Op::TSTORE_VEC> event1;
 
+// gm → ub：加载 X 和 Y 到片上缓冲区
 TLOAD(src0Tile, src0Global);
 event0 = TLOAD(dstTile, dstGlobal);
+
+// vector：原地操作 Y = a*X + Y，等待 TLOAD 完成
 event1 = TAXPY(dstTile, src0Tile, (T)scalar, event0);
+
+// ub → gm：存储结果到全局内存，等待 TAXPY 完成
 TSTORE(dstGlobal, dstTile, event1);
 ```
 
 **关键点**：
 - 标量参数必须转换为 tile 数据类型
 - 输出 tile 可以重用为输入（原地操作）
+- 指令调用之间必须使用 event 进行数据搬运等待
 
 ### 模式 4：广播操作融合
 
 **示例：TROWEXPANDADD**
 
+**数据流向**：gm → ub (TLOAD) → vector (TROWEXPANDADD) → ub → gm (TSTORE)
+
 ```cpp
+// 广播数据使用不同的形状/布局
 using GlobalDataSrc1 = GlobalTensor<T, Shape<1, 1, 1, src1Row, 1>, Stride<1, 1, 1, 1, 1>, Layout::DN>;
 using TileDataSrc1 = Tile<TileType::Vec, T, src1Row, 1, BLayout::ColMajor, -1, -1>;
 
 TileDataSrc1 src1Tile(validRow, 1);
 
+// gm → ub：加载主数据和广播数据到片上缓冲区
 TLOAD(src0Tile, src0Global);
 TLOAD(src1Tile, src1Global);
+
+// 等待 TLOAD 完成，然后执行 TROWEXPANDADD
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
+
+// vector：行广播加法，将 src1 沿行广播加到 src0
 TROWEXPANDADD(dstTile, src0Tile, src1Tile);
+
+// 等待 TROWEXPANDADD 完成，然后执行 TSTORE
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 #endif
+
+// ub → gm：存储结果到全局内存
 TSTORE(dstGlobal, dstTile);
 ```
 
@@ -191,15 +331,20 @@ TSTORE(dstGlobal, dstTile);
 - 广播数据使用不同的形状/布局
 - 沿行广播使用 ColumnMajor 布局
 - 全局张量使用 DN（Dense）布局
+- 指令调用之间必须使用 event 进行数据搬运等待
 
 ### 模式 5：矩阵操作融合
 
 **示例：TMATMUL**
 
+**数据流向**：gm → ub (TLOAD) → mat (TMOV) → matrix (TMATMUL) → ub → gm (TSTORE)
+
 ```cpp
+// 矩阵操作使用 TileType::Mat
 using TileMatAData = Tile<TileType::Mat, U, M, K, BLayout::ColMajor, validM, validK, SLayout::RowMajor, 512>;
 using TileMatBData = Tile<TileType::Mat, S, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
 
+// 矩阵乘法特化类型
 using LeftTile = TileLeft<U, M, K, validM, validK>;
 using RightTile = TileRight<S, K, N, validK, validN>;
 using AccTile = TileAcc<T, M, N, validM, validN>;
@@ -210,31 +355,45 @@ LeftTile aTile;
 RightTile bTile;
 AccTile cTile;
 
+// gm → ub：加载矩阵 A 和 B 到片上缓冲区
 TLOAD(aMatTile, src0Global);
 TLOAD(bMatTile, src1Global);
+
+// 等待 TLOAD 完成，然后执行 TMOV
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 #endif
+
+// mat：将 Mat tile 转换为操作 tile
 TMOV(aTile, aMatTile);
 TMOV(bTile, bMatTile);
+
+// 等待 TMOV 完成，然后执行 TMATMUL
 #ifndef __PTO_AUTO__
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
 #endif
+
+// matrix：矩阵乘法
 TMATMUL(cTile, aTile, bTile);
+
+// 等待 TMATMUL 完成，然后执行 TSTORE
 #ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
 #endif
+
+// ub → gm：存储结果到全局内存
 TSTORE(dstGlobal, cTile);
 ```
 
 **关键点**：
 - 矩阵操作使用 TileType::Mat
 - 需要 TileLeft、TileRight、TileAcc 特化
-- 多个流水线阶段（MTE2 -> MTE1 -> M -> FIX）
+- 多个流水线阶段（MTE2 → MTE1 → M → FIX）
 - TMOV 将 Mat tile 转换为操作 tile
+- 指令调用之间必须使用 event 进行数据搬运等待
 
 ## 同步策略
 
