@@ -62,7 +62,20 @@ inline double applyRoundingToIntegral(double v, RoundMode mode)
     }
 }
 
-template <typename TileDataD, typename TileDataS>
+template <typename T>
+struct SafeLimits {
+    static constexpr double lowest() {
+        if constexpr (std::is_same_v<T, _Float16>) return -__FLT16_MAX__;
+        return static_cast<double>(std::numeric_limits<T>::lowest());
+    }
+
+    static constexpr double max() {
+        if constexpr (std::is_same_v<T, _Float16>) return __FLT16_MAX__;
+        return static_cast<double>(std::numeric_limits<T>::max());
+    }
+};
+
+template <typename TileDataD, typename TileDataS, SaturationMode satMode>
 PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileDataS::TileDType src, unsigned validRow,
                             unsigned validCol, RoundMode mode)
 {
@@ -73,11 +86,18 @@ PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileData
             using D = typename TileDataD::DType;
             using S = typename TileDataS::DType;
 
+            S val = src[srcIdx];
+            if constexpr (satMode == SaturationMode::ON) {
+                S min_limit = static_cast<S>(std::max(SafeLimits<S>::lowest(), SafeLimits<D>::lowest()));
+                S max_limit = static_cast<S>(std::min(SafeLimits<S>::max(), SafeLimits<D>::max()));
+                val = std::clamp(val, min_limit, max_limit);
+            }
+
             if constexpr (is_float_like_v<S> && std::is_integral_v<D>) {
-                const double dv = static_cast<double>(src[srcIdx]);
+                const double dv = static_cast<double>(val);
                 dst[dstIdx] = static_cast<D>(applyRoundingToIntegral(dv, mode));
             } else {
-                dst[dstIdx] = static_cast<D>(src[srcIdx]);
+                dst[dstIdx] = static_cast<D>(val);
             }
         }
     }
@@ -86,9 +106,19 @@ PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileData
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
+    TCVT_IMPL(dst, src, mode, SaturationMode::OFF);
+}
+
+template <typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
+{
     uint16_t rows = src.GetValidRow();
     uint16_t cols = src.GetValidCol();
-    TCvt_Impl<TileDataD, TileDataS>(dst.data(), src.data(), rows, cols, mode);
+    if(satMode == SaturationMode::ON) {
+        TCvt_Impl<TileDataD, TileDataS, SaturationMode::ON>(dst.data(), src.data(), rows, cols, mode);
+    } else {
+        TCvt_Impl<TileDataD, TileDataS, SaturationMode::OFF>(dst.data(), src.data(), rows, cols, mode);
+    }
 }
 
 } // namespace pto
