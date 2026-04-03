@@ -31,6 +31,16 @@ struct TgetPingPongState {
     int pendingCols = 0;
 };
 
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename StrideT>
+PTO_INTERNAL void TgetPingPongProcessChunk(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                           TileData &pingTile, TileData &pongTile, TgetPingPongState &pp,
+                                           int64_t remoteOff, int64_t localOff, int chunkRows, int chunkCols,
+                                           const StrideT &remoteChunkStride, const StrideT &localChunkStride);
+
+template <typename GlobalDstData, typename TileData, typename StrideT>
+PTO_INTERNAL void TgetPingPongFlush(GlobalDstData &dstGlobalData, TileData &pingTile, TileData &pongTile,
+                                    TgetPingPongState &pp, const StrideT &localChunkStride);
+
 // Single synchronous transfer: TLOAD from src → sync → TSTORE to dst → sync
 template <typename TileData, typename DstGT, typename SrcGT>
 PTO_INTERNAL void TgetTransferOnce(DstGT &dst, SrcGT &src, TileData &tile)
@@ -90,6 +100,101 @@ PTO_INTERNAL void TgetChunkedSingle(GlobalDstData &dstGlobalData, GlobalSrcData 
                                             static_cast<int64_t>(colIdx) * rmtStep[4];
                         int64_t localOff = locBase + static_cast<int64_t>(rowIdx) * locStep[3] +
                                            static_cast<int64_t>(colIdx) * locStep[4];
+                        DynShape chunkShape(1, 1, 1, chunkRows, chunkCols);
+                        SrcViewT srcView(srcGlobalData.data() + remoteOff, chunkShape, remoteChunkStride);
+                        DstViewT dstView(dstGlobalData.data() + localOff, chunkShape, localChunkStride);
+                        TgetTransferOnce<TileData, DstViewT, SrcViewT>(dstView, srcView, stagingTileData);
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+PTO_INTERNAL void TgetChunkedSingleIntraPingPong(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                                 TileData &stagingTileData, int gShape0, int gShape1, int gShape2,
+                                                 int gShape3, int gShape4, int tileValidRow, int tileValidCol)
+{
+    using T = typename GlobalSrcData::RawDType;
+    constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+    constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+    constexpr bool canSplitTile = (TileData::Loc == TileType::Vec) && (TileData::BFractal == BLayout::RowMajor) &&
+                                  (TileData::SFractal == SLayout::NoneBox) && (TileData::Rows % 2 == 0);
+    constexpr int kHalfRows = TileData::Rows / 2;
+
+    const int rmtStep[5] = {static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_0)),
+                            static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_1)),
+                            static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_2)),
+                            static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_3)),
+                            static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_4))};
+    const int locStep[5] = {static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_0)),
+                            static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_1)),
+                            static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_2)),
+                            static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_3)),
+                            static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_4))};
+
+    using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+    using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+    using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+    DynStride remoteChunkStride(rmtStep[0], rmtStep[1], rmtStep[2], rmtStep[3], rmtStep[4]);
+    DynStride localChunkStride(locStep[0], locStep[1], locStep[2], locStep[3], locStep[4]);
+
+    for (int i0 = 0; i0 < gShape0; ++i0) {
+        for (int i1 = 0; i1 < gShape1; ++i1) {
+            for (int i2 = 0; i2 < gShape2; ++i2) {
+                int64_t rmtBase = static_cast<int64_t>(i0) * rmtStep[0] + static_cast<int64_t>(i1) * rmtStep[1] +
+                                  static_cast<int64_t>(i2) * rmtStep[2];
+                int64_t locBase = static_cast<int64_t>(i0) * locStep[0] + static_cast<int64_t>(i1) * locStep[1] +
+                                  static_cast<int64_t>(i2) * locStep[2];
+                for (int rowIdx = 0; rowIdx < gShape3; rowIdx += tileValidRow) {
+                    int chunkRows = (rowIdx + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowIdx);
+                    if constexpr (isDynamicRow)
+                        stagingTileData.RowMaskInternal = chunkRows;
+                    for (int colIdx = 0; colIdx < gShape4; colIdx += tileValidCol) {
+                        int chunkCols = (colIdx + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colIdx);
+                        if constexpr (isDynamicCol)
+                            stagingTileData.ColMaskInternal = chunkCols;
+                        int64_t remoteOff = rmtBase + static_cast<int64_t>(rowIdx) * rmtStep[3] +
+                                            static_cast<int64_t>(colIdx) * rmtStep[4];
+                        int64_t localOff = locBase + static_cast<int64_t>(rowIdx) * locStep[3] +
+                                           static_cast<int64_t>(colIdx) * locStep[4];
+
+                        if constexpr (canSplitTile) {
+                            const bool fullTileChunk = (tileValidRow == TileData::Rows) && (tileValidCol == TileData::Cols) &&
+                                                       (chunkRows == TileData::Rows) && (chunkCols == TileData::Cols);
+                            if (fullTileChunk) {
+                                using HalfTileData =
+                                    Tile<TileData::Loc, typename TileData::DType, kHalfRows, TileData::Cols,
+                                         TileData::BFractal, DYNAMIC, DYNAMIC, TileData::SFractal,
+                                         TileData::SFractalSize, TileData::PadVal, TileData::Compact>;
+
+                                HalfTileData pingHalf(kHalfRows, chunkCols);
+                                HalfTileData pongHalf(kHalfRows, chunkCols);
+                                const auto baseAddr = reinterpret_cast<std::uintptr_t>(stagingTileData.data());
+                                const auto halfAddr =
+                                    reinterpret_cast<std::uintptr_t>(stagingTileData.data() + kHalfRows * TileData::Cols);
+                                TASSIGN_IMPL(pingHalf, baseAddr);
+                                TASSIGN_IMPL(pongHalf, halfAddr);
+                                pingHalf.SetKAligned(stagingTileData.GetKAligned());
+                                pongHalf.SetKAligned(stagingTileData.GetKAligned());
+
+                                TgetPingPongState pp;
+                                TgetPingPongProcessChunk<GlobalDstData, GlobalSrcData, HalfTileData>(
+                                    dstGlobalData, srcGlobalData, pingHalf, pongHalf, pp, remoteOff, localOff,
+                                    kHalfRows, chunkCols, remoteChunkStride, localChunkStride);
+                                TgetPingPongProcessChunk<GlobalDstData, GlobalSrcData, HalfTileData>(
+                                    dstGlobalData, srcGlobalData, pingHalf, pongHalf, pp,
+                                    remoteOff + static_cast<int64_t>(kHalfRows) * rmtStep[3],
+                                    localOff + static_cast<int64_t>(kHalfRows) * locStep[3], kHalfRows, chunkCols,
+                                    remoteChunkStride, localChunkStride);
+                                TgetPingPongFlush<GlobalDstData, HalfTileData>(dstGlobalData, pingHalf, pongHalf, pp,
+                                                                               localChunkStride);
+                                continue;
+                            }
+                        }
+
                         DynShape chunkShape(1, 1, 1, chunkRows, chunkCols);
                         SrcViewT srcView(srcGlobalData.data() + remoteOff, chunkShape, remoteChunkStride);
                         DstViewT dstView(dstGlobalData.data() + localOff, chunkShape, localChunkStride);
@@ -164,9 +269,29 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
-    TgetChunkedSingle<GlobalDstData, GlobalSrcData, TileData>(
-        dstGlobalData, srcGlobalData, stagingTileData, remoteDims[0], remoteDims[1], remoteDims[2], remoteDims[3],
-        remoteDims[4], singleTileRows, singleTileCols);
+    constexpr bool canUseIntraTilePingPong = (TileData::Loc == TileType::Vec) &&
+                                             (TileData::BFractal == BLayout::RowMajor) &&
+                                             (TileData::SFractal == SLayout::NoneBox) && (TileData::Rows % 2 == 0);
+    if constexpr (canUseIntraTilePingPong) {
+        const int64_t outerChunkGroups =
+            static_cast<int64_t>(remoteDims[0]) * remoteDims[1] * remoteDims[2];
+        const int64_t rowChunkCount = (static_cast<int64_t>(remoteDims[3]) + singleTileRows - 1) / singleTileRows;
+        const int64_t colChunkCount = (static_cast<int64_t>(remoteDims[4]) + singleTileCols - 1) / singleTileCols;
+        const int64_t totalChunkCount = outerChunkGroups * rowChunkCount * colChunkCount;
+
+        if (singleTileRows == TileData::Rows && singleTileCols == TileData::Cols && singleTileRows >= 2 &&
+            totalChunkCount >= 8) {
+            TgetChunkedSingleIntraPingPong<GlobalDstData, GlobalSrcData, TileData>(
+                dstGlobalData, srcGlobalData, stagingTileData, remoteDims[0], remoteDims[1], remoteDims[2],
+                remoteDims[3], remoteDims[4], singleTileRows, singleTileCols);
+            return;
+        }
+    }
+
+    TgetChunkedSingle<GlobalDstData, GlobalSrcData, TileData>(dstGlobalData, srcGlobalData, stagingTileData,
+                                                               remoteDims[0], remoteDims[1], remoteDims[2],
+                                                               remoteDims[3], remoteDims[4], singleTileRows,
+                                                               singleTileCols);
 }
 
 // Process one chunk in the ping-pong pipeline: overlap TSTORE of previous chunk with TLOAD of current chunk
