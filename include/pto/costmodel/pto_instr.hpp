@@ -11,16 +11,32 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_INSTR_HPP
 #define PTO_INSTR_HPP
 
+// Intentionally reuse the common PTO include guard so this header can act as a
+// drop-in replacement when <pto/pto-inst.hpp> selects it for __COSTMODEL.
+
 #include "pto/common/debug.h"
 #include "pto/common/event.hpp"
-#include "pto/common/fifo.hpp"
 #include "pto/common/tassign_check.hpp"
 #include "pto/common/pto_instr_impl.hpp"
-#if !defined(__COSTMODEL) && !defined(PTO_COMM_NOT_SUPPORTED)
+#ifdef __COSTMODEL
+#include "pto/costmodel/trace.hpp"
+#endif
+#if !defined(PTO_COMM_NOT_SUPPORTED)
 #include "pto/comm/pto_comm_inst.hpp"
 #endif
 
+#ifdef __COSTMODEL
+#define PTO_TRACE_CALL(API, ...)             \
+    do {                                     \
+        ::pto::mocker::PtoInstrScope _scope( \
+            #API);                           \
+        __VA_ARGS__;                         \
+    } while (0)
+#define MAP_INSTR_IMPL(API, ...) PTO_TRACE_CALL(API, API##_IMPL(__VA_ARGS__))
+#else
+#define PTO_TRACE_CALL(API, ...) __VA_ARGS__
 #define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
+#endif
 
 namespace pto {
 
@@ -54,20 +70,6 @@ PTO_INST void TSYNC(WaitEvents &... events)
 {
     WaitAllEvents(events...);
 }
-
-#ifdef _DEBUG
-template <typename TileData>
-PTO_INST void TPRINT(TileData &src)
-{
-    MAP_INSTR_IMPL(TPRINT, src);
-}
-
-template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp)
-{
-    MAP_INSTR_IMPL(TPRINT, src, tmp);
-}
-#endif
 
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TADD(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
@@ -201,22 +203,11 @@ PTO_INST RecordEvent TCONCAT(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 
     return {};
 }
 
-template <typename DstTile, typename Src0Tile, typename Src1Tile, typename Src0IdxTile, typename Src1IdxTile,
-          typename = std::void_t<typename Src0IdxTile::DType>, typename = std::void_t<typename Src1IdxTile::DType>,
-          typename... WaitEvents>
-PTO_INST RecordEvent TCONCAT(DstTile &dst, Src0Tile &src0, Src1Tile &src1, Src0IdxTile &src0Idx, Src1IdxTile &src1Idx,
-                             WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TCONCAT, dst, src0, src1, src0Idx, src1Idx);
-    return {};
-}
-
 template <typename TileData, typename GlobalData, typename... WaitEvents>
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    TSTORE_IMPL<TileData, GlobalData, AtomicType::AtomicNone>(dst, src);
+    PTO_TRACE_CALL(TSTORE, TSTORE_IMPL<TileData, GlobalData, AtomicType::AtomicNone>(dst, src));
     return {};
 }
 
@@ -225,7 +216,7 @@ template <STPhase Phase, typename TileData, typename GlobalData, typename... Wai
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    TSTORE_IMPL<TileData, GlobalData, AtomicType::AtomicNone, Phase>(dst, src);
+    PTO_TRACE_CALL(TSTORE, TSTORE_IMPL<TileData, GlobalData, AtomicType::AtomicNone, Phase>(dst, src));
     return {};
 }
 
@@ -233,7 +224,7 @@ template <typename TileData, typename GlobalData, AtomicType atomicType, typenam
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src);
+    PTO_TRACE_CALL(TSTORE, TSTORE_IMPL<TileData, GlobalData, atomicType>(dst, src));
     return {};
 }
 
@@ -241,7 +232,7 @@ template <STPhase Phase, typename TileData, typename GlobalData, AtomicType atom
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    TSTORE_IMPL<TileData, GlobalData, atomicType, Phase>(dst, src);
+    PTO_TRACE_CALL(TSTORE, TSTORE_IMPL<TileData, GlobalData, atomicType, Phase>(dst, src));
     return {};
 }
 
@@ -250,7 +241,7 @@ template <typename TileData, typename GlobalData, AtomicType atomicType = Atomic
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode>(dst, src);
+    PTO_TRACE_CALL(TSTORE, TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode>(dst, src));
     return {};
 }
 
@@ -259,7 +250,7 @@ template <STPhase Phase, typename TileData, typename GlobalData, AtomicType atom
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode, Phase>(dst, src);
+    PTO_TRACE_CALL(TSTORE, TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode, Phase>(dst, src));
     return {};
 }
 
@@ -268,7 +259,7 @@ template <typename TileData, typename GlobalData, AtomicType atomicType = Atomic
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, uint64_t preQuantScalar, WaitEvents &... events)
 {
     TSYNC(events...);
-    TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode>(dst, src, preQuantScalar);
+    PTO_TRACE_CALL(TSTORE, TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode>(dst, src, preQuantScalar));
     return {};
 }
 
@@ -277,7 +268,8 @@ template <STPhase Phase, typename TileData, typename GlobalData, AtomicType atom
 PTO_INST RecordEvent TSTORE(GlobalData &dst, TileData &src, uint64_t preQuantScalar, WaitEvents &... events)
 {
     TSYNC(events...);
-    TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode, Phase>(dst, src, preQuantScalar);
+    PTO_TRACE_CALL(TSTORE,
+                   TSTORE_IMPL<TileData, GlobalData, atomicType, reluPreMode, Phase>(dst, src, preQuantScalar));
     return {};
 }
 
@@ -286,7 +278,7 @@ template <typename TileData, typename GlobalData, typename FpTileData, AtomicTyp
 PTO_INST RecordEvent TSTORE_FP(GlobalData &dst, TileData &src, FpTileData &fp, WaitEvents &... events)
 {
     TSYNC(events...);
-    TSTORE_IMPL<TileData, GlobalData, FpTileData, atomicType, reluPreMode>(dst, src, fp);
+    PTO_TRACE_CALL(TSTORE_FP, TSTORE_IMPL<TileData, GlobalData, FpTileData, atomicType, reluPreMode>(dst, src, fp));
     return {};
 }
 
@@ -366,6 +358,14 @@ PTO_INST RecordEvent TPRELU(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TPRELU, dst, src0, src1, tmp);
+    return {};
+}
+
+template <typename TileData, typename... WaitEvents>
+PTO_INST RecordEvent TPRINT(TileData &src, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TPRINT, src);
     return {};
 }
 
@@ -507,13 +507,6 @@ PTO_INST RecordEvent TMATMUL_MX(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
     return {};
 }
 
-template <uint16_t Rounds = 10, typename DstTile, typename... WaitEvents>
-PTO_INST RecordEvent TRANDOM(DstTile &dst, TRandomKey &key, TRandomCounter &counter, WaitEvents &... events)
-{
-    TSYNC(events...);
-    TRANDOM_IMPL<Rounds, DstTile>(dst, key, counter);
-    return {};
-}
 #endif
 
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
@@ -893,14 +886,6 @@ PTO_INST RecordEvent TCI(TileData &dst, T start, WaitEvents &... events)
     return {};
 }
 
-template <typename TileData, typename TileDataTmp, typename T, int descending, typename... WaitEvents>
-PTO_INST RecordEvent TCI(TileData &dst, T start, TileDataTmp &tmp, WaitEvents &... events)
-{
-    TSYNC(events...);
-    TCI_IMPL<TileData, TileDataTmp, T, descending>(dst, start, tmp);
-    return {};
-}
-
 template <typename TileData, int isUpperOrLower, typename... WaitEvents>
 PTO_INST RecordEvent TTRI(TileData &dst, int diagonal, WaitEvents &... events)
 {
@@ -1089,22 +1074,6 @@ PTO_INST RecordEvent TCOLMAX(TileDataOut &dst, TileDataIn &src, WaitEvents &... 
 {
     TSYNC(events...);
     MAP_INSTR_IMPL(TCOLMAX, dst, src);
-    return {};
-}
-
-template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TCOLARGMAX(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TCOLARGMAX, dst, src, tmp);
-    return {};
-}
-
-template <typename TileDataOut, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TCOLARGMIN(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TCOLARGMIN, dst, src, tmp);
     return {};
 }
 
@@ -1438,12 +1407,12 @@ PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDat
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
-PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar, TileDataTmp &tmp,
+template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
                            WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TREMS, dst, src, scalar, tmp);
+    MAP_INSTR_IMPL(TREMS, dst, src, scalar);
     return {};
 }
 
@@ -1670,13 +1639,11 @@ PTO_INST RecordEvent TDEQUANT(TileDataDst &dst, TileDataSrc &src, TileDataPara &
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataTmp,
-          typename... WaitEvents>
-PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataTmp &tmp,
-                          WaitEvents &... events)
+template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
+PTO_INST RecordEvent TREM(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TREM, dst, src0, src1, tmp);
+    MAP_INSTR_IMPL(TREM, dst, src0, src1);
     return {};
 }
 

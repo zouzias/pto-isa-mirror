@@ -111,3 +111,5 @@ When adding a new NPU arch to the costmodel backend, keep the split consistent:
 
 The current costmodel backend focuses on readable trace output and lightweight host compilation. Some PTO/NPU paths may
 still need additional stub coverage before they can compile under `__COSTMODEL`.
+
+codex resume 019d3d48-250d-7e93-bb17-c45990213ffa
