@@ -284,7 +284,7 @@ static bool VerifyOutput(RankResources& r, const std::string& dataDir) {
     std::string output_file = dataDir + "/output_rank" + std::to_string(r.rank_id) + ".bin";
     PtoTestCommon::WriteFile(output_file, output_host, r.outputSize);
 
-    bool is_ok = true;
+    bool is_ok = false;
     std::string golden_file = dataDir + "/golden.bin";
     size_t goldenSize = static_cast<size_t>(ORIG_M) * ORIG_N * sizeof(float);
     std::vector<float> golden(goldenSize / sizeof(float));
@@ -304,8 +304,9 @@ static bool VerifyOutput(RankResources& r, const std::string& dataDir) {
             is_ok = PtoTestCommon::ResultCmp(golden, valid_output.data(), 0.001f);
         }
     } else {
-        std::cerr << "[WARN] Rank " << r.rank_id
-                  << ": golden file not available, skipping verification" << std::endl;
+        std::cerr << "[ERROR] Rank " << r.rank_id
+                  << ": golden.bin missing or size mismatch (expected " << goldenSize
+                  << " bytes); numerical verification not performed, treated as FAILED" << std::endl;
     }
     aclrtFreeHost(output_host);
     return is_ok;
