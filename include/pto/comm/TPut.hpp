@@ -31,6 +31,16 @@ struct TputPingPongState {
     int pendingCols = 0;
 };
 
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, AtomicType atomicType, typename StrideT>
+PTO_INTERNAL void TputPingPongProcessChunk(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                           TileData &pingTile, TileData &pongTile, TputPingPongState &pp,
+                                           int64_t srcOff, int64_t dstOff, int curRows, int curCols,
+                                           const StrideT &srcChunkStride, const StrideT &dstChunkStride);
+
+template <typename GlobalDstData, typename TileData, AtomicType atomicType, typename StrideT>
+PTO_INTERNAL void TputPingPongFlush(GlobalDstData &dstGlobalData, TileData &pingTile, TileData &pongTile,
+                                    TputPingPongState &pp, const StrideT &dstChunkStride);
+
 // Single synchronous transfer: TLOAD from src → sync → TSTORE to dst → sync
 template <typename TileData, typename DstGT, typename SrcGT, AtomicType atomicType>
 PTO_INTERNAL void TputTransferOnce(DstGT &dst, SrcGT &src, TileData &tile)
@@ -91,6 +101,103 @@ PTO_INTERNAL void TputChunkedSingle(GlobalDstData &dstGlobalData, GlobalSrcData 
                                          static_cast<int64_t>(colOff) * srcStride[4];
                         int64_t dstOff = dstBase + static_cast<int64_t>(rowOff) * dstStride[3] +
                                          static_cast<int64_t>(colOff) * dstStride[4];
+                        DynShape chunkShape(1, 1, 1, curRows, curCols);
+                        SrcViewT srcView(srcGlobalData.data() + srcOff, chunkShape, srcChunkStride);
+                        DstViewT dstView(dstGlobalData.data() + dstOff, chunkShape, dstChunkStride);
+                        TputTransferOnce<TileData, DstViewT, SrcViewT, atomicType>(dstView, srcView, stagingTileData);
+                    }
+                }
+            }
+        }
+    }
+}
+
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, AtomicType atomicType>
+PTO_INTERNAL void TputChunkedSingleIntraPingPong(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                                 TileData &stagingTileData, int gShape0, int gShape1, int gShape2,
+                                                 int gShape3, int gShape4, int tileValidRow, int tileValidCol)
+{
+    using T = typename GlobalSrcData::RawDType;
+    constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+    constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+    constexpr bool canSplitTile = (TileData::Loc == TileType::Vec) && (TileData::BFractal == BLayout::RowMajor) &&
+                                  (TileData::SFractal == SLayout::NoneBox) && (TileData::Rows % 2 == 0);
+    constexpr int kHalfRows = TileData::Rows / 2;
+
+    const int srcStride[5] = {static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_0)),
+                              static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_1)),
+                              static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_2)),
+                              static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_3)),
+                              static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_4))};
+
+    const int dstStride[5] = {static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_0)),
+                              static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_1)),
+                              static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_2)),
+                              static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_3)),
+                              static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_4))};
+
+    using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+    using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
+    using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
+    DynStride srcChunkStride(srcStride[0], srcStride[1], srcStride[2], srcStride[3], srcStride[4]);
+    DynStride dstChunkStride(dstStride[0], dstStride[1], dstStride[2], dstStride[3], dstStride[4]);
+
+    for (int i0 = 0; i0 < gShape0; ++i0) {
+        for (int i1 = 0; i1 < gShape1; ++i1) {
+            for (int i2 = 0; i2 < gShape2; ++i2) {
+                int64_t srcBase = static_cast<int64_t>(i0) * srcStride[0] + static_cast<int64_t>(i1) * srcStride[1] +
+                                  static_cast<int64_t>(i2) * srcStride[2];
+                int64_t dstBase = static_cast<int64_t>(i0) * dstStride[0] + static_cast<int64_t>(i1) * dstStride[1] +
+                                  static_cast<int64_t>(i2) * dstStride[2];
+                for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
+                    int curRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
+                    if constexpr (isDynamicRow)
+                        stagingTileData.RowMaskInternal = curRows;
+                    for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
+                        int curCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
+                        if constexpr (isDynamicCol)
+                            stagingTileData.ColMaskInternal = curCols;
+                        int64_t srcOff = srcBase + static_cast<int64_t>(rowOff) * srcStride[3] +
+                                         static_cast<int64_t>(colOff) * srcStride[4];
+                        int64_t dstOff = dstBase + static_cast<int64_t>(rowOff) * dstStride[3] +
+                                         static_cast<int64_t>(colOff) * dstStride[4];
+
+                        if constexpr (canSplitTile) {
+                            const bool fullTileChunk = (tileValidRow == TileData::Rows) && (tileValidCol == TileData::Cols) &&
+                                                       (curRows == TileData::Rows) && (curCols == TileData::Cols);
+                            if (fullTileChunk) {
+                                using HalfTileData =
+                                    Tile<TileData::Loc, typename TileData::DType, kHalfRows, TileData::Cols,
+                                         TileData::BFractal, DYNAMIC, DYNAMIC, TileData::SFractal,
+                                         TileData::SFractalSize, TileData::PadVal, TileData::Compact>;
+
+                                HalfTileData pingHalf(kHalfRows, curCols);
+                                HalfTileData pongHalf(kHalfRows, curCols);
+                                const auto baseAddr = reinterpret_cast<std::uintptr_t>(stagingTileData.data());
+                                const auto halfAddr =
+                                    reinterpret_cast<std::uintptr_t>(stagingTileData.data() + kHalfRows * TileData::Cols);
+                                TASSIGN_IMPL(pingHalf, baseAddr);
+                                TASSIGN_IMPL(pongHalf, halfAddr);
+                                pingHalf.SetKAligned(stagingTileData.GetKAligned());
+                                pongHalf.SetKAligned(stagingTileData.GetKAligned());
+
+                                TputPingPongState pp;
+                                TputPingPongProcessChunk<GlobalDstData, GlobalSrcData, HalfTileData, atomicType>(
+                                    dstGlobalData, srcGlobalData, pingHalf, pongHalf, pp, srcOff, dstOff, kHalfRows,
+                                    curCols, srcChunkStride, dstChunkStride);
+                                TputPingPongProcessChunk<GlobalDstData, GlobalSrcData, HalfTileData, atomicType>(
+                                    dstGlobalData, srcGlobalData, pingHalf, pongHalf, pp,
+                                    srcOff + static_cast<int64_t>(kHalfRows) * srcStride[3],
+                                    dstOff + static_cast<int64_t>(kHalfRows) * dstStride[3], kHalfRows, curCols,
+                                    srcChunkStride, dstChunkStride);
+                                TputPingPongFlush<GlobalDstData, HalfTileData, atomicType>(dstGlobalData, pingHalf,
+                                                                                           pongHalf, pp,
+                                                                                           dstChunkStride);
+                                continue;
+                            }
+                        }
+
                         DynShape chunkShape(1, 1, 1, curRows, curCols);
                         SrcViewT srcView(srcGlobalData.data() + srcOff, chunkShape, srcChunkStride);
                         DstViewT dstView(dstGlobalData.data() + dstOff, chunkShape, dstChunkStride);
@@ -189,9 +296,30 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
-    TputChunkedSingle<GlobalDstData, GlobalSrcData, TileData, atomicType>(
-        dstGlobalData, srcGlobalData, stagingTileData, logicalDims[0], logicalDims[1], logicalDims[2], logicalDims[3],
-        logicalDims[4], ubChunkRows, ubChunkCols);
+    constexpr bool canUseIntraTilePingPong = (TileData::Loc == TileType::Vec) &&
+                                             (TileData::BFractal == BLayout::RowMajor) &&
+                                             (TileData::SFractal == SLayout::NoneBox) && (TileData::Rows % 2 == 0);
+    if constexpr (canUseIntraTilePingPong) {
+        const int64_t outerChunkGroups =
+            static_cast<int64_t>(logicalDims[0]) * logicalDims[1] * logicalDims[2];
+        const int64_t rowChunkCount = (static_cast<int64_t>(logicalDims[3]) + ubChunkRows - 1) / ubChunkRows;
+        const int64_t colChunkCount = (static_cast<int64_t>(logicalDims[4]) + ubChunkCols - 1) / ubChunkCols;
+        const int64_t totalChunkCount = outerChunkGroups * rowChunkCount * colChunkCount;
+
+        if (ubChunkRows == TileData::Rows && ubChunkCols == TileData::Cols && ubChunkRows >= 2 &&
+            totalChunkCount >= 8 && totalChunkCount <= 16) {
+            TputChunkedSingleIntraPingPong<GlobalDstData, GlobalSrcData, TileData, atomicType>(
+                dstGlobalData, srcGlobalData, stagingTileData, logicalDims[0], logicalDims[1], logicalDims[2],
+                logicalDims[3], logicalDims[4], ubChunkRows, ubChunkCols);
+            return;
+        }
+    }
+
+    TputChunkedSingle<GlobalDstData, GlobalSrcData, TileData, atomicType>(dstGlobalData, srcGlobalData,
+                                                                           stagingTileData, logicalDims[0],
+                                                                           logicalDims[1], logicalDims[2],
+                                                                           logicalDims[3], logicalDims[4], ubChunkRows,
+                                                                           ubChunkCols);
 }
 
 // Process one chunk in the ping-pong pipeline: overlap TSTORE of previous chunk with TLOAD of current chunk
