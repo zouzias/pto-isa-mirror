@@ -53,6 +53,28 @@ add_compile_options(
 add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 add_compile_definitions(PTO_NPU_ARCH_A2A3)
 
+# Matrix dimensions (configurable via -DCONFIG_G_M=... -DCONFIG_G_K=... -DCONFIG_G_N=...)
+if(DEFINED CONFIG_G_M)
+    add_compile_definitions(CONFIG_G_M=${CONFIG_G_M})
+endif()
+if(DEFINED CONFIG_G_K)
+    add_compile_definitions(CONFIG_G_K=${CONFIG_G_K})
+endif()
+if(DEFINED CONFIG_G_N)
+    add_compile_definitions(CONFIG_G_N=${CONFIG_G_N})
+endif()
+
+# Tile sizes (configurable via -DCONFIG_G_BASE_M=... -DCONFIG_G_BASE_K=... -DCONFIG_G_BASE_N=...)
+if(DEFINED CONFIG_G_BASE_M)
+    add_compile_definitions(CONFIG_G_BASE_M=${CONFIG_G_BASE_M})
+endif()
+if(DEFINED CONFIG_G_BASE_K)
+    add_compile_definitions(CONFIG_G_BASE_K=${CONFIG_G_BASE_K})
+endif()
+if(DEFINED CONFIG_G_BASE_N)
+    add_compile_definitions(CONFIG_G_BASE_N=${CONFIG_G_BASE_N})
+endif()
+
 add_link_options(-s -Wl,-z,relro -Wl,-z,now)
 
 set(CMAKE_CCE_COMPILE_OPTIONS

@@ -25,9 +25,20 @@ See LICENSE in the root of the software repository for the full text of the Lice
 static constexpr uint32_t G_ORIG_M = CONFIG_G_M;
 static constexpr uint32_t G_ORIG_K = CONFIG_G_K;
 static constexpr uint32_t G_ORIG_N = CONFIG_G_N;
-static constexpr uint32_t G_BASE_M = 128;
-static constexpr uint32_t G_BASE_K = 64;
-static constexpr uint32_t G_BASE_N = 256;
+
+#ifndef CONFIG_G_BASE_M
+#define CONFIG_G_BASE_M 128
+#endif
+#ifndef CONFIG_G_BASE_K
+#define CONFIG_G_BASE_K 64
+#endif
+#ifndef CONFIG_G_BASE_N
+#define CONFIG_G_BASE_N 256
+#endif
+
+static constexpr uint32_t G_BASE_M = CONFIG_G_BASE_M;
+static constexpr uint32_t G_BASE_K = CONFIG_G_BASE_K;
+static constexpr uint32_t G_BASE_N = CONFIG_G_BASE_N;
 
 static constexpr uint32_t CeilDiv(uint32_t a, uint32_t b) { return (a + b - 1) / b; }
 static constexpr uint32_t AlignUp(uint32_t a, uint32_t b) { return CeilDiv(a, b) * b; }

@@ -120,16 +120,17 @@ AICORE inline void GemmCommAllImpl(
     ShapeDyn tileShape(1, 1, 1, G_BASE_M, G_BASE_N);
     StrideDyn tileStride(G_BASE_M * G_N, G_BASE_M * G_N, G_BASE_M * G_N, G_N, 1);
 
+    // RS uses only the first num_compute_blocks AIVs (1:1 with compute queues).
+    // Remaining AIVs skip RS to avoid HBM bandwidth contention with AIC MTE2.
+    const int rs_active_blocks = num_compute_blocks;
+
     // ========================================================================
     // Phase 1: ReduceScatter — TPUT with AtomicAdd to owner's reduced_output
     //
-    // For tiles owned by other ranks: TPUT<AtomicAdd> to remote reduced_output.
-    // For tiles owned by this rank: copy own data to local reduced_output
-    // (the owner's contribution is the "base" that remote AtomicAdds accumulate onto).
-    //
-    // Cross-tile ping-pong for remote TPUT: overlap TSTORE[i] with TLOAD[i+1].
+    // Only block 0..(num_compute_blocks-1) participate.
+    // Blocks >= num_compute_blocks skip straight to the barrier.
     // ========================================================================
-    {
+    if (block_idx < rs_active_blocks) {
         volatile __gm__ MultiBlockQueueSet *qset = (volatile __gm__ MultiBlockQueueSet *)queue_set;
 
         int32_t heads[MAX_COMPUTE_BLOCKS];
@@ -141,7 +142,7 @@ AICORE inline void GemmCommAllImpl(
         int my_queue_indices[MAX_COMPUTE_BLOCKS];
         int my_queue_count = 0;
         for (int q = 0; q < num_compute_blocks; q++) {
-            if (q % num_comm_blocks == block_idx) {
+            if (q % rs_active_blocks == block_idx) {
                 my_queue_indices[my_queue_count++] = q;
             }
         }
@@ -262,7 +263,16 @@ AICORE inline void GemmCommAllImpl(
     DeviceBarrier(hcclCtx, signal_matrix, 0, my_rank, nranks, block_idx);
 
     // ========================================================================
-    // Phase 2: AllGather — each rank sends its owned reduced tiles to all others
+    // Phase 2: AllGather — row-level flattened decomposition
+    //
+    // Flatten all AG work into rows:
+    //   total_rows = my_tile_count * (nranks-1) * G_BASE_M
+    // Each AIV block handles an equal-sized contiguous slice of rows.
+    // Within each work row we recover (tile_owner_idx, remote_rank, row_in_tile)
+    // and issue sub-tile TLOAD/TSTORE covering only the assigned rows.
+    //
+    // This ensures every AIV transfers the exact same amount of data,
+    // eliminating the ±1 work-item imbalance of tile-level decomposition.
     // ========================================================================
     {
         const int total_tiles = G_NUM_TILES;
@@ -271,31 +281,61 @@ AICORE inline void GemmCommAllImpl(
                                   ? tiles_per_owner
                                   : (total_tiles / nranks);
 
-        int tiles_per_block = (my_tile_count + num_comm_blocks - 1) / num_comm_blocks;
-        int oi_start = block_idx * tiles_per_block;
-        int oi_end = (block_idx + 1) * tiles_per_block;
-        if (oi_end > my_tile_count) oi_end = my_tile_count;
+        const int remotes = nranks - 1;
+        constexpr int ROWS_PER_TILE = G_BASE_M;
+        const int rows_per_transfer = my_tile_count * ROWS_PER_TILE;
+        const int total_rows = rows_per_transfer * remotes;
 
-        for (int oi = oi_start; oi < oi_end; oi++) {
-            int t = my_rank + oi * nranks;
-            if (t >= total_tiles) break;
-            uint32_t mi = t / G_N_TILES;
-            uint32_t ni = t % G_N_TILES;
-            uint64_t tile_offset = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;
+        if (total_rows > 0) {
+            const int rows_per_block = (total_rows + num_comm_blocks - 1) / num_comm_blocks;
+            int row_start = block_idx * rows_per_block;
+            int row_end = (block_idx + 1) * rows_per_block;
+            if (row_end > total_rows) row_end = total_rows;
 
-            Global srcG(reduced_output + tile_offset, tileShape, tileStride);
+            int cur_row = row_start;
+            while (cur_row < row_end) {
+                int flat_transfer = cur_row / ROWS_PER_TILE;
+                int row_in_tile = cur_row % ROWS_PER_TILE;
 
-            TLOAD(pingTile, srcG);
-            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                int oi = flat_transfer / remotes;
+                int remote_idx = flat_transfer % remotes;
 
-            for (int r = 0; r < nranks; r++) {
-                if (r == my_rank) continue;
-                __gm__ half *dst_ptr = HcclRemotePtr(hcclCtx, reduced_output, r) + tile_offset;
-                Global dstG(dst_ptr, tileShape, tileStride);
-                TSTORE_IMPL<TileData, Global, pto::AtomicType::AtomicNone>(dstG, pingTile);
+                int t = my_rank + oi * nranks;
+                if (t >= total_tiles) break;
+
+                int r = remote_idx;
+                if (r >= my_rank) r++;
+
+                int rows_left_in_transfer = ROWS_PER_TILE - row_in_tile;
+                int rows_left_for_me = row_end - cur_row;
+                int nrows = rows_left_in_transfer;
+                if (nrows > rows_left_for_me) nrows = rows_left_for_me;
+
+                uint32_t mi = t / G_N_TILES;
+                uint32_t ni = t % G_N_TILES;
+                uint64_t tile_base = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;
+                uint64_t row_offset = tile_base + (uint64_t)row_in_tile * G_N;
+
+                ShapeDyn subShape(1, 1, 1, nrows, G_BASE_N);
+
+                Global srcG(reduced_output + row_offset, subShape, tileStride);
+
+                using SubTile = pto::Tile<pto::TileType::Vec, half, G_BASE_M, G_BASE_N,
+                                          pto::BLayout::RowMajor, -1, -1>;
+                SubTile subTile(nrows, G_BASE_N);
+                TASSIGN(subTile, 0x0);
+
+                TLOAD(subTile, srcG);
+                set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+
+                __gm__ half *dst_ptr = HcclRemotePtr(hcclCtx, reduced_output, r) + row_offset;
+                Global dstG(dst_ptr, subShape, tileStride);
+                TSTORE_IMPL<SubTile, Global, pto::AtomicType::AtomicNone>(dstG, subTile);
                 set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
                 wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+
+                cur_row += nrows;
             }
         }
 
