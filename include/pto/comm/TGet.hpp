@@ -273,7 +273,14 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
                                              (TileData::BFractal == BLayout::RowMajor) &&
                                              (TileData::SFractal == SLayout::NoneBox) && (TileData::Rows % 2 == 0);
     if constexpr (canUseIntraTilePingPong) {
-        if (singleTileRows == TileData::Rows && singleTileCols == TileData::Cols && singleTileRows >= 2) {
+        const int64_t outerChunkGroups =
+            static_cast<int64_t>(remoteDims[0]) * remoteDims[1] * remoteDims[2];
+        const int64_t rowChunkCount = (static_cast<int64_t>(remoteDims[3]) + singleTileRows - 1) / singleTileRows;
+        const int64_t colChunkCount = (static_cast<int64_t>(remoteDims[4]) + singleTileCols - 1) / singleTileCols;
+        const int64_t totalChunkCount = outerChunkGroups * rowChunkCount * colChunkCount;
+
+        if (singleTileRows == TileData::Rows && singleTileCols == TileData::Cols && singleTileRows >= 2 &&
+            totalChunkCount >= 8) {
             TgetChunkedSingleIntraPingPong<GlobalDstData, GlobalSrcData, TileData>(
                 dstGlobalData, srcGlobalData, stagingTileData, remoteDims[0], remoteDims[1], remoteDims[2],
                 remoteDims[3], remoteDims[4], singleTileRows, singleTileCols);
