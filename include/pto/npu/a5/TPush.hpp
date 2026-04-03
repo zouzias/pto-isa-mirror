@@ -32,7 +32,7 @@ struct TPipe {
     static constexpr bool is_c2v = is_c2v_gm || is_c2v_ub;
     static constexpr bool is_v2c = is_v2c_gm || is_v2c_mat || is_v2c_ctrl;
     static_assert(is_c2v || is_v2c || is_both || is_both_gm,
-                  "Fix: TPipe only supports C2V or V2C or Both communication with specified tile");
+                  "Fix: TPipe only supports C2V or V2C or Both communication on A5.");
     static constexpr uint8_t VEC_CORE_ID_OFFSET = 16;
 
     // -------------------------------------------------------------------------
@@ -134,8 +134,17 @@ struct TPipe {
                 wait_intra_block(PIPE_S, FlagID + 1);
 #endif
             } else if constexpr (is_both_gm) {
-                wait_intra_block(PIPE_FIX, FlagID + 1);
-                wait_intra_block(PIPE_MTE3, FlagID + 1 + VEC_CORE_ID_OFFSET);
+#ifdef __DAV_CUBE__
+                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+                    wait_intra_block(PIPE_FIX, FlagID + 1);
+                } else {
+                    wait_intra_block(PIPE_FIX, FlagID + 1);
+                    wait_intra_block(PIPE_FIX, FlagID + 1 + VEC_CORE_ID_OFFSET);
+                }
+#endif
+#ifdef __DAV_VEC__
+                wait_intra_block(PIPE_MTE3, FlagID + 1);
+#endif
             }
         }
 
@@ -172,9 +181,20 @@ struct TPipe {
 #ifdef __DAV_VEC__
                 set_intra_block(PIPE_MTE3, FlagID);
 #endif
-            } else { // is_v2c_ctrl
-                // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
+            } else if constexpr (is_v2c_ctrl) { // is_v2c_ctrl
                 set_intra_block(PIPE_S, FlagID);
+            } else if constexpr (is_both_gm) {
+#ifdef __DAV_VEC__
+                set_intra_block(PIPE_MTE3, FlagID);
+#endif
+#ifdef __DAV_CUBE__
+                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+                    set_intra_block(PIPE_FIX, FlagID);
+                } else {
+                    set_intra_block(PIPE_FIX, FlagID);
+                    set_intra_block(PIPE_FIX, FlagID + VEC_CORE_ID_OFFSET);
+                }
+#endif
             }
         }
 
@@ -403,13 +423,25 @@ struct TPipe {
                     wait_intra_block(PIPE_MTE1, FlagID + VEC_CORE_ID_OFFSET);
                 }
 #endif
-            } else { // is_v2c_ctrl
+            } else if constexpr (is_v2c_ctrl) { // is_v2c_ctrl
                 if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
                     wait_intra_block(PIPE_S, FlagID);
                 } else {
                     wait_intra_block(PIPE_S, FlagID);
                     wait_intra_block(PIPE_S, FlagID + VEC_CORE_ID_OFFSET);
                 }
+            } else if constexpr (is_both_gm) {
+#ifdef __DAV_VEC__
+                wait_intra_block(PIPE_MTE2, FlagID + 1);
+#endif
+#ifdef __DAV_CUBE__
+                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+                    wait_intra_block(PIPE_MTE2, FlagID);
+                } else {
+                    wait_intra_block(PIPE_MTE2, FlagID);
+                    wait_intra_block(PIPE_MTE2, FlagID + VEC_CORE_ID_OFFSET);
+                }
+#endif
             }
         }
 
@@ -425,20 +457,17 @@ struct TPipe {
             if constexpr (is_c2v_gm) {
                 // Vec consumer frees buffer for Cube - signals on PIPE_MTE2, flag_id+1 only
 #ifdef __DAV_VEC__
-                uint8_t freeCubeID = FlagID + 1;
-                set_intra_block(PIPE_MTE2, freeCubeID);
+                set_intra_block(PIPE_MTE2, FlagID + 1);
 #endif
             } else if constexpr (is_c2v_ub) {
                 // Vec consumer frees buffer for Cube - signals on PIPE_V, flag_id+1 only
                 // Vec signals after vector ops complete (PIPE_V)
 #ifdef __DAV_VEC__
-                uint8_t freeCubeID = FlagID + 1;
-                set_intra_block(PIPE_V, freeCubeID);
+                set_intra_block(PIPE_V, FlagID + 1);
 #endif
             } else if constexpr (is_both) {
 #ifdef __DAV_VEC__
-                uint8_t freeCubeID = FlagID + 1;
-                set_intra_block(PIPE_V, freeCubeID);
+                set_intra_block(PIPE_V, FlagID + 1);
 #endif
 #ifdef __DAV_CUBE__
                 if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
@@ -458,14 +487,25 @@ struct TPipe {
                     set_intra_block(PIPE_MTE1, FlagID + 1 + VEC_CORE_ID_OFFSET);
                 }
 #endif
-            } else { // is_v2c_ctrl
-                     // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
+            } else if constexpr (is_v2c_ctrl) { // is_v2c_ctrl
 #ifdef __DAV_CUBE__
                 if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
                     set_intra_block(PIPE_S, FlagID + 1);
                 } else {
                     set_intra_block(PIPE_S, FlagID + 1);
                     set_intra_block(PIPE_S, FlagID + 1 + VEC_CORE_ID_OFFSET);
+                }
+#endif
+            } else if constexpr (is_both_gm) {
+#ifdef __DAV_VEC__
+                set_intra_block(PIPE_MTE2, FlagID + 1);
+#endif
+#ifdef __DAV_CUBE__
+                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+                    set_intra_block(PIPE_MTE1, FlagID + 1);
+                } else {
+                    set_intra_block(PIPE_MTE1, FlagID + 1);
+                    set_intra_block(PIPE_MTE1, FlagID + 1 + VEC_CORE_ID_OFFSET);
                 }
 #endif
             }
@@ -721,10 +761,8 @@ struct TMPipe {
                 // Vec signals on flag_id+1 only, but Cube must wait on BOTH
                 // (because Vec0 signals flag_id+1, Vec1 signals flag_id+1+16 from Cube's view)
 #ifdef __DAV_CUBE__
-                uint8_t waitVec0ID = FlagID + 1;
-                uint8_t waitVec1ID = FlagID + 1 + VEC_CORE_ID_OFFSET;
-                wait_intra_block(PIPE_FIX, waitVec0ID);
-                wait_intra_block(PIPE_FIX, waitVec1ID);
+                wait_intra_block(PIPE_FIX, FlagID + 1);
+                wait_intra_block(PIPE_FIX, FlagID + 1 + VEC_CORE_ID_OFFSET);
 #endif
             } else if constexpr (is_v2c_gm || is_v2c_mat) {
                 // is_v2c (both gm and mat)
@@ -734,7 +772,7 @@ struct TMPipe {
                 uint8_t waitCubeID = FlagID + 1;
                 wait_intra_block(PIPE_MTE3, waitCubeID);
 #endif
-            } else {
+            } else if constexpr (is_v2c_ctrl) {
                 // is_v2c_ctrl
                 // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
 #ifdef __DAV_VEC__
