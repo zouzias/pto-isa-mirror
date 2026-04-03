@@ -162,7 +162,8 @@ PTO_INTERNAL void TgetChunkedSingleIntraPingPong(GlobalDstData &dstGlobalData, G
                                            static_cast<int64_t>(colIdx) * locStep[4];
 
                         if constexpr (canSplitTile) {
-                            const bool fullTileChunk = (tileValidRow == TileData::Rows) && (tileValidCol == TileData::Cols) &&
+                            const bool fullTileChunk = (tileValidRow == TileData::Rows) &&
+                                                       (tileValidCol == TileData::Cols) &&
                                                        (chunkRows == TileData::Rows) && (chunkCols == TileData::Cols);
                             if (fullTileChunk) {
                                 using HalfTileData =
@@ -173,8 +174,8 @@ PTO_INTERNAL void TgetChunkedSingleIntraPingPong(GlobalDstData &dstGlobalData, G
                                 HalfTileData pingHalf(kHalfRows, chunkCols);
                                 HalfTileData pongHalf(kHalfRows, chunkCols);
                                 const auto baseAddr = reinterpret_cast<std::uintptr_t>(stagingTileData.data());
-                                const auto halfAddr =
-                                    reinterpret_cast<std::uintptr_t>(stagingTileData.data() + kHalfRows * TileData::Cols);
+                                const auto halfAddr = reinterpret_cast<std::uintptr_t>(stagingTileData.data() +
+                                                                                       kHalfRows * TileData::Cols);
                                 TASSIGN_IMPL(pingHalf, baseAddr);
                                 TASSIGN_IMPL(pongHalf, halfAddr);
                                 pingHalf.SetKAligned(stagingTileData.GetKAligned());
@@ -273,8 +274,7 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
                                              (TileData::BFractal == BLayout::RowMajor) &&
                                              (TileData::SFractal == SLayout::NoneBox) && (TileData::Rows % 2 == 0);
     if constexpr (canUseIntraTilePingPong) {
-        const int64_t outerChunkGroups =
-            static_cast<int64_t>(remoteDims[0]) * remoteDims[1] * remoteDims[2];
+        const int64_t outerChunkGroups = static_cast<int64_t>(remoteDims[0]) * remoteDims[1] * remoteDims[2];
         const int64_t rowChunkCount = (static_cast<int64_t>(remoteDims[3]) + singleTileRows - 1) / singleTileRows;
         const int64_t colChunkCount = (static_cast<int64_t>(remoteDims[4]) + singleTileCols - 1) / singleTileCols;
         const int64_t totalChunkCount = outerChunkGroups * rowChunkCount * colChunkCount;
@@ -288,10 +288,9 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
         }
     }
 
-    TgetChunkedSingle<GlobalDstData, GlobalSrcData, TileData>(dstGlobalData, srcGlobalData, stagingTileData,
-                                                               remoteDims[0], remoteDims[1], remoteDims[2],
-                                                               remoteDims[3], remoteDims[4], singleTileRows,
-                                                               singleTileCols);
+    TgetChunkedSingle<GlobalDstData, GlobalSrcData, TileData>(
+        dstGlobalData, srcGlobalData, stagingTileData, remoteDims[0], remoteDims[1], remoteDims[2], remoteDims[3],
+        remoteDims[4], singleTileRows, singleTileCols);
 }
 
 // Process one chunk in the ping-pong pipeline: overlap TSTORE of previous chunk with TLOAD of current chunk
