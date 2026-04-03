@@ -62,7 +62,7 @@ inline double applyRoundingToIntegral(double v, RoundMode mode)
     }
 }
 
-template <typename TileDataD, typename TileDataS>
+template <typename TileDataD, typename TileDataS, SaturationMode satMode>
 PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileDataS::TileDType src, unsigned validRow,
                             unsigned validCol, RoundMode mode)
 {
@@ -73,29 +73,8 @@ PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileData
             using D = typename TileDataD::DType;
             using S = typename TileDataS::DType;
 
-            if constexpr (is_float_like_v<S> && std::is_integral_v<D>) {
-                const double dv = static_cast<double>(src[srcIdx]);
-                dst[dstIdx] = static_cast<D>(applyRoundingToIntegral(dv, mode));
-            } else {
-                dst[dstIdx] = static_cast<D>(src[srcIdx]);
-            }
-        }
-    }
-}
-
-template <typename TileDataD, typename TileDataS>
-PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileDataS::TileDType src, unsigned validRow,
-                            unsigned validCol, RoundMode mode, SaturationMode satMode)
-{
-    for (int i = 0; i < validRow; ++i) {
-        for (int j = 0; j < validCol; ++j) {
-            size_t dstIdx = GetTileElementOffset<TileDataD>(i, j);
-            size_t srcIdx = GetTileElementOffset<TileDataS>(i, j);
-            using D = typename TileDataD::DType;
-            using S = typename TileDataS::DType;
-
             S val = src[srcIdx];
-            if (satMode == SaturationMode::ON) {
+            if constexpr (satMode == SaturationMode::ON) {
                 constexpr S min_limit = static_cast<S>(std::numeric_limits<D>::min());
                 constexpr S max_limit = static_cast<S>(std::numeric_limits<D>::max());
                 val = std::clamp(val, min_limit, max_limit);
@@ -122,7 +101,11 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
 {
     uint16_t rows = src.GetValidRow();
     uint16_t cols = src.GetValidCol();
-    TCvt_Impl<TileDataD, TileDataS>(dst.data(), src.data(), rows, cols, mode);
+    if(satMode == SaturationMode::ON) {
+        TCvt_Impl<TileDataD, TileDataS, SaturationMode::ON>(dst.data(), src.data(), rows, cols, mode);
+    } else {
+        TCvt_Impl<TileDataD, TileDataS, SaturationMode::OFF>(dst.data(), src.data(), rows, cols, mode);
+    }
 }
 
 } // namespace pto
