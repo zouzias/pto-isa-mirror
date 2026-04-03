@@ -21,9 +21,7 @@
 #include <string>
 #include <iostream>
 #include <iomanip>
-#include <chrono>
 #include <algorithm>
-#include <tuple>
 
 #include "ready_queue.hpp"
 
@@ -103,36 +101,6 @@ extern void launchAllGatherGemmComputeStreaming(
     uint8_t* tile_flags,
     void* stream,
     int block_num);
-
-// ============================================================================
-// Statistics helper
-// ============================================================================
-static double SimpleSqrt(double x)
-{
-    if (x <= 0.0) return 0.0;
-    double r = x;
-    for (int i = 0; i < 64; ++i) {
-        r = 0.5 * (r + x / r);
-    }
-    return r;
-}
-
-static auto CalcStats(const std::vector<double> &times)
-{
-    double sum = 0.0, min_val = times[0], max_val = times[0];
-    for (double t : times) {
-        sum += t;
-        min_val = std::min(min_val, t);
-        max_val = std::max(max_val, t);
-    }
-    double avg = sum / static_cast<double>(times.size());
-    double variance = 0.0;
-    for (double t : times) {
-        variance += (t - avg) * (t - avg);
-    }
-    double std_dev = SimpleSqrt(variance / static_cast<double>(times.size()));
-    return std::make_tuple(avg, min_val, max_val, std_dev);
-}
 
 // ============================================================================
 // RunAllGatherGemmPerRank: per-rank test harness
@@ -350,8 +318,17 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         }
 
         // Measure streaming pipelined (the primary metric)
+        // Uses per-iteration aclrtEvent on computeStream to measure device-side
+        // kernel time, matching shmem's timing methodology.
+        // Each iteration: record start -> launch kernels -> record end -> sync.
+        // The reset+barrier overhead between iterations is excluded from timing.
+
         std::vector<double> times_us;
         times_us.reserve(MEASURE_ITERS);
+
+        aclrtEvent evtStart = nullptr, evtEnd = nullptr;
+        aclrtCreateEvent(&evtStart);
+        aclrtCreateEvent(&evtEnd);
 
         for (int iter = 0; iter < MEASURE_ITERS; ++iter) {
             resetStreamingState();
@@ -359,7 +336,7 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
             aclrtSynchronizeStream(computeStream);
             HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
 
-            auto t_start = std::chrono::high_resolution_clock::now();
+            aclrtRecordEvent(evtStart, computeStream);
 
             launchRingCommStreaming(
                 reinterpret_cast<uint8_t*>(shmem_input),
@@ -372,19 +349,30 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
                 reinterpret_cast<uint8_t*>(src1_dev),
                 reinterpret_cast<uint8_t*>(tile_flag_shmem),
                 computeStream, COMPUTE_BLOCK_NUM);
+
+            // Record end event before sync — computeStream kernel completion
+            // implies commStream data is ready (compute waits on tile flags).
+            aclrtRecordEvent(evtEnd, computeStream);
             aclrtSynchronizeStream(computeStream);
             aclrtSynchronizeStream(commStream);
 
-            auto t_end = std::chrono::high_resolution_clock::now();
-            double elapsed_us = std::chrono::duration<double, std::micro>(t_end - t_start).count();
-            times_us.push_back(elapsed_us);
+            float iterMs = 0.0f;
+            aclrtEventElapsedTime(&iterMs, evtStart, evtEnd);
+            times_us.push_back(static_cast<double>(iterMs) * 1000.0);
+
             HcclHostBarrier(hcclTestCtx.comm, hcclTestCtx.stream);
         }
 
-        // Print performance results (rank 0 only, matching reference format)
-        if (rank_id == 0) {
-            auto [avg, min_val, max_val, std_dev] = CalcStats(times_us);
+        aclrtDestroyEvent(evtStart);
+        aclrtDestroyEvent(evtEnd);
 
+        double sum = 0.0;
+        for (double t : times_us) sum += t;
+        double avg = sum / static_cast<double>(times_us.size());
+        float totalElapsedMs = static_cast<float>(sum / 1000.0);
+
+        // Print performance results (rank 0 only)
+        if (rank_id == 0) {
             double gemm_flops = 2.0 * static_cast<double>(G_M) * static_cast<double>(G_K) * static_cast<double>(G_N);
             double tflops = (avg > 0.0) ? (gemm_flops / (avg * 1e-6) / 1e12) : 0.0;
 
@@ -402,6 +390,16 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
 #endif
             constexpr double PEAK_TFLOPS_FP16 = CONFIG_PEAK_TFLOPS_FP16;
             double mfu = tflops / PEAK_TFLOPS_FP16 * 100.0;
+
+            // Machine-parseable line for benchmark.sh (padded shape + avg_time)
+            std::cout << std::fixed << std::setprecision(6);
+            std::cout << "[PERF] op=hccl_ag_gemm"
+                      << " M=" << G_M << " K=" << G_K << " N=" << G_N
+                      << " orig_M=" << ORIG_M << " orig_K=" << ORIG_K << " orig_N=" << ORIG_N
+                      << " pe_size=" << n_ranks
+                      << " total_time=" << (totalElapsedMs) << "ms"
+                      << " iters=" << MEASURE_ITERS
+                      << " avg_time=" << (avg / 1000.0) << "ms" << std::endl;
 
             std::cout << std::fixed << std::setprecision(3);
             std::cout << "\n================================================================" << std::endl;
@@ -436,11 +434,9 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
                       << (comm_bytes / (1024.0 * 1024.0)) << " MB" << std::endl;
 
             std::cout << std::fixed << std::setprecision(3);
-            std::cout << "\n  End-to-End (AllGather + GEMM fused):" << std::endl;
+            std::cout << "\n  End-to-End (AllGather + GEMM fused, aclrtEvent):" << std::endl;
+            std::cout << "    Total Time:    " << totalElapsedMs << " ms  (" << MEASURE_ITERS << " iters)" << std::endl;
             std::cout << "    Avg Time:      " << avg << " us  (" << (avg / 1000.0) << " ms)" << std::endl;
-            std::cout << "    Min Time:      " << min_val << " us" << std::endl;
-            std::cout << "    Max Time:      " << max_val << " us" << std::endl;
-            std::cout << "    Std Dev:       " << std_dev << " us" << std::endl;
 
             std::cout << "\n  Throughput:" << std::endl;
             std::cout << "    TFLOPS:        " << tflops << std::endl;
