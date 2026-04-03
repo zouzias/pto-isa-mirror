@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
+#include <unistd.h>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -284,7 +285,7 @@ static bool VerifyOutput(RankResources& r, const std::string& dataDir) {
     std::string output_file = dataDir + "/output_rank" + std::to_string(r.rank_id) + ".bin";
     PtoTestCommon::WriteFile(output_file, output_host, r.outputSize);
 
-    bool is_ok = true;
+    bool is_ok = false;
     std::string golden_file = dataDir + "/golden.bin";
     size_t goldenSize = static_cast<size_t>(ORIG_M) * ORIG_N * sizeof(float);
     std::vector<float> golden(goldenSize / sizeof(float));
@@ -304,8 +305,9 @@ static bool VerifyOutput(RankResources& r, const std::string& dataDir) {
             is_ok = PtoTestCommon::ResultCmp(golden, valid_output.data(), 0.001f);
         }
     } else {
-        std::cerr << "[WARN] Rank " << r.rank_id
-                  << ": golden file not available, skipping verification" << std::endl;
+        std::cerr << "[ERROR] Rank " << r.rank_id
+                  << ": golden.bin missing or size mismatch (expected " << goldenSize
+                  << " bytes); numerical verification not performed, treated as FAILED" << std::endl;
     }
     aclrtFreeHost(output_host);
     return is_ok;
@@ -352,9 +354,9 @@ static std::vector<double> RunMeasure(RankResources& r) {
     aclrtCreateEvent(&evtEnd);
 
     for (int iter = 0; iter < MEASURE_ITERS; ++iter) {
-        ResetStreamingState(r);
         aclrtSynchronizeStream(r.commStream);
         aclrtSynchronizeStream(r.computeStream);
+        ResetStreamingState(r);
         HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
 
         aclrtRecordEvent(evtStart, r.computeStream);
@@ -467,8 +469,8 @@ static void Cleanup(RankResources& r) {
     aclrtFree(r.src1_dev);
     aclrtFree(r.output_dev);
     aclrtFreeHost(r.tile_flag_host);
-    aclrtDestroyStream(r.computeStream);
-    aclrtDestroyStream(r.commStream);
+    if (r.computeStream) aclrtDestroyStream(r.computeStream);
+    if (r.commStream) aclrtDestroyStream(r.commStream);
 }
 
 // ============================================================================
@@ -499,9 +501,26 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
         }
     }
 
-    bool hcclOk = r.hcclTestCtx.Finalize();
+    aclrtSynchronizeStream(r.computeStream);
+    aclrtSynchronizeStream(r.commStream);
+    aclrtSynchronizeStream(r.hcclTestCtx.stream);
+
+    CommMpiBarrier();
+
     Cleanup(r);
-    return (perfMode || is_ok) && hcclOk;
+
+    bool ok = perfMode || is_ok;
+    if (rank_id == 0) {
+        std::cout << (ok ? "[SUCCESS] AllGather GEMM demo completed successfully."
+                         : "[FAILED] AllGather GEMM demo FAILED.") << std::endl;
+    }
+
+    // HcclCommDestroy hangs on the internal barrier in some HCCL versions
+    // when used with HCCL windows (shmem_input). Force-exit after MPI
+    // barrier to avoid the hang; OS reclaims all resources.
+    CommMpiBarrier();
+    CommMpiFinalize();
+    _exit(ok ? 0 : 1);
 }
 
 // ============================================================================
@@ -593,11 +612,13 @@ int main(int argc, char** argv) {
         std::cout << "================================================================" << std::endl;
     }
 
+    // RunAllGatherGemmPerRank calls _exit() internally to avoid
+    // HcclCommDestroy hang. The lines below are only reached if
+    // AllocateResources or LoadInputData fail before _exit.
     bool ok = RunAllGatherGemmPerRank(rank_id, n_ranks, device_id, &rootInfo, perfMode, dataDir);
 
     if (rank_id == 0) {
-        std::cout << (ok ? "[SUCCESS] AllGather GEMM demo completed successfully."
-                         : "[FAILED] AllGather GEMM demo FAILED.") << std::endl;
+        std::cerr << "[FAILED] AllGather GEMM early init failure." << std::endl;
     }
 
     CommMpiFinalize();

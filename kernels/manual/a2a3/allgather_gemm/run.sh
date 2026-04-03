@@ -212,7 +212,9 @@ run_one_shape() {
 
     # Launch via MPI
     export N_RANKS=${PE_SIZE}
-    local TIMEOUT=${TIMEOUT:-120}
+    local DEFAULT_TIMEOUT=120
+    if [ -n "${PERF_FLAG}" ]; then DEFAULT_TIMEOUT=600; fi
+    local TIMEOUT=${TIMEOUT:-${DEFAULT_TIMEOUT}}
 
     if [ -n "${PERF_FLAG}" ]; then
         export ALLGATHER_GEMM_PERF_MODE=1
@@ -222,10 +224,13 @@ run_one_shape() {
     export ALLGATHER_GEMM_DATA_DIR="${DATA_DIR}"
 
     echo "[INFO] Launching: ${MPI_BIN} -n ${PE_SIZE} ${EXEC_BIN}"
-    timeout ${TIMEOUT}s ${MPI_BIN} -n ${PE_SIZE} ${EXEC_BIN}
+    timeout --signal=KILL ${TIMEOUT}s ${MPI_BIN} -n ${PE_SIZE} ${EXEC_BIN}
     local RET=$?
 
+    # Clean up any residual NPU processes after timeout or crash
     if [ ${RET} -ne 0 ]; then
+        pkill -9 -f allgather_gemm 2>/dev/null || true
+        sleep 1
         echo "[ERROR] Test failed with exit code ${RET}"
         exit 1
     fi

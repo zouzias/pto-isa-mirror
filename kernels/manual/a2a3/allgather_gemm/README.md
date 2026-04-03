@@ -11,7 +11,7 @@ This example demonstrates a fused AllGather + GEMM operator on Ascend AI Cores u
 ## Directory Layout
 
 ```
-kernels/manual/a2a3/allgather_gemm_multi/
+kernels/manual/a2a3/allgather_gemm/
 ├── main.cpp                           # Host entry: HCCL init, dual-stream dispatch, warmup, verification, perf stats
 ├── allgather_gemm_comm_kernel.cpp     # AIV communication kernel: AllGather via TPUT
 ├── allgather_gemm_compute_kernel.cpp  # AIC compute kernel: streaming GEMM with tile-flag waiting
@@ -111,7 +111,7 @@ source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
 2. Generate input data and golden output:
 
 ```bash
-cd ${git_clone_path}/kernels/manual/a2a3/allgather_gemm_multi
+cd ${git_clone_path}/kernels/manual/a2a3/allgather_gemm
 python3 scripts/gen_data.py --n-ranks 2 --m 2048 --k 2048 --n 1024 --output-dir out
 ```
 
