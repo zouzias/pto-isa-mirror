@@ -54,8 +54,12 @@ struct Event {
     static constexpr Op dstOp = DstOp;
     static constexpr pipe_t srcPipe = GetPipeByOp<srcOp>();
     static constexpr pipe_t dstPipe = GetPipeByOp<dstOp>();
+    static constexpr bool isSamePipe = (srcPipe == dstPipe);
+    static constexpr bool isValidBarrierPipe =
+        ((dstPipe == PIPE_M) || (dstPipe == PIPE_MTE1) || (dstPipe == PIPE_MTE2) || (dstPipe == PIPE_MTE3) ||
+         (dstPipe == PIPE_ALL) || (dstPipe == PIPE_FIX));
     PTO_STATIC_ASSERT(SrcOp != DstOp, "SrcOp is not allowed to be equal to DstOp.");
-    PTO_STATIC_ASSERT(dstPipe != srcPipe, "SrcPipe is not allowed to be equal to dstPipe.");
+    // PTO_STATIC_ASSERT(dstPipe != srcPipe, "SrcPipe is not allowed to be equal to dstPipe.");
 
     PTO_INTERNAL static constexpr bool IsCrossCoreEvent()
     {
@@ -92,6 +96,10 @@ struct Event {
             PTO_STATIC_ASSERT(CrossCoreId != 0xff,
                               "Fix: The cross-core id must be assigned by user when the event is a cross-core event.");
             wait_flag_dev(CrossCoreId);
+        } else if (isSamePipe) {
+            if constexpr (isValidBarrierPipe) {
+                pipe_barrier((pipe_t)srcPipe);
+            }
         } else {
 #ifdef PTO_FLAG_TEST
             __pto_wait_flag((pipe_t)srcPipe, (pipe_t)dstPipe, token);
