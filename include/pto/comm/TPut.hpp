@@ -300,7 +300,14 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
                                              (TileData::BFractal == BLayout::RowMajor) &&
                                              (TileData::SFractal == SLayout::NoneBox) && (TileData::Rows % 2 == 0);
     if constexpr (canUseIntraTilePingPong) {
-        if (ubChunkRows == TileData::Rows && ubChunkCols == TileData::Cols && ubChunkRows >= 2) {
+        const int64_t outerChunkGroups =
+            static_cast<int64_t>(logicalDims[0]) * logicalDims[1] * logicalDims[2];
+        const int64_t rowChunkCount = (static_cast<int64_t>(logicalDims[3]) + ubChunkRows - 1) / ubChunkRows;
+        const int64_t colChunkCount = (static_cast<int64_t>(logicalDims[4]) + ubChunkCols - 1) / ubChunkCols;
+        const int64_t totalChunkCount = outerChunkGroups * rowChunkCount * colChunkCount;
+
+        if (ubChunkRows == TileData::Rows && ubChunkCols == TileData::Cols && ubChunkRows >= 2 &&
+            totalChunkCount >= 8 && totalChunkCount <= 16) {
             TputChunkedSingleIntraPingPong<GlobalDstData, GlobalSrcData, TileData, atomicType>(
                 dstGlobalData, srcGlobalData, stagingTileData, logicalDims[0], logicalDims[1], logicalDims[2],
                 logicalDims[3], logicalDims[4], ubChunkRows, ubChunkCols);
