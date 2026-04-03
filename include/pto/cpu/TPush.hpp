@@ -20,7 +20,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <mutex>
 #include <new>
 #include <thread>
-#include <format>
 #include <pto/common/fifo.hpp>
 
 #include <pto/cpu/TAssign.hpp>
@@ -155,8 +154,9 @@ struct TPipe {
     {
         if (auto hook = cpu_sim::ResolveSharedStorageHook(); hook != nullptr) {
             char key[128] = {};
-            std::format_to(key, "pto-pipe-%llu-%u-%u-%u-%u-%u-%u", static_cast<unsigned long long>(get_task_cookie()),
-                           get_block_idx(), FlagID, DirType, SlotSize, SlotNum, LocalSlotNum);
+            std::snprintf(key, sizeof(key), "pto-pipe-%llu-%u-%u-%u-%u-%u-%u",
+                          static_cast<unsigned long long>(get_task_cookie()), get_block_idx(), FlagID, DirType,
+                          SlotSize, SlotNum, LocalSlotNum);
             auto *storage = reinterpret_cast<SharedStateStorage *>(hook(key, sizeof(SharedStateStorage)));
             EnsureSharedStateInitialized(*storage);
             return *std::launder(reinterpret_cast<SharedState *>(storage->payload));
