@@ -36,6 +36,9 @@ constexpr uint32_t G_STEP_KA = 4;
 constexpr uint32_t G_STEP_KB = 4;
 
 static_assert(G_BASE_N == G_BASE_K * G_STEP_KA, "Expect one comm K-block equals one compute step pack");
+static_assert(G_BASE_M > 0, "G_BASE_M must be positive");
+static_assert(G_BASE_N > 0, "G_BASE_N must be positive");
+static_assert(G_BASE_K > 0, "G_BASE_K must be positive");
 
 #ifndef CONFIG_COMPUTE_BLOCK_NUM
 #define CONFIG_COMPUTE_BLOCK_NUM 24
@@ -273,7 +276,7 @@ AICORE inline void ComputeRowGroupStreaming(
     int num_tiles_per_src = flags->num_tiles_per_src;
     int first_streaming_tile = 0;
     int last_streaming_tile = -1;
-    if (block_end > block_start && num_tiles_per_src > 0) {
+    if (block_end > block_start && num_tiles_per_src > 0 && tile_size > 0) {
         first_streaming_tile = block_start / tile_size;
         last_streaming_tile = (block_end - 1) / tile_size;
         if (last_streaming_tile >= num_tiles_per_src) {
@@ -282,7 +285,7 @@ AICORE inline void ComputeRowGroupStreaming(
     }
 
     __gm__ half *aRowBase = shmem_input + static_cast<uint64_t>(mi) * G_BASE_M * G_K;
-    __gm__ float *outRowBase = output + static_cast<uint64_t>(mi * G_BASE_M) * G_N;
+    __gm__ float *outRowBase = output + static_cast<uint64_t>(mi) * G_BASE_M * G_N;
 
     for (uint32_t ni = 0; ni < n_tiles; ++ni) {
         __gm__ float *tileDst = outRowBase + ni * G_BASE_N;
@@ -323,7 +326,7 @@ AICORE inline void ComputeRowGroupDirect(
     constexpr uint32_t n_tiles = G_N / G_BASE_N;
 
     __gm__ half *aRowBase = shmem_input + static_cast<uint64_t>(mi) * G_BASE_M * G_K;
-    __gm__ float *outRowBase = output + static_cast<uint64_t>(mi * G_BASE_M) * G_N;
+    __gm__ float *outRowBase = output + static_cast<uint64_t>(mi) * G_BASE_M * G_N;
 
     for (uint32_t ni = 0; ni < n_tiles; ++ni) {
         __gm__ float *tileDst = outRowBase + ni * G_BASE_N;
@@ -386,6 +389,9 @@ AICORE inline void AllGatherGemmComputeStreamingImpl(
         reinterpret_cast<volatile __gm__ TileFlagMatrix *>(tile_flags);
 
     int n_ranks = flags->num_ranks;
+    if (n_ranks <= 0) {
+        return;
+    }
     int m_tiles = static_cast<int>(G_M / G_BASE_M);
     int m_tiles_per_rank = m_tiles / n_ranks;
     int k_chunks = static_cast<int>(G_K / G_BASE_N);

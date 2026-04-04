@@ -70,6 +70,9 @@ AICORE inline CommParams BuildCommParams(
     CommParams p;
     p.myRank = static_cast<int>(hcclCtx->rankId);
     p.nRanks = static_cast<int>(hcclCtx->rankNum);
+    if (p.nRanks <= 0) {
+        p.nRanks = 1;
+    }
     p.numRemoteRanks = p.nRanks - 1;
     int mTiles = static_cast<int>(G_M / G_BASE_M);
     p.mTilesLocal = mTiles / p.nRanks;
@@ -193,6 +196,9 @@ AICORE inline void DispatchManyBlocks(
     int numBlocks)
 {
     __gm__ TileFlagMatrix* flagsMut = const_cast<__gm__ TileFlagMatrix*>(flags);
+    if (p.numRemoteRanks <= 0) {
+        return;
+    }
     int blocksPerDest = numBlocks / p.numRemoteRanks;
     if (blocksPerDest <= 0) {
         blocksPerDest = 1;

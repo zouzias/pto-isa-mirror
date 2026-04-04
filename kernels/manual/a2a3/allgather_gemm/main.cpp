@@ -175,6 +175,10 @@ static void LaunchComputeKernel(RankResources& r) {
 // ============================================================================
 static bool AllocateResources(RankResources& r, int rank_id, int n_ranks,
                               const HcclRootInfo* rootInfo) {
+    if (n_ranks <= 0) {
+        std::cerr << "[ERROR] n_ranks must be positive, got " << n_ranks << std::endl;
+        return false;
+    }
     r.rank_id = rank_id;
     r.n_ranks = n_ranks;
 
@@ -505,6 +509,69 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
 }
 
 // ============================================================================
+// Argument parsing and ACL initialization (split from main for G.FUNC.01)
+// ============================================================================
+struct AppArgs {
+    int n_ranks = 2;
+    bool perfMode = false;
+    std::string dataDir = "../out";
+};
+
+static AppArgs ParseArgs() {
+    AppArgs args;
+    std::string envVal;
+
+    if (const char* env = std::getenv("N_RANKS")) {
+        envVal = env;
+        args.n_ranks = std::atoi(envVal.c_str());
+    }
+    if (const char* env = std::getenv("ALLGATHER_GEMM_PERF_MODE")) {
+        envVal = env;
+        if (envVal == "1") args.perfMode = true;
+    }
+    if (const char* env = std::getenv("ALLGATHER_GEMM_DATA_DIR")) {
+        args.dataDir = env;
+    }
+    return args;
+}
+
+static bool InitAcl(int rank_id, int device_id) {
+    constexpr int kAclRepeatInit = 100002;
+    aclError aRet = aclInit(nullptr);
+    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
+        std::cerr << "[ERROR] Rank " << rank_id << ": aclInit failed: " << static_cast<int>(aRet) << std::endl;
+        return false;
+    }
+
+    if (rank_id == 0) rtSetDevice(device_id);
+
+    aRet = aclrtSetDevice(device_id);
+    if (aRet != ACL_SUCCESS) {
+        std::cerr << "[ERROR] Rank " << rank_id << ": aclrtSetDevice(" << device_id
+                  << ") failed: " << static_cast<int>(aRet) << std::endl;
+        return false;
+    }
+    return true;
+}
+
+static void PrintBanner(int n_ranks, bool perfMode) {
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << "  AllGather GEMM (HCCL backend)" << std::endl;
+    std::cout << "  M=" << G_M << ", K=" << G_K << ", N=" << G_N
+              << ", pe_size=" << n_ranks << std::endl;
+    if (ORIG_M != G_M || ORIG_K != G_K || ORIG_N != G_N) {
+        std::cout << "  (original: M=" << ORIG_M << ", K=" << ORIG_K << ", N=" << ORIG_N << ")" << std::endl;
+    }
+    if (perfMode) {
+        std::cout << "  Mode: PERFORMANCE (warmup=" << WARMUP_ITERS
+                  << ", measure=" << MEASURE_ITERS << ")" << std::endl;
+    } else {
+        std::cout << "  Mode: FUNCTIONAL VERIFICATION" << std::endl;
+    }
+    std::cout << "================================================================" << std::endl;
+}
+
+// ============================================================================
 // main
 // ============================================================================
 int main(int argc, char** argv) {
@@ -513,17 +580,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    int n_ranks = 2;
-    const char* n_ranks_env = std::getenv("N_RANKS");
-    if (n_ranks_env != nullptr) n_ranks = std::atoi(n_ranks_env);
-
-    bool perfMode = false;
-    const char* perf_env = std::getenv("ALLGATHER_GEMM_PERF_MODE");
-    if (perf_env != nullptr && std::string(perf_env) == "1") perfMode = true;
-
-    std::string dataDir = "../out";
-    const char* data_dir_env = std::getenv("ALLGATHER_GEMM_DATA_DIR");
-    if (data_dir_env != nullptr) dataDir = data_dir_env;
+    AppArgs args = ParseArgs();
+    int n_ranks = args.n_ranks;
 
     if (n_ranks > MAX_RING_RANKS) {
         std::cerr << "[ERROR] n_ranks exceeds MAX_RING_RANKS=" << MAX_RING_RANKS << std::endl;
@@ -545,20 +603,7 @@ int main(int argc, char** argv) {
     int rank_id = mpiRank;
     int device_id = rank_id;
 
-    constexpr int kAclRepeatInit = 100002;
-    aclError aRet = aclInit(nullptr);
-    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
-        std::cerr << "[ERROR] Rank " << rank_id << ": aclInit failed: " << static_cast<int>(aRet) << std::endl;
-        CommMpiFinalize();
-        return 1;
-    }
-
-    if (rank_id == 0) rtSetDevice(device_id);
-
-    aRet = aclrtSetDevice(device_id);
-    if (aRet != ACL_SUCCESS) {
-        std::cerr << "[ERROR] Rank " << rank_id << ": aclrtSetDevice(" << device_id
-                  << ") failed: " << static_cast<int>(aRet) << std::endl;
+    if (!InitAcl(rank_id, device_id)) {
         CommMpiFinalize();
         return 1;
     }
@@ -576,27 +621,9 @@ int main(int argc, char** argv) {
     CommMpiBcast(&rootInfo, HCCL_ROOT_INFO_BYTES, COMM_MPI_CHAR, 0);
     CommMpiBarrier();
 
-    if (rank_id == 0) {
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "  AllGather GEMM (HCCL backend)" << std::endl;
-        std::cout << "  M=" << G_M << ", K=" << G_K << ", N=" << G_N
-                  << ", pe_size=" << n_ranks << std::endl;
-        if (ORIG_M != G_M || ORIG_K != G_K || ORIG_N != G_N) {
-            std::cout << "  (original: M=" << ORIG_M << ", K=" << ORIG_K << ", N=" << ORIG_N << ")" << std::endl;
-        }
-        if (perfMode) {
-            std::cout << "  Mode: PERFORMANCE (warmup=" << WARMUP_ITERS
-                      << ", measure=" << MEASURE_ITERS << ")" << std::endl;
-        } else {
-            std::cout << "  Mode: FUNCTIONAL VERIFICATION" << std::endl;
-        }
-        std::cout << "================================================================" << std::endl;
-    }
+    if (rank_id == 0) PrintBanner(n_ranks, args.perfMode);
 
-    // RunAllGatherGemmPerRank calls _exit() internally to avoid
-    // HcclCommDestroy hang. The lines below are only reached if
-    // AllocateResources or LoadInputData fail before _exit.
-    bool ok = RunAllGatherGemmPerRank(rank_id, n_ranks, device_id, &rootInfo, perfMode, dataDir);
+    bool ok = RunAllGatherGemmPerRank(rank_id, n_ranks, device_id, &rootInfo, args.perfMode, args.dataDir);
 
     if (rank_id == 0) {
         std::cerr << "[FAILED] AllGather GEMM early init failure." << std::endl;

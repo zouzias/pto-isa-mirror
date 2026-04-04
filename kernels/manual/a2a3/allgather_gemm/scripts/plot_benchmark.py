@@ -129,6 +129,141 @@ def format_time(us):
     return f"{us:.1f} µs"
 
 
+def _plot_time_chart(label, shape_title, seq_entry, pto_fused_entry, shmem_fused_entry, output_dir):
+    """Chart 1: Time Comparison (stacked bar for sequential, solid for fused)."""
+    fig, ax = plt.subplots(figsize=(9, 6))
+
+    bar_labels = []
+    bar_positions = []
+    pos = 0
+
+    if seq_entry:
+        comm_t = seq_entry["comm_time_us"]
+        comp_t = seq_entry["compute_time_us"]
+        ax.bar(pos, comp_t, width=0.6, color=COLORS["compute"],
+               label="Compute Time", edgecolor="white", linewidth=0.5)
+        ax.bar(pos, comm_t, width=0.6, bottom=comp_t, color=COLORS["comm"],
+               label="Comm Time", edgecolor="white", linewidth=0.5)
+        total = comm_t + comp_t
+        ax.text(pos, total + total * 0.02, format_time(total),
+                ha="center", va="bottom", fontsize=10, fontweight="bold")
+        ax.text(pos, comp_t / 2, format_time(comp_t),
+                ha="center", va="center", fontsize=8, color="white", fontweight="bold")
+        ax.text(pos, comp_t + comm_t / 2, format_time(comm_t),
+                ha="center", va="center", fontsize=8, color="white", fontweight="bold")
+        bar_labels.append("Sequential\n(PTO)")
+        bar_positions.append(pos)
+        pos += 1
+
+    if pto_fused_entry:
+        t = pto_fused_entry["time_us"]
+        ax.bar(pos, t, width=0.6, color=COLORS["pto_fused"],
+               label="PTO Fused", edgecolor="white", linewidth=0.5)
+        ax.text(pos, t + t * 0.02, format_time(t),
+                ha="center", va="bottom", fontsize=10, fontweight="bold")
+        bar_labels.append("Fused\n(PTO)")
+        bar_positions.append(pos)
+        pos += 1
+
+    if shmem_fused_entry:
+        t = shmem_fused_entry["time_us"]
+        ax.bar(pos, t, width=0.6, color=COLORS["shmem_fused"],
+               label="SHMEM Fused", edgecolor="white", linewidth=0.5)
+        ax.text(pos, t + t * 0.02, format_time(t),
+                ha="center", va="bottom", fontsize=10, fontweight="bold")
+        bar_labels.append("Fused\n(SHMEM)")
+        bar_positions.append(pos)
+
+    ax.set_xticks(bar_positions)
+    ax.set_xticklabels(bar_labels, fontsize=11)
+    ax.set_ylabel("Time (µs)", fontsize=12)
+    ax.set_title(f"Execution Time Comparison\n{shape_title}", fontsize=13, fontweight="bold")
+    ax.legend(loc="upper right", fontsize=9)
+    ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, f"{label}_time.png"), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _plot_overlap_chart(label, shape_title, pto_fused_entry, shmem_fused_entry, output_dir):
+    """Chart 2: Overlap Percentage."""
+    fig, ax = plt.subplots(figsize=(6, 5))
+
+    overlap_labels = []
+    overlap_values = []
+    overlap_colors = []
+
+    if pto_fused_entry:
+        overlap_labels.append("PTO")
+        overlap_values.append(pto_fused_entry["overlap_pct"])
+        overlap_colors.append(COLORS["pto_bar"])
+
+    if shmem_fused_entry:
+        overlap_labels.append("SHMEM")
+        overlap_values.append(shmem_fused_entry["overlap_pct"])
+        overlap_colors.append(COLORS["shmem_bar"])
+
+    bars = ax.bar(range(len(overlap_labels)), overlap_values, width=0.5,
+                  color=overlap_colors, edgecolor="white", linewidth=0.5)
+
+    for bar, val in zip(bars, overlap_values):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
+                f"{val:.1f}%", ha="center", va="bottom", fontsize=12, fontweight="bold")
+
+    ax.set_xticks(range(len(overlap_labels)))
+    ax.set_xticklabels(overlap_labels, fontsize=12)
+    ax.set_ylabel("Overlap (%)", fontsize=12)
+    ax.set_title(f"Communication-Computation Overlap\n{shape_title}", fontsize=13, fontweight="bold")
+    ax.set_ylim(0, max(overlap_values + [50]) * 1.3)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, f"{label}_overlap.png"), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _plot_bandwidth_chart(label, shape_title, pto_fused_entry, shmem_fused_entry, output_dir):
+    """Chart 3: Bandwidth Comparison."""
+    fig, ax = plt.subplots(figsize=(6, 5))
+
+    bw_labels = []
+    bw_values = []
+    bw_colors = []
+
+    if pto_fused_entry and pto_fused_entry["comm_bw_gbps"] > 0:
+        bw_labels.append("PTO")
+        bw_values.append(pto_fused_entry["comm_bw_gbps"])
+        bw_colors.append(COLORS["pto_bar"])
+
+    if shmem_fused_entry and shmem_fused_entry["comm_bw_gbps"] > 0:
+        bw_labels.append("SHMEM")
+        bw_values.append(shmem_fused_entry["comm_bw_gbps"])
+        bw_colors.append(COLORS["shmem_bar"])
+
+    if bw_values:
+        bars = ax.bar(range(len(bw_labels)), bw_values, width=0.5,
+                      color=bw_colors, edgecolor="white", linewidth=0.5)
+
+        for bar, val in zip(bars, bw_values):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + max(bw_values) * 0.02,
+                    f"{val:.2f}", ha="center", va="bottom", fontsize=12, fontweight="bold")
+
+        ax.set_xticks(range(len(bw_labels)))
+        ax.set_xticklabels(bw_labels, fontsize=12)
+    ax.set_ylabel("Bandwidth (GB/s)", fontsize=12)
+    ax.set_title(f"Effective Communication Bandwidth\n{shape_title}", fontsize=13, fontweight="bold")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, f"{label}_bandwidth.png"), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
 def plot_shape(label, entries, output_dir):
     """Generate 3 charts for a single matrix shape."""
     seq_entry = None
@@ -151,156 +286,20 @@ def plot_shape(label, entries, output_dir):
     pe_size = pto_fused_entry["pe_size"]
     shape_title = f"M={m}, K={k}, N={n} (PE={pe_size})"
 
-    # ========================================================================
-    # Chart 1: Time Comparison (stacked bar for sequential, solid for fused)
-    # ========================================================================
-    fig1, ax1 = plt.subplots(figsize=(9, 6))
-
-    bar_labels = []
-    bar_positions = []
-    pos = 0
-
-    if seq_entry:
-        comm_t = seq_entry["comm_time_us"]
-        comp_t = seq_entry["compute_time_us"]
-        b1 = ax1.bar(pos, comp_t, width=0.6, color=COLORS["compute"],
-                     label="Compute Time", edgecolor="white", linewidth=0.5)
-        b2 = ax1.bar(pos, comm_t, width=0.6, bottom=comp_t, color=COLORS["comm"],
-                     label="Comm Time", edgecolor="white", linewidth=0.5)
-        total = comm_t + comp_t
-        ax1.text(pos, total + total * 0.02, format_time(total),
-                 ha="center", va="bottom", fontsize=10, fontweight="bold")
-        ax1.text(pos, comp_t / 2, format_time(comp_t),
-                 ha="center", va="center", fontsize=8, color="white", fontweight="bold")
-        ax1.text(pos, comp_t + comm_t / 2, format_time(comm_t),
-                 ha="center", va="center", fontsize=8, color="white", fontweight="bold")
-        bar_labels.append("Sequential\n(PTO)")
-        bar_positions.append(pos)
-        pos += 1
-
-    if pto_fused_entry:
-        t = pto_fused_entry["time_us"]
-        ax1.bar(pos, t, width=0.6, color=COLORS["pto_fused"],
-                label="PTO Fused", edgecolor="white", linewidth=0.5)
-        ax1.text(pos, t + t * 0.02, format_time(t),
-                 ha="center", va="bottom", fontsize=10, fontweight="bold")
-        bar_labels.append("Fused\n(PTO)")
-        bar_positions.append(pos)
-        pos += 1
-
-    if shmem_fused_entry:
-        t = shmem_fused_entry["time_us"]
-        ax1.bar(pos, t, width=0.6, color=COLORS["shmem_fused"],
-                label="SHMEM Fused", edgecolor="white", linewidth=0.5)
-        ax1.text(pos, t + t * 0.02, format_time(t),
-                 ha="center", va="bottom", fontsize=10, fontweight="bold")
-        bar_labels.append("Fused\n(SHMEM)")
-        bar_positions.append(pos)
-        pos += 1
-
-    ax1.set_xticks(bar_positions)
-    ax1.set_xticklabels(bar_labels, fontsize=11)
-    ax1.set_ylabel("Time (µs)", fontsize=12)
-    ax1.set_title(f"Execution Time Comparison\n{shape_title}", fontsize=13, fontweight="bold")
-    ax1.legend(loc="upper right", fontsize=9)
-    ax1.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
-    ax1.spines["top"].set_visible(False)
-    ax1.spines["right"].set_visible(False)
-    ax1.grid(axis="y", alpha=0.3)
-    fig1.tight_layout()
-    fig1.savefig(os.path.join(output_dir, f"{label}_time.png"), dpi=150, bbox_inches="tight")
-    plt.close(fig1)
-
-    # ========================================================================
-    # Chart 2: Overlap Percentage
-    # ========================================================================
-    fig2, ax2 = plt.subplots(figsize=(6, 5))
-
-    overlap_labels = []
-    overlap_values = []
-    overlap_colors = []
-
-    if pto_fused_entry:
-        overlap_labels.append("PTO")
-        overlap_values.append(pto_fused_entry["overlap_pct"])
-        overlap_colors.append(COLORS["pto_bar"])
-
-    if shmem_fused_entry:
-        overlap_labels.append("SHMEM")
-        overlap_values.append(shmem_fused_entry["overlap_pct"])
-        overlap_colors.append(COLORS["shmem_bar"])
-
-    bars = ax2.bar(range(len(overlap_labels)), overlap_values, width=0.5,
-                   color=overlap_colors, edgecolor="white", linewidth=0.5)
-
-    for i, (bar, val) in enumerate(zip(bars, overlap_values)):
-        ax2.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
-                 f"{val:.1f}%", ha="center", va="bottom", fontsize=12, fontweight="bold")
-
-    ax2.set_xticks(range(len(overlap_labels)))
-    ax2.set_xticklabels(overlap_labels, fontsize=12)
-    ax2.set_ylabel("Overlap (%)", fontsize=12)
-    ax2.set_title(f"Communication-Computation Overlap\n{shape_title}", fontsize=13, fontweight="bold")
-    ax2.set_ylim(0, max(overlap_values + [50]) * 1.3)
-    ax2.spines["top"].set_visible(False)
-    ax2.spines["right"].set_visible(False)
-    ax2.grid(axis="y", alpha=0.3)
-    fig2.tight_layout()
-    fig2.savefig(os.path.join(output_dir, f"{label}_overlap.png"), dpi=150, bbox_inches="tight")
-    plt.close(fig2)
-
-    # ========================================================================
-    # Chart 3: Bandwidth Comparison
-    # ========================================================================
-    fig3, ax3 = plt.subplots(figsize=(6, 5))
-
-    bw_labels = []
-    bw_values = []
-    bw_colors = []
-
-    if pto_fused_entry and pto_fused_entry["comm_bw_gbps"] > 0:
-        bw_labels.append("PTO")
-        bw_values.append(pto_fused_entry["comm_bw_gbps"])
-        bw_colors.append(COLORS["pto_bar"])
-
-    if shmem_fused_entry and shmem_fused_entry["comm_bw_gbps"] > 0:
-        bw_labels.append("SHMEM")
-        bw_values.append(shmem_fused_entry["comm_bw_gbps"])
-        bw_colors.append(COLORS["shmem_bar"])
-
-    if bw_values:
-        bars = ax3.bar(range(len(bw_labels)), bw_values, width=0.5,
-                       color=bw_colors, edgecolor="white", linewidth=0.5)
-
-        for bar, val in zip(bars, bw_values):
-            ax3.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + max(bw_values) * 0.02,
-                     f"{val:.2f}", ha="center", va="bottom", fontsize=12, fontweight="bold")
-
-        ax3.set_xticks(range(len(bw_labels)))
-        ax3.set_xticklabels(bw_labels, fontsize=12)
-    ax3.set_ylabel("Bandwidth (GB/s)", fontsize=12)
-    ax3.set_title(f"Effective Communication Bandwidth\n{shape_title}", fontsize=13, fontweight="bold")
-    ax3.spines["top"].set_visible(False)
-    ax3.spines["right"].set_visible(False)
-    ax3.grid(axis="y", alpha=0.3)
-    fig3.tight_layout()
-    fig3.savefig(os.path.join(output_dir, f"{label}_bandwidth.png"), dpi=150, bbox_inches="tight")
-    plt.close(fig3)
+    _plot_time_chart(label, shape_title, seq_entry, pto_fused_entry, shmem_fused_entry, output_dir)
+    _plot_overlap_chart(label, shape_title, pto_fused_entry, shmem_fused_entry, output_dir)
+    _plot_bandwidth_chart(label, shape_title, pto_fused_entry, shmem_fused_entry, output_dir)
 
 
-def plot_summary(data, output_dir):
-    """Generate a summary chart across all shapes."""
-    labels = list(data.keys())
-    if len(labels) < 2:
-        return
-
+def _collect_summary_data(data):
+    """Collect PTO/SHMEM fused data across all shapes for summary chart."""
     pto_times = []
     shmem_times = []
     pto_overlaps = []
     shmem_overlaps = []
     shape_labels = []
 
-    for label in labels:
+    for label in data:
         entries = data[label]
         pto_f = next((e for e in entries if e["operator"] == "PTO" and e["mode"] == "fused"), None)
         shmem_f = next((e for e in entries if e["operator"] == "SHMEM" and e["mode"] == "fused"), None)
@@ -312,49 +311,45 @@ def plot_summary(data, output_dir):
             shmem_times.append(shmem_f["time_us"] if shmem_f else 0)
             shmem_overlaps.append(shmem_f["overlap_pct"] if shmem_f else 0)
 
+    return shape_labels, pto_times, shmem_times, pto_overlaps, shmem_overlaps
+
+
+def _format_summary_subplot(ax, x, width, pto_vals, shmem_vals, shape_labels, ylabel, title, y_fmt=None):
+    """Configure one subplot in the summary chart."""
+    ax.bar(x - width / 2, pto_vals, width, color=COLORS["pto_bar"], label="PTO", edgecolor="white")
+    if any(v > 0 for v in shmem_vals):
+        ax.bar(x + width / 2, shmem_vals, width, color=COLORS["shmem_bar"], label="SHMEM", edgecolor="white")
+    ax.set_xlabel("Matrix Shape (MxKxN)", fontsize=11)
+    ax.set_ylabel(ylabel, fontsize=11)
+    ax.set_title(title, fontsize=13, fontweight="bold")
+    ax.set_xticks(x)
+    ax.set_xticklabels(shape_labels, rotation=30, ha="right", fontsize=9)
+    ax.legend(fontsize=10)
+    if y_fmt:
+        ax.yaxis.set_major_formatter(y_fmt)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", alpha=0.3)
+
+
+def plot_summary(data, output_dir):
+    """Generate a summary chart across all shapes."""
+    if len(data) < 2:
+        return
+
+    shape_labels, pto_times, shmem_times, pto_overlaps, shmem_overlaps = _collect_summary_data(data)
     if not shape_labels:
         return
 
     x = np.arange(len(shape_labels))
     width = 0.35
 
-    # Summary: Fused time comparison
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-
-    bars1 = ax1.bar(x - width / 2, pto_times, width, color=COLORS["pto_bar"],
-                    label="PTO", edgecolor="white")
-    if any(t > 0 for t in shmem_times):
-        bars2 = ax1.bar(x + width / 2, shmem_times, width, color=COLORS["shmem_bar"],
-                        label="SHMEM", edgecolor="white")
-
-    ax1.set_xlabel("Matrix Shape (MxKxN)", fontsize=11)
-    ax1.set_ylabel("Fused Time (µs)", fontsize=11)
-    ax1.set_title("Fused Execution Time Across Shapes", fontsize=13, fontweight="bold")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(shape_labels, rotation=30, ha="right", fontsize=9)
-    ax1.legend(fontsize=10)
-    ax1.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
-    ax1.spines["top"].set_visible(False)
-    ax1.spines["right"].set_visible(False)
-    ax1.grid(axis="y", alpha=0.3)
-
-    # Summary: Overlap comparison
-    bars3 = ax2.bar(x - width / 2, pto_overlaps, width, color=COLORS["pto_bar"],
-                    label="PTO", edgecolor="white")
-    if any(o > 0 for o in shmem_overlaps):
-        bars4 = ax2.bar(x + width / 2, shmem_overlaps, width, color=COLORS["shmem_bar"],
-                        label="SHMEM", edgecolor="white")
-
-    ax2.set_xlabel("Matrix Shape (MxKxN)", fontsize=11)
-    ax2.set_ylabel("Overlap (%)", fontsize=11)
-    ax2.set_title("Comm-Compute Overlap Across Shapes", fontsize=13, fontweight="bold")
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(shape_labels, rotation=30, ha="right", fontsize=9)
-    ax2.legend(fontsize=10)
-    ax2.spines["top"].set_visible(False)
-    ax2.spines["right"].set_visible(False)
-    ax2.grid(axis="y", alpha=0.3)
-
+    _format_summary_subplot(ax1, x, width, pto_times, shmem_times, shape_labels,
+                            "Fused Time (µs)", "Fused Execution Time Across Shapes",
+                            ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    _format_summary_subplot(ax2, x, width, pto_overlaps, shmem_overlaps, shape_labels,
+                            "Overlap (%)", "Comm-Compute Overlap Across Shapes")
     fig.tight_layout()
     fig.savefig(os.path.join(output_dir, "summary.png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
