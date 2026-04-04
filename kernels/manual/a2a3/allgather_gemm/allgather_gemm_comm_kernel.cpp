@@ -18,25 +18,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/pto_tile.hpp"
 #endif
 #include "common.hpp"
+#include "gemm_config.hpp"
 #include "ready_queue.hpp"
-
-#ifndef CONFIG_G_M
-#define CONFIG_G_M 2048
-#endif
-#ifndef CONFIG_G_K
-#define CONFIG_G_K 2048
-#endif
-#ifndef CONFIG_G_N
-#define CONFIG_G_N 1024
-#endif
-
-constexpr uint32_t G_M = CONFIG_G_M;
-constexpr uint32_t G_K = CONFIG_G_K;
-constexpr uint32_t G_N = CONFIG_G_N;
-
-constexpr uint32_t G_BASE_M = 128;
-constexpr uint32_t G_BASE_K = 64;
-constexpr uint32_t G_BASE_N = 256;
 
 #ifndef CONFIG_COMM_BLOCK_NUM
 #define CONFIG_COMM_BLOCK_NUM 4
@@ -110,6 +93,27 @@ AICORE inline int DestIdxToRank(int destIdx, int myRank)
     return (destIdx < myRank) ? destIdx : (destIdx + 1);
 }
 
+struct RemoteEndpoint {
+    __gm__ TileFlagMatrix* tileFlags;
+    __gm__ int32_t* summarySrc;
+};
+
+AICORE inline RemoteEndpoint GetRemoteEndpoint(
+    __gm__ HcclDeviceContext* hcclCtx,
+    __gm__ TileFlagMatrix* flagsMut,
+    volatile __gm__ TileFlagMatrix* flags,
+    int destRank,
+    int myRank)
+{
+    RemoteEndpoint ep;
+    ep.tileFlags = reinterpret_cast<__gm__ TileFlagMatrix*>(HcclRemotePtr(hcclCtx, flagsMut, destRank));
+    ep.summarySrc = reinterpret_cast<__gm__ int32_t*>(
+                        reinterpret_cast<__gm__ uint8_t*>(HcclRemotePtr(hcclCtx, flagsMut, destRank))
+                        + TileFlagMatrixBytes(flags))
+                    + myRank;
+    return ep;
+}
+
 // 将一个 tile 对应的所有 block 通过 TPUT 传输到远端，完成后设置远端 flag
 AICORE inline void TransferTileToRemote(
     __gm__ half* shmemInput,
@@ -169,15 +173,9 @@ AICORE inline void DispatchFewBlocks(
         int tileIdx = workId % p.numTiles;
         int destRank = DestIdxToRank(destIdx, p.myRank);
 
-        __gm__ TileFlagMatrix* remoteTileFlags =
-            reinterpret_cast<__gm__ TileFlagMatrix*>(HcclRemotePtr(hcclCtx, flagsMut, destRank));
-        __gm__ int32_t* remoteSummarySrc =
-            reinterpret_cast<__gm__ int32_t*>(
-                reinterpret_cast<__gm__ uint8_t*>(HcclRemotePtr(hcclCtx, flagsMut, destRank))
-                + TileFlagMatrixBytes(flags))
-            + p.myRank;
+        RemoteEndpoint ep = GetRemoteEndpoint(hcclCtx, flagsMut, flags, destRank, p.myRank);
 
-        TransferTileToRemote(shmemInput, hcclCtx, remoteTileFlags, remoteSummarySrc,
+        TransferTileToRemote(shmemInput, hcclCtx, ep.tileFlags, ep.summarySrc,
                              tileShape, tileStride, pingTile, pongTile, p, destRank, tileIdx);
     }
 }
@@ -210,13 +208,7 @@ AICORE inline void DispatchManyBlocks(
     }
 
     int destRank = DestIdxToRank(destIdx, p.myRank);
-    __gm__ TileFlagMatrix* remoteTileFlags =
-        reinterpret_cast<__gm__ TileFlagMatrix*>(HcclRemotePtr(hcclCtx, flagsMut, destRank));
-    __gm__ int32_t* remoteSummarySrc =
-        reinterpret_cast<__gm__ int32_t*>(
-            reinterpret_cast<__gm__ uint8_t*>(HcclRemotePtr(hcclCtx, flagsMut, destRank))
-            + TileFlagMatrixBytes(flags))
-        + p.myRank;
+    RemoteEndpoint ep = GetRemoteEndpoint(hcclCtx, flagsMut, flags, destRank, p.myRank);
 
     int tilesPerBlock = (p.numTiles + blocksPerDest - 1) / blocksPerDest;
     int tileStart = localIdx * tilesPerBlock;
@@ -226,7 +218,7 @@ AICORE inline void DispatchManyBlocks(
     }
 
     for (int tileIdx = tileStart; tileIdx < tileEnd; ++tileIdx) {
-        TransferTileToRemote(shmemInput, hcclCtx, remoteTileFlags, remoteSummarySrc,
+        TransferTileToRemote(shmemInput, hcclCtx, ep.tileFlags, ep.summarySrc,
                              tileShape, tileStride, pingTile, pongTile, p, destRank, tileIdx);
     }
 }

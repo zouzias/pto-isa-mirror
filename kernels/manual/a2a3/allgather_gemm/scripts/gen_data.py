@@ -24,12 +24,28 @@
 import os
 import sys
 import argparse
+from dataclasses import dataclass
+from typing import Optional
+
 import numpy as np
 
 np.random.seed(19)
 
 
-def gen_data(m, k, n, n_ranks, padded_m=None, padded_k=None, padded_n=None, output_dir="./out"):
+@dataclass
+class GemmDataConfig:
+    """Configuration for GEMM data generation."""
+    m: int
+    k: int
+    n: int
+    n_ranks: int
+    padded_m: Optional[int] = None
+    padded_k: Optional[int] = None
+    padded_n: Optional[int] = None
+    output_dir: str = "./out"
+
+
+def gen_data(cfg: GemmDataConfig):
     """
     Generate input and golden data for AllGather GEMM demo.
 
@@ -42,9 +58,11 @@ def gen_data(m, k, n, n_ranks, padded_m=None, padded_k=None, padded_n=None, outp
       pe_<rank>_b.bin  - B matrix, same for all ranks (FP16, transposed)
       golden.bin       - golden output (FP32)
     """
-    pm = padded_m if padded_m is not None else m
-    pk = padded_k if padded_k is not None else k
-    pn = padded_n if padded_n is not None else n
+    m, k, n, n_ranks = cfg.m, cfg.k, cfg.n, cfg.n_ranks
+    pm = cfg.padded_m if cfg.padded_m is not None else m
+    pk = cfg.padded_k if cfg.padded_k is not None else k
+    pn = cfg.padded_n if cfg.padded_n is not None else n
+    output_dir = cfg.output_dir
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -97,8 +115,12 @@ def main():
     parser.add_argument("--output-dir", type=str, default="./out", help="Output directory")
 
     args = parser.parse_args()
-    gen_data(args.m, args.k, args.n, args.n_ranks,
-             args.padded_m, args.padded_k, args.padded_n, args.output_dir)
+    cfg = GemmDataConfig(
+        m=args.m, k=args.k, n=args.n, n_ranks=args.n_ranks,
+        padded_m=args.padded_m, padded_k=args.padded_k, padded_n=args.padded_n,
+        output_dir=args.output_dir,
+    )
+    gen_data(cfg)
 
 
 if __name__ == "__main__":

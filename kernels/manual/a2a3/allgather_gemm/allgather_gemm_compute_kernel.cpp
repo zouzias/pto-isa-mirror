@@ -10,28 +10,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
+#include "gemm_config.hpp"
 #include "ready_queue.hpp"
 
 constexpr uint32_t BUFFER_NUM = 2;
 constexpr uint32_t L0_PINGPONG_BYTES = 32 * 1024;
-
-#ifndef CONFIG_G_M
-#define CONFIG_G_M 2048
-#endif
-#ifndef CONFIG_G_K
-#define CONFIG_G_K 2048
-#endif
-#ifndef CONFIG_G_N
-#define CONFIG_G_N 1024
-#endif
-
-constexpr uint32_t G_M = CONFIG_G_M;
-constexpr uint32_t G_K = CONFIG_G_K;
-constexpr uint32_t G_N = CONFIG_G_N;
-
-constexpr uint32_t G_BASE_M = 128;
-constexpr uint32_t G_BASE_K = 64;
-constexpr uint32_t G_BASE_N = 256;
 constexpr uint32_t G_STEP_KA = 4;
 constexpr uint32_t G_STEP_KB = 4;
 

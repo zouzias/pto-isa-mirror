@@ -10,13 +10,18 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # -----------------------------------------------------------------------------------------------------------
 
+import logging
 import sys
+
 import numpy as np
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 
 def main():
     if len(sys.argv) < 5:
-        print("Usage: verify_result.py <output_file> <golden_file> <padded_M> <padded_N> [orig_M] [orig_N]")
+        logger.error("Usage: verify_result.py <output_file> <golden_file> <padded_M> <padded_N> [orig_M] [orig_N]")
         sys.exit(1)
 
     output_file = sys.argv[1]
@@ -37,7 +42,7 @@ def main():
     close = np.allclose(output, golden, rtol=rtol, atol=atol)
 
     if close:
-        print(f"[PASS] Output matches golden (rtol={rtol}, atol={atol})")
+        logger.info("[PASS] Output matches golden (rtol=%s, atol=%s)", rtol, atol)
         sys.exit(0)
     else:
         diff = np.abs(output - golden)
@@ -45,9 +50,9 @@ def main():
         mean_diff = np.mean(diff)
         mismatch_count = np.sum(~np.isclose(output, golden, rtol=rtol, atol=atol))
         total = output.size
-        print(f"[FAIL] Output does NOT match golden!")
-        print(f"  Max diff: {max_diff:.6f}, Mean diff: {mean_diff:.6f}")
-        print(f"  Mismatched elements: {mismatch_count}/{total} ({mismatch_count/total*100:.2f}%)")
+        logger.error("[FAIL] Output does NOT match golden!")
+        logger.error("  Max diff: %.6f, Mean diff: %.6f", max_diff, mean_diff)
+        logger.error("  Mismatched elements: %d/%d (%.2f%%)", mismatch_count, total, mismatch_count / total * 100)
         sys.exit(1)
 
 

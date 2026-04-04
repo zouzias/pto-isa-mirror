@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
+#include "securec.h"
 #include <unistd.h>
 #include <vector>
 #include <string>
@@ -47,19 +48,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 // Compile-time configuration
 // ============================================================================
-#ifndef CONFIG_G_M
-#define CONFIG_G_M 2048
-#endif
-#ifndef CONFIG_G_K
-#define CONFIG_G_K 2048
-#endif
-#ifndef CONFIG_G_N
-#define CONFIG_G_N 1024
-#endif
-
-constexpr uint32_t G_M = CONFIG_G_M;
-constexpr uint32_t G_K = CONFIG_G_K;
-constexpr uint32_t G_N = CONFIG_G_N;
+#include "gemm_config.hpp"
 
 #ifndef CONFIG_ORIG_M
 #define CONFIG_ORIG_M CONFIG_G_M
@@ -74,10 +63,6 @@ constexpr uint32_t G_N = CONFIG_G_N;
 constexpr uint32_t ORIG_M = CONFIG_ORIG_M;
 constexpr uint32_t ORIG_K = CONFIG_ORIG_K;
 constexpr uint32_t ORIG_N = CONFIG_ORIG_N;
-
-constexpr uint32_t G_BASE_M = 128;
-constexpr uint32_t G_BASE_K = 64;
-constexpr uint32_t G_BASE_N = 256;
 
 #ifndef CONFIG_COMPUTE_BLOCK_NUM
 #define CONFIG_COMPUTE_BLOCK_NUM 20
@@ -96,23 +81,7 @@ static constexpr int MEASURE_ITERS = 100;
 #endif
 constexpr double PEAK_TFLOPS_FP16 = CONFIG_PEAK_TFLOPS_FP16;
 
-// ============================================================================
-// Extern declarations for kernel launch functions
-// ============================================================================
-extern void launchRingCommStreaming(
-    uint8_t* shmem_input,
-    uint8_t* tile_flags,
-    uint8_t* hccl_ctx,
-    int n_ranks,
-    void* stream);
-
-extern void launchAllGatherGemmComputeStreaming(
-    uint8_t* output,
-    uint8_t* shmem_input,
-    uint8_t* src1,
-    uint8_t* tile_flags,
-    void* stream,
-    int block_num);
+#include "kernel_launch.hpp"
 
 // ============================================================================
 // Per-rank resource context
@@ -193,7 +162,8 @@ static bool AllocateResources(RankResources& r, int rank_id, int n_ranks,
 
     r.inputShmemBytes = static_cast<size_t>(G_M) * G_K * sizeof(uint16_t);
     int m_tiles = static_cast<int>(G_M / G_BASE_M);
-    int m_tiles_local = m_tiles / n_ranks;
+    // NOLINTNEXTLINE - n_ranks > 0 guaranteed by guard above
+    int m_tiles_local = (n_ranks > 0) ? (m_tiles / n_ranks) : 0;
     int k_chunks = static_cast<int>(G_K / G_BASE_N);
     int num_blocks_per_src = m_tiles_local * k_chunks;
     int optimal_tile_size = ComputeOptimalTileSize(num_blocks_per_src);
@@ -222,7 +192,7 @@ static bool AllocateResources(RankResources& r, int rank_id, int n_ranks,
     r.outputSize = static_cast<size_t>(G_M) * G_N * sizeof(float);
     aclrtMalloc(&r.output_dev, r.outputSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
-    r.aLocalSize = (static_cast<size_t>(G_M) / n_ranks) * G_K * sizeof(uint16_t);
+    r.aLocalSize = (n_ranks > 0) ? ((static_cast<size_t>(G_M) / n_ranks) * G_K * sizeof(uint16_t)) : 0;
     return status == 0;
 }
 
@@ -291,9 +261,10 @@ static bool VerifyOutput(RankResources& r, const std::string& dataDir) {
         } else {
             std::vector<float> valid_output(static_cast<size_t>(ORIG_M) * ORIG_N);
             for (uint32_t row = 0; row < ORIG_M; ++row) {
-                std::memcpy(valid_output.data() + row * ORIG_N,
-                            output_host + row * G_N,
-                            ORIG_N * sizeof(float));
+                memcpy_s(valid_output.data() + row * ORIG_N,
+                         ORIG_N * sizeof(float),
+                         output_host + row * G_N,
+                         ORIG_N * sizeof(float));
             }
             is_ok = PtoTestCommon::ResultCmp(golden, valid_output.data(), 0.001f);
         }
@@ -376,6 +347,7 @@ static void PrintPerfMachineLine(int n_ranks, double avg, double sum) {
 }
 
 static void PrintPerfConfig(int n_ranks) {
+    if (n_ranks <= 0) return;
     double m_local_d = static_cast<double>(G_M) / n_ranks;
     std::cout << "\n  Configuration:" << std::endl;
     std::cout << "    M (global):    " << G_M << std::endl;
@@ -391,6 +363,7 @@ static void PrintPerfConfig(int n_ranks) {
 }
 
 static void PrintPerfWorkload(int n_ranks, double gemm_flops, double comm_bytes) {
+    if (n_ranks <= 0) return;
     double m_local_d = static_cast<double>(G_M) / n_ranks;
     std::cout << "\n  Workload:" << std::endl;
     std::cout << "    GEMM FLOPs:           " << std::scientific << std::setprecision(2)
@@ -409,6 +382,7 @@ static void PrintPerfWorkload(int n_ranks, double gemm_flops, double comm_bytes)
 }
 
 static void PrintPerfResults(int n_ranks, const std::vector<double>& times_us) {
+    if (n_ranks <= 0 || times_us.empty()) return;
     double sum = 0.0;
     for (double t : times_us) sum += t;
     double avg = sum / static_cast<double>(times_us.size());
