@@ -25,15 +25,20 @@ Usage:
 
 import argparse
 import csv
+import logging
 import os
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
+from typing import Optional
 
-import matplotlib  # noqa: E402
+import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import matplotlib.ticker as ticker  # noqa: E402
 import numpy as np  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 def parse_csv(csv_path):
@@ -139,8 +144,22 @@ def format_time(us):
     return f"{us:.1f} µs"
 
 
-def _plot_time_chart(label, shape_title, seq_entry, pto_fused_entry, shmem_fused_entry, output_dir):
+@dataclass
+class ChartContext:
+    """Shared context for per-shape chart plotting."""
+    label: str
+    shape_title: str
+    seq_entry: Optional[dict]
+    pto_fused_entry: dict
+    shmem_fused_entry: Optional[dict]
+    output_dir: str
+
+
+def _plot_time_chart(ctx: ChartContext):
     """Chart 1: Time Comparison (stacked bar for sequential, solid for fused)."""
+    label, shape_title = ctx.label, ctx.shape_title
+    seq_entry, pto_fused_entry, shmem_fused_entry = ctx.seq_entry, ctx.pto_fused_entry, ctx.shmem_fused_entry
+    output_dir = ctx.output_dir
     fig, ax = plt.subplots(figsize=(9, 6))
 
     bar_labels = []
@@ -198,8 +217,10 @@ def _plot_time_chart(label, shape_title, seq_entry, pto_fused_entry, shmem_fused
     plt.close(fig)
 
 
-def _plot_overlap_chart(label, shape_title, pto_fused_entry, shmem_fused_entry, output_dir):
+def _plot_overlap_chart(ctx: ChartContext):
     """Chart 2: Overlap Percentage."""
+    label, shape_title = ctx.label, ctx.shape_title
+    pto_fused_entry, shmem_fused_entry, output_dir = ctx.pto_fused_entry, ctx.shmem_fused_entry, ctx.output_dir
     fig, ax = plt.subplots(figsize=(6, 5))
 
     overlap_labels = []
@@ -236,8 +257,10 @@ def _plot_overlap_chart(label, shape_title, pto_fused_entry, shmem_fused_entry, 
     plt.close(fig)
 
 
-def _plot_bandwidth_chart(label, shape_title, pto_fused_entry, shmem_fused_entry, output_dir):
+def _plot_bandwidth_chart(ctx: ChartContext):
     """Chart 3: Bandwidth Comparison."""
+    label, shape_title = ctx.label, ctx.shape_title
+    pto_fused_entry, shmem_fused_entry, output_dir = ctx.pto_fused_entry, ctx.shmem_fused_entry, ctx.output_dir
     fig, ax = plt.subplots(figsize=(6, 5))
 
     bw_labels = []
@@ -289,16 +312,17 @@ def plot_shape(label, entries, output_dir):
             shmem_fused_entry = e
 
     if pto_fused_entry is None:
-        print(f"[WARN] No PTO fused data for {label}, skipping")
+        logger.warning("No PTO fused data for %s, skipping", label)
         return
 
     m, k, n = pto_fused_entry["M"], pto_fused_entry["K"], pto_fused_entry["N"]
     pe_size = pto_fused_entry["pe_size"]
     shape_title = f"M={m}, K={k}, N={n} (PE={pe_size})"
 
-    _plot_time_chart(label, shape_title, seq_entry, pto_fused_entry, shmem_fused_entry, output_dir)
-    _plot_overlap_chart(label, shape_title, pto_fused_entry, shmem_fused_entry, output_dir)
-    _plot_bandwidth_chart(label, shape_title, pto_fused_entry, shmem_fused_entry, output_dir)
+    ctx = ChartContext(label, shape_title, seq_entry, pto_fused_entry, shmem_fused_entry, output_dir)
+    _plot_time_chart(ctx)
+    _plot_overlap_chart(ctx)
+    _plot_bandwidth_chart(ctx)
 
 
 def _collect_summary_data(data):
@@ -324,19 +348,34 @@ def _collect_summary_data(data):
     return shape_labels, pto_times, shmem_times, pto_overlaps, shmem_overlaps
 
 
-def _format_summary_subplot(ax, x, width, pto_vals, shmem_vals, shape_labels, ylabel, title, y_fmt=None):
+@dataclass
+class SummarySubplotConfig:
+    """Configuration for one subplot in the summary chart."""
+    x: np.ndarray
+    width: float
+    pto_vals: list
+    shmem_vals: list
+    shape_labels: list
+    ylabel: str
+    title: str
+    y_fmt: object = None
+
+
+def _format_summary_subplot(ax, cfg: SummarySubplotConfig):
     """Configure one subplot in the summary chart."""
-    ax.bar(x - width / 2, pto_vals, width, color=COLORS["pto_bar"], label="PTO", edgecolor="white")
-    if any(v > 0 for v in shmem_vals):
-        ax.bar(x + width / 2, shmem_vals, width, color=COLORS["shmem_bar"], label="SHMEM", edgecolor="white")
+    ax.bar(cfg.x - cfg.width / 2, cfg.pto_vals, cfg.width,
+           color=COLORS["pto_bar"], label="PTO", edgecolor="white")
+    if any(v > 0 for v in cfg.shmem_vals):
+        ax.bar(cfg.x + cfg.width / 2, cfg.shmem_vals, cfg.width,
+               color=COLORS["shmem_bar"], label="SHMEM", edgecolor="white")
     ax.set_xlabel("Matrix Shape (MxKxN)", fontsize=11)
-    ax.set_ylabel(ylabel, fontsize=11)
-    ax.set_title(title, fontsize=13, fontweight="bold")
-    ax.set_xticks(x)
-    ax.set_xticklabels(shape_labels, rotation=30, ha="right", fontsize=9)
+    ax.set_ylabel(cfg.ylabel, fontsize=11)
+    ax.set_title(cfg.title, fontsize=13, fontweight="bold")
+    ax.set_xticks(cfg.x)
+    ax.set_xticklabels(cfg.shape_labels, rotation=30, ha="right", fontsize=9)
     ax.legend(fontsize=10)
-    if y_fmt:
-        ax.yaxis.set_major_formatter(y_fmt)
+    if cfg.y_fmt:
+        ax.yaxis.set_major_formatter(cfg.y_fmt)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.grid(axis="y", alpha=0.3)
@@ -355,11 +394,13 @@ def plot_summary(data, output_dir):
     width = 0.35
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-    _format_summary_subplot(ax1, x, width, pto_times, shmem_times, shape_labels,
-                            "Fused Time (µs)", "Fused Execution Time Across Shapes",
-                            ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
-    _format_summary_subplot(ax2, x, width, pto_overlaps, shmem_overlaps, shape_labels,
-                            "Overlap (%)", "Comm-Compute Overlap Across Shapes")
+    _format_summary_subplot(ax1, SummarySubplotConfig(
+        x, width, pto_times, shmem_times, shape_labels,
+        "Fused Time (µs)", "Fused Execution Time Across Shapes",
+        ticker.FuncFormatter(lambda v, _: f"{v:,.0f}")))
+    _format_summary_subplot(ax2, SummarySubplotConfig(
+        x, width, pto_overlaps, shmem_overlaps, shape_labels,
+        "Overlap (%)", "Comm-Compute Overlap Across Shapes"))
     fig.tight_layout()
     fig.savefig(os.path.join(output_dir, "summary.png"), dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -377,37 +418,39 @@ def main():
                         help="Use generated sample data")
     args = parser.parse_args()
 
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
     if args.csv_path and not args.sample:
         if not os.path.isfile(args.csv_path):
-            print(f"[ERROR] CSV file not found: {args.csv_path}")
+            logger.error("CSV file not found: %s", args.csv_path)
             sys.exit(1)
         data = parse_csv(args.csv_path)
         default_output = os.path.join(os.path.dirname(args.csv_path), "charts")
     else:
-        print("[INFO] Using sample data for demonstration")
+        logger.info("Using sample data for demonstration")
         data = generate_sample_data()
         default_output = "./benchmark_charts_sample"
 
     output_dir = args.output_dir or default_output
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"[INFO] Generating charts for {len(data)} shapes...")
-    print(f"[INFO] Output directory: {output_dir}")
+    logger.info("Generating charts for %d shapes...", len(data))
+    logger.info("Output directory: %s", output_dir)
 
     for label, entries in data.items():
-        print(f"  - Plotting {label}...")
+        logger.info("  Plotting %s...", label)
         plot_shape(label, entries, output_dir)
 
     plot_summary(data, output_dir)
 
-    print(f"\n[DONE] Charts saved to {output_dir}/")
-    print("  Per-shape charts:")
+    logger.info("Charts saved to %s/", output_dir)
+    logger.info("  Per-shape charts:")
     for label in data:
-        print(f"    {label}_time.png")
-        print(f"    {label}_overlap.png")
-        print(f"    {label}_bandwidth.png")
+        logger.info("    %s_time.png", label)
+        logger.info("    %s_overlap.png", label)
+        logger.info("    %s_bandwidth.png", label)
     if len(data) >= 2:
-        print("  Summary chart: summary.png")
+        logger.info("  Summary chart: summary.png")
 
 
 if __name__ == "__main__":

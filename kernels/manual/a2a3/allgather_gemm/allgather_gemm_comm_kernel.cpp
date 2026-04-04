@@ -114,6 +114,19 @@ AICORE inline RemoteEndpoint GetRemoteEndpoint(
     return ep;
 }
 
+struct DispatchContext {
+    __gm__ half* shmemInput;
+    __gm__ HcclDeviceContext* hcclCtx;
+    volatile __gm__ TileFlagMatrix* flags;
+    const ShapeDyn* tileShape;
+    const StrideDyn* tileStride;
+    TileData* pingTile;
+    TileData* pongTile;
+    CommParams p;
+    int blockIdx;
+    int numBlocks;
+};
+
 // 将一个 tile 对应的所有 block 通过 TPUT 传输到远端，完成后设置远端 flag
 AICORE inline void TransferTileToRemote(
     __gm__ half* shmemInput,
@@ -153,73 +166,55 @@ AICORE inline void TransferTileToRemote(
 }
 
 // block 数少于 dest 数：按 work_id 均分
-AICORE inline void DispatchFewBlocks(
-    __gm__ half* shmemInput,
-    __gm__ HcclDeviceContext* hcclCtx,
-    volatile __gm__ TileFlagMatrix* flags,
-    const ShapeDyn& tileShape,
-    const StrideDyn& tileStride,
-    TileData& pingTile,
-    TileData& pongTile,
-    const CommParams& p,
-    int blockIdx,
-    int numBlocks)
+AICORE inline void DispatchFewBlocks(const DispatchContext& ctx)
 {
-    __gm__ TileFlagMatrix* flagsMut = const_cast<__gm__ TileFlagMatrix*>(flags);
-    int totalWork = p.numRemoteRanks * p.numTiles;
+    __gm__ TileFlagMatrix* flagsMut = const_cast<__gm__ TileFlagMatrix*>(ctx.flags);
+    int totalWork = ctx.p.numRemoteRanks * ctx.p.numTiles;
 
-    for (int workId = blockIdx; workId < totalWork; workId += numBlocks) {
-        int destIdx = workId / p.numTiles;
-        int tileIdx = workId % p.numTiles;
-        int destRank = DestIdxToRank(destIdx, p.myRank);
+    for (int workId = ctx.blockIdx; workId < totalWork; workId += ctx.numBlocks) {
+        int destIdx = workId / ctx.p.numTiles;
+        int tileIdx = workId % ctx.p.numTiles;
+        int destRank = DestIdxToRank(destIdx, ctx.p.myRank);
 
-        RemoteEndpoint ep = GetRemoteEndpoint(hcclCtx, flagsMut, flags, destRank, p.myRank);
+        RemoteEndpoint ep = GetRemoteEndpoint(ctx.hcclCtx, flagsMut, ctx.flags, destRank, ctx.p.myRank);
 
-        TransferTileToRemote(shmemInput, hcclCtx, ep.tileFlags, ep.summarySrc,
-                             tileShape, tileStride, pingTile, pongTile, p, destRank, tileIdx);
+        TransferTileToRemote(ctx.shmemInput, ctx.hcclCtx, ep.tileFlags, ep.summarySrc,
+                             *ctx.tileShape, *ctx.tileStride, *ctx.pingTile, *ctx.pongTile,
+                             ctx.p, destRank, tileIdx);
     }
 }
 
 // block 数 >= dest 数：每 dest 分配连续 block 区间
-AICORE inline void DispatchManyBlocks(
-    __gm__ half* shmemInput,
-    __gm__ HcclDeviceContext* hcclCtx,
-    volatile __gm__ TileFlagMatrix* flags,
-    const ShapeDyn& tileShape,
-    const StrideDyn& tileStride,
-    TileData& pingTile,
-    TileData& pongTile,
-    const CommParams& p,
-    int blockIdx,
-    int numBlocks)
+AICORE inline void DispatchManyBlocks(const DispatchContext& ctx)
 {
-    __gm__ TileFlagMatrix* flagsMut = const_cast<__gm__ TileFlagMatrix*>(flags);
-    if (p.numRemoteRanks <= 0) {
+    __gm__ TileFlagMatrix* flagsMut = const_cast<__gm__ TileFlagMatrix*>(ctx.flags);
+    if (ctx.p.numRemoteRanks <= 0) {
         return;
     }
-    int blocksPerDest = numBlocks / p.numRemoteRanks;
+    int blocksPerDest = ctx.numBlocks / ctx.p.numRemoteRanks;
     if (blocksPerDest <= 0) {
         blocksPerDest = 1;
     }
-    int destIdx = blockIdx / blocksPerDest;
-    int localIdx = blockIdx % blocksPerDest;
-    if (destIdx >= p.numRemoteRanks) {
+    int destIdx = ctx.blockIdx / blocksPerDest;
+    int localIdx = ctx.blockIdx % blocksPerDest;
+    if (destIdx >= ctx.p.numRemoteRanks) {
         return;
     }
 
-    int destRank = DestIdxToRank(destIdx, p.myRank);
-    RemoteEndpoint ep = GetRemoteEndpoint(hcclCtx, flagsMut, flags, destRank, p.myRank);
+    int destRank = DestIdxToRank(destIdx, ctx.p.myRank);
+    RemoteEndpoint ep = GetRemoteEndpoint(ctx.hcclCtx, flagsMut, ctx.flags, destRank, ctx.p.myRank);
 
-    int tilesPerBlock = (p.numTiles + blocksPerDest - 1) / blocksPerDest;
+    int tilesPerBlock = (ctx.p.numTiles + blocksPerDest - 1) / blocksPerDest;
     int tileStart = localIdx * tilesPerBlock;
     int tileEnd = tileStart + tilesPerBlock;
-    if (tileEnd > p.numTiles) {
-        tileEnd = p.numTiles;
+    if (tileEnd > ctx.p.numTiles) {
+        tileEnd = ctx.p.numTiles;
     }
 
     for (int tileIdx = tileStart; tileIdx < tileEnd; ++tileIdx) {
-        TransferTileToRemote(shmemInput, hcclCtx, ep.tileFlags, ep.summarySrc,
-                             tileShape, tileStride, pingTile, pongTile, p, destRank, tileIdx);
+        TransferTileToRemote(ctx.shmemInput, ctx.hcclCtx, ep.tileFlags, ep.summarySrc,
+                             *ctx.tileShape, *ctx.tileStride, *ctx.pingTile, *ctx.pongTile,
+                             ctx.p, destRank, tileIdx);
     }
 }
 
@@ -249,12 +244,13 @@ AICORE inline void CommAIVRoleStreamingParallel(
     ShapeDyn tileShape(1, 1, 1, G_BASE_M, G_BASE_N);
     StrideDyn tileStride(G_BASE_M * G_K, G_BASE_M * G_K, G_BASE_M * G_K, G_K, 1);
 
+    DispatchContext ctx{shmemInput, hcclCtx, flags, &tileShape, &tileStride,
+                        &pingTile, &pongTile, p, blockIdx, numBlocks};
+
     if (numBlocks < p.numRemoteRanks) {
-        DispatchFewBlocks(shmemInput, hcclCtx, flags, tileShape, tileStride,
-                          pingTile, pongTile, p, blockIdx, numBlocks);
+        DispatchFewBlocks(ctx);
     } else {
-        DispatchManyBlocks(shmemInput, hcclCtx, flags, tileShape, tileStride,
-                           pingTile, pongTile, p, blockIdx, numBlocks);
+        DispatchManyBlocks(ctx);
     }
 }
 

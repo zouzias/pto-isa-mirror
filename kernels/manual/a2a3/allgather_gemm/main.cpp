@@ -261,10 +261,16 @@ static bool VerifyOutput(RankResources& r, const std::string& dataDir) {
         } else {
             std::vector<float> valid_output(static_cast<size_t>(ORIG_M) * ORIG_N);
             for (uint32_t row = 0; row < ORIG_M; ++row) {
-                memcpy_s(valid_output.data() + row * ORIG_N,
-                         ORIG_N * sizeof(float),
-                         output_host + row * G_N,
-                         ORIG_N * sizeof(float));
+                errno_t ret = memcpy_s(valid_output.data() + row * ORIG_N,
+                                       ORIG_N * sizeof(float),
+                                       output_host + row * G_N,
+                                       ORIG_N * sizeof(float));
+                if (ret != EOK) {
+                    std::cerr << "[ERROR] memcpy_s failed at row " << row
+                              << " with errno " << ret << std::endl;
+                    aclrtFreeHost(output_host);
+                    return false;
+                }
             }
             is_ok = PtoTestCommon::ResultCmp(golden, valid_output.data(), 0.001f);
         }
@@ -348,7 +354,7 @@ static void PrintPerfMachineLine(int n_ranks, double avg, double sum) {
 
 static void PrintPerfConfig(int n_ranks) {
     if (n_ranks <= 0) return;
-    double m_local_d = static_cast<double>(G_M) / n_ranks;
+    double m_local_d = static_cast<double>(G_M) / std::max(n_ranks, 1);
     std::cout << "\n  Configuration:" << std::endl;
     std::cout << "    M (global):    " << G_M << std::endl;
     if (ORIG_M != G_M || ORIG_K != G_K || ORIG_N != G_N) {
@@ -364,7 +370,7 @@ static void PrintPerfConfig(int n_ranks) {
 
 static void PrintPerfWorkload(int n_ranks, double gemm_flops, double comm_bytes) {
     if (n_ranks <= 0) return;
-    double m_local_d = static_cast<double>(G_M) / n_ranks;
+    double m_local_d = static_cast<double>(G_M) / std::max(n_ranks, 1);
     std::cout << "\n  Workload:" << std::endl;
     std::cout << "    GEMM FLOPs:           " << std::scientific << std::setprecision(2)
               << gemm_flops << std::endl;
@@ -391,7 +397,7 @@ static void PrintPerfResults(int n_ranks, const std::vector<double>& times_us) {
     double gemm_flops = 2.0 * static_cast<double>(G_M) * static_cast<double>(G_K) * static_cast<double>(G_N);
     double tflops = (avg > 0.0) ? (gemm_flops / (avg * 1e-6) / 1e12) : 0.0;
 
-    double m_local_d = static_cast<double>(G_M) / n_ranks;
+    double m_local_d = static_cast<double>(G_M) / std::max(n_ranks, 1);
     double comm_bytes = m_local_d * static_cast<double>(G_K) * sizeof(uint16_t) * (n_ranks - 1);
     double comm_gbps = (avg > 0.0) ? (comm_bytes / (avg * 1e-6) / 1e9) : 0.0;
 
