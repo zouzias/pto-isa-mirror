@@ -207,14 +207,16 @@ AICORE inline void ProcessStreamingTiles(
                      ? (last_streaming_tile - first_streaming_tile + 1)
                      : 0;
 
+    int32_t epoch_base = (flags->epoch - 1) * flags->num_tiles_per_src;
+
     uint64_t done = 0;
     int processed_count = 0;
     int next_st = first_streaming_tile;
 
     while (processed_count < num_st) {
         int32_t ready_count = GetReadyCountFromSrc(summary_base, src_rank);
-        if (ready_count <= processed_count) {
-            WaitReadyCountFromSrc(summary_base, src_rank, processed_count + 1);
+        if (ready_count <= epoch_base + processed_count) {
+            WaitReadyCountFromSrc(summary_base, src_rank, epoch_base + processed_count + 1);
         }
 
         for (int scan_cnt = 0; scan_cnt < num_st && processed_count < num_st; ++scan_cnt) {

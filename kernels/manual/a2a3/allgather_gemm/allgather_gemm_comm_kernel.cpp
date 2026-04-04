@@ -89,7 +89,11 @@ AICORE inline void SetupLocalFlags(
     for (int c = 0; c < numTiles; ++c) {
         SetTileFlagReady(flags, myRank, c);
     }
-    SetLocalSummaryReady(summaryBase, myRank, numTiles);
+    // Use TNOTIFY AtomicAdd (matching TWAIT) instead of direct store,
+    // so that TWAIT's hardware signal mechanism is properly triggered.
+    volatile __gm__ int32_t* ptr = summaryBase + myRank;
+    pto::comm::Signal sig(reinterpret_cast<__gm__ int32_t*>(const_cast<__gm__ int32_t*>(ptr)));
+    pto::comm::TNOTIFY(sig, numTiles, pto::comm::NotifyOp::AtomicAdd);
 }
 
 AICORE inline void InitTileBuffers(TileData& pingTile, TileData& pongTile)

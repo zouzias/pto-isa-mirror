@@ -66,7 +66,8 @@ struct alignas(64) TileFlagMatrix {
     int32_t tile_size;
     int32_t stride;              // Aligned stride for each rank's tile flags
     int32_t my_rank;             // Local rank id
-    int32_t padding[10];         // Pad header to 64 bytes
+    int32_t epoch;               // Monotonically increasing generation counter (starts at 1)
+    int32_t padding[9];          // Pad header to 64 bytes
     // Followed by int32_t tile_flags[num_ranks * stride]
 };
 
@@ -101,7 +102,8 @@ inline void TileFlagMatrixInit(TileFlagMatrix* flags, int num_ranks, int num_blo
     flags->tile_size = actual_tile_size;
     flags->stride = stride;
     flags->my_rank = -1;
-    for (int i = 0; i < 10; i++) flags->padding[i] = 0;
+    flags->epoch = 1;
+    for (int i = 0; i < 9; i++) flags->padding[i] = 0;
 
     int32_t* base = reinterpret_cast<int32_t*>(
         reinterpret_cast<uint8_t*>(flags) + sizeof(TileFlagMatrix));
@@ -214,9 +216,10 @@ AICORE inline bool IsTileReady(
     int32_t tile_idx)
 {
     volatile __gm__ int32_t* ptr = GetTileFlagPtr(flags, src_rank, tile_idx);
+    int32_t epoch = flags->epoch;
     dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
-    return (*ptr >= 1);
+    return (*ptr >= epoch);
 }
 
 // First-level poll: check if any tile from this src is ready.
