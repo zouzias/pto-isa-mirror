@@ -144,24 +144,13 @@ struct RankResources {
 // ============================================================================
 // Helper functions
 // ============================================================================
-static void ResetStreamingState(RankResources& r) {
-    TileFlagMatrixReset(r.tile_flag_host);
-    TileFlagMatrixSummaryInit(r.summary_host, r.n_ranks);
-    aclrtMemcpy(r.tile_flag_shmem, r.tileFlagWithSummarySize,
-                r.tile_flag_host, r.tileFlagWithSummarySize, ACL_MEMCPY_HOST_TO_DEVICE);
+static void AdvanceEpoch(RankResources& r) {
+    r.tile_flag_host->epoch++;
+    size_t off = offsetof(TileFlagMatrix, epoch);
+    aclrtMemcpy(reinterpret_cast<uint8_t*>(r.tile_flag_shmem) + off, sizeof(int32_t),
+                reinterpret_cast<uint8_t*>(r.tile_flag_host) + off, sizeof(int32_t),
+                ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemset(r.output_dev, r.outputSize, 0, r.outputSize);
-}
-
-static void PrePopulateTileFlags(RankResources& r) {
-    for (int src = 0; src < r.n_ranks; ++src) {
-        TileFlagMatrixSetLocalReady(r.tile_flag_host, src);
-    }
-    int num_tiles = r.tile_flag_host->num_tiles_per_src;
-    for (int src = 0; src < r.n_ranks; ++src) {
-        r.summary_host[src] = num_tiles;
-    }
-    aclrtMemcpy(r.tile_flag_shmem, r.tileFlagWithSummarySize,
-                r.tile_flag_host, r.tileFlagWithSummarySize, ACL_MEMCPY_HOST_TO_DEVICE);
 }
 
 static void LaunchCommKernel(RankResources& r) {
@@ -267,7 +256,7 @@ static void RunFunctionalTest(RankResources& r) {
     if (r.rank_id == 0) {
         std::cout << "\n[INFO] Running functional verification..." << std::endl;
     }
-    ResetStreamingState(r);
+    aclrtMemset(r.output_dev, r.outputSize, 0, r.outputSize);
     HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
 
     LaunchCommKernel(r);
@@ -313,31 +302,19 @@ static bool VerifyOutput(RankResources& r, const std::string& dataDir) {
     return is_ok;
 }
 
-static void RunWarmupPhase(RankResources& r, int phase) {
-    for (int i = 0; i < WARMUP_ITERS; ++i) {
-        ResetStreamingState(r);
-        if (phase == 1) PrePopulateTileFlags(r);
-        HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
-
-        if (phase == 0 || phase == 2 || phase == 3) {
-            LaunchCommKernel(r);
-            if (phase == 0 || phase == 2) aclrtSynchronizeStream(r.commStream);
-        }
-        if (phase == 1 || phase == 2 || phase == 3) {
-            LaunchComputeKernel(r);
-            aclrtSynchronizeStream(r.computeStream);
-        }
-        if (phase == 3) aclrtSynchronizeStream(r.commStream);
-        HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
-    }
-}
-
 static void RunWarmup(RankResources& r) {
     if (r.rank_id == 0) {
         std::cout << "\n[PERF] Warmup (" << WARMUP_ITERS << " iterations)..." << std::endl;
     }
-    for (int phase = 0; phase < 4; ++phase) {
-        RunWarmupPhase(r, phase);
+    for (int i = 0; i < WARMUP_ITERS; ++i) {
+        AdvanceEpoch(r);
+        HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
+
+        LaunchCommKernel(r);
+        LaunchComputeKernel(r);
+        aclrtSynchronizeStream(r.computeStream);
+        aclrtSynchronizeStream(r.commStream);
+        HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
     }
 }
 
@@ -349,22 +326,25 @@ static std::vector<double> RunMeasure(RankResources& r) {
     std::vector<double> times_us;
     times_us.reserve(MEASURE_ITERS);
 
-    aclrtEvent evtStart = nullptr, evtEnd = nullptr;
+    aclrtEvent evtStart = nullptr, evtEnd = nullptr, commDone = nullptr;
     aclrtCreateEvent(&evtStart);
     aclrtCreateEvent(&evtEnd);
+    aclrtCreateEvent(&commDone);
 
     for (int iter = 0; iter < MEASURE_ITERS; ++iter) {
         aclrtSynchronizeStream(r.commStream);
         aclrtSynchronizeStream(r.computeStream);
-        ResetStreamingState(r);
+        AdvanceEpoch(r);
         HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
 
         aclrtRecordEvent(evtStart, r.computeStream);
         LaunchCommKernel(r);
         LaunchComputeKernel(r);
+        aclrtSynchronizeStream(r.computeStream);
+        aclrtRecordEvent(commDone, r.commStream);
+        aclrtStreamWaitEvent(r.computeStream, commDone);
         aclrtRecordEvent(evtEnd, r.computeStream);
         aclrtSynchronizeStream(r.computeStream);
-        aclrtSynchronizeStream(r.commStream);
 
         float iterMs = 0.0f;
         aclrtEventElapsedTime(&iterMs, evtStart, evtEnd);
@@ -375,6 +355,7 @@ static std::vector<double> RunMeasure(RankResources& r) {
 
     aclrtDestroyEvent(evtStart);
     aclrtDestroyEvent(evtEnd);
+    aclrtDestroyEvent(commDone);
     return times_us;
 }
 
