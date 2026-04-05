@@ -30,7 +30,8 @@ constexpr int MAX_TILE_SIZE = 64;
 
 inline int ComputeOptimalTileSize(int num_blocks_per_src)
 {
-    if (num_blocks_per_src <= 0) return MIN_TILE_SIZE;
+    if (num_blocks_per_src <= 0)
+        return MIN_TILE_SIZE;
 
     int tile_size = MIN_TILE_SIZE;
     int tile_count = (num_blocks_per_src + tile_size - 1) / tile_size;
@@ -38,7 +39,8 @@ inline int ComputeOptimalTileSize(int num_blocks_per_src)
     if (tile_count > TARGET_TILES_MAX) {
         tile_size = (num_blocks_per_src + TARGET_TILES_MAX - 1) / TARGET_TILES_MAX;
         tile_size = ((tile_size + 3) / 4) * 4;
-        if (tile_size > MAX_TILE_SIZE) tile_size = MAX_TILE_SIZE;
+        if (tile_size > MAX_TILE_SIZE)
+            tile_size = MAX_TILE_SIZE;
     }
 
     return tile_size;
@@ -64,10 +66,10 @@ struct alignas(64) TileFlagMatrix {
     int32_t num_tiles_per_src;
     int32_t num_blocks_per_src;
     int32_t tile_size;
-    int32_t stride;              // Aligned stride for each rank's tile flags
-    int32_t my_rank;             // Local rank id
-    int32_t epoch;               // Monotonically increasing generation counter (starts at 1)
-    int32_t padding[9];          // Pad header to 64 bytes
+    int32_t stride;     // Aligned stride for each rank's tile flags
+    int32_t my_rank;    // Local rank id
+    int32_t epoch;      // Monotonically increasing generation counter (starts at 1)
+    int32_t padding[9]; // Pad header to 64 bytes
     // Followed by int32_t tile_flags[num_ranks * stride]
 };
 
@@ -86,11 +88,11 @@ inline size_t TileFlagMatrixSummaryOffset(int num_ranks, int num_blocks_per_src,
 }
 inline size_t TileFlagMatrixWithSummarySize(int num_ranks, int num_blocks_per_src, int tile_size)
 {
-    return TileFlagMatrixSummaryOffset(num_ranks, num_blocks_per_src, tile_size)
-           + static_cast<size_t>(num_ranks) * sizeof(int32_t);
+    return TileFlagMatrixSummaryOffset(num_ranks, num_blocks_per_src, tile_size) +
+           static_cast<size_t>(num_ranks) * sizeof(int32_t);
 }
 
-inline void TileFlagMatrixInit(TileFlagMatrix* flags, int num_ranks, int num_blocks_per_src, int tile_size)
+inline void TileFlagMatrixInit(TileFlagMatrix *flags, int num_ranks, int num_blocks_per_src, int tile_size)
 {
     int actual_tile_size = (tile_size > 0) ? tile_size : ComputeOptimalTileSize(num_blocks_per_src);
     int num_tiles = (num_blocks_per_src + actual_tile_size - 1) / actual_tile_size;
@@ -103,33 +105,32 @@ inline void TileFlagMatrixInit(TileFlagMatrix* flags, int num_ranks, int num_blo
     flags->stride = stride;
     flags->my_rank = -1;
     flags->epoch = 1;
-    for (int i = 0; i < 9; i++) flags->padding[i] = 0;
+    for (int i = 0; i < 9; i++)
+        flags->padding[i] = 0;
 
-    int32_t* base = reinterpret_cast<int32_t*>(
-        reinterpret_cast<uint8_t*>(flags) + sizeof(TileFlagMatrix));
+    int32_t *base = reinterpret_cast<int32_t *>(reinterpret_cast<uint8_t *>(flags) + sizeof(TileFlagMatrix));
     for (int i = 0; i < num_ranks * stride; ++i) {
         base[i] = 0;
     }
 }
 
-inline void TileFlagMatrixSummaryInit(int32_t* summary_base, int num_ranks)
+inline void TileFlagMatrixSummaryInit(int32_t *summary_base, int num_ranks)
 {
-    for (int i = 0; i < num_ranks; ++i) summary_base[i] = 0;
+    for (int i = 0; i < num_ranks; ++i)
+        summary_base[i] = 0;
 }
 
-inline void TileFlagMatrixReset(TileFlagMatrix* flags)
+inline void TileFlagMatrixReset(TileFlagMatrix *flags)
 {
-    int32_t* base = reinterpret_cast<int32_t*>(
-        reinterpret_cast<uint8_t*>(flags) + sizeof(TileFlagMatrix));
+    int32_t *base = reinterpret_cast<int32_t *>(reinterpret_cast<uint8_t *>(flags) + sizeof(TileFlagMatrix));
     for (int i = 0; i < flags->num_ranks * flags->stride; ++i) {
         base[i] = 0;
     }
 }
 
-inline void TileFlagMatrixSetLocalReady(TileFlagMatrix* flags, int my_rank)
+inline void TileFlagMatrixSetLocalReady(TileFlagMatrix *flags, int my_rank)
 {
-    int32_t* base = reinterpret_cast<int32_t*>(
-        reinterpret_cast<uint8_t*>(flags) + sizeof(TileFlagMatrix));
+    int32_t *base = reinterpret_cast<int32_t *>(reinterpret_cast<uint8_t *>(flags) + sizeof(TileFlagMatrix));
     int offset = my_rank * flags->stride;
     for (int c = 0; c < flags->num_tiles_per_src; ++c) {
         base[offset + c] = 1;
@@ -141,57 +142,48 @@ inline void TileFlagMatrixSetLocalReady(TileFlagMatrix* flags, int my_rank)
 // TileFlagMatrix device-side functions
 // ============================================================================
 
-AICORE inline size_t TileFlagMatrixBytes(volatile __gm__ TileFlagMatrix* flags)
+AICORE inline size_t TileFlagMatrixBytes(volatile __gm__ TileFlagMatrix *flags)
 {
-    return sizeof(TileFlagMatrix)
-           + static_cast<size_t>(flags->num_ranks) * static_cast<size_t>(flags->stride) * sizeof(int32_t);
+    return sizeof(TileFlagMatrix) +
+           static_cast<size_t>(flags->num_ranks) * static_cast<size_t>(flags->stride) * sizeof(int32_t);
 }
 
-AICORE inline volatile __gm__ int32_t* GetTileFlagPtr(
-    volatile __gm__ TileFlagMatrix* flags,
-    int32_t src_rank,
-    int32_t tile_idx)
+AICORE inline volatile __gm__ int32_t *GetTileFlagPtr(volatile __gm__ TileFlagMatrix *flags, int32_t src_rank,
+                                                      int32_t tile_idx)
 {
     int32_t stride = flags->stride;
     int32_t idx = src_rank * stride + tile_idx;
-    volatile __gm__ int32_t* base = reinterpret_cast<volatile __gm__ int32_t*>(
-        reinterpret_cast<volatile __gm__ uint8_t*>(flags) + sizeof(TileFlagMatrix));
+    volatile __gm__ int32_t *base = reinterpret_cast<volatile __gm__ int32_t *>(
+        reinterpret_cast<volatile __gm__ uint8_t *>(flags) + sizeof(TileFlagMatrix));
     return base + idx;
 }
 
 // Summary base address: right after flag matrix, one int32 doorbell per src rank.
-AICORE inline volatile __gm__ int32_t* GetSummaryBase(volatile __gm__ TileFlagMatrix* flags)
+AICORE inline volatile __gm__ int32_t *GetSummaryBase(volatile __gm__ TileFlagMatrix *flags)
 {
-    return reinterpret_cast<volatile __gm__ int32_t*>(
-        reinterpret_cast<volatile __gm__ uint8_t*>(flags) + TileFlagMatrixBytes(flags));
+    return reinterpret_cast<volatile __gm__ int32_t *>(reinterpret_cast<volatile __gm__ uint8_t *>(flags) +
+                                                       TileFlagMatrixBytes(flags));
 }
 
 // Uses TNOTIFY AtomicAdd for hardware atomic semantics.
-AICORE inline void SetTileFlagReady(
-    volatile __gm__ TileFlagMatrix* flags,
-    int32_t src_rank,
-    int32_t tile_idx)
+AICORE inline void SetTileFlagReady(volatile __gm__ TileFlagMatrix *flags, int32_t src_rank, int32_t tile_idx)
 {
-    volatile __gm__ int32_t* ptr = GetTileFlagPtr(flags, src_rank, tile_idx);
-    pto::comm::Signal sig(reinterpret_cast<__gm__ int32_t*>(const_cast<__gm__ int32_t*>(ptr)));
+    volatile __gm__ int32_t *ptr = GetTileFlagPtr(flags, src_rank, tile_idx);
+    pto::comm::Signal sig(reinterpret_cast<__gm__ int32_t *>(const_cast<__gm__ int32_t *>(ptr)));
     pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::AtomicAdd);
 }
 
 // Notify remote rank that tile data is available.
 // If remote_summary_src_ptr is provided, also increments the summary doorbell.
-AICORE inline void SetRemoteTileFlagReady(
-    __gm__ TileFlagMatrix* remote_flags,
-    int32_t src_rank,
-    int32_t tile_idx,
-    __gm__ int32_t* remote_summary_src_ptr = nullptr)
+AICORE inline void SetRemoteTileFlagReady(__gm__ TileFlagMatrix *remote_flags, int32_t src_rank, int32_t tile_idx,
+                                          __gm__ int32_t *remote_summary_src_ptr = nullptr)
 {
-    volatile __gm__ TileFlagMatrix* r = reinterpret_cast<volatile __gm__ TileFlagMatrix*>(remote_flags);
-    if (src_rank < 0 || src_rank >= r->num_ranks ||
-        tile_idx < 0 || tile_idx >= r->num_tiles_per_src) {
+    volatile __gm__ TileFlagMatrix *r = reinterpret_cast<volatile __gm__ TileFlagMatrix *>(remote_flags);
+    if (src_rank < 0 || src_rank >= r->num_ranks || tile_idx < 0 || tile_idx >= r->num_tiles_per_src) {
         return;
     }
-    volatile __gm__ int32_t* ptr = GetTileFlagPtr(r, src_rank, tile_idx);
-    pto::comm::Signal sig(reinterpret_cast<__gm__ int32_t*>(const_cast<__gm__ int32_t*>(ptr)));
+    volatile __gm__ int32_t *ptr = GetTileFlagPtr(r, src_rank, tile_idx);
+    pto::comm::Signal sig(reinterpret_cast<__gm__ int32_t *>(const_cast<__gm__ int32_t *>(ptr)));
     pto::comm::TNOTIFY(sig, 1, pto::comm::NotifyOp::AtomicAdd);
     if (remote_summary_src_ptr != nullptr) {
         pto::comm::Signal sumSig(remote_summary_src_ptr);
@@ -199,53 +191,54 @@ AICORE inline void SetRemoteTileFlagReady(
     }
 }
 
-AICORE inline void SetLocalSummaryReady(volatile __gm__ int32_t* summary_base, int32_t src_rank, int32_t value)
+AICORE inline void SetLocalSummaryReady(volatile __gm__ int32_t *summary_base, int32_t src_rank, int32_t value)
 {
-    if (summary_base == nullptr || src_rank < 0) return;
-    volatile __gm__ int32_t* ptr = summary_base + src_rank;
-    dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
+    if (summary_base == nullptr || src_rank < 0)
+        return;
+    volatile __gm__ int32_t *ptr = summary_base + src_rank;
+    dcci((__gm__ void *)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
     *ptr = value;
-    dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
+    dcci((__gm__ void *)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
 }
 
-AICORE inline bool IsTileReady(
-    volatile __gm__ TileFlagMatrix* flags,
-    int32_t src_rank,
-    int32_t tile_idx)
+AICORE inline bool IsTileReady(volatile __gm__ TileFlagMatrix *flags, int32_t src_rank, int32_t tile_idx)
 {
-    volatile __gm__ int32_t* ptr = GetTileFlagPtr(flags, src_rank, tile_idx);
+    volatile __gm__ int32_t *ptr = GetTileFlagPtr(flags, src_rank, tile_idx);
     int32_t epoch = flags->epoch;
-    dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
+    dcci((__gm__ void *)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
     return (*ptr >= epoch);
 }
 
 // First-level poll: check if any tile from this src is ready.
-AICORE inline bool IsAnyReadyFromSrc(volatile __gm__ int32_t* summary_base, int32_t src_rank)
+AICORE inline bool IsAnyReadyFromSrc(volatile __gm__ int32_t *summary_base, int32_t src_rank)
 {
-    if (summary_base == nullptr || src_rank < 0) return false;
-    volatile __gm__ int32_t* ptr = summary_base + src_rank;
-    dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
+    if (summary_base == nullptr || src_rank < 0)
+        return false;
+    volatile __gm__ int32_t *ptr = summary_base + src_rank;
+    dcci((__gm__ void *)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
     return (*ptr >= 1);
 }
 
-AICORE inline int32_t GetReadyCountFromSrc(volatile __gm__ int32_t* summary_base, int32_t src_rank)
+AICORE inline int32_t GetReadyCountFromSrc(volatile __gm__ int32_t *summary_base, int32_t src_rank)
 {
-    if (summary_base == nullptr || src_rank < 0) return 0;
-    volatile __gm__ int32_t* ptr = summary_base + src_rank;
-    dcci((__gm__ void*)ptr, SINGLE_CACHE_LINE);
+    if (summary_base == nullptr || src_rank < 0)
+        return 0;
+    volatile __gm__ int32_t *ptr = summary_base + src_rank;
+    dcci((__gm__ void *)ptr, SINGLE_CACHE_LINE);
     __asm__ __volatile__("" ::: "memory");
     return *ptr;
 }
 
 // Blocking wait until summary[src_rank] >= expected.
-AICORE inline void WaitReadyCountFromSrc(volatile __gm__ int32_t* summary_base, int32_t src_rank, int32_t expected)
+AICORE inline void WaitReadyCountFromSrc(volatile __gm__ int32_t *summary_base, int32_t src_rank, int32_t expected)
 {
-    if (summary_base == nullptr || src_rank < 0 || expected <= 0) return;
-    __gm__ int32_t* ptr = const_cast<__gm__ int32_t*>(summary_base + src_rank);
+    if (summary_base == nullptr || src_rank < 0 || expected <= 0)
+        return;
+    __gm__ int32_t *ptr = const_cast<__gm__ int32_t *>(summary_base + src_rank);
     pto::comm::Signal sig(ptr);
     pto::comm::TWAIT(sig, expected, pto::comm::WaitCmp::GE);
 }

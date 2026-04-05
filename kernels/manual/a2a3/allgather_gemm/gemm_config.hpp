@@ -31,4 +31,4 @@ constexpr uint32_t G_BASE_M = 128;
 constexpr uint32_t G_BASE_K = 64;
 constexpr uint32_t G_BASE_N = 256;
 
-#endif  // GEMM_CONFIG_H_
+#endif // GEMM_CONFIG_H_
