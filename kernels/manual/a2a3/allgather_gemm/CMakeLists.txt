@@ -53,9 +53,6 @@ if(NOT DEFINED COMM_BLOCK_NUM)
         set(COMM_BLOCK_NUM 48)
     endif()
 endif()
-if(NOT DEFINED PEAK_TFLOPS_FP16)
-    set(PEAK_TFLOPS_FP16 320.0)
-endif()
 # Original (unpadded) dimensions for golden verification
 if(NOT DEFINED ORIG_M)
     set(ORIG_M ${G_M})
@@ -183,7 +180,6 @@ target_compile_definitions(allgather_gemm PRIVATE
     CONFIG_ORIG_M=${ORIG_M} CONFIG_ORIG_K=${ORIG_K} CONFIG_ORIG_N=${ORIG_N}
     CONFIG_COMPUTE_BLOCK_NUM=${COMPUTE_BLOCK_NUM}
     CONFIG_COMM_BLOCK_NUM=${COMM_BLOCK_NUM}
-    CONFIG_PEAK_TFLOPS_FP16=${PEAK_TFLOPS_FP16}
 )
 
 target_link_directories(allgather_gemm PUBLIC

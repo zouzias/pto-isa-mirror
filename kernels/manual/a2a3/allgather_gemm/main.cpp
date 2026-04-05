@@ -19,8 +19,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <vector>
 #include <string>
 #include <iostream>
-#include <iomanip>
-#include <algorithm>
 
 #include "ready_queue.hpp"
 
@@ -73,14 +71,6 @@ constexpr uint32_t ORIG_N = CONFIG_ORIG_N;
 constexpr int COMPUTE_BLOCK_NUM = CONFIG_COMPUTE_BLOCK_NUM;
 constexpr int COMM_BLOCK_NUM = CONFIG_COMM_BLOCK_NUM;
 
-static constexpr int WARMUP_ITERS = 5;
-static constexpr int MEASURE_ITERS = 100;
-
-#ifndef CONFIG_PEAK_TFLOPS_FP16
-#define CONFIG_PEAK_TFLOPS_FP16 320.0
-#endif
-constexpr double PEAK_TFLOPS_FP16 = CONFIG_PEAK_TFLOPS_FP16;
-
 #include "kernel_launch.hpp"
 
 // ============================================================================
@@ -113,15 +103,6 @@ struct RankResources {
 // ============================================================================
 // Helper functions
 // ============================================================================
-static void AdvanceEpoch(RankResources& r) {
-    r.tile_flag_host->epoch++;
-    size_t off = offsetof(TileFlagMatrix, epoch);
-    aclrtMemcpy(reinterpret_cast<uint8_t*>(r.tile_flag_shmem) + off, sizeof(int32_t),
-                reinterpret_cast<uint8_t*>(r.tile_flag_host) + off, sizeof(int32_t),
-                ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemset(r.output_dev, r.outputSize, 0, r.outputSize);
-}
-
 static void LaunchCommKernel(RankResources& r) {
     launchRingCommStreaming(
         reinterpret_cast<uint8_t*>(r.shmem_input),
@@ -283,153 +264,6 @@ static bool VerifyOutput(RankResources& r, const std::string& dataDir) {
     return is_ok;
 }
 
-static void RunWarmup(RankResources& r) {
-    if (r.rank_id == 0) {
-        std::cout << "\n[PERF] Warmup (" << WARMUP_ITERS << " iterations)..." << std::endl;
-    }
-    for (int i = 0; i < WARMUP_ITERS; ++i) {
-        AdvanceEpoch(r);
-        HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
-
-        LaunchCommKernel(r);
-        LaunchComputeKernel(r);
-        aclrtSynchronizeStream(r.computeStream);
-        aclrtSynchronizeStream(r.commStream);
-        HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
-    }
-}
-
-static std::vector<double> RunMeasure(RankResources& r) {
-    if (r.rank_id == 0) {
-        std::cout << "[PERF] Measuring (" << MEASURE_ITERS << " iterations)..." << std::endl;
-    }
-
-    std::vector<double> times_us;
-    times_us.reserve(MEASURE_ITERS);
-
-    aclrtEvent evtStart = nullptr, evtEnd = nullptr, commDone = nullptr;
-    aclrtCreateEvent(&evtStart);
-    aclrtCreateEvent(&evtEnd);
-    aclrtCreateEvent(&commDone);
-
-    for (int iter = 0; iter < MEASURE_ITERS; ++iter) {
-        aclrtSynchronizeStream(r.commStream);
-        aclrtSynchronizeStream(r.computeStream);
-        AdvanceEpoch(r);
-        HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
-
-        aclrtRecordEvent(evtStart, r.computeStream);
-        LaunchCommKernel(r);
-        LaunchComputeKernel(r);
-        aclrtSynchronizeStream(r.computeStream);
-        aclrtRecordEvent(commDone, r.commStream);
-        aclrtStreamWaitEvent(r.computeStream, commDone);
-        aclrtRecordEvent(evtEnd, r.computeStream);
-        aclrtSynchronizeStream(r.computeStream);
-
-        float iterMs = 0.0f;
-        aclrtEventElapsedTime(&iterMs, evtStart, evtEnd);
-        times_us.push_back(static_cast<double>(iterMs) * 1000.0);
-
-        HcclHostBarrier(r.hcclTestCtx.comm, r.hcclTestCtx.stream);
-    }
-
-    aclrtDestroyEvent(evtStart);
-    aclrtDestroyEvent(evtEnd);
-    aclrtDestroyEvent(commDone);
-    return times_us;
-}
-
-static void PrintPerfMachineLine(int n_ranks, double avg, double sum) {
-    float totalElapsedMs = static_cast<float>(sum / 1000.0);
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "[PERF] op=hccl_ag_gemm"
-              << " M=" << G_M << " K=" << G_K << " N=" << G_N
-              << " orig_M=" << ORIG_M << " orig_K=" << ORIG_K << " orig_N=" << ORIG_N
-              << " pe_size=" << n_ranks
-              << " total_time=" << totalElapsedMs << "ms"
-              << " iters=" << MEASURE_ITERS
-              << " avg_time=" << (avg / 1000.0) << "ms" << std::endl;
-}
-
-static void PrintPerfConfig(int n_ranks) {
-    if (n_ranks <= 0) return;
-    double m_local_d = static_cast<double>(G_M) / std::max(n_ranks, 1);
-    std::cout << "\n  Configuration:" << std::endl;
-    std::cout << "    M (global):    " << G_M << std::endl;
-    if (ORIG_M != G_M || ORIG_K != G_K || ORIG_N != G_N) {
-        std::cout << "    M (original):  " << ORIG_M << std::endl;
-    }
-    std::cout << "    M (per rank):  " << static_cast<int>(m_local_d) << std::endl;
-    std::cout << "    K:             " << G_K << std::endl;
-    std::cout << "    N:             " << G_N << std::endl;
-    std::cout << "    pe_size:       " << n_ranks << std::endl;
-    std::cout << "    compute_blocks:" << COMPUTE_BLOCK_NUM << std::endl;
-    std::cout << "    comm_blocks:   " << COMM_BLOCK_NUM << std::endl;
-}
-
-static void PrintPerfWorkload(int n_ranks, double gemm_flops, double comm_bytes) {
-    if (n_ranks <= 0) return;
-    double m_local_d = static_cast<double>(G_M) / std::max(n_ranks, 1);
-    std::cout << "\n  Workload:" << std::endl;
-    std::cout << "    GEMM FLOPs:           " << std::scientific << std::setprecision(2)
-              << gemm_flops << std::endl;
-    std::cout << std::fixed << std::setprecision(2);
-    std::cout << "    Input A (per rank):   "
-              << (m_local_d * G_K * sizeof(uint16_t) / (1024.0 * 1024.0)) << " MB" << std::endl;
-    std::cout << "    Input A (global):     "
-              << (static_cast<double>(G_M) * G_K * sizeof(uint16_t) / (1024.0 * 1024.0)) << " MB" << std::endl;
-    std::cout << "    Input B:              "
-              << (static_cast<double>(G_K) * G_N * sizeof(uint16_t) / (1024.0 * 1024.0)) << " MB" << std::endl;
-    std::cout << "    Output C:             "
-              << (static_cast<double>(G_M) * G_N * sizeof(float) / (1024.0 * 1024.0)) << " MB" << std::endl;
-    std::cout << "    Comm (per rank):      "
-              << (comm_bytes / (1024.0 * 1024.0)) << " MB" << std::endl;
-}
-
-static void PrintPerfResults(int n_ranks, const std::vector<double>& times_us) {
-    if (n_ranks <= 0 || times_us.empty()) return;
-    double sum = 0.0;
-    for (double t : times_us) sum += t;
-    double avg = sum / static_cast<double>(times_us.size());
-    float totalElapsedMs = static_cast<float>(sum / 1000.0);
-
-    double gemm_flops = 2.0 * static_cast<double>(G_M) * static_cast<double>(G_K) * static_cast<double>(G_N);
-    double tflops = (avg > 0.0) ? (gemm_flops / (avg * 1e-6) / 1e12) : 0.0;
-
-    double m_local_d = static_cast<double>(G_M) / std::max(n_ranks, 1);
-    double comm_bytes = m_local_d * static_cast<double>(G_K) * sizeof(uint16_t) * (n_ranks - 1);
-    double comm_gbps = (avg > 0.0) ? (comm_bytes / (avg * 1e-6) / 1e9) : 0.0;
-
-    double total_read_bytes = static_cast<double>(G_M) * static_cast<double>(G_K) * sizeof(uint16_t)
-                            + static_cast<double>(G_K) * static_cast<double>(G_N) * sizeof(uint16_t);
-    double total_write_bytes = static_cast<double>(G_M) * static_cast<double>(G_N) * sizeof(float);
-    double mem_bw_gbps = (avg > 0.0) ? ((total_read_bytes + total_write_bytes) / (avg * 1e-6) / 1e9) : 0.0;
-    double mfu = tflops / PEAK_TFLOPS_FP16 * 100.0;
-
-    PrintPerfMachineLine(n_ranks, avg, sum);
-
-    std::cout << std::fixed << std::setprecision(3);
-    std::cout << "\n================================================================" << std::endl;
-    std::cout << "[PERF] AllGather GEMM Performance Results" << std::endl;
-    std::cout << "================================================================" << std::endl;
-
-    PrintPerfConfig(n_ranks);
-    PrintPerfWorkload(n_ranks, gemm_flops, comm_bytes);
-
-    std::cout << std::fixed << std::setprecision(3);
-    std::cout << "\n  End-to-End (AllGather + GEMM fused, aclrtEvent):" << std::endl;
-    std::cout << "    Total Time:    " << totalElapsedMs << " ms  (" << MEASURE_ITERS << " iters)" << std::endl;
-    std::cout << "    Avg Time:      " << avg << " us  (" << (avg / 1000.0) << " ms)" << std::endl;
-
-    std::cout << "\n  Throughput:" << std::endl;
-    std::cout << "    TFLOPS:        " << tflops << std::endl;
-    std::cout << "    MFU:           " << mfu << "% (vs " << PEAK_TFLOPS_FP16 << " TFLOPS peak)" << std::endl;
-    std::cout << "    Comm BW:       " << comm_gbps << " GB/s  (AllGather payload / e2e time)" << std::endl;
-    std::cout << "    Mem BW:        " << mem_bw_gbps << " GB/s  (total read+write / e2e time)" << std::endl;
-    std::cout << "================================================================\n" << std::endl;
-}
-
 static void Cleanup(RankResources& r) {
     aclrtFree(r.src1_dev);
     aclrtFree(r.output_dev);
@@ -443,7 +277,7 @@ static void Cleanup(RankResources& r) {
 // ============================================================================
 static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
                                     const HcclRootInfo* rootInfo,
-                                    bool perfMode, const std::string& dataDir) {
+                                    const std::string& dataDir) {
     RankResources r;
     if (!AllocateResources(r, rank_id, n_ranks, rootInfo)) return false;
     if (!LoadInputData(r, dataDir)) return false;
@@ -458,26 +292,16 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
                             : "[ERROR] Functional run completed. Verification FAILED!") << std::endl;
     }
 
-    if (perfMode) {
-        RunWarmup(r);
-        std::vector<double> times_us = RunMeasure(r);
-        if (rank_id == 0) {
-            PrintPerfResults(n_ranks, times_us);
-        }
-    }
-
     aclrtSynchronizeStream(r.computeStream);
     aclrtSynchronizeStream(r.commStream);
     aclrtSynchronizeStream(r.hcclTestCtx.stream);
 
     CommMpiBarrier();
-
     Cleanup(r);
 
-    bool ok = perfMode || is_ok;
     if (rank_id == 0) {
-        std::cout << (ok ? "[SUCCESS] AllGather GEMM demo completed successfully."
-                         : "[FAILED] AllGather GEMM demo FAILED.") << std::endl;
+        std::cout << (is_ok ? "[SUCCESS] AllGather GEMM demo completed successfully."
+                            : "[FAILED] AllGather GEMM demo FAILED.") << std::endl;
     }
 
     // HcclCommDestroy hangs on the internal barrier in some HCCL versions
@@ -485,29 +309,21 @@ static bool RunAllGatherGemmPerRank(int rank_id, int n_ranks, int device_id,
     // barrier to avoid the hang; OS reclaims all resources.
     CommMpiBarrier();
     CommMpiFinalize();
-    _exit(ok ? 0 : 1);
+    _exit(is_ok ? 0 : 1);
 }
 
 // ============================================================================
-// Argument parsing and ACL initialization (split from main for G.FUNC.01)
+// Argument parsing and ACL initialization
 // ============================================================================
 struct AppArgs {
     int n_ranks = 2;
-    bool perfMode = false;
     std::string dataDir = "../out";
 };
 
 static AppArgs ParseArgs() {
     AppArgs args;
-    std::string envVal;
-
     if (const char* env = std::getenv("N_RANKS")) {
-        envVal = env;
-        args.n_ranks = std::atoi(envVal.c_str());
-    }
-    if (const char* env = std::getenv("ALLGATHER_GEMM_PERF_MODE")) {
-        envVal = env;
-        if (envVal == "1") args.perfMode = true;
+        args.n_ranks = std::atoi(env);
     }
     if (const char* env = std::getenv("ALLGATHER_GEMM_DATA_DIR")) {
         args.dataDir = env;
@@ -534,7 +350,7 @@ static bool InitAcl(int rank_id, int device_id) {
     return true;
 }
 
-static void PrintBanner(int n_ranks, bool perfMode) {
+static void PrintBanner(int n_ranks) {
     std::cout << "\n================================================================" << std::endl;
     std::cout << "  AllGather GEMM (HCCL backend)" << std::endl;
     std::cout << "  M=" << G_M << ", K=" << G_K << ", N=" << G_N
@@ -542,12 +358,7 @@ static void PrintBanner(int n_ranks, bool perfMode) {
     if (ORIG_M != G_M || ORIG_K != G_K || ORIG_N != G_N) {
         std::cout << "  (original: M=" << ORIG_M << ", K=" << ORIG_K << ", N=" << ORIG_N << ")" << std::endl;
     }
-    if (perfMode) {
-        std::cout << "  Mode: PERFORMANCE (warmup=" << WARMUP_ITERS
-                  << ", measure=" << MEASURE_ITERS << ")" << std::endl;
-    } else {
-        std::cout << "  Mode: FUNCTIONAL VERIFICATION" << std::endl;
-    }
+    std::cout << "  Mode: FUNCTIONAL VERIFICATION" << std::endl;
     std::cout << "================================================================" << std::endl;
 }
 
@@ -601,9 +412,9 @@ int main(int argc, char** argv) {
     CommMpiBcast(&rootInfo, HCCL_ROOT_INFO_BYTES, COMM_MPI_CHAR, 0);
     CommMpiBarrier();
 
-    if (rank_id == 0) PrintBanner(n_ranks, args.perfMode);
+    if (rank_id == 0) PrintBanner(n_ranks);
 
-    bool ok = RunAllGatherGemmPerRank(rank_id, n_ranks, device_id, &rootInfo, args.perfMode, args.dataDir);
+    bool ok = RunAllGatherGemmPerRank(rank_id, n_ranks, device_id, &rootInfo, args.dataDir);
 
     if (rank_id == 0) {
         std::cerr << "[FAILED] AllGather GEMM early init failure." << std::endl;
