@@ -17,6 +17,8 @@ namespace pto {
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
 PTO_INTERNAL void TCONCAT_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
+    assert(dst.GetValidRow() == src0.GetValidRow() && dst.GetValidRow() == src1.GetValidRow());
+    assert(dst.GetValidCol() >= src0.GetValidCol() + src1.GetValidCol());
     const unsigned rows = dst.GetValidRow();
     const unsigned cols0 = src0.GetValidCol();
     const unsigned cols1 = src1.GetValidCol();
