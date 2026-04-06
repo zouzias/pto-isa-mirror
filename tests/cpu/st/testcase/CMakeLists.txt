@@ -57,6 +57,7 @@ tcolexpandop
 tcolmax
 tcolmin
 tcolsum
+tconcat
 tcvt
 tdiv
 tdivs
