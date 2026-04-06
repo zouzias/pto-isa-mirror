@@ -72,17 +72,16 @@ TEST(TMatmulLayoutTest, AcceptsExplicitRowMajorLeftTileEncoding)
     AccTile dst;
     AccTile accIn;
     AccTile accOut;
-
-    size_t offset = 0;
-    TASSIGN(lhs, offset);
-    offset += ExplicitLeftTile::Numel * sizeof(typename ExplicitLeftTile::DType);
-    TASSIGN(rhs, offset);
-    offset += RightTile::Numel * sizeof(typename RightTile::DType);
-    TASSIGN(dst, offset);
-    offset += AccTile::Numel * sizeof(typename AccTile::DType);
-    TASSIGN(accIn, offset);
-    offset += AccTile::Numel * sizeof(typename AccTile::DType);
-    TASSIGN(accOut, offset);
+    size_t addr = 0;
+    TASSIGN(lhs, addr);
+    addr += ExplicitLeftTile::Numel * sizeof(typename ExplicitLeftTile::DType);
+    TASSIGN(rhs, addr);
+    addr += RightTile::Numel * sizeof(typename RightTile::DType);
+    TASSIGN(dst, addr);
+    addr += AccTile::Numel * sizeof(typename AccTile::DType);
+    TASSIGN(accIn, addr);
+    addr += AccTile::Numel * sizeof(typename AccTile::DType);
+    TASSIGN(accOut, addr);
 
     FillAll(lhs, 0.0f);
     FillAll(rhs, 0.0f);
