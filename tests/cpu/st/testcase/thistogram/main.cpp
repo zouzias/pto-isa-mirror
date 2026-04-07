@@ -47,26 +47,29 @@ TEST(THistogramCpuSimTest, MsbModeMatchesExactCumulativeHistogram)
     SrcTile src;
     DstTile dst;
     IdxTile idx;
-
-    TASSIGN(src, 0);
-    TASSIGN(dst, 2 * 16 * sizeof(uint16_t));
-    TASSIGN(idx, 2 * 16 * sizeof(uint16_t) + 2 * 256 * sizeof(uint32_t));
+    size_t addr = 0;
+    TASSIGN(src, addr);
+    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    TASSIGN(dst, addr);
+    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    TASSIGN(idx, addr);
 
     const std::vector<uint16_t> row0 = {0x1201u, 0x1202u, 0x13ffu, 0x1203u, 0x3400u, 0x0101u, 0x0202u, 0x0303u,
                                         0x0404u, 0x0505u, 0x0606u, 0x0707u, 0x0808u, 0x0909u, 0x0a0au, 0x0b0bu};
     const std::vector<uint16_t> row1 = {0xa001u, 0xa002u, 0xb001u, 0xa0ffu, 0xa010u, 0xb0ffu, 0xc001u, 0xc002u,
                                         0xc003u, 0xc004u, 0xc005u, 0xc006u, 0xc007u, 0xc008u, 0xc009u, 0xc00au};
 
-    std::fill(dst.data(), dst.data() + DstTile::Numel, 0u);
     std::fill(src.data(), src.data() + SrcTile::Numel, 0u);
-    idx.data()[1] = 0xa0u;
+    std::fill(dst.data(), dst.data() + DstTile::Numel, 0u);
     idx.data()[0] = 0x12u;
+    idx.data()[1] = 0xa0u;
     for (size_t i = 0; i < row0.size(); ++i) {
         src.data()[GetTileElementOffset<SrcTile>(0, static_cast<int>(i))] = row0[i];
     }
     for (size_t i = 0; i < row1.size(); ++i) {
         src.data()[GetTileElementOffset<SrcTile>(1, static_cast<int>(i))] = row1[i];
     }
+
     THISTOGRAM<true>(dst, src, idx);
 
     const auto expected0 = ReferenceHistogram<true>(row0, 0);
@@ -85,10 +88,12 @@ TEST(THistogramCpuSimTest, LsbModeMatchesExactFilteredHistogram)
     SrcTile src;
     DstTile dst;
     IdxTile idx;
-
-    TASSIGN(src, 0);
-    TASSIGN(dst, 2 * 16 * sizeof(uint16_t));
-    TASSIGN(idx, 2 * 16 * sizeof(uint16_t) + 2 * 256 * sizeof(uint32_t));
+    size_t addr = 0;
+    TASSIGN(src, addr);
+    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    TASSIGN(dst, addr);
+    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    TASSIGN(idx, addr);
 
     const std::vector<uint16_t> row0 = {0x1201u, 0x1202u, 0x34ffu, 0x12ffu, 0x1210u};
     const std::vector<uint16_t> row1 = {0xa001u, 0xa002u, 0xa0ffu, 0xb003u, 0xa010u};
