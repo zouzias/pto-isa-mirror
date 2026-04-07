@@ -28,6 +28,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <vector>
 #include <random>
 #include <thread>
+#include <mutex>
 #include <chrono>
 #include <algorithm>
 #include <string>
@@ -558,6 +559,198 @@ private:
 };
 
 // ============================================================================
+// Per-rank execution: sub-functions
+// ============================================================================
+
+static float halfToFloat(uint16_t h)
+{
+    uint32_t sign = ((uint32_t)h & 0x8000) << 16;
+    uint32_t exp  = ((uint32_t)h >> 10) & 0x1F;
+    uint32_t mant = (uint32_t)h & 0x03FF;
+    if (exp == 0) {
+        if (mant == 0) { union { uint32_t u; float f; } r; r.u = sign; return r.f; }
+        while (!(mant & 0x0400)) { mant <<= 1; exp--; }
+        exp++; mant &= ~0x0400;
+    } else if (exp == 31) {
+        union { uint32_t u; float f; } r; r.u = sign | 0x7F800000 | (mant << 13); return r.f;
+    }
+    exp = exp + (127 - 15);
+    uint32_t bits = sign | (exp << 23) | (mant << 13);
+    union { uint32_t u; float f; } r; r.u = bits; return r.f;
+}
+
+static bool VerifyOutput(const uint16_t *output_fp16, const float *golden)
+{
+    const float atol = 1.0f;
+    const float rtol = 0.01f;
+    const size_t valid_elements = (size_t)G_ORIG_M * G_ORIG_N;
+    float max_diff = 0.0f, max_diff_ratio = 0.0f;
+    size_t err_count = 0;
+    const size_t err_threshold = static_cast<size_t>(valid_elements * rtol);
+
+    for (size_t row = 0; row < G_ORIG_M; ++row) {
+        for (size_t col = 0; col < G_ORIG_N; ++col) {
+            size_t idx = row * G_N + col;
+            float exp_val = golden[idx];
+            float act_val = halfToFloat(output_fp16[idx]);
+            float diff = std::abs(exp_val - act_val);
+            float rel = (std::abs(exp_val) > 1e-3f) ? (diff / std::abs(exp_val)) : 0.0f;
+            if (diff > max_diff) max_diff = diff;
+            if (rel > max_diff_ratio) max_diff_ratio = rel;
+            if (diff > atol + rtol * std::abs(exp_val)) err_count++;
+        }
+    }
+
+    bool ok = (err_count <= err_threshold);
+    std::cout << "[VERIFY] valid_region=" << G_ORIG_M << "x" << G_ORIG_N
+              << " max_diff=" << max_diff << " max_ratio=" << max_diff_ratio
+              << " err=" << err_count << "/" << err_threshold
+              << " -> " << (ok ? "PASS" : "FAIL") << std::endl;
+    return ok;
+}
+
+static void PrintPerfReport(
+    bool is_ok, int n_ranks,
+    const std::vector<double> &compute_times_us,
+    const std::vector<double> &sequential_times_us,
+    const std::vector<double> &pipelined_times_us,
+    const std::vector<double> &seq_compute_us,
+    const std::vector<double> &seq_comm_us,
+    const std::vector<double> &pipe_compute_us,
+    const std::vector<double> &pipe_comm_us)
+{
+    PerfStats comp_s = calcStats(compute_times_us);
+    PerfStats seq_s  = calcStats(sequential_times_us);
+    PerfStats pipe_s = calcStats(pipelined_times_us);
+    PerfStats seq_comp_s = calcStats(seq_compute_us);
+    PerfStats seq_comm_s = calcStats(seq_comm_us);
+    PerfStats pipe_comp_s = calcStats(pipe_compute_us);
+    PerfStats pipe_comm_s = calcStats(pipe_comm_us);
+
+    double flops_per_rank = 2.0 * G_ORIG_M * (double)G_K * G_ORIG_N;
+    double flops_total    = flops_per_rank * ((n_ranks > 0) ? n_ranks : 1);
+    auto gflops = [](double flops, double us) { return (us > 0) ? (flops / (us * 1e-6) / 1e9) : 0.0; };
+
+    size_t tileBytes = static_cast<size_t>(G_BASE_M) * G_BASE_N * sizeof(uint16_t);
+    int tiles_per_owner = (n_ranks > 0) ? ((G_NUM_TILES + n_ranks - 1) / n_ranks) : G_NUM_TILES;
+    double rs_bytes = static_cast<double>(G_NUM_TILES - tiles_per_owner) * tileBytes;
+    int safe_remotes = (n_ranks > 1) ? (n_ranks - 1) : 0;
+    double ag_bytes = static_cast<double>(tiles_per_owner) * safe_remotes * tileBytes;
+    double data_gb = (rs_bytes + ag_bytes) / (1024.0 * 1024.0 * 1024.0);
+    auto bw_gbs = [&](double us) { return (us > 0) ? ((rs_bytes + ag_bytes) / (us * 1e-6) / (1024.0*1024.0*1024.0)) : 0.0; };
+
+    double speedup = (pipe_s.avg > 0) ? (seq_s.avg / pipe_s.avg) : 0.0;
+    double overlap_time = (seq_comp_s.avg + seq_comm_s.avg) - pipe_s.avg;
+    double overlap_eff = (overlap_time > 0) ? (overlap_time / std::min(seq_comp_s.avg, seq_comm_s.avg) * 100.0) : 0.0;
+
+    std::cout << std::fixed << std::setprecision(1);
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << (is_ok ? "[SUCCESS]" : "[FAILED]") << " GEMM AllReduce (HCCL)" << std::endl;
+    std::cout << "  M=" << G_ORIG_M << " K=" << G_K << " N=" << G_ORIG_N;
+    if (G_M != G_ORIG_M || G_N != G_ORIG_N)
+        std::cout << "  (padded " << G_M << "x" << G_K << "x" << G_N << ")";
+    std::cout << "  ranks=" << n_ranks
+              << "  compute_blocks=" << COMPUTE_BLOCK_NUM
+              << "  comm_blocks=" << COMM_BLOCK_NUM << std::endl;
+    std::cout << "  tiles=" << G_NUM_TILES << " (" << G_M_TILES << "x" << G_N_TILES << ")"
+              << "  comm_data=" << std::setprecision(3) << data_gb << " GB/rank" << std::endl;
+
+    std::cout << "\n  Compute-only:   " << std::setprecision(1) << comp_s.avg << " us"
+              << "  (" << std::setprecision(0) << gflops(flops_per_rank, comp_s.avg) << " GFLOPS)" << std::endl;
+    std::cout << "\n  Sequential:     " << std::setprecision(1) << seq_s.avg << " us" << std::endl;
+    std::cout << "    compute:      " << seq_comp_s.avg << " us"
+              << "  (" << std::setprecision(0) << gflops(flops_per_rank, seq_comp_s.avg) << " GFLOPS)" << std::endl;
+    std::cout << "    comm:         " << std::setprecision(1) << seq_comm_s.avg << " us"
+              << "  (" << std::setprecision(1) << bw_gbs(seq_comm_s.avg) << " GB/s)" << std::endl;
+    std::cout << "\n  Pipelined:      " << std::setprecision(1) << pipe_s.avg << " us" << std::endl;
+    std::cout << "    compute done: " << pipe_comp_s.avg << " us"
+              << "  (" << std::setprecision(0) << gflops(flops_per_rank, pipe_comp_s.avg) << " GFLOPS, "
+              << std::setprecision(1) << (gflops(flops_per_rank, pipe_comp_s.avg) / gflops(flops_per_rank, comp_s.avg) * 100.0)
+              << "% of pure)" << std::endl;
+    std::cout << "    comm done:    " << std::setprecision(1) << pipe_comm_s.avg << " us"
+              << "  (" << std::setprecision(1) << bw_gbs(pipe_comm_s.avg) << " GB/s)" << std::endl;
+    std::cout << "\n  Speedup:        " << std::setprecision(3) << speedup << "x" << std::endl;
+    std::cout << "  Time saved:     " << std::setprecision(1) << (seq_s.avg - pipe_s.avg) << " us"
+              << " (" << std::setprecision(1) << ((seq_s.avg > 0) ? ((seq_s.avg - pipe_s.avg) / seq_s.avg * 100.0) : 0.0) << "%)" << std::endl;
+    std::cout << "  Overlap eff:    " << std::setprecision(1) << overlap_eff << "%" << std::endl;
+    std::cout << "  Throughput:     " << std::setprecision(0) << gflops(flops_total, pipe_s.avg) << " GFLOPS (total)" << std::endl;
+    std::cout << "================================================================\n" << std::endl;
+}
+
+template <typename ResetFn, typename LaunchFn, typename SyncFn>
+static void RunComputeOnlyBenchmark(
+    ResetFn &resetState, LaunchFn &launchComp, SyncFn &syncAll,
+    aclrtStream computeStream, aclrtStream commStream, HcclComm comm,
+    std::vector<double> &compute_times_us)
+{
+    for (int iter = 0; iter < COMPUTE_ONLY_ITERS; ++iter) {
+        resetState();
+        aclrtSynchronizeStream(computeStream);
+        HcclHostBarrier(comm, commStream);
+        auto t0 = std::chrono::high_resolution_clock::now();
+        launchComp(computeStream);
+        aclrtSynchronizeStream(computeStream);
+        auto t1 = std::chrono::high_resolution_clock::now();
+        compute_times_us.push_back(std::chrono::duration<double, std::micro>(t1 - t0).count());
+        HcclHostBarrier(comm, commStream);
+    }
+}
+
+template <typename ResetFn, typename LaunchCompFn, typename LaunchCommFn, typename SyncFn>
+static void RunSequentialBenchmark(
+    ResetFn &resetState, LaunchCompFn &launchComp, LaunchCommFn &launchComm, SyncFn &syncAll,
+    aclrtStream computeStream, aclrtStream commStream, HcclComm comm,
+    std::vector<double> &seq_us, std::vector<double> &seq_comp_us, std::vector<double> &seq_comm_us)
+{
+    for (int iter = 0; iter < MEASURE_ITERS; ++iter) {
+        resetState(); syncAll();
+        auto t0 = std::chrono::high_resolution_clock::now();
+        launchComp(computeStream);
+        aclrtSynchronizeStream(computeStream);
+        auto t1 = std::chrono::high_resolution_clock::now();
+        launchComm(commStream);
+        auto t2 = std::chrono::high_resolution_clock::now();
+        seq_comp_us.push_back(std::chrono::duration<double, std::micro>(t1 - t0).count());
+        seq_comm_us.push_back(std::chrono::duration<double, std::micro>(t2 - t1).count());
+        seq_us.push_back(std::chrono::duration<double, std::micro>(t2 - t0).count());
+        HcclHostBarrier(comm, commStream);
+    }
+}
+
+template <typename ResetFn, typename LaunchCompFn, typename LaunchCommFn, typename SyncFn>
+static void RunPipelinedBenchmark(
+    ResetFn &resetState, LaunchCompFn &launchComp, LaunchCommFn &launchComm, SyncFn &syncAll,
+    aclrtStream computeStream, aclrtStream commStream,
+    std::vector<double> &pipe_us, std::vector<double> &pipe_comp_us, std::vector<double> &pipe_comm_us)
+{
+    aclrtEvent evStart = nullptr, evEnd = nullptr;
+    aclrtCreateEvent(&evStart);
+    aclrtCreateEvent(&evEnd);
+
+    for (int iter = 0; iter < MEASURE_ITERS; ++iter) {
+        resetState(); syncAll();
+        auto t0 = std::chrono::high_resolution_clock::now();
+        aclrtRecordEvent(evStart, computeStream);
+        launchComp(computeStream);
+        aclrtRecordEvent(evEnd, computeStream);
+        launchComm(commStream);
+        aclrtSynchronizeStream(computeStream);
+        auto t1 = std::chrono::high_resolution_clock::now();
+
+        float compute_ms = 0.0f;
+        aclrtEventElapsedTime(&compute_ms, evStart, evEnd);
+        double total_us = std::chrono::duration<double, std::micro>(t1 - t0).count();
+
+        pipe_comp_us.push_back((double)compute_ms * 1000.0);
+        pipe_comm_us.push_back(total_us);
+        pipe_us.push_back(total_us);
+    }
+
+    aclrtDestroyEvent(evStart);
+    aclrtDestroyEvent(evEnd);
+}
+
+// ============================================================================
 // Per-rank execution logic
 // ============================================================================
 static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
@@ -567,13 +760,10 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
                                     const HcclRootInfo *rootInfo)
 {
     int status = 0;
-    aclrtStream computeStream = nullptr;
-    aclrtStream commStream = nullptr;
-
+    aclrtStream computeStream = nullptr, commStream = nullptr;
     status |= aclrtCreateStream(&computeStream);
     status |= aclrtCreateStream(&commStream);
 
-    // ------ HCCL init ------
     rtStream_t hcclStream = nullptr;
     rtStreamCreate(&hcclStream, RT_STREAM_PRIORITY_DEFAULT);
 
@@ -583,42 +773,21 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
         return false;
     }
 
-    // ------ Allocate memory ------
-    // Only buffers that are written remotely (via HcclRemotePtr / TPUT) must
-    // reside in the HCCL RDMA window.  gemm_output is only read locally by the
-    // comm kernel, so it can live in normal device memory.
-    //
-    //   reduced_output — remote-written in RS (AtomicAdd) and AG (TPUT)
-    //   gemm_output    — local-only (compute kernel writes, comm kernel reads)
     size_t outputSize = static_cast<size_t>(G_M) * G_N * sizeof(uint16_t);
-    size_t signalMatrixSize = static_cast<size_t>(MAX_RANKS + 1) * sizeof(int32_t);
-    signalMatrixSize = ((signalMatrixSize + 63) / 64) * 64;
+    size_t signalMatrixSize = ((static_cast<size_t>(MAX_RANKS + 1) * sizeof(int32_t) + 63) / 64) * 64;
 
     void *gemm_output = nullptr;
     aclrtMalloc(&gemm_output, outputSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    if (!gemm_output) {
-        std::cerr << "[ERROR] Rank " << rank_id << ": aclrtMalloc gemm_output failed\n";
-        return false;
-    }
+    if (!gemm_output) { std::cerr << "[ERROR] Rank " << rank_id << ": alloc failed\n"; return false; }
 
     uint64_t windowBase = hctx.hostCtx.windowsIn[hctx.hostCtx.rankId];
     size_t winOffset = 0;
     void *reduced_output = WindowAlloc(windowBase, winOffset, outputSize);
     void *signal_matrix = WindowAlloc(windowBase, winOffset, signalMatrixSize);
 
-    if (rank_id == 0) {
-        std::cout << "[INFO] HCCL window: winSize=" << hctx.hostCtx.winSize
-                  << " used=" << winOffset
-                  << " (reduced=" << (outputSize / (1024 * 1024)) << "MB"
-                  << ", signals=" << signalMatrixSize << "B)"
-                  << "  gemm_output=" << (outputSize / (1024 * 1024)) << "MB (device mem)" << std::endl;
-    }
-
     if (winOffset > hctx.hostCtx.winSize) {
-        std::cerr << "[ERROR] Rank " << rank_id << ": HCCL window too small! need=" << winOffset
-                  << " have=" << hctx.hostCtx.winSize << std::endl;
-        aclrtFree(gemm_output);
-        return false;
+        std::cerr << "[ERROR] Rank " << rank_id << ": HCCL window too small\n";
+        aclrtFree(gemm_output); return false;
     }
 
     aclrtMemset(gemm_output, outputSize, 0, outputSize);
@@ -642,18 +811,10 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
     aclrtMemcpy(queueSet_dev, queueSetSize, queueSet_host, queueSetSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtFreeHost(queueSet_host);
 
-    // ------ Upload input data to device ------
-    if (rank_id == 0) {
-        std::cout << "[INFO] Data Parallel: A_i[" << G_M << "x" << G_K
-                  << "] (independent), B[" << G_K << "x" << G_N << "] (shared)" << std::endl;
-    }
-
     aclrtMemcpy(src0_dev, aSize, a_data, a_bytes, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1_dev, bSize, b_data, b_bytes, ACL_MEMCPY_HOST_TO_DEVICE);
-
     HcclHostBarrier(hctx.comm, commStream);
 
-    // ------ Helpers ------
     MultiBlockQueueSet *queueSet_reset_host = nullptr;
     aclrtMallocHost(reinterpret_cast<void **>(&queueSet_reset_host), queueSetSize);
 
@@ -664,254 +825,96 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
         aclrtMemset(reduced_output, outputSize, 0, outputSize);
         aclrtMemset(signal_matrix, signalMatrixSize, 0, signalMatrixSize);
     };
-
-    auto launchCompute = [&](aclrtStream s) {
-        launchGemmCompute(
-            reinterpret_cast<uint8_t *>(gemm_output),
-            reinterpret_cast<uint8_t *>(src0_dev),
-            reinterpret_cast<uint8_t *>(src1_dev),
-            reinterpret_cast<uint8_t *>(queueSet_dev),
-            rank_id, s, COMPUTE_BLOCK_NUM, G_K);
+    auto launchComp = [&](aclrtStream s) {
+        launchGemmCompute(reinterpret_cast<uint8_t *>(gemm_output),
+            reinterpret_cast<uint8_t *>(src0_dev), reinterpret_cast<uint8_t *>(src1_dev),
+            reinterpret_cast<uint8_t *>(queueSet_dev), rank_id, s, COMPUTE_BLOCK_NUM, G_K);
     };
-
     uint8_t *hcclCtxPtr = reinterpret_cast<uint8_t *>(hctx.deviceCtx);
-
     auto launchComm = [&](aclrtStream s) {
-        launchGemmCommAll(
-            reinterpret_cast<uint8_t *>(gemm_output),
-            reinterpret_cast<uint8_t *>(reduced_output),
-            reinterpret_cast<uint8_t *>(signal_matrix),
-            reinterpret_cast<uint8_t *>(queueSet_dev),
-            hcclCtxPtr,
-            rank_id, n_ranks, s, COMPUTE_BLOCK_NUM);
+        launchGemmCommAll(reinterpret_cast<uint8_t *>(gemm_output),
+            reinterpret_cast<uint8_t *>(reduced_output), reinterpret_cast<uint8_t *>(signal_matrix),
+            reinterpret_cast<uint8_t *>(queueSet_dev), hcclCtxPtr, rank_id, n_ranks, s, COMPUTE_BLOCK_NUM);
         aclrtSynchronizeStream(s);
     };
-
     auto syncAll = [&]() {
         aclrtSynchronizeStream(computeStream);
         aclrtSynchronizeStream(commStream);
         HcclHostBarrier(hctx.comm, commStream);
     };
 
-    // ------ Warmup ------
-    for (int i = 0; i < WARMUP_ITERS; ++i) {
-        resetState();
-        syncAll();
-        launchCompute(computeStream);
-        launchComm(commStream);
-        syncAll();
-    }
+    for (int i = 0; i < WARMUP_ITERS; ++i) { resetState(); syncAll(); launchComp(computeStream); launchComm(commStream); syncAll(); }
 
-    // ------ Compute-only measurement ------
-    std::vector<double> compute_times_us;
-    for (int iter = 0; iter < COMPUTE_ONLY_ITERS; ++iter) {
-        resetState();
-        aclrtSynchronizeStream(computeStream);
-        HcclHostBarrier(hctx.comm, commStream);
-
-        auto t0 = std::chrono::high_resolution_clock::now();
-        launchCompute(computeStream);
-        aclrtSynchronizeStream(computeStream);
-        auto t1 = std::chrono::high_resolution_clock::now();
-        compute_times_us.push_back(std::chrono::duration<double, std::micro>(t1 - t0).count());
-        HcclHostBarrier(hctx.comm, commStream);
-    }
-
-    // ------ Sequential measurement (compute -> comm, no overlap) ------
-    std::vector<double> sequential_times_us, seq_compute_us, seq_comm_us;
-    for (int iter = 0; iter < MEASURE_ITERS; ++iter) {
-        resetState();
-        syncAll();
-
-        auto t0 = std::chrono::high_resolution_clock::now();
-        launchCompute(computeStream);
-        aclrtSynchronizeStream(computeStream);
-        auto t1 = std::chrono::high_resolution_clock::now();
-        launchComm(commStream);
-        auto t2 = std::chrono::high_resolution_clock::now();
-
-        seq_compute_us.push_back(std::chrono::duration<double, std::micro>(t1 - t0).count());
-        seq_comm_us.push_back(std::chrono::duration<double, std::micro>(t2 - t1).count());
-        sequential_times_us.push_back(std::chrono::duration<double, std::micro>(t2 - t0).count());
-        HcclHostBarrier(hctx.comm, commStream);
-    }
-
-    // ------ Pipelined measurement (compute || comm, with overlap) ------
-
-    aclrtEvent evComputeStart = nullptr, evComputeEnd = nullptr;
-    aclrtCreateEvent(&evComputeStart);
-    aclrtCreateEvent(&evComputeEnd);
-
+    std::vector<double> compute_times_us, sequential_times_us, seq_compute_us, seq_comm_us;
     std::vector<double> pipelined_times_us, pipe_compute_us, pipe_comm_us;
-    for (int iter = 0; iter < MEASURE_ITERS; ++iter) {
-        resetState();
-        syncAll();
 
-        auto t0 = std::chrono::high_resolution_clock::now();
+    RunComputeOnlyBenchmark(resetState, launchComp, syncAll, computeStream, commStream, hctx.comm, compute_times_us);
+    RunSequentialBenchmark(resetState, launchComp, launchComm, syncAll, computeStream, commStream, hctx.comm,
+                           sequential_times_us, seq_compute_us, seq_comm_us);
+    RunPipelinedBenchmark(resetState, launchComp, launchComm, syncAll, computeStream, commStream,
+                          pipelined_times_us, pipe_compute_us, pipe_comm_us);
 
-        aclrtRecordEvent(evComputeStart, computeStream);
-        launchCompute(computeStream);
-        aclrtRecordEvent(evComputeEnd, computeStream);
+    resetState(); syncAll(); launchComp(computeStream); launchComm(commStream); syncAll();
 
-        launchComm(commStream);
-        aclrtSynchronizeStream(computeStream);
-
-        auto t1 = std::chrono::high_resolution_clock::now();
-
-        float compute_ms = 0.0f;
-        aclrtEventElapsedTime(&compute_ms, evComputeStart, evComputeEnd);
-
-        double total_us = std::chrono::duration<double, std::micro>(t1 - t0).count();
-
-        pipe_compute_us.push_back((double)compute_ms * 1000.0);
-        pipe_comm_us.push_back(total_us);
-        pipelined_times_us.push_back(total_us);
-    }
-
-    aclrtDestroyEvent(evComputeStart);
-    aclrtDestroyEvent(evComputeEnd);
-
-    // ------ Final run for verification ------
-    resetState();
-    syncAll();
-    launchCompute(computeStream);
-    launchComm(commStream);
-    syncAll();
-
-    // ------ Verification (FP16 output -> convert to FP32 for comparison) ------
     uint16_t *output_host_fp16 = nullptr;
     aclrtMallocHost(reinterpret_cast<void **>(&output_host_fp16), outputSize);
     aclrtMemcpy(output_host_fp16, outputSize, reduced_output, outputSize, ACL_MEMCPY_DEVICE_TO_HOST);
 
-    auto halfToFloat = [](uint16_t h) -> float {
-        uint32_t sign = ((uint32_t)h & 0x8000) << 16;
-        uint32_t exp  = ((uint32_t)h >> 10) & 0x1F;
-        uint32_t mant = (uint32_t)h & 0x03FF;
-        if (exp == 0) {
-            if (mant == 0) { union { uint32_t u; float f; } r; r.u = sign; return r.f; }
-            while (!(mant & 0x0400)) { mant <<= 1; exp--; }
-            exp++; mant &= ~0x0400;
-        } else if (exp == 31) {
-            union { uint32_t u; float f; } r; r.u = sign | 0x7F800000 | (mant << 13); return r.f;
-        }
-        exp = exp + (127 - 15);
-        uint32_t bits = sign | (exp << 23) | (mant << 13);
-        union { uint32_t u; float f; } r; r.u = bits; return r.f;
-    };
-
-    bool is_ok = true;
-    if (rank_id == 0) {
-        const float atol = 1.0f;
-        const float rtol = 0.01f;
-        const size_t valid_elements = (size_t)G_ORIG_M * G_ORIG_N;
-        float max_diff = 0.0f, max_diff_ratio = 0.0f;
-        size_t err_count = 0;
-        const size_t err_threshold = static_cast<size_t>(valid_elements * rtol);
-
-        for (size_t row = 0; row < G_ORIG_M; ++row) {
-            for (size_t col = 0; col < G_ORIG_N; ++col) {
-                size_t padded_idx = row * G_N + col;
-                size_t golden_idx = row * G_N + col;
-                float exp_val = golden[golden_idx];
-                float act_val = halfToFloat(output_host_fp16[padded_idx]);
-                float diff = std::abs(exp_val - act_val);
-                float rel = (std::abs(exp_val) > 1e-3f) ? (diff / std::abs(exp_val)) : 0.0f;
-                if (diff > max_diff) max_diff = diff;
-                if (rel > max_diff_ratio) max_diff_ratio = rel;
-                if (diff > atol + rtol * std::abs(exp_val)) err_count++;
-            }
-        }
-
-        is_ok = (err_count <= err_threshold);
-        std::cout << "[VERIFY] valid_region=" << G_ORIG_M << "x" << G_ORIG_N
-                  << " max_diff=" << max_diff << " max_ratio=" << max_diff_ratio
-                  << " err=" << err_count << "/" << err_threshold
-                  << " -> " << (is_ok ? "PASS" : "FAIL") << std::endl;
-    }
+    bool is_ok = (rank_id == 0) ? VerifyOutput(output_host_fp16, golden) : true;
 
     aclrtFreeHost(output_host_fp16);
     aclrtFreeHost(queueSet_reset_host);
 
-    // ------ Performance report ------
     if (rank_id == 0) {
-        PerfStats comp_s = calcStats(compute_times_us);
-        PerfStats seq_s  = calcStats(sequential_times_us);
-        PerfStats pipe_s = calcStats(pipelined_times_us);
-        PerfStats seq_comp_s = calcStats(seq_compute_us);
-        PerfStats seq_comm_s = calcStats(seq_comm_us);
-        PerfStats pipe_comp_s = calcStats(pipe_compute_us);
-        PerfStats pipe_comm_s = calcStats(pipe_comm_us);
-
-        double flops_per_rank = 2.0 * G_ORIG_M * (double)G_K * G_ORIG_N;
-        double flops_total    = flops_per_rank * n_ranks;
-        auto gflops = [](double flops, double us) { return (us > 0) ? (flops / (us * 1e-6) / 1e9) : 0.0; };
-
-        size_t tileBytes = static_cast<size_t>(G_BASE_M) * G_BASE_N * sizeof(uint16_t);
-        int tiles_per_owner = (G_NUM_TILES + n_ranks - 1) / n_ranks;
-        double rs_bytes = static_cast<double>(G_NUM_TILES - tiles_per_owner) * tileBytes;
-        double ag_bytes = static_cast<double>(tiles_per_owner) * (n_ranks - 1) * tileBytes;
-        double data_gb = (rs_bytes + ag_bytes) / (1024.0 * 1024.0 * 1024.0);
-        auto bw_gbs = [&](double us) { return (us > 0) ? ((rs_bytes + ag_bytes) / (us * 1e-6) / (1024.0*1024.0*1024.0)) : 0.0; };
-
-        double speedup = seq_s.avg / pipe_s.avg;
-        double overlap_time = (seq_comp_s.avg + seq_comm_s.avg) - pipe_s.avg;
-        double overlap_eff = (overlap_time > 0) ? (overlap_time / std::min(seq_comp_s.avg, seq_comm_s.avg) * 100.0) : 0.0;
-
-        std::cout << std::fixed << std::setprecision(1);
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << (is_ok ? "[SUCCESS]" : "[FAILED]") << " GEMM AllReduce (HCCL)" << std::endl;
-        std::cout << "  M=" << G_ORIG_M << " K=" << G_K << " N=" << G_ORIG_N;
-        if (G_M != G_ORIG_M || G_N != G_ORIG_N)
-            std::cout << "  (padded " << G_M << "x" << G_K << "x" << G_N << ")";
-        std::cout << "  ranks=" << n_ranks
-                  << "  compute_blocks=" << COMPUTE_BLOCK_NUM
-                  << "  comm_blocks=" << COMM_BLOCK_NUM << std::endl;
-        std::cout << "  tiles=" << G_NUM_TILES << " (" << G_M_TILES << "x" << G_N_TILES << ")"
-                  << "  comm_data=" << std::setprecision(3) << data_gb << " GB/rank" << std::endl;
-
-        std::cout << "\n  Compute-only:   " << std::setprecision(1) << comp_s.avg << " us"
-                  << "  (" << std::setprecision(0) << gflops(flops_per_rank, comp_s.avg) << " GFLOPS)" << std::endl;
-
-        std::cout << "\n  Sequential:     " << std::setprecision(1) << seq_s.avg << " us" << std::endl;
-        std::cout << "    compute:      " << seq_comp_s.avg << " us"
-                  << "  (" << std::setprecision(0) << gflops(flops_per_rank, seq_comp_s.avg) << " GFLOPS)" << std::endl;
-        std::cout << "    comm:         " << std::setprecision(1) << seq_comm_s.avg << " us"
-                  << "  (" << std::setprecision(1) << bw_gbs(seq_comm_s.avg) << " GB/s)" << std::endl;
-
-        std::cout << "\n  Pipelined:      " << std::setprecision(1) << pipe_s.avg << " us" << std::endl;
-        std::cout << "    compute done: " << pipe_comp_s.avg << " us"
-                  << "  (" << std::setprecision(0) << gflops(flops_per_rank, pipe_comp_s.avg) << " GFLOPS, "
-                  << std::setprecision(1) << (gflops(flops_per_rank, pipe_comp_s.avg) / gflops(flops_per_rank, comp_s.avg) * 100.0)
-                  << "% of pure)" << std::endl;
-        std::cout << "    comm done:    " << std::setprecision(1) << pipe_comm_s.avg << " us"
-                  << "  (" << std::setprecision(1) << bw_gbs(pipe_comm_s.avg) << " GB/s)" << std::endl;
-
-        std::cout << "\n  Speedup:        " << std::setprecision(3) << speedup << "x" << std::endl;
-        std::cout << "  Time saved:     " << std::setprecision(1) << (seq_s.avg - pipe_s.avg) << " us"
-                  << " (" << std::setprecision(1) << ((seq_s.avg - pipe_s.avg) / seq_s.avg * 100.0) << "%)" << std::endl;
-        std::cout << "  Overlap eff:    " << std::setprecision(1) << overlap_eff << "%" << std::endl;
-        std::cout << "  Throughput:     " << std::setprecision(0) << gflops(flops_total, pipe_s.avg) << " GFLOPS (total)" << std::endl;
-        std::cout << "================================================================\n" << std::endl;
+        PrintPerfReport(is_ok, n_ranks, compute_times_us, sequential_times_us, pipelined_times_us,
+                        seq_compute_us, seq_comm_us, pipe_compute_us, pipe_comm_us);
     }
 
-    // ------ Cleanup ------
-    aclrtFree(gemm_output);
-    aclrtFree(src0_dev);
-    aclrtFree(src1_dev);
-    aclrtFree(queueSet_dev);
-
+    aclrtFree(gemm_output); aclrtFree(src0_dev); aclrtFree(src1_dev); aclrtFree(queueSet_dev);
     hctx.Finalize();
     if (hcclStream) rtStreamDestroy(hcclStream);
-
     status |= aclrtDestroyStream(computeStream);
     status |= aclrtDestroyStream(commStream);
-
     return (status == 0) && is_ok;
 }
 
 // ============================================================================
 // MPI-based multi-process launcher
 // ============================================================================
+static void PrintLaunchBanner(int n_ranks, int first_device_id)
+{
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << "  GEMM AllReduce (ReduceScatter + AllGather) — HCCL backend" << std::endl;
+    std::cout << "  M=" << G_ORIG_M << " K=" << G_K << " N=" << G_ORIG_N;
+    if (G_M != G_ORIG_M || G_N != G_ORIG_N)
+        std::cout << "  (padded " << G_M << "x" << G_N << ")";
+    std::cout << "  tile=" << G_BASE_M << "x" << G_BASE_K << "x" << G_BASE_N
+              << "  tiles=" << G_NUM_TILES << std::endl;
+    std::cout << "  ranks=" << n_ranks
+              << "  devices=[" << first_device_id << "," << (first_device_id + n_ranks) << ")"
+              << "  compute_blocks=" << COMPUTE_BLOCK_NUM
+              << "  comm_blocks=" << COMM_BLOCK_NUM << std::endl;
+    std::cout << "  mode: independent A per rank, shared B" << std::endl;
+    std::cout << "================================================================" << std::endl;
+}
+
+static bool InitHcclRootInfoWithRetry(HcclRootInfo &rootInfo)
+{
+    constexpr int kMaxRetries = 3;
+    HcclResult hret = HCCL_SUCCESS;
+    for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
+        hret = HcclGetRootInfo(&rootInfo);
+        if (hret == HCCL_SUCCESS) return true;
+        std::cerr << "[WARN] HcclGetRootInfo failed: " << hret
+                  << " (attempt " << (attempt + 1) << "/" << kMaxRetries
+                  << "), retrying in 5s..." << std::endl;
+        sleep(5);
+    }
+    std::cerr << "[ERROR] HcclGetRootInfo failed after " << kMaxRetries
+              << " attempts: " << hret << std::endl;
+    return false;
+}
+
 static bool RunGemmAllReduce(int n_ranks, int first_device_id,
                              const uint16_t *a_parts,
                              const uint16_t *b_data,
@@ -923,27 +926,7 @@ static bool RunGemmAllReduce(int n_ranks, int first_device_id,
     }
 
     int mpiRank = CommMpiRank();
-
-    size_t a_rank_bytes = (size_t)G_M * G_K * sizeof(uint16_t);
-    size_t b_bytes = (size_t)G_N * G_K * sizeof(uint16_t);
-    size_t golden_bytes = (size_t)G_M * G_N * sizeof(float);
-    size_t a_rank_elems = (size_t)G_M * G_K;
-
-    if (mpiRank == 0) {
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "  GEMM AllReduce (ReduceScatter + AllGather) — HCCL backend" << std::endl;
-        std::cout << "  M=" << G_ORIG_M << " K=" << G_K << " N=" << G_ORIG_N;
-        if (G_M != G_ORIG_M || G_N != G_ORIG_N)
-            std::cout << "  (padded " << G_M << "x" << G_N << ")";
-        std::cout << "  tile=" << G_BASE_M << "x" << G_BASE_K << "x" << G_BASE_N
-                  << "  tiles=" << G_NUM_TILES << std::endl;
-        std::cout << "  ranks=" << n_ranks
-                  << "  devices=[" << first_device_id << "," << (first_device_id + n_ranks) << ")"
-                  << "  compute_blocks=" << COMPUTE_BLOCK_NUM
-                  << "  comm_blocks=" << COMM_BLOCK_NUM << std::endl;
-        std::cout << "  mode: independent A per rank, shared B" << std::endl;
-        std::cout << "================================================================" << std::endl;
-    }
+    if (mpiRank == 0) PrintLaunchBanner(n_ranks, first_device_id);
 
     int device_id = mpiRank % n_ranks + first_device_id;
 
@@ -954,10 +937,7 @@ static bool RunGemmAllReduce(int n_ranks, int first_device_id,
         return false;
     }
 
-    if (mpiRank == 0) {
-        rtSetDevice(device_id);
-    }
-
+    if (mpiRank == 0) rtSetDevice(device_id);
     aRet = aclrtSetDevice(device_id);
     if (aRet != ACL_SUCCESS) {
         std::cerr << "[ERROR] Rank " << mpiRank << ": aclrtSetDevice(" << device_id << ") failed\n";
@@ -965,40 +945,21 @@ static bool RunGemmAllReduce(int n_ranks, int first_device_id,
     }
 
     HcclRootInfo rootInfo{};
-    if (mpiRank == 0) {
-        constexpr int kMaxRetries = 3;
-        HcclResult hret = HCCL_SUCCESS;
-        for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
-            hret = HcclGetRootInfo(&rootInfo);
-            if (hret == HCCL_SUCCESS) break;
-            std::cerr << "[WARN] HcclGetRootInfo failed: " << hret
-                      << " (attempt " << (attempt + 1) << "/" << kMaxRetries
-                      << "), retrying in 5s..." << std::endl;
-            sleep(5);
-        }
-        if (hret != HCCL_SUCCESS) {
-            std::cerr << "[ERROR] HcclGetRootInfo failed after " << kMaxRetries
-                      << " attempts: " << hret << std::endl;
-            return false;
-        }
-    }
+    if (mpiRank == 0 && !InitHcclRootInfoWithRetry(rootInfo)) return false;
 
     CommMpiBcast(&rootInfo, HCCL_ROOT_INFO_BYTES, COMM_MPI_CHAR, 0);
     CommMpiBarrier();
 
-    const uint16_t *a_rank = a_parts + (size_t)mpiRank * a_rank_elems;
-
+    size_t a_rank_elems = (size_t)G_M * G_K;
     bool ok = RunGemmAllReducePerRank(mpiRank, n_ranks, device_id,
-                                      a_rank, a_rank_bytes,
-                                      b_data, b_bytes,
-                                      golden, golden_bytes,
+                                      a_parts + (size_t)mpiRank * a_rank_elems,
+                                      (size_t)G_M * G_K * sizeof(uint16_t),
+                                      b_data, (size_t)G_N * G_K * sizeof(uint16_t),
+                                      golden, (size_t)G_M * G_N * sizeof(float),
                                       &rootInfo);
-
     CommMpiBarrier();
-
     aclrtResetDevice(device_id);
     aclFinalize();
-
     return ok;
 }
 
@@ -1019,6 +980,25 @@ static uint16_t floatToHalf(float f)
     return (uint16_t)(sign | ((uint32_t)exp << 10) | (mant >> 13));
 }
 
+static void gemmBlockedRowRange(const float *A, const float *B, float *C,
+                                int K, int N, int r0, int r1)
+{
+    constexpr int BLK = 64;
+    for (int i = r0; i < r1; i++) {
+        for (int kk = 0; kk < K; kk += BLK) {
+            int kEnd = std::min(kk + BLK, K);
+            for (int jj = 0; jj < N; jj += BLK) {
+                int jEnd = std::min(jj + BLK, N);
+                for (int k = kk; k < kEnd; k++) {
+                    float aik = A[(size_t)i * K + k];
+                    for (int j = jj; j < jEnd; j++)
+                        C[(size_t)i * N + j] += aik * B[(size_t)k * N + j];
+                }
+            }
+        }
+    }
+}
+
 static void computeGolden(const float *A, const float *B, float *C, int M, int K, int N)
 {
     memset_s(C, (size_t)M * N * sizeof(float), 0, (size_t)M * N * sizeof(float));
@@ -1034,22 +1014,7 @@ static void computeGolden(const float *A, const float *B, float *C, int M, int K
         int r0 = (int)t * rows_per;
         int r1 = std::min(r0 + rows_per, M);
         if (r0 >= M) break;
-
-        threads.emplace_back([A, B, C, K, N, r0, r1]() {
-            constexpr int BLK = 64;
-            for (int i = r0; i < r1; i++)
-                for (int kk = 0; kk < K; kk += BLK) {
-                    int kEnd = std::min(kk + BLK, K);
-                    for (int jj = 0; jj < N; jj += BLK) {
-                        int jEnd = std::min(jj + BLK, N);
-                        for (int k = kk; k < kEnd; k++) {
-                            float aik = A[(size_t)i * K + k];
-                            for (int j = jj; j < jEnd; j++)
-                                C[(size_t)i * N + j] += aik * B[(size_t)k * N + j];
-                        }
-                    }
-                }
-        });
+        threads.emplace_back(gemmBlockedRowRange, A, B, C, K, N, r0, r1);
     }
     for (auto &th : threads) th.join();
 }
@@ -1058,11 +1023,19 @@ static void computeGolden(const float *A, const float *B, float *C, int M, int K
 // Input file caching: save/load binary matrices to avoid regeneration
 // ============================================================================
 
+static std::string safeGetEnv(const char *name)
+{
+    static std::mutex envMutex;
+    std::lock_guard<std::mutex> lock(envMutex);
+    const char *val = getenv(name);
+    return (val != nullptr) ? std::string(val) : std::string();
+}
+
 static std::string getInputDir()
 {
-    const char *envDir = getenv("GEMM_AR_DIR");
-    if (envDir && envDir[0] != '\0') {
-        return std::string(envDir) + "/input";
+    std::string envDir = safeGetEnv("GEMM_AR_DIR");
+    if (!envDir.empty()) {
+        return envDir + "/input";
     }
     return "input";
 }
@@ -1186,6 +1159,39 @@ static bool saveInputFiles(int nranks,
     return true;
 }
 
+static void convertFp32ToFp16Padded(
+    const std::vector<std::vector<float>> &A_fp32_all,
+    const std::vector<float> &B_fp32,
+    int nranks,
+    std::vector<uint16_t> &a_parts,
+    std::vector<uint16_t> &b_data)
+{
+    size_t a_rank_elems = (size_t)G_M * G_K;
+    size_t b_elems = (size_t)G_N * G_K;
+    a_parts.assign((size_t)nranks * a_rank_elems, 0);
+    b_data.assign(b_elems, 0);
+
+    for (int r = 0; r < nranks; r++) {
+        uint16_t *a_dst = a_parts.data() + (size_t)r * a_rank_elems;
+        for (int i = 0; i < (int)G_ORIG_M; i++)
+            for (int j = 0; j < (int)G_K; j++)
+                a_dst[(size_t)i * G_K + j] = floatToHalf(A_fp32_all[r][(size_t)i * G_K + j]);
+    }
+
+    uint16_t *b_dst = b_data.data();
+    for (int i = 0; i < (int)G_ORIG_N; i++)
+        for (int j = 0; j < (int)G_K; j++)
+            b_dst[(size_t)i * G_K + j] = floatToHalf(B_fp32[(size_t)j * G_ORIG_N + i]);
+}
+
+static void padGoldenToAligned(const std::vector<float> &golden_orig, std::vector<float> &golden)
+{
+    golden.assign((size_t)G_M * G_N, 0.0f);
+    for (int i = 0; i < (int)G_ORIG_M; i++)
+        memcpy_s(&golden[(size_t)i * G_N], G_N * sizeof(float),
+                 &golden_orig[(size_t)i * G_ORIG_N], G_ORIG_N * sizeof(float));
+}
+
 static bool generateData(int nranks,
                           std::vector<uint16_t> &a_parts,
                           std::vector<uint16_t> &b_data,
@@ -1193,25 +1199,17 @@ static bool generateData(int nranks,
 {
     printf("Data Parallel: each rank has independent A[%d,%d], shared B[%d,%d], %d ranks\n",
            G_ORIG_M, G_K, G_K, G_ORIG_N, nranks);
-    if (G_M != G_ORIG_M || G_N != G_ORIG_N) {
-        printf("  Padded: M %d->%d, N %d->%d (tile alignment)\n",
-               G_ORIG_M, G_M, G_ORIG_N, G_N);
-    }
 
     std::mt19937 gen(42);
     float scale = std::sqrt(65000.0f / ((float)G_K * nranks * 4.0f));
     std::uniform_real_distribution<float> dist(-scale, scale);
 
-    size_t A_orig_elems = (size_t)G_ORIG_M * G_K;
-    size_t B_orig_elems = (size_t)G_K * G_ORIG_N;
-
     std::vector<std::vector<float>> A_fp32_all(nranks);
     for (int r = 0; r < nranks; r++) {
-        A_fp32_all[r].resize(A_orig_elems);
+        A_fp32_all[r].resize((size_t)G_ORIG_M * G_K);
         for (auto &v : A_fp32_all[r]) v = dist(gen);
     }
-
-    std::vector<float> B_fp32(B_orig_elems);
+    std::vector<float> B_fp32((size_t)G_K * G_ORIG_N);
     for (auto &v : B_fp32) v = dist(gen);
 
     printf("  Computing golden reference (sum of %d CPU GEMMs %d×%d×%d)...\n",
@@ -1223,41 +1221,14 @@ static bool generateData(int nranks,
     for (int r = 0; r < nranks; r++) {
         memset_s(tmp.data(), tmp.size() * sizeof(float), 0, tmp.size() * sizeof(float));
         computeGolden(A_fp32_all[r].data(), B_fp32.data(), tmp.data(), G_ORIG_M, G_K, G_ORIG_N);
-        for (size_t i = 0; i < golden_orig.size(); i++)
-            golden_orig[i] += tmp[i];
+        for (size_t i = 0; i < golden_orig.size(); i++) golden_orig[i] += tmp[i];
     }
 
-    auto t1 = std::chrono::high_resolution_clock::now();
-    double secs = std::chrono::duration<double>(t1 - t0).count();
+    double secs = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - t0).count();
     printf("  Golden computed in %.1f s\n", secs);
 
-    golden.assign((size_t)G_M * G_N, 0.0f);
-    for (int i = 0; i < (int)G_ORIG_M; i++)
-        std::memcpy(&golden[(size_t)i * G_N],
-                    &golden_orig[(size_t)i * G_ORIG_N],
-                    G_ORIG_N * sizeof(float));
-
-    size_t a_rank_elems = (size_t)G_M * G_K;
-    size_t b_elems = (size_t)G_N * G_K;
-    a_parts.assign((size_t)nranks * a_rank_elems, 0);
-    b_data.assign(b_elems, 0);
-
-    for (int r = 0; r < nranks; r++) {
-        uint16_t *a_dst = a_parts.data() + (size_t)r * a_rank_elems;
-        for (int i = 0; i < (int)G_ORIG_M; i++)
-            for (int j = 0; j < (int)G_K; j++)
-                a_dst[(size_t)i * G_K + j] =
-                    floatToHalf(A_fp32_all[r][(size_t)i * G_K + j]);
-
-        printf("  Rank %d: A_%d[%d×%d] (independent)\n", r, r, G_M, G_K);
-    }
-
-    uint16_t *b_dst = b_data.data();
-    for (int i = 0; i < (int)G_ORIG_N; i++)
-        for (int j = 0; j < (int)G_K; j++)
-            b_dst[(size_t)i * G_K + j] =
-                floatToHalf(B_fp32[(size_t)j * G_ORIG_N + i]);
-    printf("  B[%d×%d] (shared across all ranks)\n", G_K, G_N);
+    padGoldenToAligned(golden_orig, golden);
+    convertFp32ToFp16Padded(A_fp32_all, B_fp32, nranks, a_parts, b_data);
 
     double gsum = 0.0;
     for (auto v : golden_orig) gsum += v;
@@ -1271,9 +1242,9 @@ static bool generateData(int nranks,
 
 static int parseFirstDevice(int argc, char *argv[])
 {
-    const char *envVal = getenv("GEMM_ALLREDUCE_FIRST_DEVICE");
-    if (envVal != nullptr) {
-        int val = atoi(envVal);
+    std::string envVal = safeGetEnv("GEMM_ALLREDUCE_FIRST_DEVICE");
+    if (!envVal.empty()) {
+        int val = atoi(envVal.c_str());
         if (val >= 0) return val;
     }
     for (int i = 1; i < argc - 1; i++) {
@@ -1283,6 +1254,43 @@ static int parseFirstDevice(int argc, char *argv[])
         }
     }
     return 0;
+}
+
+static bool PrepareInputData(int n_ranks,
+                             std::vector<uint16_t> &a_parts,
+                             std::vector<uint16_t> &b_data,
+                             std::vector<float> &golden)
+{
+    size_t a_total = (size_t)n_ranks * G_M * G_K;
+    size_t b_total = (size_t)G_N * G_K;
+    size_t g_total = (size_t)G_M * G_N;
+
+    int data_ok = 0;
+    if (CommMpiRank() == 0) {
+        if (inputFilesExist(n_ranks)) {
+            printf("[INFO] Found cached input files, loading...\n");
+            if (!loadInputFiles(n_ranks, a_parts, b_data, golden)) data_ok = 1;
+        } else {
+            printf("[INFO] No cached input files, generating...\n");
+            if (!generateData(n_ranks, a_parts, b_data, golden)) {
+                data_ok = 1;
+            } else {
+                saveInputFiles(n_ranks, a_parts, b_data, golden);
+            }
+        }
+    } else {
+        a_parts.resize(a_total);
+        b_data.resize(b_total);
+        golden.resize(g_total);
+    }
+
+    CommMpiBcast(&data_ok, 1, COMM_MPI_INT, 0);
+    if (data_ok != 0) return false;
+
+    CommMpiBcast(a_parts.data(), (int)(a_total * sizeof(uint16_t)), COMM_MPI_CHAR, 0);
+    CommMpiBcast(b_data.data(), (int)(b_total * sizeof(uint16_t)), COMM_MPI_CHAR, 0);
+    CommMpiBcast(golden.data(), (int)(g_total * sizeof(float)), COMM_MPI_CHAR, 0);
+    return true;
 }
 
 int main(int argc, char *argv[])
@@ -1308,48 +1316,12 @@ int main(int argc, char *argv[])
                n_ranks, first_device_id, first_device_id + n_ranks);
     }
 
-    size_t a_total = (size_t)n_ranks * G_M * G_K;
-    size_t b_total = (size_t)G_N * G_K;
-    size_t g_total = (size_t)G_M * G_N;
-
     std::vector<uint16_t> a_parts, b_data;
     std::vector<float> golden;
 
-    int data_ok = 0;
-    if (CommMpiRank() == 0) {
-        if (inputFilesExist(n_ranks)) {
-            printf("[INFO] Found cached input files for M=%d K=%d N=%d R=%d, loading...\n",
-                   G_ORIG_M, G_ORIG_K, G_ORIG_N, n_ranks);
-            if (!loadInputFiles(n_ranks, a_parts, b_data, golden)) {
-                data_ok = 1;
-            }
-        } else {
-            printf("[INFO] No cached input files for M=%d K=%d N=%d R=%d, generating...\n",
-                   G_ORIG_M, G_ORIG_K, G_ORIG_N, n_ranks);
-            if (!generateData(n_ranks, a_parts, b_data, golden)) {
-                data_ok = 1;
-            } else {
-                saveInputFiles(n_ranks, a_parts, b_data, golden);
-            }
-        }
-    } else {
-        a_parts.resize(a_total);
-        b_data.resize(b_total);
-        golden.resize(g_total);
-    }
-
-    CommMpiBcast(&data_ok, 1, COMM_MPI_INT, 0);
-    if (data_ok != 0) {
+    if (!PrepareInputData(n_ranks, a_parts, b_data, golden)) {
         CommMpiFinalize();
         return 1;
-    }
-
-    CommMpiBcast(a_parts.data(), (int)(a_total * sizeof(uint16_t)), COMM_MPI_CHAR, 0);
-    CommMpiBcast(b_data.data(), (int)(b_total * sizeof(uint16_t)), COMM_MPI_CHAR, 0);
-    CommMpiBcast(golden.data(), (int)(g_total * sizeof(float)), COMM_MPI_CHAR, 0);
-
-    if (CommMpiRank() == 0) {
-        printf("  Broadcast input data to all %d ranks.\n", n_ranks);
     }
 
     bool ok = RunGemmAllReduce(n_ranks, first_device_id,

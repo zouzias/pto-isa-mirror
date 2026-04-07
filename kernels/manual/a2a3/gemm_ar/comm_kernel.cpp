@@ -196,6 +196,38 @@ AICORE inline void RsWaitOnQueue(
     }
 }
 
+// Build the per-block queue assignment and tile counts for this RS block.
+// Returns total expected tiles; writes my_queue_count via out-param.
+AICORE inline int RsInitQueueState(
+    int block_idx,
+    int num_compute_blocks,
+    int *my_queue_indices,
+    int &my_queue_count,
+    int32_t *queue_max_tiles)
+{
+    my_queue_count = 0;
+    for (int q = 0; q < num_compute_blocks; q++) {
+        if (q % num_compute_blocks == block_idx) {
+            my_queue_indices[my_queue_count++] = q;
+        }
+    }
+
+    const int total_tiles = G_NUM_TILES;
+    const int tiles_per_cb = (total_tiles + num_compute_blocks - 1) / num_compute_blocks;
+
+    int my_expected_tiles = 0;
+    for (int i = 0; i < my_queue_count; i++) {
+        int q = my_queue_indices[i];
+        int block_end_tile = (q + 1) * tiles_per_cb;
+        if (block_end_tile > total_tiles) block_end_tile = total_tiles;
+        int block_tiles = block_end_tile - q * tiles_per_cb;
+        if (block_tiles < 0) block_tiles = 0;
+        queue_max_tiles[q] = block_tiles;
+        my_expected_tiles += block_tiles;
+    }
+    return my_expected_tiles;
+}
+
 // ============================================================================
 // Phase 1: ReduceScatter — TPUT with AtomicAdd to owner's reduced_output
 //
@@ -212,8 +244,7 @@ AICORE inline void ReduceScatterPhase(
     int num_compute_blocks,
     int block_idx)
 {
-    const int rs_active_blocks = num_compute_blocks;
-    if (block_idx >= rs_active_blocks) return;
+    if (block_idx >= num_compute_blocks) return;
 
     volatile __gm__ MultiBlockQueueSet *qset = (volatile __gm__ MultiBlockQueueSet *)queue_set;
 
@@ -229,27 +260,10 @@ AICORE inline void ReduceScatterPhase(
     for (int b = 0; b < MAX_COMPUTE_BLOCKS; b++) heads[b] = 0;
 
     int my_queue_indices[MAX_COMPUTE_BLOCKS];
-    int my_queue_count = 0;
-    for (int q = 0; q < num_compute_blocks; q++) {
-        if (q % rs_active_blocks == block_idx) {
-            my_queue_indices[my_queue_count++] = q;
-        }
-    }
-
-    const int total_tiles = G_NUM_TILES;
-    const int tiles_per_compute_block = (total_tiles + num_compute_blocks - 1) / num_compute_blocks;
-
     int32_t queue_max_tiles[MAX_COMPUTE_BLOCKS];
-    int my_expected_tiles = 0;
-    for (int i = 0; i < my_queue_count; i++) {
-        int q = my_queue_indices[i];
-        int block_end_tile = (q + 1) * tiles_per_compute_block;
-        if (block_end_tile > total_tiles) block_end_tile = total_tiles;
-        int block_tiles = block_end_tile - q * tiles_per_compute_block;
-        if (block_tiles < 0) block_tiles = 0;
-        queue_max_tiles[q] = block_tiles;
-        my_expected_tiles += block_tiles;
-    }
+    int my_queue_count = 0;
+    int my_expected_tiles = RsInitQueueState(block_idx, num_compute_blocks,
+                                             my_queue_indices, my_queue_count, queue_max_tiles);
 
     int next_queue_offset = 0;
     int pp_count = 0;
@@ -259,7 +273,6 @@ AICORE inline void ReduceScatterPhase(
     while (tiles_sent < my_expected_tiles) {
         int32_t tile_idx = RsPollQueues(qset, my_queue_indices, my_queue_count,
                                         heads, queue_max_tiles, next_queue_offset);
-
         if (tile_idx < 0) {
             RsWaitOnQueue(qset, my_queue_indices, my_queue_count,
                           heads, queue_max_tiles, next_queue_offset);
@@ -285,6 +298,34 @@ AICORE inline void ReduceScatterPhase(
 
     RsFlushPipeline(pingTile, pongTile, pp_pending_dst, pp_count);
     pipe_barrier(PIPE_ALL);
+}
+
+// Transfer a contiguous sub-tile of rows from local reduced_output to a remote rank.
+AICORE inline void AgTransferRows(
+    __gm__ half *reduced_output,
+    __gm__ HcclDeviceContext *hcclCtx,
+    const StrideDyn &tileStride,
+    int r,
+    uint64_t row_offset,
+    int nrows)
+{
+    ShapeDyn subShape(1, 1, 1, nrows, G_BASE_N);
+    Global srcG(reduced_output + row_offset, subShape, tileStride);
+
+    using SubTile = pto::Tile<pto::TileType::Vec, half, G_BASE_M, G_BASE_N,
+                              pto::BLayout::RowMajor, -1, -1>;
+    SubTile subTile(nrows, G_BASE_N);
+    TASSIGN(subTile, 0x0);
+
+    TLOAD(subTile, srcG);
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+
+    __gm__ half *dst_ptr = HcclRemotePtr(hcclCtx, reduced_output, r) + row_offset;
+    Global dstG(dst_ptr, subShape, tileStride);
+    TSTORE_IMPL<SubTile, Global, pto::AtomicType::AtomicNone>(dstG, subTile);
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 }
 
 // ============================================================================
@@ -315,8 +356,7 @@ AICORE inline void AllGatherPhase(
 
     const int remotes = nranks - 1;
     constexpr int ROWS_PER_TILE = G_BASE_M;
-    const int rows_per_transfer = my_tile_count * ROWS_PER_TILE;
-    const int total_rows = rows_per_transfer * remotes;
+    const int total_rows = my_tile_count * ROWS_PER_TILE * remotes;
 
     if (total_rows <= 0) {
         pipe_barrier(PIPE_ALL);
@@ -334,45 +374,21 @@ AICORE inline void AllGatherPhase(
     while (cur_row < row_end) {
         int flat_transfer = cur_row / ROWS_PER_TILE;
         int row_in_tile = cur_row % ROWS_PER_TILE;
-
-        int oi = flat_transfer / remotes;
-        int remote_idx = flat_transfer % remotes;
-
-        int t = my_rank + oi * nranks;
+        int t = my_rank + (flat_transfer / remotes) * nranks;
         if (t >= total_tiles) break;
 
-        int r = remote_idx;
+        int r = flat_transfer % remotes;
         if (r >= my_rank) r++;
 
-        int rows_left_in_transfer = ROWS_PER_TILE - row_in_tile;
-        int rows_left_for_me = row_end - cur_row;
-        int nrows = (rows_left_in_transfer < rows_left_for_me)
-                    ? rows_left_in_transfer : rows_left_for_me;
+        int nrows = ROWS_PER_TILE - row_in_tile;
+        if (nrows > row_end - cur_row) nrows = row_end - cur_row;
 
         uint32_t mi = t / G_N_TILES;
         uint32_t ni = t % G_N_TILES;
         uint64_t tile_base = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;
-        uint64_t row_offset = tile_base + (uint64_t)row_in_tile * G_N;
 
-        ShapeDyn subShape(1, 1, 1, nrows, G_BASE_N);
-
-        Global srcG(reduced_output + row_offset, subShape, tileStride);
-
-        using SubTile = pto::Tile<pto::TileType::Vec, half, G_BASE_M, G_BASE_N,
-                                  pto::BLayout::RowMajor, -1, -1>;
-        SubTile subTile(nrows, G_BASE_N);
-        TASSIGN(subTile, 0x0);
-
-        TLOAD(subTile, srcG);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-
-        __gm__ half *dst_ptr = HcclRemotePtr(hcclCtx, reduced_output, r) + row_offset;
-        Global dstG(dst_ptr, subShape, tileStride);
-        TSTORE_IMPL<SubTile, Global, pto::AtomicType::AtomicNone>(dstG, subTile);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-
+        AgTransferRows(reduced_output, hcclCtx, tileStride, r,
+                       tile_base + (uint64_t)row_in_tile * G_N, nrows);
         cur_row += nrows;
     }
 
