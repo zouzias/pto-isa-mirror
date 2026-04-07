@@ -341,11 +341,11 @@ PTO_INST RecordEvent TXOR(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &sr
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = LogAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TLOG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TLOG, dst, src);
+    TLOG_IMPL<PrecisionType>(dst, src);
     return {};
 }
 
@@ -1354,11 +1354,11 @@ PTO_INST RecordEvent TSQRT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... e
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = ExpAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
 PTO_INST RecordEvent TEXP(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TEXP, dst, src);
+    TEXP_IMPL<PrecisionType>(dst, src);
     return {};
 }
 
