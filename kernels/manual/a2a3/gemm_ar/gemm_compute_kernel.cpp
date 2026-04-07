@@ -26,6 +26,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include "ready_queue.hpp"
 #include "gemm_ar_config.h"
+#include "kernel_launchers.h"
 
 using namespace pto;
 

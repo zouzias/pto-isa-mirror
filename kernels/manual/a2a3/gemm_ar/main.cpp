@@ -288,16 +288,7 @@ inline void *WindowAlloc(uint64_t windowBase, size_t &offset, size_t bytes)
     return ptr;
 }
 
-// ============================================================================
-// Extern kernel launcher declarations (defined in comm_kernel.cpp / gemm_compute_kernel.cpp)
-// ============================================================================
-extern void launchGemmCommAll(uint8_t *gemm_output,
-                              uint8_t *reduced_output, uint8_t *signal_matrix,
-                              uint8_t *queue_set, uint8_t *hcclCtx,
-                              int rank, int nranks, void *stream, int num_compute_blocks);
-
-extern void launchGemmCompute(uint8_t *gemm_output, uint8_t *src0, uint8_t *src1,
-                              uint8_t *queue_set, int rank, void *stream, int block_num, uint32_t k_per_rank);
+#include "kernel_launchers.h"
 
 // ============================================================================
 // Helpers

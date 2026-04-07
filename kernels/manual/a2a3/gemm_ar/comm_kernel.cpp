@@ -35,6 +35,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "ready_queue.hpp"
 
 #include "gemm_ar_config.h"
+#include "kernel_launchers.h"
 
 // Signal matrix layout (per rank, in HCCL RDMA window):
 //   [0 .. MAX_RANKS-1]              Phase 0 cross-rank counters (RS done)
