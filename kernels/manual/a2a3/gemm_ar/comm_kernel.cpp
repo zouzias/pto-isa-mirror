@@ -206,6 +206,8 @@ AICORE inline int RsInitQueueState(
     int32_t *queue_max_tiles)
 {
     my_queue_count = 0;
+    if (num_compute_blocks <= 0) return 0;
+
     for (int q = 0; q < num_compute_blocks; q++) {
         if (q % num_compute_blocks == block_idx) {
             my_queue_indices[my_queue_count++] = q;

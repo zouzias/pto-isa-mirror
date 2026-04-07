@@ -609,6 +609,43 @@ static bool VerifyOutput(const uint16_t *output_fp16, const float *golden)
     return ok;
 }
 
+static void PrintTimingDetails(
+    const PerfStats &comp_s, const PerfStats &seq_s, const PerfStats &pipe_s,
+    const PerfStats &seq_comp_s, const PerfStats &seq_comm_s,
+    const PerfStats &pipe_comp_s, const PerfStats &pipe_comm_s,
+    double flops_per_rank, double flops_total,
+    double rs_bytes, double ag_bytes)
+{
+    auto gflops = [](double flops, double us) { return (us > 0) ? (flops / (us * 1e-6) / 1e9) : 0.0; };
+    auto bw_gbs = [&](double us) { return (us > 0) ? ((rs_bytes + ag_bytes) / (us * 1e-6) / (1024.0*1024.0*1024.0)) : 0.0; };
+
+    std::cout << "\n  Compute-only:   " << std::setprecision(1) << comp_s.avg << " us"
+              << "  (" << std::setprecision(0) << gflops(flops_per_rank, comp_s.avg) << " GFLOPS)" << std::endl;
+    std::cout << "\n  Sequential:     " << std::setprecision(1) << seq_s.avg << " us" << std::endl;
+    std::cout << "    compute:      " << seq_comp_s.avg << " us"
+              << "  (" << std::setprecision(0) << gflops(flops_per_rank, seq_comp_s.avg) << " GFLOPS)" << std::endl;
+    std::cout << "    comm:         " << std::setprecision(1) << seq_comm_s.avg << " us"
+              << "  (" << std::setprecision(1) << bw_gbs(seq_comm_s.avg) << " GB/s)" << std::endl;
+    std::cout << "\n  Pipelined:      " << std::setprecision(1) << pipe_s.avg << " us" << std::endl;
+    std::cout << "    compute done: " << pipe_comp_s.avg << " us"
+              << "  (" << std::setprecision(0) << gflops(flops_per_rank, pipe_comp_s.avg) << " GFLOPS, "
+              << std::setprecision(1) << (gflops(flops_per_rank, pipe_comp_s.avg) / gflops(flops_per_rank, comp_s.avg) * 100.0)
+              << "% of pure)" << std::endl;
+    std::cout << "    comm done:    " << std::setprecision(1) << pipe_comm_s.avg << " us"
+              << "  (" << std::setprecision(1) << bw_gbs(pipe_comm_s.avg) << " GB/s)" << std::endl;
+
+    double speedup = (pipe_s.avg > 0) ? (seq_s.avg / pipe_s.avg) : 0.0;
+    double overlap_time = (seq_comp_s.avg + seq_comm_s.avg) - pipe_s.avg;
+    double overlap_eff = (overlap_time > 0) ? (overlap_time / std::min(seq_comp_s.avg, seq_comm_s.avg) * 100.0) : 0.0;
+
+    std::cout << "\n  Speedup:        " << std::setprecision(3) << speedup << "x" << std::endl;
+    std::cout << "  Time saved:     " << std::setprecision(1) << (seq_s.avg - pipe_s.avg) << " us"
+              << " (" << std::setprecision(1) << ((seq_s.avg > 0) ? ((seq_s.avg - pipe_s.avg) / seq_s.avg * 100.0) : 0.0) << "%)" << std::endl;
+    std::cout << "  Overlap eff:    " << std::setprecision(1) << overlap_eff << "%" << std::endl;
+    std::cout << "  Throughput:     " << std::setprecision(0) << gflops(flops_total, pipe_s.avg) << " GFLOPS (total)" << std::endl;
+    std::cout << "================================================================\n" << std::endl;
+}
+
 static void PrintPerfReport(
     bool is_ok, int n_ranks,
     const std::vector<double> &compute_times_us,
@@ -629,7 +666,6 @@ static void PrintPerfReport(
 
     double flops_per_rank = 2.0 * G_ORIG_M * (double)G_K * G_ORIG_N;
     double flops_total    = flops_per_rank * ((n_ranks > 0) ? n_ranks : 1);
-    auto gflops = [](double flops, double us) { return (us > 0) ? (flops / (us * 1e-6) / 1e9) : 0.0; };
 
     size_t tileBytes = static_cast<size_t>(G_BASE_M) * G_BASE_N * sizeof(uint16_t);
     int tiles_per_owner = (n_ranks > 0) ? ((G_NUM_TILES + n_ranks - 1) / n_ranks) : G_NUM_TILES;
@@ -637,11 +673,6 @@ static void PrintPerfReport(
     int safe_remotes = (n_ranks > 1) ? (n_ranks - 1) : 0;
     double ag_bytes = static_cast<double>(tiles_per_owner) * safe_remotes * tileBytes;
     double data_gb = (rs_bytes + ag_bytes) / (1024.0 * 1024.0 * 1024.0);
-    auto bw_gbs = [&](double us) { return (us > 0) ? ((rs_bytes + ag_bytes) / (us * 1e-6) / (1024.0*1024.0*1024.0)) : 0.0; };
-
-    double speedup = (pipe_s.avg > 0) ? (seq_s.avg / pipe_s.avg) : 0.0;
-    double overlap_time = (seq_comp_s.avg + seq_comm_s.avg) - pipe_s.avg;
-    double overlap_eff = (overlap_time > 0) ? (overlap_time / std::min(seq_comp_s.avg, seq_comm_s.avg) * 100.0) : 0.0;
 
     std::cout << std::fixed << std::setprecision(1);
     std::cout << "\n================================================================" << std::endl;
@@ -655,26 +686,8 @@ static void PrintPerfReport(
     std::cout << "  tiles=" << G_NUM_TILES << " (" << G_M_TILES << "x" << G_N_TILES << ")"
               << "  comm_data=" << std::setprecision(3) << data_gb << " GB/rank" << std::endl;
 
-    std::cout << "\n  Compute-only:   " << std::setprecision(1) << comp_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, comp_s.avg) << " GFLOPS)" << std::endl;
-    std::cout << "\n  Sequential:     " << std::setprecision(1) << seq_s.avg << " us" << std::endl;
-    std::cout << "    compute:      " << seq_comp_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, seq_comp_s.avg) << " GFLOPS)" << std::endl;
-    std::cout << "    comm:         " << std::setprecision(1) << seq_comm_s.avg << " us"
-              << "  (" << std::setprecision(1) << bw_gbs(seq_comm_s.avg) << " GB/s)" << std::endl;
-    std::cout << "\n  Pipelined:      " << std::setprecision(1) << pipe_s.avg << " us" << std::endl;
-    std::cout << "    compute done: " << pipe_comp_s.avg << " us"
-              << "  (" << std::setprecision(0) << gflops(flops_per_rank, pipe_comp_s.avg) << " GFLOPS, "
-              << std::setprecision(1) << (gflops(flops_per_rank, pipe_comp_s.avg) / gflops(flops_per_rank, comp_s.avg) * 100.0)
-              << "% of pure)" << std::endl;
-    std::cout << "    comm done:    " << std::setprecision(1) << pipe_comm_s.avg << " us"
-              << "  (" << std::setprecision(1) << bw_gbs(pipe_comm_s.avg) << " GB/s)" << std::endl;
-    std::cout << "\n  Speedup:        " << std::setprecision(3) << speedup << "x" << std::endl;
-    std::cout << "  Time saved:     " << std::setprecision(1) << (seq_s.avg - pipe_s.avg) << " us"
-              << " (" << std::setprecision(1) << ((seq_s.avg > 0) ? ((seq_s.avg - pipe_s.avg) / seq_s.avg * 100.0) : 0.0) << "%)" << std::endl;
-    std::cout << "  Overlap eff:    " << std::setprecision(1) << overlap_eff << "%" << std::endl;
-    std::cout << "  Throughput:     " << std::setprecision(0) << gflops(flops_total, pipe_s.avg) << " GFLOPS (total)" << std::endl;
-    std::cout << "================================================================\n" << std::endl;
+    PrintTimingDetails(comp_s, seq_s, pipe_s, seq_comp_s, seq_comm_s, pipe_comp_s, pipe_comm_s,
+                       flops_per_rank, flops_total, rs_bytes, ag_bytes);
 }
 
 template <typename ResetFn, typename LaunchFn, typename SyncFn>
@@ -751,6 +764,82 @@ static void RunPipelinedBenchmark(
 }
 
 // ============================================================================
+// Per-rank device buffer management
+// ============================================================================
+struct DeviceBuffers {
+    void *gemm_output;
+    void *reduced_output;
+    void *signal_matrix;
+    void *src0_dev;
+    void *src1_dev;
+    void *queueSet_dev;
+    MultiBlockQueueSet *queueSet_reset_host;
+    size_t outputSize;
+    size_t signalMatrixSize;
+    size_t queueSetSize;
+};
+
+static bool AllocDeviceBuffers(DeviceBuffers &buf, const GemmHcclContext &hctx, int rank_id,
+                               const uint16_t *a_data, size_t a_bytes,
+                               const uint16_t *b_data, size_t b_bytes,
+                               aclrtStream commStream)
+{
+    buf.outputSize = static_cast<size_t>(G_M) * G_N * sizeof(uint16_t);
+    buf.signalMatrixSize = ((static_cast<size_t>(MAX_RANKS + 1) * sizeof(int32_t) + 63) / 64) * 64;
+
+    buf.gemm_output = nullptr;
+    aclrtMalloc(&buf.gemm_output, buf.outputSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    if (!buf.gemm_output) { std::cerr << "[ERROR] Rank " << rank_id << ": alloc failed\n"; return false; }
+
+    uint64_t windowBase = hctx.hostCtx.windowsIn[hctx.hostCtx.rankId];
+    size_t winOffset = 0;
+    buf.reduced_output = WindowAlloc(windowBase, winOffset, buf.outputSize);
+    buf.signal_matrix = WindowAlloc(windowBase, winOffset, buf.signalMatrixSize);
+    if (winOffset > hctx.hostCtx.winSize) {
+        std::cerr << "[ERROR] Rank " << rank_id << ": HCCL window too small\n";
+        aclrtFree(buf.gemm_output); return false;
+    }
+
+    aclrtMemset(buf.gemm_output, buf.outputSize, 0, buf.outputSize);
+    aclrtMemset(buf.reduced_output, buf.outputSize, 0, buf.outputSize);
+    aclrtMemset(buf.signal_matrix, buf.signalMatrixSize, 0, buf.signalMatrixSize);
+
+    size_t aSize = (size_t)G_M * G_K * sizeof(uint16_t);
+    size_t bSize = (size_t)G_K * G_N * sizeof(uint16_t);
+    buf.src0_dev = nullptr; buf.src1_dev = nullptr;
+    aclrtMalloc(&buf.src0_dev, aSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc(&buf.src1_dev, bSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    int tiles_per_block = (G_NUM_TILES + COMPUTE_BLOCK_NUM - 1) / COMPUTE_BLOCK_NUM;
+    buf.queueSetSize = MultiBlockQueueSetSize(COMPUTE_BLOCK_NUM, tiles_per_block);
+    buf.queueSet_dev = nullptr;
+    aclrtMalloc(&buf.queueSet_dev, buf.queueSetSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    MultiBlockQueueSet *queueSet_host = nullptr;
+    aclrtMallocHost(reinterpret_cast<void **>(&queueSet_host), buf.queueSetSize);
+    MultiBlockQueueSetInit(queueSet_host, COMPUTE_BLOCK_NUM, G_NUM_TILES);
+    aclrtMemcpy(buf.queueSet_dev, buf.queueSetSize, queueSet_host, buf.queueSetSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtFreeHost(queueSet_host);
+
+    aclrtMemcpy(buf.src0_dev, aSize, a_data, a_bytes, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(buf.src1_dev, bSize, b_data, b_bytes, ACL_MEMCPY_HOST_TO_DEVICE);
+    HcclHostBarrier(hctx.comm, commStream);
+
+    buf.queueSet_reset_host = nullptr;
+    aclrtMallocHost(reinterpret_cast<void **>(&buf.queueSet_reset_host), buf.queueSetSize);
+    return true;
+}
+
+static void FreeDeviceBuffers(DeviceBuffers &buf)
+{
+    aclrtFreeHost(buf.queueSet_reset_host);
+    aclrtFree(buf.gemm_output);
+    aclrtFree(buf.src0_dev);
+    aclrtFree(buf.src1_dev);
+    aclrtFree(buf.queueSet_dev);
+}
+
+// ============================================================================
 // Per-rank execution logic
 // ============================================================================
 static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
@@ -773,104 +862,55 @@ static bool RunGemmAllReducePerRank(int rank_id, int n_ranks, int device_id,
         return false;
     }
 
-    size_t outputSize = static_cast<size_t>(G_M) * G_N * sizeof(uint16_t);
-    size_t signalMatrixSize = ((static_cast<size_t>(MAX_RANKS + 1) * sizeof(int32_t) + 63) / 64) * 64;
-
-    void *gemm_output = nullptr;
-    aclrtMalloc(&gemm_output, outputSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    if (!gemm_output) { std::cerr << "[ERROR] Rank " << rank_id << ": alloc failed\n"; return false; }
-
-    uint64_t windowBase = hctx.hostCtx.windowsIn[hctx.hostCtx.rankId];
-    size_t winOffset = 0;
-    void *reduced_output = WindowAlloc(windowBase, winOffset, outputSize);
-    void *signal_matrix = WindowAlloc(windowBase, winOffset, signalMatrixSize);
-
-    if (winOffset > hctx.hostCtx.winSize) {
-        std::cerr << "[ERROR] Rank " << rank_id << ": HCCL window too small\n";
-        aclrtFree(gemm_output); return false;
-    }
-
-    aclrtMemset(gemm_output, outputSize, 0, outputSize);
-    aclrtMemset(reduced_output, outputSize, 0, outputSize);
-    aclrtMemset(signal_matrix, signalMatrixSize, 0, signalMatrixSize);
-
-    size_t aSize = (size_t)G_M * G_K * sizeof(uint16_t);
-    size_t bSize = (size_t)G_K * G_N * sizeof(uint16_t);
-    void *src0_dev = nullptr, *src1_dev = nullptr;
-    aclrtMalloc(&src0_dev, aSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc(&src1_dev, bSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    int tiles_per_block = (G_NUM_TILES + COMPUTE_BLOCK_NUM - 1) / COMPUTE_BLOCK_NUM;
-    size_t queueSetSize = MultiBlockQueueSetSize(COMPUTE_BLOCK_NUM, tiles_per_block);
-    void *queueSet_dev = nullptr;
-    aclrtMalloc(&queueSet_dev, queueSetSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    MultiBlockQueueSet *queueSet_host = nullptr;
-    aclrtMallocHost(reinterpret_cast<void **>(&queueSet_host), queueSetSize);
-    MultiBlockQueueSetInit(queueSet_host, COMPUTE_BLOCK_NUM, G_NUM_TILES);
-    aclrtMemcpy(queueSet_dev, queueSetSize, queueSet_host, queueSetSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtFreeHost(queueSet_host);
-
-    aclrtMemcpy(src0_dev, aSize, a_data, a_bytes, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(src1_dev, bSize, b_data, b_bytes, ACL_MEMCPY_HOST_TO_DEVICE);
-    HcclHostBarrier(hctx.comm, commStream);
-
-    MultiBlockQueueSet *queueSet_reset_host = nullptr;
-    aclrtMallocHost(reinterpret_cast<void **>(&queueSet_reset_host), queueSetSize);
+    DeviceBuffers buf{};
+    if (!AllocDeviceBuffers(buf, hctx, rank_id, a_data, a_bytes, b_data, b_bytes, commStream))
+        return false;
 
     auto resetState = [&]() {
-        MultiBlockQueueSetInit(queueSet_reset_host, COMPUTE_BLOCK_NUM, G_NUM_TILES);
-        aclrtMemcpy(queueSet_dev, queueSetSize, queueSet_reset_host, queueSetSize, ACL_MEMCPY_HOST_TO_DEVICE);
-        aclrtMemset(gemm_output, outputSize, 0, outputSize);
-        aclrtMemset(reduced_output, outputSize, 0, outputSize);
-        aclrtMemset(signal_matrix, signalMatrixSize, 0, signalMatrixSize);
+        MultiBlockQueueSetInit(buf.queueSet_reset_host, COMPUTE_BLOCK_NUM, G_NUM_TILES);
+        aclrtMemcpy(buf.queueSet_dev, buf.queueSetSize, buf.queueSet_reset_host, buf.queueSetSize, ACL_MEMCPY_HOST_TO_DEVICE);
+        aclrtMemset(buf.gemm_output, buf.outputSize, 0, buf.outputSize);
+        aclrtMemset(buf.reduced_output, buf.outputSize, 0, buf.outputSize);
+        aclrtMemset(buf.signal_matrix, buf.signalMatrixSize, 0, buf.signalMatrixSize);
     };
     auto launchComp = [&](aclrtStream s) {
-        launchGemmCompute(reinterpret_cast<uint8_t *>(gemm_output),
-            reinterpret_cast<uint8_t *>(src0_dev), reinterpret_cast<uint8_t *>(src1_dev),
-            reinterpret_cast<uint8_t *>(queueSet_dev), rank_id, s, COMPUTE_BLOCK_NUM, G_K);
+        launchGemmCompute(reinterpret_cast<uint8_t *>(buf.gemm_output),
+            reinterpret_cast<uint8_t *>(buf.src0_dev), reinterpret_cast<uint8_t *>(buf.src1_dev),
+            reinterpret_cast<uint8_t *>(buf.queueSet_dev), rank_id, s, COMPUTE_BLOCK_NUM, G_K);
     };
     uint8_t *hcclCtxPtr = reinterpret_cast<uint8_t *>(hctx.deviceCtx);
     auto launchComm = [&](aclrtStream s) {
-        launchGemmCommAll(reinterpret_cast<uint8_t *>(gemm_output),
-            reinterpret_cast<uint8_t *>(reduced_output), reinterpret_cast<uint8_t *>(signal_matrix),
-            reinterpret_cast<uint8_t *>(queueSet_dev), hcclCtxPtr, rank_id, n_ranks, s, COMPUTE_BLOCK_NUM);
+        launchGemmCommAll(reinterpret_cast<uint8_t *>(buf.gemm_output),
+            reinterpret_cast<uint8_t *>(buf.reduced_output), reinterpret_cast<uint8_t *>(buf.signal_matrix),
+            reinterpret_cast<uint8_t *>(buf.queueSet_dev), hcclCtxPtr, rank_id, n_ranks, s, COMPUTE_BLOCK_NUM);
         aclrtSynchronizeStream(s);
     };
     auto syncAll = [&]() {
-        aclrtSynchronizeStream(computeStream);
-        aclrtSynchronizeStream(commStream);
+        aclrtSynchronizeStream(computeStream); aclrtSynchronizeStream(commStream);
         HcclHostBarrier(hctx.comm, commStream);
     };
 
     for (int i = 0; i < WARMUP_ITERS; ++i) { resetState(); syncAll(); launchComp(computeStream); launchComm(commStream); syncAll(); }
 
-    std::vector<double> compute_times_us, sequential_times_us, seq_compute_us, seq_comm_us;
-    std::vector<double> pipelined_times_us, pipe_compute_us, pipe_comm_us;
-
-    RunComputeOnlyBenchmark(resetState, launchComp, syncAll, computeStream, commStream, hctx.comm, compute_times_us);
+    std::vector<double> compute_us, seq_us, seq_comp_us, seq_comm_us, pipe_us, pipe_comp_us, pipe_comm_us;
+    RunComputeOnlyBenchmark(resetState, launchComp, syncAll, computeStream, commStream, hctx.comm, compute_us);
     RunSequentialBenchmark(resetState, launchComp, launchComm, syncAll, computeStream, commStream, hctx.comm,
-                           sequential_times_us, seq_compute_us, seq_comm_us);
+                           seq_us, seq_comp_us, seq_comm_us);
     RunPipelinedBenchmark(resetState, launchComp, launchComm, syncAll, computeStream, commStream,
-                          pipelined_times_us, pipe_compute_us, pipe_comm_us);
+                          pipe_us, pipe_comp_us, pipe_comm_us);
 
     resetState(); syncAll(); launchComp(computeStream); launchComm(commStream); syncAll();
 
     uint16_t *output_host_fp16 = nullptr;
-    aclrtMallocHost(reinterpret_cast<void **>(&output_host_fp16), outputSize);
-    aclrtMemcpy(output_host_fp16, outputSize, reduced_output, outputSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
+    aclrtMallocHost(reinterpret_cast<void **>(&output_host_fp16), buf.outputSize);
+    aclrtMemcpy(output_host_fp16, buf.outputSize, buf.reduced_output, buf.outputSize, ACL_MEMCPY_DEVICE_TO_HOST);
     bool is_ok = (rank_id == 0) ? VerifyOutput(output_host_fp16, golden) : true;
-
     aclrtFreeHost(output_host_fp16);
-    aclrtFreeHost(queueSet_reset_host);
 
-    if (rank_id == 0) {
-        PrintPerfReport(is_ok, n_ranks, compute_times_us, sequential_times_us, pipelined_times_us,
-                        seq_compute_us, seq_comm_us, pipe_compute_us, pipe_comm_us);
-    }
+    if (rank_id == 0)
+        PrintPerfReport(is_ok, n_ranks, compute_us, seq_us, pipe_us, seq_comp_us, seq_comm_us, pipe_comp_us, pipe_comm_us);
 
-    aclrtFree(gemm_output); aclrtFree(src0_dev); aclrtFree(src1_dev); aclrtFree(queueSet_dev);
+    FreeDeviceBuffers(buf);
     hctx.Finalize();
     if (hcclStream) rtStreamDestroy(hcclStream);
     status |= aclrtDestroyStream(computeStream);
@@ -980,6 +1020,17 @@ static uint16_t floatToHalf(float f)
     return (uint16_t)(sign | ((uint32_t)exp << 10) | (mant >> 13));
 }
 
+static void gemmBlockedTile(const float *B, float *C_row,
+                            int K, int N, const float *A_row,
+                            int kk, int kEnd, int jj, int jEnd)
+{
+    for (int k = kk; k < kEnd; k++) {
+        float aik = A_row[k];
+        for (int j = jj; j < jEnd; j++)
+            C_row[(size_t)j] += aik * B[(size_t)k * N + j];
+    }
+}
+
 static void gemmBlockedRowRange(const float *A, const float *B, float *C,
                                 int K, int N, int r0, int r1)
 {
@@ -987,14 +1038,8 @@ static void gemmBlockedRowRange(const float *A, const float *B, float *C,
     for (int i = r0; i < r1; i++) {
         for (int kk = 0; kk < K; kk += BLK) {
             int kEnd = std::min(kk + BLK, K);
-            for (int jj = 0; jj < N; jj += BLK) {
-                int jEnd = std::min(jj + BLK, N);
-                for (int k = kk; k < kEnd; k++) {
-                    float aik = A[(size_t)i * K + k];
-                    for (int j = jj; j < jEnd; j++)
-                        C[(size_t)i * N + j] += aik * B[(size_t)k * N + j];
-                }
-            }
+            for (int jj = 0; jj < N; jj += BLK)
+                gemmBlockedTile(B, &C[(size_t)i * N], K, N, &A[(size_t)i * K], kk, kEnd, jj, std::min(jj + BLK, N));
         }
     }
 }
@@ -1023,17 +1068,27 @@ static void computeGolden(const float *A, const float *B, float *C, int M, int K
 // Input file caching: save/load binary matrices to avoid regeneration
 // ============================================================================
 
-static std::string safeGetEnv(const char *name)
+struct CachedEnvVars {
+    std::string gemm_ar_dir;
+    std::string first_device;
+};
+
+static const CachedEnvVars &getCachedEnv()
 {
-    static std::mutex envMutex;
-    std::lock_guard<std::mutex> lock(envMutex);
-    const char *val = getenv(name);
-    return (val != nullptr) ? std::string(val) : std::string();
+    static CachedEnvVars instance;
+    static std::once_flag flag;
+    std::call_once(flag, []() {
+        const char *v1 = getenv("GEMM_AR_DIR");  // NOLINT: called once before threads
+        if (v1 != nullptr) instance.gemm_ar_dir = v1;
+        const char *v2 = getenv("GEMM_ALLREDUCE_FIRST_DEVICE");  // NOLINT
+        if (v2 != nullptr) instance.first_device = v2;
+    });
+    return instance;
 }
 
 static std::string getInputDir()
 {
-    std::string envDir = safeGetEnv("GEMM_AR_DIR");
+    const std::string &envDir = getCachedEnv().gemm_ar_dir;
     if (!envDir.empty()) {
         return envDir + "/input";
     }
@@ -1242,7 +1297,7 @@ static bool generateData(int nranks,
 
 static int parseFirstDevice(int argc, char *argv[])
 {
-    std::string envVal = safeGetEnv("GEMM_ALLREDUCE_FIRST_DEVICE");
+    const std::string &envVal = getCachedEnv().first_device;
     if (!envVal.empty()) {
         int val = atoi(envVal.c_str());
         if (val >= 0) return val;
