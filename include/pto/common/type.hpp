@@ -306,6 +306,12 @@ enum class RecipAlgorithm : uint8_t
     HIGH_PRECISION
 };
 
+enum class ExpAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
 namespace GlobalTensorDim {
 constexpr int DIM_0 = 0;
 constexpr int DIM_1 = 1;

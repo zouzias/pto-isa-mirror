@@ -12,7 +12,6 @@
 
 import os
 import numpy as np
-np.random.seed(19)
 
 
 def gen_golden_data(param):
@@ -21,8 +20,14 @@ def gen_golden_data(param):
     src_row, src_col = [param.src_row, param.src_col]
     valid_row, valid_col = [param.valid_row, param.valid_col]
 
+    if dtype in (np.int8, np.uint8, np.int16, np.uint16, np.int32, np.uint32):
+        dtype_info = np.iinfo(dtype)
+        input_arr = np.random.randint(dtype_info.min, dtype_info.max, size=[rows, cols]).astype(dtype)
+    else:
+        dtype_info = np.finfo(dtype)
+        input_arr = np.random.uniform(low=dtype_info.min, high=dtype_info.max, size=[rows, cols]).astype(dtype)
+
     # Generate random input arrays
-    input_arr = np.random.random(size=(src_row, src_col)).astype(dtype)
     golden = np.zeros((dst_row, dst_col), dtype=dtype)
     # Perform the operation
     golden[0:valid_row, 0:valid_col] = np.exp(input_arr[0:valid_row, 0:valid_col])
@@ -62,6 +67,8 @@ if __name__ == "__main__":
         tunaryParams("TEXPTest.case6", np.float32, 64, 64, 128, 128, 32, 32),
         tunaryParams("TEXPTest.case7", np.float16, 128, 256, 64, 64, 64, 64),
         tunaryParams("TEXPTest.case8", np.float16, 64, 64, 128, 256, 32, 32),
+        tunaryParams("TEXPTest.caseHP1", np.float32, 64, 64, 64, 64, 64, 64, False),
+        tunaryParams("TEXPTest.caseHP2", np.float16, 64, 64, 64, 64, 64, 64, False),
     ]
 
     for _, param in enumerate(case_params_list):
