@@ -63,14 +63,18 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_
     TLOAD(srcTile, srcGlobal);
 
     if constexpr (mode == 0) {
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
 
         TQUANT<pto::QuantType::MXFP8, DstFP8Tile, SrcTile, DstE8Tile, MaxTile>(fp8Tile, srcTile, &e8Tile, &maxPerGpTile,
                                                                                &scalingTile);
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
 
         TSTORE(e8Global, e8Tile);
         TSTORE(fp8Global, fp8Tile);
@@ -83,7 +87,7 @@ __global__ AICORE void runTQuant(__gm__ uint8_t __out__ *out_e8m0, __gm__ uint8_
         // TMOV fp8 ND→NZ: reuse fp8Tile (int8_t RowMajor at 0x25100)
         constexpr int virtualRow = PTO_CEIL(validRows, FRACTAL_NZ_ROW) + 1; // NZ + 1 for reducing bank conflict
         using DstNZ_int8 = Tile<TileType::Vec, int8_t, virtualRow, paddedCols, BLayout::ColMajor, validRows, paddedCols,
-                                SLayout::RowMajor>;
+                                SLayout::RowMajor, 512, PadValue::Null, CompactMode::RowPlusOne>;
         DstNZ_int8 fp8TileNZ;
         IdxGlobal idxGlobal(idx);
         IdxTile idxTile(1, idxCount);
@@ -146,13 +150,17 @@ __global__ AICORE void runTQuantInt8Sym(__gm__ int8_t __out__ *out_s8, __gm__ fl
     TLOAD(srcTile, srcGlobal);
     TLOAD(scaleTile, scaleGlobal);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
 
     TQUANT<pto::QuantType::INT8_SYM, DstTile, SrcTile, ParaTile>(dstS8Tile, srcTile, scaleTile);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
 
     TSTORE(dstGlobal, dstS8Tile);
 }
@@ -192,13 +200,17 @@ __global__ AICORE void runTQuantInt8Asym(__gm__ uint8_t __out__ *out_u8, __gm__ 
     TLOAD(scaleTile, scaleGlobal);
     TLOAD(offsetTile, offsetGlobal);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
 
     TQUANT<pto::QuantType::INT8_ASYM, DstTile, SrcTile, ParaTile>(dstU8Tile, srcTile, scaleTile, &offsetTile);
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
 
     TSTORE(dstGlobal, dstU8Tile);
 }

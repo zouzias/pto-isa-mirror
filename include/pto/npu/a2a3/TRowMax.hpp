@@ -12,8 +12,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define TROWMAX_HPP
 
 #include "TRowReduceOps.hpp"
+#include <limits>
 
 namespace pto {
+
+// Scalar reduction for integer types
+template <typename T, unsigned N>
+PTO_INTERNAL T ScalarReduceMax(__ubuf__ T *tmp)
+{
+    T result = tmp[0];
+    for (unsigned i = 1; i < N; ++i) {
+        result = result > tmp[i] ? result : tmp[i];
+    }
+    return result;
+}
+
+// Float/Half operation traits (for vcmax-based implementation)
 template <typename T>
 struct TRowMaxOp : TRowReduceOp<T, TRowMaxOp<T>> {
     PTO_INTERNAL static void BinInstrImpl(__ubuf__ T *dst, __ubuf__ T *src0, __ubuf__ T *src1, uint8_t rptTimes,
@@ -41,14 +55,63 @@ struct TRowMaxOp : TRowReduceOp<T, TRowMaxOp<T>> {
 template <typename T, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 __tf__ PTO_INTERNAL void TRowMax(typename TileDataOut::TileDType __out__ dstData,
                                  typename TileDataIn::TileDType __in__ srcData,
-                                 typename TileDataTmp::TileDType __in__ tmpData, int validCol, int validRow,
-                                 unsigned version)
+                                 typename TileDataTmp::TileDType __in__ tmpData, int validCol, int validRow)
 {
     __ubuf__ T *dst = (__ubuf__ T *)__cce_get_tile_ptr(dstData);
     __ubuf__ T *src = (__ubuf__ T *)__cce_get_tile_ptr(srcData);
     __ubuf__ T *tmp = (__ubuf__ T *)__cce_get_tile_ptr(tmpData);
 
-    TRowReduceInstr<TRowMaxOp<T>, T, TileDataOut, TileDataIn, TileDataTmp>(dst, src, tmp, validCol, validRow);
+    if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t>) {
+        // Integer implementation (follows TROWPROD pattern)
+        constexpr unsigned dstRowStride = TileDataOut::RowStride;
+        constexpr unsigned srcRowStride = TileDataIn::RowStride;
+        constexpr unsigned tmpRowStride = TileDataTmp::RowStride;
+        constexpr unsigned elemsPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
+        unsigned blocksPerRow = validCol / elemsPerBlock;
+        unsigned elemsLessThanBlock = validCol % elemsPerBlock;
+
+        set_mask_count();
+
+        for (unsigned row = 0; row < validRow; ++row, dst += dstRowStride, src += srcRowStride, tmp += tmpRowStride) {
+            set_vector_mask(0, elemsPerBlock);
+
+            // Initialize tmp with minimum value
+            if constexpr (std::is_same_v<T, int32_t>) {
+                vector_dup(tmp, (T)std::numeric_limits<int32_t>::min(), 1, 1, 1, 0, 0);
+            } else {
+                vector_dup(tmp, (T)std::numeric_limits<int16_t>::min(), 1, 1, 1, 0, 0);
+            }
+            pipe_barrier(PIPE_V);
+
+            // Accumulate using vmax
+            for (unsigned block = 0; block < blocksPerRow; ++block) {
+                vmax(tmp, tmp, src + block * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
+                pipe_barrier(PIPE_V);
+            }
+
+            // Handle remaining elements
+            if (elemsLessThanBlock > 0) {
+                set_vector_mask(0, elemsLessThanBlock);
+                vmax(tmp, tmp, src + blocksPerRow * elemsPerBlock, 1, 0, 0, 1, 0, 0, 1);
+                pipe_barrier(PIPE_V);
+            }
+
+            pipe_barrier(PIPE_ALL);
+
+            // Final scalar reduction
+            if constexpr (std::is_same_v<T, int32_t>) {
+                dst[0] = ScalarReduceMax<T, 8>(tmp);
+            } else {
+                dst[0] = ScalarReduceMax<T, 16>(tmp);
+            }
+        }
+
+        set_mask_norm();
+        set_vector_mask(-1, -1);
+    } else {
+        // Float/Half implementation (original vcmax-based)
+        TRowReduceInstr<TRowMaxOp<T>, T, TileDataOut, TileDataIn, TileDataTmp>(dst, src, tmp, validCol, validRow);
+    }
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
@@ -57,12 +120,9 @@ PTO_INTERNAL void TROWMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &t
     int validCol = src.GetValidCol();
     int validRow = src.GetValidRow();
     TRowReduceCheck<TileDataOut, TileDataIn>(validRow, validCol, dst.GetValidRow());
-    if (validCol == 0 || validRow == 0) {
-        return;
-    }
 
-    TRowMax<typename TileDataIn::DType, TileDataOut, TileDataIn, TileDataTmp>(
-        dst.data(), src.data(), tmp.data(), validCol, validRow, VFImplKind::VFIMPL_DEFAULT);
+    TRowMax<typename TileDataIn::DType, TileDataOut, TileDataIn, TileDataTmp>(dst.data(), src.data(), tmp.data(),
+                                                                              validCol, validRow);
 }
 } // namespace pto
 #endif

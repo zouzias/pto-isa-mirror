@@ -14,7 +14,7 @@ set -euo pipefail
 # ============================================================================
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [-n NPU_COUNT] [-v VERSION] [-t TESTCASE] [-d]
+Usage: $(basename "$0") [-n NPU_COUNT] [-v VERSION] [-t TESTCASE] [-a] [-d]
 
 Options:
   -n NPU_COUNT   Number of NPUs (devices) available: 2, 4, or 8 (default: 8)
@@ -22,12 +22,17 @@ Options:
   -v VERSION     SoC version: a3 (Ascend910B, default) or a5 (Ascend910_9599).
   -t TESTCASE    Run only the specified testcase (e.g. tput, treduce).
                  Can be specified multiple times. Default: run all.
+  -a             Include async testcases (e.g. tput_async, tget_async).
+                 Async tests are excluded by default as they require a
+                 newer CANN version with SDMA opapi support.
   -d             Enable debug mode (extra logging at each sync point).
   -h             Show this help message.
 
 Examples:
-  $(basename "$0")                   # Run all tests with 8 NPUs on a3
-  $(basename "$0") -n 2              # Run only 2-rank tests
+  $(basename "$0")                   # Run all non-async tests with 8 NPUs on a3
+  $(basename "$0") -n 2              # Run only 2-rank non-async tests
+  $(basename "$0") -a                # Run all tests including async
+  $(basename "$0") -a -t tput_async  # Run only tput_async
   $(basename "$0") -v a5 -n 2 -t tput  # Run tput on A5 with 2 NPUs
   $(basename "$0") -d -t tput        # Run tput with debug output
 EOF
@@ -40,13 +45,15 @@ EOF
 NPU_COUNT=8
 SOC_VERSION="a3"
 DEBUG_FLAG=""
+INCLUDE_ASYNC=false
 declare -a SELECTED_TESTS=()
 
-while getopts "n:v:t:dh" opt; do
+while getopts "n:v:t:adh" opt; do
   case "$opt" in
     n) NPU_COUNT="$OPTARG" ;;
     v) SOC_VERSION="$OPTARG" ;;
     t) SELECTED_TESTS+=("$OPTARG") ;;
+    a) INCLUDE_ASYNC=true ;;
     d) DEBUG_FLAG="-d" ;;
     h) usage ;;
     *) usage ;;
@@ -70,54 +77,17 @@ fi
 # mpiSize == nRanks). The script runs the binary once per distinct rank count,
 # using gtest filters to select only the matching tests each time.
 #
-# Tests following the *_NRanks / *_Nranks naming convention are matched by
-# pattern. Tests without a rank suffix in their names are listed explicitly.
+# All multi-rank tests follow the *_NRanks / *_Nranks naming convention,
+# so a simple wildcard match is sufficient.
 # ============================================================================
 
-# Tests that need 4 ranks but lack "4Ranks"/"4ranks" in their name.
-KNOWN_4RANK_TESTS_tput="TPut.Vec_FloatSmall:TPut.AtomicAdd_Int32"
-KNOWN_4RANK_TESTS_tgather="TGather.FloatSmall"
-KNOWN_4RANK_TESTS_tscatter="TScatter.FloatSmall"
-KNOWN_4RANK_TESTS_treduce="TReduce.FloatSmall_Sum"
-KNOWN_4RANK_TESTS_tbroadcast="TBroadCast.FloatSmallRoot0"
-
-# Tests that need 8 ranks but lack "8Ranks"/"8ranks" in their name.
-KNOWN_8RANK_TESTS_tput="TPut.Vec_Uint8Small"
-
-get_known_tests() {
-  local test_name="$1"
-  local nranks="$2"
-  local varname="KNOWN_${nranks}RANK_TESTS_${test_name}"
-  echo "${!varname:-}"
-}
-
 get_gtest_filter_for_nranks() {
-  local test_name="$1"
-  local nranks="$2"
-
-  local known4; known4="$(get_known_tests "$test_name" 4)"
-  local known8; known8="$(get_known_tests "$test_name" 8)"
+  local nranks="$1"
 
   case "$nranks" in
-    2)
-      # All tests EXCEPT those needing 4 or 8 ranks.
-      local negative="*4Ranks*:*4ranks*:*8Ranks*:*8ranks*"
-      [[ -n "$known4" ]] && negative="${negative}:${known4}"
-      [[ -n "$known8" ]] && negative="${negative}:${known8}"
-      echo "*-${negative}"
-      ;;
-    4)
-      # Only tests needing exactly 4 ranks.
-      local positive="*4Ranks*:*4ranks*"
-      [[ -n "$known4" ]] && positive="${positive}:${known4}"
-      echo "${positive}"
-      ;;
-    8)
-      # Only tests needing exactly 8 ranks.
-      local positive="*8Ranks*:*8ranks*"
-      [[ -n "$known8" ]] && positive="${positive}:${known8}"
-      echo "${positive}"
-      ;;
+    2) echo "*-*4Ranks*:*4ranks*:*8Ranks*:*8ranks*" ;;
+    4) echo "*4Ranks*:*4ranks*" ;;
+    8) echo "*8Ranks*:*8ranks*" ;;
   esac
 }
 
@@ -136,12 +106,18 @@ if [[ ! -d "${ST_DIR}" ]]; then
   exit 1
 fi
 
+is_async_test() { [[ "$1" == *_async ]]; }
+
 declare -a tests=()
 if [[ "${#SELECTED_TESTS[@]}" -gt 0 ]]; then
   tests=("${SELECTED_TESTS[@]}")
 else
   while IFS= read -r -d '' dir; do
-    tests+=("$(basename "${dir}")")
+    name="$(basename "${dir}")"
+    if is_async_test "$name" && ! $INCLUDE_ASYNC; then
+      continue
+    fi
+    tests+=("$name")
   done < <(find "${ST_DIR}" -maxdepth 1 -mindepth 1 -type d -print0 | sort -z)
 fi
 
@@ -150,7 +126,9 @@ if [[ "${#tests[@]}" -eq 0 ]]; then
   exit 1
 fi
 
-echo "[INFO] NPU_COUNT=${NPU_COUNT}, SOC=${SOC_VERSION}, DEBUG=${DEBUG_FLAG:-(off)}, running ${#tests[@]} testcase(s): ${tests[*]}"
+async_info=""
+$INCLUDE_ASYNC && async_info=", async=on" || async_info=", async=off"
+echo "[INFO] NPU_COUNT=${NPU_COUNT}, SOC=${SOC_VERSION}, DEBUG=${DEBUG_FLAG:-(off)}${async_info}, running ${#tests[@]} testcase(s): ${tests[*]}"
 
 # ============================================================================
 # Run
@@ -163,7 +141,7 @@ for t in "${tests[@]}"; do
   for nranks in 2 4 8; do
     if (( nranks > NPU_COUNT )); then continue; fi
 
-    gtest_filter="$(get_gtest_filter_for_nranks "$t" "$nranks")"
+    gtest_filter="$(get_gtest_filter_for_nranks "$nranks")"
     [[ -z "$gtest_filter" ]] && continue
 
     echo "============================================================"

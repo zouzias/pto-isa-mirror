@@ -14,162 +14,86 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <type_traits>
 
 #include "pto/common/debug.h"
-#include "pto/common/type.hpp"
 #include "pto/common/constants.hpp"
+#include "pto/common/type.hpp"
 #include "pto/common/pto_instr.hpp"
 #include "pto/comm/comm_types.hpp"
 
 namespace pto {
 namespace comm {
 
-// ============================================================================
-// TGET_IMPL: Remote read operation implementation
-//
-// Data flow: srcGlobalData (remote GM) → stagingTileData (UB) → dstGlobalData (local GM)
-//
-// When the GlobalTensor exceeds the UB tile capacity in rows and/or columns,
-// the transfer is automatically chunked via 2D sliding:
-//   - Outer dimensions (DIM_0, DIM_1, DIM_2) are iterated explicitly.
-//   - DIM_3 (rows) is split into tileValidRow-sized chunks.
-//   - DIM_4 (cols) is split into tileValidCol-sized chunks.
-//
-// Constraints for chunked mode:
-//   - If TileData has static ValidRow, shape3 must be divisible by ValidRow.
-//     Use DYNAMIC ValidRow for partial row chunk support.
-//   - If TileData has static ValidCol, shape4 must be divisible by ValidCol.
-//     Use DYNAMIC ValidCol for partial column chunk support.
-// ============================================================================
+// Ping-pong double-buffering state for chunked TGET transfers
+struct TgetPingPongState {
+    bool usePing = true;
+    bool hasPending = false;
+    int64_t pendingDstOffset = 0;
+    int pendingRows = 0;
+    int pendingCols = 0;
+};
 
+// Single synchronous transfer: TLOAD from src → sync → TSTORE to dst → sync
+template <typename TileData, typename DstGT, typename SrcGT>
+PTO_INTERNAL void TgetTransferOnce(DstGT &dst, SrcGT &src, TileData &tile)
+{
+    TLOAD(tile, src);
+    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    TSTORE(dst, tile);
+    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+}
+
+// 2D sliding chunked transfer with single buffer
 template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
-PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData)
+PTO_INTERNAL void TgetChunkedSingle(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                    TileData &stagingTileData, int gShape0, int gShape1, int gShape2, int gShape3,
+                                    int gShape4, int tileValidRow, int tileValidCol)
 {
     using T = typename GlobalSrcData::RawDType;
-
-    static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TGET: src/dst element type mismatch");
-    static_assert(GlobalSrcData::layout == GlobalDstData::layout, "TGET: src/dst layout mismatch");
-    static_assert(std::is_same_v<T, typename TileData::DType>,
-                  "TGET: TileData element type must match GlobalData element type");
-
-    // Get GlobalTensor dimensions
-    const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
-    const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
-    const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
-    const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
-    const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
-
-    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
-    const int tileValidRow = stagingTileData.GetValidRow();
-    const int tileValidCol = stagingTileData.GetValidCol();
-
-    PTO_ASSERT(tileValidRow > 0, "TGET: tileValidRow must be greater than 0");
-    PTO_ASSERT(tileValidCol > 0, "TGET: tileValidCol must be greater than 0");
-
-    if (totalRows == 0 || gShape4 == 0) {
-        return;
-    }
-
-    // ---- Simple path: data fits in UB tile in both dimensions ----
-    if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
-        TLOAD(stagingTileData, srcGlobalData);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        TSTORE(dstGlobalData, stagingTileData);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        return;
-    }
-
-    // ---- 2D sliding chunked path ----
-    //
-    // Strategy (ND layout):
-    //   - Iterate over outer dimensions (dim0, dim1, dim2) explicitly.
-    //   - Within each (i0, i1, i2) block, slide a (tileValidRow × tileValidCol)
-    //     window over the (dim3 × dim4) plane.
-    //   - For each chunk, create a view: shape = (1, 1, 1, curRows, curCols),
-    //     preserving the original strides for correct GM addressing.
-    //   - TLOAD the chunk view into UB, then TSTORE from UB to local GM.
-
-    PTO_ASSERT(tileValidRow > 0, "TGET: tile ValidRow must be greater than 0 for chunked transfer");
-    PTO_ASSERT(tileValidCol > 0, "TGET: tile ValidCol must be greater than 0 for chunked transfer");
-
     constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
 
-    // Row validation: static ValidRow requires shape3 to be exactly divisible
-    if constexpr (!isDynamicRow) {
-        PTO_ASSERT(gShape3 % tileValidRow == 0,
-                   "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
-                   "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
-    }
-    // Column validation: static ValidCol requires shape4 to be exactly divisible
-    if constexpr (!isDynamicCol) {
-        PTO_ASSERT(gShape4 % tileValidCol == 0,
-                   "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
-                   "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
-    }
+    const int rmtStep[5] = {static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_0)),
+                            static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_1)),
+                            static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_2)),
+                            static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_3)),
+                            static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_4))};
+    const int locStep[5] = {static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_0)),
+                            static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_1)),
+                            static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_2)),
+                            static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_3)),
+                            static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_4))};
 
-    // Get strides for offset calculation
-    const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
-    const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
-
-    // View types with fully dynamic shape/stride for chunk GlobalTensors
     using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
     using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
     using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
-    DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
-    DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
+    DynStride remoteChunkStride(rmtStep[0], rmtStep[1], rmtStep[2], rmtStep[3], rmtStep[4]);
+    DynStride localChunkStride(locStep[0], locStep[1], locStep[2], locStep[3], locStep[4]);
 
-    // 2D sliding: iterate outer dims, then chunk rows (dim3) and columns (dim4)
     for (int i0 = 0; i0 < gShape0; ++i0) {
         for (int i1 = 0; i1 < gShape1; ++i1) {
             for (int i2 = 0; i2 < gShape2; ++i2) {
-                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
-                                  static_cast<int64_t>(i2) * srcStride2;
-                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
-                                  static_cast<int64_t>(i2) * dstStride2;
-
-                for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
-                    int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
-
-                    if constexpr (isDynamicRow) {
-                        stagingTileData.RowMaskInternal = currentRows;
-                    }
-
-                    for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
-                        int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
-
-                        if constexpr (isDynamicCol) {
-                            stagingTileData.ColMaskInternal = currentCols;
-                        }
-
-                        // Compute element offsets
-                        int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
-                                            static_cast<int64_t>(colOff) * srcStride4;
-                        int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
-                                            static_cast<int64_t>(colOff) * dstStride4;
-
-                        // Create chunk views with adjusted shape
-                        DynShape chunkShape(1, 1, 1, currentRows, currentCols);
-
-                        SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
-                        DstViewT dstView(dstGlobalData.data() + dstOffset, chunkShape, dstChunkStride);
-
-                        // Transfer: remote GM → UB → local GM
-                        TLOAD(stagingTileData, srcView);
-                        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-                        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-                        TSTORE(dstView, stagingTileData);
-                        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-                        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                int64_t rmtBase = static_cast<int64_t>(i0) * rmtStep[0] + static_cast<int64_t>(i1) * rmtStep[1] +
+                                  static_cast<int64_t>(i2) * rmtStep[2];
+                int64_t locBase = static_cast<int64_t>(i0) * locStep[0] + static_cast<int64_t>(i1) * locStep[1] +
+                                  static_cast<int64_t>(i2) * locStep[2];
+                for (int rowIdx = 0; rowIdx < gShape3; rowIdx += tileValidRow) {
+                    int chunkRows = (rowIdx + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowIdx);
+                    if constexpr (isDynamicRow)
+                        stagingTileData.RowMaskInternal = chunkRows;
+                    for (int colIdx = 0; colIdx < gShape4; colIdx += tileValidCol) {
+                        int chunkCols = (colIdx + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colIdx);
+                        if constexpr (isDynamicCol)
+                            stagingTileData.ColMaskInternal = chunkCols;
+                        int64_t remoteOff = rmtBase + static_cast<int64_t>(rowIdx) * rmtStep[3] +
+                                            static_cast<int64_t>(colIdx) * rmtStep[4];
+                        int64_t localOff = locBase + static_cast<int64_t>(rowIdx) * locStep[3] +
+                                           static_cast<int64_t>(colIdx) * locStep[4];
+                        DynShape chunkShape(1, 1, 1, chunkRows, chunkCols);
+                        SrcViewT srcView(srcGlobalData.data() + remoteOff, chunkShape, remoteChunkStride);
+                        DstViewT dstView(dstGlobalData.data() + localOff, chunkShape, localChunkStride);
+                        TgetTransferOnce<TileData, DstViewT, SrcViewT>(dstView, srcView, stagingTileData);
                     }
                 }
             }
@@ -178,17 +102,200 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
 }
 
 // ============================================================================
+// TGET_IMPL: Remote read operation implementation
+//
+// Data flow: srcGlobalData (remote GM) → stagingTileData (UB) → dstGlobalData (local GM)
+//
+// Chunked transfer follows the same 2D sliding strategy as TPUT_IMPL
+// (see TPut.hpp): outer dims iterated explicitly, DIM_3/DIM_4 split into
+// tile-sized chunks. Static ValidRow/ValidCol require divisibility;
+// use DYNAMIC for partial chunk support.
+// ============================================================================
+
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &stagingTileData)
+{
+    using T = typename GlobalSrcData::RawDType;
+
+    static_assert(std::is_same_v<typename GlobalDstData::RawDType, T>, "TGET: src/dst element type mismatch");
+    static_assert(std::is_same_v<T, typename TileData::DType>,
+                  "TGET: TileData element type must match GlobalData element type");
+    constexpr bool layoutMatched = (GlobalSrcData::layout == GlobalDstData::layout);
+    static_assert(layoutMatched, "TGET: src/dst layout mismatch");
+
+    const int remoteDims[5] = {static_cast<int>(srcGlobalData.GetShape(GlobalTensorDim::DIM_0)),
+                               static_cast<int>(srcGlobalData.GetShape(GlobalTensorDim::DIM_1)),
+                               static_cast<int>(srcGlobalData.GetShape(GlobalTensorDim::DIM_2)),
+                               static_cast<int>(srcGlobalData.GetShape(GlobalTensorDim::DIM_3)),
+                               static_cast<int>(srcGlobalData.GetShape(GlobalTensorDim::DIM_4))};
+
+    const int64_t totalRemoteRows = static_cast<int64_t>(remoteDims[0]) * remoteDims[1] * remoteDims[2] * remoteDims[3];
+    const int singleTileRows = stagingTileData.GetValidRow();
+    const int singleTileCols = stagingTileData.GetValidCol();
+
+    PTO_ASSERT(singleTileRows > 0, "TGET: tileValidRow must be greater than 0");
+    PTO_ASSERT(singleTileCols > 0, "TGET: tileValidCol must be greater than 0");
+
+    if (totalRemoteRows == 0 || remoteDims[4] == 0) {
+        return;
+    }
+
+    // Simple path: data fits in UB tile in both dimensions
+    if (totalRemoteRows <= singleTileRows && remoteDims[4] <= singleTileCols) {
+        TgetTransferOnce<TileData, GlobalDstData, GlobalSrcData>(dstGlobalData, srcGlobalData, stagingTileData);
+        return;
+    }
+
+    // 2D sliding chunked path
+    PTO_ASSERT(singleTileRows > 0, "TGET: tile ValidRow must be greater than 0 for chunked transfer");
+    PTO_ASSERT(singleTileCols > 0, "TGET: tile ValidCol must be greater than 0 for chunked transfer");
+
+    constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+    constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+
+    if constexpr (!isDynamicRow) {
+        PTO_ASSERT(remoteDims[3] % singleTileRows == 0,
+                   "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
+                   "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
+    }
+    if constexpr (!isDynamicCol) {
+        PTO_ASSERT(remoteDims[4] % singleTileCols == 0,
+                   "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
+                   "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
+    }
+
+    TgetChunkedSingle<GlobalDstData, GlobalSrcData, TileData>(
+        dstGlobalData, srcGlobalData, stagingTileData, remoteDims[0], remoteDims[1], remoteDims[2], remoteDims[3],
+        remoteDims[4], singleTileRows, singleTileCols);
+}
+
+// Process one chunk in the ping-pong pipeline: overlap TSTORE of previous chunk with TLOAD of current chunk
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData, typename StrideT>
+PTO_INTERNAL void TgetPingPongProcessChunk(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                           TileData &pingTile, TileData &pongTile, TgetPingPongState &pp,
+                                           int64_t remoteOff, int64_t localOff, int chunkRows, int chunkCols,
+                                           const StrideT &remoteChunkStride, const StrideT &localChunkStride)
+{
+    using DType = typename GlobalSrcData::RawDType;
+    constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
+    constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
+    using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+    using SrcViewT = GlobalTensor<DType, DynShape, StrideT, GlobalSrcData::layout>;
+    using DstViewT = GlobalTensor<DType, DynShape, StrideT, GlobalDstData::layout>;
+
+    TileData &loadTile = pp.usePing ? pingTile : pongTile;
+    event_t curEvent = pp.usePing ? EVENT_ID0 : EVENT_ID1;
+    if constexpr (isDynamicRow)
+        loadTile.RowMaskInternal = chunkRows;
+    if constexpr (isDynamicCol)
+        loadTile.ColMaskInternal = chunkCols;
+
+    DynShape chunkShape(1, 1, 1, chunkRows, chunkCols);
+    SrcViewT srcView(srcGlobalData.data() + remoteOff, chunkShape, remoteChunkStride);
+
+    if (pp.hasPending) {
+        TileData &storeTile = pp.usePing ? pongTile : pingTile;
+        event_t prevEvent = pp.usePing ? EVENT_ID1 : EVENT_ID0;
+        wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
+        DynShape pendShape(1, 1, 1, pp.pendingRows, pp.pendingCols);
+        DstViewT pendView(dstGlobalData.data() + pp.pendingDstOffset, pendShape, localChunkStride);
+        TSTORE(pendView, storeTile);
+        TLOAD(loadTile, srcView);
+        set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
+        set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
+        wait_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
+    } else {
+        TLOAD(loadTile, srcView);
+        set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
+    }
+
+    pp.pendingDstOffset = localOff;
+    pp.pendingRows = chunkRows;
+    pp.pendingCols = chunkCols;
+    pp.hasPending = true;
+    pp.usePing = !pp.usePing;
+}
+
+// Flush the last pending TSTORE in the ping-pong pipeline
+template <typename GlobalDstData, typename TileData, typename StrideT>
+PTO_INTERNAL void TgetPingPongFlush(GlobalDstData &dstGlobalData, TileData &pingTile, TileData &pongTile,
+                                    TgetPingPongState &pp, const StrideT &localChunkStride)
+{
+    if (!pp.hasPending)
+        return;
+
+    using DType = typename GlobalDstData::RawDType;
+    using ChunkShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
+    using DstView = GlobalTensor<DType, ChunkShape, StrideT, GlobalDstData::layout>;
+
+    TileData &finalTile = pp.usePing ? pongTile : pingTile;
+    event_t finalEvent = pp.usePing ? EVENT_ID1 : EVENT_ID0;
+    wait_flag(PIPE_MTE2, PIPE_MTE3, finalEvent);
+    ChunkShape finalShape(1, 1, 1, pp.pendingRows, pp.pendingCols);
+    DstView finalView(dstGlobalData.data() + pp.pendingDstOffset, finalShape, localChunkStride);
+    TSTORE(finalView, finalTile);
+    set_flag(PIPE_MTE3, PIPE_MTE2, finalEvent);
+    wait_flag(PIPE_MTE3, PIPE_MTE2, finalEvent);
+}
+
+// 2D sliding chunked transfer with ping-pong double buffering
+// See TputChunkedPingPong in TPut.hpp for detailed pipeline overlap analysis.
+template <typename GlobalDstData, typename GlobalSrcData, typename TileData>
+PTO_INTERNAL void TgetChunkedPingPong(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData, TileData &pingTile,
+                                      TileData &pongTile, int gShape0, int gShape1, int gShape2, int gShape3,
+                                      int gShape4, int tileValidRow, int tileValidCol)
+{
+    const int remoteStep[5] = {static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_0)),
+                               static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_1)),
+                               static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_2)),
+                               static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_3)),
+                               static_cast<int>(srcGlobalData.GetStride(GlobalTensorDim::DIM_4))};
+    const int localStep[5] = {static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_0)),
+                              static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_1)),
+                              static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_2)),
+                              static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_3)),
+                              static_cast<int>(dstGlobalData.GetStride(GlobalTensorDim::DIM_4))};
+
+    using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    DynStride remoteChunkStride(remoteStep[0], remoteStep[1], remoteStep[2], remoteStep[3], remoteStep[4]);
+    DynStride localChunkStride(localStep[0], localStep[1], localStep[2], localStep[3], localStep[4]);
+
+    TgetPingPongState pp;
+
+    for (int i0 = 0; i0 < gShape0; ++i0) {
+        for (int i1 = 0; i1 < gShape1; ++i1) {
+            for (int i2 = 0; i2 < gShape2; ++i2) {
+                int64_t remoteBase = static_cast<int64_t>(i0) * remoteStep[0] +
+                                     static_cast<int64_t>(i1) * remoteStep[1] +
+                                     static_cast<int64_t>(i2) * remoteStep[2];
+                int64_t localBase = static_cast<int64_t>(i0) * localStep[0] + static_cast<int64_t>(i1) * localStep[1] +
+                                    static_cast<int64_t>(i2) * localStep[2];
+                for (int rowIdx = 0; rowIdx < gShape3; rowIdx += tileValidRow) {
+                    int chunkRows = (rowIdx + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowIdx);
+                    for (int colIdx = 0; colIdx < gShape4; colIdx += tileValidCol) {
+                        int chunkCols = (colIdx + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colIdx);
+                        int64_t remoteOff = remoteBase + static_cast<int64_t>(rowIdx) * remoteStep[3] +
+                                            static_cast<int64_t>(colIdx) * remoteStep[4];
+                        int64_t localOff = localBase + static_cast<int64_t>(rowIdx) * localStep[3] +
+                                           static_cast<int64_t>(colIdx) * localStep[4];
+                        TgetPingPongProcessChunk<GlobalDstData, GlobalSrcData, TileData>(
+                            dstGlobalData, srcGlobalData, pingTile, pongTile, pp, remoteOff, localOff, chunkRows,
+                            chunkCols, remoteChunkStride, localChunkStride);
+                    }
+                }
+            }
+        }
+    }
+
+    TgetPingPongFlush<GlobalDstData, TileData>(dstGlobalData, pingTile, pongTile, pp, localChunkStride);
+}
+
+// ============================================================================
 // TGET_IMPL (ping-pong): Remote read with double buffering
 //
-// Uses two staging tiles (pingTile, pongTile) to overlap TLOAD (MTE2) and
-// TSTORE (MTE3) for adjacent chunks, effectively hiding one DMA transfer
-// behind the other.
-//
-// Timeline without ping-pong:
-//   [TLOAD chunk0] -> [TSTORE chunk0] -> [TLOAD chunk1] -> [TSTORE chunk1] -> ...
-//
-// Timeline with ping-pong (overlap TSTORE[i] with TLOAD[i+1]):
-//   [TLOAD chunk0] -> [TSTORE chunk0 | TLOAD chunk1] -> [TSTORE chunk1 | TLOAD chunk2] -> ...
+// Same ping-pong pipeline as TPUT_IMPL (see TPut.hpp for detailed timeline
+// and synchronization analysis), but reads from remote GM to local GM
+// without atomic operation support.
 //
 // Requirements:
 //   - pingTile and pongTile must have the same type and dimensions.
@@ -206,156 +313,47 @@ PTO_INTERNAL void TGET_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlob
     static_assert(std::is_same_v<T, typename TileData::DType>,
                   "TGET: TileData element type must match GlobalData element type");
 
-    const int gShape0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
-    const int gShape1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
-    const int gShape2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
-    const int gShape3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
-    const int gShape4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
+    const int remoteDim0 = srcGlobalData.GetShape(GlobalTensorDim::DIM_0);
+    const int remoteDim1 = srcGlobalData.GetShape(GlobalTensorDim::DIM_1);
+    const int remoteDim2 = srcGlobalData.GetShape(GlobalTensorDim::DIM_2);
+    const int remoteDim3 = srcGlobalData.GetShape(GlobalTensorDim::DIM_3);
+    const int remoteDim4 = srcGlobalData.GetShape(GlobalTensorDim::DIM_4);
 
-    const int64_t totalRows = static_cast<int64_t>(gShape0) * gShape1 * gShape2 * gShape3;
-    const int tileValidRow = pingTile.GetValidRow();
-    const int tileValidCol = pingTile.GetValidCol();
+    const int64_t totalRemoteRows = static_cast<int64_t>(remoteDim0) * remoteDim1 * remoteDim2 * remoteDim3;
+    const int pingRows = pingTile.GetValidRow();
+    const int pingCols = pingTile.GetValidCol();
 
-    PTO_ASSERT(tileValidRow > 0, "TGET: tileValidRow must be greater than 0");
-    PTO_ASSERT(tileValidCol > 0, "TGET: tileValidCol must be greater than 0");
+    PTO_ASSERT(pingRows > 0, "TGET: tileValidRow must be greater than 0");
+    PTO_ASSERT(pingCols > 0, "TGET: tileValidCol must be greater than 0");
 
-    if (totalRows == 0 || gShape4 == 0) {
+    if (totalRemoteRows == 0 || remoteDim4 == 0) {
         return;
     }
 
-    // ---- Simple path: single chunk, no ping-pong benefit ----
-    if (totalRows <= tileValidRow && gShape4 <= tileValidCol) {
-        TLOAD(pingTile, srcGlobalData);
-        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        TSTORE(dstGlobalData, pingTile);
-        set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+    // Simple path: single chunk, no ping-pong benefit
+    if (totalRemoteRows <= pingRows && remoteDim4 <= pingCols) {
+        TgetTransferOnce<TileData, GlobalDstData, GlobalSrcData>(dstGlobalData, srcGlobalData, pingTile);
         return;
     }
 
-    // ---- 2D sliding chunked path with ping-pong double buffering ----
+    // 2D sliding chunked path with ping-pong double buffering
     constexpr bool isDynamicRow = (TileData::ValidRow == DYNAMIC);
     constexpr bool isDynamicCol = (TileData::ValidCol == DYNAMIC);
 
     if constexpr (!isDynamicRow) {
-        PTO_ASSERT(gShape3 % tileValidRow == 0,
+        PTO_ASSERT(remoteDim3 % pingRows == 0,
                    "TGET chunked: shape3 must be divisible by tile ValidRow when ValidRow is static. "
                    "Use a Tile with DYNAMIC ValidRow for partial row chunk support.");
     }
     if constexpr (!isDynamicCol) {
-        PTO_ASSERT(gShape4 % tileValidCol == 0,
+        PTO_ASSERT(remoteDim4 % pingCols == 0,
                    "TGET chunked: shape4 must be divisible by tile ValidCol when ValidCol is static. "
                    "Use a Tile with DYNAMIC ValidCol for partial column chunk support.");
     }
 
-    const int srcStride0 = srcGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int srcStride1 = srcGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int srcStride2 = srcGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int srcStride3 = srcGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int srcStride4 = srcGlobalData.GetStride(GlobalTensorDim::DIM_4);
-    const int dstStride0 = dstGlobalData.GetStride(GlobalTensorDim::DIM_0);
-    const int dstStride1 = dstGlobalData.GetStride(GlobalTensorDim::DIM_1);
-    const int dstStride2 = dstGlobalData.GetStride(GlobalTensorDim::DIM_2);
-    const int dstStride3 = dstGlobalData.GetStride(GlobalTensorDim::DIM_3);
-    const int dstStride4 = dstGlobalData.GetStride(GlobalTensorDim::DIM_4);
-
-    using DynShape = Shape<1, 1, 1, DYNAMIC, DYNAMIC>;
-    using DynStride = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
-    using SrcViewT = GlobalTensor<T, DynShape, DynStride, GlobalSrcData::layout>;
-    using DstViewT = GlobalTensor<T, DynShape, DynStride, GlobalDstData::layout>;
-
-    // Precompute strides (identical for all chunk views)
-    DynStride srcChunkStride(srcStride0, srcStride1, srcStride2, srcStride3, srcStride4);
-    DynStride dstChunkStride(dstStride0, dstStride1, dstStride2, dstStride3, dstStride4);
-
-    // Ping-pong state (same as TPUT_IMPL ping-pong)
-    // See TPUT_IMPL comments for detailed pipeline analysis.
-    bool usePing = true;
-    bool hasPending = false;
-    int64_t pendingDstOffset = 0;
-    int pendingRows = 0;
-    int pendingCols = 0;
-
-    for (int i0 = 0; i0 < gShape0; ++i0) {
-        for (int i1 = 0; i1 < gShape1; ++i1) {
-            for (int i2 = 0; i2 < gShape2; ++i2) {
-                int64_t srcBase = static_cast<int64_t>(i0) * srcStride0 + static_cast<int64_t>(i1) * srcStride1 +
-                                  static_cast<int64_t>(i2) * srcStride2;
-                int64_t dstBase = static_cast<int64_t>(i0) * dstStride0 + static_cast<int64_t>(i1) * dstStride1 +
-                                  static_cast<int64_t>(i2) * dstStride2;
-
-                for (int rowOff = 0; rowOff < gShape3; rowOff += tileValidRow) {
-                    int currentRows = (rowOff + tileValidRow <= gShape3) ? tileValidRow : (gShape3 - rowOff);
-
-                    for (int colOff = 0; colOff < gShape4; colOff += tileValidCol) {
-                        int currentCols = (colOff + tileValidCol <= gShape4) ? tileValidCol : (gShape4 - colOff);
-
-                        int64_t srcOffset = srcBase + static_cast<int64_t>(rowOff) * srcStride3 +
-                                            static_cast<int64_t>(colOff) * srcStride4;
-                        int64_t dstOffset = dstBase + static_cast<int64_t>(rowOff) * dstStride3 +
-                                            static_cast<int64_t>(colOff) * dstStride4;
-
-                        TileData &loadTile = usePing ? pingTile : pongTile;
-                        event_t curEvent = usePing ? EVENT_ID0 : EVENT_ID1;
-
-                        if constexpr (isDynamicRow)
-                            loadTile.RowMaskInternal = currentRows;
-                        if constexpr (isDynamicCol)
-                            loadTile.ColMaskInternal = currentCols;
-
-                        DynShape chunkShape(1, 1, 1, currentRows, currentCols);
-                        SrcViewT srcView(srcGlobalData.data() + srcOffset, chunkShape, srcChunkStride);
-
-                        if (hasPending) {
-                            TileData &storeTile = usePing ? pongTile : pingTile;
-                            event_t prevEvent = usePing ? EVENT_ID1 : EVENT_ID0;
-
-                            // Wait for previous TLOAD to finish (data in storeTile is ready)
-                            wait_flag(PIPE_MTE2, PIPE_MTE3, prevEvent);
-
-                            DynShape pendShape(1, 1, 1, pendingRows, pendingCols);
-                            DstViewT pendView(dstGlobalData.data() + pendingDstOffset, pendShape, dstChunkStride);
-
-                            // Issue TSTORE + TLOAD concurrently (MTE3 and MTE2 in parallel)
-                            TSTORE(pendView, storeTile);
-                            TLOAD(loadTile, srcView);
-
-                            set_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
-                            set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
-
-                            // Ensure storeTile's UB has been fully read by MTE3
-                            wait_flag(PIPE_MTE3, PIPE_MTE2, prevEvent);
-                        } else {
-                            TLOAD(loadTile, srcView);
-                            set_flag(PIPE_MTE2, PIPE_MTE3, curEvent);
-                        }
-
-                        pendingDstOffset = dstOffset;
-                        pendingRows = currentRows;
-                        pendingCols = currentCols;
-                        hasPending = true;
-                        usePing = !usePing;
-                    }
-                }
-            }
-        }
-    }
-
-    // Epilogue: drain the last pending TSTORE
-    if (hasPending) {
-        TileData &lastTile = usePing ? pongTile : pingTile;
-        event_t lastEvent = usePing ? EVENT_ID1 : EVENT_ID0;
-
-        wait_flag(PIPE_MTE2, PIPE_MTE3, lastEvent);
-
-        DynShape lastShape(1, 1, 1, pendingRows, pendingCols);
-        DstViewT lastView(dstGlobalData.data() + pendingDstOffset, lastShape, dstChunkStride);
-
-        TSTORE(lastView, lastTile);
-        set_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
-        wait_flag(PIPE_MTE3, PIPE_MTE2, lastEvent);
-    }
+    TgetChunkedPingPong<GlobalDstData, GlobalSrcData, TileData>(dstGlobalData, srcGlobalData, pingTile, pongTile,
+                                                                remoteDim0, remoteDim1, remoteDim2, remoteDim3,
+                                                                remoteDim4, pingRows, pingCols);
 }
 
 } // namespace comm

@@ -52,6 +52,7 @@ struct Padding<uint32_t> {
     static constexpr Type Max = (Type)0xffffffffUL;
 };
 
+#ifndef PTO_NPU_ARCH_KIRIN9030
 template <>
 struct Padding<bfloat16_t> {
     using Type = uint16_t;
@@ -60,6 +61,7 @@ struct Padding<bfloat16_t> {
     static constexpr Type Min = (Type)0xff80UL;
     static constexpr Type Max = (Type)0x7f80UL;
 };
+#endif
 
 template <>
 struct Padding<half> {
@@ -126,14 +128,15 @@ PTO_INTERNAL void TPadOp(__ubuf__ T *dstPtr, uint64_t DstvalidRow, uint64_t Dstv
     mem_bar(VST_VLD);
 }
 
-template <typename Op, typename TileData, unsigned elementsPerRepeat, unsigned src0Stride, unsigned src1Stride,
-          unsigned dstStride>
-__tf__ PTO_INTERNAL void TCopyPadOp(typename TileData::TileDType __out__ dst, typename TileData::TileDType __in__ src0,
-                                    typename TileData::TileDType __in__ src1, uint64_t Src0validRow,
+template <typename Op, typename DstTileData, typename Src0TileData, typename Src1TileData, unsigned elementsPerRepeat,
+          unsigned src0Stride, unsigned src1Stride, unsigned dstStride>
+__tf__ PTO_INTERNAL void TCopyPadOp(typename DstTileData::TileDType __out__ dst,
+                                    typename Src0TileData::TileDType __in__ src0,
+                                    typename Src1TileData::TileDType __in__ src1, uint64_t Src0validRow,
                                     uint64_t Src0validCol, uint64_t Src1validRow, uint64_t Src1validCol,
                                     uint64_t DstvalidRow, uint64_t DstvalidCol)
 {
-    using T = typename TileData::DType;
+    using T = typename DstTileData::DType;
     __ubuf__ T *src0Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src0);
     __ubuf__ T *src1Ptr = (__ubuf__ T *)__cce_get_tile_ptr(src1);
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
@@ -166,7 +169,7 @@ __tf__ PTO_INTERNAL void TCopyPadOp(typename TileData::TileDType __out__ dst, ty
 
         mem_bar(VST_VLD);
 
-        // MAX (between the dst and source 1)
+        // MAX (between dst and source 1)
         repeatTimes = CeilDivision(Src1validCol, elementsPerRepeat);
         for (uint16_t i = 0; i < (uint16_t)Src1validRow; ++i) {
             uint32_t sreg = (uint32_t)(Src1validCol);
@@ -220,9 +223,9 @@ PTO_INTERNAL void TPartMasterImpl(DstTileData &dst, Src0TileData &src0, Src1Tile
                         (src0ValidRow <= dstValidRow && src0ValidCol <= dstValidCol);
 
     if (condDstgeSrc) { // src0 <= dst && src1 <= dst
-        TCopyPadOp<Op, DstTileData, elementsPerRepeat, Src0RowStride, Src1RowStride, DstRowStride>(
-            dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol, src1ValidRow, src1ValidCol, dstValidRow,
-            dstValidCol);
+        TCopyPadOp<Op, DstTileData, Src0TileData, Src1TileData, elementsPerRepeat, Src0RowStride, Src1RowStride,
+                   DstRowStride>(dst.data(), src0.data(), src1.data(), src0ValidRow, src0ValidCol, src1ValidRow,
+                                 src1ValidCol, dstValidRow, dstValidCol);
     } // other conditions not supported
 }
 

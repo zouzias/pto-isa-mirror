@@ -16,7 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/npu/a5/custom/TSyncCVID.hpp>
 #include <pto/npu/a5/custom/TSync_Custom.hpp>
 #include <pto/npu/a5/TMov.hpp>
-#include <pto/npu/a5/custom/TInsertCustom.hpp>
+
 #define UF_ENABLE 0
 #include "pto_macro_dn_matmul.hpp"
 #include "pto_macro_fa_dn_softmax.hpp"
@@ -106,7 +106,6 @@ enum CoreEvtID : uint32_t
     PV_EVENT_ID1,
 };
 
-#define VEC_CORES 2
 // -----------------------------------------------------------------------------
 // Performance tuning knobs (high-level)
 //
@@ -771,8 +770,8 @@ AICORE inline void compute_p(int tile_id, int row_slice, __gm__ float *qk_tile_f
             set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-            uint64_t col_offset = Vec_S0 * static_cast<size_t>(get_subblockid());
-            TINSERT_CUSTOM<TInsertMode::NZ_PLUS_1>(pMatTile, nzConvBuffer, static_cast<uint32_t>(0), col_offset);
+            uint16_t col_offset = static_cast<uint16_t>(Vec_S0 * static_cast<size_t>(get_subblockid()));
+            TINSERT<TInsertMode::NZ_PLUS_1>(pMatTile, nzConvBuffer, static_cast<uint16_t>(0), col_offset);
         }
         (void)global_sum_out;
         (void)exp_max_out;
@@ -1009,8 +1008,8 @@ __global__ AICORE void runTFA(__gm__ uint64_t *ffts_addr, __gm__ half *q, __gm__
     using ReduceTileF_T = Tile<TileType::Vec, float, 1, SubblockRows, BLayout::RowMajor, 1, SubblockRows>;
 
     constexpr uint32_t NzBufRows = Cube_S1 + 1;
-    using TileDataH_NZ_T =
-        Tile<TileType::Vec, half, NzBufRows, Vec_S0, BLayout::ColMajor, Cube_S1, Vec_S0, SLayout::RowMajor>;
+    using TileDataH_NZ_T = Tile<TileType::Vec, half, NzBufRows, Vec_S0, BLayout::ColMajor, Cube_S1, Vec_S0,
+                                SLayout::RowMajor, 512, PadValue::Null, CompactMode::RowPlusOne>;
 
     TileDataF_T qkVecTile[srcVecTNBuffers];
     ReduceTileF_T m1_local_max;

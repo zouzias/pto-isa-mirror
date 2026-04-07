@@ -11,10 +11,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 #include <limits>
+#include <bit>
 #include <algorithm>
 
 using namespace std;
 using namespace pto;
+
+// Custom pad value constant for -1.0f (bit pattern 0xBF800000)
+constexpr PadValue PadCustomNeg1 = PadValueCustom(-1.0f);
+constexpr PadValue PadCustomNeg1_Half = PadValueCustom16(0xBC00); // fp16 -1.0
 
 #define LOGSIZE 128
 #define PRINTLOG 4
@@ -202,6 +207,29 @@ void launchTFILLPAD_9(uint8_t *out, uint8_t *src, int gShape0, int gShape1, int 
         (int8_t *)out, (int8_t *)src, gShape0, gShape1, gShape2, gRows, gCols);
 }
 
+// Test case 10: PadCustomNeg1 - custom pad value (float)
+void launchTFILLPAD_10(uint8_t *out, uint8_t *src, int gShape0, int gShape1, int gShape2, int gRows, int gCols)
+{
+    runTFILLPAD<float, 1, 1, 1, 128, 64, 128, 128, 1, PadValue::Null, PadCustomNeg1>(
+        (float *)out, (float *)src, gShape0, gShape1, gShape2, gRows, gCols);
+}
+
+#ifdef CPU_SIM_BFLOAT_ENABLED
+// Test case 11: PadCustomNeg1 - custom pad value (bfloat16)
+void launchTFILLPAD_11(uint8_t *out, uint8_t *src, int gShape0, int gShape1, int gShape2, int gRows, int gCols)
+{
+    runTFILLPAD<bfloat16_t, 1, 1, 1, 128, 64, 128, 128, 1, PadValue::Null, PadCustomNeg1>(
+        (bfloat16_t *)out, (bfloat16_t *)src, gShape0, gShape1, gShape2, gRows, gCols);
+}
+#endif
+
+// Test case 12: PadCustomNeg1_Half - custom pad value (half/fp16)
+void launchTFILLPAD_12(uint8_t *out, uint8_t *src, int gShape0, int gShape1, int gShape2, int gRows, int gCols)
+{
+    runTFILLPAD<half, 1, 1, 1, 128, 64, 128, 128, 1, PadValue::Null, PadCustomNeg1_Half>(
+        (half *)out, (half *)src, gShape0, gShape1, gShape2, gRows, gCols);
+}
+
 template <int32_t testKey>
 void launchTFILLPAD(uint8_t *out, uint8_t *src, void *stream)
 {
@@ -223,6 +251,14 @@ void launchTFILLPAD(uint8_t *out, uint8_t *src, void *stream)
         launchTFILLPAD_8(out, src, 1, 1, 1, 260, 7);
     } else if constexpr (testKey == 9) {
         launchTFILLPAD_9(out, src, 1, 1, 1, 260, 7);
+    } else if constexpr (testKey == 10) {
+        launchTFILLPAD_10(out, src, 1, 1, 1, 128, 64);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+    } else if constexpr (testKey == 11) {
+        launchTFILLPAD_11(out, src, 1, 1, 1, 128, 64);
+#endif
+    } else if constexpr (testKey == 12) {
+        launchTFILLPAD_12(out, src, 1, 1, 1, 128, 64);
     }
 }
 
@@ -239,7 +275,23 @@ int get_input_golden_case(uint8_t *input, uint8_t *golden)
     int out_byteSize = out_capacity * sizeof(U);
 
     U u_padVal[1] = {0};
-    if (std::numeric_limits<U>::has_infinity) {
+    if constexpr (isCustomPadValue(PadVal_)) {
+        // Custom pad value - extract bits and convert
+        constexpr uint32_t bits = getCustomPadBits(PadVal_);
+        if constexpr (std::is_same_v<U, float>) {
+            u_padVal[0] = std::bit_cast<U>(bits);
+        } else if constexpr (sizeof(U) == 2) {
+            // fp16 and bf16 both use lower 16 bits
+            // (PadValueCustom stores native type bits directly)
+            uint16_t u16_bits = static_cast<uint16_t>(bits & 0xFFFF);
+            u_padVal[0] = std::bit_cast<U>(u16_bits);
+        } else if constexpr (sizeof(U) == 1) {
+            uint8_t u8_bits = static_cast<uint8_t>(bits & 0xFF);
+            u_padVal[0] = std::bit_cast<U>(u8_bits);
+        } else {
+            u_padVal[0] = std::bit_cast<U>(bits);
+        }
+    } else if (std::numeric_limits<U>::has_infinity) {
         if (PadVal_ == PadValue::Max)
             u_padVal[0] = std::numeric_limits<U>::infinity();
         else if (PadVal_ == PadValue::Min)
@@ -290,6 +342,14 @@ int get_input_golden(uint8_t *input, uint8_t *golden)
         return get_input_golden_case<uint16_t, 1, 1, 1, 259, 7, 260, 32, PadValue::Max>(input, golden);
     } else if constexpr (testKey == 9) {
         return get_input_golden_case<int8_t, 1, 1, 1, 259, 7, 260, 64, PadValue::Max>(input, golden);
+    } else if constexpr (testKey == 10) {
+        return get_input_golden_case<float, 1, 1, 1, 128, 64, 128, 128, PadCustomNeg1>(input, golden);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+    } else if constexpr (testKey == 11) {
+        return get_input_golden_case<bfloat16_t, 1, 1, 1, 128, 64, 128, 128, PadCustomNeg1>(input, golden);
+#endif
+    } else if constexpr (testKey == 12) {
+        return get_input_golden_case<half, 1, 1, 1, 128, 64, 128, 128, PadCustomNeg1_Half>(input, golden);
     }
     return 0;
 }
@@ -303,6 +363,11 @@ template void launchTFILLPAD<6>(uint8_t *out, uint8_t *src, void *stream);
 template void launchTFILLPAD<7>(uint8_t *out, uint8_t *src, void *stream);
 template void launchTFILLPAD<8>(uint8_t *out, uint8_t *src, void *stream);
 template void launchTFILLPAD<9>(uint8_t *out, uint8_t *src, void *stream);
+template void launchTFILLPAD<10>(uint8_t *out, uint8_t *src, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void launchTFILLPAD<11>(uint8_t *out, uint8_t *src, void *stream);
+#endif
+template void launchTFILLPAD<12>(uint8_t *out, uint8_t *src, void *stream);
 
 template int get_input_golden<1>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<2>(uint8_t *input, uint8_t *golden);
@@ -313,3 +378,8 @@ template int get_input_golden<6>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<7>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<8>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<9>(uint8_t *input, uint8_t *golden);
+template int get_input_golden<10>(uint8_t *input, uint8_t *golden);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template int get_input_golden<11>(uint8_t *input, uint8_t *golden);
+#endif
+template int get_input_golden<12>(uint8_t *input, uint8_t *golden);

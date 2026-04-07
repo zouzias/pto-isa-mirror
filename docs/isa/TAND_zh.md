@@ -42,13 +42,23 @@ pto.tand ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : 
 
 ```cpp
 template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TAND(TileData& dst, TileData& src0, TileData& src1, WaitEvents&... events);
+PTO_INST RecordEvent TAND(TileData &dst, TileData &src0, TileData &src1, WaitEvents &... events);
 ```
 
 ## 约束
 
-- 适用于整数元素类型。
-- 该操作在 `dst.GetValidRow()` / `dst.GetValidCol()` 上迭代。
+- **实现检查 (A2A3)**:
+    - 支持的元素类型为 1 字节或 2 字节整数类型。
+    - `dst`、`src0` 和 `src1` 必须使用相同的元素类型。
+    - `dst`、`src0` 和 `src1` 必须是行主序。
+    - 运行时：`src0.GetValidRow()/GetValidCol()` 和 `src1.GetValidRow()/GetValidCol()` 必须与 `dst` 一致。
+- **实现检查 (A5)**:
+    - 支持的元素类型为 1 字节、2 字节或 4 字节整数类型。
+    - `dst`、`src0` 和 `src1` 必须使用相同的元素类型。
+    - `dst`、`src0` 和 `src1` 必须是行主序。
+    - 运行时：`src0.GetValidRow()/GetValidCol()` 和 `src1.GetValidRow()/GetValidCol()` 必须与 `dst` 一致。
+- **有效区域**:
+    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
 
 ## 示例
 
@@ -87,7 +97,7 @@ void example() {
 
 ```text
 %dst = tand %src0, %src1 : !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tand ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 

@@ -16,7 +16,8 @@ import numpy as np
 np.random.seed(19)
 
 
-def gen_golden_data(case_name, m, k, n, input_type, output_type):
+def gen_golden_data(case_name, case_params):
+    m, k, n, input_type, output_type = case_params
     x1_gm = np.random.uniform(-2, 2, [m, k]).astype(input_type)
     x2_gm = np.random.uniform(-2, 2, [k, n]).astype(input_type)
     bias_gm = np.random.uniform(-1, 1, [m, n]).astype(output_type)
@@ -31,13 +32,23 @@ def gen_golden_data(case_name, m, k, n, input_type, output_type):
 
 if __name__ == "__main__":
     case_name_list = [
+        # TILE_UP_DOWN: split along rows (keys 1-4)
         "TPushPopCVTest.case1_half_single_tile",
         "TPushPopCVTest.case2_half_split_m",
         "TPushPopCVTest.case3_float_single_tile",
         "TPushPopCVTest.case4_half_multi_tile_wrapping",
+        # TILE_LEFT_RIGHT: split along columns (keys 5-8)
+        "TPushPopCVTest.case5_half_single_tile_left_right",
+        "TPushPopCVTest.case6_half_split_m_left_right",
+        "TPushPopCVTest.case7_float_single_tile_left_right",
+        "TPushPopCVTest.case8_half_multi_tile_wrapping_left_right",
     ]
 
     case_params_list = [
+        (16, 32, 32, np.float16, np.float32),
+        (32, 32, 32, np.float16, np.float32),
+        (16, 32, 32, np.float32, np.float32),
+        (64, 32, 32, np.float16, np.float32),
         (16, 32, 32, np.float16, np.float32),
         (32, 32, 32, np.float16, np.float32),
         (16, 32, 32, np.float32, np.float32),
@@ -49,6 +60,5 @@ if __name__ == "__main__":
             os.makedirs(case_name)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        m, k, n, input_type, output_type = case_params_list[i]
-        gen_golden_data(case_name, m, k, n, input_type, output_type)
+        gen_golden_data(case_name, case_params_list[i])
         os.chdir(original_dir)

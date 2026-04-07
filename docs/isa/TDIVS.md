@@ -37,14 +37,14 @@ Scalar/tile form:
 %dst = tdivs %scalar, %src : f32, !pto.tile<...>
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 %dst = pto.tdivs %scalar, %src : (dtype, !pto.tile<...>) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
@@ -55,31 +55,42 @@ pto.tdivs ins(%scalar, %src : dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_b
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TDIVS(TileData& dst, TileData& src0, typename TileData::DType scalar, WaitEvents&... events);
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename... WaitEvents>
+PTO_INST RecordEvent TDIVS(TileDataDst &dst, TileDataSrc &src0, typename TileDataSrc::DType scalar,
+                           WaitEvents &... events);
 
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TDIVS(TileData& dst, typename TileData::DType scalar, TileData& src0, WaitEvents&... events);
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename... WaitEvents>
+PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar, TileDataSrc &src0,
+                           WaitEvents &... events)
 ```
+
+`PrecisionType` has the following values available:
+
+* `DivAlgorithm::DEFAULT`: Normal algorithm, faster but with lower precision.
+* `DivAlgorithm::HIGH_PRECISION`: High precision algorithm, but slower.
 
 ## Constraints
 
 - **Implementation checks (A2A3)** (both overloads):
-  - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-  - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-  - Tile layout must be row-major (`TileData::isRowMajor`).
+    - `TileData::DType` must be one of: `int32_t`, `int`, `int16_t`, `half`, `float16_t`, `float`, `float32_t`.
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
 - **Implementation checks (A5)** (both overloads):
-  - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
-  - Tile location must be vector (`TileData::Loc == TileType::Vec`).
-  - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
-  - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
-  - Tile layout must be row-major (`TileData::isRowMajor`).
+    - `TileData::DType` must be one of: `uint8_t`, `int8_t`, `uint16_t`, `int16_t`, `uint32_t`, `int32_t`, `half`, `float`.
+    - Tile location must be vector (`TileData::Loc == TileType::Vec`).
+    - Static valid bounds: `TileData::ValidRow <= TileData::Rows` and `TileData::ValidCol <= TileData::Cols`.
+    - Runtime: `src0.GetValidRow() == dst.GetValidRow()` and `src0.GetValidCol() == dst.GetValidCol()`.
+    - Tile layout must be row-major (`TileData::isRowMajor`).
 - **Valid region**:
-  - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
 - **Division-by-zero**:
-  - Behavior is target-defined; on A5 the tile/scalar form maps to multiply-by-reciprocal and uses `1/0 -> +inf` for `scalar == 0`.
+    - Behavior is target-defined; on A5 the tile/scalar form maps to multiply-by-reciprocal and uses `1/0 -> +inf` for `scalar == 0`.
+- **High Precision Algorithm**
+    - Only available on A5, `PrecisionType` option is ignored on A3.
 
 ## Examples
 
@@ -94,6 +105,7 @@ void example_auto() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   TileT src, dst;
   TDIVS(dst, src, 2.0f);
+  TDIVS<DivAlgorithm::HIGH_PRECISION>(dst, src, 2.0f);
 }
 ```
 
@@ -110,6 +122,7 @@ void example_manual() {
   TASSIGN(src, 0x1000);
   TASSIGN(dst, 0x2000);
   TDIVS(dst, 2.0f, src);
+  TDIVS<DivAlgorithm::HIGH_PRECISION>(dst, 2.0f, src);
 }
 ```
 
@@ -136,7 +149,7 @@ void example_manual() {
 
 ```text
 %dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 

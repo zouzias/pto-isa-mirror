@@ -20,7 +20,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cmath>
 #include <sys/stat.h>
 #ifndef __CPU_SIM
+#ifndef __COSTMODEL
 #include "acl/acl.h"
+#endif
 #endif
 #include <pto/common/type.hpp>
 
@@ -142,7 +144,7 @@ void DoPrintHalfData(const aclFloat16 *data, size_t count, size_t elementsPerRow
     assert(elementsPerRow != 0);
     for (size_t i = 0; i < count; ++i) {
         std::cout << std::setw(5) << std::setprecision(6) <<
-#ifdef __CPU_SIM
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
             (float)data[i];
 #else
             aclFloat16ToFloat(data[i]);
@@ -220,7 +222,7 @@ bool ResultCmp(const std::vector<T> &outDataValExp, const T *outDataValAct, floa
     size_t errCount = 0;
 
     bool rst = true;
-    size_t eSize = outDataValExp.size() / sizeof(T);
+    size_t eSize = outDataValExp.size();
     for (size_t eIdx = 0; eIdx < eSize; eIdx++) {
         auto expVal = static_cast<float>(outDataValExp[eIdx]);
         auto actVal = static_cast<float>(outDataValAct[eIdx]);

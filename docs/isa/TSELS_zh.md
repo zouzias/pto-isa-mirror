@@ -6,7 +6,7 @@
 
 ## 简介
 
-使用标量 `selectMode` 在两个源 Tile 中选择一个（全局选择）。
+使用 mask tile 在源 Tile 和标量之间进行逐元素选择。
 
 ## 数学语义
 
@@ -15,8 +15,8 @@
 $$
 \mathrm{dst}_{i,j} =
 \begin{cases}
-\mathrm{src0}_{i,j} & \text{if } \mathrm{selectMode} = 1 \\
-\mathrm{src1}_{i,j} & \text{otherwise}
+\mathrm{src}_{i,j} & \text{if } \mathrm{mask}_{i,j}\ \text{为真} \\
+\mathrm{scalar} & \text{否则}
 \end{cases}
 $$
 
@@ -27,19 +27,19 @@ PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 同步形式：
 
 ```text
-%dst = tsels %src0, %src1, %selectMode : !pto.tile<...>
+%dst = tsels %mask, %src, %scalar : !pto.tile<...>
 ```
 
 ### AS Level 1（SSA）
 
 ```text
-%dst = pto.tsels %src0, %src1, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
+%dst = pto.tsels %mask, %src, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### AS Level 2（DPS）
 
 ```text
-pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+pto.tsels ins(%mask, %src, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 
 ## C++ 内建接口
@@ -47,25 +47,28 @@ pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dt
 声明于 `include/pto/common/pto_instr.hpp`：
 
 ```cpp
-template <typename TileData, typename... WaitEvents>
-PTO_INST RecordEvent TSELS(TileData& dst, TileData& src0, TileData& src1, uint8_t selectMode, WaitEvents&... events);
+template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TSELS(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, TileDataTmp &tmp, typename TileDataSrc::DType scalar, WaitEvents &... events);
 ```
 
 ## 约束
 
 - **实现检查 (A2A3)**:
-  - `TileData::DType` 必须是以下之一： `half`, `float16_t`, `float`, `float32_t`.
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - 静态有效边界： `TileData::ValidRow <= TileData::Rows`且`TileData::ValidCol <= TileData::Cols`.
-  - 运行时：实现期望 `src0/src1/dst` 具有匹配的有效行/列。
+    - `sizeof(TileDataDst::DType)` 必须是 `2` 或 `4` 字节。
+    - 支持的数据类型为 `half`、`float16_t`、`float` 和 `float32_t`。
+    - `dst` 和 `src` 必须使用相同的元素类型。
+    - `dst` 和 `src` 必须是行主序。
+    - 运行时：`src.GetValidRow()/GetValidCol()` 必须与 `dst.GetValidRow()/GetValidCol()` 一致。
 - **实现检查 (A5)**:
-  - `sizeof(TileData::DType)` 必须是 `1`、`2` 或 `4` 字节。
-  - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）。
-  - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
-  - 运行时：实现期望 `src0/src1/dst` 具有匹配的有效行/列。
-  - 填充行为取决于 `TileData::PadVal`（`Null`/`Zero` 与 `-INF/+INF` 模式）。
+    - `sizeof(TileDataDst::DType)` 可以是 `1`、`2` 或 `4` 字节。
+    - 支持的数据类型为 `int8_t`、`uint8_t`、`int16_t`、`uint16_t`、`int32_t`、`uint32_t`、`half` 和 `float`。
+    - `dst` 和 `src` 必须使用相同的元素类型。
+    - `dst`、`mask` 和 `src` 必须是行主序。
+    - 运行时：`src.GetValidRow()/GetValidCol()` 必须与 `dst.GetValidRow()/GetValidCol()` 一致。
 - **有效区域**:
-  - 实现使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为选择域。
+    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
+- **掩码编码**:
+    - 掩码 Tile 被解释为目标定义布局中的打包谓词位。
 
 ## 示例
 
@@ -77,9 +80,16 @@ PTO_INST RecordEvent TSELS(TileData& dst, TileData& src0, TileData& src1, uint8_
 using namespace pto;
 
 void example_auto() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT src0, src1, dst;
-  TSELS(dst, src0, src1, /*selectMode=*/1);
+  using TileDst = Tile<TileType::Vec, float, 16, 16>;
+  using TileSrc = Tile<TileType::Vec, float, 16, 16>;
+  using TileTmp = Tile<TileType::Vec, float, 16, 16>;
+  using TileMask = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
+  TileDst dst;
+  TileSrc src;
+  TileTmp tmp;
+  TileMask mask(16, 2);
+  float scalar = 0.0f;
+  TSELS(dst, mask, src, tmp, scalar);
 }
 ```
 
@@ -91,12 +101,20 @@ void example_auto() {
 using namespace pto;
 
 void example_manual() {
-  using TileT = Tile<TileType::Vec, float, 16, 16>;
-  TileT src0, src1, dst;
-  TASSIGN(src0, 0x1000);
-  TASSIGN(src1, 0x2000);
-  TASSIGN(dst,  0x3000);
-  TSELS(dst, src0, src1, /*selectMode=*/1);
+  using TileDst = Tile<TileType::Vec, float, 16, 16>;
+  using TileSrc = Tile<TileType::Vec, float, 16, 16>;
+  using TileTmp = Tile<TileType::Vec, float, 16, 16>;
+  using TileMask = Tile<TileType::Vec, uint8_t, 16, 32, BLayout::RowMajor, -1, -1>;
+  TileDst dst;
+  TileSrc src;
+  TileTmp tmp;
+  TileMask mask(16, 2);
+  float scalar = 0.0f;
+  TASSIGN(src, 0x1000);
+  TASSIGN(tmp, 0x2000);
+  TASSIGN(dst, 0x3000);
+  TASSIGN(mask, 0x4000);
+  TSELS(dst, mask, src, tmp, scalar);
 }
 ```
 
@@ -106,7 +124,7 @@ void example_manual() {
 
 ```text
 # 自动模式：由编译器/运行时负责资源放置与调度。
-%dst = pto.tsels %src0, %src1, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
+%dst = pto.tsels %mask, %src, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### 手动模式
@@ -116,14 +134,14 @@ void example_manual() {
 # 可选（当该指令包含 tile 操作数时）：
 # pto.tassign %arg0, @tile(0x1000)
 # pto.tassign %arg1, @tile(0x2000)
-%dst = pto.tsels %src0, %src1, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
+%dst = pto.tsels %mask, %src, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 ### PTO 汇编形式
 
 ```text
-%dst = tsels %src0, %src1, %selectMode : !pto.tile<...>
-# IR Level 2 (DPS)
-pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
+%dst = tsels %mask, %src, %scalar : !pto.tile<...>
+# AS Level 2 (DPS)
+pto.tsels ins(%mask, %src, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 

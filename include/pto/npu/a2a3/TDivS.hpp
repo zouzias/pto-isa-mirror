@@ -98,6 +98,15 @@ template <typename T>
 struct DivSOp {
     PTO_INTERNAL static void BinSInstr(__ubuf__ T *dst, __ubuf__ T *src0, T src1, uint8_t repeats)
     {
+        // fix inplace alias: dst == src
+        if (dst == src0) {
+            if constexpr (std::is_same<T, float>::value || std::is_same<T, half>::value) {
+                T inv = (T)((float)1 / (float)src1);
+                vmuls(dst, dst, inv, repeats, 1, 1, 8, 8);
+                return;
+            }
+        }
+
         if constexpr (std::is_same<T, int32_t>::value) {
             prepare_s32_data(dst, src0, src1, repeats, 8, 8);
             vdiv(reinterpret_cast<__ubuf__ float *>(dst), reinterpret_cast<__ubuf__ float *>(src0),
@@ -117,6 +126,15 @@ struct DivSOp {
     PTO_INTERNAL static void BinSInstr(__ubuf__ T *dst, __ubuf__ T *src0, T src1, uint8_t repeats,
                                        uint8_t dstRepeatStride, uint8_t srcRepeatStride)
     {
+        // fix inplace alias: dst == src
+        if (dst == src0) {
+            if constexpr (std::is_same<T, float>::value || std::is_same<T, half>::value) {
+                T inv = (T)((float)1 / (float)src1);
+                vmuls(dst, dst, inv, repeats, 1, 1, dstRepeatStride, dstRepeatStride);
+                return;
+            }
+        }
+
         if constexpr (std::is_same<T, int32_t>::value) {
             prepare_s32_data(dst, src0, src1, repeats, dstRepeatStride, srcRepeatStride);
             vdiv(reinterpret_cast<__ubuf__ float *>(dst), reinterpret_cast<__ubuf__ float *>(src0),
@@ -183,7 +201,7 @@ __tf__ PTO_INTERNAL void TDivS(typename TileDataDst::TileDType __out__ dstData,
     }
 }
 
-template <typename TileDataDst, typename TileDataSrc>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TDIVS_IMPL(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar)
 {
     using T = typename TileDataSrc::DType;
@@ -236,7 +254,7 @@ __tf__ PTO_INTERNAL void TSDiv(typename TileDataDst::TileDType __out__ dstData,
             dst, src, scalar, validRow, validCol);
     }
 }
-template <typename TileDataDst, typename TileDataSrc>
+template <auto PrecisionType = DivAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc>
 PTO_INTERNAL void TDIVS_IMPL(TileDataDst &dst, typename TileDataDst::DType scalar, TileDataSrc &src)
 {
     using T = typename TileDataSrc::DType;

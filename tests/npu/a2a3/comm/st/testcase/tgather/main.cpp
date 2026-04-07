@@ -19,7 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 // TGATHER Tests - Basic: Gather data from all ranks to root
 // ============================================================================
-TEST(TGather, FloatSmall)
+TEST(TGather, FloatSmall_4Ranks)
 {
     SKIP_IF_RANKS_LT(4);
     ASSERT_TRUE((RunGather<float, 256>(4, 4, 0, 0)));
@@ -87,7 +87,6 @@ TEST(TGatherPingPong, Float_256x64_tile32_2ranks)
     SKIP_IF_RANKS_LT(2);
     ASSERT_TRUE(RunGatherPingPong_Float_256x64_tile32(2, 2, 0, 0));
 }
-
 int main(int argc, char **argv)
 {
     CommMpiInit(&argc, &argv);

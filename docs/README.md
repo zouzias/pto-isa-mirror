@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../figures/pto_logo.svg" alt="PTO Tile Lib" width="200" />
+  <img src="figures/pto_logo.svg" alt="PTO Tile Lib" width="200" />
 </p>
 
 # PTO ISA Guide
@@ -38,3 +38,4 @@ This directory documents the PTO ISA (Instruction Set Architecture) used by PTO 
 - `docs/isa/`: Instruction reference (one file per instruction, plus category pages)
 - `docs/assembly/`: PTO assembly grammar and specification (PTO-AS)
 - `docs/coding/`: Developer notes for extending PTO Tile Lib
+- `docs/auto_mode/`: Docs for PTO auto mode

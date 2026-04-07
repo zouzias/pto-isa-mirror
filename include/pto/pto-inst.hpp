@@ -12,14 +12,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_INST_HPP
 
 #include "common/type.hpp"
-#ifdef __CPU_SIM
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include "common/cpu_stub.hpp"
 #endif
+#if defined(__CPU_SIM) || defined(__CCE_AICORE__) || defined(__COSTMODEL)
 #include "common/memory.hpp"
-
-#if defined(__CPU_SIM) || defined(__CCE_AICORE__)
 #include "common/arch_macro.hpp"
 #include "common/pto_tile.hpp"
 #include "common/pto_instr.hpp"
-#endif
 #endif

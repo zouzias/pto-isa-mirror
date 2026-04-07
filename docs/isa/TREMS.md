@@ -25,13 +25,13 @@ Synchronous form:
 %dst = trems %src, %scalar : !pto.tile<...>, f32
 ```
 
-### IR Level 1 (SSA)
+### AS Level 1 (SSA)
 
 ```text
 %dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
-### IR Level 2 (DPS)
+### AS Level 2 (DPS)
 
 ```text
 pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
@@ -41,15 +41,35 @@ pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 Declared in `include/pto/common/pto_instr.hpp`:
 
 ```cpp
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents>
 PTO_INST RecordEvent TREMS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
-                           WaitEvents &... events);
+                           TileDataTmp &tmp, WaitEvents &... events);
 ```
 
 ## Constraints
 
-- Division-by-zero behavior is target-defined; the CPU simulator asserts in debug builds.
-- The op iterates over `dst.GetValidRow()` / `dst.GetValidCol()`.
+- **Implementation Checks (A2A3)**:
+    - `dst` and `src` must use the same element type.
+    - Supported element types: `float` and `int32_t`.
+    - `dst` and `src` must be vector tiles.
+    - `dst` and `src` must be row-major.
+    - Runtime: `dst.GetValidRow() == src.GetValidRow() > 0` and `dst.GetValidCol() == src.GetValidCol() > 0`.
+    - **tmp Buffer Requirements**:
+      - `tmp.GetValidCol() >= dst.GetValidCol()` (at least as many columns as dst)
+      - `tmp.GetValidRow() >= 1` (at least 1 row)
+      - Data type must match `TileDataDst::DType`.
+- **Implementation Checks (A5)**:
+    - `dst` and `src` must use the same element type.
+    - Supported element types: `float`, `int32_t`, `uint32_t`, `half`, `int16_t`, and `uint16_t`.
+    - `dst` and `src` must be vector tiles.
+    - Static valid bounds: `ValidRow <= Rows` and `ValidCol <= Cols` for both tiles.
+    - Runtime: `dst.GetValidRow() == src.GetValidRow()` and `dst.GetValidCol() == src.GetValidCol()`.
+    - Note: tmp parameter is accepted but not validated or used on A5.
+- **Division by Zero**:
+    - Behavior is target-defined; the CPU simulator asserts in debug builds.
+- **Valid Region**:
+    - The op uses `dst.GetValidRow()` / `dst.GetValidCol()` as the iteration domain.
+- **For `int32_t` Inputs (A2A3 Only)**: Both `src` elements and `scalar` must be in the range `[-2^24, 2^24]` (i.e., `[-16777216, 16777216]`) to ensure exact conversion to float32 during computation.
 
 ## Examples
 
@@ -61,7 +81,8 @@ using namespace pto;
 void example() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   TileT x, out;
-  TREMS(out, x, 3.0f);
+  Tile<TileType::Vec, float, 16, 16> tmp;
+  TREMS(out, x, 3.0f, tmp);
 }
 ```
 
@@ -88,7 +109,7 @@ void example() {
 
 ```text
 %dst = trems %src, %scalar : !pto.tile<...>, f32
-# IR Level 2 (DPS)
+# AS Level 2 (DPS)
 pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
 

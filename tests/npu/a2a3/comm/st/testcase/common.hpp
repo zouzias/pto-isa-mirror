@@ -14,12 +14,19 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <limits>
+#include <numeric>
 #include <vector>
 #include <dlfcn.h>
-
 #include "acl/acl.h"
-
 #include "hccl/hccl_comm.h"
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#if __has_include("hccl/hccl.h")
+#include "hccl/hccl.h"
+#endif
 #include "hccl/hccl_types.h"
 #include "hccl_context.h"
 #include "comm_mpi.h"
@@ -69,6 +76,29 @@ using CommTopo = uint32_t;
 extern "C" HcclResult HcomGetL0TopoTypeEx(const char *group, CommTopo *topoType, uint32_t isSetDevice);
 static constexpr uint32_t COMM_IS_NOT_SET_DEVICE = 0;
 static constexpr uint32_t COMM_TOPO_MESH = 0b1u;
+
+// aclnn tensor API (from aclnn/acl_meta.h, linked via libnnopbase).
+// Forward-declared here to avoid pulling in aclnn headers that may
+// conflict with the bisheng -xcce compilation mode.
+struct aclTensor;
+struct aclOpExecutor;
+extern "C" aclTensor *aclCreateTensor(const int64_t *viewDims, uint64_t viewDimsNum, aclDataType dataType,
+                                      const int64_t *stride, int64_t offset, aclFormat format,
+                                      const int64_t *storageDims, uint64_t storageDimsNum, void *tensorData);
+extern "C" int32_t aclDestroyTensor(const aclTensor *tensor);
+
+// Mc2 tiling structures passed to HcclAllocComResourceByTiling.
+// Binary layout must match the HCCL internal expectation.
+#pragma pack(push, 8)
+struct Mc2ServerCfg {
+    uint32_t version = 0;
+    uint8_t debugMode = 0;
+    uint8_t sendArgIndex = 0;
+    uint8_t recvArgIndex = 0;
+    uint8_t commOutArgIndex = 0;
+    uint8_t reserved[8] = {};
+};
+#pragma pack(pop)
 
 // ============================================================================
 // V2 tiling structures (same as A5).
@@ -420,8 +450,6 @@ struct TestContext {
             rtStreamDestroy(stream);
             stream = nullptr;
         }
-        aclStatus |= aclrtResetDevice(deviceId);
-        aclStatus |= aclFinalize();
         return (aclStatus == 0);
     }
 
@@ -570,25 +598,38 @@ private:
 // Rank 0 generates HcclRootInfo and broadcasts it to all ranks via MPI_Bcast.
 // MPI_Barrier ensures all ranks are synchronized before HCCL operations.
 // ============================================================================
-template <typename Func>
-inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDeviceId, Func &&perRankFn)
+// Query the number of physical NPUs available on this machine.
+// Caches the result after the first successful call.
+inline int GetAvailableDeviceCount()
 {
-    int mpiRank = CommMpiRank();
-    int mpiSize = CommMpiSize();
-
-    if (mpiSize != nRanks) {
-        if (mpiRank == 0) {
-            std::cerr << "[ERROR] MPI world size (" << mpiSize << ") != expected nRanks (" << nRanks
-                      << "). Launch with: mpirun -n " << nRanks << " ./test_binary" << std::endl;
-        }
-        return false;
+    static int cachedCount = -1;
+    if (cachedCount >= 0)
+        return cachedCount;
+    constexpr int kAclRepeatInit = 100002;
+    aclError aRet = aclInit(nullptr);
+    if (aRet != ACL_SUCCESS && static_cast<int>(aRet) != kAclRepeatInit) {
+        return 0;
     }
-
-    int rankId = firstRankId + mpiRank;
-    if (nRanks <= 0) {
-        return false;
+    uint32_t count = 0;
+    aRet = aclrtGetDeviceCount(&count);
+    if (aRet != ACL_SUCCESS) {
+        return 0;
     }
-    int deviceId = rankId % nRanks + firstDeviceId;
+    cachedCount = static_cast<int>(count);
+    return cachedCount;
+}
+
+// One-time ACL/device initialization guard.
+// Ensures aclInit + aclrtSetDevice run only once per process, avoiding
+// repeated init/finalize cycles that exhaust driver Notify resources.
+// Cleanup (aclrtResetDevice / aclFinalize) is intentionally omitted:
+// the OS and driver reclaim all resources when the process exits.
+inline bool EnsureAclDeviceInit(int mpiRank, int deviceId)
+{
+    static int cachedDeviceId = -1;
+    static bool initialized = false;
+    if (initialized && cachedDeviceId == deviceId)
+        return true;
 
     constexpr int kAclRepeatInit = 100002;
     aclError aRet = aclInit(nullptr);
@@ -609,6 +650,46 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
         return false;
     }
 
+    cachedDeviceId = deviceId;
+    initialized = true;
+    return true;
+}
+
+template <typename Func>
+inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDeviceId, Func &&perRankFn)
+{
+    int mpiSize = CommMpiSize();
+    int mpiRank = CommMpiRank();
+
+    if (mpiSize != nRanks) {
+        if (mpiRank == 0) {
+            std::cerr << "[ERROR] MPI world size (" << mpiSize << ") != expected nRanks (" << nRanks
+                      << "). Launch with: mpirun -n " << nRanks << " ./test_binary" << std::endl;
+        }
+        return false;
+    }
+
+    int rankId = firstRankId + mpiRank;
+    if (nRanks <= 0) {
+        return false;
+    }
+
+    int availableDevices = GetAvailableDeviceCount();
+    int requiredDevices = nRanks + firstDeviceId;
+    if (availableDevices < requiredDevices) {
+        if (mpiRank == 0) {
+            std::cerr << "[SKIP] Test requires " << requiredDevices << " NPU(s) (nRanks=" << nRanks
+                      << ", firstDeviceId=" << firstDeviceId << ") but only " << availableDevices
+                      << " available. Skipping." << std::endl;
+        }
+        return true;
+    }
+
+    int deviceId = rankId % nRanks + firstDeviceId;
+
+    if (!EnsureAclDeviceInit(mpiRank, deviceId))
+        return false;
+
     HcclRootInfo rootInfo{};
     if (mpiRank == 0) {
         COMM_LOG("[INIT] Rank 0: calling HcclGetRootInfo ...");
@@ -627,3 +708,7 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
 
     return perRankFn(rankId, &rootInfo);
 }
+
+// SdmaWorkspaceManager moved to pto/npu/comm/async/sdma/sdma_workspace_manager.hpp
+#include "pto/npu/comm/async/sdma/sdma_workspace_manager.hpp"
+using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;

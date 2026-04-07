@@ -62,7 +62,7 @@ __tf__ PTO_INTERNAL void TSels_b32(typename TileDataDst::TileDType __out__ dst,
             for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
                 sReg = remain;
                 colOffset0 = 2 * loopTimes * elementsPerRepeat;
-                plds(tmpMask, (__ubuf__ uint32_t *)mask, i * maskRowStride + 2 * 8 * loopTimes, US);
+                plds(tmpMask, maskPtr, i * maskRowStride + 2 * 8 * loopTimes, US);
                 punpack(selMask0, tmpMask, LOWER);
                 vlds(vreg0, srcPtr, (int32_t)(i * TileDataSrc::RowStride + colOffset0), NORM);
                 vsel(dreg0, vreg0, vregScalar, selMask0);
@@ -112,8 +112,9 @@ __tf__ PTO_INTERNAL void TSels_b16_8(typename TileDataDst::TileDType __out__ dst
     } // end of vf
 }
 
-template <typename TileDataDst, typename TileDataMask, typename TileDataSrc>
-PTO_INTERNAL void TSELS_IMPL(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, typename TileDataSrc::DType scalar)
+template <typename TileDataDst, typename TileDataMask, typename TileDataSrc, typename TileDataTmp>
+PTO_INTERNAL void TSELS_IMPL(TileDataDst &dst, TileDataMask &mask, TileDataSrc &src, TileDataTmp &tmp,
+                             typename TileDataSrc::DType scalar)
 {
     using T = typename TileDataDst::DType;
     static_assert(std::is_same_v<typename TileDataSrc::DType, typename TileDataDst::DType>,

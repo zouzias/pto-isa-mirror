@@ -66,13 +66,15 @@ checkopts() {
   ENABLE_A3=FALSE
   ENABLE_A5=FALSE
   ENABLE_CPU=FALSE
-  RUN_TYPE=""
+  ENABLE_COMM=FALSE
+  RUN_TYPE="npu"
   EXAMPLE_NAME=""
   EXAMPLE_MODE=""
   PLATFORM_MODE=""
   INST_NAME=""
+  AUTO_MODE=FALSE
 
-  parsed_args=$(getopt -a -o j:hvuO: -l help,verbose,cov,make_clean,noexec,pkg,run_all,a3,a5,sim,npu,cpu,run_simple,build,cann_3rd_lib_path: -- "$@") || {
+  parsed_args=$(getopt -a -o j:hvuO: -l help,verbose,cov,make_clean,noexec,pkg,run_all,a3,a5,sim,npu,comm,cpu,auto_mode,run_simple,build,cann_3rd_lib_path: -- "$@") || {
   usage
   exit 1
   }
@@ -105,6 +107,10 @@ checkopts() {
         ENABLE_A5=TRUE
         shift
         ;;
+      --comm)
+        ENABLE_COMM=TRUE
+        shift
+        ;;
       --sim)
         RUN_TYPE=sim
         shift
@@ -125,6 +131,10 @@ checkopts() {
       --build)
         shift
         ENABLE_BUILD_ONLY=TRUE
+        ;;
+      --auto_mode)
+        shift
+        AUTO_MODE=TRUE
         ;;
       --)
         shift
@@ -159,16 +169,41 @@ run_simple_st() {
   echo $dotted_line
   echo "Start to run simple st"
   chmod +x ./tests/run_st.sh
+  ARGS=" "
   if [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "FALSE" ]; then
-    ./tests/run_st.sh a3 $RUN_TYPE simple
+    ARGS+="--a3 "
   elif [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ./tests/run_st.sh a5 $RUN_TYPE simple
+    ARGS+="--a5 "
   elif [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ./tests/run_st.sh a3_a5 $RUN_TYPE simple
+    ARGS+="--a3_a5 "
   else
-    ./tests/run_st.sh a3 npu simple
+    ARGS+="--a3 "
   fi
+  ARGS+="--$RUN_TYPE --simple "
+  if [ "$AUTO_MODE" == "TRUE" ]; then
+    ARGS+="--auto_mode "
+  fi
+  ./tests/run_st.sh ${ARGS}
   echo "execute samples success"
+}
+
+run_comm_st() {
+  echo $dotted_line
+  echo "Start to run comm st"
+  chmod +x ./tests/run_st.sh
+  ARGS="--comm "
+  if [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "FALSE" ]; then
+    ARGS+="--a3 "
+  elif [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
+    ARGS+="--a5 "
+  elif [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
+    ARGS+="--a3_a5 "
+  else
+    ARGS+="--a3 "
+  fi
+  ARGS+="--$RUN_TYPE "
+  ./tests/run_st.sh ${ARGS}
+  echo "execute comm samples success"
 }
 
 run_cpu_st() {
@@ -178,21 +213,28 @@ run_cpu_st() {
   python3 tests/run_cpu.py --cxx=clang++ --demo gemm --verbose
   python3 tests/run_cpu.py --cxx=clang++ --demo flash_attn --verbose
   python3 tests/run_cpu.py --cxx=clang++ --demo mla --verbose
+  bash tests/run_costmodel_tests.sh
 }
 
 run_all_st() {
   echo $dotted_line
   echo "Start to run all st"
   chmod +x ./tests/run_st.sh
+  ARGS=" "
   if [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "FALSE" ]; then
-    ./tests/run_st.sh a3 $RUN_TYPE all
+    ARGS+="--a3 "
   elif [ "$ENABLE_A3" = "FALSE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ./tests/run_st.sh a5 $RUN_TYPE all
+    ARGS+="--a5 "
   elif [ "$ENABLE_A3" = "TRUE" ] && [ "$ENABLE_A5" = "TRUE" ]; then
-    ./tests/run_st.sh a3_a5 $RUN_TYPE all
+    ARGS+="--a3_a5 "
   else
-    ./tests/run_st.sh a3 sim all
+    ARGS+="--a3 "
   fi
+  ARGS+="--$RUN_TYPE --all "
+  if [ "$AUTO_MODE" == "TRUE" ]; then
+      ARGS+="--auto_mode "
+  fi
+  ./tests/run_st.sh ${ARGS}
   echo "execute samples success"
 }
 
@@ -250,6 +292,9 @@ main() {
   fi
   if [ "$ENABLE_CPU" == "TRUE" ]; then
     run_cpu_st
+  fi
+  if [ "$ENABLE_COMM" == "TRUE" ]; then
+    run_comm_st
   fi
 }
 

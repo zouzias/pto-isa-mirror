@@ -15,8 +15,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "type.hpp"
 #include "constants.hpp"
 #include "debug.h"
-#ifdef __CPU_SIM
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <iomanip>
+#include <vector>
 #endif
 
 namespace pto {
@@ -400,6 +401,146 @@ struct GlobalTensor {
             return staticStride[GlobalTensorDim::DIM_4];
         }
         return -1;
+    }
+
+    template <int dim>
+    PTO_INTERNAL void SetShape(int64_t s)
+    {
+        static_assert(dim >= GlobalTensorDim::DIM_0 && dim < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(staticShape[dim] == DYNAMIC, "dim must be DYNAMIC");
+        shape_.shape[dim] = s;
+    }
+
+    template <int dim1, int dim2>
+    PTO_INTERNAL void SetShape(int64_t s1, int64_t s2)
+    {
+        static_assert(dim1 >= GlobalTensorDim::DIM_0 && dim1 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim2 >= GlobalTensorDim::DIM_0 && dim2 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(staticShape[dim1] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticShape[dim2] == DYNAMIC, "dim must be DYNAMIC");
+        shape_.shape[dim1] = s1;
+        shape_.shape[dim2] = s2;
+    }
+
+    template <int dim1, int dim2, int dim3>
+    PTO_INTERNAL void SetShape(int64_t s1, int64_t s2, int64_t s3)
+    {
+        static_assert(dim1 >= GlobalTensorDim::DIM_0 && dim1 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim2 >= GlobalTensorDim::DIM_0 && dim2 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim3 >= GlobalTensorDim::DIM_0 && dim3 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(staticShape[dim1] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticShape[dim2] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticShape[dim3] == DYNAMIC, "dim must be DYNAMIC");
+        shape_.shape[dim1] = s1;
+        shape_.shape[dim2] = s2;
+        shape_.shape[dim3] = s3;
+    }
+
+    template <int dim1, int dim2, int dim3, int dim4>
+    PTO_INTERNAL void SetShape(int64_t s1, int64_t s2, int64_t s3, int64_t s4)
+    {
+        static_assert(dim1 >= GlobalTensorDim::DIM_0 && dim1 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim2 >= GlobalTensorDim::DIM_0 && dim2 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim3 >= GlobalTensorDim::DIM_0 && dim3 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim4 >= GlobalTensorDim::DIM_0 && dim4 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(staticShape[dim1] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticShape[dim2] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticShape[dim3] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticShape[dim4] == DYNAMIC, "dim must be DYNAMIC");
+        shape_.shape[dim1] = s1;
+        shape_.shape[dim2] = s2;
+        shape_.shape[dim3] = s3;
+        shape_.shape[dim4] = s4;
+    }
+
+    template <int dim1, int dim2, int dim3, int dim4, int dim5>
+    PTO_INTERNAL void SetShape(int64_t s1, int64_t s2, int64_t s3, int64_t s4, int64_t s5)
+    {
+        static_assert(dim1 >= GlobalTensorDim::DIM_0 && dim1 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim2 >= GlobalTensorDim::DIM_0 && dim2 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim3 >= GlobalTensorDim::DIM_0 && dim3 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim4 >= GlobalTensorDim::DIM_0 && dim4 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim5 >= GlobalTensorDim::DIM_0 && dim5 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(staticShape[dim1] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticShape[dim2] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticShape[dim3] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticShape[dim4] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticShape[dim5] == DYNAMIC, "dim must be DYNAMIC");
+        shape_.shape[dim1] = s1;
+        shape_.shape[dim2] = s2;
+        shape_.shape[dim3] = s3;
+        shape_.shape[dim4] = s4;
+        shape_.shape[dim5] = s5;
+    }
+
+    template <int dim>
+    PTO_INTERNAL void SetStride(int64_t s)
+    {
+        static_assert(dim >= GlobalTensorDim::DIM_0 && dim < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(staticStride[dim] == DYNAMIC, "dim must be DYNAMIC");
+        stride_.stride[dim] = s;
+    }
+
+    template <int dim1, int dim2>
+    PTO_INTERNAL void SetStride(int64_t s1, int64_t s2)
+    {
+        static_assert(dim1 >= GlobalTensorDim::DIM_0 && dim1 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim2 >= GlobalTensorDim::DIM_0 && dim2 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(staticStride[dim1] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticStride[dim2] == DYNAMIC, "dim must be DYNAMIC");
+        stride_.stride[dim1] = s1;
+        stride_.stride[dim2] = s2;
+    }
+
+    template <int dim1, int dim2, int dim3>
+    PTO_INTERNAL void SetStride(int64_t s1, int64_t s2, int64_t s3)
+    {
+        static_assert(dim1 >= GlobalTensorDim::DIM_0 && dim1 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim2 >= GlobalTensorDim::DIM_0 && dim2 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim3 >= GlobalTensorDim::DIM_0 && dim3 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(staticStride[dim1] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticStride[dim2] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticStride[dim3] == DYNAMIC, "dim must be DYNAMIC");
+        stride_.stride[dim1] = s1;
+        stride_.stride[dim2] = s2;
+        stride_.stride[dim3] = s3;
+    }
+
+    template <int dim1, int dim2, int dim3, int dim4>
+    PTO_INTERNAL void SetStride(int64_t s1, int64_t s2, int64_t s3, int64_t s4)
+    {
+        static_assert(dim1 >= GlobalTensorDim::DIM_0 && dim1 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim2 >= GlobalTensorDim::DIM_0 && dim2 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim3 >= GlobalTensorDim::DIM_0 && dim3 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim4 >= GlobalTensorDim::DIM_0 && dim4 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(staticStride[dim1] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticStride[dim2] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticStride[dim3] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticStride[dim4] == DYNAMIC, "dim must be DYNAMIC");
+        stride_.stride[dim1] = s1;
+        stride_.stride[dim2] = s2;
+        stride_.stride[dim3] = s3;
+        stride_.stride[dim4] = s4;
+    }
+
+    template <int dim1, int dim2, int dim3, int dim4, int dim5>
+    PTO_INTERNAL void SetStride(int64_t s1, int64_t s2, int64_t s3, int64_t s4, int64_t s5)
+    {
+        static_assert(dim1 >= GlobalTensorDim::DIM_0 && dim1 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim2 >= GlobalTensorDim::DIM_0 && dim2 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim3 >= GlobalTensorDim::DIM_0 && dim3 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim4 >= GlobalTensorDim::DIM_0 && dim4 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(dim5 >= GlobalTensorDim::DIM_0 && dim5 < GlobalTensorDim::TOTAL_DIM, "only support set dim(0-4)");
+        static_assert(staticStride[dim1] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticStride[dim2] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticStride[dim3] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticStride[dim4] == DYNAMIC, "dim must be DYNAMIC");
+        static_assert(staticStride[dim5] == DYNAMIC, "dim must be DYNAMIC");
+        stride_.stride[dim1] = s1;
+        stride_.stride[dim2] = s2;
+        stride_.stride[dim3] = s3;
+        stride_.stride[dim4] = s4;
+        stride_.stride[dim5] = s5;
     }
 
     template <typename T, typename AddrType>
@@ -945,7 +1086,11 @@ struct ConvTileShape {
     }
 
 public:
+#ifdef __PTO_AUTO__
+    int64_t shape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)];
+#else
     int64_t shape[static_cast<int64_t>(ConvTileDetail::MAX_CONVTILE_DIM)] = {1};
+#endif
 };
 
 template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
@@ -975,10 +1120,23 @@ public:
         if (dim < 0 || dim >= totalDimCount) {
             return -1;
         }
+
+#ifdef __PTO_AUTO__
+        // auto mode only supports static shapes
+        return staticShape[dim];
+#else
         return isDynamicDim[dim] ? shape[dim] : staticShape[dim];
+#endif
     }
 
+#ifdef __PTO_AUTO__
+    PTO_INTERNAL ConvTile()
+    {
+        data_ = __cce_tinit(data_);
+    }
+#else
     PTO_INTERNAL ConvTile() = default;
+#endif
 
     template <typename... Ints>
     PTO_INTERNAL void SetDynamicShape(Ints... vals)
@@ -999,13 +1157,29 @@ public:
     template <typename... Ints>
     PTO_INTERNAL explicit ConvTile(Ints... dynamicVals)
     {
+#ifdef __PTO_AUTO__
+        data_ = __cce_tinit(data_);
+#endif
         SetDynamicShape(dynamicVals...);
     }
 
-#ifdef __PTO_AUTO__
+#if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
     using TileDType = typename MemoryQualifier<Loc_, DType>::type tile_size(bufferSize);
 #else
     using TileDType = typename MemoryQualifier<Loc_, DType>::type;
+#endif
+
+#ifdef __COSTMODEL
+    float cycle;
+    AICORE void SetCycle(const float cycle_)
+    {
+        cycle = cycle_;
+    }
+
+    AICORE float GetCycle()
+    {
+        return cycle;
+    }
 #endif
 
     AICORE TileDType &data()
@@ -1016,6 +1190,7 @@ public:
     {
         return data_;
     }
+
     template <typename T, typename AddrType>
     friend AICORE void TASSIGN_IMPL(T &tile, AddrType addr);
 
@@ -1201,7 +1376,7 @@ private:
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,
           const BLayout BFractal_ = BLayout::RowMajor, const int RowValid_ = Rows_, const int ColValid_ = Cols_,
           const SLayout SFractal_ = SLayout::NoneBox, const int SFractalSize_ = TileConfig::fractalABSize,
-          const PadValue PadVal_ = PadValue::Null, const CompactMode Compact_ = CompactMode::Null>
+          auto PadVal_ = PadValue::Null, const CompactMode Compact_ = CompactMode::Null>
 struct Tile {
 public:
     using DType = Element_;
@@ -1248,7 +1423,7 @@ public:
     static constexpr bool isRowMajor = BFractal_ == BLayout::RowMajor;
 
     static constexpr int SFractalSize = SFractalSize_;
-    static constexpr PadValue PadVal = PadVal_;
+    static constexpr auto PadVal = PadVal_;
     static constexpr CompactMode Compact = Compact_;
 
     __tf__ AICORE void SetValue(const uint32_t offset, const DType val)
@@ -1265,13 +1440,24 @@ public:
         return *(ptr + offset);
     }
     // constructor for static shape
-    AICORE Tile(){};
+    AICORE Tile()
+    {
+#if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
+        // we need to dummy-initialize the data_ member,
+        // otherwise in auto mode this will remain uninitialized
+        // and end up being an undef value after SROA pass
+        data_ = __cce_tinit(data_);
+#endif
+    };
 
     // constructor for both dimensions are runtime variables
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VR,
                 std::enable_if_t<RowMask == DYNAMIC && ColMask == DYNAMIC, size_t> VC)
     {
+#if defined(__PTO_AUTO__) && !defined(__CPU_SIM)
+        data_ = __cce_tinit(data_);
+#endif
         RowMaskInternal = VR;
         ColMaskInternal = VC;
     }
@@ -1280,6 +1466,9 @@ public:
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask == DYNAMIC) && (ColMask > 0), size_t> VR)
     {
+#ifdef __PTO_AUTO__
+        data_ = __cce_tinit(data_);
+#endif
         RowMaskInternal = VR;
     }
 
@@ -1287,8 +1476,16 @@ public:
     template <int RowMask = ValidRow, int ColMask = ValidCol>
     AICORE Tile(std::enable_if_t<(RowMask > 0) && (ColMask == DYNAMIC), size_t> VC)
     {
+#ifdef __PTO_AUTO__
+        data_ = __cce_tinit(data_);
+#endif
         ColMaskInternal = VC;
     }
+
+#ifdef __PTO_AUTO__
+    Tile &operator=(const Tile &) = delete;
+    Tile &operator=(Tile &&) = delete;
+#endif
 
     static constexpr bool isBoxedLayout = (SFractal != SLayout::NoneBox);
     static constexpr bool isInnerRowMajor = (SFractal == SLayout::RowMajor);
@@ -1321,16 +1518,33 @@ public:
                       SFractalSize_ == TileConfig::fractalMxSize,
                   "SFractalSize_ illegal");
 
-#ifdef __CPU_SIM
-    using TileDType = Tile::DType[Rows * Cols];
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
+    // CPU Sim: data_ is a pointer that TASSIGN can redirect to shared NPU memory
+    using TileDType = Tile::DType *;
 #else
 #ifdef __PTO_AUTO__
+#if defined(PTO_NPU_ARCH_A2A3)
     using TileDType = typename MemoryQualifier<Loc, DType>::type tile_size(Rows *Cols);
+#else
+    using TileDType = std::conditional_t<Loc == TileType::Bias,
+                                         typename MemoryQualifier<Loc, DType>::type, // special handling for Bias Tile
+                                         typename MemoryQualifier<Loc, DType>::type tile_size(Rows *Cols)>;
+#endif
 #else
     using TileDType = typename MemoryQualifier<Loc, DType>::type;
 #endif
 #endif
 
+#if (defined(__CPU_SIM) && defined(__PTO_AUTO__)) || defined(__COSTMODEL)
+    TileDType &data()
+    {
+        if (!data_) {
+            internalBuffer.resize(Rows * Cols);
+            data_ = internalBuffer.data();
+        }
+        return data_;
+    }
+#else
     AICORE TileDType &data()
     {
         return data_;
@@ -1339,6 +1553,20 @@ public:
     {
         return data_;
     }
+#endif
+
+#ifdef __COSTMODEL
+    float cycle;
+    AICORE void SetCycle(const float cycle_)
+    {
+        cycle = cycle_;
+    }
+
+    AICORE float GetCycle()
+    {
+        return cycle;
+    }
+#endif
 
     int RowMaskInternal;
     int ColMaskInternal;
@@ -1365,6 +1593,31 @@ public:
     AICORE std::enable_if_t<ColMask == DYNAMIC, int> GetValidCol() const
     {
         return ColMaskInternal;
+    }
+
+    // Call this function need PIPE_S wait
+    PTO_INTERNAL void SetValidRow(int rowMask)
+    {
+        static_assert(ValidRow == DYNAMIC, "Only Dynamic Valid Row Support Set Value.");
+        PTO_ASSERT(rowMask <= Rows, "rowMask must less than Rows.");
+        RowMaskInternal = rowMask;
+    }
+
+    // Call this function need PIPE_S wait
+    PTO_INTERNAL void SetValidCol(int colMask)
+    {
+        static_assert(ValidCol == DYNAMIC, "Only Dynamic Valid Col Support Set Value.");
+        PTO_ASSERT(colMask <= Cols, "colMask must less than Cols.");
+        ColMaskInternal = colMask;
+    }
+
+    // Call this function need PIPE_S wait
+    PTO_INTERNAL void SetValidShape(int rowMask, int colMask)
+    {
+        static_assert(ValidCol == DYNAMIC && ValidRow == DYNAMIC, "Only Dynamic Valid Shape Support Set Value.");
+        PTO_ASSERT(rowMask <= Rows && colMask <= Cols, "colMask must less than Cols.");
+        RowMaskInternal = rowMask;
+        ColMaskInternal = colMask;
     }
 
     template <typename T, typename AddrType>
@@ -1405,8 +1658,14 @@ private:
     {
         data_ = data;
     }
-    TileDType data_;
     bool isKAligned_; // K-Alignedment for A3
+
+#if (defined(__CPU_SIM) && defined(__PTO_AUTO__)) || defined(__COSTMODEL)
+    std::vector<DType> internalBuffer;
+    TileDType data_ = nullptr;
+#else
+    TileDType data_;
+#endif
 };
 
 #ifdef PTO_NPU_ARCH_A2A3
@@ -1419,7 +1678,7 @@ using TileLeftCompact = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::Ro
                              SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
 #endif
 
-#if !defined(PTO_NPU_ARCH_A2A3) || defined(__CPU_SIM)
+#if !defined(PTO_NPU_ARCH_A2A3) || defined(__CPU_SIM) || defined(__COSTMODEL)
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;

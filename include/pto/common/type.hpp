@@ -22,8 +22,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // for pto internal implementation
 #define PTO_INTERNAL AICORE PTO_INLINE
 
+#ifdef __CPU_SIM
+#define OP_NAME(Name)
+#define OP_TYPE(TypeName)
+#else
 #define OP_NAME(Name) __attribute__((vf_name(#Name)))
 #define OP_TYPE(TypeName) __attribute__((vf_kind(#TypeName)))
+#endif
 
 // -----------------------------------------------------------------------------
 // PTO assertion helpers
@@ -60,7 +65,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_DETAIL_GET_MACRO(_1, _2, NAME, ...) NAME
 #define PTO_STATIC_ASSERT(...) PTO_DETAIL_GET_MACRO(__VA_ARGS__, PTO_STATIC_ASSERT_2, PTO_STATIC_ASSERT_1)(__VA_ARGS__)
 
-#if defined(__CPU_SIM)
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 #include <cstdio>
 #include <cstdlib>
 
@@ -90,7 +95,47 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_CPU_ASSERT(...) ((void)0)
 #endif
 
+// Signed 4-bit integer type (packed: 2 elements per byte using uint8_t storage).
+// Compatible with AscendC int4b_t. The vconv intrinsics use void* for the packed side.
+struct int4b_t {
+    uint8_t storage;
+    int4b_t() = default;
+    explicit int4b_t(int32_t value) : storage(static_cast<uint8_t>(value) & 0x0F)
+    {}
+    operator int8_t() const
+    {
+        return (storage & 0x08) ? static_cast<int8_t>(storage | 0xF0) : static_cast<int8_t>(storage & 0x0F);
+    }
+};
+
 namespace pto {
+enum class TileType
+{
+    Vec,
+    Mat,
+    Left,
+    Right,
+    Acc,
+    Bias,
+    Scaling,
+    ScaleLeft,
+    ScaleRight,
+    Ctrl,
+};
+
+enum class BLayout
+{
+    RowMajor = 0,
+    ColMajor = 1,
+};
+
+enum class SLayout
+{
+    NoneBox = 0,
+    RowMajor = 1,
+    ColMajor = 2,
+};
+
 // 01-bits patterns are read from right to left.
 // Right bits are low bits, corresponding to low index positions of data.
 enum class MaskPattern : uint8_t
@@ -201,12 +246,18 @@ enum class AtomicType : uint8_t
     AtomicAdd = 1,
 };
 
-enum class PadValue
+// PadValue enum with uint64_t underlying type to support custom pad values.
+// - Standard values (Null, Zero, Max, Min) use values 0-3
+// - Custom values use bits [32:63] for the float bit pattern
+// - Use PadCustom<-1.0f> helper from constants.hpp for custom values
+enum class PadValue : uint64_t
 {
-    Null,
-    Zero,
-    Max,
-    Min,
+    Null = 0,
+    Zero = 1,
+    Max = 2,
+    Min = 3,
+    // CustomBase marks the start of custom values (bit 32 set)
+    CustomBase = 0x100000000ULL,
 };
 
 enum class SaturationMode : uint8_t
@@ -222,6 +273,7 @@ enum class CompactMode
 {
     Null,
     Normal,
+    RowPlusOne,
 };
 
 enum class SetFmatrixMode
@@ -242,6 +294,18 @@ enum class TileLayoutCustom : uint8_t
     NONE,
 };
 
+enum class DivAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RecipAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
 namespace GlobalTensorDim {
 constexpr int DIM_0 = 0;
 constexpr int DIM_1 = 1;
@@ -251,13 +315,17 @@ constexpr int DIM_4 = 4;
 constexpr int TOTAL_DIM = 5;
 } // namespace GlobalTensorDim
 
+constexpr int PTO_RANDOM_KEY_SIZE = 2;
+constexpr int PTO_RANDOM_COUNTER_SIZE = 4;
+using TRandomKey = uint32_t[PTO_RANDOM_KEY_SIZE];
+using TRandomCounter = uint32_t[PTO_RANDOM_COUNTER_SIZE];
 } // namespace pto
 
-#if defined(__CPU_SIM)
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 typedef _Float16 half;
 typedef _Float16 aclFloat16;
 // Note: clang version should be >=15 and gcc version should be >=14
-#if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L
+#if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L && defined(__STDCPP_BFLOAT16_T__)
 #include <stdfloat>
 typedef std::bfloat16_t bfloat16_t;
 #define CPU_SIM_BFLOAT_ENABLED

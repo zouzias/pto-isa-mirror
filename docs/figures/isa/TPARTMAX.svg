@@ -37,7 +37,7 @@ svg { font-family: Arial, Helvetica, sans-serif; }
 <text x="40" y="92" class="meta">Template: complex</text>
 <text x="1160" y="92" class="meta" text-anchor="end">Legend: outline=example; dashed=valid rows/cols (Rv,Cv); shaded=masked; r down / c right; ortho arrows=dataflow</text>
 <line x1="36" y1="104" x2="1164" y2="104" stroke="#e2e8f0" stroke-width="1.5" />
-<text x="600" y="140" class="subtitle" text-anchor="middle" fill="#C53A79">dst[r,c] = partial(max(src0, src1))   (validity-dependent)</text>
+<text x="600" y="140" class="subtitle" text-anchor="middle" fill="#C53A79">dst[r,c] = partial(max(src0[r,c], src1[r,c]))   (validity-dependent)</text>
 <text x="485" y="168" class="tileLabel" text-anchor="middle">src0 (valid A)</text>
 <rect x="430" y="178" width="110" height="110" class="tileBorder" />
 <rect x="430" y="178" width="22" height="22" class="cell" />
@@ -152,7 +152,7 @@ svg { font-family: Arial, Helvetica, sans-serif; }
 <text x="56" y="554" class="procText" xml:space="preserve">
   <tspan x="56" dy="0">for r,c in valid(dst):</tspan>
   <tspan x="56" dy="16">  if defined(src0[r,c]) and defined(src1[r,c]):</tspan>
-  <tspan x="56" dy="16">    dst[r,c] = max(src0, src1)</tspan>
+  <tspan x="56" dy="16">    dst[r,c] = max(src0[r,c], src1[r,c])</tspan>
   <tspan x="56" dy="16">  elif only one is defined:</tspan>
   <tspan x="56" dy="16">    dst[r,c] = that defined value</tspan>
   <tspan x="56" dy="16">  else:</tspan>

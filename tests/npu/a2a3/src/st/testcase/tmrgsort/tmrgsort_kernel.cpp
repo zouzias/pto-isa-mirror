@@ -24,8 +24,10 @@ PTO_INTERNAL void Sort2Lists(DstTileData &dstTile, Src0GlobalData &src0Global, S
     MrgSortExecutedNumList executedNumList;
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TMRGSORT<DstTileData, TmpTileData, TileData, TileData, EXHAUSTED>(dstTile, executedNumList, tmpTile, src0Tile,
                                                                       src1Tile);
 }
@@ -40,8 +42,10 @@ PTO_INTERNAL void Sort3Lists(DstTileData &dstTile, Src0GlobalData &src0Global, S
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
     TLOAD(src2Tile, src2Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TMRGSORT<DstTileData, TmpTileData, TileData, TileData, TileData, EXHAUSTED>(dstTile, executedNumList, tmpTile,
                                                                                 src0Tile, src1Tile, src2Tile);
 }
@@ -57,8 +61,10 @@ PTO_INTERNAL void Sort4Lists(DstTileData &dstTile, Src0GlobalData &src0Global, S
     TLOAD(src1Tile, src1Global);
     TLOAD(src2Tile, src2Global);
     TLOAD(src3Tile, src3Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TMRGSORT<DstTileData, TmpTileData, TileData, TileData, TileData, TileData, EXHAUSTED>(
         dstTile, executedNumList, tmpTile, src0Tile, src1Tile, src2Tile, src3Tile);
 }
@@ -108,8 +114,10 @@ __global__ AICORE void RunTMrgsort(__gm__ T *out, __gm__ T *src0, __gm__ T *src1
         Sort2Lists<Src0GlobalData, Src1GlobalData, DstTileData, TmpTileData, TileData, T, EXHAUSTED>(
             dstTile, src0Global, src1Global, src0Tile, src1Tile, tmpTile);
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
 }
 
@@ -136,15 +144,21 @@ __global__ AICORE void RunTMrgsortSingle(__gm__ T *out, __gm__ T *src0)
     DstGlobalData dstGlobal(out + offset);
 
     TLOAD(src0Tile, src0Global);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     TMRGSORT<DstTileData, TileData>(dstTile, src0Tile, blockLen);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
     pipe_barrier(PIPE_ALL);
+#endif
     out = dstGlobal.data();
 }
 
@@ -187,18 +201,24 @@ PTO_INTERNAL void SortTailBlock(DstGlobalData &dstGlobal, DstTileData &dstTile, 
 
         TileData src0Tile(1, tmpMrgSortedLen);
         TileData src1Tile(1, tmpMrgArray);
-        TASSIGN(src0Tile, 0x0);
-        TASSIGN(src1Tile, 0x0 + mrgSortedLen * sizeof(T));
+        TRESHAPE(src0Tile, srcTile);
+        TSUBVIEW(src1Tile, srcTile, 0, mrgSortedLen);
         TMRGSORT<DstTileData, TmpTileData, TileData, TileData, 0>(dstTile, executedNumList, tmp1Tile, src0Tile,
                                                                   src1Tile);
+#ifndef __PTO_AUTO__
         pipe_barrier(PIPE_V);
+#endif
         TileData srcMovTile(1, topk);
-        TASSIGN(srcMovTile, 0x0);
+        TRESHAPE(srcMovTile, srcTile);
         TMOV(srcMovTile, dstTile);
+#ifndef __PTO_AUTO__
         pipe_barrier(PIPE_V);
+#endif
     }
+#ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
     TSTORE(dstGlobal, dstTile);
 }
 
@@ -215,30 +235,34 @@ __global__ AICORE void RunTMrgsortTopk(__gm__ T *out, __gm__ T *src)
     TileData srcTile(1, kTCols_);
     DstTileData dstTile(1, topk);
     TmpTileData tmpTile(1, kTCols_);
-    uint32_t tmpAddr = kTCols_ * sizeof(T);
     TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x0);
-    TASSIGN(tmpTile, 0x0 + tmpAddr);
+    TASSIGN(tmpTile, 0x0 + kTCols_ * sizeof(T));
+    TRESHAPE(dstTile, srcTile);
 
     GlobalData srcGlobal(src);
     DstGlobalData dstGlobal(out);
 
     uint32_t blockLen = 64;
-
     // Merge sort data for every 4 blockLen lengths.
     TLOAD(srcTile, srcGlobal);
+#ifndef __PTO_AUTO__
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
     for (; blockLen * 4 <= kTCols_; blockLen *= 4) {
         uint16_t cols = kTCols_ / (blockLen * 4) * (blockLen * 4);
         TileData srcSortedTile(1, cols);
         TmpTileData tmpSortedTile(1, cols);
-        TASSIGN(srcSortedTile, 0x0);
-        TASSIGN(tmpSortedTile, 0x0 + tmpAddr);
+        TRESHAPE(srcSortedTile, srcTile);
+        TRESHAPE(tmpSortedTile, tmpTile);
         TMRGSORT<TmpTileData, TileData>(tmpSortedTile, srcSortedTile, blockLen);
+#ifndef __PTO_AUTO__
         pipe_barrier(PIPE_V);
+#endif
         TMOV(srcSortedTile, tmpSortedTile);
+#ifndef __PTO_AUTO__
         pipe_barrier(PIPE_V);
+#endif
     }
 
     // sort tail block
@@ -247,10 +271,12 @@ __global__ AICORE void RunTMrgsortTopk(__gm__ T *out, __gm__ T *src)
             dstGlobal, dstTile, srcTile, blockLen);
     } else {
         TmpTileData tmpMovTile(1, topk);
-        TASSIGN(tmpMovTile, 0x0 + tmpAddr);
+        TRESHAPE(tmpMovTile, tmpTile);
         TMOV(dstTile, tmpMovTile);
+#ifndef __PTO_AUTO__
         set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
         TSTORE(dstGlobal, dstTile);
     }
 }

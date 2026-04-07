@@ -75,7 +75,7 @@ python add_compile_and_run.py
 ## 前置要求
 
 **Baseline 和 JIT（NPU）**：
-- Ascend AI 处理器（910B/910C/950）
+- Ascend AI 处理器 A2/A3/A5（910B/910C/950）
 - CANN Toolkit 8.5.0+
 - 带 `torch_npu` 的 PyTorch
 - Python 3.8+、CMake 3.16+
@@ -87,12 +87,12 @@ python add_compile_and_run.py
 
 ## 文档
 
-- 入门指南：[docs/getting-started.md](../docs/getting-started.md)
-- 编程教程：[docs/coding/tutorial.md](../docs/coding/tutorial.md)
-- ISA 参考：[docs/isa/README.md](../docs/isa/README.md)
+- 入门指南：[docs/getting-started.md](../docs/getting-started_zh.md)
+- 编程教程：[docs/coding/tutorial.md](../docs/coding/tutorial_zh.md)
+- ISA 参考：[docs/isa/README.md](../docs/isa/README_zh.md)
 
 ## 相关
 
-- 手工内核：[kernels/manual/README.md](../kernels/manual/README.md)
-- 自定义算子：[kernels/custom/README.md](../kernels/custom/README.md)
-- 测试用例：[tests/README.md](../tests/README.md)
+- 手工内核：[kernels/manual/README.md](../kernels/manual/README_zh.md)
+- 自定义算子：[kernels/custom/README.md](../kernels/custom/README_zh.md)
+- 测试用例：[tests/README.md](../tests/README_zh.md)
