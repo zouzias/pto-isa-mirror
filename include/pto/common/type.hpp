@@ -306,6 +306,12 @@ enum class RecipAlgorithm : uint8_t
     HIGH_PRECISION
 };
 
+enum class ExpAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
 namespace GlobalTensorDim {
 constexpr int DIM_0 = 0;
 constexpr int DIM_1 = 1;
@@ -314,6 +320,16 @@ constexpr int DIM_3 = 3;
 constexpr int DIM_4 = 4;
 constexpr int TOTAL_DIM = 5;
 } // namespace GlobalTensorDim
+
+union FloatConvUnion {
+    float f;
+    uint32_t i;
+};
+
+union HalfConvUnion {
+    half f;
+    uint16_t i;
+};
 
 constexpr int PTO_RANDOM_KEY_SIZE = 2;
 constexpr int PTO_RANDOM_COUNTER_SIZE = 4;
