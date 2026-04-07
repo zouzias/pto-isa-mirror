@@ -25,6 +25,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/constants.hpp>
 #include <pto/pto-inst.hpp>
 #include "ready_queue.hpp"
+#include "gemm_ar_config.h"
 
 using namespace pto;
 
@@ -107,7 +108,6 @@ AICORE inline void ProcessKIteration(
 // ============================================================================
 // Global GEMM parameters (shared across kernel and host code)
 // ============================================================================
-#include "gemm_ar_config.h"
 
 constexpr uint32_t G_K_LOOP = G_K / G_BASE_K;
 

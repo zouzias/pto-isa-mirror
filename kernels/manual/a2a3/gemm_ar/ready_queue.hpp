@@ -1,4 +1,14 @@
 /**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
+/**
  * Ready Queue - Per-block lock-free queue for tile scheduling
  *
  * Each compute block has its own queue (no contention on enqueue).
@@ -69,7 +79,7 @@ inline void MultiBlockQueueSetInit(MultiBlockQueueSet* qset, int num_blocks, int
 {
     qset->num_blocks = num_blocks;
     qset->total_tiles = total_tiles;
-    qset->tiles_per_block = (total_tiles + num_blocks - 1) / num_blocks;
+    qset->tiles_per_block = (num_blocks == 0) ? 0 : (total_tiles + num_blocks - 1) / num_blocks;
     qset->consumed_count = 0;
     for (int i = 0; i < 4; i++) qset->padding[i] = 0;
 
