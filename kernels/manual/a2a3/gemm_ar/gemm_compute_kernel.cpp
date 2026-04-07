@@ -122,6 +122,90 @@ static_assert(G_STEP_KA == G_STEP_KB, "Current implementation assumes stepKa == 
 static_assert(G_K_LOOP >= G_STEP_KA, "K_LOOP must be >= stepKa for L1 caching");
 
 // ============================================================================
+// Type aliases for compute kernel tiles
+// ============================================================================
+using TileMatAData = Tile<TileType::Mat, half, G_BASE_M, G_BASE_K * G_STEP_KA,
+                          BLayout::ColMajor, G_BASE_M, G_BASE_K * G_STEP_KA, SLayout::RowMajor>;
+using TileMatBData = Tile<TileType::Mat, half, G_BASE_K * G_STEP_KB, G_BASE_N,
+                          BLayout::RowMajor, G_BASE_K * G_STEP_KB, G_BASE_N, SLayout::ColMajor>;
+using LeftTileT  = TileLeft<half, G_BASE_M, G_BASE_K, G_BASE_M, G_BASE_K>;
+using RightTileT = TileRight<half, G_BASE_K, G_BASE_N, G_BASE_K, G_BASE_N>;
+using ResTileT   = TileAcc<float, G_BASE_M, G_BASE_N, G_BASE_M, G_BASE_N>;
+
+// Swizzle: remap linear index to column-major within N_TILES-wide groups
+// to improve B-matrix L1 reuse (consecutive tiles share the same N column).
+AICORE inline void SwizzleTileIndex(int linear_idx, uint32_t &mi, uint32_t &ni)
+{
+    constexpr uint32_t SWIZZLE_GROUP = G_N_TILES;
+    uint32_t group = linear_idx / SWIZZLE_GROUP;
+    uint32_t local = linear_idx % SWIZZLE_GROUP;
+    mi = group;
+    ni = (group & 1) ? (SWIZZLE_GROUP - 1 - local) : local;
+    if (mi >= G_M_TILES) {
+        mi = linear_idx / G_N_TILES;
+        ni = linear_idx % G_N_TILES;
+    }
+}
+
+// Run the K-loop for one output tile, then store result to GM and signal comm kernel.
+AICORE inline void ComputeAndStoreTile(
+    __gm__ half *gemm_output,
+    __gm__ half *src0,
+    __gm__ half *src1,
+    volatile __gm__ PerBlockQueue *my_queue,
+    TileMatAData aMatTile[2],
+    TileMatBData bMatTile[2],
+    LeftTileT aTile[2],
+    RightTileT bTile[2],
+    ResTileT &cTile,
+    uint32_t mi, uint32_t ni,
+    uint32_t k_per_rank,
+    int32_t &enqueue_slot)
+{
+    using NDValidShapeC = TileShape2D<half, G_BASE_M, G_BASE_N>;
+    using NDWholeShapeC = BaseShape2D<half, G_M, G_N>;
+    using GlobalDataOut = GlobalTensor<half, NDValidShapeC, NDWholeShapeC>;
+
+    __gm__ half *currentSrc0 = src0 + mi * G_BASE_M * k_per_rank;
+    __gm__ half *currentSrc1 = src1 + ni * G_BASE_N * k_per_rank;
+
+    uint8_t mte2DBFlag = 0, mte1DBFlag = 0;
+    uint32_t k_loop_per_rank = k_per_rank / G_BASE_K;
+    static_assert(G_BASE_K == 64, "G_BASE_K must be 64 for this implementation");
+
+    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+
+    for (uint32_t kIter = 0; kIter < k_loop_per_rank; kIter++) {
+        ProcessKIteration<float, half, half, G_M, G_K, G_N,
+                          G_BASE_M, G_BASE_K, G_BASE_N, G_STEP_KA, G_STEP_KB>(
+            kIter, currentSrc0, currentSrc1,
+            aMatTile, bMatTile, aTile, bTile, cTile,
+            mte2DBFlag, mte1DBFlag, k_per_rank);
+    }
+
+    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
+    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
+    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
+
+    uint64_t outOffset = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;
+    GlobalDataOut dstGlobal(gemm_output + outOffset);
+
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    TSTORE(dstGlobal, cTile);
+
+    pipe_barrier(PIPE_ALL);
+
+    int tile_idx = mi * G_N_TILES + ni;
+    MultiBlockEnqueueFast(my_queue, tile_idx, enqueue_slot);
+    enqueue_slot++;
+}
+
+// ============================================================================
 // GemmComputeImpl: Core compute logic
 //
 // Each block handles a subset of tiles (no contention — sole producer per queue).
@@ -137,15 +221,6 @@ AICORE inline void GemmComputeImpl(
 {
     const int block_idx = get_block_idx();
 
-    using NDValidShapeC = TileShape2D<half, G_BASE_M, G_BASE_N>;
-    using NDWholeShapeC = BaseShape2D<half, G_M, G_N>;
-    using GlobalDataOut = GlobalTensor<half, NDValidShapeC, NDWholeShapeC>;
-
-    using TileMatAData = Tile<TileType::Mat, half, G_BASE_M, G_BASE_K * G_STEP_KA,
-                              BLayout::ColMajor, G_BASE_M, G_BASE_K * G_STEP_KA, SLayout::RowMajor>;
-    using TileMatBData = Tile<TileType::Mat, half, G_BASE_K * G_STEP_KB, G_BASE_N,
-                              BLayout::RowMajor, G_BASE_K * G_STEP_KB, G_BASE_N, SLayout::ColMajor>;
-
     TileMatAData aMatTile[2];
     TileMatBData bMatTile[2];
     constexpr size_t l1ASize = G_BASE_M * G_BASE_K * G_STEP_KA * sizeof(half);
@@ -155,14 +230,9 @@ AICORE inline void GemmComputeImpl(
     TASSIGN(bMatTile[0], 0x0 + 2 * l1ASize);
     TASSIGN(bMatTile[1], 0x0 + 2 * l1ASize + l1BSize);
 
-    using LeftTile  = TileLeft<half, G_BASE_M, G_BASE_K, G_BASE_M, G_BASE_K>;
-    using RightTile = TileRight<half, G_BASE_K, G_BASE_N, G_BASE_K, G_BASE_N>;
-    using ResTile   = TileAcc<float, G_BASE_M, G_BASE_N, G_BASE_M, G_BASE_N>;
-
-    LeftTile  aTile[2];
-    RightTile bTile[2];
-    ResTile   cTile;
-
+    LeftTileT  aTile[2];
+    RightTileT bTile[2];
+    ResTileT   cTile;
     TASSIGN(aTile[0], 0x0);
     TASSIGN(aTile[1], 0x0 + G_BASE_M * G_BASE_K * sizeof(half));
     TASSIGN(bTile[0], 0x0);
@@ -174,69 +244,16 @@ AICORE inline void GemmComputeImpl(
     const int my_start_tile = block_idx * tiles_per_block;
     const int my_end_tile = (block_idx + 1) * tiles_per_block;
 
-    volatile __gm__ PerBlockQueue* my_queue = GetMyBlockQueue(
-        (volatile __gm__ MultiBlockQueueSet*)queue_set, block_idx);
+    volatile __gm__ PerBlockQueue *my_queue = GetMyBlockQueue(
+        (volatile __gm__ MultiBlockQueueSet *)queue_set, block_idx);
     int32_t enqueue_slot = 0;
 
     for (int linear_idx = my_start_tile; linear_idx < my_end_tile && linear_idx < total_tiles; linear_idx++) {
-        // Swizzle: remap linear index to column-major within N_TILES-wide groups
-        // to improve B-matrix L1 reuse (consecutive tiles share the same N column)
-        constexpr uint32_t SWIZZLE_GROUP = G_N_TILES;
-        uint32_t group = linear_idx / SWIZZLE_GROUP;
-        uint32_t local = linear_idx % SWIZZLE_GROUP;
         uint32_t mi, ni;
-        if (group & 1) {
-            mi = group;
-            ni = SWIZZLE_GROUP - 1 - local;
-        } else {
-            mi = group;
-            ni = local;
-        }
-        if (mi >= G_M_TILES) {
-            mi = linear_idx / G_N_TILES;
-            ni = linear_idx % G_N_TILES;
-        }
-
-        int tile_idx = mi * G_N_TILES + ni;
-
-        __gm__ half *currentSrc0 = src0 + mi * G_BASE_M * k_per_rank;
-        __gm__ half *currentSrc1 = src1 + ni * G_BASE_N * k_per_rank;
-
-        uint8_t mte2DBFlag = 0, mte1DBFlag = 0;
-        uint32_t k_loop_per_rank = k_per_rank / G_BASE_K;
-        static_assert(G_BASE_K == 64, "G_BASE_K must be 64 for this implementation");
-
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-        set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-
-        for (uint32_t kIter = 0; kIter < k_loop_per_rank; kIter++) {
-            ProcessKIteration<float, half, half, G_M, G_K, G_N,
-                              G_BASE_M, G_BASE_K, G_BASE_N, G_STEP_KA, G_STEP_KB>(
-                kIter, currentSrc0, currentSrc1,
-                aMatTile, bMatTile, aTile, bTile, cTile,
-                mte2DBFlag, mte1DBFlag, k_per_rank);
-        }
-
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-
-        uint64_t outOffset = (uint64_t)(mi * G_BASE_M) * G_N + ni * G_BASE_N;
-        __gm__ half *tileDst = gemm_output + outOffset;
-
-        set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-        wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-        GlobalDataOut dstGlobal(tileDst);
-        TSTORE(dstGlobal, cTile);
-
-        // Drain all pipes to ensure GM write completion before signaling comm kernel
-        pipe_barrier(PIPE_ALL);
-
-        MultiBlockEnqueueFast(my_queue, tile_idx, enqueue_slot);
-        enqueue_slot++;
+        SwizzleTileIndex(linear_idx, mi, ni);
+        ComputeAndStoreTile(gemm_output, src0, src1, my_queue,
+                            aMatTile, bMatTile, aTile, bTile, cTile,
+                            mi, ni, k_per_rank, enqueue_slot);
     }
 }
 

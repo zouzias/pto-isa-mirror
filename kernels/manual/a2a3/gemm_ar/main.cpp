@@ -323,68 +323,17 @@ struct GemmHcclContext {
 
     bool Init(int rankId, int nRanks, int deviceId, const HcclRootInfo *rootInfo, rtStream_t hcclStream)
     {
-        constexpr int kMaxRetries = 3;
-        HcclResult hret = HCCL_SUCCESS;
-        for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
-            hret = HcclCommInitRootInfo(static_cast<uint32_t>(nRanks), rootInfo,
-                                        static_cast<uint32_t>(rankId), &comm);
-            if (hret == HCCL_SUCCESS) break;
-            std::cerr << "[WARN] Rank " << rankId << ": HcclCommInitRootInfo failed: " << hret
-                      << " (attempt " << (attempt + 1) << "/" << kMaxRetries
-                      << "), retrying in 5s..." << std::endl;
-            sleep(5);
-        }
-        if (hret != HCCL_SUCCESS) {
-            std::cerr << "[ERROR] Rank " << rankId << ": HcclCommInitRootInfo failed after "
-                      << kMaxRetries << " attempts: " << hret << std::endl;
-            return false;
-        }
+        if (!InitComm(rankId, nRanks, rootInfo)) return false;
 
         char group[128] = {};
-        hret = HcclGetCommName(comm, group);
-        if (hret != HCCL_SUCCESS) {
-            std::cerr << "[ERROR] Rank " << rankId << ": HcclGetCommName failed: " << hret << std::endl;
-            return false;
-        }
-
         CommTopo topoRet = 0;
-        hret = HcomGetL0TopoTypeEx(group, &topoRet, COMM_IS_NOT_SET_DEVICE);
-        if (hret != HCCL_SUCCESS) {
-            std::cerr << "[ERROR] Rank " << rankId << ": HcomGetL0TopoTypeEx failed: " << hret << std::endl;
-            return false;
-        }
-
         HcclComm commHandle = nullptr;
-        hret = HcomGetCommHandleByGroup(group, &commHandle);
-        if (hret != HCCL_SUCCESS) {
-            std::cerr << "[ERROR] Rank " << rankId << ": HcomGetCommHandleByGroup failed: " << hret << std::endl;
-            return false;
-        }
+        if (!QueryCommTopology(rankId, group, sizeof(group), topoRet, commHandle)) return false;
 
         CommMpiBarrier();
 
-        gemm_ar_tiling::Mc2CommConfigV2 tiling{};
-        memset(&tiling, 0, sizeof(tiling));
-
-        tiling.init.version = 100U;
-        tiling.init.mc2HcommCnt = 1U;
-        tiling.init.commBlockNum = 48U;
-        tiling.init.devType = 4U;
-        tiling.init.offset[0] =
-            static_cast<uint32_t>(reinterpret_cast<uint64_t>(&tiling.inner) - reinterpret_cast<uint64_t>(&tiling.init));
-
-        tiling.inner.opType = 18U;
-        tiling.inner.commEngine = 3U;
-        tiling.inner.version = 1U;
-        strncpy(tiling.inner.groupName, group, gemm_ar_tiling::TILING_GROUP_NAME_SIZE - 1);
-        strncpy(tiling.inner.algConfig, "BatchWrite=level0:fullmesh", gemm_ar_tiling::TILING_ALG_CONFIG_SIZE - 1);
-
         void *ctxPtr = nullptr;
-        hret = HcclAllocComResourceByTiling(commHandle, hcclStream, &tiling, &ctxPtr);
-        if (hret != HCCL_SUCCESS || ctxPtr == nullptr) {
-            std::cerr << "[ERROR] Rank " << rankId << ": HcclAllocComResourceByTiling failed: " << hret << std::endl;
-            return false;
-        }
+        if (!AllocCommResource(rankId, commHandle, hcclStream, group, ctxPtr)) return false;
 
         if (topoRet == COMM_TOPO_MESH) {
             return InitMeshPath(rankId, ctxPtr);
@@ -405,6 +354,76 @@ struct GemmHcclContext {
     }
 
 private:
+    bool InitComm(int rankId, int nRanks, const HcclRootInfo *rootInfo)
+    {
+        constexpr int kMaxRetries = 3;
+        HcclResult hret = HCCL_SUCCESS;
+        for (int attempt = 0; attempt < kMaxRetries; ++attempt) {
+            hret = HcclCommInitRootInfo(static_cast<uint32_t>(nRanks), rootInfo,
+                                        static_cast<uint32_t>(rankId), &comm);
+            if (hret == HCCL_SUCCESS) break;
+            std::cerr << "[WARN] Rank " << rankId << ": HcclCommInitRootInfo failed: " << hret
+                      << " (attempt " << (attempt + 1) << "/" << kMaxRetries
+                      << "), retrying in 5s..." << std::endl;
+            sleep(5);
+        }
+        if (hret != HCCL_SUCCESS) {
+            std::cerr << "[ERROR] Rank " << rankId << ": HcclCommInitRootInfo failed after "
+                      << kMaxRetries << " attempts: " << hret << std::endl;
+            return false;
+        }
+        return true;
+    }
+
+    bool QueryCommTopology(int rankId, char *group, size_t groupSize, CommTopo &topoRet, HcclComm &commHandle)
+    {
+        HcclResult hret = HcclGetCommName(comm, group);
+        if (hret != HCCL_SUCCESS) {
+            std::cerr << "[ERROR] Rank " << rankId << ": HcclGetCommName failed: " << hret << std::endl;
+            return false;
+        }
+
+        hret = HcomGetL0TopoTypeEx(group, &topoRet, COMM_IS_NOT_SET_DEVICE);
+        if (hret != HCCL_SUCCESS) {
+            std::cerr << "[ERROR] Rank " << rankId << ": HcomGetL0TopoTypeEx failed: " << hret << std::endl;
+            return false;
+        }
+
+        hret = HcomGetCommHandleByGroup(group, &commHandle);
+        if (hret != HCCL_SUCCESS) {
+            std::cerr << "[ERROR] Rank " << rankId << ": HcomGetCommHandleByGroup failed: " << hret << std::endl;
+            return false;
+        }
+        return true;
+    }
+
+    bool AllocCommResource(int rankId, HcclComm commHandle, rtStream_t hcclStream,
+                           const char *group, void *&ctxPtr)
+    {
+        gemm_ar_tiling::Mc2CommConfigV2 tiling{};
+        memset(&tiling, 0, sizeof(tiling));
+
+        tiling.init.version = 100U;
+        tiling.init.mc2HcommCnt = 1U;
+        tiling.init.commBlockNum = 48U;
+        tiling.init.devType = 4U;
+        tiling.init.offset[0] =
+            static_cast<uint32_t>(reinterpret_cast<uint64_t>(&tiling.inner) - reinterpret_cast<uint64_t>(&tiling.init));
+
+        tiling.inner.opType = 18U;
+        tiling.inner.commEngine = 3U;
+        tiling.inner.version = 1U;
+        strncpy(tiling.inner.groupName, group, gemm_ar_tiling::TILING_GROUP_NAME_SIZE - 1);
+        strncpy(tiling.inner.algConfig, "BatchWrite=level0:fullmesh", gemm_ar_tiling::TILING_ALG_CONFIG_SIZE - 1);
+
+        HcclResult hret = HcclAllocComResourceByTiling(commHandle, hcclStream, &tiling, &ctxPtr);
+        if (hret != HCCL_SUCCESS || ctxPtr == nullptr) {
+            std::cerr << "[ERROR] Rank " << rankId << ": HcclAllocComResourceByTiling failed: " << hret << std::endl;
+            return false;
+        }
+        return true;
+    }
+
     bool InitMeshPath(int rankId, void *ctxPtr)
     {
         deviceCtx = reinterpret_cast<HcclDeviceContext *>(ctxPtr);
