@@ -23,6 +23,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdlib>
 #include <cstring>
 #include <cstdint>
+#include "securec.h"
 #include <cmath>
 #include <vector>
 #include <random>
@@ -401,7 +402,7 @@ private:
                            const char *group, void *&ctxPtr)
     {
         gemm_ar_tiling::Mc2CommConfigV2 tiling{};
-        memset(&tiling, 0, sizeof(tiling));
+        memset_s(&tiling, sizeof(tiling), 0, sizeof(tiling));
 
         tiling.init.version = 100U;
         tiling.init.mc2HcommCnt = 1U;
@@ -413,8 +414,10 @@ private:
         tiling.inner.opType = 18U;
         tiling.inner.commEngine = 3U;
         tiling.inner.version = 1U;
-        strncpy(tiling.inner.groupName, group, gemm_ar_tiling::TILING_GROUP_NAME_SIZE - 1);
-        strncpy(tiling.inner.algConfig, "BatchWrite=level0:fullmesh", gemm_ar_tiling::TILING_ALG_CONFIG_SIZE - 1);
+        strncpy_s(tiling.inner.groupName, gemm_ar_tiling::TILING_GROUP_NAME_SIZE, group,
+                  gemm_ar_tiling::TILING_GROUP_NAME_SIZE - 1);
+        strncpy_s(tiling.inner.algConfig, gemm_ar_tiling::TILING_ALG_CONFIG_SIZE, "BatchWrite=level0:fullmesh",
+                  gemm_ar_tiling::TILING_ALG_CONFIG_SIZE - 1);
 
         HcclResult hret = HcclAllocComResourceByTiling(commHandle, hcclStream, &tiling, &ctxPtr);
         if (hret != HCCL_SUCCESS || ctxPtr == nullptr) {
@@ -440,12 +443,11 @@ private:
         return true;
     }
 
-    bool InitRingPath(int rankId, int nRanks, void *ctxPtr)
+    bool ReadRingParams(int rankId, uint8_t *rawCtx,
+                        hccl_compat::HcclOpResParamHead &head,
+                        std::vector<hccl_compat::RemoteResPtr> &remoteResArr)
     {
         using namespace hccl_compat;
-        auto *rawCtx = reinterpret_cast<uint8_t *>(ctxPtr);
-
-        HcclOpResParamHead head{};
         const size_t headOff = offsetof(HcclOpResParam, localUsrRankId);
         aclError aRet = aclrtMemcpy(&head, sizeof(head), rawCtx + headOff, sizeof(head), ACL_MEMCPY_DEVICE_TO_HOST);
         if (aRet != ACL_SUCCESS) {
@@ -460,7 +462,7 @@ private:
 
         const size_t remoteResOff = offsetof(HcclOpResParam, remoteRes);
         const size_t remoteResBytes = head.rankSize * sizeof(RemoteResPtr);
-        std::vector<RemoteResPtr> remoteResArr(head.rankSize);
+        remoteResArr.resize(head.rankSize);
 
         aRet = aclrtMemcpy(remoteResArr.data(), remoteResBytes, rawCtx + remoteResOff, remoteResBytes,
                            ACL_MEMCPY_DEVICE_TO_HOST);
@@ -468,11 +470,18 @@ private:
             std::cerr << "[ERROR] Rank " << rankId << ": read remoteRes failed\n";
             return false;
         }
+        return true;
+    }
 
-        memset(&hostCtx, 0, sizeof(hostCtx));
+    bool BuildRingHostCtx(int rankId, uint8_t *rawCtx,
+                          const hccl_compat::HcclOpResParamHead &head,
+                          const std::vector<hccl_compat::RemoteResPtr> &remoteResArr)
+    {
+        using namespace hccl_compat;
+        memset_s(&hostCtx, sizeof(hostCtx), 0, sizeof(hostCtx));
 
         uint64_t wsFields[2] = {0, 0};
-        aRet = aclrtMemcpy(wsFields, sizeof(wsFields), rawCtx, sizeof(wsFields), ACL_MEMCPY_DEVICE_TO_HOST);
+        aclError aRet = aclrtMemcpy(wsFields, sizeof(wsFields), rawCtx, sizeof(wsFields), ACL_MEMCPY_DEVICE_TO_HOST);
         if (aRet == ACL_SUCCESS) {
             hostCtx.workSpace = wsFields[0];
             hostCtx.workSpaceSize = wsFields[1];
@@ -504,9 +513,13 @@ private:
 
             hostCtx.windowsIn[i] = remoteInfo.windowsIn;
         }
+        return true;
+    }
 
+    bool CopyHostCtxToDevice(int rankId)
+    {
         void *newDevMem = nullptr;
-        aRet = aclrtMalloc(&newDevMem, sizeof(HcclDeviceContext), ACL_MEM_MALLOC_HUGE_FIRST);
+        aclError aRet = aclrtMalloc(&newDevMem, sizeof(HcclDeviceContext), ACL_MEM_MALLOC_HUGE_FIRST);
         if (aRet != ACL_SUCCESS || newDevMem == nullptr) {
             std::cerr << "[ERROR] Rank " << rankId << ": aclrtMalloc for RING deviceCtx failed\n";
             return false;
@@ -522,6 +535,18 @@ private:
 
         deviceCtx = reinterpret_cast<HcclDeviceContext *>(newDevMem);
         ownsDeviceCtx = true;
+        return true;
+    }
+
+    bool InitRingPath(int rankId, int nRanks, void *ctxPtr)
+    {
+        auto *rawCtx = reinterpret_cast<uint8_t *>(ctxPtr);
+
+        hccl_compat::HcclOpResParamHead head{};
+        std::vector<hccl_compat::RemoteResPtr> remoteResArr;
+        if (!ReadRingParams(rankId, rawCtx, head, remoteResArr)) return false;
+        if (!BuildRingHostCtx(rankId, rawCtx, head, remoteResArr)) return false;
+        if (!CopyHostCtxToDevice(rankId)) return false;
 
         if (rankId == 0) {
             std::cout << "[INFO] HCCL RING init OK"
@@ -996,7 +1021,7 @@ static uint16_t floatToHalf(float f)
 
 static void computeGolden(const float *A, const float *B, float *C, int M, int K, int N)
 {
-    std::memset(C, 0, (size_t)M * N * sizeof(float));
+    memset_s(C, (size_t)M * N * sizeof(float), 0, (size_t)M * N * sizeof(float));
 
     unsigned hw = std::thread::hardware_concurrency();
     if (hw == 0) hw = 1;
@@ -1196,7 +1221,7 @@ static bool generateData(int nranks,
     std::vector<float> golden_orig((size_t)G_ORIG_M * G_ORIG_N, 0.0f);
     std::vector<float> tmp((size_t)G_ORIG_M * G_ORIG_N);
     for (int r = 0; r < nranks; r++) {
-        std::memset(tmp.data(), 0, tmp.size() * sizeof(float));
+        memset_s(tmp.data(), tmp.size() * sizeof(float), 0, tmp.size() * sizeof(float));
         computeGolden(A_fp32_all[r].data(), B_fp32.data(), tmp.data(), G_ORIG_M, G_K, G_ORIG_N);
         for (size_t i = 0; i < golden_orig.size(); i++)
             golden_orig[i] += tmp[i];
