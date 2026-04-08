@@ -540,6 +540,41 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert
   fi
 fi
+if [ "$ENABLE_KIRINX90" = "true" ]; then
+  python3 tests/script/build_st.py $ARGS -v kirinX90 -t all
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t textract
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tmov
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tadd
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tcolsum
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tpartadd
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t trowsum
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tsort32
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tcvt
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tmrgsort
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tgather
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tsub
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tmatmul
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tload
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t ttrans
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tstore
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t trowexpand
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tdivs
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t trsqrt
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tadds
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tmax
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tpartmax
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tpartmin
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t trowmax
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tmul
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tmov_acc2mat
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tci
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tdiv
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t texp
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tmov_ub2l1
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tmov_vect
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tmuls
+  python3 tests/script/run_st.py $ARGS -w -v kirinX90 -t tsel
+fi
 
 if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/build_st.py $ARGS -v kirin9030 -t all

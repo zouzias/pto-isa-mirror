@@ -7,7 +7,19 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
-#ifndef TMRGSORT_KIRIN9030_HPP
-#define TMRGSORT_KIRIN9030_HPP
-#include "pto/npu/a5/TMrgSort.hpp"
-#endif // TMRGSORT_KIRIN9030_HPP
+
+#ifndef PTO_DATATYPE_HPP_KIRINX90
+#define PTO_DATATYPE_HPP_KIRINX90
+
+#include <pto/npu/kirin9030/datatype.hpp>
+
+namespace pto {
+#if defined(__DAV_VEC__)
+template <>
+struct TypeGet<vector_bf16> {
+    using T = vector_bf16;
+};
+#endif
+} // namespace pto
+
+#endif

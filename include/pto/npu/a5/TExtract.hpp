@@ -608,11 +608,11 @@ __tf__ AICORE void TExtractVecToVecNDImpl(typename DstTileData::TileDType __out_
 
     if (validCol == dstRowStride && validCol == srcRowStride && totalBytes >= BLOCK_BYTE_SIZE) {
         uint16_t burstLen = static_cast<uint16_t>(totalBytes / BLOCK_BYTE_SIZE);
-        copy_ubuf_to_ubuf((__ubuf__ void *)dstAddr, (__ubuf__ void *)srcStart, 0, 1, burstLen, 0, 0);
+        pto_copy_ubuf_to_ubuf((__ubuf__ void *)dstAddr, (__ubuf__ void *)srcStart, 1, burstLen, 0, 0);
     } else {
         uint16_t srcGap = static_cast<uint16_t>((srcRowStride - validCol) * sizeof(T) / BLOCK_BYTE_SIZE);
         uint16_t dstGap = static_cast<uint16_t>((dstRowStride - validCol) * sizeof(T) / BLOCK_BYTE_SIZE);
-        copy_ubuf_to_ubuf((__ubuf__ void *)dstAddr, (__ubuf__ void *)srcStart, 0, validRow, rowBurstLen, srcGap,
+        pto_copy_ubuf_to_ubuf((__ubuf__ void *)dstAddr, (__ubuf__ void *)srcStart, validRow, rowBurstLen, srcGap,
                           dstGap);
     }
 }

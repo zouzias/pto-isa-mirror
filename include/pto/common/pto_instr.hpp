@@ -63,7 +63,7 @@ PTO_INST void TPRINT(TileData &src)
 }
 
 template <typename TileData, typename GlobalData>
-PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp)
+PTO_INST void TPRINT(TileData &src, GlobalData &tmp)
 {
     MAP_INSTR_IMPL(TPRINT, src, tmp);
 }

@@ -10,7 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 /**
  * @file TCvt.hpp
- * @brief Type Conversion (TCVT) Implementation for NPU Kirin9030 Architecture
+ * @brief Type Conversion (TCVT) Implementation for NPU KirinX90 Architecture
  *
  * FILE ORGANIZATION (for easy navigation):
  * =======================================
@@ -19,7 +19,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
  *
  * 2. 1D Helper Templates (lines ~103-466)
  *    - Optimized for contiguous data without padding
- *    - cast32to16_1D_NoPostUpdate, cast32to32_1D_NoPostUpdate
+ *    - castS64to32_1D_NoPostUpdate, cast32to16_1D_NoPostUpdate, cast32to32_1D_NoPostUpdate, cast32toS64_1D_NoPostUpdate
  *    - cast16to16_1D_NoPostUpdate, cast16to32_1D_NoPostUpdate, cast16to8_1D_NoPostUpdate
  *    - cast8to16_1D_NoPostUpdate, cast8to32_1D_NoPostUpdate, cast32to8_1D_NoPostUpdate
  *
@@ -29,12 +29,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
  *
  * 4. castData Overloads - 2D versions (lines ~856-1503)
  *    Organized by SOURCE type for easy lookup:
- *    - FP32 (float)        → fp16, int16, int32
+ *    - FP32 (float)        → fp16, int16, int32, int64
  *    - FP16 (half)         → fp32, int32, int16, int8, uint8
  *    - U8, I8 (8-bit int)  → half, uint16, int16, int32
  *    - I16 (16-bit int)    → uint8, half, float, uint32, int32
- *    - I32 (32-bit int)    → float, int16, uint16, uint8
+ *    - I32 (32-bit int)    → float, int16, uint16, int64, uint8
  *    - U32 (32-bit uint)   → uint8, uint16, int16
+ *    - I64 (64-bit int)    → float, int32
  *
  * 5. castData_1D_NoPostUpdate Overloads (lines ~1504-1710)
  *    - Same organization as 2D versions, optimized for contiguous data
@@ -50,12 +51,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef TCVT_HPP
 #define TCVT_HPP
 
-#include <pto/common/constants.hpp>
-#include <pto/common/utils.hpp>
 #include <array>
-#include "common.hpp"
-#include "utils.hpp"
-
 namespace pto {
 
 // Import rounding type definitions from __cce_simd namespace
@@ -140,6 +136,40 @@ enum class CastMode
 // PERFORMANCE NOTE: 1D versions are significantly faster than 2D versions when applicable,
 // as they avoid the FOR_ROWS/FOR_ELEMENTS loop overhead and process data in bulk.
 
+/**
+ * Cast 64-bit integer to 32-bit (signed/float) - 1D version
+ * Handles: s64 -> s32 #sat #part, s64 -> f32 #rnd #part
+ */
+template <typename R, typename DST, typename SRC>
+inline AICORE void castS64to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows,
+                                               uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                                               SaturationMode satMode)
+{
+    vector_s64 v_input_0;
+    const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
+    uint32_t totalElements = validRows * validCols;
+    uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B64);
+    uint32_t sReg = totalElements;
+    uint32_t len64 = sReg * 2;
+    uint32_t len_even = sReg * 2;
+
+    for (uint16_t i = 0; i < repeatTimes; ++i) {
+        RegTensor<DST> v_output;
+        MaskReg preg_b64 = CreatePredicate<float>(len64);
+        MaskReg preg_b32 = CreatePredicate<float>(len_even);
+
+        vlds(v_input_0, src, i * ELE_CNT_B64, NORM);
+        if constexpr (std::is_same<R, void>::value) {
+            // KirinX90 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+            vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
+        } else {
+            vcvt(v_output, v_input_0, preg_b64, R(), PART_EVEN);
+        }
+        vsts(v_output, dst, i * ELE_CNT_B64, PK_B64, preg_b32);
+        // sReg is decremented by CreatePredicate with POST_UPDATE
+    }
+}
+
 // FP32 -> INT16 (PyTorch-compatible for inf/-inf)
 // Two-step: fp32 -> int32 -> int16 (uses registers, no UB temp)
 template <typename R>
@@ -184,7 +214,7 @@ inline AICORE void cast32to16_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
 
         vlds(v_input_0, src, i * ELE_CNT_B32, NORM);
         if constexpr (std::is_same<R, void>::value) {
-            // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        // KirinX90 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
             vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);
         } else {
             vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
@@ -223,6 +253,38 @@ inline AICORE void cast32to32_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
             vcvt(v_output, v_input_0, preg_b32, R());
         }
         vsts(v_output, dst, i * ELE_CNT_B32, NORM_B32, preg_b32_st);
+        // sReg is decremented by CreatePredicate with POST_UPDATE
+    }
+}
+
+// Cast 32-bit -> s64 (1D)
+template <typename R, typename SRC>
+inline AICORE void cast32toS64_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_t validRows,
+                                               uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                                               SaturationMode satMode)
+{
+    const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
+    uint32_t totalElements = validRows * validCols;
+    uint16_t repeatTimes = CeilDivision(totalElements, ELE_CNT_B64);
+    uint32_t sReg = totalElements;
+    uint32_t len32 = ELE_CNT_B32;
+    MaskReg preg_b32 = CreatePredicate<float>(len32);
+    uint32_t len64 = sReg * 2;
+
+    for (uint16_t i = 0; i < repeatTimes; ++i) {
+        RegTensor<SRC> v_input_0;
+        vector_s64 v_output;
+        MaskReg preg_b64 = CreatePredicate<float>(len64);
+
+        vlds(v_input_0, src, i * ELE_CNT_B64, UNPK_B32);
+        if constexpr (std::is_same<R, void>::value) {
+            // For type expansion s32->s64 without rounding, no saturation control
+            vcvt(v_output, v_input_0, preg_b32, PART_EVEN);
+        } else {
+            // For conversions with rounding (e.g., f32->s64), saturation mode is controllable
+            vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
+        }
+        vsts(v_output, dst, i * ELE_CNT_B64, NORM_B32, preg_b64);
         // sReg is decremented by CreatePredicate with POST_UPDATE
     }
 }
@@ -388,7 +450,7 @@ inline AICORE void cast16to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
             vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
         } else {
             // SAT_PART mode for int-to-int
-            // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+            // KirinX90 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
             vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
         }
         vsts(v_output_even, dst, i * ELE_CNT_B16, PK_B16, preg_b16_st);
@@ -493,7 +555,7 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         if constexpr (MODE == CastMode::ROUND_SAT_PART) {
             vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
         } else {
-            // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+            // KirinX90 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
             vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
         }
 
@@ -507,6 +569,43 @@ inline AICORE void cast32to8_1D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
 //=============================================================================================
 // 2D Helper Templates - For non-contiguous data with padding
 //=============================================================================================
+/**
+ * Cast 64-bit integer to 32-bit (signed/float) - 2D version
+ * Handles: s64 -> s32 #sat #part, s64 -> f32 #rnd #part
+ * Intrinsics:
+ *   vcvt(output, input, preg, RS_DISABLE, PART_EVEN)  // s64 -> s32 with saturation
+ *   vcvt(output, input, preg, R(), PART_EVEN)        // s64 -> f32 with rounding
+ */
+template <typename R, typename DST, typename SRC>
+inline AICORE void castS64to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols,
+                               uint32_t dstCols, uint32_t srcCols, SaturationMode satMode)
+{
+    vector_s64 v_input_0;
+
+    const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
+
+    FOR_ROWS
+    uint32_t len64 = sreg * 2; // As we operate with 64bit blocks using 32bit operations
+    MaskReg preg_b64 = CreatePredicate<float>(len64);
+    uint32_t len_even = sreg * 2; // As only the even part is taken
+
+    FOR_ELEMENTS(ELE_CNT_B64)
+    RegTensor<DST> v_output;
+    MaskReg preg_b32 = CreatePredicate<float>(len_even);
+
+    vlds(v_input_0, src, srcOffset, NORM);
+    if constexpr (std::is_same<R, void>::value) {
+        // For type expansion (s64->s32/f32), saturation mode is controllable
+        // KirinX90 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        vcvt(v_output, v_input_0, preg_b64, RS_ENABLE, PART_EVEN);
+    } else {
+        vcvt(v_output, v_input_0, preg_b64, R(), PART_EVEN);
+    }
+    vsts(v_output, dst, dstOffset, PK_B64, preg_b32);
+    END_FOR_ELEMENTS
+    END_FOR_ROWS
+}
+
 /**
  * Cast 32-bit to 16-bit types
  * Handles: f32 -> f16 #rnd #sat #part, f32 -> s16 #rnd #sat #part
@@ -523,18 +622,20 @@ inline AICORE void cast32to16(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
 
     FOR_ROWS
     FOR_ELEMENTS(ELE_CNT_B16)
-    RegTensor<SRC> v_input_0, v_input_1;
+    RegTensor<SRC> v_input_0, v_input_1, v_input_even, v_input_odd;
     RegTensor<DST> v_output_odd, v_output_even, v_output;
     MaskReg preg_b16 = CreatePredicate<half>(sreg);
 
-    vlds(v_input_0, v_input_1, src, srcOffset, DINTLV_B32);
+    vlds(v_input_0, src, srcOffset, NORM);
+    vlds(v_input_1, src, srcOffset + ELE_CNT_B32, NORM);
+    vdintlv(v_input_even, v_input_odd, v_input_0, v_input_1);
     if constexpr (std::is_same<R, void>::value) {
-        // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
-        vcvt(v_output_odd, v_input_1, preg_b32, RS_ENABLE, PART_ODD);
-        vcvt(v_output_even, v_input_0, preg_b32, RS_ENABLE, PART_EVEN);
+        // KirinX90 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        vcvt(v_output_even, v_input_even, preg_b32, RS_ENABLE, PART_EVEN);
+        vcvt(v_output_odd, v_input_odd, preg_b32, RS_ENABLE, PART_ODD);
     } else {
-        vcvt(v_output_odd, v_input_1, preg_b32, R(), RS_DISABLE, PART_ODD);
-        vcvt(v_output_even, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
+        vcvt(v_output_even, v_input_even, preg_b32, R(), RS_DISABLE, PART_EVEN);
+        vcvt(v_output_odd, v_input_odd, preg_b32, R(), RS_DISABLE, PART_ODD);
     }
     vor(v_output, v_output_even, v_output_odd, preg_b16);
     vsts(v_output, dst, dstOffset, NORM_B16, preg_b16);
@@ -565,7 +666,7 @@ inline AICORE void cast32to16_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *s
 
     vlds(v_input, src, srcOffset, NORM);
     if constexpr (std::is_same<R, void>::value) {
-        // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        // KirinX90 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
         vcvt(v_output, v_input, preg_b32, RS_ENABLE, PART_EVEN);
     } else {
         vcvt(v_output, v_input, preg_b32, R(), RS_DISABLE, PART_EVEN);
@@ -628,6 +729,41 @@ inline AICORE void cast32to32(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t val
         vcvt(v_output, v_input_0, preg_b32, R());
     }
     vsts(v_output, dst, dstOffset, NORM_B32, preg_b32);
+    END_FOR_ELEMENTS
+    END_FOR_ROWS
+}
+
+/**
+ * Cast 32-bit to 64-bit signed integer
+ * Handles: s32 -> s64 #part, f32 -> s64 #rnd #sat #part
+ * Intrinsics:
+ *   vcvt(output, input, preg, PART_EVEN)                    // s32 -> s64 (type expansion)
+ *   vcvt(output, input, preg, R(), RS_DISABLE, PART_EVEN)    // f32 -> s64 (with rounding and saturation)
+ */
+template <typename R, typename SRC>
+inline AICORE void cast32toS64(__ubuf__ int64_t *dst, __ubuf__ SRC *src, uint32_t validRows, uint32_t validCols,
+                               uint32_t dstCols, uint32_t srcCols, SaturationMode satMode)
+{
+    const uint32_t ELE_CNT_B64 = ELE_CNT_B32 / 2;
+    uint32_t len32 = ELE_CNT_B32;
+    MaskReg preg_b32 = CreatePredicate<float>(len32);
+
+    FOR_ROWS
+    uint32_t len64 = sreg * 2; // As we operate with 64bit blocks using 32bit operations
+    FOR_ELEMENTS(ELE_CNT_B64)
+    RegTensor<SRC> v_input_0;
+    vector_s64 v_output;
+
+    MaskReg preg_b64 = CreatePredicate<float>(len64);
+
+    vlds(v_input_0, src, srcOffset, UNPK_B32);
+    if constexpr (std::is_same<R, void>::value) {
+        vcvt(v_output, v_input_0, preg_b32, PART_EVEN);
+    } else {
+        // For conversions with rounding (e.g., f32->s64), saturation mode controlled by CTRL register
+        vcvt(v_output, v_input_0, preg_b32, R(), RS_DISABLE, PART_EVEN);
+    }
+    vsts(v_output, dst, dstOffset, NORM_B32, preg_b64);
     END_FOR_ELEMENTS
     END_FOR_ROWS
 }
@@ -747,7 +883,7 @@ inline AICORE void cast16to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
         vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
     } else {
         // SAT_PART mode: saturation without rounding (integer->integer)
-        // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        // KirinX90 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
         vcvt(v_output_odd, v_input_1, preg_b16, RS_ENABLE, PART_ODD);
         vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
     }
@@ -782,7 +918,7 @@ inline AICORE void cast16to8_2D_NoPostUpdate(__ubuf__ DST *dst, __ubuf__ SRC *sr
         vcvt(v_output_even, v_input_0, preg_b16, R(), RS_DISABLE, PART_EVEN);
     } else {
         // SAT_PART mode: s16 -> u8
-        // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        // KirinX90 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
         vcvt(v_output_even, v_input_0, preg_b16, RS_ENABLE, PART_EVEN);
     }
     vsts(v_output_even, dst, dstOffset, PK_B16, preg_b16_st);
@@ -930,7 +1066,7 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
     if constexpr (MODE == CastMode::ROUND_SAT_PART) {
         vcvt(v_output_p0, v_input, preg_b32, ROUND_R, RS_DISABLE, PART_P0);
     } else {
-        // Kirin9030 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
+        // KirinX90 set CTRL unsuccess, use RS_ENABLE to enable saturation mode
         vcvt(v_output_p0, v_input, preg_b32, RS_ENABLE, PART_P0);
     }
 
@@ -947,7 +1083,7 @@ inline AICORE void cast32to8(__ubuf__ DST *dst, __ubuf__ SRC *src, uint32_t vali
 // These are the main conversion functions organized by source type for easy navigation.
 // Each source type section contains conversions to all supported destination types.
 //
-// ORGANIZATION: Grouped by source type in ascending bit-width order (8→16→32-bit)
+// ORGANIZATION: Grouped by source type in ascending bit-width order (8→16→32→64-bit)
 // WHY: This ordering provides quick lookup - if you know the source type, you can
 // jump directly to its section and find all target conversions in one place.
 
@@ -1063,6 +1199,26 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ floa
                                             SaturationMode satMode)
 {
     cast32to32<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
+/**
+ * FP32 to I64
+ * Conversion: f32 -> s64 #rnd #sat #part
+ * Uses cast32toS64 helper
+ */
+template <typename R>
+inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t validRows, uint32_t validCols,
+                            uint32_t dstCols, uint32_t srcCols, SaturationMode satMode)
+{
+    cast32toS64<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
+template <typename R>
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t validRows,
+                                            uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                                            SaturationMode satMode)
+{
+    cast32toS64<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 //---------------------------------------------------------------------------------------------
@@ -1392,6 +1548,22 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ int
     cast32to16_2D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
+/** I32 -> I64 #part (type expansion) */
+template <typename R>
+inline AICORE void castData(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols,
+                            uint32_t dstCols, uint32_t srcCols, SaturationMode satMode)
+{
+    cast32toS64<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
+template <typename R>
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t validRows,
+                                            uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                                            SaturationMode satMode)
+{
+    cast32toS64<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
 /** I32 -> U8 #sat #part */
 template <typename R>
 inline AICORE void castData(__ubuf__ uint8_t *dst, __ubuf__ int32_t *src, uint32_t validRows, uint32_t validCols,
@@ -1458,6 +1630,42 @@ inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint
                                             SaturationMode satMode)
 {
     cast32to16_2D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
+//---------------------------------------------------------------------------------------------
+// Source: I64 (signed 64-bit integer) - 2D versions
+//---------------------------------------------------------------------------------------------
+
+/** I64 -> FP32 #rnd #part → vcvt(output, input, preg, R(), PART_EVEN) */
+template <typename R>
+inline AICORE void castData(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols,
+                            uint32_t dstCols, uint32_t srcCols, SaturationMode satMode)
+{
+    castS64to32<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
+template <typename R>
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t validRows,
+                                            uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                                            SaturationMode satMode)
+{
+    castS64to32<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
+/** I64 -> I32 #sat #part → vcvt(output, input, preg, RS_DISABLE, PART_EVEN) */
+template <typename R>
+inline AICORE void castData(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t validRows, uint32_t validCols,
+                            uint32_t dstCols, uint32_t srcCols, SaturationMode satMode)
+{
+    castS64to32<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
+template <typename R>
+inline AICORE void castData_2D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t validRows,
+                                            uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                                            SaturationMode satMode)
+{
+    castS64to32<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 //=============================================================================================
@@ -1673,6 +1881,14 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ floa
     cast32to32_1D_NoPostUpdate<R, CastMode::ROUND_SAT>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
+template <typename R>
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ float *src, uint32_t validRows,
+                                            uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                                            SaturationMode satMode)
+{
+    cast32toS64_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
 // Source: I32 (signed 32-bit integer)
 template <typename R>
 inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int32_t *src, uint32_t validRows,
@@ -1696,6 +1912,14 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ uint16_t *dst, __ubuf__ int
                                             SaturationMode satMode)
 {
     cast32to16_1D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
+template <typename R>
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int64_t *dst, __ubuf__ int32_t *src, uint32_t validRows,
+                                            uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                                            SaturationMode satMode)
+{
+    cast32toS64_1D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
 template <typename R>
@@ -1733,6 +1957,27 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint
     cast32to16_1D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
 }
 
+//---------------------------------------------------------------------------------------------
+// Source: 64-bit types (int64_t)
+//---------------------------------------------------------------------------------------------
+
+// Source: I64 (signed 64-bit integer)
+template <typename R>
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ float *dst, __ubuf__ int64_t *src, uint32_t validRows,
+                                            uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                                            SaturationMode satMode)
+{
+    castS64to32_1D_NoPostUpdate<R>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
+template <typename R>
+inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int32_t *dst, __ubuf__ int64_t *src, uint32_t validRows,
+                                            uint32_t validCols, uint32_t dstCols, uint32_t srcCols,
+                                            SaturationMode satMode)
+{
+    castS64to32_1D_NoPostUpdate<void>(dst, src, validRows, validCols, dstCols, srcCols, satMode);
+}
+
 //=============================================================================================
 // Main TCVT Implementation
 //=============================================================================================
@@ -1742,8 +1987,8 @@ inline AICORE void castData_1D_NoPostUpdate(__ubuf__ int16_t *dst, __ubuf__ uint
  * Converts tile data from source type to destination type using specified rounding mode
  * Iterates over rows and calls appropriate castData specialization
  *
- * @param satMode: Saturation mode control (Kirin9030-specific):
- *                 In Kirin9030, saturation is controlled by both:
+ * @param satMode: Saturation mode control (KirinX90-specific):
+ *                 In KirinX90, saturation is controlled by both:
  *                 1. CTRL register bits [60] and [48] - set by TCVT_IMPL based on conversion type
  *                 2. RS_DISABLE/RS_DISABLE parameters in vcvt intrinsics
  *
@@ -2083,6 +2328,7 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
 // This overload provides conversion-specific default saturation modes:
 // - FP16→UINT8, FP16→INT8: defaults to OFF (PyTorch-compatible truncation)
 // - FP32/FP16→INT16: defaults to OFF (truncation behavior)
+// - INT64→INT32, INT32→INT16: defaults to OFF (truncation behavior)
 // - All others: defaults to ON (native TCVT saturation)
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
@@ -2101,6 +2347,9 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
         // FP16→INT16 (float→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, int16_t>::value &&
          std::is_same<typename TileDataS::DType, half>::value) ||
+        // INT64→INT32 (int→int: CTRL[60] controls saturation)
+        (std::is_same<typename TileDataD::DType, int32_t>::value &&
+         std::is_same<typename TileDataS::DType, int64_t>::value) ||
         // INT32→INT16 (int→int: CTRL[60] controls saturation)
         (std::is_same<typename TileDataD::DType, int16_t>::value &&
          std::is_same<typename TileDataS::DType, int32_t>::value)) {
@@ -2112,7 +2361,7 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 }
 
 // ============================================================================
-// TCVT_IMPL Overloads with tmp buffer (unused in Kirin9030, for API compatibility)
+// TCVT_IMPL Overloads with tmp buffer (unused in KirinX90, for API compatibility)
 // ============================================================================
 template <typename TileDataD, typename TileDataS, typename TmpTileData>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, RoundMode mode, SaturationMode satMode)

@@ -10,8 +10,20 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef HEADER_HPP
 #define HEADER_HPP
+#include "pto/common/utils.hpp"
+#include "pto/common/constants.hpp"
 #include "pto/npu/a2a3/TAssign.hpp"
+#include "pto/npu/kirinX90/datatype.hpp"
+#include "pto/npu/kirinX90/common.hpp"
+#include "pto/npu/kirin9030/utils.hpp"
 #include "pto/npu/kirin9030/TSync.hpp"
+#include "pto/npu/kirinX90/TLoad.hpp"
+#include "pto/npu/kirinX90/TStore.hpp"
+#include "pto/npu/kirinX90/TExtract.hpp"
+#include "pto/npu/kirinX90/TMov.hpp"
+#ifdef __DAV_VEC__
+#include "pto/npu/kirinX90/TCvt.hpp"
+#endif
 #include "pto/npu/kirin9030/TAdd.hpp"
 #include "pto/npu/kirin9030/TAddS.hpp"
 #include "pto/npu/kirin9030/TDivS.hpp"
@@ -19,11 +31,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/kirin9030/TSub.hpp"
 #include "pto/npu/kirin9030/TMin.hpp"
 #include "pto/npu/kirin9030/TMax.hpp"
-#include "pto/npu/kirin9030/TLoad.hpp"
-#ifdef __DAV_VEC__
-#include "pto/npu/kirin9030/TCvt.hpp"
-#endif
-#include "pto/npu/kirin9030/TStore.hpp"
 #include "pto/npu/kirin9030/TMrgSort.hpp"
 #include "pto/npu/kirin9030/TMatmul.hpp"
 #include "pto/npu/kirin9030/TCmps.hpp"
@@ -35,13 +42,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/kirin9030/Tci.hpp"
 #include "pto/npu/kirin9030/TSel.hpp"
 #include "pto/npu/kirin9030/TSort32.hpp"
-#include "pto/npu/kirin9030/TExtract.hpp"
-#include "pto/npu/kirin9030/TMov.hpp"
 #include "pto/npu/kirin9030/TRowExpand.hpp"
 #include "pto/npu/kirin9030/TPartAdd.hpp"
 #include "pto/npu/kirin9030/TPartMax.hpp"
-#include "pto/npu/kirin9030/TInsert.hpp"
 #include "pto/npu/kirin9030/TPartMin.hpp"
+#include "pto/npu/kirin9030/TInsert.hpp"
 #include "pto/npu/kirin9030/TGather.hpp"
 #include "pto/npu/kirin9030/TRsqrt.hpp"
 #include "pto/npu/kirin9030/TUnaryOp.hpp"
