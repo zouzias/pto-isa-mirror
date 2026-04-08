@@ -8,11 +8,11 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_NPU_COMM_ASYNC_UDMA_WORKSPACE_MANAGER_HPP
-#define PTO_NPU_COMM_ASYNC_UDMA_WORKSPACE_MANAGER_HPP
+#ifndef PTO_NPU_COMM_ASYNC_URMA_WORKSPACE_MANAGER_HPP
+#define PTO_NPU_COMM_ASYNC_URMA_WORKSPACE_MANAGER_HPP
 
 #if defined(__CCE_KT_TEST__)
-#error "udma_workspace_manager.hpp is a host-only header and cannot be included in device code."
+#error "urma_workspace_manager.hpp is a host-only header and cannot be included in device code."
 #endif
 
 #include <cstdint>
@@ -25,17 +25,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <dlfcn.h>
 #include "acl/acl.h"
 
-#include "pto/npu/comm/async/udma/udma_types.hpp"
+#include "pto/npu/comm/async/urma/urma_types.hpp"
 
 namespace pto {
 namespace comm {
-namespace udma {
+namespace urma {
 
 // ============================================================================
-// UdmaBootstrapHandle: generic cross-rank information exchange abstraction.
+// UrmaBootstrapHandle: generic cross-rank information exchange abstraction.
 // Users bind the actual implementation (MPI, TCP socket, etc.) at init time.
 // ============================================================================
-struct UdmaBootstrapHandle {
+struct UrmaBootstrapHandle {
     int (*allgather)(const void *sendbuf, void *recvbuf, int size, void *ctx);
     int (*barrier)(void *ctx);
     void *ctx;
@@ -44,7 +44,7 @@ struct UdmaBootstrapHandle {
 // ============================================================================
 // HCCP V2 type definitions — self-contained, no CANN header dependency.
 // Binary-compatible with CANN HCCP V2 library.
-// Only the minimal subset required by UdmaWorkspaceManager is defined.
+// Only the minimal subset required by UrmaWorkspaceManager is defined.
 // ============================================================================
 namespace hccp {
 
@@ -598,24 +598,24 @@ public:
 
         hcclV1Handle_ = dlopen("libhccl.so", RTLD_NOW);
         if (!hcclV1Handle_) {
-            std::cerr << "[UDMA] Failed to load libhccl.so: " << dlerror() << std::endl;
+            std::cerr << "[URMA] Failed to load libhccl.so: " << dlerror() << std::endl;
             return false;
         }
         hcclV2Handle_ = dlopen("libhccl_v2.so", RTLD_NOW);
         if (!hcclV2Handle_) {
-            std::cerr << "[UDMA] Failed to load libhccl_v2.so: " << dlerror() << std::endl;
+            std::cerr << "[URMA] Failed to load libhccl_v2.so: " << dlerror() << std::endl;
             CleanupUnlocked();
             return false;
         }
         raHandle_ = dlopen("libra.so", RTLD_NOW);
         if (!raHandle_) {
-            std::cerr << "[UDMA] Failed to load libra.so: " << dlerror() << std::endl;
+            std::cerr << "[URMA] Failed to load libra.so: " << dlerror() << std::endl;
             CleanupUnlocked();
             return false;
         }
         tsdHandle_ = dlopen("libtsdclient.so", RTLD_NOW);
         if (!tsdHandle_) {
-            std::cerr << "[UDMA] Failed to load libtsdclient.so: " << dlerror() << std::endl;
+            std::cerr << "[URMA] Failed to load libtsdclient.so: " << dlerror() << std::endl;
             CleanupUnlocked();
             return false;
         }
@@ -687,7 +687,7 @@ private:
             fn = reinterpret_cast<T>(dlsym(lib, fallback));
         }
         if (!fn) {
-            std::cerr << "[UDMA] Failed to load symbol " << primary << ": " << dlerror() << std::endl;
+            std::cerr << "[URMA] Failed to load symbol " << primary << ": " << dlerror() << std::endl;
             return false;
         }
         return true;
@@ -731,7 +731,7 @@ private:
 };
 
 // ============================================================================
-// UdmaWorkspaceManager: Host-side UDMA workspace initialization.
+// UrmaWorkspaceManager: Host-side URMA workspace initialization.
 //
 // 10-step initialization:
 //   1. TsdProcessOpen
@@ -743,18 +743,18 @@ private:
 //   7. JettyImport (allgather QpKey, RaCtxQpImport per remote rank)
 //   8. JettyBind (skip in RM mode)
 //   9. RmemImport (allgather MR, RaCtxRmemImport per remote rank)
-//  10. FillUdmaInfo (construct device layout + aclrtMemcpy)
+//  10. FillUrmaInfo (construct device layout + aclrtMemcpy)
 // ============================================================================
-class UdmaWorkspaceManager {
+class UrmaWorkspaceManager {
 public:
-    UdmaWorkspaceManager() = default;
-    ~UdmaWorkspaceManager() { Finalize(); }
+    UrmaWorkspaceManager() = default;
+    ~UrmaWorkspaceManager() { Finalize(); }
 
-    UdmaWorkspaceManager(const UdmaWorkspaceManager &) = delete;
-    UdmaWorkspaceManager &operator=(const UdmaWorkspaceManager &) = delete;
+    UrmaWorkspaceManager(const UrmaWorkspaceManager &) = delete;
+    UrmaWorkspaceManager &operator=(const UrmaWorkspaceManager &) = delete;
 
     bool Init(uint32_t deviceId, uint32_t rankId, uint32_t rankCount, void *symmetricAddr, uint64_t symmetricSize,
-              const UdmaBootstrapHandle &bootstrap)
+              const UrmaBootstrapHandle &bootstrap)
     {
         deviceId_ = deviceId;
         rankId_ = rankId;
@@ -775,7 +775,7 @@ public:
 
         auto &loader = HccpV2Loader::Instance();
         if (!loader.Load()) {
-            std::cerr << "[UDMA] Failed to load HCCP V2 libraries" << std::endl;
+            std::cerr << "[URMA] Failed to load HCCP V2 libraries" << std::endl;
             return false;
         }
 
@@ -788,7 +788,7 @@ public:
         if (!JettyImport()) return false;
         if (!JettyBind()) return false;
         if (!RmemImport()) return false;
-        if (!FillUdmaInfo()) return false;
+        if (!FillUrmaInfo()) return false;
 
         initialized_ = true;
         return true;
@@ -798,9 +798,9 @@ public:
     {
         if (!initialized_) return;
 
-        if (udmaInfoDevice_) {
-            aclrtFree(udmaInfoDevice_);
-            udmaInfoDevice_ = nullptr;
+        if (urmaInfoDevice_) {
+            aclrtFree(urmaInfoDevice_);
+            urmaInfoDevice_ = nullptr;
         }
         if (hccpEidDevice_) {
             aclrtFree(hccpEidDevice_);
@@ -864,7 +864,7 @@ public:
         initialized_ = false;
     }
 
-    void *GetWorkspaceAddr() const { return udmaInfoDevice_; }
+    void *GetWorkspaceAddr() const { return urmaInfoDevice_; }
 
 private:
     static uint32_t Log2U32(uint32_t n) { return (n <= 1) ? 0 : __builtin_ctz(n); }
@@ -891,7 +891,7 @@ private:
 
         int ret = api.tsdProcessOpen(deviceId_, &args);
         if (ret != 0) {
-            std::cerr << "[UDMA] TsdProcessOpen failed: " << ret << std::endl;
+            std::cerr << "[URMA] TsdProcessOpen failed: " << ret << std::endl;
             return false;
         }
         tsdOpened_ = true;
@@ -913,7 +913,7 @@ private:
 
         int ret = api.raInit(&config);
         if (ret != 0) {
-            std::cerr << "[UDMA] RaInit failed: " << ret << std::endl;
+            std::cerr << "[URMA] RaInit failed: " << ret << std::endl;
             return false;
         }
         raInitialized_ = true;
@@ -932,7 +932,7 @@ private:
         unsigned int eidNum = 0;
         int ret = api.raGetDevEidInfoNum(info, &eidNum);
         if (ret != 0 || eidNum == 0) {
-            std::cerr << "[UDMA] RaGetDevEidInfoNum failed: ret=" << ret << " eidNum=" << eidNum << std::endl;
+            std::cerr << "[URMA] RaGetDevEidInfoNum failed: ret=" << ret << " eidNum=" << eidNum << std::endl;
             return false;
         }
 
@@ -940,7 +940,7 @@ private:
         unsigned int infoListNum = eidNum;
         ret = api.raGetDevEidInfoList(info, eidInfoList.data(), &infoListNum);
         if (ret != 0 || infoListNum != eidNum) {
-            std::cerr << "[UDMA] RaGetDevEidInfoList failed: ret=" << ret << std::endl;
+            std::cerr << "[URMA] RaGetDevEidInfoList failed: ret=" << ret << std::endl;
             return false;
         }
 
@@ -954,7 +954,7 @@ private:
 
         ret = api.raCtxInit(&cfg, &attr, &ctxHandle_);
         if (ret != 0) {
-            std::cerr << "[UDMA] RaCtxInit failed: " << ret << std::endl;
+            std::cerr << "[URMA] RaCtxInit failed: " << ret << std::endl;
             return false;
         }
 
@@ -971,7 +971,7 @@ private:
         hccp::HccpTokenId tokenId{0};
         ret = api.raCtxTokenIdAlloc(ctxHandle_, &tokenId, &tokenIdHandle_);
         if (ret != 0) {
-            std::cerr << "[UDMA] RaCtxTokenIdAlloc failed: " << ret << std::endl;
+            std::cerr << "[URMA] RaCtxTokenIdAlloc failed: " << ret << std::endl;
             return false;
         }
 
@@ -996,7 +996,7 @@ private:
 
         int ret = api.raCtxLmemRegister(ctxHandle_, &mrInfo, &lmemHandle_);
         if (ret != 0) {
-            std::cerr << "[UDMA] RaCtxLmemRegister failed: " << ret << std::endl;
+            std::cerr << "[URMA] RaCtxLmemRegister failed: " << ret << std::endl;
             return false;
         }
 
@@ -1032,7 +1032,7 @@ private:
         chanInfo.in.dataPlaneFlag.bs.poolCqCstm = 1;
         int ret = api.raCtxChanCreate(ctxHandle_, &chanInfo, &chanHandle_);
         if (ret != 0) {
-            std::cerr << "[UDMA] RaCtxChanCreate failed: " << ret << std::endl;
+            std::cerr << "[URMA] RaCtxChanCreate failed: " << ret << std::endl;
             return false;
         }
 
@@ -1046,7 +1046,7 @@ private:
 
         ret = api.raCtxCqCreate(ctxHandle_, &cqInfo_, &cqHandle_);
         if (ret != 0) {
-            std::cerr << "[UDMA] RaCtxCqCreate failed: " << ret << std::endl;
+            std::cerr << "[URMA] RaCtxCqCreate failed: " << ret << std::endl;
             return false;
         }
 
@@ -1099,7 +1099,7 @@ private:
 
         int ret = api.raCtxQpCreate(ctxHandle_, &qpAttr, &qpCreateInfo_, &qpHandle_);
         if (ret != 0) {
-            std::cerr << "[UDMA] RaCtxQpCreate failed: " << ret << std::endl;
+            std::cerr << "[URMA] RaCtxQpCreate failed: " << ret << std::endl;
             return false;
         }
 
@@ -1147,7 +1147,7 @@ private:
             allQpImportInfoT_[i].in.key = qpKeyList_[i];
             int ret = api.raCtxQpImport(ctxHandle_, &allQpImportInfoT_[i], &remoteQpHandles_[i]);
             if (ret != 0) {
-                std::cerr << "[UDMA] RaCtxQpImport for rank " << i << " failed: " << ret << std::endl;
+                std::cerr << "[URMA] RaCtxQpImport for rank " << i << " failed: " << ret << std::endl;
                 return false;
             }
             tpnList_[i] = allQpImportInfoT_[i].out.ub.tpn;
@@ -1167,7 +1167,7 @@ private:
             if (i == rankId_) continue;
             int ret = api.raCtxQpBind(qpHandle_, remoteQpHandles_[i]);
             if (ret != 0) {
-                std::cerr << "[UDMA] RaCtxQpBind for rank " << i << " failed: " << ret << std::endl;
+                std::cerr << "[URMA] RaCtxQpBind for rank " << i << " failed: " << ret << std::endl;
                 return false;
             }
         }
@@ -1195,7 +1195,7 @@ private:
 
             int ret = api.raCtxRmemImport(ctxHandle_, &mrImport, &rmemHandles_[i]);
             if (ret != 0) {
-                std::cerr << "[UDMA] RaCtxRmemImport for rank " << i << " failed: " << ret << std::endl;
+                std::cerr << "[URMA] RaCtxRmemImport for rank " << i << " failed: " << ret << std::endl;
                 return false;
             }
         }
@@ -1203,9 +1203,9 @@ private:
         return true;
     }
 
-    // Step 10: Construct UdmaInfo on host, copy to device
+    // Step 10: Construct UdmaInfo on host, copy to device (binary layout preserved)
     // Layout: [UdmaInfo header] [WQCtx*N SQ] [WQCtx*N RQ] [CqCtx*N SCQ] [CqCtx*N RCQ] [MemInfo*N]
-    bool FillUdmaInfo()
+    bool FillUrmaInfo()
     {
         bootstrap_.allgather(&localMemInfo_, ubMemInfoList_.data(), sizeof(UdmaMemInfo), bootstrap_.ctx);
         bootstrap_.allgather(&localHccpEid_, hccpEidList_.data(), sizeof(hccp::HccpEid), bootstrap_.ctx);
@@ -1214,13 +1214,13 @@ private:
         aclError err =
             aclrtMalloc(&hccpEidDevice_, rankCount_ * sizeof(hccp::HccpEid), ACL_MEM_MALLOC_HUGE_FIRST);
         if (err != ACL_SUCCESS) {
-            std::cerr << "[UDMA] aclrtMalloc for hccpEid failed: " << err << std::endl;
+            std::cerr << "[URMA] aclrtMalloc for hccpEid failed: " << err << std::endl;
             return false;
         }
         err = aclrtMemcpy(hccpEidDevice_, rankCount_ * sizeof(hccp::HccpEid), hccpEidList_.data(),
                           rankCount_ * sizeof(hccp::HccpEid), ACL_MEMCPY_HOST_TO_DEVICE);
         if (err != ACL_SUCCESS) {
-            std::cerr << "[UDMA] aclrtMemcpy for hccpEid failed: " << err << std::endl;
+            std::cerr << "[URMA] aclrtMemcpy for hccpEid failed: " << err << std::endl;
             return false;
         }
 
@@ -1230,9 +1230,9 @@ private:
         size_t oneQpSize = 2U * (wqSize + cqSize) + sizeof(UdmaMemInfo) * qpNum;
         size_t totalSize = sizeof(UdmaInfo) + oneQpSize * rankCount_;
 
-        err = aclrtMalloc(&udmaInfoDevice_, totalSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        err = aclrtMalloc(&urmaInfoDevice_, totalSize, ACL_MEM_MALLOC_HUGE_FIRST);
         if (err != ACL_SUCCESS) {
-            std::cerr << "[UDMA] aclrtMalloc for udmaInfo failed: " << err << std::endl;
+            std::cerr << "[URMA] aclrtMalloc for urmaInfo failed: " << err << std::endl;
             return false;
         }
 
@@ -1267,7 +1267,7 @@ private:
         }
 
         // Phase 2: rewrite pointers from host addresses to device virtual addresses
-        auto *devBase = reinterpret_cast<UdmaInfo *>(udmaInfoDevice_);
+        auto *devBase = reinterpret_cast<UdmaInfo *>(urmaInfoDevice_);
         copyInfo->sqPtr = reinterpret_cast<uint64_t>(devBase + 1);
         copyInfo->rqPtr = reinterpret_cast<uint64_t>(
             reinterpret_cast<UdmaWQCtx *>(copyInfo->sqPtr) + rankCount_ * qpNum);
@@ -1278,11 +1278,11 @@ private:
         copyInfo->memPtr = reinterpret_cast<uint64_t>(
             reinterpret_cast<UdmaCqCtx *>(copyInfo->rcqPtr) + rankCount_ * qpNum);
 
-        err = aclrtMemcpy(udmaInfoDevice_, totalSize, hostBuf.data(), totalSize, ACL_MEMCPY_HOST_TO_DEVICE);
+        err = aclrtMemcpy(urmaInfoDevice_, totalSize, hostBuf.data(), totalSize, ACL_MEMCPY_HOST_TO_DEVICE);
         if (err != ACL_SUCCESS) {
-            std::cerr << "[UDMA] aclrtMemcpy for udmaInfo failed: " << err << std::endl;
-            aclrtFree(udmaInfoDevice_);
-            udmaInfoDevice_ = nullptr;
+            std::cerr << "[URMA] aclrtMemcpy for urmaInfo failed: " << err << std::endl;
+            aclrtFree(urmaInfoDevice_);
+            urmaInfoDevice_ = nullptr;
             return false;
         }
 
@@ -1295,7 +1295,7 @@ private:
     uint32_t rankCount_{0};
     void *symmetricAddr_{nullptr};
     uint64_t symmetricSize_{0};
-    UdmaBootstrapHandle bootstrap_{};
+    UrmaBootstrapHandle bootstrap_{};
     hccp::TransportModeT transportMode_{hccp::CONN_RM};
 
     // HCCP V2 handles
@@ -1316,7 +1316,7 @@ private:
     UdmaMemInfo localMemInfo_{};
 
     // Device-side allocations
-    void *udmaInfoDevice_{nullptr};
+    void *urmaInfoDevice_{nullptr};
     void *hccpEidDevice_{nullptr};
     void *cqPiAddr_{nullptr};
     void *cqCiAddr_{nullptr};
@@ -1339,8 +1339,8 @@ private:
     static inline bool raInitialized_{false};
 };
 
-} // namespace udma
+} // namespace urma
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_NPU_COMM_ASYNC_UDMA_WORKSPACE_MANAGER_HPP
+#endif // PTO_NPU_COMM_ASYNC_URMA_WORKSPACE_MANAGER_HPP

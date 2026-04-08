@@ -12,7 +12,7 @@
 
 - `engine`：
     - `DmaEngine::SDMA`（默认）
-    - `DmaEngine::URMA`（待实现）
+    - `DmaEngine::URMA`（基于 HCCP V2 Jetty，仅 3510）
 
 > **注意（SDMA 路径）**
 > `TGET_ASYNC` 配合 `DmaEngine::SDMA` 目前**仅支持扁平连续的逻辑一维 tensor**。
@@ -45,6 +45,8 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
                                     uint32_t channelGroupIdx = sdma::kAutoChannelGroupIdx);
 ```
 
+### SDMA 参数（默认）
+
 带默认值的参数说明：
 
 | 参数 | 默认值 | 说明 |
@@ -53,12 +55,29 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 | `baseConfig` | `{32*1024, 0, 1}` | `{block_bytes, comm_block_offset, queue_num}`。适用于大多数单队列传输场景。|
 | `channelGroupIdx` | `kAutoChannelGroupIdx` | SDMA 通道组索引。默认内部使用 `get_block_idx()` 映射到当前 AI Core。多 block 或自定义通道映射场景下需覆盖此值。|
 
+### URMA 构建（仅 NPU_ARCH 3510）
+
+```cpp
+#ifdef PTO_URMA_SUPPORTED
+template <DmaEngine engine>
+PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
+                                    uint32_t destRankId,
+                                    AsyncSession &session);
+#endif
+```
+
+URMA 不需要 `scratchTile`（轮询通过 `ld_dev`/`st_dev` 硬件原语直接操作）。
+`workspace` 是由 `UrmaWorkspaceManager` 分配的设备 GM 指针。
+`destRankId` 指定此会话的源 PE。
+
 ## 约束
 
 - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
 - `GlobalSrcData::layout == GlobalDstData::layout`
-- SDMA 路径要求源 tensor 为**扁平连续的逻辑一维**
-- workspace 必须是由主机侧 `SdmaWorkspaceManager` 分配的有效 GM 指针
+- SDMA 和 URMA 路径均要求源 tensor 为**扁平连续的逻辑一维**
+- SDMA workspace 必须是由主机侧 `SdmaWorkspaceManager` 分配的有效 GM 指针
+- URMA workspace 必须是由主机侧 `UrmaWorkspaceManager` 分配的有效 GM 指针
+- URMA 仅在 NPU_ARCH 3510（Ascend950）上可用
 
 若不满足一维连续要求，当前实现返回无效 async event（`handle == 0`）。
 
@@ -120,6 +139,37 @@ __global__ AICORE void SimpleGet(__gm__ T *localDst, __gm__ T *remoteSrc,
     }
 
     auto event = comm::TGET_ASYNC<comm::DmaEngine::SDMA>(dstG, srcG, session);
+    (void)event.Wait(session);
+}
+```
+
+### URMA 示例（NPU_ARCH 3510）
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+#include <pto/common/pto_tile.hpp>
+
+using namespace pto;
+
+template <typename T>
+__global__ AICORE void SimpleGetUrma(__gm__ T *localDst, __gm__ T *remoteSrc,
+                                     __gm__ uint8_t *urmaWorkspace, uint32_t srcRankId)
+{
+    using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    using GT = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
+
+    ShapeDyn shape(1, 1, 1, 1, 1024);
+    StrideDyn stride(1024, 1024, 1024, 1024, 1);
+    GT dstG(localDst, shape, stride);
+    GT srcG(remoteSrc, shape, stride);
+
+    comm::AsyncSession session;
+    if (!comm::BuildAsyncSession<comm::DmaEngine::URMA>(urmaWorkspace, srcRankId, session)) {
+        return;
+    }
+
+    auto event = comm::TGET_ASYNC<comm::DmaEngine::URMA>(dstG, srcG, session);
     (void)event.Wait(session);
 }
 ```

@@ -18,14 +18,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "../common.hpp"
 
 // ============================================================================
-// TGET_ASYNC via UDMA — standalone test (no HCCL dependency).
+// TGET_ASYNC via URMA — standalone test (no HCCL dependency).
 // ============================================================================
 
 template <typename T, size_t count>
-__global__ AICORE void TGetAsyncUdmaKernelImpl(__gm__ T *localBuf, int nranks, int my_rank, int root_rank,
+__global__ AICORE void TGetAsyncUrmaKernelImpl(__gm__ T *localBuf, int nranks, int my_rank, int root_rank,
                                                int elem_offset, int elem_count,
                                                __gm__ uint64_t *remoteAddrs,
-                                               __gm__ uint8_t *udmaWorkspace)
+                                               __gm__ uint8_t *urmaWorkspace)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -47,7 +47,7 @@ __global__ AICORE void TGetAsyncUdmaKernelImpl(__gm__ T *localBuf, int nranks, i
     pipe_barrier(PIPE_ALL);
 
     if (my_rank == root_rank) {
-#ifdef PTO_UDMA_SUPPORTED
+#ifdef PTO_URMA_SUPPORTED
         for (int target_rank = 0; target_rank < nranks; ++target_rank) {
             if (target_rank == root_rank) {
                 continue;
@@ -59,10 +59,10 @@ __global__ AICORE void TGetAsyncUdmaKernelImpl(__gm__ T *localBuf, int nranks, i
             Global localRecvG(localRecvBuf, shape, stride);
 
             pto::comm::AsyncSession session;
-            pto::comm::BuildAsyncSession<pto::comm::DmaEngine::UDMA>(
-                udmaWorkspace, static_cast<uint32_t>(target_rank), session);
+            pto::comm::BuildAsyncSession<pto::comm::DmaEngine::URMA>(
+                urmaWorkspace, static_cast<uint32_t>(target_rank), session);
             auto event =
-                pto::comm::TGET_ASYNC<pto::comm::DmaEngine::UDMA>(localRecvG, remoteSendG, session);
+                pto::comm::TGET_ASYNC<pto::comm::DmaEngine::URMA>(localRecvG, remoteSendG, session);
             event.Wait(session);
         }
 #endif
@@ -75,7 +75,7 @@ __global__ AICORE void TGetAsyncUdmaKernelImpl(__gm__ T *localBuf, int nranks, i
 // Host-side runner — no HCCL.
 // ============================================================================
 template <typename T, size_t count>
-bool RunGetAsyncUdmaRootGetKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank)
+bool RunGetAsyncUrmaRootGetKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank)
 {
     int deviceId = rank_id % n_devices + first_device_id;
 
@@ -93,8 +93,7 @@ bool RunGetAsyncUdmaRootGetKernel(int rank_id, int n_ranks, int n_devices, int f
     const size_t recv_elems = static_cast<size_t>(n_ranks) * count;
     size_t commBytesNeeded = 64 * sizeof(int32_t) + (static_cast<size_t>(n_ranks) + 1) * count * sizeof(T);
 
-    // UDMA MR registration requires huge-page memory (CANN ADXL doc: "如通过
-    // HCCS传输，则内存分配规则需配置为ACL_MEM_MALLOC_HUGE_ONLY").
+    // URMA MR registration requires huge-page memory.
     // ACL_MEM_MALLOC_HUGE_FIRST silently falls back to normal 4KB pages when
     // size <= 1MB, causing RaCtxLmemRegister to fail with 528101.
     // Huge-page granularity is 2MB, so round up to 2MB minimum.
@@ -129,12 +128,12 @@ bool RunGetAsyncUdmaRootGetKernel(int rank_id, int n_ranks, int n_devices, int f
     aclrtMemcpy(devRemoteAddrs, n_ranks * sizeof(uint64_t), allDevAddrs.data(), n_ranks * sizeof(uint64_t),
                 ACL_MEMCPY_HOST_TO_DEVICE);
 
-    // UDMA workspace init — RaInit is first caller, no HCCL conflict
-    UdmaBootstrapHandle bootstrap{MpiAllgatherWrapper, MpiBarrierWrapper, nullptr};
-    UdmaWorkspaceManager udmaMgr;
-    if (!udmaMgr.Init(static_cast<uint32_t>(deviceId), static_cast<uint32_t>(rank_id),
+    // URMA workspace init — RaInit is first caller, no HCCL conflict
+    UrmaBootstrapHandle bootstrap{MpiAllgatherWrapper, MpiBarrierWrapper, nullptr};
+    UrmaWorkspaceManager urmaMgr;
+    if (!urmaMgr.Init(static_cast<uint32_t>(deviceId), static_cast<uint32_t>(rank_id),
                       static_cast<uint32_t>(n_ranks), devBuf, allocSize, bootstrap)) {
-        std::cerr << "[ERROR] UdmaWorkspaceManager Init failed!" << std::endl;
+        std::cerr << "[ERROR] UrmaWorkspaceManager Init failed!" << std::endl;
         aclrtFree(devRemoteAddrs);
         aclrtFree(devBuf);
         return false;
@@ -168,9 +167,9 @@ bool RunGetAsyncUdmaRootGetKernel(int rank_id, int n_ranks, int n_devices, int f
     CommMpiBarrier();
 
     // Launch kernel
-    TGetAsyncUdmaKernelImpl<T, count><<<1, nullptr, stream>>>(
+    TGetAsyncUrmaKernelImpl<T, count><<<1, nullptr, stream>>>(
         reinterpret_cast<T *>(devBuf), n_ranks, rank_id, root_rank, 0, static_cast<int>(count),
-        reinterpret_cast<uint64_t *>(devRemoteAddrs), reinterpret_cast<uint8_t *>(udmaMgr.GetWorkspaceAddr()));
+        reinterpret_cast<uint64_t *>(devRemoteAddrs), reinterpret_cast<uint8_t *>(urmaMgr.GetWorkspaceAddr()));
     int syncRet = aclrtSynchronizeStream(stream);
 
     CommMpiBarrier();
@@ -200,7 +199,7 @@ bool RunGetAsyncUdmaRootGetKernel(int rank_id, int n_ranks, int n_devices, int f
 
     aclrtFreeHost(input_host);
     aclrtFreeHost(output_host);
-    udmaMgr.Finalize();
+    urmaMgr.Finalize();
     aclrtFree(devRemoteAddrs);
     aclrtFree(devBuf);
     rtStreamDestroy(stream);
@@ -212,7 +211,7 @@ bool RunGetAsyncUdmaRootGetKernel(int rank_id, int n_ranks, int n_devices, int f
 // MPI-based multi-rank launch.
 // ============================================================================
 template <typename T, size_t count>
-bool RunGetAsyncUdmaRootGet(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
+bool RunGetAsyncUrmaRootGet(int n_ranks, int n_devices, int first_rank_id, int first_device_id)
 {
     int mpiRank = CommMpiRank();
     int mpiSize = CommMpiSize();
@@ -242,13 +241,13 @@ bool RunGetAsyncUdmaRootGet(int n_ranks, int n_devices, int first_rank_id, int f
         return false;
     }
 
-    bool result = RunGetAsyncUdmaRootGetKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, root_rank);
+    bool result = RunGetAsyncUrmaRootGetKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, root_rank);
 
     aclFinalize();
     return result;
 }
 
 // Explicit instantiations
-template bool RunGetAsyncUdmaRootGet<float, 256>(int, int, int, int);
-template bool RunGetAsyncUdmaRootGet<int32_t, 4096>(int, int, int, int);
-template bool RunGetAsyncUdmaRootGet<uint8_t, 512>(int, int, int, int);
+template bool RunGetAsyncUrmaRootGet<float, 256>(int, int, int, int);
+template bool RunGetAsyncUrmaRootGet<int32_t, 4096>(int, int, int, int);
+template bool RunGetAsyncUrmaRootGet<uint8_t, 512>(int, int, int, int);

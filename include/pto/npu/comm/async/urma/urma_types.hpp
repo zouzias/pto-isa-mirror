@@ -8,14 +8,14 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_NPU_COMM_ASYNC_UDMA_TYPES_HPP
-#define PTO_NPU_COMM_ASYNC_UDMA_TYPES_HPP
+#ifndef PTO_NPU_COMM_ASYNC_URMA_TYPES_HPP
+#define PTO_NPU_COMM_ASYNC_URMA_TYPES_HPP
 
 #include <cstdint>
 
 namespace pto {
 namespace comm {
-namespace udma {
+namespace urma {
 
 // ============================================================================
 // Constants
@@ -27,7 +27,7 @@ constexpr uint32_t kMaxSgeNumShift = 2;
 constexpr uint64_t kCacheLineSize = 64;
 
 // ============================================================================
-// UdmaOpcode — UDMA operation codes (binary-compatible with HCCP V2 ABI)
+// UdmaOpcode — operation codes (binary-compatible with HCCP V2 ABI)
 // ============================================================================
 enum class UdmaOpcode : uint32_t {
     SEND = 0,
@@ -74,7 +74,7 @@ struct UdmaMemInfo {
 };
 
 // ============================================================================
-// UdmaDbMode — doorbell mode for UDMA queues
+// UdmaDbMode — doorbell mode for URMA queues
 // ============================================================================
 enum class UdmaDbMode : int32_t { INVALID_DB = -1, HW_DB = 0, SW_DB };
 
@@ -192,8 +192,8 @@ struct UdmaJfcCqeCtx {
     uint32_t inlineData[3];
 };
 
-} // namespace udma
+} // namespace urma
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_NPU_COMM_ASYNC_UDMA_TYPES_HPP
+#endif // PTO_NPU_COMM_ASYNC_URMA_TYPES_HPP

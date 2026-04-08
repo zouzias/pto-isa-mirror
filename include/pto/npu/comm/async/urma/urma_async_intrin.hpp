@@ -8,18 +8,18 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_NPU_COMM_ASYNC_UDMA_INTRIN_HPP
-#define PTO_NPU_COMM_ASYNC_UDMA_INTRIN_HPP
+#ifndef PTO_NPU_COMM_ASYNC_URMA_INTRIN_HPP
+#define PTO_NPU_COMM_ASYNC_URMA_INTRIN_HPP
 
-#ifdef PTO_UDMA_SUPPORTED
+#ifdef PTO_URMA_SUPPORTED
 
 #include "pto/common/debug.h"
 #include "pto/comm/async/async_types.hpp"
-#include "pto/npu/comm/async/udma/udma_types.hpp"
+#include "pto/npu/comm/async/urma/urma_types.hpp"
 
 namespace pto {
 namespace comm {
-namespace udma {
+namespace urma {
 
 // ============================================================================
 // DcciCachelines — flush multiple cache lines covering [addr, addr+length)
@@ -38,9 +38,9 @@ AICORE inline void DcciCachelines(__gm__ uint8_t *addr, uint64_t length)
 namespace detail {
 
 // ============================================================================
-// UdmaPollCqUpdateInfo — update CQ/WQ tail and ring CQ doorbell after polling
+// UrmaPollCqUpdateInfo — update CQ/WQ tail and ring CQ doorbell after polling (URMA)
 // ============================================================================
-AICORE inline void UdmaPollCqUpdateInfo(uint32_t curTail, __gm__ UdmaCqCtx *cqCtxEntry,
+AICORE inline void UrmaPollCqUpdateInfo(uint32_t curTail, __gm__ UdmaCqCtx *cqCtxEntry,
                                         __gm__ UdmaWQCtx *wqCtxEntry)
 {
     __gm__ uint32_t *dbAddr = (__gm__ uint32_t *)cqCtxEntry->dbAddr;
@@ -51,20 +51,20 @@ AICORE inline void UdmaPollCqUpdateInfo(uint32_t curTail, __gm__ UdmaCqCtx *cqCt
 }
 
 // ============================================================================
-// UdmaPollCq — poll completion queue until idx entries are consumed
+// UrmaPollCq — poll completion queue until idx entries are consumed
 // Returns 0 on success, non-zero on error/timeout.
 // ============================================================================
-AICORE inline uint32_t UdmaPollCq(__gm__ uint8_t *contextGm, uint32_t destRankId, uint32_t qpIdx, uint32_t idx)
+AICORE inline uint32_t UrmaPollCq(__gm__ uint8_t *contextGm, uint32_t destRankId, uint32_t qpIdx, uint32_t idx)
 {
     if (idx == 0) {
         return 0;
     }
 
-    __gm__ UdmaInfo *udmaInfo = (__gm__ UdmaInfo *)contextGm;
-    uint32_t qpNum = udmaInfo->qpNum;
+    __gm__ UdmaInfo *urmaInfo = (__gm__ UdmaInfo *)contextGm;
+    uint32_t qpNum = urmaInfo->qpNum;
 
     __gm__ UdmaCqCtx *cqCtxEntry =
-        (__gm__ UdmaCqCtx *)(udmaInfo->scqPtr + (destRankId * qpNum + qpIdx) * sizeof(UdmaCqCtx));
+        (__gm__ UdmaCqCtx *)(urmaInfo->scqPtr + (destRankId * qpNum + qpIdx) * sizeof(UdmaCqCtx));
     uint64_t cqBaseAddr = cqCtxEntry->bufAddr;
     uint32_t cqeSize = 1U << cqCtxEntry->cqeShiftSize;
     uint32_t depth = cqCtxEntry->depth;
@@ -82,7 +82,7 @@ AICORE inline uint32_t UdmaPollCq(__gm__ uint8_t *contextGm, uint32_t destRankId
             times++;
         }
         if (times >= kUdmaMaxPollTimes) {
-            PTO_ASSERT(false, "UDMA poll_cq timeout");
+            PTO_ASSERT(false, "URMA poll_cq timeout");
             return 0xFF;
         }
 
@@ -99,16 +99,16 @@ AICORE inline uint32_t UdmaPollCq(__gm__ uint8_t *contextGm, uint32_t destRankId
     st_dev(curTail, (__gm__ uint32_t *)cqCtxEntry->tailAddr, 0);
 
     __gm__ UdmaWQCtx *wqCtxEntry =
-        (__gm__ UdmaWQCtx *)(udmaInfo->sqPtr + (destRankId * qpNum + qpIdx) * sizeof(UdmaWQCtx));
-    UdmaPollCqUpdateInfo(curTail, cqCtxEntry, wqCtxEntry);
+        (__gm__ UdmaWQCtx *)(urmaInfo->sqPtr + (destRankId * qpNum + qpIdx) * sizeof(UdmaWQCtx));
+    UrmaPollCqUpdateInfo(curTail, cqCtxEntry, wqCtxEntry);
 
     return 0;
 }
 
 // ============================================================================
-// UdmaPostSendUpdateInfo — ring SQ doorbell and update head
+// UrmaPostSendUpdateInfo — ring SQ doorbell and update head
 // ============================================================================
-AICORE inline void UdmaPostSendUpdateInfo(uint32_t curHead, __gm__ UdmaWQCtx *qpCtxEntry)
+AICORE inline void UrmaPostSendUpdateInfo(uint32_t curHead, __gm__ UdmaWQCtx *qpCtxEntry)
 {
     __gm__ uint32_t *doorBellAddr = (__gm__ uint32_t *)qpCtxEntry->dbAddr;
     st_dev(curHead, doorBellAddr, 0);
@@ -116,18 +116,18 @@ AICORE inline void UdmaPostSendUpdateInfo(uint32_t curHead, __gm__ UdmaWQCtx *qp
 }
 
 // ============================================================================
-// UdmaPostSend — prepare WQE+SGE, flush cache, ring doorbell
+// UrmaPostSend — prepare WQE+SGE, flush cache, ring doorbell
 // Returns curHead after post (used to encode AsyncEvent handle).
 // ============================================================================
-AICORE inline uint32_t UdmaPostSend(__gm__ uint8_t *contextGm, __gm__ uint8_t *remoteAddr,
+AICORE inline uint32_t UrmaPostSend(__gm__ uint8_t *contextGm, __gm__ uint8_t *remoteAddr,
                                     __gm__ uint8_t *localAddr, uint32_t destRankId, uint32_t qpIdx,
                                     UdmaOpcode opcode, uint64_t messageLen)
 {
-    __gm__ UdmaInfo *udmaInfo = (__gm__ UdmaInfo *)contextGm;
-    uint32_t qpNum = udmaInfo->qpNum;
+    __gm__ UdmaInfo *urmaInfo = (__gm__ UdmaInfo *)contextGm;
+    uint32_t qpNum = urmaInfo->qpNum;
 
     __gm__ UdmaWQCtx *qpCtxEntry =
-        (__gm__ UdmaWQCtx *)(udmaInfo->sqPtr + (destRankId * qpNum + qpIdx) * sizeof(UdmaWQCtx));
+        (__gm__ UdmaWQCtx *)(urmaInfo->sqPtr + (destRankId * qpNum + qpIdx) * sizeof(UdmaWQCtx));
     uint64_t sqBaseAddr = qpCtxEntry->bufAddr;
     uint32_t wqeSize = 1U << qpCtxEntry->wqeShiftSize;
     uint32_t depth = qpCtxEntry->depth;
@@ -135,12 +135,12 @@ AICORE inline uint32_t UdmaPostSend(__gm__ uint8_t *contextGm, __gm__ uint8_t *r
     uint32_t curHead = ld_dev((__gm__ uint32_t *)qpCtxEntry->headAddr, 0);
     uint32_t curTail = ld_dev((__gm__ uint32_t *)qpCtxEntry->tailAddr, 0);
 
-    if ((curHead + kUdmaPollCqThreshold) % depth == curTail % depth) {
-        (void)UdmaPollCq(contextGm, destRankId, qpIdx, curTail + kNumCqePerPollCq);
+    if ((curHead + kUrmaPollCqThreshold) % depth == curTail % depth) {
+        (void)UrmaPollCq(contextGm, destRankId, qpIdx, curTail + kNumCqePerPollCq);
     }
 
     __gm__ UdmaMemInfo *remoteMemInfo =
-        (__gm__ UdmaMemInfo *)(udmaInfo->memPtr + sizeof(UdmaMemInfo) * destRankId);
+        (__gm__ UdmaMemInfo *)(urmaInfo->memPtr + sizeof(UdmaMemInfo) * destRankId);
 
     __gm__ uint8_t *wqeAddr = (__gm__ uint8_t *)(sqBaseAddr + wqeSize * (curHead % depth));
     __gm__ UdmaSqeCtx *sqeCtx = (__gm__ UdmaSqeCtx *)wqeAddr;
@@ -176,12 +176,12 @@ AICORE inline uint32_t UdmaPostSend(__gm__ uint8_t *contextGm, __gm__ uint8_t *r
 
     __gm__ UdmaSgeCtx *sgeCtx = (__gm__ UdmaSgeCtx *)(wqeAddr + sizeof(UdmaSqeCtx));
     sgeCtx->len = static_cast<uint32_t>(messageLen);
-    sgeCtx->tokenId = udmaInfo->localTokenId;
+    sgeCtx->tokenId = urmaInfo->localTokenId;
     sgeCtx->va = reinterpret_cast<uint64_t>(localAddr);
 
     DcciCachelines(wqeAddr, sizeof(UdmaSqeCtx) + sizeof(UdmaSgeCtx));
     curHead++;
-    UdmaPostSendUpdateInfo(curHead, qpCtxEntry);
+    UrmaPostSendUpdateInfo(curHead, qpCtxEntry);
 
     return curHead;
 }
@@ -201,30 +201,30 @@ AICORE inline void DecodeHandle(uint64_t handle, uint32_t &destRankId, uint32_t 
 }
 
 // ============================================================================
-// UdmaWaitEvent — blocking wait for UDMA completion (polls CQ)
+// UrmaWaitEvent — blocking wait for URMA completion (polls CQ)
 // ============================================================================
-AICORE inline bool UdmaWaitEvent(uint64_t eventHandle, const UdmaEventContext &eventCtx)
+AICORE inline bool UrmaWaitEvent(uint64_t eventHandle, const UrmaEventContext &eventCtx)
 {
     uint32_t destRankId = 0;
     uint32_t curHead = 0;
     DecodeHandle(eventHandle, destRankId, curHead);
-    uint32_t ret = UdmaPollCq(eventCtx.contextGm, destRankId, 0, curHead);
+    uint32_t ret = UrmaPollCq(eventCtx.contextGm, destRankId, 0, curHead);
     return ret == 0;
 }
 
 // ============================================================================
-// UdmaTestEvent — non-blocking completion check
+// UrmaTestEvent — non-blocking completion check
 // ============================================================================
-AICORE inline bool UdmaTestEvent(uint64_t eventHandle, const UdmaEventContext &eventCtx)
+AICORE inline bool UrmaTestEvent(uint64_t eventHandle, const UrmaEventContext &eventCtx)
 {
     uint32_t destRankId = 0;
     uint32_t curHead = 0;
     DecodeHandle(eventHandle, destRankId, curHead);
 
-    __gm__ UdmaInfo *udmaInfo = (__gm__ UdmaInfo *)eventCtx.contextGm;
-    uint32_t qpNum = udmaInfo->qpNum;
+    __gm__ UdmaInfo *urmaInfo = (__gm__ UdmaInfo *)eventCtx.contextGm;
+    uint32_t qpNum = urmaInfo->qpNum;
     __gm__ UdmaCqCtx *cqCtxEntry =
-        (__gm__ UdmaCqCtx *)(udmaInfo->scqPtr + (destRankId * qpNum + 0) * sizeof(UdmaCqCtx));
+        (__gm__ UdmaCqCtx *)(urmaInfo->scqPtr + (destRankId * qpNum + 0) * sizeof(UdmaCqCtx));
     uint32_t curTail = ld_dev((__gm__ uint32_t *)cqCtxEntry->tailAddr, 0);
     return curTail >= curHead;
 }
@@ -232,31 +232,31 @@ AICORE inline bool UdmaTestEvent(uint64_t eventHandle, const UdmaEventContext &e
 } // namespace detail
 
 // ============================================================================
-// Public API: __udma_put_async / __udma_get_async
+// Public API: __urma_put_async / __urma_get_async
 // ============================================================================
 
-AICORE inline uint64_t __udma_put_async(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint64_t transferSize,
-                                        const UdmaExecContext &execCtx)
+AICORE inline uint64_t __urma_put_async(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint64_t transferSize,
+                                        const UrmaExecContext &execCtx)
 {
-    uint32_t curHead = detail::UdmaPostSend(execCtx.contextGm, dst, src, execCtx.destRankId, execCtx.qpIdx,
+    uint32_t curHead = detail::UrmaPostSend(execCtx.contextGm, dst, src, execCtx.destRankId, execCtx.qpIdx,
                                             UdmaOpcode::WRITE, transferSize);
     return detail::EncodeHandle(execCtx.destRankId, curHead);
 }
 
-AICORE inline uint64_t __udma_get_async(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint64_t transferSize,
-                                        const UdmaExecContext &execCtx)
+AICORE inline uint64_t __urma_get_async(__gm__ uint8_t *dst, __gm__ uint8_t *src, uint64_t transferSize,
+                                        const UrmaExecContext &execCtx)
 {
     // RDMA READ: remote addr = src (SQE remote field), local addr = dst (SGE.va)
-    uint32_t curHead = detail::UdmaPostSend(execCtx.contextGm, src, dst, execCtx.destRankId, execCtx.qpIdx,
+    uint32_t curHead = detail::UrmaPostSend(execCtx.contextGm, src, dst, execCtx.destRankId, execCtx.qpIdx,
                                             UdmaOpcode::READ, transferSize);
     return detail::EncodeHandle(execCtx.destRankId, curHead);
 }
 
 // ============================================================================
-// BuildUdmaSession — fill UdmaSession from workspace and destRankId
+// BuildUrmaSession — fill UrmaSession from workspace and destRankId
 // ============================================================================
 
-AICORE inline bool BuildUdmaSession(__gm__ uint8_t *contextGm, uint32_t destRankId, UdmaSession &session)
+AICORE inline bool BuildUrmaSession(__gm__ uint8_t *contextGm, uint32_t destRankId, UrmaSession &session)
 {
     session.execCtx.contextGm = contextGm;
     session.execCtx.destRankId = destRankId;
@@ -266,9 +266,9 @@ AICORE inline bool BuildUdmaSession(__gm__ uint8_t *contextGm, uint32_t destRank
     return session.valid;
 }
 
-} // namespace udma
+} // namespace urma
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_UDMA_SUPPORTED
-#endif // PTO_NPU_COMM_ASYNC_UDMA_INTRIN_HPP
+#endif // PTO_URMA_SUPPORTED
+#endif // PTO_NPU_COMM_ASYNC_URMA_INTRIN_HPP
