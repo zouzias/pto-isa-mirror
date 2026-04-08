@@ -16,7 +16,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.append(str(Path(__file__).resolve().parents[5]))
-from tests.script.cpu_bfloat16 import BF16_DTYPE, cast_for_compute, normalize_case_dtype_name, write_array, zeros
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent.parent))
+from utils import NumExt
 np.random.seed(19)
 
 def gen_golden_data(case_name, param):
@@ -26,18 +28,18 @@ def gen_golden_data(case_name, param):
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = cast_for_compute(np.random.random(size=(H, W)), dtype)
+    input1 = NumExt.astype(np.random.random(size=(H, W)), dtype)
 
     # Perform the operation
-    golden = cast_for_compute(np.sqrt(input1), dtype)
+    golden = NumExt.astype(np.sqrt(input1), dtype)
 
     # Apply valid region constraints
     golden[h_valid:, :] = 0
     golden[:, w_valid:] = 0
 
     # Save the input and golden data to binary files
-    write_array("input1.bin", input1, dtype)
-    write_array("golden.bin", golden, dtype)
+    NumExt.write_array("input1.bin", input1, dtype)
+    NumExt.write_array("golden.bin", golden, dtype)
 
     return input1, golden
 
@@ -53,13 +55,7 @@ class tunaryParams:
         self.in_place = in_place
 
 def generate_case_name(param):
-    dtype_str = normalize_case_dtype_name(param.dtype, {
-        np.float32: 'float',
-        np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
-    })
+    dtype_str = NumExt.get_short_type_name(param.dtype)
     return f"TSQRTTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_inPlace_{param.in_place}"
 
 if __name__ == "__main__":
@@ -76,8 +72,8 @@ if __name__ == "__main__":
         tunaryParams(np.float32, 64, 64, 64, 64, 64, 64, False),
         tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, True),
         tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, False),
-        tunaryParams(BF16_DTYPE, 64, 64, 64, 64, 64, 64, True),
-        tunaryParams(BF16_DTYPE, 64, 64, 64, 64, 64, 64, False)
+        tunaryParams(NumExt.bf16, 64, 64, 64, 64, 64, 64, True),
+        tunaryParams(NumExt.bf16, 64, 64, 64, 64, 64, 64, False)
     ]
 
     for i, param in enumerate(case_params_list):

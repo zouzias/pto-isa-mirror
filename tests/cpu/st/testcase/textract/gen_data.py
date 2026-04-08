@@ -16,7 +16,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.append(str(Path(__file__).resolve().parents[5]))
-from tests.script.cpu_bfloat16 import BF16_DTYPE, cast_for_compute, is_bfloat16_dtype, write_array
+import sys, pathlib
+sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent.parent))
+from utils import NumExt
 
 PRINT_C_CASE = True
 
@@ -29,7 +31,7 @@ def type2str(t):
         return "half"
     if t is np.float32:
         return "float"
-    if is_bfloat16_dtype(t):
+    if NumExt.is_bf16(t):
         return "bfloat16_t"
     return np.dtype(t).name + "_t"
 
@@ -39,12 +41,12 @@ def gen_golden_data(case_name, param):
 
     rows, cols, valid_rows, valid_cols, idx_row, idx_col = param.rows, param.cols, param.valid_rows, param.valid_cols, param.idx_row, param.idx_col
 
-    gm = cast_for_compute(np.arange(1, valid_rows * valid_cols + 1).reshape([valid_rows, valid_cols]), src_type)
+    gm = NumExt.astype(np.arange(1, valid_rows * valid_cols + 1).reshape([valid_rows, valid_cols]), src_type)
 
-    golden = cast_for_compute(gm[idx_row:, idx_col:], dst_type)
+    golden = NumExt.astype(gm[idx_row:, idx_col:], dst_type)
 
-    write_array("./input.bin", gm, src_type)
-    write_array("./golden.bin", golden, dst_type)
+    NumExt.write_array("./input.bin", gm, src_type)
+    NumExt.write_array("./golden.bin", golden, dst_type)
 
     if PRINT_C_CASE:
         print(f"TEST_F(TEXTRACTTest, {case_name}) " + "{")
@@ -89,9 +91,9 @@ if __name__ == "__main__":
         textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 2, 0),
         textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 2, 1),
         textractParams(np.float32, np.float32, 128, 96, 125, 93, 8, 16, 2, 2),
-        textractParams(BF16_DTYPE, BF16_DTYPE, 32, 32, 32, 32, 0, 0, 0, 0),
-        textractParams(BF16_DTYPE, np.float32, 32, 32, 32, 32, 8, 16, 0, 0),
-        textractParams(BF16_DTYPE, BF16_DTYPE, 32, 32, 31, 31, 8, 16, 0, 0),
+        textractParams(NumExt.bf16, NumExt.bf16, 32, 32, 32, 32, 0, 0, 0, 0),
+        textractParams(NumExt.bf16, np.float32, 32, 32, 32, 32, 8, 16, 0, 0),
+        textractParams(NumExt.bf16, NumExt.bf16, 32, 32, 31, 31, 8, 16, 0, 0),
     ]
 
     for case_param in case_params_list:

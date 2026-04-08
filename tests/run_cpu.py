@@ -23,7 +23,6 @@ import platform
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-
 def _format_cmd(command: List[str]) -> str:
     return " ".join(map(str, command))
 
@@ -479,7 +478,7 @@ def setup_environment(args) -> None:
 
 
 def resolve_bf16_compiler_pair(args) -> None:
-    from script.cpu_bfloat16 import detect_bfloat16_cxx, derive_cc_from_cxx
+    from tests.script.cpu_bfloat16 import detect_bfloat16_cxx, derive_cc_from_cxx
 
     selected_cxx = detect_bfloat16_cxx(args.cxx)
     if args.cxx and (shutil.which(args.cxx) or args.cxx) != selected_cxx:
