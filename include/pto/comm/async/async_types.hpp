@@ -108,7 +108,7 @@ struct UdmaSession {
 struct AsyncSession {
     DmaEngine engine{DmaEngine::SDMA};
     sdma::SdmaSession sdmaSession{};
-    udma::UdmaSession udmaSession{};
+    udma::UdmaSession urmaSession{};
     bool valid{false};
 };
 

@@ -46,7 +46,7 @@ __global__ AICORE void TPutAsyncUdmaKernelImpl(__gm__ T *localBuf, int nranks, i
     Global sendG(sendBufCore, shape, stride);
 
     if (my_rank == root_rank) {
-#ifdef PTO_UDMA_SUPPORTED
+#ifdef PTO_URMA_SUPPORTED
         for (int target_rank = 0; target_rank < nranks; ++target_rank) {
             if (target_rank == root_rank) {
                 continue;
@@ -57,10 +57,10 @@ __global__ AICORE void TPutAsyncUdmaKernelImpl(__gm__ T *localBuf, int nranks, i
             Global remoteRecvG(remoteRecvBuf, shape, stride);
 
             pto::comm::AsyncSession session;
-            pto::comm::BuildAsyncSession<pto::comm::DmaEngine::UDMA>(
+            pto::comm::BuildAsyncSession<pto::comm::DmaEngine::URMA>(
                 udmaWorkspace, static_cast<uint32_t>(target_rank), session);
             auto event =
-                pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::UDMA>(remoteRecvG, sendG, session);
+                pto::comm::TPUT_ASYNC<pto::comm::DmaEngine::URMA>(remoteRecvG, sendG, session);
             event.Wait(session);
         }
 #endif

@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_NPU_COMM_ASYNC_UDMA_INTRIN_HPP
 #define PTO_NPU_COMM_ASYNC_UDMA_INTRIN_HPP
 
-#ifdef PTO_UDMA_SUPPORTED
+#ifdef PTO_URMA_SUPPORTED
 
 #include "pto/common/debug.h"
 #include "pto/comm/async/async_types.hpp"
@@ -270,5 +270,5 @@ AICORE inline bool BuildUdmaSession(__gm__ uint8_t *contextGm, uint32_t destRank
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_UDMA_SUPPORTED
+#endif // PTO_URMA_SUPPORTED
 #endif // PTO_NPU_COMM_ASYNC_UDMA_INTRIN_HPP

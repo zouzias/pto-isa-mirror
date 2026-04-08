@@ -12,7 +12,7 @@
 
 - `engine`：
     - `DmaEngine::SDMA`（默认）
-    - `DmaEngine::UDMA`（基于 HCCP V2 Jetty，仅 3510）
+    - `DmaEngine::URMA`（基于 HCCP V2 Jetty，仅 3510）
 
 > **注意（SDMA 路径）**
 > `TGET_ASYNC` 配合 `DmaEngine::SDMA` 目前**仅支持扁平连续的逻辑一维 tensor**。
@@ -29,7 +29,7 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
                                const AsyncSession &session, WaitEvents &... events);
 ```
 
-`AsyncSession` 是引擎无关的会话对象。使用 `BuildAsyncSession<engine>()` 构建一次后，传递给所有异步调用和事件等待。模板参数 `engine` 在编译期选择 DMA 后端，使代码对未来引擎（UDMA、CCU 等）保持前向兼容。
+`AsyncSession` 是引擎无关的会话对象。使用 `BuildAsyncSession<engine>()` 构建一次后，传递给所有异步调用和事件等待。模板参数 `engine` 在编译期选择 DMA 后端，使代码对未来引擎（URMA、CCU 等）保持前向兼容。
 
 ## AsyncSession 构建
 
@@ -55,10 +55,10 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 | `baseConfig` | `{32*1024, 0, 1}` | `{block_bytes, comm_block_offset, queue_num}`。适用于大多数单队列传输场景。|
 | `channelGroupIdx` | `kAutoChannelGroupIdx` | SDMA 通道组索引。默认内部使用 `get_block_idx()` 映射到当前 AI Core。多 block 或自定义通道映射场景下需覆盖此值。|
 
-### UDMA 构建（仅 NPU_ARCH 3510）
+### URMA 构建（仅 NPU_ARCH 3510）
 
 ```cpp
-#ifdef PTO_UDMA_SUPPORTED
+#ifdef PTO_URMA_SUPPORTED
 template <DmaEngine engine>
 PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
                                     uint32_t destRankId,
@@ -66,7 +66,7 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
 #endif
 ```
 
-UDMA 不需要 `scratchTile`（轮询通过 `ld_dev`/`st_dev` 硬件原语直接操作）。
+URMA 不需要 `scratchTile`（轮询通过 `ld_dev`/`st_dev` 硬件原语直接操作）。
 `workspace` 是由 `UdmaWorkspaceManager` 分配的设备 GM 指针。
 `destRankId` 指定此会话的源 PE。
 
@@ -74,10 +74,10 @@ UDMA 不需要 `scratchTile`（轮询通过 `ld_dev`/`st_dev` 硬件原语直接
 
 - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
 - `GlobalSrcData::layout == GlobalDstData::layout`
-- SDMA 和 UDMA 路径均要求源 tensor 为**扁平连续的逻辑一维**
+- SDMA 和 URMA 路径均要求源 tensor 为**扁平连续的逻辑一维**
 - SDMA workspace 必须是由主机侧 `SdmaWorkspaceManager` 分配的有效 GM 指针
-- UDMA workspace 必须是由主机侧 `UdmaWorkspaceManager` 分配的有效 GM 指针
-- UDMA 仅在 NPU_ARCH 3510（Ascend950）上可用
+- URMA workspace 必须是由主机侧 `UdmaWorkspaceManager` 分配的有效 GM 指针
+- URMA 仅在 NPU_ARCH 3510（Ascend950）上可用
 
 若不满足一维连续要求，当前实现返回无效 async event（`handle == 0`）。
 
@@ -143,7 +143,7 @@ __global__ AICORE void SimpleGet(__gm__ T *localDst, __gm__ T *remoteSrc,
 }
 ```
 
-### UDMA 示例（NPU_ARCH 3510）
+### URMA 示例（NPU_ARCH 3510）
 
 ```cpp
 #include <pto/comm/pto_comm_inst.hpp>
@@ -165,11 +165,11 @@ __global__ AICORE void SimpleGetUdma(__gm__ T *localDst, __gm__ T *remoteSrc,
     GT srcG(remoteSrc, shape, stride);
 
     comm::AsyncSession session;
-    if (!comm::BuildAsyncSession<comm::DmaEngine::UDMA>(udmaWorkspace, srcRankId, session)) {
+    if (!comm::BuildAsyncSession<comm::DmaEngine::URMA>(udmaWorkspace, srcRankId, session)) {
         return;
     }
 
-    auto event = comm::TGET_ASYNC<comm::DmaEngine::UDMA>(dstG, srcG, session);
+    auto event = comm::TGET_ASYNC<comm::DmaEngine::URMA>(dstG, srcG, session);
     (void)event.Wait(session);
 }
 ```

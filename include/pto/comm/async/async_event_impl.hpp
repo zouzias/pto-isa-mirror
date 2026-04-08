@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/comm_types.hpp"
 #include "pto/comm/async/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
-#ifdef PTO_UDMA_SUPPORTED
+#ifdef PTO_URMA_SUPPORTED
 #include "pto/npu/comm/async/udma/udma_async_intrin.hpp"
 #endif
 
@@ -34,18 +34,18 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *wo
         return session.valid;
     } else {
         static_assert(engine == DmaEngine::SDMA,
-                      "This overload is for SDMA; use the UDMA-specific BuildAsyncSession for DmaEngine::UDMA");
+                      "This overload is for SDMA; use the URMA-specific BuildAsyncSession for DmaEngine::URMA");
         return false;
     }
 }
 
-#ifdef PTO_UDMA_SUPPORTED
+#ifdef PTO_URMA_SUPPORTED
 template <DmaEngine engine>
 PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRankId, AsyncSession &session)
 {
-    static_assert(engine == DmaEngine::UDMA, "This overload is for UDMA only");
+    static_assert(engine == DmaEngine::URMA, "This overload is for URMA only");
     session.engine = engine;
-    session.valid = udma::BuildUdmaSession(workspace, destRankId, session.udmaSession);
+    session.valid = udma::BuildUdmaSession(workspace, destRankId, session.urmaSession);
     return session.valid;
 }
 #endif
@@ -62,9 +62,9 @@ PTO_INTERNAL bool AsyncEvent::Wait(const AsyncSession &session) const
     switch (session.engine) {
         case DmaEngine::SDMA:
             return sdma::detail::SdmaWaitEvent(handle, session.sdmaSession.eventCtx);
-#ifdef PTO_UDMA_SUPPORTED
-        case DmaEngine::UDMA:
-            return udma::detail::UdmaWaitEvent(handle, session.udmaSession.eventCtx);
+#ifdef PTO_URMA_SUPPORTED
+        case DmaEngine::URMA:
+            return udma::detail::UdmaWaitEvent(handle, session.urmaSession.eventCtx);
 #endif
         default:
             return false;
@@ -79,9 +79,9 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession &session) const
     switch (session.engine) {
         case DmaEngine::SDMA:
             return sdma::detail::SdmaTestEvent(handle, session.sdmaSession.eventCtx);
-#ifdef PTO_UDMA_SUPPORTED
-        case DmaEngine::UDMA:
-            return udma::detail::UdmaTestEvent(handle, session.udmaSession.eventCtx);
+#ifdef PTO_URMA_SUPPORTED
+        case DmaEngine::URMA:
+            return udma::detail::UdmaTestEvent(handle, session.urmaSession.eventCtx);
 #endif
         default:
             return false;
