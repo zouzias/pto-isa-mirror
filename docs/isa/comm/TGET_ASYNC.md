@@ -72,7 +72,7 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
 ```
 
 URMA does not require `scratchTile` (polling uses `ld_dev`/`st_dev` hardware intrinsics directly).
-`workspace` is a device GM pointer allocated by `UdmaWorkspaceManager`.
+`workspace` is a device GM pointer allocated by `UrmaWorkspaceManager`.
 `destRankId` specifies the source PE for this session.
 
 ## Constraints
@@ -81,7 +81,7 @@ URMA does not require `scratchTile` (polling uses `ld_dev`/`st_dev` hardware int
 - `GlobalSrcData::layout == GlobalDstData::layout`
 - Both SDMA and URMA paths require source tensor to be **flat contiguous logical 1D only**
 - SDMA workspace must be a valid GM pointer allocated by host-side `SdmaWorkspaceManager`
-- URMA workspace must be a valid GM pointer allocated by host-side `UdmaWorkspaceManager`
+- URMA workspace must be a valid GM pointer allocated by host-side `UrmaWorkspaceManager`
 - URMA is only available on NPU_ARCH 3510 (Ascend950)
 
 If the 1D contiguous requirement is not met, current implementation returns an invalid async event (`handle == 0`).
@@ -157,8 +157,8 @@ __global__ AICORE void SimpleGet(__gm__ T *localDst, __gm__ T *remoteSrc,
 using namespace pto;
 
 template <typename T>
-__global__ AICORE void SimpleGetUdma(__gm__ T *localDst, __gm__ T *remoteSrc,
-                                     __gm__ uint8_t *udmaWorkspace, uint32_t srcRankId)
+__global__ AICORE void SimpleGetUrma(__gm__ T *localDst, __gm__ T *remoteSrc,
+                                     __gm__ uint8_t *urmaWorkspace, uint32_t srcRankId)
 {
     using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
@@ -170,7 +170,7 @@ __global__ AICORE void SimpleGetUdma(__gm__ T *localDst, __gm__ T *remoteSrc,
     GT srcG(remoteSrc, shape, stride);
 
     comm::AsyncSession session;
-    if (!comm::BuildAsyncSession<comm::DmaEngine::URMA>(udmaWorkspace, srcRankId, session)) {
+    if (!comm::BuildAsyncSession<comm::DmaEngine::URMA>(urmaWorkspace, srcRankId, session)) {
         return;
     }
 

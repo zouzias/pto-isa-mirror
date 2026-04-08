@@ -18,7 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/async/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
 #ifdef PTO_URMA_SUPPORTED
-#include "pto/npu/comm/async/udma/udma_async_intrin.hpp"
+#include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
 #endif
 
 namespace pto {
@@ -153,7 +153,7 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_MTE_FALLBACK(GlobalDstData &dstGlobalData, Gl
 #ifdef PTO_URMA_SUPPORTED
 template <typename GlobalDstData, typename GlobalSrcData>
 PTO_INTERNAL AsyncEvent TPUT_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
-                                              const udma::UdmaExecContext &execCtx)
+                                              const urma::UrmaExecContext &execCtx)
 {
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
@@ -164,7 +164,7 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, Globa
     const uint32_t totalElems = TPutAsyncGetTotalElemCount(srcGlobalData);
     using T = typename GlobalSrcData::RawDType;
     const uint64_t eventHandle =
-        udma::__udma_put_async(reinterpret_cast<__gm__ uint8_t *>(dstGlobalData.data()),
+        urma::__urma_put_async(reinterpret_cast<__gm__ uint8_t *>(dstGlobalData.data()),
                                reinterpret_cast<__gm__ uint8_t *>(srcGlobalData.data()),
                                static_cast<uint64_t>(totalElems) * sizeof(T), execCtx);
     return AsyncEvent(eventHandle, DmaEngine::URMA);

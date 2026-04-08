@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/async/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
 #ifdef PTO_URMA_SUPPORTED
-#include "pto/npu/comm/async/udma/udma_async_intrin.hpp"
+#include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
 #endif
 
 namespace pto {
@@ -45,7 +45,7 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRank
 {
     static_assert(engine == DmaEngine::URMA, "This overload is for URMA only");
     session.engine = engine;
-    session.valid = udma::BuildUdmaSession(workspace, destRankId, session.urmaSession);
+    session.valid = urma::BuildUrmaSession(workspace, destRankId, session.urmaSession);
     return session.valid;
 }
 #endif
@@ -64,7 +64,7 @@ PTO_INTERNAL bool AsyncEvent::Wait(const AsyncSession &session) const
             return sdma::detail::SdmaWaitEvent(handle, session.sdmaSession.eventCtx);
 #ifdef PTO_URMA_SUPPORTED
         case DmaEngine::URMA:
-            return udma::detail::UdmaWaitEvent(handle, session.urmaSession.eventCtx);
+            return urma::detail::UrmaWaitEvent(handle, session.urmaSession.eventCtx);
 #endif
         default:
             return false;
@@ -81,7 +81,7 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession &session) const
             return sdma::detail::SdmaTestEvent(handle, session.sdmaSession.eventCtx);
 #ifdef PTO_URMA_SUPPORTED
         case DmaEngine::URMA:
-            return udma::detail::UdmaTestEvent(handle, session.urmaSession.eventCtx);
+            return urma::detail::UrmaTestEvent(handle, session.urmaSession.eventCtx);
 #endif
         default:
             return false;

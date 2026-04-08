@@ -67,7 +67,7 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
 ```
 
 URMA 不需要 `scratchTile`（轮询通过 `ld_dev`/`st_dev` 硬件原语直接操作）。
-`workspace` 是由 `UdmaWorkspaceManager` 分配的设备 GM 指针。
+`workspace` 是由 `UrmaWorkspaceManager` 分配的设备 GM 指针。
 `destRankId` 指定此会话的目标 PE。
 
 ## 约束
@@ -76,7 +76,7 @@ URMA 不需要 `scratchTile`（轮询通过 `ld_dev`/`st_dev` 硬件原语直接
 - `GlobalSrcData::layout == GlobalDstData::layout`
 - SDMA 和 URMA 路径均要求源 tensor 为**扁平连续的逻辑一维**
 - SDMA workspace 必须是由主机侧 `SdmaWorkspaceManager` 分配的有效 GM 指针
-- URMA workspace 必须是由主机侧 `UdmaWorkspaceManager` 分配的有效 GM 指针
+- URMA workspace 必须是由主机侧 `UrmaWorkspaceManager` 分配的有效 GM 指针
 - URMA 仅在 NPU_ARCH 3510（Ascend950）上可用
 
 若不满足一维连续要求，当前实现返回无效 async event（`handle == 0`）。
@@ -152,8 +152,8 @@ __global__ AICORE void SimplePut(__gm__ T *remoteDst, __gm__ T *localSrc,
 using namespace pto;
 
 template <typename T>
-__global__ AICORE void SimplePutUdma(__gm__ T *remoteDst, __gm__ T *localSrc,
-                                     __gm__ uint8_t *udmaWorkspace, uint32_t destRankId)
+__global__ AICORE void SimplePutUrma(__gm__ T *remoteDst, __gm__ T *localSrc,
+                                     __gm__ uint8_t *urmaWorkspace, uint32_t destRankId)
 {
     using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
     using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
@@ -165,7 +165,7 @@ __global__ AICORE void SimplePutUdma(__gm__ T *remoteDst, __gm__ T *localSrc,
     GT srcG(localSrc, shape, stride);
 
     comm::AsyncSession session;
-    if (!comm::BuildAsyncSession<comm::DmaEngine::URMA>(udmaWorkspace, destRankId, session)) {
+    if (!comm::BuildAsyncSession<comm::DmaEngine::URMA>(urmaWorkspace, destRankId, session)) {
         return;
     }
 

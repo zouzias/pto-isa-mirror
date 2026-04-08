@@ -12,26 +12,26 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-#include "tget_async_udma_kernel.h"
+#include "tget_async_urma_kernel.h"
 #include "../comm_mpi.h"
 
 // ============================================================================
-// 1D Vector Tile Tests (UDMA true async GET on A5 3510)
+// 1D Vector Tile Tests (URMA true async GET on A5 3510)
 // ============================================================================
-TEST(TGetAsyncUdma, Vec_FloatSmall)
+TEST(TGetAsyncUrma, Vec_FloatSmall)
 {
     SKIP_IF_RANKS_LT(2);
-    ASSERT_TRUE((RunGetAsyncUdmaRootGet<float, 256>(2, 2, 0, 0)));
+    ASSERT_TRUE((RunGetAsyncUrmaRootGet<float, 256>(2, 2, 0, 0)));
 }
-TEST(TGetAsyncUdma, Vec_Int32Large)
+TEST(TGetAsyncUrma, Vec_Int32Large)
 {
     SKIP_IF_RANKS_LT(2);
-    ASSERT_TRUE((RunGetAsyncUdmaRootGet<int32_t, 4096>(2, 2, 0, 0)));
+    ASSERT_TRUE((RunGetAsyncUrmaRootGet<int32_t, 4096>(2, 2, 0, 0)));
 }
-TEST(TGetAsyncUdma, Vec_Uint8Small)
+TEST(TGetAsyncUrma, Vec_Uint8Small)
 {
     SKIP_IF_RANKS_LT(2);
-    ASSERT_TRUE((RunGetAsyncUdmaRootGet<uint8_t, 512>(2, 2, 0, 0)));
+    ASSERT_TRUE((RunGetAsyncUrmaRootGet<uint8_t, 512>(2, 2, 0, 0)));
 }
 
 int main(int argc, char **argv)
