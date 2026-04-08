@@ -82,7 +82,7 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 | 值 | 说明 |
 |-------|-------------|
 | `DmaEngine::SDMA` | SDMA 引擎（支持二维传输）|
-| `DmaEngine::URMA` | URMA 引擎（支持一维传输，待实现）|
+| `DmaEngine::UDMA` | UDMA 引擎（支持一维传输，基于 HCCP V2 Jetty，仅 3510/Ascend950）|
 
 ### AsyncEvent
 

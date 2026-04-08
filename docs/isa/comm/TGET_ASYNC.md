@@ -12,7 +12,7 @@ Data flow:
 
 - `engine`:
     - `DmaEngine::SDMA` (default)
-    - `DmaEngine::URMA` (todo)
+    - `DmaEngine::UDMA` (HCCP V2 Jetty, 3510 only)
 
 > **Important (SDMA path)**  
 > `TGET_ASYNC` with `DmaEngine::SDMA` currently supports **only flat contiguous logical 1D tensors**.  
@@ -32,7 +32,7 @@ PTO_INST AsyncEvent TGET_ASYNC(GlobalDstData &dstGlobalData, GlobalSrcData &srcG
 `AsyncSession` is an engine-agnostic session object. Build once with
 `BuildAsyncSession<engine>()`, then pass to all async calls and event waits.
 The template `engine` parameter selects the DMA backend at compile time, making the
-code forward-compatible with future engines (URMA, CCU, etc.).
+code forward-compatible with future engines (UDMA, CCU, etc.).
 
 ## AsyncSession Construction
 
@@ -48,7 +48,9 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
                                     uint32_t channelGroupIdx = sdma::kAutoChannelGroupIdx);
 ```
 
-The engine template parameter selects the backend (currently only SDMA).
+The engine template parameter selects the backend.
+
+### SDMA Parameters (default)
 
 Parameters with defaults:
 
@@ -58,12 +60,29 @@ Parameters with defaults:
 | `baseConfig` | `{32*1024, 0, 1}` | `{block_bytes, comm_block_offset, queue_num}`. Suitable for most single-queue transfers. |
 | `channelGroupIdx` | `kAutoChannelGroupIdx` | SDMA channel group index. Default uses `get_block_idx()` internally, mapping to current AI core. Override for multi-block or custom channel mapping scenarios. |
 
+### UDMA Construction (NPU_ARCH 3510 only)
+
+```cpp
+#ifdef PTO_UDMA_SUPPORTED
+template <DmaEngine engine>
+PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace,
+                                    uint32_t destRankId,
+                                    AsyncSession &session);
+#endif
+```
+
+UDMA does not require `scratchTile` (polling uses `ld_dev`/`st_dev` hardware intrinsics directly).
+`workspace` is a device GM pointer allocated by `UdmaWorkspaceManager`.
+`destRankId` specifies the source PE for this session.
+
 ## Constraints
 
 - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
 - `GlobalSrcData::layout == GlobalDstData::layout`
-- SDMA path requires source tensor to be **flat contiguous logical 1D only**
-- workspace must be a valid GM pointer allocated by host-side `SdmaWorkspaceManager`
+- Both SDMA and UDMA paths require source tensor to be **flat contiguous logical 1D only**
+- SDMA workspace must be a valid GM pointer allocated by host-side `SdmaWorkspaceManager`
+- UDMA workspace must be a valid GM pointer allocated by host-side `UdmaWorkspaceManager`
+- UDMA is only available on NPU_ARCH 3510 (Ascend950)
 
 If the 1D contiguous requirement is not met, current implementation returns an invalid async event (`handle == 0`).
 
@@ -125,6 +144,37 @@ __global__ AICORE void SimpleGet(__gm__ T *localDst, __gm__ T *remoteSrc,
     }
 
     auto event = comm::TGET_ASYNC<comm::DmaEngine::SDMA>(dstG, srcG, session);
+    (void)event.Wait(session);
+}
+```
+
+### UDMA Example (NPU_ARCH 3510)
+
+```cpp
+#include <pto/comm/pto_comm_inst.hpp>
+#include <pto/common/pto_tile.hpp>
+
+using namespace pto;
+
+template <typename T>
+__global__ AICORE void SimpleGetUdma(__gm__ T *localDst, __gm__ T *remoteSrc,
+                                     __gm__ uint8_t *udmaWorkspace, uint32_t srcRankId)
+{
+    using ShapeDyn = Shape<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    using StrideDyn = Stride<DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC, DYNAMIC>;
+    using GT = GlobalTensor<T, ShapeDyn, StrideDyn, Layout::ND>;
+
+    ShapeDyn shape(1, 1, 1, 1, 1024);
+    StrideDyn stride(1024, 1024, 1024, 1024, 1);
+    GT dstG(localDst, shape, stride);
+    GT srcG(remoteSrc, shape, stride);
+
+    comm::AsyncSession session;
+    if (!comm::BuildAsyncSession<comm::DmaEngine::UDMA>(udmaWorkspace, srcRankId, session)) {
+        return;
+    }
+
+    auto event = comm::TGET_ASYNC<comm::DmaEngine::UDMA>(dstG, srcG, session);
     (void)event.Wait(session);
 }
 ```

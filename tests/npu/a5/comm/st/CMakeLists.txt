@@ -37,6 +37,13 @@ set(CMAKE_C_COMPILER ${CMAKE_COMPILER})
 set(CMAKE_CXX_COMPILER ${CMAKE_COMPILER})
 
 find_package(GTest REQUIRED)
+if(NOT TARGET GTest::gtest)
+    add_library(GTest::gtest IMPORTED INTERFACE)
+    set_target_properties(GTest::gtest PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${GTEST_INCLUDE_DIRS}"
+        INTERFACE_LINK_LIBRARIES "${GTEST_LIBRARIES}"
+    )
+endif()
 
 add_compile_options(
     -D_FORTIFY_SOURCE=2
