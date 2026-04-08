@@ -42,16 +42,9 @@ std::vector<typename TileData::DType> BuildExpected(const ConvTileData &src, uin
     const int64_t filterW = src.GetFilterW();
     const int64_t padLeft = src.GetPadList(0);
     const int64_t padTop = src.GetPadList(2);
-
-    if (strideH == 0)
-        throw std::invalid_argument("strideH (divisor) can't be null!");
-    if (strideW == 0)
-        throw std::invalid_argument("strideW (divisor) can't be null!");
-    if (filterW == 0)
-        throw std::invalid_argument("filterW (divisor) can't be null!");
-
     const int64_t outH = (fmapH + src.GetPadList(2) + src.GetPadList(3) - dilationH * (filterH - 1) - 1) / strideH + 1;
     const int64_t outW = (fmapW + src.GetPadList(0) + src.GetPadList(1) - dilationW * (filterW - 1) - 1) / strideW + 1;
+
     std::vector<typename TileData::DType> expected(TileData::Numel, 0);
     for (int r = 0; r < TileData::ValidRow; ++r) {
         const int64_t mIndex = posM + r;
@@ -89,8 +82,8 @@ TEST(TImg2colCpuSimTest, ManualMetadataPathMatchesReferenceWithPadding)
     std::vector<float> storage(SrcTile::bufferSize, 0.0f);
     SrcTile src;
     DstTile dst;
-    TASSIGN(dst, 0);
     src.data() = storage.data();
+    TASSIGN(dst, 0);
 
     for (int n = 0; n < 1; ++n) {
         for (int h = 0; h < 3; ++h) {
@@ -136,8 +129,8 @@ TEST(TImg2colCpuSimTest, AutoMetadataPathMatchesReferenceForSplitKChunk)
     std::vector<int8_t> storage(SrcTile::bufferSize, 0);
     SrcTile src;
     DstTile dst;
-    TASSIGN(dst, 0);
     src.data() = storage.data();
+    TASSIGN(dst, 0);
 
     for (int h = 0; h < 4; ++h) {
         for (int w = 0; w < 4; ++w) {
