@@ -14,6 +14,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/comm_types.hpp"
 #include "pto/comm/async/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
+#ifdef PTO_UDMA_SUPPORTED
+#include "pto/npu/comm/async/udma/udma_async_intrin.hpp"
+#endif
 
 namespace pto {
 namespace comm {
@@ -30,10 +33,22 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *wo
             sdma::BuildSdmaSession(scratchTile, workspace, session.sdmaSession, syncId, baseConfig, channelGroupIdx);
         return session.valid;
     } else {
-        static_assert(engine == DmaEngine::SDMA, "Only SDMA engine is supported currently");
+        static_assert(engine == DmaEngine::SDMA,
+                      "This overload is for SDMA; use the UDMA-specific BuildAsyncSession for DmaEngine::UDMA");
         return false;
     }
 }
+
+#ifdef PTO_UDMA_SUPPORTED
+template <DmaEngine engine>
+PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRankId, AsyncSession &session)
+{
+    static_assert(engine == DmaEngine::UDMA, "This overload is for UDMA only");
+    session.engine = engine;
+    session.valid = udma::BuildUdmaSession(workspace, destRankId, session.udmaSession);
+    return session.valid;
+}
+#endif
 
 // ============================================================================
 // AsyncEvent::Wait / Test — AsyncSession overloads (primary user API)
@@ -47,6 +62,10 @@ PTO_INTERNAL bool AsyncEvent::Wait(const AsyncSession &session) const
     switch (session.engine) {
         case DmaEngine::SDMA:
             return sdma::detail::SdmaWaitEvent(handle, session.sdmaSession.eventCtx);
+#ifdef PTO_UDMA_SUPPORTED
+        case DmaEngine::UDMA:
+            return udma::detail::UdmaWaitEvent(handle, session.udmaSession.eventCtx);
+#endif
         default:
             return false;
     }
@@ -60,6 +79,10 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession &session) const
     switch (session.engine) {
         case DmaEngine::SDMA:
             return sdma::detail::SdmaTestEvent(handle, session.sdmaSession.eventCtx);
+#ifdef PTO_UDMA_SUPPORTED
+        case DmaEngine::UDMA:
+            return udma::detail::UdmaTestEvent(handle, session.udmaSession.eventCtx);
+#endif
         default:
             return false;
     }
