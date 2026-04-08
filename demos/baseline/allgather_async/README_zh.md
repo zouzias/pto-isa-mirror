@@ -23,7 +23,6 @@ source /path/to/set_env.sh
 每个 rank 贡献 256 个 `int32_t` 数据。allgather 操作完成后，每个 rank 都持有所有 rank 的完整数据。
 
 1. **TPUT_ASYNC Allgather（异步远程写）**：每个 rank 通过 `pto::comm::TPUT_ASYNC` 将自身数据异步写入所有其他 rank 的接收缓冲区对应位置。
-
 2. **TGET_ASYNC Allgather（异步远程读）**：每个 rank 通过 `pto::comm::TGET_ASYNC` 从所有其他 rank 异步拉取数据到本地接收缓冲区。
 
 ### 关键 PTO API
@@ -78,10 +77,12 @@ source ${install_path}/ascend-toolkit/set_env.sh
 
 CANN Ops 包（9.0.0 及以上版本），按硬件平台选择对应的 ops-legacy 包下载安装：
 
-| 硬件平台 | x86_64 | aarch64 |
-| --- | --- | --- |
-| A2 | [下载](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-x86_64.run) | [下载](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-aarch64.run) |
-| A3 | [下载](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-x86_64.run) | [下载](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-aarch64.run) |
+
+| 硬件平台 | x86_64                                                                                                                      | aarch64                                                                                                                      |
+| ---- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| A2   | [下载](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-x86_64.run) | [下载](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-aarch64.run) |
+| A3   | [下载](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-x86_64.run)   | [下载](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-aarch64.run)   |
+
 
 安装方式与 Toolkit 相同，参考[快速安装 CANN](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/850alpha002/softwareinst/instg/instg_quick.html?Mode=PmIns&OS=openEuler&Software=cannToolKit)。
 
@@ -145,3 +146,4 @@ mpirun -n 2 ./build/bin/allgather_demo
  All demos PASSED
 ========================================
 ```
+

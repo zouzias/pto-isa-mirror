@@ -10,11 +10,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #pragma once
 
-// Allgather via TPUT_ASYNC: every rank writes its data to all other ranks.
-bool RunAllgatherPutAsync(int nRanks, int firstRankId, int firstDeviceId);
+// Allgather via TPUT: every rank writes its data to all other ranks (synchronous).
+bool RunAllgatherPutSync(int nRanks, int firstRankId, int firstDeviceId);
 
-// Allgather via TGET_ASYNC: every rank pulls data from all other ranks.
-bool RunAllgatherGetAsync(int nRanks, int firstRankId, int firstDeviceId);
+// Allgather via TGET: every rank pulls data from all other ranks (synchronous).
+bool RunAllgatherGetSync(int nRanks, int firstRankId, int firstDeviceId);
 
-// Bandwidth sweep: runs TPUT_ASYNC + TGET_ASYNC across multiple data sizes (1KB..4MB).
-bool RunAllgatherAsyncSweep(int nRanks, int firstRankId, int firstDeviceId);
+// Bandwidth sweep: runs TPUT_SYNC + TGET_SYNC across multiple data sizes (1KB..4MB).
+bool RunAllgatherSyncSweep(int nRanks, int firstRankId, int firstDeviceId);

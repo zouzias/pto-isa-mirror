@@ -15,7 +15,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <sys/time.h>
 
 #include <pto/pto-inst.hpp>
-#include "pto/npu/comm/async/sdma/sdma_types.hpp"
 #include "pto/common/pto_tile.hpp"
 #include "common.hpp"
 
@@ -54,22 +53,21 @@ static inline double CyclesToUs(double cycles) { return cycles / kSysCntPerUs; }
 using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using GlobalI32 = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
-using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::sdma::UB_ALIGN_SIZE>;
-using LocalTile = pto::Tile<pto::TileType::Vec, int32_t, 1, ELEM_COUNT, pto::BLayout::RowMajor, -1, -1>;
+using VecTile = pto::Tile<pto::TileType::Vec, int32_t, 1, ELEM_COUNT, pto::BLayout::RowMajor, -1, -1>;
 
 // ============================================================================
-// Allgather via TPUT_ASYNC
+// Allgather via synchronous TPUT
 //
-// Every rank writes its sendBuf to every other rank's recvBuf slot.
+// Every rank writes its sendBuf to every other rank's recvBuf slot using
+// pto::comm::TPUT (local GM -> UB staging tile -> remote GM).
 // Also copies its own data locally to complete the allgather.
 //
 // Memory layout per rank (in shared window):
 //   sendBuf[ELEM_COUNT]               -- this rank's contribution
 //   recvBuf[nranks * ELEM_COUNT]      -- gathered result
 // ============================================================================
-__global__ AICORE void AllgatherPutAsyncKernel(__gm__ int32_t *dataBuf, int nranks,
-                                               __gm__ HcclDeviceContext *hcclCtx,
-                                               __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
+__global__ AICORE void AllgatherPutSyncKernel(__gm__ int32_t *dataBuf, int nranks,
+                                              __gm__ HcclDeviceContext *hcclCtx)
 {
     if (nranks < 2) return;
 
@@ -80,58 +78,40 @@ __global__ AICORE void AllgatherPutAsyncKernel(__gm__ int32_t *dataBuf, int nran
     __gm__ int32_t *sendBuf = dataBuf;
     __gm__ int32_t *recvBuf = dataBuf + ELEM_COUNT;
 
+    VecTile stagingTile(1, ELEM_COUNT);
+    TASSIGN(stagingTile, 0x0);
+
     // Local copy: recvBuf[myRank * ELEM_COUNT] = sendBuf
     GlobalI32 srcG(sendBuf, shape, stride);
     GlobalI32 localSlotG(recvBuf + myRank * ELEM_COUNT, shape, stride);
-    LocalTile tile(1, ELEM_COUNT);
-    TASSIGN(tile, 0x10000);
-    TLOAD(tile, srcG);
+    TLOAD(stagingTile, srcG);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(localSlotG, tile);
+    TSTORE(localSlotG, stagingTile);
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
-    // Async remote writes
+    // Synchronous remote writes to every other rank
     GlobalI32 sendG(sendBuf, shape, stride);
-    constexpr int kEventSlots = pto::comm::sdma::SDMA_EVENT_SLOT_COUNT;
-    pto::comm::AsyncEvent events[kEventSlots];
-    ScratchTile scratchTile;
-    TASSIGN(scratchTile, 0x0);
-    pto::comm::AsyncSession session;
-    if (!pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId)) {
-        pipe_barrier(PIPE_ALL);
-        return;
-    }
-
-    int issued = 0;
     for (int target = 0; target < nranks; ++target) {
         if (target == myRank) continue;
         __gm__ int32_t *remoteSlot = HcclRemotePtr(hcclCtx, recvBuf, target) + myRank * ELEM_COUNT;
         GlobalI32 remoteG(remoteSlot, shape, stride);
-        if (issued >= kEventSlots) {
-            (void)events[issued % kEventSlots].Wait(session);
-        }
-        events[issued % kEventSlots] = pto::comm::TPUT_ASYNC(remoteG, sendG, session);
-        issued++;
-    }
-    const int pending = (issued < kEventSlots) ? issued : kEventSlots;
-    for (int i = 0; i < pending; ++i) {
-        (void)events[i].Wait(session);
+        pto::comm::TPUT(remoteG, sendG, stagingTile);
     }
 
     pipe_barrier(PIPE_ALL);
 }
 
 // ============================================================================
-// Allgather via TGET_ASYNC
+// Allgather via synchronous TGET
 //
-// Every rank pulls every other rank's sendBuf into its local recvBuf slot.
+// Every rank pulls every other rank's sendBuf into its local recvBuf slot
+// using pto::comm::TGET (remote GM -> UB staging tile -> local GM).
 // Also copies its own data locally to complete the allgather.
 // ============================================================================
-__global__ AICORE void AllgatherGetAsyncKernel(__gm__ int32_t *dataBuf, int nranks,
-                                               __gm__ HcclDeviceContext *hcclCtx,
-                                               __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
+__global__ AICORE void AllgatherGetSyncKernel(__gm__ int32_t *dataBuf, int nranks,
+                                              __gm__ HcclDeviceContext *hcclCtx)
 {
     if (nranks < 2) return;
 
@@ -142,44 +122,26 @@ __global__ AICORE void AllgatherGetAsyncKernel(__gm__ int32_t *dataBuf, int nran
     __gm__ int32_t *sendBuf = dataBuf;
     __gm__ int32_t *recvBuf = dataBuf + ELEM_COUNT;
 
+    VecTile stagingTile(1, ELEM_COUNT);
+    TASSIGN(stagingTile, 0x0);
+
     // Local copy: recvBuf[myRank * ELEM_COUNT] = sendBuf
     GlobalI32 srcG(sendBuf, shape, stride);
     GlobalI32 localSlotG(recvBuf + myRank * ELEM_COUNT, shape, stride);
-    LocalTile tile(1, ELEM_COUNT);
-    TASSIGN(tile, 0x10000);
-    TLOAD(tile, srcG);
+    TLOAD(stagingTile, srcG);
     set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(localSlotG, tile);
+    TSTORE(localSlotG, stagingTile);
     set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
     wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
 
-    // Async remote reads
-    constexpr int kEventSlots = pto::comm::sdma::SDMA_EVENT_SLOT_COUNT;
-    pto::comm::AsyncEvent events[kEventSlots];
-    ScratchTile scratchTile;
-    TASSIGN(scratchTile, 0x0);
-    pto::comm::AsyncSession session;
-    if (!pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId)) {
-        pipe_barrier(PIPE_ALL);
-        return;
-    }
-
-    int issued = 0;
+    // Synchronous remote reads from every other rank
     for (int src = 0; src < nranks; ++src) {
         if (src == myRank) continue;
         __gm__ int32_t *remoteSend = HcclRemotePtr(hcclCtx, sendBuf, src);
         GlobalI32 remoteG(remoteSend, shape, stride);
         GlobalI32 localG(recvBuf + src * ELEM_COUNT, shape, stride);
-        if (issued >= kEventSlots) {
-            (void)events[issued % kEventSlots].Wait(session);
-        }
-        events[issued % kEventSlots] = pto::comm::TGET_ASYNC(localG, remoteG, session);
-        issued++;
-    }
-    const int pending = (issued < kEventSlots) ? issued : kEventSlots;
-    for (int i = 0; i < pending; ++i) {
-        (void)events[i].Wait(session);
+        pto::comm::TGET(localG, remoteG, stagingTile);
     }
 
     pipe_barrier(PIPE_ALL);
@@ -218,10 +180,10 @@ static void PrintSample(const int32_t *host, int nRanks, size_t elemCount, int r
 }
 
 // ============================================================================
-// RunAllgatherPutAsync
+// RunAllgatherPutSync
 // ============================================================================
-static bool RunAllgatherPutAsyncKernel(int rankId, int nRanks, int nDevices, int firstDeviceId,
-                                       const HcclRootInfo *rootInfo)
+static bool RunAllgatherPutSyncKernel(int rankId, int nRanks, int nDevices, int firstDeviceId,
+                                      const HcclRootInfo *rootInfo)
 {
     TestContext ctx;
     if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, rootInfo))
@@ -257,16 +219,9 @@ static bool RunAllgatherPutAsyncKernel(int rankId, int nRanks, int nDevices, int
     aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t),
                 ACL_MEMCPY_HOST_TO_DEVICE);
 
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
-        return false;
-    }
-
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    AllgatherPutAsyncKernel<<<1, nullptr, ctx.stream>>>(
-        dataBuf, nRanks, ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0);
+    AllgatherPutSyncKernel<<<1, nullptr, ctx.stream>>>(dataBuf, nRanks, ctx.deviceCtx);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
@@ -274,29 +229,28 @@ static bool RunAllgatherPutAsyncKernel(int rankId, int nRanks, int nDevices, int
     aclrtMemcpy(recvHost, recvElems * sizeof(int32_t), recvBuf, recvElems * sizeof(int32_t),
                 ACL_MEMCPY_DEVICE_TO_HOST);
 
-    bool ok = VerifyAllgather(recvHost, nRanks, ELEM_COUNT, rankId, "TPUT_ASYNC");
-    if (ok) PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "TPUT_ASYNC");
+    bool ok = VerifyAllgather(recvHost, nRanks, ELEM_COUNT, rankId, "TPUT_SYNC");
+    if (ok) PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "TPUT_SYNC");
 
     aclrtFreeHost(sendHost);
     aclrtFreeHost(recvHost);
-    sdmaMgr.Finalize();
 
     return ctx.Finalize() && ok;
 }
 
-bool RunAllgatherPutAsync(int nRanks, int firstRankId, int firstDeviceId)
+bool RunAllgatherPutSync(int nRanks, int firstRankId, int firstDeviceId)
 {
     return ForkAndRunWithHcclRootInfo(
         nRanks, firstRankId, firstDeviceId, [&](int rankId, const HcclRootInfo *rootInfo) {
-            return RunAllgatherPutAsyncKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
+            return RunAllgatherPutSyncKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
         });
 }
 
 // ============================================================================
-// RunAllgatherGetAsync
+// RunAllgatherGetSync
 // ============================================================================
-static bool RunAllgatherGetAsyncKernel(int rankId, int nRanks, int nDevices, int firstDeviceId,
-                                       const HcclRootInfo *rootInfo)
+static bool RunAllgatherGetSyncKernel(int rankId, int nRanks, int nDevices, int firstDeviceId,
+                                      const HcclRootInfo *rootInfo)
 {
     TestContext ctx;
     if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, rootInfo))
@@ -332,16 +286,9 @@ static bool RunAllgatherGetAsyncKernel(int rankId, int nRanks, int nDevices, int
     aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t),
                 ACL_MEMCPY_HOST_TO_DEVICE);
 
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
-        return false;
-    }
-
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    AllgatherGetAsyncKernel<<<1, nullptr, ctx.stream>>>(
-        dataBuf, nRanks, ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0);
+    AllgatherGetSyncKernel<<<1, nullptr, ctx.stream>>>(dataBuf, nRanks, ctx.deviceCtx);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
@@ -349,37 +296,33 @@ static bool RunAllgatherGetAsyncKernel(int rankId, int nRanks, int nDevices, int
     aclrtMemcpy(recvHost, recvElems * sizeof(int32_t), recvBuf, recvElems * sizeof(int32_t),
                 ACL_MEMCPY_DEVICE_TO_HOST);
 
-    bool ok = VerifyAllgather(recvHost, nRanks, ELEM_COUNT, rankId, "TGET_ASYNC");
-    if (ok) PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "TGET_ASYNC");
+    bool ok = VerifyAllgather(recvHost, nRanks, ELEM_COUNT, rankId, "TGET_SYNC");
+    if (ok) PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "TGET_SYNC");
 
     aclrtFreeHost(sendHost);
     aclrtFreeHost(recvHost);
-    sdmaMgr.Finalize();
 
     return ctx.Finalize() && ok;
 }
 
-bool RunAllgatherGetAsync(int nRanks, int firstRankId, int firstDeviceId)
+bool RunAllgatherGetSync(int nRanks, int firstRankId, int firstDeviceId)
 {
     return ForkAndRunWithHcclRootInfo(
         nRanks, firstRankId, firstDeviceId, [&](int rankId, const HcclRootInfo *rootInfo) {
-            return RunAllgatherGetAsyncKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
+            return RunAllgatherGetSyncKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
         });
 }
 
 // ============================================================================
-// Bandwidth Sweep: variable-size perf kernels
-// For local copy: UB chunking via ChunkTile (same as sync).
-// For remote: single full-size SDMA transfer per target.
+// Bandwidth Sweep: variable-size perf kernels with UB chunking
 // ============================================================================
-static constexpr int CHUNK_ELEMS = 8192;
+static constexpr int CHUNK_ELEMS = 8192;  // 32 KB staging tile for UB
 using ChunkTile = pto::Tile<pto::TileType::Vec, int32_t, 1, CHUNK_ELEMS, pto::BLayout::RowMajor, -1, -1>;
 
-__global__ AICORE void AllgatherPutAsyncPerfKernel(__gm__ int32_t *dataBuf, int nranks,
-                                                   __gm__ HcclDeviceContext *hcclCtx,
-                                                   __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
-                                                   __gm__ uint64_t *latencyMetrics,
-                                                   int elemCount, int warmupIters, int timedIters)
+__global__ AICORE void AllgatherPutSyncPerfKernel(__gm__ int32_t *dataBuf, int nranks,
+                                                  __gm__ HcclDeviceContext *hcclCtx,
+                                                  __gm__ uint64_t *latencyMetrics,
+                                                  int elemCount, int warmupIters, int timedIters)
 {
     if (nranks < 2) return;
 
@@ -389,23 +332,14 @@ __global__ AICORE void AllgatherPutAsyncPerfKernel(__gm__ int32_t *dataBuf, int 
 
     int chunkSize = (elemCount < CHUNK_ELEMS) ? elemCount : CHUNK_ELEMS;
     int numChunks = (elemCount + chunkSize - 1) / chunkSize;
-    ChunkTile localTile(1, chunkSize);
-    TASSIGN(localTile, 0x10000);
+    ChunkTile pingTile(1, chunkSize);
+    ChunkTile pongTile(1, chunkSize);
+    TASSIGN(pingTile, 0x0);
+    TASSIGN(pongTile, 0x8000);
     ShapeDyn cShape(1, 1, 1, 1, chunkSize);
     StrideDyn cStride(chunkSize, chunkSize, chunkSize, chunkSize, 1);
-
     ShapeDyn fullShape(1, 1, 1, 1, elemCount);
     StrideDyn fullStride(elemCount, elemCount, elemCount, elemCount, 1);
-
-    constexpr int kEventSlots = pto::comm::sdma::SDMA_EVENT_SLOT_COUNT;
-    pto::comm::AsyncEvent events[kEventSlots];
-    ScratchTile scratchTile;
-    TASSIGN(scratchTile, 0x0);
-    pto::comm::AsyncSession session;
-    if (!pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId)) {
-        pipe_barrier(PIPE_ALL);
-        return;
-    }
 
     uint64_t localCopyCycles = 0, remoteCommCycles = 0, totalCycles = 0;
 
@@ -417,10 +351,10 @@ __global__ AICORE void AllgatherPutAsyncPerfKernel(__gm__ int32_t *dataBuf, int 
             int off = c * chunkSize;
             GlobalI32 srcC(sendBuf + off, cShape, cStride);
             GlobalI32 dstC(recvBuf + myRank * elemCount + off, cShape, cStride);
-            TLOAD(localTile, srcC);
+            TLOAD(pingTile, srcC);
             set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-            TSTORE(dstC, localTile);
+            TSTORE(dstC, pingTile);
             set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
@@ -429,19 +363,12 @@ __global__ AICORE void AllgatherPutAsyncPerfKernel(__gm__ int32_t *dataBuf, int 
         uint64_t t1 = get_syscnt();
 
         GlobalI32 sendG(sendBuf, fullShape, fullStride);
-        int issued = 0;
         for (int target = 0; target < nranks; ++target) {
             if (target == myRank) continue;
-            __gm__ int32_t *remoteSlot = HcclRemotePtr(hcclCtx, recvBuf, target) + myRank * elemCount;
-            GlobalI32 remoteG(remoteSlot, fullShape, fullStride);
-            if (issued >= kEventSlots)
-                (void)events[issued % kEventSlots].Wait(session);
-            events[issued % kEventSlots] = pto::comm::TPUT_ASYNC(remoteG, sendG, session);
-            issued++;
+            __gm__ int32_t *remoteRecv = HcclRemotePtr(hcclCtx, recvBuf, target) + myRank * elemCount;
+            GlobalI32 remoteG(remoteRecv, fullShape, fullStride);
+            pto::comm::TPUT(remoteG, sendG, pingTile, pongTile);
         }
-        int pending = (issued < kEventSlots) ? issued : kEventSlots;
-        for (int i = 0; i < pending; ++i)
-            (void)events[i].Wait(session);
 
         pipe_barrier(PIPE_ALL);
         uint64_t t2 = get_syscnt();
@@ -461,11 +388,10 @@ __global__ AICORE void AllgatherPutAsyncPerfKernel(__gm__ int32_t *dataBuf, int 
     }
 }
 
-__global__ AICORE void AllgatherGetAsyncPerfKernel(__gm__ int32_t *dataBuf, int nranks,
-                                                   __gm__ HcclDeviceContext *hcclCtx,
-                                                   __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
-                                                   __gm__ uint64_t *latencyMetrics,
-                                                   int elemCount, int warmupIters, int timedIters)
+__global__ AICORE void AllgatherGetSyncPerfKernel(__gm__ int32_t *dataBuf, int nranks,
+                                                  __gm__ HcclDeviceContext *hcclCtx,
+                                                  __gm__ uint64_t *latencyMetrics,
+                                                  int elemCount, int warmupIters, int timedIters)
 {
     if (nranks < 2) return;
 
@@ -475,23 +401,14 @@ __global__ AICORE void AllgatherGetAsyncPerfKernel(__gm__ int32_t *dataBuf, int 
 
     int chunkSize = (elemCount < CHUNK_ELEMS) ? elemCount : CHUNK_ELEMS;
     int numChunks = (elemCount + chunkSize - 1) / chunkSize;
-    ChunkTile localTile(1, chunkSize);
-    TASSIGN(localTile, 0x10000);
+    ChunkTile pingTile(1, chunkSize);
+    ChunkTile pongTile(1, chunkSize);
+    TASSIGN(pingTile, 0x0);
+    TASSIGN(pongTile, 0x8000);
     ShapeDyn cShape(1, 1, 1, 1, chunkSize);
     StrideDyn cStride(chunkSize, chunkSize, chunkSize, chunkSize, 1);
-
     ShapeDyn fullShape(1, 1, 1, 1, elemCount);
     StrideDyn fullStride(elemCount, elemCount, elemCount, elemCount, 1);
-
-    constexpr int kEventSlots = pto::comm::sdma::SDMA_EVENT_SLOT_COUNT;
-    pto::comm::AsyncEvent events[kEventSlots];
-    ScratchTile scratchTile;
-    TASSIGN(scratchTile, 0x0);
-    pto::comm::AsyncSession session;
-    if (!pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId)) {
-        pipe_barrier(PIPE_ALL);
-        return;
-    }
 
     uint64_t localCopyCycles = 0, remoteCommCycles = 0, totalCycles = 0;
 
@@ -503,10 +420,10 @@ __global__ AICORE void AllgatherGetAsyncPerfKernel(__gm__ int32_t *dataBuf, int 
             int off = c * chunkSize;
             GlobalI32 srcC(sendBuf + off, cShape, cStride);
             GlobalI32 dstC(recvBuf + myRank * elemCount + off, cShape, cStride);
-            TLOAD(localTile, srcC);
+            TLOAD(pingTile, srcC);
             set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
             wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-            TSTORE(dstC, localTile);
+            TSTORE(dstC, pingTile);
             set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
             wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
         }
@@ -514,20 +431,13 @@ __global__ AICORE void AllgatherGetAsyncPerfKernel(__gm__ int32_t *dataBuf, int 
         pipe_barrier(PIPE_ALL);
         uint64_t t1 = get_syscnt();
 
-        int issued = 0;
         for (int src = 0; src < nranks; ++src) {
             if (src == myRank) continue;
             __gm__ int32_t *remoteSend = HcclRemotePtr(hcclCtx, sendBuf, src);
             GlobalI32 remoteG(remoteSend, fullShape, fullStride);
             GlobalI32 localG(recvBuf + src * elemCount, fullShape, fullStride);
-            if (issued >= kEventSlots)
-                (void)events[issued % kEventSlots].Wait(session);
-            events[issued % kEventSlots] = pto::comm::TGET_ASYNC(localG, remoteG, session);
-            issued++;
+            pto::comm::TGET(localG, remoteG, pingTile, pongTile);
         }
-        int pending = (issued < kEventSlots) ? issued : kEventSlots;
-        for (int i = 0; i < pending; ++i)
-            (void)events[i].Wait(session);
 
         pipe_barrier(PIPE_ALL);
         uint64_t t2 = get_syscnt();
@@ -548,7 +458,7 @@ __global__ AICORE void AllgatherGetAsyncPerfKernel(__gm__ int32_t *dataBuf, int 
 }
 
 // ============================================================================
-// RunAllgatherAsyncSweep — single TestContext, all sizes, TPUT_ASYNC + TGET_ASYNC
+// RunAllgatherSyncSweep — single TestContext, all sizes, TPUT + TGET
 // ============================================================================
 static void PrintSweepLine(const char *instr, size_t sizeBytes,
                            double hostE2e, double devTotal, double localCopy, double remoteComm)
@@ -563,18 +473,12 @@ static void PrintSweepLine(const char *instr, size_t sizeBytes,
               << std::endl;
 }
 
-static bool RunAllgatherAsyncSweepKernel(int rankId, int nRanks, int nDevices, int firstDeviceId,
-                                         const HcclRootInfo *rootInfo)
+static bool RunAllgatherSyncSweepKernel(int rankId, int nRanks, int nDevices, int firstDeviceId,
+                                        const HcclRootInfo *rootInfo)
 {
     TestContext ctx;
     if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, rootInfo))
         return false;
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
-        return false;
-    }
 
     static const size_t kSweepElems[] = {256, 1024, 4096, 16384, 65536, 262144, 1048576};
     static const int kNumSizes = sizeof(kSweepElems) / sizeof(kSweepElems[0]);
@@ -591,7 +495,7 @@ static bool RunAllgatherAsyncSweepKernel(int rankId, int nRanks, int nDevices, i
 
         if (winBytes > ctx.hostCtx.winSize) {
             if (rankId == 0)
-                std::cout << "[SWEEP] instr=TPUT_ASYNC  size_bytes=" << elemCount * 4 << "  SKIPPED (window=" << ctx.hostCtx.winSize << ")" << std::endl;
+                std::cout << "[SWEEP] instr=TPUT_SYNC  size_bytes=" << elemCount * 4 << "  SKIPPED (window=" << ctx.hostCtx.winSize << ")" << std::endl;
             continue;
         }
 
@@ -607,10 +511,10 @@ static bool RunAllgatherAsyncSweepKernel(int rankId, int nRanks, int nDevices, i
 
         HcclHostBarrier(ctx.comm, ctx.stream);
 
+        // TPUT sweep
         double t0 = NowUs();
-        AllgatherPutAsyncPerfKernel<<<1, nullptr, ctx.stream>>>(
-            dataBuf, nRanks, ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
-            latDev, static_cast<int>(elemCount), WARMUP_ITERS, TIMED_ITERS);
+        AllgatherPutSyncPerfKernel<<<1, nullptr, ctx.stream>>>(
+            dataBuf, nRanks, ctx.deviceCtx, latDev, static_cast<int>(elemCount), WARMUP_ITERS, TIMED_ITERS);
         ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
         double t1 = NowUs();
 
@@ -620,14 +524,14 @@ static bool RunAllgatherAsyncSweepKernel(int rankId, int nRanks, int nDevices, i
                     latDev, kLatMetricsCount * sizeof(uint64_t), ACL_MEMCPY_DEVICE_TO_HOST);
 
         if (rankId == 0) {
-            PrintSweepLine("TPUT_ASYNC", elemCount * 4,
+            PrintSweepLine("TPUT_SYNC", elemCount * 4,
                            (t1 - t0) / TIMED_ITERS,
                            CyclesToUs(static_cast<double>(latHost[kLatTotalIdx]) / TIMED_ITERS),
                            CyclesToUs(static_cast<double>(latHost[kLatLocalCopyIdx]) / TIMED_ITERS),
                            CyclesToUs(static_cast<double>(latHost[kLatRemoteCommIdx]) / TIMED_ITERS));
         }
 
-        // TGET_ASYNC with same size
+        // TGET sweep with same size
         aclrtMemset(dataBuf, (elemCount + recvElems) * sizeof(int32_t), 0,
                     (elemCount + recvElems) * sizeof(int32_t));
         aclrtMemset(latDev, kLatMetricsCount * sizeof(uint64_t), 0, kLatMetricsCount * sizeof(uint64_t));
@@ -635,9 +539,8 @@ static bool RunAllgatherAsyncSweepKernel(int rankId, int nRanks, int nDevices, i
         HcclHostBarrier(ctx.comm, ctx.stream);
 
         t0 = NowUs();
-        AllgatherGetAsyncPerfKernel<<<1, nullptr, ctx.stream>>>(
-            dataBuf, nRanks, ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
-            latDev, static_cast<int>(elemCount), WARMUP_ITERS, TIMED_ITERS);
+        AllgatherGetSyncPerfKernel<<<1, nullptr, ctx.stream>>>(
+            dataBuf, nRanks, ctx.deviceCtx, latDev, static_cast<int>(elemCount), WARMUP_ITERS, TIMED_ITERS);
         ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
         t1 = NowUs();
 
@@ -647,7 +550,7 @@ static bool RunAllgatherAsyncSweepKernel(int rankId, int nRanks, int nDevices, i
                     latDev, kLatMetricsCount * sizeof(uint64_t), ACL_MEMCPY_DEVICE_TO_HOST);
 
         if (rankId == 0) {
-            PrintSweepLine("TGET_ASYNC", elemCount * 4,
+            PrintSweepLine("TGET_SYNC", elemCount * 4,
                            (t1 - t0) / TIMED_ITERS,
                            CyclesToUs(static_cast<double>(latHost[kLatTotalIdx]) / TIMED_ITERS),
                            CyclesToUs(static_cast<double>(latHost[kLatLocalCopyIdx]) / TIMED_ITERS),
@@ -657,14 +560,13 @@ static bool RunAllgatherAsyncSweepKernel(int rankId, int nRanks, int nDevices, i
 
     aclrtFreeHost(latHost);
     aclrtFree(latDev);
-    sdmaMgr.Finalize();
     return ctx.Finalize();
 }
 
-bool RunAllgatherAsyncSweep(int nRanks, int firstRankId, int firstDeviceId)
+bool RunAllgatherSyncSweep(int nRanks, int firstRankId, int firstDeviceId)
 {
     return ForkAndRunWithHcclRootInfo(
         nRanks, firstRankId, firstDeviceId, [&](int rankId, const HcclRootInfo *rootInfo) {
-            return RunAllgatherAsyncSweepKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
+            return RunAllgatherSyncSweepKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
         });
 }

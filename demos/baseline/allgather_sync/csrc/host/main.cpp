@@ -8,12 +8,12 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-// Allgather Async Demo — Host Entry Point
+// Allgather Sync Demo — Host Entry Point
 //
-// Demonstrates the allgather collective using PTO's TPUT_ASYNC (remote write)
-// and TGET_ASYNC (remote read) SDMA-based instructions.
+// Demonstrates the allgather collective using PTO's synchronous TPUT (remote
+// write) and TGET (remote read) instructions.
 //
-// Usage: mpirun -n <N> ./allgather_demo
+// Usage: mpirun -n <N> ./allgather_sync_demo
 
 #include <cstdlib>
 #include <iostream>
@@ -23,7 +23,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 int main(int argc, char **argv)
 {
     if (!CommMpiInit(&argc, &argv)) {
-        std::cerr << "[FATAL] MPI init failed. Launch with: mpirun -n <N> ./allgather_demo" << std::endl;
+        std::cerr << "[FATAL] MPI init failed. Launch with: mpirun -n <N> ./allgather_sync_demo" << std::endl;
         return 1;
     }
 
@@ -33,7 +33,7 @@ int main(int argc, char **argv)
     if (size < 2) {
         if (rank == 0) {
             std::cerr << "[ERROR] Allgather requires at least 2 MPI ranks." << std::endl;
-            std::cerr << "        Launch with: mpirun -n <N> ./allgather_demo" << std::endl;
+            std::cerr << "        Launch with: mpirun -n <N> ./allgather_sync_demo" << std::endl;
         }
         CommMpiFinalize();
         return 1;
@@ -41,7 +41,7 @@ int main(int argc, char **argv)
 
     if (rank == 0) {
         std::cout << "========================================" << std::endl;
-        std::cout << " PTO Allgather Async Demo" << std::endl;
+        std::cout << " PTO Allgather Sync Demo" << std::endl;
         std::cout << " Ranks: " << size << std::endl;
         std::cout << "========================================" << std::endl;
     }
@@ -49,20 +49,20 @@ int main(int argc, char **argv)
     int failures = 0;
 
     if (rank == 0)
-        std::cout << "\n--- Demo 1: Allgather via TPUT_ASYNC ---" << std::endl;
-    if (!RunAllgatherPutAsync(size, 0, 0)) {
+        std::cout << "\n--- Demo 1: Allgather via TPUT (Sync) ---" << std::endl;
+    if (!RunAllgatherPutSync(size, 0, 0)) {
         if (rank == 0)
-            std::cerr << "[TPUT_ASYNC Allgather FAIL]" << std::endl;
+            std::cerr << "[TPUT_SYNC Allgather FAIL]" << std::endl;
         ++failures;
     }
 
     CommMpiBarrier();
 
     if (rank == 0)
-        std::cout << "\n--- Demo 2: Allgather via TGET_ASYNC ---" << std::endl;
-    if (!RunAllgatherGetAsync(size, 0, 0)) {
+        std::cout << "\n--- Demo 2: Allgather via TGET (Sync) ---" << std::endl;
+    if (!RunAllgatherGetSync(size, 0, 0)) {
         if (rank == 0)
-            std::cerr << "[TGET_ASYNC Allgather FAIL]" << std::endl;
+            std::cerr << "[TGET_SYNC Allgather FAIL]" << std::endl;
         ++failures;
     }
 
@@ -83,9 +83,9 @@ int main(int argc, char **argv)
         std::cout << "[PERF] warmup=20 iters=100 nranks=" << size << std::endl;
     }
 
-    if (!RunAllgatherAsyncSweep(size, 0, 0)) {
+    if (!RunAllgatherSyncSweep(size, 0, 0)) {
         if (rank == 0)
-            std::cerr << "[PERF] Async sweep FAILED" << std::endl;
+            std::cerr << "[PERF] Sync sweep FAILED" << std::endl;
     }
 
     if (rank == 0) {
