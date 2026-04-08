@@ -94,6 +94,8 @@ tget
 # Point-to-Point Communication (Asynchronous)
 tget_async
 tput_async
+tput_async_udma
+tget_async_udma
 # Signal-Based Synchronization
 tnotify
 twait
