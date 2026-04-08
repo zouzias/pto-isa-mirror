@@ -14,4 +14,4 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 
 template <typename T, size_t count>
-bool RunPutAsyncUdmaRootPut(int n_ranks, int n_devices, int first_rank_id, int first_device_id);
+bool RunGetAsyncUrmaRootGet(int n_ranks, int n_devices, int first_rank_id, int first_device_id);

@@ -12,49 +12,49 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cstdint>
 #include <gtest/gtest.h>
 
-#include "tput_async_udma_kernel.h"
+#include "tput_async_urma_kernel.h"
 #include "../comm_mpi.h"
 
 // ============================================================================
-// Basic correctness (UDMA true async PUT on A5 3510)
+// Basic correctness (URMA true async PUT on A5 3510)
 // ============================================================================
-TEST(TPutAsyncUdma, Vec_FloatSmall)
+TEST(TPutAsyncUrma, Vec_FloatSmall)
 {
     SKIP_IF_RANKS_LT(2);
-    ASSERT_TRUE((RunPutAsyncUdmaRootPut<float, 256>(2, 2, 0, 0)));
+    ASSERT_TRUE((RunPutAsyncUrmaRootPut<float, 256>(2, 2, 0, 0)));
 }
-TEST(TPutAsyncUdma, Vec_Int32Large)
+TEST(TPutAsyncUrma, Vec_Int32Large)
 {
     SKIP_IF_RANKS_LT(2);
-    ASSERT_TRUE((RunPutAsyncUdmaRootPut<int32_t, 4096>(2, 2, 0, 0)));
+    ASSERT_TRUE((RunPutAsyncUrmaRootPut<int32_t, 4096>(2, 2, 0, 0)));
 }
-TEST(TPutAsyncUdma, Vec_Uint8Small)
+TEST(TPutAsyncUrma, Vec_Uint8Small)
 {
     SKIP_IF_RANKS_LT(2);
-    ASSERT_TRUE((RunPutAsyncUdmaRootPut<uint8_t, 512>(2, 2, 0, 0)));
+    ASSERT_TRUE((RunPutAsyncUrmaRootPut<uint8_t, 512>(2, 2, 0, 0)));
 }
 
 // ============================================================================
 // Boundary scenarios
 // ============================================================================
-TEST(TPutAsyncUdma, Vec_Uint8_SingleChunk)
+TEST(TPutAsyncUrma, Vec_Uint8_SingleChunk)
 {
     SKIP_IF_RANKS_LT(2);
-    ASSERT_TRUE((RunPutAsyncUdmaRootPut<uint8_t, 64>(2, 2, 0, 0)));
+    ASSERT_TRUE((RunPutAsyncUrmaRootPut<uint8_t, 64>(2, 2, 0, 0)));
 }
-TEST(TPutAsyncUdma, Vec_Float_ExactChunk)
+TEST(TPutAsyncUrma, Vec_Float_ExactChunk)
 {
     SKIP_IF_RANKS_LT(2);
-    ASSERT_TRUE((RunPutAsyncUdmaRootPut<float, 64>(2, 2, 0, 0)));
+    ASSERT_TRUE((RunPutAsyncUrmaRootPut<float, 64>(2, 2, 0, 0)));
 }
 
 // ============================================================================
 // Multi-rank broadcast
 // ============================================================================
-TEST(TPutAsyncUdma, Vec_FloatSmall_4Ranks)
+TEST(TPutAsyncUrma, Vec_FloatSmall_4Ranks)
 {
     SKIP_IF_RANKS_LT(4);
-    ASSERT_TRUE((RunPutAsyncUdmaRootPut<float, 256>(4, 4, 0, 0)));
+    ASSERT_TRUE((RunPutAsyncUrmaRootPut<float, 256>(4, 4, 0, 0)));
 }
 
 int main(int argc, char **argv)

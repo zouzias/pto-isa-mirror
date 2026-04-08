@@ -24,7 +24,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "hccl_context.h"
 #include "comm_mpi.h"
 #include "pto/npu/comm/async/sdma/sdma_workspace_manager.hpp"
-#include "pto/npu/comm/async/udma/udma_workspace_manager.hpp"
+#include "pto/npu/comm/async/urma/urma_workspace_manager.hpp"
 
 // ============================================================================
 // Debug logging helpers.  Enabled by cmake -DDEBUG_MODE=ON  (defines COMM_DEBUG).
@@ -376,8 +376,8 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
 
 using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;
 
-using UdmaWorkspaceManager = pto::comm::udma::UdmaWorkspaceManager;
-using UdmaBootstrapHandle = pto::comm::udma::UdmaBootstrapHandle;
+using UrmaWorkspaceManager = pto::comm::urma::UrmaWorkspaceManager;
+using UrmaBootstrapHandle = pto::comm::urma::UrmaBootstrapHandle;
 
 static int MpiAllgatherWrapper(const void *sendbuf, void *recvbuf, int size, void *ctx)
 {
