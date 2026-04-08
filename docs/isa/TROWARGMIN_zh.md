@@ -2,7 +2,7 @@
 
 ## 指令示意图
 
-![TROWMIN tile operation](../figures/isa/TROWMIN.svg)
+![TROWARGMIN tile operation](../figures/isa/TROWARGMIN.svg)
 
 ## 简介
 

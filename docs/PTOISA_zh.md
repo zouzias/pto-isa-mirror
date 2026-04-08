@@ -79,6 +79,8 @@
 | 轴归约 / 扩展 | [`TROWMIN`](isa/TROWMIN_zh.md) | 通过取列间最小值来归约每一行。 |
 | 轴归约 / 扩展 | [`TROWARGMAX`](isa/TROWARGMAX_zh.md) | 获取每行最大值对应列索引。 |
 | 轴归约 / 扩展 | [`TROWARGMIN`](isa/TROWARGMIN_zh.md) | 获取每行最小值对应列索引。 |
+| 轴归约 / 扩展 | [`TCOLARGMAX`](isa/TCOLARGMAX_zh.md) | 获取每列最大值对应行索引。 |
+| 轴归约 / 扩展 | [`TCOLARGMIN`](isa/TCOLARGMIN_zh.md) | 获取每列最小值对应行索引。 |
 | 轴归约 / 扩展 | [`TROWEXPAND`](isa/TROWEXPAND_zh.md) | 将每个源行的第一个元素广播到目标行中。 |
 | 轴归约 / 扩展 | [`TROWEXPANDDIV`](isa/TROWEXPANDDIV_zh.md) | 行广播除法：将 `src0` 的每一行除以一个每行标量向量 `src1`。 |
 | 轴归约 / 扩展 | [`TROWEXPANDMUL`](isa/TROWEXPANDMUL_zh.md) | 行广播乘法：将 `src0` 的每一行乘以一个每行标量向量 `src1`。 |
@@ -130,6 +132,7 @@
 | 复杂指令 | [`TGATHER`](isa/TGATHER_zh.md) | 使用索引 Tile 或编译时掩码模式来收集/选择元素。 |
 | 复杂指令 | [`TCI`](isa/TCI_zh.md) | 生成连续整数序列到目标 Tile 中。 |
 | 复杂指令 | [`TTRI`](isa/TTRI_zh.md) | 生成三角（下/上）掩码 Tile。 |
+| 复杂指令 | [`TRANDOM`](isa/TRANDOM_zh.md) | 使用基于计数器的密码算法在目标 Tile 中生成随机数。 |
 | 复杂指令 | [`TPARTADD`](isa/TPARTADD_zh.md) | 部分逐元素加法，对不匹配的有效区域具有实现定义的处理方式。 |
 | 复杂指令 | [`TPARTMUL`](isa/TPARTMUL_zh.md) | 部分逐元素乘法，对有效区域不一致的处理为实现定义。 |
 | 复杂指令 | [`TPARTMAX`](isa/TPARTMAX_zh.md) | 部分逐元素最大值，对不匹配的有效区域具有实现定义的处理方式。 |

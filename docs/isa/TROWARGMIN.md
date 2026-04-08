@@ -3,7 +3,7 @@
 
 ## Tile Operation Diagram
 
-![TROWMIN tile operation](../figures/isa/TROWMIN.svg)
+![TROWARGMIN tile operation](../figures/isa/TROWARGMIN.svg)
 
 ## Introduction
 

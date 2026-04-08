@@ -79,6 +79,8 @@
 - [TROWMIN](TROWMIN_zh.md) - 通过取列间最小值来归约每一行。
 - [TROWARGMAX](TROWARGMAX_zh.md) - 获取每行最大值对应列索引。
 - [TROWARGMIN](TROWARGMIN_zh.md) - 获取每行最小值对应列索引。
+- [TCOLARGMAX](TCOLARGMAX_zh.md) - 获取每列最大值对应行索引。
+- [TCOLARGMIN](TCOLARGMIN_zh.md) - 获取每列最小值对应行索引。
 - [TROWEXPAND](TROWEXPAND_zh.md) - 将每个源行的第一个元素广播到目标行中。
 - [TROWEXPANDDIV](TROWEXPANDDIV_zh.md) - 行广播除法：将 `src0` 的每一行除以一个每行标量向量 `src1`。
 - [TROWEXPANDMUL](TROWEXPANDMUL_zh.md) - 行广播乘法：将 `src0` 的每一行乘以一个每行标量向量 `src1`。
@@ -138,6 +140,7 @@
 - [TGATHER](TGATHER_zh.md) - 使用索引 Tile 或编译时掩码模式来收集/选择元素。
 - [TCI](TCI_zh.md) - 生成连续整数序列到目标 Tile 中。
 - [TTRI](TTRI_zh.md) - 生成三角（下/上）掩码 Tile。
+- [TRANDOM](TRANDOM_zh.md) - 使用基于计数器的密码算法在目标 Tile 中生成随机数。
 - [TPARTADD](TPARTADD_zh.md) - 部分逐元素加法，对不匹配的有效区域具有实现定义的处理方式。
 - [TPARTMUL](TPARTMUL_zh.md) - 部分逐元素乘法，对有效区域不一致的处理为实现定义。
 - [TPARTMAX](TPARTMAX_zh.md) - 部分逐元素最大值，对不匹配的有效区域具有实现定义的处理方式。

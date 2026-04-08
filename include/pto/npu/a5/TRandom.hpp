@@ -35,12 +35,11 @@ PTO_INTERNAL void AddWith128Bits(T &ctr0, T &ctr1, T &ctr2, T &ctr3, T &zeros, T
     vaddcs(pd, ctr3, ctr3, zeros, pd, pReg);
 }
 
-template <unsigned eleStrideB32OneRow, typename T>
-PTO_INTERNAL void TRandomInitConst(T &incIdx, T &zeros, T &vEleStride, T &const0, T &const1)
+template <typename T>
+PTO_INTERNAL void TRandomInitConst(T &incIdx, T &zeros, T &const0, T &const1)
 {
     vci((RegTensor<int32_t> &)incIdx, 0);
     vbr(zeros, 0);
-    vbr(vEleStride, eleStrideB32OneRow);
     vbr(const0, TRANDOM_CONST_0);
     vbr(const1, TRANDOM_CONST_1);
 }
@@ -73,6 +72,12 @@ PTO_INTERNAL void TRandomKernel(T &ctr0, T &ctr1, T &ctr2, T &ctr3, T &key0, T &
         vadds(key0, key0, TRANDOM_CONST_KEY_ADD_0, pg);
         vadds(key1, key1, TRANDOM_CONST_KEY_ADD_1, pg);
     }
+
+    // adjust the order of random numbers to the normal generation order
+    vintlv(tmpL0, tmpH0, ctr0, ctr2);
+    vintlv(tmpL1, tmpH1, ctr1, ctr3);
+    vintlv(ctr0, ctr1, tmpL0, tmpL1);
+    vintlv(ctr2, ctr3, tmpH0, tmpH1);
 }
 
 template <unsigned nElemPerRpt, unsigned rowStride, typename T, typename U>
@@ -101,10 +106,8 @@ __tf__ PTO_INTERNAL void TRandom(typename DstTile::TileDType __out__ dstData, TR
     {
         constexpr unsigned nElemPerRpt = CCE_VL / sizeof(T);
         constexpr unsigned rowStride = DstTile::RowStride;
-        constexpr unsigned eleStrideB32OneRow = rowStride / TRANDOM_ONCE_REPEAT;
 
         uint16_t nLoop = CeilDivision(validCol, TRANDOM_ONCE_REPEAT * nElemPerRpt);
-        unsigned sReg = validCol;
         unsigned pgTmp = nElemPerRpt;
         MaskReg pg = CreatePredicate<T>(pgTmp);
         MaskReg pReg0, pReg1, pReg2, pReg3;
@@ -113,9 +116,10 @@ __tf__ PTO_INTERNAL void TRandom(typename DstTile::TileDType __out__ dstData, TR
         RegTensor<uint32_t> tmpCtr0, tmpCtr1, tmpCtr2, tmpCtr3, tmpKey0, tmpKey1;
 
         TRandomInitKeyCnt(key0, key1, ctr0, ctr1, ctr2, ctr3, key, counter);
-        TRandomInitConst<eleStrideB32OneRow>(incIdx, zeros, vEleStride, const0, const1);
+        TRandomInitConst(incIdx, zeros, const0, const1);
         AddWith128Bits(ctr0, ctr1, ctr2, ctr3, zeros, incIdx, pd, pg);
 
+        unsigned sReg, counterAddVal;
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
             sReg = validCol;
             for (uint16_t j = 0; j < nLoop; ++j) {
@@ -130,6 +134,8 @@ __tf__ PTO_INTERNAL void TRandom(typename DstTile::TileDType __out__ dstData, TR
 
                 TRandomStore<nElemPerRpt, rowStride>(dst, tmpCtr0, tmpCtr1, tmpCtr2, tmpCtr3, i, j, sReg);
 
+                counterAddVal = (j != nLoop - 1) ? nElemPerRpt : (((validCol - 1) % nElemPerRpt) + 1);
+                vbr(vEleStride, counterAddVal);
                 AddWith128Bits(ctr0, ctr1, ctr2, ctr3, zeros, vEleStride, pd, pg);
             }
         }

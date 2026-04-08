@@ -22,8 +22,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // for pto internal implementation
 #define PTO_INTERNAL AICORE PTO_INLINE
 
+#ifdef __CPU_SIM
+#define OP_NAME(Name)
+#define OP_TYPE(TypeName)
+#else
 #define OP_NAME(Name) __attribute__((vf_name(#Name)))
 #define OP_TYPE(TypeName) __attribute__((vf_kind(#TypeName)))
+#endif
 
 // -----------------------------------------------------------------------------
 // PTO assertion helpers
@@ -90,7 +95,47 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_CPU_ASSERT(...) ((void)0)
 #endif
 
+// Signed 4-bit integer type (packed: 2 elements per byte using uint8_t storage).
+// Compatible with AscendC int4b_t. The vconv intrinsics use void* for the packed side.
+struct int4b_t {
+    uint8_t storage;
+    int4b_t() = default;
+    explicit int4b_t(int32_t value) : storage(static_cast<uint8_t>(value) & 0x0F)
+    {}
+    operator int8_t() const
+    {
+        return (storage & 0x08) ? static_cast<int8_t>(storage | 0xF0) : static_cast<int8_t>(storage & 0x0F);
+    }
+};
+
 namespace pto {
+enum class TileType
+{
+    Vec,
+    Mat,
+    Left,
+    Right,
+    Acc,
+    Bias,
+    Scaling,
+    ScaleLeft,
+    ScaleRight,
+    Ctrl,
+};
+
+enum class BLayout
+{
+    RowMajor = 0,
+    ColMajor = 1,
+};
+
+enum class SLayout
+{
+    NoneBox = 0,
+    RowMajor = 1,
+    ColMajor = 2,
+};
+
 // 01-bits patterns are read from right to left.
 // Right bits are low bits, corresponding to low index positions of data.
 enum class MaskPattern : uint8_t
@@ -247,6 +292,18 @@ enum class TileLayoutCustom : uint8_t
     ZN,
     ZZ,
     NONE,
+};
+
+enum class DivAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RecipAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
 };
 
 namespace GlobalTensorDim {

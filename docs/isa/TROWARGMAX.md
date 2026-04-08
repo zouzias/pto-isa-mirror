@@ -3,7 +3,7 @@
 
 ## Tile Operation Diagram
 
-![TROWARGMAX tile operation](../figures/isa/TROWMAX.svg)
+![TROWARGMAX tile operation](../figures/isa/TROWARGMAX.svg)
 
 ## Introduction
 

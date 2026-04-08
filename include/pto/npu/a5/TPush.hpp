@@ -22,14 +22,17 @@ template <uint8_t FlagID, uint8_t DirType, uint32_t SlotSize, uint32_t SlotNum, 
 struct TPipe {
     static constexpr uint8_t DIR_MASK = 0x7;
     static constexpr uint8_t DIR_TYPE = DIR_MASK & DirType;
-    static constexpr bool is_c2v_ub = ((DIR_TYPE & Direction::DIR_C2V) == Direction::DIR_C2V);
-    static constexpr bool is_v2c_mat = ((DIR_TYPE & Direction::DIR_V2C) == Direction::DIR_V2C);
-    static constexpr bool is_c2v_gm = ((DIR_TYPE & Direction::DIR_C2V_GM) == Direction::DIR_C2V_GM);
+    static constexpr bool is_c2v_ub = (DIR_TYPE == Direction::DIR_C2V);        // 1
+    static constexpr bool is_v2c_mat = (DIR_TYPE == Direction::DIR_V2C);       // 2
+    static constexpr bool is_both = (DIR_TYPE == Direction::DIR_BOTH);         // 3
+    static constexpr bool is_v2c_ctrl = (DIR_TYPE == Direction::DIR_V2C_CTRL); // 4
+    static constexpr bool is_c2v_gm = (DIR_TYPE == Direction::DIR_C2V_GM);     // 5
+    static constexpr bool is_v2c_gm = (DIR_TYPE == Direction::DIR_V2C_GM);     // 6
+    static constexpr bool is_both_gm = (DIR_TYPE == Direction::DIR_BOTH_GM);   // 7
     static constexpr bool is_c2v = is_c2v_gm || is_c2v_ub;
-    static constexpr bool is_v2c_gm = ((DIR_TYPE & Direction::DIR_V2C_GM) == Direction::DIR_V2C_GM);
-    static constexpr bool is_v2c_ctrl = ((DIR_TYPE & Direction::DIR_V2C_CTRL) == Direction::DIR_V2C_CTRL);
     static constexpr bool is_v2c = is_v2c_gm || is_v2c_mat || is_v2c_ctrl;
-    static_assert(is_c2v || is_v2c, "Fix: TPipe only supports C2V or V2C communication with specified tile");
+    static_assert(is_c2v || is_v2c || is_both || is_both_gm,
+                  "Fix: TPipe only supports C2V or V2C or Both communication on A5.");
     static constexpr uint8_t VEC_CORE_ID_OFFSET = 16;
 
     // -------------------------------------------------------------------------
@@ -90,6 +93,24 @@ struct TPipe {
             entryOffset = offset;
         }
 
+        template <pipe_t Pipe, TileSplitAxis Split>
+        PTO_INTERNAL static void setIntraBlockBySplit(uint8_t flagId)
+        {
+            set_intra_block(Pipe, flagId);
+            if constexpr (Split != TileSplitAxis::TILE_NO_SPLIT) {
+                set_intra_block(Pipe, flagId + VEC_CORE_ID_OFFSET);
+            }
+        }
+
+        template <pipe_t Pipe, TileSplitAxis Split>
+        PTO_INTERNAL static void waitIntraBlockBySplit(uint8_t flagId)
+        {
+            wait_intra_block(Pipe, flagId);
+            if constexpr (Split != TileSplitAxis::TILE_NO_SPLIT) {
+                wait_intra_block(Pipe, flagId + VEC_CORE_ID_OFFSET);
+            }
+        }
+
         /**
          * alloc: Request space in FIFO
          * 1. (iter >= Depth): Startup protection. Don't check flags when buffer is empty.
@@ -99,24 +120,30 @@ struct TPipe {
         PTO_INTERNAL void allocate() const
         {
             if constexpr (is_c2v) {
-                // Cube producer waits for Vec consumer to free buffer
-                // Vec signals on flag_id+1 only, but Cube must wait on BOTH
-                // (because Vec0 signals flag_id+1, Vec1 signals flag_id+1+16 from Cube's view)
 #ifdef __DAV_CUBE__
-                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-                    wait_intra_block(PIPE_FIX, FlagID + 1);
-                } else {
-                    wait_intra_block(PIPE_FIX, FlagID + 1);
-                    wait_intra_block(PIPE_FIX, FlagID + 1 + VEC_CORE_ID_OFFSET);
-                }
+                waitIntraBlockBySplit<PIPE_FIX, Split>(FlagID + 1);
 #endif
             } else if constexpr (is_v2c_gm || is_v2c_mat) { // is_v2c (both gm and mat)
 #ifdef __DAV_VEC__
                 wait_intra_block(PIPE_MTE3, FlagID + 1);
 #endif
-            } else { // is_v2c_ctrl
+            } else if constexpr (is_both) {
+#ifdef __DAV_CUBE__
+                waitIntraBlockBySplit<PIPE_FIX, Split>(FlagID + 1);
+#endif
+#ifdef __DAV_VEC__
+                wait_intra_block(PIPE_MTE3, FlagID + 1);
+#endif
+            } else if constexpr (is_v2c_ctrl) {
 #ifdef __DAV_VEC__
                 wait_intra_block(PIPE_S, FlagID + 1);
+#endif
+            } else if constexpr (is_both_gm) {
+#ifdef __DAV_CUBE__
+                waitIntraBlockBySplit<PIPE_FIX, Split>(FlagID + 1);
+#endif
+#ifdef __DAV_VEC__
+                wait_intra_block(PIPE_MTE3, FlagID + 1);
 #endif
             }
         }
@@ -131,21 +158,26 @@ struct TPipe {
         {
             if constexpr (is_c2v) {
 #ifdef __DAV_CUBE__
-                // Cube -> Vec: Cube sets BOTH flags on PIPE_FIX
-                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-                    set_intra_block(PIPE_FIX, FlagID);
-                } else {
-                    set_intra_block(PIPE_FIX, FlagID);
-                    set_intra_block(PIPE_FIX, FlagID + VEC_CORE_ID_OFFSET);
-                }
+                setIntraBlockBySplit<PIPE_FIX, Split>(FlagID);
 #endif
-            } else if constexpr (is_v2c_gm || is_v2c_mat) { // is_v2c (both gm and mat)
-                // Vec -> Cube: Vec sets flag_id only on PIPE_MTE3
-                // Each Vec subblock executes this; hardware maps subblock 1's flag to flag_id+16
+            } else if constexpr (is_v2c_gm || is_v2c_mat) {
                 set_intra_block(PIPE_MTE3, FlagID);
-            } else { // is_v2c_ctrl
-                // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
+            } else if constexpr (is_both) {
+#ifdef __DAV_CUBE__
+                setIntraBlockBySplit<PIPE_FIX, Split>(FlagID);
+#endif
+#ifdef __DAV_VEC__
+                set_intra_block(PIPE_MTE3, FlagID);
+#endif
+            } else if constexpr (is_v2c_ctrl) {
                 set_intra_block(PIPE_S, FlagID);
+            } else if constexpr (is_both_gm) {
+#ifdef __DAV_VEC__
+                set_intra_block(PIPE_MTE3, FlagID);
+#endif
+#ifdef __DAV_CUBE__
+                setIntraBlockBySplit<PIPE_FIX, Split>(FlagID);
+#endif
             }
         }
 
@@ -168,7 +200,7 @@ struct TPipe {
             } else if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
                 TMOV_IMPL<TileCons, TileProd, AccToVecMode::DualModeSplitM>(vecTile, tile);
             } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
-                TMOV_IMPL<TileProd, TileProd, AccToVecMode::DualModeSplitN>(vecTile, tile);
+                TMOV_IMPL<TileCons, TileProd, AccToVecMode::DualModeSplitN>(vecTile, tile);
             }
         }
 
@@ -191,7 +223,7 @@ struct TPipe {
                 int rowIndex = ProdM * static_cast<size_t>(get_subblockid());
                 TINSERT_IMPL<TInsertMode::NZ>(matTile, tile, rowIndex, 0);
             } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) {
-                constexpr uint32_t colIndex = ProdN * static_cast<size_t>(get_subblockid());
+                uint32_t colIndex = ProdN * static_cast<size_t>(get_subblockid());
                 TINSERT_IMPL<TInsertMode::NZ>(matTile, tile, 0, colIndex);
             }
         }
@@ -222,11 +254,23 @@ struct TPipe {
             constexpr int ProdN = TileProd::Cols;
             constexpr int ConsM = (Split == TileSplitAxis::TILE_UP_DOWN) ? ProdM * splitNum : ProdM;
             constexpr int ConsN = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? ProdN * splitNum : ProdN;
-            size_t entryBase =
-                (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // slotIndex * ConsM * ConsN * sizeof(T);
-            size_t subAIVOffset =
-                (Split == TileSplitAxis::TILE_NO_SPLIT) ? 0 : (get_subblockid() * ProdM * ProdN * sizeof(T));
-            using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ProdM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
+            size_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // ConsM * ConsN * sizeof(T);
+            constexpr int gmValidR = ProdM;
+            constexpr int gmValidC = ProdN;
+            constexpr int gmStrideR = ConsN;
+            size_t subAIVOffset = 0;
+            if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+                // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = ProdM * ProdN * sizeof(T)
+                subAIVOffset = get_subblockid() * ProdM * ProdN * sizeof(T);
+            } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) { // TILE_LEFT_RIGHT
+                // TILE_LEFT_RIGHT: Vec1 starts at column ProdN within row 0 → offset = ProdN * sizeof(T)
+                subAIVOffset = get_subblockid() * ProdN * sizeof(T);
+            } else if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+                // TILE_NO_SPLIT : single writer, no offset needed
+                subAIVOffset = 0;
+            }
+            using GlobalData =
+                GlobalTensor<T, pto::Shape<1, 1, 1, gmValidR, gmValidC>, pto::Stride<1, 1, 1, gmStrideR, 1>>;
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + subAIVOffset + entryOffset);
             GlobalData globalData(addr);
             TSTORE_IMPL(globalData, tile);
@@ -246,13 +290,13 @@ struct TPipe {
         PTO_INTERNAL void push(RingFiFo &fifo, TileProd &tile)
         {
             if constexpr (TileProd::Loc == TileType::Acc) {
-                if constexpr (is_c2v_ub) {
+                if constexpr (is_c2v_ub || is_both) {
                     pushAcc2VecFiFo<TileProd, Split>(fifo, tile);
                 } else if constexpr (is_c2v_gm) {
                     pushAcc2GMFiFo<TileProd>(fifo, tile);
                 }
             } else if constexpr (TileProd::Loc == TileType::Vec) {
-                if constexpr (is_v2c_mat) {
+                if constexpr (is_v2c_mat || is_both) {
                     pushVec2MatFiFo<TileProd, Split>(fifo, tile);
                 } else if constexpr (is_v2c_gm) {
                     pushVec2GMFiFo<TileProd, Split>(fifo, tile);
@@ -311,96 +355,101 @@ struct TPipe {
             return isFree;
         }
 
-        PTO_INTERNAL void setentryOffset(int offset)
+        PTO_INTERNAL void setEntryOffset(int offset)
         {
             entryOffset = offset;
         }
 
+        template <pipe_t Pipe, TileSplitAxis Split>
+        PTO_INTERNAL static void waitIntraBlockBySplit(uint8_t flagId)
+        {
+            wait_intra_block(Pipe, flagId);
+            if constexpr (Split != TileSplitAxis::TILE_NO_SPLIT) {
+                wait_intra_block(Pipe, flagId + VEC_CORE_ID_OFFSET);
+            }
+        }
+
+        template <pipe_t Pipe, TileSplitAxis Split>
+        PTO_INTERNAL static void setIntraBlockBySplit(uint8_t flagId)
+        {
+            set_intra_block(Pipe, flagId);
+            if constexpr (Split != TileSplitAxis::TILE_NO_SPLIT) {
+                set_intra_block(Pipe, flagId + VEC_CORE_ID_OFFSET);
+            }
+        }
+
         /**
          * wait: Block until data is ready
-         * Consumers strictly wait for data (no sparse optimization for safety).
          */
         template <TileSplitAxis Split = TileSplitAxis::TILE_UP_DOWN>
         PTO_INTERNAL void wait() const
         {
             if constexpr (is_c2v_gm) {
-                // Cube -> Vec (GM path): Vec waits on PIPE_MTE2 (data loaded from GM)
                 wait_intra_block(PIPE_MTE2, FlagID);
             } else if constexpr (is_c2v_ub) {
-                // Cube -> Vec (UB path): Vec waits on PIPE_V before vector ops on UB data
-                // Cube sets PIPE_FIX, Vec waits PIPE_V (Vec does vector ops, not TLOAD)
 #ifdef __DAV_VEC__
                 wait_intra_block(PIPE_V, FlagID);
 #endif
             } else if constexpr (is_v2c_gm) {
-                // Vec -> Cube (GM path): Cube waits on PIPE_MTE2, BOTH flags
-                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-                    wait_intra_block(PIPE_MTE2, FlagID);
-                } else {
-                    wait_intra_block(PIPE_MTE2, FlagID);
-                    wait_intra_block(PIPE_MTE2, FlagID + VEC_CORE_ID_OFFSET);
-                }
-            } else if constexpr (is_v2c_gm) { // is_v2c_mat
-                                              // Vec -> Cube (UB path - TINSERT): Cube waits on PIPE_MTE1, BOTH flags
+                waitIntraBlockBySplit<PIPE_MTE2, Split>(FlagID);
+            } else if constexpr (is_v2c_mat) {
 #ifdef __DAV_CUBE__
-                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-                    wait_intra_block(PIPE_MTE1, FlagID);
-                } else {
-                    wait_intra_block(PIPE_MTE1, FlagID);
-                    wait_intra_block(PIPE_MTE1, FlagID + VEC_CORE_ID_OFFSET);
-                }
+                waitIntraBlockBySplit<PIPE_MTE1, Split>(FlagID);
 #endif
-            } else { // is_v2c_ctrl
-                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-                    wait_intra_block(PIPE_S, FlagID);
-                } else {
-                    wait_intra_block(PIPE_S, FlagID);
-                    wait_intra_block(PIPE_S, FlagID + VEC_CORE_ID_OFFSET);
-                }
+            } else if constexpr (is_both) {
+#ifdef __DAV_VEC__ // c2v_ub
+                wait_intra_block(PIPE_V, FlagID);
+#endif
+#ifdef __DAV_CUBE__ // v2c_mat
+                waitIntraBlockBySplit<PIPE_MTE1, Split>(FlagID);
+#endif
+            } else if constexpr (is_v2c_ctrl) {
+                waitIntraBlockBySplit<PIPE_S, Split>(FlagID);
+            } else if constexpr (is_both_gm) {
+#ifdef __DAV_VEC__
+                wait_intra_block(PIPE_MTE2, FlagID + 1);
+#endif
+#ifdef __DAV_CUBE__
+                waitIntraBlockBySplit<PIPE_MTE2, Split>(FlagID);
+#endif
             }
         }
 
         /**
          * free: Release space in FIFO
-         * 1. (iter >= Depth - Period): Silence at start. Don't signal if Producer
-         * is still enjoying the initial free buffer space.
-         * 2. (is_sync_step): Accumulate free entrys and signal in batches.
          */
         template <TileSplitAxis Split = TileSplitAxis::TILE_UP_DOWN>
         PTO_INTERNAL void free() const
         {
             if constexpr (is_c2v_gm) {
-                // Vec consumer frees buffer for Cube - signals on PIPE_MTE2, flag_id+1 only
 #ifdef __DAV_VEC__
-                uint8_t freeCubeID = FlagID + 1;
-                set_intra_block(PIPE_MTE2, freeCubeID);
+                set_intra_block(PIPE_MTE2, FlagID + 1);
 #endif
             } else if constexpr (is_c2v_ub) {
-                // Vec consumer frees buffer for Cube - signals on PIPE_V, flag_id+1 only
-                // Vec signals after vector ops complete (PIPE_V)
 #ifdef __DAV_VEC__
-                uint8_t freeCubeID = FlagID + 1;
-                set_intra_block(PIPE_V, freeCubeID);
+                set_intra_block(PIPE_V, FlagID + 1);
 #endif
-            } else if constexpr (is_v2c_gm || is_v2c_mat) { // is_v2c (both gm and mat)
-                // Cube consumer frees buffer for Vec - signals BOTH flags on PIPE_MTE1
-#ifdef __DAV_CUBE__
-                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-                    set_intra_block(PIPE_MTE1, FlagID + 1);
-                } else {
-                    set_intra_block(PIPE_MTE1, FlagID + 1);
-                    set_intra_block(PIPE_MTE1, FlagID + 1 + VEC_CORE_ID_OFFSET);
-                }
+            } else if constexpr (is_both) {
+#ifdef __DAV_VEC__
+                set_intra_block(PIPE_V, FlagID + 1);
 #endif
-            } else { // is_v2c_ctrl
-                     // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
 #ifdef __DAV_CUBE__
-                if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-                    set_intra_block(PIPE_S, FlagID + 1);
-                } else {
-                    set_intra_block(PIPE_S, FlagID + 1);
-                    set_intra_block(PIPE_S, FlagID + 1 + VEC_CORE_ID_OFFSET);
-                }
+                setIntraBlockBySplit<PIPE_MTE1, Split>(FlagID + 1);
+#endif
+            } else if constexpr (is_v2c_gm || is_v2c_mat) {
+#ifdef __DAV_CUBE__
+                setIntraBlockBySplit<PIPE_MTE1, Split>(FlagID + 1);
+#endif
+            } else if constexpr (is_v2c_ctrl) {
+#ifdef __DAV_CUBE__
+                setIntraBlockBySplit<PIPE_S, Split>(FlagID + 1);
+#endif
+            } else if constexpr (is_both_gm) {
+#ifdef __DAV_VEC__
+                set_intra_block(PIPE_MTE2, FlagID + 1);
+#endif
+#ifdef __DAV_CUBE__
+                setIntraBlockBySplit<PIPE_MTE1, Split>(FlagID + 1);
 #endif
             }
         }
@@ -411,7 +460,7 @@ struct TPipe {
             using T = typename TileCons::DType;
             constexpr int ConsM = TileCons::Rows;
             constexpr int ConsN = TileCons::Cols;
-            uint32_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // ConsM * ConsN * sizeof(T);
+            uint32_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE;
             uint64_t localTileBase = fifo.C2V_CONSUMER_BUF + entryBase + entryOffset;
             TASSIGN_IMPL(tile, localTileBase);
         }
@@ -422,7 +471,7 @@ struct TPipe {
             using T = typename TileCons::DType;
             constexpr int ConsM = TileCons::Rows;
             constexpr int ConsN = TileCons::Cols;
-            uint32_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // ConsM * ConsN * sizeof(T);
+            uint32_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE;
             uint64_t localTileBase = fifo.V2C_CONSUMER_BUF + entryBase + entryOffset;
             TASSIGN_IMPL(tile, localTileBase);
         }
@@ -430,24 +479,37 @@ struct TPipe {
         template <typename TileCons, TileSplitAxis Split>
         PTO_INTERNAL void popVecTileFromGMFiFo(RingFiFo &fifo, TileCons &tile)
         {
-            using T = typename TileCons::DType;
-            constexpr int ConsM = TileCons::Rows;
-            constexpr int ConsN = TileCons::Cols;
             constexpr int splitNum = 2;
-            constexpr int ProdM = (Split == TileSplitAxis::TILE_UP_DOWN) ? ConsM * splitNum : ConsM;
+            using T = typename TileCons::DType;
+            constexpr int ConsN = TileCons::Cols;
+            constexpr int ConsM = TileCons::Rows;
             constexpr int ProdN = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? ConsN * splitNum : ConsN;
+            constexpr int ProdM = (Split == TileSplitAxis::TILE_UP_DOWN) ? ConsM * splitNum : ConsM;
 
             // global tensor
-            size_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // ProdM * ProdN * sizeof(T);
-            size_t subAIVOffset =
-                (Split == TileSplitAxis::TILE_NO_SPLIT) ? 0 : (get_subblockid() * ConsM * ConsN * sizeof(T));
+            size_t entryBase = (static_cast<size_t>(tileIndex) % RingFiFo::SLOT_NUM) *
+                               RingFiFo::SLOT_SIZE; // ProdM * ProdN * sizeof(T);
+            constexpr int gmValidC = ConsN;
+            constexpr int gmValidR = ConsM;
+            constexpr int gmStrideR = ProdN;
+            size_t subAIVOffset = 0;
+            if constexpr (Split == TileSplitAxis::TILE_UP_DOWN) {
+                // TILE_UP_DOWN  : Vec1 starts at the second row-block → offset = VEC_M * ProdN * sizeof(T)
+                subAIVOffset = get_subblockid() * ConsM * ConsN * sizeof(T);
+            } else if constexpr (Split == TileSplitAxis::TILE_LEFT_RIGHT) { // TILE_LEFT_RIGHT
+                // TILE_LEFT_RIGHT: Vec1 starts at column ConsN within row 0 → offset = ConsN * sizeof(T)
+                subAIVOffset = get_subblockid() * ConsN * sizeof(T);
+            } else if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+                subAIVOffset = 0; // TILE_NO_SPLIT : single reader, no offset needed
+            }
+            using GlobalData =
+                GlobalTensor<T, pto::Shape<1, 1, 1, gmValidR, gmValidC>, pto::Stride<1, 1, 1, gmStrideR, 1>>;
             __gm__ T *addr = (__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + subAIVOffset + entryOffset);
-            using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
             GlobalData globalTensor(addr);
 
-            // local vector tile
             uint64_t localTileBase =
-                fifo.C2V_CONSUMER_BUF + (tileIndex % RingFiFo::LOCAL_SLOT_NUM) * ConsM * ConsN * sizeof(T);
+                fifo.C2V_CONSUMER_BUF +
+                (static_cast<size_t>(tileIndex) % RingFiFo::LOCAL_SLOT_NUM) * ConsM * ConsN * sizeof(T);
             TASSIGN_IMPL(tile, localTileBase);
             TLOAD_IMPL(tile, globalTensor);
         }
@@ -456,11 +518,11 @@ struct TPipe {
         PTO_INTERNAL void popMatTileFromGMFiFo(RingFiFo &fifo, TileCons &tile)
         {
             using T = typename TileCons::DType;
-            constexpr int ConsM = TileCons::Rows;
             constexpr int ConsN = TileCons::Cols;
-            uint32_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE; // ConsM * ConsN * sizeof(T);
-            using GlobaData = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ConsN>, pto::Stride<1, 1, 1, ConsN, 1>>;
-            GlobaData globalTensor((__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset));
+            constexpr int ConsM = TileCons::Rows;
+            using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ConsN>, pto::Stride<1, 1, 1, ConsN, 1>>;
+            uint32_t entryBase = (tileIndex % RingFiFo::SLOT_NUM) * RingFiFo::SLOT_SIZE;
+            GlobalData globalTensor((__gm__ T *)((uint64_t)fifo.GM_SLOT_BUFFER + entryBase + entryOffset));
 
             uint64_t localTileBase =
                 fifo.V2C_CONSUMER_BUF + (tileIndex % RingFiFo::LOCAL_SLOT_NUM) * ConsM * ConsN * sizeof(T);
@@ -482,7 +544,7 @@ struct TPipe {
             static_assert(TileCons::Loc == TileType::Vec || TileCons::Loc == TileType::Mat,
                           "Fix: TPOP has unsupported tile type!");
             if constexpr (TileCons::Loc == TileType::Vec) {
-                if constexpr (is_c2v_ub) {
+                if constexpr (is_c2v_ub || is_both) {
                     popTileFromVecFiFo<TileCons, Split>(fifo, tile);
                     return false;
                 } else if constexpr (is_c2v_gm) {
@@ -490,7 +552,7 @@ struct TPipe {
                     return true;
                 }
             } else if constexpr (TileCons::Loc == TileType::Mat) {
-                if constexpr (is_v2c_mat) {
+                if constexpr (is_v2c_mat || is_both) {
                     popTileFromMatFiFo<TileCons, Split>(fifo, tile);
                     return false;
                 } else if constexpr (is_v2c_gm) {
@@ -642,25 +704,21 @@ struct TMPipe {
                 // Vec signals on flag_id+1 only, but Cube must wait on BOTH
                 // (because Vec0 signals flag_id+1, Vec1 signals flag_id+1+16 from Cube's view)
 #ifdef __DAV_CUBE__
-                uint8_t waitVec0ID = FlagID + 1;
-                uint8_t waitVec1ID = FlagID + 1 + VEC_CORE_ID_OFFSET;
-                wait_intra_block(PIPE_FIX, waitVec0ID);
-                wait_intra_block(PIPE_FIX, waitVec1ID);
+                wait_intra_block(PIPE_FIX, FlagID + 1);
+                wait_intra_block(PIPE_FIX, FlagID + 1 + VEC_CORE_ID_OFFSET);
 #endif
             } else if constexpr (is_v2c_gm || is_v2c_mat) {
                 // is_v2c (both gm and mat)
                 // Vec producer waits for Cube consumer to free buffer
                 // Cube signals on BOTH, Vec waits on flag_id+1 only
 #ifdef __DAV_VEC__
-                uint8_t waitCubeID = FlagID + 1;
-                wait_intra_block(PIPE_MTE3, waitCubeID);
+                wait_intra_block(PIPE_MTE3, FlagID + 1);
 #endif
-            } else {
+            } else if constexpr (is_v2c_ctrl) {
                 // is_v2c_ctrl
                 // Control signals from Vec to Cube: Vec signals on flag_id, Cube waits on flag_id only
 #ifdef __DAV_VEC__
-                uint8_t waitCubeID = FlagID + 1;
-                wait_intra_block(PIPE_S, waitCubeID);
+                wait_intra_block(PIPE_S, FlagID + 1);
 #endif
             }
         }
@@ -697,7 +755,7 @@ struct TMPipe {
             size_t entryBase = bufIndex * kTileFactor * ProdM * ProdN * sizeof(T);
             using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ProdM, ProdN>, pto::Stride<1, 1, 1, ProdN, 1>>;
             GlobalData globalTensor((__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset));
-            // store tile to GM FIFO, enable unit-flag or diable unit-flag
+            // store tile to GM FIFO, enable unit-flag or disable unit-flag
             if constexpr (EN_UNIT_FLAG) {
                 TSTORE_IMPL<TileDataProd, GlobalData, AtomicType::AtomicNone, STPhase::Final>(globalTensor, tile);
             } else { // disable unit flag
@@ -845,7 +903,7 @@ struct TMPipe {
                           "Fix: TPUSH has unsupported tile type!");
             if constexpr (TileDataProd::Loc == TileType::Acc) {
                 static_assert((DataFiFo::fifoType == FIFOType::GM_FIFO) || (DataFiFo::fifoType == FIFOType::VEC_FIFO),
-                              "Fix: TPUSH has unsuported fifo type!");
+                              "Fix: TPUSH has unsupported fifo type!");
                 if constexpr (DataFiFo::fifoType == FIFOType::GM_FIFO) {
                     pushAcc2GMFiFo<T, ProdM, ProdN, ConsM, ConsN>(fifo, tile);
                 } else if constexpr (DataFiFo::fifoType == FIFOType::VEC_FIFO) {
@@ -1031,8 +1089,8 @@ struct TMPipe {
         {
             uint32_t bufIndex = static_cast<uint32_t>(tile_id % fifo.fifoDepth);
             size_t entryBase = bufIndex * ConsM * ProdN * sizeof(T);
-            using GlobaData = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ConsN>, pto::Stride<1, 1, 1, ConsN, 1>>;
-            GlobaData globalTensor((__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset));
+            using GlobalData = GlobalTensor<T, pto::Shape<1, 1, 1, ConsM, ConsN>, pto::Stride<1, 1, 1, ConsN, 1>>;
+            GlobalData globalTensor((__gm__ T *)((uint64_t)fifo.fifoBase + entryBase + entryOffset));
 
             if constexpr (DataFiFo::useLocalFiFo) {
                 uint64_t localTileBase =
@@ -1097,6 +1155,12 @@ struct TMPipe {
     template <FIFOType T = FiFoType, typename std::enable_if_t<T == FIFOType::GM_FIFO, int> = 0>
     PTO_INTERNAL explicit TMPipe(__gm__ typename TileDataCons::DType *gmFiFoBase, uint32_t localFiFoBase)
         : fifo(gmFiFoBase, localFiFoBase), prod(), cons()
+    {
+        cons.free();
+    }
+
+    template <FIFOType T = FiFoType, typename std::enable_if_t<T != FIFOType::GM_FIFO, int> = 0>
+    PTO_INTERNAL explicit TMPipe(uint32_t fifoBase) : fifo(fifoBase), prod(), cons()
     {
         cons.free();
     }

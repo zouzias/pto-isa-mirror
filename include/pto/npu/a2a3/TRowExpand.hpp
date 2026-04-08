@@ -86,7 +86,7 @@ PTO_INTERNAL void TROWEXPAND_IMPL(TileDataDst &dst, TileDataSrc &src)
     static_assert(TileDataDst::Loc == pto::TileType::Vec, "Fix: TROWEXPAND Dst TileType must be Vec!");
     static_assert(TileDataSrc::SFractal == SLayout::NoneBox, "Fix: TROWEXPAND Src layout must be ND or DN!");
     static_assert((TileDataDst::isRowMajor && (TileDataDst::SFractal == SLayout::NoneBox)),
-                  "Fix: TROWEXPAND Src and dst layout must be ND!");
+                  "Fix: TROWEXPAND dst layout must be ND!");
     int srcValidRow = src.GetValidRow();
     int srcValidCol = src.GetValidCol();
     int dstValidRow = dst.GetValidRow();

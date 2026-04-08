@@ -17,48 +17,45 @@ np.random.seed(19)
 def gen_golden_data(case_name, param):
     dtype = param.dtype
 
-    H, W = [param.tile_row, param.tile_col]
+    h_src, w_src = [param.src_row, param.src_col]
+    h_dst, w_dst = [param.dst_row, param.dst_col]
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = np.random.random(size=(H,W)).astype(dtype)
+    input1 = np.random.uniform(0.1, 10.0, size=(h_src, w_src)).astype(dtype)
 
     # Perform the operation
-    golden = np.sqrt(input1)
+    golden = np.zeros([h_dst, w_dst]).astype(dtype)
 
     # Apply valid region constraints
-    output = np.zeros([H, W]).astype(dtype)
-    for h in range(H):
-        for w in range(W):
-            if h >= h_valid or w >= w_valid:
-                golden[h][w] = output[h][w]
+    for h in range(h_dst):
+        for w in range(w_dst):
+            if h < h_valid and w < w_valid:
+                golden[h][w] = np.sqrt(input1[h][w])
 
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
     golden.tofile("golden.bin")
 
-    return output, input1, golden
+    return input1, golden
 
 class tunaryParams:
-    def __init__(self, dtype, global_row, global_col, tile_row, tile_col, valid_row, valid_col, in_place = False):
+    def __init__(self, dtype, dst_row, dst_col, src_row, src_col, valid_row, valid_col):
         self.dtype = dtype
-        self.global_row = global_row
-        self.global_col = global_col
-        self.tile_row = tile_row
-        self.tile_col = tile_col
+        self.dst_row = dst_row
+        self.dst_col = dst_col
+        self.src_row = src_row
+        self.src_col = src_col
         self.valid_row = valid_row
         self.valid_col = valid_col
-        self.in_place = in_place
 
 def generate_case_name(param):
     dtype_str = {
         np.float32: 'float',
         np.float16: 'half',
-        np.int8: 'int8',
-        np.int32: 'int32',
-        np.int16: 'int16'
     }[param.dtype]
-    return f"TSQRTTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_{param.valid_row}x{param.valid_col}_inPlace_{param.in_place}"
+    return f"TSQRTTest.case_{dtype_str}_{param.dst_row}x{param.dst_col}_{param.src_row}x{param.src_col}_\
+        {param.valid_row}x{param.valid_col}"
 
 if __name__ == "__main__":
     # Get the absolute path of the script
@@ -70,10 +67,8 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        tunaryParams(np.float32, 64, 64, 64, 64, 64, 64, True),
-        tunaryParams(np.float32, 64, 64, 64, 64, 64, 64, False),
-        tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, True),
-        tunaryParams(np.float16, 64, 64, 64, 64, 64, 64, False),
+        tunaryParams(np.float32, 64, 64, 64, 64, 64, 64),
+        tunaryParams(np.float16, 64, 64, 64, 64, 64, 64),
     ]
 
     for i, param in enumerate(case_params_list):
