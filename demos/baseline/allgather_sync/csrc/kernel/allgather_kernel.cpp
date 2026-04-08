@@ -480,7 +480,7 @@ static bool RunAllgatherSyncSweepKernel(int rankId, int nRanks, int nDevices, in
     if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, rootInfo))
         return false;
 
-    static const size_t kSweepElems[] = {256, 1024, 4096, 16384, 65536, 262144, 1048576};
+    static const size_t kSweepElems[] = {1024, 4096, 16384, 65536, 262144, 1048576};
     static const int kNumSizes = sizeof(kSweepElems) / sizeof(kSweepElems[0]);
 
     uint64_t *latDev = nullptr;
