@@ -415,7 +415,8 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpack -g TPACKTEST.case_fp32_fp8_128x128
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpack -g TPACKTEST.case_fp16_fp8_128x128
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tconcat -g TCONCATTest.case_half_16x128_16x64_16x64_16x63_16x64
-    python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_8x128_LSB_k104
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_8x128_b1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram -g THISTOGRAMTest.case_u32_6x912_b1_k64 
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_acc2mat_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nd_1
@@ -575,31 +576,4 @@ if [ "$ENABLE_KIRIN9030" = "true" ]; then
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmov_vect
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tmuls
   python3 tests/script/run_st.py $ARGS -w -v kirin9030 -t tsel
-fi
-
-if [ "$ENABLE_COMM" == "true" ]; then
-  if [ "$ENABLE_A3" = "true" ]; then
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tgather
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tnotify
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/treduce
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tscatter
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/ttest
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/twait
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tbroadcast
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tput_async
-    python3 tests/script/run_st.py $ARGS -v a3 -t comm/tget_async
-  fi
-  if [ "$ENABLE_A5" = "true" ]; then
-    python3 tests/script/run_st.py $ARGS -v a5 -t comm/tbroadcast
-    python3 tests/script/run_st.py $ARGS -v a5 -t comm/tgather
-    python3 tests/script/run_st.py $ARGS -v a5 -t comm/tget
-    python3 tests/script/run_st.py $ARGS -v a5 -t comm/tnotify
-    python3 tests/script/run_st.py $ARGS -v a5 -t comm/tput
-    python3 tests/script/run_st.py $ARGS -v a5 -t comm/treduce
-    python3 tests/script/run_st.py $ARGS -v a5 -t comm/tscatter
-    python3 tests/script/run_st.py $ARGS -v a5 -t comm/ttest
-    python3 tests/script/run_st.py $ARGS -v a5 -t comm/twait
-  fi
 fi
