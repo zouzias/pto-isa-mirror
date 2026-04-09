@@ -87,9 +87,12 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
         return AsyncEvent(0, DmaEngine::SDMA);
     }
 
-    if (!TGetAsyncIsFlatContiguous1D(srcGlobalData) || !TGetAsyncIsFlatContiguous1D(dstGlobalData)) {
-        return AsyncEvent(0, DmaEngine::SDMA);
-    }
+    PTO_ASSERT(TGetAsyncIsFlatContiguous1D(srcGlobalData),
+               "TGET_ASYNC: src tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by SDMA async path.");
+    PTO_ASSERT(TGetAsyncIsFlatContiguous1D(dstGlobalData),
+               "TGET_ASYNC: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by SDMA async path.");
 
     const uint32_t srcElems = TGetAsyncGetTotalElemCount(srcGlobalData);
     const uint32_t dstElems = TGetAsyncGetTotalElemCount(dstGlobalData);
