@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <initializer_list>
 #include <string>
 #include <string_view>
@@ -79,6 +80,12 @@ inline uint64_t ToTraceValue(T value)
         return static_cast<uint64_t>(std::bit_cast<uint32_t>(value));
     } else if constexpr (std::is_floating_point_v<Decayed> && sizeof(Decayed) == sizeof(uint64_t)) {
         return std::bit_cast<uint64_t>(value);
+    } else if constexpr (sizeof(Decayed) == sizeof(uint16_t) && !std::is_integral_v<Decayed> &&
+                         !std::is_enum_v<Decayed> && !std::is_pointer_v<Decayed>) {
+        // Handles _Float16 / __fp16 / half which may not satisfy std::is_floating_point_v
+        uint16_t bits;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return static_cast<uint64_t>(bits);
     } else {
         static_assert(kUnsupportedTraceType<Decayed>, "Unsupported trace argument type.");
         return 0;

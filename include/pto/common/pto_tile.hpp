@@ -19,6 +19,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <iomanip>
 #endif
 
+#ifdef __COSTMODEL
+namespace pto::mocker {
+float GetLastPtoInstrCycles();
+} // namespace pto::mocker
+#endif
+
 namespace pto {
 
 constexpr int DYNAMIC = -1;
@@ -1199,6 +1205,9 @@ public:
     {
         return dstMposition_;
     }
+#endif
+#ifdef __COSTMODEL
+    float GetCycle() const { return ::pto::mocker::GetLastPtoInstrCycles(); }
 #endif
 private:
     AICORE void assignData(TileDType data)
