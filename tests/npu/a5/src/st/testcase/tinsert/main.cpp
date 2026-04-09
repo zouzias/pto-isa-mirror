@@ -479,6 +479,11 @@ TEST_F(TInsertTest, case_nz_9)
     testTInsertNZUnaligned<2, float>(10, 32, 32, 32);
 }
 
+TEST_F(TInsertTest, case_nz_11)
+{
+    testTInsertNZUnaligned<3, float>(10, 32, 32, 32);
+}
+
 template <int32_t testKey, typename dType>
 void testTInsertNZTwoInsert(int32_t srcRows1, int32_t srcRows2, int32_t cols, int32_t dstRows)
 {
@@ -532,4 +537,68 @@ void testTInsertNZTwoInsert(int32_t srcRows1, int32_t srcRows2, int32_t cols, in
 TEST_F(TInsertTest, case_nz_10)
 {
     testTInsertNZTwoInsert<1, float>(15, 10, 32, 32);
+}
+
+template <int32_t testKey>
+void launchTInsertNZOverwrite(uint64_t *out, uint64_t *src1, uint64_t *src2, void *stream);
+
+template <int32_t testKey, typename dType>
+void testTInsertNZOverwrite(int32_t srcRows2, int32_t cols, int32_t dstRows)
+{
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    size_t src1ByteSize = dstRows * cols * sizeof(dType);
+    size_t src2ByteSize = srcRows2 * cols * sizeof(dType);
+    size_t dstByteSize = dstRows * cols * sizeof(dType);
+    uint64_t *dstHost, *src1Host, *src2Host, *dstDevice, *src1Device, *src2Device;
+
+    aclrtMallocHost((void **)(&dstHost), dstByteSize);
+    aclrtMallocHost((void **)(&src1Host), src1ByteSize);
+    aclrtMallocHost((void **)(&src2Host), src2ByteSize);
+    aclrtMalloc((void **)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src1Device, src1ByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src2Device, src2ByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/src1_input.bin", src1ByteSize, src1Host, src1ByteSize);
+    ReadFile(GetGoldenDir() + "/src2_input.bin", src2ByteSize, src2Host, src2ByteSize);
+    aclrtMemcpy(src1Device, src1ByteSize, src1Host, src1ByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src2Device, src2ByteSize, src2Host, src2ByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    launchTInsertNZOverwrite<testKey>(dstDevice, src1Device, src2Device, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    WriteFile(GetGoldenDir() + "/output_z.bin", dstHost, dstByteSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(src1Device);
+    aclrtFree(src2Device);
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(src1Host);
+    aclrtFreeHost(src2Host);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<dType> golden(dstByteSize / sizeof(dType));
+    std::vector<dType> devFinal(dstByteSize / sizeof(dType));
+    ReadFile(GetGoldenDir() + "/golden_output.bin", dstByteSize, golden.data(), dstByteSize);
+    ReadFile(GetGoldenDir() + "/output_z.bin", dstByteSize, devFinal.data(), dstByteSize);
+
+    bool ret = ResultCmp(golden, devFinal, 0.001f);
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TInsertTest, case_nz_12)
+{
+    testTInsertNZOverwrite<1, float>(10, 32, 32);
+}
+
+TEST_F(TInsertTest, case_nz_13)
+{
+    // Two 8×256 ND→NZ inserts into 16×256 dest at (0,0) + (8,0)
+    testTInsertNZTwoInsert<2, float>(8, 8, 256, 16);
 }

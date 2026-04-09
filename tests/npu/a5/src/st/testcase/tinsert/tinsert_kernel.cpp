@@ -904,11 +904,15 @@ void launchTInsertNZUnaligned(uint64_t *out, uint64_t *src, void *stream)
     } else if constexpr (testKey == 2) {
         // case_nz_9: 10 rows into 32-row dest at offset (16,0) (aligned boundary)
         launchTInsertNZUnalignedKernel<float, 10, 32, 32, 16><<<1, nullptr, stream>>>(out, src);
+    } else if constexpr (testKey == 3) {
+        // case_nz_11: 10 rows into 32-row dest at offset (4,0) (unaligned indexRow)
+        launchTInsertNZUnalignedKernel<float, 10, 32, 32, 4><<<1, nullptr, stream>>>(out, src);
     }
 }
 
 template void launchTInsertNZUnaligned<1>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTInsertNZUnaligned<2>(uint64_t *out, uint64_t *src, void *stream);
+template void launchTInsertNZUnaligned<3>(uint64_t *out, uint64_t *src, void *stream);
 
 template <int32_t testKey>
 void launchTInsertNZTwoInsert(uint64_t *out, uint64_t *src1, uint64_t *src2, void *stream)
@@ -916,7 +920,144 @@ void launchTInsertNZTwoInsert(uint64_t *out, uint64_t *src1, uint64_t *src2, voi
     if constexpr (testKey == 1) {
         // case_nz_10: 15+10 rows into 32-row dest at (0,0) + (15,0)
         launchTInsertNZTwoInsertKernel<float, 15, 10, 32, 32, 15><<<1, nullptr, stream>>>(out, src1, src2);
+    } else if constexpr (testKey == 2) {
+        // case_nz_13: 8+8 rows into 16-row dest at (0,0) + (8,0), 256 cols
+        launchTInsertNZTwoInsertKernel<float, 8, 8, 16, 256, 8><<<1, nullptr, stream>>>(out, src1, src2);
     }
 }
 
 template void launchTInsertNZTwoInsert<1>(uint64_t *out, uint64_t *src1, uint64_t *src2, void *stream);
+template void launchTInsertNZTwoInsert<2>(uint64_t *out, uint64_t *src1, uint64_t *src2, void *stream);
+
+template <typename T, uint32_t SrcRows2, uint32_t DstRows, uint32_t Cols, uint32_t IdxRow>
+AICORE void runTInsertNZOverwrite(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
+{
+    constexpr uint32_t c0Size = CUBE_BLOCK_SIZE / (FRACTAL_NZ_ROW * sizeof(T));
+    constexpr uint32_t AlignedRow2 = ((SrcRows2 + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW) * FRACTAL_NZ_ROW;
+
+    // src1 is full DstRows×Cols, src2 is SrcRows2×Cols
+    using Src1ShapeDim5 = pto::Shape<1, 1, 1, DstRows, Cols>;
+    using Src1StridDim5 = pto::Stride<1, 1, 1, Cols, 1>;
+    using Src1GlobalData = GlobalTensor<T, Src1ShapeDim5, Src1StridDim5>;
+
+    using Src2ShapeDim5 = pto::Shape<1, 1, 1, SrcRows2, Cols>;
+    using Src2StridDim5 = pto::Stride<1, 1, 1, Cols, 1>;
+    using Src2GlobalData = GlobalTensor<T, Src2ShapeDim5, Src2StridDim5>;
+
+    using OutShapeDim5 = pto::Shape<1, Cols / c0Size, DstRows / FRACTAL_NZ_ROW, FRACTAL_NZ_ROW, c0Size>;
+    using OutStridDim5 =
+        pto::Stride<Cols / c0Size * c0Size * DstRows, DstRows * c0Size, FRACTAL_NZ_ROW * c0Size, c0Size, 1>;
+    using OutGlobalData = GlobalTensor<T, OutShapeDim5, OutStridDim5, Layout::NZ>;
+
+    // src1 tile: full DstRows, NZ_PLUS_1 format
+    using Src1VecTile = Tile<TileType::Vec, T, DstRows, Cols, BLayout::RowMajor, -1, -1>;
+    using TmpVecTile1 = Tile<TileType::Vec, T, DstRows + 1, Cols, BLayout::ColMajor, DstRows, Cols, SLayout::RowMajor,
+                             512, PadValue::Null, CompactMode::RowPlusOne>;
+
+    // src2 tile: SrcRows2, NZ_PLUS_1 format
+    using Src2VecTile = Tile<TileType::Vec, T, SrcRows2, Cols, BLayout::RowMajor, -1, -1>;
+    using TmpVecTile2 = Tile<TileType::Vec, T, AlignedRow2 + 1, Cols, BLayout::ColMajor, SrcRows2, Cols,
+                             SLayout::RowMajor, 512, PadValue::Null, CompactMode::RowPlusOne>;
+
+    using DstVecTile = Tile<TileType::Vec, T, DstRows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
+    using MatTile = Tile<TileType::Mat, T, DstRows, Cols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
+
+    Src1VecTile src1Tile(DstRows, Cols);
+    Src2VecTile src2Tile(SrcRows2, Cols);
+    TmpVecTile1 tmpTile1;
+    TmpVecTile2 tmpTile2;
+    DstVecTile dstTile(DstRows, Cols);
+    MatTile matTile(DstRows, Cols);
+
+    TASSIGN(src1Tile, 0x0);
+    TASSIGN(src2Tile, 0x4000);
+    TASSIGN(tmpTile1, 0x10000);
+    TASSIGN(tmpTile2, 0x10000);
+    TASSIGN(dstTile, 0x20000);
+    TASSIGN(matTile, 0x0);
+
+    Src1GlobalData src1Global(src1);
+    Src2GlobalData src2Global(src2);
+    OutGlobalData dstGlobal(out);
+
+    uint8_t syncId = 0;
+    uint8_t eventIdNum = 16;
+
+    constexpr uint32_t burstNum = Cols / c0Size;
+    constexpr uint16_t burstLen = (DstRows * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
+
+    __cbuf__ T *matAddr = matTile.data();
+    __ubuf__ T *dstUbAddr = dstTile.data();
+    __ubuf__ T *tmpAddr = tmpTile1.data();
+
+#if defined(__DAV_VEC__)
+    // Step 1: Load src1 (full DstRows), convert ND→NZ+1, insert at (0,0)
+    TLOAD(src1Tile, src1Global);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+    pto::TMovToVecNd2Nz<T, TmpVecTile1, Src1VecTile>(tmpTile1.data(), src1Tile.data(), DstRows, Cols, DstRows);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+    TINSERT<pto::TInsertMode::NZ_PLUS_1>(matTile, tmpTile1, static_cast<uint16_t>(0), static_cast<uint16_t>(0));
+
+    // Step 2: Load src2 (SrcRows2), convert ND→NZ+1, insert at (IdxRow, 0)
+    TLOAD(src2Tile, src2Global);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+
+    // Zero-fill tmpTile2 then convert
+    {
+        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t tmpElements = (AlignedRow2 + 1) * Cols;
+        constexpr uint16_t tmpRepeats =
+            static_cast<uint16_t>((tmpElements + elementsPerRepeat - 1) / elementsPerRepeat);
+        __VEC_SCOPE__
+        {
+            RegTensor<T> vreg;
+            uint32_t predCount = elementsPerRepeat;
+            MaskReg preg = CreatePredicate<T>(predCount);
+            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
+            for (uint16_t i = 0; i < tmpRepeats; ++i) {
+                vsts(vreg, tmpAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
+            }
+        }
+    }
+    pto::TMovToVecNd2Nz<T, TmpVecTile2, Src2VecTile>(tmpTile2.data(), src2Tile.data(), SrcRows2, Cols, SrcRows2);
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+    TINSERT<pto::TInsertMode::NZ_PLUS_1>(matTile, tmpTile2, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(0));
+    set_intra_block(PIPE_MTE3, syncId);
+#endif
+
+#if defined(__DAV_CUBE__)
+    ReadbackCbufToUbuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, burstNum, burstLen, 0, syncId, eventIdNum);
+#endif
+
+#if defined(__DAV_VEC__)
+    WaitAndStore(dstGlobal, dstTile, syncId);
+#endif
+}
+
+template <typename T, uint32_t SrcRows2, uint32_t DstRows, uint32_t Cols, uint32_t IdxRow>
+__global__ AICORE void launchTInsertNZOverwriteKernel(__gm__ uint64_t *out, __gm__ uint64_t *src1,
+                                                      __gm__ uint64_t *src2)
+{
+    runTInsertNZOverwrite<T, SrcRows2, DstRows, Cols, IdxRow>(
+        reinterpret_cast<__gm__ T *>(out), reinterpret_cast<__gm__ T *>(src1), reinterpret_cast<__gm__ T *>(src2));
+}
+
+template <int32_t testKey>
+void launchTInsertNZOverwrite(uint64_t *out, uint64_t *src1, uint64_t *src2, void *stream)
+{
+    if constexpr (testKey == 1) {
+        // case_nz_12: fill 32-row dest with src1, then insert 10 rows at row 4 (unaligned)
+        launchTInsertNZOverwriteKernel<float, 10, 32, 32, 4><<<1, nullptr, stream>>>(out, src1, src2);
+    }
+}
+
+template void launchTInsertNZOverwrite<1>(uint64_t *out, uint64_t *src1, uint64_t *src2, void *stream);
