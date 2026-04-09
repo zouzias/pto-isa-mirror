@@ -114,24 +114,26 @@ AICORE inline void ComputeNZBlockParams(uint32_t validRow, uint32_t validCol, ui
     constexpr uint32_t nzRow = FRACTAL_NZ_ROW;
     burstNum = CeilDivision(validCol, c0Size);
     uint32_t alignedRow = CeilDivision(validRow, nzRow) * nzRow;
-    burstLen = (alignedRow * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
+    // Use validRow (not alignedRow) for burstLen to avoid overwriting
+    // adjacent rows in the destination when indexRow is not NZ-aligned.
+    burstLen = (validRow * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
     uint32_t colBlockOffset = (indexCol / c0Size) * dstRow * c0Size;
     uint32_t rowOffset = indexRow * c0Size + (indexCol % c0Size);
     dstOffset = colBlockOffset + rowOffset;
     switch (mode) {
         case TInsertMode::NZ:
-            srcGap = 0;
-            dstGap = static_cast<uint16_t>(dstRow - alignedRow);
+            srcGap = static_cast<uint16_t>(alignedRow - validRow);
+            dstGap = static_cast<uint16_t>(dstRow - validRow);
             break;
         case TInsertMode::NZ_PLUS_1:
         case TInsertMode::SPLIT2_NZ_PLUS_1:
         case TInsertMode::SPLIT4_NZ_PLUS_1:
-            srcGap = 1;
-            dstGap = static_cast<uint16_t>(dstRow - alignedRow);
+            srcGap = static_cast<uint16_t>(alignedRow + 1 - validRow);
+            dstGap = static_cast<uint16_t>(dstRow - validRow);
             break;
         default:
-            srcGap = 1;
-            dstGap = static_cast<uint16_t>(dstRow - alignedRow);
+            srcGap = static_cast<uint16_t>(alignedRow + 1 - validRow);
+            dstGap = static_cast<uint16_t>(dstRow - validRow);
             break;
     }
 }
