@@ -44,6 +44,32 @@ namespace comm {
 //   - All destination tensors in the ParallelGroup are assumed to have the same shape/strides.
 // ============================================================================
 
+template <typename GlobalDataDst, typename GlobalDataSrc>
+void Scatter(
+    typename GlobalDataDst::DType *dst, 
+    typename GlobalDataSrc::DType *src, 
+    long int srcShape[], 
+    long int srcStride[],
+    long int dstShape[], 
+    long int dstStride[],
+    long int srcOffset
+)
+{
+    for (size_t i = 0; i < dstShape[0]; i++) {
+        for (size_t j = 0; j < dstShape[1]; j++) {
+            for (size_t k = 0; k < dstShape[2]; k++) {
+                for (size_t l = 0; l < dstShape[3]; l++) {
+                    for (size_t m = 0; m < dstShape[4]; m++) {
+                        int index = i * dstStride[0] + j * dstStride[1] + k * dstStride[2] + l * dstStride[3] + m * dstStride[4];
+                        dst[index] = src[index];
+                    }
+                }
+            }
+        }
+    }
+}
+
+
 template <typename ParallelGroupType, typename GlobalSrcData, typename TileData>
 PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData &srcGlobalData,
                                 TileData &stagingTileData)
@@ -58,11 +84,52 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
 
     const int nranks = parallelGroup.GetSize();
     const int rootIdx = parallelGroup.GetRootIdx();
+    const int myRank = parallelGroup.GetRank();
 
     PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
     PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
 
-    // CPU Logic is not implemented yet
+    const int H = srcGlobalData.GetShape(3) / nranks;
+    const int W = srcGlobalData.GetShape(4);
+
+    constexpr size_t numDims = 5;
+    long int srcShape[numDims] = {
+        srcGlobalData.GetShape(0), 
+        srcGlobalData.GetShape(1), 
+        srcGlobalData.GetShape(2), 
+        srcGlobalData.GetShape(3), 
+        srcGlobalData.GetShape(4)
+    };
+    long int srcStride[numDims] = {
+        srcGlobalData.GetStride(0), 
+        srcGlobalData.GetStride(1), 
+        srcGlobalData.GetStride(2), 
+        srcGlobalData.GetStride(3),
+        srcGlobalData.GetStride(4)
+    };
+
+    for (int r = 0; i < nranks; ++i)
+    {
+        GlobalDstData& dstGlobalData = parallelGroup[n];
+
+        long int dstShape[numDims] = {
+            dstGlobalData.GetShape(0), 
+            dstGlobalData.GetShape(1), 
+            dstGlobalData.GetShape(2), 
+            dstGlobalData.GetShape(3), 
+            dstGlobalData.GetShape(4)
+        };
+        long int dstStride[numDims] = {
+            dstGlobalData.GetStride(0), 
+            dstGlobalData.GetStride(1), 
+            dstGlobalData.GetStride(2), 
+            dstGlobalData.GetStride(3),
+            dstGlobalData.GetStride(4)
+        };
+
+
+    }
+    
 }
 
 // ============================================================================
