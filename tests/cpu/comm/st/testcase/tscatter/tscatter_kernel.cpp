@@ -124,7 +124,11 @@ bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_
         T *src_staging = nullptr;
         aclrtMalloc(reinterpret_cast<void **>(&src_staging), src_size, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMemcpy(src_staging, src_size, src_host, src_size, ACL_MEMCPY_HOST_TO_DEVICE);
-        WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)src_ptr, src_staging, static_cast<int>(n_ranks * count));
+        WindowMemCopyIn<T>
+        #ifndef __CPU_SIM 
+            <<<1, nullptr, ctx.stream>>> 
+        #endif
+        ((T *)src_ptr, src_staging, static_cast<int>(n_ranks * count));
         aclrtSynchronizeStream(ctx.stream);
         aclrtFree(src_staging);
     }
@@ -135,17 +139,29 @@ bool RunScatterKernel(int rank_id, int n_ranks, int n_devices, int first_device_
     T *dst_staging = nullptr;
     aclrtMalloc(reinterpret_cast<void **>(&dst_staging), dst_size, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMemcpy(dst_staging, dst_size, dst_host, dst_size, ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)dst_ptr, dst_staging, static_cast<int>(count));
+    WindowMemCopyIn<T>
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    ((T *)dst_ptr, dst_staging, static_cast<int>(count));
     aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    TScatterKernelImpl<T, count><<<1, nullptr, ctx.stream>>>((T *)src_ptr, (T *)dst_ptr, n_ranks, root, ctx.deviceCtx);
+    TScatterKernelImpl<T, count>
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    ((T *)src_ptr, (T *)dst_ptr, n_ranks, root, ctx.deviceCtx);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    WindowMemCopyOut<T><<<1, nullptr, ctx.stream>>>(dst_staging, (T *)dst_ptr, static_cast<int>(count));
+    WindowMemCopyOut<T>
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    (dst_staging, (T *)dst_ptr, static_cast<int>(count));
     aclrtSynchronizeStream(ctx.stream);
     aclrtMemcpy(dst_host, dst_size, dst_staging, dst_size, ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtFree(dst_staging);
@@ -247,7 +263,7 @@ template <typename T, size_t count>
 bool RunScatterEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, int root,
                            uint64_t /*local_mem_size*/, const HcclRootInfo *rootInfo)
 {
-    TestContext ctx;
+    TestContext<T, count> ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
 
@@ -277,7 +293,11 @@ bool RunScatterEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_de
         T *src_staging = nullptr;
         aclrtMalloc(reinterpret_cast<void **>(&src_staging), src_size, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMemcpy(src_staging, src_size, src_host, src_size, ACL_MEMCPY_HOST_TO_DEVICE);
-        WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)src_ptr, src_staging, static_cast<int>(n_ranks * count));
+        WindowMemCopyIn<T>
+        #ifndef __CPU_SIM 
+            <<<1, nullptr, ctx.stream>>> 
+        #endif
+        ((T *)src_ptr, src_staging, static_cast<int>(n_ranks * count));
         aclrtSynchronizeStream(ctx.stream);
         aclrtFree(src_staging);
     }
@@ -288,18 +308,29 @@ bool RunScatterEmptyKernel(int rank_id, int n_ranks, int n_devices, int first_de
     T *dst_staging = nullptr;
     aclrtMalloc(reinterpret_cast<void **>(&dst_staging), dst_size, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMemcpy(dst_staging, dst_size, dst_host, dst_size, ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)dst_ptr, dst_staging, static_cast<int>(count));
+    WindowMemCopyIn<T>
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    ((T *)dst_ptr, dst_staging, static_cast<int>(count));
     aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
     TScatterEmptyKernelImpl<T, count>
-        <<<1, nullptr, ctx.stream>>>((T *)src_ptr, (T *)dst_ptr, n_ranks, root, ctx.deviceCtx);
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    ((T *)src_ptr, (T *)dst_ptr, n_ranks, root, ctx.deviceCtx);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    WindowMemCopyOut<T><<<1, nullptr, ctx.stream>>>(dst_staging, (T *)dst_ptr, static_cast<int>(count));
+    WindowMemCopyOut<T>
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    (dst_staging, (T *)dst_ptr, static_cast<int>(count));
     aclrtSynchronizeStream(ctx.stream);
     aclrtMemcpy(dst_host, dst_size, dst_staging, dst_size, ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtFree(dst_staging);
@@ -384,7 +415,7 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
 {
     constexpr size_t total_count = total_rows * cols;
 
-    TestContext ctx;
+    TestContext<T, total_count> ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
 
@@ -416,7 +447,10 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
         aclrtMemcpy(src_staging, n_ranks * total_count * sizeof(T), src_host, n_ranks * total_count * sizeof(T),
                     ACL_MEMCPY_HOST_TO_DEVICE);
         WindowMemCopyIn<T>
-            <<<1, nullptr, ctx.stream>>>((T *)src_ptr, src_staging, static_cast<int>(n_ranks * total_count));
+        #ifndef __CPU_SIM 
+            <<<1, nullptr, ctx.stream>>> 
+        #endif
+        ((T *)src_ptr, src_staging, static_cast<int>(n_ranks * total_count));
         aclrtSynchronizeStream(ctx.stream);
         aclrtFree(src_staging);
     }
@@ -427,18 +461,29 @@ bool RunScatterLargeShapeKernel(int rank_id, int n_ranks, int n_devices, int fir
     T *dst_staging = nullptr;
     aclrtMalloc(reinterpret_cast<void **>(&dst_staging), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMemcpy(dst_staging, total_count * sizeof(T), dst_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)dst_ptr, dst_staging, static_cast<int>(total_count));
+    WindowMemCopyIn<T>
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    ((T *)dst_ptr, dst_staging, static_cast<int>(total_count));
     aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
     TScatterLargeShapeKernelImpl<T, total_rows, cols, tile_rows>
-        <<<1, nullptr, ctx.stream>>>((T *)src_ptr, (T *)dst_ptr, n_ranks, ctx.deviceCtx);
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    ((T *)src_ptr, (T *)dst_ptr, n_ranks, ctx.deviceCtx);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    WindowMemCopyOut<T><<<1, nullptr, ctx.stream>>>(dst_staging, (T *)dst_ptr, static_cast<int>(total_count));
+    WindowMemCopyOut<T>
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    (dst_staging, (T *)dst_ptr, static_cast<int>(total_count));
     aclrtSynchronizeStream(ctx.stream);
     aclrtMemcpy(dst_host, total_count * sizeof(T), dst_staging, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtFree(dst_staging);
@@ -557,7 +602,7 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
 {
     constexpr size_t total_count = total_rows * cols;
 
-    TestContext ctx;
+    TestContext<T, total_count> ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
 
@@ -589,7 +634,10 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
         aclrtMemcpy(src_staging, n_ranks * total_count * sizeof(T), src_host, n_ranks * total_count * sizeof(T),
                     ACL_MEMCPY_HOST_TO_DEVICE);
         WindowMemCopyIn<T>
-            <<<1, nullptr, ctx.stream>>>((T *)src_ptr, src_staging, static_cast<int>(n_ranks * total_count));
+        #ifndef __CPU_SIM 
+            <<<1, nullptr, ctx.stream>>> 
+        #endif
+        ((T *)src_ptr, src_staging, static_cast<int>(n_ranks * total_count));
         aclrtSynchronizeStream(ctx.stream);
         aclrtFree(src_staging);
     }
@@ -600,18 +648,29 @@ bool RunScatterPingPongKernel(int rank_id, int n_ranks, int n_devices, int first
     T *dst_staging = nullptr;
     aclrtMalloc(reinterpret_cast<void **>(&dst_staging), total_count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMemcpy(dst_staging, total_count * sizeof(T), dst_host, total_count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    WindowMemCopyIn<T><<<1, nullptr, ctx.stream>>>((T *)dst_ptr, dst_staging, static_cast<int>(total_count));
+    WindowMemCopyIn<T>
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    ((T *)dst_ptr, dst_staging, static_cast<int>(total_count));
     aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
     TScatterPingPongKernelImpl<T, total_rows, cols, tile_rows>
-        <<<1, nullptr, ctx.stream>>>((T *)src_ptr, (T *)dst_ptr, n_ranks, ctx.deviceCtx);
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    ((T *)src_ptr, (T *)dst_ptr, n_ranks, ctx.deviceCtx);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    WindowMemCopyOut<T><<<1, nullptr, ctx.stream>>>(dst_staging, (T *)dst_ptr, static_cast<int>(total_count));
+    WindowMemCopyOut<T>
+    #ifndef __CPU_SIM 
+        <<<1, nullptr, ctx.stream>>> 
+    #endif
+    (dst_staging, (T *)dst_ptr, static_cast<int>(total_count));
     aclrtSynchronizeStream(ctx.stream);
     aclrtMemcpy(dst_host, total_count * sizeof(T), dst_staging, total_count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
     aclrtFree(dst_staging);

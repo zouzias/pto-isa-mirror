@@ -70,7 +70,7 @@ static inline int aclrtMallocHost(void **p, size_t sz)
             reinterpret_cast<char *>(dst)[i] = reinterpret_cast<char *>(src)[i]; \
     }
 
-#define aclrtSynchronizeStream(x)
+#define aclrtSynchronizeStream(x) (0)
 #define aclrtFree(x) free(x)
 #define aclrtFreeHost(x) free(x)
 #define aclrtDestroyStream(x)
