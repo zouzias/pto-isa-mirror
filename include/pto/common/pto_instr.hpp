@@ -1329,28 +1329,30 @@ PTO_INST RecordEvent TROWEXPANDEXPDIF(TileDataDst &dst, TileDataSrc0 &src0, Tile
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename... WaitEvents>
 PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TRSQRT, dst, src);
+    TRSQRT_IMPL<PrecisionType>(dst, src);
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, typename... WaitEvents,
-          typename = std::void_t<typename TileDataTmp::DType>>
+template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename TileDataTmp, typename... WaitEvents, typename = std::void_t<typename TileDataTmp::DType>>
 PTO_INST RecordEvent TRSQRT(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TRSQRT, dst, src, tmp);
+    TRSQRT_IMPL<PrecisionType>(dst, src, tmp);
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = SqrtAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename... WaitEvents>
 PTO_INST RecordEvent TSQRT(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TSQRT, dst, src);
+    TSQRT_IMPL<PrecisionType>(dst, src);
     return {};
 }
 
