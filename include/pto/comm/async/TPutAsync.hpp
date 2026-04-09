@@ -80,9 +80,9 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
 {
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
-    if (!TPutAsyncIsFlatContiguous1D(srcGlobalData)) {
-        return AsyncEvent(0, DmaEngine::SDMA);
-    }
+    PTO_ASSERT(TPutAsyncIsFlatContiguous1D(srcGlobalData),
+               "TPUT_ASYNC: src tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by SDMA async path.");
 
     const uint32_t totalElems = TPutAsyncGetTotalElemCount(srcGlobalData);
     using T = typename GlobalSrcData::RawDType;
