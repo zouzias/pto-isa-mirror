@@ -17,6 +17,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/comm_types.hpp"
 #include "pto/comm/async/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
+#ifdef PTO_URMA_SUPPORTED
+#include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
+#endif
 
 namespace pto {
 namespace comm {
@@ -91,6 +94,26 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
     return AsyncEvent(eventHandle, DmaEngine::SDMA);
 }
 
+#ifdef PTO_URMA_SUPPORTED
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TGET_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                             const urma::UrmaExecContext &execCtx)
+{
+    (void)TGetAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
+
+    if (!TGetAsyncIsFlatContiguous1D(srcGlobalData)) {
+        return AsyncEvent(0, DmaEngine::URMA);
+    }
+
+    const uint32_t totalElems = TGetAsyncGetTotalElemCount(srcGlobalData);
+    using T = typename GlobalSrcData::RawDType;
+    const uint64_t eventHandle = urma::__urma_get_async(reinterpret_cast<__gm__ uint8_t *>(dstGlobalData.data()),
+                                                        reinterpret_cast<__gm__ uint8_t *>(srcGlobalData.data()),
+                                                        static_cast<uint64_t>(totalElems) * sizeof(T), execCtx);
+    return AsyncEvent(eventHandle, DmaEngine::URMA);
+}
+#endif
+
 } // namespace detail
 
 // ============================================================================
@@ -103,8 +126,15 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_IMPL(GlobalDstData &dstGlobalData, GlobalSrcD
 {
     if constexpr (engine == DmaEngine::SDMA) {
         return detail::TGET_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
+    } else if constexpr (engine == DmaEngine::URMA) {
+#ifdef PTO_URMA_SUPPORTED
+        return detail::TGET_ASYNC_URMA_IMPL(dstGlobalData, srcGlobalData, session.urmaSession.execCtx);
+#else
+        static_assert(engine != DmaEngine::URMA, "TGET_ASYNC: URMA engine requires NPU_ARCH 3510");
+        return AsyncEvent(0, engine);
+#endif
     } else {
-        PTO_ASSERT(false, "TGET_ASYNC: only SDMA engine is implemented currently");
+        PTO_ASSERT(false, "TGET_ASYNC: unsupported engine");
         return AsyncEvent(0, engine);
     }
 }

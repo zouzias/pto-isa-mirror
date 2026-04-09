@@ -17,7 +17,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <vector>
 #include <dlfcn.h>
 
-// #include "hccl/hccl.h"
 #include "acl/acl.h"
 
 #include "hccl/hccl_comm.h"
@@ -25,6 +24,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "hccl_context.h"
 #include "comm_mpi.h"
 #include "pto/npu/comm/async/sdma/sdma_workspace_manager.hpp"
+#include "pto/npu/comm/async/urma/urma_workspace_manager.hpp"
 
 // ============================================================================
 // Debug logging helpers.  Enabled by cmake -DDEBUG_MODE=ON  (defines COMM_DEBUG).
@@ -375,3 +375,173 @@ inline bool ForkAndRunWithHcclRootInfo(int nRanks, int firstRankId, int firstDev
 }
 
 using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;
+
+using UrmaWorkspaceManager = pto::comm::urma::UrmaWorkspaceManager;
+using UrmaBootstrapHandle = pto::comm::urma::UrmaBootstrapHandle;
+
+static int MpiAllgatherWrapper(const void *sendbuf, void *recvbuf, int size, void *ctx)
+{
+    (void)ctx;
+    return CommMpiAllgather(sendbuf, size, recvbuf, size);
+}
+
+static int MpiBarrierWrapper(void *ctx)
+{
+    (void)ctx;
+    CommMpiBarrier();
+    return 0;
+}
+
+// ============================================================================
+// UrmaTestContext: common URMA test infrastructure shared between
+// TGET_ASYNC and TPUT_ASYNC tests.  Manages device/stream setup,
+// huge-page MR allocation, MPI address exchange, and URMA workspace
+// initialization/teardown.
+// ============================================================================
+struct UrmaTestContext {
+    int deviceId{-1};
+    int rankId{-1};
+    int nRanks{0};
+    int rootRank{0};
+    rtStream_t stream{nullptr};
+    void *devBuf{nullptr};
+    size_t allocSize{0};
+    void *devRemoteAddrs{nullptr};
+    UrmaWorkspaceManager urmaMgr;
+
+    // Allocate huge-page device memory (2MB aligned, required by URMA MR registration).
+    bool AllocHugePageBuffer(size_t commBytesNeeded)
+    {
+        constexpr size_t kHugePageSize = 2UL * 1024 * 1024;
+        allocSize = (commBytesNeeded + kHugePageSize - 1) & ~(kHugePageSize - 1);
+        if (allocSize < kHugePageSize) {
+            allocSize = kHugePageSize;
+        }
+        aclError aErr = aclrtMalloc(&devBuf, allocSize, ACL_MEM_MALLOC_HUGE_ONLY);
+        if (aErr != ACL_SUCCESS || devBuf == nullptr) {
+            std::cerr << "[ERROR] aclrtMalloc(" << allocSize << ") failed: " << aErr << std::endl;
+            return false;
+        }
+        aclrtMemset(devBuf, allocSize, 0, allocSize);
+        COMM_LOG("[INFO] Rank " << rankId << " devBuf=" << devBuf << " size=" << allocSize);
+        return true;
+    }
+
+    // Exchange device buffer addresses across ranks and copy to device memory.
+    bool ExchangeRemoteAddrs(int n_ranks)
+    {
+        std::vector<uint64_t> allDevAddrs(n_ranks);
+        uint64_t myAddr = reinterpret_cast<uint64_t>(devBuf);
+        MpiAllgatherWrapper(&myAddr, allDevAddrs.data(), sizeof(uint64_t), nullptr);
+
+        aclError aErr = aclrtMalloc(&devRemoteAddrs, n_ranks * sizeof(uint64_t), ACL_MEM_MALLOC_HUGE_FIRST);
+        if (aErr != ACL_SUCCESS) {
+            std::cerr << "[ERROR] aclrtMalloc for remoteAddrs failed" << std::endl;
+            return false;
+        }
+        aclrtMemcpy(devRemoteAddrs, n_ranks * sizeof(uint64_t), allDevAddrs.data(), n_ranks * sizeof(uint64_t),
+                    ACL_MEMCPY_HOST_TO_DEVICE);
+        return true;
+    }
+
+    bool Setup(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank, size_t commBytesNeeded)
+    {
+        if (n_devices <= 0 || n_ranks <= 0) {
+            std::cerr << "[ERROR] n_devices and n_ranks must be > 0" << std::endl;
+            return false;
+        }
+        rankId = rank_id;
+        nRanks = n_ranks;
+        rootRank = root_rank;
+        deviceId = rank_id % n_devices + first_device_id;
+
+        aclError aErr = aclrtSetDevice(deviceId);
+        if (aErr != ACL_SUCCESS) {
+            std::cerr << "[ERROR] aclrtSetDevice(" << deviceId << ") failed: " << aErr << std::endl;
+            return false;
+        }
+        if (rtStreamCreate(&stream, RT_STREAM_PRIORITY_DEFAULT) != 0) {
+            std::cerr << "[ERROR] rtStreamCreate failed" << std::endl;
+            return false;
+        }
+
+        if (!AllocHugePageBuffer(commBytesNeeded))
+            return false;
+        if (!ExchangeRemoteAddrs(n_ranks)) {
+            aclrtFree(devBuf);
+            devBuf = nullptr;
+            return false;
+        }
+
+        UrmaBootstrapHandle bootstrap{MpiAllgatherWrapper, MpiBarrierWrapper, nullptr};
+        if (!urmaMgr.Init(static_cast<uint32_t>(deviceId), static_cast<uint32_t>(rank_id),
+                          static_cast<uint32_t>(n_ranks), devBuf, allocSize, bootstrap)) {
+            std::cerr << "[ERROR] UrmaWorkspaceManager Init failed!" << std::endl;
+            aclrtFree(devRemoteAddrs);
+            devRemoteAddrs = nullptr;
+            aclrtFree(devBuf);
+            devBuf = nullptr;
+            return false;
+        }
+        return true;
+    }
+
+    void Cleanup()
+    {
+        urmaMgr.Finalize();
+        if (devRemoteAddrs) {
+            aclrtFree(devRemoteAddrs);
+            devRemoteAddrs = nullptr;
+        }
+        if (devBuf) {
+            aclrtFree(devBuf);
+            devBuf = nullptr;
+        }
+        if (stream) {
+            rtStreamDestroy(stream);
+            stream = nullptr;
+        }
+    }
+};
+
+// ============================================================================
+// RunUrmaTestMpiLaunch: MPI-based multi-rank launch for standalone URMA tests.
+// KernelFn signature: bool(int rank_id, int n_ranks, int n_devices, int first_device_id, int root_rank)
+// ============================================================================
+using UrmaKernelFn = bool (*)(int, int, int, int, int);
+
+inline bool RunUrmaTestMpiLaunch(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
+                                 UrmaKernelFn kernelFn)
+{
+    int mpiRank = CommMpiRank();
+    int mpiSize = CommMpiSize();
+    int rankId = first_rank_id + mpiRank;
+    int rootRank = first_rank_id;
+
+    if (mpiSize != n_ranks) {
+        if (mpiRank == 0) {
+            std::cerr << "[ERROR] MPI world size (" << mpiSize << ") != expected nRanks (" << n_ranks
+                      << "). Launch with: mpirun -n " << n_ranks << " ./test_binary" << std::endl;
+        }
+        return false;
+    }
+
+    int deviceCount = GetAvailableDeviceCount();
+    if (deviceCount < n_ranks + first_device_id) {
+        if (mpiRank == 0) {
+            std::cerr << "[SKIP] Need " << (n_ranks + first_device_id) << " NPU(s), have " << deviceCount << std::endl;
+        }
+        return true;
+    }
+
+    constexpr int kAclRepeatInit = 100002;
+    aclError aclRet = aclInit(nullptr);
+    if (aclRet != ACL_SUCCESS && static_cast<int>(aclRet) != kAclRepeatInit) {
+        std::cerr << "[ERROR] aclInit failed: " << static_cast<int>(aclRet) << std::endl;
+        return false;
+    }
+
+    bool result = kernelFn(rankId, n_ranks, n_devices, first_device_id, rootRank);
+    aclFinalize();
+    return result;
+}
