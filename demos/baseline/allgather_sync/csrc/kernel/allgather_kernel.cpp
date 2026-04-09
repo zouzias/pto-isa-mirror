@@ -458,7 +458,79 @@ __global__ AICORE void AllgatherGetSyncPerfKernel(__gm__ int32_t *dataBuf, int n
 }
 
 // ============================================================================
-// RunAllgatherSyncSweep — single TestContext, all sizes, TPUT + TGET
+// Multi-core parallel AllGather via TGET
+//
+// Launch with nRanks blocks. Each block handles one slot:
+//   block_idx == myRank  → local copy (sendBuf → recvBuf[myRank])
+//   block_idx != myRank  → TGET from remote rank block_idx
+// All blocks run in parallel on separate AICOREs.
+// ============================================================================
+__global__ AICORE void AllgatherGetSyncMulticorePerfKernel(
+    __gm__ int32_t *dataBuf, int nranks,
+    __gm__ HcclDeviceContext *hcclCtx,
+    __gm__ uint64_t *perBlockCycles,
+    int elemCount, int warmupIters, int timedIters)
+{
+    if (nranks < 2) return;
+
+    int bid = block_idx;
+    int myRank = static_cast<int>(hcclCtx->rankId);
+    __gm__ int32_t *sendBuf = dataBuf;
+    __gm__ int32_t *recvBuf = dataBuf + elemCount;
+
+    int chunkSize = (elemCount < CHUNK_ELEMS) ? elemCount : CHUNK_ELEMS;
+    int numChunks = (elemCount + chunkSize - 1) / chunkSize;
+    ChunkTile pingTile(1, chunkSize);
+    ChunkTile pongTile(1, chunkSize);
+    TASSIGN(pingTile, 0x0);
+    TASSIGN(pongTile, 0x8000);
+    ShapeDyn cShape(1, 1, 1, 1, chunkSize);
+    StrideDyn cStride(chunkSize, chunkSize, chunkSize, chunkSize, 1);
+    ShapeDyn fullShape(1, 1, 1, 1, elemCount);
+    StrideDyn fullStride(elemCount, elemCount, elemCount, elemCount, 1);
+
+    uint64_t totalCycles = 0;
+
+    for (int iter = 0; iter < warmupIters + timedIters; ++iter) {
+        pipe_barrier(PIPE_ALL);
+        uint64_t t0 = get_syscnt();
+
+        if (bid == myRank) {
+            for (int c = 0; c < numChunks; ++c) {
+                int off = c * chunkSize;
+                GlobalI32 srcC(sendBuf + off, cShape, cStride);
+                GlobalI32 dstC(recvBuf + myRank * elemCount + off, cShape, cStride);
+                TLOAD(pingTile, srcC);
+                set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                TSTORE(dstC, pingTile);
+                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            }
+        } else {
+            int srcRank = bid;
+            __gm__ int32_t *remoteSend = HcclRemotePtr(hcclCtx, sendBuf, srcRank);
+            GlobalI32 remoteG(remoteSend, fullShape, fullStride);
+            GlobalI32 localG(recvBuf + srcRank * elemCount, fullShape, fullStride);
+            pto::comm::TGET(localG, remoteG, pingTile, pongTile);
+        }
+
+        pipe_barrier(PIPE_ALL);
+        uint64_t t1 = get_syscnt();
+
+        if (iter >= warmupIters) {
+            totalCycles += t1 - t0;
+        }
+    }
+
+    pipe_barrier(PIPE_ALL);
+    if (perBlockCycles) {
+        perBlockCycles[bid] = totalCycles;
+    }
+}
+
+// ============================================================================
+// RunAllgatherSyncSweep — single TestContext, all sizes, TPUT + TGET + Multicore
 // ============================================================================
 static void PrintSweepLine(const char *instr, size_t sizeBytes,
                            double hostE2e, double devTotal, double localCopy, double remoteComm)
@@ -555,6 +627,45 @@ static bool RunAllgatherSyncSweepKernel(int rankId, int nRanks, int nDevices, in
                            CyclesToUs(static_cast<double>(latHost[kLatTotalIdx]) / TIMED_ITERS),
                            CyclesToUs(static_cast<double>(latHost[kLatLocalCopyIdx]) / TIMED_ITERS),
                            CyclesToUs(static_cast<double>(latHost[kLatRemoteCommIdx]) / TIMED_ITERS));
+        }
+
+        // Multi-core TGET sweep
+        {
+            size_t mcLatBytes = static_cast<size_t>(nRanks) * sizeof(uint64_t);
+            uint64_t *mcLatDev = nullptr;
+            uint64_t *mcLatHost = nullptr;
+            aclrtMalloc(reinterpret_cast<void **>(&mcLatDev), mcLatBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+            aclrtMallocHost(reinterpret_cast<void **>(&mcLatHost), mcLatBytes);
+
+            aclrtMemset(dataBuf, (elemCount + recvElems) * sizeof(int32_t), 0,
+                        (elemCount + recvElems) * sizeof(int32_t));
+            aclrtMemset(mcLatDev, mcLatBytes, 0, mcLatBytes);
+
+            HcclHostBarrier(ctx.comm, ctx.stream);
+
+            t0 = NowUs();
+            AllgatherGetSyncMulticorePerfKernel<<<nRanks, nullptr, ctx.stream>>>(
+                dataBuf, nRanks, ctx.deviceCtx, mcLatDev,
+                static_cast<int>(elemCount), WARMUP_ITERS, TIMED_ITERS);
+            ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+            t1 = NowUs();
+
+            HcclHostBarrier(ctx.comm, ctx.stream);
+
+            aclrtMemcpy(mcLatHost, mcLatBytes, mcLatDev, mcLatBytes, ACL_MEMCPY_DEVICE_TO_HOST);
+
+            if (rankId == 0) {
+                uint64_t maxCycles = 0;
+                for (int b = 0; b < nRanks; ++b) {
+                    if (mcLatHost[b] > maxCycles) maxCycles = mcLatHost[b];
+                }
+                double devTotal = CyclesToUs(static_cast<double>(maxCycles) / TIMED_ITERS);
+                PrintSweepLine("TGET_MC", elemCount * 4,
+                               (t1 - t0) / TIMED_ITERS, devTotal, 0.0, devTotal);
+            }
+
+            aclrtFreeHost(mcLatHost);
+            aclrtFree(mcLatDev);
         }
     }
 
