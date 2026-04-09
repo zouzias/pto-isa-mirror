@@ -19,12 +19,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <iomanip>
 #endif
 
-#ifdef __COSTMODEL
-namespace pto::mocker {
-float GetLastPtoInstrCycles();
-} // namespace pto::mocker
-#endif
-
 namespace pto {
 
 constexpr int DYNAMIC = -1;
@@ -1206,9 +1200,6 @@ public:
         return dstMposition_;
     }
 #endif
-#ifdef __COSTMODEL
-    float GetCycle() const { return ::pto::mocker::GetLastPtoInstrCycles(); }
-#endif
 private:
     AICORE void assignData(TileDType data)
     {
@@ -1237,6 +1228,13 @@ private:
 #endif
     bool smallChannel_ = false;
     bool transpose_ = false;
+#ifdef __COSTMODEL
+public:
+    float GetCycle() const { return lastCycle_; }
+    void SetLastCycle(float c) { lastCycle_ = c; }
+private:
+    float lastCycle_ = 0.0f;
+#endif
 };
 
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_,
@@ -1526,12 +1524,19 @@ public:
         set_ctrl(sbitset0(get_ctrl(), MAD_MODE_BIT));
     }
 #endif
+#ifdef __COSTMODEL
+    float GetCycle() const { return lastCycle_; }
+    void SetLastCycle(float c) { lastCycle_ = c; }
+#endif
 private:
     AICORE void assignData(TileDType data)
     {
         data_ = data;
     }
     TileDType data_;
+#ifdef __COSTMODEL
+    float lastCycle_ = 0.0f;
+#endif
     bool isKAligned_; // K-Alignedment for A3
 };
 

@@ -20,6 +20,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/pto_instr_impl.hpp"
 #ifdef __COSTMODEL
 #include "pto/costmodel/trace.hpp"
+#include "pto/costmodel/evaluator/trace_evaluator.hpp"
 #endif
 #if !defined(PTO_COMM_NOT_SUPPORTED)
 #include "pto/comm/pto_comm_inst.hpp"
@@ -32,10 +33,40 @@ See LICENSE in the root of the software repository for the full text of the Lice
             #API);                           \
         __VA_ARGS__;                         \
     } while (0)
-#define MAP_INSTR_IMPL(API, ...) PTO_TRACE_CALL(API, API##_IMPL(__VA_ARGS__))
+#define MAP_INSTR_IMPL(API, dst, ...)                                              \
+    do {                                                                           \
+        ::pto::mocker::PtoInstrScope _scope(#API);                                 \
+        API##_IMPL(dst __VA_OPT__(,) __VA_ARGS__);                                 \
+        ::pto::mocker::CaptureCycleIntoTile(dst);                                  \
+    } while (0)
 #else
 #define PTO_TRACE_CALL(API, ...) __VA_ARGS__
 #define MAP_INSTR_IMPL(API, ...) API##_IMPL(__VA_ARGS__)
+#endif
+
+#ifdef __COSTMODEL
+namespace pto::mocker {
+
+// After each PTO instruction IMPL runs, evaluate the just-recorded trace entry
+// and store the resulting cycle count into the dst tile.  Uses `if constexpr`
+// so that non-Tile arguments (e.g. GlobalTensor in TSTORE) are silently ignored.
+template <typename T>
+inline void CaptureCycleIntoTile(T &obj)
+{
+    if constexpr (requires { obj.SetLastCycle(0.0f); }) {
+        const auto &trace = GetTrace();
+        if (trace.executed_pto.empty()) {
+            return;
+        }
+        const auto &active = trace.active_pto_stack;
+        size_t idx = active.empty() ? trace.executed_pto.size() - 1 : active.back();
+        auto report = evaluator::EvaluatePtoInstr(
+            trace.executed_pto[idx], evaluator::GetDefaultArchConfig());
+        obj.SetLastCycle(static_cast<float>(report.total_cycles));
+    }
+}
+
+} // namespace pto::mocker
 #endif
 
 namespace pto {

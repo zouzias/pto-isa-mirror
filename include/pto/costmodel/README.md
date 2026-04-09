@@ -1,115 +1,69 @@
-/**
-Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
-*/
-
 # PTO Costmodel
 
-`include/pto/costmodel` is the host-side trace backend for PTO when `__COSTMODEL` is enabled.
+`include/pto/costmodel` 是 PTO-ISA 的主机侧 trace-based cycle 评估后端。
 
-It is intended for:
+当开启 `__COSTMODEL` 宏时，PTO 代码可以在标准 host 工具链上编译运行，costmodel 后端会：
+- 替换 CCE intrinsic 为 trace-only stub
+- 记录 PTO 指令和底层 CCE 调用的执行轨迹
+- 基于架构规则估算每条 PTO 指令的 cycle 开销
+- 将 cycle 结果绑定到目标 Tile，通过 `tile.GetCycle()` 查询
 
-- compiling NPU PTO headers on a normal host toolchain
-- replacing CCE/CANN intrinsics with trace-oriented stubs
-- running small host-side demos that print PTO and CCE traces
+它不是数值模拟器。如需 host 侧数值行为，请使用 CPU 后端。
 
-It is not a numeric simulator. If you need host-side numerical behavior, use the CPU backend under
-`include/pto/cpu/`.
-
-## Folder Layout
+## 目录结构
 
 ```text
 include/pto/costmodel/
-  common/        shared host runtime pieces
-  a2a3/          A2/A3-specific CCE stubs
-  a5/            A5-specific CCE stubs and compat helpers
-  evaluator/     trace-based latency evaluator
-  runtime_stub.hpp
-  trace.hpp
-  arch_config.hpp
+├── runtime_stub.hpp       host 运行时总入口
+├── pto_instr.hpp          PTO 指令的 costmodel 包装（MAP_INSTR_IMPL 宏）
+├── trace.hpp              轨迹采集（PtoInstrScope、TraceState）
+├── arch_config.hpp        架构规则配置
+├── common/                host 运行时兼容层
+│   ├── qualifiers.hpp     设备限定符替代
+│   ├── aclrt_stub.hpp     ACL runtime 伪实现
+│   ├── runtime_util.hpp   host helper shim
+│   └── arch_select.hpp    架构选择分发
+├── a2a3/
+│   └── cce_stub.hpp       A2/A3 CCE 伪 stub
+├── a5/
+│   ├── cce_stub.hpp       A5 CCE 伪 stub
+│   └── compat.hpp         A5 兼容层
+└── evaluator/
+    ├── cce_evaluator.hpp  CCE 调用级评估
+    └── trace_evaluator.hpp PTO 指令级评估
 ```
 
-Main entry points:
+## 架构选择
 
-- `runtime_stub.hpp`: common host runtime facade included by PTO costmodel builds
-- `trace.hpp`: shared PTO/CCE trace recording
-- `a2a3/cce_stub.hpp`: A2/A3 trace-only intrinsic stubs
-- `a5/cce_stub.hpp`: A5 trace-only intrinsic stubs
+通过 `__NPU_ARCH__` 选择目标架构：
 
-## Arch Selection
+| 架构 | `__NPU_ARCH__` |
+|------|----------------|
+| A2/A3 | 2201 |
+| A5 | 3101/3510 |
 
-Costmodel arch is selected the same way as the NPU backend: by `__NPU_ARCH__`.
+## 核心机制
 
-Current test mappings:
+### MAP_INSTR_IMPL 宏
 
-- `a2a3` -> `__NPU_ARCH__=2201`
-- `a5` -> `__NPU_ARCH__=3101`
+每条 PTO 指令通过 `MAP_INSTR_IMPL` 宏包装，完成三步操作：
+1. `PtoInstrScope` 记录 PTO 指令名（RAII）
+2. 执行原始 `XXX_IMPL` 实现（CCE stub 记录底层调用）
+3. `CaptureCycleIntoTile(dst)` 评估 trace 并将 cycle 写入目标 Tile
 
-The test build system exposes this through the CMake cache variable:
+### 逐 Tile Cycle 存储
 
-```text
-PTO_COSTMODEL_TEST_ARCH=a2a3
-PTO_COSTMODEL_TEST_ARCH=a5
-```
+每条 PTO 指令执行后，cycle 结果存储在该指令的目标 Tile 中，通过 `tile.GetCycle()` 查询。这避免了全局状态错配，支持多指令混合执行的独立查询。
 
-The test runner also accepts the environment variable:
+## 相关文档
+
+- [方案说明（中文）](COSTMODEL_PROPOSAL.zh-CN.md) —— 完整的设计与实现说明
+- [测试使用指南](../../../tests/costmodel/USER_GUIDE.zh-CN.md) —— 如何编写和运行 costmodel 测试
+
+## 运行测试
 
 ```bash
-PTO_COSTMODEL_TEST_ARCH=a2a3
-PTO_COSTMODEL_TEST_ARCH=a5
+./tests/run_costmodel_tests.sh
 ```
 
-If unset, the default is `a2a3`.
-
-## Running Tests
-
-See [tests/README.md](/home/lc/pto-isa/tests/costmodel/README.md) for the exact commands.
-
-Short version:
-
-```bash
-# default arch: a2a3
-./tests/costmodel/run.sh all
-
-# select A5
-PTO_COSTMODEL_TEST_ARCH=a5 ./tests/costmodel/run.sh all
-
-# run a few cases only
-PTO_COSTMODEL_TEST_ARCH=a5 ./tests/costmodel/run.sh tload tadd tstore
-```
-
-## What the Tests Do
-
-Each testcase is a small host executable that:
-
-1. resets the shared trace
-2. runs one PTO path or direct stub calls
-3. prints the recorded PTO/CCE trace
-
-The tests do not use `EXPECT_*`. They are trace demos intended to verify:
-
-- the selected arch compiles
-- the expected PTO path is reachable
-- the expected intrinsic stub calls are emitted
-
-## Adding New Arch Support
-
-When adding a new NPU arch to the costmodel backend, keep the split consistent:
-
-- put shared host runtime code in `common/`
-- put arch-specific CCE stubs in `<arch>/cce_stub.hpp`
-- keep `trace.hpp` shared
-- add tests under `/tests/costmodel/<arch>/`
-- teach `/tests/costmodel/run.sh` and `/tests/costmodel/CMakeLists.txt` how to select the new arch
-
-## Current Scope
-
-The current costmodel backend focuses on readable trace output and lightweight host compilation. Some PTO/NPU paths may
-still need additional stub coverage before they can compile under `__COSTMODEL`.
-
-codex resume 019d3d48-250d-7e93-bb17-c45990213ffa
+详见 [tests/costmodel/README.md](../../../tests/costmodel/README.md)。

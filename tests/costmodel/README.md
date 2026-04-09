@@ -1,176 +1,62 @@
-/**
-Copyright (c) 2026 Huawei Technologies Co., Ltd.
-This program is free software, you can redistribute it and/or modify it under the terms and conditions of
-CANN Open Software License Agreement Version 2.0 (the "License").
-Please refer to the License for details. You may not use this file except in compliance with the License.
-THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
-See LICENSE in the root of the software repository for the full text of the License.
-*/
-
 # PTO Costmodel Tests
 
-These tests are small host executables that run one PTO path under `__COSTMODEL` and print trace results.
+Costmodel 测试基于 Google Test 框架，通过 `EXPECT_CYCLE_NEAR` 宏校验 PTO 指令的 cycle 估算精度。
 
-## Arch Selection
+详细使用指南请参阅 [USER_GUIDE.zh-CN.md](USER_GUIDE.zh-CN.md)。
 
-There are two ways to select the costmodel arch.
-
-### 1. Use `run.sh`
-
-`run.sh` reads `PTO_COSTMODEL_TEST_ARCH` from the environment.
-
-Valid values:
-
-- `a2a3`
-- `a5`
-
-Examples:
+## 快速开始
 
 ```bash
-# default: a2a3
-./tests/costmodel/run.sh all
+# 运行全部测试
+./tests/run_costmodel_tests.sh
 
-# explicit A2/A3
-PTO_COSTMODEL_TEST_ARCH=a2a3 ./tests/costmodel/run.sh all
-
-# A5
-PTO_COSTMODEL_TEST_ARCH=a5 ./tests/costmodel/run.sh all
+# 运行单个用例
+python tests/run_costmodel.py --testcase tadd --clean --verbose
 ```
 
-Arch-specific build outputs go to:
+## 测试目录结构
 
 ```text
-tests/costmodel/build/a2a3
-tests/costmodel/build/a5
+tests/costmodel/st/
+├── CMakeLists.txt               # 顶层 CMake，定义编译选项和架构宏
+├── common/
+│   └── cost_check.hpp           # EXPECT_CYCLE_NEAR 宏定义
+└── testcase/
+    └── a2a3/
+        ├── CMakeLists.txt       # 注册所有 A2/A3 测试用例
+        ├── tadd/tadd.cpp
+        ├── tmul/tmul.cpp
+        └── ...
 ```
 
-### 2. Use CMake directly
+## 构建说明
 
-`tests/CMakeLists.txt` accepts the cache variable `PTO_COSTMODEL_TEST_ARCH`.
+测试通过 `tests/run_costmodel.py` 自动构建，不需要手动运行 cmake。
 
-Examples:
+关键编译宏：
+
+| 宏 | 值 | 说明 |
+|----|----|------|
+| `__COSTMODEL` | （自动定义） | 启用 costmodel 后端 |
+| `PTO_NPU_ARCH_A2A3` | （自动定义） | 选择 A2/A3 架构 |
+| `__NPU_ARCH__` | 2201 | NPU 架构编号 |
+| `PTO_HOST_RUNTIME` | （自动定义） | host 运行时模式 |
+
+## 添加新测试用例
+
+1. 在 `tests/costmodel/st/testcase/a2a3/` 下创建 `<用例名>/` 目录
+2. 编写 `<用例名>/<用例名>.cpp`（自包含的 GTest 源文件）
+3. 在 `tests/costmodel/st/testcase/a2a3/CMakeLists.txt` 的 `A2A3_TESTCASES` 列表中添加用例名
+
+## 可选参数
 
 ```bash
-cmake -S tests/costmodel -B tests/costmodel/build/a2a3 \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DPTO_COSTMODEL_TEST_ARCH=a2a3 \
-  -DPTO_COSTMODEL_CASES=all
+# 使用 GTest 过滤器
+python tests/run_costmodel.py --testcase tadd --gtest_filter "TAdd.float_64x64"
 
-cmake -S tests/costmodel -B tests/costmodel/build/a5 \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DPTO_COSTMODEL_TEST_ARCH=a5 \
-  -DPTO_COSTMODEL_CASES=all
+# 不重新构建
+python tests/run_costmodel.py --testcase tadd --no-build
+
+# 强制清理重建
+python tests/run_costmodel.py --testcase tadd --clean
 ```
-
-## Running All Tests
-
-Use:
-
-```bash
-./tests/costmodel/run.sh all
-PTO_COSTMODEL_TEST_ARCH=a5 ./tests/costmodel/run.sh all
-```
-
-This does three things:
-
-1. configures CMake for the selected arch
-2. builds the requested cases
-3. runs each built executable and prints its trace
-
-## Running Selected Tests
-
-Pass testcase names to `run.sh`:
-
-```bash
-./tests/costmodel/run.sh tload tadd tstore
-PTO_COSTMODEL_TEST_ARCH=a5 ./tests/costmodel/run.sh tdiv tands txor
-```
-
-This only builds the requested targets and then runs them.
-
-If you use CMake directly, select cases with `PTO_COSTMODEL_CASES`:
-
-```bash
-cmake -S tests/costmodel -B tests/costmodel/build/a5 \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DPTO_COSTMODEL_TEST_ARCH=a5 \
-  -DPTO_COSTMODEL_CASES="tload;tadd;tstore"
-
-cmake --build tests/costmodel/build/a5 --target tload tadd tstore
-
-tests/costmodel/build/a5/bin/tload
-tests/costmodel/build/a5/bin/tadd
-tests/costmodel/build/a5/bin/tstore
-```
-
-## Available Testcases
-
-### `a2a3`
-
-```text
-runtime_stub
-tload tadd tadds
-tsub tsubs
-tmul tmuls
-tmatmul tmatmul_acc tmatmul_bias
-tgemv tgemv_acc tgemv_bias
-tmax tmaxs
-tmin tmins
-tabs tneg
-texp tlog tsqrt trsqrt
-tnot tand tor
-tlrelu trelu
-taxpy
-tdivs
-tstore
-```
-
-### `a5`
-
-```text
-runtime_stub
-tload tadd tadds
-tsub tsubs
-tmul tmuls
-tdiv tdivs
-tmax tmaxs
-tmin tmins
-tabs tneg
-texp tlog tsqrt trsqrt
-tnot
-tand tands
-tor tors
-txor txors
-tshl tshls
-tshr tshrs
-tlrelu trelu
-taxpy
-tstore
-```
-
-## Adding a New Testcase
-
-Add the testcase under the correct arch folder:
-
-```text
-tests/costmodel/a2a3/testcase/<name>/
-tests/costmodel/a5/testcase/<name>/
-```
-
-Minimal pattern:
-
-- `main.cpp`
-- `<name>_kernel.cpp` if needed
-- `CMakeLists.txt` with `pto_costmodel_st(<name>)`
-
-Then register the name in:
-
-- `tests/costmodel/<arch>/testcase/CMakeLists.txt`
-- `tests/costmodel/run.sh`
-
-## Notes
-
-- Default build type is `Release`.
-- `run.sh` uses a per-arch build directory, so `a2a3` and `a5` builds do not overwrite each other.
-- Current tests are trace-only; they are intended to show PTO and CCE call flow, not numeric correctness.

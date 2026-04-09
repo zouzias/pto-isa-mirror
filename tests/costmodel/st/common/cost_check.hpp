@@ -15,32 +15,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <iostream>
 #include <gtest/gtest.h>
 
-#include "pto/costmodel/trace.hpp"
-#include "pto/costmodel/evaluator/trace_evaluator.hpp"
-
-namespace pto::mocker {
-
-// Definition of the function forward-declared in pto_tile.hpp.
-// Tile::GetCycle() calls this.
-inline float GetLastPtoInstrCycles()
-{
-    const auto &trace = GetTrace();
-    if (trace.executed_pto.empty()) {
-        return 0.0f;
-    }
-    auto report = evaluator::EvaluatePtoInstr(
-        trace.executed_pto.back(), evaluator::GetDefaultArchConfig());
-    return static_cast<float>(report.total_cycles);
-}
-
-} // namespace pto::mocker
-
-// Compare the cycle count of the last executed PTO instruction against an
-// expected `profiling` value. The check passes when relative precision
+// Compare the cycle count stored in the dst tile (set by CaptureCycleIntoTile
+// immediately after each PTO instruction executes) against an expected
+// `profiling` value. The check passes when relative precision
 // `1 - |profiling - actual| / profiling` is at least `accuracy`.
 #define EXPECT_CYCLE_NEAR(tile, profiling, accuracy)                                                                   \
     do {                                                                                                               \
-        float _pto_actual = ::pto::mocker::GetLastPtoInstrCycles();                                                    \
+        float _pto_actual = static_cast<float>((tile).GetCycle());                                                     \
         float _pto_expected = static_cast<float>(profiling);                                                           \
         float _pto_precision =                                                                                         \
             (_pto_expected == 0.0f) ? ((_pto_actual == 0.0f) ? 1.0f : 0.0f)                                            \
