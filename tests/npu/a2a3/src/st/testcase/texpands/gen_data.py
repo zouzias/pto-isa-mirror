@@ -26,21 +26,20 @@ def gen_golden_data(case_name, param):
     height, width = [param.global_row, param.global_col]
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
+    if np.issubdtype(dtype, np.integer):
+        value_max = np.iinfo(dtype).max
+        value_min = np.iinfo(dtype).min
+    else:
+        value_max = np.finfo(dtype).max
+        value_min = np.finfo(dtype).min
+
     # Generate random input arrays
-    M = 0
-    if dtype == np.int16:
-        M = np.random.randint(-30_000, 30_000, size=[1, 1]).astype(dtype)
-    elif dtype == np.int32:
-        M = np.random.randint(-2_000_000_000, 2_000_000_000, size=[1, 1]).astype(dtype)
-    elif dtype == np.float16:
-        M = np.random.uniform(-8, 8, size=[1, 1]).astype(dtype)
-    elif dtype == np.float32:
-        M = np.random.uniform(-8, 8, size=[1, 1]).astype(dtype)
+    scalar = np.random.uniform(low=value_min, high=value_max, size=[1, 1]).astype(dtype)
 
     with open("scalar.bin", "wb") as f:
-        f.write(struct.pack('f', np.float32(M[0, 0])))
+        f.write(struct.pack('f', np.float32(scalar[0, 0])))
 
-    golden = np.full((height, width), M[0, 0]).astype(dtype)
+    golden = np.full((height, width), scalar[0, 0]).astype(dtype)
 
     output = np.zeros([height, width]).astype(dtype)
     for h in range(height):
@@ -111,6 +110,7 @@ if __name__ == "__main__":
 
         TestParams(np.float16, 1, 3600, 2, 4096, 1, 3600, PAD_VALUE_MAX),
         TestParams(np.int16, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX),
+        TestParams(np.int8, 16, 200, 20, 512, 16, 200, PAD_VALUE_MAX),
     ]
 
     for i, param in enumerate(case_params_list):

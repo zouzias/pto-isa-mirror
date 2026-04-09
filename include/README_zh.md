@@ -133,6 +133,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TSYNC`](../docs/isa/TSYNC_zh.md) | TODO | TODO | 是 | 是 | 是 |
 | [`TTRANS`](../docs/isa/TTRANS_zh.md) | 是 | TODO | 是 | 是 | 是 |
 | [`TTRI`](../docs/isa/TTRI_zh.md) | TODO | TODO | 是 | 是 | 是 |
+| [`TRANDOM`](../docs/isa/TRANDOM_zh.md) | 否 | TODO | TODO | TODO | 是 |
 | [`TXOR`](../docs/isa/TXOR_zh.md) | 是 | TODO | 是 | 是 | 是 |
 | [`TXORS`](../docs/isa/TXORS_zh.md) | 是 | TODO | 是 | 是 | 是 |
 | [`TPUT`](../docs/isa/comm/TPUT_zh.md) | 是 | TODO | 是 | 是 | 是 |

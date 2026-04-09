@@ -109,6 +109,33 @@ struct int4b_t {
 };
 
 namespace pto {
+enum class TileType
+{
+    Vec,
+    Mat,
+    Left,
+    Right,
+    Acc,
+    Bias,
+    Scaling,
+    ScaleLeft,
+    ScaleRight,
+    Ctrl,
+};
+
+enum class BLayout
+{
+    RowMajor = 0,
+    ColMajor = 1,
+};
+
+enum class SLayout
+{
+    NoneBox = 0,
+    RowMajor = 1,
+    ColMajor = 2,
+};
+
 // 01-bits patterns are read from right to left.
 // Right bits are low bits, corresponding to low index positions of data.
 enum class MaskPattern : uint8_t
@@ -265,6 +292,29 @@ enum class TileLayoutCustom : uint8_t
     ZN,
     ZZ,
     NONE,
+};
+
+// Enum identifying which byte of a multi-byte element is being histogrammed.
+// BYTE_0 = LSB (bits 7-0), BYTE_3 = MSB (bits 31-24).
+// Radix sort processes MSB-first: BYTE_3 → BYTE_2 → BYTE_1 → BYTE_0.
+enum class HistByte : uint8_t
+{
+    BYTE_0 = 0, // LSB (bits 7-0)
+    BYTE_1 = 1, // bits 15-8
+    BYTE_2 = 2, // bits 23-16
+    BYTE_3 = 3  // MSB (bits 31-24)
+};
+
+enum class DivAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RecipAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
 };
 
 namespace GlobalTensorDim {
