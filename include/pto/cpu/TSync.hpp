@@ -19,5 +19,10 @@ namespace pto {
 template <Op OpCode>
 PTO_INTERNAL void TSYNC_IMPL()
 {}
+template<typename T>
+struct is_event : std::false_type {};
+
+template<typename... Ts>
+inline constexpr bool all_events_v = (is_event<Ts>::value && ...);
 } // namespace pto
 #endif
