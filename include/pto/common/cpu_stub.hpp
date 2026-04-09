@@ -207,4 +207,11 @@ inline uint64_t get_task_cookie()
     return pto::cpu_sim::execution_context.task_cookie;
 }
 
+template <typename T>
+struct is_event : std::false_type {
+};
+
+template <typename... Ts>
+inline constexpr bool all_events_v = (is_event<Ts>::value && ...);
+
 #endif
