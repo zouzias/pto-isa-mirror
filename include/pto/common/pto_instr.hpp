@@ -1139,6 +1139,14 @@ PTO_INST RecordEvent TROWARGMAX(TileDataOut &dst, TileDataIn &src, TileDataTmp &
     return {};
 }
 
+template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp, typename... WaitEvents>
+PTO_INST RecordEvent TROWARGMAX(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, TileDataIn &src, TileDataTmp &tmp, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TROWARGMAX, dstVal, dstIdx, src, tmp);
+    return {};
+}
+
 template <typename TileDataOut, typename TileDataIn, typename... WaitEvents>
 PTO_INST RecordEvent TRESHAPE(TileDataOut &dst, TileDataIn &src, WaitEvents &... events)
 {
