@@ -15,28 +15,28 @@ import numpy as np
 np.random.seed(19)
 
 
-def gen_golden_data_trem(case_name, param):
+def gen_golden_data_tfmods(case_name, param):
     dtype = param.dtype
 
-    row, col = [param.valid_row, param.valid_col]
-    h_valid, w_valid = [param.valid_row, param.valid_col]
+    row_valid, col_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = np.random.randint(-100, 100, size=[row, col]).astype(dtype)
-    input2 = np.random.randint(-100, 100, size=[row, col]).astype(dtype)
-    input2[input2 == 0] = 1
+    input1 = np.random.randint(-100, 100,
+                               size=[row_valid, col_valid]).astype(dtype)
+    scalar = np.random.randint(-100, 100, size=[1, 1]).astype(dtype)
+    scalar[scalar == 0] = 1
 
     # Perform the operation
     # Note that % operation in Python have different behavior on negatives comparing to C++ (C++ truncates during division, Python floors)
-    golden = input1 % input2
+    golden = np.fmod(input1, scalar).astype(dtype)
 
     # Save the input and golden data to binary files
     input1.tofile("input1.bin")
-    input2.tofile("input2.bin")
+    scalar.tofile("scalar.bin")
     golden.tofile("golden.bin")
 
 
-class TRemParams:
+class TFmodsParams:
     def __init__(self, dtype, dst_tile_row, dst_tile_col, valid_row, valid_col):
         self.dtype = dtype
         self.dst_tile_row = dst_tile_row
@@ -49,12 +49,15 @@ def generate_case_name(param):
     dtype_str = {
         np.float32: 'float',
         np.float16: 'half',
+        np.int8: 'int8',
+        np.int32: 'int32',
+        np.int16: 'int16'
     }[param.dtype]
 
     def substring(a, b) -> str:
         return f"_{a}x{b}"
 
-    name = f"TREMTest.case_{dtype_str}"
+    name = f"TFMODSTest.case_{dtype_str}"
     name += substring(param.dst_tile_row, param.dst_tile_col)
     name += substring(param.valid_row, param.valid_col)
 
@@ -71,10 +74,16 @@ if __name__ == "__main__":
         os.makedirs(testcases_dir)
 
     case_params_list = [
-        TRemParams(np.float32, 64, 64, 64, 64),
-        TRemParams(np.float16, 16, 256, 16, 256),
-        TRemParams(np.float32, 64, 512, 64, 64),
-        TRemParams(np.float16, 32, 512, 16, 256)
+        TFmodsParams(np.float32, 64, 64, 64, 64),
+        TFmodsParams(np.int32, 64, 64, 64, 64),
+        TFmodsParams(np.int16, 64, 64, 64, 64),
+        TFmodsParams(np.float16, 16, 256, 16, 256),
+        TFmodsParams(np.float32, 64, 512, 64, 64),
+        TFmodsParams(np.int32, 64, 512, 64, 64),
+        TFmodsParams(np.int16, 64, 512, 64, 64),
+        TFmodsParams(np.float16, 32, 512, 16, 256),
+
+
     ]
 
     for i, param in enumerate(case_params_list):
@@ -83,5 +92,5 @@ if __name__ == "__main__":
             os.makedirs(case_name)
         original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data_trem(case_name, param)
+        gen_golden_data_tfmods(case_name, param)
         os.chdir(original_dir)
