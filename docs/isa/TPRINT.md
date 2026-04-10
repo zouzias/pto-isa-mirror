@@ -40,12 +40,23 @@ pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>
 Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
 // For printing GlobalTensor or Vec-type Tile
-template <typename TileData>
+template <PrintFormat Format = PrintFormat::Width8_Precision4, typename TileData>
 PTO_INST void TPRINT(TileData &src);
 
 // For printing Acc-type Tile and Mat-type Tile (Mat printing only supported for A3, not yet for A5)
-template <typename TileData, typename GlobalData>
+template <PrintFormat Format = PrintFormat::Width8_Precision4, typename TileData, typename GlobalData>
 PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp);
+```
+
+### PrintFormat Enumeration
+Declared in `include/pto/common/type.hpp`:
+```cpp
+enum class PrintFormat : uint8_t
+{
+    Width8_Precision4 = 0,  // Print width 8, precision 4
+    Width8_Precision2 = 1,  // Print width 8, precision 2
+    Width10_Precision6 = 2, // Print width 10, precision 6
+};
 ```
 
 ### Supported Types for T
@@ -78,8 +89,13 @@ PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp);
 
 - **Formatting**:
 
-    - Floating-point values: printed as `%6.2f`
-    - Integer values: printed as `%6d`
+    - Floating-point values: printed format depends on `PrintFormat` template parameter:
+      - `PrintFormat::Width8_Precision4`: `%8.4f` (default)
+      - `PrintFormat::Width8_Precision2`: `%8.2f`
+      - `PrintFormat::Width10_Precision6`: `%10.6f`
+    - Integer values: printed format depends on `PrintFormat` template parameter:
+      - `PrintFormat::Width8_Precision4` or `PrintFormat::Width8_Precision2`: `%8d`
+      - `PrintFormat::Width10_Precision6`: `%10d`
     - For `GlobalTensor`, due to data size and buffer limitations, only elements within its logical shape (defined by `Shape`) are printed.
     - For `Tile`, invalid regions (beyond `validRows`/`validCols`) are still printed but marked with a `|` separator when partial validity is specified.
 
