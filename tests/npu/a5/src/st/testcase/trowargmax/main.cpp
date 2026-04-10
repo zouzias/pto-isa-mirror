@@ -23,11 +23,14 @@ void LaunchTRowArgMaxHalf(TDst *out, aclFloat16 *src, void *stream);
 class TROWARGMAXTest : public testing::Test {
 private:
     aclrtStream stream;
-    void *dstHost;
+    void *dstIdxHost;
+    void *dstValHost;
     void *srcHost;
-    void *dstDevice;
+    void *dstIdxDevice;
+    void *dstValDevice;
     void *srcDevice;
-    size_t dstFileSize;
+    size_t dstIdxFileSize;
+    size_t dstValFileSize;
     size_t srcFileSize;
 
 protected:
@@ -44,51 +47,85 @@ protected:
         aclInit(nullptr);
         aclrtSetDevice(0);
         aclrtCreateStream(&this->stream);
+        this->dstValFileSize = 0;
     }
     void TearDown() override
     {
+        if (this->dstValFileSize > 0) {
+            aclrtFreeHost(this->dstValHost);
+            aclrtFree(this->dstValDevice);
+        }
+        aclrtFreeHost(this->dstIdxHost);
+        aclrtFree(this->dstIdxDevice);
+        aclrtFreeHost(this->srcHost);
+        aclrtFree(this->srcDevice);
         aclrtDestroyStream(this->stream);
         aclrtResetDevice(0);
         aclFinalize();
     }
-    template <typename TDst, typename TSrc, int dstTileH, int dstTileW, int srcTileH, int srcTileW>
+    template <typename TIdx, typename TVal, int dstIdxTileH, int dstIdxTileW, int srcTileH, int srcTileW>
     void BeforeLaunch()
     {
-        this->dstFileSize = sizeof(TDst) * dstTileH * dstTileW;
-        this->srcFileSize = sizeof(TSrc) * srcTileH * srcTileW;
+        this->dstIdxFileSize = sizeof(TIdx) * dstIdxTileH * dstIdxTileW;
+        this->srcFileSize = sizeof(TVal) * srcTileH * srcTileW;
 
-        aclrtMallocHost(&this->dstHost, this->dstFileSize);
-        aclrtMallocHost(&this->srcHost, this->srcFileSize);
-        memset(this->dstHost, 0, this->dstFileSize);
+        aclrtMallocHost(&this->dstIdxHost, this->dstIdxFileSize);
+        aclrtMallocHost(&this->srcHost, this->dstIdxFileSize);
+        memset(this->dstIdxHost, 0, this->dstIdxFileSize);
         ReadFile(GetGoldenDir() + "/input.bin", this->srcFileSize, this->srcHost, this->srcFileSize);
 
-        aclrtMalloc(&this->dstDevice, this->dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMalloc(&this->dstIdxDevice, this->dstIdxFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
         aclrtMalloc(&this->srcDevice, this->srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-        aclrtMemcpy(dstDevice, dstFileSize, dstHost, dstFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-        aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+        aclrtMemcpy(this->dstIdxDevice, this->dstIdxFileSize, this->dstIdxHost, this->dstIdxFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+        aclrtMemcpy(this->srcDevice, this->srcFileSize, this->srcHost, this->srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     }
-
-    template <typename TDst>
+    template <typename TIdx, typename TVal, int dstValTileH, int dstValTileW, int dstIdxTileH, int dstIdxTileW,
+        int srcTileH, int srcTileW>
+    void BeforeLaunch()
+    {
+        this->BeforeLaunch<TIdx, TVal, dstIdxTileH, dstIdxTileW, srcTileH, srcTileW>()
+        this->dstValFileSize = sizeof(TVal) * dstValTileH * dstValTileW;
+        aclrtMallocHost(&this->dstValHost, this->dstValFileSize);
+        memset(this->dstValHost, 0, this->dstValFileSize);
+        aclrtMalloc(&this->dstValDevice, this->dstValFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMemcpy(this->dstValDevice, this->dstValFileSize, this->dstValHost, this->dstValFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    }
+    template <typename TIdx>
     bool AfterLaunch()
     {
         aclrtSynchronizeStream(this->stream);
-        std::vector<TDst> golden(this->dstFileSize);
-        std::vector<TDst> devFinal(this->dstFileSize);
-        aclrtMemcpy(devFinal.data(), this->dstFileSize, this->dstDevice, this->dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-        aclrtFree(this->dstDevice);
-        aclrtFree(this->srcDevice);
-        aclrtFreeHost(this->srcHost);
-        aclrtFreeHost(this->dstHost);
-
-        ReadFile(GetGoldenDir() + "/golden.bin", this->dstFileSize, golden.data(), this->dstFileSize);
-        bool res = ResultCmp<TDst>(golden, devFinal, 0.0001f);
+        std::vector<TIdx> golden(this->dstIdxFileSize);
+        std::vector<TIdx> devFinal(this->dstIdxFileSize);
+        aclrtMemcpy(devFinal.data(), this->dstIdxFileSize, this->dstIdxDevice, this->dstIdxFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+        ReadFile(GetGoldenDir() + "/golden.bin", this->dstIdxFileSize, golden.data(), this->dstIdxFileSize);
+        bool res = ResultCmp<TIdx>(golden, devFinal, 0.0001f);
         if (!res) {
-            WriteFile(GetGoldenDir() + "/output.bin", devFinal.data(), this->dstFileSize);
+            WriteFile(GetGoldenDir() + "/output.bin", devFinal.data(), this->dstIdxFileSize);
         }
         return res;
     }
-
+    template <typename TVal, typename TIdx>
+    bool AfterLaunch()
+    {
+        aclrtSynchronizeStream(this->stream);
+        std::vector<TVal> goldenVal(this->dstValFileSize);
+        std::vector<TVal> devValFinal(this->dstValFileSize);
+        std::vector<TIdx> goldenIdx(this->dstIdxFileSize);
+        std::vector<TIdx> devIdxFinal(this->dstIdxFileSize);
+        aclrtMemcpy(devValFinal.data(), this->dstValFileSize, this->dstValDevice, this->dstValFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+        aclrtMemcpy(devIdxFinal.data(), this->dstIdxFileSize, this->dstIdxDevice, this->dstIdxFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+        ReadFile(GetGoldenDir() + "/golden.bin", this->dstIdxFileSize, goldenIdx.data(), this->dstIdxFileSize);
+        ReadFile(GetGoldenDir() + "/golden_val.bin", this->dstValFileSize, goldenVal.data(), this->dstValFileSize);
+        bool res = ResultCmp<TIdx>(goldenIdx, devIdxFinal, 0.0001f);
+        if (!res) {
+            WriteFile(GetGoldenDir() + "/output.bin", devIdxFinal.data(), this->dstIdxFileSize);
+        }
+        res = ResultCmp<TVal>(goldenVal, devValFinal, 0.0001f);
+        if (!res) {
+            WriteFile(GetGoldenDir() + "/output_val.bin", devValFinal.data(), this->dstIdxFileSize);
+        }
+        return res;
+    }
     template <typename TDst, typename TSrc, int dstTileH, int dstTileW, int srcTileH, int srcTileW, int vRows,
               int vCols, bool isHalf = false>
     void Launch()
@@ -96,12 +133,27 @@ protected:
         this->BeforeLaunch<TDst, TSrc, dstTileH, dstTileW, srcTileH, srcTileW>();
         if constexpr (isHalf) {
             LaunchTRowArgMaxHalf<TDst, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols>(
-                (TDst *)this->dstDevice, (TSrc *)this->srcDevice, this->stream);
+                (TDst *)this->dstIdxDevice, (TSrc *)this->srcDevice, this->stream);
         } else {
             LaunchTRowArgMax<TDst, TSrc, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols>(
-                (TDst *)this->dstDevice, (TSrc *)this->srcDevice, this->stream);
+                (TDst *)this->dstIdxDevice, (TSrc *)this->srcDevice, this->stream);
         }
         bool res = this->AfterLaunch<TDst>();
+        EXPECT_TRUE(res);
+    }
+    template <typename TIdx, typename TVal, int dstValTileH, int dstValTileW, int dstIdxTileH, int dstIdxTileW,
+        int srcTileH, int srcTileW, int vRows, int vCols, bool isHalf = false>
+    void Launch()
+    {
+        this->BeforeLaunch<TIdx, TVal, dstValTileH, dstValTileW, dstIdxTileH, dstIdxTileW, srcTileH, srcTileW, vRows, vCols>();
+        if constexpr (isHalf) {
+            LaunchTRowArgMaxHalf<TIdx, dstValTileH, dstValTileW, dstIdxTileH, dstIdxTileW, srcTileH, srcTileW, vRows, vCols>(
+                (TIdx *)this->dstIdxDevice, (TVal *)this->srcDevice, this->stream);
+        } else {
+            LaunchTRowArgMax<TIdx, TVal, dstValTileH, dstValTileW, dstIdxTileH, dstIdxTileW, srcTileH, srcTileW, vRows, vCols>(
+                (TIdx *)this->dstIdxDevice, (TVal *)this->srcDevice, this->stream);
+        }
+        bool res = this->AfterLaunch<TVal, TIdx>();
         EXPECT_TRUE(res);
     }
 };
@@ -201,4 +253,8 @@ TEST_F(TROWARGMAXTest, case_uint32_half_260x16_260x64_260x64)
 TEST_F(TROWARGMAXTest, case_uint32_half_1023x16_1023x32_1023x17)
 {
     this->Launch<uint32_t, aclFloat16, 1023, 16, 1023, 32, 1023, 17, true>();
+}
+TEST_F(TROWARGMAXTest, case_uint32_float_8x1_8x1_8x8_8x8)
+{
+    this->Launch<uint32_t, float, 8, 1, 8, 1, 8, 8, 8, 8>();
 }
