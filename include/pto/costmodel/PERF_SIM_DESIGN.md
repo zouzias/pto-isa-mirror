@@ -63,6 +63,7 @@ struct TraceState {
     std::vector<std::size_t> active_pto_stack;
 
     // --- perf-sim 新增 ---
+    std::vector<TraceEntry> timeline;                  // 统一时间线（见 4.1.3）
     std::vector<OperatorRecord> operators;
     std::vector<std::size_t> active_operator_stack;
 };
@@ -167,40 +168,108 @@ enum class PipeStage : uint8_t {
 
 #### 4.1.2 统一同步模型
 
-PTO-ISA 中存在两种硬件同步原语，但它们的本质相同——都是 producer/consumer 依赖：
+PTO-ISA 中存在两种同步原语，但**处理逻辑完全相同**：
 
 | 同步类型 | Producer（发信号） | Consumer（等信号） | 场景 |
 |----------|-------------------|-------------------|------|
-| 同核 event | `set_flag(srcPipe, dstPipe, id)` | `wait_flag(srcPipe, dstPipe, id)` | 同核内 Pipeline 间同步 |
-| 跨核 FFTS | `ffts_cross_core_sync(pipe, msg)` | `wait_flag_dev(flag_id)` | Cube ↔ Vector 跨核同步 |
+| 核内同步 | `set_flag(srcPipe, dstPipe, id)` | `wait_flag(srcPipe, dstPipe, id)` | 同核内 Pipeline 间 |
+| 跨核同步 | `ffts_cross_core_sync(pipe, msg)` | `wait_flag_dev(flag_id)` | Cube ↔ Vector |
 
-perf-sim 的 PipelineScheduler **不区分这两种机制**，统一按依赖关系处理：
+PTO 代码中有两种写法风格，但底层都产生相同的 CCE 调用：
 
-- 所有同步操作都作为 CCE call 记录在 trace 中
-- 调度器只关心：这个操作属于哪个 PipeStage、依赖什么信号、自身开销多少 cycle
-- 同核与跨核的区别仅体现在 latency 数值上（通过 `arch_config` 规则配置）
+```
+写法一（手动）：                          写法二（Event<> 语法糖）：
+TLOAD(...);                               evt = TLOAD(...);
+set_flag(MTE2, V, id);                    → 内部也是 set_flag(MTE2, V, token)
+wait_flag(MTE2, V, id);                   → 内部也是 wait_flag(MTE2, V, token)
+TABS(...);                                 TADD(..., evt);
+```
+
+**perf-sim 统一基于 CCE 级别的 trace 来处理同步**，不关心上层用的是哪种写法。
 
 当前 `arch_config.hpp` 已有的同步规则：
 
 ```cpp
-FixedRule("set_flag",      CoreType::Scalar, 1),   // 同核 event 发信号
-FixedRule("wait_flag",     CoreType::Scalar, 1),   // 同核 event 等信号
-FixedRule("wait_flag_dev", CoreType::Scalar, 1),   // 跨核 FFTS 等信号
+FixedRule("set_flag",      CoreType::Scalar, 1),
+FixedRule("wait_flag",     CoreType::Scalar, 1),
+FixedRule("wait_flag_dev", CoreType::Scalar, 1),
 ```
 
 需要补充：
 
 ```cpp
-FixedRule("ffts_cross_core_sync", CoreType::Scalar, ???),  // 跨核 FFTS 发信号
+FixedRule("ffts_cross_core_sync", CoreType::Scalar, ???),
 ```
 
-`Event<>` 模板类（`TSync.hpp`）已提供统一封装，内部根据 `IsCrossCore` 自动分发到 `set_flag/wait_flag` 或 `ffts_cross_core_sync/wait_flag_dev`，perf-sim 只需处理 trace 中记录的 CCE 调用即可。
+#### 4.1.3 Trace 统一时间线
 
-#### 4.1.3 时序数据结构
+当前 `TraceState` 把 PTO 指令和同步 CCE 调用**分开存储**，丢失了交错顺序：
+
+```
+executed_pto:    [TLOAD, TABS, TSTORE]           // PTO 指令
+raw_cce_calls:   [set_flag, wait_flag, ...]      // 同步调用（不知道在哪些 PTO 指令之间）
+```
+
+实际执行顺序是交错的：`TLOAD → set_flag → wait_flag → TABS → set_flag → wait_flag → TSTORE`
+
+perf-sim 需要**统一时间线**，保持 PTO 指令和同步调用的交错顺序：
+
+```cpp
+enum class TraceEntryKind : uint8_t {
+    PtoInstr,       // PTO 指令（含其内部 CCE 调用）
+    Sync,           // 同步调用：set_flag, wait_flag, ffts_cross_core_sync, wait_flag_dev
+};
+
+struct TraceEntry {
+    TraceEntryKind kind;
+
+    // kind == PtoInstr 时有效
+    PtoInstrRecord pto_instr;
+
+    // kind == Sync 时有效
+    std::string sync_name;     // "set_flag" / "wait_flag" / "ffts_cross_core_sync" / "wait_flag_dev"
+    pipe_t src_pipe = {};
+    pipe_t dst_pipe = {};
+    event_t event_id = 0;
+};
+
+// 扩展 TraceState
+struct TraceState {
+    // --- 原有字段（保留兼容）---
+    std::vector<PtoInstrRecord> executed_pto;
+    std::vector<CceCallRecord> raw_cce_calls;
+    std::vector<std::size_t> active_pto_stack;
+
+    // --- perf-sim 新增：统一时间线 ---
+    std::vector<TraceEntry> timeline;
+
+    // --- perf-sim 新增：算子层 ---
+    std::vector<OperatorRecord> operators;
+    std::vector<std::size_t> active_operator_stack;
+};
+```
+
+改造后的 trace 示例：
+
+```
+timeline: [
+    PtoInstr(TLOAD,  [copy_gm_to_ubuf, ...]),
+    Sync(set_flag,   src=MTE2, dst=V,    id=0),
+    Sync(wait_flag,  src=MTE2, dst=V,    id=0),
+    PtoInstr(TABS,   [vabs, ...]),
+    Sync(set_flag,   src=V,    dst=MTE3, id=0),
+    Sync(wait_flag,  src=V,    dst=MTE3, id=0),
+    PtoInstr(TSTORE, [copy_ubuf_to_gm, ...]),
+]
+```
+
+实现方式：在现有的 `RecordCceCall` 和 `PtoInstrScope` 机制基础上，对同步类 CCE 调用额外记录一条 `TraceEntry` 到 `timeline`。不需要改变用户代码或 PTO 指令的写法。
+
+#### 4.1.4 时序数据结构
 
 ```cpp
 struct PipeEvent {
-    std::string name;           // CCE 操作名
+    std::string name;           // CCE 操作名 或 同步操作名
     CoreKind core;              // Cube 核 或 Vector 核
     PipeStage stage;            // 所属流水线阶段
     uint64_t start_cycle;       // 开始时刻
@@ -218,52 +287,104 @@ struct PipeTimeline {
 
     // C&V 专属分析
     uint64_t CVOverlapTime() const;              // Cube 和 Vector 同时活跃的时间
-    uint64_t SyncWaitTime() const;               // FFTS 等信号引入的空闲
+    uint64_t SyncWaitTime() const;               // 同步等待引入的空闲
 };
 ```
 
-#### 4.1.4 时序调度算法
+#### 4.1.5 时序调度算法
 
 ```cpp
 class PipelineScheduler {
 public:
-    // 输入：算子内所有 CCE 调用的 cycle 估算
+    // 输入：算子的统一时间线
     // 输出：C&V 双核并行时序安排
     PipeTimeline Schedule(const OperatorRecord& op, const ArchConfig& arch);
 
 private:
-    // Cube 核和 Vector 核各自维护独立的 stage 时间线
-    uint64_t cube_cycle_[7] = {};   // Cube 核每个 stage 的当前时刻
-    uint64_t vector_cycle_[7] = {}; // Vector 核每个 stage 的当前时刻
+    // 每个 PipeStage 的完成时刻（区分 Cube / Vector 核）
+    uint64_t stage_ready_[2][7] = {};   // [CoreKind][PipeStage]
+
+    // 信号表：event_id → 信号就绪时刻
+    std::unordered_map<event_t, uint64_t> signal_table_;
 };
 ```
 
-调度逻辑（统一处理同步与计算操作）：
+**核心调度逻辑（三种 entry 统一处理）：**
 
 ```
-对于算子内的每条 CCE 调用：
-  1. 查 arch_config 得到 PipeStage + cycle 数
-  2. 根据 PipeStage 确定归属核（Matrix/FIX/MTE1 → Cube；Vector → Vector）
-  3. 如果是发信号操作（set_flag / ffts_cross_core_sync）：
-     → 记录信号就绪时刻
-  4. 如果是等信号操作（wait_flag / wait_flag_dev）：
-     → start_cycle = max(当前 stage 时刻, 信号就绪时刻)
-  5. 如果是计算/搬运操作：
-     → start_cycle = max(当前 stage 上次完成时刻, 前驱 stage 完成时刻)
-  6. end_cycle = start_cycle + cycles
-  7. 更新对应核的 current_cycle_[stage]
+按序扫描 timeline 中的每个 TraceEntry：
+
+┌─ kind == Sync（同步调用）─────────────────────────┐
+│                                                    │
+│  发信号操作（set_flag / ffts_cross_core_sync）：    │
+│    duration = FindRule(sync_name).cycles            │
+│    start = stage_ready_[core][Scalar]               │
+│    end = start + duration                           │
+│    signal_table_[event_id] = end                    │
+│    stage_ready_[core][Scalar] = end                 │
+│                                                    │
+│  等信号操作（wait_flag / wait_flag_dev）：           │
+│    duration = FindRule(sync_name).cycles            │
+│    dep = signal_table_[event_id]                    │
+│    start = max(stage_ready_[core][Scalar], dep)     │
+│    end = start + duration                           │
+│    stage_ready_[core][Scalar] = end                 │
+│                                                    │
+├─ kind == PtoInstr（PTO 指令）─────────────────────┤
+│                                                    │
+│  对该 PTO 指令内部的每条 CCE 调用：                  │
+│    stage = FindRule(cce_name).stage                 │
+│    core  = stage → CoreKind                        │
+│    duration = EvaluateCceCall(cce, arch).cycles     │
+│    start = stage_ready_[core][stage]                │
+│    end = start + duration                           │
+│    stage_ready_[core][stage] = end                  │
+│                                                    │
+│  （同步依赖已通过前面的 Sync entry 体现在            │
+│    stage_ready_ 中，此处无需额外处理）               │
+│                                                    │
+└────────────────────────────────────────────────────┘
 ```
 
-示例：matmul + bias_add 的 C&V 并行时序
+**核内同步和跨核同步使用完全相同的逻辑**，不区分。原因：
+
+- `set_flag` / `ffts_cross_core_sync` 都是往 `signal_table_` 写入完成时刻
+- `wait_flag` / `wait_flag_dev` 都是从 `signal_table_` 读出依赖时刻
+- 计算操作的 `start = stage_ready_[core][stage]`，而 `stage_ready_` 已被前面的 wait 更新过
+- 唯一差异是 latency 值不同（由 `arch_config` 规则配置）
+
+**示例：核内同步**（TLOAD → TABS）
+
+```
+timeline: [TLOAD(copy_gm_to_ubuf), set_flag(MTE2→V,id=0), wait_flag(MTE2→V,id=0), TABS(vabs)]
+
+1. copy_gm_to_ubuf:  stage=MTE2, core=Vector, start=0, end=100  → vector_stage_ready[MTE2]=100
+2. set_flag:         start=0, end=1                              → signal_table_[0]=1
+3. wait_flag:        dep=signal_table_[0]=1, start=max(0,1)=1    → vector_stage_ready[Scalar]=2
+4. vabs:             stage=Vector, start=max(0,2)=2, end=52      → vector_stage_ready[Vector]=52
+```
+
+**示例：跨核同步**（Cube TMATMUL → Vector TADD）
+
+```
+timeline: [..., ffts_sync(PIPE_FIX,id=5), ..., wait_dev(id=5), ..., TADD(vadd)]
+
+1. mad(Cube):        stage=Matrix, start=0, end=400               → cube_stage_ready[Matrix]=400
+2. ffts_sync(Cube):  start=400, end=405                           → signal_table_[5]=405
+3. wait_dev(Vector):  dep=signal_table_[5]=405, start=max(0,405)=405 → vector_stage_ready[Scalar]=407
+4. vadd(Vector):     stage=Vector, start=max(0,407)=407, end=607  → vector_stage_ready[Vector]=607
+```
+
+两种场景的调度代码路径完全一致，只是操作名和 latency 值不同。
+
+时序可视化示例（matmul + bias_add）：
 
 ```
 Cycle:  0    100   200   300   400   500   600   700   800
-Cube:   [TLOAD] [TMATMUL----] [TSTORE_ACC] [ffts record]
-                                              ↓ FFTS
-Vector:                                     [wait_dev] [TLOAD] [TADD] [TSTORE]
+Cube:   [TLOAD] [TMATMUL----] [TSTORE_ACC] [ffts_sync]
+                                               ↓ signal_table
+Vector:                                      [wait_dev] [TLOAD] [TADD] [TSTORE]
 ```
-
-Cube 核和 Vector 核的时间线并行展开，FFTS wait 产生的空隙即为跨核同步开销。
 
 ### 4.2 白盒指标采集（metrics.hpp）
 
