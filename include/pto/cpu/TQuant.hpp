@@ -190,8 +190,7 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
 {
     static_assert(quant_type == QuantType::MXFP8, "Fix: MX overload is reserved for MXFP8.");
     using SrcT = typename TileDataSrc::DType;
-    static_assert(std::is_same_v<SrcT, float> || std::is_same_v<SrcT, bfloat16_t> ||
-                      std::is_same_v<SrcT, half>,
+    static_assert(std::is_same_v<SrcT, float> || std::is_same_v<SrcT, bfloat16_t> || std::is_same_v<SrcT, half>,
                   "Fix: MXFP8 input must be float32, bfloat16, or half (fp16)");
     static_assert(std::is_same_v<typename TileDataOut::DType, int8_t>, "Fix: MXFP8 output must be int8 bytes.");
     static_assert(std::is_same_v<typename TileDataExp::DType, uint8_t>, "Fix: MXFP8 exponent must be uint8 bytes.");
@@ -209,7 +208,8 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
         for (int group = 0; group < groupCols; ++group) {
             float maxAbsValue = 0.0f;
             for (int inner = 0; inner < 32; ++inner) {
-                const float value = static_cast<float>(src.data()[GetTileElementOffset<TileDataSrc>(row, group * 32 + inner)]);
+                const float value =
+                    static_cast<float>(src.data()[GetTileElementOffset<TileDataSrc>(row, group * 32 + inner)]);
                 maxAbsValue = std::max(maxAbsValue, std::fabs(value));
             }
             const uint8_t e8m0 = cpu_quant::ComputeSharedExponent(maxAbsValue);

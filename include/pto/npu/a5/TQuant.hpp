@@ -219,9 +219,8 @@ PTO_INTERNAL void CalcQuantizedFP8Values_Unroll2(__ubuf__ float *srcPtr, __ubuf_
 // AbsReduceMax for 16-bit float input (BF16 or FP16): widens to FP32 on-the-fly and computes abs max per
 // 32-element group. Processes 64 elements per iteration (= 2 groups of 32). Output maxPtr is always FP32.
 template <typename T>
-PTO_INTERNAL void AbsReduceMax_b16_Naive(__ubuf__ T *srcPtr, __ubuf__ float *maxPtr,
-                                         unsigned total_elements_count, unsigned vl_count,
-                                         unsigned elementsPerRepeat, MaskReg &preg_lower32,
+PTO_INTERNAL void AbsReduceMax_b16_Naive(__ubuf__ T *srcPtr, __ubuf__ float *maxPtr, unsigned total_elements_count,
+                                         unsigned vl_count, unsigned elementsPerRepeat, MaskReg &preg_lower32,
                                          MaskReg &preg_upper32)
 {
     RegTensor<T> vreg_b16;
@@ -244,8 +243,8 @@ PTO_INTERNAL void AbsReduceMax_b16_Naive(__ubuf__ T *srcPtr, __ubuf__ float *max
 // version, but narrows scaling back to T and stores as T.
 template <typename T>
 PTO_INTERNAL void ExtractB8ExponentAndScaling_b16(__ubuf__ float *maxPtr, __ubuf__ uint8_t *expPtr,
-                                                   __ubuf__ T *scalingPtr, unsigned exp_max_loop_count,
-                                                   unsigned total_elements_count, unsigned elementsPerRepeat)
+                                                  __ubuf__ T *scalingPtr, unsigned exp_max_loop_count,
+                                                  unsigned total_elements_count, unsigned elementsPerRepeat)
 {
     vector_f32 vb32_max;
     vector_s32 vb32_exponent, vb32_shared_exp, vb32_scaling, vb32_nan, vb32_subnorm;
@@ -274,8 +273,7 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling_b16(__ubuf__ float *maxPtr, __ubuf
         vcmps_ge(preg_inf, (vector_s32 &)vb32_scaling, -127, preg_b32);
         vsel(vb32_scaling, vb32_scaling, vb32_subnorm, preg_inf);
         vsel(vb32_shared_exp, vb32_shared_exp, vb32_subnorm, preg_inf);
-        vsts((vector_s32 &)vb32_shared_exp, ((__ubuf__ int32_t *)expPtr), i * elementsPerRepeat / 4, PK4_B32,
-             preg_b32);
+        vsts((vector_s32 &)vb32_shared_exp, ((__ubuf__ int32_t *)expPtr), i * elementsPerRepeat / 4, PK4_B32, preg_b32);
         // Narrow FP32 scaling to T and store (scaling are powers of 2, exact in any 16-bit float)
         vcvt(vb16_scaling, (vector_f32 &)vb32_scaling, preg_b32, ROUND_R, RS_DISABLE, PART_EVEN);
         vsts(vb16_scaling, scalingPtr, i * elementsPerRepeat, PK_B32, preg_b32);
@@ -286,9 +284,9 @@ PTO_INTERNAL void ExtractB8ExponentAndScaling_b16(__ubuf__ float *maxPtr, __ubuf
 // convert to FP8 E4M3.
 template <typename T>
 PTO_INTERNAL void CalcQuantizedFP8Values_b16(__ubuf__ T *srcPtr, __ubuf__ T *scalingPtr, __ubuf__ uint8_t *dstPtr,
-                                              unsigned vl_count, unsigned elementsPerRepeat,
-                                              unsigned total_elements_count, MaskReg &preg_lower32,
-                                              MaskReg &preg_upper32)
+                                             unsigned vl_count, unsigned elementsPerRepeat,
+                                             unsigned total_elements_count, MaskReg &preg_lower32,
+                                             MaskReg &preg_upper32)
 {
     RegTensor<T> vb16_scaling_0, vb16_scaling_1, vb16_in;
     vector_f32 vb32_scaling_0, vb32_scaling_1, vb32_in, vb32_out_1, vb32_out_2, vb32_out;
@@ -321,11 +319,11 @@ PTO_INTERNAL void CalcQuantizedFP8Values_b16(__ubuf__ T *srcPtr, __ubuf__ T *sca
 // E8M0 exponents are output in ND layout; use TMOV for ND->ZZ conversion if needed.
 template <typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax>
 __tf__ PTO_INTERNAL void TQuant_MXFP8_16bit(typename TileDataOut::TileDType __out__ dst,
-                                             typename TileDataExp::TileDType __out__ exp,
-                                             typename TileDataMax::TileDType __out__ max,
-                                             typename TileDataSrc::TileDType __out__ scaling,
-                                             typename TileDataSrc::TileDType __in__ src, unsigned validRows,
-                                             unsigned validCols)
+                                            typename TileDataExp::TileDType __out__ exp,
+                                            typename TileDataMax::TileDType __out__ max,
+                                            typename TileDataSrc::TileDType __out__ scaling,
+                                            typename TileDataSrc::TileDType __in__ src, unsigned validRows,
+                                            unsigned validCols)
 {
     using T = typename TileDataSrc::DType;    // bfloat16_t or half
     using TMax = typename TileDataMax::DType; // float
@@ -528,9 +526,9 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
                               TileDataSrc *scaling)
 {
     using T = typename TileDataSrc::DType;
-    static_assert(std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value ||
-                      std::is_same<T, half>::value,
-                  "Fix: MXFP8 input must be float32, bfloat16, or half (fp16)");
+    static_assert(
+        std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value,
+        "Fix: MXFP8 input must be float32, bfloat16, or half (fp16)");
 
     if constexpr (std::is_same<T, bfloat16_t>::value || std::is_same<T, half>::value) {
         using TMax = typename TileDataMax::DType;

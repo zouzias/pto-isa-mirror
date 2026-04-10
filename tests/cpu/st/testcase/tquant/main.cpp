@@ -301,7 +301,8 @@ TEST(TQuantCpuSimTest, MxFp8NdBf16MatchesExactBytes)
     for (int row = 0; row < 16; ++row) {
         float maxAbs = 0.0f;
         for (int col = 0; col < 32; ++col) {
-            maxAbs = std::max(maxAbs, std::fabs(static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)])));
+            maxAbs =
+                std::max(maxAbs, std::fabs(static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)])));
         }
         const uint8_t expectedExp = static_cast<uint8_t>(((FloatToBits(maxAbs) & 0x7F800000u) >> 23) - 8u);
         const float expectedScaling_f32 = BitsToFloat((254u - expectedExp) << 23);
