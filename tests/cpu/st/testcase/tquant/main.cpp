@@ -264,3 +264,58 @@ TEST(TQuantCpuSimTest, MxFp8NzReordersExponentsExactly)
         }
     }
 }
+
+TEST(TQuantCpuSimTest, MxFp8NdBf16MatchesExactBytes)
+{
+    // BF16 -> MXFP8 ND: scaling tile is BF16 (same type as src); max tile must be float32.
+    using SrcTile = Tile<TileType::Vec, bfloat16_t, 16, 32>;
+    using DstTile = Tile<TileType::Vec, int8_t, 16, 32>;
+    using ExpTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, 1, 16>;
+    using MaxTile = Tile<TileType::Vec, float, 1, 16>;
+    SrcTile src;
+    SrcTile scaling;
+    DstTile dst;
+    ExpTile exp;
+    MaxTile max;
+    size_t addr = 0;
+    TASSIGN(src, addr);
+    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    TASSIGN(scaling, addr);
+    addr += SrcTile::Numel * sizeof(typename SrcTile::DType);
+    TASSIGN(dst, addr);
+    addr += DstTile::Numel * sizeof(typename DstTile::DType);
+    TASSIGN(exp, addr);
+    addr += ExpTile::Numel * sizeof(typename ExpTile::DType);
+    TASSIGN(max, addr);
+
+    for (int r = 0; r < src.GetValidRow(); ++r) {
+        for (int c = 0; c < src.GetValidCol(); ++c) {
+            const float base = (c % 8 == 0) ? 16.0f : static_cast<float>((r + c) % 7 + 1);
+            src.data()[GetTileElementOffset<SrcTile>(r, c)] =
+                static_cast<bfloat16_t>(((r + c) % 2 == 0) ? base : -base);
+        }
+    }
+
+    TQUANT<QuantType::MXFP8>(dst, src, &exp, &max, &scaling);
+
+    for (int row = 0; row < 16; ++row) {
+        float maxAbs = 0.0f;
+        for (int col = 0; col < 32; ++col) {
+            maxAbs =
+                std::max(maxAbs, std::fabs(static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)])));
+        }
+        const uint8_t expectedExp = static_cast<uint8_t>(((FloatToBits(maxAbs) & 0x7F800000u) >> 23) - 8u);
+        const float expectedScaling_f32 = BitsToFloat((254u - expectedExp) << 23);
+        // Scaling is stored as BF16; for power-of-2 scalings the BF16 roundtrip is exact.
+        EXPECT_EQ(exp.data()[row], expectedExp);
+        EXPECT_FLOAT_EQ(max.data()[row], maxAbs);
+        for (int col = 0; col < 32; ++col) {
+            // Compare as float since bfloat16_t may not have an ostream operator for EXPECT_EQ printing.
+            EXPECT_FLOAT_EQ(static_cast<float>(scaling.data()[GetTileElementOffset<SrcTile>(row, col)]),
+                            expectedScaling_f32);
+            const float srcVal = static_cast<float>(src.data()[GetTileElementOffset<SrcTile>(row, col)]);
+            const uint8_t expectedByte = EncodeE4M3Fn(srcVal * expectedScaling_f32);
+            EXPECT_EQ(static_cast<uint8_t>(dst.data()[GetTileElementOffset<DstTile>(row, col)]), expectedByte);
+        }
+    }
+}
