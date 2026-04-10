@@ -113,9 +113,9 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, Globa
     const uint64_t transferSize = static_cast<uint64_t>(srcElems) * sizeof(T);
     PTO_ASSERT(transferSize <= UINT32_MAX, "TGET_ASYNC URMA: transfer size exceeds SGE length limit (4GB)");
 
-    const uint64_t eventHandle = urma::__urma_get_async(reinterpret_cast<__gm__ uint8_t *>(dstGlobalData.data()),
-                                                        reinterpret_cast<__gm__ uint8_t *>(srcGlobalData.data()),
-                                                        transferSize, execCtx);
+    const uint64_t eventHandle =
+        urma::__urma_get_async(reinterpret_cast<__gm__ uint8_t *>(dstGlobalData.data()),
+                               reinterpret_cast<__gm__ uint8_t *>(srcGlobalData.data()), transferSize, execCtx);
     return AsyncEvent(eventHandle, DmaEngine::URMA);
 }
 #endif
