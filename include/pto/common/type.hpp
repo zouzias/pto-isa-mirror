@@ -136,6 +136,12 @@ enum class SLayout
     ColMajor = 2,
 };
 
+enum class PrintFormat : uint8_t
+{
+    Width8_Precision4 = 0,
+    Width8_Precision2 = 1,
+    Width10_Precision6 = 2,
+};
 // 01-bits patterns are read from right to left.
 // Right bits are low bits, corresponding to low index positions of data.
 enum class MaskPattern : uint8_t
