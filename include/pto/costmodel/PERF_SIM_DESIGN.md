@@ -137,30 +137,71 @@ include/pto/costmodel/
 
 ### 4.1 Pipeline 时序建模（pipeline_model.hpp）
 
-现有 costmodel 只做 cycle 简单累加，不考虑 Pipeline 时序。perf-sim 需要建模 NPU 的多级流水线。
+现有 costmodel 只做 cycle 简单累加，不考虑 Pipeline 时序。perf-sim 需要建模 NPU 的 C&V 双核并行流水线。
 
-#### 4.1.1 Pipeline 阶段定义
+#### 4.1.1 双核流水线结构
+
+NPU AICore 由 Cube 核和 Vector 核组成，各自拥有独立的 Pipeline，通过 FFTS 硬件通道跨核同步：
+
+```
+Cube 核:   MTE2(搬入) → MTE1 → Matrix(矩阵计算) → FIX(定点转换) → MTE3(搬出)
+Vector 核: MTE2(搬入) → Vector(向量计算) → MTE3(搬出)
+                       ↕ FFTS 跨核同步 ↕
+```
 
 ```cpp
+enum class CoreKind : uint8_t { Cube, Vector };
+
 enum class PipeStage : uint8_t {
-    Scalar,     // 标量控制：set_flag, wait_flag, pipe_barrier
+    Scalar,     // 标量控制：set_flag, wait_flag, ffts_cross_core_sync
     MTE2,       // 搬入：copy_gm_to_ubuf, copy_gm_to_cbuf
-    Vector,     // 向量计算：vadd, vmul, vexp ...
-    Matrix,     // 矩阵计算：mad
-    Fix,        // 定点转换
+    MTE1,       // Cube 专用：搬运到矩阵缓冲
+    Vector,     // 向量计算（Vector 核）：vadd, vmul, vexp ...
+    Matrix,     // 矩阵计算（Cube 核）：mad
+    Fix,        // 定点转换（Cube 核）：copy_matrix_cc_to_gm
     MTE3,       // 搬出：copy_ubuf_to_gm, copy_cbuf_to_gm
 };
 ```
 
 已有 `CoreType` 枚举（`arch_config.hpp`）可以直接映射到 `PipeStage`。
 
-#### 4.1.2 时序模型
+#### 4.1.2 统一同步模型
 
-基于 NPU AICore 的流水线结构设计简化时序模型：
+PTO-ISA 中存在两种硬件同步原语，但它们的本质相同——都是 producer/consumer 依赖：
+
+| 同步类型 | Producer（发信号） | Consumer（等信号） | 场景 |
+|----------|-------------------|-------------------|------|
+| 同核 event | `set_flag(srcPipe, dstPipe, id)` | `wait_flag(srcPipe, dstPipe, id)` | 同核内 Pipeline 间同步 |
+| 跨核 FFTS | `ffts_cross_core_sync(pipe, msg)` | `wait_flag_dev(flag_id)` | Cube ↔ Vector 跨核同步 |
+
+perf-sim 的 PipelineScheduler **不区分这两种机制**，统一按依赖关系处理：
+
+- 所有同步操作都作为 CCE call 记录在 trace 中
+- 调度器只关心：这个操作属于哪个 PipeStage、依赖什么信号、自身开销多少 cycle
+- 同核与跨核的区别仅体现在 latency 数值上（通过 `arch_config` 规则配置）
+
+当前 `arch_config.hpp` 已有的同步规则：
+
+```cpp
+FixedRule("set_flag",      CoreType::Scalar, 1),   // 同核 event 发信号
+FixedRule("wait_flag",     CoreType::Scalar, 1),   // 同核 event 等信号
+FixedRule("wait_flag_dev", CoreType::Scalar, 1),   // 跨核 FFTS 等信号
+```
+
+需要补充：
+
+```cpp
+FixedRule("ffts_cross_core_sync", CoreType::Scalar, ???),  // 跨核 FFTS 发信号
+```
+
+`Event<>` 模板类（`TSync.hpp`）已提供统一封装，内部根据 `IsCrossCore` 自动分发到 `set_flag/wait_flag` 或 `ffts_cross_core_sync/wait_flag_dev`，perf-sim 只需处理 trace 中记录的 CCE 调用即可。
+
+#### 4.1.3 时序数据结构
 
 ```cpp
 struct PipeEvent {
     std::string name;           // CCE 操作名
+    CoreKind core;              // Cube 核 或 Vector 核
     PipeStage stage;            // 所属流水线阶段
     uint64_t start_cycle;       // 开始时刻
     uint64_t end_cycle;         // 结束时刻
@@ -171,37 +212,58 @@ struct PipeTimeline {
     std::vector<PipeEvent> events;
 
     // 分析接口
-    uint64_t TotalActiveTime(PipeStage stage) const;
-    uint64_t TotalBubbleTime(PipeStage stage) const;
-    double Utilization(PipeStage stage, uint64_t total_span) const;
+    uint64_t TotalActiveTime(CoreKind core, PipeStage stage) const;
+    uint64_t TotalBubbleTime(CoreKind core, PipeStage stage) const;
+    double Utilization(CoreKind core, PipeStage stage, uint64_t total_span) const;
+
+    // C&V 专属分析
+    uint64_t CVOverlapTime() const;              // Cube 和 Vector 同时活跃的时间
+    uint64_t SyncWaitTime() const;               // FFTS 等信号引入的空闲
 };
 ```
 
-#### 4.1.3 时序调度算法
+#### 4.1.4 时序调度算法
 
 ```cpp
 class PipelineScheduler {
 public:
     // 输入：算子内所有 CCE 调用的 cycle 估算
-    // 输出：考虑 Pipeline 并行的时序安排
+    // 输出：C&V 双核并行时序安排
     PipeTimeline Schedule(const OperatorRecord& op, const ArchConfig& arch);
 
 private:
-    // 1. 同一 PipeStage 内的操作严格串行
-    // 2. 不同 PipeStage 的操作按数据依赖排列
-    uint64_t current_cycle_[6] = {};  // 每个 stage 的当前时刻
+    // Cube 核和 Vector 核各自维护独立的 stage 时间线
+    uint64_t cube_cycle_[7] = {};   // Cube 核每个 stage 的当前时刻
+    uint64_t vector_cycle_[7] = {}; // Vector 核每个 stage 的当前时刻
 };
 ```
 
-时序计算逻辑：
+调度逻辑（统一处理同步与计算操作）：
 
 ```
 对于算子内的每条 CCE 调用：
-  1. 确定所属 PipeStage
-  2. start_cycle = max(当前 stage 上次完成时刻, 前驱 stage 完成时刻)
-  3. end_cycle = start_cycle + EvaluateCceCall(...).cycles
-  4. 更新 current_cycle_[stage] = end_cycle
+  1. 查 arch_config 得到 PipeStage + cycle 数
+  2. 根据 PipeStage 确定归属核（Matrix/FIX/MTE1 → Cube；Vector → Vector）
+  3. 如果是发信号操作（set_flag / ffts_cross_core_sync）：
+     → 记录信号就绪时刻
+  4. 如果是等信号操作（wait_flag / wait_flag_dev）：
+     → start_cycle = max(当前 stage 时刻, 信号就绪时刻)
+  5. 如果是计算/搬运操作：
+     → start_cycle = max(当前 stage 上次完成时刻, 前驱 stage 完成时刻)
+  6. end_cycle = start_cycle + cycles
+  7. 更新对应核的 current_cycle_[stage]
 ```
+
+示例：matmul + bias_add 的 C&V 并行时序
+
+```
+Cycle:  0    100   200   300   400   500   600   700   800
+Cube:   [TLOAD] [TMATMUL----] [TSTORE_ACC] [ffts record]
+                                              ↓ FFTS
+Vector:                                     [wait_dev] [TLOAD] [TADD] [TSTORE]
+```
+
+Cube 核和 Vector 核的时间线并行展开，FFTS wait 产生的空隙即为跨核同步开销。
 
 ### 4.2 白盒指标采集（metrics.hpp）
 
@@ -230,6 +292,12 @@ struct OperatorMetrics {
     uint64_t total_bubble_cycles = 0;
     uint64_t vector_bubble = 0;
     uint64_t matrix_bubble = 0;
+
+    // --- C&V 协作指标 ---
+    uint64_t cv_overlap_cycles = 0;       // Cube 和 Vector 同时活跃的时间
+    uint64_t cv_sync_wait_cycles = 0;     // FFTS 等信号引入的空闲
+    uint64_t cv_gm_transfer_cycles = 0;   // C→V / V→C GM 中转搬运开销
+    double cv_overlap_ratio = 0.0;        // overlap / pipeline_span
 
     // --- 指令统计 ---
     uint64_t pto_instr_count = 0;
@@ -298,9 +366,27 @@ SimReport ComputeFullReport(const TraceState& trace, const ArchConfig& arch);
 ```
 
 字段映射：
-- `pid` → Core Index（PTO-ISA 单核场景下固定为 0）
-- `tid` → PipeStage 枚举值（Scalar=0, MTE2=1, Vector=2, Matrix=3, Fix=4, MTE3=5）
+- `pid` → 核编号（Cube 核=0, Vector 核=1）
+- `tid` → PipeStage 枚举值（Scalar=0, MTE2=1, MTE1=2, Vector=3, Matrix=4, Fix=5, MTE3=6）
 - `ts` / `dur` → Pipeline scheduler 计算的 cycle 数 × 时钟周期（ns）
+
+示例：C&V 双核泳道布局
+
+```
+pid=0 (Cube Core)
+  tid=0: Scalar   ─┐
+  tid=1: MTE2     ─┤  [TLOAD]
+  tid=2: MTE1     ─┤
+  tid=4: Matrix   ─┤          [TMATMUL]
+  tid=5: Fix      ─┤                    [TSTORE_ACC] [ffts_sync]
+  tid=6: MTE3     ─┘
+
+pid=1 (Vector Core)
+  tid=0: Scalar   ─┐
+  tid=1: MTE2     ─┤                                      [TLOAD]
+  tid=3: Vector   ─┤                                             [TADD]
+  tid=6: MTE3     ─┘                                                    [TSTORE]
+```
 
 #### 4.3.2 生成接口
 
