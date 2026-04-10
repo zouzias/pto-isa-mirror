@@ -47,12 +47,27 @@ void LaunchTRelu(T *out, T *src0, void *stream)
         runTRelu<T, sTRows_, sTCols_, dTRows_, dTCols_, kGRows_, kGCols_>(out, src0);
 }
 
-template void LaunchTRelu<float, 64, 64, 64, 64, 64, 64>(float *out, float *src0, void *stream);
-template void LaunchTRelu<int32_t, 64, 64, 64, 64, 64, 64>(int32_t *out, int32_t *src0, void *stream);
-template void LaunchTRelu<aclFloat16, 16, 256, 16, 256, 16, 256>(aclFloat16 *out, aclFloat16 *src0, void *stream);
-template void LaunchTRelu<int16_t, 64, 64, 64, 64, 64, 64>(int16_t *out, int16_t *src0, void *stream);
+const int NUM_16 = 16;
+const int NUM_64 = 64;
+const int NUM_256 = 256;
 
-template void LaunchTRelu<float, 64, 64, 64, 64, 60, 55>(float *out, float *src0, void *stream);
-template void LaunchTRelu<int32_t, 64, 64, 64, 64, 60, 55>(int32_t *out, int32_t *src0, void *stream);
-template void LaunchTRelu<aclFloat16, 64, 64, 96, 96, 64, 60>(aclFloat16 *out, aclFloat16 *src0, void *stream);
-template void LaunchTRelu<int16_t, 64, 64, 96, 96, 64, 60>(int16_t *out, int16_t *src0, void *stream);
+template void LaunchTRelu<float, NUM_64, NUM_64, NUM_64, NUM_64, NUM_64, NUM_64>(float *out, float *src0,
+                                                                                   void *stream);
+template void LaunchTRelu<int32_t, NUM_64, NUM_64, NUM_64, NUM_64, NUM_64, NUM_64>(int32_t *out, int32_t *src0,
+                                                                                     void *stream);
+template void LaunchTRelu<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256, NUM_16, NUM_256>(aclFloat16 *out,
+                                                                                            aclFloat16 *src0,
+                                                                                            void *stream);
+template void LaunchTRelu<int16_t, NUM_64, NUM_64, NUM_64, NUM_64, NUM_64, NUM_64>(int16_t *out, int16_t *src0,
+                                                                                     void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTRelu<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256, NUM_16, NUM_256>(bfloat16_t *out,
+                                                                                           bfloat16_t *src0,
+                                                                                           void *stream);
+#endif
+template void LaunchTRelu<float, NUM_64, NUM_64, NUM_64, NUM_64, 60, 55>(float *out, float *src0, void *stream);
+template void LaunchTRelu<int32_t, NUM_64, NUM_64, NUM_64, NUM_64, 60, 55>(int32_t *out, int32_t *src0,
+                                                                            void *stream);
+template void LaunchTRelu<aclFloat16, NUM_64, NUM_64, 96, 96, NUM_64, 60>(aclFloat16 *out, aclFloat16 *src0,
+                                                                           void *stream);
+template void LaunchTRelu<int16_t, NUM_64, NUM_64, 96, 96, NUM_64, 60>(int16_t *out, int16_t *src0, void *stream);

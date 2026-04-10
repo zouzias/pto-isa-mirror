@@ -1,4 +1,4 @@
-﻿# TLOG
+# TLOG
 
 ## 指令示意图
 
@@ -10,7 +10,7 @@ Tile 的逐元素自然对数。
 
 ## 数学语义
 
-对每个元素 `(i, j)` 在有效区域内：
+对有效区域内的每个元素 `(i, j)`：
 
 $$ \mathrm{dst}_{i,j} = \log(\mathrm{src}_{i,j}) $$
 
@@ -36,6 +36,18 @@ PTO-AS 形式：参见 [PTO-AS 规范](../assembly/PTO-AS_zh.md)。
 pto.tlog ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
 
+### IR Level 1（SSA）
+
+```text
+%dst = pto.tlog %src : !pto.tile<...> -> !pto.tile<...>
+```
+
+### IR Level 2（DPS）
+
+```text
+pto.tlog ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
 ## C++ 内建接口
 
 声明于 `include/pto/common/pto_instr.hpp`：
@@ -46,25 +58,25 @@ template <auto PrecisionType = LogAlgorithm::DEFAULT, typename TileDataDst, type
 PTO_INST RecordEvent TLOG(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events);
 ```
 
-`PrecisionType`可指定以下值：
+`PrecisionType` 可指定以下取值：
 
-* `LogAlgorithm::DEFAULT`：普通算法，速度快但精度较低。
-* `LogAlgorithm::HIGH_PRECISION`：高精度算法，速度较慢。
+- `LogAlgorithm::DEFAULT`：普通算法，速度更快但精度较低。
+- `LogAlgorithm::HIGH_PRECISION`：高精度算法，速度较慢。
 
 ## 约束
 
-- **实现检查 (NPU)**:
-    - `TileData::DType` 必须是以下之一：`float` 或 `half`。
-    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`);
-    - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`。
-    - 运行时：`src.GetValidRow() == dst.GetValidRow()` 且 `src.GetValidCol() == dst.GetValidCol()`。
+- **实现检查（NPU）**：
+    - `TileData::DType` 必须是 `float` 或 `half`；
+    - Tile 位置必须是向量（`TileData::Loc == TileType::Vec`）；
+    - 静态有效边界：`TileData::ValidRow <= TileData::Rows` 且 `TileData::ValidCol <= TileData::Cols`；
+    - 运行时：`src.GetValidRow() == dst.GetValidRow()` 且 `src.GetValidCol() == dst.GetValidCol()`；
     - Tile 布局必须是行主序（`TileData::isRowMajor`）。
-- **有效区域**:
-    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域.
-- **域 / NaN**:
-    - 域行为（例如，`log(<=0)`）由目标定义。
-- **高精度算法**
-    - 仅在A5上有效，`PrecisionType`选项A3上将被忽略。
+- **有效区域**：
+    - 该操作使用 `dst.GetValidRow()` / `dst.GetValidCol()` 作为迭代域。
+- **域 / NaN**：
+    - 域行为（例如 `log(<=0)`）由目标实现定义。
+- **高精度算法**：
+    - 仅 A5 支持，A3 会忽略 `PrecisionType` 选项。
 
 ## 示例
 
@@ -77,11 +89,11 @@ void example() {
   using TileT = Tile<TileType::Vec, float, 16, 16>;
   TileT x, out;
   TLOG(out, x);
-  TLOG<LogAlgorithm::HIGH_PRECISION>(out, x);  // A5 Only
+  TLOG<LogAlgorithm::HIGH_PRECISION>(out, x);  // 仅 A5
 }
 ```
 
-## 汇编示例（ASM）
+## 汇编示例
 
 ### 自动模式
 
@@ -107,4 +119,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.tlog ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

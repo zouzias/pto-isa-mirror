@@ -19,8 +19,8 @@ PTO_INTERNAL void TPACK_IMPL(TileDataDst &dst, TileDataSrc &src)
 {
     for (unsigned r = 0; r < src.GetValidRow(); ++r) {
         for (unsigned c = 0; c < src.GetValidCol(); ++c) {
-            dst.data()[GetTileElementOffset<TileDataDst>(r, c)] =
-                static_cast<typename TileDataDst::DType>(src.data()[GetTileElementOffset<TileDataSrc>(r, c)]);
+            dst.data()[GetTileElementOffset<TileDataDst>(r, c)] = static_cast<typename TileDataDst::DType>(
+                src.data()[GetTileElementOffset<TileDataSrc>(r, c)]);
         }
     }
 }

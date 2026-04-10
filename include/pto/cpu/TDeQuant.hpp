@@ -28,10 +28,9 @@ PTO_INTERNAL void TDEQUANT_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataPara
             const auto scaleVal = scale.data()[GetTileElementOffset<TileDataPara>(r, paraCol)];
             const auto offsetVal = offset.data()[GetTileElementOffset<TileDataPara>(r, paraCol)];
             const auto srcVal = src.data()[GetTileElementOffset<TileDataSrc>(r, c)];
-            dst.data()[GetTileElementOffset<TileDataDst>(r, c)] =
-                static_cast<typename TileDataDst::DType>((static_cast<typename TileDataDst::DType>(srcVal) -
-                                                          static_cast<typename TileDataDst::DType>(offsetVal)) *
-                                                         static_cast<typename TileDataDst::DType>(scaleVal));
+            dst.data()[GetTileElementOffset<TileDataDst>(r, c)] = static_cast<typename TileDataDst::DType>(
+                (static_cast<typename TileDataDst::DType>(srcVal) - static_cast<typename TileDataDst::DType>(offsetVal)) *
+                static_cast<typename TileDataDst::DType>(scaleVal));
         }
     }
 }

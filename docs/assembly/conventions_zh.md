@@ -29,4 +29,3 @@ PTO 支持用事件建模操作间依赖：
 - 类型使用 MLIR 风格拼写，例如 `!pto.tile<...>` 与 `!pto.memref<...>`。
 
 完整语法与文法参见：`docs/assembly/PTO-AS_zh.md` 与 `docs/assembly/PTO-AS.bnf`。
-

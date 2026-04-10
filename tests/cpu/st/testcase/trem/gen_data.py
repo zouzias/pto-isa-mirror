@@ -12,6 +12,7 @@
 
 import os
 import numpy as np
+from tests.script.cpu_bfloat16 import BF16_DTYPE, cast_for_compute, normalize_case_dtype_name, write_array, zeros
 np.random.seed(19)
 
 
@@ -22,16 +23,17 @@ def gen_golden_data_trem(case_name, param):
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = np.random.randint(1, 10, size=[row, col]).astype(dtype)
-    input2 = np.random.randint(1, 10, size=[row, col]).astype(dtype)
+    input1 = cast_for_compute(np.random.randint(1, 10, size=[row, col]), dtype)
+    input2 = cast_for_compute(np.random.randint(1, 10, size=[row, col]), dtype)
 
     # Perform the addbtraction
-    golden = input1 % input2
+    golden = zeros([row, col], dtype)
+    golden[:h_valid, :w_valid] = cast_for_compute(np.fmod(input1, input2), dtype)[:h_valid, :w_valid]
 
     # Save the input and golden data to binary files
-    input1.tofile("input1.bin")
-    input2.tofile("input2.bin")
-    golden.tofile("golden.bin")
+    write_array("input1.bin", input1, dtype)
+    write_array("input2.bin", input2, dtype)
+    write_array("golden.bin", golden, dtype)
 
 
 class TRemParams:
@@ -44,11 +46,10 @@ class TRemParams:
 
 
 def generate_case_name(param):
-    dtype_str = {
+    dtype_str = normalize_case_dtype_name(param.dtype, {
         np.float32: 'float',
         np.float16: 'half',
-    }[param.dtype]
-
+    })
     def substring(a, b) -> str:
         return f"_{a}x{b}"
 
@@ -74,6 +75,8 @@ if __name__ == "__main__":
         TRemParams(np.float32, 32, 512, 64, 64),
         TRemParams(np.float16, 32, 512, 16, 256)
     ]
+    if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
+        case_params_list.append(TRemParams(BF16_DTYPE, 16, 256, 16, 256))
 
     for i, param in enumerate(case_params_list):
         case_name = generate_case_name(param)

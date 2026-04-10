@@ -103,6 +103,12 @@ TEST_F(TREMTest, case_half_16x256_16x256)
 {
     test_trem<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>();
 }
+#ifdef CPU_SIM_BFLOAT_ENABLED
+TEST_F(TREMTest, case_bf16_16x256_16x256_16x256)
+{
+    test_trem<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256>();
+}
+#endif
 TEST_F(TREMTest, case_float_32x512_64x64)
 {
     test_trem<float, NUM_32, NUM_512, NUM_64, NUM_64>();

@@ -101,7 +101,8 @@ inline uint8_t EncodeE4M3Fn(float value)
         const float candidate = DecodeE4M3Fn(static_cast<uint8_t>(code));
         const float distance = std::fabs(candidate - clipped);
         const bool isEven = (code & 1) == 0;
-        if (distance < bestDistance || (distance == bestDistance && isEven && !bestEven) ||
+        if (distance < bestDistance ||
+            (distance == bestDistance && isEven && !bestEven) ||
             (distance == bestDistance && isEven == bestEven && static_cast<uint8_t>(code) < bestCode)) {
             bestDistance = distance;
             bestCode = static_cast<uint8_t>(code);
@@ -136,9 +137,8 @@ inline float ComputeScalingFromExponent(uint8_t e8m0)
 
 inline std::vector<uint8_t> ReorderExponentZZ(const std::vector<uint8_t> &exp, int rows, int groupCols)
 {
-    PTO_CPU_ASSERT(
-        rows % 16 == 0 && groupCols % 2 == 0,
-        "Fix: MXFP8 NZ exponent reorder currently requires rows multiple of 16 and group cols multiple of 2.");
+    PTO_CPU_ASSERT(rows % 16 == 0 && groupCols % 2 == 0,
+                   "Fix: MXFP8 NZ exponent reorder currently requires rows multiple of 16 and group cols multiple of 2.");
     const int rowBlocks = rows / 16;
     const int groupBlocks = groupCols / 2;
     std::vector<uint8_t> reordered;
@@ -194,8 +194,7 @@ PTO_INTERNAL void TQUANT_IMPL(TileDataOut &dst, TileDataSrc &src, TileDataExp *e
     static_assert(std::is_same_v<typename TileDataOut::DType, int8_t>, "Fix: MXFP8 output must be int8 bytes.");
     static_assert(std::is_same_v<typename TileDataExp::DType, uint8_t>, "Fix: MXFP8 exponent must be uint8 bytes.");
 
-    PTO_CPU_ASSERT(exp != nullptr && max != nullptr && scaling != nullptr,
-                   "Fix: MXFP8 requires exp/max/scaling tiles.");
+    PTO_CPU_ASSERT(exp != nullptr && max != nullptr && scaling != nullptr, "Fix: MXFP8 requires exp/max/scaling tiles.");
 
     const int rows = src.GetValidRow();
     const int cols = src.GetValidCol();

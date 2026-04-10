@@ -119,3 +119,9 @@ TEST_F(TRELUTest, case_7)
 {
     test_trelu<int16_t, 64, 64, 96, 96, 64, 60>();
 }
+#ifdef CPU_SIM_BFLOAT_ENABLED
+TEST_F(TRELUTest, case_bf16_16x256_16x256_16x256)
+{
+    test_trelu<bfloat16_t, 16, 256, 16, 256, 16, 256>();
+}
+#endif

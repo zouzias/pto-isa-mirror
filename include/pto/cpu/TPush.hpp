@@ -20,7 +20,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <mutex>
 #include <new>
 #include <thread>
-#include <format>
 #include <pto/common/fifo.hpp>
 
 #include <pto/cpu/TAssign.hpp>
@@ -153,11 +152,12 @@ struct TPipe {
 
     PTO_INTERNAL static SharedState &GetSharedState()
     {
-        if (auto hook = cpu_sim::ResolveSharedStorageHook(); hook != nullptr) {
-            char key[128] = {};
-            std::format_to(key, "pto-pipe-%llu-%u-%u-%u-%u-%u-%u", static_cast<unsigned long long>(get_task_cookie()),
-                           get_block_idx(), FlagID, DirType, SlotSize, SlotNum, LocalSlotNum);
-            auto *storage = reinterpret_cast<SharedStateStorage *>(hook(key, sizeof(SharedStateStorage)));
+        if (auto hook = cpu_sim::get_pipe_shared_state_hook(); hook != nullptr) {
+            static_assert(SlotNum <= 0xFF && LocalSlotNum <= 0xFF,
+                          "pipe_key packs SlotNum/LocalSlotNum into 8 bits each; values must be <= 255");
+            uint64_t pipe_key = (uint64_t(FlagID) << 56) | (uint64_t(DirType) << 48) | (uint64_t(SlotNum) << 40) |
+                                (uint64_t(LocalSlotNum) << 32) | uint64_t(SlotSize);
+            auto *storage = reinterpret_cast<SharedStateStorage *>(hook(pipe_key, sizeof(SharedStateStorage)));
             EnsureSharedStateInitialized(*storage);
             return *std::launder(reinterpret_cast<SharedState *>(storage->payload));
         }
@@ -354,57 +354,16 @@ struct TPipe {
 };
 
 template <typename Pipe, typename TileProd, TileSplitAxis Split>
-PTO_INTERNAL void TPush_c2v(Pipe &pipe, TileProd &tile, size_t entryBase, size_t slotIndex)
-{
-    using T = typename TileProd::DType;
-
-    constexpr int consRows =
-        (Split == TileSplitAxis::TILE_UP_DOWN) ? (TileProd::Rows / 2) : static_cast<int>(TileProd::Rows);
-    constexpr int consCols =
-        (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? (TileProd::Cols / 2) : static_cast<int>(TileProd::Cols);
-
-    if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
-        using SlotTile = Tile<TileType::Vec, T, consRows, consCols, BLayout::RowMajor, consRows, consCols>;
-        SlotTile slotTile;
-        TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.C2V_CONSUMER_BUF + entryBase));
-        cpu_pipe::CopyTileWindow(slotTile, tile, 0, 0);
-    } else {
-        auto &slotStorage = Pipe::GetSharedState().local_slot_storage[slotIndex];
-        for (uint32_t splitIndex = 0; splitIndex < cpu_pipe::GetSplitCount<Split>(); ++splitIndex) {
-            auto *slotPtr = reinterpret_cast<T *>(slotStorage.data() + splitIndex * Pipe::RingFiFo::SLOT_SIZE +
-                                                  pipe.prod.entryOffset);
-            const uint32_t rowOffset = (Split == TileSplitAxis::TILE_UP_DOWN) ? splitIndex * consRows : 0;
-            const uint32_t colOffset = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? splitIndex * consCols : 0;
-            cpu_pipe::CopyTileWindowToLinear(slotPtr, consCols, tile, consRows, rowOffset, colOffset);
-        }
-    }
-}
-
-template <typename Pipe, typename TileProd, TileSplitAxis Split>
-PTO_INTERNAL void TPush_v2c(Pipe &pipe, TileProd &tile, size_t entryBase)
-{
-    using T = typename TileProd::DType;
-    constexpr int consRows =
-        (Split == TileSplitAxis::TILE_UP_DOWN) ? (TileProd::Rows * 2) : static_cast<int>(TileProd::Rows);
-    constexpr int consCols =
-        (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? (TileProd::Cols * 2) : static_cast<int>(TileProd::Cols);
-    using SlotTile = Tile<TileType::Mat, T, consRows, consCols, BLayout::RowMajor, consRows, consCols>;
-    SlotTile slotTile;
-    TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.V2C_CONSUMER_BUF + entryBase));
-    cpu_pipe::FillTile(slotTile, static_cast<T>(0));
-    cpu_pipe::InsertTileWindow(slotTile, tile, cpu_pipe::GetSplitRowOffset<Split, SlotTile>(),
-                               cpu_pipe::GetSplitColOffset<Split, SlotTile>());
-}
-
-template <typename Pipe, typename TileProd, TileSplitAxis Split>
 PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
 {
     if (pipe.prod.getAllocateStatus()) {
         pipe.prod.template allocate<Split>();
     }
+
     const std::size_t slotIndex = static_cast<std::size_t>(pipe.prod.getTileId() % Pipe::RingFiFo::SLOT_NUM);
     const std::size_t entryBase =
         slotIndex * Pipe::RingFiFo::SLOT_SIZE + static_cast<std::size_t>(pipe.prod.entryOffset);
+
     if (pipe.fifo.GM_SLOT_BUFFER != nullptr) {
         using T = typename TileProd::DType;
         constexpr int rows = TileProd::Rows;
@@ -419,10 +378,42 @@ PTO_INTERNAL void TPUSH_IMPL(Pipe &pipe, TileProd &tile)
         GlobalData globalData(addr);
         TSTORE_IMPL(globalData, tile);
     } else if constexpr (Pipe::is_c2v) {
-        TPush_c2v<Pipe, TileProd, Split>(pipe, tile, entryBase, slotIndex);
+        using T = typename TileProd::DType;
+        constexpr int consRows =
+            (Split == TileSplitAxis::TILE_UP_DOWN) ? (TileProd::Rows / 2) : static_cast<int>(TileProd::Rows);
+        constexpr int consCols =
+            (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? (TileProd::Cols / 2) : static_cast<int>(TileProd::Cols);
+        if constexpr (Split == TileSplitAxis::TILE_NO_SPLIT) {
+            using SlotTile = Tile<TileType::Vec, T, consRows, consCols, BLayout::RowMajor, consRows, consCols>;
+
+            SlotTile slotTile;
+            TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.C2V_CONSUMER_BUF + entryBase));
+            cpu_pipe::CopyTileWindow(slotTile, tile, 0, 0);
+        } else {
+            auto &slotStorage = Pipe::GetSharedState().local_slot_storage[slotIndex];
+            for (uint32_t splitIndex = 0; splitIndex < cpu_pipe::GetSplitCount<Split>(); ++splitIndex) {
+                auto *slotPtr = reinterpret_cast<T *>(slotStorage.data() + splitIndex * Pipe::RingFiFo::SLOT_SIZE +
+                                                      pipe.prod.entryOffset);
+                const uint32_t rowOffset = (Split == TileSplitAxis::TILE_UP_DOWN) ? splitIndex * consRows : 0;
+                const uint32_t colOffset = (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? splitIndex * consCols : 0;
+                cpu_pipe::CopyTileWindowToLinear(slotPtr, consCols, tile, consRows, rowOffset, colOffset);
+            }
+        }
     } else if constexpr (Pipe::is_v2c) {
-        TPush_v2c<Pipe, TileProd, Split>(pipe, tile, entryBase);
+        using T = typename TileProd::DType;
+        constexpr int consRows =
+            (Split == TileSplitAxis::TILE_UP_DOWN) ? (TileProd::Rows * 2) : static_cast<int>(TileProd::Rows);
+        constexpr int consCols =
+            (Split == TileSplitAxis::TILE_LEFT_RIGHT) ? (TileProd::Cols * 2) : static_cast<int>(TileProd::Cols);
+        using SlotTile = Tile<TileType::Mat, T, consRows, consCols, BLayout::RowMajor, consRows, consCols>;
+
+        SlotTile slotTile;
+        TASSIGN(slotTile, static_cast<uint64_t>(pipe.fifo.V2C_CONSUMER_BUF + entryBase));
+        cpu_pipe::FillTile(slotTile, static_cast<T>(0));
+        cpu_pipe::InsertTileWindow(slotTile, tile, cpu_pipe::GetSplitRowOffset<Split, SlotTile>(),
+                                   cpu_pipe::GetSplitColOffset<Split, SlotTile>());
     }
+
     if (pipe.prod.getRecordStatus()) {
         pipe.prod.template record<Split>();
     }

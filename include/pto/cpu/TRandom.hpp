@@ -75,8 +75,9 @@ PTO_INTERNAL void TRANDOM_IMPL(DstTile &dst, TRandomKey &key, TRandomCounter &co
     constexpr uint32_t rowStrideChunks = DstTile::RowStride / cpu_random::kTrandomOnceRepeat;
     const uint32_t validRows = static_cast<uint32_t>(dst.GetValidRow());
     const uint32_t validCols = static_cast<uint32_t>(dst.GetValidCol());
-    const uint32_t loopCount = (validCols + cpu_random::kTrandomOnceRepeat * elementsPerRepeat - 1) /
-                               (cpu_random::kTrandomOnceRepeat * elementsPerRepeat);
+    const uint32_t loopCount =
+        (validCols + cpu_random::kTrandomOnceRepeat * elementsPerRepeat - 1) /
+        (cpu_random::kTrandomOnceRepeat * elementsPerRepeat);
 
     const std::array<uint32_t, 2> baseKey = {key[0], key[1]};
     std::array<uint32_t, 4> rowCounter = {counter[0], counter[1], counter[2], counter[3]};
@@ -88,8 +89,8 @@ PTO_INTERNAL void TRANDOM_IMPL(DstTile &dst, TRandomKey &key, TRandomCounter &co
                 cpu_random::IncrementCounter(laneCounter, lane);
                 const auto out = cpu_random::RunRounds<Rounds>(laneCounter, baseKey);
                 for (uint32_t repeat = 0; repeat < cpu_random::kTrandomOnceRepeat; ++repeat) {
-                    const uint32_t col =
-                        loop * cpu_random::kTrandomOnceRepeat * elementsPerRepeat + repeat * elementsPerRepeat + lane;
+                    const uint32_t col = loop * cpu_random::kTrandomOnceRepeat * elementsPerRepeat +
+                                         repeat * elementsPerRepeat + lane;
                     if (col >= validCols) {
                         continue;
                     }

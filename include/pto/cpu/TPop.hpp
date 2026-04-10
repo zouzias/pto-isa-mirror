@@ -53,8 +53,9 @@ PTO_INTERNAL void TPOP_IMPL(Pipe &pipe, TileCons &tile)
             constexpr uint32_t splitCount = cpu_pipe::GetSplitCount<Split>();
             const uint32_t splitIndex = (get_subblockid() < splitCount) ? get_subblockid() : (splitCount - 1);
             const auto &slotStorage = Pipe::GetSharedState().local_slot_storage[slotIndex];
-            const auto *slotPtr = reinterpret_cast<const T *>(
-                slotStorage.data() + splitIndex * Pipe::RingFiFo::SLOT_SIZE + pipe.cons.entryOffset);
+            const auto *slotPtr = reinterpret_cast<const T *>(slotStorage.data() +
+                                                              splitIndex * Pipe::RingFiFo::SLOT_SIZE +
+                                                              pipe.cons.entryOffset);
             cpu_pipe::CopyLinearToTile(tile, slotPtr, static_cast<uint32_t>(tile.GetValidCol()));
         }
     } else if constexpr (Pipe::is_v2c) {

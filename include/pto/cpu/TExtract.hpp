@@ -14,7 +14,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cassert>
 
 namespace pto {
-
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t idxRow = 0, uint32_t idxCol = 0)
 {
@@ -28,5 +27,14 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t idx
     }
 }
 
+template <typename DstTileData, typename SrcTileData, typename FpTileData,
+          ReluPreMode reluMode = ReluPreMode::NoRelu, std::enable_if_t<is_tile<FpTileData>::value, int> = 0>
+PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint32_t idxRow = 0,
+                                uint32_t idxCol = 0)
+{
+    (void)fp;
+    (void)reluMode;
+    TEXTRACT_IMPL(dst, src, idxRow, idxCol);
+}
 } // namespace pto
 #endif // TEXTRACT_HPP

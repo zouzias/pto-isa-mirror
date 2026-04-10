@@ -107,7 +107,12 @@ TEST_F(TNEGTest, case_half_16x256_16x256)
 {
     test_tneg<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>();
 }
-
+#ifdef CPU_SIM_BFLOAT_ENABLED
+TEST_F(TNEGTest, case_bf16_16x256_16x256_16x256)
+{
+    test_tneg<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256>();
+}
+#endif
 TEST_F(TNEGTest, case_float_128x128_64x64)
 {
     test_tneg<float, NUM_128, NUM_128, NUM_64, NUM_64>();

@@ -14,7 +14,7 @@ The `TPRINT` instruction outputs the logical view of data stored in a Tile or Gl
 > **Important**:
 > - This instruction is **for development and debugging ONLY**.
 > - It incurs **significant runtime overhead** and **must not be used in production kernels**.
-> - Output may be **truncated** if it exceeds the internal print buffer. The print buffer can be modified by adding `-DCCEBlockMaxSize=16384` in compile options; default is 16KB.
+> - Output may be **truncated** if it exceeds the internal print buffer. The print buffer can be adjusted with `-DCCEBlockMaxSize=16384`; the default is 16 KiB.
 > - **Requires CCE compilation option `-D_DEBUG --cce-enable-print`** (see [Behavior](#behavior)).
 
 ## Assembly Syntax
@@ -36,6 +36,18 @@ pto.tprint %src : !pto.tile<...> | !pto.partition_tensor_view<MxNxdtype> -> ()
 ```text
 pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>)
 ```
+
+### IR Level 1 (SSA)
+
+```text
+pto.tprint %src : !pto.tile<...> | !pto.partition_tensor_view<MxNxdtype> -> ()
+```
+
+### IR Level 2 (DPS)
+
+```text
+pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>)
+```
 ## C++ Intrinsic
 Declared in `include/pto/common/pto_instr.hpp`:
 ```cpp
@@ -43,13 +55,13 @@ Declared in `include/pto/common/pto_instr.hpp`:
 template <typename TileData>
 PTO_INST void TPRINT(TileData &src);
 
-// For printing Acc-type Tile and Mat-type Tile (Mat printing only supported for A3, not yet for A5)
+// For printing Acc-type Tile and Mat-type Tile (Mat printing is currently A3-only)
 template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp);
 ```
 
 ### Supported Types for T
-- **Tile**: TileType must be `Vec`, `Acc`, `Mat (A3 only)`, and have a supported element type.
+- **Tile**: `TileType` may be `Vec`, `Acc`, or `Mat` (Mat printing is currently supported on A3 only).
 - **GlobalTensor**: Must use layout `ND`, `DN`, or `NZ`, and have a supported element type.
 
 ## Constraints
@@ -59,9 +71,9 @@ PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp);
     - Signed integers: `int8_t`, `int16_t`, `int32_t`
     - Unsigned integers: `uint8_t`, `uint16_t`, `uint32_t`
 - **For GlobalTensor**: Layout must be one of `Layout::ND`, `Layout::DN`, or `Layout::NZ`.
-- **For temporary space**: Printing a Tile with `TileType` of `Mat` or `Acc` requires temporary space on GM. The temporary space must not be less than `TileData::Numel * sizeof(T)`.
-- A5 does not yet support printing Tiles with `TileType` of `Mat`.
-- **Echo information**: When `TileType` is `Mat`, the layout will be printed according to `Layout::ND`; other layouts may result in misaligned information.
+- **For temporary space**: Printing a `Tile` with `TileType::Mat` or `TileType::Acc` requires GM temporary space. The temporary buffer must be at least `TileData::Numel * sizeof(T)`.
+- A5 does not yet support printing `TileType::Mat`.
+- When `TileType` is `Mat`, the output is formatted according to `Layout::ND`; other layouts may appear misaligned.
 
 ## Behavior
 - **Mandatory Compilation Flag**:
@@ -150,4 +162,3 @@ pto.tprint %src : !pto.tile<...> | !pto.partition_tensor_view<MxNxdtype> -> ()
 # AS Level 2 (DPS)
 pto.tprint ins(%src : !pto.tile_buf<...> | !pto.partition_tensor_view<MxNxdtype>)
 ```
-

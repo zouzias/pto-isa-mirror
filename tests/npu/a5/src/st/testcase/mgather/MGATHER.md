@@ -31,7 +31,7 @@ Indices are interpreted as linear element offsets into the source.
 
 ## Assembly Syntax
 
-PTO-AS form: see [docs/assembly/PTO-AS.md](/docs/assembly/PTO-AS.md).
+PTO-AS form: see [PTO-AS Specification](../../../../../../../docs/assembly/PTO-AS.md).
 
 Row-indexed gather:
 
@@ -199,8 +199,8 @@ void example_manual() {
 
 ## Related Instructions
 
-- [`TLOAD`](/docs/isa/TLOAD.md): Contiguous block transfer from GM to Tile
-- [`TGATHER`](/docs/isa/TGATHER.md): Index-based gather within tiles (UB-to-UB)
+- [`TLOAD`](../../../../../../../docs/isa/TLOAD.md): Contiguous block transfer from GM to Tile
+- [`TGATHER`](../../../../../../../docs/isa/TGATHER.md): Index-based gather within tiles (UB-to-UB)
 - [`MSCATTER`](../mscatter/MSCATTER.md): Indexed scatter from Tile to GM (inverse operation)
 
 ## Test Cases

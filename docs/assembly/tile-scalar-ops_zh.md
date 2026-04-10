@@ -12,13 +12,14 @@
 
 该指令的详细介绍请见[isa/TEXPANDS](../isa/TEXPANDS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.texpands %scalar : dtype -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -29,13 +30,14 @@ pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 
 该指令的详细介绍请见[isa/TCMPS](../isa/TCMPS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tcmps %src, %scalar {cmpMode = #pto<cmp xx>} : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -46,13 +48,14 @@ pto.tcmps ins(%src, %scalar{cmpMode = #pto<cmp xx>}: !pto.tile_buf<...>, dtype) 
 
 该指令的详细介绍请见[isa/TSELS](../isa/TSELS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tsels %src0, %src1, %scalar : (!pto.tile<...>, !pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -63,13 +66,14 @@ pto.tsels ins(%src0, %src1, %scalar : !pto.tile_buf<...>, !pto.tile_buf<...>, dt
 
 该指令的详细介绍请见[isa/TMINS](../isa/TMINS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tmins %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tmins ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -80,13 +84,14 @@ pto.tmins ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TADDS](../isa/TADDS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tadds %src, %scalar : (!pto.tile<...>,dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tadds ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -97,13 +102,14 @@ pto.tadds ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TSUBS](../isa/TSUBS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tsubs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tsubs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -114,14 +120,15 @@ pto.tsubs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TDIVS](../isa/TDIVS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tdivs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 %dst = pto.tdivs %scalar, %src : (dtype, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tdivs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 pto.tdivs ins(%scalar, %src : dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
@@ -133,13 +140,14 @@ pto.tdivs ins(%scalar, %src : dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TMULS](../isa/TMULS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tmuls %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tmuls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -150,13 +158,14 @@ pto.tmuls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TFMODS](../isa/TFMODS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tfmods %src, %scalar : !pto.tile<...>, f32
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tfmods ins(%src, %scalar : !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -167,13 +176,14 @@ pto.tfmods ins(%src, %scalar : !pto.tile_buf<...>, f32) outs(%dst : !pto.tile_bu
 
 该指令的详细介绍请见[isa/TREMS](../isa/TREMS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.trems %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -184,13 +194,14 @@ pto.trems ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TMAXS](../isa/TMAXS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tmaxs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tmaxs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -201,13 +212,14 @@ pto.tmaxs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TANDS](../isa/TANDS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tands %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tands ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -218,13 +230,14 @@ pto.tands ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TORS](../isa/TORS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -235,13 +248,14 @@ pto.tors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_bu
 
 该指令的详细介绍请见[isa/TSHLS](../isa/TSHLS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tshls %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tshls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -252,13 +266,14 @@ pto.tshls ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TSHRS](../isa/TSHRS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tshrs %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tshrs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -269,13 +284,14 @@ pto.tshrs ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TXORS](../isa/TXORS_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.txors %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.txors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -286,13 +302,14 @@ pto.txors ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_b
 
 该指令的详细介绍请见[isa/TLRELU](../isa/TLRELU_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tlrelu %src, %scalar : (!pto.tile<...>, dtype) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tlrelu ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -303,13 +320,14 @@ pto.tlrelu ins(%src, %scalar : !pto.tile_buf<...>, dtype) outs(%dst : !pto.tile_
 
 该指令的详细介绍请见[isa/TADDSC](../isa/TADDSC_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.taddsc %src0, %scalar, %src1 : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.taddsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
@@ -320,13 +338,14 @@ pto.taddsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<
 
 该指令的详细介绍请见[isa/TSUBSC](../isa/TSUBSC_zh.md)
 
-
 **AS Level 1 (SSA)：**
+
 ```text
 %dst = pto.tsubsc %src0, %scalar, %src1 : (!pto.tile<...>, dtype, !pto.tile<...>) -> !pto.tile<...>
 ```
 
 **AS Level 2 (DPS)：**
+
 ```text
 pto.tsubsc ins(%src0, %scalar, %src1 : !pto.tile_buf<...>, dtype, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```

@@ -84,10 +84,12 @@ TEST(TRandomCpuSimTest, Rounds10MatchesExactReferenceFor4x256)
 
     TRANDOM<10>(dst, key, counter);
 
-    const auto expected = BuildExpected<10>(4, 256, {key[0], key[1]}, {counter[0], counter[1], counter[2], counter[3]});
+    const auto expected = BuildExpected<10>(4, 256, {key[0], key[1]},
+                                            {counter[0], counter[1], counter[2], counter[3]});
     for (int r = 0; r < dst.GetValidRow(); ++r) {
         for (int c = 0; c < dst.GetValidCol(); ++c) {
-            EXPECT_EQ(dst.data()[GetTileElementOffset<TileData>(r, c)], expected[r * dst.GetValidCol() + c]);
+            EXPECT_EQ(dst.data()[GetTileElementOffset<TileData>(r, c)],
+                      expected[r * dst.GetValidCol() + c]);
         }
     }
 }
@@ -102,7 +104,8 @@ TEST(TRandomCpuSimTest, Rounds7MatchesExactReference)
 
     TRANDOM<7>(dst, key, counter);
 
-    const auto expected = BuildExpected<7>(2, 256, {key[0], key[1]}, {counter[0], counter[1], counter[2], counter[3]});
+    const auto expected = BuildExpected<7>(2, 256, {key[0], key[1]},
+                                           {counter[0], counter[1], counter[2], counter[3]});
     for (int r = 0; r < dst.GetValidRow(); ++r) {
         for (int c = 0; c < dst.GetValidCol(); ++c) {
             EXPECT_EQ(static_cast<uint32_t>(dst.data()[GetTileElementOffset<TileData>(r, c)]),
