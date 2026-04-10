@@ -156,6 +156,53 @@ def fp32_to_int8_asym(valid_rows, valid_cols, mode):
     return src_fp32, src_u8
 
 
+def bf16_to_mxfp8(valid_rows, valid_cols, mode):
+    padded_cols = ((valid_cols + 31) // 32) * 32
+
+    mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
+    signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
+    src_fp32 = (mags * signs).astype(np.float32)
+    src_fp32 = np.clip(src_fp32, -1e8, 1e8)
+
+    # Cast to BF16 to capture precision truncation; save raw BF16 bytes as input.
+    src_bf16 = src_fp32.astype(bfloat16)
+    src_bf16.tofile("input.bin")
+
+    # Widen back to FP32 (exact) for all golden computations.
+    src_as_fp32 = src_bf16.astype(np.float32)
+    pad_value = np.float32(-np.inf)
+    padded_src = np.full((valid_rows, padded_cols), pad_value, dtype=np.float32)
+    padded_src[:, :valid_cols] = src_as_fp32
+
+    # Scaling values are powers of 2 — always BF16-exact — so no adjustment needed.
+    e8m0, scaling, data_fp8, group_max = quant_fp32_to_e4m3(padded_src, mode=mode)
+    return
+
+
+def f16_to_mxfp8(valid_rows, valid_cols, mode):
+    padded_cols = ((valid_cols + 31) // 32) * 32
+
+    mags = np.random.lognormal(mean=0.0, sigma=2.0, size=(valid_rows, valid_cols))
+    signs = np.where(np.random.rand(valid_rows, valid_cols) < 0.5, -1.0, 1.0)
+    src_fp32 = (mags * signs).astype(np.float32)
+    # Clip to FP16 representable range before casting
+    src_fp32 = np.clip(src_fp32, -65504.0, 65504.0)
+
+    # Cast to FP16 to capture precision truncation; save raw FP16 bytes as input.
+    src_f16 = src_fp32.astype(np.float16)
+    src_f16.tofile("input.bin")
+
+    # Widen back to FP32 (exact) for all golden computations.
+    src_as_fp32 = src_f16.astype(np.float32)
+    pad_value = np.float32(-np.inf)
+    padded_src = np.full((valid_rows, padded_cols), pad_value, dtype=np.float32)
+    padded_src[:, :valid_cols] = src_as_fp32
+
+    # Scaling values are powers of 2 — always FP16-exact — so no adjustment needed.
+    e8m0, scaling, data_fp8, group_max = quant_fp32_to_e4m3(padded_src, mode=mode)
+    return
+
+
 def fp32_to_mxfp8(valid_rows, valid_cols, mode):
     padded_cols = ((valid_cols + 31) // 32) * 32
 
@@ -185,21 +232,25 @@ def gen_golden_data_tquant(case_name, param):
         fp32_to_int8_sym(valid_rows, valid_cols, mode)
     elif out_dtype_str == "int8_asym":
         fp32_to_int8_asym(valid_rows, valid_cols, mode)
+    elif out_dtype_str == "mxfp8" and param.dtype == bfloat16:
+        bf16_to_mxfp8(valid_rows, valid_cols, mode)
+    elif out_dtype_str == "mxfp8" and param.dtype == np.float16:
+        f16_to_mxfp8(valid_rows, valid_cols, mode)
     else:
         fp32_to_mxfp8(valid_rows, valid_cols, mode)
     return
 
 
 class TQuantParams:
-    def __init__(self, out_dtype_str, valid_rows, valid_cols, mode="nd"):
+    def __init__(self, out_dtype_str, valid_rows, valid_cols, mode="nd", dtype=np.float32):
         self.valid_rows = valid_rows
         self.valid_cols = valid_cols
-        self.dtype = np.float32
+        self.dtype = dtype
         self.mode = mode
         self.out_dtype_str = {"s8": "int8_sym", "mxfp8": "mxfp8", "u8": "int8_asym"}[out_dtype_str]
 
         ## convert dtype to string for case name to match that in main.cpp
-        self.dtype_str = {np.float32: "fp32", bfloat16: "bf16"}[self.dtype]
+        self.dtype_str = {np.float32: "fp32", bfloat16: "bf16", np.float16: "f16"}[self.dtype]
 
 
 def generate_case_name(param):
@@ -231,6 +282,16 @@ if __name__ == "__main__":
         TQuantParams("u8", 64, 128, mode="nd"),
         TQuantParams("u8", 128, 128, mode="nd"),
         TQuantParams("u8", 256, 128, mode="nd"),
+        # MXFP8 BF16 ND cases
+        TQuantParams("mxfp8", 32, 32, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 32, 64, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 64, 128, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 128, 128, mode="nd", dtype=bfloat16),
+        # MXFP8 FP16 ND cases
+        TQuantParams("mxfp8", 32, 32, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp8", 32, 64, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp8", 64, 128, mode="nd", dtype=np.float16),
+        TQuantParams("mxfp8", 128, 128, mode="nd", dtype=np.float16),
     ]
 
     for param in case_params_list:
