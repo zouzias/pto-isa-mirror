@@ -22,10 +22,12 @@ def gen_golden_data_trem(case_name, param):
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = np.random.randint(1, 10, size=[row, col]).astype(dtype)
-    input2 = np.random.randint(1, 10, size=[row, col]).astype(dtype)
+    input1 = np.random.randint(-100, 100, size=[row, col]).astype(dtype)
+    input2 = np.random.randint(-100, 100, size=[row, col]).astype(dtype)
+    input2[input2 == 0] = 1
 
-    # Perform the addbtraction
+    # Perform the operation
+    # Note that % operation in Python have different behavior on negatives comparing to C++ (C++ truncates during division, Python floors)
     golden = input1 % input2
 
     # Save the input and golden data to binary files
@@ -71,7 +73,7 @@ if __name__ == "__main__":
     case_params_list = [
         TRemParams(np.float32, 64, 64, 64, 64),
         TRemParams(np.float16, 16, 256, 16, 256),
-        TRemParams(np.float32, 32, 512, 64, 64),
+        TRemParams(np.float32, 64, 512, 64, 64),
         TRemParams(np.float16, 32, 512, 16, 256)
     ]
 

@@ -23,60 +23,43 @@ constexpr int CONSTRAINT_ROWMAJOR = 3;
 constexpr int NO_CONSTRAINT = 4;
 
 template <ElementOp op>
-struct CategoryBinSOps : std::false_type {
-};
+struct CategoryBinSOps : std::false_type {};
 
 template <>
-struct CategoryBinSOps<ElementOp::OP_ADDS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
-};
+struct CategoryBinSOps<ElementOp::OP_ADDS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_DIVS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
-};
+struct CategoryBinSOps<ElementOp::OP_DIVS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_RDIVS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
-};
+struct CategoryBinSOps<ElementOp::OP_RDIVS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_MULS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
-};
+struct CategoryBinSOps<ElementOp::OP_MULS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_MAXS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
-};
+struct CategoryBinSOps<ElementOp::OP_MAXS> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_LRELU> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {
-};
+struct CategoryBinSOps<ElementOp::OP_LRELU> : std::integral_constant<int, CONSTRAINT_VEC_ROWMAJOR> {};
 
 template <>
-struct CategoryBinSOps<ElementOp::OP_SUBS> : std::integral_constant<int, CONSTRAINT_VEC> {
-};
+struct CategoryBinSOps<ElementOp::OP_SUBS> : std::integral_constant<int, CONSTRAINT_VEC> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_REMS> : std::integral_constant<int, CONSTRAINT_VEC> {
-};
+struct CategoryBinSOps<ElementOp::OP_REMS> : std::integral_constant<int, CONSTRAINT_VEC> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_MINS> : std::integral_constant<int, CONSTRAINT_VEC> {
-};
+struct CategoryBinSOps<ElementOp::OP_MINS> : std::integral_constant<int, CONSTRAINT_VEC> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_ANDS> : std::integral_constant<int, CONSTRAINT_VEC> {
-};
+struct CategoryBinSOps<ElementOp::OP_ANDS> : std::integral_constant<int, CONSTRAINT_VEC> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_ORS> : std::integral_constant<int, CONSTRAINT_VEC> {
-};
+struct CategoryBinSOps<ElementOp::OP_ORS> : std::integral_constant<int, CONSTRAINT_VEC> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_FMODS> : std::integral_constant<int, CONSTRAINT_VEC> {
-};
+struct CategoryBinSOps<ElementOp::OP_FMODS> : std::integral_constant<int, CONSTRAINT_VEC> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_SHLS> : std::integral_constant<int, CONSTRAINT_VEC> {
-};
+struct CategoryBinSOps<ElementOp::OP_SHLS> : std::integral_constant<int, CONSTRAINT_VEC> {};
 template <>
-struct CategoryBinSOps<ElementOp::OP_SHRS> : std::integral_constant<int, CONSTRAINT_VEC> {
-};
+struct CategoryBinSOps<ElementOp::OP_SHRS> : std::integral_constant<int, CONSTRAINT_VEC> {};
 
 template <>
-struct CategoryBinSOps<ElementOp::OP_SELS> : std::integral_constant<int, CONSTRAINT_ROWMAJOR> {
-};
+struct CategoryBinSOps<ElementOp::OP_SELS> : std::integral_constant<int, CONSTRAINT_ROWMAJOR> {};
 
 template <>
-struct CategoryBinSOps<ElementOp::OP_XORS> : std::integral_constant<int, NO_CONSTRAINT> {
-};
+struct CategoryBinSOps<ElementOp::OP_XORS> : std::integral_constant<int, NO_CONSTRAINT> {};
 
 template <typename TileData, ElementOp op>
 PTO_INTERNAL void CheckBinSOpTileData()
@@ -211,7 +194,11 @@ template <typename TileDst, typename TileSrc>
 PTO_INTERNAL void TREMS_IMPL(TileDst &dst, TileSrc &src, typename TileSrc::DType scalar, TileDst &tmp)
 {
     (void)tmp;
-    TREMS_IMPL(dst, src, scalar);
+    if (scalar != static_cast<TileSrc::DType>(0)) {
+        TREMS_IMPL(dst, src, scalar);
+    } else {
+        PTO_ASSERT(false, "illegal src is zero");
+    }
 }
 
 template <typename TileDst, typename TileSrc>
@@ -254,7 +241,11 @@ PTO_INTERNAL void TLRELU_IMPL(TileDst &dst, TileSrc &src, typename TileSrc::DTyp
 template <typename TileDst, typename TileSrc>
 PTO_INTERNAL void TFMODS_IMPL(TileDst &dst, TileSrc &src, typename TileSrc::DType scalar)
 {
-    UnaryTileScalarOpImpl<TileDst, TileSrc, ElementOp::OP_FMODS>(dst, src, scalar);
+    if (scalar != static_cast<TileSrc::DType>(0)) {
+        UnaryTileScalarOpImpl<TileDst, TileSrc, ElementOp::OP_FMODS>(dst, src, scalar);
+    } else {
+        PTO_ASSERT(false, "illegal src is zero");
+    }
 }
 
 template <typename TileDst, typename TileSrc>

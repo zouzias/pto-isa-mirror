@@ -103,9 +103,9 @@ TEST_F(TREMTest, case_half_16x256_16x256)
 {
     test_trem<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>();
 }
-TEST_F(TREMTest, case_float_32x512_64x64)
+TEST_F(TREMTest, case_float_64x512_64x64)
 {
-    test_trem<float, NUM_32, NUM_512, NUM_64, NUM_64>();
+    test_trem<float, NUM_64, NUM_512, NUM_64, NUM_64>();
 }
 TEST_F(TREMTest, case_half_32x512_16x256)
 {
