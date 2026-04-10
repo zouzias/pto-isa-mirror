@@ -56,16 +56,16 @@ PTO_INST void TSYNC(WaitEvents &... events)
 }
 
 #if defined(_DEBUG) || defined(__CPU_SIM)
-template <typename TileData>
+template <PrintFormat Format = PrintFormat::Width8_Precision4, typename TileData>
 PTO_INST void TPRINT(TileData &src)
 {
-    MAP_INSTR_IMPL(TPRINT, src);
+    TPRINT_IMPL<Format>(src);
 }
 
-template <typename TileData, typename GlobalData>
+template <PrintFormat Format = PrintFormat::Width8_Precision4, typename TileData, typename GlobalData>
 PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp)
 {
-    MAP_INSTR_IMPL(TPRINT, src, tmp);
+    TPRINT_IMPL<Format>(src, tmp);
 }
 #endif
 
