@@ -11,8 +11,8 @@ Data flow:
 ## Template Parameter
 
 - `engine`:
-    - `DmaEngine::SDMA` (default)
-    - `DmaEngine::URMA` (todo)
+  - `DmaEngine::SDMA` (default)
+  - `DmaEngine::URMA` (todo)
 
 > **Important (SDMA path)**  
 > `TGET_ASYNC` with `DmaEngine::SDMA` currently supports **only flat contiguous logical 1D tensors**.  
@@ -50,41 +50,43 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 
 The engine template parameter selects the backend (currently only SDMA).
 
-Parameters with defaults:
+### Parameter Reference
 
-| Parameter | Default | Description |
-|---|---|---|
-| `syncId` | `0` | MTE3/MTE2 pipe sync event id (0-7). Override if kernel uses other pipe barriers on the same id. |
-| `baseConfig` | `{1024*1024, 0, 1}` | `{block_bytes, comm_block_offset, queue_num}`. Suitable for most single-queue transfers. |
-| `channelGroupIdx` | `kAutoChannelGroupIdx` | SDMA channel group index. Default uses `get_block_idx()` internally, mapping to current AI core. Override for multi-block or custom channel mapping scenarios. |
+
+| Parameter                      | Type                                             | Required | Default                                                   | Valid Range           | Description                                                                                                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------ | -------- | --------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scratchTile`                  | `Tile<TileType::Vec, uint8_t, 1, UB_ALIGN_SIZE>` | **Yes**  | —                                                         | bytes >= 8            | UB Vec tile for SDMA control-plane reads/writes (doorbell, event record, tail state). **Not** used for payload data. Do not reuse while async ops are in-flight.                                                                   |
+| `workspace`                    | `__gm__ uint8_t` *                               | **Yes**  | —                                                         | non-`nullptr`         | Device-side SDMA context GM region (channel info, SQ ring addresses, workspace flags). Initialized by host-side `SdmaWorkspaceManager` + AICPU operator. Layout: `BatchWriteFlagInfo(64B)`                                         |
+| `syncId`                       | `uint32_t`                                       | No       | `0`                                                       | 0–7 (MTE event id)    | MTE3/MTE2 pipe sync event id for `set_flag`/`wait_flag` pairs in `SetValue`/`GetValue`. Override only if kernel uses other pipe barriers on the same id.                                                                           |
+| `baseConfig.block_bytes`       | `uint64_t`                                       | No       | `1048576` (1 MiB)                                         | > 0                   | Max bytes per data SQE. Total transfer splits into `ceil(transfer_size / block_bytes)` SQEs. Larger = less control overhead but coarser; per-queue SQE count (`ceil(iter_num / queue_num) + 1`) must not exceed `kSqDepth` (2048). |
+| `baseConfig.comm_block_offset` | `uint64_t`                                       | No       | `0`                                                       | >= 0                  | Byte offset on both src and dst: `addr = data() + offset + idx * block_bytes`. For multi-core partitioning of a shared buffer. Caller must ensure no out-of-bounds (no runtime check).                                             |
+| `baseConfig.queue_num`         | `uint32_t`                                       | No       | `1`                                                       | 1 – 48                | Parallel SDMA channels (SQ rings) for this block. SQEs distributed via `idx % queue_num`. Max concurrent blocks = `48 / queue_num`. `eventHandle` tracks queue 0 only. Start with 1.                                               |
+| `channelGroupIdx`              | `uint32_t`                                       | No       | `kAutoChannelGroupIdx` (`UINT32_MAX`) → `get_block_idx()` | `[0, 48 / queue_num)` | Selects consecutive channel group starting at `idx * queue_num`. Out-of-range silently returns `AsyncEvent(handle=0)`.                                                                                                             |
+
 
 ## Constraints
 
+### Compile-time Checks (static_assert)
+
 - `GlobalSrcData::RawDType == GlobalDstData::RawDType`
 - `GlobalSrcData::layout == GlobalDstData::layout`
-- SDMA path requires source tensor to be **flat contiguous logical 1D only**
-- workspace must be a valid GM pointer allocated by host-side `SdmaWorkspaceManager`
 
-If the 1D contiguous requirement is not met, current implementation returns an invalid async event (`handle == 0`).
+### Runtime Checks (enforced in code; returns failure or `AsyncEvent(handle=0)` on violation)
 
-## scratchTile Role
+- Both src and dst tensors must be **flat contiguous logical 1D**
+- dst tensor element count must be **>=** src tensor element count
+- src and dst GM pointers must be non-`nullptr`, i.e. the HCCL window must be initialized and the remote address must be valid
+- `blockDim * queue_num` must be **<= 48** (i.e. `channelGroupIdx < 48 / queue_num`). Both `BuildAsyncSession` and the data transfer path enforce this
+- `queue_num` must be in range **1 – 48** (must not exceed `kSdmaMaxChannel`)
+- `syncId` must be in range **0 – 7** (MTE event id)
+- Per-queue SQE count `ceil(iter_num / queue_num) + 1` (data SQEs + flag SQE) must not exceed **`kSqDepth` (2048)**. Enforced in the data transfer path
+- workspace must be a valid GM pointer allocated by host-side `SdmaWorkspaceManager` (non-`nullptr`)
 
-`scratchTile` is **not** used to hold transferred payload data.  
-It is converted to `TmpBuffer` and used as temporary UB workspace for:
+### Caller Responsibility (no runtime check)
 
-- writing/reading SDMA control words (flag, sq_tail, channel_info)
-- polling event completion flags
-- committing queue tail during completion
-
-The real payload path remains remote GM -> DMA engine -> local GM; `scratchTile` is only for control/synchronization metadata.
-
-## scratchTile Type and Size Constraints
-
-- must be a `pto::Tile` type
-- must be UB/Vec tile (`ScratchTile::Loc == TileType::Vec`)
-- available bytes must be at least `sizeof(uint64_t)` (8 bytes)
-
-Recommended: `Tile<TileType::Vec, uint8_t, 1, comm::sdma::UB_ALIGN_SIZE>` (256B).
+- When multiple blocks run concurrently, each block's **`channelGroupIdx` must be unique** — overlapping indices cause SQ ring and workspace corruption. Using the default `kAutoChannelGroupIdx` (resolves to `get_block_idx()`) satisfies this automatically; manual values require caller to guarantee uniqueness
+- While async operations are in-flight, **`event.Wait(session)` must be called** before destroying the session / scratchTile or starting a new batch. Otherwise the SQ ring may overflow and overwrite unconsumed SQEs
+- **`comm_block_offset + transfer_size`** must not exceed the actual size of the src/dst buffer; otherwise out-of-bounds memory access occurs
 
 ## Completion Semantics (Quiet Semantics)
 
@@ -165,3 +167,4 @@ __global__ AICORE void BatchGet(__gm__ T *localDstBase, __gm__ T *remoteSrcBase,
     (void)lastEvent.Wait(session);  // single Wait drains all pending ops
 }
 ```
+
