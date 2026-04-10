@@ -132,16 +132,19 @@ static constexpr uint32_t COMPAT_AICPU_OP_NOTIFY_MAX_NUM = 2;
 // on a remote rank.
 // ============================================================================
 template <typename T>
-AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T *localPtr, int pe)
+AICORE inline __gm__ T *HcclRemotePtr(__gm__ HcclDeviceContext *ctx, __gm__ T* localPtr, int pe)
 {
-    return localPtr;
+    int memberSize = ctx->winSize / sizeof(T);
+    if(ctx->rankId == pe) {
+        return localPtr;
+    }
+    T *buffer = new T[memberSize];
+    return buffer;
 }
 
 inline void *WindowAlloc(uint64_t windowBase, size_t &offset, size_t bytes)
 {
-    // void *ptr = reinterpret_cast<void *>(windowBase + offset);
     void *ptr = std::malloc(bytes);
-    // offset += bytes;
     return ptr;
 }
 

@@ -44,24 +44,24 @@ namespace comm {
 //   - All destination tensors in the ParallelGroup are assumed to have the same shape/strides.
 // ============================================================================
 
-template <typename GlobalDataDst, typename GlobalDataSrc>
+template <typename GlobalDataDst, typename T>
 void Scatter(
     typename GlobalDataDst::DType *dst, 
-    typename GlobalDataSrc::DType *src, 
-    long int srcShape[], 
-    long int srcStride[],
+    std::vector<T> src, 
     long int dstShape[], 
     long int dstStride[],
     long int srcOffset
 )
 {
+    int srcIndex = 0;
     for (size_t i = 0; i < dstShape[0]; i++) {
         for (size_t j = 0; j < dstShape[1]; j++) {
             for (size_t k = 0; k < dstShape[2]; k++) {
                 for (size_t l = 0; l < dstShape[3]; l++) {
                     for (size_t m = 0; m < dstShape[4]; m++) {
-                        int index = i * dstStride[0] + j * dstStride[1] + k * dstStride[2] + l * dstStride[3] + m * dstStride[4];
-                        dst[index] = src[index];
+                        int dstIndex = i * dstStride[0] + j * dstStride[1] + 
+                                k * dstStride[2] + l * dstStride[3] + m * dstStride[4];
+                        dst[dstIndex] = src[srcIndex++ + srcOffset];
                     }
                 }
             }
@@ -76,6 +76,7 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
 {
     using GlobalDstData = typename ParallelGroupTraits<ParallelGroupType>::GlobalDataType;
     using T = typename GlobalSrcData::RawDType;
+    T* srcArray = srcGlobalData.data();
 
     static_assert(std::is_same_v<T, typename GlobalDstData::RawDType>, "TSCATTER: GlobalData type mismatch!");
     static_assert(std::is_same_v<T, typename TileData::DType>,
@@ -84,13 +85,9 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
 
     const int nranks = parallelGroup.GetSize();
     const int rootIdx = parallelGroup.GetRootIdx();
-    const int myRank = parallelGroup.GetRank();
 
     PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
     PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
-
-    const int H = srcGlobalData.GetShape(3) / nranks;
-    const int W = srcGlobalData.GetShape(4);
 
     constexpr size_t numDims = 5;
     long int srcShape[numDims] = {
@@ -108,10 +105,29 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
         srcGlobalData.GetStride(4)
     };
 
-    for (int r = 0; i < nranks; ++i)
-    {
-        GlobalDstData& dstGlobalData = parallelGroup[n];
+    int srcSize = srcShape[0] * srcShape[1] * srcShape[2] * srcShape[3] * srcShape[4];
+    std::vector<T> buffer(srcSize);
 
+    int bufferIndx = 0;
+    for (size_t i = 0; i < srcShape[0]; i++) {
+        for (size_t j = 0; j < srcShape[1]; j++) {
+            for (size_t k = 0; k < srcShape[2]; k++) {
+                for (size_t l = 0; l < srcShape[3]; l++) {
+                    for (size_t m = 0; m < srcShape[4]; m++) {
+                        int index = i * srcStride[0] + j * srcStride[1] + 
+                            k * srcStride[2] + l * srcStride[3] + m * srcStride[4];
+                        buffer[bufferIndx++] = srcArray[index];
+                    }
+                }
+            }
+        }
+    }
+
+    size_t elementsPerRank = srcSize / nranks;
+
+    for (int r = 0; r < nranks; ++r)
+    {
+        GlobalDstData& dstGlobalData = parallelGroup[r];
         long int dstShape[numDims] = {
             dstGlobalData.GetShape(0), 
             dstGlobalData.GetShape(1), 
@@ -127,7 +143,13 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
             dstGlobalData.GetStride(4)
         };
 
-
+        long int currentSrcOffset = r * elementsPerRank;
+        Scatter<GlobalDstData, T>(
+            dstGlobalData.data(),
+            buffer,
+            dstShape, dstStride,
+            currentSrcOffset
+        );
     }
     
 }
@@ -165,7 +187,7 @@ PTO_INTERNAL void TSCATTER_IMPL(ParallelGroupType &parallelGroup, GlobalSrcData 
     PTO_ASSERT(nranks > 0, "ParallelGroup size must be greater than 0!");
     PTO_ASSERT(rootIdx >= 0 && rootIdx < nranks, "rootIdx must be in range [0, nranks)!");
 
-    // CPU Logic is not implemented yet
+    pto::comm::TSCATTER_IMPL(parallelGroup, srcGlobalData, pingTile);
 }
 
 } // namespace comm
