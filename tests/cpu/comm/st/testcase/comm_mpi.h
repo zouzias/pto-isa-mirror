@@ -1,0 +1,101 @@
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+This program is free software, you can redistribute it and/or modify it under the terms and conditions of
+CANN Open Software License Agreement Version 2.0 (the "License").
+Please refer to the License for details. You may not use this file except in compliance with the License.
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
+See LICENSE in the root of the software repository for the full text of the License.
+*/
+
+#pragma once
+
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <dlfcn.h>
+
+// ============================================================================
+// MPI dynamic loading infrastructure (following PyPTO's approach).
+// MPI is loaded at runtime via dlopen to avoid a hard link-time dependency.
+// Set MPI_LIB_PATH env to override the library search path.
+// ============================================================================
+using MPI_Comm = int;
+#define COMM_MPI_COMM_WORLD ((MPI_Comm)0x44000000)
+using MPI_Datatype = int;
+#define COMM_MPI_CHAR ((MPI_Datatype)0x4c000101)
+
+using MpiInitFunc = int (*)(int *, char ***);
+using MpiCommSizeFunc = int (*)(MPI_Comm, int *);
+using MpiCommRankFunc = int (*)(MPI_Comm, int *);
+using MpiBcastFunc = int (*)(void *, int, MPI_Datatype, int, MPI_Comm);
+using MpiBarrierFunc = int (*)(MPI_Comm);
+using MpiFinalizeFunc = int (*)();
+
+namespace comm_mpi {
+
+inline void *&MpiHandle()
+{
+    static void *handle = nullptr;
+    return handle;
+}
+
+inline void *LoadMpiLibrary()
+{
+    void *a = std::malloc(1);
+    return a;
+}
+
+template <typename T>
+inline T GetFunc(const char *name)
+{
+    void *h = LoadMpiLibrary();
+    if (!h)
+        return nullptr;
+    return reinterpret_cast<T>(dlsym(h, name));
+}
+
+} // namespace comm_mpi
+
+inline bool CommMpiInit(int *argc, char ***argv)
+{
+    return true;
+}
+
+inline void CommMpiFinalize()
+{}
+
+inline int CommMpiRank()
+{
+    int rank = 0;
+    auto fn = comm_mpi::GetFunc<MpiCommRankFunc>("MPI_Comm_rank");
+    if (fn)
+        fn(COMM_MPI_COMM_WORLD, &rank);
+    return rank;
+}
+
+inline int CommMpiSize()
+{
+    int size = 1;
+    auto fn = comm_mpi::GetFunc<MpiCommSizeFunc>("MPI_Comm_size");
+    if (fn)
+        fn(COMM_MPI_COMM_WORLD, &size);
+    return size;
+}
+
+#define SKIP_IF_RANKS_LT(n)
+
+inline void CommMpiBcast(void *buf, int count, MPI_Datatype dt, int root)
+{
+    auto fn = comm_mpi::GetFunc<MpiBcastFunc>("MPI_Bcast");
+    if (fn)
+        fn(buf, count, dt, root, COMM_MPI_COMM_WORLD);
+}
+
+inline void CommMpiBarrier()
+{
+    auto fn = comm_mpi::GetFunc<MpiBarrierFunc>("MPI_Barrier");
+    if (fn)
+        fn(COMM_MPI_COMM_WORLD);
+}
