@@ -122,6 +122,7 @@ __tf__ PTO_INTERNAL void TRandom(typename DstTile::TileDType __out__ dstData, TR
         unsigned sReg, counterAddVal;
         for (uint16_t i = 0; i < (uint16_t)validRow; ++i) {
             sReg = validCol;
+            counterAddVal = nElemPerRpt;
             for (uint16_t j = 0; j < nLoop; ++j) {
                 tmpCtr0 = ctr0;
                 tmpCtr1 = ctr1;

@@ -60,7 +60,7 @@ __tf__ PTO_INTERNAL void TColSum(typename TileDataDst::TileDType __out__ dst,
     int lenBurst = (validCol * DTypeSize + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
     if (validRow == 1) {
-        copy_ubuf_to_ubuf(dstPtr, srcPtr, 0, 1, lenBurst, 0, 0);
+        pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, lenBurst, 0, 0);
         pipe_barrier(PIPE_V);
         return;
     }
@@ -73,10 +73,10 @@ __tf__ PTO_INTERNAL void TColSum(typename TileDataDst::TileDType __out__ dst,
             pipe_barrier(PIPE_V);
             cnt /= 2;
         }
-        copy_ubuf_to_ubuf(dstPtr, tmpPtr, 0, 1, lenBurst, 0, 0);
+        pto_copy_ubuf_to_ubuf(dstPtr, tmpPtr, 1, lenBurst, 0, 0);
         pipe_barrier(PIPE_V);
     } else {
-        copy_ubuf_to_ubuf(dstPtr, srcPtr, 0, 1, lenBurst, 0, 0);
+        pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, lenBurst, 0, 0);
         pipe_barrier(PIPE_V);
         SequentialSum<T, srcStride, dstStride>(dstPtr, srcPtr, validRow, validCol);
     }

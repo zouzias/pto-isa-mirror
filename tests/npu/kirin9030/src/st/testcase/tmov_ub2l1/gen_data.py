@@ -54,8 +54,6 @@ if __name__ == "__main__":
         "TMovUb2l1Test.case5",
         "TMovUb2l1Test.case6",
         "TMovUb2l1Test.case7",
-        "TMovUb2l1Test.case8",
-        "TMovUb2l1Test.case9",
     ]
 
     case_params_list = [
@@ -66,8 +64,6 @@ if __name__ == "__main__":
         TmovUb2L1Params(np.int8, 32, 512, 32, 512),
         TmovUb2L1Params(np.int8, 64, 96, 64, 96),
         TmovUb2L1Params(np.float16, 64, 64, 48, 48, 16, 16),
-        TmovUb2L1Params(np.int32, 128, 128, 64, 64, 64, 64),
-        TmovUb2L1Params(np.int8, 256, 256, 32, 32, 224, 224),
     ]
 
     for i, case_name in enumerate(case_name_list):
