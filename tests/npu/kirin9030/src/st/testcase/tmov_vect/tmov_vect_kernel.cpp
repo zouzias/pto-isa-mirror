@@ -24,8 +24,8 @@ __global__ AICORE void runTMOV(__gm__ T *out, __gm__ T *src)
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, kTRows_, kTCols_>;
     TileData dstTile;
     TileData srcTile;
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(T));
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<kTRows_ * kTCols_ * sizeof(T)>(dstTile);
 
     TLOAD(srcTile, srcGlobal);
 

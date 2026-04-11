@@ -138,13 +138,12 @@ PTO_INTERNAL void TExtractToBNonTranspose(__cb__ DstType *dstAddr, __cbuf__ SrcT
     if constexpr (dstRowNum >= dstColNum) {
         dstGap = dstColNum - 1;
         for (uint16_t i = 0; i < dstColNum; i++) {
-            load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, 0, false,
-                            addr_cal_mode_t(0));
+            pto_load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap);
             dstAddr += blockNum;
         }
     } else {
         for (uint16_t i = 0; i < dstRowNum; i++) {
-            load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, 0, false, addr_cal_mode_t(0));
+            pto_load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0);
             dstAddr += dstCol * c0Size;
         }
     }
@@ -325,13 +324,12 @@ PTO_INTERNAL void TExtractToBNonTransposeCompact(__cb__ DstType *dstAddr, __cbuf
     if (dstRowNum >= dstColNum) {
         dstGap = dstColNum - 1;
         for (uint16_t i = 0; i < dstColNum; i++) {
-            load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap, 0, false,
-                            addr_cal_mode_t(0));
+            pto_load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i, dstRowNum, srcColNum, dstGap);
             dstAddr += blockNum;
         }
     } else {
         for (uint16_t i = 0; i < dstRowNum; i++) {
-            load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, 0, false, addr_cal_mode_t(0));
+            pto_load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0);
             dstAddr += dstValidColAlign * c0Size;
         }
     }
@@ -419,7 +417,7 @@ __tf__ AICORE void TExtractToBConv(typename DstTileData::TileDType __out__ dst,
     uint16_t blockNum = CUBE_BLOCK_SIZE / sizeof(SrcType);
     uint16_t startIdx0 = (indexRow * sizeof(SrcType) * srcColNum >> SHIFT_BLOCK_BYTE) + (indexCol >> SHIFT_BLOCK_LEN);
     for (uint16_t i = 0; i < dstRowNum; i++) {
-        load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0, 0, false, addr_cal_mode_t(0));
+        pto_load_cbuf_to_cb(dstAddr, srcAddr, startIdx0 + i * srcColNum, dstColNum, 1, 0);
         dstAddr += dstValidColAlign * c0Size;
     }
 }

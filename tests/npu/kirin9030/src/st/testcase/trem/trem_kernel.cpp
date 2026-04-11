@@ -24,10 +24,10 @@ __global__ AICORE void runTRem(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
     TileData src1Tile(vRows, vCols);
     TileData dstTile(vRows, vCols);
     TileData tmpTile(1, vCols);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x10000);
-    TASSIGN(dstTile, 0x20000);
-    TASSIGN(tmpTile, 0x30000);
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<0x10000>(src1Tile);
+    TASSIGN<0x20000>(dstTile);
+    TASSIGN<0x30000>(tmpTile);
 
     GlobalData src0Global(src0);
     GlobalData src1Global(src1);

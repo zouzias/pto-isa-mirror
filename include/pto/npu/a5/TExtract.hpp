@@ -279,7 +279,8 @@ __tf__ AICORE void TExtractToB(typename DstTileData::TileDType __out__ dst, type
             load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF,
                                srcStride, dstStride, 0);
         } else {
-            load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
+            pto_load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride,
+                                0);
         }
     } else {
         static_assert((srcRow % (typeSize == 1 ? c0Size : FRACTAL_NZ_ROW)) == 0,
@@ -298,7 +299,8 @@ __tf__ AICORE void TExtractToB(typename DstTileData::TileDType __out__ dst, type
             load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF,
                                srcStride, dstStride, 1);
         } else {
-            load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+            pto_load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride,
+                                1);
         }
     }
 }
@@ -327,7 +329,7 @@ __tf__ AICORE void TExtractToBCompact(typename DstTileData::TileDType __out__ ds
         load_cbuf_to_cb_s4(dstAddr, srcAddr, mStartPosition, kStartPosition / KHALF, mStep, kStep / KHALF, srcStride,
                            dstStride, 0);
     } else {
-        load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
+        pto_load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
     }
 }
 
@@ -367,12 +369,13 @@ __tf__ AICORE void TExtractToBTransCompact(typename DstTileData::TileDType __out
         uint16_t nLoop = mStep >> SHIFT_M_STEP_B8;
         mStep = M_STEP_MIN_VAL_B8;
         for (uint16_t idx = 0; idx < nLoop; ++idx) {
-            load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+            pto_load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride,
+                                1);
             dstAddr += dstAddrStride;
             mStartPosition += M_STEP_MIN_VAL_B8;
         }
     } else { // b16/b32
-        load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
+        pto_load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 1);
     }
 }
 
@@ -547,7 +550,7 @@ __tf__ AICORE void TExtractToBConv(typename DstTileData::TileDType __out__ dst,
     uint8_t kStep = (dstValidRowAlign * sizeof(DataType)) >> SHIFT_BLOCK_BYTE;
     uint16_t srcStride = srcCol >> SHIFT_BLOCK_LEN;
     uint16_t dstStride = dstValidColAlign >> SHIFT_BLOCK_LEN;
-    load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
+    pto_load_cbuf_to_cb(dstAddr, srcAddr, mStartPosition, kStartPosition, mStep, kStep, srcStride, dstStride, 0);
 }
 
 template <typename DstTileData, typename SrcTileData>
@@ -608,12 +611,12 @@ __tf__ AICORE void TExtractVecToVecNDImpl(typename DstTileData::TileDType __out_
 
     if (validCol == dstRowStride && validCol == srcRowStride && totalBytes >= BLOCK_BYTE_SIZE) {
         uint16_t burstLen = static_cast<uint16_t>(totalBytes / BLOCK_BYTE_SIZE);
-        copy_ubuf_to_ubuf((__ubuf__ void *)dstAddr, (__ubuf__ void *)srcStart, 0, 1, burstLen, 0, 0);
+        pto_copy_ubuf_to_ubuf((__ubuf__ void *)dstAddr, (__ubuf__ void *)srcStart, 1, burstLen, 0, 0);
     } else {
         uint16_t srcGap = static_cast<uint16_t>((srcRowStride - validCol) * sizeof(T) / BLOCK_BYTE_SIZE);
         uint16_t dstGap = static_cast<uint16_t>((dstRowStride - validCol) * sizeof(T) / BLOCK_BYTE_SIZE);
-        copy_ubuf_to_ubuf((__ubuf__ void *)dstAddr, (__ubuf__ void *)srcStart, 0, validRow, rowBurstLen, srcGap,
-                          dstGap);
+        pto_copy_ubuf_to_ubuf((__ubuf__ void *)dstAddr, (__ubuf__ void *)srcStart, validRow, rowBurstLen, srcGap,
+                              dstGap);
     }
 }
 

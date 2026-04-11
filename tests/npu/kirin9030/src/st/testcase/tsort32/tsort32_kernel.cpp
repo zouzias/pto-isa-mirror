@@ -44,10 +44,10 @@ __global__ AICORE void runTSORT32(__gm__ T *out, __gm__ T *src, __gm__ uint32_t 
     IdxTileData idxTile(VALID_R_, ALIGN_C);
     DstTileData dstTile(VALID_R_, VALID_C * TYPE_COEF * 2);
     TmpTileData tmpTile;
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(idxTile, 0x8000);
-    TASSIGN(dstTile, 0x16000);
-    TASSIGN(tmpTile, 0x20000);
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<SrcTileData::Numel * sizeof(T)>(idxTile);
+    TASSIGN<SrcTileData::Numel * sizeof(T) + IdxTileData::Numel * sizeof(uint32_t)>(dstTile);
+    TASSIGN<(SrcTileData::Numel + DstTileData::Numel) * sizeof(T) + IdxTileData::Numel * sizeof(uint32_t)>(tmpTile);
 
     SrcGlobalData srcGlobal(src);
     IdxGlobalData idxGlobal(idx);

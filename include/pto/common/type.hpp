@@ -311,41 +311,32 @@ enum class HistByte : uint8_t
     BYTE_3 = 3  // MSB (bits 31-24)
 };
 
-enum class DivAlgorithm : uint8_t
+union NotNumUnion {
+    float f;
+    uint32_t i;
+};
+
+union HalfUnion {
+#ifdef __CCE_AICORE__
+    half f;
+#else
+    uint16_t f;
+#endif
+    uint16_t i;
+};
+
+enum class Algorithm : uint8_t
 {
     DEFAULT,
     HIGH_PRECISION
 };
 
-enum class SqrtAlgorithm : uint8_t
-{
-    DEFAULT,
-    HIGH_PRECISION
-};
-
-enum class RsqrtAlgorithm : uint8_t
-{
-    DEFAULT,
-    HIGH_PRECISION
-};
-
-enum class RecipAlgorithm : uint8_t
-{
-    DEFAULT,
-    HIGH_PRECISION
-};
-
-enum class ExpAlgorithm : uint8_t
-{
-    DEFAULT,
-    HIGH_PRECISION
-};
-
-enum class LogAlgorithm : uint8_t
-{
-    DEFAULT,
-    HIGH_PRECISION
-};
+using DivAlgorithm = Algorithm;
+using SqrtAlgorithm = Algorithm;
+using RsqrtAlgorithm = Algorithm;
+using RecipAlgorithm = Algorithm;
+using ExpAlgorithm = Algorithm;
+using LogAlgorithm = Algorithm;
 
 namespace GlobalTensorDim {
 constexpr int DIM_0 = 0;

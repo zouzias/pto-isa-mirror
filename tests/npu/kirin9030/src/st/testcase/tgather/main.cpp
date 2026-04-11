@@ -46,7 +46,7 @@ std::string GetGoldenDir()
 
 TEST_F(TGATHERTest, case1_float)
 {
-    size_t src0FileSize = 32 * 1024 * sizeof(float);
+    size_t src0FileSize = 32 * 864 * sizeof(float);
     size_t src1FileSize = 16 * 64 * sizeof(int32_t);
     size_t dstFileSize = 16 * 64 * sizeof(float);
 
