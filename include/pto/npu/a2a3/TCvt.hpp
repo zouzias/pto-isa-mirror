@@ -1222,11 +1222,6 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
     constexpr unsigned SS = TileDataS::RowStride;
     constexpr unsigned DS = TileDataD::RowStride;
     unsigned validRow = dst.GetValidRow();
-#if EDGE_CASE_ALIGN_ENABLE
-    // Without tmp buffer, NonSatTorch paths are unavailable; force saturation ON for affected types
-    TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, SaturationMode::ON, numRepeatPerLine,
-                                       numRemainPerLine, validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
-#else
     if constexpr (kIsNarrowingCvt<TileDataD, TileDataS>) {
         TCvt<TileDataD, TileDataS, SS, DS>(dst.data(), src.data(), mode, satMode, numRepeatPerLine, numRemainPerLine,
                                            validRow, elementsPerRepeat, dstRepeatStride, srcRepeatStride);
@@ -1235,7 +1230,6 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, Satu
                                            numRemainPerLine, validRow, elementsPerRepeat, dstRepeatStride,
                                            srcRepeatStride);
     }
-#endif
 }
 
 // TCVT_IMPL overload with explicit TmpTileData and explicit satMode.
@@ -1278,15 +1272,11 @@ PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, TmpTileData &tmp, Ro
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
-#if EDGE_CASE_ALIGN_ENABLE
-    TCVT_IMPL(dst, src, mode, SaturationMode::ON);
-#else
     if constexpr (kIsNarrowingCvt<TileDataD, TileDataS>) {
         TCVT_IMPL(dst, src, mode, SaturationMode::OFF);
     } else {
         TCVT_IMPL(dst, src, mode, SaturationMode::ON);
     }
-#endif
 }
 } // namespace pto
 #endif
