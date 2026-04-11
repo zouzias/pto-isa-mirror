@@ -37,9 +37,9 @@ __global__ AICORE void runTGATHERB(__gm__ T *out, __gm__ T *src, __gm__ uint32_t
     constexpr uint64_t dstSize = dstS1 * dstS0 * sizeof(T);
     constexpr uint64_t totalSize = srcSize + offsetSize + dstSize;
     static_assert(totalSize < 192 * 1024, "UB size overflow, should be less than 192KB.");
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(offsetTile, srcSize);
-    TASSIGN(dstTile, srcSize + offsetSize);
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<srcSize>(offsetTile);
+    TASSIGN<srcSize + offsetSize>(dstTile);
 
     GlobalDataSrc srcGlobal(src);
     GlobalDataOffset offsetGlobal(offset);
