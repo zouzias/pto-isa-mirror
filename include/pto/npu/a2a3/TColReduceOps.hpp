@@ -53,7 +53,7 @@ PTO_INTERNAL void ColReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, int validRow,
     constexpr int DTypeSize = sizeof(T);
     int lenBurst = (validCol * DTypeSize + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
-    copy_ubuf_to_ubuf(dst, src, 0, 1, lenBurst, 0, 0);
+    pto_copy_ubuf_to_ubuf(dst, src, 1, lenBurst, 0, 0);
     pipe_barrier(PIPE_V);
     if (validRow == 1) {
         return;

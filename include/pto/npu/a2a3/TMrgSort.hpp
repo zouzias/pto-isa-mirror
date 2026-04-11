@@ -72,7 +72,7 @@ PTO_INTERNAL void MovUb2Ub(__ubuf__ typename DstTileData::DType *dstPtr, __ubuf_
 {
     pipe_barrier(PIPE_V);
     unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
-    copy_ubuf_to_ubuf((__ubuf__ void *)dstPtr, (__ubuf__ void *)tmpPtr, 0, 1, lenBurst, 0, 0);
+    pto_copy_ubuf_to_ubuf((__ubuf__ void *)dstPtr, (__ubuf__ void *)tmpPtr, 1, lenBurst, 0, 0);
 }
 
 template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData,

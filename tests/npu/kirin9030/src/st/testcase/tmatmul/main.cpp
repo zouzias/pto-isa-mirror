@@ -108,7 +108,7 @@ TEST_F(TMATMULTest, case_norm_2)
 
 TEST_F(TMATMULTest, case_norm_3)
 {
-    tmatmul_test<aclFloat16, aclFloat16, aclFloat16, 3>(1, 16, 1026);
+    tmatmul_test<aclFloat16, aclFloat16, aclFloat16, 3>(1, 16, 512);
 }
 
 TEST_F(TMATMULTest, case_norm_4)

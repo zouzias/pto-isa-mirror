@@ -32,10 +32,10 @@ AICORE inline void runTLOAD_MIX_ND2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
         Tile<TileType::Mat, T, baseM, baseK, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>; // 大N小Z
     using TileUBData = Tile<TileType::Vec, T, baseM, baseK, BLayout::RowMajor, -1, -1>;
     TileUBData srcTile(baseM, baseK);
-    TASSIGN(srcTile, 0x0);
+    TASSIGN<0x0>(srcTile);
 
     TileMatAData aMatTile;
-    TASSIGN(aMatTile, 0x0);
+    TASSIGN<0x0>(aMatTile);
 
     __cbuf__ T *srcMatAddr = aMatTile.data();
     __ubuf__ T *srcUbAddr = srcTile.data();
@@ -97,10 +97,10 @@ AICORE inline void runTLOAD_MIX_DN2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
         Tile<TileType::Mat, T, baseM, baseK, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>; // 大N小Z
     using TileUBData = Tile<TileType::Vec, T, baseM, baseK, BLayout::RowMajor, -1, -1>;
     TileUBData srcTile(baseM, baseK);
-    TASSIGN(srcTile, 0x0);
+    TASSIGN<0x0>(srcTile);
 
     TileMatAData aMatTile;
-    TASSIGN(aMatTile, 0x0);
+    TASSIGN<0x0>(aMatTile);
 
     __cbuf__ T *srcMatAddr = aMatTile.data();
     __ubuf__ T *srcUbAddr = srcTile.data();
@@ -164,10 +164,10 @@ AICORE inline void runTLOAD_MIX_ND2ND(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     using TileMatAData = Tile<TileType::Mat, T, baseM, baseK, BLayout::RowMajor, M, K, SLayout::NoneBox>; // 大N小Z
     using TileUBData = Tile<TileType::Vec, T, baseM, baseK, BLayout::RowMajor, -1, -1>;
     TileUBData srcTile(baseM, baseK);
-    TASSIGN(srcTile, 0x0);
+    TASSIGN<0x0>(srcTile);
 
     TileMatAData aMatTile;
-    TASSIGN(aMatTile, 0x0);
+    TASSIGN<0x0>(aMatTile);
 
     __cbuf__ T *srcMatAddr = aMatTile.data();
     __ubuf__ T *srcUbAddr = srcTile.data();
@@ -223,10 +223,10 @@ AICORE inline void runTLOAD_MIX_DN2DN(__gm__ T *out, __gm__ T *src0, __gm__ T *s
     using TileMatAData = Tile<TileType::Mat, T, baseM, baseK, BLayout::ColMajor, M, K, SLayout::NoneBox>; // 大N小Z
     using TileUBData = Tile<TileType::Vec, T, baseK, baseM, BLayout::RowMajor, -1, -1>; // DN：baseM need 32Byte aligned
     TileUBData srcTile(baseK, baseM);
-    TASSIGN(srcTile, 0x0);
+    TASSIGN<0x0>(srcTile);
 
     TileMatAData aMatTile;
-    TASSIGN(aMatTile, 0x0);
+    TASSIGN<0x0>(aMatTile);
 
     __cbuf__ T *srcMatAddr = aMatTile.data();
     __ubuf__ T *srcUbAddr = srcTile.data();
@@ -287,10 +287,10 @@ AICORE inline void runTLOAD_MIX_NZ2NZ(__gm__ T *out, __gm__ T *src0, __gm__ T *s
 
     using TileUBData = Tile<TileType::Vec, T, baseM, baseK, BLayout::RowMajor, -1, -1>;
     TileUBData srcTile(baseM, baseK);
-    TASSIGN(srcTile, 0x0);
+    TASSIGN<0x0>(srcTile);
 
     TileMatAData aMatTile;
-    TASSIGN(aMatTile, 0x0);
+    TASSIGN<0x0>(aMatTile);
 
     __cbuf__ T *srcMatAddr = aMatTile.data();
     __ubuf__ T *srcUbAddr = srcTile.data();

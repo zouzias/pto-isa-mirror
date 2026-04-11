@@ -27,13 +27,13 @@ PTO_INTERNAL void TPartCopyInstr(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, uint64_
         set_mask_count(); // counter mode
         SetVectorCount(dstCols * validRow);
         uint64_t blockLen = (dstCols * validRow * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
-        copy_ubuf_to_ubuf(dstPtr, srcPtr, 0, 1, blockLen, 1, 1);
+        pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, blockLen, 1, 1);
     } else {
         set_mask_count(); // counter mode
         SetVectorCount(validCol);
         uint64_t blockLen = (validCol * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
         for (uint64_t i = 0; i < validRow; i++) {
-            copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 0, 1, blockLen, 1, 1);
+            pto_copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 1, blockLen, 1, 1);
         }
     }
     set_mask_norm();

@@ -34,8 +34,8 @@ __global__ AICORE void runROWEXPAND(__gm__ T *out, __gm__ T *src)
     SrcTile srcTile;
     DstTile dstTile;
 
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, sizeof(T) * rows * srcCols);
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<sizeof(T) * rows * srcCols>(dstTile);
 
     TLOAD(dstTile, dstGlobal);
     TLOAD(srcTile, srcGlobal);

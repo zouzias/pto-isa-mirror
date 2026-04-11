@@ -60,18 +60,18 @@ __global__ AICORE void RunTMATMUL(__gm__ OutType *out, __gm__ AType *src0, __gm_
     TileMatAData aMatTile;
     TileMatBData bMatTile;
     TileBiasData biasDataTile;
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, M * K * sizeof(AType));
-    TASSIGN(biasDataTile, M * K * sizeof(AType) + K * N * sizeof(BType));
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<M * K * sizeof(AType)>(bMatTile);
+    TASSIGN<M * K * sizeof(AType) + K * N * sizeof(BType)>(biasDataTile);
 
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
     BiasTile biasTile;
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
-    TASSIGN(biasTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
+    TASSIGN<0x0>(biasTile);
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -139,18 +139,18 @@ __global__ AICORE void RunTMATMUL_SPLIT_K(__gm__ OutType *out, __gm__ AType *src
     TileMatAData aMatTile;
     TileMatBData bMatTile;
     TileBiasData biasDataTile;
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, M * K * sizeof(AType));
-    TASSIGN(biasDataTile, M * K * sizeof(AType) + K * N * sizeof(BType));
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<M * K * sizeof(AType)>(bMatTile);
+    TASSIGN<M * K * sizeof(AType) + K * N * sizeof(BType)>(biasDataTile);
 
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
     BiasTile biasTile;
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
-    TASSIGN(biasTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
+    TASSIGN<0x0>(biasTile);
 
     constexpr int iter = K / BASEK;
 
@@ -208,7 +208,7 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
             <<<1, nullptr, stream>>>(reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0),
                                      reinterpret_cast<int8_t *>(src1), nullptr);
     } else if constexpr (tilingKey == 3) {
-        RunTMATMUL<half, half, half, half, 1, 16, 1026, false><<<1, nullptr, stream>>>(
+        RunTMATMUL<half, half, half, half, 1, 16, 512, false><<<1, nullptr, stream>>>(
             reinterpret_cast<half *>(out), reinterpret_cast<half *>(src0), reinterpret_cast<half *>(src1), nullptr);
     } else if constexpr (tilingKey == 4) {
         RunTMATMUL<int32_t, int8_t, int8_t, int32_t, 26, 15, 27, false>

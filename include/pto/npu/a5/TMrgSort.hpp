@@ -46,15 +46,13 @@ PTO_INTERNAL uint64_t InitConfig()
     return config;
 }
 
-#ifndef MOV_UB_2_UB_STUB
 template <typename DstTileData>
 PTO_INTERNAL void MovUb2Ub(__ubuf__ typename DstTileData::DType *dstPtr, __ubuf__ typename DstTileData::DType *tmpPtr,
                            unsigned dstCol)
 {
     unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
-    copy_ubuf_to_ubuf((__ubuf__ void *)dstPtr, (__ubuf__ void *)tmpPtr, 0, 1, lenBurst, 0, 0);
+    pto_copy_ubuf_to_ubuf((__ubuf__ void *)dstPtr, (__ubuf__ void *)tmpPtr, 1, lenBurst, 0, 0);
 }
-#endif
 
 template <bool exhausted>
 PTO_INTERNAL void GetExhaustedData(uint16_t &mrgSortList0, uint16_t &mrgSortList1, uint16_t &mrgSortList2,

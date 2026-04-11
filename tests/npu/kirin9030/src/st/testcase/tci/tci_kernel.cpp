@@ -25,7 +25,7 @@ __global__ AICORE void runTci(__gm__ T *out, T S)
     TileData dstTile(kTRows_, kTCols_);
 
     // 3. 为devices侧的变量分配地址；
-    TASSIGN(dstTile, 0x0);
+    TASSIGN<0x0>(dstTile);
 
     // 4. 定义host侧的变量，并分配地址；
     GlobalData dstGlobal(out);
