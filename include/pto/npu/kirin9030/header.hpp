@@ -10,7 +10,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef HEADER_HPP
 #define HEADER_HPP
-#include "pto/npu/kirin9030/TAssign.hpp"
+#define bfloat16_t half
+#define float8_e4m3_t int8_t
+#define float8_e5m2_t int8_t
+#define hifloat8_t int8_t
+#define float8_e8m0_t int8_t
+#include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/kirin9030/TSync.hpp"
 #include "pto/npu/kirin9030/TAdd.hpp"
 #include "pto/npu/kirin9030/TAddS.hpp"
@@ -48,4 +53,15 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/kirin9030/TBinSOp.hpp"
 #include "pto/npu/kirin9030/TDiv.hpp"
 #include "pto/npu/kirin9030/TMul.hpp"
+#include "pto/npu/a5/TCmp.hpp"
+#include "pto/npu/a5/TExpandS.hpp"
+#include "pto/npu/a5/TColExpand.hpp"
+#include "pto/npu/a5/TMaxs.hpp"
+#include "pto/npu/a5/TMins.hpp"
+#undef bfloat16_t
+#undef float8_e4m3_t
+#undef float8_e5m2_t
+#undef hifloat8_t
+#undef float8_e8m0_t
+
 #endif

@@ -61,16 +61,6 @@ PTO_INTERNAL void DivPrecisionImpl(U &dstReg, U &srcReg0, U &srcReg1, MaskReg &m
     vsel(dstReg, tmpDst, z, infNanCmp);
 }
 
-union NotNumUnion {
-    float f;
-    uint32_t i;
-};
-
-union HalfUnion {
-    half f;
-    uint16_t i;
-};
-
 template <typename T, typename U>
 PTO_INTERNAL void DivIEEE754FloatImpl(RegTensor<float> &dst, RegTensor<float> &src0, RegTensor<float> &src1,
                                       MaskReg &mask)

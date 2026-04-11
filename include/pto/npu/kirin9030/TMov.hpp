@@ -24,11 +24,10 @@ __tf__ AICORE void TMovToBt(typename DstTile::TileDType __out__ dst, typename Sr
                       (std::is_same_v<SrcType, half> && std::is_same_v<DstType, half>),
                   "Fix: TMOV: Bias data type only supports int32_t or half.");
     constexpr const int BIAS_TABLE_UNIT_ELEM = 16;
-    constexpr const int BIAS_TABLE_SIZE = 1024;
     static_assert(SrcTile::Rows == 1, "Fix: TMov: When TileType is Bias, row must be 1.");
     static_assert(DstTile::Cols % BIAS_TABLE_UNIT_ELEM == 0,
                   "Fix: TMov: When TileType is Bias, col must be aligned to 16.");
-    static_assert(DstTile::Cols * sizeof(DstType) <= BIAS_TABLE_SIZE,
+    static_assert(DstTile::Cols * sizeof(DstType) <= PTO_BIAS_SIZE_BYTES,
                   "Fix: TMov: The memory occupation of BiasTile exceeds 1.0KB bias table size.");
 
     __cbuf__ SrcType *srcP = (__cbuf__ SrcType *)(src);

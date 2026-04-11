@@ -31,14 +31,14 @@ __tf__ PTO_INTERNAL void TCopy(typename TileDataDst::TileDType __out__ dst, type
     if constexpr (TileDataDst::Cols == TileDataSrc::Cols || TileDataDst::Rows == 1) {
         unsigned blockLen = (TileDataDst::Cols * validRow * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
         if constexpr (TileDataDst::Cols == TileDataDst::ValidCol) {
-            copy_ubuf_to_ubuf(dstPtr, srcPtr, 0, 1, blockLen, 1, 1);
+            pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, blockLen, 1, 1);
         } else {
             if (TileDataDst::Cols == validCol) {
-                copy_ubuf_to_ubuf(dstPtr, srcPtr, 0, 1, blockLen, 1, 1);
+                pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, blockLen, 1, 1);
             } else {
                 unsigned blockLen = (validCol * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
                 for (int i = 0; i < validRow; i++) {
-                    copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 0, 1, blockLen, 1, 1);
+                    pto_copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 1, blockLen, 1, 1);
                 }
             }
         }
@@ -47,7 +47,7 @@ __tf__ PTO_INTERNAL void TCopy(typename TileDataDst::TileDType __out__ dst, type
         unsigned srcGap = (TileDataSrc::Cols * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE - blockLen;
         unsigned dstGap = (TileDataDst::Cols * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE - blockLen;
         for (int i = 0; i < validRow; i++) {
-            copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 0, 1, blockLen, srcGap, dstGap);
+            pto_copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr + i * srcStride, 1, blockLen, srcGap, dstGap);
         }
     }
 } // end of tf

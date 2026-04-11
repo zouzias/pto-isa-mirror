@@ -22,8 +22,8 @@ __global__ AICORE void runTorS(__gm__ T *out, __gm__ T *src0, T src1)
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     TileData src0Tile(vRows, vCols);
     TileData dstTile(vRows, vCols);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(dstTile, 0x20000);
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<0x20000>(dstTile);
 
     GlobalData src0Global(src0);
     GlobalData dstGlobal(out);

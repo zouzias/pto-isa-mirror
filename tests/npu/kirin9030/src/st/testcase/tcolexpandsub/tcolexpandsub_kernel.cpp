@@ -31,9 +31,9 @@ __global__ AICORE void runCOLEXPANDSUB(__gm__ T *out, __gm__ T *src0, __gm__ T *
     DstTileData src0Tile(dstRow, dstCol);
     TileData src1Tile(src1Row, src1Col);
     DstTileData dstTile(dstRow, dstCol);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x10000);
-    TASSIGN(dstTile, 0x20000);
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<0x10000>(src1Tile);
+    TASSIGN<0x20000>(dstTile);
 
     int offset = 0;
     DstGlobalData src0Global(src0 + offset);
