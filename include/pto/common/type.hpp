@@ -311,6 +311,20 @@ enum class HistByte : uint8_t
     BYTE_3 = 3  // MSB (bits 31-24)
 };
 
+union NotNumUnion {
+    float f;
+    uint32_t i;
+};
+
+union HalfUnion {
+#ifdef __CCE_AICORE__
+    half f;
+#else
+    uint16_t f;
+#endif
+    uint16_t i;
+};
+
 enum class DivAlgorithm : uint8_t
 {
     DEFAULT,

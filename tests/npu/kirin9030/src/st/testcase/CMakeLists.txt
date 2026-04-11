@@ -144,6 +144,7 @@ set(ALL_TESTCASES
     tsort32
     trowexpand
     tgather
+    tfillpad
     tcvt
     tsub
     tadd

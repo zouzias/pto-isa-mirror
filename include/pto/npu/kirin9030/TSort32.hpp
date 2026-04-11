@@ -9,7 +9,5 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #ifndef TSORT32_HPP_KIRIN9030
 #define TSORT32_HPP_KIRIN9030
-#define SID_MARCO
 #include "pto/npu/a5/TSort32.hpp"
-#undef SID_MARCO
 #endif

@@ -132,18 +132,15 @@ AICORE void runTLOADND(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, i
 #ifdef DEBUGLOG
     gLog += block_idx * LOGSIZE;
 #endif
-    __ubuf__ T *ubaddr0 = 0x0;
-    __ubuf__ T *ubaddr1 = 0x0;
-
     using TileData =
         Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, PadVal_>;
     // using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     TileData vecTile(kTRows_, gCols);
-    TASSIGN(vecTile, (uint64_t)ubaddr0);
+    TASSIGN<0x0>(vecTile);
 
     using TileDataP = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, kTCols_>;
     TileDataP vecTileP(kTRows_);
-    TASSIGN(vecTileP, (uint64_t)ubaddr1);
+    TASSIGN<0x0>(vecTileP);
 
     constexpr int kGTRows = kTRows_ / shape0 / shape1 / shape2; // Dst Tile Rows, merged all shape0*shape1*shape2 row
     constexpr int shape4_aligned = align_to_32B(shape4, T);

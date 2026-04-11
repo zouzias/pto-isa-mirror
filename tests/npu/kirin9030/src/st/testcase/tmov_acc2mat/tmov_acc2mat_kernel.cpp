@@ -8,6 +8,7 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
+#include <type_traits>
 #include <pto/pto-inst.hpp>
 
 using namespace pto;
@@ -70,8 +71,8 @@ AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ FbTy
     using TileMatBData = Tile<TileType::Mat, BType, K, N, BLayout::ColMajor, validK, validN, SLayout::RowMajor, 512>;
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, TileMatAData::Numel * sizeof(AType));
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<TileMatAData::Numel * sizeof(AType)>(bMatTile);
 
     using LeftTile = TileLeft<AType, M, K, validM, validK>;
     using RightTile = TileRight<BType, K, N, validK, validN>;
@@ -79,9 +80,9 @@ AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ FbTy
     AccTile cTile;
     LeftTile aTile;
     RightTile bTile;
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -92,7 +93,7 @@ AICORE inline void RunMATMUL(__gm__ AType *src0, __gm__ BType *src1, __gm__ FbTy
         GlobalDataSrc2 src2Global(src2);
         using TileMatFbData = Tile<TileType::Mat, FbType, 1, N, BLayout::RowMajor, 1, validN, SLayout::NoneBox>;
         TileMatFbData fbMatTile;
-        TASSIGN(fbMatTile, TileMatAData::Numel * sizeof(AType) + TileMatBData::Numel * sizeof(BType));
+        TASSIGN<TileMatAData::Numel * sizeof(AType) + TileMatBData::Numel * sizeof(BType)>(fbMatTile);
         TLOAD(fbMatTile, src2Global);
     }
     set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
@@ -123,8 +124,8 @@ AICORE inline void RunMATMUL_NZUNALIGN(__gm__ AType *src0, __gm__ BType *src1, _
     using TileMatBData = Tile<TileType::Mat, BType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, TileMatAData::Numel * sizeof(AType));
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<TileMatAData::Numel * sizeof(AType)>(bMatTile);
 
     using LeftTile = TileLeft<AType, M, K, M, K>;
     using RightTile = TileRight<BType, K, N, K, N>;
@@ -132,9 +133,9 @@ AICORE inline void RunMATMUL_NZUNALIGN(__gm__ AType *src0, __gm__ BType *src1, _
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -144,7 +145,7 @@ AICORE inline void RunMATMUL_NZUNALIGN(__gm__ AType *src0, __gm__ BType *src1, _
         GlobalDataSrc2 src2Global(src2);
         using TileMatFbData = Tile<TileType::Mat, FbType, 1, N, BLayout::RowMajor, 1, N, SLayout::NoneBox>;
         TileMatFbData fbMatTile;
-        TASSIGN(fbMatTile, TileMatAData::Numel * sizeof(AType) + TileMatBData::Numel * sizeof(BType));
+        TASSIGN<TileMatAData::Numel * sizeof(AType) + TileMatBData::Numel * sizeof(BType)>(fbMatTile);
         TLOAD(fbMatTile, src2Global);
     }
 
@@ -273,9 +274,9 @@ __global__ AICORE void RunTMOV(__gm__ OutType *out, __gm__ AType *src0, __gm__ B
     SrcTileData srcTileData;
     DstTileData dstTileData;
     AccTile cTile;
-    TASSIGN(cTile, 0x0);
-    TASSIGN(srcTileData, 0x0);
-    TASSIGN(dstTileData, 0x0);
+    TASSIGN<0x0>(cTile);
+    TASSIGN<0x0>(srcTileData);
+    TASSIGN<0x0>(dstTileData);
 
     if constexpr (isRelu) {
         TMOV<SrcTileData, AccTile, ReluPreMode::NormalRelu>(srcTileData, cTile);

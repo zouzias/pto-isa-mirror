@@ -23,9 +23,9 @@ __global__ AICORE void runTShl(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
     TileData src0Tile(vRows, vCols);
     TileData src1Tile(vRows, vCols);
     TileData dstTile(vRows, vCols);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x10000);
-    TASSIGN(dstTile, 0x20000);
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<0x10000>(src1Tile);
+    TASSIGN<0x20000>(dstTile);
 
     GlobalData src0Global(src0);
     GlobalData src1Global(src1);

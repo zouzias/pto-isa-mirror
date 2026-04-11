@@ -43,7 +43,7 @@ __global__ AICORE void runTEXPANDS(__gm__ T *out, float scalar)
     using TileData = typename TileDataSelector<T, kTRows_, kTCols_, padValueType>::Type;
 
     TileData dstTile(kVRows_, kVCols_);
-    TASSIGN(dstTile, 0x0 + 0x400 * block_idx);
+    TASSIGN<0x0 + 0x400 * block_idx>(dstTile);
 
     int offset = (block_idx / 4) * (64 * 16) + (block_idx % 4) * 16;
     GlobalData dstGlobal(out + offset);

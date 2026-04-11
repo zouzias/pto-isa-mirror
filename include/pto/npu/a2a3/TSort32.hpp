@@ -44,9 +44,9 @@ PTO_INTERNAL void LargeTmpBufferImpl(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, __u
 
                 // copy row src cbuf to tmp cbuf
                 uint16_t lenBurst = (srcTailPerRow * sizeof(T) + BLOCK_SIZE - 1) / BLOCK_SIZE;
-                copy_ubuf_to_ubuf(
+                pto_copy_ubuf_to_ubuf(
                     tmpPtr, srcPtr + i * srcStride + j * REPEAT_MAX * BLOCK_SIZE + (srcTailRepeatNum - 1) * BLOCK_SIZE,
-                    0, 1, lenBurst, 0, 0);
+                    1, lenBurst, 0, 0);
                 pipe_barrier(PIPE_V);
 
                 // dup -inf of tial value in tmp cbuf
@@ -117,7 +117,7 @@ __tf__ AICORE void TSort32Impl(typename DstTileData::TileDType __out__ dst, type
         for (int32_t i = 0; i < validRow; i++) {
             // copy row src cbuf to tmp cbuf
             uint16_t lenBurst = (srcShapeBytesPerRow + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            copy_ubuf_to_ubuf(tmpPtr, srcPtr + i * srcStride, 0, 1, lenBurst, 0, 0);
+            pto_copy_ubuf_to_ubuf(tmpPtr, srcPtr + i * srcStride, 1, lenBurst, 0, 0);
             pipe_barrier(PIPE_V);
 
             // dup -NAN of tial value in tmp cbuf

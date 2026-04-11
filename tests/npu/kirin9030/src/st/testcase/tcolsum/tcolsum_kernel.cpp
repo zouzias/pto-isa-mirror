@@ -29,9 +29,9 @@ PTO_INTERNAL void runTColSum(__gm__ T *out, __gm__ T *src, bool isBinary)
     SrcTileData srcTile(srcValidRow, validCol);
     TmpTileData tmpTile((srcValidRow + 1) / 2, validCol);
     DstTileData dstTile(dstRow, validCol);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, srcRow * col * sizeof(T));
-    TASSIGN(dstTile, (srcRow * 3 / 2 + 1) * col * sizeof(T));
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<srcRow * col * sizeof(T)>(tmpTile);
+    TASSIGN<(srcRow * 3 / 2 + 1) * col * sizeof(T)>(dstTile);
 
     // 搬运数据
     TLOAD(srcTile, srcGlobal);

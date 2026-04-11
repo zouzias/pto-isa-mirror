@@ -63,7 +63,7 @@ PTO_INST void TPRINT(TileData &src)
 }
 
 template <PrintFormat Format = PrintFormat::Width8_Precision4, typename TileData, typename GlobalData>
-PTO_INTERNAL void TPRINT(TileData &src, GlobalData &tmp)
+PTO_INST void TPRINT(TileData &src, GlobalData &tmp)
 {
     TPRINT_IMPL<Format>(src, tmp);
 }

@@ -138,7 +138,7 @@ class TGatherParamsNorm(TGatherParamsBase):
 if __name__ == "__main__":
 
     case_params_list = [
-        TGatherParamsNorm("TGATHERTest.case1_float", np.float32, np.int32, 32, 1024, 16, 64),
+        TGatherParamsNorm("TGATHERTest.case1_float", np.float32, np.int32, 32, 864, 16, 64),
         TGatherParamsNorm("TGATHERTest.case2_int32", np.int32, np.int32, 32, 512, 16, 256),
         TGatherParamsNorm("TGATHERTest.case3_half", np.half, np.int16, 16, 1024, 16, 128),
         TGatherParamsNorm("TGATHERTest.case4_int16", np.int16, np.int16, 32, 256, 32, 64),
