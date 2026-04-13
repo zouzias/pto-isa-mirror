@@ -64,21 +64,25 @@ PTO_INTERNAL void UpdateIdxValue(RegTensor<TDst> &vregIdxOrig, RegTensor<TSrc> &
     vsel(vregIdxOrig, vregIdx, vregIdxOrig, pregCmp);
 }
 
-template <typename ReduceIdxOp, typename TileDataOut, typename TileDataIn>
-PTO_INTERNAL void TRowReduceIdxImpl(__ubuf__ typename TileDataOut::DType *dstPtr,
+template <typename ReduceIdxOp, typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, bool outputVal>
+PTO_INTERNAL void TRowReduceIdxImpl(__ubuf__ typename TileDataOutVal::DType *dstValPtr,
+                                    __ubuf__ typename TileDataOutIdx::DType *dstIdxPtr,
                                     __ubuf__ typename TileDataIn::DType *srcPtr, uint32_t rows, uint32_t cols,
                                     unsigned version)
 {
-    using TDst = typename TileDataOut::DType;
+    using TDstVal = typename TileDataOutVal::DType;
+    using TDstIdx = typename TileDataOutIdx::DType;
     using TSrc = typename TileDataIn::DType;
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(TSrc);
     uint16_t repeatTimes = CeilDivision(cols, elementsPerRepeat);
     __VEC_SCOPE__
     {
-        constexpr auto distValue =
-            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<TDst, DistVST::DIST_ONEPT>())>();
+        constexpr auto distValueVal =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<TDstVal, DistVST::DIST_ONEPT>())>();
+        constexpr auto distValueIdx =
+            std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<TDstIdx, DistVST::DIST_ONEPT>())>();
         RegTensor<TSrc> vregZero, vregSrc, vregValOrig;
-        RegTensor<TDst> vregIdxOrig;
+        RegTensor<TDstIdx> vregIdxOrig;
         vbr(vregZero, 0);
 
         uint32_t dstDup = 1;
@@ -93,10 +97,13 @@ PTO_INTERNAL void TRowReduceIdxImpl(__ubuf__ typename TileDataOut::DType *dstPtr
                     MaskReg pRegSrc = CreatePredicate<TSrc>(sregCol);
                     vlds(vregSrc, srcPtr, i * TileDataIn::RowStride + j * elementsPerRepeat, NORM);
                     ReduceIdxOp::Reduce(vregSrc, vregSrc, pRegSrc);
-                    UpdateIdxValue<ReduceIdxOp, TDst, TSrc>(vregIdxOrig, vregValOrig, vregSrc, vregZero,
+                    UpdateIdxValue<ReduceIdxOp, TDstIdx, TSrc>(vregIdxOrig, vregValOrig, vregSrc, vregZero,
                                                             j * elementsPerRepeat, pRegOneElem);
                 }
-                vsts(vregIdxOrig, dstPtr, i * TileDataOut::RowStride, distValue, pRegOneElem);
+                vsts(vregIdxOrig, dstIdxPtr, i * TileDataOutIdx::RowStride, distValueIdx, pRegOneElem);
+                if constexpr (outputVal) {
+                    vsts(vregValOrig, dstValPtr, i * TileDataOutVal::RowStride, distValueVal, pRegOneElem);
+                }
             }
         } else {
             for (uint16_t i = 0; i < (uint16_t)rows; ++i) {
@@ -109,50 +116,68 @@ PTO_INTERNAL void TRowReduceIdxImpl(__ubuf__ typename TileDataOut::DType *dstPtr
                     MaskReg pRegSrc = CreatePredicate<TSrc>(sregCol);
                     vlds(vregSrc, rowPtr, elementsPerRepeat, NORM, POST_UPDATE);
                     ReduceIdxOp::Reduce(vregSrc, vregSrc, pRegSrc);
-                    UpdateIdxValue<ReduceIdxOp, TDst, TSrc>(vregIdxOrig, vregValOrig, vregSrc, vregZero,
+                    UpdateIdxValue<ReduceIdxOp, TDstIdx, TSrc>(vregIdxOrig, vregValOrig, vregSrc, vregZero,
                                                             j * elementsPerRepeat, pRegOneElem);
                 }
-                vsts(vregIdxOrig, dstPtr, TileDataOut::RowStride, distValue, pRegOneElem, POST_UPDATE);
+                vsts(vregIdxOrig, dstIdxPtr, TileDataOutIdx::RowStride, distValueIdx, pRegOneElem, POST_UPDATE);
+                if constexpr (outputVal) {
+                    vsts(vregValOrig, dstValPtr, TileDataOutVal::RowStride, distValueVal, pRegOneElem, POST_UPDATE);
+                }
             }
         }
     }
 }
 
-template <typename TileDataOut, typename TileDataIn>
+template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, bool outputVal>
 __tf__ PTO_INTERNAL OP_NAME(TROWARGMAX)
-    OP_TYPE(reduce) void TRowArgMax(typename TileDataOut::TileDType __out__ dst,
+    OP_TYPE(reduce) void TRowArgMax(typename TileDataOutVal::TileDType __out__ dstVal,
+                                    typename TileDataOutIdx::TileDType __out__ dstIdx,
                                     typename TileDataIn::TileDType __in__ src, uint32_t srcValidRows,
                                     uint32_t srcValidCols, uint32_t dstValidRow,
                                     unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
-    using TDst = typename TileDataOut::DType;
+    using TDstVal = typename TileDataOutVal::DType;
+    using TDstIdx = typename TileDataOutIdx::DType;
     using TSrc = typename TileDataIn::DType;
-    TRowReduceCheck<TileDataOut, TileDataIn, true>(srcValidRows, srcValidCols, dstValidRow);
-    __ubuf__ TDst *dstPtr = __cce_get_tile_ptr(dst);
+    TRowReduceCheck<TileDataOutIdx, TileDataIn, true>(srcValidRows, srcValidCols, dstValidRow);
+    __ubuf__ TDstVal *dstValPtr = __cce_get_tile_ptr(dstVal);
+    __ubuf__ TDstIdx *dstIdxPtr = __cce_get_tile_ptr(dstIdx);
     __ubuf__ TSrc *srcPtr = __cce_get_tile_ptr(src);
-    TRowReduceIdxImpl<ROWIDXMAX<TSrc>, TileDataOut, TileDataIn>(dstPtr, srcPtr, srcValidRows, srcValidCols, version);
+    TRowReduceIdxImpl<ROWIDXMAX<TSrc>, TileDataOutVal, TileDataOutIdx, TileDataIn, outputVal>
+        (dstValPtr, dstIdxPtr, srcPtr, srcValidRows, srcValidCols, version);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TROWARGMAX_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
-    TRowArgMax<TileDataOut, TileDataIn>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(),
-                                        dst.GetValidRow());
+    TRowArgMax<TileDataOut, TileDataOut, TileDataIn, false>(dst.data(), dst.data(), src.data(),
+        src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
 }
 
-template <typename TileDataOut, typename TileDataIn>
+template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp>
+PTO_INTERNAL void TROWARGMAX_IMPL(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, TileDataIn &src, TileDataTmp &tmp)
+{
+    TRowArgMax<TileDataOutVal, TileDataOutIdx, TileDataIn, true>(dstVal.data(), dstIdx.data(), src.data(),
+        src.GetValidRow(), src.GetValidCol(), dstIdx.GetValidRow());
+}
+
+template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, bool outputVal>
 __tf__ PTO_INTERNAL OP_NAME(TROWARGMIN)
-    OP_TYPE(reduce) void TRowArgMin(typename TileDataOut::TileDType __out__ dst,
+    OP_TYPE(reduce) void TRowArgMin(typename TileDataOutVal::TileDType __out__ dstVal,
+                                    typename TileDataOutIdx::TileDType __out__ dstIdx,
                                     typename TileDataIn::TileDType __in__ src, uint32_t srcValidRows,
                                     uint32_t srcValidCols, uint32_t dstValidRow,
                                     unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
-    using TDst = typename TileDataOut::DType;
+    using TDstVal = typename TileDataOutVal::DType;
+    using TDstIdx = typename TileDataOutIdx::DType;
     using TSrc = typename TileDataIn::DType;
-    TRowReduceCheck<TileDataOut, TileDataIn, true>(srcValidRows, srcValidCols, dstValidRow);
-    __ubuf__ TDst *dstPtr = __cce_get_tile_ptr(dst);
+    TRowReduceCheck<TileDataOutIdx, TileDataIn, true>(srcValidRows, srcValidCols, dstValidRow);
+    __ubuf__ TDstVal *dstValPtr = __cce_get_tile_ptr(dstVal);
+    __ubuf__ TDstIdx *dstIdxPtr = __cce_get_tile_ptr(dstIdx);
     __ubuf__ TSrc *srcPtr = __cce_get_tile_ptr(src);
-    TRowReduceIdxImpl<ROWIDXMIN<TSrc>, TileDataOut, TileDataIn>(dstPtr, srcPtr, srcValidRows, srcValidCols, version);
+    TRowReduceIdxImpl<ROWIDXMIN<TSrc>, TileDataOutVal, TileDataOutIdx, TileDataIn, outputVal>
+        (dstValPtr, dstIdxPtr, srcPtr, srcValidRows, srcValidCols, version);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
@@ -160,6 +185,13 @@ PTO_INTERNAL void TROWARGMIN_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp
 {
     TRowArgMin<TileDataOut, TileDataIn>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(),
                                         dst.GetValidRow());
+}
+
+template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp>
+PTO_INTERNAL void TROWARGMIN_IMPL(TileDataOutVal &dstVal, TileDataOutIdx &dstIdx, TileDataIn &src, TileDataTmp &tmp)
+{
+    TRowArgMin<TileDataOutVal, TileDataOutIdx, TileDataIn, true>(dstVal.data(), dstIdx.data(), src.data(),
+        src.GetValidRow(), src.GetValidCol(), dstIdx.GetValidRow());
 }
 } // namespace pto
 
