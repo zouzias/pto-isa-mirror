@@ -21,6 +21,9 @@ void launchTExtractNDVec(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn, void 
 template <int32_t testKey>
 void launchTExtractNDVecScalar(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn, void *stream);
 
+template <int32_t testKey>
+void launchTExtractNZVecToVec(uint64_t *out, uint64_t *src, void *stream);
+
 class TExtractNDVecTest : public testing::Test {
 protected:
     void SetUp() override
@@ -162,4 +165,62 @@ TEST_F(TExtractNDVecTest, case_nd_vec_11)
 TEST_F(TExtractNDVecTest, case_nd_vec_12)
 {
     testTExtractNDVecScalar<3, int8_t>(64, 64);
+}
+
+template <int32_t testKey, typename dType>
+void testTExtractNZVecToVec(int32_t srcRows, int32_t srcCols, int32_t dstRows, int32_t dstCols)
+{
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    size_t srcByteSize = srcRows * srcCols * sizeof(dType);
+    size_t dstByteSize = dstRows * dstCols * sizeof(dType);
+    uint64_t *dstHost, *srcHost, *dstDevice, *srcDevice;
+
+    aclrtMallocHost((void **)(&dstHost), dstByteSize);
+    aclrtMallocHost((void **)(&srcHost), srcByteSize);
+    aclrtMalloc((void **)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input_arr.bin", srcByteSize, srcHost, srcByteSize);
+    aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    launchTExtractNZVecToVec<testKey>(dstDevice, srcDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstByteSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<dType> golden(dstByteSize / sizeof(dType));
+    std::vector<dType> devFinal(dstByteSize / sizeof(dType));
+    ReadFile(GetGoldenDir() + "/golden_output.bin", dstByteSize, golden.data(), dstByteSize);
+    ReadFile(GetGoldenDir() + "/output.bin", dstByteSize, devFinal.data(), dstByteSize);
+
+    bool ret = ResultCmp(golden, devFinal, 0.001f);
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TExtractNDVecTest, case_nz_vec_1)
+{
+    testTExtractNZVecToVec<1, float>(16, 32, 16, 32);
+}
+
+TEST_F(TExtractNDVecTest, case_nz_vec_2)
+{
+    testTExtractNZVecToVec<2, float>(32, 32, 16, 32);
+}
+
+TEST_F(TExtractNDVecTest, case_nz_vec_3)
+{
+    testTExtractNZVecToVec<3, uint16_t>(32, 64, 16, 32);
 }
