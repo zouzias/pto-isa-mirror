@@ -164,7 +164,7 @@ void test_softmax_dn_fusion()
     bool ret = false;
     if(init){
         ret0 = ResultCmp(golden, devFinal, 0.01f);
-        ret4 = ResultCmp(golden4, devFinal4, 0.001f);
+        ret4 = ResultCmp(golden4, devFinal4, 0.001f);  //if use compiler version, check local max instead of global max
         ret5 = ResultCmp(golden5, devFinal5, 0.001f);
         ret = ret0 && ret4 && ret5;
     }
