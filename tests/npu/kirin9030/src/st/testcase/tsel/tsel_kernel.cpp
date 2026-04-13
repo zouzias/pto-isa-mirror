@@ -48,11 +48,11 @@ __global__ AICORE void runTSel(__gm__ T *out, __gm__ uint8_t *mask, __gm__ T *sr
     constexpr uint64_t totalSize = tileSize * 3 + maskSize;
     static_assert(totalSize <= 192 * 1024, "UB size overflow, should be less than 192KB.");
 
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, (uint64_t)(tileSize));
-    TASSIGN(dstTile, (uint64_t)(tileSize * 2));
-    TASSIGN(maskTile, (uint64_t)(tileSize * 3));
-    TASSIGN(maskTile, (uint64_t)(tileSize * 4));
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<(uint64_t)(tileSize)>(src1Tile);
+    TASSIGN<(uint64_t)(tileSize * 2)>(dstTile);
+    TASSIGN<(uint64_t)(tileSize * 3)>(maskTile);
+    TASSIGN<(uint64_t)(tileSize * 4)>(maskTile);
 
     GlobalData src0Global(src0);
     GlobalData src1Global(src1);

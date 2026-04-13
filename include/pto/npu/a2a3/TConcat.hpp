@@ -38,15 +38,15 @@ __tf__ PTO_INTERNAL void TConcatImpl(typename TileDataD::TileDType __out__ dst,
     unsigned src0Gap = (TileDataS0::Cols * sizeof(TD) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE - blockLen;
     unsigned dstGap = (TileDataD::Cols * sizeof(TD) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE - blockLen;
     for (int i = 0; i < validRow; i++) {
-        copy_ubuf_to_ubuf(dstPtr + i * dstRowStride, src0Ptr + i * src0RowStride, 0, 1, blockLen, src0Gap, dstGap);
+        pto_copy_ubuf_to_ubuf(dstPtr + i * dstRowStride, src0Ptr + i * src0RowStride, 1, blockLen, src0Gap, dstGap);
     }
 
     bool isAligned = (validCol0 % elementsPerBlock) == 0;
     if (isAligned) {
         unsigned src1Gap = (TileDataS1::Cols * sizeof(TD) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE - blockLen;
         for (int i = 0; i < validRow; i++) {
-            copy_ubuf_to_ubuf(dstPtr + i * dstRowStride + validCol0, src1Ptr + i * src1RowStride, 0, 1, blockLen,
-                              src1Gap, dstGap);
+            pto_copy_ubuf_to_ubuf(dstPtr + i * dstRowStride + validCol0, src1Ptr + i * src1RowStride, 1, blockLen,
+                                  src1Gap, dstGap);
         }
     } else {
         set_flag(PIPE_V, PIPE_S, EVENT_ID0);

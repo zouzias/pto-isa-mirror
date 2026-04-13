@@ -271,7 +271,7 @@ struct RsqrtOp {
         vrsqrt(dst, src, repeat, 1, 1, dstStride, srcStride);
     }
 };
-template <typename DstTile, typename SrcTile>
+template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename DstTile, typename SrcTile>
 PTO_INTERNAL void TRSQRT_IMPL(DstTile &dst, SrcTile &src)
 {
     TUNARY_IMPL<RsqrtOp<typename DstTile::DType>>(dst, src);
@@ -313,7 +313,7 @@ __tf__ PTO_INTERNAL void TRsqrtHighPrecision(typename DstTile::TileDType __out__
     set_vector_mask(-1, -1);
 }
 
-template <typename DstTile, typename SrcTile, typename TmpTile>
+template <auto PrecisionType = RsqrtAlgorithm::DEFAULT, typename DstTile, typename SrcTile, typename TmpTile>
 PTO_INTERNAL void TRSQRT_IMPL(DstTile &dst, SrcTile &src, TmpTile &tmp)
 {
     TunaryCheck<DstTile, SrcTile>();
@@ -334,7 +334,7 @@ struct SqrtOp {
         vsqrt(dst, src, repeat, 1, 1, dstStride, srcStride);
     }
 };
-template <typename DstTile, typename SrcTile>
+template <auto PrecisionType = SqrtAlgorithm::DEFAULT, typename DstTile, typename SrcTile>
 PTO_INTERNAL void TSQRT_IMPL(DstTile &dst, SrcTile &src)
 {
     TUNARY_IMPL<SqrtOp<typename DstTile::DType>>(dst, src);
@@ -350,7 +350,7 @@ struct ExpOp {
         vexp(dst, src, repeat, 1, 1, dstStride, srcStride);
     }
 };
-template <typename DstTile, typename SrcTile>
+template <auto PrecisionType = ExpAlgorithm::DEFAULT, typename DstTile, typename SrcTile>
 PTO_INTERNAL void TEXP_IMPL(DstTile &dst, SrcTile &src)
 {
     TUNARY_IMPL<ExpOp<typename DstTile::DType>>(dst, src);
@@ -415,7 +415,7 @@ struct LogOp {
         vln(dst, src, repeat, 1, 1, dstStride, srcStride);
     }
 };
-template <typename DstTile, typename SrcTile>
+template <auto PrecisionType = LogAlgorithm::DEFAULT, typename DstTile, typename SrcTile>
 PTO_INTERNAL void TLOG_IMPL(DstTile &dst, SrcTile &src)
 {
     TUNARY_IMPL<LogOp<typename DstTile::DType>>(dst, src);

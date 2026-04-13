@@ -30,8 +30,8 @@ __global__ AICORE void runROWEXPAND(__gm__ T *out, __gm__ T *src)
 
     SrcTileData srcTile;
     DstTileData dstTile;
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, sizeof(T) * 1 * dstRows); // UB最大到0x40000
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<sizeof(T) * 1 * dstRows>(dstTile); // UB最大到0x40000
 
     GlobalData srcGlobal(src);
     DstGlobalData dstGlobal(out);

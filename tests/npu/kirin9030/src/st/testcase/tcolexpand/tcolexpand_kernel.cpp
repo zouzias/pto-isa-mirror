@@ -30,8 +30,8 @@ __global__ AICORE void runCOLEXPAND(__gm__ T *out, __gm__ T *src)
 
     TileData srcTile(srcRows, validCols);
     DstTileData dstTile(dstRows, validCols);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0xF000); // UB最大到0x40000
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<0xF000>(dstTile); // UB最大到0x40000
 
     int offset = 0;
     GlobalData srcGlobal(src + offset);

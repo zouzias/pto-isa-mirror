@@ -29,10 +29,10 @@ __global__ AICORE void CONCAT(run, CASENAME)(__gm__ T *out, __gm__ T *src0, __gm
     TileData tmpTile(vRows, vCols);
     TileData tmp1Tile;
     TileData dstTile(vRows, 1);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(tmpTile, kTRows_ * kTCols_ * sizeof(T) * 2);
-    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(T) * 3);
-    TASSIGN(tmp1Tile, kTRows_ * kTCols_ * sizeof(T) * 4);
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<kTRows_ * kTCols_ * sizeof(T) * 2>(tmpTile);
+    TASSIGN<kTRows_ * kTCols_ * sizeof(T) * 3>(dstTile);
+    TASSIGN<kTRows_ * kTCols_ * sizeof(T) * 4>(tmp1Tile);
 
     GlobalData src0Global(src0);
     GlobalData dstGlobal(out);

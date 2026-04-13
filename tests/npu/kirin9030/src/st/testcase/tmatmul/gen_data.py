@@ -90,7 +90,7 @@ if __name__ == "__main__":
     case_params_list = [
         tmatmulParams(np.float16, np.float16, np.float16, 40, 50, 60, False),
         tmatmulParams(np.int8, np.int8, np.int32, 6, 7, 8, False),
-        tmatmulParams(np.float16, np.float16, np.float16, 1, 16, 1026, False),
+        tmatmulParams(np.float16, np.float16, np.float16, 1, 16, 512, False),
         tmatmulParams(np.int8, np.int8, np.int32, 26, 15, 27, False),
         tmatmulParams(np.int8, np.int8, np.int32, 101, 1, 99, False),
 

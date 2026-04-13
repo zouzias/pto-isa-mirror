@@ -32,9 +32,9 @@ __global__ AICORE void runTTRANS(__gm__ T *out, __gm__ T *src, int vRows, int vC
     TileDataDst dstTile(vCols, vRows);
     TileDataTmp tmpTile;
 
-    TASSIGN(srcTile, 0);
-    TASSIGN(dstTile, srcTRows * srcTCols * sizeof(T));
-    TASSIGN(tmpTile, 0);
+    TASSIGN<0>(srcTile);
+    TASSIGN<srcTRows * srcTCols * sizeof(T)>(dstTile);
+    TASSIGN<0>(tmpTile);
 
     GlobalDataSrc srcGlobal(src, pto::Shape(1, 1, 1, vRows, vCols), pto::Stride(1, 1, 1, srcTCols, 1));
     GlobalDataDst dstGlobal(out, pto::Shape(1, 1, 1, vCols, vRows), pto::Stride(1, 1, 1, dstTCols, 1));

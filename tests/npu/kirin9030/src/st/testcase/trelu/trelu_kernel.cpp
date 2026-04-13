@@ -25,8 +25,8 @@ __global__ AICORE void runTRELU(__gm__ T *out, __gm__ T *input)
     TileData srcTile(kGRows_, kGCols_);
     TileData dstTile(kGRows_, kGCols_);
 
-    TASSIGN(srcTile, 0x0 + 0x400 * block_idx);
-    TASSIGN(dstTile, 0x4000 + 0x400 * block_idx);
+    TASSIGN<0x0 + 0x400 * block_idx>(srcTile);
+    TASSIGN<0x4000 + 0x400 * block_idx>(dstTile);
 
     int offset = (block_idx / 4) * (64 * 16) + (block_idx % 4) * 16;
     GlobalData srcGlobal(input + offset);

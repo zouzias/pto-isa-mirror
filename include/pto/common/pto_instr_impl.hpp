@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
+#include <pto/common/arch_cce_intrinsic.hpp>
 
 #ifdef PTO_NPU_ARCH_A2A3
 #include "pto/npu/a2a3/TAssign.hpp"
@@ -226,8 +227,12 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef PTO_NPU_ARCH_KIRIN9030
 #include "pto/npu/kirin9030/header.hpp"
 #endif
+#ifdef PTO_NPU_ARCH_KIRINX90
+#include "pto/npu/kirinX90/header.hpp"
+#endif
 
 #ifdef __CPU_SIM
+#include "pto/cpu/TSync.hpp"
 #include "pto/cpu/ElementTileOp.h"
 #include "pto/cpu/ElementTileScalarOp.h"
 #include "pto/cpu/TBinSOps.hpp"
@@ -297,7 +302,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TQuant.hpp"
 #include "pto/cpu/TSubView.hpp"
 #include "pto/cpu/MGatherScatter.hpp"
-#include "pto/cpu/TSync.hpp"
 #include "pto/cpu/TPush.hpp"
 #include "pto/cpu/TPop.hpp"
 #include "pto/cpu/TColReduceIdx.hpp"

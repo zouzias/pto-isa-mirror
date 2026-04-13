@@ -33,9 +33,9 @@ __global__ AICORE void runTPartMin(__gm__ T *out, __gm__ T *src0, __gm__ T *src1
     TileDataSrc1 src1Tile(src1VR, src1VC);
     TileDataDst dstTile(dstVR, dstVC);
 
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x12000);
-    TASSIGN(dstTile, 0x24000);
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<TileDataSrc0::Numel * sizeof(T)>(src1Tile);
+    TASSIGN<(TileDataSrc0::Numel + TileDataSrc1::Numel) * sizeof(T)>(dstTile);
 
     GlobalDataSrc0 src0Global(src0);
     GlobalDataSrc1 src1Global(src1);
@@ -94,23 +94,22 @@ template void TPartMinTest::LaunchTPartMin<float, 128, 64, 128, 64, 96, 64>(floa
                                                                             void *stream);
 template void TPartMinTest::LaunchTPartMin<float, 95, 95, 95, 95, 95, 95>(float *out, float *src0, float *src1,
                                                                           void *stream);
-template void TPartMinTest::LaunchTPartMin<float, 122, 123, 104, 123, 122, 110>(float *out, float *src0, float *src1,
-                                                                                void *stream);
-template void TPartMinTest::LaunchTPartMin<aclFloat16, 122, 123, 104, 123, 122, 110, true>(aclFloat16 *out,
-                                                                                           aclFloat16 *src0,
-                                                                                           aclFloat16 *src1,
-                                                                                           void *stream);
-template void TPartMinTest::LaunchTPartMin<int16_t, 122, 123, 104, 123, 122, 110>(int16_t *out, int16_t *src0,
-                                                                                  int16_t *src1, void *stream);
-template void TPartMinTest::LaunchTPartMin<int32_t, 122, 123, 104, 123, 122, 110>(int32_t *out, int32_t *src0,
-                                                                                  int32_t *src1, void *stream);
-template void TPartMinTest::LaunchTPartMin<uint16_t, 122, 123, 104, 123, 122, 110>(uint16_t *out, uint16_t *src0,
-                                                                                   uint16_t *src1, void *stream);
-template void TPartMinTest::LaunchTPartMin<uint32_t, 122, 123, 104, 123, 122, 110>(uint32_t *out, uint32_t *src0,
-                                                                                   uint32_t *src1, void *stream);
-template void TPartMinTest::LaunchTPartMin<int8_t, 122, 123, 104, 123, 122, 110>(int8_t *out, int8_t *src0,
-                                                                                 int8_t *src1, void *stream);
-template void TPartMinTest::LaunchTPartMin<uint8_t, 122, 123, 104, 123, 122, 110>(uint8_t *out, uint8_t *src0,
-                                                                                  uint8_t *src1, void *stream);
+template void TPartMinTest::LaunchTPartMin<float, 61, 123, 52, 123, 61, 110>(float *out, float *src0, float *src1,
+                                                                             void *stream);
+template void TPartMinTest::LaunchTPartMin<aclFloat16, 61, 123, 52, 123, 61, 110, true>(aclFloat16 *out,
+                                                                                        aclFloat16 *src0,
+                                                                                        aclFloat16 *src1, void *stream);
+template void TPartMinTest::LaunchTPartMin<int16_t, 61, 123, 52, 123, 61, 110>(int16_t *out, int16_t *src0,
+                                                                               int16_t *src1, void *stream);
+template void TPartMinTest::LaunchTPartMin<int32_t, 61, 123, 52, 123, 61, 110>(int32_t *out, int32_t *src0,
+                                                                               int32_t *src1, void *stream);
+template void TPartMinTest::LaunchTPartMin<uint16_t, 61, 123, 52, 123, 61, 110>(uint16_t *out, uint16_t *src0,
+                                                                                uint16_t *src1, void *stream);
+template void TPartMinTest::LaunchTPartMin<uint32_t, 61, 123, 52, 123, 61, 110>(uint32_t *out, uint32_t *src0,
+                                                                                uint32_t *src1, void *stream);
+template void TPartMinTest::LaunchTPartMin<int8_t, 61, 123, 52, 123, 61, 110>(int8_t *out, int8_t *src0, int8_t *src1,
+                                                                              void *stream);
+template void TPartMinTest::LaunchTPartMin<uint8_t, 61, 123, 52, 123, 61, 110>(uint8_t *out, uint8_t *src0,
+                                                                               uint8_t *src1, void *stream);
 template void TPartMinTest::LaunchTPartMin<aclFloat16, 5, 33, 5, 33, 5, 33, 6, 1520, 6, 1520, 6, 464, true>(
     aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream);

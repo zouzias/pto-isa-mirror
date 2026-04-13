@@ -130,6 +130,8 @@ timg2col
 tquant
 txor
 txors
+tget_async
+tput_async
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
