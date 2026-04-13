@@ -140,7 +140,7 @@ protected:
             LaunchTRowArgMax<TDst, TSrc, dstTileH, dstTileW, srcTileH, srcTileW, vRows, vCols>(
                 (TDst *)this->dstDevice, (TSrc *)this->srcDevice, this->stream);
         }
-        bool res = this->AfterLaunch<TSrc, TDst>();
+        bool res = this->AfterLaunch<TDst, TSrc>();
         EXPECT_TRUE(res);
     }
 
