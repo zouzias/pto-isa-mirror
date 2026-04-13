@@ -5,6 +5,7 @@ This directory contains manual, performance-oriented kernel examples targeting A
 ## Examples
 
 - GEMM performance kernel: [gemm_performance/README.md](gemm_performance/README.md)
+- AllGather + GEMM fusion: [allgather_gemm/README.md](allgather_gemm/README.md)
 - Flash-Attention kernel: [../common/flash_atten/README.md](../common/flash_atten/README.md)
 - TOPK performance kernel: [topk/README.md](topk/README.md)
 

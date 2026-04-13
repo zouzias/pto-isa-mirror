@@ -31,9 +31,9 @@ PTO_INTERNAL void runTRemS(__gm__ T *out, __gm__ T *src, T scalar)
     dstTileData dstTile(validRow, validCol);
     tmpTileData tmpTile(1, validCol);
 
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, row * col * sizeof(T));
-    TASSIGN(tmpTile, row * col * sizeof(T) + dstTileRow * dstTileCol * sizeof(T));
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<row * col * sizeof(T)>(dstTile);
+    TASSIGN<row * col * sizeof(T) + dstTileRow * dstTileCol * sizeof(T)>(tmpTile);
     TLOAD(dstTile, dstGlobal);
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);

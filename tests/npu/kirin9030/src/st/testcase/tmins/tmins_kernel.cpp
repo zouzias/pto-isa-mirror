@@ -54,8 +54,8 @@ __global__ AICORE void runTMINS(__gm__ T *out, __gm__ T *src0, __gm__ T *scalar)
     using srcTileData = typename GDS::srcTileType;
     srcTileData src0Tile;
     dstTileData dstTile;
-    TASSIGN(src0Tile, 0x0 + 0x400 * block_idx);
-    TASSIGN(dstTile, 0x8000 + 0x400 * block_idx);
+    TASSIGN<0x0 + 0x400 * block_idx>(src0Tile);
+    TASSIGN<0x8000 + 0x400 * block_idx>(dstTile);
 
     int offset = 0;
     srcGlobalType src0Global(src0 + offset);

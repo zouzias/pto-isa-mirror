@@ -63,9 +63,9 @@ __tf__ PTO_INTERNAL void TColReduceIdx16(typename TileDataOut::TileDType __out__
 
     for (uint16_t j = 0; j < numLoop; j++) {
         pipe_barrier(PIPE_V);
-        vector_dup((__ubuf__ int16_t *)tmpPtr, 0, 1, 1, 1, 0, 0);                       // cur index
-        vector_dup((__ubuf__ int16_t *)tmpPtr + 2 * tmpGapEles, 0, 1, 1, 1, 0, 0);      // argmin index
-        copy_ubuf_to_ubuf(tmpPtr + tmpGapEles, srcPtr + j * elemPerRpt, 0, 1, 8, 0, 0); // min elements
+        vector_dup((__ubuf__ int16_t *)tmpPtr, 0, 1, 1, 1, 0, 0);                        // cur index
+        vector_dup((__ubuf__ int16_t *)tmpPtr + 2 * tmpGapEles, 0, 1, 1, 1, 0, 0);       // argmin index
+        pto_copy_ubuf_to_ubuf(tmpPtr + tmpGapEles, srcPtr + j * elemPerRpt, 1, 8, 0, 0); // min elements
         pipe_barrier(PIPE_V);
         for (uint16_t i = 1; i < srcValidRow; i++) {
             vadds((__ubuf__ int16_t *)tmpPtr, (__ubuf__ int16_t *)tmpPtr, 1, 1, 1, 1, 0, 0);
@@ -158,9 +158,9 @@ __tf__ PTO_INTERNAL void TColReduceIdx32(typename TileDataOut::TileDType __out__
     uint32_t tmpGapEles = numLoop > 0 ? elemPerRpt : CeilDivision(srcValidCol, elemPerBlock) * elemPerBlock;
 
     for (uint16_t j = 0; j < numLoop; j++) {
-        vector_dup(dstPtr + j * elemPerRpt, 0, 1, 1, 1, 0, 0);                          // argmin index
-        vector_dup(tmpPtr, 0, 1, 1, 1, 0, 0);                                           // cur index
-        copy_ubuf_to_ubuf(tmpPtr + tmpGapEles, srcPtr + j * elemPerRpt, 0, 1, 8, 0, 0); // min elements
+        vector_dup(dstPtr + j * elemPerRpt, 0, 1, 1, 1, 0, 0);                           // argmin index
+        vector_dup(tmpPtr, 0, 1, 1, 1, 0, 0);                                            // cur index
+        pto_copy_ubuf_to_ubuf(tmpPtr + tmpGapEles, srcPtr + j * elemPerRpt, 1, 8, 0, 0); // min elements
         pipe_barrier(PIPE_V);
         for (uint16_t i = 1; i < srcValidRow; i++) {
             vadds((__ubuf__ int32_t *)tmpPtr, (__ubuf__ int32_t *)tmpPtr, 1, 1, 1, 1, 0, 0);

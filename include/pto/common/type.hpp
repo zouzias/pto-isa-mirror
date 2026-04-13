@@ -136,6 +136,12 @@ enum class SLayout
     ColMajor = 2,
 };
 
+enum class PrintFormat : uint8_t
+{
+    Width8_Precision4 = 0,
+    Width8_Precision2 = 1,
+    Width10_Precision6 = 2,
+};
 // 01-bits patterns are read from right to left.
 // Right bits are low bits, corresponding to low index positions of data.
 enum class MaskPattern : uint8_t
@@ -305,7 +311,33 @@ enum class HistByte : uint8_t
     BYTE_3 = 3  // MSB (bits 31-24)
 };
 
+union NotNumUnion {
+    float f;
+    uint32_t i;
+};
+
+union HalfUnion {
+#ifdef __CCE_AICORE__
+    half f;
+#else
+    uint16_t f;
+#endif
+    uint16_t i;
+};
+
 enum class DivAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class SqrtAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RsqrtAlgorithm : uint8_t
 {
     DEFAULT,
     HIGH_PRECISION

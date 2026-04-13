@@ -46,18 +46,18 @@ __global__ AICORE void runTMovL12Bias(__gm__ cType *out, __gm__ aType *src0, __g
     TileMatAData aMatTile;
     TileMatBData bMatTile;
     TileMatBiasData biasMatTile;
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, M * K * sizeof(aType));
-    TASSIGN(biasMatTile, M * K * sizeof(aType) + K * N * sizeof(bType));
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<M * K * sizeof(aType)>(bMatTile);
+    TASSIGN<M * K * sizeof(aType) + K * N * sizeof(bType)>(biasMatTile);
 
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
     BiasTile biasTile;
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
-    TASSIGN(biasTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
+    TASSIGN<0x0>(biasTile);
 
     /******************************TLOAD*****************************/
     TLOAD(aMatTile, src0Global);
@@ -108,18 +108,18 @@ __global__ AICORE void runTMovL12Fb(__gm__ cType *out, __gm__ aType *src0, __gm_
     TileMatAData aMatTile;
     TileMatBData bMatTile;
     TileMatFbData fbMatTile;
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, M * K * sizeof(aType));
-    TASSIGN(fbMatTile, M * K * sizeof(aType) + K * N * sizeof(bType));
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<M * K * sizeof(aType)>(bMatTile);
+    TASSIGN<M * K * sizeof(aType) + K * N * sizeof(bType)>(fbMatTile);
 
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
     FbTile fbTile;
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
-    TASSIGN(fbTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
+    TASSIGN<0x0>(fbTile);
 
     Event<Op::TLOAD, Op::TMOV_M2L> evtLoad_Mov2Left = TLOAD(aMatTile, src0Global);
     Event<Op::TLOAD, Op::TMOV_M2R> evtLoad_Mov2Right = TLOAD(bMatTile, src1Global);
@@ -137,6 +137,41 @@ __global__ AICORE void runTMovL12Fb(__gm__ cType *out, __gm__ aType *src0, __gm_
     TSTORE_FP(dstGlobal, cTile, fbTile, evtMov2S_Store, evtMatmul_Store);
 }
 
+template <int32_t tilingKey>
+void launchTMovL12Bias(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *bias, void *stream)
+{
+    if constexpr (tilingKey == 4) {
+        runTMovL12Bias<int32_t, int8_t, int8_t, int32_t, 128, 96, 64, 128, 96, 64>
+            <<<1, nullptr, stream>>>(reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0),
+                                     reinterpret_cast<int8_t *>(src1), reinterpret_cast<int32_t *>(bias));
+    } else if constexpr (tilingKey == 5) {
+        runTMovL12Bias<int32_t, int8_t, int8_t, int32_t, 32, 32, 64, 31, 32, 63>
+            <<<1, nullptr, stream>>>(reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0),
+                                     reinterpret_cast<int8_t *>(src1), reinterpret_cast<int32_t *>(bias));
+    }
+}
+
+template <int32_t tilingKey>
+void launchTMovL12Fb(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *scaling, void *stream)
+{
+    if constexpr (tilingKey == 1) {
+        runTMovL12Fb<int8_t, int8_t, int8_t, uint64_t, int32_t, 32, 32, 128, 32, 32, 128>
+            <<<1, nullptr, stream>>>(reinterpret_cast<int8_t *>(out), reinterpret_cast<int8_t *>(src0),
+                                     reinterpret_cast<int8_t *>(src1), reinterpret_cast<uint64_t *>(scaling));
+    } else if constexpr (tilingKey == 2) {
+        runTMovL12Fb<half, int8_t, int8_t, uint64_t, int32_t, 96, 32, 64, 96, 32, 64>
+            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<int8_t *>(src0),
+                                     reinterpret_cast<int8_t *>(src1), reinterpret_cast<uint64_t *>(scaling));
+    }
+}
+
+template void launchTMovL12Bias<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+template void launchTMovL12Bias<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+
+template void launchTMovL12Fb<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+template void launchTMovL12Fb<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+
+#ifndef PTO_TEST_KIRINX90
 template <typename cType, typename aType, typename bType, int M, int K, int N, int ValidM, int ValidK, int ValidN,
           int Block = 1>
 __global__ AICORE void runTMovAcc2Vec(__gm__ cType *out, __gm__ aType *src0, __gm__ bType *src1)
@@ -170,18 +205,18 @@ __global__ AICORE void runTMovAcc2Vec(__gm__ cType *out, __gm__ aType *src0, __g
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    TASSIGN(aMatTile, 0x0);
-    TASSIGN(bMatTile, M * K * sizeof(aType));
+    TASSIGN<0x0>(aMatTile);
+    TASSIGN<M * K * sizeof(aType)>(bMatTile);
 
     LeftTile aTile;
     RightTile bTile;
     AccTile cTile;
     VecTile dstTile;
 
-    TASSIGN(aTile, 0x0);
-    TASSIGN(bTile, 0x0);
-    TASSIGN(cTile, 0x0);
-    TASSIGN(dstTile, 0x0);
+    TASSIGN<0x0>(aTile);
+    TASSIGN<0x0>(bTile);
+    TASSIGN<0x0>(cTile);
+    TASSIGN<0x0>(dstTile);
 
     /******************************TLOAD*****************************/
     Event<Op::TLOAD, Op::TMOV_M2L> evtLoad_MovL = TLOAD(aMatTile, src0Global);
@@ -201,34 +236,6 @@ __global__ AICORE void runTMovAcc2Vec(__gm__ cType *out, __gm__ aType *src0, __g
 }
 
 template <int32_t tilingKey>
-void launchTMovL12Bias(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *bias, void *stream)
-{
-    if constexpr (tilingKey == 4) {
-        runTMovL12Bias<int32_t, int8_t, int8_t, int32_t, 128, 96, 64, 128, 96, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0),
-                                     reinterpret_cast<int8_t *>(src1), reinterpret_cast<int32_t *>(bias));
-    } else if constexpr (tilingKey == 5) {
-        runTMovL12Bias<int32_t, int8_t, int8_t, int32_t, 32, 32, 64, 31, 32, 63>
-            <<<1, nullptr, stream>>>(reinterpret_cast<int32_t *>(out), reinterpret_cast<int8_t *>(src0),
-                                     reinterpret_cast<int8_t *>(src1), reinterpret_cast<int32_t *>(bias));
-    }
-}
-
-template <int32_t tilingKey>
-void launchTMovL12Fb(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *scaling, void *stream)
-{
-    if constexpr (tilingKey == 1) {
-        runTMovL12Fb<int8_t, int8_t, int8_t, uint64_t, int32_t, 32, 32, 128, 32, 32, 128>
-            <<<1, nullptr, stream>>>(reinterpret_cast<int8_t *>(out), reinterpret_cast<int8_t *>(src0),
-                                     reinterpret_cast<int8_t *>(src1), reinterpret_cast<uint64_t *>(scaling));
-    } else if constexpr (tilingKey == 2) {
-        runTMovL12Fb<half, int8_t, int8_t, uint64_t, int32_t, 96, 32, 64, 96, 32, 64>
-            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<int8_t *>(src0),
-                                     reinterpret_cast<int8_t *>(src1), reinterpret_cast<uint64_t *>(scaling));
-    }
-}
-
-template <int32_t tilingKey>
 void launchTMovAcc2Vec(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 {
     if constexpr (tilingKey == 1) {
@@ -240,10 +247,6 @@ void launchTMovAcc2Vec(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
     }
 }
 
-template void launchTMovL12Bias<4>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
-template void launchTMovL12Bias<5>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
-
-template void launchTMovL12Fb<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
-template void launchTMovL12Fb<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
 template void launchTMovAcc2Vec<1>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 template void launchTMovAcc2Vec<2>(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+#endif

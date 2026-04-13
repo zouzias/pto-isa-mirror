@@ -43,9 +43,9 @@ PTO_INTERNAL void runTScatter(__gm__ Tsrc0 *out, __gm__ Tsrc0 *src0, __gm__ Tsrc
     TileData_src0 src0Tile(src0_row, src0_col);
     TileData_src1 src1Tile(src1_row, src1_col); // index
     TileData_dst dstTile(dst_row, dst_col);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x20000);
-    TASSIGN(dstTile, 0x28000);
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<0x20000>(src1Tile);
+    TASSIGN<0x28000>(dstTile);
 
     GlobalData_src0 src0Global(src0);
     GlobalData_src1 src1Global(src1);

@@ -5,6 +5,7 @@
 ## 示例
 
 - GEMM 性能 kernel：[gemm_performance/README.md](gemm_performance/README.md)
+- AllGather + GEMM 融合：[allgather_gemm/README.md](allgather_gemm/README.md)
 - Flash-Attention kernel：[../common/flash_atten/README.md](../common/flash_atten/README.md)
 - TOPK 性能 kernel：[topk/README.md](topk/README.md)
 
