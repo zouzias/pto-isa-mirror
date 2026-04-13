@@ -94,7 +94,7 @@ protected:
 
 TEST_F(TCOLCMAXTest, case01)
 {
-    bool ret = TCOLCMAXTestFramework<1, float, 1, 1, 1, 256, 255>();
+    bool ret = TCOLCMAXTestFramework<1, float, 1, 1, 1, 256, 127>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLCMAXTest, case02)
@@ -104,12 +104,12 @@ TEST_F(TCOLCMAXTest, case02)
 }
 TEST_F(TCOLCMAXTest, case03)
 {
-    bool ret = TCOLCMAXTestFramework<3, float, 16, 15, 1, 256, 255>();
+    bool ret = TCOLCMAXTestFramework<3, float, 16, 15, 1, 256, 127>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLCMAXTest, case11)
 {
-    bool ret = TCOLCMAXTestFramework<11, aclFloat16, 1, 1, 1, 256, 255>();
+    bool ret = TCOLCMAXTestFramework<11, aclFloat16, 1, 1, 1, 256, 127>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLCMAXTest, case12)
@@ -119,12 +119,12 @@ TEST_F(TCOLCMAXTest, case12)
 }
 TEST_F(TCOLCMAXTest, case13)
 {
-    bool ret = TCOLCMAXTestFramework<13, aclFloat16, 16, 15, 1, 256, 255>();
+    bool ret = TCOLCMAXTestFramework<13, aclFloat16, 16, 15, 1, 256, 127>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLCMAXTest, case51)
 {
-    bool ret = TCOLCMAXTestFramework<51, uint16_t, 1, 1, 1, 256, 255>();
+    bool ret = TCOLCMAXTestFramework<51, uint16_t, 1, 1, 1, 256, 127>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLCMAXTest, case52)
@@ -134,12 +134,12 @@ TEST_F(TCOLCMAXTest, case52)
 }
 TEST_F(TCOLCMAXTest, case53)
 {
-    bool ret = TCOLCMAXTestFramework<53, uint16_t, 16, 15, 1, 256, 255>();
+    bool ret = TCOLCMAXTestFramework<53, uint16_t, 16, 15, 1, 256, 127>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLCMAXTest, case71)
 {
-    bool ret = TCOLCMAXTestFramework<71, uint32_t, 1, 1, 1, 256, 255>();
+    bool ret = TCOLCMAXTestFramework<71, uint32_t, 1, 1, 1, 256, 127>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLCMAXTest, case72)
@@ -149,7 +149,7 @@ TEST_F(TCOLCMAXTest, case72)
 }
 TEST_F(TCOLCMAXTest, case73)
 {
-    bool ret = TCOLCMAXTestFramework<73, uint32_t, 16, 15, 1, 256, 255>();
+    bool ret = TCOLCMAXTestFramework<73, uint32_t, 16, 15, 1, 256, 127>();
     EXPECT_TRUE(ret);
 }
 TEST_F(TCOLCMAXTest, case81)

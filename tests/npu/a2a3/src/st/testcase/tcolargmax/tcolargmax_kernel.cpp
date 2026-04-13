@@ -22,18 +22,19 @@ PTO_INTERNAL void runTColCMax(__gm__ uint32_t __out__ *out, __gm__ T __in__ *src
     using DynDim2Stride = pto::Stride<1, 1, -1, -1, 1>;
     using GlobalData = GlobalTensor<T, DynDim2Shape, DynDim2Stride>;
     using GlobalDataDst = GlobalTensor<uint32_t, DynDim2Shape, DynDim2Stride>;
+    int dstCol = (dstCol + 7) / 8 * 8;
     GlobalData srcGlobal(src, DynDim2Shape(srcValidRow, validCol), DynDim2Stride(srcRow, col));
-    GlobalDataDst dstGlobal(out, DynDim2Shape(dstRow, validCol), DynDim2Stride(dstRow, col));
+    GlobalDataDst dstGlobal(out, DynDim2Shape(dstRow, validCol), DynDim2Stride(dstRow, dstCol));
 
     using SrcTileData = Tile<TileType::Vec, T, srcRow, col, BLayout::RowMajor, -1, -1>;
-    using DstTileData = Tile<TileType::Vec, uint32_t, dstRow, col, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, uint32_t, dstRow, dstCol, BLayout::RowMajor, -1, -1>;
     using TmpTile = Tile<TileType::Vec, T, 1, 32, BLayout::RowMajor, -1, -1>;
     SrcTileData srcTile(srcValidRow, validCol);
     DstTileData dstTile(dstRow, validCol);
     TmpTile tmpTile(1, 32);
     TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, srcRow * col * sizeof(T));
-    TASSIGN(tmpTile, srcRow * col * sizeof(T) + col * sizeof(uint32_t));
+    TASSIGN(dstTile, srcRow * dstCol * sizeof(T));
+    TASSIGN(tmpTile, srcRow * dstCol * sizeof(T) + col * sizeof(uint32_t));
 
     // 搬运数据
     TLOAD(srcTile, srcGlobal);
@@ -49,7 +50,7 @@ PTO_INTERNAL void runTColCMax(__gm__ uint32_t __out__ *out, __gm__ T __in__ *src
 
 extern "C" __global__ AICORE void launchTCOLCMAXCase01(__gm__ uint32_t *out, __gm__ float *src)
 {
-    runTColCMax<float, 1, 1, 1, 256, 255>(out, src, false);
+    runTColCMax<float, 1, 1, 1, 256, 127>(out, src, false);
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase02(__gm__ uint32_t *out, __gm__ float *src)
 {
@@ -57,11 +58,11 @@ extern "C" __global__ AICORE void launchTCOLCMAXCase02(__gm__ uint32_t *out, __g
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase03(__gm__ uint32_t *out, __gm__ float *src)
 {
-    runTColCMax<float, 16, 15, 1, 256, 255>(out, src, false);
+    runTColCMax<float, 16, 15, 1, 256, 127>(out, src, false);
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase11(__gm__ uint32_t *out, __gm__ half *src)
 {
-    runTColCMax<half, 1, 1, 1, 256, 255>(out, src, false);
+    runTColCMax<half, 1, 1, 1, 256, 127>(out, src, false);
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase12(__gm__ uint32_t *out, __gm__ half *src)
 {
@@ -69,11 +70,11 @@ extern "C" __global__ AICORE void launchTCOLCMAXCase12(__gm__ uint32_t *out, __g
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase13(__gm__ uint32_t *out, __gm__ half *src)
 {
-    runTColCMax<half, 16, 15, 1, 256, 255>(out, src, false);
+    runTColCMax<half, 16, 15, 1, 256, 127>(out, src, false);
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase51(__gm__ uint32_t *out, __gm__ uint16_t *src)
 {
-    runTColCMax<uint16_t, 1, 1, 1, 256, 255>(out, src, false);
+    runTColCMax<uint16_t, 1, 1, 1, 256, 127>(out, src, false);
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase52(__gm__ uint32_t *out, __gm__ uint16_t *src)
 {
@@ -81,11 +82,11 @@ extern "C" __global__ AICORE void launchTCOLCMAXCase52(__gm__ uint32_t *out, __g
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase53(__gm__ uint32_t *out, __gm__ uint16_t *src)
 {
-    runTColCMax<uint16_t, 16, 15, 1, 256, 255>(out, src, false);
+    runTColCMax<uint16_t, 16, 15, 1, 256, 127>(out, src, false);
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase71(__gm__ uint32_t *out, __gm__ uint32_t *src)
 {
-    runTColCMax<uint32_t, 1, 1, 1, 256, 255>(out, src, false);
+    runTColCMax<uint32_t, 1, 1, 1, 256, 127>(out, src, false);
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase72(__gm__ uint32_t *out, __gm__ uint32_t *src)
 {
@@ -93,7 +94,7 @@ extern "C" __global__ AICORE void launchTCOLCMAXCase72(__gm__ uint32_t *out, __g
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase73(__gm__ uint32_t *out, __gm__ uint32_t *src)
 {
-    runTColCMax<uint32_t, 16, 15, 1, 256, 255>(out, src, false);
+    runTColCMax<uint32_t, 16, 15, 1, 256, 127>(out, src, false);
 }
 extern "C" __global__ AICORE void launchTCOLCMAXCase81(__gm__ uint32_t *out, __gm__ half *src)
 {
