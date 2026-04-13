@@ -45,13 +45,15 @@ $$
 
 ### 规格
 
-| 项目 | 值 |
-| --- | --- |
-| OpType | `GEMM + AllReduce` |
-| 输入 | `A_i`: `M×K`, `float16`, `ND`（每 rank 独立）; `B`: `K×N`, `float16`, `DN`（共享） |
-| 输出 | `C_final`: `M×N`, `float16`, `ND`（AllReduce 归约结果） |
-| 计算 Kernel 名称 | `GemmComputeKernel`（Cube 架构，`dav-c220-cube`） |
-| 通信 Kernel 名称 | `GemmCommAllKernel`（Vector 架构，`dav-c220-vec`） |
+
+| 项目           | 值                                                                         |
+| ------------ | ------------------------------------------------------------------------- |
+| OpType       | `GEMM + AllReduce`                                                        |
+| 输入           | `A_i`: `M×K`, `float16`, `ND`（每 rank 独立）; `B`: `K×N`, `float16`, `DN`（共享） |
+| 输出           | `C_final`: `M×N`, `float16`, `ND`（AllReduce 归约结果）                         |
+| 计算 Kernel 名称 | `GemmComputeKernel`（Cube 架构，`dav-c220-cube`）                              |
+| 通信 Kernel 名称 | `GemmCommAllKernel`（Vector 架构，`dav-c220-vec`）                             |
+
 
 ## 优化说明
 
@@ -67,21 +69,23 @@ $$
 
 ## Tiling 参数
 
-| 参数 | 值 |
-| --- | --- |
-| `M`（原始） | 5416 |
-| `K` | 6144 |
-| `N`（原始） | 1408 |
-| `M`（对齐后） | 5504 |
-| `N`（对齐后） | 1536 |
-| `baseM` | 128 |
-| `baseK` | 64 |
-| `baseN` | 256 |
-| `stepKa` | 4 |
-| `stepKb` | 4 |
-| `tile 数` | 258（43×6） |
-| `COMPUTE_BLOCK_NUM` | 24 |
-| `COMM_BLOCK_NUM` | 24 |
+
+| 参数                  | 值         |
+| ------------------- | --------- |
+| `M`（原始）             | 5416      |
+| `K`                 | 6144      |
+| `N`（原始）             | 1408      |
+| `M`（对齐后）            | 5504      |
+| `N`（对齐后）            | 1536      |
+| `baseM`             | 128       |
+| `baseK`             | 64        |
+| `baseN`             | 256       |
+| `stepKa`            | 4         |
+| `stepKb`            | 4         |
+| `tile 数`            | 258（43×6） |
+| `COMPUTE_BLOCK_NUM` | 24        |
+| `COMM_BLOCK_NUM`    | 24        |
+
 
 ## 整体架构
 
@@ -131,7 +135,7 @@ Cube (M):             [TMATMUL k0] [ACC k1] [ACC k2] [ACC k3] [TMATMUL k0'] ...
 每个 AIV 与一个 AIC 的 Ready Queue 1:1 绑定。AIV 通过 `TTEST` 硬件指令非阻塞轮询队列，取到就绪 tile 后：
 
 1. **TLOAD** 从 `gemm_output` 搬入 UB（ping/pong 双缓冲）
-2. **TSTORE\<AtomicAdd\>** 到 owner rank 的 `reduced_output`（本地或远端 RDMA）
+2. **TSTOREAtomicAdd** 到 owner rank 的 `reduced_output`（本地或远端 RDMA）
 
 双缓冲流水线使当前 tile 的 TLOAD 与上一个 tile 的 TSTORE 重叠执行。当队列无数据时，AIV 通过 `TWAIT` 硬件等待，避免空转。
 
@@ -201,12 +205,14 @@ rows_per_block = ceil(total_rows / num_comm_blocks)
 
 只有被远端 TPUT/TNOTIFY 写入的 buffer 需要放在 HCCL RDMA 窗口中，本地读写的 buffer 使用普通 `aclrtMalloc`。
 
-| 缓冲区 | 大小 | 位置 | 原因 |
-| --- | --- | --- | --- |
-| `reduced_output` | M × N × 2B | **HCCL 窗口** | RS AtomicAdd + AG 远端 TPUT 写入（FP16） |
-| `signal_matrix` | (MAX_RANKS+1) × 4B，对齐 64B | **HCCL 窗口** | DeviceBarrier 跨 rank TNOTIFY 写入 |
-| `gemm_output` | M × N × 2B | **aclrtMalloc** | 仅本地读写（FP16） |
-| `src0_dev`, `src1_dev` | 输入矩阵（FP16） | **aclrtMalloc** | 仅本地读写 |
+
+| 缓冲区                    | 大小                        | 位置              | 原因                                 |
+| ---------------------- | ------------------------- | --------------- | ---------------------------------- |
+| `reduced_output`       | M × N × 2B                | **HCCL 窗口**     | RS AtomicAdd + AG 远端 TPUT 写入（FP16） |
+| `signal_matrix`        | (MAX_RANKS+1) × 4B，对齐 64B | **HCCL 窗口**     | DeviceBarrier 跨 rank TNOTIFY 写入    |
+| `gemm_output`          | M × N × 2B                | **aclrtMalloc** | 仅本地读写（FP16）                        |
+| `src0_dev`, `src1_dev` | 输入矩阵（FP16）                | **aclrtMalloc** | 仅本地读写                              |
+
 
 窗口大小由 `HCCL_BUFFSIZE` 环境变量控制，`run.sh` 自动计算：`M × N × 2 / 1MB + 64MB`。
 
@@ -214,12 +220,14 @@ rows_per_block = ceil(total_rows / num_comm_blocks)
 
 以下数据在 8 卡 Ascend 910B 上测得，参数 M=5416, K=6144, N=1408（padded 5504×1536），258 tiles (43×6)。每 rank 计算完整 GEMM C_i = A_i × B，AllReduce 对 8 个 C_i 求和。
 
-| 指标 | 值 |
-| --- | --- |
-| Compute-only | 365 us (257 TFLOPS, 98%) |
-| Sequential | 743 us (compute 368 us + comm 375 us @ 74 GB/s) |
-| Pipelined | **631 us** (speedup 1.18x, overlap 31%) |
-| Throughput | 1189 TFLOPS (total) |
+
+| 指标           | 值                                               |
+| ------------ | ----------------------------------------------- |
+| Compute-only | 365 us (257 TFLOPS, 98%)                        |
+| Sequential   | 743 us (compute 368 us + comm 375 us @ 74 GB/s) |
+| Pipelined    | **631 us** (speedup 1.18x, overlap 31%)         |
+| Throughput   | 1189 TFLOPS (total)                             |
+
 
 ### 这些数字意味着什么
 
@@ -231,14 +239,16 @@ rows_per_block = ceil(total_rows / num_comm_blocks)
 
 ### 优化历程
 
-| 优化 | Pipelined (us) | 增益 | 结论 |
-| --- | --- | --- | --- |
-| 基线 | 808 | — | — |
-| Block Swizzle | 793 | -1.8% | **保留** |
-| RS AtomicAdd 消除 Reduce 阶段 | 736 | -6.6% | **保留** |
-| AG 行级展平分解 | 623 | -15.4% | **保留** |
-| 48 AIV（RS skip + AG 参与） | 639 | RS 仅 24 AIV、AG 48 AIV | **回退**（AIC 干扰） |
-| 48 AIV 双队列（1 AIC : 2 AIV） | 667 | RS/AG 均 48 AIV | **回退**（AIC 干扰） |
+
+| 优化                        | Pipelined (us) | 增益                    | 结论             |
+| ------------------------- | -------------- | --------------------- | -------------- |
+| 基线                        | 808            | —                     | —              |
+| Block Swizzle             | 793            | -1.8%                 | **保留**         |
+| RS AtomicAdd 消除 Reduce 阶段 | 736            | -6.6%                 | **保留**         |
+| AG 行级展平分解                 | 623            | -15.4%                | **保留**         |
+| 48 AIV（RS skip + AG 参与）   | 639            | RS 仅 24 AIV、AG 48 AIV | **回退**（AIC 干扰） |
+| 48 AIV 双队列（1 AIC : 2 AIV） | 667            | RS/AG 均 48 AIV        | **回退**（AIC 干扰） |
+
 
 ## 性能优化指南（如何调这个 kernel）
 
@@ -300,26 +310,26 @@ L1 使用量：`2×64KB(A) + 2×128KB(B) = 384KB ≤ 1024KB`（L1 总容量）�
 source ${ASCEND_INSTALL_PATH}/bin/setenv.bash
 ```
 
-2. 激活 conda 环境（需含 Python + NumPy）：
+1. 激活 conda 环境（需含 Python + NumPy）：
 
 ```bash
 conda activate <your-conda-env>
 ```
 
-3. 运行示例（8 卡）：
+1. 运行示例（8 卡）：
 
 ```bash
 cd ${git_clone_path}/kernels/manual/a2a3/gemm_ar
 ./run.sh --nranks 8 --soc-version Ascend910B1
 ```
 
-4. 指定起始设备编号：
+1. 指定起始设备编号：
 
 ```bash
 FIRST_DEVICE=0 ./run.sh --nranks 8 --soc-version Ascend910B1
 ```
 
-5. 自定义 block 分配：
+1. 自定义 block 分配：
 
 ```bash
 ./run.sh --nranks 8 --compute-blocks 20 --comm-blocks 4
@@ -333,14 +343,16 @@ GEMM AllReduce demo completed successfully.
 
 ### 环境变量说明
 
-| 环境变量 | 用途 | 默认行为 |
-| --- | --- | --- |
-| `ASCEND_CANN_PATH` | CANN `set_env.sh` 的完整路径 | 自动 glob `/usr/local/Ascend/cann-*/set_env.sh` 取最新版 |
-| `MPI_SEARCH_DIRS` | MPI `bin/` 目录搜索路径（空格分隔） | 搜索 `/usr/local/mpich/bin`、`/home/mpich/bin` 等常见路径 |
-| `ASCEND_DRIVER_PATH` | Ascend driver 路径（CMake 使用） | 默认 `/usr/local/Ascend/driver` |
-| `MPI_LIB_PATH` | `libmpi.so` 绝对路径（运行时动态加载） | 由 `run.sh` 根据找到的 MPI 自动设置 |
-| `HCCL_BUFFSIZE` | HCCL RDMA 窗口大小（MB） | 由 `run.sh` 根据 M/N 自动计算 |
-| `FIRST_DEVICE` | 起始 NPU 设备编号 | 默认 0 |
+
+| 环境变量                 | 用途                         | 默认行为                                               |
+| -------------------- | -------------------------- | -------------------------------------------------- |
+| `ASCEND_CANN_PATH`   | CANN `set_env.sh` 的完整路径    | 自动 glob `/usr/local/Ascend/cann-*/set_env.sh` 取最新版 |
+| `MPI_SEARCH_DIRS`    | MPI `bin/` 目录搜索路径（空格分隔）    | 搜索 `/usr/local/mpich/bin`、`/home/mpich/bin` 等常见路径  |
+| `ASCEND_DRIVER_PATH` | Ascend driver 路径（CMake 使用） | 默认 `/usr/local/Ascend/driver`                      |
+| `MPI_LIB_PATH`       | `libmpi.so` 绝对路径（运行时动态加载）  | 由 `run.sh` 根据找到的 MPI 自动设置                          |
+| `HCCL_BUFFSIZE`      | HCCL RDMA 窗口大小（MB）         | 由 `run.sh` 根据 M/N 自动计算                             |
+| `FIRST_DEVICE`       | 起始 NPU 设备编号                | 默认 0                                               |
+
 
 ## 修改矩阵维度
 
@@ -354,16 +366,18 @@ cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 
 ## 常见问题
 
-| 问题 | 原因与解决 |
-| --- | --- |
-| `HCCL window too small` | 窗口不够大。检查 `HCCL_BUFFSIZE`，公式：`M × N × 2 bytes + margin` |
-| `HcclGetRootInfo failed: 7` | 上次运行残留脏状态。执行 `rm -rf /dev/shm/sem.hccl*; ipcrm -a` 或等待 ~30s 重试 |
-| HCCL 初始化后挂死 | rank 同步问题，检查所有 rank 是否到达 `CommMpiBarrier` |
-| 通信 kernel 段错误 | 通常是窗口地址无效，验证 `windowsIn[]` 值非零 |
-| DeviceBarrier 死锁 | signal_matrix 未在迭代间清零，检查 `resetState` 是否 memset 了 signal_matrix |
-| 验证失败 max_diff 较大 | FP16 精度有限，验证容差为 atol=1.0, rtol=0.01；若 diff 异常大，检查 DeviceBarrier 同步逻辑 |
-| `aclInit repeat init` (100002) | 无害，代码已做保护，同一进程只调用一次 `aclInit` |
-| `--allow-run-as-root` 失败 | 本项目使用 MPICH，此选项是 OpenMPI 专用 |
+
+| 问题                             | 原因与解决                                                                |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `HCCL window too small`        | 窗口不够大。检查 `HCCL_BUFFSIZE`，公式：`M × N × 2 bytes + margin`               |
+| `HcclGetRootInfo failed: 7`    | 上次运行残留脏状态。执行 `rm -rf /dev/shm/sem.hccl*; ipcrm -a` 或等待 ~30s 重试       |
+| HCCL 初始化后挂死                    | rank 同步问题，检查所有 rank 是否到达 `CommMpiBarrier`                            |
+| 通信 kernel 段错误                  | 通常是窗口地址无效，验证 `windowsIn[]` 值非零                                       |
+| DeviceBarrier 死锁               | signal_matrix 未在迭代间清零，检查 `resetState` 是否 memset 了 signal_matrix      |
+| 验证失败 max_diff 较大               | FP16 精度有限，验证容差为 atol=1.0, rtol=0.01；若 diff 异常大，检查 DeviceBarrier 同步逻辑 |
+| `aclInit repeat init` (100002) | 无害，代码已做保护，同一进程只调用一次 `aclInit`                                        |
+| `--allow-run-as-root` 失败       | 本项目使用 MPICH，此选项是 OpenMPI 专用                                          |
+
 
 ## 构建系统
 
@@ -376,8 +390,11 @@ cmake -DCONFIG_G_M=8192 -DCONFIG_G_K=8192 -DCONFIG_G_N=2048 ..
 
 ## 变更记录
 
-| 日期 | 变更 |
-| --- | --- |
-| 2025-12-15 | 初始版本，实现 GEMM + AllReduce 双流融合算子 |
-| 2026-04-01 | 兼容 CANN 9.0.0（移除已废弃的 hccl/hccl.h 依赖） |
+
+| 日期         | 变更                                               |
+| ---------- | ------------------------------------------------ |
+| 2025-12-15 | 初始版本，实现 GEMM + AllReduce 双流融合算子                  |
+| 2026-04-01 | 兼容 CANN 9.0.0（移除已废弃的 hccl/hccl.h 依赖）             |
 | 2026-04-02 | RS AtomicAdd 消除 Reduce 阶段；AG 行级展平分解优化负载均衡；更新架构文档 |
+
+

@@ -55,31 +55,19 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile,
 | `syncId`                       | `uint32_t`                                       | 否     | `0`                                                       | 0–7（MTE 事件号）          | MTE3/MTE2 管道同步事件编号，供 `SetValue`/`GetValue` 的 `set_flag`/`wait_flag` 配对使用。仅当 kernel 在同一编号上有其他管道屏障时才需覆盖。                                                           |
 | `baseConfig.block_bytes`       | `uint64_t`                                       | 否     | `1048576`（1 MiB）                                          | > 0                   | 每条 data SQE 的最大搬运字节数。总传输量拆分为 `ceil(transfer_size / block_bytes)` 条 SQE。值越大控制面开销越低但粒度越粗；单 queue 上的 SQE 总数（`ceil(iter_num / queue_num) + 1`）不得超过 `kSqDepth`（2048）。 |
 | `baseConfig.comm_block_offset` | `uint64_t`                                       | 否     | `0`                                                       | >= 0                  | 字节偏移，叠加到 src 和 dst 基地址上：`addr = data() + offset + idx * block_bytes`。典型场景：多核分片传输同一大 buffer。调用方须保证 `offset + transfer_size` 不越界（无运行时检查）。                          |
-| `baseConfig.queue_num`         | `uint32_t`                                       | 否     | `1`                                                       | 1 – 48                | 本 block 占用的并行 SDMA channel（SQ ring）数量。data SQE 按 `idx % queue_num` 轮转分发。并发 block 数上限 = `48 / queue_num`。`eventHandle` 仅追踪 queue 0。建议从 1 起步。                      |
+| `baseConfig.queue_num`         | `uint32_t`                                       | 否     | `1`                                                       | 1 – 48                | 本 block 占用的并行 SDMA channel（SQ ring）数量。data SQE 按 `idx % queue_num` 轮转分发。并发 block 数上限 = `48 / queue_num`。建议从 1 起步。                                                      |
 | `channelGroupIdx`              | `uint32_t`                                       | 否     | `kAutoChannelGroupIdx`（`UINT32_MAX`）→ 取 `get_block_idx()` | `[0, 48 / queue_num)` | 选择本 block 使用的连续 channel 组，从 `idx * queue_num` 起占 `queue_num` 个槽位。越界时静默返回 `AsyncEvent(handle=0)`。                                                                 |
 
 
 ## 约束
 
-### 编译期检查（static_assert）
-
-- `GlobalSrcData::RawDType == GlobalDstData::RawDType`
-- `GlobalSrcData::layout == GlobalDstData::layout`
-
-### 运行时检查（代码拦截，不满足时返回失败或 `AsyncEvent(handle=0)`）
-
-- src 和 dst tensor 均须为**扁平连续的逻辑一维**
-- dst tensor 的元素数量须 **>=** src tensor 的元素数量
+- src 和 dst tensor 的数据类型和内存布局必须一致，且均须为**扁平连续的逻辑一维**
+- dst tensor 的元素数量须大于等于 src tensor 的元素数量
 - src 和 dst 的 GM 指针须非 `nullptr`，即 HCCL window 须已初始化且远端地址有效
-- `blockDim * queue_num` 须 **<= 48**（即 `channelGroupIdx < 48 / queue_num`）。`BuildAsyncSession` 和数据传输路径均会拦截
-- `queue_num` 须在 **1 – 48** 范围内（不得超过 `kSdmaMaxChannel`）
-- `syncId` 须在 **0 – 7** 范围内（MTE 事件号）
-- 单 queue 上的 SQE 总数 `ceil(iter_num / queue_num) + 1`（data SQE + flag SQE）不得超过 **`kSqDepth`（2048）**。数据传输路径会拦截
+- `blockDim * queue_num` 须小于等于48（即 `channelGroupIdx < 48 / queue_num`）
+- 单 queue 上的 SQE 总数不得超过2048
 - workspace 必须是由主机侧 `SdmaWorkspaceManager` 分配的有效 GM 指针（非 `nullptr`）
-
-### 调用方须自行保证（无运行时检查）
-
-- 多 block 并发时，各 block 的 **`channelGroupIdx` 必须互不重叠**，否则 SQ ring 和 workspace 会互相踩踏。使用默认值 `kAutoChannelGroupIdx`（取 `get_block_idx()`）时天然满足；手动指定时调用方须自行保证唯一性
+- 多 block 并发时，各 block 的 **`channelGroupIdx` 必须互不重叠**，否则 SQ ring 和 workspace 会互相踩踏。使用默认值 `kAutoChannelGroupIdx`时天然满足；手动指定时调用方须自行保证唯一性
 - 异步操作 in-flight 期间，必须先调用 **`event.Wait(session)`** 等待全部完成，才能销毁 session / scratchTile 或开启新一轮批量提交。否则 SQ ring 可能溢出覆盖未消费的 SQE
 - **`comm_block_offset + transfer_size`** 不得超过 src/dst buffer 的实际大小，否则产生内存越界
 
