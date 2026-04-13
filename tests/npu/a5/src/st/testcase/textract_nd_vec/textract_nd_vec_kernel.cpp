@@ -162,3 +162,71 @@ void launchTExtractNDVecScalar(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn,
 template void launchTExtractNDVecScalar<1>(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn, void *stream);
 template void launchTExtractNDVecScalar<2>(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn, void *stream);
 template void launchTExtractNDVecScalar<3>(uint8_t *out, uint8_t *srcIn, uint8_t *dstInitIn, void *stream);
+
+template <typename T, uint32_t SrcRows, uint32_t SrcCols, uint32_t DstRows, uint32_t DstCols, uint32_t IdxRow,
+          uint32_t IdxCol>
+__global__ AICORE void RunTExtractNZVecToVec(__gm__ T *out, __gm__ T *src)
+{
+    constexpr uint32_t c0Size = CUBE_BLOCK_SIZE / (FRACTAL_NZ_ROW * sizeof(T));
+
+    using SrcShapeDim5 = pto::Shape<1, 1, 1, SrcRows, SrcCols>;
+    using SrcStridDim5 = pto::Stride<1, 1, 1, SrcCols, 1>;
+    using SrcGlobalData = GlobalTensor<T, SrcShapeDim5, SrcStridDim5>;
+
+    using OutShapeDim5 = pto::Shape<1, DstCols / c0Size, DstRows / FRACTAL_NZ_ROW, FRACTAL_NZ_ROW, c0Size>;
+    using OutStridDim5 =
+        pto::Stride<DstCols / c0Size * c0Size * DstRows, DstRows * c0Size, FRACTAL_NZ_ROW * c0Size, c0Size, 1>;
+    using OutGlobalData = GlobalTensor<T, OutShapeDim5, OutStridDim5, Layout::NZ>;
+
+    using SrcNDTile = Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::RowMajor, -1, -1>;
+    using SrcNZTile = Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::ColMajor, SrcRows, SrcCols, SLayout::RowMajor>;
+    using DstNZTile = Tile<TileType::Vec, T, DstRows, DstCols, BLayout::ColMajor, DstRows, DstCols, SLayout::RowMajor>;
+
+    SrcNDTile srcNDTile(SrcRows, SrcCols);
+    SrcNZTile srcNZTile;
+    DstNZTile dstNZTile;
+
+    TASSIGN(srcNDTile, 0x0);
+    TASSIGN(srcNZTile, 0x10000);
+    TASSIGN(dstNZTile, 0x20000);
+
+    SrcGlobalData srcGlobal(src);
+    OutGlobalData dstGlobal(out);
+
+#if defined(__DAV_VEC__)
+    TLOAD(srcNDTile, srcGlobal);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+    TMOV(srcNZTile, srcNDTile);
+
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+    TEXTRACT(dstNZTile, srcNZTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+
+    TSTORE(dstGlobal, dstNZTile);
+#endif
+}
+
+template <int32_t testKey>
+void launchTExtractNZVecToVec(uint64_t *out, uint64_t *src, void *stream)
+{
+    if constexpr (testKey == 1) {
+        RunTExtractNZVecToVec<float, 16, 32, 16, 32, 0, 0>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float *>(src));
+    } else if constexpr (testKey == 2) {
+        RunTExtractNZVecToVec<float, 32, 32, 16, 32, 16, 0>
+            <<<1, nullptr, stream>>>(reinterpret_cast<float *>(out), reinterpret_cast<float *>(src));
+    } else if constexpr (testKey == 3) {
+        RunTExtractNZVecToVec<half, 32, 64, 16, 32, 16, 32>
+            <<<1, nullptr, stream>>>(reinterpret_cast<half *>(out), reinterpret_cast<half *>(src));
+    }
+}
+
+template void launchTExtractNZVecToVec<1>(uint64_t *out, uint64_t *src, void *stream);
+template void launchTExtractNZVecToVec<2>(uint64_t *out, uint64_t *src, void *stream);
+template void launchTExtractNZVecToVec<3>(uint64_t *out, uint64_t *src, void *stream);

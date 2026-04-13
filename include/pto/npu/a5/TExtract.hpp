@@ -699,6 +699,27 @@ __tf__ AICORE void TExtractVecToVecNDScalarImpl(typename DstTileData::TileDType 
 }
 
 template <typename T, typename DstTileData, typename SrcTileData>
+__tf__ AICORE void TExtractVecToVecNZImpl(typename DstTileData::TileDType __out__ dst,
+                                          typename SrcTileData::TileDType __in__ src, uint16_t validRow,
+                                          uint16_t validCol, uint16_t srcRow, uint16_t indexRow = 0,
+                                          uint16_t indexCol = 0)
+{
+    __ubuf__ T *dstAddr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *srcAddr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+    constexpr uint32_t typeSize = sizeof(T);
+    uint32_t c0Size = BLOCK_BYTE_SIZE / typeSize;
+    uint16_t burstNum = CeilDivision(validCol, c0Size);
+    uint16_t burstLen = (validRow * c0Size * typeSize) / BLOCK_BYTE_SIZE;
+    uint32_t colBlockOffset = (indexCol / c0Size) * srcRow * c0Size;
+    uint32_t rowOffset = indexRow * c0Size + (indexCol % c0Size);
+    uint32_t srcOffset = colBlockOffset + rowOffset;
+    uint16_t srcGap = static_cast<uint16_t>(srcRow - validRow);
+    uint16_t dstGap = static_cast<uint16_t>(DstTileData::Rows - validRow);
+    __ubuf__ T *srcStart = srcAddr + srcOffset;
+    copy_ubuf_to_ubuf((__ubuf__ void *)dstAddr, (__ubuf__ void *)srcStart, 0, burstNum, burstLen, srcGap, dstGap);
+}
+
+template <typename T, typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TExtractVecToVecNDDispatch(DstTileData &dst, SrcTileData &src, uint32_t indexRow, uint32_t indexCol)
 {
     uint16_t validRow = static_cast<uint16_t>(dst.GetValidRow());
@@ -739,26 +760,43 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t ind
         using T = typename DstTileData::DType;
         static_assert(std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,
                       "TEXTRACT : Source and destination data types must match");
-        static_assert(DstTileData::isRowMajor, "TEXTRACT : Destination must be RowMajor (ND format)");
-        static_assert(SrcTileData::isRowMajor, "TEXTRACT : Source must be RowMajor (ND format)");
-        static_assert(DstTileData::Rows <= SrcTileData::Rows,
-                      "TEXTRACT : Destination rows must not exceed source rows");
-        static_assert(DstTileData::Cols <= SrcTileData::Cols,
-                      "TEXTRACT : Destination cols must not exceed source cols");
         static_assert((std::is_same<T, half>::value) || (std::is_same<T, bfloat16_t>::value) ||
                           (std::is_same<T, float>::value) || (std::is_same<T, int32_t>::value) ||
                           (std::is_same<T, float8_e4m3_t>::value) || (std::is_same<T, float8_e5m2_t>::value) ||
                           (std::is_same<T, hifloat8_t>::value) || (std::is_same<T, int8_t>::value) ||
                           (std::is_same<T, float8_e8m0_t>::value),
                       "TEXTRACT : Unsupported data type.");
-        uint32_t idxRow = static_cast<uint32_t>(indexRow);
-        uint32_t idxCol = static_cast<uint32_t>(indexCol);
-        if constexpr (DstTileData::ValidRow == 1 && DstTileData::ValidCol == 1) {
-            PTO_ASSERT(idxRow < SrcTileData::Rows, "TEXTRACT : indexRow exceeds srcRows!");
-            PTO_ASSERT(idxCol < SrcTileData::Cols, "TEXTRACT : indexCol exceeds srcCols!");
-            TExtractVecToVecNDScalarImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), idxRow, idxCol);
+        if constexpr (DstTileData::isRowMajor && SrcTileData::isRowMajor) {
+            static_assert(DstTileData::Rows <= SrcTileData::Rows,
+                          "TEXTRACT ND Vec→Vec : Destination rows must not exceed source rows");
+            static_assert(DstTileData::Cols <= SrcTileData::Cols,
+                          "TEXTRACT ND Vec→Vec : Destination cols must not exceed source cols");
+            uint32_t idxRow = static_cast<uint32_t>(indexRow);
+            uint32_t idxCol = static_cast<uint32_t>(indexCol);
+            if constexpr (DstTileData::ValidRow == 1 && DstTileData::ValidCol == 1) {
+                PTO_ASSERT(idxRow < SrcTileData::Rows, "TEXTRACT : indexRow exceeds srcRows!");
+                PTO_ASSERT(idxCol < SrcTileData::Cols, "TEXTRACT : indexCol exceeds srcCols!");
+                TExtractVecToVecNDScalarImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), idxRow, idxCol);
+            } else {
+                TExtractVecToVecNDDispatch<T>(dst, src, idxRow, idxCol);
+            }
+        } else if constexpr (!DstTileData::isRowMajor && !SrcTileData::isRowMajor &&
+                             DstTileData::SFractal == SLayout::RowMajor &&
+                             SrcTileData::SFractal == SLayout::RowMajor) {
+            static_assert(DstTileData::Cols <= SrcTileData::Cols,
+                          "TEXTRACT NZ Vec→Vec : Destination cols must not exceed source cols");
+            uint16_t validRow = static_cast<uint16_t>(dst.GetValidRow());
+            uint16_t validCol = static_cast<uint16_t>(dst.GetValidCol());
+            PTO_ASSERT(indexRow + validRow <= SrcTileData::Rows,
+                       "TEXTRACT NZ Vec→Vec : indexRow + validRow exceeds source rows!");
+            PTO_ASSERT(indexCol + validCol <= SrcTileData::Cols,
+                       "TEXTRACT NZ Vec→Vec : indexCol + validCol exceeds source cols!");
+            TExtractVecToVecNZImpl<T, DstTileData, SrcTileData>(
+                dst.data(), src.data(), validRow, validCol, static_cast<uint16_t>(SrcTileData::Rows), indexRow,
+                indexCol);
         } else {
-            TExtractVecToVecNDDispatch<T>(dst, src, idxRow, idxCol);
+            static_assert(DstTileData::isRowMajor == SrcTileData::isRowMajor,
+                          "TEXTRACT Vec→Vec : Source and destination layout must match (both ND or both NZ)");
         }
     } else if constexpr (is_conv_tile_v<SrcTileData>) {
         TEXTRACT_CONVTILE_IMPL(dst, src, indexRow, indexCol);

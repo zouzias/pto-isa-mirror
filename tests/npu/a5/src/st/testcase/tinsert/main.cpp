@@ -599,6 +599,76 @@ TEST_F(TInsertTest, case_nz_12)
 
 TEST_F(TInsertTest, case_nz_13)
 {
-    // Two 8×256 ND→NZ inserts into 16×256 dest at (0,0) + (8,0)
     testTInsertNZTwoInsert<2, float>(8, 8, 256, 16);
+}
+
+TEST_F(TInsertTest, case_nz_14)
+{
+    testTInsertNZ<8, float>(32, 32);
+}
+
+TEST_F(TInsertTest, case_nz_15)
+{
+    testTInsertNZ<9, float>(32, 32);
+}
+
+template <int32_t testKey>
+void launchTInsertNZVecToVec(uint64_t *out, uint64_t *src, void *stream);
+
+template <int32_t testKey, typename dType>
+void testTInsertNZVecToVec(int32_t srcRows, int32_t srcCols, int32_t dstRows, int32_t dstCols)
+{
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    size_t srcByteSize = srcRows * srcCols * sizeof(dType);
+    size_t dstByteSize = dstRows * dstCols * sizeof(dType);
+    uint64_t *dstHost, *srcHost, *dstDevice, *srcDevice;
+
+    aclrtMallocHost((void **)(&dstHost), dstByteSize);
+    aclrtMallocHost((void **)(&srcHost), srcByteSize);
+    aclrtMalloc((void **)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input_arr.bin", srcByteSize, srcHost, srcByteSize);
+    aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    launchTInsertNZVecToVec<testKey>(dstDevice, srcDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    WriteFile(GetGoldenDir() + "/output_z.bin", dstHost, dstByteSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<dType> golden(dstByteSize / sizeof(dType));
+    std::vector<dType> devFinal(dstByteSize / sizeof(dType));
+    ReadFile(GetGoldenDir() + "/golden_output.bin", dstByteSize, golden.data(), dstByteSize);
+    ReadFile(GetGoldenDir() + "/output_z.bin", dstByteSize, devFinal.data(), dstByteSize);
+
+    bool ret = ResultCmp(golden, devFinal, 0.001f);
+    EXPECT_TRUE(ret);
+}
+
+TEST_F(TInsertTest, case_nz_vec_1)
+{
+    testTInsertNZVecToVec<1, float>(16, 32, 16, 32);
+}
+
+TEST_F(TInsertTest, case_nz_vec_2)
+{
+    testTInsertNZVecToVec<2, float>(16, 32, 16, 32);
+}
+
+TEST_F(TInsertTest, case_nz_vec_3)
+{
+    testTInsertNZVecToVec<3, float>(16, 32, 32, 32);
 }

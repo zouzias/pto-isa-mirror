@@ -66,12 +66,12 @@ if __name__ == "__main__":
 
     nz_params = [
         (np.float32, 16, 32, "NZ"),
-        (np.float32, 16, 32, "NZ_PLUS_1"),
-        (np.float32, 32, 64, "NZ_PLUS_1"),
-        (np.int32, 32, 32, "NZ_PLUS_1"),
-        (np.float32, 32, 32, "SPLIT2_NZ_PLUS_1"),
-        (np.float32, 32, 32, "SPLIT4_NZ_PLUS_1"),
-        (np.float32, 64, 64, "SPLIT4_NZ_PLUS_1"),
+        (np.float32, 16, 32, "NZ"),
+        (np.float32, 32, 64, "NZ"),
+        (np.int32, 32, 32, "NZ"),
+        (np.float32, 32, 32, "SPLIT2"),
+        (np.float32, 32, 32, "SPLIT4"),
+        (np.float32, 64, 64, "SPLIT4"),
     ]
 
     for i, case_name in enumerate(nz_case_names):
@@ -346,6 +346,84 @@ if __name__ == "__main__":
 
         golden_nz = (
             result.reshape(int(dst_rows / nz_block_row), nz_block_row, int(cols / c0_size), c0_size)
+            .transpose(2, 0, 1, 3)
+            .astype(test_type)
+        )
+        golden_nz.tofile("golden_output.bin")
+        os.chdir(original_dir)
+
+    nz_large_tile_case_names = ["TInsertTest.case_nz_14", "TInsertTest.case_nz_15"]
+    nz_large_tile_params = [
+        (np.float32, 16, 32, 32, 32, 0),
+        (np.float32, 16, 32, 32, 32, 16),
+    ]
+
+    for i, case_name in enumerate(nz_large_tile_case_names):
+        if not os.path.exists(case_name):
+            os.makedirs(case_name)
+        original_dir = os.getcwd()
+        os.chdir(case_name)
+        test_type, valid_row, tile_rows, dst_rows, cols, idx_row = nz_large_tile_params[i]
+        nz_block_row = 16
+        c0_size = 8
+
+        nd_data = np.random.uniform(low=-10, high=10, size=(valid_row, cols)).astype(test_type)
+
+        padded = np.zeros((tile_rows, cols), dtype=test_type)
+        padded[:valid_row, :] = nd_data
+        input_nz = (
+            padded.reshape(tile_rows // nz_block_row, nz_block_row, cols // c0_size, c0_size)
+            .transpose(2, 0, 1, 3)
+            .astype(test_type)
+        )
+        input_nz.tofile("input_arr.bin")
+
+        result = np.zeros((dst_rows, cols), dtype=test_type)
+        result[idx_row : idx_row + valid_row, :] = nd_data
+        golden_nz = (
+            result.reshape(dst_rows // nz_block_row, nz_block_row, cols // c0_size, c0_size)
+            .transpose(2, 0, 1, 3)
+            .astype(test_type)
+        )
+        golden_nz.tofile("golden_output.bin")
+        os.chdir(original_dir)
+
+    # NZ Vec→Vec test cases (UB NZ → UB NZ)
+    nz_vec_case_names = [
+        "TInsertTest.case_nz_vec_1",
+        "TInsertTest.case_nz_vec_2",
+        "TInsertTest.case_nz_vec_3",
+    ]
+
+    # (dtype, src_rows, src_cols, dst_rows, dst_cols, idx_row)
+    nz_vec_params = [
+        (np.float32, 16, 32, 16, 32, 0),
+        (np.float32, 16, 32, 16, 32, 0),
+        (np.float32, 16, 32, 32, 32, 16),
+    ]
+
+    for i, case_name in enumerate(nz_vec_case_names):
+        if not os.path.exists(case_name):
+            os.makedirs(case_name)
+        original_dir = os.getcwd()
+        os.chdir(case_name)
+        test_type, src_rows, src_cols, dst_rows, dst_cols, idx_row = nz_vec_params[i]
+        nz_block_row = 16
+        if test_type == np.float32 or test_type == np.int32:
+            c0_size = 8
+        elif test_type == np.int8:
+            c0_size = 32
+        else:
+            c0_size = 16
+
+        input_arr = np.random.uniform(low=-10, high=10, size=(src_rows, src_cols)).astype(test_type)
+        input_arr.tofile("input_arr.bin")
+
+        result = np.zeros((dst_rows, dst_cols), dtype=test_type)
+        result[idx_row : idx_row + src_rows, :src_cols] = input_arr
+
+        golden_nz = (
+            result.reshape(int(dst_rows / nz_block_row), nz_block_row, int(dst_cols / c0_size), c0_size)
             .transpose(2, 0, 1, 3)
             .astype(test_type)
         )

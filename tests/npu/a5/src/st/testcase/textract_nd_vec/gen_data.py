@@ -94,3 +94,46 @@ if __name__ == "__main__":
         golden.tofile("golden_output.bin")
 
         os.chdir(original_dir)
+
+    # NZ Vec→Vec TEXTRACT test cases
+    nz_vec_case_names = [
+        "TExtractNDVecTest.case_nz_vec_1",
+        "TExtractNDVecTest.case_nz_vec_2",
+        "TExtractNDVecTest.case_nz_vec_3",
+    ]
+
+    # (dtype, src_rows, src_cols, dst_rows, dst_cols, idx_row, idx_col)
+    nz_vec_params = [
+        (np.float32, 16, 32, 16, 32, 0, 0),
+        (np.float32, 32, 32, 16, 32, 16, 0),
+        (np.float16, 32, 64, 16, 32, 16, 32),
+    ]
+
+    nz_block_row = 16
+    for i, case_name in enumerate(nz_vec_case_names):
+        if not os.path.exists(case_name):
+            os.makedirs(case_name)
+        original_dir = os.getcwd()
+        os.chdir(case_name)
+
+        test_type, src_rows, src_cols, dst_rows, dst_cols, idx_row, idx_col = nz_vec_params[i]
+        if test_type == np.float32 or test_type == np.int32:
+            c0_size = 8
+        elif test_type == np.int8:
+            c0_size = 32
+        else:
+            c0_size = 16
+
+        input_arr = np.random.uniform(low=-10, high=10, size=(src_rows, src_cols)).astype(test_type)
+        input_arr.tofile("input_arr.bin")
+
+        extracted = input_arr[idx_row:idx_row + dst_rows, idx_col:idx_col + dst_cols].copy()
+
+        golden_nz = (
+            extracted.reshape(int(dst_rows / nz_block_row), nz_block_row, int(dst_cols / c0_size), c0_size)
+            .transpose(2, 0, 1, 3)
+            .astype(test_type)
+        )
+        golden_nz.tofile("golden_output.bin")
+
+        os.chdir(original_dir)
