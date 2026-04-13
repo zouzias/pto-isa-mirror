@@ -249,8 +249,8 @@ __global__ AICORE void TGetAsyncConfigKernelImpl(__gm__ T *commBuf, int nranks, 
 
 template <typename T, size_t count>
 bool RunGetAsyncWithConfigKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                                 const HcclRootInfo *rootInfo, int root_rank,
-                                 uint64_t blockBytes, uint64_t commBlockOffset, uint32_t queueNum)
+                                 const HcclRootInfo *rootInfo, int root_rank, uint64_t blockBytes,
+                                 uint64_t commBlockOffset, uint32_t queueNum)
 {
     TestContext ctx;
     if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
@@ -293,15 +293,14 @@ bool RunGetAsyncWithConfigKernel(int rank_id, int n_ranks, int n_devices, int fi
     }
 
     const size_t offsetElems = static_cast<size_t>(commBlockOffset / sizeof(T));
-    const int elemCount = (commBlockOffset > 0 && offsetElems < count)
-                              ? static_cast<int>(count - offsetElems)
-                              : static_cast<int>(count);
+    const int elemCount =
+        (commBlockOffset > 0 && offsetElems < count) ? static_cast<int>(count - offsetElems) : static_cast<int>(count);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    TGetAsyncConfigKernelImpl<T, count><<<1, nullptr, ctx.stream>>>(
-        dataBase, n_ranks, root_rank, 0, elemCount, ctx.deviceCtx,
-        (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0, blockBytes, commBlockOffset, queueNum);
+    TGetAsyncConfigKernelImpl<T, count>
+        <<<1, nullptr, ctx.stream>>>(dataBase, n_ranks, root_rank, 0, elemCount, ctx.deviceCtx,
+                                     (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0, blockBytes, commBlockOffset, queueNum);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
@@ -338,15 +337,14 @@ bool RunGetAsyncWithConfigKernel(int rank_id, int n_ranks, int n_devices, int fi
 }
 
 template <typename T, size_t count>
-bool RunGetAsyncWithConfig(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                           uint64_t blockBytes, uint64_t commBlockOffset, uint32_t queueNum)
+bool RunGetAsyncWithConfig(int n_ranks, int n_devices, int first_rank_id, int first_device_id, uint64_t blockBytes,
+                           uint64_t commBlockOffset, uint32_t queueNum)
 {
     const int root_rank = first_rank_id;
     return ForkAndRunWithHcclRootInfo(
-        n_ranks, first_rank_id, first_device_id,
-        [&](int rankId, const HcclRootInfo *rootInfo) {
+        n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
             return RunGetAsyncWithConfigKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, rootInfo,
-                                                        root_rank, blockBytes, commBlockOffset, queueNum);
+                                                         root_rank, blockBytes, commBlockOffset, queueNum);
         });
 }
 
@@ -360,9 +358,8 @@ template bool RunGetAsyncWithConfig<float, 2048>(int, int, int, int, uint64_t, u
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TGetAsyncMultiCoreKernelImpl(__gm__ T *commBuf, int nranks, int root_rank, int total_elem_count,
-                                                    __gm__ HcclDeviceContext *hcclCtx,
-                                                    __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
-                                                    int multiCoreMode)
+                                                    __gm__ HcclDeviceContext *hcclCtx, __gm__ uint8_t *sdmaWorkspace,
+                                                    uint32_t sdmaSyncId, int multiCoreMode)
 {
     using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
     using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
@@ -468,9 +465,9 @@ bool RunGetAsyncMultiCoreKernel(int rank_id, int n_ranks, int n_devices, int fir
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    TGetAsyncMultiCoreKernelImpl<T, count><<<blockDim, nullptr, ctx.stream>>>(
-        dataBase, n_ranks, root_rank, static_cast<int>(count), ctx.deviceCtx,
-        (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0, multiCoreMode);
+    TGetAsyncMultiCoreKernelImpl<T, count>
+        <<<blockDim, nullptr, ctx.stream>>>(dataBase, n_ranks, root_rank, static_cast<int>(count), ctx.deviceCtx,
+                                            (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0, multiCoreMode);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
@@ -507,13 +504,12 @@ bool RunGetAsyncMultiCoreKernel(int rank_id, int n_ranks, int n_devices, int fir
 }
 
 template <typename T, size_t count>
-bool RunGetAsyncMultiCore(int n_ranks, int n_devices, int first_rank_id, int first_device_id,
-                          int blockDim, int multiCoreMode)
+bool RunGetAsyncMultiCore(int n_ranks, int n_devices, int first_rank_id, int first_device_id, int blockDim,
+                          int multiCoreMode)
 {
     const int root_rank = first_rank_id;
     return ForkAndRunWithHcclRootInfo(
-        n_ranks, first_rank_id, first_device_id,
-        [&](int rankId, const HcclRootInfo *rootInfo) {
+        n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
             return RunGetAsyncMultiCoreKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, rootInfo,
                                                         root_rank, blockDim, multiCoreMode);
         });
