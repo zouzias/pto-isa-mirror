@@ -13,40 +13,49 @@
 import os
 
 import numpy as np
-from utils import NumExt
-
 np.random.seed(19)
-ENABLE_BF16 = os.environ.get("PTO_CPU_SIM_ENABLE_BF16") == "1"
+
+
+def get_limits(t):
+    try:
+        info = np.iinfo(t)
+        return info.min, info.max
+    except ValueError:
+        info = np.finfo(t)
+        return info.min, info.max
 
 
 def gen_golden(param):
     m, n = param.m, param.n
 
-    x1_gm = NumExt.astype(np.random.random([m, n]) * 4.41, param.srctype)
+    s_min, s_max = get_limits(param.srctype)
+    d_min, d_max = get_limits(param.dsttype)
+
+    x1_gm = np.random.uniform(s_min + 5, s_max - 5, size=[m, n]).astype(param.srctype)
+
+    if param.saturation_mode == "SatMode::ON":     
+        data_to_cast = np.clip(x1_gm, d_min, d_max)
+    else:
+        data_to_cast = x1_gm
+
     if param.mode == "RoundMode::CAST_RINT":
-        if param.srctype == np.float32:
-            if param.dsttype == np.float16 or param.dsttype == NumExt.bf16:
-                golden = NumExt.astype(x1_gm, param.dsttype)
-            else:
-                golden = np.rint(x1_gm).astype(param.dsttype)
-        elif param.srctype == np.float16 or param.srctype == NumExt.bf16:
-            if param.dsttype == np.float32:
-                golden = x1_gm.astype(param.dsttype)
-            else:
-                golden = np.rint(x1_gm).astype(param.dsttype)
-        else:
-            golden = x1_gm.astype(param.dsttype)
-    NumExt.write_array("./x1_gm.bin", x1_gm, param.srctype)
-    NumExt.write_array("./golden.bin", golden, param.dsttype)
+        rounded_data = np.rint(data_to_cast)
+        golden = rounded_data.astype(param.dsttype)
+    else:
+        golden = data_to_cast.astype(param.dsttype)
+
+    x1_gm.tofile("./x1_gm.bin")
+    golden.tofile("./golden.bin")
 
 
 class TCvtParams:
-    def __init__(self, srctype, dsttype, m, n, mode):
+    def __init__(self, srctype, dsttype, m, n, mode, saturation_mode="SatMode::OFF"):
         self.srctype = srctype
         self.dsttype = dsttype
         self.m = m
         self.n = n
         self.mode = mode
+        self.saturation_mode = saturation_mode
 
 if __name__ == "__main__":
     case_name_list = [
@@ -58,9 +67,16 @@ if __name__ == "__main__":
         "TCVTTest.case6",
         "TCVTTest.case7",
         "TCVTTest.case8",
-        "TCVTTest.case9"
-    ]
+        "TCVTTest.case9",
 
+        "TCVTTest.case10",
+        "TCVTTest.case11",
+        "TCVTTest.case12",
+        "TCVTTest.case13",
+        "TCVTTest.case14",
+        "TCVTTest.case15"
+    ]
+   
     case_params_list = [
         TCvtParams(np.float32, np.int32, 128, 128, "RoundMode::CAST_RINT"),
         TCvtParams(np.int32, np.float32, 256, 64, "RoundMode::CAST_RINT"),
@@ -70,17 +86,15 @@ if __name__ == "__main__":
         TCvtParams(np.float32, np.int32, 4, 4096, "RoundMode::CAST_RINT"),
         TCvtParams(np.int16, np.float32, 64, 64, "RoundMode::CAST_RINT"),
         TCvtParams(np.float32, np.float16, 64, 64, "RoundMode::CAST_RINT"),
-        TCvtParams(np.float16, np.uint8, 64, 64, "RoundMode::CAST_RINT")
+        TCvtParams(np.float16, np.uint8, 64, 64, "RoundMode::CAST_RINT"),
+
+        TCvtParams(np.int32, np.float32, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
+        TCvtParams(np.int8, np.float32, 128, 128, "RoundMode::CAST_RINT", "SatMode::ON"),
+        TCvtParams(np.float32, np.uint8, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
+        TCvtParams(np.int32, np.int16, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON"),
+        TCvtParams(np.float16, np.int8, 32, 32, "RoundMode::CAST_RINT", "SatMode::ON"),
+        TCvtParams(np.float16, np.uint8, 64, 64, "RoundMode::CAST_RINT", "SatMode::ON")
     ]
-    if ENABLE_BF16:
-        case_name_list.extend([
-            "TCVTTest.case10",
-            "TCVTTest.case11",
-        ])
-        case_params_list.extend([
-            TCvtParams(np.float32, NumExt.bf16, 64, 64, "RoundMode::CAST_RINT"),
-            TCvtParams(NumExt.bf16, np.float32, 64, 64, "RoundMode::CAST_RINT"),
-        ])
 
     for i, case_name in enumerate(case_name_list):
         if not os.path.exists(case_name):

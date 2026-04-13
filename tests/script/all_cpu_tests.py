@@ -134,8 +134,9 @@ def build_all_cpu_tests(repo_root: Path, build_dir: Path, args: argparse.Namespa
 def generate_test_data(repo_root: Path, build_dir: Path, args: argparse.Namespace) -> None:
     testcase_src_root = repo_root / "tests" / "cpu" / "st" / "testcase"
     testcase_build_root = build_dir / "testcase"
+    tests_st_path = repo_root / "tests" / "cpu" / "st"
     gen_env = os.environ.copy()
-    gen_env["PYTHONPATH"] = str(repo_root) + \
+    gen_env["PYTHONPATH"] = str(tests_st_path) + os.pathsep + str(repo_root) + \
         os.pathsep + gen_env.get("PYTHONPATH", "")
     if args.enable_bf16:
         gen_env["PTO_CPU_SIM_ENABLE_BF16"] = "1"
