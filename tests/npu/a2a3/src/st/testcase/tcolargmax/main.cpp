@@ -172,3 +172,18 @@ TEST_F(TCOLCMAXTest, case84)
     bool ret = TCOLCMAXTestFramework<84, float, 16, 16, 1, 32, 31>();
     EXPECT_TRUE(ret);
 }
+TEST_F(TCOLCMAXTest, case84)
+{
+    bool ret = TCOLCMAXTestFramework<91, uint16_t, 16, 16, 1, 128, 120>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case84)
+{
+    bool ret = TCOLCMAXTestFramework<92, aclFloat16, 16, 16, 1, 96, 88>();
+    EXPECT_TRUE(ret);
+}
+TEST_F(TCOLCMAXTest, case84)
+{
+    bool ret = TCOLCMAXTestFramework<93, uint16_t, 1, 1, 1, 48, 34>();
+    EXPECT_TRUE(ret);
+}
