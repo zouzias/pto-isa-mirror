@@ -259,7 +259,7 @@ PTO_INTERNAL void GenerateB8IndicesZZToUB(__ubuf__ uint8_t *dst, __ubuf__ uint8_
                                           unsigned rows, unsigned groupedCols)
 {
     const uint16_t P = groupedCols / 2;
-    const uint16_t rowBlockCount = rows / 16;
+    const uint16_t rowBlockCount = (rows + 15) / 16; // ceil-divide to support non-16-aligned row counts
     const uint16_t N_blk = rowBlockCount * P;
     const uint16_t vlElem = REPEAT_BYTE / sizeof(uint16_t);     // 128
     constexpr uint16_t blkElem = BLOCK_SIZE / sizeof(uint16_t); // 16
@@ -323,7 +323,7 @@ __tf__ PTO_INTERNAL void TMovNdTo2Zz(typename DstTileData::TileDType __out__ dst
                   "TMov ND->ZZ: Destination Mat tile must use ColMajor + RowMajor fractal layout.");
 
     const uint32_t srcBytes = validRow * validCol * sizeof(uint8_t);
-    const uint32_t rowBlockCount = validRow / 16;
+    const uint32_t rowBlockCount = (validRow + 15) / 16; // ceil-divide to support non-16-aligned row counts
     const uint32_t P = validCol / 2;
     const uint32_t tmpBytes =
         (BLOCK_SIZE / sizeof(uint16_t) + rowBlockCount * P + BLOCK_SIZE / sizeof(uint16_t)) * sizeof(uint16_t);
