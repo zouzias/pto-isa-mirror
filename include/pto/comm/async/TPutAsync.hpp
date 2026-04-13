@@ -83,7 +83,7 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
 {
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
-    if (dstGlobalData.data() == nullptr || srcGlobalData.data() == nullptr) {
+    if (srcGlobalData.data() == nullptr || dstGlobalData.data() == nullptr) {
         return AsyncEvent(0, DmaEngine::SDMA);
     }
 
@@ -91,8 +91,8 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
         return AsyncEvent(0, DmaEngine::SDMA);
     }
 
-    const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
     const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
+    const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
     if (dstElems < srcElems) {
         return AsyncEvent(0, DmaEngine::SDMA);
     }
