@@ -111,6 +111,18 @@ extern "C" __global__ AICORE void launchTCOLCMAXCase84(__gm__ uint32_t *out, __g
 {
     runTColCMax<float, 16, 16, 1, 32, 31>(out, src, false);
 }
+extern "C" __global__ AICORE void launchTCOLCMAXCase91(__gm__ uint32_t *out, __gm__ uint16_t *src)
+{
+    runTColCMax<uint16_t, 16, 16, 1, 128, 120>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMAXCase92(__gm__ uint32_t *out, __gm__ half *src)
+{
+    runTColCMax<half, 16, 16, 1, 96, 88>(out, src, false);
+}
+extern "C" __global__ AICORE void launchTCOLCMAXCase93(__gm__ uint32_t *out, __gm__ uint16_t *src)
+{
+    runTColCMax<uint16_t, 1, 1, 1, 48, 34>(out, src, false);
+}
 
 template <uint32_t caseId>
 void launchTCOLCMAXTestCase(void *out, void *src, aclrtStream stream)
@@ -180,6 +192,18 @@ void launchTCOLCMAXTestCase(void *out, void *src, aclrtStream stream)
             launchTCOLCMAXCase84<<<1, nullptr, stream>>>((uint32_t *)out, (float *)src);
             break;
         }
+        case 91: {
+            launchTCOLCMAXCase91<<<1, nullptr, stream>>>((uint32_t *)out, (uint16_t *)src);
+            break;
+        }
+        case 92: {
+            launchTCOLCMAXCase92<<<1, nullptr, stream>>>((uint32_t *)out, (half *)src);
+            break;
+        }
+        case 93: {
+            launchTCOLCMAXCase93<<<1, nullptr, stream>>>((uint32_t *)out, (uint16_t *)src);
+            break;
+        }
         default: {
         }
     }
@@ -201,3 +225,6 @@ template void launchTCOLCMAXTestCase<81>(void *out, void *src, aclrtStream strea
 template void launchTCOLCMAXTestCase<82>(void *out, void *src, aclrtStream stream);
 template void launchTCOLCMAXTestCase<83>(void *out, void *src, aclrtStream stream);
 template void launchTCOLCMAXTestCase<84>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMAXTestCase<91>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMAXTestCase<92>(void *out, void *src, aclrtStream stream);
+template void launchTCOLCMAXTestCase<93>(void *out, void *src, aclrtStream stream);
