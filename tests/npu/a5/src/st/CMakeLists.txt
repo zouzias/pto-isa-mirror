@@ -77,6 +77,7 @@ set(CMAKE_CCE_COMPILE_OPTIONS
     "SHELL:-mllvm -cce-aicore-record-overflow=true"
     "SHELL:-mllvm -cce-aicore-addr-transform"
     "SHELL:-mllvm -cce-aicore-dcci-insert-for-scalar=false"
+    #"SHELL:--cce-simd-vf-fusion=false"
 )
 
 if(DEBUG_MODE)

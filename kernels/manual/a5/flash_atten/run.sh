@@ -57,7 +57,7 @@ do
     esac
 done
 
-pattern="^Ascend910_9599"
+pattern="^Ascend950PR_9599"
 if [[ ! "$SOC_VERSION" =~ $pattern ]]; then
     echo "[ERROR] Unsupported SocVersion: ${SOC_VERSION}, this folder only support A5."
     exit 1
