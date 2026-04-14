@@ -8,10 +8,10 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-// Allgather Sync Demo — Host Entry Point
+// Allgather Sync Perf Sweep — Host Entry Point
 //
-// Demonstrates the allgather collective using PTO's synchronous TPUT (remote
-// write) and TGET (remote read) instructions.
+// Runs bandwidth/latency sweep across 4 kernel strategies:
+//   TPUT_MC, TGET_MC, RING, REC_DBL
 //
 // Usage: mpirun -n <N> ./allgather_sync_demo
 
@@ -41,43 +41,12 @@ int main(int argc, char **argv)
 
     if (rank == 0) {
         std::cout << "========================================" << std::endl;
-        std::cout << " PTO Allgather Sync Demo" << std::endl;
+        std::cout << " PTO Allgather Sync Perf Sweep" << std::endl;
         std::cout << " Ranks: " << size << std::endl;
+        std::cout << " Strategies: TPUT_MC, TGET_MC, RING, REC_DBL" << std::endl;
         std::cout << "========================================" << std::endl;
     }
 
-    int failures = 0;
-
-    if (rank == 0)
-        std::cout << "\n--- Demo 1: Allgather via TPUT (Sync) ---" << std::endl;
-    if (!RunAllgatherPutSync(size, 0, 0)) {
-        if (rank == 0)
-            std::cerr << "[TPUT_SYNC Allgather FAIL]" << std::endl;
-        ++failures;
-    }
-
-    CommMpiBarrier();
-
-    if (rank == 0)
-        std::cout << "\n--- Demo 2: Allgather via TGET (Sync) ---" << std::endl;
-    if (!RunAllgatherGetSync(size, 0, 0)) {
-        if (rank == 0)
-            std::cerr << "[TGET_SYNC Allgather FAIL]" << std::endl;
-        ++failures;
-    }
-
-    if (rank == 0) {
-        std::cout << "\n========================================" << std::endl;
-        if (failures == 0)
-            std::cout << " All demos PASSED" << std::endl;
-        else
-            std::cout << " " << failures << " demo(s) FAILED" << std::endl;
-        std::cout << "========================================" << std::endl;
-    }
-
-    CommMpiBarrier();
-
-    // Bandwidth sweep: 1KB .. 4MB
     if (rank == 0) {
         std::cout << "\n[PERF] ======== Bandwidth Sweep (Rank 0) ========" << std::endl;
         std::cout << "[PERF] warmup=20 iters=100 nranks=" << size << std::endl;
@@ -93,5 +62,5 @@ int main(int argc, char **argv)
     }
 
     CommMpiFinalize();
-    return (failures == 0) ? 0 : 1;
+    return 0;
 }

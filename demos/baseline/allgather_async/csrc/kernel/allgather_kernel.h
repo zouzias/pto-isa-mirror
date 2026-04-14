@@ -10,11 +10,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #pragma once
 
-// Allgather via TPUT_ASYNC: every rank writes its data to all other ranks.
-bool RunAllgatherPutAsync(int nRanks, int firstRankId, int firstDeviceId);
-
-// Allgather via TGET_ASYNC: every rank pulls data from all other ranks.
-bool RunAllgatherGetAsync(int nRanks, int firstRankId, int firstDeviceId);
-
-// Bandwidth sweep: runs Ring + Recursive Doubling across multiple data sizes.
+// Bandwidth sweep: single-core Ring + Recursive Doubling across multiple data sizes.
 bool RunAllgatherAsyncSweep(int nRanks, int firstRankId, int firstDeviceId);
+
+// Bandwidth sweep: multi-core TPUT_ASYNC_MC + TGET_ASYNC_MC across multiple data sizes.
+bool RunAllgatherMcAsyncSweep(int nRanks, int firstRankId, int firstDeviceId);

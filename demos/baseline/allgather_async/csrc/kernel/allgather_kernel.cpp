@@ -22,9 +22,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 // Constants
 // ============================================================================
-static constexpr size_t ELEM_COUNT = 256;
 static constexpr size_t SYNC_BUF_BYTES = 64 * sizeof(int32_t);
-static constexpr int32_t RANK_BASE = 1000;
 
 // Perf profiling constants
 static constexpr int WARMUP_ITERS = 20;
@@ -55,317 +53,6 @@ using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAM
 using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 using GlobalI32 = pto::GlobalTensor<int32_t, ShapeDyn, StrideDyn, pto::Layout::ND>;
 using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::sdma::UB_ALIGN_SIZE>;
-using LocalTile = pto::Tile<pto::TileType::Vec, int32_t, 1, ELEM_COUNT, pto::BLayout::RowMajor, -1, -1>;
-
-// ============================================================================
-// Allgather via TPUT_ASYNC
-//
-// Every rank writes its sendBuf to every other rank's recvBuf slot.
-// Also copies its own data locally to complete the allgather.
-//
-// Memory layout per rank (in shared window):
-//   sendBuf[ELEM_COUNT]               -- this rank's contribution
-//   recvBuf[nranks * ELEM_COUNT]      -- gathered result
-// ============================================================================
-__global__ AICORE void AllgatherPutAsyncKernel(__gm__ int32_t *dataBuf, int nranks,
-                                               __gm__ HcclDeviceContext *hcclCtx,
-                                               __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
-{
-    if (nranks < 2) return;
-
-    ShapeDyn shape(1, 1, 1, 1, ELEM_COUNT);
-    StrideDyn stride(ELEM_COUNT, ELEM_COUNT, ELEM_COUNT, ELEM_COUNT, 1);
-
-    int myRank = static_cast<int>(hcclCtx->rankId);
-    __gm__ int32_t *sendBuf = dataBuf;
-    __gm__ int32_t *recvBuf = dataBuf + ELEM_COUNT;
-
-    // Local copy: recvBuf[myRank * ELEM_COUNT] = sendBuf
-    GlobalI32 srcG(sendBuf, shape, stride);
-    GlobalI32 localSlotG(recvBuf + myRank * ELEM_COUNT, shape, stride);
-    LocalTile tile(1, ELEM_COUNT);
-    TASSIGN(tile, 0x10000);
-    TLOAD(tile, srcG);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(localSlotG, tile);
-    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-
-    // Async remote writes
-    GlobalI32 sendG(sendBuf, shape, stride);
-    constexpr int kEventSlots = pto::comm::sdma::SDMA_EVENT_SLOT_COUNT;
-    pto::comm::AsyncEvent events[kEventSlots];
-    ScratchTile scratchTile;
-    TASSIGN(scratchTile, 0x0);
-    pto::comm::AsyncSession session;
-    if (!pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId)) {
-        pipe_barrier(PIPE_ALL);
-        return;
-    }
-
-    int issued = 0;
-    for (int target = 0; target < nranks; ++target) {
-        if (target == myRank) continue;
-        __gm__ int32_t *remoteSlot = HcclRemotePtr(hcclCtx, recvBuf, target) + myRank * ELEM_COUNT;
-        GlobalI32 remoteG(remoteSlot, shape, stride);
-        if (issued >= kEventSlots) {
-            (void)events[issued % kEventSlots].Wait(session);
-        }
-        events[issued % kEventSlots] = pto::comm::TPUT_ASYNC(remoteG, sendG, session);
-        issued++;
-    }
-    const int pending = (issued < kEventSlots) ? issued : kEventSlots;
-    for (int i = 0; i < pending; ++i) {
-        (void)events[i].Wait(session);
-    }
-
-    pipe_barrier(PIPE_ALL);
-}
-
-// ============================================================================
-// Allgather via TGET_ASYNC
-//
-// Every rank pulls every other rank's sendBuf into its local recvBuf slot.
-// Also copies its own data locally to complete the allgather.
-// ============================================================================
-__global__ AICORE void AllgatherGetAsyncKernel(__gm__ int32_t *dataBuf, int nranks,
-                                               __gm__ HcclDeviceContext *hcclCtx,
-                                               __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
-{
-    if (nranks < 2) return;
-
-    ShapeDyn shape(1, 1, 1, 1, ELEM_COUNT);
-    StrideDyn stride(ELEM_COUNT, ELEM_COUNT, ELEM_COUNT, ELEM_COUNT, 1);
-
-    int myRank = static_cast<int>(hcclCtx->rankId);
-    __gm__ int32_t *sendBuf = dataBuf;
-    __gm__ int32_t *recvBuf = dataBuf + ELEM_COUNT;
-
-    // Local copy: recvBuf[myRank * ELEM_COUNT] = sendBuf
-    GlobalI32 srcG(sendBuf, shape, stride);
-    GlobalI32 localSlotG(recvBuf + myRank * ELEM_COUNT, shape, stride);
-    LocalTile tile(1, ELEM_COUNT);
-    TASSIGN(tile, 0x10000);
-    TLOAD(tile, srcG);
-    set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-    TSTORE(localSlotG, tile);
-    set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
-
-    // Async remote reads
-    constexpr int kEventSlots = pto::comm::sdma::SDMA_EVENT_SLOT_COUNT;
-    pto::comm::AsyncEvent events[kEventSlots];
-    ScratchTile scratchTile;
-    TASSIGN(scratchTile, 0x0);
-    pto::comm::AsyncSession session;
-    if (!pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId)) {
-        pipe_barrier(PIPE_ALL);
-        return;
-    }
-
-    int issued = 0;
-    for (int src = 0; src < nranks; ++src) {
-        if (src == myRank) continue;
-        __gm__ int32_t *remoteSend = HcclRemotePtr(hcclCtx, sendBuf, src);
-        GlobalI32 remoteG(remoteSend, shape, stride);
-        GlobalI32 localG(recvBuf + src * ELEM_COUNT, shape, stride);
-        if (issued >= kEventSlots) {
-            (void)events[issued % kEventSlots].Wait(session);
-        }
-        events[issued % kEventSlots] = pto::comm::TGET_ASYNC(localG, remoteG, session);
-        issued++;
-    }
-    const int pending = (issued < kEventSlots) ? issued : kEventSlots;
-    for (int i = 0; i < pending; ++i) {
-        (void)events[i].Wait(session);
-    }
-
-    pipe_barrier(PIPE_ALL);
-}
-
-// ============================================================================
-// Host-side helpers
-// ============================================================================
-static bool VerifyAllgather(const int32_t *host, int nRanks, size_t elemCount, int rankId, const char *tag)
-{
-    for (int r = 0; r < nRanks; ++r) {
-        for (size_t i = 0; i < elemCount; ++i) {
-            int32_t expected = static_cast<int32_t>(r) * RANK_BASE + static_cast<int32_t>(i);
-            int32_t actual = host[r * elemCount + i];
-            if (actual != expected) {
-                std::cerr << "[" << tag << " FAIL] Rank " << rankId << ": recvBuf[" << r << "][" << i << "] = "
-                          << actual << ", expected " << expected << std::endl;
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-static void PrintSample(const int32_t *host, int nRanks, size_t elemCount, int rankId, const char *tag)
-{
-    std::cout << "[" << tag << " PASS] Rank " << rankId << ": ";
-    for (int r = 0; r < nRanks && r < 3; ++r) {
-        std::cout << "slot[" << r << "]=[";
-        for (size_t i = 0; i < 3 && i < elemCount; ++i)
-            std::cout << (i ? "," : "") << host[r * elemCount + i];
-        std::cout << ",...] ";
-    }
-    if (nRanks > 3) std::cout << "...";
-    std::cout << std::endl;
-}
-
-// ============================================================================
-// RunAllgatherPutAsync
-// ============================================================================
-static bool RunAllgatherPutAsyncKernel(int rankId, int nRanks, int nDevices, int firstDeviceId,
-                                       const HcclRootInfo *rootInfo)
-{
-    TestContext ctx;
-    if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, rootInfo))
-        return false;
-
-    const size_t recvElems = static_cast<size_t>(nRanks) * ELEM_COUNT;
-
-    int32_t *sendHost = nullptr;
-    int32_t *recvHost = nullptr;
-    if (aclrtMallocHost(reinterpret_cast<void **>(&sendHost), ELEM_COUNT * sizeof(int32_t)) != 0 ||
-        aclrtMallocHost(reinterpret_cast<void **>(&recvHost), recvElems * sizeof(int32_t)) != 0) {
-        std::cerr << "[ERROR] aclrtMallocHost failed" << std::endl;
-        return false;
-    }
-
-    for (size_t i = 0; i < ELEM_COUNT; ++i)
-        sendHost[i] = static_cast<int32_t>(rankId) * RANK_BASE + static_cast<int32_t>(i);
-    for (size_t i = 0; i < recvElems; ++i)
-        recvHost[i] = -1;
-
-    uint64_t winBase = ctx.hostCtx.windowsIn[rankId];
-    size_t winOff = 0;
-    size_t winBytes = SYNC_BUF_BYTES + (ELEM_COUNT + recvElems) * sizeof(int32_t);
-    void *commPtr = WindowAlloc(winBase, winOff, winBytes);
-
-    int32_t *dataBuf = reinterpret_cast<int32_t *>(
-        reinterpret_cast<uint8_t *>(commPtr) + SYNC_BUF_BYTES);
-    int32_t *sendBuf = dataBuf;
-    int32_t *recvBuf = dataBuf + ELEM_COUNT;
-
-    aclrtMemcpy(sendBuf, ELEM_COUNT * sizeof(int32_t), sendHost, ELEM_COUNT * sizeof(int32_t),
-                ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t),
-                ACL_MEMCPY_HOST_TO_DEVICE);
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
-        return false;
-    }
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    AllgatherPutAsyncKernel<<<1, nullptr, ctx.stream>>>(
-        dataBuf, nRanks, ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    aclrtMemcpy(recvHost, recvElems * sizeof(int32_t), recvBuf, recvElems * sizeof(int32_t),
-                ACL_MEMCPY_DEVICE_TO_HOST);
-
-    bool ok = VerifyAllgather(recvHost, nRanks, ELEM_COUNT, rankId, "TPUT_ASYNC");
-    if (ok) PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "TPUT_ASYNC");
-
-    aclrtFreeHost(sendHost);
-    aclrtFreeHost(recvHost);
-    sdmaMgr.Finalize();
-
-    return ctx.Finalize() && ok;
-}
-
-bool RunAllgatherPutAsync(int nRanks, int firstRankId, int firstDeviceId)
-{
-    return ForkAndRunWithHcclRootInfo(
-        nRanks, firstRankId, firstDeviceId, [&](int rankId, const HcclRootInfo *rootInfo) {
-            return RunAllgatherPutAsyncKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
-        });
-}
-
-// ============================================================================
-// RunAllgatherGetAsync
-// ============================================================================
-static bool RunAllgatherGetAsyncKernel(int rankId, int nRanks, int nDevices, int firstDeviceId,
-                                       const HcclRootInfo *rootInfo)
-{
-    TestContext ctx;
-    if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, rootInfo))
-        return false;
-
-    const size_t recvElems = static_cast<size_t>(nRanks) * ELEM_COUNT;
-
-    int32_t *sendHost = nullptr;
-    int32_t *recvHost = nullptr;
-    if (aclrtMallocHost(reinterpret_cast<void **>(&sendHost), ELEM_COUNT * sizeof(int32_t)) != 0 ||
-        aclrtMallocHost(reinterpret_cast<void **>(&recvHost), recvElems * sizeof(int32_t)) != 0) {
-        std::cerr << "[ERROR] aclrtMallocHost failed" << std::endl;
-        return false;
-    }
-
-    for (size_t i = 0; i < ELEM_COUNT; ++i)
-        sendHost[i] = static_cast<int32_t>(rankId) * RANK_BASE + static_cast<int32_t>(i);
-    for (size_t i = 0; i < recvElems; ++i)
-        recvHost[i] = -1;
-
-    uint64_t winBase = ctx.hostCtx.windowsIn[rankId];
-    size_t winOff = 0;
-    size_t winBytes = SYNC_BUF_BYTES + (ELEM_COUNT + recvElems) * sizeof(int32_t);
-    void *commPtr = WindowAlloc(winBase, winOff, winBytes);
-
-    int32_t *dataBuf = reinterpret_cast<int32_t *>(
-        reinterpret_cast<uint8_t *>(commPtr) + SYNC_BUF_BYTES);
-    int32_t *sendBuf = dataBuf;
-    int32_t *recvBuf = dataBuf + ELEM_COUNT;
-
-    aclrtMemcpy(sendBuf, ELEM_COUNT * sizeof(int32_t), sendHost, ELEM_COUNT * sizeof(int32_t),
-                ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t),
-                ACL_MEMCPY_HOST_TO_DEVICE);
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
-        return false;
-    }
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    AllgatherGetAsyncKernel<<<1, nullptr, ctx.stream>>>(
-        dataBuf, nRanks, ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    aclrtMemcpy(recvHost, recvElems * sizeof(int32_t), recvBuf, recvElems * sizeof(int32_t),
-                ACL_MEMCPY_DEVICE_TO_HOST);
-
-    bool ok = VerifyAllgather(recvHost, nRanks, ELEM_COUNT, rankId, "TGET_ASYNC");
-    if (ok) PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "TGET_ASYNC");
-
-    aclrtFreeHost(sendHost);
-    aclrtFreeHost(recvHost);
-    sdmaMgr.Finalize();
-
-    return ctx.Finalize() && ok;
-}
-
-bool RunAllgatherGetAsync(int nRanks, int firstRankId, int firstDeviceId)
-{
-    return ForkAndRunWithHcclRootInfo(
-        nRanks, firstRankId, firstDeviceId, [&](int rankId, const HcclRootInfo *rootInfo) {
-            return RunAllgatherGetAsyncKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
-        });
-}
 
 // ============================================================================
 // Bandwidth Sweep: Ring + Recursive Doubling perf kernels
@@ -543,6 +230,12 @@ __global__ AICORE void RecDoublingRoundKernel(__gm__ int32_t *dataBuf, int nrank
 // ============================================================================
 // RunAllgatherAsyncSweep — all sizes, all strategies
 // ============================================================================
+static double BwGbps(size_t sizeBytes, double latencyUs)
+{
+    if (latencyUs <= 0.0) return 0.0;
+    return static_cast<double>(sizeBytes) / latencyUs / 1000.0;
+}
+
 static void PrintSweepLine(const char *instr, size_t sizeBytes,
                            double hostE2e, double devTotal, double localCopy, double remoteComm)
 {
@@ -553,6 +246,8 @@ static void PrintSweepLine(const char *instr, size_t sizeBytes,
               << "  device_total_avg_us=" << devTotal
               << "  local_copy_avg_us=" << localCopy
               << "  remote_comm_avg_us=" << remoteComm
+              << "  host_bw_gbps=" << BwGbps(sizeBytes, hostE2e)
+              << "  device_bw_gbps=" << BwGbps(sizeBytes, devTotal)
               << std::endl;
 }
 
@@ -703,5 +398,278 @@ bool RunAllgatherAsyncSweep(int nRanks, int firstRankId, int firstDeviceId)
     return ForkAndRunWithHcclRootInfo(
         nRanks, firstRankId, firstDeviceId, [&](int rankId, const HcclRootInfo *rootInfo) {
             return RunAllgatherAsyncSweepKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
+        });
+}
+
+// ============================================================================
+// Perf: Multi-core TPUT_ASYNC with variable-size sweep
+// ============================================================================
+__global__ AICORE void AllgatherPutAsyncMulticorePerfKernel(
+    __gm__ int32_t *dataBuf, int nranks,
+    __gm__ HcclDeviceContext *hcclCtx,
+    __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
+    __gm__ uint64_t *perBlockCycles,
+    int elemCount, int warmupIters, int timedIters)
+{
+    if (nranks < 2) return;
+
+    int bid = block_idx;
+    int myRank = static_cast<int>(hcclCtx->rankId);
+    __gm__ int32_t *sendBuf = dataBuf;
+    __gm__ int32_t *recvBuf = dataBuf + elemCount;
+
+    int chunkSize = (elemCount < CHUNK_ELEMS) ? elemCount : CHUNK_ELEMS;
+    int numChunks = (elemCount + chunkSize - 1) / chunkSize;
+    ChunkTile localTile(1, chunkSize);
+    TASSIGN(localTile, 0x10000);
+    ShapeDyn cShape(1, 1, 1, 1, chunkSize);
+    ShapeDyn fullShape(1, 1, 1, 1, elemCount);
+    StrideDyn cStride(chunkSize, chunkSize, chunkSize, chunkSize, 1);
+    StrideDyn fullStride(elemCount, elemCount, elemCount, elemCount, 1);
+
+    ScratchTile scratchTile;
+    TASSIGN(scratchTile, 0x0);
+    pto::comm::AsyncSession session;
+    bool hasSession = false;
+    if (bid != myRank) {
+        hasSession = pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId);
+        if (!hasSession) {
+            pipe_barrier(PIPE_ALL);
+            if (perBlockCycles) perBlockCycles[bid] = 0;
+            return;
+        }
+    }
+
+    uint64_t totalCycles = 0;
+
+    for (int iter = 0; iter < warmupIters + timedIters; ++iter) {
+        pipe_barrier(PIPE_ALL);
+        uint64_t t0 = get_syscnt();
+
+        if (bid == myRank) {
+            for (int c = 0; c < numChunks; ++c) {
+                int off = c * chunkSize;
+                GlobalI32 srcC(sendBuf + off, cShape, cStride);
+                GlobalI32 dstC(recvBuf + myRank * elemCount + off, cShape, cStride);
+                TLOAD(localTile, srcC);
+                set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                TSTORE(dstC, localTile);
+                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            }
+        } else {
+            int target = bid;
+            GlobalI32 sendG(sendBuf, fullShape, fullStride);
+            __gm__ int32_t *remoteSlot = HcclRemotePtr(hcclCtx, recvBuf, target) + myRank * elemCount;
+            GlobalI32 remoteG(remoteSlot, fullShape, fullStride);
+
+            pto::comm::AsyncEvent event = pto::comm::TPUT_ASYNC(remoteG, sendG, session);
+            (void)event.Wait(session);
+        }
+
+        pipe_barrier(PIPE_ALL);
+        uint64_t t1 = get_syscnt();
+
+        if (iter >= warmupIters) {
+            totalCycles += t1 - t0;
+        }
+    }
+
+    pipe_barrier(PIPE_ALL);
+    if (perBlockCycles) {
+        perBlockCycles[bid] = totalCycles;
+    }
+}
+
+// ============================================================================
+// Perf: Multi-core TGET_ASYNC with variable-size sweep
+// ============================================================================
+__global__ AICORE void AllgatherGetAsyncMulticorePerfKernel(
+    __gm__ int32_t *dataBuf, int nranks,
+    __gm__ HcclDeviceContext *hcclCtx,
+    __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
+    __gm__ uint64_t *perBlockCycles,
+    int elemCount, int warmupIters, int timedIters)
+{
+    if (nranks < 2) return;
+
+    int bid = block_idx;
+    int myRank = static_cast<int>(hcclCtx->rankId);
+    __gm__ int32_t *sendBuf = dataBuf;
+    __gm__ int32_t *recvBuf = dataBuf + elemCount;
+
+    int chunkSize = (elemCount < CHUNK_ELEMS) ? elemCount : CHUNK_ELEMS;
+    int numChunks = (elemCount + chunkSize - 1) / chunkSize;
+    ChunkTile localTile(1, chunkSize);
+    TASSIGN(localTile, 0x10000);
+    ShapeDyn cShape(1, 1, 1, 1, chunkSize);
+    ShapeDyn fullShape(1, 1, 1, 1, elemCount);
+    StrideDyn cStride(chunkSize, chunkSize, chunkSize, chunkSize, 1);
+    StrideDyn fullStride(elemCount, elemCount, elemCount, elemCount, 1);
+
+    ScratchTile scratchTile;
+    TASSIGN(scratchTile, 0x0);
+    pto::comm::AsyncSession session;
+    bool hasSession = false;
+    if (bid != myRank) {
+        hasSession = pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId);
+        if (!hasSession) {
+            pipe_barrier(PIPE_ALL);
+            if (perBlockCycles) perBlockCycles[bid] = 0;
+            return;
+        }
+    }
+
+    uint64_t totalCycles = 0;
+
+    for (int iter = 0; iter < warmupIters + timedIters; ++iter) {
+        pipe_barrier(PIPE_ALL);
+        uint64_t t0 = get_syscnt();
+
+        if (bid == myRank) {
+            for (int c = 0; c < numChunks; ++c) {
+                int off = c * chunkSize;
+                GlobalI32 srcC(sendBuf + off, cShape, cStride);
+                GlobalI32 dstC(recvBuf + myRank * elemCount + off, cShape, cStride);
+                TLOAD(localTile, srcC);
+                set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+                TSTORE(dstC, localTile);
+                set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+                wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            }
+        } else {
+            int srcRank = bid;
+            __gm__ int32_t *remoteSend = HcclRemotePtr(hcclCtx, sendBuf, srcRank);
+            GlobalI32 remoteG(remoteSend, fullShape, fullStride);
+            GlobalI32 localG(recvBuf + srcRank * elemCount, fullShape, fullStride);
+
+            pto::comm::AsyncEvent event = pto::comm::TGET_ASYNC(localG, remoteG, session);
+            (void)event.Wait(session);
+        }
+
+        pipe_barrier(PIPE_ALL);
+        uint64_t t1 = get_syscnt();
+
+        if (iter >= warmupIters) {
+            totalCycles += t1 - t0;
+        }
+    }
+
+    pipe_barrier(PIPE_ALL);
+    if (perBlockCycles) {
+        perBlockCycles[bid] = totalCycles;
+    }
+}
+
+// ============================================================================
+// RunAllgatherMcAsyncSweep — TPUT_ASYNC_MC + TGET_ASYNC_MC across data sizes
+// ============================================================================
+static bool RunAllgatherMcAsyncSweepKernel(int rankId, int nRanks, int nDevices, int firstDeviceId,
+                                           const HcclRootInfo *rootInfo)
+{
+    TestContext ctx;
+    if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, rootInfo))
+        return false;
+
+    SdmaWorkspaceManager sdmaMgr;
+    if (!sdmaMgr.Init()) {
+        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
+        return false;
+    }
+
+    static const size_t kSweepElems[] = {1024, 4096, 16384, 65536, 262144, 1048576};
+    static const int kNumSizes = sizeof(kSweepElems) / sizeof(kSweepElems[0]);
+
+    size_t mcLatBytes = static_cast<size_t>(nRanks) * sizeof(uint64_t);
+    uint64_t *mcLatDev = nullptr;
+    uint64_t *mcLatHost = nullptr;
+    aclrtMalloc(reinterpret_cast<void **>(&mcLatDev), mcLatBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMallocHost(reinterpret_cast<void **>(&mcLatHost), mcLatBytes);
+
+    for (int si = 0; si < kNumSizes; ++si) {
+        size_t elemCount = kSweepElems[si];
+        size_t recvElems = static_cast<size_t>(nRanks) * elemCount;
+        size_t winBytes = SYNC_BUF_BYTES + (elemCount + recvElems) * sizeof(int32_t);
+
+        if (winBytes > ctx.hostCtx.winSize) {
+            if (rankId == 0)
+                std::cout << "[SWEEP] size_bytes=" << elemCount * 4 << "  SKIPPED (window=" << ctx.hostCtx.winSize << ")" << std::endl;
+            continue;
+        }
+
+        uint64_t winBase = ctx.hostCtx.windowsIn[rankId];
+        size_t winOff = 0;
+        void *commPtr = WindowAlloc(winBase, winOff, winBytes);
+        int32_t *dataBuf = reinterpret_cast<int32_t *>(
+            reinterpret_cast<uint8_t *>(commPtr) + SYNC_BUF_BYTES);
+
+        // --- TPUT_ASYNC_MC ---
+        aclrtMemset(dataBuf, (elemCount + recvElems) * sizeof(int32_t), 0,
+                    (elemCount + recvElems) * sizeof(int32_t));
+        aclrtMemset(mcLatDev, mcLatBytes, 0, mcLatBytes);
+        HcclHostBarrier(ctx.comm, ctx.stream);
+
+        double t0 = NowUs();
+        AllgatherPutAsyncMulticorePerfKernel<<<nRanks, nullptr, ctx.stream>>>(
+            dataBuf, nRanks, ctx.deviceCtx,
+            (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
+            mcLatDev, static_cast<int>(elemCount), WARMUP_ITERS, TIMED_ITERS);
+        ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+        double t1 = NowUs();
+
+        HcclHostBarrier(ctx.comm, ctx.stream);
+        aclrtMemcpy(mcLatHost, mcLatBytes, mcLatDev, mcLatBytes, ACL_MEMCPY_DEVICE_TO_HOST);
+
+        if (rankId == 0) {
+            uint64_t maxCycles = 0;
+            for (int b = 0; b < nRanks; ++b) {
+                if (mcLatHost[b] > maxCycles) maxCycles = mcLatHost[b];
+            }
+            double devTotal = CyclesToUs(static_cast<double>(maxCycles) / TIMED_ITERS);
+            PrintSweepLine("TPUT_ASYNC_MC", elemCount * 4,
+                           (t1 - t0) / TIMED_ITERS, devTotal, 0.0, devTotal);
+        }
+
+        // --- TGET_ASYNC_MC ---
+        aclrtMemset(dataBuf, (elemCount + recvElems) * sizeof(int32_t), 0,
+                    (elemCount + recvElems) * sizeof(int32_t));
+        aclrtMemset(mcLatDev, mcLatBytes, 0, mcLatBytes);
+        HcclHostBarrier(ctx.comm, ctx.stream);
+
+        t0 = NowUs();
+        AllgatherGetAsyncMulticorePerfKernel<<<nRanks, nullptr, ctx.stream>>>(
+            dataBuf, nRanks, ctx.deviceCtx,
+            (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
+            mcLatDev, static_cast<int>(elemCount), WARMUP_ITERS, TIMED_ITERS);
+        ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+        t1 = NowUs();
+
+        HcclHostBarrier(ctx.comm, ctx.stream);
+        aclrtMemcpy(mcLatHost, mcLatBytes, mcLatDev, mcLatBytes, ACL_MEMCPY_DEVICE_TO_HOST);
+
+        if (rankId == 0) {
+            uint64_t maxCycles = 0;
+            for (int b = 0; b < nRanks; ++b) {
+                if (mcLatHost[b] > maxCycles) maxCycles = mcLatHost[b];
+            }
+            double devTotal = CyclesToUs(static_cast<double>(maxCycles) / TIMED_ITERS);
+            PrintSweepLine("TGET_ASYNC_MC", elemCount * 4,
+                           (t1 - t0) / TIMED_ITERS, devTotal, 0.0, devTotal);
+        }
+    }
+
+    aclrtFreeHost(mcLatHost);
+    aclrtFree(mcLatDev);
+    sdmaMgr.Finalize();
+    return ctx.Finalize();
+}
+
+bool RunAllgatherMcAsyncSweep(int nRanks, int firstRankId, int firstDeviceId)
+{
+    return ForkAndRunWithHcclRootInfo(
+        nRanks, firstRankId, firstDeviceId, [&](int rankId, const HcclRootInfo *rootInfo) {
+            return RunAllgatherMcAsyncSweepKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
         });
 }

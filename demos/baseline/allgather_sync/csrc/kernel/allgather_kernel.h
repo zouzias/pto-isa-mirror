@@ -10,11 +10,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #pragma once
 
-// Allgather via TPUT: every rank writes its data to all other ranks (synchronous).
-bool RunAllgatherPutSync(int nRanks, int firstRankId, int firstDeviceId);
-
-// Allgather via TGET: every rank pulls data from all other ranks (synchronous).
-bool RunAllgatherGetSync(int nRanks, int firstRankId, int firstDeviceId);
-
-// Bandwidth sweep: runs TPUT_SYNC + TGET_SYNC across multiple data sizes (1KB..4MB).
+// Bandwidth sweep covering 4 kernel strategies:
+//   TPUT_MC, TGET_MC, RING, REC_DBL
+// Each strategy is measured with warmup + timed iterations.
+// Output includes host/device latency and bandwidth for each data size.
 bool RunAllgatherSyncSweep(int nRanks, int firstRankId, int firstDeviceId);

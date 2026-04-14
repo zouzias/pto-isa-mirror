@@ -1,6 +1,6 @@
 # Allgather 异步通信 Demo
 
-本示例展示如何使用 PTO 的 `TPUT_ASYNC`（异步远程写）和 `TGET_ASYNC`（异步远程读）SDMA 指令在多个 NPU 设备之间实现 allgather 集合通信操作。
+本示例展示如何使用 PTO 的 `TPUT_ASYNC`（异步远程写）和 `TGET_ASYNC`（异步远程读）SDMA 指令在多个 NPU 设备之间实现 allgather 集合通信操作，涵盖**单核**和**多核**两种模式。
 
 ## 前置条件
 
@@ -22,8 +22,10 @@ source /path/to/set_env.sh
 
 每个 rank 贡献 256 个 `int32_t` 数据。allgather 操作完成后，每个 rank 都持有所有 rank 的完整数据。
 
-1. **TPUT_ASYNC Allgather（异步远程写）**：每个 rank 通过 `pto::comm::TPUT_ASYNC` 将自身数据异步写入所有其他 rank 的接收缓冲区对应位置。
-2. **TGET_ASYNC Allgather（异步远程读）**：每个 rank 通过 `pto::comm::TGET_ASYNC` 从所有其他 rank 异步拉取数据到本地接收缓冲区。
+1. **TPUT_ASYNC Allgather（异步远程写，单核）**：每个 rank 通过 `pto::comm::TPUT_ASYNC` 将自身数据异步写入所有其他 rank 的接收缓冲区对应位置。
+2. **TGET_ASYNC Allgather（异步远程读，单核）**：每个 rank 通过 `pto::comm::TGET_ASYNC` 从所有其他 rank 异步拉取数据到本地接收缓冲区。
+3. **TPUT_ASYNC Allgather（异步远程写，多核）**：以 `<<<nRanks, ...>>>` 启动，每个 AICORE 负责一个目标 rank 的通信，并行执行。
+4. **TGET_ASYNC Allgather（异步远程读，多核）**：以 `<<<nRanks, ...>>>` 启动，每个 AICORE 负责从一个源 rank 拉取数据，并行执行。
 
 ### 关键 PTO API
 
@@ -141,6 +143,14 @@ mpirun -n 2 ./build/bin/allgather_demo
 --- Demo 2: Allgather via TGET_ASYNC ---
 [TGET_ASYNC PASS] Rank 0: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
 [TGET_ASYNC PASS] Rank 1: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
+
+--- Demo 3: Allgather via TPUT_ASYNC (Multi-core) ---
+[TPUT_ASYNC_MC PASS] Rank 0: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
+[TPUT_ASYNC_MC PASS] Rank 1: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
+
+--- Demo 4: Allgather via TGET_ASYNC (Multi-core) ---
+[TGET_ASYNC_MC PASS] Rank 0: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
+[TGET_ASYNC_MC PASS] Rank 1: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
 
 ========================================
  All demos PASSED

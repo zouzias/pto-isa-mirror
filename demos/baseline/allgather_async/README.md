@@ -1,6 +1,6 @@
 # Allgather Async Demo
 
-Demonstrates the allgather collective operation using PTO's `TPUT_ASYNC` (remote write) and `TGET_ASYNC` (remote read) SDMA-based async instructions across multiple NPU devices.
+Demonstrates the allgather collective operation using PTO's `TPUT_ASYNC` (remote write) and `TGET_ASYNC` (remote read) SDMA-based async instructions across multiple NPU devices, covering both single-core and multi-core variants.
 
 ## Prerequisites
 
@@ -22,9 +22,10 @@ source /path/to/set_env.sh
 
 Each rank contributes 256 `int32_t` values. After allgather, every rank holds all ranks' data.
 
-1. **TPUT_ASYNC Allgather**: Each rank asynchronously writes its chunk to every other rank's receive buffer using `pto::comm::TPUT_ASYNC`.
-
-2. **TGET_ASYNC Allgather**: Each rank asynchronously pulls every other rank's chunk into its own receive buffer using `pto::comm::TGET_ASYNC`.
+1. **TPUT_ASYNC Allgather (single-core)**: Each rank asynchronously writes its chunk to every other rank's receive buffer using `pto::comm::TPUT_ASYNC`.
+2. **TGET_ASYNC Allgather (single-core)**: Each rank asynchronously pulls every other rank's chunk into its own receive buffer using `pto::comm::TGET_ASYNC`.
+3. **TPUT_ASYNC Allgather (multi-core)**: Launched with `<<<nRanks, ...>>>` — each AICORE handles one target rank's communication in parallel.
+4. **TGET_ASYNC Allgather (multi-core)**: Launched with `<<<nRanks, ...>>>` — each AICORE pulls data from one source rank in parallel.
 
 ## Project Structure
 

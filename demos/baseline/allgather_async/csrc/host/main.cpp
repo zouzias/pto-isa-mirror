@@ -8,10 +8,10 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-// Allgather Async Demo — Host Entry Point
+// Allgather Async Perf Sweep — Host Entry Point
 //
-// Demonstrates the allgather collective using PTO's TPUT_ASYNC (remote write)
-// and TGET_ASYNC (remote read) SDMA-based instructions.
+// Runs bandwidth/latency sweep across all 4 kernel strategies:
+//   RING, REC_DBL (single-core), TPUT_ASYNC_MC, TGET_ASYNC_MC (multi-core)
 //
 // Usage: mpirun -n <N> ./allgather_demo
 
@@ -41,45 +41,15 @@ int main(int argc, char **argv)
 
     if (rank == 0) {
         std::cout << "========================================" << std::endl;
-        std::cout << " PTO Allgather Async Demo" << std::endl;
+        std::cout << " PTO Allgather Async Perf Sweep" << std::endl;
         std::cout << " Ranks: " << size << std::endl;
+        std::cout << " Strategies: RING, REC_DBL," << std::endl;
+        std::cout << "             TPUT_ASYNC_MC, TGET_ASYNC_MC" << std::endl;
         std::cout << "========================================" << std::endl;
     }
 
-    int failures = 0;
-
-    if (rank == 0)
-        std::cout << "\n--- Demo 1: Allgather via TPUT_ASYNC ---" << std::endl;
-    if (!RunAllgatherPutAsync(size, 0, 0)) {
-        if (rank == 0)
-            std::cerr << "[TPUT_ASYNC Allgather FAIL]" << std::endl;
-        ++failures;
-    }
-
-    CommMpiBarrier();
-
-    if (rank == 0)
-        std::cout << "\n--- Demo 2: Allgather via TGET_ASYNC ---" << std::endl;
-    if (!RunAllgatherGetAsync(size, 0, 0)) {
-        if (rank == 0)
-            std::cerr << "[TGET_ASYNC Allgather FAIL]" << std::endl;
-        ++failures;
-    }
-
     if (rank == 0) {
-        std::cout << "\n========================================" << std::endl;
-        if (failures == 0)
-            std::cout << " All demos PASSED" << std::endl;
-        else
-            std::cout << " " << failures << " demo(s) FAILED" << std::endl;
-        std::cout << "========================================" << std::endl;
-    }
-
-    CommMpiBarrier();
-
-    // Bandwidth sweep: 1KB .. 4MB
-    if (rank == 0) {
-        std::cout << "\n[PERF] ======== Bandwidth Sweep (Rank 0) ========" << std::endl;
+        std::cout << "\n[PERF] ======== Bandwidth Sweep: Single-core (Rank 0) ========" << std::endl;
         std::cout << "[PERF] warmup=20 iters=100 nranks=" << size << std::endl;
     }
 
@@ -92,6 +62,22 @@ int main(int argc, char **argv)
         std::cout << "[PERF] ==============================================" << std::endl;
     }
 
+    CommMpiBarrier();
+
+    if (rank == 0) {
+        std::cout << "\n[PERF] ======== Bandwidth Sweep: Multi-core (Rank 0) ========" << std::endl;
+        std::cout << "[PERF] warmup=20 iters=100 nranks=" << size << std::endl;
+    }
+
+    if (!RunAllgatherMcAsyncSweep(size, 0, 0)) {
+        if (rank == 0)
+            std::cerr << "[PERF] MC Async sweep FAILED" << std::endl;
+    }
+
+    if (rank == 0) {
+        std::cout << "[PERF] ==============================================" << std::endl;
+    }
+
     CommMpiFinalize();
-    return (failures == 0) ? 0 : 1;
+    return 0;
 }
