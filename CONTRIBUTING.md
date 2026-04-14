@@ -1,97 +1,160 @@
-# 贡献指南
+# Contributing Guide
 
-本项目欢迎广大开发者体验并参与贡献，在参与社区贡献之前。请参见[cann-community](https://gitcode.com/cann/community)了解行为准则，进行CLA协议签署，了解源码仓的贡献流程。
+We welcome developers to explore PTO Tile Lib and contribute to the project. Before participating in community contributions, please refer to [cann-community](https://gitcode.com/cann/community) to review the community code of conduct, complete the CLA process, and understand the contribution workflow used by the source repositories.
 
-开发者准备本地代码与提交PR时需要重点关注如下几点：
+This document is organized into three parts:
 
-1. 提交PR时，请按照PR模板仔细填写本次PR的业务背景、目的、方案等信息。
-2. 若您的修改不是简单的bug修复，而是涉及到新增特性、新增接口、新增配置参数或者修改代码流程等，请务必先通过Issue进行方案讨论，以避免您的代码被拒绝合入。若您不确定本次修改是否可被归为“简单的bug修复”，亦可通过提交Issue进行方案讨论。
+1. **Common Contribution Scenarios**: explains which types of changes are suitable for contribution and how to get started with an Issue.
+2. **Local Development**: covers local implementation, delivery files, and local checks.
+3. **Submitting and Merging PRs**: describes pre-submission checks, PR submission, and the review and merge process.
 
+## Common Contribution Scenarios
 
-开发者贡献场景主要包括：
+### Bug Fixes for Operators
 
-### 算子Bug修复
+If you find a bug in an operator implementation in this project and would like to fix it, you are welcome to open an Issue for tracking and resolution.
 
-  如果您在本项目中发现了某些算子Bug，希望对其进行修复，欢迎您新建Issue进行反馈和跟踪处理。
+You can follow [Submit / Process Issues](https://gitcode.com/cann/community#提交Issue处理Issue任务) to create a `Bug-Report|缺陷反馈` Issue describing the problem, then enter `/assign` or `/assign @yourself` in a comment to assign the Issue to yourself.
 
-  您可以按照[提交Issue/处理Issue任务](https://gitcode.com/cann/community#提交Issue处理Issue任务)指引新建 `Bug-Report|缺陷反馈` 类Issue对Bug进行描述，然后在评论框中输入“/assign”或“/assign @yourself”，将该Issue分配给您进行处理。
-  
-### 算子优化
+### Operator Optimization
 
-  如果您对本项目中某些算子实现有泛化性增强/性能优化思路，希望着手实现这些优化点，欢迎您对算子进行优化贡献。
+If you have ideas for improving generality or optimizing the performance of an existing operator implementation, you are welcome to contribute them.
 
-  您可以按照[提交Issue/处理Issue任务](https://gitcode.com/cann/community#提交Issue处理Issue任务)指引新建 `Requirement|需求建议` 类Issue对优化点进行说明，并提供您的设计方案，
-  然后在评论框中输入“/assign”或“/assign @yourself”，将该Issue分配给您进行跟踪优化。
+You can follow [Submit / Process Issues](https://gitcode.com/cann/community#提交Issue处理Issue任务) to create a `Requirement|需求建议` Issue describing the optimization opportunity and your proposed design. Then enter `/assign` or `/assign @yourself` in a comment to assign the Issue to yourself for follow-up work.
 
-### 贡献新算子
+### Contributing a New Operator
 
-  如果您有全新的算子希望基于 NPU 进行设计与实现，欢迎在 Issue 中提出您的想法与设计方案。完整的贡献流程如下：
+If you want to design and implement a brand-new operator for NPU, you are welcome to propose the idea and design in an Issue.
 
-  #### 1. 新增 Issue  
-  请按照[提交 Issue / 处理 Issue 任务](https://gitcode.com/cann/community#提交Issue处理Issue任务)指引，新建 `Requirement|需求建议` 类 Issue，并在其中说明新增算子的设计方案。  
-  Issue 需包含以下内容：
+#### 1. Create an Issue
 
-  - **背景信息**  
-  - **价值/作用**  
-  - **设计方案**
+Please follow [Submit / Process Issues](https://gitcode.com/cann/community#提交Issue处理Issue任务) to create a `Requirement|需求建议` Issue and describe the proposed operator design.
 
-  同时，请在提交的 Issue 中评论 `/assign` 或 `/assign @yourself` 认领该任务，以便后续完成算子上库。
+The Issue should include:
 
-  #### 2. 需求评审
-  Sig成员将对您提交的 Issue 进行评审并给出修改意见。请在完成修改后，于 Issue 中回复：
-  > “完成意见修改，申请复审”
+- **Background**
+- **Value / motivation**
+- **Design proposal**
 
-  若需求被接纳，sig成员将为您分配合适的算子分类路径（如：`include/pto/npu/a5`），以便您将新增算子提交至对应目录。
-  如在 Issue 交流中未能达成共识，建议申报 SIG 组双周例会，在会议中进行进一步讨论。
+You should also comment `/assign` or `/assign @yourself` on the Issue to claim the task for later implementation.
 
-  #### 3. 提交 PR  
-  在方案确定后，即可开始开发工作。新增算子的交付内容可基于最小交付件结构调整，请参考以下最小交付件进行检查。其中 `${op_name}` 为新增算子名称。
-  ```
-    docs
-    ├── isa
-    │   ├── ${op_name}.md                                # 算子说明文档
-    include
-    ├── pto                                              # 业务代码
-    │   ├── common                                       # 通用目录
-    │   │   ├── pto_instr_impl.hpp                       # 算子实现文件汇总
-    │   │   └── pto_instr.hpp                            # 对外暴露接口
-    │   ├── ${op_class}                                  # 算子分类
-    │   │   └── ${op_name}.hpp                           # 算子实现文件，定义算子头文件，包含函数说明、结构定义、逻辑实现
-    tests                                                # 测试文件目录
-    ├── ${op_class}/src/st/testcase                      # st测试目录
-    │   ├── ${op_name}                                   # 单个算子st测试文件
-    │   │   ├── ${op_name}.cpp                           # 调用接口文件
-    │   │   ├── main.cpp                                 # st运行主函数文件
-    │   │   ├── gen_data.py                              # st用例输入数据与预期结果生成文件
-    │   │   └── CMakeList.txt                            # 编译配置文件
-    │   └── CMakeList.txt                                # 编译配置文件
-    ├── run_st.sh                                        # cpu类算子st用例执行文件，添加单个用例及所有用例的执行命令
-  ```
+#### 2. Requirement Review
 
-  开发完成后，请检查以下内容：
-  - 代码交付件完整性（含 ST 测试用例代码）
-  - 代码符合.clang-format和pyproject.toml规范，提交前请使用命令clang-format -i -style=file <文件名>和ruff format <文件名>修复代码规范问题
-  - PR 是否已关联对应 Issue  
-  - 是否签署 CLA  
-  - 通过评论 `compile` 指令触发开源仓门禁，并依据 CI 检测结果进行修改。如涉及codecheck误报，请提交给sig成员屏蔽。
+SIG members will review the Issue and provide feedback. After addressing the comments, please reply in the Issue:
 
-  门禁通过后，请在关联的 Issue 中回复：
-  > "该 Issue 关联的 PR：XXX，请尽快评审"
+> "The review comments have been addressed. Requesting re-review."
 
-  Sig成员检视后将反馈检视意见，请完成所有修改后回复：
-  > "该 Issue 关联的 PR：XXX，已完成 PR 问题整改，请尽快评审"
+If the requirement is accepted, SIG members will assign a suitable operator category path for you (for example `include/pto/npu/a5`) so that the new operator can be contributed in the appropriate location.
 
-  #### 4. PR 上库  
-  Committer 检视通过后，Maintainer 将进行最终审核。确认无误后，将标注 `/lgtm` 和 `/approve` 标签合入PR。
+If no consensus is reached during the Issue discussion, it is recommended to request further discussion in the SIG biweekly meeting.
 
-### 文档纠错
+### Documentation Fixes
 
-  如果您在本项目中发现某些算子文档描述错误，欢迎您新建Issue进行反馈和修复。
+If you find incorrect descriptions in the operator documentation, you are welcome to open an Issue and submit a fix.
 
-  您可以按照[提交Issue/处理Issue任务](https://gitcode.com/cann/community#提交Issue处理Issue任务)指引新建 `Documentation|文档反馈` 类Issue指出对应文档的问题，然后在评论框中输入“/assign”或“/assign @yourself”，将该Issue分配给您纠正对应文档描述。
-  
-### 帮助解决他人Issue
+You can follow [Submit / Process Issues](https://gitcode.com/cann/community#提交Issue处理Issue任务) to create a `Documentation|文档反馈` Issue describing the problem, then enter `/assign` or `/assign @yourself` in a comment to assign the Issue to yourself.
 
-  如果社区中他人遇到的问题您有合适的解决方法，欢迎您在Issue中发表评论交流，帮助他人解决问题和痛点，共同优化易用性。
+### Helping Resolve Other Issues
 
-  如果对应Issue需要进行代码修改，您可以在Issue评论框中输入“/assign”或“/assign @yourself”，将该Issue分配给您，跟踪协助解决问题。
+If you have a suitable solution to an Issue raised by another community member, you are welcome to discuss it in the Issue and help resolve it together.
+
+If the Issue requires code changes, you can enter `/assign` or `/assign @yourself` in the Issue comments to assign the task to yourself and help drive it to completion.
+
+## Local Development
+
+Once the design is confirmed, you can begin local development. For a new operator, the delivery contents can be adjusted according to the minimum required structure. The following layout reflects the current repository organization and can be used as a reference, where `${op_name}` is the operator name and `${op_class}` is the operator category path assigned during review:
+
+```text
+    docs/
+    ├── isa/
+    │   └── ${op_name}.md                                # operator documentation
+    include/
+    └── pto/
+        ├── common/
+        │   ├── pto_instr_impl.hpp                       # summary of operator implementations
+        │   └── pto_instr.hpp                            # public interfaces
+        └── ${op_class}/
+            └── ${op_name}.hpp                           # operator implementation, comments, structures, logic
+    tests/
+    ├── ${op_class}/src/st/testcase/
+    │   ├── ${op_name}/
+    │   │   ├── ${op_name}.cpp                           # interface invocation file
+    │   │   ├── main.cpp                                 # test entry file
+    │   │   ├── gen_data.py                              # input / expected output generator
+    │   │   └── CMakeLists.txt                           # build file
+    │   └── CMakeLists.txt                               # testcase collection build file
+    ├── run_st.sh                                        # ST execution script entry
+    └── README.md                                        # test instructions
+```
+
+Before preparing a PR, please complete the following local development checks:
+
+- Ensure the delivery files are complete, including ST testcases
+- Make sure the code follows `.clang-format` and `pyproject.toml`; use `clang-format -i -style=file <file>` and `ruff format <file>` before submission
+
+## Submitting and Merging PRs
+
+When preparing local changes and submitting a PR, please pay particular attention to the following:
+
+1. When submitting a PR, please complete the PR template carefully, including the business background, goals, and design of the change.
+2. If your change is not a simple bug fix, but involves a new feature, a new interface, a new configuration parameter, or a modification to an existing workflow, please open an Issue for design discussion first to avoid unnecessary rework or rejection during review. If you are unsure whether your change qualifies as a “simple bug fix,” it is still recommended to start with an Issue.
+
+### Local Checks Before Submission
+
+Community contributors can use `pre-commit` to perform local checks before submitting changes.
+
+#### Step 1: Install the `pre-commit` framework
+
+```bash
+# Install with pip (recommended)
+pip install pre-commit
+
+# Verify installation
+pre-commit --version
+# Output: pre-commit 3.x.x
+```
+
+For Windows users, make sure Python and pip are installed first.
+
+#### Step 2: Enter the project directory
+
+```bash
+cd /path/to/your/pto-isa
+
+# Example
+cd d:\complianceRepo\CANN\pto-isa
+```
+
+#### Step 3: Install Git hooks
+
+```bash
+# Run in the project root directory
+pre-commit install
+```
+
+#### Step 4: Verify the installation (optional)
+
+This command is used to verify that the `pre-commit` hook is installed and can run successfully. If the checks pass, it creates an empty commit, so you can remove it afterward if it is only for testing. After `pre-commit` is installed, the same checks will run automatically on subsequent `git commit` operations.
+
+```bash
+# Test the hook with an empty commit
+git commit --allow-empty -m "test pre-commit"
+```
+
+#### PR Submission and Review
+
+Before submitting the PR, please also confirm the following:
+
+- The PR is linked to the corresponding Issue
+- The CLA has been signed
+- Use the `compile` command in comments to trigger CI checks, and fix any issues reported by CI. If `codecheck` reports false positives, contact SIG members for suppression
+
+After the checks pass, reply in the linked Issue:
+
+> "The PR linked to this Issue is: XXX. Please review when available."
+
+After SIG members provide review comments, please complete all requested changes and reply:
+
+> "The PR linked to this Issue is: XXX. All requested changes have been addressed. Please review again."
+
+After the committer review passes, the maintainer will perform the final review. Once approved, the PR will be merged with `/lgtm` and `/approve` labels.

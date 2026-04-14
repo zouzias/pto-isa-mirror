@@ -122,7 +122,7 @@ PTO_INTERNAL void TransB8FullSubTiles(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, un
             set_va_reg_sb(VA7, &tmpUb1[HALF_ADDR_NUM]);
             if (numSubTileY == 1) { // [32, 32]
                 Op::TransB8Instr(1, 0, 0);
-            } else { // larger then [32, 32], e.g, [32, 64]
+            } else {                // larger then [32, 32], e.g, [32, 64]
                 Op::TransB8Instr(numSubTileY, 1, vconvSrcStride);
             }
         } // end of numSubTileX
@@ -251,7 +251,7 @@ PTO_INTERNAL void TTransOperation(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr, __ubuf
     uint16_t srcGap = tmpStride * sizeof(T) / BLOCK_BYTE_SIZE - lenBurst;
     uint16_t dstGap = dstStride * sizeof(T) / BLOCK_BYTE_SIZE - lenBurst;
     pipe_barrier(PIPE_V);
-    pto_copy_ubuf_to_ubuf(dstPtr, tmpPtr, validCol, lenBurst, srcGap, dstGap);
+    copy_ubuf_to_ubuf(dstPtr, tmpPtr, 0, validCol, lenBurst, srcGap, dstGap);
 }
 
 template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp, unsigned blockSizeElem>
@@ -333,7 +333,7 @@ PTO_INTERNAL void TransRepeatXB8FullSubTiles(__ubuf__ T *dstPtr, __ubuf__ T *src
             set_va_reg_sb(VA1, &tmpUb[HALF_ADDR_NUM]);
             if (numSubTileX == 1) { // [32, 32]
                 Op::TransB8Instr(1, 0, 0);
-            } else { // larger than [32, 32], e.g, [32, 64]
+            } else {                // larger than [32, 32], e.g, [32, 64]
                 Op::TransB8Instr(numSubTileX, vconvDstStride, 1);
             }
         } // end of numSubTileY
@@ -375,7 +375,7 @@ PTO_INTERNAL void TTransRepeatXOperation(__ubuf__ T *dstPtr, __ubuf__ T *srcPtr,
     uint16_t dstGap = dstStride * sizeof(T) / BLOCK_BYTE_SIZE - lenBurst;
     uint16_t srcGap = tmpStride * sizeof(T) / BLOCK_BYTE_SIZE - lenBurst;
     pipe_barrier(PIPE_V);
-    pto_copy_ubuf_to_ubuf(dstPtr, tmpPtr, validCol, lenBurst, srcGap, dstGap);
+    copy_ubuf_to_ubuf(dstPtr, tmpPtr, 0, validCol, lenBurst, srcGap, dstGap);
 }
 
 ///////////////////
@@ -455,7 +455,7 @@ __tf__ PTO_INTERNAL void TTransConvNC1HWC02C1HWNC0(typename TileData::TileDType 
         for (int i = 0; i < srcN; i++) {
             __ubuf__ T *srcPtr = srcPtrOrig + i * nStride;
             __ubuf__ T *dstPtr = dstPtrOrig + i * srcC0;
-            pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, burstNum, lenBurst, srcGap, dstGap);
+            copy_ubuf_to_ubuf(dstPtr, srcPtr, 0, burstNum, lenBurst, srcGap, dstGap);
         }
     } else {
         unsigned validCol = srcC0;

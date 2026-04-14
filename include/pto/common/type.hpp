@@ -136,12 +136,6 @@ enum class SLayout
     ColMajor = 2,
 };
 
-enum class PrintFormat : uint8_t
-{
-    Width8_Precision4 = 0,
-    Width8_Precision2 = 1,
-    Width10_Precision6 = 2,
-};
 // 01-bits patterns are read from right to left.
 // Right bits are low bits, corresponding to low index positions of data.
 enum class MaskPattern : uint8_t
@@ -280,8 +274,8 @@ enum class CompactMode
     Null,
     Normal,
     RowPlusOne,
-    RowAlignedPadding, // apply padding only to the part of ValidRow aligned upward to 16 in TFILLPAD.
 };
+
 enum class SetFmatrixMode
 {
     FMATRIX_A_AUTO,
@@ -309,20 +303,6 @@ enum class HistByte : uint8_t
     BYTE_1 = 1, // bits 15-8
     BYTE_2 = 2, // bits 23-16
     BYTE_3 = 3  // MSB (bits 31-24)
-};
-
-union NotNumUnion {
-    float f;
-    uint32_t i;
-};
-
-union HalfUnion {
-#ifdef __CCE_AICORE__
-    half f;
-#else
-    uint16_t f;
-#endif
-    uint16_t i;
 };
 
 enum class DivAlgorithm : uint8_t
@@ -380,22 +360,13 @@ using TRandomCounter = uint32_t[PTO_RANDOM_COUNTER_SIZE];
 typedef _Float16 half;
 typedef _Float16 aclFloat16;
 // Note: clang version should be >=15 and gcc version should be >=14
-// Use native BF16 automatically when the current toolchain already supports it.
-// PTO_CPU_SIM_ENABLE_BF16 remains useful as a strict request: if callers define
-// it on an unsupported toolchain, we fail loudly instead of silently falling back
-// to the placeholder _Float16 alias.
 #if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L && defined(__STDCPP_BFLOAT16_T__)
 #include <stdfloat>
 typedef std::bfloat16_t bfloat16_t;
 #define CPU_SIM_BFLOAT_ENABLED
-#elif defined(PTO_CPU_SIM_ENABLE_BF16)
-#error "PTO_CPU_SIM_ENABLE_BF16 requires C++23 <stdfloat> with std::bfloat16_t support."
 #else
 // macOS libc++ (and some other toolchains) may not ship <stdfloat> yet.
 // For CPU simulation, a best-effort 16-bit float type is sufficient.
-// Default CPU simulator builds keep the existing compiler baseline.
-// bfloat16_t remains available as a placeholder type, but BF16 ST coverage and
-// bit-accurate custom-value paths are compiled only when CPU_SIM_BFLOAT_ENABLED is set.
 typedef _Float16 bfloat16_t;
 #endif
 #endif

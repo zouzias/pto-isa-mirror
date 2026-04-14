@@ -189,9 +189,7 @@ void TMrgsortSingle()
     aclrtMalloc((void **)&src0Device, inputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/input0.bin", inputFileSize, src0Host, inputFileSize);
-    aclrtMemset(dstHost, outputFileSize, 0, outputFileSize);
 
-    aclrtMemcpy(dstDevice, outputFileSize, dstHost, outputFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src0Device, inputFileSize, src0Host, inputFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LanchTMrgsortSingle<T, kGRows_, kGCols_, kTRows_, kTCols_, blockLen>(dstDevice, src0Device, stream);
 
@@ -240,10 +238,9 @@ void TMrgsortTopk()
 
     aclrtMalloc((void **)&dstDevice, outputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src0Device, inputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    ReadFile(GetGoldenDir() + "/input0.bin", inputFileSize, src0Host, inputFileSize);
-    aclrtMemset(dstHost, outputFileSize, 0, outputFileSize);
 
-    aclrtMemcpy(dstDevice, outputFileSize, dstHost, outputFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    ReadFile(GetGoldenDir() + "/input0.bin", inputFileSize, src0Host, inputFileSize);
+
     aclrtMemcpy(src0Device, inputFileSize, src0Host, inputFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LanchTMrgsortTopK<T, kGRows_, kGCols_, kTRows_, kTCols_, topk>(dstDevice, src0Device, stream);
 

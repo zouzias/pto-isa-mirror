@@ -23,11 +23,11 @@ __global__ AICORE void runTRecip(__gm__ T *out, __gm__ T *src)
     using TileData = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     TileData srcTile(kGRows_, kGCols_);
     TileData dstTile(kGRows_, kGCols_);
-    TASSIGN<0x0>(srcTile);
+    TASSIGN(srcTile, 0x0);
     if constexpr (isInPlace) {
-        TASSIGN<0x0>(dstTile);
+        TASSIGN(dstTile, 0x0);
     } else {
-        TASSIGN<0x20000>(dstTile);
+        TASSIGN(dstTile, 0x20000);
     }
 
     GlobalData srcGlobal(src);

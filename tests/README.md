@@ -2,6 +2,16 @@
 
 Tests and examples for PTO Tile Lib, covering both CPU simulation and NPU (including `sim` and on-board `npu` modes).
 
+## Test Entry Points
+
+Common test entry points:
+
+- Full CPU Simulator run: `python3 tests/run_cpu.py --clean --verbose`
+- GEMM demo: `python3 tests/run_cpu.py --demo gemm --verbose`
+- Flash Attention demo: `python3 tests/run_cpu.py --demo flash_attn --verbose`
+- Single ST testcase: `python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]`
+- One-click scripts: `./tests/run_st.sh`, `./tests/run_cpu_tests.sh`
+
 ## Layout
 
 - `script/`: Recommended entry scripts

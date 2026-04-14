@@ -199,4 +199,3 @@ tassign %tile, %addr : !pto.tile<...>, index
 # AS Level 2 (DPS)
 pto.tassign ins(%tile, %addr : !pto.tile_buf<...>, dtype)
 ```
-

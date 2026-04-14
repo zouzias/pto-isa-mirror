@@ -96,15 +96,15 @@ TLOAD(tile[0], ...);  // 预加载第一个
 for (int i = 0; i < N; i++) {
   int curr = i % 2;
   int next = (i + 1) % 2;
-  
+
   // 当前迭代计算
   TCOMPUTE(result[curr], tile[curr]);
-  
+
   // 同时加载下一个
   if (i + 1 < N) {
     TLOAD(tile[next], ...);
   }
-  
+
   // 存储结果
   TSTORE(..., result[curr]);
 }
@@ -122,17 +122,17 @@ for (int i = 0; i < N; i++) {
 for (int k = 0; k < K; k += tileK) {
   int curr = k % 2;
   int next = (k + tileK) % 2;
-  
+
   // 阶段1: MTE2 加载下一批数据
   if (k + tileK < K) {
     TLOAD(tileA_L1[next], ...);
     TLOAD(tileB_L1[next], ...);
   }
-  
+
   // 阶段2: MTE1 提取当前数据到 L0
   TEXTRACT(tileA_L0[curr], tileA_L1[curr]);
   TEXTRACT(tileB_L0[curr], tileB_L1[curr]);
-  
+
   // 阶段3: CUBE 计算
   TMATMUL(acc, tileA_L0[curr], tileB_L0[curr]);
 }
@@ -150,10 +150,10 @@ Event<Op::TMATMUL, Op::TMOV> e_compute;
 for (int k = 0; k < K; k += tileK) {
   // 加载并记录事件
   e_load = TLOAD(tileA, ...);
-  
+
   // 等待加载完成，然后提取
   e_extract = TEXTRACT(tileLeft, tileA, e_load);
-  
+
   // 等待提取完成，然后计算
   e_compute = TMATMUL(acc, tileLeft, tileRight, e_extract);
 }
@@ -178,18 +178,18 @@ __global__ __aicore__ void MatMulKernel(...) {
   int block_idx = get_block_idx();
   int block_m = block_idx / N_blocks;
   int block_n = block_idx % N_blocks;
-  
+
   // 计算当前核负责的数据范围
   int m_start = block_m * TILE_M;
   int n_start = block_n * TILE_N;
-  
+
   // 处理当前块
   for (int k = 0; k < K; k += TILE_K) {
     TLOAD(tileA, A[m_start:m_start+TILE_M, k:k+TILE_K]);
     TLOAD(tileB, B[k:k+TILE_K, n_start:n_start+TILE_N]);
     TMATMUL(acc, tileA, tileB);
   }
-  
+
   TSTORE(C[m_start:m_start+TILE_M, n_start:n_start+TILE_N], acc);
 }
 ```
@@ -338,17 +338,17 @@ TLOAD(tileB[0], ...);
 for (int k = 0; k < K; k += tileK) {
   int curr = k % 2;
   int next = (k + tileK) % 2;
-  
+
   // 提取当前数据
   TEXTRACT(tileLeft[curr], tileA[curr]);
   TEXTRACT(tileRight[curr], tileB[curr]);
-  
+
   // 同时加载下一批
   if (k + tileK < K) {
     TLOAD(tileA[next], ...);
     TLOAD(tileB[next], ...);
   }
-  
+
   // 计算
   TMATMUL(acc, tileLeft[curr], tileRight[curr]);
 }
@@ -434,8 +434,3 @@ printf("TLOAD time: %f ms\n", (end - start) / N);
 - [性能优化指南](opt_zh.md)
 - [GEMM 优化案例](../../kernels/manual/a2a3/gemm_performance/README_zh.md)
 - [Flash Attention 案例](../../kernels/manual/common/flash_atten/README_zh.md)
-
-
-
-
-

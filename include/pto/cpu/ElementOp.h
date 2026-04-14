@@ -35,8 +35,6 @@ enum class ElementOp
     OP_CMP, // compare mode need extra parameters
     OP_PRELU,
     OP_EXPDIF,
-    OP_FMOD,
-
     // unary operation
     OP_EXP,
     OP_ABS,
@@ -130,14 +128,20 @@ template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_DIV> {
     static void apply(DType &dst, DType &src0, DType &src1, size_t)
     {
-        assert(src1 != static_cast<DType>(0) && "Divider cannot be equal to zero");
-        dst = src0 / src1;
+        if (src1 != static_cast<DType>(0)) {
+            dst = src0 / src1;
+        } else {
+            PTO_ASSERT(false, "illegal src is zero");
+        }
     }
 
     static void apply(DType &dst, const DType &src0, const DType &src1)
     {
-        assert(src1 != static_cast<DType>(0) && "Divider cannot be equal to zero");
-        dst = src0 / src1;
+        if (src1 != static_cast<DType>(0)) {
+            dst = src0 / src1;
+        } else {
+            PTO_ASSERT(false, "illegal src is zero");
+        }
     }
 };
 
@@ -145,14 +149,14 @@ template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_REM> {
     static void apply(DType &dst, DType &src0, DType &src1, size_t)
     {
-        assert(src1 != static_cast<DType>(0) && "Divider cannot be equal to zero");
-        if constexpr (std::is_integral_v<DType>) {
-            dst = src0 % src1;
+        if (src1 != static_cast<DType>(0)) {
+            if constexpr (std::is_integral_v<DType>) {
+                dst = src0 % src1;
+            } else {
+                dst = static_cast<DType>(std::fmod(static_cast<double>(src0), static_cast<double>(src1)));
+            }
         } else {
-            dst = static_cast<DType>(std::fmod(static_cast<double>(src0), static_cast<double>(src1)));
-        }
-        if (((src0 >= 0) != (src1 >= 0)) && dst != 0) {
-            dst += src1;
+            PTO_ASSERT(false, "illegal src is zero");
         }
     }
 };
@@ -280,19 +284,6 @@ struct ElementOpCal<half, ElementOp::OP_EXPDIF> {
 #endif
 
 template <typename DType>
-struct ElementOpCal<DType, ElementOp::OP_FMOD> {
-    static void apply(DType &dst, DType &src0, DType &src1, size_t)
-    {
-        assert(src1 != static_cast<DType>(0) && "Divider cannot be equal to zero");
-        if constexpr (std::is_integral_v<DType>) {
-            dst = src0 % src1;
-        } else {
-            dst = static_cast<DType>(std::fmod(static_cast<double>(src0), static_cast<double>(src1)));
-        }
-    }
-};
-
-template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_EXP> {
     static void apply(DType &dst, DType &src)
     {
@@ -348,8 +339,11 @@ template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_RECIP> {
     static void apply(DType &dst, DType &src)
     {
-        assert(src != static_cast<DType>(0) && "Divider cannot be equal to zero");
-        dst = 1 / src;
+        if (src != static_cast<DType>(0)) {
+            dst = 1 / src;
+        } else {
+            PTO_ASSERT(false, "illegal src is zero");
+        }
     }
 };
 
@@ -357,8 +351,11 @@ template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_RSQRT> {
     static void apply(DType &dst, DType &src)
     {
-        assert(src != static_cast<DType>(0) && "Divider cannot be equal to zero");
-        dst = static_cast<DType>(1.0 / std::sqrt(static_cast<double>(src)));
+        if (src != static_cast<DType>(0)) {
+            dst = static_cast<DType>(1.0 / std::sqrt(static_cast<double>(src)));
+        } else {
+            PTO_ASSERT(false, "illegal src is zero");
+        }
     }
 };
 
@@ -442,8 +439,11 @@ template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_RDIVS> {
     static void apply(DType &dst, DType &src, DType &scalar, size_t)
     {
-        assert(src != static_cast<DType>(0) && "Divider cannot be equal to zero");
-        dst = scalar / src;
+        if (src != static_cast<DType>(0)) {
+            dst = scalar / src;
+        } else {
+            PTO_ASSERT(false, "illegal src is zero");
+        }
     }
 };
 
@@ -451,13 +451,14 @@ template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_REMS> {
     static void apply(DType &dst, DType &src, DType &scalar, size_t)
     {
-        if constexpr (std::is_integral_v<DType>) {
-            dst = src % scalar;
+        if (scalar != static_cast<DType>(0)) {
+            if constexpr (std::is_integral_v<DType>) {
+                dst = src % scalar;
+            } else {
+                dst = static_cast<DType>(std::fmod(static_cast<double>(src), static_cast<double>(scalar)));
+            }
         } else {
-            dst = static_cast<DType>(std::fmod(static_cast<double>(src), static_cast<double>(scalar)));
-        }
-        if (((src >= 0) != (scalar >= 0)) && dst != 0) {
-            dst += scalar;
+            PTO_ASSERT(false, "illegal src is zero");
         }
     }
 };
@@ -544,11 +545,7 @@ template <typename DType>
 struct ElementOpCal<DType, ElementOp::OP_FMODS> {
     static void apply(DType &dst, DType &src, DType &scalar, size_t)
     {
-        if constexpr (std::is_integral_v<DType>) {
-            dst = src % scalar;
-        } else {
-            dst = static_cast<DType>(std::fmod(static_cast<double>(src), static_cast<double>(scalar)));
-        }
+        dst = static_cast<DType>(std::fmod(static_cast<double>(src), static_cast<double>(scalar)));
     }
 };
 

@@ -36,7 +36,7 @@ template <typename GlobalData>
 struct ParallelGroup {
     using value_type = GlobalData; // Type alias for type traits
 
-    GlobalData *tensors{nullptr}; // Points to external array of GlobalData objects
+    GlobalData *tensors{nullptr};  // Points to external array of GlobalData objects
     int nranks{0};
     int rootIdx{-1};
 
@@ -131,7 +131,7 @@ enum class ReduceOp : uint8_t
 enum class DmaEngine : uint8_t
 {
     SDMA = 0, // Supports 2D transfer
-    URMA = 1, // Supports 1D transfer (HCCP V2 Jetty, NPU_ARCH 3510 only)
+    URMA = 1, // Supports 1D transfer
 };
 
 // ============================================================================

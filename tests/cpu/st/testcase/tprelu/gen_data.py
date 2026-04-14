@@ -12,7 +12,6 @@
 
 import os
 import numpy as np
-from utils import NumExt
 np.random.seed(19)
 
 
@@ -23,21 +22,25 @@ def gen_golden_data_tprelu(case_name, param):
     h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = NumExt.astype(np.random.randint(1, 10, size=[row, col]), dtype)
-    input2 = NumExt.astype(np.random.randint(1, 10, size=[row, col]), dtype)
+    input1 = np.random.randint(1, 10, size=[row, col]).astype(dtype)
+    input2 = np.random.randint(1, 10, size=[row, col]).astype(dtype)
 
     # Perform the addbtraction
-    golden = NumExt.zeros([row, col], dtype)
-    golden[:h_valid, :w_valid] = NumExt.astype(
-        np.where(input1 > 0, input1, input1 * input2), dtype
-    )[:h_valid, :w_valid]
+    golden = np.where(input1 > 0, input1, input1 * input2).astype(dtype)
+
+    # Apply valid region constraints
+    output = np.zeros([row, col]).astype(dtype)
+    for h in range(row):
+        for w in range(col):
+            if h >= h_valid or w >= w_valid:
+                golden[h][w] = output[h][w]
 
     # Save the input and golden data to binary files
-    NumExt.write_array("input1.bin", input1, dtype)
-    NumExt.write_array("input2.bin", input2, dtype)
-    NumExt.write_array("golden.bin", golden, dtype)
+    input1.tofile("input1.bin")
+    input2.tofile("input2.bin")
+    golden.tofile("golden.bin")
 
-    return input1, input2, golden
+    return output, input1, input2, golden
 
 
 class TPreluParams:
@@ -52,7 +55,13 @@ class TPreluParams:
 
 
 def generate_case_name(param):
-    dtype_str = NumExt.get_short_type_name(param.dtype)
+    dtype_str = {
+        np.float32: 'float',
+        np.float16: 'half',
+        np.int8: 'int8',
+        np.int32: 'int32',
+        np.int16: 'int16'
+    }[param.dtype]
     return f"TPRELUTest.case_{dtype_str}_{param.global_row}x{param.global_col}_{param.tile_row}x{param.tile_col}_" + \
            f"{param.valid_row}x{param.valid_col}"
 
@@ -72,8 +81,6 @@ if __name__ == "__main__":
         TPreluParams(np.int16, 64, 64, 64, 64, 64, 64),
         TPreluParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]
-    if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
-        case_params_list.append(TPreluParams(NumExt.bf16, 16, 256, 16, 256, 16, 256))
 
     for i, param in enumerate(case_params_list):
         case_name = generate_case_name(param)

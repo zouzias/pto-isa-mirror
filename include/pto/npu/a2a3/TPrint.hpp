@@ -40,57 +40,40 @@ DEFINE_TYPE_NAME_GROUP("int8", std::int8_t)
 DEFINE_TYPE_NAME_GROUP("float32", float)
 DEFINE_TYPE_NAME_GROUP("float16", half)
 
-template <PrintFormat Format, typename T>
+template <typename T>
 PTO_INTERNAL void PrintValue(T &val, int col)
 {
-    if (col > 0) {
+    if (col > 0)
         cce::printf(" ");
-    }
-
     if constexpr (std::is_same_v<T, float> || std::is_same_v<T, half>) {
-        if constexpr (Format == PrintFormat::Width8_Precision4) {
-            cce::printf("%8.4f", static_cast<float>(val));
-        } else if constexpr (Format == PrintFormat::Width8_Precision2) {
-            cce::printf("%8.2f", static_cast<float>(val));
-        } else if constexpr (Format == PrintFormat::Width10_Precision6) {
-            cce::printf("%10.6f", static_cast<float>(val));
-        }
+        cce::printf("%8.2f", static_cast<float>(val));
     } else if constexpr (std::is_integral_v<T>) {
-        if constexpr (Format == PrintFormat::Width10_Precision6) {
-            cce::printf("%10d", static_cast<int>(val));
-        } else {
-            cce::printf("%8d", static_cast<int>(val));
-        }
+        cce::printf("%8d", static_cast<int>(val));
     } else {
         static_assert(sizeof(T) == 0, "Unsupported data type for Print.");
     }
 }
 
-template <PrintFormat Format, typename TileDataIn>
+template <typename TileDataIn>
 PTO_INTERNAL void PrintTileRow(__ubuf__ typename TileDataIn::DType *src, int row, int validCols)
 {
     using DType = typename TileDataIn::DType;
     for (int j = 0; j < TileDataIn::Cols; ++j) {
         DType val = *(src + GetTileOffset<TileDataIn>(row, j));
-        PrintValue<Format>(val, j);
+        PrintValue(val, j);
         if (j == validCols - 1 && validCols > 0 && validCols < TileDataIn::Cols) {
             cce::printf("|");
         }
     }
 }
 
-template <PrintFormat Format>
 PTO_INTERNAL void PrintHorizontalSeparator(int totalCols, int validCols)
 {
     for (int j = 0; j < totalCols; ++j) {
         if (j > 0) {
             cce::printf(" ");
         }
-        if constexpr (Format == PrintFormat::Width10_Precision6) {
-            cce::printf("----------"); // 10 dashes to match %10 width
-        } else {
-            cce::printf("--------"); // 8 dashes to match %8 width
-        }
+        cce::printf("--------"); // 8 dashes to match %8 width
 
         if (j == validCols - 1 && validCols > 0 && validCols < totalCols) {
             cce::printf("|");
@@ -98,7 +81,7 @@ PTO_INTERNAL void PrintHorizontalSeparator(int totalCols, int validCols)
     }
 }
 
-template <PrintFormat Format, typename TileDataIn>
+template <typename TileDataIn>
 __tf__ PTO_INTERNAL void TPrintTileImpl(typename TileDataIn::TileDType __in__ srcData, int validRows, int validCols)
 {
     using DType = typename TileDataIn::DType;
@@ -108,27 +91,27 @@ __tf__ PTO_INTERNAL void TPrintTileImpl(typename TileDataIn::TileDType __in__ sr
                 GetLayoutName(TileDataIn::BFractal, TileDataIn::SFractal), "Vec");
     cce::printf("  Shape: [%d, %d], Valid Shape: [%d, %d]\n", TileDataIn::Rows, TileDataIn::Cols, validRows, validCols);
     for (int i = 0; i < TileDataIn::Rows; ++i) {
-        PrintTileRow<Format, TileDataIn>(src, i, validCols);
+        PrintTileRow<TileDataIn>(src, i, validCols);
         cce::printf("\n");
         if (i == validRows - 1 && validRows > 0 && validRows < TileDataIn::Rows) {
-            PrintHorizontalSeparator<Format>(TileDataIn::Cols, validCols);
+            PrintHorizontalSeparator(TileDataIn::Cols, validCols);
             cce::printf("\n");
         }
     }
 }
 
-template <PrintFormat Format, typename T>
+template <typename T>
 PTO_INTERNAL void PrintRow(T *dataPtr, int i0, int i1, int i2, int r, int n4, int s0, int s1, int s2, int s3, int s4)
 {
     for (int c = 0; c < n4; ++c) {
         size_t offset = i0 * s0 + i1 * s1 + i2 * s2 + r * s3 + c * s4;
         auto val = dataPtr[offset];
-        PrintValue<Format>(val, c);
+        PrintValue(val, c);
     }
     cce::printf("\n");
 }
 
-template <PrintFormat Format, typename T>
+template <typename T>
 PTO_INTERNAL void PrintGlobalTensorNDOrDN(T *dataPtr, int n0, int n1, int n2, int n3, int n4, int s0, int s1, int s2,
                                           int s3, int s4)
 {
@@ -140,14 +123,14 @@ PTO_INTERNAL void PrintGlobalTensorNDOrDN(T *dataPtr, int n0, int n1, int n2, in
                 cce::printf("  Batch [%d, %d, %d]:\n", i0, i1, i2);
                 // print 2D matrix (Row: n3, Col: n4)
                 for (int r = 0; r < n3; ++r) {
-                    PrintRow<Format>(dataPtr, i0, i1, i2, r, n4, s0, s1, s2, s3, s4);
+                    PrintRow(dataPtr, i0, i1, i2, r, n4, s0, s1, s2, s3, s4);
                 }
             }
         }
     }
 }
 
-template <PrintFormat Format, typename T>
+template <typename T>
 PTO_INTERNAL void PrintGlobalTensorNZ(T *dataPtr, int n0, int n1, int n2, int n3, int n4, int s0, int s1, int s2,
                                       int s3, int s4)
 {
@@ -164,13 +147,13 @@ PTO_INTERNAL void PrintGlobalTensorNZ(T *dataPtr, int n0, int n1, int n2, int n3
             int in_block_col = c % n4;
             size_t offset = block_row * s2 + block_col * s1 + in_block_row * s3 + in_block_col * s4;
             auto val = dataPtr[offset];
-            PrintValue<Format>(val, c);
+            PrintValue(val, c);
         }
         cce::printf("\n");
     }
 }
 
-template <PrintFormat Format, typename GlobalData>
+template <typename GlobalData>
 PTO_INTERNAL void TPrintGlobalTensorImpl(GlobalData &src)
 {
     using DType = typename GlobalData::DType;
@@ -193,16 +176,16 @@ PTO_INTERNAL void TPrintGlobalTensorImpl(GlobalData &src)
     if constexpr (GlobalData::layout == Layout::ND || GlobalData::layout == Layout::DN) {
         cce::printf("=== [TPRINT GlobalTensor] Data Type: %s, Layout: %s ===\n", GetDTypeName<ElemType>(),
                     GlobalData::layout == Layout::ND ? "ND" : "DN");
-        PrintGlobalTensorNDOrDN<Format>(dataPtr, n0, n1, n2, n3, n4, s0, s1, s2, s3, s4);
+        PrintGlobalTensorNDOrDN(dataPtr, n0, n1, n2, n3, n4, s0, s1, s2, s3, s4);
     } else if constexpr (GlobalData::layout == Layout::NZ) {
         cce::printf("=== [TPRINT GlobalTensor] Data Type: %s, Layout: %s ===\n", GetDTypeName<ElemType>(), "NZ");
-        PrintGlobalTensorNZ<Format>(dataPtr, n0, n1, n2, n3, n4, s0, s1, s2, s3, s4);
+        PrintGlobalTensorNZ(dataPtr, n0, n1, n2, n3, n4, s0, s1, s2, s3, s4);
     } else {
         static_assert(sizeof(GlobalData) == 0, "Unsupported GlobalTensor layout.");
     }
 }
 
-template <PrintFormat Format, typename T>
+template <typename T>
 PTO_INTERNAL void TPRINT_IMPL(T &src)
 {
     pipe_barrier(PIPE_ALL);
@@ -211,17 +194,17 @@ PTO_INTERNAL void TPRINT_IMPL(T &src)
 
         int validRows = src.GetValidRow();
         int validCols = src.GetValidCol();
-        TPrintTileImpl<Format, T>(src.data(), validRows, validCols);
+        TPrintTileImpl<T>(src.data(), validRows, validCols);
         return;
     } else if constexpr (is_global_data_v<T>) {
-        TPrintGlobalTensorImpl<Format, T>(src);
+        TPrintGlobalTensorImpl<T>(src);
         return;
     } else {
         static_assert(sizeof(T) == 0, "TPRINT: Only Vec Tile and GlobalTensor are supported without tmp buffer.");
     }
 }
 
-template <PrintFormat Format, typename GlobalData, typename TileData>
+template <typename GlobalData, typename TileData>
 __tf__ PTO_INTERNAL void TPrintCopyAcc2GM(typename GlobalData::DType __out__ *tmp,
                                           typename TileData::TileDType __in__ src)
 {
@@ -254,7 +237,7 @@ __tf__ PTO_INTERNAL void TPrintCopyAcc2GM(typename GlobalData::DType __out__ *tm
 }
 
 #ifdef PTO_NPU_ARCH_A2A3
-template <PrintFormat Format, typename GlobalData, typename TileData>
+template <typename GlobalData, typename TileData>
 __tf__ PTO_INTERNAL void TPrintCopyMat2GM(typename GlobalData::DType __out__ *tmp,
                                           typename TileData::TileDType __in__ src)
 {
@@ -267,7 +250,7 @@ __tf__ PTO_INTERNAL void TPrintCopyMat2GM(typename GlobalData::DType __out__ *tm
 }
 #endif
 
-template <PrintFormat Format, typename TileData>
+template <typename TileData>
 PTO_INTERNAL void TPrintMatOrAccTileByTmp(__gm__ typename TileData::DType *tmp, int validRows, int validCols)
 {
     using T = typename TileData::DType;
@@ -277,20 +260,20 @@ PTO_INTERNAL void TPrintMatOrAccTileByTmp(__gm__ typename TileData::DType *tmp, 
     for (int i = 0; i < TileData::Rows; ++i) {
         for (int j = 0; j < TileData::Cols; ++j) {
             T val = *(tmp + i * TileData::Cols + j);
-            PrintValue<Format>(val, j);
+            PrintValue(val, j);
             if (j == validCols - 1 && validCols > 0 && validCols < TileData::Cols) {
                 cce::printf("|");
             }
         }
         cce::printf("\n");
         if (i == validRows - 1 && validRows > 0 && validRows < TileData::Rows) {
-            PrintHorizontalSeparator<Format>(TileData::Cols, validCols);
+            PrintHorizontalSeparator(TileData::Cols, validCols);
             cce::printf("\n");
         }
     }
 }
 
-template <PrintFormat Format, typename TileData, typename GlobalData>
+template <typename TileData, typename GlobalData>
 PTO_INTERNAL void TPRINT_IMPL(TileData &src, GlobalData &tmp)
 {
     pipe_barrier(PIPE_ALL);
@@ -302,21 +285,21 @@ PTO_INTERNAL void TPRINT_IMPL(TileData &src, GlobalData &tmp)
 
     if constexpr (TileData::Loc == TileType::Mat) {
 #ifdef PTO_NPU_ARCH_A2A3
-        TPrintCopyMat2GM<Format, GlobalData, TileData>(tmp.data(), src.data());
+        TPrintCopyMat2GM<GlobalData, TileData>(tmp.data(), src.data());
 #else
         static_assert(sizeof(TileData) == 0, "Fix: TPRINT Mat Tile is not supported in A5.");
 #endif
     } else if constexpr (TileData::Loc == TileType::Acc) {
-        TPrintCopyAcc2GM<Format, GlobalData, TileData>(tmp.data(), src.data());
+        TPrintCopyAcc2GM<GlobalData, TileData>(tmp.data(), src.data());
     } else if constexpr (TileData::Loc == TileType::Vec) {
-        TPRINT_IMPL<Format>(src);
+        TPRINT_IMPL(src);
     } else {
         static_assert(sizeof(TileData) == 0, "Fix: TPRINT TileType must be Mat / Vec / Acc.");
     }
     pipe_barrier(PIPE_ALL);
     int validRows = src.GetValidRow();
     int validCols = src.GetValidCol();
-    TPrintMatOrAccTileByTmp<Format, TileData>(tmpData, validRows, validCols);
+    TPrintMatOrAccTileByTmp<TileData>(tmpData, validRows, validCols);
     pipe_barrier(PIPE_ALL);
 }
 } // namespace pto

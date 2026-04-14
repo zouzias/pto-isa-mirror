@@ -188,6 +188,13 @@ Set library path (Linux):
 
 This section is for users who need to run on Ascend NPU hardware or simulator. It requires a Linux environment and the Ascend CANN toolkit.
 
+### Note
+
+The root `README.md` keeps only the shortest onboarding path and the most common commands. For more complete run, test, and scripting details, see:
+
+- [Test Guide](../tests/README.md)
+- [Documentation Build Guide](mkdocs/README.md)
+
 ### Prerequisites
 
 **System Requirements:**

@@ -27,8 +27,8 @@ __global__ AICORE void runTsqrt(__gm__ T *out, __gm__ T *src)
     using DstTileData = Tile<TileType::Vec, T, dstRow, dstCol, BLayout::RowMajor, -1, -1>;
     SrcTileData srcTile(validRow, validCol);
     DstTileData dstTile(validRow, validCol);
-    TASSIGN<isInPlace ? 0x0 : srcRow * srcCol * sizeof(T)>(dstTile);
-    TASSIGN<0x0>(srcTile);
+    TASSIGN(dstTile, isInPlace ? 0x0 : srcRow * srcCol * sizeof(T));
+    TASSIGN(srcTile, 0x0);
 
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);

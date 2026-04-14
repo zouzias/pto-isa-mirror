@@ -59,9 +59,9 @@ PTO_INTERNAL uint64_t InitConfig()
 {
     uint64_t config = uint64_t(REPEAT_ONE_TIME); // Xt[7:0]: repeat time
     if constexpr (exhausted) {
-        config |= (uint64_t(0b1) << 12); // Xt[12]: 1-enable input list exhausted suspension
+        config |= (uint64_t(0b1) << 12);         // Xt[12]: 1-enable input list exhausted suspension
     } else {
-        config |= (uint64_t(0b0) << 12); // Xt[12]: 0-disable input list exhausted suspension
+        config |= (uint64_t(0b0) << 12);         // Xt[12]: 0-disable input list exhausted suspension
     }
     return config;
 }
@@ -72,7 +72,7 @@ PTO_INTERNAL void MovUb2Ub(__ubuf__ typename DstTileData::DType *dstPtr, __ubuf_
 {
     pipe_barrier(PIPE_V);
     unsigned lenBurst = (dstCol * sizeof(typename DstTileData::DType) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
-    pto_copy_ubuf_to_ubuf((__ubuf__ void *)dstPtr, (__ubuf__ void *)tmpPtr, 1, lenBurst, 0, 0);
+    copy_ubuf_to_ubuf((__ubuf__ void *)dstPtr, (__ubuf__ void *)tmpPtr, 0, 1, lenBurst, 0, 0);
 }
 
 template <typename DstTileData, typename TmpTileData, typename Src0TileData, typename Src1TileData,
@@ -105,7 +105,7 @@ __tf__ AICORE void TMrgsort(typename DstTileData::TileDType __out__ dst, typenam
         __ubuf__ typename DstTileData::DType *src2Ptr =
             (__ubuf__ typename DstTileData::DType *)__cce_get_tile_ptr(src2);
 
-        config |= (uint64_t(0b0111) << 8); // Xt[11:8]: 4-bit mask signal
+        config |= (uint64_t(0b0111) << 8);  // Xt[11:8]: 4-bit mask signal
 
         count |= (uint64_t(src2Col) << 32); // VMS4_SR[47:32], number of finished region proposals in list2
 
@@ -120,7 +120,7 @@ __tf__ AICORE void TMrgsort(typename DstTileData::TileDType __out__ dst, typenam
         __ubuf__ typename DstTileData::DType *src3Ptr =
             (__ubuf__ typename DstTileData::DType *)__cce_get_tile_ptr(src3);
 
-        config |= (uint64_t(0b1111) << 8); // Xt[11:8]: 4-bit mask signal
+        config |= (uint64_t(0b1111) << 8);  // Xt[11:8]: 4-bit mask signal
 
         count |= (uint64_t(src2Col) << 32); // VMS4_SR[47:32], number of finished region proposals in list2
         count |= (uint64_t(src3Col) << 48); // VMS4_SR[63:48], number of finished region proposals in list3
@@ -143,9 +143,9 @@ __tf__ AICORE void TMrgsort(typename DstTileData::TileDType __out__ dst, typenam
     __ubuf__ typename DstTileData::DType *dstPtr = (__ubuf__ typename DstTileData::DType *)__cce_get_tile_ptr(dst);
     __ubuf__ typename SrcTileData::DType *srcPtr = (__ubuf__ typename SrcTileData::DType *)__cce_get_tile_ptr(src);
 
-    uint64_t config = uint64_t(repeatTimes); // Xt[7:0]: repeat time
-    config |= (uint64_t(0b1111) << 8);       // Xt[11:8]: 4-bit mask signal
-    config |= (uint64_t(0b0) << 12);         // Xt[12]: 1-enable input list exhausted suspension
+    uint64_t config = uint64_t(repeatTimes);    // Xt[7:0]: repeat time
+    config |= (uint64_t(0b1111) << 8);          // Xt[11:8]: 4-bit mask signal
+    config |= (uint64_t(0b0) << 12);            // Xt[12]: 1-enable input list exhausted suspension
 
     uint64_t count = (uint64_t(numStrcutures)); // VMS4_SR[15:0], length of block0 in the list
     count |= (uint64_t(numStrcutures) << 16);   // VMS4_SR[31:16], length of block1 in the list

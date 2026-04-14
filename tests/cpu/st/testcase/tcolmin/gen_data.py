@@ -12,7 +12,6 @@
 
 import os
 import numpy as np
-from utils import NumExt
 
 np.random.seed(19)
 
@@ -22,15 +21,14 @@ def gen_golden_data_tcolmin(param):
     row, col = [param.tile_row, param.tile_col]
     h_valid, w_valid = [min(row, param.valid_row), min(col, param.valid_col)]
 
-    input1 = NumExt.astype(np.random.uniform(low=-16, high=16, size=[row, col]), dtype)
+    input1 = np.random.uniform(low=-16, high=16, size=[row, col]).astype(dtype)
 
-    max_value = np.finfo(np.float32).max if dtype == NumExt.bf16 else np.finfo(dtype).max
-    golden = NumExt.astype(np.full((w_valid,), max_value, dtype=np.float32), dtype)
+    golden = np.full((w_valid,), np.finfo(dtype).max, dtype=dtype)
     for j in range(w_valid):
-        golden[j] = NumExt.astype(np.min(input1[:h_valid, j]), dtype)
+        golden[j] = np.min(input1[:h_valid, j])
 
-    NumExt.write_array("input1.bin", input1, dtype)
-    NumExt.write_array("golden.bin", golden, dtype)
+    input1.tofile("input1.bin")
+    golden.astype(dtype).tofile("golden.bin")
 
 
 class TColminParams:
@@ -45,7 +43,7 @@ class TColminParams:
 
 
 def generate_case_name(param):
-    dtype_str = NumExt.get_short_type_name(param.dtype)
+    dtype_str = {np.float32: "float", np.float16: "half"}[param.dtype]
 
     def substring(a, b) -> str:
         return f"_{a}x{b}"
@@ -63,8 +61,6 @@ if __name__ == "__main__":
         TColminParams(np.float16, 64, 64, 64, 64, 64, 64),
         TColminParams(np.float32, 32, 32, 32, 16, 32, 32),
     ]
-    if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
-        case_params_list.append(TColminParams(NumExt.bf16, 64, 64, 64, 64, 64, 64))
 
     for param in case_params_list:
         case_name = generate_case_name(param)
