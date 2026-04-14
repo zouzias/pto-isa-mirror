@@ -82,7 +82,7 @@ svg { font-family: Arial, Helvetica, sans-serif; }
 <text x="549" y="422" class="axisText">Rv</text>
 <text x="629" y="416" class="axisText" text-anchor="end">Cv</text>
 <text x="600" y="140" class="subtitle" text-anchor="middle" fill="#C46A1C">dst[0,c] = max_r src[r,c]</text>
-<path d="M 600 300 L 600 392" class="arrow" stroke="#C46A1C" marker-end="url(#arrow)" />
+<path d="M 600 300 L 600 384" class="arrow" stroke="#C46A1C" marker-end="url(#arrow)" />
 <rect x="40" y="502" width="1120" height="194" class="procBox" />
 <text x="56" y="528" class="procTitle">Procedure (conceptual)</text>
 <text x="56" y="554" class="procText" xml:space="preserve">

@@ -128,4 +128,3 @@ void example_manual() {
 # AS Level 2 (DPS)
 pto.texpands ins(%scalar : dtype) outs(%dst : !pto.tile_buf<...>)
 ```
-

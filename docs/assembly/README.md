@@ -1,142 +1,75 @@
-# PTO AS Operations Reference
+# PTO AS Documentation Guide
 
-This directory contains comprehensive documentation for PTO AS operations, covering ISA-level tile operations and auxiliary IR constructs used in PTO Level-1 and Level-2 intermediate representations.
+This page is the main entry for PTO AS documentation. It helps readers quickly locate assembly-related documents by topic instead of navigating individual files one by one.
 
----
+PTO AS documentation mainly covers the following areas:
 
-## Overview
+- PTO-AS syntax, grammar, and textual representation
+- ISA-level tile operations and auxiliary AS constructs
+- Scalar arithmetic and control-flow operations reused from MLIR
+- Assembly-related conventions and supporting references
 
-PTO AS provides **117 tile operations**, **11 auxiliary functions**, **47 scalar arithmetic operations**, and **7 control flow operations**.
+## Recommended Reading Path
 
-Each operation is documented with:
-- **AS Level 1 (SSA)**: Static Single Assignment form
-- **AS Level 2 (DPS)**: Destination-Passing Style
-- **Mathematical Semantics**: Formal mathematical interpretation
-- **Constraints**: Type, layout, and runtime requirements
+If you are new to PTO-AS, we recommend reading in the following order:
 
----
+1. [PTO-AS Specification](PTO-AS.md): understand the textual format, syntax, and directives
+2. [PTO AS Operations Reference](README.md): get an overview of operation categories and linked references
+3. [PTO-AS Conventions](conventions.md): understand naming and documentation conventions
+4. Operation category documents: read the category pages relevant to your task
 
-## Auxiliary Functions (11 functions)
+## Documentation Categories
 
-**Document**: [Auxiliary Functions](nonisa-ops.md)
+### 1. PTO-AS Syntax and Core Specification
 
-IR-level constructs for tensor view management, tile allocation, and synchronization:
+- [PTO-AS Specification](PTO-AS.md): textual format, SSA-style naming, directives, and grammar overview
+- [PTO-AS Conventions](conventions.md): assembly syntax conventions and related documentation rules
+- `PTO-AS.bnf`: formal BNF grammar definition for PTO-AS
 
-- **Tensor View**: `make_tensor_view`, `partition_view`
-- **Tile Management**: `alloc_tile`, `tgetval`, `tsetval`
-- **Indexing**: `get_block_idx`, `get_subblock_idx`, `get_block_num`, `get_subblock_num`
-- **Pointer Arithmetic**: `addptr`
-- **Synchronization**: `record_event`, `wait_event`, `barrier`, `PIPE_BARRIER`
+### 2. PTO Tile Operation Categories
 
----
+- [Elementwise Operations](elementwise-ops.md): tile-tile elementwise operations
+- [Tile-Scalar Operations](tile-scalar-ops.md): tile-scalar arithmetic, comparison, and activation operations
+- [Axis Reduction and Expansion](axis-ops.md): row/column reductions and broadcast-like expansion operations
+- [Memory Operations](memory-ops.md): GM and tile data movement operations
+- [Matrix Multiplication](matrix-ops.md): GEMM and GEMV related operations
+- [Data Movement and Layout](data-movement-ops.md): extraction, insertion, transpose, reshape, and padding operations
+- [Complex Operations](complex-ops.md): sorting, gather/scatter, random, quantization, and utility operations
+- [Manual Resource Binding](manual-binding-ops.md): assignment and hardware/resource configuration operations
 
-## Tile Operations (116 operations)
+### 3. Auxiliary AS and MLIR-Derived Operations
 
-### Elementwise (Tile-Tile) - 28 operations
-**Document**: [Elementwise Operations](elementwise-ops.md)
+- [Auxiliary Functions](nonisa-ops.md): tensor views, tile allocation, indexing, and synchronization helpers
+- [Scalar Arithmetic Operations](scalar-arith-ops.md): scalar-only arithmetic operations from MLIR `arith`
+- [Control Flow Operations](control-flow-ops.md): structured control-flow operations from MLIR `scf`
 
-- **Arithmetic**: `TADD`, `TSUB`, `TMUL`, `TDIV`, `TABS`, `TNEG`
-- **Bitwise**: `TAND`, `TOR`, `TXOR`, `TNOT`, `TSHL`, `TSHR`
-- **Comparison**: `TCMP`, `TMIN`, `TMAX`
-- **Mathematical**: `TLOG`, `TEXP`, `TSQRT`, `TRSQRT`, `TRECIP`
-- **Activation**: `TRELU`, `TPRELU`
-- **Type Conversion**: `TCVT`
-- **Conditional**: `TSEL`
-- **Compound**: `TADDC`, `TSUBC`
-- **Modulo**: `TREM`, `TFMOD`
+### 4. Related References
 
-### Tile-Scalar Operations - 19 operations
-**Document**: [Tile-Scalar Operations](tile-scalar-ops.md)
+- [ISA Instruction Reference](../isa/README.md): canonical per-instruction semantics
+- [docs Entry Guide](../README.md): top-level documentation navigation for PTO Tile Lib
 
-- **Arithmetic**: `TADDS`, `TSUBS`, `TMULS`, `TDIVS`, `TMINS`, `TMAXS`
-- **Bitwise**: `TANDS`, `TORS`, `TXORS`, `TSHLS`, `TSHRS`
-- **Modulo**: `TREMS`, `TFMODS`
-- **Broadcast**: `TEXPANDS`
-- **Comparison**: `TCMPS`
-- **Conditional**: `TSELS`
-- **Activation**: `TLRELU`
-- **Compound**: `TADDSC`, `TSUBSC`
+## Directory Structure
 
-### Axis Reduction and Expansion - 23 operations
-**Document**: [Axis Reduction and Expansion](axis-ops.md)
+Key entries are listed below:
 
-- **Row Reduction**: `TROWSUM`, `TROWMAX`, `TROWMIN`
-- **Column Reduction**: `TCOLSUM`, `TCOLMAX`, `TCOLMIN`, `TCOLPROD`
-- **Row Expansion**: `TROWEXPAND`, `TROWEXPANDADD`, `TROWEXPANDMUL`, `TROWEXPANDDIV`, `TROWEXPANDSUB`, `TROWEXPANDMAX`, `TROWEXPANDMIN`, `TROWEXPANDEXPDIF`
-- **Column Expansion**: `TCOLEXPAND`, `TCOLEXPANDADD`, `TCOLEXPANDMUL`, `TCOLEXPANDDIV`, `TCOLEXPANDSUB`, `TCOLEXPANDMAX`, `TCOLEXPANDMIN`, `TCOLEXPANDEXPDIF`
+```text
+├── PTO-AS*                     # PTO-AS syntax and specification documents
+├── conventions*                # Assembly conventions documents
+├── elementwise-ops*            # Elementwise tile operation references
+├── tile-scalar-ops*            # Tile-scalar operation references
+├── axis-ops*                   # Axis reduction and expansion references
+├── memory-ops*                 # Memory operation references
+├── matrix-ops*                 # Matrix multiplication references
+├── data-movement-ops*          # Data movement and layout references
+├── complex-ops*                # Complex operation references
+├── manual-binding-ops*         # Manual resource binding references
+├── scalar-arith-ops*           # Scalar arithmetic references
+├── control-flow-ops*           # Control-flow references
+└── nonisa-ops*                 # Auxiliary AS construct references
+```
 
-### Memory Operations - 6 operations
-**Document**: [Memory Operations](memory-ops.md)
+## Related Entry Points
 
-- **Load/Store**: `TLOAD`, `TSTORE`, `TSTORE_FP`, `TPREFETCH`
-- **Gather/Scatter**: `MGATHER`, `MSCATTER`
-
-### Matrix Multiplication - 8 operations
-**Document**: [Matrix Multiplication](matrix-ops.md)
-
-- **Basic**: `TMATMUL`, `TMATMUL_ACC`, `TMATMUL_BIAS`
-- **Mixed Precision**: `TMATMUL_MX`
-- **Vector**: `TGEMV`, `TGEMV_ACC`, `TGEMV_BIAS`, `TGEMV_MX`
-
-### Data Movement and Layout - 12 operations
-**Document**: [Data Movement and Layout](data-movement-ops.md)
-
-- **Extract/Insert**: `TEXTRACT`, `TEXTRACT_FP`, `TINSERT`, `TINSERT_FP`
-- **Transform**: `TTRANS`, `TRESHAPE`, `TIMG2COL`
-- **Move**: `TMOV`, `TMOV_FP`
-- **Padding**: `TFILLPAD`, `TFILLPAD_INPLACE`, `TFILLPAD_EXPAND`
-
-### Complex Operations - 14 operations
-**Document**: [Complex Operations](complex-ops.md)
-
-- **Sorting**: `TSORT32`, `TMRGSORT`
-- **Gathering**: `TGATHER`, `TGATHERB`, `TSCATTER`
-- **Partial Operations**: `TPARTADD`, `TPARTMUL`, `TPARTMAX`, `TPARTMIN`
-- **Utility**: `TCI`, `TTRI`, `TRANDOM`, `TQUANT`, `TPRINT`
-
-### Manual Resource Binding - 6 operations
-**Document**: [Manual Resource Binding](manual-binding-ops.md)
-
-- **Assignment**: `TASSIGN`
-- **Mode Configuration**: `TSETHF32MODE`, `TSETTF32MODE`, `TSETFMATRIX`
-- **IMG2COL Configuration**: `TSET_IMG2COL_RPT`, `TSET_IMG2COL_PADDING`
-
----
-
-## Scalar Arithmetic Operations (47 operations)
-
-**Document**: [Scalar Arithmetic Operations](scalar-arith-ops.md)
-
-Standard scalar operations from MLIR `arith` dialect (scalar only, no vector/tensor):
-
-- **Integer Arithmetic**: `addi`, `subi`, `muli`, `divsi`, `divui`, `remsi`, `remui`, `ceildivsi`, `ceildivui`, `floordivsi`
-- **Floating-Point Arithmetic**: `addf`, `subf`, `mulf`, `divf`, `remf`, `negf`
-- **Bitwise**: `andi`, `ori`, `xori`
-- **Shift**: `shli`, `shrsi`, `shrui`
-- **Comparison**: `cmpi`, `cmpf`
-- **Min/Max**: `minsi`, `minui`, `maxsi`, `maxui`, `minimumf`, `maximumf`, `minnumf`, `maxnumf`
-- **Type Conversion**: `extsi`, `extui`, `trunci`, `extf`, `truncf`, `sitofp`, `uitofp`, `fptosi`, `fptoui`, `bitcast`, `index_cast`, `index_castui`
-- **Special**: `select`, `constant`
-- **Extended Arithmetic**: `addui_extended`, `mulsi_extended`, `mului_extended`
-
----
-
-## Control Flow Operations (7 operations)
-
-**Document**: [Control Flow Operations](control-flow-ops.md)
-
-Structured control flow operations from MLIR `scf` dialect:
-
-- **Loops**: `scf.for`, `scf.while`
-- **Conditionals**: `scf.if`, `scf.index_switch`
-- **Regions**: `scf.execute_region`
-- **Terminators**: `scf.yield`, `scf.condition`
-
----
-
-## Related Resources
-
-- [**ISA Instruction Reference**](../isa/README.md) - Per-instruction canonical semantics
-- [**PTO-AS Language Overview**](PTO-AS.md) - Assembly language syntax and grammar
-- [**PTO-AS Conventions**](conventions.md) - Assembly and ISA documentation conventions
-- [**BNF Grammar**](PTO-AS.bnf) - Formal grammar definition for PTO-AS
+- [ISA Instruction Reference](../isa/README.md): browse canonical PTO instruction semantics
+- [docs Entry Guide](../README.md): return to the main docs navigation page
+- [Machine Documentation](../machine/README.md): understand the abstract execution model
