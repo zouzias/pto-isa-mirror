@@ -14,7 +14,7 @@ Include the unified entry header:
 
 ## Layout
 
-- `include/pto/`: Public PTO ISA API and backend implementations (common / cpu / npu)
+- `include/pto/`: Public PTO ISA API and backend implementations (common / cpu / npu / comm)
 
 ## Related Docs
 
@@ -138,3 +138,14 @@ This table tracks per-instruction backend availability:
 | [`TRANDOM`](../docs/isa/TRANDOM.md) | TODO | TODO | TODO | TODO | Yes |
 | [`TXOR`](../docs/isa/TXOR.md) | Yes | TODO | Yes | Yes | Yes |
 | [`TXORS`](../docs/isa/TXORS.md) | Yes | TODO | Yes | Yes | Yes |
+| [`TPUT`](../docs/isa/comm/TPUT.md) | Yes | TODO | Yes | Yes | Yes |
+| [`TGET`](../docs/isa/comm/TGET.md) | Yes | TODO | Yes | Yes | Yes |
+| [`TPUT_ASYNC`](../docs/isa/comm/TPUT_ASYNC.md) | TODO | TODO | Yes | Yes | Yes |
+| [`TGET_ASYNC`](../docs/isa/comm/TGET_ASYNC.md) | TODO | TODO | Yes | Yes | Yes |
+| [`TNOTIFY`](../docs/isa/comm/TNOTIFY.md) | Yes | TODO | Yes | Yes | Yes |
+| [`TWAIT`](../docs/isa/comm/TWAIT.md) | Yes | TODO | Yes | Yes | Yes |
+| [`TTEST`](../docs/isa/comm/TTEST.md) | Yes | TODO | Yes | Yes | Yes |
+| [`TGATHER`](../docs/isa/comm/TGATHER.md) | Yes | TODO | Yes | Yes | Yes |
+| [`TSCATTER`](../docs/isa/comm/TSCATTER.md) | Yes | TODO | Yes | Yes | Yes |
+| [`TBROADCAST`](../docs/isa/comm/TBROADCAST.md) | Yes | TODO | Yes | Yes | Yes |
+| [`TREDUCE`](../docs/isa/comm/TREDUCE.md) | Yes | TODO | Yes | Yes | Yes |
