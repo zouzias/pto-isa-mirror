@@ -18,8 +18,26 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cmath>
 #include <type_traits>
 
+#define F16_MAX 65504
+
 namespace pto {
 constexpr double CAST_ODD_THRESHHOLD = 0.5;
+
+inline void PrintFloatBits(double val, const char *name)
+{
+    uint64_t bits = *reinterpret_cast<const uint64_t *>(&val);
+    std::printf("[PTO][TCVT] %s: %.17g bits=0x%016lx sign=%lu exp=%lu(0x%lx) mantissa=0x%lx\n", name, val, bits,
+                (unsigned long)((bits >> 63) & 1), (unsigned long)((bits >> 52) & 0x7FF),
+                (unsigned long)((bits >> 52) & 0x7FF), (unsigned long)(bits & 0xFFFFFFFFFFFFF));
+}
+
+inline void PrintFloatBits(float val, const char *name)
+{
+    uint32_t bits = *reinterpret_cast<const uint32_t *>(&val);
+    std::printf("[PTO][TCVT] %s: %.9g bits=0x%08x sign=%u exp=%u(0x%x) mantissa=0x%x\n", name, val, bits,
+                (unsigned)((bits >> 31) & 1), (unsigned)((bits >> 23) & 0xFF), (unsigned)((bits >> 23) & 0xFF),
+                bits & 0x7FFFFF);
+}
 
 template <typename T>
 constexpr bool is_float_like_v = std::is_floating_point_v<T> || std::is_same_v<T, half> ||
@@ -62,7 +80,24 @@ inline double applyRoundingToIntegral(double v, RoundMode mode)
     }
 }
 
-template <typename TileDataD, typename TileDataS>
+template <typename T>
+struct SafeLimits {
+    static constexpr double lowest()
+    {
+        if constexpr (std::is_same_v<T, _Float16> || std::is_same_v<T, half> || std::is_same_v<T, aclFloat16>)
+            return -F16_MAX;
+        return static_cast<double>(std::numeric_limits<T>::lowest());
+    }
+
+    static constexpr double max()
+    {
+        if constexpr (std::is_same_v<T, _Float16> || std::is_same_v<T, half> || std::is_same_v<T, aclFloat16>)
+            return F16_MAX;
+        return static_cast<double>(std::numeric_limits<T>::max());
+    }
+};
+
+template <typename TileDataD, typename TileDataS, SaturationMode satMode>
 PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileDataS::TileDType src, unsigned validRow,
                             unsigned validCol, RoundMode mode)
 {
@@ -73,11 +108,18 @@ PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileData
             using D = typename TileDataD::DType;
             using S = typename TileDataS::DType;
 
+            S val = src[srcIdx];
+            if constexpr (satMode == SaturationMode::ON) {
+                S min_limit = static_cast<S>(std::max(SafeLimits<S>::lowest(), SafeLimits<D>::lowest()));
+                S max_limit = static_cast<S>(std::min(SafeLimits<S>::max(), SafeLimits<D>::max()));
+                val = std::clamp(val, min_limit, max_limit);
+            }
+
             if constexpr (is_float_like_v<S> && std::is_integral_v<D>) {
-                const double dv = static_cast<double>(src[srcIdx]);
+                const volatile double dv = static_cast<double>(val);
                 dst[dstIdx] = static_cast<D>(applyRoundingToIntegral(dv, mode));
             } else {
-                dst[dstIdx] = static_cast<D>(src[srcIdx]);
+                dst[dstIdx] = static_cast<D>(val);
             }
         }
     }
@@ -86,9 +128,19 @@ PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileData
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode)
 {
+    TCVT_IMPL(dst, src, mode, SaturationMode::OFF);
+}
+
+template <typename TileDataD, typename TileDataS>
+PTO_INTERNAL void TCVT_IMPL(TileDataD &dst, TileDataS &src, RoundMode mode, SaturationMode satMode)
+{
     uint16_t rows = src.GetValidRow();
     uint16_t cols = src.GetValidCol();
-    TCvt_Impl<TileDataD, TileDataS>(dst.data(), src.data(), rows, cols, mode);
+    if (satMode == SaturationMode::ON) {
+        TCvt_Impl<TileDataD, TileDataS, SaturationMode::ON>(dst.data(), src.data(), rows, cols, mode);
+    } else {
+        TCvt_Impl<TileDataD, TileDataS, SaturationMode::OFF>(dst.data(), src.data(), rows, cols, mode);
+    }
 }
 
 } // namespace pto
