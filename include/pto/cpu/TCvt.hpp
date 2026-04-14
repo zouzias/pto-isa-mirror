@@ -117,20 +117,9 @@ PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileData
 
             if constexpr (is_float_like_v<S> && std::is_integral_v<D>) {
                 const double dv = static_cast<double>(val);
-                if constexpr (std::is_same_v<S, double>) {
-                    PrintFloatBits(val, "src_double");
-                } else if constexpr (std::is_same_v<S, float>) {
-                    PrintFloatBits(val, "src_float");
-                }
-                PTO_CPU_DEBUG("TCVT", "i=%d j=%d src=0x%016llx val=%.17g dv=%.17g mode=%d", i, j,
-                              *reinterpret_cast<const uint64_t *>(&val), val, dv, static_cast<int>(mode));
                 D result = static_cast<D>(applyRoundingToIntegral(dv, mode));
-                PTO_CPU_DEBUG("TCVT", "i=%d j=%d result=%d", i, j, result);
                 dst[dstIdx] = result;
             } else {
-                PTO_CPU_DEBUG("TCVT", "i=%d j=%d src=0x%016llx dst=0x%016llx", i, j,
-                              *reinterpret_cast<const uint64_t *>(&val),
-                              *reinterpret_cast<const uint64_t *>(&dst[dstIdx]));
                 dst[dstIdx] = static_cast<D>(val);
             }
         }
