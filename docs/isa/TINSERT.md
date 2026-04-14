@@ -72,7 +72,7 @@ PTO_INST RecordEvent TINSERT(DstTileData &dst, SrcTileData &src, uint32_t indexR
     - In addition to the `Acc -> Mat` insertion paths above, A5 also exposes `template <TInsertMode mode, ...> TINSERT(...)` for `Vec -> Mat` and `Vec -> Vec` insertion variants.
     - `mode == TInsertMode::ND` requires a row-major source vector tile and inserts into a matrix tile in ND layout.
     - `mode == TInsertMode::ND_VEC` requires both source and destination to be row-major vector tiles.
-    - NZ-family modes (`NZ`, `NZ_PLUS_1`, `SPLIT2_NZ_PLUS_1`, `SPLIT4_NZ_PLUS_1`) require an NZ-format source vector tile and a matrix destination tile.
+    - NZ-family modes require an NZ-format source vector tile and a matrix destination tile. The non-templated `TINSERT` handles NZ insertion, while `SPLIT2` and `SPLIT4` modes split the insertion across multiple blocks.
 
 ## Examples
 
