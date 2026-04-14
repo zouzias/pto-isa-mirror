@@ -4,67 +4,145 @@
 
 # PTO Tile Library
 
-PTO（Parallel Tile Operation）是昇腾 CANN 定义的一套面向 tile 的虚拟 ISA。本仓库提供 PTO Tile 指令的高性能实现与配套工具链：把算子/框架映射到 PTO 指令序列后，可以更平滑地在不同昇腾代际之间迁移与复用。
+PTO（Parallel Tile Operation）是昇腾 CANN 定义的一套面向 tile 编程的虚拟 ISA。本仓库提供 PTO Tile 指令的实现、示例、测试与文档，帮助开发者在不同昇腾代际之间更平滑地迁移和优化算子。
 
-## 新闻
+[![License](https://img.shields.io/badge/License-CANN%20Open%20Software%20License%202.0-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Ascend%20A2%20%7C%20A3%20%7C%20A5%20%7C%20CPU-green.svg)](#️-平台支持)
+[![Docs](https://img.shields.io/badge/Docs-文档-blue.svg)](docs/README_zh.md)
 
-* **2025-12-27**：PTO Tile Library 正式开源发布。
+## 📰 新闻
 
-## 概览
+- 🎉 **2025-12-27**：PTO Tile Library 正式开源发布。
+- ✨ **2026-01-30**：新增合轴类指令、MX 指令。
+- 🚀 **2026-02-28**：新增卷积类指令、量化类指令、核间通信类指令。
+- 🔥 **2026-03-30**：支持昇腾 A5 芯片，新增异步通信指令、CostModel 性能仿真。
+- 🛠️ **2026-04-02**：本地工程链路进一步完善，补充了 pre-commit 检查、文档构建校验与 CPU-SIM 验证能力。
 
-PTO ISA 基于昇腾底层硬件与软件抽象，定义 90+ 条标准 tile 指令。
+## 🎯 项目定位
 
-昇腾硬件架构随代际演进发生了显著变化，导致指令集也产生了较大差异。PTO 指令集通过提升抽象层级来桥接这些差异。我们保证在固定 tile shape 下，这些 PTO 指令能够跨平台正确工作并保持向后兼容。同时，这种抽象并不会屏蔽性能调优空间：用户仍然可以通过调整 tile size、tile shape、指令顺序等进行精细化优化，从而对内部流水线具备足够控制力。
+PTO ISA 基于昇腾底层硬件与软件抽象，定义 90+ 条标准 tile 指令，用更高层的 tile 编程模型桥接不同代际之间的实现差异。它的目标不是隐藏底层能力，而是在提升抽象层级的同时保留性能调优空间。
 
-目标是在提升抽象层级的同时保留调参空间：既方便跨代迁移，也不牺牲性能优化手感。
+- **统一跨代 tile 抽象**：降低不同 Ascend 代际之间的迁移成本。
+- **兼顾可移植性与性能**：在固定 tile shape 下保证正确工作，同时保留 tile size、tile shape、指令顺序等调优能力。
+- **面向框架、算子与工具链**：可作为上层框架、算子实现和编译工具链的共同接口。
+- **支持持续扩展**：当前已定义 90+ 条标准操作，并持续补充实现与生态集成。
 
 目前，PTO 指令已集成到以下框架中：
 
-* [PyPTO](https://gitcode.com/cann/pypto/)
-* [TileLang Ascend](https://github.com/tile-ai/tilelang-ascend/)
-* 更多语言与前端持续完善中
+- [PyPTO](https://gitcode.com/cann/pypto/)
+- [TileLang Ascend](https://github.com/tile-ai/tilelang-ascend/)
+- 更多语言与前端持续完善中
 
-## 本仓库的目标用户
+## ✨ 核心特性
 
-PTO Tile Lib 并不面向入门级用户，主要面向：
+- **统一的 Tile ISA 抽象**：用标准 PTO 指令描述 tile 级计算与数据流。
+- **跨代迁移与性能调优兼顾**：既提升可移植性，也保留足够的底层控制能力。
+- **Auto / Manual 双模式开发路径**：先快速验证逻辑，再逐步深入优化实现。当前 Auto Mode 主要可用于 CPU 仿真。
+- **CPU Simulator 支持**：支持在 CPU 上进行功能验证与开发调试。
+- **覆盖关键编程要素**：支持 tile shape、tile mask、事件同步、固定功能单元与流水线建模。
+- **文档、测试、示例齐全**：提供 ISA 文档、开发文档、测试脚本和性能案例。
 
-* 直接对接昇腾硬件的框架后端开发者
-* 跨平台应用开发者
-* 高性能算子开发者（手工实现算子/内核）
+## 👥 适用人群
 
-## 性能
+PTO Tile Lib 主要面向以下开发者：
 
-本仓库包含面向性能的 kernels，并给出参考测量数据与可复现的实验设置。性能测试工具，请参考[msprof工具](https://www.hiascend.com/document/detail/zh/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html)。
+- 直接对接昇腾硬件的框架或编译器后端开发者
+- 需要跨平台迁移与复用实现的高性能算子开发者
+- 需要显式控制 tile、buffer 与 pipeline 的性能优化工程师
 
-### GEMM（A2/A3 参考）
+## 🚀 快速开始
 
-- Kernel：`kernels/manual/a2a3/gemm_performance/`
+### 环境准备
 
-在 Ascend A3（24 核）上测量（fp16 输入 → fp32 输出）：
+- **CPU 路径**：需要 Python、CMake 和支持 C++20 的编译器，适合跨平台快速验证。
+- **NPU 路径**：需要 Linux 环境与 Ascend CANN toolkit，适合在昇腾硬件或模拟器上运行。
+- 更详细的环境部署说明请参见：[快速开始指南](docs/getting-started_zh.md)
 
-| 参数 | TMATMUL（Cube）占比 | TEXTRACT 占比 | TLOAD 占比 | TSTORE 占比 | 执行时间（ms） |
-| --- | --- | --- | --- | --- | --- |
-| `m=1536` `k=1536` `n=1536` | 54.5% | 42.2% | 72.2% | 7.7% | 0.0388 |
-| `m=3072` `k=3072` `n=3072` | 79.0% | 62.0% | 90.9% | 5.8% | 0.2067 |
-| `m=6144` `k=6144` `n=6144` | 86.7% | 68.1% | 95.2% | 3.1% | 1.5060 |
-| `m=7680` `k=7680` `n=7680` | 80.6% | 63.0% | 98.4% | 2.4% | 3.1680 |
+### 编译与运行
 
-详细分析与调参说明：[高性能 GEMM 算子示例](kernels/manual/a2a3/gemm_performance/README_zh.md)。
+```bash
+# CPU Simulator（建议第一步）
+python3 tests/run_cpu.py --clean --verbose
+
+# 运行 GEMM demo
+python3 tests/run_cpu.py --demo gemm --verbose
+
+# 运行 Flash Attention demo
+python3 tests/run_cpu.py --demo flash_attn --verbose
+
+# 运行单个 ST 用例
+python3 tests/script/run_st.py -r sim -v a3 -t tadd -g TADDTest.case_float_64x64_64x64
+
+# 一键构建并运行推荐测试
+./build.sh --run_all --a3 --sim
+```
+
+更完整的构建、测试和脚本说明请参见：[快速开始指南](docs/getting-started_zh.md)、[测试说明](tests/README_zh.md)
+
+### 推荐样例
+
+- [Auto Mode Add 示例](demos/auto_mode/baseline/add/README_zh.md)：适合第一次了解 PTO 指令组织方式
+- [GEMM 性能示例](kernels/manual/a2a3/gemm_performance/README_zh.md)：适合理解 tile 级算子优化
+- [Flash Attention 示例](kernels/manual/common/flash_atten/README_zh.md)：适合理解复杂算子与性能调优
+
+### 推荐上手路径
+
+1. 从简单示例开始，理解 PTO 指令如何组织 tile 级计算与数据搬运。
+2. 在 CPU 仿真中验证功能与正确性，建立对指令语义和结果的直观认知。
+3. 将代码移植到昇腾硬件上验证正确性并采集性能数据。参见 [msprof 工具](https://www.hiascend.com/document/detail/zh/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html)
+4. 定位性能瓶颈（CUBE Bound / MTE Bound / Vector Bound），开始优化与调参。参见 [性能优化](docs/coding/opt_zh.md)
+
+本仓库也展示了标准 tile 操作如何通过模板参数映射到不同流水线实现：
+
+- [Tile 编程模型](docs/coding/Tile_zh.md)：理解静态 tile shape、动态 tile mask 与数据组织方式
+- [事件与同步](docs/coding/Event_zh.md)：理解 set/wait flag 与流水线同步
+- [通用约定](docs/isa/conventions_zh.md)：理解 PTO 编程中的通用规则与约束
+- [PTO 指令列表](docs/isa/README_zh.md)：查看 PTO ISA 已定义的标准操作
+
+## 🗂️ 文档导航
+
+### ISA 与编程模型
+
+- [ISA 总览](docs/README_zh.md)：PTO ISA 文档入口与阅读导航
+- [PTO 指令列表](docs/isa/README_zh.md)：按指令分类查看 PTO 标准操作
+- [Tile 编程模型](docs/coding/Tile_zh.md)：理解 tile 的形状、mask 与编程模型
+- [事件与同步](docs/coding/Event_zh.md)：理解事件记录、等待与同步方式
+- [通用约定](docs/isa/conventions_zh.md)：查看命名、约束与通用规则
+
+### 开发与优化
+
+- [开发文档索引](docs/coding/README_zh.md)：查看扩展 PTO Tile Lib 的开发文档
+- [性能优化](docs/coding/opt_zh.md)：查看性能分析与调优建议
+- [文档构建说明](docs/mkdocs/README_zh.md)：查看 MkDocs 文档的本地构建方式
+
+## 📊 示例与性能参考
+
+### GEMM
+
+- 参考实现：`kernels/manual/a2a3/gemm_performance/`
+- 详细分析与调参说明：[高性能 GEMM 算子示例](kernels/manual/a2a3/gemm_performance/README_zh.md)
 
 ![GEMM 性能参考（Ascend A3，24 核）](docs/figures/performance/gemm_performance_a3.svg)
 
-### Flash Attention（A2/A3 参考）
+### Flash Attention
 
-- Kernel：`kernels/manual/common/flash_atten/`
-
-详细分析与调参说明：[Flash Attention 算子实现](kernels/manual/common/flash_atten/README_zh.md)。
-
+- 参考实现：`kernels/manual/common/flash_atten/`
+- 详细分析与调参说明：[Flash Attention 算子实现](kernels/manual/common/flash_atten/README_zh.md)
 - S0：query 序列长度（Q/O 的行数）
 - S1：key/value 序列长度（K/V 的行数）
 
 ![Flash Attention 归一化 TFLOPS（A2/A3）](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
 
-## 路线图（Roadmap）
+## 🖥️ 平台支持
+
+- Ascend A2（Ascend 910B）
+- Ascend A3（Ascend 910C）
+- Ascend A5（Ascend 950）
+- CPU（x86_64 / AArch64）
+
+更多细节请参考 [include/README_zh.md](include/README_zh.md)。
+
+## 🛣️ 路线图
 
 未来计划发布的特性：
 
@@ -77,241 +155,44 @@ PTO Tile Lib 并不面向入门级用户，主要面向：
 | **集合通信扩展** | PTO ISA 对集合通信 kernel 的支持。 | ISA 扩展 |
 | **系统调度扩展** | PTO ISA 对 SPMD/MPMD 编程的调度支持。 | ISA 扩展 |
 
+## 🗃️ 目录结构
 
-## 如何使用 PTO Tile Library
+关键目录如下：
 
-PTO 指令支持两种模式：**Auto Mode（仅在 CPU 仿真中可用）**（无需手动分配 buffer/管理流水线），以及 **Manual Mode**（需要显式管理 buffer 地址与流水线）。推荐按以下路径推进算子优化：
-
-1. 基于 Auto Mode 开发算子，根据算法逻辑生成 PTO 指令序列。示例见 [demos/auto_mode/baseline/add](demos/auto_mode/baseline/add/README_zh.md) 
-2. 在 CPU 仿真中验证功能与正确性（见：[运行 CPU Simulator](#运行-cpu-simulator建议第一步)）。
-3. 将代码移植到昇腾硬件上验证正确性并采集性能数据。参见 [msprof工具](https://www.hiascend.com/document/detail/zh/canncommercial/850/devaids/Profiling/atlasprofiling_16_0010.html)。
-4. 定位性能瓶颈（CUBE Bound / MTE Bound / Vector Bound），开始优化与调参。参见 [性能优化](docs/coding/opt_zh.md)
-
-每条 PTO 指令会在固定 tile shape 下映射到对应的底层实现（通常由模板与静态选择完成）。通过组合不同 PTO 指令并调整 tile 参数/顺序，可以做端到端的性能调优。
-
-本仓库也展示了标准 tile 操作如何通过模板参数映射到不同流水线实现：
-
-- 静态 tile shape（Row/Col）：[Tile 编程模型](docs/coding/Tile_zh.md)
-- 动态 tile mask（valid mask）：[Tile 编程模型](docs/coding/Tile_zh.md)
-- 事件记录与等待（set/wait flag）：[事件与同步](docs/coding/Event_zh.md)、[通用约定](docs/isa/conventions_zh.md)
-- 专用固定功能（SFU）
-- 固定流水线（FIXP）
-
-PTO ISA 定义了 90+ 条标准操作，参见[PTO指令列表](docs/isa/README_zh.md)。本仓库实现了其中不断增长的一部分，并持续补充更多指令实现。
-
-## 平台支持
-
-* Ascend A2（Ascend 910B）
-* Ascend A3（Ascend 910C）
-* Ascend A5（Ascend 950）
-* CPU（x86_64 / AArch64）
-
-更多细节请参考：[include/README_zh.md](include/README_zh.md)
-
-## 快速开始
-
-更详细、分操作系统的环境配置（Windows / Linux / macOS），请参考：[docs/getting-started_zh.md](docs/getting-started_zh.md)。
-
-### 构建文档（MkDocs）
-
-本仓库在 `docs/mkdocs/` 下提供完整的 API 文档和 ISA 指令参考，使用 MkDocs（Material 主题）构建。文档内容包括：
-
-- 完整的 PTO ISA 指令参考
-- API 使用指南与示例
-- 性能调优指南
-- 架构与设计文档
-
-**选项 1：访问在线文档（推荐）**
-
-访问[文档中心](https://pto-isa.gitcode.com)获取最新文档。
-
-**选项 2：本地构建文档**
-
-如果需要离线访问、正在修改文档或想查看未发布的功能，可以本地构建文档。
-
-**前置条件：**
-- Python >= 3.8
-- pip（Python 包管理器）
-
-**方法 1：使用 MkDocs CLI 快速开始**
-
-1. 安装 MkDocs 及依赖：
-
-```bash
-python -m pip install -r docs/mkdocs/requirements.txt
+```text
+├── include/                     # PTO 对外头文件与接口
+│   └── pto/                     # 公共类型、ISA 接口、CPU/NPU 实现
+├── kernels/                     # kernel 与算子实现
+│   ├── manual/                  # 手工优化实现与性能示例
+│   └── custom/                  # 自定义算子示例
+├── docs/                        # ISA、编程模型、快速开始与文档站点源文件
+│   ├── isa/                     # 指令参考与分类索引
+│   ├── coding/                  # 开发与性能优化文档
+│   ├── assembly/                # PTO-AS 汇编语法与规范
+│   └── mkdocs/                  # MkDocs 文档构建配置与源文件
+├── demos/                       # Auto Mode、baseline 与 torch_jit 示例
+├── tests/                       # CPU / NPU 测试、脚本与测试入口
+│   ├── cpu/                     # CPU 仿真测试
+│   ├── npu/                     # 按 SoC 拆分的 NPU 测试
+│   └── script/                  # 测试构建与运行脚本
+├── scripts/                     # 构建、安装与发布脚本
+├── cmake/                       # CMake 公共配置与打包逻辑
+├── build.sh                     # 一键构建与运行入口脚本
+└── CMakeLists.txt               # 顶层 CMake 配置
 ```
 
-2. 选择以下选项之一：
+## ℹ️ 相关信息
 
-**选项 A：本地运行文档服务器（用于开发/预览）**
+- [贡献指南](CONTRIBUTING_zh.md)：参与项目开发与提交流程
+- [安全与漏洞披露](SECURITY_zh.md)：安全问题反馈流程
+- [版本说明](ReleaseNote_zh.md)：版本更新与发布记录
+- [许可证](LICENSE)：CANN Open Software License Agreement Version 2.0
+- [PyPTO](https://gitcode.com/cann/pypto/)：PTO 生态中的上层编程框架
+- [PTOAS](https://gitcode.com/cann/PTOAS/)：面向 PTO 工作流的汇编器与编译后端
+- [pto-dsl](https://gitcode.com/cann/pto-dsl/)：面向 PTO 的 Python 前端与 JIT 工作流探索
 
-```bash
-python -m mkdocs serve -f docs/mkdocs/mkdocs.yml
-```
+## 📬 联系我们
 
-文档将在 `http://127.0.0.1:8000` 可访问。服务器会监听文件变化并自动重新加载。按 `Ctrl+C` 停止服务器。
-
-**选项 B：构建静态 HTML 站点（用于离线使用/部署）**
-
-```bash
-python -m mkdocs build -f docs/mkdocs/mkdocs.yml
-```
-
-输出将位于 `docs/mkdocs/site/`。在浏览器中打开 `docs/mkdocs/site/index.html` 即可查看。
-
-**方法 2：通过 CMake 构建（高级）**
-
-此方法适用于 CI/CD 流水线或将文档构建集成到开发工作流中。
-
-1. 创建 Python 虚拟环境（推荐）：
-
-```bash
-python3 -m venv .venv-mkdocs
-source .venv-mkdocs/bin/activate  # Windows: .venv-mkdocs\Scripts\Activate.ps1
-python -m pip install -r docs/mkdocs/requirements.txt
-```
-
-2. 使用 CMake 配置和构建：
-
-```bash
-cmake -S docs -B build/docs -DPython3_EXECUTABLE=$PWD/.venv-mkdocs/bin/python
-cmake --build build/docs --target pto_docs
-```
-
-Windows (PowerShell)：
-
-```powershell
-cmake -S docs -B build/docs -DPython3_EXECUTABLE="$PWD\.venv-mkdocs\Scripts\python.exe"
-cmake --build build/docs --target pto_docs
-```
-
-构建的文档将位于 `build/docs/site/`。
-
-### 运行 CPU Simulator（建议第一步）
-
-CPU 仿真跨平台，不依赖昇腾驱动/CANN：
-
-```bash
-python3 tests/run_cpu.py --clean --verbose
-```
-
-构建并运行 GEMM demo（可选）：
-
-```bash
-python3 tests/run_cpu.py --demo gemm --verbose
-```
-
-构建并运行 Flash Attention demo（可选）：
-
-```bash
-python3 tests/run_cpu.py --demo flash_attn --verbose
-```
-
-### 运行单个 ST 测试用例
-
-运行 ST 需要可用的昇腾 CANN 环境，通常仅在 Linux 上使用。
-
-```bash
-python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]
-```
-
-说明：`a3` 后端覆盖 A2/A3 系列（`include/pto/npu/a2a3`）。
-
-示例：
-
-```bash
-python3 tests/script/run_st.py -r npu -v a3 -t tmatmul -g TMATMULTest.case1
-python3 tests/script/run_st.py -r sim -v a5 -t tmatmul -g TMATMULTest.case1
-```
-
-### 运行推荐的测试集
-
-```bash
-# 在项目根目录下执行：
-chmod +x ./tests/run_st.sh
-./tests/run_st.sh a5 npu simple
-./tests/run_st.sh a3 sim all
-```
-
-### 运行 CPU 仿真测试
-
-```bash
-# 在项目根目录下执行：
-chmod +x ./tests/run_cpu_tests.sh
-./tests/run_cpu_tests.sh
-
-python3 tests/run_cpu.py --verbose
-```
-
-## 构建 / 运行说明
-
-### 配置环境变量（Ascend CANN）
-
-例如使用 CANN 社区包并安装到默认路径：
-
-- 默认路径（root 安装）
-
-    ```bash
-    source /usr/local/Ascend/cann/bin/setenv.bash
-    ```
-
-- 默认路径（非 root 用户安装）
-    ```bash
-    source $HOME/Ascend/cann/bin/setenv.bash
-    ```
-
-如果安装到 `install-path`，可使用：
-
-```bash
-source ${install-path}/cann/bin/setenv.bash
-```
-
-### 一键构建与运行
-
-* 运行完整 ST 测试：
-
-  ```bash
-  chmod +x build.sh
-  ./build.sh --run_all --a3 --sim
-  ```
-* 运行精简 ST 测试：
-
-  ```bash
-  chmod +x build.sh
-  ./build.sh --run_simple --a5 --npu
-  ```
-* 打包：
-
-  ```bash
-  chmod +x build.sh
-  ./build.sh --pkg
-  ```
-
-## 文档
-
-* ISA 指南与导航：[docs/README_zh.md](docs/README_zh.md)
-* ISA 指令索引：[docs/isa/README_zh.md](docs/isa/README_zh.md)
-* 开发者文档索引：[docs/coding/README_zh.md](docs/coding/README_zh.md)
-* 入门指南（建议先 CPU，再 NPU）：[docs/getting-started_zh.md](docs/getting-started_zh.md)
-* 安全与披露流程：[SECURITY_zh.md](SECURITY_zh.md)
-* 分目录阅读（代码组织）：
-
-  * 构建与打包（CMake）：[cmake/README_zh.md](cmake/README_zh.md)
-  * 对外头文件与 API：[include/README_zh.md](include/README_zh.md)、[include/pto/README_zh.md](include/pto/README_zh.md)
-  * NPU 实现（按 SoC 拆分）：[include/pto/npu/README_zh.md](include/pto/npu/README_zh.md)、[include/pto/npu/a2a3/README_zh.md](include/pto/npu/a2a3/README_zh.md)、[include/pto/npu/a5/README_zh.md](include/pto/npu/a5/README_zh.md)
-  * Kernel / 自定义算子：[kernels/README_zh.md](kernels/README_zh.md)、[kernels/custom/README_zh.md](kernels/custom/README_zh.md)
-  * 测试与用例：[tests/README_zh.md](tests/README_zh.md)、[tests/script/README_zh.md](tests/script/README_zh.md)
-  * 打包脚本：[scripts/README_zh.md](scripts/README_zh.md)、[scripts/package/README_zh.md](scripts/package/README_zh.md)
-
-## 仓库结构
-
-* `include/`：PTO C++ 头文件（见 [include/README_zh.md](include/README_zh.md)）
-* `kernels/`：自定义算子与 kernel 实现（见 [kernels/README_zh.md](kernels/README_zh.md)）
-* `docs/`：ISA 指令、API 指南与示例（见 [docs/README_zh.md](docs/README_zh.md)）
-* `tests/`：ST/CPU 测试脚本与用例（见 [tests/README_zh.md](tests/README_zh.md)）
-* `scripts/`：打包与发布脚本（见 [scripts/README_zh.md](scripts/README_zh.md)）
-* `build.sh`、`tests/run_st.sh`：构建、打包与示例运行入口
-
-## 许可证
-
-本项目基于 CANN Open Software License Agreement Version 2.0 进行许可。详情见根目录下的 `LICENSE` 文件。
+- **问题反馈**：通过仓库 Issues 提交问题
+- **功能建议**：通过仓库 Issues 或讨论区反馈需求
+- **贡献代码**：通过 Pull Request 参与项目贡献

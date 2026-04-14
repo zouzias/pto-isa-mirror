@@ -1,8 +1,8 @@
 # Release Notes — PTO Tile Lib
 
-This file summarizes changes in PTO Tile Lib.
+This document summarizes version changes in PTO Tile Lib.
 
-Format: Keep a Changelog style (Added/Changed/Fixed/Deprecated/Removed/Security).
+The format follows Keep a Changelog style (Added / Changed / Fixed / Deprecated / Removed / Security).
 
 ## Unreleased
 
@@ -30,10 +30,9 @@ Format: Keep a Changelog style (Added/Changed/Fixed/Deprecated/Removed/Security)
 
 ### Security
 
-- See `SECURITY.md` for the vulnerability reporting process.
+- For the vulnerability reporting process, see `SECURITY.md`.
 
 ## Compatibility Notes
 
-- **Ascend (NPU / simulator)**: requires Ascend CANN toolkit `>= 8.3` (see `version.info`); exact supported SoCs and toolchains depend on your installed CANN distribution.
-- **CPU simulator**: intended to run on macOS/Linux/Windows with a C++ toolchain and Python; see `docs/getting-started.md`.
-
+- **Ascend (NPU / simulator)**: requires Ascend CANN toolkit `>= 8.3` (see `version.info`); exact supported SoCs and toolchains depend on the installed CANN distribution.
+- **CPU simulator**: intended to run on macOS / Linux / Windows with a C++ toolchain and Python; see `docs/getting-started.md`.

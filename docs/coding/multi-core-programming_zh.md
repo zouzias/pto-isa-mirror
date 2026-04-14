@@ -75,19 +75,19 @@ __global__ __aicore__ void VecAddKernel(__gm__ float* out,
   // 获取当前核心 ID
   int block_idx = get_block_idx();
   int block_num = get_block_num();
-  
+
   // 计算当前核心负责的数据范围
   int elements_per_block = (totalLength + block_num - 1) / block_num;
   int start = block_idx * elements_per_block;
   int end = min(start + elements_per_block, totalLength);
-  
+
   // 处理当前块
   for (int i = start; i < end; i += TILE_SIZE) {
     int size = min(TILE_SIZE, end - i);
-    
+
     using TileT = Tile<TileType::Vec, float, 8, 256>;
     TileT a, b, c;
-    
+
     TLOAD(a, GlobalTensor(in0 + i));
     TLOAD(b, GlobalTensor(in1 + i));
     TADD(c, a, b);
@@ -106,36 +106,36 @@ __global__ __aicore__ void MatMulKernel(__gm__ float* C,
                                         int M, int K, int N) {
   // 获取核心 ID
   int block_idx = get_block_idx();
-  
+
   // 2D 划分：M 和 N 维度
   int blocks_m = (M + TILE_M - 1) / TILE_M;
   int blocks_n = (N + TILE_N - 1) / TILE_N;
-  
+
   int block_m = block_idx / blocks_n;
   int block_n = block_idx % blocks_n;
-  
+
   // 计算当前核心负责的矩阵块
   int m_start = block_m * TILE_M;
   int n_start = block_n * TILE_N;
-  
+
   // 确保不越界
   if (m_start >= M || n_start >= N) return;
-  
+
   int m_size = min(TILE_M, M - m_start);
   int n_size = min(TILE_N, N - n_start);
-  
+
   // 执行矩阵乘法
   TileAcc acc;
   TFILL(acc, 0);
-  
+
   for (int k = 0; k < K; k += TILE_K) {
     int k_size = min(TILE_K, K - k);
-    
+
     TLOAD(tileA, A[m_start:m_start+m_size, k:k+k_size]);
     TLOAD(tileB, B[k:k+k_size, n_start:n_start+n_size]);
     TMATMUL_ACC(acc, tileA, tileB);
   }
-  
+
   TSTORE(C[m_start:m_start+m_size, n_start:n_start+n_size], acc);
 }
 ```
@@ -146,15 +146,15 @@ __global__ __aicore__ void MatMulKernel(__gm__ float* C,
 ```cpp
 __global__ __aicore__ void ConvKernel(...) {
   int block_idx = get_block_idx();
-  
+
   // 3D 划分：Batch, Height, Width
   int blocks_h = (H + TILE_H - 1) / TILE_H;
   int blocks_w = (W + TILE_W - 1) / TILE_W;
-  
+
   int block_b = block_idx / (blocks_h * blocks_w);
   int block_h = (block_idx / blocks_w) % blocks_h;
   int block_w = block_idx % blocks_w;
-  
+
   // 处理当前 3D 块
   process_conv_block(block_b, block_h, block_w);
 }
@@ -229,7 +229,7 @@ __global__ __aicore__ void PipelineKernel(__gm__ float* out,
         signal_stage2();
       }
       break;
-      
+
     case 1:  // Stage 2: Compute
       for (int i = 0; i < N; i++) {
         wait_stage1();
@@ -237,7 +237,7 @@ __global__ __aicore__ void PipelineKernel(__gm__ float* out,
         signal_stage3();
       }
       break;
-      
+
     case 2:  // Stage 3: Store
       for (int i = 0; i < N; i++) {
         wait_stage2();
@@ -259,7 +259,7 @@ __global__ __aicore__ void PipelineKernel(__gm__ float* out,
 // 方法1：简单均分
 int elements_per_block = totalLength / block_num;
 int start = block_idx * elements_per_block;
-int end = (block_idx == block_num - 1) ? 
+int end = (block_idx == block_num - 1) ?
           totalLength : start + elements_per_block;
 
 // 方法2：向上取整均分
@@ -292,9 +292,9 @@ __global__ __aicore__ void DynamicKernel(...) {
   while (true) {
     // 原子获取下一个任务
     int task_id = next_task.fetch_add(1);
-    
+
     if (task_id >= total_tasks) break;
-    
+
     // 处理任务
     process_task(task_id);
   }
@@ -308,23 +308,23 @@ __global__ __aicore__ void DynamicKernel(...) {
 // 记录每个核心的执行时间
 #ifdef PROFILE
   auto start = GetTime();
-  
+
   // 执行任务
   process_block(block_idx);
-  
+
   auto end = GetTime();
   execution_times[block_idx] = end - start;
 #endif
 
 // 分析负载均衡性
-float max_time = *max_element(execution_times.begin(), 
+float max_time = *max_element(execution_times.begin(),
                               execution_times.end());
-float min_time = *min_element(execution_times.begin(), 
+float min_time = *min_element(execution_times.begin(),
                               execution_times.end());
 float imbalance = (max_time - min_time) / max_time;
 
 if (imbalance > 0.2) {
-  printf("Warning: Load imbalance detected: %.2f%%\n", 
+  printf("Warning: Load imbalance detected: %.2f%%\n",
          imbalance * 100);
 }
 ```
@@ -369,14 +369,14 @@ __gm__ atomic<int> counter = 0;
 __global__ __aicore__ void SyncKernel(...) {
   // 每个核心完成工作后增加计数器
   process_local_work();
-  
+
   counter.fetch_add(1);
-  
+
   // 等待所有核心完成
   while (counter.load() < block_num) {
     // 自旋等待
   }
-  
+
   // 继续下一阶段
   next_stage_work();
 }
@@ -390,11 +390,11 @@ class Barrier {
   __gm__ atomic<int> counter;
   __gm__ atomic<int> generation;
   int num_threads;
-  
+
 public:
   void wait() {
     int gen = generation.load();
-    
+
     if (counter.fetch_add(1) == num_threads - 1) {
       // 最后一个到达的线程
       counter.store(0);
@@ -410,15 +410,15 @@ public:
 
 __global__ __aicore__ void BarrierKernel(...) {
   Barrier barrier(block_num);
-  
+
   // 阶段 1
   phase1_work();
   barrier.wait();
-  
+
   // 阶段 2
   phase2_work();
   barrier.wait();
-  
+
   // 阶段 3
   phase3_work();
 }
@@ -450,7 +450,7 @@ for (int i = 0; i < N; i += BATCH_SIZE) {
 // 尽量让每个核心独立完成工作
 __global__ __aicore__ void LocalizedKernel(...) {
   int block_idx = get_block_idx();
-  
+
   // 每个核心处理完整的子问题
   // 无需与其他核心通信
   process_independent_subproblem(block_idx);
@@ -507,28 +507,28 @@ __global__ __aicore__ void GoodKernel(...) {
 #ifdef PROFILE
   __gm__ uint64_t start_times[NUM_CORES];
   __gm__ uint64_t end_times[NUM_CORES];
-  
+
   __global__ __aicore__ void ProfileKernel(...) {
     int idx = get_block_idx();
-    
+
     start_times[idx] = GetCycles();
-    
+
     // 执行工作
     do_work();
-    
+
     end_times[idx] = GetCycles();
   }
-  
+
   // 分析结果
   uint64_t max_time = 0;
   uint64_t total_time = 0;
-  
+
   for (int i = 0; i < NUM_CORES; i++) {
     uint64_t time = end_times[i] - start_times[i];
     max_time = max(max_time, time);
     total_time += time;
   }
-  
+
   float efficiency = (float)total_time / (NUM_CORES * max_time);
   printf("Core efficiency: %.2f%%\n", efficiency * 100);
 #endif
@@ -592,11 +592,11 @@ __global__ __aicore__ void GEMMKernel(...) {
   int block_idx = get_block_idx();
   int block_m = block_idx / BLOCKS_N;
   int block_n = block_idx % BLOCKS_N;
-  
+
   // 每个核心处理 M/4 × N/6 的块
   int m_start = block_m * (M / BLOCKS_M);
   int n_start = block_n * (N / BLOCKS_N);
-  
+
   // 执行局部 GEMM
   local_gemm(m_start, n_start, ...);
 }
@@ -614,10 +614,10 @@ __global__ __aicore__ void GEMMKernel(...) {
 __global__ __aicore__ void FlashAttnKernel(...) {
   int block_idx = get_block_idx();
   int seq_per_block = (SEQ_LEN + block_num - 1) / block_num;
-  
+
   int seq_start = block_idx * seq_per_block;
   int seq_end = min(seq_start + seq_per_block, SEQ_LEN);
-  
+
   // 每个核心处理一段序列
   // 无需核间通信
   for (int i = seq_start; i < seq_end; i += TILE_SIZE) {
@@ -634,8 +634,3 @@ __global__ __aicore__ void FlashAttnKernel(...) {
 - [流水线与并行执行](pipeline-parallel_zh.md)
 - [性能调优最佳实践](performance-best-practices_zh.md)
 - [GEMM 优化案例](../../kernels/manual/a2a3/gemm_performance/README_zh.md)
-
-
-
-
-
