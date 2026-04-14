@@ -25,7 +25,7 @@ Include the unified entry header:
 
 This table tracks per-instruction backend availability:
 
-- **CPU**: `__CPU_SIM` (CPU simulation backend).
+- **CPU**: `__CPU_SIM` (CPU simulation backend). More information about this backend can be found in [docs/coding/cpu_sim.md](../docs/coding/cpu_sim.md)
 - **Costmodel**: `__COSTMODEL` (A2 / A3 cost model backend).
 - **A2 (Ascend 910B) / A3 (Ascend 910C)**: share the `include/pto/npu/a2a3/` implementation today (so the status is identical for both columns).
 - **A5 (Ascend 950)**: uses the `include/pto/npu/a5/` implementation.
@@ -135,5 +135,6 @@ This table tracks per-instruction backend availability:
 | [`TSYNC`](../docs/isa/TSYNC.md) | TODO | TODO | Yes | Yes | Yes |
 | [`TTRANS`](../docs/isa/TTRANS.md) | Yes | TODO | Yes | Yes | Yes |
 | [`TTRI`]() | TODO | TODO | Yes | Yes | Yes |
+| [`TRANDOM`](../docs/isa/TRANDOM.md) | TODO | TODO | TODO | TODO | Yes |
 | [`TXOR`](../docs/isa/TXOR.md) | Yes | TODO | Yes | Yes | Yes |
 | [`TXORS`](../docs/isa/TXORS.md) | Yes | TODO | Yes | Yes | Yes |

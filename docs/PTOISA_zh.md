@@ -12,6 +12,7 @@
 | ISA 参考 | [`docs/isa/conventions_zh.md`](isa/conventions_zh.md) | 通用符号、操作数、事件与修饰符。 |
 | 汇编 (PTO-AS) | [`docs/assembly/PTO-AS_zh.md`](assembly/PTO-AS_zh.md) | PTO-AS 语法参考。 |
 | 权威源 | [`include/pto/common/pto_instr.hpp`](reference/pto-intrinsics-header_zh.md) | C++ intrinsic API（权威来源）。 |
+| PTO auto 模式 | [`docs/auto_mode/README_zh.md`](README_zh.md) | PTO auto模式文档入口 |
 
 ## 指令索引（全部 PTO 指令）
 
@@ -78,6 +79,8 @@
 | 轴归约 / 扩展 | [`TROWMIN`](isa/TROWMIN_zh.md) | 通过取列间最小值来归约每一行。 |
 | 轴归约 / 扩展 | [`TROWARGMAX`](isa/TROWARGMAX_zh.md) | 获取每行最大值对应列索引。 |
 | 轴归约 / 扩展 | [`TROWARGMIN`](isa/TROWARGMIN_zh.md) | 获取每行最小值对应列索引。 |
+| 轴归约 / 扩展 | [`TCOLARGMAX`](isa/TCOLARGMAX_zh.md) | 获取每列最大值对应行索引。 |
+| 轴归约 / 扩展 | [`TCOLARGMIN`](isa/TCOLARGMIN_zh.md) | 获取每列最小值对应行索引。 |
 | 轴归约 / 扩展 | [`TROWEXPAND`](isa/TROWEXPAND_zh.md) | 将每个源行的第一个元素广播到目标行中。 |
 | 轴归约 / 扩展 | [`TROWEXPANDDIV`](isa/TROWEXPANDDIV_zh.md) | 行广播除法：将 `src0` 的每一行除以一个每行标量向量 `src1`。 |
 | 轴归约 / 扩展 | [`TROWEXPANDMUL`](isa/TROWEXPANDMUL_zh.md) | 行广播乘法：将 `src0` 的每一行乘以一个每行标量向量 `src1`。 |
@@ -121,12 +124,15 @@
 | 数据搬运 / 布局 | [`TMOV_FP`](isa/TMOV_FP_zh.md) | 使用缩放 (`fp`) Tile 作为向量量化参数，将累加器 Tile 移动/转换到目标 Tile。 |
 | 数据搬运 / 布局 | [`TRESHAPE`](isa/TRESHAPE_zh.md) | 将 Tile 重新解释为另一种 Tile 类型/形状，同时保留底层字节。 |
 | 数据搬运 / 布局 | [`TTRANS`](isa/TTRANS_zh.md) | 使用实现定义的临时 Tile 进行转置。 |
+| 数据搬运 / 布局 | [`TSUBVIEW`](isa/TSUBVIEW_zh.md) | 表达一个tile是另一个tile的subview |
+| 数据搬运 / 布局 | [`TGET_SCALE_ADDR`](isa/TGET_SCALE_ADDR_zh.md) | 将输出tile的片上内存值绑定为扩展后的输入tile内存的值。 |
 | 复杂指令 | [`TPRINT`](isa/TPRINT_zh.md) | 调试/打印 Tile 中的元素（实现定义）。 |
 | 复杂指令 | [`TMRGSORT`](isa/TMRGSORT_zh.md) | 用于多个已排序列表的归并排序（实现定义的元素格式和布局）。 |
 | 复杂指令 | [`TSORT32`](isa/TSORT32_zh.md) | 对 `src` 的每个 32 元素块连同对应的 `idx` 条目一起排序，并输出排序后的 value-index 对。 |
 | 复杂指令 | [`TGATHER`](isa/TGATHER_zh.md) | 使用索引 Tile 或编译时掩码模式来收集/选择元素。 |
 | 复杂指令 | [`TCI`](isa/TCI_zh.md) | 生成连续整数序列到目标 Tile 中。 |
 | 复杂指令 | [`TTRI`](isa/TTRI_zh.md) | 生成三角（下/上）掩码 Tile。 |
+| 复杂指令 | [`TRANDOM`](isa/TRANDOM_zh.md) | 使用基于计数器的密码算法在目标 Tile 中生成随机数。 |
 | 复杂指令 | [`TPARTADD`](isa/TPARTADD_zh.md) | 部分逐元素加法，对不匹配的有效区域具有实现定义的处理方式。 |
 | 复杂指令 | [`TPARTMUL`](isa/TPARTMUL_zh.md) | 部分逐元素乘法，对有效区域不一致的处理为实现定义。 |
 | 复杂指令 | [`TPARTMAX`](isa/TPARTMAX_zh.md) | 部分逐元素最大值，对不匹配的有效区域具有实现定义的处理方式。 |

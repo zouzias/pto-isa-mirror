@@ -38,11 +38,18 @@ python3 tests/script/build_st.py -r npu -v a3 -t tpartmax -g TPARTMAXTest.test0
 python3 tests/script/build_st.py -r npu -v a3 -t ttrans -g TTRANSTest.case1_float_16_8_16_8
 python3 tests/script/build_st.py -r npu -v a3 -t ttrans_conv -g TTRANSConvTest.uint16_45_3_2_7_16
 python3 tests/script/build_st.py -r npu -v a3 -t texpands_mat -g TEXPANDSTest.case1
+python3 tests/script/build_st.py -r npu -v a3 -t tpushpop_cv -g TPushPopCvTest.case1_half_single_tile
+python3 tests/script/build_st.py -r npu -v a3 -t tpushpop_vc -g TPushPopVcTest.case1_int8_single_k_tile
+python3 tests/script/build_st.py -r npu -v a3 -t tpushpop_cv_nosplit -g TPushPopCvNoSplitTest.case1_half_single_tile
+python3 tests/script/build_st.py -r npu -v a3 -t tpushpop_vc_nosplit -g TPushPopVcNoSplitTest.case1_int8_single_k_tile
+python3 tests/script/build_st.py -r npu -v a3 -t tpushpop_dir_both -g TPushPopDirBothTest.case1_float_dir_both
 
 python3 tests/script/build_st.py -r npu -v a5 -t tcvt -g TCVTTest.case_fp16_fp32_2x64
 python3 tests/script/build_st.py -r npu -v a5 -t tmatmul -g TMATMULTest.case1
 python3 tests/script/build_st.py -r npu -v a5 -t tmatmul_mx -g TMATMULMXTest.case1
 python3 tests/script/build_st.py -r npu -v a5 -t textract -g TEXTRACTTest.case1
+python3 tests/script/build_st.py -r npu -v a5 -t tinsert_acc2vec -g TMOVTest.case_nz2nd_sc_quant_1
+python3 tests/script/build_st.py -r npu -v a5 -t textract_acc2vec -g TMOVTest.case_nz2nd_fb_quant_1
 python3 tests/script/build_st.py -r npu -v a5 -t tmrgsort -g TMRGSORTTest.case_topk1
 python3 tests/script/build_st.py -r npu -v a5 -t tmov_acc2vec -g TMOVTest.case_nz2nd_1
 python3 tests/script/build_st.py -r npu -v a5 -t tmov_acc2vec -g TMOVTest.case_nz2nz_fb_quant_1
@@ -72,3 +79,8 @@ python3 tests/script/build_st.py -r npu -v a5 -t tmov -g TMOVTest.case_fixpipe1
 python3 tests/script/build_st.py -r npu -v a5 -t tstore_acc2gm -g TStoreAcc2gmTest.case1
 python3 tests/script/build_st.py -r npu -v a5 -t tstore_acc2gm -g TStoreAcc2gmTest.case17
 python3 tests/script/build_st.py -r npu -v a5 -t texpands_mat -g TEXPANDSTest.case1
+python3 tests/script/build_st.py -r npu -v a5 -t tpushpop_cv -g TPushPopCvTest.case1_half_single_tile
+python3 tests/script/build_st.py -r npu -v a5 -t tpushpop_vc -g TPushPopVcTest.case1_int8_single_k_tile
+python3 tests/script/build_st.py -r npu -v a5 -t tpushpop_cv_nosplit -g TPushPopCvNoSplitTest.case1_half_single_tile
+python3 tests/script/build_st.py -r npu -v a5 -t tpushpop_vc_nosplit -g TPushPopVcNoSplitTest.case1_int8_single_k_tile
+python3 tests/script/build_st.py -r npu -v a5 -t tpushpop_dir_both -g TPushPopDirBothTest.case1_float_dir_both

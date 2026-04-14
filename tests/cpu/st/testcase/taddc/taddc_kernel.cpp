@@ -29,6 +29,11 @@ AICORE void runTAddc(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in
     GlobalData src2Global(src2);
     GlobalData dstGlobal(out);
 
+    TASSIGN(src0Tile, 0);
+    TASSIGN(src1Tile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+    TASSIGN(src2Tile, 2 * kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+    TASSIGN(dstTile, 3 * kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
     TLOAD(src2Tile, src2Global);
@@ -59,3 +64,8 @@ template void LaunchTAddc<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>(aclFloat
                                                                         void *stream);
 template void LaunchTAddc<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(int16_t *out, int16_t *src0, int16_t *src1,
                                                                    int16_t *src2, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTAddc<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256>(bfloat16_t *out, bfloat16_t *src0,
+                                                                        bfloat16_t *src1, bfloat16_t *src2,
+                                                                        void *stream);
+#endif

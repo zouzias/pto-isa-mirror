@@ -30,6 +30,9 @@ AICORE void runTCmps(__gm__ uint8_t __out__ *out, __gm__ T __in__ *src0, __gm__ 
     GlobalData_src0 src0Global(src0);
     GlobalData_dst dstGlobal(out);
 
+    TASSIGN(src0Tile, 0);
+    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(typename TileData_src0::DType));
+
     TLOAD(src0Tile, src0Global);
     TCMPS(dstTile, src0Tile, src1[0], cmpMode);
     TSTORE(dstGlobal, dstTile);
@@ -48,6 +51,10 @@ void LaunchTCmps(uint8_t *out, T *src0, T *src1, void *stream)
 
 template void LaunchTCmps<aclFloat16, 32, 32, 32, 32, 5>(uint8_t *out, aclFloat16 *src0, aclFloat16 *src1,
                                                          void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTCmps<bfloat16_t, 32, 32, 32, 32, 5>(uint8_t *out, bfloat16_t *src0, bfloat16_t *src1,
+                                                         void *stream);
+#endif
 template void LaunchTCmps<float, 1, 64, 1, 64, 0>(uint8_t *out, float *src0, float *src1, void *stream);
 template void LaunchTCmps<float, 8, 64, 8, 64, 4>(uint8_t *out, float *src0, float *src1, void *stream);
 template void LaunchTCmps<float, 4, 64, 4, 64, 1>(uint8_t *out, float *src0, float *src1, void *stream);

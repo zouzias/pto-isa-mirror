@@ -17,6 +17,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/comm_types.hpp"
 #include "pto/comm/async/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
+#ifdef PTO_URMA_SUPPORTED
+#include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
+#endif
 
 namespace pto {
 namespace comm {
@@ -80,16 +83,116 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
 {
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
-    if (!TPutAsyncIsFlatContiguous1D(srcGlobalData)) {
+    if (srcGlobalData.data() == nullptr || dstGlobalData.data() == nullptr) {
         return AsyncEvent(0, DmaEngine::SDMA);
     }
 
-    const uint32_t totalElems = TPutAsyncGetTotalElemCount(srcGlobalData);
+    if (!TPutAsyncIsFlatContiguous1D(srcGlobalData) || !TPutAsyncIsFlatContiguous1D(dstGlobalData)) {
+        return AsyncEvent(0, DmaEngine::SDMA);
+    }
+
+    const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
+    const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
+    if (dstElems < srcElems) {
+        return AsyncEvent(0, DmaEngine::SDMA);
+    }
+
     using T = typename GlobalSrcData::RawDType;
     const uint64_t eventHandle =
-        sdma::__sdma_put_async(dstGlobalData.data(), srcGlobalData.data(), totalElems * sizeof(T), execCtx);
+        sdma::__sdma_put_async(dstGlobalData.data(), srcGlobalData.data(), srcElems * sizeof(T), execCtx);
     return AsyncEvent(eventHandle, DmaEngine::SDMA);
 }
+
+// ============================================================================
+// TPUT_ASYNC_MTE_FALLBACK: Synchronous MTE fallback for platforms where SDMA
+// does not support PUT direction (e.g. A5).
+//
+// Uses the session's UB scratch buffer (tmpBuf) as staging to perform a
+// chunked GM → UB → GM transfer via MTE2/MTE3 pipelines. The operation
+// completes synchronously; the returned AsyncEvent has handle=0 (already done).
+// ============================================================================
+
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TPUT_ASYNC_MTE_FALLBACK(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                                const sdma::SdmaExecContext &execCtx)
+{
+    (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
+
+    if (dstGlobalData.data() == nullptr || srcGlobalData.data() == nullptr) {
+        return AsyncEvent(0, DmaEngine::SDMA);
+    }
+
+    if (!TPutAsyncIsFlatContiguous1D(srcGlobalData) || !TPutAsyncIsFlatContiguous1D(dstGlobalData)) {
+        return AsyncEvent(0, DmaEngine::SDMA);
+    }
+
+    const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
+    const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
+    if (dstElems < srcElems) {
+        return AsyncEvent(0, DmaEngine::SDMA);
+    }
+
+    using T = typename GlobalSrcData::RawDType;
+    const uint64_t totalBytes = static_cast<uint64_t>(srcElems) * sizeof(T);
+    if (totalBytes == 0) {
+        return AsyncEvent(0, DmaEngine::SDMA);
+    }
+
+    __ubuf__ uint8_t *ubBuf = execCtx.tmpBuf.addr;
+    const uint32_t ubSize = execCtx.tmpBuf.size;
+    PTO_ASSERT(ubBuf != nullptr && ubSize > 0, "TPUT_ASYNC MTE fallback: tmpBuf is invalid");
+
+    __gm__ uint8_t *srcPtr = reinterpret_cast<__gm__ uint8_t *>(srcGlobalData.data());
+    __gm__ uint8_t *dstPtr = reinterpret_cast<__gm__ uint8_t *>(dstGlobalData.data());
+
+    uint64_t offset = 0;
+    while (offset < totalBytes) {
+        const uint64_t remaining = totalBytes - offset;
+        const uint32_t chunkBytes = static_cast<uint32_t>((remaining < ubSize) ? remaining : ubSize);
+
+        copy_gm_to_ubuf_align_v2(reinterpret_cast<__ubuf__ uint8_t *>(ubBuf),
+                                 reinterpret_cast<__gm__ uint8_t *>(srcPtr + offset), 0, 1, chunkBytes, 0, 0, false, 0,
+                                 chunkBytes, chunkBytes);
+        set_flag(PIPE_MTE2, PIPE_MTE3, execCtx.syncId);
+        wait_flag(PIPE_MTE2, PIPE_MTE3, execCtx.syncId);
+
+        copy_ubuf_to_gm_align_v2(reinterpret_cast<__gm__ uint8_t *>(dstPtr + offset),
+                                 reinterpret_cast<__ubuf__ uint8_t *>(ubBuf), 0, 1, chunkBytes, 0, chunkBytes,
+                                 chunkBytes);
+        set_flag(PIPE_MTE3, PIPE_MTE2, execCtx.syncId);
+        wait_flag(PIPE_MTE3, PIPE_MTE2, execCtx.syncId);
+
+        offset += chunkBytes;
+    }
+
+    return AsyncEvent(0, DmaEngine::SDMA);
+}
+
+#ifdef PTO_URMA_SUPPORTED
+template <typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TPUT_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, GlobalSrcData &srcGlobalData,
+                                             const urma::UrmaExecContext &execCtx)
+{
+    (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
+
+    if (!TPutAsyncIsFlatContiguous1D(srcGlobalData) || !TPutAsyncIsFlatContiguous1D(dstGlobalData)) {
+        return AsyncEvent(0, DmaEngine::URMA);
+    }
+
+    const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
+    const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
+    PTO_ASSERT(dstElems >= srcElems, "TPUT_ASYNC URMA: dst buffer too small for src data");
+
+    using T = typename GlobalSrcData::RawDType;
+    const uint64_t transferSize = static_cast<uint64_t>(srcElems) * sizeof(T);
+    PTO_ASSERT(transferSize <= UINT32_MAX, "TPUT_ASYNC URMA: transfer size exceeds SGE length limit (4GB)");
+
+    const uint64_t eventHandle =
+        urma::__urma_put_async(reinterpret_cast<__gm__ uint8_t *>(dstGlobalData.data()),
+                               reinterpret_cast<__gm__ uint8_t *>(srcGlobalData.data()), transferSize, execCtx);
+    return AsyncEvent(eventHandle, DmaEngine::URMA);
+}
+#endif
 
 } // namespace detail
 
@@ -102,9 +205,20 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_IMPL(GlobalDstData &dstGlobalData, GlobalSrcD
                                         const AsyncSession &session)
 {
     if constexpr (engine == DmaEngine::SDMA) {
+#ifdef PTO_NPU_ARCH_A5
+        return detail::TPUT_ASYNC_MTE_FALLBACK(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
+#else
         return detail::TPUT_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
+#endif
+    } else if constexpr (engine == DmaEngine::URMA) {
+#ifdef PTO_URMA_SUPPORTED
+        return detail::TPUT_ASYNC_URMA_IMPL(dstGlobalData, srcGlobalData, session.urmaSession.execCtx);
+#else
+        static_assert(engine != DmaEngine::URMA, "TPUT_ASYNC: URMA engine requires NPU_ARCH 3510");
+        return AsyncEvent(0, engine);
+#endif
     } else {
-        PTO_ASSERT(false, "TPUT_ASYNC: only SDMA engine is implemented currently");
+        PTO_ASSERT(false, "TPUT_ASYNC: unsupported engine");
         return AsyncEvent(0, engine);
     }
 }

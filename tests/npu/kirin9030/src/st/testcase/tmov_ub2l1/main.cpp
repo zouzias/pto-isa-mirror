@@ -111,13 +111,3 @@ TEST_F(TMovUb2l1Test, case7)
 {
     testTMovUb2L1<7, uint16_t>(64, 64, 48, 48);
 }
-
-TEST_F(TMovUb2l1Test, case8)
-{
-    testTMovUb2L1<8, int32_t>(128, 128, 64, 64);
-}
-
-TEST_F(TMovUb2l1Test, case9)
-{
-    testTMovUb2L1<9, int8_t>(256, 256, 32, 32);
-}

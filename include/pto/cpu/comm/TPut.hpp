@@ -27,16 +27,11 @@ PTO_INTERNAL void TPUT_IMPL(GlobalDstData &dst, GlobalSrcData &src, TileData &pi
     Copy_Data(src, dst);
 }
 
-template <typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL void TGET_ASYNC_IMPL(GlobalDstData &dst, GlobalSrcData &src)
-{
-    Copy_Data(dst, src);
-}
-
-template <typename GlobalDstData, typename GlobalSrcData>
-PTO_INTERNAL void TPUT_ASYNC_IMPL(GlobalDstData &dst, GlobalSrcData &src)
+template <DmaEngine engine = DmaEngine::SDMA, typename GlobalDstData, typename GlobalSrcData>
+PTO_INTERNAL AsyncEvent TPUT_ASYNC_IMPL(GlobalDstData &dst, GlobalSrcData &src, const AsyncSession &session)
 {
     Copy_Data(src, dst);
+    return AsyncEvent(0, engine);
 }
 
 } // namespace comm

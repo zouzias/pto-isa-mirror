@@ -28,9 +28,9 @@ __global__ AICORE void runTPartAdd(__gm__ T *out, __gm__ T *src0, __gm__ T *src1
     TileDataSrc0 src0Tile(src0VR, src0VC);
     TileDataSrc1 src1Tile(src1VR, src1VC);
     TileDataDst dstTile(dstVR, dstVC);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x10000);
-    TASSIGN(dstTile, 0x20000);
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<TileDataSrc0::Numel * sizeof(T)>(src1Tile);
+    TASSIGN<(TileDataSrc0::Numel + TileDataSrc1::Numel) * sizeof(T)>(dstTile);
 
     GlobalDataSrc0 src0Global(src0);
     GlobalDataSrc1 src1Global(src1);

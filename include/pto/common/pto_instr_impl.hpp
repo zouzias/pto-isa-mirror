@@ -14,6 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
+#include <pto/common/arch_cce_intrinsic.hpp>
 
 #ifdef PTO_NPU_ARCH_A2A3
 #include "pto/npu/a2a3/TAssign.hpp"
@@ -111,6 +112,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TDequant.hpp"
 #include "pto/npu/a2a3/TPush.hpp"
 #include "pto/npu/a2a3/TPop.hpp"
+#include "pto/npu/a2a3/TColReduceIdx.hpp"
 #endif
 
 #ifdef PTO_NPU_ARCH_A5
@@ -219,13 +221,18 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TInsert.hpp"
 #include "pto/npu/a5/TPush.hpp"
 #include "pto/npu/a5/TPop.hpp"
+#include "pto/npu/a5/TColReduceIdx.hpp"
 #endif
 
 #ifdef PTO_NPU_ARCH_KIRIN9030
 #include "pto/npu/kirin9030/header.hpp"
 #endif
+#ifdef PTO_NPU_ARCH_KIRINX90
+#include "pto/npu/kirinX90/header.hpp"
+#endif
 
 #ifdef __CPU_SIM
+#include "pto/cpu/TSync.hpp"
 #include "pto/cpu/ElementTileOp.h"
 #include "pto/cpu/ElementTileScalarOp.h"
 #include "pto/cpu/TBinSOps.hpp"
@@ -240,7 +247,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TLoad.hpp"
 #include "pto/cpu/TStore.hpp"
 #include "pto/cpu/TExpands.hpp"
-#include "pto/cpu/TExp.hpp"
 #include "pto/cpu/TGather.hpp"
 #include "pto/cpu/TGatherB.hpp"
 #include "pto/cpu/TRowMax.hpp"
@@ -248,23 +254,29 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TMrgSort.hpp"
 #include "pto/cpu/TMov.hpp"
 #include "pto/cpu/TExtract.hpp"
+#include "pto/cpu/TInsert.hpp"
 #include "pto/cpu/TSqrt.hpp"
 #include "pto/cpu/TReshape.hpp"
 #include "pto/cpu/TRowSum.hpp"
+#include "pto/cpu/TRowProd.hpp"
+#include "pto/cpu/TRowReduceIdx.hpp"
 #include "pto/cpu/TMax.hpp"
 #include "pto/cpu/TExtract.hpp"
 #include "pto/cpu/TFillPad.hpp"
 #include "pto/cpu/TTrans.hpp"
 #include "pto/cpu/TSelS.hpp"
 #include "pto/cpu/TColSum.hpp"
+#include "pto/cpu/TColProd.hpp"
 #include "pto/cpu/TColMax.hpp"
 #include "pto/cpu/TSel.hpp"
 #include "pto/cpu/TCmps.hpp"
 #include "pto/cpu/TGatherB.hpp"
 #include "pto/cpu/TSort32.hpp"
 #include "pto/cpu/TPartAdd.hpp"
+#include "pto/cpu/TPartMul.hpp"
 #include "pto/cpu/TPartMax.hpp"
 #include "pto/cpu/TPartMin.hpp"
+#include "pto/cpu/TConcat.hpp"
 #include "pto/cpu/TRowExpand.hpp"
 #include "pto/cpu/TRowExpandOp.hpp"
 #include "pto/cpu/TRSqrt.hpp"
@@ -273,13 +285,25 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TColMin.hpp"
 #include "pto/cpu/TColExpand.hpp"
 #include "pto/cpu/TColExpandOp.hpp"
+#include "pto/cpu/TDeQuant.hpp"
 #include "pto/cpu/TScatter.hpp"
 #include "pto/cpu/TTRI.hpp"
 #include "pto/cpu/TSort32.hpp"
+#include "pto/cpu/TGetScaleAddr.hpp"
+#include "pto/cpu/TPack.hpp"
+#include "pto/cpu/TPrint.hpp"
+#include "pto/cpu/TRandom.hpp"
+#include "pto/cpu/TSetFmatrix.hpp"
+#include "pto/cpu/TSetImg2colRpt.hpp"
+#include "pto/cpu/TSetImg2colPadding.hpp"
+#include "pto/cpu/TImg2col.hpp"
+#include "pto/cpu/THistogram.hpp"
+#include "pto/cpu/TQuant.hpp"
+#include "pto/cpu/TSubView.hpp"
 #include "pto/cpu/MGatherScatter.hpp"
-#include "pto/cpu/TSync.hpp"
 #include "pto/cpu/TPush.hpp"
 #include "pto/cpu/TPop.hpp"
+#include "pto/cpu/TColReduceIdx.hpp"
 #include "pto/cpu/comm/TBroadcast.hpp"
 #include "pto/cpu/comm/TTest.hpp"
 #include "pto/cpu/comm/TGet.hpp"

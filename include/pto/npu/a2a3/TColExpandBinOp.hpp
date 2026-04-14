@@ -55,11 +55,11 @@ PTO_INTERNAL void TColExpandBinaryNormMode(__ubuf__ T *dstPtr, __ubuf__ T *src0P
     }
 }
 
-template <typename Op, typename TileData, typename TileDataSrc, unsigned ElementsPerRepeat, unsigned BlockSizeElem,
-          unsigned RowStride>
+template <typename Op, typename TileData, typename TileDataSrc0, typename TileDataSrc1, unsigned ElementsPerRepeat,
+          unsigned BlockSizeElem, unsigned RowStride>
 __tf__ PTO_INTERNAL void ColExpandBinaryInstr(typename TileData::TileDType __out__ dst,
-                                              typename TileData::TileDType __in__ src0,
-                                              typename TileDataSrc::TileDType __in__ src1, unsigned validRow,
+                                              typename TileDataSrc0::TileDType __in__ src0,
+                                              typename TileDataSrc1::TileDType __in__ src1, unsigned validRow,
                                               unsigned validCol)
 {
     using T = typename TileData::DType;
@@ -79,9 +79,14 @@ template <typename Op, typename Op2, typename TileData, typename TileDataSrc0, t
 PTO_INTERNAL void TCOLEXPANDOP_IMPL(TileData &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
     using T = typename TileData::DType;
-    static_assert(
-        std::is_same<typename TileData::DType, float>::value || std::is_same<typename TileData::DType, half>::value,
-        "Fix: TCOLEXPANDOP Invalid data type.");
+    static_assert(std::is_same<typename TileData::DType, int32_t>::value ||
+                      std::is_same<typename TileData::DType, int>::value ||
+                      std::is_same<typename TileData::DType, int16_t>::value ||
+                      std::is_same<typename TileData::DType, half>::value ||
+                      std::is_same<typename TileData::DType, float16_t>::value ||
+                      std::is_same<typename TileData::DType, float>::value ||
+                      std::is_same<typename TileData::DType, float32_t>::value,
+                  "Fix: TCOLEXPANDOP Invalid data type.");
     static_assert(TileData::isRowMajor, "Fix: TCOLEXPANDOP not supported Layout type");
     constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
     constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(typename TileData::DType);
@@ -96,10 +101,10 @@ PTO_INTERNAL void TCOLEXPANDOP_IMPL(TileData &dst, TileDataSrc0 &src0, TileDataS
     bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
 
     if (src0eqdst) {
-        ColExpandBinaryInstr<Op, TileData, TileDataSrc1, elementsPerRepeat, blockSizeElem, rowStride>(
+        ColExpandBinaryInstr<Op, TileData, TileDataSrc0, TileDataSrc1, elementsPerRepeat, blockSizeElem, rowStride>(
             dst.data(), src0.data(), src1.data(), validRow, validCol);
     } else {
-        ColExpandBinaryInstr<Op2, TileData, TileDataSrc0, elementsPerRepeat, blockSizeElem, rowStride>(
+        ColExpandBinaryInstr<Op2, TileData, TileDataSrc1, TileDataSrc0, elementsPerRepeat, blockSizeElem, rowStride>(
             dst.data(), src1.data(), src0.data(), validRow, validCol);
     }
 }

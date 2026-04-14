@@ -26,8 +26,8 @@ PTO_INTERNAL void runTDivS(__gm__ T *out, __gm__ T *src, T scalar)
     using dstTileData = Tile<TileType::Vec, T, dstTileRow, dstTileCol, BLayout::RowMajor, -1, -1>;
     srcTileData srcTile(validRow, validCol);
     dstTileData dstTile(validRow, validCol);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, row * col * sizeof(T));
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<row * col * sizeof(T)>(dstTile);
     TLOAD(dstTile, dstGlobal);
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -51,8 +51,8 @@ PTO_INTERNAL void runTSDiv(__gm__ T *out, __gm__ T *src, T scalar)
     using dstTileData = Tile<TileType::Vec, T, dstTileRow, dstTileCol, BLayout::RowMajor, -1, -1>;
     srcTileData srcTile(validRow, validCol);
     dstTileData dstTile(validRow, validCol);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, row * col * sizeof(T));
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<row * col * sizeof(T)>(dstTile);
     TLOAD(dstTile, dstGlobal);
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);

@@ -18,33 +18,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/arch_macro.hpp>
 
 namespace pto {
-enum class TileType
-{
-    Vec,
-    Mat,
-    Left,
-    Right,
-    Acc,
-    Bias,
-    Scaling,
-    ScaleLeft,
-    ScaleRight,
-    Ctrl,
-};
-
-enum class BLayout
-{
-    RowMajor = 0,
-    ColMajor = 1,
-};
-
-enum class SLayout
-{
-    NoneBox = 0,
-    RowMajor = 1,
-    ColMajor = 2,
-};
-
 // returns the memory qualifier for a given TileType and data type.
 // compilation errors occur if the TileType does not have a specialized version.
 template <TileType L, typename DType>
@@ -150,6 +123,35 @@ PTO_INTERNAL constexpr const __gm__ char *GetLayoutName(BLayout bType, SLayout s
             return (bType == BLayout::RowMajor) ? "Zz" : "Nz";
         case SLayout::ColMajor:
             return (bType == BLayout::RowMajor) ? "Zn" : "Nn";
+        default:
+            return "Unknown";
+    }
+}
+
+template <TileType type>
+PTO_INTERNAL constexpr const __gm__ char *GetTileTypeName() noexcept
+{
+    switch (type) {
+        case TileType::Vec:
+            return "Vec";
+        case TileType::Mat:
+            return "Mat";
+        case TileType::Left:
+            return "Left";
+        case TileType::Right:
+            return "Right";
+        case TileType::Acc:
+            return "Acc";
+        case TileType::Bias:
+            return "Bias";
+        case TileType::Scaling:
+            return "Scaling";
+        case TileType::ScaleLeft:
+            return "ScaleLeft";
+        case TileType::ScaleRight:
+            return "ScaleRight";
+        case TileType::Ctrl:
+            return "Ctrl";
         default:
             return "Unknown";
     }

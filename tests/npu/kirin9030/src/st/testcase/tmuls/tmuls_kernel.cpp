@@ -27,8 +27,8 @@ PTO_INTERNAL void runTMuls(__gm__ T *out, __gm__ T *src, T scalar)
     using srcTileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1>;
     srcTileData srcTile(validRow, validCol);
     dstTileData dstTile(validRow, validCol);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x26000);
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<srcTileData::Numel * sizeof(T)>(dstTile);
     TLOAD(dstTile, dstGlobal);
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);

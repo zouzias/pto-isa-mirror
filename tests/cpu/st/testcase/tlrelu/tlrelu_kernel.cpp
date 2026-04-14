@@ -26,6 +26,9 @@ AICORE void runTLrelu(__gm__ T __out__ *out, __gm__ T __in__ *src, __gm__ T __in
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
+    TASSIGN(srcTile, 0);
+    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+
     TLOAD(srcTile, srcGlobal);
     TLRELU(dstTile, srcTile, scalar[0]);
     TSTORE(dstGlobal, dstTile);
@@ -50,3 +53,7 @@ template void LaunchTLrelu<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>(aclFloa
                                                                          aclFloat16 *scalar, void *stream);
 template void LaunchTLrelu<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(int16_t *out, int16_t *src, int16_t *scalar,
                                                                     void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTLrelu<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256>(bfloat16_t *out, bfloat16_t *src,
+                                                                         bfloat16_t *scalar, void *stream);
+#endif

@@ -31,6 +31,10 @@ AICORE void runTDiv(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in_
     GlobalData src1Global(src1);
     GlobalData dstGlobal(out);
 
+    TASSIGN(src0Tile, 0);
+    TASSIGN(src1Tile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+    TASSIGN(dstTile, 2 * kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -56,3 +60,7 @@ template void LaunchTDiv<int32_t, 64, 64, 64, 64>(int32_t *out, int32_t *src0, i
 template void LaunchTDiv<aclFloat16, 16, 256, 16, 256>(aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1,
                                                        void *stream);
 template void LaunchTDiv<int16_t, 64, 64, 64, 64>(int16_t *out, int16_t *src0, int16_t *src1, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTDiv<bfloat16_t, 16, 256, 16, 256>(bfloat16_t *out, bfloat16_t *src0, bfloat16_t *src1,
+                                                       void *stream);
+#endif

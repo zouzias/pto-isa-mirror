@@ -29,15 +29,29 @@ struct ExpandSOp {
     }
 };
 
-template <typename TileDataDst, unsigned elementsPerRepeat, unsigned blockSizeElem, unsigned rowStride>
-__tf__ PTO_INTERNAL void TExpandS(typename TileDataDst::TileDType __out__ dst, typename TileDataDst::DType scalar,
+template <typename TileData>
+__tf__ PTO_INTERNAL void TExpandS(typename TileData::TileDType __out__ dst, typename TileData::DType scalar,
                                   unsigned kValidRows, unsigned kValidCols,
                                   VFImplKind version = VFImplKind::VFIMPL_DEFAULT)
 {
-    using T = typename TileDataDst::DType;
+    using T = typename TileData::DType;
+    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
+    constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
-    BinaryInstr<ExpandSOp<T>, TileDataDst, TileDataDst, T, elementsPerRepeat, blockSizeElem, rowStride, rowStride>(
-        dstPtr, dstPtr, scalar, kValidRows, kValidCols, version);
+
+    if constexpr (TileData::isRowMajor) {
+        constexpr unsigned stride = TileData::RowStride;
+        BinaryInstr<ExpandSOp<T>, TileData, TileData, T, elementsPerRepeat, blockSizeElem, stride, stride>(
+            dstPtr, dstPtr, scalar, kValidRows, kValidCols, version);
+    } else {
+        // switch row and col for colmajor
+        constexpr unsigned stride = TileData::ColStride;
+        using TmpTile = Tile<TileType::Vec, T, TileData::Cols, TileData::Rows, BLayout::RowMajor, TileData::ValidCol,
+                             TileData::ValidRow>;
+        BinaryInstr<ExpandSOp<T>, TmpTile, TmpTile, T, elementsPerRepeat, blockSizeElem, stride, stride>(
+            dstPtr, dstPtr, scalar, kValidCols, kValidRows, version);
+    }
 }
 
 template <typename TileData>
@@ -98,11 +112,11 @@ __tf__ PTO_INTERNAL void TExpandsMatConv(typename TileData::TileDType __out__ ds
     TExpandSInstrMat<TileData>(dstPtr, repeatConfig, value);
 }
 
-template <typename TileDataDst>
-PTO_INTERNAL void TExpandsConvTile(TileDataDst &dst, typename TileDataDst::DType scalar)
+template <typename TileData>
+PTO_INTERNAL void TExpandsConvTile(TileData &dst, typename TileData::DType scalar)
 {
-    using U = typename TileDataDst::DType;
-    if constexpr (TileDataDst::layout == pto::Layout::NC1HWC0 || TileDataDst::layout == pto::Layout::FRACTAL_Z) {
+    using U = typename TileData::DType;
+    if constexpr (TileData::layout == pto::Layout::NC1HWC0 || TileData::layout == pto::Layout::FRACTAL_Z) {
         // dim4 is c0Size
         uint64_t totalBytes =
             dst.GetShape(0) * dst.GetShape(1) * dst.GetShape(2) * dst.GetShape(3) * dst.GetShape(4) * sizeof(U);
@@ -110,9 +124,8 @@ PTO_INTERNAL void TExpandsConvTile(TileDataDst &dst, typename TileDataDst::DType
         uint16_t repeatTimes = static_cast<uint16_t>(repeat);
         PTO_ASSERT(repeatTimes >= 1 && repeatTimes <= EXPANDS_MAX_SUPPORT_REPEAT_TIMES,
                    "ERROR: The range of convtile's (shape0 * shape1 * shape2 * shape3) is [1, 32767].");
-        TExpandsMatConv<TileDataDst>(dst.data(), scalar, repeatTimes);
-    } else if constexpr (TileDataDst::layout == pto::Layout::NDC1HWC0 ||
-                         TileDataDst::layout == pto::Layout::FRACTAL_Z_3D) {
+        TExpandsMatConv<TileData>(dst.data(), scalar, repeatTimes);
+    } else if constexpr (TileData::layout == pto::Layout::NDC1HWC0 || TileData::layout == pto::Layout::FRACTAL_Z_3D) {
         // dim5 is c0Size
         uint64_t totalBytes = dst.GetShape(0) * dst.GetShape(1) * dst.GetShape(2) * dst.GetShape(3) * dst.GetShape(4) *
                               dst.GetShape(5) * sizeof(U);
@@ -120,41 +133,37 @@ PTO_INTERNAL void TExpandsConvTile(TileDataDst &dst, typename TileDataDst::DType
         uint16_t repeatTimes = static_cast<uint16_t>(repeat);
         PTO_ASSERT(repeatTimes >= 1 && repeatTimes <= EXPANDS_MAX_SUPPORT_REPEAT_TIMES,
                    "ERROR: The range of convtile's (shape0 * shape1 * shape2 * shape3 * shape4) is [1, 32767].");
-        TExpandsMatConv<TileDataDst>(dst.data(), scalar, repeatTimes);
+        TExpandsMatConv<TileData>(dst.data(), scalar, repeatTimes);
     }
 }
 
-template <typename TileDataDst>
-PTO_INTERNAL void TEXPANDS_IMPL(TileDataDst &dst, typename TileDataDst::DType scalar)
+template <typename TileData>
+PTO_INTERNAL void TEXPANDS_IMPL(TileData &dst, typename TileData::DType scalar)
 {
-    using T = typename TileDataDst::DType;
+    using T = typename TileData::DType;
     static_assert(
         std::is_same<T, int32_t>::value || std::is_same<T, uint32_t>::value || std::is_same<T, int>::value ||
             std::is_same<T, int16_t>::value || std::is_same<T, uint16_t>::value || std::is_same<T, int8_t>::value ||
             std::is_same<T, uint8_t>::value || std::is_same<T, half>::value || std::is_same<T, float16_t>::value ||
             std::is_same<T, float>::value || std::is_same<T, float32_t>::value || std::is_same<T, bfloat16_t>::value,
         "TEXPANDS: Invalid data type");
-    static_assert(TileDataDst::Loc == TileType::Vec || TileDataDst::Loc == TileType::Mat,
+    static_assert(TileData::Loc == TileType::Vec || TileData::Loc == TileType::Mat,
                   "Location of tiles must be Location::Vec or Mat.");
 
-    if constexpr (TileDataDst::Loc == TileType::Vec) {
-        static_assert(TileDataDst::ValidCol <= TileDataDst::Cols,
+    if constexpr (TileData::Loc == TileType::Vec) {
+        static_assert(TileData::ValidCol <= TileData::Cols,
                       "Number of valid columns must not be greater than number of tile columns.");
-        static_assert(TileDataDst::ValidRow <= TileDataDst::Rows,
+        static_assert(TileData::ValidRow <= TileData::Rows,
                       "Number of valid rows must not be greater than number of tile rows.");
 
-        constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(T);
-        constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-        constexpr unsigned rowStride = TileDataDst::RowStride;
         unsigned validRow = dst.GetValidRow();
         unsigned validCol = dst.GetValidCol();
-
-        TExpandS<TileDataDst, elementsPerRepeat, blockSizeElem, rowStride>(dst.data(), scalar, validRow, validCol);
-    } else if constexpr (TileDataDst::Loc == TileType::Mat) {
-        if constexpr (is_conv_tile_v<TileDataDst>) {
-            TExpandsConvTile<TileDataDst>(dst, scalar);
+        TExpandS<TileData>(dst.data(), scalar, validRow, validCol);
+    } else if constexpr (TileData::Loc == TileType::Mat) {
+        if constexpr (is_conv_tile_v<TileData>) {
+            TExpandsConvTile<TileData>(dst, scalar);
         } else {
-            TExpandsTile<TileDataDst>(dst.data(), scalar);
+            TExpandsTile<TileData>(dst.data(), scalar);
         }
     }
 }

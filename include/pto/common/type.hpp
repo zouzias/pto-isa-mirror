@@ -22,8 +22,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // for pto internal implementation
 #define PTO_INTERNAL AICORE PTO_INLINE
 
+#ifdef __CPU_SIM
+#define OP_NAME(Name)
+#define OP_TYPE(TypeName)
+#else
 #define OP_NAME(Name) __attribute__((vf_name(#Name)))
 #define OP_TYPE(TypeName) __attribute__((vf_kind(#TypeName)))
+#endif
 
 // -----------------------------------------------------------------------------
 // PTO assertion helpers
@@ -90,7 +95,53 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #define PTO_CPU_ASSERT(...) ((void)0)
 #endif
 
+// Signed 4-bit integer type (packed: 2 elements per byte using uint8_t storage).
+// Compatible with AscendC int4b_t. The vconv intrinsics use void* for the packed side.
+struct int4b_t {
+    uint8_t storage;
+    int4b_t() = default;
+    explicit int4b_t(int32_t value) : storage(static_cast<uint8_t>(value) & 0x0F)
+    {}
+    operator int8_t() const
+    {
+        return (storage & 0x08) ? static_cast<int8_t>(storage | 0xF0) : static_cast<int8_t>(storage & 0x0F);
+    }
+};
+
 namespace pto {
+enum class TileType
+{
+    Vec,
+    Mat,
+    Left,
+    Right,
+    Acc,
+    Bias,
+    Scaling,
+    ScaleLeft,
+    ScaleRight,
+    Ctrl,
+};
+
+enum class BLayout
+{
+    RowMajor = 0,
+    ColMajor = 1,
+};
+
+enum class SLayout
+{
+    NoneBox = 0,
+    RowMajor = 1,
+    ColMajor = 2,
+};
+
+enum class PrintFormat : uint8_t
+{
+    Width8_Precision4 = 0,
+    Width8_Precision2 = 1,
+    Width10_Precision6 = 2,
+};
 // 01-bits patterns are read from right to left.
 // Right bits are low bits, corresponding to low index positions of data.
 enum class MaskPattern : uint8_t
@@ -228,6 +279,7 @@ enum class CompactMode
 {
     Null,
     Normal,
+    RowPlusOne,
 };
 
 enum class SetFmatrixMode
@@ -246,6 +298,67 @@ enum class TileLayoutCustom : uint8_t
     ZN,
     ZZ,
     NONE,
+};
+
+// Enum identifying which byte of a multi-byte element is being histogrammed.
+// BYTE_0 = LSB (bits 7-0), BYTE_3 = MSB (bits 31-24).
+// Radix sort processes MSB-first: BYTE_3 → BYTE_2 → BYTE_1 → BYTE_0.
+enum class HistByte : uint8_t
+{
+    BYTE_0 = 0, // LSB (bits 7-0)
+    BYTE_1 = 1, // bits 15-8
+    BYTE_2 = 2, // bits 23-16
+    BYTE_3 = 3  // MSB (bits 31-24)
+};
+
+union NotNumUnion {
+    float f;
+    uint32_t i;
+};
+
+union HalfUnion {
+#ifdef __CCE_AICORE__
+    half f;
+#else
+    uint16_t f;
+#endif
+    uint16_t i;
+};
+
+enum class DivAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class SqrtAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RsqrtAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class RecipAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class ExpAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
+};
+
+enum class LogAlgorithm : uint8_t
+{
+    DEFAULT,
+    HIGH_PRECISION
 };
 
 namespace GlobalTensorDim {
@@ -267,13 +380,22 @@ using TRandomCounter = uint32_t[PTO_RANDOM_COUNTER_SIZE];
 typedef _Float16 half;
 typedef _Float16 aclFloat16;
 // Note: clang version should be >=15 and gcc version should be >=14
+// Use native BF16 automatically when the current toolchain already supports it.
+// PTO_CPU_SIM_ENABLE_BF16 remains useful as a strict request: if callers define
+// it on an unsupported toolchain, we fail loudly instead of silently falling back
+// to the placeholder _Float16 alias.
 #if defined(__has_include) && __has_include(<stdfloat>) && __cplusplus >= 202302L && defined(__STDCPP_BFLOAT16_T__)
 #include <stdfloat>
 typedef std::bfloat16_t bfloat16_t;
 #define CPU_SIM_BFLOAT_ENABLED
+#elif defined(PTO_CPU_SIM_ENABLE_BF16)
+#error "PTO_CPU_SIM_ENABLE_BF16 requires C++23 <stdfloat> with std::bfloat16_t support."
 #else
 // macOS libc++ (and some other toolchains) may not ship <stdfloat> yet.
 // For CPU simulation, a best-effort 16-bit float type is sufficient.
+// Default CPU simulator builds keep the existing compiler baseline.
+// bfloat16_t remains available as a placeholder type, but BF16 ST coverage and
+// bit-accurate custom-value paths are compiled only when CPU_SIM_BFLOAT_ENABLED is set.
 typedef _Float16 bfloat16_t;
 #endif
 #endif

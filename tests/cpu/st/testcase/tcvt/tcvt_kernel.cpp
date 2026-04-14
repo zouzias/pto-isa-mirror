@@ -36,6 +36,9 @@ __global__ AICORE void runTCVT(__gm__ T *out, __gm__ S *src)
 
     GlobalData_dst dstGlobal(out);
 
+    TASSIGN(srcTile, 0);
+    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(typename TileDataSrc::DType));
+
     TLOAD(srcTile, srcGlobal);
 
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -72,3 +75,7 @@ template void launchTCVT<int32_t, float, 4, 4096, 4, 4096>(int32_t *dst, float *
 template void launchTCVT<float, int16_t, 64, 64, 64, 64>(float *dst, int16_t *src, void *stream);
 template void launchTCVT<aclFloat16, float, 64, 64, 64, 64>(aclFloat16 *dst, float *src, void *stream);
 template void launchTCVT<uint8_t, aclFloat16, 64, 64, 64, 64>(uint8_t *dst, aclFloat16 *src, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void launchTCVT<bfloat16_t, float, 64, 64, 64, 64>(bfloat16_t *dst, float *src, void *stream);
+template void launchTCVT<float, bfloat16_t, 64, 64, 64, 64>(float *dst, bfloat16_t *src, void *stream);
+#endif

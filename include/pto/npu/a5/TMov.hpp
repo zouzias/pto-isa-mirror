@@ -85,18 +85,6 @@ __tf__ AICORE void TMovToFb(typename DstTileData::TileDType __out__ dst, typenam
     copy_cbuf_to_fbuf(dstAddrP, srcAddrP, burstNum, burstLen, srcGap, dstGap);
 }
 
-template <typename DstTileData, typename SrcTileData, AccToVecMode mode, QuantMode_t quantPre>
-PTO_INTERNAL constexpr uint8_t GetDualDstCtl()
-{
-    if constexpr (mode == AccToVecMode::DualModeSplitM || mode == AccToVecMode::DualModeSplitN) {
-        static_assert(quantPre == QuantMode_t::NoQuant, "Quant is not support in dual Dst Mode.");
-        static_assert((!(!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::NoneBox)),
-                      "Dual Dst Mode is not support in nz2dn.");
-        return ((mode == AccToVecMode::DualModeSplitM) ? 1 : 2);
-    }
-    return 0;
-}
-
 PTO_INTERNAL void SetLoop3Para()
 {
     constexpr uint16_t ndNum = 1;
@@ -245,6 +233,96 @@ PTO_INTERNAL constexpr void CommonCheckMX()
                   "TMov: Destination and Source tile data types must be the same.");
 }
 
+template <typename DstTileData, typename SrcTileData, typename TmpTileData>
+PTO_INTERNAL constexpr void CommonCheckZZ()
+{
+    static_assert(std::is_same_v<typename DstTileData::DType, uint8_t> &&
+                      std::is_same_v<typename SrcTileData::DType, uint8_t> &&
+                      std::is_same_v<typename TmpTileData::DType, uint8_t>,
+                  "TMov ND->ZZ: Destination, source, and temporary tile data types must all be uint8_t.");
+}
+
+template <typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void GenerateB8IndicesZZToUB(__ubuf__ uint8_t *dst, __ubuf__ uint8_t *src, __ubuf__ uint8_t *tmp,
+                                          unsigned rows, unsigned groupedCols)
+{
+    const uint16_t P = groupedCols / 2;
+    const uint16_t rowBlockCount = (rows + 15) / 16; // ceil-divide to support non-16-aligned row counts
+    const uint16_t N_blk = rowBlockCount * P;
+    const uint16_t vlElem = REPEAT_BYTE / sizeof(uint16_t);     // 128
+    constexpr uint16_t blkElem = BLOCK_SIZE / sizeof(uint16_t); // 16
+    constexpr uint16_t blksPerVL = REPEAT_BYTE / BLOCK_SIZE;    // 8
+    __ubuf__ uint16_t *srcPtr_b16 = (__ubuf__ uint16_t *)src;
+    __ubuf__ uint16_t *dstPtr_b16 = (__ubuf__ uint16_t *)dst;
+    __ubuf__ uint16_t *basePtr = (__ubuf__ uint16_t *)tmp;
+    __ubuf__ uint16_t *offsetBuf = basePtr + blkElem;
+
+    vector_u16 vb16_base;
+    MaskReg preg_blk = pset_b16(PAT_VL16);
+    vci((vector_s16 &)vb16_base, 0, INC_ORDER);
+    vmuls(vb16_base, vb16_base, P, preg_blk, MODE_ZEROING);
+    vsts(vb16_base, basePtr, 0, NORM_B16, preg_blk);
+
+    __ubuf__ uint16_t *offWr = offsetBuf;
+    vector_u16 vb16_off;
+    vector_align ureg_align;
+    for (uint16_t rb = 0; rb < rowBlockCount; ++rb) {
+        vci((vector_s16 &)vb16_off, (int16_t)(rb * 16 * P), INC_ORDER);
+        vstus(ureg_align, (uint32_t)P, vb16_off, offWr, POST_UPDATE);
+    }
+    vstus(ureg_align, (uint32_t)blkElem, vb16_off, offWr, POST_UPDATE);
+    vstas(ureg_align, offWr, 0, POST_UPDATE);
+    mem_bar(VST_VLD);
+
+    __ubuf__ uint16_t *offRd = offsetBuf;
+    const uint16_t fullIters = N_blk / blksPerVL;
+    const uint16_t tailBlks = N_blk % blksPerVL;
+    vector_u16 vb16_base_blk, vb16_blk_off, vb16_idx, vb16_gathered;
+    vlds(vb16_base_blk, basePtr, 0, BLK);
+    MaskReg preg_full = pset_b16(PAT_ALL);
+    for (uint16_t i = 0; i < fullIters; ++i) {
+        vlds(vb16_blk_off, offRd, blksPerVL, E2B_B16, POST_UPDATE);
+        vadd(vb16_idx, vb16_blk_off, vb16_base_blk, preg_full, MODE_ZEROING);
+        vgather2(vb16_gathered, srcPtr_b16, vb16_idx, preg_full);
+        vsts(vb16_gathered, dstPtr_b16, vlElem, NORM_B16, preg_full, POST_UPDATE);
+    }
+    if (tailBlks > 0) {
+        uint32_t tailCount = (uint32_t)tailBlks * blkElem;
+        MaskReg preg_tail = CreatePredicate<uint16_t>(tailCount);
+        vlds(vb16_blk_off, offRd, blksPerVL, E2B_B16, POST_UPDATE);
+        vadd(vb16_idx, vb16_blk_off, vb16_base_blk, preg_tail, MODE_ZEROING);
+        vgather2(vb16_gathered, srcPtr_b16, vb16_idx, preg_tail);
+        vsts(vb16_gathered, dstPtr_b16, vlElem, NORM_B16, preg_tail, POST_UPDATE);
+    }
+}
+
+template <typename DstTileData, typename SrcTileData, typename TmpTileData>
+__tf__ PTO_INTERNAL void TMovNdTo2Zz(typename DstTileData::TileDType __out__ dst,
+                                     typename SrcTileData::TileDType __in__ src,
+                                     typename TmpTileData::TileDType __in__ tmp, uint32_t validRow, uint32_t validCol)
+{
+    CommonCheckZZ<DstTileData, SrcTileData, TmpTileData>();
+    static_assert(SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::NoneBox),
+                  "TMov ND->ZZ: Source tile must be RowMajor with NoneBox layout.");
+    static_assert(DstTileData::isRowMajor && (DstTileData::SFractal == SLayout::RowMajor),
+                  "TMov ND->ZZ: Destination Mat tile must use ColMajor + RowMajor fractal layout.");
+
+    const uint32_t srcBytes = validRow * validCol * sizeof(uint8_t);
+    const uint32_t rowBlockCount = (validRow + 15) / 16; // ceil-divide to support non-16-aligned row counts
+    const uint32_t P = validCol / 2;
+    const uint32_t tmpBytes =
+        (BLOCK_SIZE / sizeof(uint16_t) + rowBlockCount * P + BLOCK_SIZE / sizeof(uint16_t)) * sizeof(uint16_t);
+
+    __ubuf__ uint8_t *srcPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(src);
+    __ubuf__ uint8_t *dstPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(dst);
+    __ubuf__ uint8_t *tmpPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(tmp);
+
+    __VEC_SCOPE__
+    {
+        GenerateB8IndicesZZToUB<DstTileData, SrcTileData>(dstPtr, srcPtr, tmpPtr, validRow, validCol);
+    }
+}
+
 template <typename T, typename DstTileData, typename SrcTileData>
 __tf__ PTO_INTERNAL void TMovToVecNd2Nz(typename DstTileData::TileDType __out__ dst,
                                         typename SrcTileData::TileDType __in__ src, uint32_t validRow,
@@ -265,8 +343,7 @@ __tf__ PTO_INTERNAL void TMovToVecNd2Nz(typename DstTileData::TileDType __out__ 
 
     constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
     uint16_t repeatTimes = CeilDivision(validCol, elementsPerRepeat);
-    bool isOptForConflict = std::is_same<T, half>::value && (srcValidRow % FRACTAL_NZ_ROW == 0) &&
-                            (dstByteSize >= (srcRow + 1) * srcCol * sizeof(T));
+    constexpr bool isOptForConflict = DstTileData::Compact == CompactMode::RowPlusOne;
     uint32_t alignRow = (validRow + FRACTAL_NZ_ROW - 1) / FRACTAL_NZ_ROW * FRACTAL_NZ_ROW;
     uint32_t blockStride = isOptForConflict ? ((alignRow + 1) * C0_SIZE_BYTE) / BLOCK_BYTE_SIZE :
                                               (alignRow * C0_SIZE_BYTE) / BLOCK_BYTE_SIZE;
@@ -459,6 +536,15 @@ PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
     }
 }
 
+template <typename DstTileData, typename SrcTileData, typename TmpTileData,
+          std::enable_if_t<(TmpTileData::Loc != TileType::Scaling), int> = 0>
+PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, TmpTileData &tmp)
+{
+    CommonCheckZZ<DstTileData, SrcTileData, TmpTileData>();
+    TMovNdTo2Zz<DstTileData, SrcTileData, TmpTileData>(dst.data(), src.data(), tmp.data(), dst.GetValidRow(),
+                                                       dst.GetValidCol());
+}
+
 template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src)
 {
@@ -523,7 +609,8 @@ __tf__ PTO_INTERNAL void SetFPC(typename FpTileData::TileDType __in__ fp)
     set_fpc(deqTensorAddr);
 }
 
-template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
+template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode = ReluPreMode::NoRelu,
+          std::enable_if_t<(FpTileData::Loc == TileType::Scaling), int> = 0>
 PTO_INTERNAL void TMOV_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp)
 {
     CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();

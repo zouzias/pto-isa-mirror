@@ -27,6 +27,9 @@ AICORE void runTCOLEXPAND(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
+    TASSIGN(srcTile, 0);
+    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(typename TileT::DType));
+
     TLOAD(srcTile, srcGlobal);
     TCOLEXPAND(dstTile, srcTile);
     TSTORE(dstGlobal, dstTile);
@@ -45,3 +48,6 @@ void LaunchTCOLEXPAND(T *out, T *src, void *stream)
 
 template void LaunchTCOLEXPAND<float, 64, 64, 64, 64>(float *out, float *src, void *stream);
 template void LaunchTCOLEXPAND<aclFloat16, 16, 256, 16, 256>(aclFloat16 *out, aclFloat16 *src, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTCOLEXPAND<bfloat16_t, 16, 256, 16, 256>(bfloat16_t *out, bfloat16_t *src, void *stream);
+#endif

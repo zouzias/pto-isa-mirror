@@ -25,7 +25,7 @@ __tf__ PTO_INTERNAL void TColExpand(typename TileDataDst::TileDType __out__ dst,
     int lenBurst = (validCol * sizeof(T) + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
 
     for (int i = 0; i < validRow; i++) {
-        copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr, 0, 1, lenBurst, 0, 0);
+        pto_copy_ubuf_to_ubuf(dstPtr + i * dstStride, srcPtr, 1, lenBurst, 0, 0);
     }
 }
 

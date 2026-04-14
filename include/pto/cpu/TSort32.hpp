@@ -92,9 +92,9 @@ template <typename TileDataDst, typename TileDataSrc, typename TileDataIdx>
 PTO_INTERNAL void TSORT32_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataIdx &idx)
 {
     using T = typename TileDataSrc::DType;
-    static_assert(
-        std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, half> || std::is_same_v<T, float>,
-        "TSORT32: Invalid data type.");
+    static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t> || std::is_same_v<T, half> ||
+                      std::is_same_v<T, bfloat16_t> || std::is_same_v<T, float>,
+                  "TSORT32: Invalid data type.");
     static_assert(std::is_same_v<typename TileDataDst::DType, T>,
                   "The Src data type must be consistent with the dst data type");
     static_assert(std::is_same_v<typename TileDataIdx::DType, uint32_t>, "The Idx data type must be uint32");
@@ -116,5 +116,12 @@ PTO_INTERNAL void TSORT32_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataIdx &
     }
     TSort32<T, TileDataDst, TileDataSrc, TileDataIdx>(dst.data(), src.data(), idx.data(), validRow, validCol);
 }
+
+template <typename TileDataDst, typename TileDataSrc, typename TileDataIdx, typename TmpTileData>
+PTO_INTERNAL void TSORT32_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataIdx &idx, TmpTileData &tmp)
+{
+    TSORT32_IMPL(dst, src, idx);
+}
+
 } // namespace pto
 #endif

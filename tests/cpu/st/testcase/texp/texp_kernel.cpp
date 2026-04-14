@@ -28,6 +28,9 @@ AICORE void runTEXP(__gm__ T __out__ *out, __gm__ T __in__ *src)
     GlobalData srcGlobal(src);
     GlobalData dstGlobal(out);
 
+    TASSIGN(srcTile, 0);
+    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
@@ -52,3 +55,7 @@ template void LaunchTExp<aclFloat16, 64, 64, 64, 64>(aclFloat16 *out, aclFloat16
 template void LaunchTExp<aclFloat16, 32, 32, 32, 32>(aclFloat16 *out, aclFloat16 *src, void *stream);
 template void LaunchTExp<float, 32, 32, 32, 32>(float *out, float *src, void *stream);
 template void LaunchTExp<float, 32, 16, 32, 16>(float *out, float *src, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTExp<bfloat16_t, 64, 64, 64, 64>(bfloat16_t *out, bfloat16_t *src, void *stream);
+template void LaunchTExp<bfloat16_t, 32, 32, 32, 32>(bfloat16_t *out, bfloat16_t *src, void *stream);
+#endif

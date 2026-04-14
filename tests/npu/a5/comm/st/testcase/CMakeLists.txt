@@ -91,6 +91,11 @@ set(ALL_TESTCASES
 # Point-to-Point Communication (Synchronous)
 tput
 tget
+# Point-to-Point Communication (Asynchronous)
+tget_async
+tput_async
+tput_async_urma
+tget_async_urma
 # Signal-Based Synchronization
 tnotify
 twait

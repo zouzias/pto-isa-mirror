@@ -26,6 +26,9 @@ AICORE void runTLog(__gm__ T __out__ *out, __gm__ T __in__ *src0)
     GlobalData src0Global(src0);
     GlobalData dstGlobal(out);
 
+    TASSIGN(src0Tile, 0);
+    TASSIGN(dstTile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+
     TLOAD(src0Tile, src0Global);
     TLOG(dstTile, src0Tile);
     TSTORE(dstGlobal, dstTile);
@@ -47,3 +50,6 @@ template void LaunchTLog<float, NUM_64, NUM_64, NUM_64, NUM_64>(float *out, floa
 template void LaunchTLog<int32_t, NUM_64, NUM_64, NUM_64, NUM_64>(int32_t *out, int32_t *src0, void *stream);
 template void LaunchTLog<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>(aclFloat16 *out, aclFloat16 *src0, void *stream);
 template void LaunchTLog<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(int16_t *out, int16_t *src0, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTLog<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256>(bfloat16_t *out, bfloat16_t *src0, void *stream);
+#endif

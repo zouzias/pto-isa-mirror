@@ -79,6 +79,8 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TROWMIN](TROWMIN.md) - Reduce each row by taking the minimum across columns.
 - [TROWARGMAX](TROWARGMAX.md) - Get the column index of the maximum element for each row.
 - [TROWARGMIN](TROWARGMIN.md) - Get the column index of the minimum element for each row.
+- [TCOLARGMAX](TCOLARGMAX.md) - Get the row index of the maximum element for each column.
+- [TCOLARGMIN](TCOLARGMIN.md) - Get the row index of the minimum element for each column.
 - [TROWEXPAND](TROWEXPAND.md) - Broadcast the first element of each source row across the destination row.
 - [TROWEXPANDDIV](TROWEXPANDDIV.md) - Row-wise broadcast divide: divide each row of `src0` by a per-row scalar vector `src1`.
 - [TROWEXPANDMUL](TROWEXPANDMUL.md) - Row-wise broadcast multiply: multiply each row of `src0` by a per-row scalar vector `src1`.
@@ -128,6 +130,8 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TMOV_FP](TMOV_FP.md) - Move/convert from an accumulator tile into a destination tile, using a scaling (`fp`) tile for vector quantization parameters.
 - [TRESHAPE](TRESHAPE.md) - Reinterpret a tile as another tile type/shape while preserving the underlying bytes.
 - [TTRANS](TTRANS.md) - Transpose with an implementation-defined temporary tile.
+- [TSUBVIEW](TSUBVIEW.md) - Reinterpret a tile as a subtile of another tile.
+- [TGET_SCALE_ADDR](TGET_SCALE_ADDR.md) - Bind the on-chip address of output tile to a scaled factor of that of input tile.
 
 ## Complex
 - [TPRINT](TPRINT.md) - Debug/print elements from a tile (implementation-defined).
@@ -136,6 +140,7 @@ This directory contains the per-instruction reference for the PTO Tile Lib ISA.
 - [TGATHER](TGATHER.md) - Gather/select elements using either an index tile or a compile-time mask pattern.
 - [TCI](TCI.md) - Generate a contiguous integer sequence into a destination tile.
 - [TTRI](TTRI.md) - Generate a triangular (lower/upper) mask tile.
+- [TRANDOM](TRANDOM.md) - Generates random numbers in the destination tile using a counter-based cipher algorithm.
 - [TPARTADD](TPARTADD.md) - Partial elementwise add with implementation-defined handling of mismatched valid regions.
 - [TPARTMUL](TPARTMUL.md) - Partial elementwise multiply with implementation-defined handling of mismatched valid regions.
 - [TPARTMAX](TPARTMAX.md) - Partial elementwise max with implementation-defined handling of mismatched valid regions.

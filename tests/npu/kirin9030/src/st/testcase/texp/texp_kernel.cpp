@@ -27,8 +27,8 @@ __global__ AICORE void runTExp(__gm__ T *out, __gm__ T *src)
     using SrcTileData = Tile<TileType::Vec, T, srcRow, srcCol, BLayout::RowMajor, -1, -1>;
     SrcTileData srcTile(validRow, validCol);
     DstTileData dstTile(validRow, validCol);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, isInPlace ? 0x0 : srcRow * srcCol * sizeof(T));
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<isInPlace ? 0x0 : srcRow * srcCol * sizeof(T)>(dstTile);
 
     TLOAD(srcTile, srcGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);

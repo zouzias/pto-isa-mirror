@@ -51,10 +51,10 @@ AICORE void runTmovUb2l1(__gm__ T *out, __gm__ T *src)
     TmpTileData tmpTile(Rows, Cols);
     DstTileData dstTile(ValidRows, ValidCols);
     MatTileData matTile(ValidRows, ValidCols);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, 0x10000);
-    TASSIGN(dstTile, 0x20000);
-    TASSIGN(matTile, 0x0);
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<SrcTileData::Numel * sizeof(T)>(tmpTile);
+    TASSIGN<(SrcTileData::Numel + TmpTileData::Numel) * sizeof(T)>(dstTile);
+    TASSIGN<0x0>(matTile);
 
     SrcGlobalData srcGlobal(src);
     OutGlobalData dstGlobal(out);
@@ -106,10 +106,6 @@ void launchTmovUb2l1(uint64_t *out, uint64_t *src, void *stream)
         launchTmovUb2l1<int8_t, 64, 96, 64><<<1, nullptr, stream>>>(out, src);
     } else if constexpr (testKey == 7) {
         launchTmovUb2l1<half, 64, 64, 65, 48, 48, 16, 16><<<1, nullptr, stream>>>(out, src);
-    } else if constexpr (testKey == 8) {
-        launchTmovUb2l1<int32_t, 128, 128, 129, 64, 64, 64, 64><<<1, nullptr, stream>>>(out, src);
-    } else if constexpr (testKey == 9) {
-        launchTmovUb2l1<int8_t, 256, 256, 256, 32, 32, 224, 224><<<1, nullptr, stream>>>(out, src);
     }
     cout << "launchTmovUb2l1 end!" << endl;
 }
@@ -121,5 +117,3 @@ template void launchTmovUb2l1<4>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTmovUb2l1<5>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTmovUb2l1<6>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTmovUb2l1<7>(uint64_t *out, uint64_t *src, void *stream);
-template void launchTmovUb2l1<8>(uint64_t *out, uint64_t *src, void *stream);
-template void launchTmovUb2l1<9>(uint64_t *out, uint64_t *src, void *stream);

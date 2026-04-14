@@ -88,6 +88,8 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Axis Reduce / Expand | [TCOLMAX](/docs/isa/TCOLMAX.md) | `reduce_expand` | `dst, src` | `docs/isa/TCOLMAX.md` |
 | Axis Reduce / Expand | [TROWMAX](/docs/isa/TROWMAX.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWMAX.md` |
 | Axis Reduce / Expand | [TROWMIN](/docs/isa/TROWMIN.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWMIN.md` |
+| Axis Reduce / Expand | [TCOLARGMAX](/docs/isa/TCOLARGMAX.md) | `reduce_expand` | `dst, src` | `docs/isa/TCOLARGMAX.md` |
+| Axis Reduce / Expand | [TCOLARGMIN](/docs/isa/TCOLARGMIN.md) | `reduce_expand` | `dst, src` | `docs/isa/TCOLARGMIN.md` |
 | Axis Reduce / Expand | [TROWEXPAND](/docs/isa/TROWEXPAND.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWEXPAND.md` |
 | Axis Reduce / Expand | [TROWEXPANDDIV](/docs/isa/TROWEXPANDDIV.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWEXPANDDIV.md` |
 | Axis Reduce / Expand | [TROWEXPANDMUL](/docs/isa/TROWEXPANDMUL.md) | `reduce_expand` | `dst, src` | `docs/isa/TROWEXPANDMUL.md` |
@@ -131,6 +133,8 @@ This appendix is generated from `docs/isa/manifest.yaml` and provides a source-s
 | Data Movement / Layout | [TMOV_FP](/docs/isa/TMOV_FP.md) | `reshape_move` | `dst, src` | `docs/isa/TMOV_FP.md` |
 | Data Movement / Layout | [TRESHAPE](/docs/isa/TRESHAPE.md) | `reshape_move` | `dst, src` | `docs/isa/TRESHAPE.md` |
 | Data Movement / Layout | [TTRANS](/docs/isa/TTRANS.md) | `reshape_move` | `dst, src` | `docs/isa/TTRANS.md` |
+| Data Movement / Layout | [TSUBVIEW](/docs/isa/TSUBVIEW.md) | `reshape_move` | `dst, src, rowOffset, colOffset` | `docs/isa/TSUBVIEW.md` |
+| Data Movement / Layout | [TGET_SCALE_ADDR](/docs/isa/TGET_SCALE_ADDR.md) | `reshape_move` | `dst, src` | `docs/isa/TGET_SCALE_ADDR.md` |
 | Complex | [TPRINT](/docs/isa/TPRINT.md) | `complex` | `dst, src0, src1` | `docs/isa/TPRINT.md` |
 | Complex | [TMRGSORT](/docs/isa/TMRGSORT.md) | `complex` | `dst, src0, src1` | `docs/isa/TMRGSORT.md` |
 | Complex | [TSORT32](/docs/isa/TSORT32.md) | `complex` | `dst, src0, src1` | `docs/isa/TSORT32.md` |

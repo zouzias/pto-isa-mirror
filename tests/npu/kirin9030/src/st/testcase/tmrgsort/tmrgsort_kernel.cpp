@@ -83,12 +83,12 @@ __global__ AICORE void RunTMrgsort(__gm__ T *out, __gm__ T *src0, __gm__ T *src1
     TileData src3Tile(1, kTCols_src3);
     DstTileData dstTile(1, TOPK);
     TmpTileData tmpTile(1, kTCols_ * LISTNUM);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x0 + kTCols_ * sizeof(T));
-    TASSIGN(src2Tile, 0x0 + (kTCols_ + kTCols_src1) * sizeof(T));
-    TASSIGN(src3Tile, 0x0 + (kTCols_ + kTCols_src1 + kTCols_src2) * sizeof(T));
-    TASSIGN(dstTile, 0x0 + (kTCols_ + kTCols_src1 + kTCols_src2 + kTCols_src3) * sizeof(T));
-    TASSIGN(tmpTile, 0x0 + (kTCols_ + kTCols_src1 + kTCols_src2 + kTCols_src3 + TOPK) * sizeof(T));
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<0x0 + kTCols_ * sizeof(T)>(src1Tile);
+    TASSIGN<0x0 + (kTCols_ + kTCols_src1) * sizeof(T)>(src2Tile);
+    TASSIGN<0x0 + (kTCols_ + kTCols_src1 + kTCols_src2) * sizeof(T)>(src3Tile);
+    TASSIGN<0x0 + (kTCols_ + kTCols_src1 + kTCols_src2 + kTCols_src3) * sizeof(T)>(dstTile);
+    TASSIGN<0x0 + (kTCols_ + kTCols_src1 + kTCols_src2 + kTCols_src3 + TOPK) * sizeof(T)>(tmpTile);
 
     Src0GlobalData src0Global(src0);
     Src1GlobalData src1Global(src1);
@@ -127,8 +127,8 @@ __global__ AICORE void RunTMrgsortSingle(__gm__ T *out, __gm__ T *src0)
 
     TileData src0Tile(1, kTCols_);
     DstTileData dstTile(1, kTCols_);
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(dstTile, 0x0 + kTCols_ * sizeof(T));
+    TASSIGN<0x0>(src0Tile);
+    TASSIGN<0x0 + kTCols_ * sizeof(T)>(dstTile);
 
     int offset = 0;
     GlobalData src0Global(src0 + offset);
@@ -167,7 +167,7 @@ template <typename GlobalData, typename DstGlobalData, typename DstTileData, typ
 PTO_INTERNAL void SortTailBlock(DstGlobalData &dstGlobal, DstTileData &dstTile, TileData &srcTile, int blockLen)
 {
     TmpTileData tmp1Tile(1, kTCols_);
-    TASSIGN(tmp1Tile, 0x0 + kTCols_ * 2 * sizeof(T));
+    TASSIGN<0x0 + kTCols_ * 2 * sizeof(T)>(tmp1Tile);
 
     int32_t mrgArray[15] = {0};
     int32_t arrayCount = FillMrgArray<kTCols_>(mrgArray, blockLen);
@@ -186,12 +186,12 @@ PTO_INTERNAL void SortTailBlock(DstGlobalData &dstGlobal, DstTileData &dstTile, 
 
         TileData src0Tile(1, tmpMrgSortedLen);
         TileData src1Tile(1, tmpMrgArray);
-        TASSIGN(src0Tile, 0x0);
+        TASSIGN<0x0>(src0Tile);
         TASSIGN(src1Tile, 0x0 + mrgSortedLen * sizeof(T));
         TMRGSORT<DstTileData, TmpTileData, TileData, TileData, 0>(dstTile, executedNumList, tmp1Tile, src0Tile,
                                                                   src1Tile);
         TileData srcMovTile(1, topk);
-        TASSIGN(srcMovTile, 0x0);
+        TASSIGN<0x0>(srcMovTile);
         TMOV(srcMovTile, dstTile);
     }
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
@@ -212,10 +212,10 @@ __global__ AICORE void RunTMrgsortTopk(__gm__ T *out, __gm__ T *src)
     TileData srcTile(1, kTCols_);
     DstTileData dstTile(1, topk);
     TmpTileData tmpTile(1, kTCols_);
-    uint32_t tmpAddr = kTCols_ * sizeof(T);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x0);
-    TASSIGN(tmpTile, 0x0 + tmpAddr);
+    constexpr uint32_t tmpAddr = kTCols_ * sizeof(T);
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<0x0>(dstTile);
+    TASSIGN<0x0 + tmpAddr>(tmpTile);
 
     GlobalData srcGlobal(src);
     DstGlobalData dstGlobal(out);
@@ -230,8 +230,8 @@ __global__ AICORE void RunTMrgsortTopk(__gm__ T *out, __gm__ T *src)
         uint16_t cols = kTCols_ / (blockLen * 4) * (blockLen * 4);
         TileData srcSortedTile(1, cols);
         TmpTileData tmpSortedTile(1, cols);
-        TASSIGN(srcSortedTile, 0x0);
-        TASSIGN(tmpSortedTile, 0x0 + tmpAddr);
+        TASSIGN<0x0>(srcSortedTile);
+        TASSIGN<0x0 + tmpAddr>(tmpSortedTile);
         TMRGSORT<TmpTileData, TileData>(tmpSortedTile, srcSortedTile, blockLen);
         TMOV(srcSortedTile, tmpSortedTile);
     }
@@ -242,7 +242,7 @@ __global__ AICORE void RunTMrgsortTopk(__gm__ T *out, __gm__ T *src)
             dstGlobal, dstTile, srcTile, blockLen);
     } else {
         TmpTileData tmpMovTile(1, topk);
-        TASSIGN(tmpMovTile, 0x0 + tmpAddr);
+        TASSIGN<0x0 + tmpAddr>(tmpMovTile);
         TMOV(dstTile, tmpMovTile);
         set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
         wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);

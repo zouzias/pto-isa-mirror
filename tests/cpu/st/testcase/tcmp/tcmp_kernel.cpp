@@ -28,6 +28,10 @@ AICORE void runTCmp(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in_
     GlobalData src1Global(src1);
     GlobalData dstGlobal(out);
 
+    TASSIGN(src0Tile, 0);
+    TASSIGN(src1Tile, kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+    TASSIGN(dstTile, 2 * kTRows_ * kTCols_ * sizeof(typename TileData::DType));
+
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
     TCMP(dstTile, src0Tile, src1Tile, mode);
@@ -55,3 +59,8 @@ template void LaunchTCmp<aclFloat16, NUM_16, NUM_256, NUM_16, NUM_256>(aclFloat1
                                                                        void *stream);
 template void LaunchTCmp<int16_t, NUM_64, NUM_64, NUM_64, NUM_64>(int16_t *out, int16_t *src0, int16_t *src1,
                                                                   pto::CmpMode mode, void *stream);
+#ifdef CPU_SIM_BFLOAT_ENABLED
+template void LaunchTCmp<bfloat16_t, NUM_16, NUM_256, NUM_16, NUM_256>(bfloat16_t *out, bfloat16_t *src0,
+                                                                       bfloat16_t *src1, pto::CmpMode mode,
+                                                                       void *stream);
+#endif

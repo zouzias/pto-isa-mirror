@@ -27,8 +27,8 @@ PTO_INTERNAL void runTColMax(__gm__ T *out, __gm__ T *src, bool isBinary)
     using DstTileData = Tile<TileType::Vec, T, dstRow, col, BLayout::RowMajor, -1, -1>;
     SrcTileData srcTile(srcValidRow, validCol);
     DstTileData dstTile(dstRow, validCol);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, srcRow * col * sizeof(T));
+    TASSIGN<0x0>(srcTile);
+    TASSIGN<srcRow * col * sizeof(T)>(dstTile);
 
     // 搬运数据
     TLOAD(srcTile, srcGlobal);
