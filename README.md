@@ -18,6 +18,10 @@ Ascend hardware architectures have significantly evolved over generations, leadi
 
 Our goal is to offer users a simplified, yet powerful way to optimize performance, enabling them to write high-performance code with PTO instructions.
 
+In addition to compute and data-movement instructions, PTO ISA also provides a **communication extension instruction set** for inter-NPU data transfer and synchronization, covering three categories: point-to-point communication, signal synchronization, and collective communication.
+
+These communication primitives follow the same tile-level abstraction and cross-platform design as the compute instructions, and can drive multiple data-movement hardware engines on Ascend to help users build deeply fused compute-communication kernels.
+
 Currently, PTO instructions are integrated into the following frameworks:
 
 * [PyPTO](https://gitcode.com/cann/pypto/)
@@ -64,6 +68,31 @@ Detailed analysis and tuning notes: [Flash Attention Kernel Implementation](kern
 
 ![Flash Attention normalized TFLOPS (A2/A3)](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
 
+### Communication Instruction Bandwidth (A2/A3 reference)
+
+- Kernel: `kernels/manual/a2a3/tget_bandwidth/`
+
+Point-to-point remote read bandwidth measured on Ascend A2/A3, comparing `TGET` (synchronous, via UB staging) and `TGET_ASYNC` (asynchronous, SDMA engine direct transfer). Measured with float dtype, 2 NPUs:
+
+Detailed analysis and build/run guide: [TGET / TGET_ASYNC Bandwidth Comparison Example](kernels/manual/a2a3/tget_bandwidth/README.md).
+
+TGET vs TGET_ASYNC bandwidth comparison (A2/A3)
+
+### GEMM AllReduce Fused Compute-Communication (A2/A3 reference)
+
+- Kernel: `kernels/manual/a2a3/gemm_ar/`
+
+Measured on Ascend A2/A3 (8 NPUs) with a fused GEMM + AllReduce operator:
+
+| Metric | Value |
+| --- | --- |
+| Compute-only | 369 us (254 TFLOPS, 99%) |
+| Sequential | 749 us (compute 370 us + comm 379 us @ 74 GB/s) |
+| Pipelined | **639 us** (1.17x speedup, 30% overlap efficiency) |
+| Throughput | 1173 TFLOPS (total throughput) |
+
+Detailed analysis and tuning notes: [High-Performance GEMM AllReduce Fused Operator Example](kernels/manual/a2a3/gemm_ar/README_zh.md).
+
 ## Coming Soon
 
 The following features will be released in the future:
@@ -74,7 +103,6 @@ The following features will be released in the future:
 | PTO Tile Fusion | BiSheng compiler support to fuse tile operations automatically. | Compiler / toolchain |
 | PTO-AS | Byte Code Support for PTO ISA. | Compiler / toolchain |
 | **Convolution extension** | PTO ISA support for convolution kernels. | ISA Extension |
-| **Collective communication extension** | PTO ISA support for collective communication. | ISA Extension |
 | **System schedule extension** | PTO ISA support for SPMD/MPMD programming. | ISA Extension |
 
 
@@ -233,6 +261,31 @@ chmod +x ./tests/run_st.sh
 ./tests/run_st.sh a3 sim all
 ```
 
+### Running Communication ST Tests
+
+Communication tests require a multi-NPU environment (2/4/8 NPUs) with HCCL and MPI support.
+
+```bash
+# Execute the following commands from the project root directory:
+chmod +x ./tests/run_comm_test.sh
+
+# Run all comm tests with 8 NPUs on A3 (default)
+./tests/run_comm_test.sh
+
+# Run only 2-rank tests
+./tests/run_comm_test.sh -n 2
+
+# Run a specific testcase (e.g. tput) on A5 with 2 NPUs
+./tests/run_comm_test.sh -v a5 -n 2 -t tput
+
+# Run with debug output
+./tests/run_comm_test.sh -d -t treduce
+```
+
+**Note:** Asynchronous communication instructions (`TPUT_ASYNC` and `TGET_ASYNC`) require CANN 9.0 packages with the corresponding OPS packages installed.
+
+For details on individual communication instructions, see [docs/isa/comm/README.md](docs/isa/comm/README.md).
+
 ### Running CPU Simulation Tests
 
 ```bash
@@ -265,6 +318,43 @@ If you install to `install-path`, use:
 ```bash
 source ${install-path}/cann/bin/setenv.bash
 ```
+
+### Communication Instruction Software Dependencies
+
+| Instruction type | CANN version | MPI | Other dependencies |
+| --- | --- | --- | --- |
+| Synchronous instructions | 8.5.0 or later | 3.2.1 or later | None |
+| Asynchronous instructions | 9.0.0 or later | 3.2.1 or later | ops-legacy package required |
+
+### Installing MPI Dependency (Optional)
+
+Communication instruction test cases depend on MPI. Recommended version >= 3.2.1.
+
+**Install from source:**
+
+```bash
+# Using version 3.2.1 as an example
+version='3.2.1'
+wget https://www.mpich.org/static/downloads/${version}/mpich-${version}.tar.gz
+tar -xzf mpich-${version}.tar.gz
+cd mpich-${version}
+./configure --prefix=/usr/local/mpich --disable-fortran
+make && make install
+```
+
+**Set environment variables:**
+
+```bash
+export MPI_HOME=/usr/local/mpich
+export PATH=${MPI_HOME}/bin:${PATH}
+```
+
+### Installing ops-legacy Package (Optional)
+
+- [A2 x86_64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-x86_64.run)
+- [A2 aarch64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-aarch64.run)
+- [A3 x86_64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-x86_64.run)
+- [A3 aarch64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-aarch64.run)
 
 ### One-click Build and Run
 
