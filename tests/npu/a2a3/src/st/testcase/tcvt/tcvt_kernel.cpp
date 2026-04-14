@@ -459,6 +459,9 @@ void launchTCVTNonSatTorch(D *dst, S *src, void *stream)
     }
 }
 
+// Default-saturation regression test instantiation (1x128 not in INSTANTIATE_TCVT macro)
+template void launchTCVT<int8_t, aclFloat16, 1, 128, 1, 128>(int8_t *dst, aclFloat16 *src, void *stream);
+
 // NonSatTorch test instantiations
 template void launchTCVTNonSatTorch<int8_t, aclFloat16, 1, 32, 1, 32>(int8_t *dst, aclFloat16 *src, void *stream);
 template void launchTCVTNonSatTorch<int8_t, aclFloat16, 2, 64, 2, 64>(int8_t *dst, aclFloat16 *src, void *stream);

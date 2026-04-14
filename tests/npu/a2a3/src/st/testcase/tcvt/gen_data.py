@@ -419,6 +419,23 @@ class tcvtParams:
 S4_TYPE = "s4"
 
 
+def gen_golden_fp16_int8_default_sat(case_name, param):
+    """fp16->int8 with out-of-range values: golden expects clamped (saturated) output.
+
+    The default TCVT for fp16->int8 must saturate (clamp), not wrap.
+    Values outside [-128, 127] must be clamped, not bit-truncated.
+    A kernel using wrap-around (SAT_MODE_BIT=1) will produce a mismatch.
+    """
+    m, n = param.m, param.n
+    base = np.array([200.0, -200.0, 127.5, -128.0, 50.0, -50.0, 0.0, 1.5], dtype=np.float32)
+    repeats = (m * n + len(base) - 1) // len(base)
+    x1_gm = np.tile(base, repeats)[:m * n].reshape(m, n).astype(np.float16)
+    # Saturating golden: rint then clamp to int8 range.
+    golden = np.clip(np.rint(x1_gm.astype(np.float32)), -128, 127).astype(np.int8)
+    x1_gm.tofile("./x1_gm.bin")
+    golden.tofile("./golden.bin")
+
+
 def pack_int4(values):
     """Pack an array of int4 values [-8..7] into bytes (2 per byte, low nibble first)."""
     values = np.asarray(values).flatten()
@@ -547,6 +564,19 @@ if __name__ == "__main__":
         case_name_list.append(f"TCVTTest.{test_name}")
         case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT"))
 
+    # Default-saturation regression tests: verify that the default TCVT path
+    # saturates (clamps) for fp16->int8 when no explicit satMode is given.
+    # These use a dedicated generator that writes a clamped golden so a kernel
+    # that wraps (SAT_MODE_BIT=1) will produce a mismatch.
+    default_sat_tests = [
+        ("default_sat_fp16_int8_1x128", np.float16, np.int8, 1, 128),
+    ]
+    default_sat_gen_cases = []
+    for test_name, src, dst, m, n in default_sat_tests:
+        case_name_list.append(f"TCVTTest.{test_name}")
+        case_params_list.append(tcvtParams(src, dst, m, n, "RoundMode::CAST_RINT"))
+        default_sat_gen_cases.append(test_name)
+
     # NonSatTorch test cases (with explicit tmp tile, saturation OFF)
     # These exercise the GenCastCallFp16ToInt8_NonSatTorch and similar paths
     nonsattorch_tests = [
@@ -601,7 +631,12 @@ if __name__ == "__main__":
         original_dir = os.getcwd()
         os.chdir(case_name)
 
-        gen_golden(case_name, case_params_list[i])
+        # Strip the "TCVTTest." prefix to get the bare test name for dispatch.
+        bare_name = case_name.split(".", 1)[-1]
+        if bare_name in default_sat_gen_cases:
+            gen_golden_fp16_int8_default_sat(case_name, case_params_list[i])
+        else:
+            gen_golden(case_name, case_params_list[i])
 
         os.chdir(original_dir)
 

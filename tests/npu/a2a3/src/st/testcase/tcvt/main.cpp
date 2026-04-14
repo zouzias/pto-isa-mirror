@@ -523,3 +523,15 @@ TEST_F(TCVTTest, nonsattorch_fp32_int16_4x128_4x65)
 {
     test_tcvt_nonsattorch<int16_t, float, 4, 128, 4, 128, 4, 65>();
 }
+
+// ============================================================================
+// Default-saturation regression tests
+// Verify that tile.cvt(dst, src) without explicit satMode saturates (clamps)
+// for fp16->int8.  Out-of-range values (>127 or <-128) must clamp, not wrap.
+// A kernel that sets SAT_MODE_BIT=1 (saturation OFF) will mismatch the golden.
+// ============================================================================
+
+TEST_F(TCVTTest, default_sat_fp16_int8_1x128)
+{
+    test_tcvt<int8_t, aclFloat16, 1, 128, 1, 128>();
+}

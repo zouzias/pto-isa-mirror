@@ -1191,11 +1191,12 @@ PTO_INTERNAL void ComputeTCvtRepeatConfig(unsigned &elementsPerRepeat, unsigned 
     }
 }
 
-// Helper: Check if this is a narrowing conversion that defaults to non-saturating mode
+// Helper: Check if this is a narrowing conversion that defaults to non-saturating mode.
+// FP16→INT8 and FP16→UINT8 are intentionally excluded: they default to saturating mode
+// (SaturationMode::ON) to match the hardware default prior to explicit satMode support
+// and to align with typical quantization references that clamp to the output type range.
 template <typename TileDataD, typename TileDataS>
 constexpr bool kIsNarrowingCvt =
-    (std::is_same<typename TileDataD::DType, uint8_t>::value && std::is_same<typename TileDataS::DType, half>::value) ||
-    (std::is_same<typename TileDataD::DType, int8_t>::value && std::is_same<typename TileDataS::DType, half>::value) ||
     (std::is_same<typename TileDataD::DType, int16_t>::value &&
      std::is_same<typename TileDataS::DType, float>::value) ||
     (std::is_same<typename TileDataD::DType, int16_t>::value && std::is_same<typename TileDataS::DType, half>::value) ||
