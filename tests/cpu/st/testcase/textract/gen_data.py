@@ -11,7 +11,9 @@
 # --------------------------------------------------------------------------------
 
 import os
+import sys
 import numpy as np
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../..")
 from utils import NumExt
 
 PRINT_C_CASE = True
