@@ -54,6 +54,9 @@ void launchTInsertNZTwoInput(uint64_t *out, uint64_t *src, void *stream);
 template <int32_t testKey>
 void launchTInsertNZDoubleInput(uint64_t *out, uint64_t *src, void *stream);
 
+template <int32_t testKey>
+void launchTInsertNZFp4Offset(uint64_t *out, uint64_t *src, void *stream);
+
 class TInsertTest : public testing::Test {
 protected:
     void SetUp() override
@@ -685,4 +688,40 @@ TEST_F(TInsertTest, case_nz_dblinput_fp8e5_2)
 TEST_F(TInsertTest, case_nz_dblinput_fp8e4_2)
 {
     testTInsertNZDoubleInput<18, uint8_t, 129, 256, 256>();
+}
+
+// FP4 split remainder tests (3 NZ c0 blocks with SPLIT2 → partBurstNum=1, lastBurstNum=2)
+TEST_F(TInsertTest, case_nz_twoinput_fp4e2m1_3)
+{
+    testTInsertNZTwoInput<19, uint8_t, 8, 16, 96>();
+}
+TEST_F(TInsertTest, case_nz_twoinput_fp4e1m2_3)
+{
+    testTInsertNZTwoInput<20, uint8_t, 8, 16, 96>();
+}
+
+// FP4 non-zero indexCol tests
+template <int32_t testKey, int32_t SrcRows, int32_t SrcByteCols, int32_t DstRows, int32_t DstByteCols>
+void testTInsertNZFp4Offset()
+{
+    constexpr size_t srcNzBytes = static_cast<size_t>(SrcRows) * SrcByteCols;
+    constexpr size_t dstBytes = static_cast<size_t>(DstRows) * DstByteCols;
+    testSingleSrc<uint8_t>(dstBytes + srcNzBytes, dstBytes, launchTInsertNZFp4Offset<testKey>);
+}
+
+TEST_F(TInsertTest, case_nz_fp4_offset_e2m1_col)
+{
+    testTInsertNZFp4Offset<1, 16, 32, 16, 128>();
+}
+TEST_F(TInsertTest, case_nz_fp4_offset_e1m2_col)
+{
+    testTInsertNZFp4Offset<2, 16, 32, 16, 128>();
+}
+TEST_F(TInsertTest, case_nz_fp4_offset_e2m1_rowcol)
+{
+    testTInsertNZFp4Offset<3, 16, 32, 16, 128>();
+}
+TEST_F(TInsertTest, case_nz_fp4_offset_e1m2_rowcol)
+{
+    testTInsertNZFp4Offset<4, 16, 32, 16, 128>();
 }

@@ -240,6 +240,25 @@ def gen_double_twoinput(dtype_size, valid_row1, idx_row1, valid_row2, idx_row2, 
     )
 
 
+def gen_fp4_offset(src_rows, src_byte_cols, valid_rows, dst_rows, dst_byte_cols, idx_row, idx_byte_col):
+    c0 = 32
+    nz_row = 16
+
+    src = rand_data(np.uint8, (valid_rows, src_byte_cols))
+    src_padded = np.zeros((src_rows, src_byte_cols), dtype=np.uint8)
+    src_padded[:valid_rows, :] = src
+    src_nz = src_padded.reshape(src_rows // nz_row, nz_row, src_byte_cols // c0, c0).transpose(2, 0, 1, 3)
+
+    zeros = np.zeros(dst_rows * dst_byte_cols, dtype=np.uint8)
+    np.concatenate([zeros, src_nz.flatten()]).tofile("input_arr.bin")
+
+    result = np.zeros((dst_rows, dst_byte_cols), dtype=np.uint8)
+    result[idx_row : idx_row + valid_rows, idx_byte_col : idx_byte_col + src_byte_cols] = src
+    result.reshape(dst_rows // nz_row, nz_row, dst_byte_cols // c0, c0).transpose(2, 0, 1, 3).flatten().tofile(
+        "golden_output.bin"
+    )
+
+
 if __name__ == "__main__":
     cases = [
         ("TInsertTest.case_acc2mat_1", gen_acc2mat, 16, 16, 16),
@@ -331,6 +350,12 @@ if __name__ == "__main__":
         ("TInsertTest.case_nz_dblinput_int8_2", gen_double_twoinput, 1, 1, 128, 128, 0, 129, 256, 256),
         ("TInsertTest.case_nz_dblinput_fp8e5_2", gen_double_twoinput, 1, 1, 128, 128, 0, 129, 256, 256),
         ("TInsertTest.case_nz_dblinput_fp8e4_2", gen_double_twoinput, 1, 1, 128, 128, 0, 129, 256, 256),
+        ("TInsertTest.case_nz_twoinput_fp4e2m1_3", gen_twoinput, 1, 4, 4, 0, 4, 16, 96),
+        ("TInsertTest.case_nz_twoinput_fp4e1m2_3", gen_twoinput, 1, 4, 4, 0, 4, 16, 96),
+        ("TInsertTest.case_nz_fp4_offset_e2m1_col", gen_fp4_offset, 16, 32, 16, 16, 128, 0, 32),
+        ("TInsertTest.case_nz_fp4_offset_e1m2_col", gen_fp4_offset, 16, 32, 16, 16, 128, 0, 32),
+        ("TInsertTest.case_nz_fp4_offset_e2m1_rowcol", gen_fp4_offset, 16, 32, 8, 16, 128, 4, 64),
+        ("TInsertTest.case_nz_fp4_offset_e1m2_rowcol", gen_fp4_offset, 16, 32, 8, 16, 128, 4, 64),
     ]
 
     for name, gen_fn, *args in cases:

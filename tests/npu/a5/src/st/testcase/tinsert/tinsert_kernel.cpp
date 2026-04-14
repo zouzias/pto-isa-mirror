@@ -1671,6 +1671,12 @@ void launchTInsertNZTwoInput(uint64_t *out, uint64_t *src, void *stream)
     } else if constexpr (testKey == 18) {
         launchTInsertNZTwoInputSplitKernel<pto::TInsertMode::SPLIT2, float4_e1m2x2_t, 129, 256, 256>
             <<<1, nullptr, stream>>>(out, src);
+    } else if constexpr (testKey == 19) {
+        launchTInsertNZTwoInputSplitKernel<pto::TInsertMode::SPLIT2, float4_e2m1x2_t, 8, 16, 192>
+            <<<1, nullptr, stream>>>(out, src);
+    } else if constexpr (testKey == 20) {
+        launchTInsertNZTwoInputSplitKernel<pto::TInsertMode::SPLIT2, float4_e1m2x2_t, 8, 16, 192>
+            <<<1, nullptr, stream>>>(out, src);
     }
 }
 
@@ -1812,6 +1818,115 @@ void launchTInsertNZDoubleInput(uint64_t *out, uint64_t *src, void *stream)
     }
 }
 
+template <typename T, uint32_t SrcRows, uint32_t SrcCols, uint32_t ValidRows, uint32_t IndexRow, uint32_t IndexCol,
+          uint32_t DstRows, uint32_t DstCols>
+AICORE void runTInsertNZFp4Offset(__gm__ T *out, __gm__ T *src)
+{
+    constexpr uint32_t c0Size = CUBE_BLOCK_SIZE / (FRACTAL_NZ_ROW * sizeof(T));
+    constexpr uint32_t nzRow = FRACTAL_NZ_ROW;
+    constexpr bool isFp4 = std::is_same_v<T, float4_e2m1x2_t> || std::is_same_v<T, float4_e1m2x2_t>;
+    constexpr uint32_t fp4Factor = isFp4 ? 2 : 1;
+    constexpr uint32_t c0Dim = c0Size * fp4Factor;
+    constexpr uint32_t dstByteCols = DstCols / fp4Factor;
+    constexpr uint32_t srcByteCols = SrcCols / fp4Factor;
+
+    using SrcVecTile =
+        Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::ColMajor, ValidRows, SrcCols, SLayout::RowMajor>;
+    using DstVecTile = Tile<TileType::Vec, T, DstRows, DstCols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
+    using MatTile = Tile<TileType::Mat, T, DstRows, DstCols, BLayout::ColMajor, -1, -1, SLayout::RowMajor>;
+
+    using OutShapeDim5 = pto::Shape<1, DstCols / c0Dim, DstRows / nzRow, nzRow, c0Dim>;
+    using OutStridDim5 = pto::Stride<DstCols / c0Dim * c0Dim * DstRows, DstRows * c0Dim, nzRow * c0Dim, c0Dim, 1>;
+    using OutGlobalData = GlobalTensor<T, OutShapeDim5, OutStridDim5, Layout::NZ>;
+
+    constexpr uint32_t dstUbBytes = DstRows * dstByteCols;
+    constexpr uint32_t srcUbOffset = ((dstUbBytes + 511) / 512) * 512;
+
+    SrcVecTile srcTile;
+    DstVecTile dstTile(DstRows, DstCols);
+    MatTile matTile(DstRows, DstCols);
+
+    TASSIGN(srcTile, srcUbOffset);
+    TASSIGN(dstTile, 0x0);
+    TASSIGN(matTile, 0x0);
+
+    OutGlobalData dstGlobal(out);
+
+    uint8_t syncId = 0;
+    uint8_t eventIdNum = 16;
+
+    constexpr uint32_t dstBurstNum = dstByteCols / c0Size;
+    constexpr uint16_t dstBurstLen = (DstRows * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
+    constexpr uint32_t srcNzBytes = srcByteCols * SrcRows * sizeof(T);
+    constexpr uint16_t srcBurstLen = static_cast<uint16_t>(srcNzBytes / BLOCK_BYTE_SIZE);
+    constexpr uint32_t zeroElements = DstRows * dstByteCols;
+
+    __cbuf__ T *matAddr = matTile.data();
+    __ubuf__ T *dstUbAddr = dstTile.data();
+    __ubuf__ T *srcUbAddr = srcTile.data();
+    __gm__ T *srcGmAddr = src + zeroElements;
+
+#if defined(__DAV_VEC__)
+    copy_gm_to_ubuf((__ubuf__ void *)dstUbAddr, (__gm__ void *)src, 0, dstBurstNum, dstBurstLen, 0, 0);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)dstUbAddr, 0, dstBurstNum, dstBurstLen, 0, 0);
+    set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+    wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
+
+    copy_gm_to_ubuf((__ubuf__ void *)srcUbAddr, (__gm__ void *)srcGmAddr, 0, 1, srcBurstLen, 0, 0);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    TINSERT(matTile, srcTile, static_cast<uint16_t>(IndexRow), static_cast<uint16_t>(IndexCol));
+    set_intra_block(PIPE_MTE3, syncId);
+#endif
+
+#if defined(__DAV_CUBE__)
+    ReadbackCbufToUbuf((__ubuf__ void *)dstUbAddr, (__cbuf__ void *)matAddr, dstBurstNum, dstBurstLen, 0, syncId,
+                       eventIdNum);
+#endif
+
+#if defined(__DAV_VEC__)
+    WaitAndStore(dstGlobal, dstTile, syncId);
+#endif
+}
+
+template <typename T, uint32_t SrcRows, uint32_t SrcCols, uint32_t ValidRows, uint32_t IndexRow, uint32_t IndexCol,
+          uint32_t DstRows, uint32_t DstCols>
+__global__ AICORE void launchTInsertNZFp4OffsetKernel(__gm__ uint64_t *out, __gm__ uint64_t *src)
+{
+    runTInsertNZFp4Offset<T, SrcRows, SrcCols, ValidRows, IndexRow, IndexCol, DstRows, DstCols>(
+        reinterpret_cast<__gm__ T *>(out), reinterpret_cast<__gm__ T *>(src));
+}
+
+template <int32_t testKey>
+void launchTInsertNZFp4Offset(uint64_t *out, uint64_t *src, void *stream)
+{
+    if constexpr (testKey == 1) {
+        // fp4e2m1: insert 16×64 at col=64 into 16×256 dst
+        launchTInsertNZFp4OffsetKernel<float4_e2m1x2_t, 16, 64, 16, 0, 64, 16, 256><<<1, nullptr, stream>>>(out, src);
+    } else if constexpr (testKey == 2) {
+        // fp4e1m2: insert 16×64 at col=64 into 16×256 dst
+        launchTInsertNZFp4OffsetKernel<float4_e1m2x2_t, 16, 64, 16, 0, 64, 16, 256><<<1, nullptr, stream>>>(out, src);
+    } else if constexpr (testKey == 3) {
+        // fp4e2m1: insert 16×64 at (row=4, col=128) into 16×256 dst
+        launchTInsertNZFp4OffsetKernel<float4_e2m1x2_t, 16, 64, 8, 4, 128, 16, 256><<<1, nullptr, stream>>>(out, src);
+    } else if constexpr (testKey == 4) {
+        // fp4e1m2: insert 16×64 at (row=4, col=128) into 16×256 dst
+        launchTInsertNZFp4OffsetKernel<float4_e1m2x2_t, 16, 64, 8, 4, 128, 16, 256><<<1, nullptr, stream>>>(out, src);
+    }
+}
+
+template void launchTInsertNZFp4Offset<1>(uint64_t *out, uint64_t *src, void *stream);
+template void launchTInsertNZFp4Offset<2>(uint64_t *out, uint64_t *src, void *stream);
+template void launchTInsertNZFp4Offset<3>(uint64_t *out, uint64_t *src, void *stream);
+template void launchTInsertNZFp4Offset<4>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTInsertNZDoubleInput<1>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTInsertNZDoubleInput<2>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTInsertNZDoubleInput<3>(uint64_t *out, uint64_t *src, void *stream);
@@ -1848,6 +1963,8 @@ template void launchTInsertNZTwoInput<15>(uint64_t *out, uint64_t *src, void *st
 template void launchTInsertNZTwoInput<16>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTInsertNZTwoInput<17>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTInsertNZTwoInput<18>(uint64_t *out, uint64_t *src, void *stream);
+template void launchTInsertNZTwoInput<19>(uint64_t *out, uint64_t *src, void *stream);
+template void launchTInsertNZTwoInput<20>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTInsertNZSplitCustom<1>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTInsertNZSplitCustom<2>(uint64_t *out, uint64_t *src, void *stream);
 template void launchTInsertNZSplitCustom<3>(uint64_t *out, uint64_t *src, void *stream);
