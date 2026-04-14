@@ -520,6 +520,10 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
     constexpr uint16_t fp16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(half);
     constexpr uint16_t int8ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int8_t);
 
+    // Number of int16 elements per hardware repeat — used to narrow the vector mask
+    // for mask-controlled operations (vector_dup, vand) in Steps 3-4.
+    const uint16_t elemsPerHwRepeat = hwFp16Stride * int16ElemsPerBlock;
+
     // Loop over chunks of at most REPEAT_MAX hardware repeats to stay within hardware limits.
     // The temp buffer is reused each iteration; only src and dst pointers advance.
     uint16_t hwRepeatsDone = 0;
@@ -573,6 +577,16 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
         vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
                       hwInt32Stride);
         pipe_barrier(PIPE_V);
+
+        // Steps 3-4 use vector_dup and vand which are mask-controlled operations on A2/A3.
+        // Each hw repeat covers hwFp16Stride blocks (e.g. 4 blocks = 64 int16 elements).
+        // If the current vector mask is wider than that (e.g. 128 elements from TCvtHead, or
+        // numRemainPerLine > 64 from TCvtTail), the mask-controlled op would process elements
+        // beyond the hw repeat stride boundary, overlapping with the next repeat's data.
+        // Fix: narrow the mask to exactly elemsPerHwRepeat for these two steps.
+        // The surrounding vconv steps (1/2/5/6) are not affected because their hw repeat size
+        // exactly matches the stride, so any mask value produces correct results.
+        SetContinuousMask(elemsPerHwRepeat);
 
         // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (freed upper half of int32 region)
         vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
