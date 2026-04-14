@@ -850,7 +850,7 @@ struct TMPipe {
                 uint64_t entryBase = (tile_id % DataFiFo::fifoDepth) * ConsM * ConsN * sizeof(T);
                 TileDataCons matTile;
                 TASSIGN_IMPL(matTile, fifo.fifoBase + entryBase);
-                TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(row_offset), static_Cast<uint16_t>(0));
+                TINSERT_IMPL(matTile, tile, static_cast<uint16_t>(row_offset), static_cast<uint16_t>(0));
             } else if constexpr (isSplitN) {
                 // split N between vectors
                 int col_index = ProdN;

@@ -390,8 +390,7 @@ PTO_INTERNAL void TInsertVecToVecImpl(DstTileData &dst, SrcTileData &src, uint16
             TInsertVecToVecNDDispatch<T>(dst, src, indexRow, indexCol);
         }
     } else if constexpr (!DstTileData::isRowMajor && !SrcTileData::isRowMajor &&
-                         DstTileData::SFractal == SLayout::RowMajor &&
-                         SrcTileData::SFractal == SLayout::RowMajor) {
+                         DstTileData::SFractal == SLayout::RowMajor && SrcTileData::SFractal == SLayout::RowMajor) {
         static_assert(SrcTileData::Cols <= DstTileData::Cols,
                       "TINSERT NZ Vec→Vec : Source cols must not exceed destination cols");
         uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
@@ -400,9 +399,8 @@ PTO_INTERNAL void TInsertVecToVecImpl(DstTileData &dst, SrcTileData &src, uint16
                    "TINSERT NZ Vec→Vec : indexRow + validRow exceeds destination rows!");
         PTO_ASSERT(indexCol + validCol <= DstTileData::Cols,
                    "TINSERT NZ Vec→Vec : indexCol + validCol exceeds destination cols!");
-        TInsertVecToVecNZImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
-                                                           static_cast<uint16_t>(DstTileData::Rows), indexRow,
-                                                           indexCol);
+        TInsertVecToVecNZImpl<T, DstTileData, SrcTileData>(
+            dst.data(), src.data(), validRow, validCol, static_cast<uint16_t>(DstTileData::Rows), indexRow, indexCol);
     } else {
         static_assert(DstTileData::isRowMajor == SrcTileData::isRowMajor,
                       "TINSERT Vec→Vec : Source and destination layout must match (both ND or both NZ)");
