@@ -23,26 +23,20 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 constexpr double CAST_ODD_THRESHHOLD = 0.5;
 
-inline void PrintFloatBits(double val, const char* name)
+inline void PrintFloatBits(double val, const char *name)
 {
-    uint64_t bits = *reinterpret_cast<const uint64_t*>(&val);
-    std::printf("[PTO][TCVT] %s: %.17g bits=0x%016lx sign=%lu exp=%lu(0x%lx) mantissa=0x%lx\n",
-               name, val, bits,
-               (unsigned long)((bits >> 63) & 1),
-               (unsigned long)((bits >> 52) & 0x7FF),
-               (unsigned long)((bits >> 52) & 0x7FF),
-               (unsigned long)(bits & 0xFFFFFFFFFFFFF));
+    uint64_t bits = *reinterpret_cast<const uint64_t *>(&val);
+    std::printf("[PTO][TCVT] %s: %.17g bits=0x%016lx sign=%lu exp=%lu(0x%lx) mantissa=0x%lx\n", name, val, bits,
+                (unsigned long)((bits >> 63) & 1), (unsigned long)((bits >> 52) & 0x7FF),
+                (unsigned long)((bits >> 52) & 0x7FF), (unsigned long)(bits & 0xFFFFFFFFFFFFF));
 }
 
-inline void PrintFloatBits(float val, const char* name)
+inline void PrintFloatBits(float val, const char *name)
 {
-    uint32_t bits = *reinterpret_cast<const uint32_t*>(&val);
-    std::printf("[PTO][TCVT] %s: %.9g bits=0x%08x sign=%u exp=%u(0x%x) mantissa=0x%x\n",
-               name, val, bits,
-               (unsigned)((bits >> 31) & 1),
-               (unsigned)((bits >> 23) & 0xFF),
-               (unsigned)((bits >> 23) & 0xFF),
-               bits & 0x7FFFFF);
+    uint32_t bits = *reinterpret_cast<const uint32_t *>(&val);
+    std::printf("[PTO][TCVT] %s: %.9g bits=0x%08x sign=%u exp=%u(0x%x) mantissa=0x%x\n", name, val, bits,
+                (unsigned)((bits >> 31) & 1), (unsigned)((bits >> 23) & 0xFF), (unsigned)((bits >> 23) & 0xFF),
+                bits & 0x7FFFFF);
 }
 
 template <typename T>
@@ -128,14 +122,15 @@ PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileData
                 } else if constexpr (std::is_same_v<S, float>) {
                     PrintFloatBits(val, "src_float");
                 }
-                PTO_CPU_DEBUG("TCVT", "i=%d j=%d src=0x%016llx val=%.17g dv=%.17g mode=%d",
-                           i, j, *reinterpret_cast<const uint64_t*>(&val), val, dv, static_cast<int>(mode));
+                PTO_CPU_DEBUG("TCVT", "i=%d j=%d src=0x%016llx val=%.17g dv=%.17g mode=%d", i, j,
+                              *reinterpret_cast<const uint64_t *>(&val), val, dv, static_cast<int>(mode));
                 D result = static_cast<D>(applyRoundingToIntegral(dv, mode));
                 PTO_CPU_DEBUG("TCVT", "i=%d j=%d result=%d", i, j, result);
                 dst[dstIdx] = result;
             } else {
-                PTO_CPU_DEBUG("TCVT", "i=%d j=%d src=0x%016llx dst=0x%016llx",
-                           i, j, *reinterpret_cast<const uint64_t*>(&val), *reinterpret_cast<const uint64_t*>(&dst[dstIdx]));
+                PTO_CPU_DEBUG("TCVT", "i=%d j=%d src=0x%016llx dst=0x%016llx", i, j,
+                              *reinterpret_cast<const uint64_t *>(&val),
+                              *reinterpret_cast<const uint64_t *>(&dst[dstIdx]));
                 dst[dstIdx] = static_cast<D>(val);
             }
         }
