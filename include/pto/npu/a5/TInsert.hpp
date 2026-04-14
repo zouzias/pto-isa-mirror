@@ -112,12 +112,9 @@ __tf__ PTO_INTERNAL void SetFPCInsert(typename FpTileData::TileDType __in__ fp)
     set_fpc(deqTensorAddr);
 }
 
-// relu
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
-PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
+template <typename DstTileData, typename SrcTileData, QuantMode_t quantPre, ReluPreMode reluMode>
+PTO_INTERNAL void TInsertAccDispatch(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
 {
-    CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
-    constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     if constexpr (DstTileData::Loc == TileType::Mat) {
         static_assert((!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor),
                       "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor).");
@@ -130,6 +127,15 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t inde
         static_assert(DstTileData::Loc == TileType::Mat || DstTileData::Loc == TileType::Vec,
                       "TINSERT: Destination must be Mat or Vec.");
     }
+}
+
+// relu
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
+{
+    CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
+    constexpr QuantMode_t quantPre = GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
+    TInsertAccDispatch<DstTileData, SrcTileData, quantPre, reluMode>(dst, src, indexRow, indexCol);
 }
 
 // scalar quant
@@ -140,18 +146,7 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQ
     CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
     constexpr QuantMode_t quantPre = GetScalarPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     set_quant_pre(preQuantScalar);
-    if constexpr (DstTileData::Loc == TileType::Mat) {
-        static_assert((!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor),
-                      "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor).");
-        TInsertAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), src.GetValidRow(),
-                                                                      src.GetValidCol(), indexRow, indexCol);
-    } else if constexpr (DstTileData::Loc == TileType::Vec) {
-        TInsertAccToVec<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), src.GetValidRow(),
-                                                                      src.GetValidCol(), indexRow, indexCol);
-    } else {
-        static_assert(DstTileData::Loc == TileType::Mat || DstTileData::Loc == TileType::Vec,
-                      "TINSERT: Destination must be Mat or Vec.");
-    }
+    TInsertAccDispatch<DstTileData, SrcTileData, quantPre, reluMode>(dst, src, indexRow, indexCol);
 }
 
 // vector quant
@@ -162,18 +157,7 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &f
     CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType, true>();
     constexpr QuantMode_t quantPre = GetVectorPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
     SetFPCInsert<FpTileData>(fp.data());
-    if constexpr (DstTileData::Loc == TileType::Mat) {
-        static_assert((!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor),
-                      "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor).");
-        TInsertAccToMat<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), src.GetValidRow(),
-                                                                      src.GetValidCol(), indexRow, indexCol);
-    } else if constexpr (DstTileData::Loc == TileType::Vec) {
-        TInsertAccToVec<DstTileData, SrcTileData, quantPre, reluMode>(dst.data(), src.data(), src.GetValidRow(),
-                                                                      src.GetValidCol(), indexRow, indexCol);
-    } else {
-        static_assert(DstTileData::Loc == TileType::Mat || DstTileData::Loc == TileType::Vec,
-                      "TINSERT: Destination must be Mat or Vec.");
-    }
+    TInsertAccDispatch<DstTileData, SrcTileData, quantPre, reluMode>(dst, src, indexRow, indexCol);
 }
 
 template <typename T, typename DstTileData, typename SrcTileData>
@@ -509,22 +493,13 @@ PTO_INTERNAL void TInsertVecToMatImpl(DstTileData &dst, SrcTileData &src, uint16
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
-    if constexpr (DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Acc) {
-        // Acc→Mat path (accumulator to L1/cbuf)
-        static_assert((!DstTileData::isRowMajor && DstTileData::SFractal == SLayout::RowMajor),
-                      "Dst fractal format should be (BFractal: ColMajor, SFractal: RowMajor).");
+    if constexpr ((DstTileData::Loc == TileType::Mat || DstTileData::Loc == TileType::Vec) &&
+                  SrcTileData::Loc == TileType::Acc) {
+        // Acc→Mat/Vec path
         CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
         constexpr QuantMode_t quantPre =
             GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
-        TInsertAccToMat<DstTileData, SrcTileData, quantPre, ReluPreMode::NoRelu>(
-            dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(), indexRow, indexCol);
-    } else if constexpr (DstTileData::Loc == TileType::Vec && SrcTileData::Loc == TileType::Acc) {
-        // Acc→Vec path (accumulator to UB/ubuf)
-        CheckTMovAccValid<DstTileData, SrcTileData, typename DstTileData::DType, typename SrcTileData::DType>();
-        constexpr QuantMode_t quantPre =
-            GetCastPreQuantMode<typename SrcTileData::DType, typename DstTileData::DType>();
-        TInsertAccToVec<DstTileData, SrcTileData, quantPre, ReluPreMode::NoRelu>(
-            dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(), indexRow, indexCol);
+        TInsertAccDispatch<DstTileData, SrcTileData, quantPre, ReluPreMode::NoRelu>(dst, src, indexRow, indexCol);
     } else {
         using T = typename SrcTileData::DType;
         static_assert(std::is_same<typename DstTileData::DType, typename SrcTileData::DType>::value,

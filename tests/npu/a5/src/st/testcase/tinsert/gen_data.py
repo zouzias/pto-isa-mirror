@@ -240,21 +240,33 @@ def gen_double_twoinput(dtype_size, valid_row1, idx_row1, valid_row2, idx_row2, 
     )
 
 
+class Fp4OffsetParams:
+    def __init__(self, src_rows, src_byte_cols, valid_rows, dst_rows, dst_byte_cols):
+        self.src_rows = src_rows
+        self.src_byte_cols = src_byte_cols
+        self.valid_rows = valid_rows
+        self.dst_rows = dst_rows
+        self.dst_byte_cols = dst_byte_cols
+
+
 def gen_fp4_offset(src_rows, src_byte_cols, valid_rows, dst_rows, dst_byte_cols, idx_row, idx_byte_col):
+    p = Fp4OffsetParams(src_rows, src_byte_cols, valid_rows, dst_rows, dst_byte_cols)
     c0 = 32
     nz_row = 16
 
-    src = rand_data(np.uint8, (valid_rows, src_byte_cols))
-    src_padded = np.zeros((src_rows, src_byte_cols), dtype=np.uint8)
-    src_padded[:valid_rows, :] = src
-    src_nz = src_padded.reshape(src_rows // nz_row, nz_row, src_byte_cols // c0, c0).transpose(2, 0, 1, 3)
+    src = rand_data(np.uint8, (p.valid_rows, p.src_byte_cols))
+    src_padded = np.zeros((p.src_rows, p.src_byte_cols), dtype=np.uint8)
+    src_padded[: p.valid_rows, :] = src
+    src_nz = src_padded.reshape(p.src_rows // nz_row, nz_row, p.src_byte_cols // c0, c0).transpose(2, 0, 1, 3)
 
-    zeros = np.zeros(dst_rows * dst_byte_cols, dtype=np.uint8)
+    zeros = np.zeros(p.dst_rows * p.dst_byte_cols, dtype=np.uint8)
     np.concatenate([zeros, src_nz.flatten()]).tofile("input_arr.bin")
 
-    result = np.zeros((dst_rows, dst_byte_cols), dtype=np.uint8)
-    result[idx_row : idx_row + valid_rows, idx_byte_col : idx_byte_col + src_byte_cols] = src
-    result.reshape(dst_rows // nz_row, nz_row, dst_byte_cols // c0, c0).transpose(2, 0, 1, 3).flatten().tofile(
+    result = np.zeros((p.dst_rows, p.dst_byte_cols), dtype=np.uint8)
+    r_end = idx_row + p.valid_rows
+    c_end = idx_byte_col + p.src_byte_cols
+    result[idx_row:r_end, idx_byte_col:c_end] = src
+    result.reshape(p.dst_rows // nz_row, nz_row, p.dst_byte_cols // c0, c0).transpose(2, 0, 1, 3).flatten().tofile(
         "golden_output.bin"
     )
 
