@@ -4,16 +4,16 @@
  * This file lives under `kernels/manual/a5/topk_ub/` (local UB-focused variant). The upstream
  * manual scaffold is `kernels/manual/a5/topk/` — keep that directory aligned with cann/pto-isa.
  *
- * Pipeline:
- * 1) THISTOGRAM<true>  (MSB) over full input -> chistMSB
- * 2) Winner MSB: smallest b with C[b] >= (N - TopK). idxFilter / packed MSB use raw min bin (TROWMIN); RemainK uses
- *    WinnerBinU8 (TADDS -1 on b) so TGATHER reads C[winner-1].
- * 3) remainK = (N - TopK) - C[w] with w = post-TADDS bin (same as Python remain_k uses C[winner-1]).
- * 4) THISTOGRAM<false> (LSB, MSB filter) -> chistLSB
- * 5) Winner LSB: TCMPS GE(chistLSB, remainKTile), TCI, TSELS, TROWMIN → lsbWinnerBin
- * 6) GatherCmpToTile (GT then EQ) on full 1×N UB keys; TCONCAT(gtChunk,eqChunk) with counts; TSTORE TopK indices to GM.
+ * All pto-isa ops (including `TASSIGN` / `TLOAD`) live only in five `Phase*` functions — no nested helpers inside them.
+ * `RunRadixTopKDraft` only constructs tile objects and calls the phases in order.
+ * 1) **`TASSIGN` UB + `TLOAD` + Histogram (MSB)** — `THISTOGRAM<BYTE_1>` → `chistMSB`.
+ * 2) **Winner MSB + remainK** — `TCMPS`/`TCI`/`TSELS`, raw MSB broadcast, `WinnerBinU8` path, `TGATHER`+`TSUB` remainK.
+ * 3) **Histogram (LSB)** — `TCVT` idx from saved MSB; `THISTOGRAM<BYTE_0>` → `chistLSB`.
+ * 4) **Winner LSB + remainK + packed threshold** — `TCMPS`/`TSELS`/`TROWMIN`/`TGATHER`; `TCVT`/`TSHLS`/`TOR` for compare key.
+ * 5) **Two full-width `TGATHER` (GT/EQ) + `TCONCAT_IMPL` + `TSTORE`**.
  *
  * Notes:
+ * - ISA/pto 名稱為 **`TGATHER`**（模擬器 log 中常見 `VGATHER` 類指令為其下層實現）。
  * - Input keys are uint16 (sortable). TGATHER compare path uses int16_t tiles so the
  *   A5 dispatch selects TGather_b16_gt/eq (see include/pto/npu/a5/TGather.hpp); keys and
  *   threshold share the same bit pattern via reinterpret_cast.
@@ -46,9 +46,9 @@ constexpr int kBinNum = 256;
 template <int ValidCols>
 using InTileU16 = Tile<TileType::Vec, uint16_t, 1, ValidCols, BLayout::RowMajor, -1, -1>;
 using HistTile = Tile<TileType::Vec, uint32_t, 1, kBinNum, BLayout::RowMajor, -1, -1>;
-// TSELS output: per-bin lane values (same shape as hist); primary output of FindWinnerBucketDescending.
+// TSELS output: per-bin lane values (same shape as hist).
 using WinnerLaneTile = Tile<TileType::Vec, uint32_t, 1, kBinNum, BLayout::RowMajor, -1, -1>;
-// Broadcast winner value: 1×32 u32 lanes (each = selOut[0] after TGATHER); output of WinnerBinU8FromSelsMin.
+// Broadcast winner: 1×32 u32 lanes (TGATHER from row min / TSEL path).
 using WinnerBinTile = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, -1>;
 using MaskCmpTile = Tile<TileType::Vec, uint8_t, 1, kBinNum, BLayout::RowMajor, -1, -1>;
 using IdxU32Tile = Tile<TileType::Vec, uint32_t, 1, kBinNum, BLayout::RowMajor, -1, -1>;
@@ -69,7 +69,7 @@ constexpr uint64_t kUbTileHist = 0x20000;
 constexpr uint64_t kUbChistMSB = 0x21000;
 constexpr uint64_t kUbChistLSB = 0x22000;
 constexpr uint64_t kUbIdxFilter = 0x23000;
-// Scratch for FindWinnerBucketDescending (TCMPS / TCI / TSELS).
+// Scratch for MSB/LSB winner lanes (TCMPS / TCI / TSELS).
 constexpr uint64_t kWinnerUbMask = 0x24000;
 constexpr uint64_t kWinnerUbIdx = 0x24400;
 constexpr uint64_t kWinnerUbGather = 0x24800;
@@ -95,192 +95,230 @@ constexpr uint16_t kIdxAlignedRows = PTO_CEIL(1 * sizeof(uint8_t), BLOCK_BYTE_SI
 using IdxFilterTile = Tile<TileType::Vec, uint8_t, kIdxAlignedRows, 1, BLayout::ColMajor, -1, -1>;
 
 template <int ValidCols>
-AICORE inline void LoadTileU16(InTileU16<ValidCols> &inTile, __gm__ uint16_t *src, int base, int validCols)
-{
-    inTile.SetValidCol(validCols);
-    using SrcGlobal = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, ValidCols>,
-                                   pto::Stride<ValidCols, ValidCols, ValidCols, ValidCols, 1>>;
-    SrcGlobal srcGlobal(src + base);
-    TLOAD(inTile, srcGlobal);
-}
-
-template <int ValidCols>
 using GatherSrcI16 = Tile<TileType::Vec, int16_t, 1, ValidCols, BLayout::RowMajor, -1, -1>;
 
 // Keys already in UB at kUbFullKeys (same layout as GM); slice [base, base+validCols) for TGATHER.
 constexpr uint64_t kUbFullKeys = 0x00000;
 
-template <int ValidCols>
-AICORE inline void AssignGatherChunkUb(GatherSrcI16<ValidCols> &inTile, int base, int validCols)
-{
-    inTile.SetValidCol(validCols);
-    TASSIGN(inTile, kUbFullKeys + static_cast<uint64_t>(base) * sizeof(uint16_t));
-}
-
-AICORE inline void ZeroHist(HistTile &dst)
-{
-    dst.SetValidRow(1);
-    dst.SetValidCol(kBinNum);
-    TEXPANDS(dst, 0u);
-}
-
 // Full-width compare-gather dst (1×kN indices); keys already contiguous in UB at kUbFullKeys.
 using GatherFullU32 = Tile<TileType::Vec, uint32_t, 1, kN, BLayout::RowMajor, -1, -1>;
-// Must match TGATHER ConcatTile in GatherCmpToTile (count = first u32 at ubConcat).
 constexpr int kGatherConcatRows =
     (1 * static_cast<int>(sizeof(uint32_t)) < 32) ? (32 / static_cast<int>(sizeof(uint32_t))) : 1;
 using GatherConcatCountTile = Tile<TileType::Vec, uint32_t, kGatherConcatRows, 1, BLayout::ColMajor, -1, -1>;
 
-// THISTOGRAM: ascending cumulative C[b]. Pipeline: TCMPS(GE,thr), TCI, TSELS -> outLanes; thr from caller.
-AICORE inline void FindWinnerBucketDescending(HistTile &histTile, uint32_t thr, WinnerLaneTile &outLanes)
+// --- Five phases: every TLOAD / THISTOGRAM / TCMPS / TGATHER / … appears only below (no callees). ---
+
+AICORE inline void Phase1_LoadAndHistogramMsb(__gm__ uint16_t *src, InTileU16<kN> &fullInTile, HistTile &tileHist,
+                                                HistTile &chistMSB, HistTile &chistLSB, IdxFilterTile &idxFilter)
 {
-    MaskCmpTile maskTile(1, kBinNum);
-    IdxU32Tile indexTile(1, kBinNum);
-    TmpSelsTile tmpSelsTile(1, 32);
+    TASSIGN(fullInTile, kUbFullKeys);
+    TASSIGN(tileHist, kUbTileHist);
+    TASSIGN(chistMSB, kUbChistMSB);
+    TASSIGN(chistLSB, kUbChistLSB);
+    TASSIGN(idxFilter, kUbIdxFilter);
 
-    TASSIGN(maskTile, kWinnerUbMask);
-    TASSIGN(indexTile, kWinnerUbIdx);
-    TASSIGN(outLanes, kWinnerUbGather);
-    TASSIGN(tmpSelsTile, kWinnerUbTmp);
+    fullInTile.SetValidCol(kN);
+    using SrcGlobal = GlobalTensor<uint16_t, pto::Shape<1, 1, 1, 1, kN>, pto::Stride<kN, kN, kN, kN, 1>>;
+    SrcGlobal srcGlobal(src);
+    TLOAD(fullInTile, srcGlobal);
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    maskTile.SetValidCol(kBinNum);
-    indexTile.SetValidCol(kBinNum);
-    outLanes.SetValidCol(kBinNum);
-    tmpSelsTile.SetValidCol(32);
-    histTile.SetValidCol(kBinNum);
-
-    TCMPS(maskTile, histTile, thr, CmpMode::GE);
-    TCI<IdxU32Tile, IdxU32Tile, uint32_t, 0>(indexTile, static_cast<uint32_t>(0), indexTile);
-    constexpr uint32_t kSelsFalse = 0xffffffffu;
-    TSELS(outLanes, maskTile, indexTile, tmpSelsTile, kSelsFalse);
+    chistMSB.SetValidRow(1);
+    chistMSB.SetValidCol(kBinNum);
+    TEXPANDS(chistMSB, 0u);
+    THISTOGRAM<pto::HistByte::BYTE_1>(tileHist, fullInTile, idxFilter);
+    TMOV(chistMSB, tileHist);
 }
 
-// LSB: per-bin C[b] vs remainK (broadcast); GE mask → TCI bin ids → TSELS lanes → caller TROWMIN for min idx.
-AICORE inline void LsbHistGeRemainKToLanes(HistTile &chistLSB, RemainKTile &remainKTile, WinnerLaneTile &outLanes)
+template <int TopK>
+AICORE inline void Phase2_WinnerMsbAndRemainK(HistTile &chistMSB, WinnerBinTile &msbWinnerBin, RemainKTile &remainKTile,
+                                               WinnerBinTile &msbWinnerSaved)
 {
+    constexpr uint32_t kThrMsb = static_cast<uint32_t>(kN - TopK);
+    constexpr uint32_t kSelsFalse = 0xffffffffu;
+    WinnerLaneTile msbWinnerLanes(1, kBinNum);
+
     MaskCmpTile maskTile(1, kBinNum);
     IdxU32Tile indexTile(1, kBinNum);
     TmpSelsTile tmpSelsTile(1, 32);
-
     TASSIGN(maskTile, kWinnerUbMask);
     TASSIGN(indexTile, kWinnerUbIdx);
-    TASSIGN(outLanes, kWinnerUbGather);
+    TASSIGN(msbWinnerLanes, kWinnerUbGather);
     TASSIGN(tmpSelsTile, kWinnerUbTmp);
-
     maskTile.SetValidCol(kBinNum);
     indexTile.SetValidCol(kBinNum);
-    outLanes.SetValidCol(kBinNum);
+    msbWinnerLanes.SetValidCol(kBinNum);
+    tmpSelsTile.SetValidCol(32);
+    chistMSB.SetValidCol(kBinNum);
+    TCMPS(maskTile, chistMSB, kThrMsb, CmpMode::GE);
+    TCI<IdxU32Tile, IdxU32Tile, uint32_t, 0>(indexTile, static_cast<uint32_t>(0), indexTile);
+    TSELS(msbWinnerLanes, maskTile, indexTile, tmpSelsTile, kSelsFalse);
+
+    TASSIGN(msbWinnerSaved, kMsbWinnerSavedUb);
+    msbWinnerSaved.SetValidRow(1);
+    msbWinnerSaved.SetValidCol(32);
+    {
+        RowMinDstTile rowMinDst(1, 16);
+        RowMinTmpTile rowMinTmp(1, kBinNum);
+        TASSIGN(rowMinDst, kWinnerUbRowMinDst);
+        TASSIGN(rowMinTmp, kWinnerUbRowMinTmp);
+        rowMinDst.SetValidRow(1);
+        rowMinDst.SetValidCol(1);
+        rowMinTmp.SetValidRow(1);
+        rowMinTmp.SetValidCol(kBinNum);
+        TROWMIN(rowMinDst, msbWinnerLanes, rowMinTmp);
+        GatherIdxU32Tile gatherIdx(1, 32);
+        TmpSelsTile gatherTmp(1, 32);
+        TASSIGN(gatherIdx, kWinnerUbRowMinTmp);
+        TASSIGN(gatherTmp, kWinnerUbTselTmp);
+        gatherIdx.SetValidRow(1);
+        gatherIdx.SetValidCol(32);
+        gatherTmp.SetValidCol(32);
+        TEXPANDS(gatherIdx, 0u);
+        TGATHER(msbWinnerSaved, rowMinDst, gatherIdx, gatherTmp);
+    }
+
+    {
+        RowMinDstTile rowMinDst(1, 16);
+        RowMinTmpTile rowMinTmp(1, kBinNum);
+        RowMinDstTile zeroTile(1, 16);
+        RowMinDstTile selOut(1, 16);
+        SelMaskRowTile selMask(1, 32);
+        TmpSelsTile tselTmp(1, 32);
+        TASSIGN(rowMinDst, kWinnerUbRowMinDst);
+        TASSIGN(rowMinTmp, kWinnerUbRowMinTmp);
+        TASSIGN(zeroTile, kWinnerUbSelZero);
+        TASSIGN(selOut, kWinnerUbSelOut);
+        TASSIGN(selMask, kWinnerUbSelMask);
+        TASSIGN(tselTmp, kWinnerUbTselTmp);
+        rowMinDst.SetValidRow(1);
+        rowMinDst.SetValidCol(1);
+        rowMinTmp.SetValidRow(1);
+        rowMinTmp.SetValidCol(kBinNum);
+        zeroTile.SetValidRow(1);
+        zeroTile.SetValidCol(1);
+        selOut.SetValidRow(1);
+        selOut.SetValidCol(1);
+        selMask.SetValidRow(1);
+        selMask.SetValidCol(1);
+        tselTmp.SetValidCol(32);
+        TROWMIN(rowMinDst, msbWinnerLanes, rowMinTmp);
+        TADDS(rowMinDst, rowMinDst, static_cast<uint32_t>(-1));
+        constexpr uint32_t kCmp256 = 256u;
+        TCMPS(selMask, rowMinDst, kCmp256, CmpMode::GT);
+        TSEL(selOut, selMask, zeroTile, rowMinDst, tselTmp);
+        TASSIGN(msbWinnerBin, kWinnerUbTmp);
+        msbWinnerBin.SetValidRow(1);
+        msbWinnerBin.SetValidCol(32);
+        GatherIdxU32Tile gatherIdx(1, 32);
+        TmpSelsTile gatherTmp(1, 32);
+        TASSIGN(gatherIdx, kWinnerUbRowMinTmp);
+        TASSIGN(gatherTmp, kWinnerUbTselTmp);
+        gatherIdx.SetValidRow(1);
+        gatherIdx.SetValidCol(32);
+        gatherTmp.SetValidCol(32);
+        TEXPANDS(gatherIdx, 0u);
+        TGATHER(msbWinnerBin, selOut, gatherIdx, gatherTmp);
+    }
+
+    {
+        using U32x32 = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, -1>;
+        U32x32 thrMsbT(1, 32);
+        U32x32 cwT(1, 32);
+        TmpSelsTile gatherTmp(1, 32);
+        TASSIGN(thrMsbT, kRemainUbTopk);
+        TASSIGN(cwT, kRemainUbCw);
+        TASSIGN(remainKTile, kRemainUbOut);
+        TASSIGN(gatherTmp, kWinnerUbRowMinTmp);
+        thrMsbT.SetValidRow(1);
+        thrMsbT.SetValidCol(32);
+        cwT.SetValidRow(1);
+        cwT.SetValidCol(32);
+        remainKTile.SetValidRow(1);
+        remainKTile.SetValidCol(32);
+        gatherTmp.SetValidCol(32);
+        constexpr uint32_t kThrMsbU = static_cast<uint32_t>(kN - TopK);
+        TEXPANDS(thrMsbT, kThrMsbU);
+        TGATHER(cwT, chistMSB, msbWinnerBin, gatherTmp);
+        TSUB(remainKTile, thrMsbT, cwT);
+    }
+}
+
+AICORE inline void Phase3_HistogramLsb(InTileU16<kN> &fullInTile, HistTile &tileHist, HistTile &chistLSB,
+                                       IdxFilterTile &idxFilter, WinnerBinTile &msbWinnerSaved)
+{
+    idxFilter.SetValidRow(1);
+    idxFilter.SetValidCol(1);
+    msbWinnerSaved.SetValidRow(1);
+    msbWinnerSaved.SetValidCol(1);
+    TCVT(idxFilter, msbWinnerSaved, RoundMode::CAST_TRUNC);
+
+    chistLSB.SetValidRow(1);
+    chistLSB.SetValidCol(kBinNum);
+    TEXPANDS(chistLSB, 0u);
+    THISTOGRAM<pto::HistByte::BYTE_0>(tileHist, fullInTile, idxFilter);
+    TMOV(chistLSB, tileHist);
+}
+
+AICORE inline uint16_t Phase4_WinnerLsbRemainKAndPackedThresholdTor(HistTile &chistLSB, RemainKTile &remainKTile,
+                                                                     WinnerBinTile &lsbWinnerBin,
+                                                                     WinnerBinTile &msbWinnerSaved)
+{
+    constexpr uint32_t kSelsFalse = 0xffffffffu;
+    WinnerLaneTile lsbWinnerLanes(1, kBinNum);
+    MaskCmpTile maskTile(1, kBinNum);
+    IdxU32Tile indexTile(1, kBinNum);
+    TmpSelsTile tmpSelsTile(1, 32);
+    TASSIGN(maskTile, kWinnerUbMask);
+    TASSIGN(indexTile, kWinnerUbIdx);
+    TASSIGN(lsbWinnerLanes, kWinnerUbGather);
+    TASSIGN(tmpSelsTile, kWinnerUbTmp);
+    maskTile.SetValidCol(kBinNum);
+    indexTile.SetValidCol(kBinNum);
+    lsbWinnerLanes.SetValidCol(kBinNum);
     tmpSelsTile.SetValidCol(32);
     chistLSB.SetValidCol(kBinNum);
     remainKTile.SetValidRow(1);
     remainKTile.SetValidCol(32);
-
     TCMPS(maskTile, chistLSB, remainKTile, CmpMode::GT);
     TCI<IdxU32Tile, IdxU32Tile, uint32_t, 0>(indexTile, static_cast<uint32_t>(0), indexTile);
-    constexpr uint32_t kSelsFalse = 0xffffffffu;
-    TSELS(outLanes, maskTile, indexTile, tmpSelsTile, kSelsFalse);
-}
+    TSELS(lsbWinnerLanes, maskTile, indexTile, tmpSelsTile, kSelsFalse);
 
-// TROWMIN + TGATHER broadcast. Caller must TASSIGN(outBin, ...) before call (do not force kWinnerUbTmp here).
-AICORE inline void WinnerLsbBinU32RowMinBroadcast(WinnerLaneTile &outLanes, WinnerBinTile &outBin)
-{
-    RowMinDstTile rowMinDst(1, 16);
-    RowMinTmpTile rowMinTmp(1, kBinNum);
+    TASSIGN(lsbWinnerBin, kWinnerUbTmp);
+    lsbWinnerBin.SetValidRow(1);
+    lsbWinnerBin.SetValidCol(32);
+    {
+        RowMinDstTile rowMinDst(1, 16);
+        RowMinTmpTile rowMinTmp(1, kBinNum);
+        TASSIGN(rowMinDst, kWinnerUbRowMinDst);
+        TASSIGN(rowMinTmp, kWinnerUbRowMinTmp);
+        rowMinDst.SetValidRow(1);
+        rowMinDst.SetValidCol(1);
+        rowMinTmp.SetValidRow(1);
+        rowMinTmp.SetValidCol(kBinNum);
+        TROWMIN(rowMinDst, lsbWinnerLanes, rowMinTmp);
+        GatherIdxU32Tile gatherIdx(1, 32);
+        TmpSelsTile gatherTmp(1, 32);
+        TASSIGN(gatherIdx, kWinnerUbRowMinTmp);
+        TASSIGN(gatherTmp, kWinnerUbTselTmp);
+        gatherIdx.SetValidRow(1);
+        gatherIdx.SetValidCol(32);
+        gatherTmp.SetValidCol(32);
+        TEXPANDS(gatherIdx, 0u);
+        TGATHER(lsbWinnerBin, rowMinDst, gatherIdx, gatherTmp);
+    }
 
-    TASSIGN(rowMinDst, kWinnerUbRowMinDst);
-    TASSIGN(rowMinTmp, kWinnerUbRowMinTmp);
-
-    rowMinDst.SetValidRow(1);
-    rowMinDst.SetValidCol(1);
-    rowMinTmp.SetValidRow(1);
-    rowMinTmp.SetValidCol(kBinNum);
-
-    TROWMIN(rowMinDst, outLanes, rowMinTmp);
-
-    outBin.SetValidRow(1);
-    outBin.SetValidCol(32);
-
-    GatherIdxU32Tile gatherIdx(1, 32);
-    TmpSelsTile gatherTmp(1, 32);
-    TASSIGN(gatherIdx, kWinnerUbRowMinTmp);
-    TASSIGN(gatherTmp, kWinnerUbTselTmp);
-    gatherIdx.SetValidRow(1);
-    gatherIdx.SetValidCol(32);
-    gatherTmp.SetValidCol(32);
-
-    TEXPANDS(gatherIdx, 0u);
-    // Broadcast rowMinDst[0] → outBin[*] (idx 0 repeats first element).
-    TGATHER(outBin, rowMinDst, gatherIdx, gatherTmp);
-}
-
-// TROWMIN → TADDS(-1) → TCMPS(GT,256) → TSEL(mask ? 0 : value) → TEXPANDS(0) idx → TGATHER → outBin (u32×32).
-// TSEL: mask true (value > 256) → src0 (zero); else → src1 (post-TADDS rowMinDst).
-AICORE inline void WinnerBinU8FromSelsMin(WinnerLaneTile &outLanes, WinnerBinTile &outBin)
-{
-    RowMinDstTile rowMinDst(1, 16);
-    RowMinTmpTile rowMinTmp(1, kBinNum);
-    RowMinDstTile zeroTile(1, 16);
-    RowMinDstTile selOut(1, 16);
-    SelMaskRowTile selMask(1, 32);
-    TmpSelsTile tselTmp(1, 32);
-
-    TASSIGN(rowMinDst, kWinnerUbRowMinDst);
-    TASSIGN(rowMinTmp, kWinnerUbRowMinTmp);
-    TASSIGN(zeroTile, kWinnerUbSelZero);
-    TASSIGN(selOut, kWinnerUbSelOut);
-    TASSIGN(selMask, kWinnerUbSelMask);
-    TASSIGN(tselTmp, kWinnerUbTselTmp);
-
-    rowMinDst.SetValidRow(1);
-    rowMinDst.SetValidCol(1);
-    rowMinTmp.SetValidRow(1);
-    rowMinTmp.SetValidCol(kBinNum);
-    zeroTile.SetValidRow(1);
-    zeroTile.SetValidCol(1);
-    selOut.SetValidRow(1);
-    selOut.SetValidCol(1);
-    selMask.SetValidRow(1);
-    selMask.SetValidCol(1);
-    tselTmp.SetValidCol(32);
-
-    TROWMIN(rowMinDst, outLanes, rowMinTmp);
-    TADDS(rowMinDst, rowMinDst, static_cast<uint32_t>(-1));
-    constexpr uint32_t kCmp256 = 256u;
-    TCMPS(selMask, rowMinDst, kCmp256, CmpMode::GT);
-    TSEL(selOut, selMask, zeroTile, rowMinDst, tselTmp);
-
-    TASSIGN(outBin, kWinnerUbTmp);
-    outBin.SetValidRow(1);
-    outBin.SetValidCol(32);
-
-    GatherIdxU32Tile gatherIdx(1, 32);
-    TmpSelsTile gatherTmp(1, 32);
-    TASSIGN(gatherIdx, kWinnerUbRowMinTmp);
-    TASSIGN(gatherTmp, kWinnerUbTselTmp);
-    gatherIdx.SetValidRow(1);
-    gatherIdx.SetValidCol(32);
-    gatherTmp.SetValidCol(32);
-
-    TEXPANDS(gatherIdx, 0u);
-    TGATHER(outBin, selOut, gatherIdx, gatherTmp);
-}
-
-// (msb<<8)|lsb in uint16 bit pattern: TCVT u32→u16 from winner bins, TSHLS<<8 on MSB, TOR with LSB.
-// UB: kRemainUbTopk, SumAbove, Cw, Out — only after no more vector use of remainKTile at kRemainUbOut.
-AICORE inline uint16_t PackedThresholdU16ViaShlOr(WinnerBinTile &msbWinnerBin, WinnerBinTile &lsbWinnerBin)
-{
     PackedU16Tile msbU(1, 32);
     PackedU16Tile hiU(1, 32);
     PackedU16Tile lsbU(1, 32);
     PackedU16Tile outU(1, 32);
-
     TASSIGN(msbU, kRemainUbTopk);
     TASSIGN(hiU, kRemainUbSumAbove);
     TASSIGN(lsbU, kRemainUbCw);
     TASSIGN(outU, kRemainUbOut);
-
-    msbWinnerBin.SetValidRow(1);
-    msbWinnerBin.SetValidCol(1);
+    msbWinnerSaved.SetValidRow(1);
+    msbWinnerSaved.SetValidCol(1);
     lsbWinnerBin.SetValidRow(1);
     lsbWinnerBin.SetValidCol(1);
     msbU.SetValidRow(1);
@@ -291,126 +329,78 @@ AICORE inline uint16_t PackedThresholdU16ViaShlOr(WinnerBinTile &msbWinnerBin, W
     lsbU.SetValidCol(1);
     outU.SetValidRow(1);
     outU.SetValidCol(1);
-
-    TCVT(msbU, msbWinnerBin, RoundMode::CAST_TRUNC);
+    TCVT(msbU, msbWinnerSaved, RoundMode::CAST_TRUNC);
     constexpr uint16_t kShift8 = 8u;
     TSHLS(hiU, msbU, kShift8);
     TCVT(lsbU, lsbWinnerBin, RoundMode::CAST_TRUNC);
     TOR(outU, hiU, lsbU);
     set_flag(PIPE_V, PIPE_S, EVENT_ID1);
     wait_flag(PIPE_V, PIPE_S, EVENT_ID1);
-
     __ubuf__ const uint16_t *po = reinterpret_cast<__ubuf__ const uint16_t *>(outU.data());
     return po[0];
 }
 
-AICORE inline void LsbWinnerBinFromChistTiles(HistTile &chistLSB, RemainKTile &remainKTile, WinnerBinTile &lsbWinnerBin)
-{
-    WinnerLaneTile lsbWinnerLanes(1, kBinNum);
-    LsbHistGeRemainKToLanes(chistLSB, remainKTile, lsbWinnerLanes);
-
-    TASSIGN(lsbWinnerBin, kWinnerUbTmp);
-    lsbWinnerBin.SetValidRow(1);
-    lsbWinnerBin.SetValidCol(32);
-    WinnerLsbBinU32RowMinBroadcast(lsbWinnerLanes, lsbWinnerBin);
-}
-
-// remainK = thr_msb - C[w]; w = TGATHER index from WinnerBinU8FromSelsMin (TROWMIN bin + TADDS(-1)), not raw winner.
 template <int TopK>
-AICORE inline void RemainKMsbFromTiles(HistTile &chistMSB, WinnerBinTile &winnerBinU32, RemainKTile &remainKTile)
+AICORE inline void Phase5_TgatherGtEqTconcatAndStore(uint16_t packedThreshold, __gm__ uint32_t *outIdx)
 {
-    using U32x32 = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, -1>;
-    U32x32 thrMsbT(1, 32);
-    U32x32 cwT(1, 32);
-    TmpSelsTile gatherTmp(1, 32);
-
-    TASSIGN(thrMsbT, kRemainUbTopk);
-    TASSIGN(cwT, kRemainUbCw);
-    TASSIGN(remainKTile, kRemainUbOut);
-    TASSIGN(gatherTmp, kWinnerUbRowMinTmp);
-
-    thrMsbT.SetValidRow(1);
-    thrMsbT.SetValidCol(32);
-    cwT.SetValidRow(1);
-    cwT.SetValidCol(32);
-    remainKTile.SetValidRow(1);
-    remainKTile.SetValidCol(32);
-    gatherTmp.SetValidCol(32);
-
-    constexpr uint32_t kThrMsbU = static_cast<uint32_t>(kN - TopK);
-    TEXPANDS(thrMsbT, kThrMsbU);
-
-    TGATHER(cwT, chistMSB, winnerBinU32, gatherTmp);
-
-    TSUB(remainKTile, thrMsbT, cwT);
-}
-
-// THISTOGRAM<false> idx filter: MSB byte = raw winner (TROWMIN min bin), not WinnerBinU8FromSelsMin (-1) tile.
-AICORE inline void FillIdxMsbFromWinnerBin(IdxFilterTile &idxTile, WinnerBinTile &winnerMsbRawU32)
-{
-    idxTile.SetValidRow(1);
-    idxTile.SetValidCol(1);
-    winnerMsbRawU32.SetValidRow(1);
-    winnerMsbRawU32.SetValidCol(1);
-    TCVT(idxTile, winnerMsbRawU32, RoundMode::CAST_TRUNC);
-}
-
-// Full 1×ValidCols UB slice at gmBase; lane index offset 0. ConcatTile at ubConcat holds match count (TGATHER).
-template <CmpMode mode, int ValidCols>
-AICORE inline void GatherCmpToTile(uint16_t threshold, int gmBase, int validCols, uint64_t ubDst, uint64_t ubConcat)
-{
-    using DstTile = Tile<TileType::Vec, uint32_t, 1, ValidCols, BLayout::RowMajor, -1, -1>;
-    GatherSrcI16<ValidCols> srcTile(1, validCols);
-    DstTile dstTile(1, ValidCols);
-    using ConcatTile = GatherConcatCountTile;
-    constexpr int cmpVCol = (ValidCols + 7) / 8;
-    constexpr int cmpCol = (cmpVCol + 31) / 32 * 32;
-    using TmpTile = Tile<TileType::Vec, uint8_t, 1, cmpCol, BLayout::RowMajor, -1, -1>;
-
-    ConcatTile concatTile(1, 1);
-    TmpTile tmpTile(1, cmpVCol);
-
-    // After winner/concat scratch (≥0x28040); 8192 bytes for N=65536 (cmpVCol=8192).
+    constexpr uint64_t kFullGatherGtDst = 0x30000;
+    constexpr uint64_t kFullGatherEqDst = 0x38000;
+    constexpr uint64_t kChunkConcatGt = 0x28000;
+    constexpr uint64_t kChunkConcatEq = 0x28040;
+    constexpr uint64_t kUbMerged = 0x0;
     constexpr uint64_t kGatherUbTmp = 0x29000;
-    TASSIGN(dstTile, ubDst);
-    TASSIGN(concatTile, ubConcat);
-    TASSIGN(tmpTile, kGatherUbTmp);
+    constexpr int cmpVCol = (kN + 7) / 8;
+    constexpr int cmpCol = (cmpVCol + 31) / 32 * 32;
+    using DstTile = Tile<TileType::Vec, uint32_t, 1, kN, BLayout::RowMajor, -1, -1>;
+    using TmpGatherTile = Tile<TileType::Vec, uint8_t, 1, cmpCol, BLayout::RowMajor, -1, -1>;
 
-    AssignGatherChunkUb<ValidCols>(srcTile, gmBase, validCols);
+    GatherFullU32 gtChunk(1, kN);
+    GatherFullU32 eqChunk(1, kN);
+    GatherConcatCountTile idxGtCnt(1, 1);
+    GatherConcatCountTile idxEqCnt(1, 1);
+    TASSIGN(gtChunk, kFullGatherGtDst);
+    TASSIGN(eqChunk, kFullGatherEqDst);
+    TASSIGN(idxGtCnt, kChunkConcatGt);
+    TASSIGN(idxEqCnt, kChunkConcatEq);
 
-    int16_t kBits;
-    {
-        uint16_t t = threshold;
-        kBits = *reinterpret_cast<const int16_t *>(&t);
-    }
-    if constexpr (mode == CmpMode::GT) {
-        TGATHER<DstTile, GatherSrcI16<ValidCols>, ConcatTile, TmpTile, CmpMode::GT, 0u>(dstTile, srcTile, kBits,
-                                                                                         concatTile, tmpTile);
-    } else {
-        TGATHER<DstTile, GatherSrcI16<ValidCols>, ConcatTile, TmpTile, CmpMode::EQ, 0u>(dstTile, srcTile, kBits,
-                                                                                        concatTile, tmpTile);
-    }
+    using MergedIdxTile = Tile<TileType::Vec, uint32_t, 1, 2 * TopK, BLayout::RowMajor, -1, -1>;
+    MergedIdxTile mergedIdx(1, 2 * TopK);
+    TASSIGN(mergedIdx, kUbMerged);
+    mergedIdx.SetValidRow(1);
+    mergedIdx.SetValidCol(2 * TopK);
+    idxGtCnt.SetValidRow(1);
+    idxGtCnt.SetValidCol(1);
+    idxEqCnt.SetValidRow(1);
+    idxEqCnt.SetValidCol(1);
+
+    GatherSrcI16<kN> srcGt(1, kN);
+    TmpGatherTile tmpGt(1, cmpVCol);
+    TASSIGN(tmpGt, kGatherUbTmp);
+    srcGt.SetValidCol(kN);
+    TASSIGN(srcGt, kUbFullKeys);
+    int16_t kBitsGt = *reinterpret_cast<const int16_t *>(&packedThreshold);
+    TGATHER<DstTile, GatherSrcI16<kN>, GatherConcatCountTile, TmpGatherTile, CmpMode::GT, 0u>(gtChunk, srcGt, kBitsGt,
+                                                                                              idxGtCnt, tmpGt);
+
+    GatherSrcI16<kN> srcEq(1, kN);
+    TmpGatherTile tmpEq(1, cmpVCol);
+    TASSIGN(tmpEq, kGatherUbTmp);
+    srcEq.SetValidCol(kN);
+    TASSIGN(srcEq, kUbFullKeys);
+    int16_t kBitsEq = *reinterpret_cast<const int16_t *>(&packedThreshold);
+    TGATHER<DstTile, GatherSrcI16<kN>, GatherConcatCountTile, TmpGatherTile, CmpMode::EQ, 0u>(eqChunk, srcEq, kBitsEq,
+                                                                                              idxEqCnt, tmpEq);
+
+    TCONCAT_IMPL(mergedIdx, gtChunk, eqChunk, idxGtCnt, idxEqCnt);
+
+    mergedIdx.SetValidRow(1);
+    mergedIdx.SetValidCol(TopK);
+    using OutShape = pto::Shape<1, 1, 1, 1, TopK>;
+    using OutStride = pto::Stride<TopK, TopK, TopK, TopK, 1>;
+    GlobalTensor<uint32_t, OutShape, OutStride> outGlobal(outIdx);
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
-}
-
-// After MSB cumulative hist: raw MSB → msbWinnerSaved (idx + packed MSB); (-1) bin → msbWinnerBin for RemainK TGATHER.
-template <int TopK>
-AICORE inline void MsbWinnerRemainKAndSaveTile(HistTile &chistMSB, WinnerBinTile &msbWinnerBin, RemainKTile &remainKTile,
-                                               WinnerBinTile &msbWinnerSaved)
-{
-    constexpr uint32_t kThrMsb = static_cast<uint32_t>(kN - TopK);
-    WinnerLaneTile msbWinnerLanes(1, kBinNum);
-    FindWinnerBucketDescending(chistMSB, kThrMsb, msbWinnerLanes);
-
-    TASSIGN(msbWinnerSaved, kMsbWinnerSavedUb);
-    msbWinnerSaved.SetValidRow(1);
-    msbWinnerSaved.SetValidCol(32);
-    // Same as LSB path: TROWMIN + broadcast, no TADDS(-1) — raw MSB winner bin for THISTOGRAM<false> / packed high byte.
-    WinnerLsbBinU32RowMinBroadcast(msbWinnerLanes, msbWinnerSaved);
-
-    WinnerBinU8FromSelsMin(msbWinnerLanes, msbWinnerBin);
-    RemainKMsbFromTiles<TopK>(chistMSB, msbWinnerBin, remainKTile);
+    TSTORE(outGlobal, mergedIdx);
 }
 
 template <int TopK>
@@ -425,84 +415,20 @@ __global__ AICORE void RunRadixTopKDraft(__gm__ uint16_t *src, __gm__ uint32_t *
     HistTile chistLSB(1, kBinNum);
     IdxFilterTile idxFilter(1, 1);
 
-    TASSIGN(fullInTile, kUbFullKeys);
-    TASSIGN(tileHist, kUbTileHist);
-    TASSIGN(chistMSB, kUbChistMSB);
-    TASSIGN(chistLSB, kUbChistLSB);
-    TASSIGN(idxFilter, kUbIdxFilter);
-
-    // Single GM load of full input; histograms and gather use UB only afterward.
-    LoadTileU16(fullInTile, src, 0, kN);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-
-    // Pass 1: MSB histogram (full width)
-    ZeroHist(chistMSB);
-    THISTOGRAM<pto::HistByte::BYTE_1>(tileHist, fullInTile, idxFilter);
-    TMOV(chistMSB, tileHist);
+    Phase1_LoadAndHistogramMsb(src, fullInTile, tileHist, chistMSB, chistLSB, idxFilter);
 
     WinnerBinTile msbWinnerBin(1, 32);
     RemainKTile remainKTile(1, 32);
     WinnerBinTile msbWinnerSaved(1, 32);
     WinnerBinTile lsbWinnerBin(1, 32);
-    MsbWinnerRemainKAndSaveTile<TopK>(chistMSB, msbWinnerBin, remainKTile, msbWinnerSaved);
+    Phase2_WinnerMsbAndRemainK<TopK>(chistMSB, msbWinnerBin, remainKTile, msbWinnerSaved);
 
-    // Pass 2: LSB histogram (THISTOGRAM<false>, idx = raw MSB winner byte). Reuse full in-UB buffer.
-    FillIdxMsbFromWinnerBin(idxFilter, msbWinnerSaved);
-    ZeroHist(chistLSB);
-    THISTOGRAM<pto::HistByte::BYTE_0>(tileHist, fullInTile, idxFilter);
-    TMOV(chistLSB, tileHist);
-    // LSB winner path overwrites kWinnerUbTmp; msbWinnerSaved already holds raw MSB (kMsbWinnerSavedUb) for packedThreshold.
-    LsbWinnerBinFromChistTiles(chistLSB, remainKTile, lsbWinnerBin);
-    uint16_t packedThreshold = PackedThresholdU16ViaShlOr(msbWinnerSaved, lsbWinnerBin);
+    Phase3_HistogramLsb(fullInTile, tileHist, chistLSB, idxFilter, msbWinnerSaved);
 
-    // Compare-gather: full 1×kN TGATHER dst (kN×4 bytes each). Placed after gather tmp [0x29000, 0x2B000).
-    constexpr uint64_t kFullGatherGtDst = 0x30000;
-    constexpr uint64_t kFullGatherEqDst = 0x38000;
-    constexpr uint64_t kChunkConcatGt = 0x28000;
-    constexpr uint64_t kChunkConcatEq = 0x28040;
+    const uint16_t packedThreshold =
+        Phase4_WinnerLsbRemainKAndPackedThresholdTor(chistLSB, remainKTile, lsbWinnerBin, msbWinnerSaved);
 
-    GatherFullU32 gtChunk(1, kN);
-    GatherFullU32 eqChunk(1, kN);
-    GatherConcatCountTile idxGtCnt(1, 1);
-    GatherConcatCountTile idxEqCnt(1, 1);
-
-    TASSIGN(gtChunk, kFullGatherGtDst);
-    TASSIGN(eqChunk, kFullGatherEqDst);
-    TASSIGN(idxGtCnt, kChunkConcatGt);
-    TASSIGN(idxEqCnt, kChunkConcatEq);
-
-    // mergedIdx: 2×TopK u32 immediately after EQ buffer (0x80000 + kN×4 = 0xC0000).
-    constexpr uint64_t kUbMerged = 0x0;
-
-    using MergedIdxTile = Tile<TileType::Vec, uint32_t, 1, 2 * TopK, BLayout::RowMajor, -1, -1>;
-
-    MergedIdxTile mergedIdx(1, 2 * TopK);
-
-    TASSIGN(mergedIdx, kUbMerged);
-
-    mergedIdx.SetValidRow(1);
-    mergedIdx.SetValidCol(2 * TopK);
-    idxGtCnt.SetValidRow(1);
-    idxGtCnt.SetValidCol(1);
-    idxEqCnt.SetValidRow(1);
-    idxEqCnt.SetValidCol(1);
-
-    const uint32_t kTopKU = static_cast<uint32_t>(TopK);
-    GatherCmpToTile<CmpMode::GT, kN>(packedThreshold, 0, kN, kFullGatherGtDst, kChunkConcatGt);
-
-    GatherCmpToTile<CmpMode::EQ, kN>(packedThreshold, 0, kN, kFullGatherEqDst, kChunkConcatEq);
-
-    TCONCAT_IMPL(mergedIdx, gtChunk, eqChunk, idxGtCnt, idxEqCnt);
-    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID2);
-    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID2);
-
-    mergedIdx.SetValidRow(1);
-    mergedIdx.SetValidCol(TopK);
-    using OutShape = pto::Shape<1, 1, 1, 1, TopK>;
-    using OutStride = pto::Stride<TopK, TopK, TopK, TopK, 1>;
-    GlobalTensor<uint32_t, OutShape, OutStride> outGlobal(outIdx);
-    TSTORE(outGlobal, mergedIdx);
+    Phase5_TgatherGtEqTconcatAndStore<TopK>(packedThreshold, outIdx);
 }
 
 } // namespace topk_radix_detail
