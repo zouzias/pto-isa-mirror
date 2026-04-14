@@ -82,7 +82,7 @@ DMA backend selection for `TPUT_ASYNC` and `TGET_ASYNC`:
 | Value | Description |
 |-------|-------------|
 | `DmaEngine::SDMA` | SDMA engine (supports 2D transfer) |
-| `DmaEngine::URMA` | URMA engine (supports 1D transfer, Ascend950 / NPU_ARCH 3510 only) |
+| `DmaEngine::URMA` | URMA engine (supports 1D transfer, todo) |
 
 ### AsyncEvent
 
@@ -123,7 +123,7 @@ struct ParallelGroup {
     GlobalData *tensors;
     int nranks;   // Number of ranks
     int rootIdx;  // Root NPU's rank index
-    
+
     // Factory function (recommended): build from an existing tensor array.
     static ParallelGroup Create(GlobalData *tensorArray, int size, int rank_id);
 };

@@ -27,8 +27,8 @@ PTO_INTERNAL void runTColMin(__gm__ T *out, __gm__ T *src, bool isBinary)
     using DstTileData = Tile<TileType::Vec, T, dstRow, col, BLayout::RowMajor, -1, -1>;
     SrcTileData srcTile(srcValidRow, validCol);
     DstTileData dstTile(dstRow, validCol);
-    TASSIGN<0x0>(srcTile);
-    TASSIGN<srcRow * col * sizeof(T)>(dstTile);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, srcRow * col * sizeof(T));
 
     // 搬运数据
     TLOAD(srcTile, srcGlobal);

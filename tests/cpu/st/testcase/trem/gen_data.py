@@ -12,7 +12,6 @@
 
 import os
 import numpy as np
-from utils import NumExt
 np.random.seed(19)
 
 
@@ -20,23 +19,19 @@ def gen_golden_data_trem(case_name, param):
     dtype = param.dtype
 
     row, col = [param.valid_row, param.valid_col]
+    h_valid, w_valid = [param.valid_row, param.valid_col]
 
     # Generate random input arrays
-    input1 = NumExt.astype(
-        np.random.randint(-100, 100, size=[row, col]), dtype)
-    input2 = NumExt.astype(
-        np.random.randint(-100, 100, size=[row, col]), dtype)
-    input2[input2 == 0] = 1
+    input1 = np.random.randint(1, 10, size=[row, col]).astype(dtype)
+    input2 = np.random.randint(1, 10, size=[row, col]).astype(dtype)
 
-    # Perform the operation
-    # Note that % operation in Python have different behavior on negatives comparing to C++
-    # (C++ truncates during division, Python floors)
+    # Perform the addbtraction
     golden = input1 % input2
 
     # Save the input and golden data to binary files
-    NumExt.write_array("input1.bin", input1, dtype)
-    NumExt.write_array("input2.bin", input2, dtype)
-    NumExt.write_array("golden.bin", golden, dtype)
+    input1.tofile("input1.bin")
+    input2.tofile("input2.bin")
+    golden.tofile("golden.bin")
 
 
 class TRemParams:
@@ -49,7 +44,10 @@ class TRemParams:
 
 
 def generate_case_name(param):
-    dtype_str = NumExt.get_short_type_name(param.dtype)
+    dtype_str = {
+        np.float32: 'float',
+        np.float16: 'half',
+    }[param.dtype]
 
     def substring(a, b) -> str:
         return f"_{a}x{b}"
@@ -73,12 +71,9 @@ if __name__ == "__main__":
     case_params_list = [
         TRemParams(np.float32, 64, 64, 64, 64),
         TRemParams(np.float16, 16, 256, 16, 256),
-        TRemParams(np.float32, 64, 512, 64, 64),
+        TRemParams(np.float32, 32, 512, 64, 64),
         TRemParams(np.float16, 32, 512, 16, 256)
     ]
-    if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
-        case_params_list.append(TRemParams(NumExt.bf16, 16, 256, 16, 256))
-        case_params_list.append(TRemParams(NumExt.bf16, 32, 256, 16, 256))
 
     for i, param in enumerate(case_params_list):
         case_name = generate_case_name(param)

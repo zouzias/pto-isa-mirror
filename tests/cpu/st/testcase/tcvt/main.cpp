@@ -15,7 +15,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace std;
 using namespace PtoTestCommon;
 
-template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_, pto::SaturationMode saturation>
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void launchTCVT(D *dst, S *src, void *stream);
 
 class TCVTTest : public testing::Test {
@@ -35,8 +35,7 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_,
-          pto::SaturationMode saturation = pto::SaturationMode::OFF>
+template <typename D, typename S, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 void test_tcvt()
 {
     uint32_t M = kGRows_;
@@ -62,7 +61,7 @@ void test_tcvt()
     CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/x1_gm.bin", srcFileSize, srcHost, srcFileSize));
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_, saturation>(dstDevice, srcDevice, stream);
+    launchTCVT<D, S, kGRows_, kGCols_, kTRows_, kTCols_>(dstDevice, srcDevice, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -132,34 +131,4 @@ TEST_F(TCVTTest, case8)
 TEST_F(TCVTTest, case9)
 {
     test_tcvt<uint8_t, aclFloat16, 64, 64, 64, 64>();
-}
-
-TEST_F(TCVTTest, case10)
-{
-    test_tcvt<float, int32_t, 64, 64, 64, 64, pto::SaturationMode::ON>();
-}
-
-TEST_F(TCVTTest, case11)
-{
-    test_tcvt<float, int8_t, 128, 128, 128, 128, pto::SaturationMode::ON>();
-}
-
-TEST_F(TCVTTest, case12)
-{
-    test_tcvt<uint8_t, float, 64, 64, 64, 64, pto::SaturationMode::ON>();
-}
-
-TEST_F(TCVTTest, case13)
-{
-    test_tcvt<int16_t, int32_t, 64, 64, 64, 64, pto::SaturationMode::ON>();
-}
-
-TEST_F(TCVTTest, case14)
-{
-    test_tcvt<int8_t, aclFloat16, 32, 32, 32, 32, pto::SaturationMode::ON>();
-}
-
-TEST_F(TCVTTest, case15)
-{
-    test_tcvt<uint8_t, aclFloat16, 64, 64, 64, 64, pto::SaturationMode::ON>();
 }

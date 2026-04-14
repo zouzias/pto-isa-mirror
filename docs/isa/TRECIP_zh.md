@@ -108,4 +108,3 @@ void example() {
 # AS Level 2 (DPS)
 pto.trecip ins(%src : !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
 ```
-

@@ -12,7 +12,6 @@
 
 import os
 import numpy as np
-from utils import NumExt
 
 np.random.seed(19)
 
@@ -21,11 +20,11 @@ def gen_golden_data_tcolexpand(param):
     dtype = param.dtype
     row, col = [param.tile_row, param.tile_col]
 
-    input1 = NumExt.astype(np.random.uniform(low=-16, high=16, size=[row, col]), dtype)
-    golden = NumExt.astype(np.tile(input1[0:1, :], (row, 1)), dtype)
+    input1 = np.random.uniform(low=-16, high=16, size=[row, col]).astype(dtype)
+    golden = np.tile(input1[0:1, :], (row, 1)).astype(dtype)
 
-    NumExt.write_array("input1.bin", input1, dtype)
-    NumExt.write_array("golden.bin", golden, dtype)
+    input1.tofile("input1.bin")
+    golden.tofile("golden.bin")
 
 
 class TColExpandParams:
@@ -40,7 +39,7 @@ class TColExpandParams:
 
 
 def generate_case_name(param):
-    dtype_str = NumExt.get_short_type_name(param.dtype)
+    dtype_str = {np.float32: "float", np.float16: "half"}[param.dtype]
 
     def substring(a, b) -> str:
         return f"_{a}x{b}"
@@ -57,8 +56,6 @@ if __name__ == "__main__":
         TColExpandParams(np.float32, 64, 64, 64, 64, 64, 64),
         TColExpandParams(np.float16, 16, 256, 16, 256, 16, 256),
     ]
-    if os.getenv("PTO_CPU_SIM_ENABLE_BF16") == "1":
-        case_params_list.append(TColExpandParams(NumExt.bf16, 16, 256, 16, 256, 16, 256))
 
     for param in case_params_list:
         case_name = generate_case_name(param)

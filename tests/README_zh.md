@@ -2,6 +2,16 @@
 
 PTO Tile Lib 的测试与示例，覆盖 CPU 仿真与 NPU（`sim` 和板上 `npu` 两种模式）。
 
+## 测试入口
+
+常见测试入口如下：
+
+- CPU Simulator 全量运行：`python3 tests/run_cpu.py --clean --verbose`
+- GEMM demo：`python3 tests/run_cpu.py --demo gemm --verbose`
+- Flash Attention demo：`python3 tests/run_cpu.py --demo flash_attn --verbose`
+- 单个 ST 用例：`python3 tests/script/run_st.py -r [sim|npu] -v [a3|a5] -t [TEST_CASE] -g [GTEST_FILTER_CASE]`
+- 一键脚本：`./tests/run_st.sh`、`./tests/run_cpu_tests.sh`
+
 ## 目录结构
 
 - `script/`：推荐的入口脚本

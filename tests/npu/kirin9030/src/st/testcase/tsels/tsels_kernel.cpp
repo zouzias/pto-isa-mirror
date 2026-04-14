@@ -18,8 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kPadValue_>
-struct GenericDataSelector {
-};
+struct GenericDataSelector {};
 
 template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_>
 struct GenericDataSelector<T, kGRows_, kGCols_, kTRows_, kTCols_, PAD_VALUE_NULL> {
@@ -50,10 +49,10 @@ __global__ AICORE void runTSELS(__gm__ T *out, __gm__ T *src0, __gm__ T *src1, u
     TileData src1Tile;
     TileData dstTile;
     TmpTile tmpTile(1, 32);
-    TASSIGN<0x0 + 0x400 * block_idx>(src0Tile);
-    TASSIGN<0x4000 + 0x400 * block_idx>(src1Tile);
-    TASSIGN<0x8000 + 0x400 * block_idx>(dstTile);
-    TASSIGN<0x12000>(tmpTile);
+    TASSIGN(src0Tile, 0x0 + 0x400 * block_idx);
+    TASSIGN(src1Tile, 0x4000 + 0x400 * block_idx);
+    TASSIGN(dstTile, 0x8000 + 0x400 * block_idx);
+    TASSIGN(tmpTile, 0x12000);
     int offset = (block_idx / 4) * (64 * 16) + (block_idx % 4) * 16;
     GlobalData src0Global(src0 + offset);
     GlobalData src1Global(src1 + offset);

@@ -49,15 +49,15 @@ AICORE inline void runTEXTRACT(__gm__ T *out, __gm__ U *src0, __gm__ S *src1)
 
     TileMatAData aMatTile;
     TileMatBData bMatTile;
-    TASSIGN<0x0>(aMatTile);
-    TASSIGN<M * K * sizeof(U)>(bMatTile);
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, M * K * sizeof(U));
 
     LeftTile aTile;
     RightTile bTile;
     ResTile cTile;
-    TASSIGN<0x0>(aTile);
-    TASSIGN<0x0>(bTile);
-    TASSIGN<0x0>(cTile);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);
@@ -120,8 +120,8 @@ AICORE inline void runTEXTRACT_DYNAMIC(__gm__ T *out, __gm__ U *src0, __gm__ S *
 
     TileMatAData aMatTile(m, k);
     TileMatBData bMatTile(k, n);
-    TASSIGN<0x0>(aMatTile);
-    TASSIGN<M * K * sizeof(U)>(bMatTile);
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile, M * K * sizeof(U));
 
     int validM = m - indexM;
     int validK = k - indexK;
@@ -130,9 +130,9 @@ AICORE inline void runTEXTRACT_DYNAMIC(__gm__ T *out, __gm__ U *src0, __gm__ S *
     LeftTile aTile(validM, validK);
     RightTile bTile(validN);
     ResTile cTile(validM);
-    TASSIGN<0x0>(aTile);
-    TASSIGN<0x0>(bTile);
-    TASSIGN<0x0>(cTile);
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile, 0x0);
+    TASSIGN(cTile, 0x0);
 
     /*************************************TLOAD****************************************/
     TLOAD(aMatTile, src0Global);

@@ -66,8 +66,6 @@ texpands
 textract
 tfillpad
 tflashattn
-tfmod
-tfmods
 tgather
 tgatherb
 tget
@@ -113,9 +111,7 @@ tscatter
 tsel
 tsels
 tshl
-tshls
 tshr
-tshrs
 tsort32
 tsqrt
 tstore

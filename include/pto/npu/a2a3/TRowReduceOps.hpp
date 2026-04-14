@@ -286,8 +286,8 @@ PTO_INTERNAL void TRowReduceInstr(__ubuf__ T *dst, __ubuf__ T *src, __ubuf__ T *
             return;
         }
         // 将满足一次repeat部分copy到dst
-        pto_copy_ubuf_to_ubuf(tmp, src, validRow, BLOCK_MAX_PER_REPEAT, srcRptStride - BLOCK_MAX_PER_REPEAT,
-                              tmpRptStride - BLOCK_MAX_PER_REPEAT);
+        copy_ubuf_to_ubuf(tmp, src, 0, validRow, BLOCK_MAX_PER_REPEAT, srcRptStride - BLOCK_MAX_PER_REPEAT,
+                          tmpRptStride - BLOCK_MAX_PER_REPEAT);
         pipe_barrier(PIPE_V);
     }
 

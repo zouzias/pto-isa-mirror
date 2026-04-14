@@ -82,7 +82,7 @@ comm::TTEST(signal, 1, comm::WaitCmp::GE);
 | 值 | 说明 |
 |-------|-------------|
 | `DmaEngine::SDMA` | SDMA 引擎（支持二维传输）|
-| `DmaEngine::URMA` | URMA 引擎（支持一维传输，仅 Ascend950 / NPU_ARCH 3510）|
+| `DmaEngine::URMA` | URMA 引擎（支持一维传输，待实现）|
 
 ### AsyncEvent
 
@@ -128,4 +128,3 @@ struct ParallelGroup {
     static ParallelGroup Create(GlobalData *tensorArray, int size, int rank_id);
 };
 ```
-

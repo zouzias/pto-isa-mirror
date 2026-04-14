@@ -1668,7 +1668,7 @@ private:
 #endif
 };
 
-#if defined(PTO_NPU_ARCH_A2A3) || defined(PTO_NPU_ARCH_KIRINX90)
+#ifdef PTO_NPU_ARCH_A2A3
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::RowMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;
@@ -1678,7 +1678,7 @@ using TileLeftCompact = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::Ro
                              SLayout::RowMajor, TileConfig::fractalABSize, PadValue::Null, CompactMode::Normal>;
 #endif
 
-#if (!defined(PTO_NPU_ARCH_A2A3) && !defined(PTO_NPU_ARCH_KIRINX90)) || defined(__CPU_SIM) || defined(__COSTMODEL)
+#if !defined(PTO_NPU_ARCH_A2A3) || defined(__CPU_SIM) || defined(__COSTMODEL)
 template <typename Element_, const int Rows_, const int Cols_, const int RowValid_ = Rows_, const int ColValid_ = Cols_>
 using TileLeft = Tile<TileType::Left, Element_, Rows_, Cols_, BLayout::ColMajor, RowValid_, ColValid_,
                       SLayout::RowMajor, TileConfig::fractalABSize>;
@@ -1722,16 +1722,14 @@ using TileAccCompact = Tile<TileType::Acc, Element_, Rows_, Cols_, BLayout::ColM
                             SLayout::RowMajor, TileConfig::fractalCSize, PadValue::Null, CompactMode::Normal>;
 
 template <typename T>
-struct is_global : std::false_type {
-};
+struct is_global : std::false_type {};
 template <typename T>
 struct is_tile : std::false_type {
     static constexpr SLayout layout_enum = SLayout::NoneBox;
 };
 
 template <typename Element_, typename Shape_, typename Stride_, Layout Layout_>
-struct is_global<GlobalTensor<Element_, Shape_, Stride_, Layout_>> : std::true_type {
-};
+struct is_global<GlobalTensor<Element_, Shape_, Stride_, Layout_>> : std::true_type {};
 
 template <TileType Loc_, typename Element_, const int Rows_, const int Cols_, const BLayout BFractal_,
           const int RowValid_, const int ColValid_, const SLayout SFractal_, const int SFractalSize_,
@@ -1746,11 +1744,9 @@ template <typename T>
 constexpr bool is_boxed_tile = is_tile<T>::value && (is_tile<T>::layout_enum != SLayout::NoneBox);
 
 template <typename T>
-struct is_conv_tile : std::false_type {
-};
+struct is_conv_tile : std::false_type {};
 template <TileType Loc_, typename Element_, const int BufferSize_, Layout Layout_, typename Shape_>
-struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {
-};
+struct is_conv_tile<ConvTile<Loc_, Element_, BufferSize_, Layout_, Shape_>> : std::true_type {};
 
 template <typename tile_shape>
 struct is_Nz_layout {

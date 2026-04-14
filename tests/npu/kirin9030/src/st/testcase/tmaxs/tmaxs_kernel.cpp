@@ -18,8 +18,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 using namespace pto;
 
 template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int kVRows_, int kVCols_, int kPadValue_>
-struct GenericDataSelector {
-};
+struct GenericDataSelector {};
 
 template <typename T, int dstRow, int dstCol, int srcRow, int srcCol, int kVRows_, int kVCols_>
 struct GenericDataSelector<T, dstRow, dstCol, srcRow, srcCol, kVRows_, kVCols_, PAD_VALUE_NULL> {
@@ -54,8 +53,8 @@ __global__ AICORE void runTMAXS(__gm__ T *out, __gm__ T *src0, __gm__ T *scalar)
     using srcTileData = typename GDS::srcTileType;
     srcTileData src0Tile;
     dstTileData dstTile;
-    TASSIGN<0x0 + 0x400 * block_idx>(src0Tile);
-    TASSIGN<0x8000 + 0x400 * block_idx>(dstTile);
+    TASSIGN(src0Tile, 0x0 + 0x400 * block_idx);
+    TASSIGN(dstTile, 0x8000 + 0x400 * block_idx);
 
     int offset = 0;
     srcGlobalType src0Global(src0 + offset);

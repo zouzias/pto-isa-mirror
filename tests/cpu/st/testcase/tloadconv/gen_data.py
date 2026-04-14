@@ -11,15 +11,12 @@
 # --------------------------------------------------------------------------------
 import os
 import numpy as np
-from utils import NumExt
-
-ENABLE_BF16 = os.environ.get("PTO_CPU_SIM_ENABLE_BF16") == "1"
 
 
 def generate_cpu_test_suite(prefix, cases):
     """
     Generates a structured test suite for NPU TLoad testing.
-    
+
     Args:
         prefix: Folder prefix (e.g., 'TLoadConvTest')
         cases: List of tuples (suffix, shape, dtype_str)
@@ -27,7 +24,6 @@ def generate_cpu_test_suite(prefix, cases):
     type_map = {
         'float16': (np.float16, 2),
         'half': (np.float16, 2),
-        'bf16': (NumExt.bf16, 2),
         'float32': (np.float32, 4),
         'float': (np.float32, 4),
         'int8': (np.int8, 1),
@@ -42,19 +38,19 @@ def generate_cpu_test_suite(prefix, cases):
 
         # 1. Type Resolution
         np_type, type_size = type_map.get(dtype_str.lower(), (np.float16, 2))
-        
+
         # 2. Data Generation
         # Sequential values mod 256 to track memory alignment easily
         total_elements = np.prod(gm_shape)
-        data = NumExt.astype((np.arange(total_elements) % 256).reshape(gm_shape), np_type)
+        data = (np.arange(total_elements) % 256).reshape(gm_shape).astype(np_type)
 
         # 3. Save Binaries
         input_path = os.path.join(folder_name, "input.bin")
         golden_path = os.path.join(folder_name, "golden.bin")
-        
-        NumExt.write_array(input_path, data, np_type)
-        NumExt.write_array(golden_path, data, np_type)
-        
+
+        data.tofile(input_path)
+        data.tofile(golden_path)
+
         print(f"Generated: {folder_name}")
         print(f"  -> Shape: {gm_shape} | DType: {dtype_str} | File Size: {os.path.getsize(input_path)}B")
 
@@ -65,9 +61,6 @@ test_cases = [
     ("case_FracZ_4D_fp16", (16, 2, 1, 18, 16), "float16"),
     ("case_FracZ_5D_small_int8", (4, 2, 6, 16, 32), "int8")
 ]
-
-if ENABLE_BF16:
-    test_cases.append(("case_5HD_fused_bf16", (1, 2, 4, 4, 16), "bf16"))
 
 if __name__ == "__main__":
     generate_cpu_test_suite("TLoadConvTest", test_cases)

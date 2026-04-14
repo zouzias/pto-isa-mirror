@@ -61,6 +61,16 @@ PTO_INTERNAL void DivPrecisionImpl(U &dstReg, U &srcReg0, U &srcReg1, MaskReg &m
     vsel(dstReg, tmpDst, z, infNanCmp);
 }
 
+union NotNumUnion {
+    float f;
+    uint32_t i;
+};
+
+union HalfUnion {
+    half f;
+    uint16_t i;
+};
+
 template <typename T, typename U>
 PTO_INTERNAL void DivIEEE754FloatImpl(RegTensor<float> &dst, RegTensor<float> &src0, RegTensor<float> &src1,
                                       MaskReg &mask)
@@ -86,7 +96,7 @@ PTO_INTERNAL void DivIEEE754FloatImpl(RegTensor<float> &dst, RegTensor<float> &s
     NotNumUnion normalizeScaleEnlarge;
     normalizeScaleEnlarge.i = 0x4B000000; // 2^23
     NotNumUnion normalizeScaleReduce;
-    normalizeScaleReduce.i = 0x34000000; // 2^-23
+    normalizeScaleReduce.i = 0x34000000;  // 2^-23
 
     RegTensor<float> maxSubnormal;
     RegTensor<uint32_t> tmp0;
@@ -306,7 +316,7 @@ PTO_INTERNAL void DivIEEE754HalfImpl(RegTensor<half> &dst, RegTensor<half> &src0
     HalfUnion normalizeScaleEnlarge;
     normalizeScaleEnlarge.i = 0x6400; // 2^10
     HalfUnion normalizeScaleReduce;
-    normalizeScaleReduce.i = 0x1400; // 2^-10
+    normalizeScaleReduce.i = 0x1400;  // 2^-10
 
     RegTensor<half> maxSubnormal;
     RegTensor<uint16_t> tmp0;
