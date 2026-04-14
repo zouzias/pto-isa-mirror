@@ -37,12 +37,12 @@ using LocalTile = pto::Tile<pto::TileType::Vec, int32_t, 1, ELEM_COUNT, pto::BLa
 //   block_idx == myRank  -> local copy (sendBuf -> recvBuf[myRank])
 //   block_idx != myRank  -> TPUT_ASYNC to remote rank block_idx
 // ============================================================================
-__global__ AICORE void AllgatherPutAsyncMulticoreKernel(
-    __gm__ int32_t *dataBuf, int nranks,
-    __gm__ HcclDeviceContext *hcclCtx,
-    __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
+__global__ AICORE void AllgatherPutAsyncMulticoreKernel(__gm__ int32_t *dataBuf, int nranks,
+                                                        __gm__ HcclDeviceContext *hcclCtx,
+                                                        __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
-    if (nranks < 2) return;
+    if (nranks < 2)
+        return;
 
     int bid = block_idx;
     int myRank = static_cast<int>(hcclCtx->rankId);
@@ -92,12 +92,12 @@ __global__ AICORE void AllgatherPutAsyncMulticoreKernel(
 //   block_idx == myRank  -> local copy
 //   block_idx != myRank  -> TGET_ASYNC from remote rank block_idx
 // ============================================================================
-__global__ AICORE void AllgatherGetAsyncMulticoreKernel(
-    __gm__ int32_t *dataBuf, int nranks,
-    __gm__ HcclDeviceContext *hcclCtx,
-    __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
+__global__ AICORE void AllgatherGetAsyncMulticoreKernel(__gm__ int32_t *dataBuf, int nranks,
+                                                        __gm__ HcclDeviceContext *hcclCtx,
+                                                        __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
-    if (nranks < 2) return;
+    if (nranks < 2)
+        return;
 
     int bid = block_idx;
     int myRank = static_cast<int>(hcclCtx->rankId);
@@ -150,8 +150,8 @@ static bool VerifyAllgather(const int32_t *host, int nRanks, size_t elemCount, i
             int32_t expected = static_cast<int32_t>(r) * RANK_BASE + static_cast<int32_t>(i);
             int32_t actual = host[r * elemCount + i];
             if (actual != expected) {
-                std::cerr << "[" << tag << " FAIL] Rank " << rankId << ": recvBuf[" << r << "][" << i << "] = "
-                          << actual << ", expected " << expected << std::endl;
+                std::cerr << "[" << tag << " FAIL] Rank " << rankId << ": recvBuf[" << r << "][" << i
+                          << "] = " << actual << ", expected " << expected << std::endl;
                 return false;
             }
         }
@@ -168,7 +168,8 @@ static void PrintSample(const int32_t *host, int nRanks, size_t elemCount, int r
             std::cout << (i ? "," : "") << host[r * elemCount + i];
         std::cout << ",...] ";
     }
-    if (nRanks > 3) std::cout << "...";
+    if (nRanks > 3)
+        std::cout << "...";
     std::cout << std::endl;
 }
 
@@ -199,15 +200,13 @@ static bool RunAllgatherPutAsyncMCKernel(int rankId, int nRanks, int nDevices, i
     size_t winBytes = SYNC_BUF_BYTES + (ELEM_COUNT + recvElems) * sizeof(int32_t);
     void *commPtr = WindowAlloc(winBase, winOff, winBytes);
 
-    int32_t *dataBuf = reinterpret_cast<int32_t *>(
-        reinterpret_cast<uint8_t *>(commPtr) + SYNC_BUF_BYTES);
+    int32_t *dataBuf = reinterpret_cast<int32_t *>(reinterpret_cast<uint8_t *>(commPtr) + SYNC_BUF_BYTES);
     int32_t *sendBuf = dataBuf;
     int32_t *recvBuf = dataBuf + ELEM_COUNT;
 
     aclrtMemcpy(sendBuf, ELEM_COUNT * sizeof(int32_t), sendHost, ELEM_COUNT * sizeof(int32_t),
                 ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t),
-                ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
     SdmaWorkspaceManager sdmaMgr;
     if (!sdmaMgr.Init()) {
@@ -217,16 +216,16 @@ static bool RunAllgatherPutAsyncMCKernel(int rankId, int nRanks, int nDevices, i
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    AllgatherPutAsyncMulticoreKernel<<<nRanks, nullptr, ctx.stream>>>(
-        dataBuf, nRanks, ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0);
+    AllgatherPutAsyncMulticoreKernel<<<nRanks, nullptr, ctx.stream>>>(dataBuf, nRanks, ctx.deviceCtx,
+                                                                      (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
-    aclrtMemcpy(recvHost, recvElems * sizeof(int32_t), recvBuf, recvElems * sizeof(int32_t),
-                ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(recvHost, recvElems * sizeof(int32_t), recvBuf, recvElems * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
 
     bool ok = VerifyAllgather(recvHost, nRanks, ELEM_COUNT, rankId, "TPUT_ASYNC_MC");
-    if (ok) PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "TPUT_ASYNC_MC");
+    if (ok)
+        PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "TPUT_ASYNC_MC");
 
     aclrtFreeHost(sendHost);
     aclrtFreeHost(recvHost);
@@ -269,15 +268,13 @@ static bool RunAllgatherGetAsyncMCKernel(int rankId, int nRanks, int nDevices, i
     size_t winBytes = SYNC_BUF_BYTES + (ELEM_COUNT + recvElems) * sizeof(int32_t);
     void *commPtr = WindowAlloc(winBase, winOff, winBytes);
 
-    int32_t *dataBuf = reinterpret_cast<int32_t *>(
-        reinterpret_cast<uint8_t *>(commPtr) + SYNC_BUF_BYTES);
+    int32_t *dataBuf = reinterpret_cast<int32_t *>(reinterpret_cast<uint8_t *>(commPtr) + SYNC_BUF_BYTES);
     int32_t *sendBuf = dataBuf;
     int32_t *recvBuf = dataBuf + ELEM_COUNT;
 
     aclrtMemcpy(sendBuf, ELEM_COUNT * sizeof(int32_t), sendHost, ELEM_COUNT * sizeof(int32_t),
                 ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t),
-                ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
 
     SdmaWorkspaceManager sdmaMgr;
     if (!sdmaMgr.Init()) {
@@ -287,16 +284,16 @@ static bool RunAllgatherGetAsyncMCKernel(int rankId, int nRanks, int nDevices, i
 
     HcclHostBarrier(ctx.comm, ctx.stream);
 
-    AllgatherGetAsyncMulticoreKernel<<<nRanks, nullptr, ctx.stream>>>(
-        dataBuf, nRanks, ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0);
+    AllgatherGetAsyncMulticoreKernel<<<nRanks, nullptr, ctx.stream>>>(dataBuf, nRanks, ctx.deviceCtx,
+                                                                      (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0);
     ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
 
     HcclHostBarrier(ctx.comm, ctx.stream);
-    aclrtMemcpy(recvHost, recvElems * sizeof(int32_t), recvBuf, recvElems * sizeof(int32_t),
-                ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(recvHost, recvElems * sizeof(int32_t), recvBuf, recvElems * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
 
     bool ok = VerifyAllgather(recvHost, nRanks, ELEM_COUNT, rankId, "TGET_ASYNC_MC");
-    if (ok) PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "TGET_ASYNC_MC");
+    if (ok)
+        PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "TGET_ASYNC_MC");
 
     aclrtFreeHost(sendHost);
     aclrtFreeHost(recvHost);

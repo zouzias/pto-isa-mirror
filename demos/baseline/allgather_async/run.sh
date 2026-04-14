@@ -23,6 +23,11 @@
 
 set -e
 
+if [ -z "${ASCEND_HOME_PATH}" ]; then
+    echo "ASCEND_HOME_PATH not set, sourcing /usr/local/Ascend/ascend-toolkit/set_env.sh ..."
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 N_RANKS="${1:-${N_RANKS:-8}}"
 SOC_VERSION="${2:-${SOC_VERSION:-ascend910b1}}"
