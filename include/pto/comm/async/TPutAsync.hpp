@@ -83,9 +83,8 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
 {
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
-    if (srcGlobalData.data() == nullptr || dstGlobalData.data() == nullptr) {
-        return AsyncEvent(0, DmaEngine::SDMA);
-    }
+    PTO_ASSERT(srcGlobalData.data() != nullptr && dstGlobalData.data() != nullptr,
+               "TPUT_ASYNC: src and dst tensor pointers must not be null.");
 
     PTO_ASSERT(TPutAsyncIsFlatContiguous1D(srcGlobalData),
                "TPUT_ASYNC: src tensor must be flat contiguous 1D (packed layout, single logical line). "
@@ -96,9 +95,7 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
 
     const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
     const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
-    if (dstElems < srcElems) {
-        return AsyncEvent(0, DmaEngine::SDMA);
-    }
+    PTO_ASSERT(dstElems >= srcElems, "TPUT_ASYNC SDMA: dst buffer too small for src data.");
 
     using T = typename GlobalSrcData::RawDType;
     const uint64_t eventHandle =
