@@ -27,12 +27,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Print configure/build and passing test output.")
     parser.add_argument(
-        "-b",
-        "--build-folder",
-        default="build/cpu_st_all",
-        help="Build folder to use. Relative paths are resolved from the repo root.",
-    )
-    parser.add_argument(
         "-c",
         "--compiler",
         required=False,
@@ -98,8 +92,7 @@ def run_command(
     return proc
 
 
-def build_all_cpu_tests(repo_root: Path, build_dir: Path, args: argparse.Namespace) -> None:
-    tests_path = repo_root / "tests" / "cpu" / "st"
+def build_single_test(repo_root: Path, tests_path: Path, build_dir: Path, args: argparse.Namespace) -> None:
     env = os.environ.copy()
     cc = None
     if args.enable_bf16:
@@ -131,66 +124,94 @@ def build_all_cpu_tests(repo_root: Path, build_dir: Path, args: argparse.Namespa
     run_command(build_cmd, cwd=repo_root, env=env, verbose=args.verbose)
 
 
-def generate_test_data(repo_root: Path, build_dir: Path, args: argparse.Namespace) -> None:
-    tests_st_path = repo_root / "tests" / "cpu" / "st"    
-    testcase_src_root = tests_st_path / "testcase"
-    testcase_build_root = build_dir / "testcase"
+TEST_SOURCES = [
+    ("tests/cpu/st", "build/cpu_st"),
+    ("tests/cpu/comm/st", "build/cpu_st_comm"),
+]
+
+
+def build_all_cpu_tests(repo_root: Path, args: argparse.Namespace) -> None:
+    for src_rel, build_rel in TEST_SOURCES:
+        tests_path = repo_root / src_rel
+        this_build_dir = repo_root / build_rel
+        if not tests_path.exists():
+            print(f"Skipping non-existent source: {tests_path}")
+            continue
+        print(f"Building {src_rel} -> {build_rel}")
+        build_single_test(repo_root, tests_path, this_build_dir, args)
+
+
+def generate_test_data(repo_root: Path, args: argparse.Namespace) -> None:
     gen_env = os.environ.copy()
-    gen_env["PYTHONPATH"] = str(repo_root) + \
-        os.pathsep + str(tests_st_path) + \
-        os.pathsep + gen_env.get("PYTHONPATH", "")
     if args.enable_bf16:
         gen_env["PTO_CPU_SIM_ENABLE_BF16"] = "1"
-    testcase_build_root.mkdir(parents=True, exist_ok=True)
 
-    with multiprocessing.Pool(processes=args.jobs) as pool:
-        run_args = [[sys.executable, str(script)] for script in sorted(testcase_src_root.glob("*/gen_data.py"))]
-        results = pool.map(partial(run_command, cwd=testcase_build_root,
-                           env=gen_env, verbose=args.verbose), run_args)
+    for src_rel, build_rel in TEST_SOURCES:
+        testcase_src_root = repo_root / src_rel / "testcase"
+        if not testcase_src_root.exists():
+            continue
+        testcase_build_root = repo_root / build_rel / "testcase"
+        testcase_build_root.mkdir(parents=True, exist_ok=True)
+
+        env = gen_env.copy()
+        env["PYTHONPATH"] = str(repo_root / src_rel) + os.pathsep + str(repo_root) + \
+            os.pathsep + env.get("PYTHONPATH", "")
+
+        with multiprocessing.Pool(processes=args.jobs) as pool:
+            run_args = [[sys.executable, str(script)] for script in sorted(testcase_src_root.glob("*/gen_data.py"))]
+            results = pool.map(partial(run_command, cwd=testcase_build_root,
+                                env=env, verbose=args.verbose), run_args)
 
 
-def run_binaries(repo_root: Path, build_dir: Path, args: argparse.Namespace) -> int:
-    bin_dir = build_dir / "bin"
-    testcase_build_root = build_dir / "testcase"
-    binaries = sorted(path for path in bin_dir.iterdir() if path.is_file())
+def run_binaries(repo_root: Path, args: argparse.Namespace) -> int:
     total = 0
     failed = 0
 
-    for binary in binaries:
-        cwd = testcase_build_root / binary.name
-        if not cwd.is_dir():
-            cwd = repo_root
+    for src_rel, build_rel in TEST_SOURCES:
+        name = src_rel.split("/")[-2].upper()
+        print("=" * 60 + f" {name} " + "=" * 60)
+        build_dir = repo_root / build_rel
+        bin_dir = build_dir / "bin"
+        if not bin_dir.exists():
+            continue
+        testcase_build_root = build_dir / "testcase"
+        binaries = sorted(path for path in bin_dir.iterdir() if path.is_file())
 
-        total += 1
-        start = time.time()
-        try:
-            proc = subprocess.run(
-                [str(binary)],
-                cwd=cwd,
-                text=True,
-                stdout=subprocess.PIPE,
-                timeout=args.timeout,
-            )
-            duration = time.time() - start
-            passed = proc.returncode == 0
-            status = green("PASS:") if passed else red("FAIL:")
-            print(
-                f"{status} {binary.name:<10} (RC={proc.returncode:<3} Duration={duration:.2f}s)")
-            if args.verbose or not passed:
-                if proc.stdout:
-                    print(proc.stdout, end="\n" if proc.stdout.endswith(
-                        "\n") else "\n\n")
-            if not passed:
+        for binary in binaries:
+            cwd = testcase_build_root / binary.name
+            if not cwd.is_dir():
+                cwd = repo_root
+
+            total += 1
+            start = time.time()
+            try:
+                proc = subprocess.run(
+                    [str(binary)],
+                    cwd=cwd,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    timeout=args.timeout,
+                )
+                duration = time.time() - start
+                passed = proc.returncode == 0
+                status = green("PASS:") if passed else red("FAIL:")
+                print(
+                    f"{status} {binary.name:<10} (RC={proc.returncode:<3} Duration={duration:.2f}s)")
+                if args.verbose or not passed:
+                    if proc.stdout:
+                        print(proc.stdout, end="\n" if proc.stdout.endswith(
+                            "\n") else "\n\n")
+                if not passed:
+                    failed += 1
+            except subprocess.TimeoutExpired as exc:
+                duration = time.time() - start
+                print(red("FAIL:") +
+                      f" {binary.name:<10} (RC=124 Duration={duration:.2f}s)")
+                captured = exc.stdout if isinstance(exc.stdout, str) else ""
+                if captured:
+                    print(captured, end="" if captured.endswith("\n") else "\n")
+                print("[TIMEOUT]")
                 failed += 1
-        except subprocess.TimeoutExpired as exc:
-            duration = time.time() - start
-            print(red("FAIL:") +
-                  f" {binary.name:<10} (RC=124 Duration={duration:.2f}s)")
-            captured = exc.stdout if isinstance(exc.stdout, str) else ""
-            if captured:
-                print(captured, end="" if captured.endswith("\n") else "\n")
-            print("[TIMEOUT]")
-            failed += 1
 
     summary = f"SUMMARY: TOTAL:{total} PASSED:{total - failed} FAILED:{failed}"
     print(green(summary) if failed == 0 else red(summary))
@@ -200,14 +221,14 @@ def run_binaries(repo_root: Path, build_dir: Path, args: argparse.Namespace) -> 
 def main() -> int:
     args = parse_arguments()
     repo_root = Path(__file__).resolve().parents[2]
-    build_dir = Path(args.build_folder)
-    if not build_dir.is_absolute():
-        build_dir = repo_root / build_dir
-    build_dir.mkdir(parents=True, exist_ok=True)
 
-    build_all_cpu_tests(repo_root, build_dir, args)
-    generate_test_data(repo_root, build_dir, args)
-    return run_binaries(repo_root, build_dir, args)
+    for src_rel, build_rel in TEST_SOURCES:
+        build_dir = repo_root / build_rel
+        build_dir.mkdir(parents=True, exist_ok=True)
+
+    build_all_cpu_tests(repo_root, args)
+    generate_test_data(repo_root, args)
+    return run_binaries(repo_root, args)
 
 
 if __name__ == "__main__":
