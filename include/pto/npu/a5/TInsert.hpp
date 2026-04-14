@@ -373,6 +373,62 @@ PTO_INTERNAL void TInsertVecToVecNDDispatch(DstTileData &dst, SrcTileData &src, 
     }
 }
 
+template <typename T, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TInsertVecToVecImpl(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
+{
+    if constexpr (DstTileData::isRowMajor && SrcTileData::isRowMajor) {
+        static_assert(SrcTileData::Rows <= DstTileData::Rows,
+                      "TINSERT ND Vec→Vec : Source rows must not exceed destination rows");
+        static_assert(SrcTileData::Cols <= DstTileData::Cols,
+                      "TINSERT ND Vec→Vec : Source cols must not exceed destination cols");
+
+        if constexpr (SrcTileData::ValidRow == 1 && SrcTileData::ValidCol == 1) {
+            PTO_ASSERT(indexRow < DstTileData::Rows, "TINSERT : indexRow exceeds dstRows!");
+            PTO_ASSERT(indexCol < DstTileData::Cols, "TINSERT : indexCol exceeds dstCols!");
+            TInsertVecToVecNDScalarImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), indexRow, indexCol);
+        } else {
+            TInsertVecToVecNDDispatch<T>(dst, src, indexRow, indexCol);
+        }
+    } else if constexpr (!DstTileData::isRowMajor && !SrcTileData::isRowMajor &&
+                         DstTileData::SFractal == SLayout::RowMajor &&
+                         SrcTileData::SFractal == SLayout::RowMajor) {
+        static_assert(SrcTileData::Cols <= DstTileData::Cols,
+                      "TINSERT NZ Vec→Vec : Source cols must not exceed destination cols");
+        uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
+        uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
+        PTO_ASSERT(indexRow + validRow <= DstTileData::Rows,
+                   "TINSERT NZ Vec→Vec : indexRow + validRow exceeds destination rows!");
+        PTO_ASSERT(indexCol + validCol <= DstTileData::Cols,
+                   "TINSERT NZ Vec→Vec : indexCol + validCol exceeds destination cols!");
+        TInsertVecToVecNZImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
+                                                           static_cast<uint16_t>(DstTileData::Rows), indexRow,
+                                                           indexCol);
+    } else {
+        static_assert(DstTileData::isRowMajor == SrcTileData::isRowMajor,
+                      "TINSERT Vec→Vec : Source and destination layout must match (both ND or both NZ)");
+    }
+}
+
+template <typename T, typename DstTileData, typename SrcTileData>
+PTO_INTERNAL void TInsertVecToMatImpl(DstTileData &dst, SrcTileData &src, uint16_t indexRow, uint16_t indexCol)
+{
+    uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
+    uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
+    PTO_ASSERT(indexRow + validRow <= DstTileData::Rows, "TINSERT : indexRow + validRow exceeds destination rows!");
+    PTO_ASSERT(indexCol + validCol <= DstTileData::Cols, "TINSERT : indexCol + validCol exceeds destination cols!");
+
+    if constexpr (SrcTileData::isRowMajor) {
+        uint16_t dstCols = static_cast<uint16_t>(DstTileData::Cols);
+        TInsertNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstCols, indexRow,
+                                                   indexCol);
+    } else if constexpr (!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::RowMajor)) {
+        uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
+        PTO_ASSERT(indexRow + validRow <= dstRow, "TINSERT NZ : indexRow + validRow exceeds destination valid rows!");
+        TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstRow, indexRow,
+                                                 indexCol);
+    }
+}
+
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t indexRow = 0, uint16_t indexCol = 0)
 {
@@ -398,57 +454,9 @@ PTO_INTERNAL void TINSERT_IMPL(DstTileData &dst, SrcTileData &src, uint16_t inde
                       "TINSERT : Unsupported data type.");
 
         if constexpr (DstTileData::Loc == TileType::Vec && SrcTileData::Loc == TileType::Vec) {
-            if constexpr (DstTileData::isRowMajor && SrcTileData::isRowMajor) {
-                static_assert(SrcTileData::Rows <= DstTileData::Rows,
-                              "TINSERT ND Vec→Vec : Source rows must not exceed destination rows");
-                static_assert(SrcTileData::Cols <= DstTileData::Cols,
-                              "TINSERT ND Vec→Vec : Source cols must not exceed destination cols");
-
-                if constexpr (SrcTileData::ValidRow == 1 && SrcTileData::ValidCol == 1) {
-                    PTO_ASSERT(indexRow < DstTileData::Rows, "TINSERT : indexRow exceeds dstRows!");
-                    PTO_ASSERT(indexCol < DstTileData::Cols, "TINSERT : indexCol exceeds dstCols!");
-                    TInsertVecToVecNDScalarImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), indexRow,
-                                                                             indexCol);
-                } else {
-                    TInsertVecToVecNDDispatch<T>(dst, src, indexRow, indexCol);
-                }
-            } else if constexpr (!DstTileData::isRowMajor && !SrcTileData::isRowMajor &&
-                                 DstTileData::SFractal == SLayout::RowMajor &&
-                                 SrcTileData::SFractal == SLayout::RowMajor) {
-                static_assert(SrcTileData::Cols <= DstTileData::Cols,
-                              "TINSERT NZ Vec→Vec : Source cols must not exceed destination cols");
-                uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
-                uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
-                PTO_ASSERT(indexRow + validRow <= DstTileData::Rows,
-                           "TINSERT NZ Vec→Vec : indexRow + validRow exceeds destination rows!");
-                PTO_ASSERT(indexCol + validCol <= DstTileData::Cols,
-                           "TINSERT NZ Vec→Vec : indexCol + validCol exceeds destination cols!");
-                TInsertVecToVecNZImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol,
-                                                                   static_cast<uint16_t>(DstTileData::Rows), indexRow,
-                                                                   indexCol);
-            } else {
-                static_assert(DstTileData::isRowMajor == SrcTileData::isRowMajor,
-                              "TINSERT Vec→Vec : Source and destination layout must match (both ND or both NZ)");
-            }
+            TInsertVecToVecImpl<T>(dst, src, indexRow, indexCol);
         } else if constexpr (DstTileData::Loc == TileType::Mat && SrcTileData::Loc == TileType::Vec) {
-            uint16_t validRow = static_cast<uint16_t>(src.GetValidRow());
-            uint16_t validCol = static_cast<uint16_t>(src.GetValidCol());
-            PTO_ASSERT(indexRow + validRow <= DstTileData::Rows,
-                       "TINSERT : indexRow + validRow exceeds destination rows!");
-            PTO_ASSERT(indexCol + validCol <= DstTileData::Cols,
-                       "TINSERT : indexCol + validCol exceeds destination cols!");
-
-            if constexpr (SrcTileData::isRowMajor) {
-                uint16_t dstCols = static_cast<uint16_t>(DstTileData::Cols);
-                TInsertNDImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstCols,
-                                                           indexRow, indexCol);
-            } else if constexpr (!SrcTileData::isRowMajor && (SrcTileData::SFractal == SLayout::RowMajor)) {
-                uint16_t dstRow = static_cast<uint16_t>(dst.GetValidRow());
-                PTO_ASSERT(indexRow + validRow <= dstRow,
-                           "TINSERT NZ : indexRow + validRow exceeds destination valid rows!");
-                TInsertImpl<T, DstTileData, SrcTileData>(dst.data(), src.data(), validRow, validCol, dstRow, indexRow,
-                                                         indexCol);
-            }
+            TInsertVecToMatImpl<T>(dst, src, indexRow, indexCol);
         }
     } // else (non Acc→Mat)
 }
