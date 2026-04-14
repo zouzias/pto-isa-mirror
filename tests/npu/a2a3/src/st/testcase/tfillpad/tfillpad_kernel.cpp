@@ -334,6 +334,130 @@ extern "C" __global__ AICORE void launchTFILLPAD_13(__gm__ uint8_t *out, __gm__ 
         (__gm__ float *)out, (__gm__ float *)src, gShape0, gShape1, gShape2, gRows, gCols, gLog);
 }
 
+// Case 14: fp16 (272, 176) tile, valid (64, 131), EXPAND mode
+extern "C" __global__ AICORE void launchTFILLPAD_14(__gm__ uint8_t *out, __gm__ uint8_t *src,
+                                                    int gShape0, int gShape1, int gShape2,
+                                                    int gRows, int gCols, __gm__ uint64_t *gLog)
+{
+    runTFILLPAD<half, 1, 1, 1, 272, 176, 272, 176, 1, PadValue::Null, PadValue::Max, false, true>(
+        (__gm__ half *)out, (__gm__ half *)src,
+        gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+// ========== Case 15: UB Guard Check ==========
+// Same as Case 14, but with SWAPPED UB layout:
+//   - dst tile @ 0x0 (TFILLPAD output)
+//   - src tile @ dstTileBytes (right after dst)
+// If TFILLPAD writes beyond dst boundary, it corrupts src tile!
+// EXPAND mode: dst (272,176) fp16 = 272 * 192 bytes = 52224 = 0xCC00
+// src tile placed at 0xCC00 (with 32B alignment = 0xCC20 or round up)
+
+template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4, int kTRows_, int kTCols_, int dyn_,
+          PadValue LoadPadVal_ = PadValue::Null, PadValue FillPadVal_ = PadValue::Null>
+AICORE void runTFILLPAD_UB_GUARD(__gm__ T *out, __gm__ T *src, int gShape0, int gShape1, int gShape2, int gRows,
+                                  int gCols, __gm__ uint64_t *gLog)
+{
+#ifndef __PTO_AUTO__
+    {
+#define INIT_STACK 8192
+        uint64_t stack[INIT_STACK / sizeof(uint64_t)];
+        volatile uint64_t *pStack = stack;
+        for (int i = 0; i < INIT_STACK; i += 64 / sizeof(uint64_t))
+            *(pStack++) = 0;
+        dsb(DSB_ALL);
+    }
+    uint64_t pc;
+    asm volatile("MOV %0, PC\n" : "+l"(pc));
+    preload((void *)pc, 2);
+    while (get_icache_prl_st()) {
+#if defined(__DAV_C220_CUBE__) || defined(__DAV_C220_VEC__)
+        asm("nop");
+#endif
+    }
+#endif
+
+#ifdef DEBUGLOG
+    gLog += block_idx * LOGSIZE;
+#endif
+
+    // UB Layout: [DST @ 0x0] [SRC @ after dst]
+    // dst tile size: 272 rows * (176 * 2 bytes, aligned to 32B) = 272 * 384 = 104448 = 0x19800
+    // Actually for fp16 176 cols: 176*2 = 352, aligned to 32B = 384 bytes per row
+    // 272 * 384 = 104448 bytes = 0x19800
+    constexpr int kDstColBytes = (kTCols_ * sizeof(T) + 31) / 32 * 32;
+    constexpr int kDstTileBytes = kTRows_ * kDstColBytes;
+    constexpr uint64_t DST_OFFSET = 0x0;
+    constexpr uint64_t SRC_OFFSET = (kDstTileBytes + 31) / 32 * 32;  // 32B aligned
+
+    __ubuf__ T *ubDst = (__ubuf__ T *)DST_OFFSET;  // dst at 0x0
+    __ubuf__ T *ubSrc = (__ubuf__ T *)SRC_OFFSET;  // src right after dst
+
+    constexpr int shape4_aligned = align_to_32B(shape4, T);
+    constexpr int kGTRows = kTRows_ / shape0 / shape1 / shape2;
+
+    int srcOffset = (block_idx) * (shape3 / block_num) * shape4;
+    auto srcGlobal =
+        getGlobalTensor<T, shape0, shape1, shape2, shape3, shape4, kGTRows, shape4, BLayout::RowMajor, dyn_>(
+            src + srcOffset, gShape0, gShape1, gShape2, kGTRows, shape4);
+
+    int dstOffset = (block_idx) * (shape3 / block_num) * kTCols_;
+    auto dstGlobal =
+        getGlobalTensor<T, shape0, shape1, shape2, shape3, kTCols_, kGTRows, kTCols_, BLayout::RowMajor, 0>(
+            out + dstOffset, gShape0, gShape1, gShape2, kGTRows, kTCols_);
+
+    // dst tile in UB (output)
+    using TileDataDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, FillPadVal_>;
+    TileDataDst vecTileDst(kTRows_, kTCols_);
+    TASSIGN(vecTileDst, (uint64_t)ubDst);
+
+    // src tile in UB (placed AFTER dst)
+    using TileDataSrc = Tile<TileType::Vec, T, kTRows_, shape4_aligned, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, LoadPadVal_>;
+    TileDataSrc vecTileSrc(shape3, shape4);
+    TASSIGN(vecTileSrc, (uint64_t)ubSrc);
+
+    // Load src into UB (at SRC_OFFSET, after dst tile)
+    TLOAD(vecTileSrc, srcGlobal);
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+#endif
+
+    volatile uint64_t t0, t1;
+    t0 = get_syscnt();
+
+    // TFILLPAD_EXPAND: output to dst @ 0x0
+    // If it overruns dst boundary, it will write into src tile area!
+    TFILLPAD_EXPAND(vecTileDst, vecTileSrc);
+
+    t1 = get_syscnt();
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
+#endif
+
+    // Store dst result to GM
+    TSTORE(dstGlobal, vecTileDst);
+
+#ifndef __PTO_AUTO__
+    set_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+    wait_flag(PIPE_MTE2, PIPE_S, EVENT_ID0);
+#endif
+
+    LOG(t0);
+    LOG(t1 - t0);
+    LOG(DST_OFFSET);
+    LOG(SRC_OFFSET);
+}
+
+// Case 15: UB Guard Check - dst before src to detect overrun
+extern "C" __global__ AICORE void launchTFILLPAD_15(__gm__ uint8_t *out, __gm__ uint8_t *src,
+                                                    int gShape0, int gShape1, int gShape2,
+                                                    int gRows, int gCols, __gm__ uint64_t *gLog)
+{
+    runTFILLPAD_UB_GUARD<half, 1, 1, 1, 272, 176, 272, 176, 1, PadValue::Null, PadValue::Max>(
+        (__gm__ half *)out, (__gm__ half *)src,
+        gShape0, gShape1, gShape2, gRows, gCols, gLog);
+}
+
 template <int32_t testKey>
 void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
 {
@@ -363,6 +487,10 @@ void launchTFILLPAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream)
         launchTFILLPAD_12<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 128, 64, gLog);
     } else if constexpr (testKey == 13) {
         launchTFILLPAD_13<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 128, 127, gLog);
+    } else if constexpr (testKey == 14) {
+        launchTFILLPAD_14<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 64, 131, gLog);
+    } else if constexpr (testKey == 15) {
+        launchTFILLPAD_15<<<1, nullptr, stream>>>(out, src, 1, 1, 1, 64, 131, gLog);
     }
 }
 
@@ -453,6 +581,10 @@ int get_input_golden(uint8_t *input, uint8_t *golden)
         return get_input_golden_case<float, 1, 1, 1, 128, 64, 128, 128, PadCustomNeg1>(input, golden);
     } else if constexpr (testKey == 13) {
         return get_input_golden_case<float, 1, 1, 1, 128, 127, 128, 160, PadCustomNeg1>(input, golden);
+    } else if constexpr (testKey == 14) {
+        return get_input_golden_case<half, 1, 1, 1, 272, 176, 272, 176, PadValue::Max>(input, golden);
+    } else if constexpr (testKey == 15) {
+        return get_input_golden_case<half, 1, 1, 1, 272, 176, 272, 176, PadValue::Max>(input, golden);
     }
 
     return 0;
@@ -471,6 +603,7 @@ template void launchTFILLPAD<10>(uint8_t *out, uint8_t *src, uint64_t *gLog, voi
 template void launchTFILLPAD<11>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 template void launchTFILLPAD<12>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream); // 实例化 Key=0 的版本
 template void launchTFILLPAD<13>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
+template void launchTFILLPAD<14>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
 
 template int get_input_golden<1>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<2>(uint8_t *input, uint8_t *golden);
@@ -485,3 +618,9 @@ template int get_input_golden<10>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<11>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<12>(uint8_t *input, uint8_t *golden);
 template int get_input_golden<13>(uint8_t *input, uint8_t *golden);
+template int get_input_golden<14>(uint8_t *input, uint8_t *golden);
+
+
+
+template void launchTFILLPAD<15>(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
+template int get_input_golden<15>(uint8_t *input, uint8_t *golden);

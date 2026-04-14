@@ -209,3 +209,15 @@ TEST_F(TFILLPADTest, case_float_GT_128_127_VT_128_160_BLK1_PADCUSTOM_NEG1_PADCUS
 {
     tfillpad_test<13, float, 1>();
 }
+
+// Case 14: fp16 (272, 176) tile, valid (64, 131), EXPAND mode - Issue: potential UB access overrun
+TEST_F(TFILLPADTest, case_fp16_GT_272_176_VT_272_176_VALID_64_131_PADINF_EXPAND)
+{
+    tfillpad_test<14, uint16_t, 1>();
+}
+
+// Case 15: UB Guard Check - dst before src to detect memory overrun
+TEST_F(TFILLPADTest, case_fp16_GT_272_176_VT_272_176_VALID_64_131_UB_GUARD_CHECK)
+{
+    tfillpad_test<15, uint16_t, 1>();
+}
