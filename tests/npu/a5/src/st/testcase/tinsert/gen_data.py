@@ -87,7 +87,7 @@ def gen_nd_vec(p):
     golden = dst_init.copy()
     r_end = p.idx_row + p.src_rows
     c_end = p.idx_col + p.src_cols
-    golden[p.idx_row:r_end, p.idx_col:c_end] = src
+    golden[p.idx_row : r_end, p.idx_col : c_end] = src
     golden.tofile("golden_output.bin")
 
 
@@ -122,7 +122,7 @@ def gen_nd_vec_valid(p):
     golden = dst_init.copy()
     r_end = p.idx_row + p.src_rows
     c_end = p.idx_col + p.valid_cols
-    golden[p.idx_row:r_end, p.idx_col:c_end] = src[:, :p.valid_cols]
+    golden[p.idx_row : r_end, p.idx_col : c_end] = src[:, : p.valid_cols]
     golden.tofile("golden_output.bin")
 
 
@@ -153,9 +153,9 @@ def gen_nz_two_insert(p):
     src1.tofile("src1_input.bin")
     src2.tofile("src2_input.bin")
     result = np.zeros((p.dst_rows, p.cols), dtype=p.dtype)
-    result[0:p.src_rows1, :] = src1
+    result[0 : p.src_rows1, :] = src1
     r2_end = p.idx_row2 + p.src_rows2
-    result[p.idx_row2:r2_end, :] = src2
+    result[p.idx_row2 : r2_end, :] = src2
     nd_to_nz(result, p.dst_rows, p.cols, ds).tofile("golden_output.bin")
 
 
@@ -185,11 +185,11 @@ def gen_nz_large_tile(p):
     ds = np.dtype(p.dtype).itemsize
     nd_data = rand_data(p.dtype, (p.valid_row, p.cols))
     padded = np.zeros((p.tile_rows, p.cols), dtype=p.dtype)
-    padded[:p.valid_row, :] = nd_data
+    padded[: p.valid_row, :] = nd_data
     nd_to_nz(padded, p.tile_rows, p.cols, ds).tofile("input_arr.bin")
     result = np.zeros((p.dst_rows, p.cols), dtype=p.dtype)
     r_end = p.idx_row + p.valid_row
-    result[p.idx_row:r_end, :] = nd_data
+    result[p.idx_row : r_end, :] = nd_data
     nd_to_nz(result, p.dst_rows, p.cols, ds).tofile("golden_output.bin")
 
 
@@ -209,7 +209,7 @@ def gen_nz_vec(p):
     arr.tofile("input_arr.bin")
     result = np.zeros((p.dst_rows, p.dst_cols), dtype=p.dtype)
     r_end = p.idx_row + p.src_rows
-    result[p.idx_row:r_end, :p.src_cols] = arr
+    result[p.idx_row : r_end, : p.src_cols] = arr
     nd_to_nz(result, p.dst_rows, p.dst_cols, ds).tofile("golden_output.bin")
 
 
@@ -259,8 +259,8 @@ def gen_twoinput(p):
     combined = np.zeros((aligned_row, p.cols), dtype=dt)
     r1_end = p.idx_row1 + p.valid_row1
     r2_end = p.idx_row2 + p.valid_row2
-    combined[p.idx_row1:r1_end, :] = src1
-    combined[p.idx_row2:r2_end, :] = src2
+    combined[p.idx_row1 : r1_end, :] = src1
+    combined[p.idx_row2 : r2_end, :] = src2
 
     nz = combined.reshape(aligned_row // nz_row, nz_row, burst_num, c0).transpose(2, 0, 1, 3)
     nz_flat = nz.reshape(burst_num, -1)
@@ -271,8 +271,8 @@ def gen_twoinput(p):
     np.concatenate([zero_region, nz1_data]).tofile("input_arr.bin")
 
     result = np.zeros((p.dst_rows, p.cols), dtype=dt)
-    result[p.idx_row1:r1_end, :] = src1
-    result[p.idx_row2:r2_end, :] = src2
+    result[p.idx_row1 : r1_end, :] = src1
+    result[p.idx_row2 : r2_end, :] = src2
     result.reshape(p.dst_rows // nz_row, nz_row, burst_num, c0).transpose(2, 0, 1, 3).flatten().tofile(
         "golden_output.bin"
     )
@@ -323,8 +323,8 @@ def gen_double_twoinput(p):
     result = np.zeros((p.dst_rows, p.cols), dtype=dt)
     r1_end = p.idx_row1 + p.valid_row1
     r2_end = p.idx_row2 + p.valid_row2
-    result[p.idx_row1:r1_end, :] = src1
-    result[p.idx_row2:r2_end, :] = src2
+    result[p.idx_row1 : r1_end, :] = src1
+    result[p.idx_row2 : r2_end, :] = src2
     result.reshape(p.dst_rows // nz_row, nz_row, burst_num, c0).transpose(2, 0, 1, 3).flatten().tofile(
         "golden_output.bin"
     )
@@ -347,7 +347,7 @@ def gen_fp4_offset(p):
 
     src = rand_data(np.uint8, (p.valid_rows, p.src_byte_cols))
     src_padded = np.zeros((p.src_rows, p.src_byte_cols), dtype=np.uint8)
-    src_padded[:p.valid_rows, :] = src
+    src_padded[: p.valid_rows, :] = src
     src_nz = src_padded.reshape(p.src_rows // nz_row, nz_row, p.src_byte_cols // c0, c0).transpose(2, 0, 1, 3)
 
     zeros = np.zeros(p.dst_rows * p.dst_byte_cols, dtype=np.uint8)
@@ -356,7 +356,7 @@ def gen_fp4_offset(p):
     result = np.zeros((p.dst_rows, p.dst_byte_cols), dtype=np.uint8)
     r_end = p.idx_row + p.valid_rows
     c_end = p.idx_byte_col + p.src_byte_cols
-    result[p.idx_row:r_end, p.idx_byte_col:c_end] = src
+    result[p.idx_row : r_end, p.idx_byte_col : c_end] = src
     result.reshape(p.dst_rows // nz_row, nz_row, p.dst_byte_cols // c0, c0).transpose(2, 0, 1, 3).flatten().tofile(
         "golden_output.bin"
     )
@@ -435,24 +435,68 @@ if __name__ == "__main__":
         ("TInsertTest.case_nz_twoinput_fp4e1m2_1", gen_twoinput, TwoInputParams(1, 4, 4, 0, 4, 16, 64)),
         ("TInsertTest.case_nz_twoinput_fp4e2m1_2", gen_twoinput, TwoInputParams(1, 128, 1, 0, 128, 256, 128)),
         ("TInsertTest.case_nz_twoinput_fp4e1m2_2", gen_twoinput, TwoInputParams(1, 128, 1, 0, 128, 256, 128)),
-        ("TInsertTest.case_nz_dblinput_fp4e2m1_1", gen_double_twoinput, DoubleTwoInputParams(1, 4, 0, 4, 4, 17, 16, 64)),
-        ("TInsertTest.case_nz_dblinput_fp4e1m2_1", gen_double_twoinput, DoubleTwoInputParams(1, 4, 0, 4, 4, 17, 16, 64)),
+        (
+            "TInsertTest.case_nz_dblinput_fp4e2m1_1",
+            gen_double_twoinput,
+            DoubleTwoInputParams(1, 4, 0, 4, 4, 17, 16, 64),
+        ),
+        (
+            "TInsertTest.case_nz_dblinput_fp4e1m2_1",
+            gen_double_twoinput,
+            DoubleTwoInputParams(1, 4, 0, 4, 4, 17, 16, 64),
+        ),
         ("TInsertTest.case_nz_dblinput_hif8_1", gen_double_twoinput, DoubleTwoInputParams(1, 4, 0, 4, 4, 17, 16, 128)),
-        ("TInsertTest.case_nz_dblinput_fp4e2m1_2", gen_double_twoinput, DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 128)),
-        ("TInsertTest.case_nz_dblinput_fp4e1m2_2", gen_double_twoinput, DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 128)),
-        ("TInsertTest.case_nz_dblinput_hif8_2", gen_double_twoinput, DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 256)),
+        (
+            "TInsertTest.case_nz_dblinput_fp4e2m1_2",
+            gen_double_twoinput,
+            DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 128),
+        ),
+        (
+            "TInsertTest.case_nz_dblinput_fp4e1m2_2",
+            gen_double_twoinput,
+            DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 128),
+        ),
+        (
+            "TInsertTest.case_nz_dblinput_hif8_2",
+            gen_double_twoinput,
+            DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 256),
+        ),
         ("TInsertTest.case_nz_dblinput_fp16_1", gen_double_twoinput, DoubleTwoInputParams(2, 4, 0, 4, 4, 17, 16, 128)),
         ("TInsertTest.case_nz_dblinput_bf16_1", gen_double_twoinput, DoubleTwoInputParams(2, 4, 0, 4, 4, 17, 16, 128)),
         ("TInsertTest.case_nz_dblinput_fp32_1", gen_double_twoinput, DoubleTwoInputParams(4, 4, 0, 4, 4, 17, 16, 128)),
         ("TInsertTest.case_nz_dblinput_int8_1", gen_double_twoinput, DoubleTwoInputParams(1, 4, 0, 4, 4, 17, 16, 128)),
         ("TInsertTest.case_nz_dblinput_fp8e5_1", gen_double_twoinput, DoubleTwoInputParams(1, 4, 0, 4, 4, 17, 16, 128)),
         ("TInsertTest.case_nz_dblinput_fp8e4_1", gen_double_twoinput, DoubleTwoInputParams(1, 4, 0, 4, 4, 17, 16, 128)),
-        ("TInsertTest.case_nz_dblinput_fp16_2", gen_double_twoinput, DoubleTwoInputParams(2, 1, 128, 128, 0, 129, 256, 256)),
-        ("TInsertTest.case_nz_dblinput_bf16_2", gen_double_twoinput, DoubleTwoInputParams(2, 1, 128, 128, 0, 129, 256, 256)),
-        ("TInsertTest.case_nz_dblinput_fp32_2", gen_double_twoinput, DoubleTwoInputParams(4, 1, 128, 128, 0, 129, 256, 128)),
-        ("TInsertTest.case_nz_dblinput_int8_2", gen_double_twoinput, DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 256)),
-        ("TInsertTest.case_nz_dblinput_fp8e5_2", gen_double_twoinput, DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 256)),
-        ("TInsertTest.case_nz_dblinput_fp8e4_2", gen_double_twoinput, DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 256)),
+        (
+            "TInsertTest.case_nz_dblinput_fp16_2",
+            gen_double_twoinput,
+            DoubleTwoInputParams(2, 1, 128, 128, 0, 129, 256, 256),
+        ),
+        (
+            "TInsertTest.case_nz_dblinput_bf16_2",
+            gen_double_twoinput,
+            DoubleTwoInputParams(2, 1, 128, 128, 0, 129, 256, 256),
+        ),
+        (
+            "TInsertTest.case_nz_dblinput_fp32_2",
+            gen_double_twoinput,
+            DoubleTwoInputParams(4, 1, 128, 128, 0, 129, 256, 128),
+        ),
+        (
+            "TInsertTest.case_nz_dblinput_int8_2",
+            gen_double_twoinput,
+            DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 256),
+        ),
+        (
+            "TInsertTest.case_nz_dblinput_fp8e5_2",
+            gen_double_twoinput,
+            DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 256),
+        ),
+        (
+            "TInsertTest.case_nz_dblinput_fp8e4_2",
+            gen_double_twoinput,
+            DoubleTwoInputParams(1, 1, 128, 128, 0, 129, 256, 256),
+        ),
         ("TInsertTest.case_nz_twoinput_fp4e2m1_3", gen_twoinput, TwoInputParams(1, 4, 4, 0, 4, 16, 96)),
         ("TInsertTest.case_nz_twoinput_fp4e1m2_3", gen_twoinput, TwoInputParams(1, 4, 4, 0, 4, 16, 96)),
         ("TInsertTest.case_nz_fp4_offset_e2m1_col", gen_fp4_offset, Fp4OffsetParams(16, 32, 16, 16, 128, 0, 32)),
