@@ -18,6 +18,9 @@ PTO ISA 基于昇腾底层硬件与软件抽象，定义 90+ 条标准 tile 指�
 
 目标是在提升抽象层级的同时保留调参空间：既方便跨代迁移，也不牺牲性能优化手感。
 
+除计算与数据搬运指令外，PTO ISA 还提供了面向 NPU 间数据传输与同步的**通信扩展指令集**，覆盖三类能力：点对点通信、信号同步和集合通信。
+这些通信原语延续了与计算指令一致的 tile 级抽象和跨平台设计，并可驱动昇腾上的多种数据搬移硬件引擎，帮助用户构建计算与通信深度融合的 kernel。
+
 目前，PTO 指令已集成到以下框架中：
 
 * [PyPTO](https://gitcode.com/cann/pypto/)
@@ -64,6 +67,33 @@ PTO Tile Lib 并不面向入门级用户，主要面向：
 
 ![Flash Attention 归一化 TFLOPS（A2/A3）](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
 
+### 通信指令带宽（A2/A3 参考）
+
+- Kernel：`kernels/manual/a2a3/tget_bandwidth/`
+
+在 Ascend A2/A3 上测量 `TGET`（同步，通过 UB 中转）与 `TGET_ASYNC`（异步，SDMA 引擎直传）的点对点远程读带宽（float 类型，2 卡）：
+
+详细分析说明与构建运行指南：[TGET / TGET_ASYNC 带宽对比示例](kernels/manual/a2a3/tget_bandwidth/README_zh.md)。
+
+TGET vs TGET_ASYNC 带宽对比（A2/A3）
+
+### GEMM AllReduce 通算融合（A2/A3 参考）
+
+- Kernel：`kernels/manual/a2a3/gemm_ar/`
+
+在 Ascend A2/A3（8 卡）上测量 GEMM + AllReduce 融合算子：
+
+
+| 指标           | 值                                              |
+| ------------ | ---------------------------------------------- |
+| Compute-only | 369 us（254 TFLOPS，99%）                         |
+| Sequential   | 749 us（compute 370 us + comm 379 us @ 74 GB/s） |
+| Pipelined    | **639 us**（加速比 1.17×，重叠效率 30%）                 |
+| Throughput   | 1173 TFLOPS（总吞吐）                               |
+
+
+详细分析与调参说明：[高性能 GEMM AllReduce 融合算子示例](kernels/manual/a2a3/gemm_ar/README_zh.md)。
+
 ## 路线图（Roadmap）
 
 未来计划发布的特性：
@@ -74,7 +104,6 @@ PTO Tile Lib 并不面向入门级用户，主要面向：
 | PTO Tile Fusion | BiSheng 编译器支持：自动融合 tile 操作。 | 编译器 / 工具链 |
 | PTO-AS | PTO ISA 的字节码（Byte Code）支持。 | 编译器 / 工具链 |
 | **卷积扩展** | PTO ISA 对卷积 kernel 的支持。 | ISA 扩展 |
-| **集合通信扩展** | PTO ISA 对集合通信 kernel 的支持。 | ISA 扩展 |
 | **系统调度扩展** | PTO ISA 对 SPMD/MPMD 编程的调度支持。 | ISA 扩展 |
 
 
@@ -233,6 +262,31 @@ chmod +x ./tests/run_st.sh
 ./tests/run_st.sh a3 sim all
 ```
 
+### 运行通信 ST 测试
+
+通信测试需要多 NPU 环境（2/4/8 NPU），并依赖 HCCL 和 MPI。
+
+```bash
+# 在项目根目录下执行：
+chmod +x ./tests/run_comm_test.sh
+
+# 使用 8 NPU 在 A3 上运行所有通信测试（默认）
+./tests/run_comm_test.sh
+
+# 仅运行 2 卡测试
+./tests/run_comm_test.sh -n 2
+
+# 在 A5 上使用 2 NPU 运行指定测试（如 tput）
+./tests/run_comm_test.sh -v a5 -n 2 -t tput
+
+# 开启调试输出
+./tests/run_comm_test.sh -d -t treduce
+```
+
+**注意：** 异步通信指令（Tput_async 和 Tget_async）需要安装 CANN 9.0 软件包及对应的 OPS 包。
+
+各通信指令详情参见 [docs/isa/comm/README.md](docs/isa/comm/README.md)。
+
 ### 运行 CPU 仿真测试
 
 ```bash
@@ -265,6 +319,45 @@ python3 tests/run_cpu.py --verbose
 ```bash
 source ${install-path}/cann/bin/setenv.bash
 ```
+
+### 通信指令软件依赖说明
+
+
+| 指令类型 | CANN 版本   | MPI       | 其他依赖              |
+| ---- | --------- | --------- | ----------------- |
+| 同步指令 | 8.5.0 及以上 | 3.2.1 及以上 | 不涉及               |
+| 异步指令 | 9.0.0 及以上 | 3.2.1 及以上 | 需要安装 ops-legacy 包 |
+
+
+### 安装 MPI 依赖（可选）
+
+通信指令的测试用例依赖 MPI，推荐版本 >= 3.2.1。
+
+**从源码安装：**
+
+```bash
+# 以 3.2.1 版本为例
+version='3.2.1'
+wget https://www.mpich.org/static/downloads/${version}/mpich-${version}.tar.gz
+tar -xzf mpich-${version}.tar.gz
+cd mpich-${version}
+./configure --prefix=/usr/local/mpich --disable-fortran
+make && make install
+```
+
+**设置环境变量：**
+
+```bash
+export MPI_HOME=/usr/local/mpich
+export PATH=${MPI_HOME}/bin:${PATH}
+```
+
+### 安装 ops-legacy 包（可选）
+
+- [A2 x86_64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-x86_64.run)
+- [A2 aarch64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-910b-ops-legacy_9.0.0_linux-aarch64.run)
+- [A3 x86_64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-x86_64.run)
+- [A3 aarch64](https://ascend-cann.obs.cn-north-4.myhuaweicloud.com/CANN/20260305_newest/cann-A3-ops-legacy_9.0.0_linux-aarch64.run)
 
 ### 一键构建与运行
 
