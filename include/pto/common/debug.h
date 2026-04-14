@@ -45,6 +45,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/tile_offsets.hpp"
 #include "pto/common/type.hpp"
 
+#ifndef PTO_CPU_DEBUG
+#define PTO_CPU_DEBUG(tag, fmt, ...)                                   \
+    do {                                                               \
+        std::printf("[PTO][DEBUG][" tag "] " fmt "\n", ##__VA_ARGS__); \
+    } while (0)
+#endif
+
 template <typename GT>
 void printRawGT(GT &tensor, const std::string name = "", int elementWidth = 5, int maxR = INT32_MAX,
                 int maxC = INT32_MAX)
