@@ -1,0 +1,3 @@
+# Local CMake / sim artifacts (do not commit)
+/build/
+/build_sim/
