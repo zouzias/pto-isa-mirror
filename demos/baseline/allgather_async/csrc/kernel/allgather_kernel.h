@@ -10,8 +10,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #pragma once
 
-// Bandwidth sweep: single-core Ring + Recursive Doubling across multiple data sizes.
-bool RunAllgatherAsyncSweep(int nRanks, int firstRankId, int firstDeviceId);
+// Multi-core Allgather via TPUT_ASYNC: each AICORE writes to one target rank.
+bool RunAllgatherPutAsyncMC(int nRanks, int firstRankId, int firstDeviceId);
 
-// Bandwidth sweep: multi-core TPUT_ASYNC_MC + TGET_ASYNC_MC across multiple data sizes.
-bool RunAllgatherMcAsyncSweep(int nRanks, int firstRankId, int firstDeviceId);
+// Multi-core Allgather via TGET_ASYNC: each AICORE reads from one source rank.
+bool RunAllgatherGetAsyncMC(int nRanks, int firstRankId, int firstDeviceId);
