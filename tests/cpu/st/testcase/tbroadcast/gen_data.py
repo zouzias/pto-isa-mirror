@@ -8,7 +8,9 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 import os
+import sys
 import numpy as np
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../..")
 from utils import NumExt
 
 np.random.seed(19)
