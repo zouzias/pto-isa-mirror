@@ -241,16 +241,17 @@ def gen_double_twoinput(dtype_size, valid_row1, idx_row1, valid_row2, idx_row2, 
 
 
 class Fp4OffsetParams:
-    def __init__(self, src_rows, src_byte_cols, valid_rows, dst_rows, dst_byte_cols):
+    def __init__(self, src_rows, src_byte_cols, valid_rows, dst_rows, dst_byte_cols, idx_row, idx_byte_col):
         self.src_rows = src_rows
         self.src_byte_cols = src_byte_cols
         self.valid_rows = valid_rows
         self.dst_rows = dst_rows
         self.dst_byte_cols = dst_byte_cols
+        self.idx_row = idx_row
+        self.idx_byte_col = idx_byte_col
 
 
-def gen_fp4_offset(src_rows, src_byte_cols, valid_rows, dst_rows, dst_byte_cols, idx_row, idx_byte_col):
-    p = Fp4OffsetParams(src_rows, src_byte_cols, valid_rows, dst_rows, dst_byte_cols)
+def gen_fp4_offset(p):
     c0 = 32
     nz_row = 16
 
@@ -263,9 +264,9 @@ def gen_fp4_offset(src_rows, src_byte_cols, valid_rows, dst_rows, dst_byte_cols,
     np.concatenate([zeros, src_nz.flatten()]).tofile("input_arr.bin")
 
     result = np.zeros((p.dst_rows, p.dst_byte_cols), dtype=np.uint8)
-    r_end = idx_row + p.valid_rows
-    c_end = idx_byte_col + p.src_byte_cols
-    result[idx_row:r_end, idx_byte_col:c_end] = src
+    r_end = p.idx_row + p.valid_rows
+    c_end = p.idx_byte_col + p.src_byte_cols
+    result[p.idx_row : r_end, p.idx_byte_col : c_end] = src
     result.reshape(p.dst_rows // nz_row, nz_row, p.dst_byte_cols // c0, c0).transpose(2, 0, 1, 3).flatten().tofile(
         "golden_output.bin"
     )
@@ -364,10 +365,10 @@ if __name__ == "__main__":
         ("TInsertTest.case_nz_dblinput_fp8e4_2", gen_double_twoinput, 1, 1, 128, 128, 0, 129, 256, 256),
         ("TInsertTest.case_nz_twoinput_fp4e2m1_3", gen_twoinput, 1, 4, 4, 0, 4, 16, 96),
         ("TInsertTest.case_nz_twoinput_fp4e1m2_3", gen_twoinput, 1, 4, 4, 0, 4, 16, 96),
-        ("TInsertTest.case_nz_fp4_offset_e2m1_col", gen_fp4_offset, 16, 32, 16, 16, 128, 0, 32),
-        ("TInsertTest.case_nz_fp4_offset_e1m2_col", gen_fp4_offset, 16, 32, 16, 16, 128, 0, 32),
-        ("TInsertTest.case_nz_fp4_offset_e2m1_rowcol", gen_fp4_offset, 16, 32, 8, 16, 128, 4, 64),
-        ("TInsertTest.case_nz_fp4_offset_e1m2_rowcol", gen_fp4_offset, 16, 32, 8, 16, 128, 4, 64),
+        ("TInsertTest.case_nz_fp4_offset_e2m1_col", gen_fp4_offset, Fp4OffsetParams(16, 32, 16, 16, 128, 0, 32)),
+        ("TInsertTest.case_nz_fp4_offset_e1m2_col", gen_fp4_offset, Fp4OffsetParams(16, 32, 16, 16, 128, 0, 32)),
+        ("TInsertTest.case_nz_fp4_offset_e2m1_rowcol", gen_fp4_offset, Fp4OffsetParams(16, 32, 8, 16, 128, 4, 64)),
+        ("TInsertTest.case_nz_fp4_offset_e1m2_rowcol", gen_fp4_offset, Fp4OffsetParams(16, 32, 8, 16, 128, 4, 64)),
     ]
 
     for name, gen_fn, *args in cases:
