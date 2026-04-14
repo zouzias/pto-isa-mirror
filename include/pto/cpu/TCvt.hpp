@@ -116,7 +116,7 @@ PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileData
             }
 
             if constexpr (is_float_like_v<S> && std::is_integral_v<D>) {
-                const double dv = static_cast<double>(val);
+                const volatile double dv = static_cast<double>(val);
                 D result = static_cast<D>(applyRoundingToIntegral(dv, mode));
                 dst[dstIdx] = result;
             } else {
