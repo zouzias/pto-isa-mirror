@@ -10,14 +10,14 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
-"""Generate [1, 2048] uint16 keys, golden Top-K indices, and optional value multiset (Top-512 largest)."""
+"""Generate [1, 65536] uint16 keys, golden Top-K indices, and optional value multiset (Top-512 largest)."""
 
 import argparse
 import os
 
 import numpy as np
 
-N = 2048
+N = 65536
 TOPK = 512
 
 
