@@ -31,25 +31,32 @@ std::string GetGoldenDir()
     return "../" + suiteName + "." + caseName;
 }
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols, int iRow = kTRows, int iCol = kTCols, int oRow = kTRows,
+          int oCol = kTCols>
 void LaunchTCOLEXPANDDIV(T *out, T *src0, T *src1, void *stream);
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols, int iRow = kTRows, int iCol = kTCols, int oRow = kTRows,
+          int oCol = kTCols>
 void LaunchTCOLEXPANDMUL(T *out, T *src0, T *src1, void *stream);
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols, int iRow = kTRows, int iCol = kTCols, int oRow = kTRows,
+          int oCol = kTCols>
 void LaunchTCOLEXPANDSUB(T *out, T *src0, T *src1, void *stream);
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols, int iRow = kTRows, int iCol = kTCols, int oRow = kTRows,
+          int oCol = kTCols>
 void LaunchTCOLEXPANDADD(T *out, T *src0, T *src1, void *stream);
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols, int iRow = kTRows, int iCol = kTCols, int oRow = kTRows,
+          int oCol = kTCols>
 void LaunchTCOLEXPANDMAX(T *out, T *src0, T *src1, void *stream);
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols, int iRow = kTRows, int iCol = kTCols, int oRow = kTRows,
+          int oCol = kTCols>
 void LaunchTCOLEXPANDMIN(T *out, T *src0, T *src1, void *stream);
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols, int iRow = kTRows, int iCol = kTCols, int oRow = kTRows,
+          int oCol = kTCols>
 void LaunchTCOLEXPANDEXPDIF(T *out, T *src0, T *src1, void *stream);
 
 template <typename T, int kTRows_, int kTCols_, typename LaunchFn>
@@ -106,98 +113,98 @@ void run_vec_op(LaunchFn fn)
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TCOLEXPANDOPTest, case_div_float_64x64)
+TEST_F(TCOLEXPANDOPTest, case_div_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTCOLEXPANDDIV<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_div_half_16x256)
+TEST_F(TCOLEXPANDOPTest, case_div_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTCOLEXPANDDIV<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_mul_float_64x64)
+TEST_F(TCOLEXPANDOPTest, case_mul_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTCOLEXPANDMUL<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_mul_half_16x256)
+TEST_F(TCOLEXPANDOPTest, case_mul_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTCOLEXPANDMUL<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_sub_float_64x64)
+TEST_F(TCOLEXPANDOPTest, case_sub_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTCOLEXPANDSUB<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_sub_half_16x256)
+TEST_F(TCOLEXPANDOPTest, case_sub_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTCOLEXPANDSUB<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_add_float_64x64)
+TEST_F(TCOLEXPANDOPTest, case_add_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTCOLEXPANDADD<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_add_half_16x256)
+TEST_F(TCOLEXPANDOPTest, case_add_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTCOLEXPANDADD<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_max_float_64x64)
+TEST_F(TCOLEXPANDOPTest, case_max_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTCOLEXPANDMAX<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_max_half_16x256)
+TEST_F(TCOLEXPANDOPTest, case_max_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTCOLEXPANDMAX<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_min_float_64x64)
+TEST_F(TCOLEXPANDOPTest, case_min_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTCOLEXPANDMIN<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_min_half_16x256)
+TEST_F(TCOLEXPANDOPTest, case_min_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTCOLEXPANDMIN<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_expdif_float_64x64)
+TEST_F(TCOLEXPANDOPTest, case_expdif_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTCOLEXPANDEXPDIF<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TCOLEXPANDOPTest, case_expdif_half_16x256)
+TEST_F(TCOLEXPANDOPTest, case_expdif_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTCOLEXPANDEXPDIF<aclFloat16, 16, 256>(out, src0, src1, stream);

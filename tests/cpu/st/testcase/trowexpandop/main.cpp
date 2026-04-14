@@ -106,98 +106,98 @@ void run_vec_op(LaunchFn fn)
     EXPECT_TRUE(ret);
 }
 
-TEST_F(TROWEXPANDOPTest, case_div_float_64x64)
+TEST_F(TROWEXPANDOPTest, case_div_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTROWEXPANDDIV<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_div_half_16x256)
+TEST_F(TROWEXPANDOPTest, case_div_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTROWEXPANDDIV<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_mul_float_64x64)
+TEST_F(TROWEXPANDOPTest, case_mul_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTROWEXPANDMUL<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_mul_half_16x256)
+TEST_F(TROWEXPANDOPTest, case_mul_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTROWEXPANDMUL<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_sub_float_64x64)
+TEST_F(TROWEXPANDOPTest, case_sub_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTROWEXPANDSUB<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_sub_half_16x256)
+TEST_F(TROWEXPANDOPTest, case_sub_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTROWEXPANDSUB<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_add_float_64x64)
+TEST_F(TROWEXPANDOPTest, case_add_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTROWEXPANDADD<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_add_half_16x256)
+TEST_F(TROWEXPANDOPTest, case_add_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTROWEXPANDADD<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_max_float_64x64)
+TEST_F(TROWEXPANDOPTest, case_max_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTROWEXPANDMAX<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_max_half_16x256)
+TEST_F(TROWEXPANDOPTest, case_max_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTROWEXPANDMAX<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_min_float_64x64)
+TEST_F(TROWEXPANDOPTest, case_min_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTROWEXPANDMIN<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_min_half_16x256)
+TEST_F(TROWEXPANDOPTest, case_min_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTROWEXPANDMIN<aclFloat16, 16, 256>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_expdif_float_64x64)
+TEST_F(TROWEXPANDOPTest, case_expdif_float_64x64_64x64_64x64)
 {
     run_vec_op<float, 64, 64>([](float *out, float *src0, float *src1, void *stream) {
         LaunchTROWEXPANDEXPDIF<float, 64, 64>(out, src0, src1, stream);
     });
 }
 
-TEST_F(TROWEXPANDOPTest, case_expdif_half_16x256)
+TEST_F(TROWEXPANDOPTest, case_expdif_half_16x256_16x256_16x256)
 {
     run_vec_op<aclFloat16, 16, 256>([](aclFloat16 *out, aclFloat16 *src0, aclFloat16 *src1, void *stream) {
         LaunchTROWEXPANDEXPDIF<aclFloat16, 16, 256>(out, src0, src1, stream);
