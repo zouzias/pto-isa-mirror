@@ -14,7 +14,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 
 ## 目录结构
 
-- `include/pto/`：公共 PTO ISA API 与后端实现（common / cpu / npu）
+- `include/pto/`：公共 PTO ISA API 与后端实现（common / cpu / npu / comm）
 
 ## 相关文档
 
@@ -136,3 +136,14 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TRANDOM`](../docs/isa/TRANDOM_zh.md) | 否 | TODO | TODO | TODO | 是 |
 | [`TXOR`](../docs/isa/TXOR_zh.md) | 是 | TODO | 是 | 是 | 是 |
 | [`TXORS`](../docs/isa/TXORS_zh.md) | 是 | TODO | 是 | 是 | 是 |
+| [`TPUT`](../docs/isa/comm/TPUT_zh.md) | 是 | TODO | 是 | 是 | 是 |
+| [`TGET`](../docs/isa/comm/TGET_zh.md) | 是 | TODO | 是 | 是 | 是 |
+| [`TPUT_ASYNC`](../docs/isa/comm/TPUT_ASYNC_zh.md) | TODO | TODO | 是 | 是 | 是 |
+| [`TGET_ASYNC`](../docs/isa/comm/TGET_ASYNC_zh.md) | TODO | TODO | 是 | 是 | 是 |
+| [`TNOTIFY`](../docs/isa/comm/TNOTIFY_zh.md) | 是 | TODO | 是 | 是 | 是 |
+| [`TWAIT`](../docs/isa/comm/TWAIT_zh.md) | 是 | TODO | 是 | 是 | 是 |
+| [`TTEST`](../docs/isa/comm/TTEST_zh.md) | 是 | TODO | 是 | 是 | 是 |
+| [`TGATHER`](../docs/isa/comm/TGATHER_zh.md) | 是 | TODO | 是 | 是 | 是 |
+| [`TSCATTER`](../docs/isa/comm/TSCATTER_zh.md) | 是 | TODO | 是 | 是 | 是 |
+| [`TBROADCAST`](../docs/isa/comm/TBROADCAST_zh.md) | 是 | TODO | 是 | 是 | 是 |
+| [`TREDUCE`](../docs/isa/comm/TREDUCE_zh.md) | 是 | TODO | 是 | 是 | 是 |
