@@ -17,11 +17,30 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/common/debug.h"
 #include <cmath>
 #include <type_traits>
+#include <iostream>
+#include <iomanip>
 
 #define F16_MAX 65504
 
 namespace pto {
 constexpr double CAST_ODD_THRESHHOLD = 0.5;
+
+template <typename T>
+PTO_INTERNAL void PrintFloatBits(const char* name, T val)
+{
+    if constexpr (std::is_same_v<T, half> || std::is_same_v<T, _Float16>) {
+        pto::HalfUnion h;
+        h.f = val;
+        std::cout << name << " = " << static_cast<double>(val) << " (bits=0x" << std::hex << h.i << std::dec << ")" << std::endl;
+    } else if constexpr (std::is_floating_point_v<T>) {
+        std::cout << name << " = " << val;
+        if (std::isnan(val)) std::cout << " [NaN]";
+        if (std::isinf(val)) std::cout << " [Inf]";
+        std::cout << std::endl;
+    } else {
+        std::cout << name << " = " << val << std::endl;
+    }
+}
 
 template <typename T>
 constexpr bool is_float_like_v = std::is_floating_point_v<T> || std::is_same_v<T, half> ||
@@ -85,12 +104,21 @@ template <typename TileDataD, typename TileDataS, SaturationMode satMode>
 PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileDataS::TileDType src, unsigned validRow,
                             unsigned validCol, RoundMode mode)
 {
+    using D = typename TileDataD::DType;
+    using S = typename TileDataS::DType;
+
+    bool needsDebug = true;
+    if (needsDebug) {
+        std::cout << "[TCVT_DEBUG] Converting " << typeid(S).name() << " -> " << typeid(D).name()
+                  << ", rows=" << validRow << ", cols=" << validCol
+                  << ", mode=" << static_cast<int>(mode)
+                  << ", saturation=" << static_cast<int>(satMode) << std::endl;
+    }
+
     for (int i = 0; i < validRow; ++i) {
         for (int j = 0; j < validCol; ++j) {
             size_t dstIdx = GetTileElementOffset<TileDataD>(i, j);
             size_t srcIdx = GetTileElementOffset<TileDataS>(i, j);
-            using D = typename TileDataD::DType;
-            using S = typename TileDataS::DType;
 
             S val = src[srcIdx];
             if constexpr (satMode == SaturationMode::ON) {
@@ -101,7 +129,13 @@ PTO_INTERNAL void TCvt_Impl(typename TileDataD::TileDType dst, typename TileData
 
             if constexpr (is_float_like_v<S> && std::is_integral_v<D>) {
                 const double dv = static_cast<double>(val);
-                dst[dstIdx] = static_cast<D>(applyRoundingToIntegral(dv, mode));
+                D result = static_cast<D>(applyRoundingToIntegral(dv, mode));
+                dst[dstIdx] = result;
+
+                if (needsDebug && i < 2 && j < 4) {
+                    std::cout << "  [" << i << "," << j << "] src=" << std::fixed << std::setprecision(6)
+                              << static_cast<double>(val) << " -> dst=" << static_cast<long long>(result) << std::endl;
+                }
             } else {
                 dst[dstIdx] = static_cast<D>(val);
             }
