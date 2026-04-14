@@ -14,7 +14,7 @@
 # Prerequisites:
 #   1. CANN toolkit installed and set_env.sh sourced (ASCEND_HOME_PATH set)
 #   2. MPI (mpich) available in PATH
-#   3. At least 8 NPU devices available (or adjust N_RANKS)
+#   3. At least 2 NPU devices available (N_RANKS <= number of devices)
 #
 # Usage:
 #   ./run.sh                             # 8 ranks, default SoC
