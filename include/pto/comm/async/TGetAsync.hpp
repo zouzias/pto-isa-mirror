@@ -110,9 +110,12 @@ PTO_INTERNAL AsyncEvent TGET_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, Globa
 {
     (void)TGetAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
-    if (!TGetAsyncIsFlatContiguous1D(srcGlobalData) || !TGetAsyncIsFlatContiguous1D(dstGlobalData)) {
-        return AsyncEvent(0, DmaEngine::URMA);
-    }
+    PTO_ASSERT(TGetAsyncIsFlatContiguous1D(srcGlobalData),
+               "TGET_ASYNC URMA: src tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by URMA async path.");
+    PTO_ASSERT(TGetAsyncIsFlatContiguous1D(dstGlobalData),
+               "TGET_ASYNC URMA: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by URMA async path.");
 
     const uint32_t srcElems = TGetAsyncGetTotalElemCount(srcGlobalData);
     const uint32_t dstElems = TGetAsyncGetTotalElemCount(dstGlobalData);
