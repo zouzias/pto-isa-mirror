@@ -13,30 +13,31 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace pto;
 
-template <typename T, int kTRows_, int kTCols_, typename LaunchFn>
+template <typename T, int kTRows, int kTCols, int iRow = kTRows, int iCol = kTCols, int oRow = kTRows,
+          int oCol = kTCols, typename LaunchFn>
 AICORE void runTCOLEXPANDOP(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__ T __in__ *src1, LaunchFn fn)
 {
-    using DynShapeDim5 = Shape<1, 1, 1, kTRows_, kTCols_>;
-    using DynStridDim5 = Stride<1, 1, 1, kTCols_, 1>;
+    using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+    using DynStridDim5 = Stride<1, 1, -1, -1, 1>;
     using GlobalData = GlobalTensor<T, DynShapeDim5, DynStridDim5>;
 
-    using ShapeVec = Shape<1, 1, 1, 1, kTCols_>;
+    using ShapeVec = Shape<1, 1, 1, 1, kTCols>;
     using StrideVec = Stride<1, 1, 1, 1, 1>;
     using GlobalVec = GlobalTensor<T, ShapeVec, StrideVec>;
 
-    using TileT = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileVec = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
-    TileT src0Tile(kTRows_, kTCols_);
-    TileVec src1Tile(1, kTCols_);
-    TileT dstTile(kTRows_, kTCols_);
+    using TileT = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+    using TileVec = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
+    TileT src0Tile(kTRows, kTCols);
+    TileVec src1Tile(1, kTCols);
+    TileT dstTile(kTRows, kTCols);
 
-    GlobalData src0Global(src0);
+    GlobalData src0Global(src0, DynShapeDim5(kTRows, kTCols), DynStridDim5(iRow, iCol));
     GlobalVec src1Global(src1);
-    GlobalData dstGlobal(out);
+    GlobalData dstGlobal(out, DynShapeDim5(kTRows, kTCols), DynStridDim5(oRow, oCol));
 
     TASSIGN(src0Tile, 0);
-    TASSIGN(src1Tile, kTRows_ * kTCols_ * sizeof(typename TileT::DType));
-    TASSIGN(dstTile, 2 * kTRows_ * kTCols_ * sizeof(typename TileVec::DType));
+    TASSIGN(src1Tile, kTRows * kTCols * sizeof(typename TileT::DType));
+    TASSIGN(dstTile, 2 * kTRows * kTCols * sizeof(typename TileVec::DType));
 
     TLOAD(src0Tile, src0Global);
     TLOAD(src1Tile, src1Global);
@@ -45,107 +46,107 @@ AICORE void runTCOLEXPANDOP(__gm__ T __out__ *out, __gm__ T __in__ *src0, __gm__
     out = dstGlobal.data();
 }
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols>
 void LaunchTCOLEXPANDDIV(T *out, T *src0, T *src1, void *stream)
 {
-    using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TileDst = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<half, kTRows, kTCols>(
             (half *)(out), (half *)(src0), (half *)(src1),
             [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDDIV(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<T, kTRows, kTCols>(
             out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDDIV(dst, src0, src1); });
     }
 }
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols>
 void LaunchTCOLEXPANDMUL(T *out, T *src0, T *src1, void *stream)
 {
-    using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TileDst = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<half, kTRows, kTCols>(
             (half *)(out), (half *)(src0), (half *)(src1),
             [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMUL(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<T, kTRows, kTCols>(
             out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMUL(dst, src0, src1); });
     }
 }
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols>
 void LaunchTCOLEXPANDSUB(T *out, T *src0, T *src1, void *stream)
 {
-    using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TileDst = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<half, kTRows, kTCols>(
             (half *)(out), (half *)(src0), (half *)(src1),
             [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDSUB(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<T, kTRows, kTCols>(
             out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDSUB(dst, src0, src1); });
     }
 }
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols>
 void LaunchTCOLEXPANDADD(T *out, T *src0, T *src1, void *stream)
 {
-    using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TileDst = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<half, kTRows, kTCols>(
             (half *)(out), (half *)(src0), (half *)(src1),
             [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDADD(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<T, kTRows, kTCols>(
             out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDADD(dst, src0, src1); });
     }
 }
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols>
 void LaunchTCOLEXPANDMAX(T *out, T *src0, T *src1, void *stream)
 {
-    using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TileDst = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<half, kTRows, kTCols>(
             (half *)(out), (half *)(src0), (half *)(src1),
             [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMAX(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<T, kTRows, kTCols>(
             out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMAX(dst, src0, src1); });
     }
 }
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols>
 void LaunchTCOLEXPANDMIN(T *out, T *src0, T *src1, void *stream)
 {
-    using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TileDst = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<half, kTRows, kTCols>(
             (half *)(out), (half *)(src0), (half *)(src1),
             [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMIN(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<T, kTRows, kTCols>(
             out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDMIN(dst, src0, src1); });
     }
 }
 
-template <typename T, int kTRows_, int kTCols_>
+template <typename T, int kTRows, int kTCols>
 void LaunchTCOLEXPANDEXPDIF(T *out, T *src0, T *src1, void *stream)
 {
-    using TileDst = Tile<TileType::Vec, T, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
-    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols_, BLayout::RowMajor, -1, -1>;
+    using TileDst = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1>;
+    using TileSrc1 = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
     if constexpr (std::is_same_v<T, aclFloat16>) {
-        runTCOLEXPANDOP<half, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<half, kTRows, kTCols>(
             (half *)(out), (half *)(src0), (half *)(src1),
             [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDEXPDIF(dst, src0, src1); });
     } else {
-        runTCOLEXPANDOP<T, kTRows_, kTCols_>(
+        runTCOLEXPANDOP<T, kTRows, kTCols>(
             out, src0, src1, [](TileDst &dst, TileDst &src0, TileSrc1 &src1) { TCOLEXPANDEXPDIF(dst, src0, src1); });
     }
 }
