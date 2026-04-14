@@ -19,8 +19,9 @@
  *   threshold share the same bit pattern via reinterpret_cast.
  * - Output index order is unspecified (no sorting required); length is TopK (caller may trim if duplicates in EQ).
  *
- * Current example shape: N = 1 * 2048 keys, TopK = 512 (see scripts/gen_data.py).
- * Input is loaded once to UB (1×N uint16); MSB/LSB histograms and per-chunk TGATHER read that buffer only.
+ * Current example shape: N = 65536 (64K) keys, TopK = 512 (see scripts/gen_data.py).
+ * Input is loaded once to UB (1×N uint16); MSB/LSB histograms and full-width TGATHER read that buffer only.
+ * UB layout uses ~0xC01000 bytes (keys 128 KiB + GT/EQ index buffers 256 KiB each + merged); verify A5 UB limits.
  */
 
 #include <pto/pto-inst.hpp>
@@ -37,7 +38,7 @@ using namespace pto;
 
 namespace topk_radix_detail {
 
-constexpr int kN = 2048;
+constexpr int kN = 65536;
 constexpr int kBinNum = 256;
 #define PTO_DIV_ROUNDUP(x, y) (((x) + (y)-1) / (y))
 #define PTO_CEIL(x, y) (PTO_DIV_ROUNDUP(x, y) * (y))
@@ -62,28 +63,33 @@ using RemainKTile = Tile<TileType::Vec, uint32_t, 1, 32, BLayout::RowMajor, -1, 
 // packedThreshold = (msb<<8)|lsb via TSHL + TOR (reuse kRemainUb* after remainKTile V ops are done).
 using PackedU16Tile = Tile<TileType::Vec, uint16_t, 1, 32, BLayout::RowMajor, -1, -1>;
 
-// Scratch for FindWinnerBucketDescending (TCMPS / TCI / TSELS). Disjoint from 0x10000–0x1C000
-// histogram tiles and from 0x20000+ gather scratch used after winner selection.
-constexpr uint64_t kWinnerUbMask = 0x23000;
-constexpr uint64_t kWinnerUbIdx = 0x23400;
-constexpr uint64_t kWinnerUbGather = 0x23800;
-constexpr uint64_t kWinnerUbTmp = 0x23C00;
+// Histogram tiles sit after full keys [0, kN*sizeof(uint16)) = [0, 0x20000). Winner scratch starts at 0x24000
+// (past idxFilter at 0x23000). Gather GT/EQ buffers are high UB (0x40000 / 0x80000) — see RunRadixTopKDraft.
+constexpr uint64_t kUbTileHist = 0x20000;
+constexpr uint64_t kUbChistMSB = 0x21000;
+constexpr uint64_t kUbChistLSB = 0x22000;
+constexpr uint64_t kUbIdxFilter = 0x23000;
+// Scratch for FindWinnerBucketDescending (TCMPS / TCI / TSELS).
+constexpr uint64_t kWinnerUbMask = 0x24000;
+constexpr uint64_t kWinnerUbIdx = 0x24400;
+constexpr uint64_t kWinnerUbGather = 0x24800;
+constexpr uint64_t kWinnerUbTmp = 0x24C00;
 // TROWMIN / TADDS / TCMPS / TSEL scratch (after TSELS; tmp must not alias outLanes at kWinnerUbGather).
-constexpr uint64_t kWinnerUbRowMinDst = 0x24000;
-constexpr uint64_t kWinnerUbRowMinTmp = 0x24400; // 1×256×4 bytes
-constexpr uint64_t kWinnerUbSelMask = 0x24800;   // TCMPS mask (packed), 1×32 u8
-constexpr uint64_t kWinnerUbSelZero = 0x24840;   // u32 0 for TSEL src0
-constexpr uint64_t kWinnerUbSelOut = 0x24900;    // TSEL dst (1×16 u32)
-constexpr uint64_t kWinnerUbTselTmp = 0x24A00;   // TSEL tmp; TGATHER tmp (WinnerBinU8 outBin uses kWinnerUbTmp)
+constexpr uint64_t kWinnerUbRowMinDst = 0x25000;
+constexpr uint64_t kWinnerUbRowMinTmp = 0x25400; // 1×256×4 bytes
+constexpr uint64_t kWinnerUbSelMask = 0x25800;   // TCMPS mask (packed), 1×32 u8
+constexpr uint64_t kWinnerUbSelZero = 0x25840;   // u32 0 for TSEL src0
+constexpr uint64_t kWinnerUbSelOut = 0x25900;    // TSEL dst (1×16 u32)
+constexpr uint64_t kWinnerUbTselTmp = 0x25A00;   // TSEL tmp; TGATHER tmp (WinnerBinU8 outBin uses kWinnerUbTmp)
 // After TROWMIN..TSEL, reuse kWinnerUbRowMinTmp for TGATHER index tile (1×32 u32).
 // MSB remainK tile pipeline: TEXPANDS(TopK), TEXPANDS(N), TGATHER(C[w]), TSUB(N,Cw), TSUB(TopK,sumAbove).
-constexpr uint64_t kRemainUbTopk = 0x24E00;
-constexpr uint64_t kRemainUbN = 0x24E80;
-constexpr uint64_t kRemainUbCw = 0x24F00;
-constexpr uint64_t kRemainUbSumAbove = 0x24F80;
-constexpr uint64_t kRemainUbOut = 0x25000;
+constexpr uint64_t kRemainUbTopk = 0x25E00;
+constexpr uint64_t kRemainUbN = 0x25E80;
+constexpr uint64_t kRemainUbCw = 0x25F00;
+constexpr uint64_t kRemainUbSumAbove = 0x25F80;
+constexpr uint64_t kRemainUbOut = 0x26000;
 // Copy of msbWinnerBin before LSB WinnerBinU8FromSelsMin overwrites kWinnerUbTmp (128 B, 1×32 u32).
-constexpr uint64_t kMsbWinnerSavedUb = 0x24D80;
+constexpr uint64_t kMsbWinnerSavedUb = 0x25D80;
 // Match tests/npu/a5/src/st/testcase/thistogram/thistogram_kernel.cpp idx tile layout.
 constexpr uint16_t kIdxAlignedRows = PTO_CEIL(1 * sizeof(uint8_t), BLOCK_BYTE_SIZE);
 using IdxFilterTile = Tile<TileType::Vec, uint8_t, kIdxAlignedRows, 1, BLayout::ColMajor, -1, -1>;
@@ -364,7 +370,8 @@ AICORE inline void GatherCmpToTile(uint16_t threshold, int gmBase, int validCols
     ConcatTile concatTile(1, 1);
     TmpTile tmpTile(1, cmpVCol);
 
-    constexpr uint64_t kGatherUbTmp = 0x21880;
+    // After winner/concat scratch (≥0x28040); 8192 bytes for N=65536 (cmpVCol=8192).
+    constexpr uint64_t kGatherUbTmp = 0x29000;
     TASSIGN(dstTile, ubDst);
     TASSIGN(concatTile, ubConcat);
     TASSIGN(tmpTile, kGatherUbTmp);
@@ -383,6 +390,8 @@ AICORE inline void GatherCmpToTile(uint16_t threshold, int gmBase, int validCols
         TGATHER<DstTile, GatherSrcI16<ValidCols>, ConcatTile, TmpTile, CmpMode::EQ, 0u>(dstTile, srcTile, kBits,
                                                                                         concatTile, tmpTile);
     }
+    set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
+    wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
 }
 
 // After MSB cumulative hist: raw MSB → msbWinnerSaved (idx + packed MSB); (-1) bin → msbWinnerBin for RemainK TGATHER.
@@ -417,10 +426,10 @@ __global__ AICORE void RunRadixTopKDraft(__gm__ uint16_t *src, __gm__ uint32_t *
     IdxFilterTile idxFilter(1, 1);
 
     TASSIGN(fullInTile, kUbFullKeys);
-    TASSIGN(tileHist, 0x10000);
-    TASSIGN(chistMSB, 0x14000);
-    TASSIGN(chistLSB, 0x18000);
-    TASSIGN(idxFilter, 0x1C000);
+    TASSIGN(tileHist, kUbTileHist);
+    TASSIGN(chistMSB, kUbChistMSB);
+    TASSIGN(chistLSB, kUbChistLSB);
+    TASSIGN(idxFilter, kUbIdxFilter);
 
     // Single GM load of full input; histograms and gather use UB only afterward.
     LoadTileU16(fullInTile, src, 0, kN);
@@ -447,11 +456,11 @@ __global__ AICORE void RunRadixTopKDraft(__gm__ uint16_t *src, __gm__ uint32_t *
     LsbWinnerBinFromChistTiles(chistLSB, remainKTile, lsbWinnerBin);
     uint16_t packedThreshold = PackedThresholdU16ViaShlOr(msbWinnerSaved, lsbWinnerBin);
 
-    // Compare-gather: full 1×kN TGATHER dst (8 KiB each). Reuse UB after MSB/LSB winner scratch (≥0x23000).
-    constexpr uint64_t kFullGatherGtDst = 0x23000;
-    constexpr uint64_t kFullGatherEqDst = 0x25000;
-    constexpr uint64_t kChunkConcatGt = 0x21000;
-    constexpr uint64_t kChunkConcatEq = 0x21040;
+    // Compare-gather: full 1×kN TGATHER dst (kN×4 bytes each). Placed after gather tmp [0x29000, 0x2B000).
+    constexpr uint64_t kFullGatherGtDst = 0x30000;
+    constexpr uint64_t kFullGatherEqDst = 0x38000;
+    constexpr uint64_t kChunkConcatGt = 0x28000;
+    constexpr uint64_t kChunkConcatEq = 0x28040;
 
     GatherFullU32 gtChunk(1, kN);
     GatherFullU32 eqChunk(1, kN);
@@ -463,9 +472,8 @@ __global__ AICORE void RunRadixTopKDraft(__gm__ uint16_t *src, __gm__ uint32_t *
     TASSIGN(idxGtCnt, kChunkConcatGt);
     TASSIGN(idxEqCnt, kChunkConcatEq);
 
-    // mergedIdx after reserved 2×TopK u32 at 0x28000 (legacy layout hole).
-    constexpr uint64_t kUbMerged =
-        static_cast<uint64_t>(0x28000) + static_cast<uint64_t>(2 * TopK) * sizeof(uint32_t);
+    // mergedIdx: 2×TopK u32 immediately after EQ buffer (0x80000 + kN×4 = 0xC0000).
+    constexpr uint64_t kUbMerged = 0x0;
 
     using MergedIdxTile = Tile<TileType::Vec, uint32_t, 1, 2 * TopK, BLayout::RowMajor, -1, -1>;
 
