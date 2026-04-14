@@ -134,14 +134,12 @@ PTO_INTERNAL void TRowReduceCheck(uint32_t srcValidRows, uint32_t srcValidCols, 
     using T = typename TileDataIn::DType;
     using TDst = typename TileDataOut::DType;
     static_assert(
-        std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int32_t> || std::is_same_v<T, int16_t>,
+        std::is_same_v<T, half> || std::is_same_v<T, float> || std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t> || std::is_same_v<T, int16_t>,
         "Row reduction only supports 'half', 'float', 'int32', or 'int16' data types. "
-        "Fix: Define TileDataIn with DType = half, float, int32, or int16.");
-    static_assert(idx || std::is_same_v<T, typename TileDataOut::DType>,
+        "Fix: Define TileDataIn with DType = half, float, int32, uint32, or int16.");
+    static_assert(idx || std::is_same_v<T, TDst>,
                   "Input and output tile data types must match. "
                   "Fix: Ensure TileDataOut uses the same DType as TileDataIn.");
-    static_assert(!idx || std::is_same_v<uint32_t, TDst> || std::is_same_v<int32_t, TDst>,
-                  "Output tile data type must be uint32_t or int32_t.");
     static_assert(TileDataOut::Loc == pto::TileType::Vec && TileDataIn::Loc == pto::TileType::Vec,
                   "Row reduction only works on vector tiles (TileType::Vec). "
                   "Fix: Instantiate TileDataIn and TileDataOut with Loc_ = TileType::Vec.");
