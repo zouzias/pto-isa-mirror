@@ -236,10 +236,11 @@ PTO_INTERNAL constexpr void CommonCheckMX()
 template <typename DstTileData, typename SrcTileData, typename TmpTileData>
 PTO_INTERNAL constexpr void CommonCheckZZ()
 {
-    static_assert(std::is_same_v<typename DstTileData::DType, uint8_t> &&
-                      std::is_same_v<typename SrcTileData::DType, uint8_t> &&
-                      std::is_same_v<typename TmpTileData::DType, uint8_t>,
-                  "TMov ND->ZZ: Destination, source, and temporary tile data types must all be uint8_t.");
+    using T = typename DstTileData::DType;
+    static_assert(std::is_same_v<T, uint8_t> || std::is_same_v<T, hifloat8_t> || std::is_same_v<T, float8_e8m0_t>,
+                  "TMov ND->ZZ: Data type must be uint8_t, hifloat8_t, or float8_e8m0_t.");
+    static_assert(std::is_same_v<T, typename SrcTileData::DType> && std::is_same_v<T, typename TmpTileData::DType>,
+                  "TMov ND->ZZ: Destination, source, and temporary tile data types must all be the same.");
 }
 
 template <typename DstTileData, typename SrcTileData>

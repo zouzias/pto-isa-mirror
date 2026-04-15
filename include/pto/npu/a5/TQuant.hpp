@@ -37,13 +37,15 @@ PTO_INTERNAL void AbsReduceMax_Naive(__ubuf__ float *srcPtr, __ubuf__ float *max
                                      MaskReg &preg_upper32)
 {
     RegTensor<float> vreg_b32;
+    vector_s32 vreg_zero;
+    vbr(vreg_zero, 0);
     uint32_t elem_count = total_elements_count;
-    // assumption: input total num of elements is a multiple of 64
     for (uint16_t i = 0; i < (uint16_t)vl_count; ++i) {
         MaskReg preg = CreatePredicate<float>(elem_count);
         RegTensor<float> vreg_max_0, vreg_max_1;
         vlds(vreg_b32, srcPtr, i * elementsPerRepeat, NORM);
         vabs(vreg_b32, vreg_b32, preg);
+        vsel((vector_s32 &)vreg_b32, (vector_s32 &)vreg_b32, vreg_zero, preg);
         vcmax(vreg_max_0, vreg_b32, preg_lower32);
         vcmax(vreg_max_1, vreg_b32, preg_upper32);
         vsts(vreg_max_0, maxPtr, 2 * i, ONEPT_B32, preg);
@@ -119,29 +121,93 @@ PTO_INTERNAL void AbsReduceMax_f32_opt_largesizes(__ubuf__ float *srcPtr, __ubuf
     }
 }
 
+// Assumption: input total size is NOT a multiple of 256 elements
+template <typename T>
+PTO_INTERNAL void AbsReduceMax_b16_ND(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, unsigned vl_count,
+                                      unsigned total_elem_count)
+{
+    vector_bf16 vb16_in_1, vb16_in_2, vb16_max_1;
+    vector_align ureg_max;
+    constexpr uint32_t grp_size = 32;
+    constexpr uint32_t elements_per_vl = REPEAT_BYTE / sizeof(T);
+    constexpr uint32_t elements_per_dintlv = 2 * elements_per_vl; // 256 bf16 per DINTLV load
+    constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_SIZE;
+    uint16_t loop_num = CeilDivision(vl_count, 2);
+    for (uint16_t i = 0; i < (uint16_t)loop_num; ++i) {
+        // DINTLV_B16 deinterleaves 256 elements into even/odd registers.
+        // Predicates must reflect per-register valid count (half of remaining),
+        // NOT sequential 128-subtraction which assumes linear VL consumption.
+        uint32_t offset = i * elements_per_dintlv;
+        uint32_t remaining = (total_elem_count > offset) ? (total_elem_count - offset) : 0;
+        if (remaining > elements_per_dintlv)
+            remaining = elements_per_dintlv;
+        uint32_t even_count = (remaining + 1) / 2;
+        uint32_t odd_count = remaining / 2;
+        MaskReg preg_vl0 = CreatePredicate<T>(even_count);
+        MaskReg preg_vl1 = CreatePredicate<T>(odd_count);
+        vlds(vb16_in_1, vb16_in_2, srcPtr, offset, DINTLV_B16); // loads 2 VLs (256 bf16 elements)
+        vabs((vector_f16 &)vb16_in_1, (vector_f16 &)vb16_in_1, preg_vl0);
+        vabs((vector_f16 &)vb16_in_2, (vector_f16 &)vb16_in_2, preg_vl1);
+        vmax(vb16_in_1, vb16_in_1, vb16_in_2, preg_vl0);
+        vcgmax((vector_f16 &)vb16_max_1, (vector_f16 &)vb16_in_1, preg_vl0); // 8 group maxes per 2 VLs
+        // Use vstus (alignment-safe store) instead of vsts to avoid 32-byte alignment issues
+        // when i*8 elements (i*16 bytes for bf16) is not a multiple of 32 bytes.
+        vstus(ureg_max, blks_per_vl, vb16_max_1, maxPtr + i * 8);
+    }
+    vstas(ureg_max, maxPtr, 0);
+}
+
+// Assumption: input total size is a multiple of 256 elements
+template <typename T>
+PTO_INTERNAL void AbsReduceMax_b16_ND_opt(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, unsigned vl_count,
+                                          unsigned total_elem_count)
+{
+    vector_bf16 vb16_in_1, vb16_in_2, vb16_max_1;
+    vector_align ureg_max;
+    uint32_t total_count = total_elem_count;
+    constexpr uint32_t grp_size = 32;
+    constexpr uint32_t elements_per_vl = REPEAT_BYTE / sizeof(T);
+    uint16_t loop_num = CeilDivision(vl_count, 2);
+    uint32_t num_st = CeilDivision(total_count, grp_size);
+    MaskReg preg_lower8 = pset_b16(PAT_VL8);
+    static constexpr auto distValue =
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
+    for (uint16_t i = 0; i < (uint16_t)loop_num; ++i) { // 32 VLs per outer loop
+        MaskReg preg_vl0 = CreatePredicate<T>(total_count);
+        MaskReg preg_vl1 = CreatePredicate<T>(total_count);
+        vlds(vb16_in_1, vb16_in_2, srcPtr, 2 * i * elements_per_vl, DINTLV_B16); // loads 2 VLs (256 bf16 elements)
+        vabs((vector_f16 &)vb16_in_1, (vector_f16 &)vb16_in_1, preg_vl0);
+        vabs((vector_f16 &)vb16_in_2, (vector_f16 &)vb16_in_2, preg_vl1);
+        vmax(vb16_in_1, vb16_in_1, vb16_in_2, preg_vl0);
+        vcgmax((vector_f16 &)vb16_max_1, (vector_f16 &)vb16_in_1, preg_vl0); // 8 group maxes per 2 VLs
+        vsts(vb16_max_1, maxPtr, i * 8, distValue, preg_lower8);
+    }
+}
+
 // Assumption: input total size is a multiple of 2K elements
 // Uses 2 VLs per inner iteration (1 DINTLV + 1 vcgmax + 1 vstus) to avoid
 // WAW hazard on the vstus auto-increment scalar register when using 2 vstus per iteration.
-PTO_INTERNAL void AbsReduceMax_bf16_ND_largesizes(__ubuf__ bfloat16_t *srcPtr, __ubuf__ bfloat16_t *maxPtr,
-                                                  unsigned vl_count, unsigned total_elements_count)
+template <typename T>
+PTO_INTERNAL void AbsReduceMax_b16_ND_largesizes(__ubuf__ T *srcPtr, __ubuf__ T *maxPtr, unsigned vl_count,
+                                                 unsigned total_elements_count)
 {
     vector_bf16 vb16_in_1, vb16_in_2, vb16_max_1;
     vector_align ureg_max;
     uint32_t total_count = total_elements_count;
     constexpr uint32_t grp_size = 32;
-    constexpr uint32_t elements_per_vl = REPEAT_BYTE / sizeof(bfloat16_t); // 256 B / 2 B = 128 elements per VL
-    constexpr uint32_t grps_per_vl = elements_per_vl / grp_size;           // 128 / 32 = 4 groups per VL
-    constexpr uint32_t num_vl_per_inner_loop = 2;                          // 2 VLs per inner loop (1 DINTLV load)
+    constexpr uint32_t elements_per_vl = REPEAT_BYTE / sizeof(T); // 256 B / 2 B = 128 elements per VL
+    constexpr uint32_t grps_per_vl = elements_per_vl / grp_size;  // 128 / 32 = 4 groups per VL
+    constexpr uint32_t num_vl_per_inner_loop = 2;                 // 2 VLs per inner loop (1 DINTLV load)
     constexpr uint32_t num_vl_per_outer_loop = 32;
     constexpr uint32_t grps_per_inner_loop = num_vl_per_inner_loop * grps_per_vl; // 2 * 4 = 8 grps per inner loop
     constexpr uint32_t grps_per_outer_loop = num_vl_per_outer_loop * grps_per_vl; // 32 * 4 = 128
     constexpr uint32_t blks_per_vl = REPEAT_BYTE / BLOCK_SIZE;                    // 8 blocks per VL
     static constexpr auto distValue =
-        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<bfloat16_t, DistVST::DIST_NORM>())>();
+        std::integral_constant<::DistVST, static_cast<::DistVST>(GetDistVst<T, DistVST::DIST_NORM>())>();
     for (uint16_t i = 0; i < (uint16_t)vl_count / num_vl_per_outer_loop; ++i) {        // 32 VLs per outer loop
         for (uint16_t j = 0; j < num_vl_per_outer_loop / num_vl_per_inner_loop; ++j) { // 2 VLs per inner loop
-            MaskReg preg_vl0 = CreatePredicate<bfloat16_t>(total_count);
-            MaskReg preg_vl1 = CreatePredicate<bfloat16_t>(total_count);
+            MaskReg preg_vl0 = CreatePredicate<T>(total_count);
+            MaskReg preg_vl1 = CreatePredicate<T>(total_count);
             uint32_t offset = (i * num_vl_per_outer_loop + j * num_vl_per_inner_loop) * elements_per_vl;
             uint32_t grp_offset = grps_per_outer_loop * i + grps_per_inner_loop * j;
             vlds(vb16_in_1, vb16_in_2, srcPtr, offset, DINTLV_B16); // loads 2 VLs (256 bf16 elements)
@@ -281,8 +347,8 @@ PTO_INTERNAL void CalcQuantizedFP8Values(__ubuf__ float *srcPtr, __ubuf__ float 
         vmul(vb32_out_1, vb32_in, vb32_scaling_0, preg_lower32, MODE_ZEROING);
         vmul(vb32_out_2, vb32_in, vb32_scaling_1, preg_upper32, MODE_ZEROING);
         vor(vb32_out, vb32_out_1, vb32_out_2, preg_ALL);
-        vcvt((vector_f8e4m3 &)vb8_out, (vector_f32 &)vb32_out, preg_ALL, ROUND_R, RS_ENABLE, PART_P0);
-        vsts((vector_u8 &)vb8_out, (__ubuf__ uint8_t *)dstPtr, i * elementsPerRepeat, PK4_B32, preg_ALL);
+        vcvt((vector_f8e4m3 &)vb8_out, (vector_f32 &)vb32_out, preg, ROUND_R, RS_ENABLE, PART_P0);
+        vsts((vector_u8 &)vb8_out, (__ubuf__ uint8_t *)dstPtr, i * elementsPerRepeat, PK4_B32, preg);
     }
 }
 
@@ -320,15 +386,24 @@ PTO_INTERNAL void CalcQuantizedFP8Values(__ubuf__ T *srcPtr, __ubuf__ T *scaling
     vector_f8e4m3 vb8_or1, vb8_or2, vb8_out, vb8_p0, vb8_p1, vb8_p2, vb8_p3;
     constexpr uint32_t elementsPerVL_b16 = REPEAT_BYTE / sizeof(T);
     constexpr uint32_t elementsPerVL_b8 = REPEAT_BYTE / sizeof(uint8_t);
+    constexpr uint32_t elementsPerDintlv = 2 * elementsPerVL_b16; // 256 bf16 per DINTLV load
     uint32_t vl_count = CeilDivision(total_elements_count, elementsPerVL_b16);
-    uint32_t elem_count_b16 = total_elements_count;
-    uint32_t elem_count_b8 = total_elements_count;
     for (uint16_t i = 0; i < (uint16_t)vl_count / 2; ++i) {
-        MaskReg preg_b16_1 = CreatePredicate<T>(elem_count_b16);
-        MaskReg preg_b16_2 = CreatePredicate<T>(elem_count_b16);
-        MaskReg preg_b8 = CreatePredicate<uint8_t>(elem_count_b8);
+        // DINTLV_B16 deinterleaves 256 elements into even/odd registers.
+        // Predicates must reflect per-register valid count (half of remaining),
+        // NOT sequential 128-subtraction which assumes linear VL consumption.
+        uint32_t offset_b16 = i * elementsPerDintlv;
+        uint32_t remaining = (total_elements_count > offset_b16) ? (total_elements_count - offset_b16) : 0;
+        if (remaining > elementsPerDintlv)
+            remaining = elementsPerDintlv;
+        uint32_t even_count = (remaining + 1) / 2;
+        uint32_t odd_count = remaining / 2;
+        MaskReg preg_b16_1 = CreatePredicate<T>(even_count);
+        MaskReg preg_b16_2 = CreatePredicate<T>(odd_count);
+        uint32_t remaining_b8 = remaining; // 1 bf16 → 1 FP8 byte
+        MaskReg preg_b8 = CreatePredicate<uint8_t>(remaining_b8);
         vlds((vector_u16 &)vb16_scaling, (__ubuf__ uint16_t *)scalingPtr, 8 * i, E2B_B16);
-        vlds(vb16_in_1, vb16_in_2, srcPtr, 2 * i * elementsPerVL_b16, DINTLV_B16);
+        vlds(vb16_in_1, vb16_in_2, srcPtr, offset_b16, DINTLV_B16);
         vmul(vb16_out_1, vb16_in_1, vb16_scaling, preg_b16_1, MODE_ZEROING);
         vmul(vb16_out_2, vb16_in_2, vb16_scaling, preg_b16_2, MODE_ZEROING);
         // b16->fp32: EVEN/ODD split each 128-element b16 register into 2x64 fp32
@@ -360,13 +435,26 @@ PTO_INTERNAL void TQuant_MXFP8_F32(__ubuf__ float *srcPtr, __ubuf__ uint8_t *exp
     MaskReg preg_lower32 = pset_b32(PAT_VL32), preg_upper32, preg_ALL = pset_b32(PAT_ALL);
     pxor(preg_upper32, preg_ALL, preg_lower32, preg_ALL);
     __ubuf__ float *maxPtr_backup = maxPtr;
-    if (validRows * validCols <= 1024 || (validRows * validCols) % 256 != 0)
+    if (validRows * validCols <= 1024)
         AbsReduceMax_Naive(srcPtr, maxPtr, total_elements_count, vl_count, elementsPerRepeat, preg_lower32,
                            preg_upper32);
-    else if ((validRows * validCols) % 2048 == 0)
-        AbsReduceMax_f32_opt_largesizes(srcPtr, maxPtr, vl_count, elementsPerRepeat, total_elements_count);
-    else
-        AbsReduceMax_f32_opt(srcPtr, maxPtr, vl_count, elementsPerRepeat, total_elements_count);
+    else {
+        uint32_t aligned_total = (total_elements_count / 256) * 256;
+        uint32_t tail_total = total_elements_count - aligned_total;
+        if (aligned_total > 0) {
+            uint16_t aligned_vl_count = aligned_total / elementsPerRepeat;
+            if (aligned_total % 2048 == 0)
+                AbsReduceMax_f32_opt_largesizes(srcPtr, maxPtr, aligned_vl_count, elementsPerRepeat, aligned_total);
+            else
+                AbsReduceMax_f32_opt(srcPtr, maxPtr, aligned_vl_count, elementsPerRepeat, aligned_total);
+        }
+        if (tail_total > 0) {
+            uint32_t aligned_groups = aligned_total / 32;
+            uint16_t tail_vl_count = CeilDivision(tail_total, elementsPerRepeat);
+            AbsReduceMax_Naive(srcPtr + aligned_total, maxPtr + aligned_groups, tail_total, tail_vl_count,
+                               elementsPerRepeat, preg_lower32, preg_upper32);
+        }
+    }
     mem_bar(VST_VLD);
     maxPtr = maxPtr_backup;
     constexpr bool unroll = (StaticRows * StaticCols > 1024) && (StaticRows * StaticCols % 256 == 0);
@@ -386,8 +474,16 @@ PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr,
                                    unsigned exp_loop_count, uint32_t numGroups, uint32_t total_elements_count)
 {
     __ubuf__ T *maxPtr_backup = maxPtr;
-    AbsReduceMax_bf16_ND_largesizes((__ubuf__ bfloat16_t *)srcPtr, (__ubuf__ bfloat16_t *)maxPtr, vl_count,
-                                    total_elements_count);
+    // AbsReduceMax functions use vector_bf16 intrinsics; cast pointers for fp16 compatibility
+    // (both types are 16-bit; abs/max operate on raw bit patterns identically for exponent extraction)
+    __ubuf__ bfloat16_t *srcPtr_b16 = (__ubuf__ bfloat16_t *)srcPtr;
+    __ubuf__ bfloat16_t *maxPtr_b16 = (__ubuf__ bfloat16_t *)maxPtr;
+    if (total_elements_count % 2048 == 0)
+        AbsReduceMax_b16_ND_largesizes(srcPtr_b16, maxPtr_b16, vl_count, total_elements_count);
+    else if (total_elements_count % 256 == 0)
+        AbsReduceMax_b16_ND_opt(srcPtr_b16, maxPtr_b16, vl_count, total_elements_count);
+    else
+        AbsReduceMax_b16_ND(srcPtr_b16, maxPtr_b16, vl_count, total_elements_count);
     mem_bar(VST_VLD);
     maxPtr = maxPtr_backup;
     ExtractB8ExponentAndScaling(maxPtr, expPtr, scalingPtr, exp_loop_count, numGroups);
@@ -424,11 +520,11 @@ __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl(typename TileDataOut::TileDType __out
         unsigned exp_loop_count = CeilDivision(numGroups, elementsPerRepeat);
         if constexpr (std::is_same<T, float>::value)
             TQuant_MXFP8_F32<TileDataSrc::Rows, TileDataSrc::Cols>(
-                srcPtr, expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr, vl_count, exp_loop_count, numGroups,
-                elementsPerRepeat, total_elements_count, validRows, validCols);
+                srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr, vl_count,
+                exp_loop_count, numGroups, elementsPerRepeat, total_elements_count, validRows, validCols);
         else
-            TQuant_MXFP8_B16(srcPtr, expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr, vl_count, exp_loop_count,
-                             numGroups, total_elements_count);
+            TQuant_MXFP8_B16(srcPtr, (__ubuf__ uint8_t *)expPtr, (__ubuf__ uint8_t *)dstPtr, maxPtr, scalingPtr,
+                             vl_count, exp_loop_count, numGroups, total_elements_count);
     }
 }
 
