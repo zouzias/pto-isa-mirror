@@ -127,14 +127,15 @@ if __name__ == "__main__":
         TRowArgMaxParams(np.uint32, np.float16, 260, 16, 260, 64, 1, 16, 260, 64),
         TRowArgMaxParams(np.uint32, np.float16, 1023, 16, 1023, 32, 1, 16, 1023, 17),
         TRowArgMaxParams(np.uint32, np.float16, 2, 16, 2, 32768, 2, 768, 2, 32761),
-        TRowArgMaxValIdxParams(np.uint32, np.float32, 8, 1, 8, 1, 3, 4096, 3, 192, 3, 4095),
-        TRowArgMaxValIdxParams(np.uint32, np.float32, 8, 1, 8, 1, 1, 16384, 1, 768, 1, 16381),
-        TRowArgMaxValIdxParams(np.uint32, np.float16, 16, 1, 16, 1, 3, 8192, 3, 384, 3, 8191),
-        TRowArgMaxValIdxParams(np.uint32, np.float16, 16, 1, 16, 1, 1, 16384, 1, 768, 1, 16381),
-        TRowArgMaxValIdxParams(np.uint32, np.float16, 16, 1, 16, 1, 1, 32768, 1, 768, 1, 32761),
-        TRowArgMaxValIdxParams(np.uint32, np.float32, 8, 1, 8, 1, 8, 8, 2, 8, 8, 8),
         TRowArgMaxValIdxParams(np.uint32, np.float32, 1024, 1, 1024, 1, 1023, 24, 1023, 8, 1023, 17),
         TRowArgMaxValIdxParams(np.uint32, np.float32, 264, 1, 264, 1, 260, 64, 260, 8, 260, 64),
+        TRowArgMaxValIdxParams(np.uint32, np.float32, 8, 1, 8, 1, 3, 4096, 3, 192, 3, 4095),
+        TRowArgMaxValIdxParams(np.uint32, np.float32, 8, 1, 8, 1, 1, 16384, 1, 768, 1, 16381),
+        TRowArgMaxValIdxParams(np.uint16, np.float16, 272, 1, 272, 1, 260, 64, 260, 16, 260, 63),
+        TRowArgMaxValIdxParams(np.uint16, np.float16, 272, 1, 272, 1, 260, 128, 260, 16, 260, 127),
+        TRowArgMaxValIdxParams(np.uint16, np.float16, 16, 1, 16, 1, 3, 8192, 3, 384, 3, 8191),
+        TRowArgMaxValIdxParams(np.uint16, np.float16, 16, 1, 16, 1, 1, 16384, 1, 768, 1, 16381),
+        TRowArgMaxValIdxParams(np.uint16, np.float16, 16, 1, 16, 1, 1, 32768, 1, 768, 1, 32761),
     ]
 
     for case in case_list:
