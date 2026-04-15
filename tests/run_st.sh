@@ -339,6 +339,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_dir_both -g TPushPopDirBothTest.case1_float_dir_both
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract -g TEXTRACTTest.case1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_acc2vec -g TMOVTest.case_nz2nd_sc_quant_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tfillpad -g TFILLPADTest.case_float_GT_128_127_VT_128_128_BLK1_PADMAX_PADMAX
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tgather -g TGATHERTest.case1_float_32x1024_16x64
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tgatherb -g TGATHERBTest.case_float_2x128_2x16_2x128
@@ -427,6 +428,18 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nd_1
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_2
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_6
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_acc2vec -g TMOVTest.case_nz2nd_fb_quant_1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nd_vec_16
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_split_1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_split_4
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_hif8_3
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_twoinput_bf16_1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_twoinput_fp8e5_1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_twoinput_fp4e1m2_2
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_dblinput_fp4e2m1_1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_twoinput_fp4e2m1_1
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert -g TInsertTest.case_nz_dblinput_fp8e4_2
+
 
   elif [ "$ENABLE_ALL" = "true" ]; then            # 所有用例
     python3 tests/script/build_st.py $ARGS -v a5 -t all
@@ -475,6 +488,7 @@ if [ "$ENABLE_A5" = "true" ]; then
       python3 tests/script/run_st.py $ARGS -w -v a5 -t tpushpop_dir_both
     fi
     python3 tests/script/run_st.py $ARGS -w -v a5 -t textract
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t textract_acc2vec
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tfillpad
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tgather
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tgatherb
@@ -547,6 +561,7 @@ if [ "$ENABLE_A5" = "true" ]; then
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tpack
     python3 tests/script/run_st.py $ARGS -w -v a5 -t thistogram
     python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert
+    python3 tests/script/run_st.py $ARGS -w -v a5 -t tinsert_acc2vec
   fi
 fi
 

@@ -1,6 +1,6 @@
 # Allgather Async Demo
 
-Demonstrates the allgather collective operation using PTO's `TPUT_ASYNC` (remote write) and `TGET_ASYNC` (remote read) SDMA-based async instructions across multiple NPU devices, covering both single-core and multi-core variants.
+Demonstrates the allgather collective operation using PTO's `TPUT_ASYNC` (remote write) and `TGET_ASYNC` (remote read) SDMA-based async instructions across multiple NPU devices in multi-core mode.
 
 ## Prerequisites
 
@@ -13,19 +13,24 @@ Demonstrates the allgather collective operation using PTO's `TPUT_ASYNC` (remote
 
 ```bash
 source /path/to/set_env.sh
+<<<<<<< HEAD
 ./run.sh                      # 2 ranks, default SoC
 ./run.sh 4                    # 4 ranks
 ./run.sh 2 Ascend910_9599     # A5 devices
 ```
 
 ## What It Does
-
 Each rank contributes 256 `int32_t` values. After allgather, every rank holds all ranks' data.
 
+<<<<<<< HEAD
 1. **TPUT_ASYNC Allgather (single-core)**: Each rank asynchronously writes its chunk to every other rank's receive buffer using `pto::comm::TPUT_ASYNC`.
 2. **TGET_ASYNC Allgather (single-core)**: Each rank asynchronously pulls every other rank's chunk into its own receive buffer using `pto::comm::TGET_ASYNC`.
 3. **TPUT_ASYNC Allgather (multi-core)**: Launched with `<<<nRanks, ...>>>` — each AICORE handles one target rank's communication in parallel.
 4. **TGET_ASYNC Allgather (multi-core)**: Launched with `<<<nRanks, ...>>>` — each AICORE pulls data from one source rank in parallel.
+=======
+1. **TPUT_ASYNC Allgather (multi-core)**: Launched with `<<<nRanks, ...>>>` — each AICORE handles one target rank's communication in parallel. The AICORE where `block_idx == myRank` performs a local copy; all others use `pto::comm::TPUT_ASYNC` to write data to the corresponding remote rank.
+2. **TGET_ASYNC Allgather (multi-core)**: Launched with `<<<nRanks, ...>>>` — each AICORE pulls data from one source rank in parallel. The AICORE where `block_idx == myRank` performs a local copy; all others use `pto::comm::TGET_ASYNC` to read data from the corresponding remote rank.
+>>>>>>> pto/master
 
 ## Project Structure
 

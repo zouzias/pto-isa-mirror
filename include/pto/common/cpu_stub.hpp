@@ -56,10 +56,11 @@ constexpr pipe_t opPipeList[] = {};
 
 #define aclrtCreateStream(x)
 
-static inline void aclrtMallocHost(void **p, size_t sz)
+static inline int aclrtMallocHost(void **p, size_t sz)
 {
     assert(sz != 0 && "[PTO][CA] Constraint violated. Condition: %s. Hint: see docs/coding/debug.md\n");
     *p = malloc(sz);
+    return 0;
 }
 
 #define aclrtMalloc(a, b, c) aclrtMallocHost(a, b)
@@ -70,7 +71,7 @@ static inline void aclrtMallocHost(void **p, size_t sz)
             reinterpret_cast<char *>(dst)[i] = reinterpret_cast<char *>(src)[i]; \
     }
 
-#define aclrtSynchronizeStream(x)
+#define aclrtSynchronizeStream(x) (0)
 #define aclrtFree(x) free(x)
 #define aclrtFreeHost(x) free(x)
 #define aclrtDestroyStream(x)
@@ -81,6 +82,28 @@ static inline void aclrtMallocHost(void **p, size_t sz)
 #define __cce_get_tile_ptr(x) x
 #define set_mask_norm(...)
 #define set_vector_mask(...)
+
+/* <Hccl> */
+#define HcclHostBarrier(x, y)
+#define CommMpiInit(x, y) (true)
+#define CommMpiFinalize()
+#define SKIP_IF_RANKS_LT(n)
+static constexpr uint32_t HCCL_MAX_RANK_NUM = 64;
+
+struct HcclRootInfo {
+};
+
+struct HcclDeviceContext {
+    uint64_t workSpace;
+    uint64_t workSpaceSize;
+
+    uint32_t rankId;
+    uint32_t rankNum;
+    uint64_t winSize;
+    uint64_t windowsIn[HCCL_MAX_RANK_NUM];
+    uint64_t windowsOut[HCCL_MAX_RANK_NUM];
+};
+/* </Hccl> */
 
 typedef int event_t;
 #define EVENT_ID0 0

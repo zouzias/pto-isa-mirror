@@ -35,7 +35,10 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
     using T = typename TileDataDst::DType;
     static_assert(std::is_same_v<T, typename TileDataSrc0::DType> && std::is_same_v<T, typename TileDataSrc1::DType>,
                   "Fix: TROWEXPANDMUL src and dst data type is different!");
-    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float>, "Fix: TROWEXPANDMUL Invalid data type.");
+    static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, int> || std::is_same_v<T, int16_t> ||
+                      std::is_same_v<T, half> || std::is_same_v<T, float16_t> || std::is_same_v<T, float> ||
+                      std::is_same_v<T, float32_t>,
+                  "Fix: TROWEXPANDMUL Invalid data type.");
     static_assert(TileDataDst::isRowMajor, "Fix: TROWEXPANMUL Invalid tile shape.");
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();
@@ -43,7 +46,7 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
     unsigned src0ValidCol = src0.GetValidCol();
     unsigned src1ValidRow = src1.GetValidRow();
     unsigned src1ValidCol = src1.GetValidCol();
-    bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol);
+    bool src0eqdst = (validRow == src0ValidRow) && (validCol == src0ValidCol) && (src1ValidCol == TileDataSrc1::Cols);
     bool src1eqdst = (validRow == src1ValidRow) && (validCol == src1ValidCol);
     PTO_ASSERT((src0eqdst && TileDataSrc0::isRowMajor) || (src1eqdst && TileDataSrc1::isRowMajor),
                "TROWEXPANMUL: the validShape of src0 or src1 should be equal to those of dst.");
@@ -70,7 +73,10 @@ PTO_INTERNAL void TROWEXPANDMUL_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileD
     using T = typename TileDataDst::DType;
     static_assert(std::is_same_v<T, typename TileDataSrc0::DType> && std::is_same_v<T, typename TileDataSrc1::DType>,
                   "Fix: TROWEXPANDMUL src and dst data type is different!");
-    static_assert(std::is_same_v<T, half> || std::is_same_v<T, float>, "Fix: TROWEXPANDMUL Invalid data type.");
+    static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, int> || std::is_same_v<T, int16_t> ||
+                      std::is_same_v<T, half> || std::is_same_v<T, float16_t> || std::is_same_v<T, float> ||
+                      std::is_same_v<T, float32_t>,
+                  "Fix: TROWEXPANDMUL Invalid data type.");
     static_assert(TileDataDst::isRowMajor, "Fix: TROWEXPANDMUL Invalid tile shape.");
     unsigned validRow = dst.GetValidRow();
     unsigned validCol = dst.GetValidCol();

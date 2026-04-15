@@ -83,14 +83,23 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
 {
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
-    if (!TPutAsyncIsFlatContiguous1D(srcGlobalData)) {
-        return AsyncEvent(0, DmaEngine::SDMA);
-    }
+    PTO_ASSERT(srcGlobalData.data() != nullptr && dstGlobalData.data() != nullptr,
+               "TPUT_ASYNC: src and dst tensor pointers must not be null.");
 
-    const uint32_t totalElems = TPutAsyncGetTotalElemCount(srcGlobalData);
+    PTO_ASSERT(TPutAsyncIsFlatContiguous1D(srcGlobalData),
+               "TPUT_ASYNC: src tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by SDMA async path.");
+    PTO_ASSERT(TPutAsyncIsFlatContiguous1D(dstGlobalData),
+               "TPUT_ASYNC: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by SDMA async path.");
+
+    const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
+    const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
+    PTO_ASSERT(dstElems >= srcElems, "TPUT_ASYNC SDMA: dst buffer too small for src data.");
+
     using T = typename GlobalSrcData::RawDType;
     const uint64_t eventHandle =
-        sdma::__sdma_put_async(dstGlobalData.data(), srcGlobalData.data(), totalElems * sizeof(T), execCtx);
+        sdma::__sdma_put_async(dstGlobalData.data(), srcGlobalData.data(), srcElems * sizeof(T), execCtx);
     return AsyncEvent(eventHandle, DmaEngine::SDMA);
 }
 
@@ -109,13 +118,22 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_MTE_FALLBACK(GlobalDstData &dstGlobalData, Gl
 {
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
-    if (!TPutAsyncIsFlatContiguous1D(srcGlobalData)) {
-        return AsyncEvent(0, DmaEngine::SDMA);
-    }
+    PTO_ASSERT(dstGlobalData.data() != nullptr && srcGlobalData.data() != nullptr,
+               "TPUT_ASYNC MTE fallback: src and dst tensor pointers must not be null.");
 
-    const uint32_t totalElems = TPutAsyncGetTotalElemCount(srcGlobalData);
+    PTO_ASSERT(TPutAsyncIsFlatContiguous1D(srcGlobalData),
+               "TPUT_ASYNC MTE fallback: src tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported.");
+    PTO_ASSERT(TPutAsyncIsFlatContiguous1D(dstGlobalData),
+               "TPUT_ASYNC MTE fallback: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported.");
+
+    const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
+    const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);
+    PTO_ASSERT(dstElems >= srcElems, "TPUT_ASYNC MTE fallback: dst buffer too small for src data.");
+
     using T = typename GlobalSrcData::RawDType;
-    const uint64_t totalBytes = static_cast<uint64_t>(totalElems) * sizeof(T);
+    const uint64_t totalBytes = static_cast<uint64_t>(srcElems) * sizeof(T);
     if (totalBytes == 0) {
         return AsyncEvent(0, DmaEngine::SDMA);
     }
@@ -157,9 +175,12 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_URMA_IMPL(GlobalDstData &dstGlobalData, Globa
 {
     (void)TPutAsyncCheckTensorCompatibility<GlobalDstData, GlobalSrcData>();
 
-    if (!TPutAsyncIsFlatContiguous1D(srcGlobalData) || !TPutAsyncIsFlatContiguous1D(dstGlobalData)) {
-        return AsyncEvent(0, DmaEngine::URMA);
-    }
+    PTO_ASSERT(TPutAsyncIsFlatContiguous1D(srcGlobalData),
+               "TPUT_ASYNC URMA: src tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by URMA async path.");
+    PTO_ASSERT(TPutAsyncIsFlatContiguous1D(dstGlobalData),
+               "TPUT_ASYNC URMA: dst tensor must be flat contiguous 1D (packed layout, single logical line). "
+               "Multi-dimensional or non-contiguous tensors are not supported by URMA async path.");
 
     const uint32_t srcElems = TPutAsyncGetTotalElemCount(srcGlobalData);
     const uint32_t dstElems = TPutAsyncGetTotalElemCount(dstGlobalData);

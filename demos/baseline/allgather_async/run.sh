@@ -14,7 +14,7 @@
 # Prerequisites:
 #   1. CANN toolkit installed and set_env.sh sourced (ASCEND_HOME_PATH set)
 #   2. MPI (mpich) available in PATH
-#   3. At least 8 NPU devices available (or adjust N_RANKS)
+#   3. At least 2 NPU devices available (N_RANKS <= number of devices)
 #
 # Usage:
 #   ./run.sh                             # 8 ranks, default SoC
@@ -22,6 +22,11 @@
 #   ./run.sh 2 Ascend910_9599            # 2 ranks, A5 SoC
 
 set -e
+
+if [ -z "${ASCEND_HOME_PATH}" ]; then
+    echo "ASCEND_HOME_PATH not set, sourcing /usr/local/Ascend/ascend-toolkit/set_env.sh ..."
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 N_RANKS="${1:-${N_RANKS:-8}}"
