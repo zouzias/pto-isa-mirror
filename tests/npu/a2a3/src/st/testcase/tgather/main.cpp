@@ -20,8 +20,8 @@ template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, pto::M
 void LaunchTGATHER(T *out, T *src, void *stream);
 
 template <typename srcT, typename src1T, typename dstT, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int K,
-          pto::CmpMode cmpMode, uint32_t offset>
-void LaunchTGATHER_CMP(srcT *src, src1T *src1, dstT *out, void *stream);
+          pto::CmpMode cmpMode>
+void LaunchTGATHER_CMP(srcT *src, src1T *src1, dstT *out, uint32_t offset, void *stream);
 
 constexpr int HALF_SIZE = 2;
 constexpr int QUARTER_SIZE = 4;
@@ -328,7 +328,7 @@ TEST_F(TGATHERTest, case_1D_half_16x16_32x32)
     test_gather_index<int16_t, int32_t, int16_t, 16, 16, 32, 32>();
 }
 
-template <typename srcT, typename dstT, uint32_t offset, uint32_t ROW, uint32_t COL, uint32_t K, pto::CmpMode cmpMode>
+template <typename srcT, typename dstT, uint32_t ROW, uint32_t COL, uint32_t K, pto::CmpMode cmpMode>
 void test_gather_cmp()
 {
     aclInit(nullptr);
@@ -338,11 +338,13 @@ void test_gather_cmp()
 
     size_t size = ROW * COL * sizeof(srcT);
     size_t dstsize = ROW * K * sizeof(dstT);
-    size_t scalarSize = sizeof(srcT);
+    size_t scalarSize = ROW * sizeof(srcT);
 
     srcT *srcHost, *srcDevice;
     srcT *src1Host, *src1Device;
     dstT *dstHost, *dstDevice;
+
+    uint32_t offset = 0;
 
     aclrtMallocHost((void **)(&dstHost), dstsize);
     aclrtMallocHost((void **)(&srcHost), size);
@@ -356,7 +358,7 @@ void test_gather_cmp()
 
     aclrtMemcpy(srcDevice, size, srcHost, size, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, scalarSize, src1Host, scalarSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTGATHER_CMP<srcT, srcT, dstT, ROW, COL, ROW, COL, K, cmpMode, offset>(srcDevice, src1Device, dstDevice,
+    LaunchTGATHER_CMP<srcT, srcT, dstT, ROW, COL, ROW, COL, K, cmpMode>(srcDevice, src1Device, dstDevice, offset,
                                                                                 stream);
 
     aclrtSynchronizeStream(stream);
@@ -386,25 +388,25 @@ void test_gather_cmp()
 
 TEST_F(TGATHERTest, case1_float_topk)
 {
-    test_gather_cmp<float, uint32_t, 0, 16, 64, 32, pto::CmpMode::GT>();
+    test_gather_cmp<float, uint32_t, 16, 64, 32, pto::CmpMode::GT>();
 }
 
 TEST_F(TGATHERTest, case2_s32_topk)
 {
-    test_gather_cmp<int32_t, uint32_t, 0, 8, 128, 64, pto::CmpMode::EQ>();
+    test_gather_cmp<int32_t, uint32_t, 8, 128, 64, pto::CmpMode::EQ>();
 }
 
 TEST_F(TGATHERTest, case3_float_topk)
 {
-    test_gather_cmp<float, uint32_t, 0, 4, 256, 64, pto::CmpMode::EQ>();
+    test_gather_cmp<float, uint32_t, 4, 256, 64, pto::CmpMode::EQ>();
 }
 
 TEST_F(TGATHERTest, case4_half_topk)
 {
-    test_gather_cmp<aclFloat16, uint32_t, 0, 2, 256, 32, pto::CmpMode::GT>();
+    test_gather_cmp<aclFloat16, uint32_t, 2, 256, 32, pto::CmpMode::GT>();
 }
 
 TEST_F(TGATHERTest, case5_half_topk)
 {
-    test_gather_cmp<aclFloat16, uint32_t, 0, 8, 128, 32, pto::CmpMode::EQ>();
+    test_gather_cmp<aclFloat16, uint32_t, 8, 128, 32, pto::CmpMode::EQ>();
 }

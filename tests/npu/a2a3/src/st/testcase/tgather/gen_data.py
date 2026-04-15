@@ -178,6 +178,7 @@ def gen_golden_data(param: TGatherParamsBase):
             assert False, "not implemented"
 
         src_data1 = np.array(kvalue).astype(src_type)
+        src_data1 = np.tile(src_data1, src_row)
 
         src_data.tofile("./src.bin")
         src_data1.tofile("./src1.bin")

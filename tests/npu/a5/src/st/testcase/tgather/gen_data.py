@@ -141,13 +141,14 @@ def gen_golden_data(param: TGatherParamsBase):
         src_data = np.random.randint(0, 100, [src_row, src_col]).astype(src_type)
         golden = np.zeros((dst_row, dst_col)).astype(dst_type)
         # 0x7F800001转float比较时为nan，保证尾块对比通过
-        golden[:dst_row][:dst_col] = 0x7F800001
+        # golden[:dst_row][:dst_col] = 0x7F800001
         if cmpmode == 0:
             for i in range(src_row):
                 k = 0
                 for j in range(src_col):
                     idx = i * src_col + j
                     if src_data[i, j] > kvalue:
+                    # if src_data[i, j] > kvalue+i:
                         golden[i, k] = idx
                         k = k + 1
         elif cmpmode == 1:
@@ -156,12 +157,26 @@ def gen_golden_data(param: TGatherParamsBase):
                 for j in range(src_col):
                     idx = i * src_col + j
                     if src_data[i, j] == kvalue:
+                    # if src_data[i, j] == kvalue+i:
                         golden[i, k] = idx
                         k = k + 1
         else:
             assert False, "not implemented"
 
         src_data1 = np.array(kvalue).astype(src_type)
+        # src_data1 = np.array(0).astype(src_type)    #wrong
+        # src_data1 = np.tile(src_data1, src_row)
+        # different per-row test
+        # src_data1 = np.arange(kvalue, kvalue + src_row).astype(src_type)
+        
+        if src_type == np.float32 or src_type == np.int32 or src_type == np.uint32:
+            src_data1 = np.tile(src_data1, src_row).astype(np.uint32)
+            # src_data1 = np.arange(kvalue, kvalue + src_row).astype(np.uint32)
+        elif src_type == np.half or src_type == np.int16 or src_type == np.uint16:
+            src_data1 = np.tile(src_data1, src_row).astype(np.uint16)
+            # src_data1 = np.arange(kvalue, kvalue + src_row).astype(np.uint16)
+        else:
+            assert False, "not implemented"
 
         src_data.tofile("./src.bin")
         src_data1.tofile("./src1.bin")

@@ -129,14 +129,48 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
     TGather<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode,
-          uint32_t offset>
-__tf__ AICORE void TGather_cmp(typename TileDataD::TileDType __out__ dst, typename TileDataC::TileDType __in__ cdst,
-                               typename TileDataTmp::TileDType __in__ tmp, typename TileDataS::DType __in__ k_value,
+// template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode>
+// __tf__ AICORE void TGather_cmp(typename TileDataD::TileDType __out__ dst, typename TileDataC::TileDType __in__ cdst,
+//                                typename TileDataTmp::TileDType __in__ tmp, typename TileDataS::DType __in__ k_value,
+//                                uint32_t offset,
+//                                unsigned srcValidCol, unsigned srcValidRow)
+// {
+//     using T = typename TileDataD::DType;
+//     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+//     __ubuf__ typename TileDataC::DType *cdstPtr = (__ubuf__ typename TileDataC::DType *)__cce_get_tile_ptr(cdst);
+//     __ubuf__ uint8_t *cmpsTmpPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(tmp);
+//     uint32_t indexTmpAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(cmpsTmpPtr)) +
+//                             TileDataTmp::Rows * TileDataTmp::Cols * sizeof(uint8_t);
+//     __ubuf__ T *indexTmpPtr = (__ubuf__ T *)get_imm(indexTmpAddr);
+
+//     for (int i = 0; i < TileDataS::Rows * TileDataS::Cols; i++) {
+//         *(indexTmpPtr + i) = offset + i;
+//     }
+//     PtoSetWaitFlag<PIPE_S, PIPE_V>();
+
+//     set_mask_count();
+//     set_vector_mask(0, srcValidCol);
+//     for (int i = 0; i < srcValidRow; i++) {
+//         vreducev2(reinterpret_cast<__ubuf__ uint32_t *>(dstPtr + i * TileDataD::RowStride),
+//                   reinterpret_cast<__ubuf__ uint32_t *>(indexTmpPtr + i * TileDataS::RowStride),
+//                   reinterpret_cast<__ubuf__ uint32_t *>(cmpsTmpPtr + i * TileDataTmp::RowStride), 1, 1, 0, 8, 0);
+//         *(cdstPtr + i) = (T)get_rsvd_cnt();
+//     }
+//     set_mask_norm();
+//     set_vector_mask(-1, -1);
+// }
+
+template <typename TileDataD, typename TileDataS, typename TileDataS1, typename TileDataC, typename TileDataTmp, CmpMode cmpMode>
+__tf__ AICORE void TGather_cmp(typename TileDataD::TileDType __out__ dst, 
+                               typename TileDataS::TileDType __out__ src0, 
+                               typename TileDataC::TileDType __in__ cdst,
+                               typename TileDataTmp::TileDType __in__ tmp, typename TileDataS1::TileDType __in__ k_value,
+                               uint32_t offset,
                                unsigned srcValidCol, unsigned srcValidRow)
 {
     using T = typename TileDataD::DType;
     __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ typename TileDataS::DType *src0Ptr = (__ubuf__ typename TileDataS::DType *)__cce_get_tile_ptr(src0);
     __ubuf__ typename TileDataC::DType *cdstPtr = (__ubuf__ typename TileDataC::DType *)__cce_get_tile_ptr(cdst);
     __ubuf__ uint8_t *cmpsTmpPtr = (__ubuf__ uint8_t *)__cce_get_tile_ptr(tmp);
     uint32_t indexTmpAddr = static_cast<uint32_t>(reinterpret_cast<int64_t>(cmpsTmpPtr)) +
@@ -147,6 +181,42 @@ __tf__ AICORE void TGather_cmp(typename TileDataD::TileDType __out__ dst, typena
         *(indexTmpPtr + i) = offset + i;
     }
     PtoSetWaitFlag<PIPE_S, PIPE_V>();
+
+    //TCMPS
+    using TIN = typename TileDataS::DType;
+    using TS = typename TileDataS1::DType;
+    __ubuf__ TS *kPtr = (__ubuf__ TS *)__cce_get_tile_ptr(k_value);
+    unsigned numRepeatPerLine = CeilDivision(srcValidCol, (REPEAT_BYTE / sizeof(TIN)));
+    size_t nLoop = numRepeatPerLine / TCMPS_REPEAT_MAX;
+    int remainPerLine = numRepeatPerLine % TCMPS_REPEAT_MAX;
+    constexpr int srcAlignCols = TileDataS::Cols;
+    constexpr int dstAlignCols = TileDataTmp::Cols;
+    constexpr int srcOffset = TCMPS_REPEAT_MAX * REPEAT_BYTE / sizeof(TIN);
+    constexpr int dstOffset = TCMPS_REPEAT_MAX * REPEAT_BYTE / sizeof(TIN) / NUM_BITS_IN_BYTE;
+    set_mask_norm();
+    set_vector_mask(-1, -1);
+    for (size_t i = 0; i < srcValidRow; i++) {
+        TS k_scalar = *(kPtr+i);
+        for (size_t j = 0; j < nLoop; j++) {
+            if (cmpMode == CmpMode::GT) {
+                vcmpvs_gt(cmpsTmpPtr + i * dstAlignCols + j * dstOffset, src0Ptr + i * srcAlignCols + j * srcOffset, k_scalar, TCMPS_REPEAT_MAX, 1, 1, 8, 8);
+            } else {
+                vcmpvs_eq(cmpsTmpPtr + i * dstAlignCols + j * dstOffset, src0Ptr + i * srcAlignCols + j * srcOffset, k_scalar, TCMPS_REPEAT_MAX, 1, 1, 8, 8);
+            }
+        }
+    }
+    if (remainPerLine) {
+        for (size_t i = 0; i < srcValidRow; i++) {
+            TS k_scalar = *(kPtr+i);
+            if (cmpMode == CmpMode::GT) {
+                vcmpvs_gt(cmpsTmpPtr + i * dstAlignCols + nLoop * dstOffset, src0 + i * srcAlignCols + nLoop * srcOffset, k_scalar, remainPerLine, 1, 1, 8, 8);
+            } else {
+                vcmpvs_eq(cmpsTmpPtr + i * dstAlignCols + nLoop * dstOffset, src0 + i * srcAlignCols + nLoop * srcOffset, k_scalar, remainPerLine, 1, 1, 8, 8);
+            }
+        }
+    }
+
+    pipe_barrier(PIPE_V);
 
     set_mask_count();
     set_vector_mask(0, srcValidCol);
@@ -160,10 +230,32 @@ __tf__ AICORE void TGather_cmp(typename TileDataD::TileDType __out__ dst, typena
     set_vector_mask(-1, -1);
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode,
-          uint32_t offset>
-PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst,
-                               TileDataTmp &tmp)
+// template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode>
+// PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst,
+//                                TileDataTmp &tmp, uint32_t offset)
+// {
+//     static_assert(
+//         std::is_same_v<typename TileDataD::DType, uint32_t> || std::is_same_v<typename TileDataD::DType, int32_t>,
+//         "Fix: TGATHER Dst data type must be int32_t/uint32_t.");
+//     static_assert(std::is_same_v<typename TileDataS::DType, float> || std::is_same_v<typename TileDataS::DType, half> ||
+//                       (std::is_same_v<typename TileDataS::DType, int32_t> && cmpMode == CmpMode::EQ),
+//                   "Fix: TGATHER Src data type must be half/float or int32_t while cmpMode is EQ.");
+//     static_assert((cmpMode == CmpMode::GT || cmpMode == CmpMode::EQ), "Fix: TGATHER only support GT or EQ mode");
+//     static_assert((TileDataD::Loc == TileType::Vec) && (TileDataS::Loc == TileType::Vec),
+//                   "Fix: TGATHER expect vec TileType");
+
+//     TCMPS_IMPL(tmp, src0, k_value, cmpMode);
+
+//     unsigned sValidCols = src0.GetValidCol();
+//     unsigned sValidRows = src0.GetValidRow();
+
+//     TGather_cmp<TileDataD, TileDataS, TileDataC, TileDataTmp, cmpMode>(dst.data(), cdst.data(), tmp.data(),
+//                                                                                k_value, offset, sValidCols, sValidRows);
+// }
+
+template <typename TileDataD, typename TileDataS, typename TileDataS1, typename TileDataC, typename TileDataTmp, CmpMode cmpMode>
+PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, TileDataS1 &k_value, TileDataC &cdst,
+                               TileDataTmp &tmp, uint32_t offset)
 {
     static_assert(
         std::is_same_v<typename TileDataD::DType, uint32_t> || std::is_same_v<typename TileDataD::DType, int32_t>,
@@ -175,13 +267,22 @@ PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDat
     static_assert((TileDataD::Loc == TileType::Vec) && (TileDataS::Loc == TileType::Vec),
                   "Fix: TGATHER expect vec TileType");
 
-    TCMPS_IMPL(tmp, src0, k_value, cmpMode);
+    // TCMPS_IMPL(tmp, src0, k_value, cmpMode);
+    //TROWEXPAND+TCMP?
 
     unsigned sValidCols = src0.GetValidCol();
     unsigned sValidRows = src0.GetValidRow();
 
-    TGather_cmp<TileDataD, TileDataS, TileDataC, TileDataTmp, cmpMode, offset>(dst.data(), cdst.data(), tmp.data(),
-                                                                               k_value, sValidCols, sValidRows);
+    // using T = typename TileDataD::DType;
+    // unsigned tValidCols = tmp.GetValidCol();
+    // using TileDataSrc0PerRow = Tile<TileType::Vec, typename TileDataS::DType, 1, TileDataS::Cols, BLayout::RowMajor, 1, sValidCols>;
+    // using TileDataCmpPerRow = Tile<TileType::Vec, typename TileDataTmp::DType,, 1, TileDataTmp::Cols, BLayout::RowMajor, 1, tValidCols>;
+    // for (int i = 0; i < sValidRows; i++) {
+    //     unsigned 
+    // }
+
+    TGather_cmp<TileDataD, TileDataS, TileDataS1, TileDataC, TileDataTmp, cmpMode>(dst.data(), src0.data(), cdst.data(), tmp.data(),
+                                                                               k_value.data(), offset, sValidCols, sValidRows);
 }
 } // namespace pto
 #endif
