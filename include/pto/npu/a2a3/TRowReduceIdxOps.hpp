@@ -205,14 +205,33 @@ PTO_INTERNAL void OneRepeatProcValIdx(__ubuf__ typename TileDataOutVal::DType *d
             src += rptTimes * TileDataIn::Cols;
         } while (rowRptTimes >= 0);
     }
-    set_mask_count();
-    set_vector_mask(0, validRow * 2);
-    vreducev2(reinterpret_cast<__ubuf__ U *>(dstIdx), reinterpret_cast<__ubuf__ U *>(tmp), reinterpret_cast<__ubuf__ U *>(tmp), 1, 1, 2, elemPerBlock, elemPerBlock);
-    pipe_barrier(PIPE_V);
-    vreducev2(reinterpret_cast<__ubuf__ U *>(dstVal), reinterpret_cast<__ubuf__ U *>(tmp), reinterpret_cast<__ubuf__ U *>(tmp), 1, 1, 1, elemPerBlock, elemPerBlock);
-    pipe_barrier(PIPE_V);
+    if constexpr (TileDataOutVal::Cols == 1 || TileDataOutIdx::Cols == 1) {
+        set_mask_count();
+        set_vector_mask(0, validRow * 2);
+        if constexpr (TileDataOutIdx::Cols == 1) {
+            vreducev2(reinterpret_cast<__ubuf__ U *>(dstIdx), reinterpret_cast<__ubuf__ U *>(tmp), reinterpret_cast<__ubuf__ U *>(tmp), 1, 1, 2, elemPerBlock, elemPerBlock);
+            pipe_barrier(PIPE_V);
+        }
+        if constexpr (TileDataOutVal::Cols == 1) {
+            vreducev2(reinterpret_cast<__ubuf__ U *>(dstVal), reinterpret_cast<__ubuf__ U *>(tmp), reinterpret_cast<__ubuf__ U *>(tmp), 1, 1, 1, elemPerBlock, elemPerBlock);
+            pipe_barrier(PIPE_V);
+        }
+    }
     set_mask_norm();
     set_vector_mask(-1, -1);
+    if constexpr (TileDataOutVal::Cols != 1 || TileDataOutIdx::Cols != 1) {
+        PtoSetWaitFlag<PIPE_V, PIPE_S>();
+        if constexpr (TileDataOutIdx::Cols != 1) {
+            for (int i = 0; i < validRow; i++) {
+                *(reinterpret_cast<__ubuf__ U *>(dstIdx) + i * TileDataOutIdx::Cols) = *(reinterpret_cast<__ubuf__ U *>(tmp) + i * 2 + 1);
+            }
+        }
+        if constexpr (TileDataOutVal::Cols != 1) {
+            for (int i = 0; i < validRow; i++) {
+                *(reinterpret_cast<__ubuf__ U *>(dstVal) + i * TileDataOutVal::Cols) = *(reinterpret_cast<__ubuf__ U *>(tmp) + i * 2);
+            }
+        }
+    }
 }
 
 template <bool outputVal, typename InstrOp, typename TileDataOutVal, typename TileDataOut, typename TileDataIn, typename TileDataTmp>
