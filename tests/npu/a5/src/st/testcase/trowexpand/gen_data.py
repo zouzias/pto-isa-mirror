@@ -22,21 +22,28 @@ def gen_golden_data(case_name, param):
     m, k, n = param.row, param.src_col, param.dst_col
     dst_valid_col = param.dst_valid_col
     input_arr = (np.random.rand(m, k) * 10).astype(datatype)
-    golden = np.zeros((m, n)).astype(datatype)
-    for i in range(m):
-        for j in range(dst_valid_col):
-            golden[i][j] = input_arr[i][0]
+    if param.gm_row_stride is not None:
+        # Logical GM shape (m, 1) with row stride gm_row_stride (elements); pad rows to width gm_row_stride.
+        golden = np.zeros((m, param.gm_row_stride), dtype=datatype)
+        for i in range(m):
+            golden[i, 0] = input_arr[i, 0]
+    else:
+        golden = np.zeros((m, n)).astype(datatype)
+        for i in range(m):
+            for j in range(dst_valid_col):
+                golden[i][j] = input_arr[i][0]
     input_arr.tofile("./input.bin")
     golden.tofile("./golden.bin")
 
 
 class TRowExpandParam:
-    def __init__(self, datatype, row, src_col, dst_col, dst_valid_col):
+    def __init__(self, datatype, row, src_col, dst_col, dst_valid_col, gm_row_stride=None):
         self.datatype = datatype
         self.row = row
         self.src_col = src_col
         self.dst_col = dst_col
         self.dst_valid_col = dst_valid_col
+        self.gm_row_stride = gm_row_stride
 
 
 def generate_case_name(idx, param):
@@ -47,7 +54,10 @@ def generate_case_name(idx, param):
         np.int16: 'int16',
         np.int32: 'int32'
     }[param.datatype]
-    return f"TROWEXPANDTest.case{idx}_{dtype_str}_{param.row}_{param.src_col}_{param.row}_{param.dst_valid_col}"
+    name = f"TROWEXPANDTest.case{idx}_{dtype_str}_{param.row}_{param.src_col}_{param.row}_{param.dst_valid_col}"
+    if param.gm_row_stride is not None:
+        name += f"_gmstride{param.gm_row_stride}"
+    return name
 
 if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -62,6 +72,8 @@ if __name__ == "__main__":
         TRowExpandParam(np.float16, 16, 16, 512, 511),
         TRowExpandParam(np.int8, 16, 32, 256, 255),
         TRowExpandParam(np.float32, 16, 8, 128, 127),
+        # [32,1] ColMajor fp32 -> UB [32,8] valid (32,1) -> GM (32,1) stride (256,1)
+        TRowExpandParam(np.float32, 32, 1, 8, 1, gm_row_stride=256),
     ]
 
     for i, param in enumerate(case_params_list):

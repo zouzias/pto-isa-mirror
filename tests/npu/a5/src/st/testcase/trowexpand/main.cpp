@@ -19,6 +19,9 @@ namespace TRowExpandTest {
 template <typename T, uint32_t rows, uint32_t srcCols, uint32_t dstValidCols, uint32_t dstCols>
 void launchTROWEXPAND(T *out, T *src, void *stream);
 
+template <typename T, uint32_t kRows, uint32_t kExpandCols, uint32_t kGmRowStrideElems>
+void launchTROWEXPANDColMajorStridedGm(T *out, T *src, void *stream);
+
 class TROWEXPANDTest : public testing::Test {
 protected:
     void SetUp() override
@@ -85,6 +88,59 @@ void test_trowexpand()
     EXPECT_TRUE(ret);
 }
 
+template <typename T, uint32_t kRows, uint32_t kExpandCols, uint32_t kGmRowStrideElems>
+void test_trowexpand_colmajor_strided_gm()
+{
+    constexpr uint32_t kSrcCols = 1;
+    const size_t inputNumElems = kRows * kSrcCols;
+    const size_t outputNumElems = kRows * kGmRowStrideElems;
+    size_t inputFileSize = inputNumElems * sizeof(T);
+    size_t outputFileSize = outputNumElems * sizeof(T);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    T *dstHost, *src0Host;
+    T *dstDevice, *src0Device;
+
+    aclrtMallocHost((void **)(&dstHost), outputFileSize);
+    aclrtMallocHost((void **)(&src0Host), inputFileSize);
+
+    aclrtMalloc((void **)&dstDevice, outputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src0Device, inputFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input.bin", inputFileSize, src0Host, inputFileSize);
+
+    aclrtMemcpy(src0Device, inputFileSize, src0Host, inputFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemset(dstDevice, outputFileSize, 0, outputFileSize);
+    launchTROWEXPANDColMajorStridedGm<T, kRows, kExpandCols, kGmRowStrideElems>(dstDevice, src0Device, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, outputFileSize, dstDevice, outputFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, outputFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(src0Device);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(src0Host);
+
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<T> golden(outputNumElems);
+    std::vector<T> devFinal(outputNumElems);
+    ReadFile(GetGoldenDir() + "/golden.bin", outputFileSize, golden.data(), outputFileSize);
+    ReadFile(GetGoldenDir() + "/output.bin", outputFileSize, devFinal.data(), outputFileSize);
+    bool ret = ResultCmp(golden, devFinal, 0.001f);
+
+    EXPECT_TRUE(ret);
+}
+
 TEST_F(TROWEXPANDTest, case0_half_16_16_16_512)
 {
     test_trowexpand<aclFloat16, 16, 16, 512, 512>();
@@ -108,5 +164,9 @@ TEST_F(TROWEXPANDTest, case4_int8_16_32_16_255)
 TEST_F(TROWEXPANDTest, case5_float_16_8_16_127)
 {
     test_trowexpand<float, 16, 8, 127, 128>();
+}
+TEST_F(TROWEXPANDTest, case6_float_32_1_32_1_gmstride256)
+{
+    test_trowexpand_colmajor_strided_gm<float, 32, 8, 256>();
 }
 } // namespace TRowExpandTest
