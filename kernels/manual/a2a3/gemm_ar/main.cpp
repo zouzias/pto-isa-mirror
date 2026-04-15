@@ -885,6 +885,7 @@ static bool RunBenchmarkAndVerify(int rank_id, int n_ranks, ResetFn &resetState,
     }
 
     std::vector<double> compute_us, seq_us, seq_comp_us, seq_comm_us, pipe_us, pipe_comp_us, pipe_comm_us;
+
     RunComputeOnlyBenchmark(resetState, launchComp, syncAll, computeStream, commStream, comm, compute_us);
     RunSequentialBenchmark(resetState, launchComp, launchComm, syncAll, computeStream, commStream, comm, seq_us,
                            seq_comp_us, seq_comm_us);
