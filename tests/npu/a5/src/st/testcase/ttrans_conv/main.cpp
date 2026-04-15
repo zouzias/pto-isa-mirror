@@ -19,6 +19,11 @@ template <typename T, int format, int gShape0, int gShape1, int gShape2, int gSh
           int gWholeShape0, int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4>
 void LaunchTTRANSConv(T *out, T *src, void *stream);
 
+template <typename T, int format, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gShape5,
+          int gShape6, int gWholeShape0, int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4,
+          int gWholeShape5>
+void LaunchTTRANSGroupConv(T *out, T *src, void *stream);
+
 class TTRANSConvTest : public testing::Test {
 protected:
     void SetUp() override
@@ -62,6 +67,59 @@ void test_ttrans()
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTTRANSConv<T, format, gShape0, gShape1, gShape2, gShape3, gShape4, gShape5, gWholeShape0, gWholeShape1,
                      gWholeShape2, gWholeShape3, gWholeShape4>(dstDevice, srcDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(srcDevice);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(srcHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<T> golden(dstFileSize);
+    std::vector<T> result(dstFileSize);
+    ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize);
+    ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, result.data(), dstFileSize);
+
+    bool ret = ResultCmp(golden, result, 0.001f);
+
+    EXPECT_TRUE(ret);
+}
+
+template <typename T, int format, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gShape5,
+          int gShape6, int gWholeShape0, int gWholeShape1, int gWholeShape2, int gWholeShape3, int gWholeShape4,
+          int gWholeShape5>
+void test_ttrans_group()
+{
+    size_t srcFileSize = gShape0 * gShape1 * gShape2 * gShape3 * gShape4 * gShape5 * gShape6 * sizeof(T);
+    size_t dstFileSize = srcFileSize;
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    T *dstHost, *srcHost;
+    T *dstDevice, *srcDevice;
+
+    aclrtMallocHost((void **)(&dstHost), dstFileSize);
+    aclrtMallocHost((void **)(&srcHost), srcFileSize);
+
+    aclrtMalloc((void **)&dstDevice, dstFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
+
+    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTTRANSGroupConv<T, format, gShape0, gShape1, gShape2, gShape3, gShape4, gShape5, gShape6, gWholeShape0,
+                          gWholeShape1, gWholeShape2, gWholeShape3, gWholeShape4, gWholeShape5>(dstDevice, srcDevice,
+                                                                                                stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstFileSize, dstDevice, dstFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -181,4 +239,54 @@ TEST_F(TTRANSConvTest, int8_25_5_1_6_32)
 TEST_F(TTRANSConvTest, uint8_11_2_7_7_32)
 {
     test_ttrans<uint8_t, 1, 2, 7, 7, 1, 16, 32, 11, 2, 7, 7, 32>();
+}
+
+TEST_F(TTRANSConvTest, float32_1_1_32_6_56)
+{
+    test_ttrans_group<float, 0, 1, 1, 4, 6, 56, 8, 1, 1, 1, 1, 32, 6, 56>();
+}
+
+TEST_F(TTRANSConvTest, int32_4_1_8_1_8)
+{
+    test_ttrans_group<int32_t, 0, 4, 1, 1, 1, 8, 8, 1, 1, 4, 1, 8, 1, 8>();
+}
+
+TEST_F(TTRANSConvTest, float32_2_5_30_4_16)
+{
+    test_ttrans_group<float, 0, 2, 5, 2, 4, 16, 16, 1, 1, 2, 5, 30, 4, 16>();
+}
+
+TEST_F(TTRANSConvTest, half_1_1_30_2_16)
+{
+    test_ttrans_group<aclFloat16, 0, 1, 1, 2, 2, 16, 16, 1, 1, 1, 1, 30, 2, 16>();
+}
+
+TEST_F(TTRANSConvTest, float32_2_1_32_6_12)
+{
+    test_ttrans_group<float, 0, 2, 1, 8, 6, 12, 4, 1, 1, 2, 1, 32, 6, 12>();
+}
+
+TEST_F(TTRANSConvTest, float32_1_3_2_2_16_4)
+{
+    test_ttrans_group<float, 1, 1, 2, 2, 16, 2, 2, 4, 1, 3, 2, 2, 16, 4>();
+}
+
+TEST_F(TTRANSConvTest, float32_2_3_2_2_16_4)
+{
+    test_ttrans_group<float, 1, 2, 2, 2, 16, 2, 2, 4, 2, 3, 2, 2, 16, 4>();
+}
+
+TEST_F(TTRANSConvTest, float32_2_4_2_2_16_4)
+{
+    test_ttrans_group<float, 1, 2, 2, 2, 16, 2, 2, 4, 2, 4, 2, 2, 16, 4>();
+}
+
+TEST_F(TTRANSConvTest, float16_1_7_2_1_8_16)
+{
+    test_ttrans_group<aclFloat16, 1, 1, 2, 1, 8, 1, 16, 16, 1, 7, 2, 1, 8, 16>();
+}
+
+TEST_F(TTRANSConvTest, float16_4_7_2_1_8_4)
+{
+    test_ttrans_group<aclFloat16, 1, 4, 2, 1, 8, 1, 16, 4, 4, 7, 2, 1, 8, 4>();
 }
