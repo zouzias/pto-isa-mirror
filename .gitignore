@@ -1,6 +1,7 @@
 .git
 .idea
 .vscode
+.cursor
 .trae
 .DS_Store
 build

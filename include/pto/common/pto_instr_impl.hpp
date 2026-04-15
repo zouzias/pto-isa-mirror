@@ -193,7 +193,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a5/TSetFmatrix.hpp"
 #include "pto/npu/a5/TSetImg2colRpt.hpp"
 #include "pto/npu/a5/TSetImg2colPadding.hpp"
-#include "pto/npu/a5/TPack.hpp"
+
 #include "pto/npu/a5/THistogram.hpp"
 #ifdef _DEBUG
 #include "pto/npu/a5/TPrint.hpp"
@@ -290,7 +290,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/TTRI.hpp"
 #include "pto/cpu/TSort32.hpp"
 #include "pto/cpu/TGetScaleAddr.hpp"
-#include "pto/cpu/TPack.hpp"
+
 #include "pto/cpu/TPrint.hpp"
 #include "pto/cpu/TRandom.hpp"
 #include "pto/cpu/TSetFmatrix.hpp"
