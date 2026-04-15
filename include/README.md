@@ -14,7 +14,7 @@ Include the unified entry header:
 
 ## Layout
 
-- `include/pto/`: Public PTO ISA API and backend implementations (common / cpu / npu)
+- `include/pto/`: Public PTO ISA API and backend implementations (common / cpu / npu / comm)
 
 ## Related Docs
 
@@ -44,7 +44,7 @@ This table tracks per-instruction backend availability:
 | [`TANDS`](../docs/isa/TANDS.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TASSIGN`](../docs/isa/TASSIGN.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TAXPY`]() | TODO | TODO | Yes | Yes | Yes | TODO |
-| [`TBROADCAST`](../docs/isa/comm/TBROADCAST.md) | TODO | TODO | Yes | Yes | Yes | TODO |
+| [`TBROADCAST`](../docs/isa/comm/TBROADCAST.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TCI`](../docs/isa/TCI.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TCMP`](../docs/isa/TCMP.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TCMPS`](../docs/isa/TCMPS.md) | Yes | TODO | Yes | Yes | Yes | Yes |
@@ -80,8 +80,8 @@ This table tracks per-instruction backend availability:
 | [`TGEMV_ACC`](../docs/isa/TGEMV_ACC.md) | TODO | TODO | Yes | Yes | Yes | Yes |
 | [`TGEMV_BIAS`](../docs/isa/TGEMV_BIAS.md) | TODO | TODO | Yes | Yes | Yes | Yes |
 | [`TGEMV_MX`](../docs/isa/TGEMV_MX.md) | TODO | TODO | TODO | TODO | Yes | TODO |
-| [`TGET`](../docs/isa/comm/TGET.md) | TODO | TODO | Yes | Yes | Yes | TODO |
-| [`TGET_ASYNC`](../docs/isa/comm/TGET_ASYNC.md) | TODO | TODO | Yes | Yes | Yes | TODO |
+| [`TGET`](../docs/isa/comm/TGET.md) | Yes | TODO | Yes | Yes | Yes | TODO |
+| [`TGET_ASYNC`](../docs/isa/comm/TGET_ASYNC.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TGET_SCALE_ADDR`](../docs/isa/TGET_SCALE_ADDR.md) | TODO | TODO | TODO | TODO | Yes | TODO |
 | [`TIMG2COL`](../docs/isa/TIMG2COL.md) | TODO | TODO | Yes | Yes | Yes | TODO |
 | [`TINSERT`](../docs/isa/TINSERT.md) | TODO | TODO | TODO | TODO | Yes | TODO |
@@ -104,7 +104,7 @@ This table tracks per-instruction backend availability:
 | [`TMULS`](../docs/isa/TMULS.md) | Yes | Yes | Yes | Yes | Yes | Yes |
 | [`TNEG`](../docs/isa/TNEG.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TNOT`](../docs/isa/TNOT.md) | Yes | TODO | Yes | Yes | Yes | Yes |
-| [`TNOTIFY`](../docs/isa/comm/TNOTIFY.md) | TODO | TODO | Yes | Yes | Yes | TODO |
+| [`TNOTIFY`](../docs/isa/comm/TNOTIFY.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TOR`](../docs/isa/TOR.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TORS`](../docs/isa/TORS.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TPARTADD`](../docs/isa/TPARTADD.md) | Yes | TODO | Yes | Yes | Yes | Yes |
@@ -114,12 +114,12 @@ This table tracks per-instruction backend availability:
 | [`TPREFETCH`](../docs/isa/TPREFETCH.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TPRELU`](../docs/isa/TPRELU.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TPRINT`](../docs/isa/TPRINT.md) | TODO | TODO | Yes | Yes | Yes | TODO |
-| [`TPUT`](../docs/isa/comm/TPUT.md) | TODO | TODO | Yes | Yes | Yes | TODO |
-| [`TPUT_ASYNC`](../docs/isa/comm/TPUT_ASYNC.md) | TODO | TODO | Yes | Yes | TODO | TODO |
+| [`TPUT`](../docs/isa/comm/TPUT.md) | Yes | TODO | Yes | Yes | Yes | TODO |
+| [`TPUT_ASYNC`](../docs/isa/comm/TPUT_ASYNC.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TQUANT`](../docs/isa/TQUANT.md) | TODO | TODO | TODO | TODO | Yes | TODO |
 | [`TRANDOM`](../docs/isa/TRANDOM.md) | No | TODO | TODO | TODO | Yes | TODO |
 | [`TRECIP`](../docs/isa/TRECIP.md) | Yes | TODO | Yes | Yes | Yes | Yes |
-| [`TREDUCE`](../docs/isa/comm/TREDUCE.md) | TODO | TODO | Yes | Yes | Yes | TODO |
+| [`TREDUCE`](../docs/isa/comm/TREDUCE.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TRELU`](../docs/isa/TRELU.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TREM`](../docs/isa/TREM.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TREMS`](../docs/isa/TREMS.md) | Yes | TODO | Yes | Yes | Yes | Yes |
@@ -159,10 +159,10 @@ This table tracks per-instruction backend availability:
 | [`TSUBSC`](../docs/isa/TSUBSC.md) | Yes | TODO | TODO | TODO | TODO | TODO |
 | [`TSUBVIEW`](../docs/isa/TSUBVIEW.md) | TODO | TODO | Yes | Yes | TODO | TODO |
 | [`TSYNC`](../docs/isa/TSYNC.md) | TODO | TODO | Yes | Yes | Yes | Yes |
-| [`TTEST`](../docs/isa/comm/TTEST.md) | TODO | TODO | Yes | Yes | Yes | TODO |
+| [`TTEST`](../docs/isa/comm/TTEST.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TTRANS`](../docs/isa/TTRANS.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TTRI`](../docs/isa/TTRI.md) | TODO | TODO | Yes | Yes | Yes | Yes |
-| [`TWAIT`](../docs/isa/comm/TWAIT.md) | TODO | TODO | Yes | Yes | Yes | TODO |
+| [`TWAIT`](../docs/isa/comm/TWAIT.md) | Yes | TODO | Yes | Yes | Yes | TODO |
 | [`TXOR`](../docs/isa/TXOR.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TXORS`](../docs/isa/TXORS.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 
