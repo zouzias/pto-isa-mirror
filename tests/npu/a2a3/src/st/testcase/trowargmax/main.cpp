@@ -339,3 +339,27 @@ TEST_F(TROWARGMAXTest, case_uint16_half_777x16_784x1_777x48_777x16_777x43)
 {
     this->Launch<uint16_t, aclFloat16, 777, 16, 784, 1, 777, 48, 777, 16, 777, 43, true>();
 }
+TEST_F(TROWARGMAXTest, case_uint16_half_3x16_3x16_3x4096_3x192_3x4095)
+{
+    this->Launch<uint16_t, aclFloat16, 3, 16, 3, 16, 3, 4096, 3, 192, 3, 4095, true>();
+}
+TEST_F(TROWARGMAXTest, case_uint16_half_16x1_3x16_3x4096_3x192_3x4095)
+{
+    this->Launch<uint16_t, aclFloat16, 16, 1, 3, 16, 3, 4096, 3, 192, 3, 4095, true>();
+}
+TEST_F(TROWARGMAXTest, case_uint16_half_3x16_16x1_3x4096_3x192_3x4095)
+{
+    this->Launch<uint16_t, aclFloat16, 3, 16, 16, 1, 3, 4096, 3, 192, 3, 4095, true>();
+}
+TEST_F(TROWARGMAXTest, case_uint16_half_1x16_1x16_1x32768_1x768_1x32761)
+{
+    this->Launch<uint16_t, aclFloat16, 1, 16, 1, 16, 1, 32768, 1, 768, 1, 32761, true>();
+}
+TEST_F(TROWARGMAXTest, case_uint16_half_16x1_1x16_1x32768_1x768_1x32761)
+{
+    this->Launch<uint16_t, aclFloat16, 16, 1, 1, 16, 1, 32768, 1, 768, 1, 32761, true>();
+}
+TEST_F(TROWARGMAXTest, case_uint16_half_1x16_16x1_1x32768_1x768_1x32761)
+{
+    this->Launch<uint16_t, aclFloat16, 1, 16, 16, 1, 1, 32768, 1, 768, 1, 32761, true>();
+}
