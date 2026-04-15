@@ -311,9 +311,9 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
     TGather<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), rows, cols);
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
+template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode>
 __tf__ AICORE void TGather_b32_gt(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src0,
-                                  typename TileDataS::DType __in__ k_value, typename TileDataC::TileDType __in__ cdst,
+                                  typename TileDataS::DType __in__ k_value, uint32_t offset, typename TileDataC::TileDType __in__ cdst,
                                   unsigned srcValidCol, unsigned srcValidRow, unsigned dstValidCol,
                                   unsigned dstValidRow)
 {
@@ -360,9 +360,9 @@ __tf__ AICORE void TGather_b32_gt(typename TileDataD::TileDType __out__ dst, typ
     }
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
+template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode>
 __tf__ AICORE void TGather_b32_eq(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src0,
-                                  typename TileDataS::DType __in__ k_value, typename TileDataC::TileDType __in__ cdst,
+                                  typename TileDataS::DType __in__ k_value, uint32_t offset, typename TileDataC::TileDType __in__ cdst,
                                   unsigned srcValidCol, unsigned srcValidRow, unsigned dstValidCol,
                                   unsigned dstValidRow)
 {
@@ -408,9 +408,9 @@ __tf__ AICORE void TGather_b32_eq(typename TileDataD::TileDType __out__ dst, typ
     }
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
+template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode>
 __tf__ AICORE void TGather_b16_gt(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src0,
-                                  typename TileDataS::DType __in__ k_value, typename TileDataC::TileDType __in__ cdst,
+                                  typename TileDataS::DType __in__ k_value, uint32_t offset, typename TileDataC::TileDType __in__ cdst,
                                   unsigned srcValidCol, unsigned srcValidRow, unsigned dstValidCol,
                                   unsigned dstValidRow)
 {
@@ -457,9 +457,9 @@ __tf__ AICORE void TGather_b16_gt(typename TileDataD::TileDType __out__ dst, typ
     }
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
+template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode>
 __tf__ AICORE void TGather_b16_eq(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src0,
-                                  typename TileDataS::DType __in__ k_value, typename TileDataC::TileDType __in__ cdst,
+                                  typename TileDataS::DType __in__ k_value, uint32_t offset, typename TileDataC::TileDType __in__ cdst,
                                   unsigned srcValidCol, unsigned srcValidRow, unsigned dstValidCol,
                                   unsigned dstValidRow)
 {
@@ -505,9 +505,9 @@ __tf__ AICORE void TGather_b16_eq(typename TileDataD::TileDType __out__ dst, typ
     }
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
+template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode>
 __tf__ AICORE void TGather_half_gt(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src0,
-                                   typename TileDataS::DType __in__ k_value, typename TileDataC::TileDType __in__ cdst,
+                                   typename TileDataS::DType __in__ k_value, uint32_t offset, typename TileDataC::TileDType __in__ cdst,
                                    unsigned srcValidCol, unsigned srcValidRow, unsigned dstValidCol,
                                    unsigned dstValidRow)
 {
@@ -559,9 +559,9 @@ __tf__ AICORE void TGather_half_gt(typename TileDataD::TileDType __out__ dst, ty
     }
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
+template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode>
 __tf__ AICORE void TGather_half_eq(typename TileDataD::TileDType __out__ dst, typename TileDataS::TileDType __in__ src0,
-                                   typename TileDataS::DType __in__ k_value, typename TileDataC::TileDType __in__ cdst,
+                                   typename TileDataS::DType __in__ k_value, uint32_t offset, typename TileDataC::TileDType __in__ cdst,
                                    unsigned srcValidCol, unsigned srcValidRow, unsigned dstValidCol,
                                    unsigned dstValidRow)
 {
@@ -614,36 +614,35 @@ __tf__ AICORE void TGather_half_eq(typename TileDataD::TileDType __out__ dst, ty
     }
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode, uint32_t offset>
+template <typename TileDataD, typename TileDataS, typename TileDataC, CmpMode cmpMode>
 AICORE void TGather_cmp(typename TileDataD::TileDType dst, typename TileDataS::TileDType src0,
-                        typename TileDataC::TileDType cdst, typename TileDataS::DType k_value, unsigned srcValidCol,
+                        typename TileDataC::TileDType cdst, typename TileDataS::DType k_value, uint32_t offset, unsigned srcValidCol,
                         unsigned srcValidRow, unsigned dstValidCol, unsigned dstValidRow)
 {
     if constexpr (sizeof(typename TileDataS::DType) == 4 && cmpMode == CmpMode::GT) {
-        TGather_b32_gt<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst, src0, k_value, cdst, srcValidCol,
+        TGather_b32_gt<TileDataD, TileDataS, TileDataC, cmpMode>(dst, src0, k_value, offset, cdst, srcValidCol,
                                                                          srcValidRow, dstValidCol, dstValidRow);
     } else if constexpr (sizeof(typename TileDataS::DType) == 4 && cmpMode == CmpMode::EQ) {
-        TGather_b32_eq<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst, src0, k_value, cdst, srcValidCol,
+        TGather_b32_eq<TileDataD, TileDataS, TileDataC, cmpMode>(dst, src0, k_value, offset, cdst, srcValidCol,
                                                                          srcValidRow, dstValidCol, dstValidRow);
     } else if constexpr (std::is_same_v<typename TileDataS::DType, half> && cmpMode == CmpMode::GT) {
-        TGather_half_gt<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst, src0, k_value, cdst, srcValidCol,
+        TGather_half_gt<TileDataD, TileDataS, TileDataC, cmpMode>(dst, src0, k_value, offset, cdst, srcValidCol,
                                                                           srcValidRow, dstValidCol, dstValidRow);
     } else if constexpr (std::is_same_v<typename TileDataS::DType, half> && cmpMode == CmpMode::EQ) {
-        TGather_half_eq<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst, src0, k_value, cdst, srcValidCol,
+        TGather_half_eq<TileDataD, TileDataS, TileDataC, cmpMode>(dst, src0, k_value, offset, cdst, srcValidCol,
                                                                           srcValidRow, dstValidCol, dstValidRow);
     } else if constexpr (std::is_same_v<typename TileDataS::DType, int16_t> && cmpMode == CmpMode::GT) {
-        TGather_b16_gt<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst, src0, k_value, cdst, srcValidCol,
+        TGather_b16_gt<TileDataD, TileDataS, TileDataC, cmpMode>(dst, src0, k_value, offset, cdst, srcValidCol,
                                                                          srcValidRow, dstValidCol, dstValidRow);
     } else {
-        TGather_b16_eq<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst, src0, k_value, cdst, srcValidCol,
+        TGather_b16_eq<TileDataD, TileDataS, TileDataC, cmpMode>(dst, src0, k_value, offset, cdst, srcValidCol,
                                                                          srcValidRow, dstValidCol, dstValidRow);
     }
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode,
-          uint32_t offset>
+template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode>
 PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst,
-                               TileDataTmp &tmp)
+                               TileDataTmp &tmp, uint32_t offset)
 {
     static_assert(
         std::is_same_v<typename TileDataD::DType, uint32_t> || std::is_same_v<typename TileDataD::DType, int32_t>,
@@ -662,7 +661,7 @@ PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDat
     unsigned dValidCols = dst.GetValidCol();
     unsigned dValidRows = dst.GetValidRow();
 
-    TGather_cmp<TileDataD, TileDataS, TileDataC, cmpMode, offset>(dst.data(), src0.data(), cdst.data(), k_value,
+    TGather_cmp<TileDataD, TileDataS, TileDataC, cmpMode>(dst.data(), src0.data(), cdst.data(), k_value, offset,
                                                                   sValidCols, sValidRows, dValidCols, dValidRows);
 }
 

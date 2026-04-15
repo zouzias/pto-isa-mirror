@@ -129,10 +129,10 @@ PTO_INTERNAL void TGATHER_IMPL(DstTileData &dst, SrcTileData &src)
     TGather<DstTileData, SrcTileData, maskPattern>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol());
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode,
-          uint32_t offset>
+template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode>
 __tf__ AICORE void TGather_cmp(typename TileDataD::TileDType __out__ dst, typename TileDataC::TileDType __in__ cdst,
                                typename TileDataTmp::TileDType __in__ tmp, typename TileDataS::DType __in__ k_value,
+                               uint32_t offset,
                                unsigned srcValidCol, unsigned srcValidRow)
 {
     using T = typename TileDataD::DType;
@@ -160,10 +160,9 @@ __tf__ AICORE void TGather_cmp(typename TileDataD::TileDType __out__ dst, typena
     set_vector_mask(-1, -1);
 }
 
-template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode,
-          uint32_t offset>
+template <typename TileDataD, typename TileDataS, typename TileDataC, typename TileDataTmp, CmpMode cmpMode>
 PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDataS::DType k_value, TileDataC &cdst,
-                               TileDataTmp &tmp)
+                               TileDataTmp &tmp, uint32_t offset)
 {
     static_assert(
         std::is_same_v<typename TileDataD::DType, uint32_t> || std::is_same_v<typename TileDataD::DType, int32_t>,
@@ -180,8 +179,8 @@ PTO_INTERNAL void TGATHER_IMPL(TileDataD &dst, TileDataS &src0, typename TileDat
     unsigned sValidCols = src0.GetValidCol();
     unsigned sValidRows = src0.GetValidRow();
 
-    TGather_cmp<TileDataD, TileDataS, TileDataC, TileDataTmp, cmpMode, offset>(dst.data(), cdst.data(), tmp.data(),
-                                                                               k_value, sValidCols, sValidRows);
+    TGather_cmp<TileDataD, TileDataS, TileDataC, TileDataTmp, cmpMode>(dst.data(), cdst.data(), tmp.data(),
+                                                                               k_value, offset, sValidCols, sValidRows);
 }
 } // namespace pto
 #endif
