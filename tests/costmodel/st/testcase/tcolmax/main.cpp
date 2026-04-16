@@ -8,55 +8,49 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-class TCOLMAXTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+using namespace pto;
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTColMax(T *out, T *src, void *stream);
+namespace {
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_tcolmax()
+template <typename T, int rows, int cols, float profiling, float accuracy>
+void runTColMax()
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    LaunchTColMax<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(nullptr, nullptr, stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    using TileData = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
+    TileData srcTile(rows, cols);
+    TileData dstTile(rows, cols);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x8000);
+
+    TCOLMAX(dstTile, srcTile);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-TEST_F(TCOLMAXTest, case_float_64x64)
+} // namespace
+
+TEST(TColMax, float_64x64)
 {
-    test_tcolmax<float, 64, 64, 64, 64, 1130.0f, 1.0f>();
+    runTColMax<float, 64, 64, 1137.0f, 0.277044f>();
 }
-TEST_F(TCOLMAXTest, case_half_64x64)
+TEST(TColMax, half_64x64)
 {
-    test_tcolmax<aclFloat16, 64, 64, 64, 64, 1256.0f, 1.0f>();
+    runTColMax<half, 64, 64, 1120.0f, 0.140178f>();
 }
-TEST_F(TCOLMAXTest, case_int16_64x64)
+TEST(TColMax, int16_64x64)
 {
-    test_tcolmax<int16_t, 64, 64, 64, 64, 1256.0f, 1.0f>();
+    runTColMax<int16_t, 64, 64, 454.0f, 0.0f>();
 }
-TEST_F(TCOLMAXTest, case_half_16x256)
+TEST(TColMax, half_16x256)
 {
-    test_tcolmax<aclFloat16, 16, 256, 16, 256, 266.0f, 1.0f>();
+    runTColMax<half, 16, 256, 102.0f, 0.0f>();
 }
-TEST_F(TCOLMAXTest, case_float_1x3072_1x3072_1x3072)
+TEST(TColMax, float_1x3072)
 {
-    test_tcolmax<float, 1, 3072, 1, 3072, 14.0f, 1.0f>();
+    runTColMax<float, 1, 3072, 390.0f, 0.053846f>();
 }

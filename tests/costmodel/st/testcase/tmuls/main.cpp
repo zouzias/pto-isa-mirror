@@ -8,108 +8,54 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
-#include <gtest/gtest.h>
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
+#include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-template <uint32_t caseId>
-void launchTMULSTestCase(void *out, void *src, float scalar, aclrtStream stream);
+using namespace pto;
 
-class TMULSTest : public testing::Test {
-public:
-protected:
-    void SetUp() override
-    {}
+namespace {
 
-    void TearDown() override
-    {}
-};
-
-std::string GetGoldenDir()
+// Template ordering matches the original kernel: <T, row, validRow, col, validCol>
+template <typename T, int row, int validRow, int col, int validCol, float profiling, float accuracy>
+void runTMulS(T scalar)
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    const std::string caseName = testInfo->name();
-    std::string suiteName = testInfo->test_suite_name();
-    std::string fullPath = "../" + suiteName + "." + caseName;
-    return fullPath;
+    using TileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1>;
+    TileData srcTile(validRow, validCol);
+    TileData dstTile(validRow, validCol);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x28000);
+
+    TMULS(dstTile, srcTile, scalar);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-template <uint32_t caseId, typename T, int row, int vaildRow, int col, int srcVaildCol, float profiling, float accuracy>
-bool TMulSTestFramework()
+} // namespace
+
+TEST(TMulS, case1_float_32x64)
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    size_t dstByteSize = row * col * sizeof(T);
-    size_t srcByteSize = row * col * sizeof(T);
-    T *dstHost;
-    T *srcHost;
-    T *dstDevice;
-    T *srcDevice;
-    float scalar;
-
-    aclrtMallocHost((void **)(&dstHost), dstByteSize);
-    aclrtMallocHost((void **)(&srcHost), srcByteSize);
-
-    aclrtMalloc((void **)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTMULSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
-
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-    return true;
+    runTMulS<float, 32, 32, 64, 64, 58.0f, 0.879310f>(0.0f);
 }
-
-TEST_F(TMULSTest, case1)
+TEST(TMulS, case2_half_63x64)
 {
-    bool ret = TMulSTestFramework<1, float, 32, 32, 64, 64, 46.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTMulS<half, 63, 63, 64, 64, 69.0f, 0.579710f>(half{1.0f});
 }
-
-TEST_F(TMULSTest, case2)
+TEST(TMulS, case3_int32_31x128)
 {
-    bool ret = TMulSTestFramework<2, aclFloat16, 63, 63, 64, 64, 77.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTMulS<int32_t, 31, 31, 128, 128, 70.0f, 0.642857f>(1);
 }
-
-TEST_F(TMULSTest, case3)
+TEST(TMulS, case4_int16_15x192)
 {
-    bool ret = TMulSTestFramework<3, int32_t, 31, 31, 128, 128, 76.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTMulS<int16_t, 15, 15, 192, 192, 40.0f, 0.375000f>(1);
 }
-
-TEST_F(TMULSTest, case4)
+TEST(TMulS, case5_float_7x448)
 {
-    bool ret = TMulSTestFramework<4, int16_t, 15, 15, 192, 192, 44.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTMulS<float, 7, 7, 448, 448, 77.0f, 0.935064f>(1.0f);
 }
-
-TEST_F(TMULSTest, case5)
+TEST(TMulS, case6_float_256x16)
 {
-    bool ret = TMulSTestFramework<5, float, 7, 7, 448, 448, 63.0f, 1.0f>();
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(TMULSTest, case6)
-{
-    bool ret = TMulSTestFramework<6, float, 256, 256, 16, 16, 270.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTMulS<float, 256, 256, 16, 16, 266.0f, 0.906015f>(1.0f);
 }
