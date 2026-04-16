@@ -156,24 +156,19 @@ PTO_INTERNAL void TRowReduceIdxImpl(__ubuf__ typename TileDataOutVal::DType *dst
     }
 }
 
-template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, bool outputVal>
+template <typename TVal, typename TIdx, typename TIn, bool outputVal>
 __tf__ PTO_INTERNAL OP_NAME(TROWARGMAX)
-    OP_TYPE(reduce) void TRowArgMax(typename TileDataOutVal::TileDType __out__ dstVal,
-                                    typename TileDataOutIdx::TileDType __out__ dstIdx,
-                                    typename TileDataIn::TileDType __in__ src, uint32_t srcValidRows,
-                                    uint32_t srcValidCols, uint32_t dstValValidRow, uint32_t dstIdxValidRow,
+    OP_TYPE(reduce) void TRowArgMax(typename TVal::TileDType __out__ dstVal, typename TIdx::TileDType __out__ dstIdx,
+                                    typename TIn::TileDType __in__ src, uint32_t srcValidRows, uint32_t srcValidCols,
+                                    uint32_t dstValValidRow, uint32_t dstIdxValidRow,
                                     unsigned version = VFImplKind::VFIMPL_DEFAULT)
 {
-    using TDstVal = typename TileDataOutVal::DType;
-    using TDstIdx = typename TileDataOutIdx::DType;
-    using TSrc = typename TileDataIn::DType;
-    TRowReduceIdxCheck<TileDataOutVal, TileDataOutIdx, TileDataIn, outputVal>(srcValidRows, srcValidCols,
-                                                                              dstValValidRow, dstIdxValidRow);
-    __ubuf__ TDstVal *dstValPtr = __cce_get_tile_ptr(dstVal);
-    __ubuf__ TDstIdx *dstIdxPtr = __cce_get_tile_ptr(dstIdx);
-    __ubuf__ TSrc *srcPtr = __cce_get_tile_ptr(src);
-    TRowReduceIdxImpl<ROWIDXMAX<TSrc>, TileDataOutVal, TileDataOutIdx, TileDataIn, outputVal>(
-        dstValPtr, dstIdxPtr, srcPtr, srcValidRows, srcValidCols, version);
+    TRowReduceIdxCheck<TVal, TIdx, TIn, outputVal>(srcValidRows, srcValidCols, dstValValidRow, dstIdxValidRow);
+    __ubuf__ typename TVal::DType *dstValPtr = __cce_get_tile_ptr(dstVal);
+    __ubuf__ typename TIdx::DType *dstIdxPtr = __cce_get_tile_ptr(dstIdx);
+    __ubuf__ typename TIn::DType *srcPtr = __cce_get_tile_ptr(src);
+    TRowReduceIdxImpl<ROWIDXMAX<typename TIn::DType>, TVal, TIdx, TIn, outputVal>(dstValPtr, dstIdxPtr, srcPtr,
+                                                                                  srcValidRows, srcValidCols, version);
 }
 
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>

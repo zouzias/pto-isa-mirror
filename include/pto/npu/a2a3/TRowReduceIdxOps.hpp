@@ -23,17 +23,17 @@ template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn,
 PTO_INTERNAL void TRowReduceIdxCheck(uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValValidRow,
                                      uint32_t dstIdxValidRow)
 {
-    using TVal = typename TileDataIn::DType;
     using TIdx = typename TileDataOutIdx::DType;
+    using TVal = typename TileDataIn::DType;
     if constexpr (outputVal) {
         static_assert(
-            (sizeof(TVal) == sizeof(half) && (std::is_same_v<int16_t, TIdx> || std::is_same_v<uint16_t, TIdx>)) ||
-                (sizeof(TVal) == sizeof(float) && (std::is_same_v<int32_t, TIdx> || std::is_same_v<uint32_t, TIdx>)),
+            (sizeof(TVal) == sizeof(float) && (std::is_same_v<int32_t, TIdx> || std::is_same_v<uint32_t, TIdx>)) ||
+                (sizeof(TVal) == sizeof(half) && (std::is_same_v<int16_t, TIdx> || std::is_same_v<uint16_t, TIdx>)),
             "Input and output tile data types must match. "
             "Fix: Ensure TileDataOutIdx uses the same DType as TileDataIn.");
         TRowReduceCheck<TileDataOutVal, TileDataIn, false>(srcValidRows, srcValidCols, dstValValidRow);
     } else {
-        static_assert(std::is_same_v<int32_t, TIdx> || std::is_same_v<uint32_t, TIdx>,
+        static_assert(std::is_same_v<uint32_t, TIdx> || std::is_same_v<int32_t, TIdx>,
                       "Input and output tile data types must match. "
                       "Fix: Ensure TileDataOutIdx uses the same DType as TileDataIn.");
     }
@@ -64,11 +64,11 @@ PTO_INTERNAL void ProcReduceIdxStage2(__ubuf__ typename TileDataOutVal::DType *d
                                       __ubuf__ typename TileDataIn::DType *src,
                                       __ubuf__ typename TileDataTmp::DType *tmp, int validRow, int validCol)
 {
+    using TIdxFinal = typename TileDataOut::DType;
     using T = typename TileDataIn::DType;
     using U = std::conditional_t<sizeof(T) == sizeof(uint32_t), uint32_t, uint16_t>;
-    using TIdxFinal = typename TileDataOut::DType;
-    constexpr uint8_t elemPerRpt = REPEAT_BYTE / sizeof(T);
     constexpr uint8_t elemPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
+    constexpr uint8_t elemPerRpt = REPEAT_BYTE / sizeof(T);
     constexpr uint32_t srcRptStride = TileDataIn::Cols / elemPerBlock;
     size_t tempElementsStage1 = CeilDivision(validCol, elemPerRpt);
     size_t tempElementsStage2 = CeilDivision(tempElementsStage1, elemPerRpt);
@@ -203,38 +203,14 @@ PTO_INTERNAL void OneRepeatProcIdx(__ubuf__ typename TileDataOut::DType *dst, __
     set_vector_mask(-1, -1);
 }
 
-template <typename InstrOp, typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp>
-PTO_INTERNAL void OneRepeatProcValIdx(__ubuf__ typename TileDataOutVal::DType *dstVal,
-                                      __ubuf__ typename TileDataOutIdx::DType *dstIdx,
-                                      __ubuf__ typename TileDataIn::DType *src,
-                                      __ubuf__ typename TileDataTmp::DType *tmp, int validRow, int validCol)
+template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataTmp>
+PTO_INTERNAL void ExtractValIdxFromTmp(__ubuf__ typename TileDataOutVal::DType *dstVal,
+                                       __ubuf__ typename TileDataOutIdx::DType *dstIdx,
+                                       __ubuf__ typename TileDataTmp::DType *tmp, int validRow)
 {
-    using T = typename TileDataIn::DType;
+    using T = typename TileDataOutVal::DType;
     using U = std::conditional_t<sizeof(T) == sizeof(uint32_t), uint32_t, uint16_t>;
-    constexpr uint8_t elemPerRpt = REPEAT_BYTE / sizeof(typename TileDataIn::DType);
-    constexpr uint8_t elemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataIn::DType);
-    constexpr uint32_t srcRptStride = TileDataIn::Cols / elemPerBlock;
-
-    if (validCol == elemPerRpt) {
-        set_mask_count();
-        set_vector_mask(0, (uint32_t)validRow * elemPerRpt);
-        InstrOp::ReduceValIdxInstrImpl(reinterpret_cast<__ubuf__ T *>(tmp), src, 0, 1, 1, srcRptStride);
-        pipe_barrier(PIPE_V);
-    } else {
-        int remain = validCol % elemPerRpt;
-        int rowRptTimes = validRow / REPEAT_MAX;
-        __ubuf__ T *tmpPtr = reinterpret_cast<__ubuf__ T *>(tmp);
-        unsigned rptTimes;
-        SetContinuousMask(remain);
-        do {
-            rptTimes = (rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX);
-            InstrOp::ReduceValIdxInstrImpl(tmpPtr, src, rptTimes, 1, 1, srcRptStride);
-            pipe_barrier(PIPE_V);
-            rowRptTimes -= 1;
-            tmpPtr += rptTimes * 2;
-            src += rptTimes * TileDataIn::Cols;
-        } while (rowRptTimes >= 0);
-    }
+    constexpr uint8_t elemPerBlock = BLOCK_BYTE_SIZE / sizeof(T);
     if constexpr (TileDataOutVal::Cols == 1 || TileDataOutIdx::Cols == 1) {
         set_mask_count();
         set_vector_mask(0, validRow * 2);
@@ -267,6 +243,40 @@ PTO_INTERNAL void OneRepeatProcValIdx(__ubuf__ typename TileDataOutVal::DType *d
         }
         PtoSetWaitFlag<PIPE_S, PIPE_V>();
     }
+}
+
+template <typename InstrOp, typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp>
+PTO_INTERNAL void OneRepeatProcValIdx(__ubuf__ typename TileDataOutVal::DType *dstVal,
+                                      __ubuf__ typename TileDataOutIdx::DType *dstIdx,
+                                      __ubuf__ typename TileDataIn::DType *src,
+                                      __ubuf__ typename TileDataTmp::DType *tmp, int validRow, int validCol)
+{
+    using T = typename TileDataIn::DType;
+    constexpr uint8_t elemPerRpt = REPEAT_BYTE / sizeof(typename TileDataIn::DType);
+    constexpr uint8_t elemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataIn::DType);
+    constexpr uint32_t srcRptStride = TileDataIn::Cols / elemPerBlock;
+
+    if (validCol == elemPerRpt) {
+        set_mask_count();
+        set_vector_mask(0, (uint32_t)validRow * elemPerRpt);
+        InstrOp::ReduceValIdxInstrImpl(reinterpret_cast<__ubuf__ T *>(tmp), src, 0, 1, 1, srcRptStride);
+        pipe_barrier(PIPE_V);
+    } else {
+        int remain = validCol % elemPerRpt;
+        int rowRptTimes = validRow / REPEAT_MAX;
+        __ubuf__ T *tmpPtr = reinterpret_cast<__ubuf__ T *>(tmp);
+        unsigned rptTimes;
+        SetContinuousMask(remain);
+        do {
+            rptTimes = (rowRptTimes == 0 ? (validRow % REPEAT_MAX) : REPEAT_MAX);
+            InstrOp::ReduceValIdxInstrImpl(tmpPtr, src, rptTimes, 1, 1, srcRptStride);
+            pipe_barrier(PIPE_V);
+            rowRptTimes -= 1;
+            tmpPtr += rptTimes * 2;
+            src += rptTimes * TileDataIn::Cols;
+        } while (rowRptTimes >= 0);
+    }
+    ExtractValIdxFromTmp<TileDataOutVal, TileDataOutIdx, TileDataTmp>(dstVal, dstIdx, tmp, validRow);
 }
 
 template <bool outputVal, typename InstrOp, typename TileDataOutVal, typename TileDataOut, typename TileDataIn,
