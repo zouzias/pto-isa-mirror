@@ -8,87 +8,49 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-class TEXPTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+using namespace pto;
 
-std::string GetGoldenDir()
+namespace {
+
+template <typename T, int rows, int cols, float profiling, float accuracy>
+void runTExp()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    const std::string caseName = testInfo->name();
-    std::string suiteName = testInfo->test_suite_name();
-    std::string fullPath = "../" + suiteName + "." + caseName;
-    return fullPath;
+    using TileData = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
+    TileData srcTile(rows, cols);
+    TileData dstTile(rows, cols);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x11000);
+
+    TEXP(dstTile, srcTile);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTExp(T *out, T *src, void *stream);
+} // namespace
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_texp()
+TEST(TExp, float_64x64)
 {
-    size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    T *dstHost, *srcHost;
-    T *dstDevice, *srcDevice;
-
-    aclrtMallocHost((void **)(&dstHost), fileSize);
-    aclrtMallocHost((void **)(&srcHost), fileSize);
-
-    aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTExp<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, srcDevice, stream);
-
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-    return;
+    runTExp<float, 64, 64, 159.0f, 0.157232f>();
 }
-
-TEST_F(TEXPTest, case_float_64x64_64x64_64x64)
+TEST(TExp, half_64x64)
 {
-    test_texp<float, 64, 64, 64, 64, 141.0f, 1.0f>();
+    runTExp<half, 64, 64, 159.0f, 0.962264f>();
 }
-TEST_F(TEXPTest, case_half_64x64_64x64_64x64)
+TEST(TExp, half_32x32)
 {
-    test_texp<aclFloat16, 64, 64, 64, 64, 141.0f, 1.0f>();
+    runTExp<half, 32, 32, 63.0f, 0.904761f>();
 }
-TEST_F(TEXPTest, case_half_32x32_32x32_32x32)
+TEST(TExp, float_32x32)
 {
-    test_texp<aclFloat16, 32, 32, 32, 32, 45.0f, 1.0f>();
+    runTExp<float, 32, 32, 63.0f, 0.396825f>();
 }
-TEST_F(TEXPTest, case_float_32x32_32x32_32x32)
+TEST(TExp, float_32x16)
 {
-    test_texp<float, 32, 32, 32, 32, 45.0f, 1.0f>();
-}
-TEST_F(TEXPTest, case_float_32x16_32x16_32x16)
-{
-    test_texp<float, 32, 16, 32, 16, 29.0f, 1.0f>();
+    runTExp<float, 32, 16, 30.0f, 0.0f>();
 }

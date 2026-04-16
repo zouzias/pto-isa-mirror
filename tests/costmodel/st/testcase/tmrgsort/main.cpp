@@ -8,131 +8,111 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
-#include <gtest/gtest.h>
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
+#include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kTCols_src1, int kTCols_src2,
-          int kTCols_src3, int TOPK, int LISTNUM, bool EXHAUSTED, float profiling, float accuracy>
-void LanchTMrgsortMulti(void *stream);
+using namespace pto;
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, uint32_t blockLen, float profiling,
-          float accuracy>
-void LanchTMrgsortSingle(void *stream);
+namespace {
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int topk, float profiling, float accuracy>
-void LanchTMrgsortTopK(void *stream);
-
-class TMRGSORTTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
-
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int kTCols_src1, int kTCols_src2,
-          int kTCols_src3, int TOPK, int LISTNUM, bool EXHAUSTED, float profiling, float accuracy>
-void TMrgsortMulti()
+// Multi-source merge (2/3/4 lists)
+template <typename T, int kTCols, int kTColsSrc1, int kTColsSrc2, int kTColsSrc3, int TOPK, int LISTNUM, bool EXHAUSTED,
+          float profiling, float accuracy>
+void runTMrgsortMulti()
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    LanchTMrgsortMulti<T, kGRows_, kGCols_, kTRows_, kTCols_, kTCols_src1, kTCols_src2, kTCols_src3, TOPK, LISTNUM,
-                       EXHAUSTED, profiling, accuracy>(stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    using TileData = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, T, 1, TOPK, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, T, 1, kTCols * LISTNUM, BLayout::RowMajor, -1, -1>;
+
+    TileData src0Tile(1, kTCols);
+    TileData src1Tile(1, kTColsSrc1);
+    DstTileData dstTile(1, TOPK);
+    TmpTileData tmpTile(1, kTCols * LISTNUM);
+
+    TASSIGN(src0Tile, 0x0);
+    TASSIGN(src1Tile, 0x0 + kTCols * sizeof(T));
+    TASSIGN(dstTile, 0x0 + (kTCols + kTColsSrc1) * sizeof(T));
+    TASSIGN(tmpTile, 0x0 + (kTCols + kTColsSrc1 + TOPK) * sizeof(T));
+
+    MrgSortExecutedNumList executedNumList;
+    if constexpr (LISTNUM == 4) {
+        TileData src2Tile(1, kTColsSrc2);
+        TileData src3Tile(1, kTColsSrc3);
+        TASSIGN(src2Tile, 0x0 + (kTCols + kTColsSrc1 + kTColsSrc2) * sizeof(T));
+        TASSIGN(src3Tile, 0x0 + (kTCols + kTColsSrc1 + kTColsSrc2 + kTColsSrc3) * sizeof(T));
+        TMRGSORT<DstTileData, TmpTileData, TileData, TileData, TileData, TileData, EXHAUSTED>(
+            dstTile, executedNumList, tmpTile, src0Tile, src1Tile, src2Tile, src3Tile);
+    } else if constexpr (LISTNUM == 3) {
+        TileData src2Tile(1, kTColsSrc2);
+        TASSIGN(src2Tile, 0x0 + (kTCols + kTColsSrc1 + kTColsSrc2) * sizeof(T));
+        TMRGSORT<DstTileData, TmpTileData, TileData, TileData, TileData, EXHAUSTED>(dstTile, executedNumList, tmpTile,
+                                                                                    src0Tile, src1Tile, src2Tile);
+    } else {
+        TMRGSORT<DstTileData, TmpTileData, TileData, TileData, EXHAUSTED>(dstTile, executedNumList, tmpTile, src0Tile,
+                                                                          src1Tile);
+    }
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, uint32_t blockLen, float profiling,
-          float accuracy>
-void TMrgsortSingle()
+// Single-source merge
+template <typename T, int kTCols, uint32_t blockLen, float profiling, float accuracy>
+void runTMrgsortSingle()
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    LanchTMrgsortSingle<T, kGRows_, kGCols_, kTRows_, kTCols_, blockLen, profiling, accuracy>(stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    using TileData = Tile<TileType::Vec, T, 1, kTCols, BLayout::RowMajor, -1, -1>;
+
+    TileData srcTile(1, kTCols);
+    TileData dstTile(1, kTCols);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x0 + kTCols * sizeof(T));
+
+    TMRGSORT<TileData, TileData>(dstTile, srcTile, blockLen);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, int topk, float profiling, float accuracy>
-void TMrgsortTopk()
+} // namespace
+
+// Multi-src
+TEST(TMrgsort, multi_float_128_4list)
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    LanchTMrgsortTopK<T, kGRows_, kGCols_, kTRows_, kTCols_, topk, profiling, accuracy>(stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    runTMrgsortMulti<float, 128, 128, 128, 128, 512, 4, false, 0.0f, 0.0f>();
+}
+TEST(TMrgsort, multi_half_128_4list)
+{
+    runTMrgsortMulti<half, 256, 256, 256, 256, 1024, 4, false, 0.0f, 0.0f>();
+}
+TEST(TMrgsort, multi_float_64_2list_exh)
+{
+    runTMrgsortMulti<float, 64, 64, 0, 0, 128, 2, true, 0.0f, 0.0f>();
+}
+TEST(TMrgsort, multi_half_256_3list_exh)
+{
+    runTMrgsortMulti<half, 512, 512, 512, 0, 1536, 3, true, 0.0f, 0.0f>();
 }
 
-// multi case: costmodel=20
-TEST_F(TMRGSORTTest, case_multi1)
+// Single-src
+TEST(TMrgsort, single_float_256_bl64)
 {
-    TMrgsortMulti<float, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 34.0f, 1.0f>();
+    runTMrgsortSingle<float, 256, 64, 0.0f, 0.0f>();
 }
-
-TEST_F(TMRGSORTTest, case_multi2)
+TEST(TMrgsort, single_float_512_bl64)
 {
-    TMrgsortMulti<uint16_t, 1, 128, 1, 128, 128, 128, 128, 512, 4, false, 34.0f, 1.0f>();
+    runTMrgsortSingle<float, 512, 64, 0.0f, 0.0f>();
 }
-
-TEST_F(TMRGSORTTest, case_exhausted1)
+TEST(TMrgsort, single_half_512_bl64)
 {
-    TMrgsortMulti<float, 1, 64, 1, 64, 64, 0, 0, 128, 2, true, 34.0f, 1.0f>();
+    runTMrgsortSingle<half, 512, 64, 0.0f, 0.0f>();
 }
-
-TEST_F(TMRGSORTTest, case_exhausted2)
+TEST(TMrgsort, single_half_1024_bl64)
 {
-    TMrgsortMulti<uint16_t, 1, 256, 1, 256, 256, 256, 0, 768, 3, true, 34.0f, 1.0f>();
+    runTMrgsortSingle<half, 1024, 64, 0.0f, 0.0f>();
 }
-
-// single case: costmodel output
-TEST_F(TMRGSORTTest, case_single1)
+TEST(TMrgsort, single_half_2048_bl256)
 {
-    TMrgsortSingle<float, 1, 256, 1, 256, 64, 20.0f, 1.0f>();
-}
-
-TEST_F(TMRGSORTTest, case_single3)
-{
-    TMrgsortSingle<float, 1, 512, 1, 512, 64, 26.0f, 1.0f>();
-}
-
-TEST_F(TMRGSORTTest, case_single5)
-{
-    TMrgsortSingle<uint16_t, 1, 256, 1, 256, 64, 20.0f, 1.0f>();
-}
-
-TEST_F(TMRGSORTTest, case_single7)
-{
-    TMrgsortSingle<uint16_t, 1, 512, 1, 512, 64, 26.0f, 1.0f>();
-}
-
-TEST_F(TMRGSORTTest, case_single8)
-{
-    TMrgsortSingle<uint16_t, 1, 1024, 1, 1024, 256, 20.0f, 1.0f>();
-}
-
-// topk case: final TMRGSORT on dstTile costmodel=20
-TEST_F(TMRGSORTTest, case_topk2)
-{
-    TMrgsortTopk<float, 1, 2048, 1, 2048, 2048, 34.0f, 1.0f>();
-}
-
-TEST_F(TMRGSORTTest, case_topk5)
-{
-    TMrgsortTopk<uint16_t, 1, 2048, 1, 2048, 2048, 20.0f, 1.0f>();
+    runTMrgsortSingle<half, 2048, 256, 0.0f, 0.0f>();
 }

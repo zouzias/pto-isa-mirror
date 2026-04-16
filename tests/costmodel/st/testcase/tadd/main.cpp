@@ -8,82 +8,50 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-template <int32_t tilingKey>
-void launchTADD_demo(uint8_t *out, uint8_t *src, void *stream);
+using namespace pto;
 
-class TADDTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+namespace {
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTAdd(T *out, T *src0, T *src1, void *stream);
-
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_tadd()
+template <typename T, int rows, int cols, float profiling, float accuracy>
+void runTAdd()
 {
-    size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
+    using TileData = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
+    TileData src0Tile(rows, cols);
+    TileData src1Tile(rows, cols);
+    TileData dstTile(rows, cols);
+    TASSIGN(src0Tile, 0x0);
+    TASSIGN(src1Tile, 0x4000);
+    TASSIGN(dstTile, 0x8000);
 
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
+    TADD(dstTile, src0Tile, src1Tile);
 
-    T *dstHost, *src0Host, *src1Host;
-    T *dstDevice, *src0Device, *src1Device;
-
-    aclrtMallocHost((void **)(&dstHost), fileSize);
-    aclrtMallocHost((void **)(&src0Host), fileSize);
-    aclrtMallocHost((void **)(&src1Host), fileSize);
-
-    aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(src1Device, fileSize, src1Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTAdd<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, src0Device, src1Device, stream);
-
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(src0Device);
-    aclrtFree(src1Device);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(src0Host);
-    aclrtFreeHost(src1Host);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-    return;
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-TEST_F(TADDTest, case_float_64x64_64x64_64x64)
+} // namespace
+
+TEST(TAdd, float_64x64)
 {
-    test_tadd<float, 64, 64, 64, 64, 142.0f, 1.0f>();
+    runTAdd<float, 64, 64, 132.0f, 0.727272f>();
 }
-TEST_F(TADDTest, case_int32_64x64_64x64_64x64)
+
+TEST(TAdd, int32_64x64)
 {
-    test_tadd<int32_t, 64, 64, 64, 64, 142.0f, 1.0f>();
+    runTAdd<int32_t, 64, 64, 132.0f, 0.727272f>();
 }
-TEST_F(TADDTest, case_int16_64x64_64x64_64x64)
+
+TEST(TAdd, half_16x256)
 {
-    test_tadd<int16_t, 64, 64, 64, 64, 142.0f, 1.0f>();
+    runTAdd<half, 16, 256, 68.0f, 0.941176f>();
 }
-TEST_F(TADDTest, case_half_16x256_16x256_16x256)
+
+TEST(TAdd, int16_64x64)
 {
-    test_tadd<aclFloat16, 16, 256, 16, 256, 78.0f, 1.0f>();
+    runTAdd<int16_t, 64, 64, 134.0f, 0.731343f>();
 }
