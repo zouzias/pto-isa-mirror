@@ -106,6 +106,10 @@ TEST_F(TADDTest, case_float_64x64_64x64_64x64_64x64)
 {
     test_tadd<float, 64, 64, 64, 64, 64, 64, 64, 64>();
 }
+TEST_F(TADDTest, case_float_64x128_64x128_64x128_64x128)
+{
+    test_tadd<float, 64, 128, 64, 128, 64, 128, 64, 128>();
+}
 TEST_F(TADDTest, case_int32_64x64_64x64_64x64_64x64)
 {
     test_tadd<int32_t, 64, 64, 64, 64, 64, 64, 64, 64>();
