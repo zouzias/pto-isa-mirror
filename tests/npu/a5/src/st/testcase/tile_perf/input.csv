@@ -1,0 +1,7 @@
+# op,dtype,tile_h,tile_w,valid_h,valid_w,scalar
+# 2D comparison: 32x64 fp32 (2048 elements) - matches existing ST size
+tadd,float32,32,64,32,64
+tadds,float32,32,64,32,64,3.14
+# 1D comparison: 1x2048 fp32 (same element count, different shape)
+tadd,float32,1,2048,1,2048
+tadds,float32,1,2048,1,2048,3.14
