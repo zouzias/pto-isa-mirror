@@ -19,6 +19,12 @@ template <typename TDst, typename TSrc, int dstTileH, int dstTileW, int srcTileH
 void LaunchTRowArgMin(TDst *out, TSrc *src, void *stream);
 template <typename TDst, int dstTileH, int dstTileW, int srcTileH, int srcTileW, int vRows, int vCols>
 void LaunchTRowArgMinHalf(TDst *out, aclFloat16 *src, void *stream);
+template <typename TIdx, typename TVal, int dstValTileH, int dstValTileW, int dstIdxTileH, int dstIdxTileW,
+    int srcTileH, int srcTileW, int vRows, int vCols>
+void LaunchTRowArgMin(TVal *outVal, TIdx *outIdx, TVal *src, void *stream);
+template <typename TIdx, int dstValTileH, int dstValTileW, int dstIdxTileH, int dstIdxTileW,
+    int srcTileH, int srcTileW, int vRows, int vCols>
+void LaunchTRowArgMinHalf(aclFloat16 *outVal, TIdx *outIdx, aclFloat16 *src, void *stream);
 
 class TROWARGMINTest : public testing::Test {
 private:
@@ -201,4 +207,52 @@ TEST_F(TROWARGMINTest, case_uint32_half_260x16_260x64_260x64)
 TEST_F(TROWARGMINTest, case_uint32_half_1023x16_1023x32_1023x17)
 {
     this->Launch<uint32_t, aclFloat16, 1023, 16, 1023, 32, 1023, 17, true>();
+}
+TEST_F(TROWARGMINTest, case_uint32_float_8x1_8x1_8x8_8x8)
+{
+    this->Launch<uint32_t, float, 8, 1, 8, 1, 8, 8, 8, 8>();
+}
+TEST_F(TROWARGMINTest, case_uint32_float_8x8_8x1_8x8_8x8)
+{
+    this->Launch<uint32_t, float, 8, 8, 8, 1, 8, 8, 8, 8>();
+}
+TEST_F(TROWARGMINTest, case_uint32_float_8x1_8x8_8x8_8x8)
+{
+    this->Launch<uint32_t, float, 8, 1, 8, 8, 8, 8, 8, 8>();
+}
+TEST_F(TROWARGMINTest, case_uint32_float_8x8_8x8_8x8_8x8)
+{
+    this->Launch<uint32_t, float, 8, 8, 8, 8, 8, 8, 8, 8>();
+}
+TEST_F(TROWARGMINTest, case_uint32_float_1024x1_1024x1_1024x8_1024x7)
+{
+    this->Launch<uint32_t, float, 1024, 1, 1024, 1, 1024, 8, 1024, 7>();
+}
+TEST_F(TROWARGMINTest, case_uint32_float_8x1_8x1_2x16384_2x16381)
+{
+    this->Launch<uint32_t, float, 8, 1, 8, 1, 2, 16384, 2, 16381>();
+}
+TEST_F(TROWARGMINTest, case_uint16_half_16x1_16x1_8x16_8x16)
+{
+    this->Launch<uint16_t, aclFloat16, 16, 1, 16, 1, 8, 16, 8, 16, true>();
+}
+TEST_F(TROWARGMINTest, case_uint16_half_8x16_16x1_8x16_8x16)
+{
+    this->Launch<uint16_t, aclFloat16, 8, 16, 16, 1, 8, 16, 8, 16, true>();
+}
+TEST_F(TROWARGMINTest, case_uint16_half_16x1_8x16_8x16_8x16)
+{
+    this->Launch<uint16_t, aclFloat16, 16, 1, 8, 16, 8, 16, 8, 16, true>();
+}
+TEST_F(TROWARGMINTest, case_uint16_half_8x16_8x16_8x16_8x16)
+{
+    this->Launch<uint16_t, aclFloat16, 8, 16, 8, 16, 8, 16, 8, 16, true>();
+}
+TEST_F(TROWARGMINTest, case_uint16_half_1024x1_1024x1_1024x16_1024x13)
+{
+    this->Launch<uint16_t, aclFloat16, 1024, 1, 1024, 1, 1024, 16, 1024, 13, true>();
+}
+TEST_F(TROWARGMINTest, case_uint16_half_16x1_16x1_2x16384_2x16381)
+{
+    this->Launch<uint16_t, aclFloat16, 16, 1, 16, 1, 2, 16384, 2, 16381, true>();
 }

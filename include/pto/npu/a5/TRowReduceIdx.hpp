@@ -183,8 +183,8 @@ __tf__ PTO_INTERNAL OP_NAME(TROWARGMIN)
 template <typename TileDataOut, typename TileDataIn, typename TileDataTmp>
 PTO_INTERNAL void TROWARGMIN_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &tmp)
 {
-    TRowArgMin<TileDataOut, TileDataIn>(dst.data(), src.data(), src.GetValidRow(), src.GetValidCol(),
-                                        dst.GetValidRow());
+    TRowArgMin<TileDataOut, TileDataOut, TileDataIn, false>(dst.data(), dst.data(), src.data(),
+        src.GetValidRow(), src.GetValidCol(), dst.GetValidRow());
 }
 
 template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, typename TileDataTmp>
