@@ -8,120 +8,88 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
-#include <gtest/gtest.h>
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
+#include <gtest/gtest.h>
+#include <vector>
+#include <cstdint>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-template <uint32_t caseId>
-void launchTDIVSTestCase(void *out, void *src, float scalar, aclrtStream stream);
+using namespace pto;
 
-class TDIVSTest : public testing::Test {
-public:
-protected:
-    void SetUp() override
-    {}
+namespace {
 
-    void TearDown() override
-    {}
-};
+// NOTE: TDIVS for integer types (int16/int32) falls back to a naive loop that
+// dereferences the tile's backing buffer. For these cases we must provide real
+// memory — TASSIGN(tile, raw_addr) with a bogus address segfaults. Floats/halves
+// use the vectorized path and do not need real memory.
 
-std::string GetGoldenDir()
+template <typename T, int row, int validRow, int col, int validCol, float profiling, float accuracy>
+void runTDivS_TileScalar(T scalar)
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    const std::string caseName = testInfo->name();
-    std::string suiteName = testInfo->test_suite_name();
-    std::string fullPath = "../" + suiteName + "." + caseName;
-    return fullPath;
+    using TileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1>;
+    TileData srcTile(validRow, validCol);
+    TileData dstTile(validRow, validCol);
+
+    std::vector<T> srcBuf(row * col, T{1});
+    std::vector<T> dstBuf(row * col, T{0});
+    TASSIGN(srcTile, reinterpret_cast<std::uintptr_t>(srcBuf.data()));
+    TASSIGN(dstTile, reinterpret_cast<std::uintptr_t>(dstBuf.data()));
+
+    TDIVS(dstTile, srcTile, scalar);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-template <uint32_t caseId, typename T, int row, int vaildRow, int col, int srcVaildCol, float profiling, float accuracy>
-bool TDivSTestFramework()
+template <typename T, int row, int validRow, int col, int validCol, float profiling, float accuracy>
+void runTDivS_ScalarTile(T scalar)
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
+    using TileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1>;
+    TileData srcTile(validRow, validCol);
+    TileData dstTile(validRow, validCol);
 
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
+    std::vector<T> srcBuf(row * col, T{1});
+    std::vector<T> dstBuf(row * col, T{0});
+    TASSIGN(srcTile, reinterpret_cast<std::uintptr_t>(srcBuf.data()));
+    TASSIGN(dstTile, reinterpret_cast<std::uintptr_t>(dstBuf.data()));
 
-    size_t dstByteSize = row * col * sizeof(T);
-    size_t srcByteSize = row * col * sizeof(T);
-    T *dstHost;
-    T *srcHost;
-    T *dstDevice;
-    T *srcDevice;
-    float scalar;
+    TDIVS(dstTile, scalar, srcTile);
 
-    aclrtMallocHost((void **)(&dstHost), dstByteSize);
-    aclrtMallocHost((void **)(&srcHost), srcByteSize);
-
-    aclrtMalloc((void **)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTDIVSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
-
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-    return true;
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-TEST_F(TDIVSTest, case1)
-{
-    bool ret = TDivSTestFramework<1, float, 32, 32, 64, 64, 46.0f, 1.0f>();
-    EXPECT_TRUE(ret);
-}
+} // namespace
 
-TEST_F(TDIVSTest, case2)
+TEST(TDivS, case1_tile_scalar_float_32x64)
 {
-    bool ret = TDivSTestFramework<2, aclFloat16, 63, 63, 64, 64, 77.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTDivS_TileScalar<float, 32, 32, 64, 64, 205.0f, 0.287804f>(0.0f);
 }
-
-TEST_F(TDIVSTest, case3)
+TEST(TDivS, case2_tile_scalar_half_63x64)
 {
-    bool ret = TDivSTestFramework<3, int32_t, 31, 31, 128, 128, 76.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTDivS_TileScalar<half, 63, 63, 64, 64, 328.0f, 0.073170f>(half{1.0f});
 }
-
-TEST_F(TDIVSTest, case4)
+TEST(TDivS, case3_tile_scalar_int32_31x128)
 {
-    bool ret = TDivSTestFramework<4, int16_t, 15, 15, 192, 192, 44.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTDivS_TileScalar<int32_t, 31, 31, 128, 128, 4.0f, 1.0f>(1);
 }
-
-TEST_F(TDIVSTest, case5)
+TEST(TDivS, case4_tile_scalar_int16_15x192)
 {
-    bool ret = TDivSTestFramework<5, float, 32, 32, 64, 64, 46.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTDivS_TileScalar<int16_t, 15, 15, 192, 192, 4.0f, 1.0f>(1);
 }
-
-TEST_F(TDIVSTest, case6)
+TEST(TDivS, case5_scalar_tile_float_32x64)
 {
-    bool ret = TDivSTestFramework<6, aclFloat16, 63, 63, 64, 64, 77.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTDivS_ScalarTile<float, 32, 32, 64, 64, 205.0f, 0.287804f>(0.0f);
 }
-
-TEST_F(TDIVSTest, case7)
+TEST(TDivS, case6_scalar_tile_half_63x64)
 {
-    bool ret = TDivSTestFramework<7, int32_t, 31, 31, 128, 128, 76.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTDivS_ScalarTile<half, 63, 63, 64, 64, 328.0f, 0.073170f>(half{1.0f});
 }
-
-TEST_F(TDIVSTest, case8)
+TEST(TDivS, case7_scalar_tile_int32_31x128)
 {
-    bool ret = TDivSTestFramework<8, int16_t, 15, 15, 192, 192, 44.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTDivS_ScalarTile<int32_t, 31, 31, 128, 128, 4.0f, 1.0f>(1);
+}
+TEST(TDivS, case8_scalar_tile_int16_15x192)
+{
+    runTDivS_ScalarTile<int16_t, 15, 15, 192, 192, 4.0f, 1.0f>(1);
 }

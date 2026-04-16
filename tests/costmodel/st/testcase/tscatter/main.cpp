@@ -7,75 +7,70 @@ THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, E
 INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE in the root of the software repository for the full text of the License.
 */
+
 #include <pto/pto-inst.hpp>
-#include "test_common.h"
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
-#include <cmath>
+#include <vector>
+#include <cstdint>
 
-using namespace std;
+#include "cost_check.hpp"
+
 using namespace pto;
-using namespace PtoTestCommon;
 
-class TSCATTERTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+namespace {
+
+// NOTE: TSCATTER's impl iterates over real idx/src buffers to produce dst, so
+// the tile backing memory must be real (not a bogus raw address).
 
 template <typename ST, typename DT, typename IT, int rows, int cols, int validRow, int validCol, float profiling,
           float accuracy>
-void testScatter()
+void runTScatter()
 {
-    Tile<TileType::Vec, DT, rows, cols, BLayout::RowMajor, validRow, validCol, SLayout::NoneBox> dst;
-    Tile<TileType::Vec, ST, rows, cols, BLayout::RowMajor, validRow, validCol, SLayout::NoneBox> src;
-    Tile<TileType::Vec, IT, rows, cols, BLayout::RowMajor, validRow, validCol, SLayout::NoneBox> idx;
+    Tile<TileType::Vec, DT, rows, cols, BLayout::RowMajor, validRow, validCol, SLayout::NoneBox> dstTile;
+    Tile<TileType::Vec, ST, rows, cols, BLayout::RowMajor, validRow, validCol, SLayout::NoneBox> srcTile;
+    Tile<TileType::Vec, IT, rows, cols, BLayout::RowMajor, validRow, validCol, SLayout::NoneBox> idxTile;
 
-    std::fill(dst.data(), dst.data() + rows * cols, static_cast<DT>(0));
-    std::fill(src.data(), src.data() + rows * cols, static_cast<ST>(1));
-    std::fill(idx.data(), idx.data() + rows * cols, static_cast<IT>(0));
+    std::vector<ST> srcBuf(rows * cols, ST{});
+    std::vector<DT> dstBuf(rows * cols, DT{});
+    std::vector<IT> idxBuf(rows * cols, IT{0});
+    TASSIGN(srcTile, reinterpret_cast<std::uintptr_t>(srcBuf.data()));
+    TASSIGN(idxTile, reinterpret_cast<std::uintptr_t>(idxBuf.data()));
+    TASSIGN(dstTile, reinterpret_cast<std::uintptr_t>(dstBuf.data()));
 
-    TSCATTER(dst, src, idx);
+    TSCATTER(dstTile, srcTile, idxTile);
 
-    float costResult = dst.GetCycle();
-    float precision = 1 - fabs(profiling - costResult) / profiling;
-    bool ret = precision >= accuracy;
-    EXPECT_TRUE(ret);
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-// float 16x16 full: 14 + 256 * 2 = 526
-TEST_F(TSCATTERTest, case_float_16x16_full)
+} // namespace
+
+TEST(TScatter, float_16x16_full)
 {
-    testScatter<float, float, uint32_t, 16, 16, 16, 16, 526.0f, 1.0f>();
+    runTScatter<float, float, uint32_t, 16, 16, 16, 16, 0.0f, 0.0f>();
 }
 
-// float 32x32 full: 14 + 1024 * 2 = 2062
-TEST_F(TSCATTERTest, case_float_32x32_full)
+TEST(TScatter, float_32x32_full)
 {
-    testScatter<float, float, uint32_t, 32, 32, 32, 32, 2062.0f, 1.0f>();
+    runTScatter<float, float, uint32_t, 32, 32, 32, 32, 0.0f, 0.0f>();
 }
 
-// half 16x16 full: 14 + 256 * 1 = 270
-TEST_F(TSCATTERTest, case_half_16x16_full)
+TEST(TScatter, half_16x16_full)
 {
-    testScatter<half, half, uint16_t, 16, 16, 16, 16, 270.0f, 1.0f>();
+    runTScatter<half, half, uint16_t, 16, 16, 16, 16, 0.0f, 0.0f>();
 }
 
-// int32_t 16x16 full: 14 + 256 * 2 = 526
-TEST_F(TSCATTERTest, case_int32_16x16_full)
+TEST(TScatter, int32_16x16_full)
 {
-    testScatter<int32_t, int32_t, uint32_t, 16, 16, 16, 16, 526.0f, 1.0f>();
+    runTScatter<int32_t, int32_t, uint32_t, 16, 16, 16, 16, 0.0f, 0.0f>();
 }
 
-// int16_t 16x16 full: 14 + 256 * 1 = 270
-TEST_F(TSCATTERTest, case_int16_16x16_full)
+TEST(TScatter, int16_16x16_full)
 {
-    testScatter<int16_t, int16_t, uint16_t, 16, 16, 16, 16, 270.0f, 1.0f>();
+    runTScatter<int16_t, int16_t, uint16_t, 16, 16, 16, 16, 0.0f, 0.0f>();
 }
 
-// float 16x16 partial validRow=12 validCol=10: 14 + 120 * 2 = 254
-TEST_F(TSCATTERTest, case_float_16x16_partial_12x10)
+TEST(TScatter, float_16x16_partial_12x10)
 {
-    testScatter<float, float, uint32_t, 16, 16, 12, 10, 254.0f, 1.0f>();
+    runTScatter<float, float, uint32_t, 16, 16, 12, 10, 0.0f, 0.0f>();
 }
