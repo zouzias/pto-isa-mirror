@@ -90,7 +90,9 @@ PTO_INTERNAL T GetValue(__gm__ uint8_t *addr, UbTmpBuf &tmpBuf)
 
 PTO_INTERNAL __gm__ SdmaEventRecord *GetEventRecord(__gm__ uint8_t *recvWorkspace, uint32_t slotIdx)
 {
-    return reinterpret_cast<__gm__ SdmaEventRecord *>(recvWorkspace) + slotIdx;
+    // Stride by 64 bytes (SDMA minimum transfer) so flag-SQE writes don't overlap.
+    constexpr uint32_t kRecordStride = 64U;
+    return reinterpret_cast<__gm__ SdmaEventRecord *>(recvWorkspace + slotIdx * kRecordStride);
 }
 
 PTO_INTERNAL uint32_t SelectEventSlot(uint32_t sqTail)
@@ -182,8 +184,6 @@ PTO_INTERNAL void PrepareWorkspace(__gm__ uint8_t *workspace, const SdmaConfig &
 
     layout.send_workspace = workspace;
     layout.recv_workspace = myWorkspace;
-
-    SetValue<uint32_t>((__gm__ uint8_t *)layout.send_workspace, tmpBuf, syncId, config.queue_num);
 }
 
 PTO_INTERNAL void InitSqTailArray(__gm__ BatchWriteChannelInfo *batchWriteChannelInfo, uint32_t queueNum,
@@ -223,18 +223,39 @@ PTO_INTERNAL void SubmitFlagTransferSqes(__gm__ BatchWriteChannelInfo *batchWrit
                                          const WorkspaceLayout &layout, const SdmaConfig &config, uint32_t *sqTail,
                                          UbTmpBuf &tmpBuf, uint32_t syncId)
 {
+    constexpr uint32_t kMinSdmaTransferBytes = 64U;
+
     for (uint32_t queueId = 0U; queueId < config.queue_num; ++queueId) {
         __gm__ BatchWriteChannelInfo *channelInfo = batchWriteChannelInfo + queueId;
 
         __gm__ SdmaEventRecord *record = GetEventRecord(layout.recv_workspace, queueId);
 
-        SetValue<uint32_t>((__gm__ uint8_t *)&record->flag, tmpBuf, syncId, 0U);
-        SetValue<uint32_t>((__gm__ uint8_t *)&record->sq_tail, tmpBuf, syncId, (sqTail[queueId] + 1) % kSqDepth);
-        SetValue<uint64_t>((__gm__ uint8_t *)&record->channel_info, tmpBuf, syncId,
-                           reinterpret_cast<uint64_t>(channelInfo));
+        // Clear both flag and sq_tail with a single 8-byte write (MTE3 min granularity).
+        SetValue<uint64_t>((__gm__ uint8_t *)record, tmpBuf, syncId, 0ULL);
 
-        AddOneMemcpySqe(channelInfo, layout.send_workspace, (__gm__ uint8_t *)&record->flag, 0, sizeof(uint32_t),
-                        sqTail[queueId], sqTail[queueId] - channelInfo->sq_head);
+        __gm__ uint8_t *sendBuf = layout.send_workspace + queueId * kMinSdmaTransferBytes;
+        uint32_t nextTail = (sqTail[queueId] + 1) % kSqDepth;
+
+        // Assemble complete SdmaEventRecord in UB, then single MTE copy to sendBuf.
+        // This avoids multiple small SetValue calls whose MTE minimum transfer size
+        // could overwrite adjacent fields.
+        __ubuf__ uint8_t *ub = tmpBuf.addr;
+        *reinterpret_cast<__ubuf__ uint32_t *>(ub + 0) = config.queue_num;
+        *reinterpret_cast<__ubuf__ uint32_t *>(ub + 4) = nextTail;
+        *reinterpret_cast<__ubuf__ uint64_t *>(ub + 8) = reinterpret_cast<uint64_t>(channelInfo);
+        pipe_barrier(PIPE_ALL);
+
+#ifdef PTO_NPU_ARCH_A5
+        copy_ubuf_to_gm_align_v2(reinterpret_cast<__gm__ uint32_t *>(sendBuf),
+                                 reinterpret_cast<__ubuf__ uint32_t *>(ub), 0, 1, kMinSdmaTransferBytes, 0, 0, 0);
+#else
+        copy_ubuf_to_gm_align_b32((__gm__ void *)sendBuf, (__ubuf__ void *)ub, 0, 1, kMinSdmaTransferBytes, 0, 0, 0, 0);
+#endif
+        set_flag(PIPE_MTE3, PIPE_MTE2, syncId);
+        wait_flag(PIPE_MTE3, PIPE_MTE2, syncId);
+
+        AddOneMemcpySqe(channelInfo, sendBuf, (__gm__ uint8_t *)record, 0, kMinSdmaTransferBytes, sqTail[queueId],
+                        sqTail[queueId] - channelInfo->sq_head);
 
         sqTail[queueId] = (sqTail[queueId] + 1) % kSqDepth;
         pipe_barrier(PIPE_ALL);
@@ -251,6 +272,8 @@ PTO_INTERNAL void FlushCacheAndRingDoorbell(__gm__ BatchWriteChannelInfo *batchW
         __asm__ __volatile__("");
         dcci((__gm__ void *)(channelInfo->sq_base), ENTIRE_DATA_CACHE);
         __asm__ __volatile__("");
+        pipe_barrier(PIPE_ALL);
+        dsb(DSB_DDR);
 
 #ifdef PTO_NPU_ARCH_A5
         SetValue<uint32_t>((__gm__ uint8_t *)(channelInfo->sq_reg_base), tmpBuf, syncId, sqTail[queueId]);
@@ -265,7 +288,10 @@ PTO_INTERNAL void UpdateSqTailState(__gm__ BatchWriteChannelInfo *batchWriteChan
 {
     for (uint8_t queueId = 0; queueId < config.queue_num; queueId++) {
         __gm__ BatchWriteChannelInfo *channelInfo = batchWriteChannelInfo + queueId;
-        SetValue<uint32_t>((__gm__ uint8_t *)channelInfo + 4, tmpBuf, syncId, sqTail[queueId]);
+        // Read current sq_head so the 8-byte write preserves it.
+        uint32_t currentHead = GetValue<uint32_t>((__gm__ uint8_t *)channelInfo, tmpBuf);
+        uint64_t packed = (static_cast<uint64_t>(sqTail[queueId]) << 32) | static_cast<uint64_t>(currentHead);
+        SetValue<uint64_t>((__gm__ uint8_t *)channelInfo, tmpBuf, syncId, packed);
     }
 }
 
@@ -315,14 +341,18 @@ PTO_INTERNAL bool PrepareEventCheck(const SdmaSession &session, UbTmpBuf &tmpBuf
 
 PTO_INTERNAL void HandleCompletedEventRecord(__gm__ SdmaEventRecord *record, UbTmpBuf &tmpBuf, uint32_t syncId)
 {
-    SetValue<uint32_t>((__gm__ uint8_t *)&record->flag, tmpBuf, syncId, 0U);
-
     const uint32_t completedTail = GetValue<uint32_t>((__gm__ uint8_t *)&record->sq_tail, tmpBuf);
     const uint64_t channelInfoAddr = GetValue<uint64_t>((__gm__ uint8_t *)&record->channel_info, tmpBuf);
-    constexpr uint8_t offset = 4;
+
+    // MTE3 minimum transfer is 8 bytes: writing uint32_t zeroes the adjacent 4 bytes.
+    // Use uint64_t to write both flag(=0) and sq_tail(=0) atomically.
+    SetValue<uint64_t>((__gm__ uint8_t *)record, tmpBuf, syncId, 0ULL);
+
     if (channelInfoAddr != 0) {
         __gm__ uint8_t *channelInfo = reinterpret_cast<__gm__ uint8_t *>(channelInfoAddr);
-        SetValue<uint32_t>(channelInfo + offset, tmpBuf, syncId, completedTail);
+        // Pack sq_head (low 32) and sq_tail (high 32) into one 8-byte write.
+        uint64_t packed = (static_cast<uint64_t>(completedTail) << 32) | static_cast<uint64_t>(completedTail);
+        SetValue<uint64_t>(channelInfo, tmpBuf, syncId, packed);
     }
 }
 
@@ -345,6 +375,9 @@ PTO_INTERNAL bool SdmaTestEvent(uint64_t eventHandle, const SdmaSession &session
 
     for (uint32_t queueId = 0; queueId < queueNum; ++queueId) {
         __gm__ SdmaEventRecord *record = GetEventRecord(recvWorkspace, queueId);
+        __asm__ __volatile__("");
+        dcci((__gm__ void *)record, SINGLE_CACHE_LINE);
+        __asm__ __volatile__("");
         const uint32_t sendValue = GetValue<uint32_t>((__gm__ uint8_t *)&record->flag, tmpBuf);
         if (sendValue == 0) {
             return false;
@@ -376,6 +409,9 @@ PTO_INTERNAL bool SdmaWaitEvent(uint64_t eventHandle, const SdmaSession &session
         __gm__ SdmaEventRecord *record = GetEventRecord(recvWorkspace, queueId);
         uint32_t sendValue = 0;
         for (uint32_t i = 0; i < kMaxPollTimes && sendValue == 0; ++i) {
+            __asm__ __volatile__("");
+            dcci((__gm__ void *)record, SINGLE_CACHE_LINE);
+            __asm__ __volatile__("");
             sendValue = GetValue<uint32_t>((__gm__ uint8_t *)&record->flag, tmpBuf);
         }
         if (sendValue == 0) {
@@ -424,7 +460,8 @@ PTO_INTERNAL uint64_t SdmaPostSendAsyncWithCtx(__gm__ uint8_t *recvBuffer, __gm_
     SubmitDataTransferSqes(batchWriteChannelInfo, sendBuffer, recvBuffer, static_cast<uint32_t>(opcode), config,
                            sqTail);
 
-    FlushCacheAndRingDoorbell(batchWriteChannelInfo, config, sqTail, tmpBuf, syncId);
+    // Doorbell deferred to PrepareEventCheck (Wait) — data SQE and flag SQE
+    // will be flushed and signalled together in a single dcci + doorbell.
     UpdateSqTailState(batchWriteChannelInfo, config, sqTail, tmpBuf, syncId);
 
     pipe_barrier(PIPE_ALL);
