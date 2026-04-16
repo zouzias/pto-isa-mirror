@@ -78,7 +78,8 @@ PTO_INTERNAL void TFmodCheck(const TileDataDst &dst, const TileDataSrc0 &src0, c
                "Fix: TFMOD input tile src1 valid shape mismatch with output tile dst shape.");
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1>
+template <auto PrecisionType = FmodAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc0,
+          typename TileDataSrc1>
 PTO_INTERNAL void TFMOD_IMPL(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1)
 {
     using T = typename TileDataDst::DType;
