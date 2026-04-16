@@ -505,11 +505,18 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
 
     // Compute hardware-level strides for intermediate int32/int16 operations.
     // The hardware INT32 capacity per repeat is 64 (= REPEAT_BYTE / sizeof(int32) = 256 / 4).
-    // When srcRepeatStride >= 4, each logical repeat has >= 64 fp16 values; we use 64-element
-    // hardware repeats (hwFp16Stride = 4 blocks) and multiply the repeat count accordingly.
-    // When srcRepeatStride < 4, the mask already limits the active elements; use as-is.
-    const uint16_t hwFp16Stride = (srcRepeatStride >= 4) ? (uint16_t)4 : srcRepeatStride;
-    const uint16_t factor = srcRepeatStride / hwFp16Stride; // = 2 for S=8, = 1 for S<=4
+    // When srcRepeatStride > 4, each logical repeat has > 64 fp16 values; we must split into
+    // multiple hardware repeats.  hwFp16Stride must satisfy three constraints:
+    //   1. Evenly divide srcRepeatStride (no truncation in factor).
+    //   2. Be <= 4 (int32 capacity limit per repeat).
+    //   3. Be even when factor > 1, so that hwFp16Stride/2 gives an integer int8 dest stride.
+    // We pick the largest valid divisor (prefer 4, then 2).
+    // Examples: S=8 → hw=4,f=2;  S=6 → hw=2,f=3;  S=10 → hw=2,f=5;  S=12 → hw=4,f=3.
+    const uint16_t hwFp16Stride =
+        (srcRepeatStride <= 4) ?
+            srcRepeatStride :
+            (srcRepeatStride % 4 == 0) ? (uint16_t)4 : (srcRepeatStride % 2 == 0) ? (uint16_t)2 : (uint16_t)1;
+    const uint16_t factor = srcRepeatStride / hwFp16Stride;
     const uint16_t totalHwRepeats = static_cast<uint16_t>(repeatNum) * factor;
     const uint16_t hwInt32Stride = hwFp16Stride * 2; // int32 is 2x wider than fp16 in blocks
     const uint16_t hwInt16Stride = hwFp16Stride;     // int16 same width as fp16 in blocks
@@ -519,6 +526,10 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
     constexpr uint16_t int16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int16_t);
     constexpr uint16_t fp16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(half);
     constexpr uint16_t int8ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int8_t);
+
+    // Number of int16 elements per hardware repeat — used to narrow the vector mask
+    // for mask-controlled operations (vector_dup, vand) in Steps 3-4.
+    const uint16_t elemsPerHwRepeat = hwFp16Stride * int16ElemsPerBlock;
 
     // Loop over chunks of at most REPEAT_MAX hardware repeats to stay within hardware limits.
     // The temp buffer is reused each iteration; only src and dst pointers advance.
@@ -573,6 +584,16 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
         vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
                       hwInt32Stride);
         pipe_barrier(PIPE_V);
+
+        // Steps 3-4 use vector_dup and vand which are mask-controlled operations on A2/A3.
+        // Each hw repeat covers hwFp16Stride blocks (e.g. 4 blocks = 64 int16 elements).
+        // If the current vector mask is wider than that (e.g. 128 elements from TCvtHead, or
+        // numRemainPerLine > 64 from TCvtTail), the mask-controlled op would process elements
+        // beyond the hw repeat stride boundary, overlapping with the next repeat's data.
+        // Fix: narrow the mask to exactly elemsPerHwRepeat for these two steps.
+        // The surrounding vconv steps (1/2/5/6) are not affected because their hw repeat size
+        // exactly matches the stride, so any mask value produces correct results.
+        SetContinuousMask(elemsPerHwRepeat);
 
         // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (freed upper half of int32 region)
         vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
