@@ -9,90 +9,69 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
-#include "test_common.h"
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
-#include <functional>
-#include <cmath>
 
-using namespace std;
+#include "cost_check.hpp"
+
 using namespace pto;
-using namespace PtoTestCommon;
 
-template <typename T, int rows, int cols, int validRow, int validCol, float profiling, float accuracy, TileType srcLoc,
-          BLayout srcBL, SLayout srcSL, TileType dstLoc, BLayout dstBL, SLayout dstSL>
-void testMov()
+namespace {
+
+template <typename T, int rows, int cols, int validRow, int validCol, TileType srcLoc, BLayout srcBL, SLayout srcSL,
+          TileType dstLoc, BLayout dstBL, SLayout dstSL, float profiling, float accuracy>
+void runTMov()
 {
-    Tile<srcLoc, T, rows, cols, srcBL, validRow, validCol, srcSL> src;
-    Tile<dstLoc, T, rows, cols, dstBL, -1, -1, dstSL> dst(validRow, validCol);
+    Tile<srcLoc, T, rows, cols, srcBL, validRow, validCol, srcSL> srcTile;
+    Tile<dstLoc, T, rows, cols, dstBL, -1, -1, dstSL> dstTile(validRow, validCol);
 
-    std::fill(src.data(), src.data() + rows * cols, 0);
-    std::fill(dst.data(), dst.data() + rows * cols, 0);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x20000);
 
-    std::vector<T> srcData(validCol * validRow, 0);
-    std::vector<T> dstData(validCol * validRow, 0);
+    TMOV(dstTile, srcTile);
 
-    for (int i = 0; i < srcData.size(); i++) {
-        srcData[i] = std::rand() / 1000.0;
-    }
-
-    using TensorType = GlobalTensor<T, Shape<1, 1, 1, validRow, validCol>,
-                                    Stride<validRow * validCol, validRow * validCol, validRow, validCol, 1>>;
-    TensorType srcTensor(srcData.data());
-    TensorType dstTensor(dstData.data());
-
-    if constexpr (srcBL == BLayout::RowMajor && srcSL == SLayout::NoneBox) {
-        // ND tile: ND2ND TLOAD
-        TLOAD(src, srcTensor);
-    } else if constexpr (srcBL == BLayout::ColMajor && srcSL == SLayout::NoneBox) {
-        // DN tile: DN2DN TLOAD
-        using DnTensorType =
-            GlobalTensor<T, Shape<1, 1, 1, validRow, validCol>,
-                         Stride<validRow * validCol, validRow * validCol, validRow * validCol, 1, validRow>,
-                         Layout::DN>;
-        DnTensorType srcTensorDN(srcData.data());
-        TLOAD(src, srcTensorDN);
-    }
-    // For NZ and other tile layouts, skip TLOAD (dst.GetCycle() measures TMOV, not TLOAD)
-    TMOV(dst, src);
-    TSTORE(dstTensor, dst);
-
-    float costResult = dst.GetCycle();
-    float precision = 1 - fabs(profiling - costResult) / profiling;
-    bool ret = precision >= accuracy;
-    EXPECT_TRUE(ret);
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-class TMOVTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+} // namespace
 
-#define TMOV_TEST(T, rows, cols, validRow, validCol, profiling, accuracy, srcLoc, srcBL, srcSL, dstLoc, dstBL, dstSL) \
-    TEST_F(                                                                                                           \
-        TMOVTest,                                                                                                     \
-        T##_##rows##_##cols##_##validRow##_##validCol##_##srcLoc##_##srcBL##_##srcSL##_##dstLoc##_##dstBL##_##dstSL)  \
-    {                                                                                                                 \
-        testMov<T, rows, cols, validRow, validCol, profiling, accuracy, TileType::srcLoc, BLayout::srcBL,             \
-                SLayout::srcSL, TileType::dstLoc, BLayout::dstBL, SLayout::dstSL>();                                  \
+#define TMOV_CASE(TAG, T, R, C, VR, VC, SL_L, SL_BL, SL_SL, DL_L, DL_BL, DL_SL, PROF, ACC)                       \
+    TEST(TMov, TAG)                                                                                              \
+    {                                                                                                            \
+        runTMov<T, R, C, VR, VC, TileType::SL_L, BLayout::SL_BL, SLayout::SL_SL, TileType::DL_L, BLayout::DL_BL, \
+                SLayout::DL_SL, PROF, ACC>();                                                                    \
     }
 
-TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, RowMajor)
-TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, ColMajor, RowMajor, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, RowMajor)
-TMOV_TEST(float, 64, 128, 64, 128, 256.0f, 1.0f, Vec, ColMajor, RowMajor, Vec, ColMajor, NoneBox)
+TMOV_CASE(c01_f_64_128_64_128_RM_N_RM_N, float, 64, 128, 64, 128, Vec, RowMajor, NoneBox, Vec, RowMajor, NoneBox,
+          1029.0f, 0.053449f)
+TMOV_CASE(c02_f_64_128_64_128_RM_N_CM_N, float, 64, 128, 64, 128, Vec, RowMajor, NoneBox, Vec, ColMajor, NoneBox,
+          1029.0f, 0.053449f)
+TMOV_CASE(c03_f_64_128_64_128_CM_N_CM_N, float, 64, 128, 64, 128, Vec, ColMajor, NoneBox, Vec, ColMajor, NoneBox,
+          1029.0f, 0.053449f)
+TMOV_CASE(c04_f_64_128_64_128_CM_N_RM_N, float, 64, 128, 64, 128, Vec, ColMajor, NoneBox, Vec, RowMajor, NoneBox,
+          1029.0f, 0.053449f)
+TMOV_CASE(c05_f_64_128_64_128_RM_N_CM_RM, float, 64, 128, 64, 128, Vec, RowMajor, NoneBox, Vec, ColMajor, RowMajor,
+          1029.0f, 0.053449f)
+TMOV_CASE(c06_f_64_128_64_128_CM_RM_RM_N, float, 64, 128, 64, 128, Vec, ColMajor, RowMajor, Vec, RowMajor, NoneBox,
+          1029.0f, 0.053449f)
+TMOV_CASE(c07_f_64_128_64_128_CM_N_CM_RM, float, 64, 128, 64, 128, Vec, ColMajor, NoneBox, Vec, ColMajor, RowMajor,
+          1029.0f, 0.053449f)
+TMOV_CASE(c08_f_64_128_64_128_CM_RM_CM_N, float, 64, 128, 64, 128, Vec, ColMajor, RowMajor, Vec, ColMajor, NoneBox,
+          1029.0f, 0.053449f)
 
-TMOV_TEST(float, 16, 24, 15, 23, 10.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, RowMajor, NoneBox, Vec, ColMajor, RowMajor)
-TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, ColMajor, RowMajor, Vec, RowMajor, NoneBox)
-TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, ColMajor, NoneBox, Vec, ColMajor, RowMajor)
-TMOV_TEST(float, 64, 128, 63, 125, 246.0f, 1.0f, Vec, ColMajor, RowMajor, Vec, ColMajor, NoneBox)
+TMOV_CASE(c09_f_16_24_15_23_RM_N_RM_N, float, 16, 24, 15, 23, Vec, RowMajor, NoneBox, Vec, RowMajor, NoneBox, 120.0f,
+          0.0f)
+TMOV_CASE(c10_f_64_128_63_125_RM_N_CM_N, float, 64, 128, 63, 125, Vec, RowMajor, NoneBox, Vec, ColMajor, NoneBox,
+          1323.0f, 0.0f)
+TMOV_CASE(c11_f_64_128_63_125_CM_N_CM_N, float, 64, 128, 63, 125, Vec, ColMajor, NoneBox, Vec, ColMajor, NoneBox,
+          1323.0f, 0.0f)
+TMOV_CASE(c12_f_64_128_63_125_CM_N_RM_N, float, 64, 128, 63, 125, Vec, ColMajor, NoneBox, Vec, RowMajor, NoneBox,
+          1323.0f, 0.0f)
+TMOV_CASE(c13_f_64_128_63_125_RM_N_CM_RM, float, 64, 128, 63, 125, Vec, RowMajor, NoneBox, Vec, ColMajor, RowMajor,
+          1323.0f, 0.0f)
+TMOV_CASE(c14_f_64_128_63_125_CM_RM_RM_N, float, 64, 128, 63, 125, Vec, ColMajor, RowMajor, Vec, RowMajor, NoneBox,
+          1323.0f, 0.0f)
+TMOV_CASE(c15_f_64_128_63_125_CM_N_CM_RM, float, 64, 128, 63, 125, Vec, ColMajor, NoneBox, Vec, ColMajor, RowMajor,
+          1323.0f, 0.0f)
+TMOV_CASE(c16_f_64_128_63_125_CM_RM_CM_N, float, 64, 128, 63, 125, Vec, ColMajor, RowMajor, Vec, ColMajor, NoneBox,
+          1323.0f, 0.0f)
