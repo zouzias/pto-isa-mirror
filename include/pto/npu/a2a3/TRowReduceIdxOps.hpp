@@ -19,6 +19,26 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #endif
 
 namespace pto {
+template <typename TileDataOutVal, typename TileDataOutIdx, typename TileDataIn, bool outputVal>
+PTO_INTERNAL void TRowReduceIdxCheck(uint32_t srcValidRows, uint32_t srcValidCols, uint32_t dstValidRow)
+{
+    using TVal = typename TileDataIn::DType;
+    using TIdx = typename TileDataOutIdx::DType;
+    if constexpr (outputVal) {
+        static_assert(
+            (sizeof(TVal) == sizeof(half) && (std::is_same_v<int16_t, TIdx> || std::is_same_v<uint16_t, TIdx>)) ||
+                (sizeof(TVal) == sizeof(float) && (std::is_same_v<int32_t, TIdx> || std::is_same_v<uint32_t, TIdx>)),
+            "Input and output tile data types must match. "
+            "Fix: Ensure TileDataOutIdx uses the same DType as TileDataIn.");
+        TRowReduceCheck<TileDataOutVal, TileDataIn, false>(srcValidRows, srcValidCols, dstValidRow);
+    } else {
+        static_assert(std::is_same_v<int32_t, TIdx> || std::is_same_v<uint32_t, TIdx>,
+                      "Input and output tile data types must match. "
+                      "Fix: Ensure TileDataOutIdx uses the same DType as TileDataIn.");
+    }
+    TRowReduceCheck<TileDataOutIdx, TileDataIn, true>(srcValidRows, srcValidCols, dstValidRow);
+}
+
 template <typename InstrOp, typename TVal, typename TIdx>
 PTO_INTERNAL void ReduceThenGroupValIdx(__ubuf__ TVal *dstVal, __ubuf__ TIdx *dstIdx, __ubuf__ TVal *src,
                                         uint32_t count)
@@ -256,7 +276,7 @@ PTO_INTERNAL void TRowReduceIdxInstr(__ubuf__ typename TileDataOutVal::DType *ds
                                      __ubuf__ typename TileDataTmp::DType *tmp, int validRow, int validCol,
                                      int dstValidRow)
 {
-    TRowReduceCheck<TileDataOut, TileDataIn, true>(validRow, validCol, dstValidRow);
+    TRowReduceIdxCheck<TileDataOutVal, TileDataOut, TileDataIn, outputVal>(validRow, validCol, dstValidRow);
     constexpr uint8_t elemPerRpt = REPEAT_BYTE / sizeof(typename TileDataIn::DType);
     if (validCol <= elemPerRpt) {
         if constexpr (outputVal) {
