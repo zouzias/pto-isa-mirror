@@ -9,11 +9,28 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 #pragma once
 
-#include <pto/costmodel/a2a3/cce_costmodel/cce_costmodel_core.hpp>
-#include <pto/costmodel/a2a3/cce_costmodel/cce_costmodel_memory.hpp>
-#include <pto/costmodel/a2a3/cce_costmodel/cce_costmodel_sync.hpp>
-#include <pto/costmodel/a2a3/cce_costmodel/cce_costmodel_vector_compare.hpp>
-#include <pto/costmodel/a2a3/cce_costmodel/cce_costmodel_vector_compute.hpp>
-#include <pto/costmodel/a2a3/cce_costmodel/cce_costmodel_vector_convert_fp16_fp32.hpp>
-#include <pto/costmodel/a2a3/cce_costmodel/cce_costmodel_vector_convert_int.hpp>
-#include <pto/costmodel/a2a3/cce_costmodel/cce_costmodel_debug.hpp>
+inline void printf(...)
+{}
+inline void print(...)
+{}
+inline void print_str(...)
+{}
+inline void print_int(...)
+{}
+inline void print_float(...)
+{}
+inline void print_half(...)
+{}
+inline void print_hex(...)
+{}
+inline void print_matrix(...)
+{}
+inline void print_tensor(...)
+{}
+inline void print_ubuf(...)
+{}
+inline void print_cbuf(...)
+{}
+inline void print_gm(...)
+{}
+} // namespace cce
