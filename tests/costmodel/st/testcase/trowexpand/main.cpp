@@ -8,72 +8,53 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
+#include <vector>
+#include <cstdint>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-class TROWEXPANDTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+using namespace pto;
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTRowExpand(T *out, T *src, void *stream);
+namespace {
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_trowexpand()
+// NOTE: TROWEXPAND's impl reads the tile backing buffer — we must provide real
+// memory instead of a bogus raw address.
+
+template <typename T, int rows, int cols, float profiling, float accuracy>
+void runTRowExpand()
 {
-    size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
+    using TileData = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
+    TileData srcTile(rows, cols);
+    TileData dstTile(rows, cols);
 
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
+    std::vector<T> srcBuf(rows * cols, T{});
+    std::vector<T> dstBuf(rows * cols, T{});
+    TASSIGN(srcTile, reinterpret_cast<std::uintptr_t>(srcBuf.data()));
+    TASSIGN(dstTile, reinterpret_cast<std::uintptr_t>(dstBuf.data()));
 
-    T *dstHost, *srcHost;
-    T *dstDevice, *srcDevice;
+    TROWEXPAND(dstTile, srcTile);
 
-    aclrtMallocHost((void **)(&dstHost), fileSize);
-    aclrtMallocHost((void **)(&srcHost), fileSize);
-
-    aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(srcDevice, fileSize, srcHost, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTRowExpand<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, srcDevice, stream);
-
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-TEST_F(TROWEXPANDTest, case_float_64x64)
+} // namespace
+
+TEST(TRowExpand, float_64x64)
 {
-    test_trowexpand<float, 64, 64, 64, 64, 526.0f, 1.0f>();
+    runTRowExpand<float, 64, 64, 933.0f, 0.075026f>();
 }
-TEST_F(TROWEXPANDTest, case_half_64x64)
+TEST(TRowExpand, half_64x64)
 {
-    test_trowexpand<aclFloat16, 64, 64, 64, 64, 526.0f, 1.0f>();
+    runTRowExpand<half, 64, 64, 933.0f, 0.075026f>();
 }
-TEST_F(TROWEXPANDTest, case_int16_64x64)
+TEST(TRowExpand, int16_64x64)
 {
-    test_trowexpand<int16_t, 64, 64, 64, 64, 526.0f, 1.0f>();
+    runTRowExpand<int16_t, 64, 64, 0.0f, 0.0f>();
 }
-TEST_F(TROWEXPANDTest, case_half_16x256)
+TEST(TRowExpand, half_16x256)
 {
-    test_trowexpand<aclFloat16, 16, 256, 16, 256, 142.0f, 1.0f>();
+    runTRowExpand<half, 16, 256, 0.0f, 0.0f>();
 }
