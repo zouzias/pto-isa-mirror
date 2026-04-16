@@ -74,16 +74,10 @@ class TRowArgMaxParams:
 class TRowArgMaxValIdxParams(TRowArgMaxParams):
     def __init__(self, dst_dtype, src_dtype, dst_val_tile_row, dst_val_tile_col, dst_tile_row, dst_tile_col,
         src_tile_row, src_tile_col, valid_row, valid_col):
-        self.dst_dtype = dst_dtype
-        self.src_dtype = src_dtype
+        super().__init__(dst_dtype, src_dtype, dst_tile_row, dst_tile_col, src_tile_row, src_tile_col,
+            tmp_tile_row, tmp_tile_col, valid_row, valid_col)
         self.dst_val_tile_row = dst_val_tile_row
         self.dst_val_tile_col = dst_val_tile_col
-        self.dst_tile_row = dst_tile_row
-        self.dst_tile_col = dst_tile_col
-        self.src_tile_row = src_tile_row
-        self.src_tile_col = src_tile_col
-        self.valid_row = valid_row
-        self.valid_col = valid_col
         self.output_val = True
         self.name = f"TROWARGMAXTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"\
             f"{dst_val_tile_row}x{dst_val_tile_col}_{dst_tile_row}x{dst_tile_col}_"\
