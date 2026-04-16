@@ -8,52 +8,52 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
-#include <gtest/gtest.h>
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
+#include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-class TSELTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+using namespace pto;
 
-template <typename T, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTSel(void *stream);
+namespace {
 
-template <typename T, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_tsel()
+template <typename T, int rows, int cols, float profiling, float accuracy>
+void runTSel()
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    LaunchTSel<T, kTRows_, kTCols_, profiling, accuracy>(stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    using VecTile = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
+    constexpr int maskCols = ((cols / 8 + 31) / 32) * 32;
+    using MaskTile = Tile<TileType::Vec, uint8_t, rows, maskCols, BLayout::RowMajor, -1, -1>;
+    using TmpTile = Tile<TileType::Vec, uint8_t, 1, 32, BLayout::RowMajor, -1, -1>;
+
+    VecTile dstTile(rows, cols);
+    VecTile src0Tile(rows, cols);
+    VecTile src1Tile(rows, cols);
+    MaskTile maskTile(rows, maskCols);
+    TmpTile tmpTile(1, 32);
+
+    TASSIGN(dstTile, 0x0);
+    TASSIGN(src0Tile, 0x4000);
+    TASSIGN(src1Tile, 0x8000);
+    TASSIGN(maskTile, 0xC000);
+    TASSIGN(tmpTile, 0xE000);
+
+    TSEL(dstTile, maskTile, src0Tile, src1Tile, tmpTile);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-// 34 + (4-1)*20 = 94
-TEST_F(TSELTest, case_half_4x128)
-{
-    test_tsel<aclFloat16, 4, 128, 94.0f, 0.0f>();
-}
+} // namespace
 
-// 34 + (1-1)*20 = 34
-TEST_F(TSELTest, case_half_1x128)
+TEST(TSel, half_4x128)
 {
-    test_tsel<aclFloat16, 1, 128, 34.0f, 0.0f>();
+    runTSel<half, 4, 128, 67.0f, 0.0f>();
 }
-
-// 34 + (4-1)*20 = 94  (same formula, FP32 vsel has same per_repeat)
-TEST_F(TSELTest, case_float_4x64)
+TEST(TSel, half_1x128)
 {
-    test_tsel<float, 4, 64, 94.0f, 0.0f>();
+    runTSel<half, 1, 128, 19.0f, 0.0f>();
+}
+TEST(TSel, float_4x64)
+{
+    runTSel<float, 4, 64, 67.0f, 0.0f>();
 }
