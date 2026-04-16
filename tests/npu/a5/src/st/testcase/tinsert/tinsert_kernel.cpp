@@ -411,7 +411,7 @@ AICORE void runTInsertNZLargeTile(__gm__ T *out, __gm__ T *src)
             RegTensor<T> vreg;
             uint32_t predCount = elementsPerRepeat;
             MaskReg preg = CreatePredicate<T>(predCount);
-            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
+            vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
             for (uint16_t i = 0; i < dstRepeats; ++i) {
                 vsts(vreg, dstUbAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
             }
@@ -949,7 +949,7 @@ AICORE void runTInsertNZUnaligned(__gm__ T *out, __gm__ T *src)
             RegTensor<T> vreg;
             uint32_t predCount = elementsPerRepeat;
             MaskReg preg = CreatePredicate<T>(predCount);
-            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
+            vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
             for (uint16_t i = 0; i < tmpRepeats; ++i) {
                 vsts(vreg, tmpAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
             }
@@ -1057,7 +1057,7 @@ AICORE void runTInsertNZTwoInsert(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
             RegTensor<T> vreg;
             uint32_t predCount = elementsPerRepeat;
             MaskReg preg = CreatePredicate<T>(predCount);
-            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
+            vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
             for (uint16_t i = 0; i < tmpRepeats; ++i) {
                 vsts(vreg, tmpAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
             }
@@ -1092,7 +1092,7 @@ AICORE void runTInsertNZTwoInsert(__gm__ T *out, __gm__ T *src1, __gm__ T *src2)
             RegTensor<T> vreg;
             uint32_t predCount = elementsPerRepeat;
             MaskReg preg = CreatePredicate<T>(predCount);
-            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
+            vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
             for (uint16_t i = 0; i < tmpRepeats2; ++i) {
                 vsts(vreg, tmpAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
             }
@@ -1321,7 +1321,7 @@ AICORE void runTInsertNZVecToVec(__gm__ T *out, __gm__ T *src)
             RegTensor<T> vreg;
             uint32_t predCount = elementsPerRepeat;
             MaskReg preg = CreatePredicate<T>(predCount);
-            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
+            vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
             for (uint16_t i = 0; i < dstRepeats; ++i) {
                 vsts(vreg, dstAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
             }
@@ -1389,7 +1389,7 @@ AICORE void runTInsertNZPlusOneVecToVec(__gm__ T *out, __gm__ T *src)
             RegTensor<T> vreg;
             uint32_t predCount = elementsPerRepeat;
             MaskReg preg = CreatePredicate<T>(predCount);
-            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
+            vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
             for (uint16_t i = 0; i < dstRepeats; ++i) {
                 vsts(vreg, dstAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
             }

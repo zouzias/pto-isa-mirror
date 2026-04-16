@@ -139,9 +139,9 @@ def gen_nd_vec_valid(p):
 
 def gen_nz_unaligned(dtype, src_rows, dst_rows, cols, idx_row):
     ds = np.dtype(dtype).itemsize
-    arr = rand_data(dtype, (src_rows, cols))
+    arr = rand_nonzero(dtype, (src_rows, cols))
     arr.tofile("input_arr.bin")
-    result = np.zeros((dst_rows, cols), dtype=dtype)
+    result = np.full((dst_rows, cols), dtype(1), dtype=dtype)
     r_end = idx_row + src_rows
     result[idx_row:r_end, :] = arr
     nd_to_nz(result, dst_rows, cols, ds).tofile("golden_output.bin")
@@ -159,11 +159,11 @@ class NzTwoInsertParams:
 
 def gen_nz_two_insert(p):
     ds = np.dtype(p.dtype).itemsize
-    src1 = rand_data(p.dtype, (p.src_rows1, p.cols))
-    src2 = rand_data(p.dtype, (p.src_rows2, p.cols))
+    src1 = rand_nonzero(p.dtype, (p.src_rows1, p.cols))
+    src2 = rand_nonzero(p.dtype, (p.src_rows2, p.cols))
     src1.tofile("src1_input.bin")
     src2.tofile("src2_input.bin")
-    result = np.zeros((p.dst_rows, p.cols), dtype=p.dtype)
+    result = np.full((p.dst_rows, p.cols), p.dtype(1), dtype=p.dtype)
     result[0 : p.src_rows1, :] = src1
     r2_end = p.idx_row2 + p.src_rows2
     result[p.idx_row2 : r2_end, :] = src2
@@ -194,11 +194,11 @@ class NzLargeTileParams:
 
 def gen_nz_large_tile(p):
     ds = np.dtype(p.dtype).itemsize
-    nd_data = rand_data(p.dtype, (p.valid_row, p.cols))
-    padded = np.zeros((p.tile_rows, p.cols), dtype=p.dtype)
+    nd_data = rand_nonzero(p.dtype, (p.valid_row, p.cols))
+    padded = np.full((p.tile_rows, p.cols), p.dtype(1), dtype=p.dtype)
     padded[: p.valid_row, :] = nd_data
     nd_to_nz(padded, p.tile_rows, p.cols, ds).tofile("input_arr.bin")
-    result = np.zeros((p.dst_rows, p.cols), dtype=p.dtype)
+    result = np.full((p.dst_rows, p.cols), p.dtype(1), dtype=p.dtype)
     r_end = p.idx_row + p.valid_row
     result[p.idx_row : r_end, :] = nd_data
     nd_to_nz(result, p.dst_rows, p.cols, ds).tofile("golden_output.bin")
@@ -216,9 +216,9 @@ class NzVecParams:
 
 def gen_nz_vec(p):
     ds = np.dtype(p.dtype).itemsize
-    arr = rand_data(p.dtype, (p.src_rows, p.src_cols))
+    arr = rand_nonzero(p.dtype, (p.src_rows, p.src_cols))
     arr.tofile("input_arr.bin")
-    result = np.zeros((p.dst_rows, p.dst_cols), dtype=p.dtype)
+    result = np.full((p.dst_rows, p.dst_cols), p.dtype(1), dtype=p.dtype)
     r_end = p.idx_row + p.src_rows
     result[p.idx_row : r_end, : p.src_cols] = arr
     nd_to_nz(result, p.dst_rows, p.dst_cols, ds).tofile("golden_output.bin")
