@@ -15,6 +15,14 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
+template <typename T>
+void ReLU(T val) {
+    if (val < 0) 
+        return 0;
+    return val;
+}
+
+
 template <typename DstTileData, typename SrcTileData>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t idxRow = 0, uint32_t idxCol = 0)
 {
@@ -26,6 +34,24 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t idx
             dst.data()[dstTileIdx] = src.data()[srcTileIdx];
         }
     }
+}
+
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
+PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t idxRow = 0, uint32_t idxCol = 0)
+{
+    assert(src.GetValidRow() - idxRow == dst.GetValidRow() && src.GetValidCol() - idxCol == dst.GetValidCol());
+
+    if constexpr (reluMode == ReluPreMode::NoRelu) {
+        TEXTRACT_IMPL(dst, src, idxRow, idxCol);
+    } else {
+        for (size_t rDst = 0; rDst < dst.GetValidRow(); ++rDst) {
+            for (size_t cDst = 0; cDst < dst.GetValidCol(); ++cDst) {
+                const size_t srcTileIdx = GetTileElementOffset<SrcTileData>(rDst + idxRow, cDst + idxCol);
+                const size_t dstTileIdx = GetTileElementOffset<DstTileData>(rDst, cDst);
+                dst.data()[dstTileIdx] = ReLU(src.data()[srcTileIdx]);
+            }
+        }
+    }  
 }
 
 } // namespace pto
