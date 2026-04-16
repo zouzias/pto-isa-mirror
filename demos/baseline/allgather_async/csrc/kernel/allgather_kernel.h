@@ -15,3 +15,6 @@ bool RunAllgatherPutAsyncMC(int nRanks, int firstRankId, int firstDeviceId);
 
 // Multi-core Allgather via TGET_ASYNC: each AICORE reads from one source rank.
 bool RunAllgatherGetAsyncMC(int nRanks, int firstRankId, int firstDeviceId);
+
+// Ring Allgather via TPUT_ASYNC: N-1 rounds, each round pushes one chunk to the next rank.
+bool RunAllgatherRing(int nRanks, int firstRankId, int firstDeviceId);

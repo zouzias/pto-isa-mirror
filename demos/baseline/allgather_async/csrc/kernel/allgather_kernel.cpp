@@ -308,3 +308,144 @@ bool RunAllgatherGetAsyncMC(int nRanks, int firstRankId, int firstDeviceId)
             return RunAllgatherGetAsyncMCKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
         });
 }
+
+// ============================================================================
+// Ring AllGather Round Kernel (TPUT_ASYNC)
+//
+// Ring algorithm: N-1 rounds for N ranks.
+//   Round 0: rank i copies sendBuf -> recvBuf[i] (local), then pushes
+//            sendBuf -> rank (i+1)'s recvBuf[i] via TPUT_ASYNC.
+//   Round r: rank i pushes recvBuf[chunk] -> rank (i+1)'s recvBuf[chunk]
+//            where chunk = (i - r + N) % N.
+//
+// Each round is a separate kernel launch. Host-side barrier between rounds
+// ensures all SDMA writes complete before the next round begins.
+// ============================================================================
+__global__ AICORE void RingAllgatherRoundKernel(__gm__ int32_t *dataBuf, int nranks, __gm__ HcclDeviceContext *hcclCtx,
+                                                __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId, int elemCount,
+                                                int round)
+{
+    if (nranks < 2)
+        return;
+
+    int myRank = static_cast<int>(hcclCtx->rankId);
+    int nextRank = (myRank + 1) % nranks;
+
+    __gm__ int32_t *sendBuf = dataBuf;
+    __gm__ int32_t *recvBuf = dataBuf + elemCount;
+
+    ShapeDyn shape(1, 1, 1, 1, elemCount);
+    StrideDyn stride(elemCount, elemCount, elemCount, elemCount, 1);
+
+    if (round == 0) {
+        LocalTile tile(1, ELEM_COUNT);
+        TASSIGN(tile, 0x10000);
+        int chunkSize = static_cast<int>(ELEM_COUNT);
+        int numChunks = (elemCount + chunkSize - 1) / chunkSize;
+        ShapeDyn cShape(1, 1, 1, 1, chunkSize);
+        StrideDyn cStride(chunkSize, chunkSize, chunkSize, chunkSize, 1);
+        for (int c = 0; c < numChunks; ++c) {
+            int off = c * chunkSize;
+            GlobalI32 srcC(sendBuf + off, cShape, cStride);
+            GlobalI32 dstC(recvBuf + myRank * elemCount + off, cShape, cStride);
+            TLOAD(tile, srcC);
+            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+            TSTORE(dstC, tile);
+            set_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+            wait_flag(PIPE_MTE3, PIPE_MTE2, EVENT_ID0);
+        }
+        pipe_barrier(PIPE_ALL);
+    }
+
+    int sendChunkIdx = (myRank - round + nranks) % nranks;
+    __gm__ int32_t *srcPtr = (round == 0) ? sendBuf : (recvBuf + sendChunkIdx * elemCount);
+    __gm__ int32_t *remoteDst = HcclRemotePtr(hcclCtx, recvBuf, nextRank) + sendChunkIdx * elemCount;
+
+    GlobalI32 srcG(srcPtr, shape, stride);
+    GlobalI32 remoteDstG(remoteDst, shape, stride);
+
+    ScratchTile scratchTile;
+    TASSIGN(scratchTile, 0x0);
+    pto::comm::AsyncSession session;
+    if (!pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId)) {
+        pipe_barrier(PIPE_ALL);
+        return;
+    }
+
+    pto::comm::AsyncEvent event = pto::comm::TPUT_ASYNC(remoteDstG, srcG, session);
+    (void)event.Wait(session);
+
+    pipe_barrier(PIPE_ALL);
+}
+
+// ============================================================================
+// RunAllgatherRing — Ring allgather host runner
+// ============================================================================
+static bool RunAllgatherRingKernel(int rankId, int nRanks, int nDevices, int firstDeviceId,
+                                   const HcclRootInfo *rootInfo)
+{
+    TestContext ctx;
+    if (!ctx.Init(rankId, nRanks, nDevices, firstDeviceId, rootInfo))
+        return false;
+
+    const size_t recvElems = static_cast<size_t>(nRanks) * ELEM_COUNT;
+
+    int32_t *sendHost = nullptr;
+    int32_t *recvHost = nullptr;
+    aclrtMallocHost(reinterpret_cast<void **>(&sendHost), ELEM_COUNT * sizeof(int32_t));
+    aclrtMallocHost(reinterpret_cast<void **>(&recvHost), recvElems * sizeof(int32_t));
+
+    for (size_t i = 0; i < ELEM_COUNT; ++i)
+        sendHost[i] = static_cast<int32_t>(rankId) * RANK_BASE + static_cast<int32_t>(i);
+    for (size_t i = 0; i < recvElems; ++i)
+        recvHost[i] = -1;
+
+    uint64_t winBase = ctx.hostCtx.windowsIn[rankId];
+    size_t winOff = 0;
+    size_t winBytes = SYNC_BUF_BYTES + (ELEM_COUNT + recvElems) * sizeof(int32_t);
+    void *commPtr = WindowAlloc(winBase, winOff, winBytes);
+
+    int32_t *dataBuf = reinterpret_cast<int32_t *>(reinterpret_cast<uint8_t *>(commPtr) + SYNC_BUF_BYTES);
+    int32_t *sendBuf = dataBuf;
+    int32_t *recvBuf = dataBuf + ELEM_COUNT;
+
+    aclrtMemcpy(sendBuf, ELEM_COUNT * sizeof(int32_t), sendHost, ELEM_COUNT * sizeof(int32_t),
+                ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(recvBuf, recvElems * sizeof(int32_t), recvHost, recvElems * sizeof(int32_t), ACL_MEMCPY_HOST_TO_DEVICE);
+
+    SdmaWorkspaceManager sdmaMgr;
+    if (!sdmaMgr.Init()) {
+        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed" << std::endl;
+        return false;
+    }
+
+    HcclHostBarrier(ctx.comm, ctx.stream);
+
+    int numRounds = nRanks - 1;
+    for (int r = 0; r < numRounds; ++r) {
+        RingAllgatherRoundKernel<<<1, nullptr, ctx.stream>>>(
+            dataBuf, nRanks, ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0, static_cast<int>(ELEM_COUNT), r);
+        ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+        HcclHostBarrier(ctx.comm, ctx.stream);
+    }
+
+    aclrtMemcpy(recvHost, recvElems * sizeof(int32_t), recvBuf, recvElems * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+
+    bool ok = VerifyAllgather(recvHost, nRanks, ELEM_COUNT, rankId, "RING_TPUT_ASYNC");
+    if (ok)
+        PrintSample(recvHost, nRanks, ELEM_COUNT, rankId, "RING_TPUT_ASYNC");
+
+    aclrtFreeHost(sendHost);
+    aclrtFreeHost(recvHost);
+    sdmaMgr.Finalize();
+    return ctx.Finalize() && ok;
+}
+
+bool RunAllgatherRing(int nRanks, int firstRankId, int firstDeviceId)
+{
+    return ForkAndRunWithHcclRootInfo(
+        nRanks, firstRankId, firstDeviceId, [&](int rankId, const HcclRootInfo *rootInfo) {
+            return RunAllgatherRingKernel(rankId, nRanks, nRanks, firstDeviceId, rootInfo);
+        });
+}
