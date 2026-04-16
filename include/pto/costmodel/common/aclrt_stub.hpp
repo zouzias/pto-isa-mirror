@@ -61,7 +61,6 @@ inline int aclrtSetStreamAttribute(aclrtStream, int, const void *)
 }
 inline int aclrtMallocHost(void **ptr, size_t size)
 {
-    assert(size != 0 && "[PTO][CA] aclrtMallocHost requires non-zero size.");
     *ptr = std::malloc(size);
     return (*ptr == nullptr) ? 1 : 0;
 }
