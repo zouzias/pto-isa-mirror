@@ -1,0 +1,11 @@
+# PTO TADD Benchmark Input CSV
+# op,dtype,tile_h,tile_w,valid_h,valid_w
+tadd,float32,64,64,64,64
+tadd,float32,8,512,8,512
+tadd,float32,1,4096,1,4096
+tadd,float32,64,128,64,128
+tadd,float32,16,512,16,512
+tadd,float32,1,8192,1,8192
+tadd,float32,128,128,128,128
+tadd,float32,32,512,32,512
+tadd,float32,1,16384,1,16384
