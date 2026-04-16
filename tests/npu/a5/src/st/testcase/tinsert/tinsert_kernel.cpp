@@ -1496,8 +1496,8 @@ AICORE void runTInsertNZSplitCustom(__gm__ T *out, __gm__ T *src)
     // Start TLOAD (MTE2) to overlap with V-pipe zero-fill
     TLOAD(srcTile, srcGlobal);
 
-    // Zero-fill tmpTile UB so rows beyond ValidRow are zero after NZ conversion.
-    // TINSERT writes ALL alignedRows from tmpTile to L1, so L1 zero-fill is not needed.
+    // Fill tmpTile UB with non-zero constant so rows beyond ValidRow carry a known value
+    // after NZ conversion. TINSERT writes ALL alignedRows from tmpTile to L1.
     {
         constexpr uint32_t tmpTileBytes = burstNum * (DstRows + 1) * c0Size * sizeof(T);
         constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
@@ -1510,7 +1510,7 @@ AICORE void runTInsertNZSplitCustom(__gm__ T *out, __gm__ T *src)
             RegTensor<T> vreg;
             uint32_t predCount = elementsPerRepeat;
             MaskReg preg = CreatePredicate<T>(predCount);
-            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
+            vdup(vreg, static_cast<T>(1), preg, MODE_ZEROING);
             for (uint16_t i = 0; i < zeroRepeats; ++i) {
                 vsts(vreg, tmpUbAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
             }
