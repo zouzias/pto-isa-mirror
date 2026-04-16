@@ -190,4 +190,3 @@ inline void scatter_vnchwconv_b32(...)
 {}
 inline void scatter_vnchwconv_b8(...)
 {}
-
