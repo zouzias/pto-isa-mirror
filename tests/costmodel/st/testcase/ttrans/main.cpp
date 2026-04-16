@@ -8,34 +8,43 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/common/pto_tile.hpp>
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-template <int32_t tilingKey, float profiling, float accuracy>
-void launchTTRANS(void *stream);
+using namespace pto;
 
-class TTRANSTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+namespace {
 
-// float 128x128: numSubTileX=16, numSubTileY=8 → 14 + 16*8*2 = 270
-TEST_F(TTRANSTest, case1)
+template <typename T, int rows, int cols, float profiling, float accuracy>
+void runTTrans()
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    launchTTRANS<1, 284.0f, 1.0f>(stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    constexpr uint16_t alignedRows = ((rows * sizeof(T) + 31) / 32) * (32 / sizeof(T));
+    constexpr uint16_t alignedCols = ((cols * sizeof(T) + 31) / 32) * (32 / sizeof(T));
+
+    using TileDataSrc = Tile<TileType::Vec, T, rows, alignedCols, BLayout::RowMajor>;
+    using TileDataDst = Tile<TileType::Vec, T, cols, alignedRows, BLayout::RowMajor>;
+    using TileDataTmp = Tile<TileType::Vec, T, cols, alignedRows, BLayout::RowMajor>;
+
+    TileDataSrc srcTile;
+    TileDataDst dstTile;
+    TileDataTmp tmpTile;
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x20000);
+    TASSIGN(tmpTile, 0x30000);
+
+    TTRANS(dstTile, srcTile, tmpTile);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
+}
+
+} // namespace
+
+TEST(TTrans, float_128x128)
+{
+    runTTrans<float, 128, 128, 501.0f, 0.872255f>();
 }
