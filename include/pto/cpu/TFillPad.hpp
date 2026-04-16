@@ -17,18 +17,16 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-template <typename TileDataDst, typename TileDataSrc>
+template <typename TileDataDst, typename TileDataSrc, PadValue PadVal>
 void TFillPad(typename TileDataDst::TileDType dst, typename TileDataSrc::TileDType src, unsigned validDstRow,
               unsigned validDstCol, unsigned validSrcRow, unsigned validSrcCol)
 {
     using DType = typename TileDataDst::DType;
     DType padVal = 0;
 
-    constexpr PadValue PadVal_ = TileDataDst::PadVal;
-
     // Handle custom pad values (PadCustom<-1.0f>, etc.)
-    if constexpr (isCustomPadValue(PadVal_)) {
-        constexpr uint32_t bits = getCustomPadBits(PadVal_);
+    if constexpr (isCustomPadValue(PadVal)) {
+        constexpr uint32_t bits = getCustomPadBits(PadVal);
         if constexpr (std::is_same_v<DType, float>) {
             padVal = std::bit_cast<float>(bits);
         } else if constexpr (sizeof(DType) == 2) {
@@ -40,15 +38,15 @@ void TFillPad(typename TileDataDst::TileDType dst, typename TileDataSrc::TileDTy
         }
     } else if constexpr (std::numeric_limits<DType>::has_infinity) {
         // Standard PadValue with infinity support
-        if constexpr (PadVal_ == PadValue::Max)
+        if constexpr (PadVal == PadValue::Max)
             padVal = std::numeric_limits<DType>::infinity();
-        else if constexpr (PadVal_ == PadValue::Min)
+        else if constexpr (PadVal == PadValue::Min)
             padVal = -std::numeric_limits<DType>::infinity();
     } else {
         // Standard PadValue without infinity
-        if constexpr (PadVal_ == PadValue::Max)
+        if constexpr (PadVal == PadValue::Max)
             padVal = std::numeric_limits<DType>::max();
-        else if constexpr (PadVal_ == PadValue::Min)
+        else if constexpr (PadVal == PadValue::Min)
             padVal = std::numeric_limits<DType>::min();
     }
 
@@ -63,6 +61,14 @@ void TFillPad(typename TileDataDst::TileDType dst, typename TileDataSrc::TileDTy
                 }
             }
         });
+}
+
+template <typename TileDataDst, typename TileDataSrc>
+void TFillPad(typename TileDataDst::TileDType dst, typename TileDataSrc::TileDType src, unsigned validDstRow,
+              unsigned validDstCol, unsigned validSrcRow, unsigned validSrcCol)
+{
+    constexpr PadValue PadVal_ = TileDataDst::PadVal;
+    TFillPad<TileDataDst, TileDataSrc, PadVal_>(dst, src, validDstRow, validDstCol, validSrcRow, validSrcCol);
 }
 
 template <typename TileDataDst, typename TileDataSrc, bool inplace>
@@ -89,6 +95,26 @@ PTO_INTERNAL void TFILLPAD_IMPL(TileDataDst &dst, TileDataSrc &src)
         TFillPad<TileDataDst, TileDataSrc>(dst.data(), src.data(), validDstRow, validDstCol, validSrcRow, validSrcCol);
     }
     TFillPad<TileDataDst, TileDataSrc>(dst.data(), src.data(), validDstRow, validDstCol, validSrcRow, validSrcCol);
+}
+
+template <typename TileData, PadValue PadVal = PadValue::Zero>
+PTO_INTERNAL void TFILLPAD_IMPL(TileData &dst, TileData &src)
+{
+    constexpr unsigned blockSizeElem = BLOCK_BYTE_SIZE / sizeof(typename TileData::DType);
+    constexpr unsigned Stride = TileData::RowStride;
+    unsigned validSrcRow = src.GetValidRow();
+    unsigned validSrcCol = src.GetValidCol();
+    unsigned validDstRow = dst.GetValidRow();
+    unsigned validDstCol = dst.GetValidCol();
+
+    using T = typename TileData::DType;
+    static_assert(sizeof(T) == 4 || sizeof(T) == 2 || sizeof(T) == 1, "TFillPad: Invalid data type!");
+
+    if (validDstRow == 0 || validDstCol == 0) {
+        return;
+    }
+
+    TFillPad<TileData, TileData, PadVal>(dst.data(), src.data(), validDstRow, validDstCol, validSrcRow, validSrcCol);
 }
 
 template <typename TileDataDst, typename TileDataSrc>
