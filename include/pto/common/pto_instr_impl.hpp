@@ -14,9 +14,58 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
+#if !defined(__COSTMODEL)
 #include <pto/common/arch_cce_intrinsic.hpp>
+#else
+PTO_INTERNAL void pto_copy_ubuf_to_ubuf(__ubuf__ void *dst, __ubuf__ void *src, uint16_t nBurst, uint16_t lenBurst,
+                                        uint16_t srcGap, uint16_t dstGap)
+{
+    copy_ubuf_to_ubuf(dst, src, 0, nBurst, lenBurst, srcGap, dstGap);
+}
+#endif
 
 #ifdef PTO_NPU_ARCH_A2A3
+#ifdef __COSTMODEL
+#include "pto/npu/a2a3/TAssign.hpp"
+#include "pto/npu/a2a3/TSync.hpp"
+#include "pto/npu/a2a3/TAdd.hpp"
+#include "pto/npu/a2a3/TAddS.hpp"
+#include "pto/npu/a2a3/TSub.hpp"
+#include "pto/npu/a2a3/TSubS.hpp"
+#include "pto/npu/a2a3/TMul.hpp"
+#include "pto/npu/a2a3/TMulS.hpp"
+#include "pto/npu/a2a3/TMin.hpp"
+#include "pto/npu/a2a3/TMins.hpp"
+#include "pto/npu/a2a3/TMax.hpp"
+#include "pto/npu/a2a3/TMaxS.hpp"
+#include "pto/npu/a2a3/TDiv.hpp"
+#include "pto/npu/a2a3/TDivS.hpp"
+#include "pto/npu/a2a3/TCmp.hpp"
+#include "pto/npu/a2a3/TCmps.hpp"
+#include "pto/npu/a2a3/TLoad.hpp"
+#include "pto/npu/a2a3/TCvt.hpp"
+#include "pto/npu/a2a3/TStore.hpp"
+#include "pto/npu/a2a3/TMrgSort.hpp"
+#include "pto/npu/a2a3/TExtract.hpp"
+#include "pto/npu/a2a3/TMov.hpp"
+#include "pto/npu/a2a3/TScatter.hpp"
+#include "pto/npu/a2a3/TTrans.hpp"
+#include "pto/npu/a2a3/TMatmul.hpp"
+#include "pto/npu/a2a3/TSel.hpp"
+#include "pto/npu/a2a3/TSels.hpp"
+#include "pto/npu/a2a3/TSort32.hpp"
+#include "pto/npu/a2a3/TGather.hpp"
+#include "pto/npu/a2a3/TRowExpand.hpp"
+#include "pto/npu/a2a3/TRowSum.hpp"
+#include "pto/npu/a2a3/TRowMax.hpp"
+#include "pto/npu/a2a3/TRowMin.hpp"
+#include "pto/npu/a2a3/TColMax.hpp"
+#include "pto/npu/a2a3/TColMin.hpp"
+#include "pto/npu/a2a3/TColSum.hpp"
+#include "pto/npu/a2a3/TUnaryOp.hpp"
+#include "pto/npu/a2a3/TPush.hpp"
+#include "pto/npu/a2a3/TPop.hpp"
+#else
 #include "pto/npu/a2a3/TAssign.hpp"
 #include "pto/npu/a2a3/TAlias.hpp"
 #include "pto/npu/a2a3/TSync.hpp"
@@ -113,6 +162,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/npu/a2a3/TPush.hpp"
 #include "pto/npu/a2a3/TPop.hpp"
 #include "pto/npu/a2a3/TColReduceIdx.hpp"
+#endif
 #endif
 
 #ifdef PTO_NPU_ARCH_A5
@@ -310,38 +360,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/comm/TWait.hpp"
 #include "pto/cpu/comm/TReduce.hpp"
 
-#endif
-
-#ifdef __COSTMODEL
-#include "pto/costmodel/a2a3/TAbs.hpp"
-#include "pto/costmodel/a2a3/TAdd.hpp"
-#include "pto/costmodel/a2a3/TAddS.hpp"
-#include "pto/costmodel/a2a3/TAssign.hpp"
-#include "pto/costmodel/a2a3/TColMax.hpp"
-#include "pto/costmodel/a2a3/TColSum.hpp"
-#include "pto/costmodel/a2a3/TDivS.hpp"
-#include "pto/costmodel/a2a3/TExp.hpp"
-#include "pto/costmodel/a2a3/TLoad.hpp"
-#include "pto/costmodel/a2a3/TMinS.hpp"
-#include "pto/costmodel/a2a3/TMul.hpp"
-#include "pto/costmodel/a2a3/TMulS.hpp"
-#include "pto/costmodel/a2a3/TRowExpand.hpp"
-#include "pto/costmodel/a2a3/TRowSum.hpp"
-#include "pto/costmodel/a2a3/TRowMax.hpp"
-#include "pto/costmodel/a2a3/TRowMin.hpp"
-#include "pto/costmodel/a2a3/TSqrt.hpp"
-#include "pto/costmodel/a2a3/TStore.hpp"
-#include "pto/costmodel/a2a3/TSub.hpp"
-#include "pto/costmodel/a2a3/TExtract.hpp"
-#include "pto/costmodel/a2a3/TMov.hpp"
-#include "pto/costmodel/a2a3/TScatter.hpp"
-#include "pto/costmodel/a2a3/TTrans.hpp"
-#include "pto/costmodel/a2a3/TMatmul.hpp"
-#include "pto/costmodel/a2a3/TSel.hpp"
-#include "pto/costmodel/a2a3/TCvt.hpp"
-#include "pto/costmodel/a2a3/TSort32.hpp"
-#include "pto/costmodel/a2a3/TMrgSort.hpp"
-#include "pto/costmodel/a2a3/TCopy.hpp"
 #endif
 
 #endif
