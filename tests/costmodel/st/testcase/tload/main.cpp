@@ -113,9 +113,9 @@ void runTLoadDN()
     TASSIGN(vecTile, 0x0);
 
     constexpr int kGTCols = kTCols / shape0 / shape1 / shape2;
-    auto srcGlobal = getGlobalTensor<T, shape0, shape1, shape2, shape3, kGTCols, shape3, kGTCols, BLayout::ColMajor,
-                                     dyn, Layout::DN>(reinterpret_cast<T *>(0x10000), gShape0, gShape1, gShape2,
-                                                      shape3, kGTCols);
+    auto srcGlobal =
+        getGlobalTensor<T, shape0, shape1, shape2, shape3, kGTCols, shape3, kGTCols, BLayout::ColMajor, dyn,
+                        Layout::DN>(reinterpret_cast<T *>(0x10000), gShape0, gShape1, gShape2, shape3, kGTCols);
 
     TLOAD(vecTile, srcGlobal);
 
