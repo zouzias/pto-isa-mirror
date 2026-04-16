@@ -61,8 +61,28 @@ class TRowArgMinParams:
         self.src_tile_col = src_tile_col
         self.valid_row = valid_row
         self.valid_col = valid_col
+        self.output_val = False
         self.name = f"TROWARGMINTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"\
             f"{dst_tile_row}x{dst_tile_col}_{src_tile_row}x{src_tile_col}_{valid_row}x{valid_col}"
+
+
+class TRowArgMinValIdxParams(TRowArgMinParams):
+    def __init__(self, dst_dtype, src_dtype, dst_val_tile_row, dst_val_tile_col, dst_tile_row, dst_tile_col,
+        src_tile_row, src_tile_col, valid_row, valid_col):
+        self.dst_dtype = dst_dtype
+        self.src_dtype = src_dtype
+        self.dst_val_tile_row = dst_val_tile_row
+        self.dst_val_tile_col = dst_val_tile_col
+        self.dst_tile_row = dst_tile_row
+        self.dst_tile_col = dst_tile_col
+        self.src_tile_row = src_tile_row
+        self.src_tile_col = src_tile_col
+        self.valid_row = valid_row
+        self.valid_col = valid_col
+        self.output_val = True
+        self.name = f"TROWARGMINTest.case_{self.DTYPE_STR_TABLE[dst_dtype]}_{self.DTYPE_STR_TABLE[src_dtype]}_"\
+            f"{dst_val_tile_row}x{dst_val_tile_col}_{dst_tile_row}x{dst_tile_col}_"\
+            f"{src_tile_row}x{src_tile_col}_{valid_row}x{valid_col}"
 
 
 if __name__ == "__main__":
@@ -99,6 +119,18 @@ if __name__ == "__main__":
         TRowArgMinParams(np.uint32, np.float16, 3, 16, 3, 3488, 3, 3473),
         TRowArgMinParams(np.uint32, np.float16, 260, 16, 260, 64, 260, 64),
         TRowArgMinParams(np.uint32, np.float16, 1023, 16, 1023, 32, 1023, 17),
+        TRowArgMinValIdxParams(np.uint32, np.float32, 8, 1, 8, 1, 8, 8, 8, 8),
+        TRowArgMinValIdxParams(np.uint32, np.float32, 8, 8, 8, 1, 8, 8, 8, 8),
+        TRowArgMinValIdxParams(np.uint32, np.float32, 8, 1, 8, 8, 8, 8, 8, 8),
+        TRowArgMinValIdxParams(np.uint32, np.float32, 8, 8, 8, 8, 8, 8, 8, 8),
+        TRowArgMinValIdxParams(np.uint32, np.float32, 1024, 1, 1024, 1, 1024, 8, 1024, 7),
+        TRowArgMinValIdxParams(np.uint32, np.float32, 8, 1, 8, 1, 2, 16384, 2, 16381),
+        TRowArgMinValIdxParams(np.uint32, np.float16, 16, 1, 16, 1, 8, 16, 8, 16),
+        TRowArgMinValIdxParams(np.uint32, np.float16, 8, 16, 16, 1, 8, 16, 8, 16),
+        TRowArgMinValIdxParams(np.uint32, np.float16, 16, 1, 8, 16, 8, 16, 8, 16),
+        TRowArgMinValIdxParams(np.uint32, np.float16, 8, 16, 8, 16, 8, 16, 8, 16),
+        TRowArgMinValIdxParams(np.uint32, np.float16, 1024, 1, 1024, 1, 1024, 16, 1024, 13),
+        TRowArgMinValIdxParams(np.uint32, np.float16, 16, 1, 16, 1, 2, 16384, 2, 16381),
     ]
 
     for case in case_list:
