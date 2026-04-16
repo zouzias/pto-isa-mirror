@@ -1,5 +1,6 @@
 /**
- * TADD Benchmark Test Suite - v1 Float32 only
+ * TADD Benchmark Test Suite - Auto-generated from input.csv
+ * Run: python3 generate_code.py
  */
 #include "test_common.h"
 #include "acl/acl.h"
@@ -58,7 +59,7 @@ void test_tadd_bench()
     aclFinalize();
 }
 
-// Float32 Tests
+// Test cases (auto-generated from input.csv)
 TEST_F(TADDBenchTest, case_float_64x64) { test_tadd_bench<float, 64, 64, 64, 64>(); }
 TEST_F(TADDBenchTest, case_float_8x512) { test_tadd_bench<float, 8, 512, 8, 512>(); }
 TEST_F(TADDBenchTest, case_float_1x4096) { test_tadd_bench<float, 1, 4096, 1, 4096>(); }
