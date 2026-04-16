@@ -121,26 +121,91 @@ PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRig
     }
 }
 
+template <typename TileRes, typename TileLeft, typename TileRight>
+PTO_INTERNAL void CheckStaticMad()
+{
+    using AType = typename TileLeft::DType;
+    using BType = typename TileRight::DType;
+    using CType = typename TileRes::DType;
+    static_assert(((std::is_same<CType, int32_t>::value) && (std::is_same<AType, int8_t>::value) &&
+                   (std::is_same<BType, int8_t>::value)) ||
+                      ((std::is_same<CType, float>::value) && (std::is_same<AType, half>::value) &&
+                       (std::is_same<BType, half>::value)) ||
+                      ((std::is_same<CType, float>::value) && (std::is_same<AType, float>::value) &&
+                       (std::is_same<BType, float>::value)) ||
+                      ((std::is_same<CType, float>::value) && (std::is_same<AType, bfloat16_t>::value) &&
+                       (std::is_same<BType, bfloat16_t>::value)),
+                  "The data type is not supported.");
+
+    static_assert(TileLeft::Loc == TileType::Left, "TileLeft TileType must be set to TileType::Left.");
+    static_assert(TileRight::Loc == TileType::Right, "TileRight TileType must be set to TileType::Right.");
+    static_assert(TileRes::Loc == TileType::Acc, "TileRes TileType must be set to TileType::Acc.");
+}
+
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TGEMV_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
+    CheckStaticMad<TileRes, TileLeft, TileRight>();
+
+    uint16_t m = aMatrix.GetValidRow();
+    uint16_t k = aMatrix.GetValidCol();
+    uint16_t n = bMatrix.GetValidCol();
+
+    PTO_ASSERT(m == 1, "ERROR: Valid row of matrix A should be equal to 1.");
+    PTO_ASSERT(k >= 1 && k <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid aMatrixCol is [1, 4095].");
+    PTO_ASSERT(n >= 1 && n <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid bMatrixCol is [1, 4095].");
+    PTO_ASSERT(aMatrix.GetValidCol() == bMatrix.GetValidRow(),
+               "ERROR: Valid col of matrix A should be equal to valid row of matrix B.");
+
     (void)Phase;
-    TMATMUL_IMPL(cMatrix, aMatrix, bMatrix);
+    TMatmulNzZn<TileRes, TileLeft, TileRight>(cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), m, n, k);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
 PTO_INTERNAL void TGEMV_ACC_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix)
 {
+    CheckStaticMad<TileRes, TileLeft, TileRight>();
+
+    uint16_t k = aMatrix.GetValidCol();
+    uint16_t n = bMatrix.GetValidCol();
+    uint16_t m = aMatrix.GetValidRow();
+
+    PTO_ASSERT(aMatrix.GetValidCol() == bMatrix.GetValidRow(),
+               "ERROR: Valid col of matrix A should be equal to valid row of matrix B.");
+    PTO_ASSERT(k >= 1 && k <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid aMatrixCol is [1, 4095].");
+    PTO_ASSERT(n >= 1 && n <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid bMatrixCol is [1, 4095].");
+    PTO_ASSERT(m == 1, "ERROR: Valid row of matrix A should be equal to 1.");
+
     (void)Phase;
-    TMATMUL_ACC_IMPL(cOutMatrix, cInMatrix, aMatrix, bMatrix);
+    TMatmulNzZn<TileRes, TileLeft, TileRight>(cOutMatrix.data(), cInMatrix.data(), aMatrix.data(), bMatrix.data(), m, n,
+                                              k);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
           typename TileBias>
 PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData)
 {
+    CheckStaticMad<TileRes, TileLeft, TileRight>();
+
+    uint16_t k = aMatrix.GetValidCol();
+    uint16_t m = aMatrix.GetValidRow();
+    uint16_t n = bMatrix.GetValidCol();
+    
+    PTO_ASSERT(m == 1, "ERROR: Valid row of matrix A should be equal to 1.");
+    PTO_ASSERT(n >= 1 && n <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid bMatrixCol is [1, 4095].");
+    PTO_ASSERT(k >= 1 && k <= MMAD_MAX_SUPPORT_LENGTH, "ERROR: The range of valid aMatrixCol is [1, 4095].");
+    PTO_ASSERT(aMatrix.GetValidCol() == bMatrix.GetValidRow(),
+               "ERROR: Valid col of matrix A should be equal to valid row of matrix B.");
+
     (void)Phase;
-    TMATMUL_BIAS_IMPL(cMatrix, aMatrix, bMatrix, biasData);
+    TMatmulNzZn<TileRes, TileLeft, TileRight>(cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), m, n, k);
+    for (size_t c = 0; c < n; c++) {
+        for (size_t r = 0; r < m; r++) {
+            size_t out_idx = GetTileElementOffset<TileRes>(r, c);
+            size_t bias_idx = GetTileElementOffset<TileBias>(0, c);
+            cMatrix.data()[out_idx] += biasData.data()[bias_idx];
+        }
+    }
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileLeftScale,
