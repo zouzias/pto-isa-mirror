@@ -67,6 +67,16 @@ int main(int argc, char **argv)
         ++failures;
     }
 
+    CommMpiBarrier();
+
+    if (rank == 0)
+        std::cout << "\n--- Demo 3: Ring TPUT_ASYNC ---" << std::endl;
+    if (!RunAllgatherRing(size, 0, 0)) {
+        if (rank == 0)
+            std::cerr << "[RING_TPUT_ASYNC FAIL]" << std::endl;
+        ++failures;
+    }
+
     if (rank == 0) {
         std::cout << "\n========================================" << std::endl;
         if (failures == 0)
