@@ -1,6 +1,6 @@
 # Allgather Async Demo
 
-Demonstrates the allgather collective operation using PTO's `TPUT_ASYNC` (remote write) and `TGET_ASYNC` (remote read) SDMA-based async instructions across multiple NPU devices in multi-core mode.
+Demonstrates the allgather collective operation using PTO's `TPUT_ASYNC` (remote write) and `TGET_ASYNC` (remote read) SDMA-based async instructions across multiple NPU devices.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ Demonstrates the allgather collective operation using PTO's `TPUT_ASYNC` (remote
 source /path/to/set_env.sh
 ./run.sh                      # 8 ranks, default SoC
 ./run.sh 4                    # 4 ranks
-./run.sh 2 Ascend910_9599     # 2 ranks, A5 devices
+./run.sh 2 Ascend910_9599     # A5 devices
 ```
 
 ## What It Does
@@ -24,6 +24,7 @@ Each rank contributes 256 `int32_t` values. After allgather, every rank holds al
 
 1. **TPUT_ASYNC Allgather (multi-core)**: Launched with `<<<nRanks, ...>>>` — each AICORE handles one target rank's communication in parallel. The AICORE where `block_idx == myRank` performs a local copy; all others use `pto::comm::TPUT_ASYNC` to write data to the corresponding remote rank.
 2. **TGET_ASYNC Allgather (multi-core)**: Launched with `<<<nRanks, ...>>>` — each AICORE pulls data from one source rank in parallel. The AICORE where `block_idx == myRank` performs a local copy; all others use `pto::comm::TGET_ASYNC` to read data from the corresponding remote rank.
+3. **Ring TPUT_ASYNC Allgather**: Ring algorithm with N-1 rounds for N ranks. In round 0, each rank copies its `sendBuf` locally and pushes it to the next rank via `TPUT_ASYNC`. In subsequent rounds, each rank forwards the chunk it received in the previous round to the next rank. Each round is a separate kernel launch with a host-side barrier in between.
 
 ## Project Structure
 
@@ -105,4 +106,29 @@ cmake .. -DSOC_VERSION=ascend910b1
 make -j$(nproc)
 cd ..
 mpirun -n 2 ./build/bin/allgather_demo
+```
+
+## Expected Output (2 ranks)
+
+```
+========================================
+ PTO Allgather Async Demo
+ Ranks: 2
+========================================
+
+--- Demo 1: Multi-core TPUT_ASYNC ---
+[TPUT_ASYNC_MC PASS] Rank 0: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
+[TPUT_ASYNC_MC PASS] Rank 1: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
+
+--- Demo 2: Multi-core TGET_ASYNC ---
+[TGET_ASYNC_MC PASS] Rank 0: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
+[TGET_ASYNC_MC PASS] Rank 1: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
+
+--- Demo 3: Ring TPUT_ASYNC ---
+[RING_TPUT_ASYNC PASS] Rank 0: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
+[RING_TPUT_ASYNC PASS] Rank 1: slot[0]=[0,1,2,...] slot[1]=[1000,1001,1002,...]
+
+========================================
+ All demos PASSED
+========================================
 ```
