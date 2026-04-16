@@ -71,6 +71,8 @@ tfmods
 tgather
 tgatherb
 tget
+tget_async
+tget_scale_addr
 tinsert
 tload
 tloadconv
@@ -98,6 +100,7 @@ tprefetch
 tprelu
 tpushpop
 tput
+tput_async
 trecip
 treduce
 trelu
@@ -134,8 +137,6 @@ timg2col
 tquant
 txor
 txors
-tget_async
-tput_async
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
