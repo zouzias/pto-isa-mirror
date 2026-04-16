@@ -1,10 +1,10 @@
 #ifndef PTO_MOCKER_COMMON_ACLRT_STUB_HPP
 #define PTO_MOCKER_COMMON_ACLRT_STUB_HPP
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdlib>
-#include <cstring>
 
 #include <pto/costmodel/common/qualifiers.hpp>
 
@@ -71,13 +71,19 @@ inline int aclrtMalloc(void **ptr, size_t size, uint32_t)
 inline int aclrtMemcpy(void *dst, size_t dstSize, const void *src, size_t srcSize, int)
 {
     const size_t bytes = (srcSize < dstSize) ? srcSize : dstSize;
-    std::memcpy(dst, src, bytes);
+    if (bytes == 0) {
+        return 0;
+    }
+    std::copy_n(reinterpret_cast<const unsigned char *>(src), bytes, reinterpret_cast<unsigned char *>(dst));
     return 0;
 }
 inline int aclrtMemset(void *dst, size_t dstSize, int value, size_t count)
 {
     const size_t bytes = (count < dstSize) ? count : dstSize;
-    std::memset(dst, value, bytes);
+    if (bytes == 0) {
+        return 0;
+    }
+    std::fill_n(reinterpret_cast<unsigned char *>(dst), bytes, static_cast<unsigned char>(value));
     return 0;
 }
 inline int aclrtFree(void *ptr)
