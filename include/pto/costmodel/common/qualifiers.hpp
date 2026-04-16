@@ -35,6 +35,10 @@ using CceEventIdType = event_t;
 using pad_t = int;
 using addr_cal_mode_t = int;
 
+namespace __cce_scalar {
+using addr_cal_mode_t = ::addr_cal_mode_t;
+}
+
 inline constexpr event_t EVENT_ID0 = 0;
 inline constexpr int ACL_MEM_MALLOC_HUGE_FIRST = 0;
 inline constexpr int ACL_MEMCPY_HOST_TO_DEVICE = 0;

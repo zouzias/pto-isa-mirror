@@ -14,15 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/common/pto_tile.hpp>
 #include <pto/common/type.hpp>
 #include <pto/common/event.hpp>
-#if !defined(__COSTMODEL)
 #include <pto/common/arch_cce_intrinsic.hpp>
-#else
-PTO_INTERNAL void pto_copy_ubuf_to_ubuf(__ubuf__ void *dst, __ubuf__ void *src, uint16_t nBurst, uint16_t lenBurst,
-                                        uint16_t srcGap, uint16_t dstGap)
-{
-    copy_ubuf_to_ubuf(dst, src, 0, nBurst, lenBurst, srcGap, dstGap);
-}
-#endif
 
 #ifdef PTO_NPU_ARCH_A2A3
 #ifdef __COSTMODEL
