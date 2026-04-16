@@ -158,4 +158,3 @@ inline void wait_flag_dev(auto flagId)
     const uint64_t cycles = EstimateConstCycles();
     ::pto::mocker::RecordCceCall("wait_flag_dev", cycles, flagId);
 }
-
