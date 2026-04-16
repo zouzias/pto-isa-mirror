@@ -1818,14 +1818,6 @@ PTO_INST RecordEvent TFREE(Pipe &pipe, WaitEvents &... events)
 }
 
 #if defined(PTO_NPU_ARCH_A5) || defined(__CPU_SIM)
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
-PTO_INST RecordEvent TPACK(TileDataDst &dst, TileDataSrc &src, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TPACK, dst, src);
-    return {};
-}
-
 template <HistByte byte, typename TileDataDst, typename TileDataSrc, typename TileDataIdx, typename... WaitEvents>
 PTO_INST RecordEvent THISTOGRAM(TileDataDst &dst, TileDataSrc &src, TileDataIdx &idx, WaitEvents &... events)
 {

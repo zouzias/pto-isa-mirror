@@ -273,12 +273,17 @@ def bf16_to_mxfp8(valid_rows, valid_cols, mode):
     src_bf16 = src_fp32.astype(bfloat16)
     src_bf16.tofile("input.bin")
 
-    pad_value = bfloat16(float("-inf"))
+    pad_value = bfloat16(0.0)  # match kernel PadValue::Zero
     padded_src = np.full((valid_rows, padded_cols), pad_value, dtype=bfloat16)
     padded_src[:, :valid_cols] = src_bf16
 
     # bf16 quantization, golden is saved in quant function
     e8m0, scaling, data_fp8, group_max = quant_bf16_to_e4m3(padded_src, mode=mode)
+
+    # Trim FP8 golden to valid dimensions (kernel TSTORE only outputs valid columns)
+    if padded_cols != valid_cols and mode == "nd":
+        data_fp8_valid = data_fp8.reshape(valid_rows, padded_cols)[:, :valid_cols].copy()
+        data_fp8_valid.tofile("golden_fp8.bin")
     return
 
 
@@ -390,6 +395,9 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 32, 64, mode="nd"),
         TQuantParams("mxfp8", 64, 128, mode="nd"),
         TQuantParams("mxfp8", 128, 128, mode="nd"),
+        TQuantParams("mxfp8", 15, 32, mode="nd"),
+        TQuantParams("mxfp8", 7, 64, mode="nd"),
+        TQuantParams("mxfp8", 33, 64, mode="nd"),
         TQuantParams("mxfp8", 32, 64, mode="nz"),
         TQuantParams("mxfp8", 64, 128, mode="nz"),
         TQuantParams("mxfp8", 64, 256, mode="nz"),
@@ -404,6 +412,8 @@ if __name__ == "__main__":
         TQuantParams("mxfp8", 32, 128, mode="nd", dtype=bfloat16),
         TQuantParams("mxfp8", 64, 128, mode="nd", dtype=bfloat16),
         TQuantParams("mxfp8", 128, 128, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 14, 16, mode="nd", dtype=bfloat16),
+        TQuantParams("mxfp8", 7, 48, mode="nd", dtype=bfloat16),
         TQuantParams("mxfp8", 32, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 64, 128, mode="nz", dtype=bfloat16),
         TQuantParams("mxfp8", 128, 128, mode="nz", dtype=bfloat16),
