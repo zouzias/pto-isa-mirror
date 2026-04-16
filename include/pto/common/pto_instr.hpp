@@ -1509,12 +1509,13 @@ PTO_INST RecordEvent TDIVS(TileDataDst &dst, typename TileDataDst::DType scalar,
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename... WaitEvents>
+template <auto PrecisionType = FmodAlgorithm::DEFAULT, typename TileDataDst, typename TileDataSrc,
+          typename... WaitEvents>
 PTO_INST RecordEvent TFMODS(TileDataDst &dst, TileDataSrc &src, typename TileDataSrc::DType scalar,
                             WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TFMODS, dst, src, scalar);
+    TFMOD_IMPL<PrecisionType>(dst, src0, src1);
     return {};
 }
 
