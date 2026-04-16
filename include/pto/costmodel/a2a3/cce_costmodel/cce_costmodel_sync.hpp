@@ -143,6 +143,10 @@ inline void set_va_reg_sb(auto vaReg, auto addrArray)
     ::pto::mocker::RecordCceCall("set_va_reg_sb", cycles, vaReg, addrArray);
 }
 inline void set_vector_mask(auto mask0, auto mask1)
+{
+    const uint64_t cycles = EstimateConstCycles();
+    ::pto::mocker::RecordCceCall("set_vector_mask", cycles, mask0, mask1);
+}
 inline void wait_flag(auto srcPipe, auto dstPipe, auto token)
 {
     FlushTailsForPipe(srcPipe);

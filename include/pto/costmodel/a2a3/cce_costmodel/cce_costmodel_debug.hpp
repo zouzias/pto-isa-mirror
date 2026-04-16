@@ -33,4 +33,3 @@ inline void print_cbuf(...)
 {}
 inline void print_gm(...)
 {}
-} // namespace cce
