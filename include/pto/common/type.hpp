@@ -10,7 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #ifndef _PTO_INCLUDE_NPU_TYPE_H_
 #define _PTO_INCLUDE_NPU_TYPE_H_
-#ifndef __CPU_SIM
+#if !defined(__CPU_SIM) && !defined(__COSTMODEL)
 #define AICORE [aicore]
 #else
 #define AICORE
@@ -22,7 +22,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // for pto internal implementation
 #define PTO_INTERNAL AICORE PTO_INLINE
 
-#ifdef __CPU_SIM
+#if defined(__CPU_SIM) || defined(__COSTMODEL)
 #define OP_NAME(Name)
 #define OP_TYPE(TypeName)
 #else
@@ -379,6 +379,8 @@ using TRandomCounter = uint32_t[PTO_RANDOM_COUNTER_SIZE];
 #if defined(__CPU_SIM) || defined(__COSTMODEL)
 typedef _Float16 half;
 typedef _Float16 aclFloat16;
+typedef half float16_t;
+typedef float float32_t;
 // Note: clang version should be >=15 and gcc version should be >=14
 // Use native BF16 automatically when the current toolchain already supports it.
 // PTO_CPU_SIM_ENABLE_BF16 remains useful as a strict request: if callers define

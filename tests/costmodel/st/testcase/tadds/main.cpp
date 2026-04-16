@@ -8,108 +8,58 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
-#include <gtest/gtest.h>
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
+#include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-template <uint32_t caseId>
-void launchTADDSTestCase(void *out, void *src, float scalar, aclrtStream stream);
+using namespace pto;
 
-class TADDSTest : public testing::Test {
-public:
-protected:
-    void SetUp() override
-    {}
+namespace {
 
-    void TearDown() override
-    {}
-};
-
-std::string GetGoldenDir()
+template <typename T, int row, int validRow, int col, int validCol, float profiling, float accuracy>
+void runTAddS(T scalar)
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    const std::string caseName = testInfo->name();
-    std::string suiteName = testInfo->test_suite_name();
-    std::string fullPath = "../" + suiteName + "." + caseName;
-    return fullPath;
+    using TileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1>;
+    TileData srcTile(validRow, validCol);
+    TileData dstTile(validRow, validCol);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x28000);
+
+    TADDS(dstTile, srcTile, scalar);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-template <uint32_t caseId, typename T, int row, int vaildRow, int col, int srcVaildCol, float profiling, float accuracy>
-bool TAddSTestFramework()
+} // namespace
+
+TEST(TAddS, float_32x64)
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    size_t dstByteSize = row * col * sizeof(T);
-    size_t srcByteSize = row * col * sizeof(T);
-    T *dstHost;
-    T *srcHost;
-    T *dstDevice;
-    T *srcDevice;
-    float scalar;
-
-    aclrtMallocHost((void **)(&dstHost), dstByteSize);
-    aclrtMallocHost((void **)(&srcHost), srcByteSize);
-
-    aclrtMalloc((void **)&dstDevice, dstByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, srcByteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(srcDevice, srcByteSize, srcHost, srcByteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    launchTADDSTestCase<caseId>(dstDevice, srcDevice, scalar, stream);
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, dstByteSize, dstDevice, dstByteSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
-
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-    return true;
+    runTAddS<float, 32, 32, 64, 64, 57.0f, 0.894736f>(0.0f);
 }
 
-TEST_F(TADDSTest, case1)
+TEST(TAddS, half_63x64)
 {
-    bool ret = TAddSTestFramework<1, float, 32, 32, 64, 64, 46.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTAddS<half, 63, 63, 64, 64, 69.0f, 0.608695f>((half)1.5f);
 }
 
-TEST_F(TADDSTest, case2)
+TEST(TAddS, int32_31x128)
 {
-    bool ret = TAddSTestFramework<2, aclFloat16, 63, 63, 64, 64, 77.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTAddS<int32_t, 31, 31, 128, 128, 70.0f, 0.671428f>(3);
 }
 
-TEST_F(TADDSTest, case3)
+TEST(TAddS, int16_15x192)
 {
-    bool ret = TAddSTestFramework<3, int32_t, 31, 31, 128, 128, 76.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTAddS<int16_t, 15, 15, 192, 192, 40.0f, 0.425000f>(3);
 }
 
-TEST_F(TADDSTest, case4)
+TEST(TAddS, float_7x448)
 {
-    bool ret = TAddSTestFramework<4, int16_t, 15, 15, 192, 192, 44.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTAddS<float, 7, 7, 448, 448, 77.0f, 0.961038f>(1.5f);
 }
 
-TEST_F(TADDSTest, case5)
+TEST(TAddS, float_256x16)
 {
-    bool ret = TAddSTestFramework<5, float, 7, 7, 448, 448, 63.0f, 1.0f>();
-    EXPECT_TRUE(ret);
-}
-
-TEST_F(TADDSTest, case6)
-{
-    bool ret = TAddSTestFramework<6, float, 256, 256, 16, 16, 270.0f, 1.0f>();
-    EXPECT_TRUE(ret);
+    runTAddS<float, 256, 256, 16, 16, 266.0f, 0.913533f>(1.5f);
 }

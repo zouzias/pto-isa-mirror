@@ -1,5 +1,5 @@
 /**
-Copyright (c) 2025 Huawei Technologies Co., Ltd.
+Copyright (c) 2026 Huawei Technologies Co., Ltd.
 This program is free software, you can redistribute it and/or modify it under the terms and conditions of
 CANN Open Software License Agreement Version 2.0 (the "License").
 Please refer to the License for details. You may not use this file except in compliance with the License.
@@ -9,155 +9,167 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
-#include "test_common.h"
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-template <int32_t testKey>
-void launchTLOAD(uint8_t *out, uint8_t *src, uint64_t *gLog, void *stream);
+using namespace pto;
 
-template <int32_t testKey>
-int get_input_golden(uint8_t *input, uint8_t *golden);
+namespace {
 
-class TLOADTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
-
-std::string GetGoldenDir()
+// case shape is static, but testing would do dynamic or static test
+template <int shape0, int shape1, int shape2, int shape3, int shape4>
+inline auto getOptDynShape(int gShape0, int gShape1, int gShape2, int gShape3, int gShape4)
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    const std::string caseName = testInfo->name();
-    std::string suiteName = testInfo->test_suite_name();
-    std::string fullPath = "../" + suiteName + "." + caseName;
-    return fullPath;
-}
-
-#define LOGSIZE 128
-#define PRINTLOG 4
-#define MAXBLOCK 64
-
-template <int32_t testKey, typename T, int32_t kBlock>
-void tload_test()
-{
-    uint32_t M = 1024;
-    uint32_t N = 1024;
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    int in_byteSize = M * N * sizeof(float);
-    int out_byteSize = M * N * sizeof(float);
-
-    void *dstHost, *srcHost, *goldHost;
-    void *dstDevice, *srcDevice;
-    void *logDevice;
-
-    aclrtMallocHost((void **)(&srcHost), in_byteSize);
-    aclrtMallocHost((void **)(&dstHost), out_byteSize);
-    aclrtMallocHost((void **)(&goldHost), out_byteSize);
-
-    aclrtMalloc((void **)&dstDevice, in_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&srcDevice, out_byteSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    std::fill((uint8_t *)dstHost, ((uint8_t *)(dstHost)) + out_byteSize, 0);
-
-    aclrtMemcpy(srcDevice, in_byteSize, srcHost, in_byteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(dstDevice, out_byteSize, dstHost, out_byteSize, ACL_MEMCPY_HOST_TO_DEVICE);
-
-#ifdef DEBUGLOG
-    uint64_t logHost[MAXBLOCK][LOGSIZE];
-    std::fill((uint8_t *)logHost, ((uint8_t *)(logHost)) + sizeof(logHost), 0);
-    aclrtMalloc((void **)&logDevice, sizeof(logHost), ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMemcpy(logDevice, sizeof(logHost), logHost, sizeof(logHost), ACL_MEMCPY_HOST_TO_DEVICE);
-#endif
-
-    launchTLOAD<testKey>((uint8_t *)dstDevice, (uint8_t *)srcDevice, (uint64_t *)logDevice, stream);
-
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, out_byteSize, dstDevice, out_byteSize, ACL_MEMCPY_DEVICE_TO_HOST);
-#ifdef DEBUGLOG
-    aclrtMemcpy(logHost, sizeof(logHost), logDevice, sizeof(logHost), ACL_MEMCPY_DEVICE_TO_HOST);
-#endif
-
-    aclrtFree(dstDevice);
-    aclrtFree(srcDevice);
-#ifdef DEBUGLOG
-    aclrtFree(logDevice);
-#endif
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(srcHost);
-    aclrtFreeHost(goldHost);
-
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-#ifdef DEBUGLOG
-    for (int b = 0; b < kBlock; b++) {
-        cout << "Block: " << setw(2) << b << " ";
-        for (int l = 0; l < sizeof(logHost[0]) / sizeof(logHost[0][0]) && l < PRINTLOG; l++) {
-            cout << hex << setfill('0') << setw(16) << logHost[b][l] << " ";
-        }
-        cout << dec << endl;
+    if constexpr (shape0 == 1) {
+        using DynShapeDim5 = Shape<1, -1, -1, -1, -1>;
+        DynShapeDim5 dynShape(gShape1, gShape2, gShape3, gShape4);
+        return dynShape;
+    } else if constexpr (shape0 == 1 && shape1 == 1) {
+        using DynShapeDim5 = Shape<1, 1, -1, -1, -1>;
+        DynShapeDim5 dynShape(gShape2, gShape3, gShape4);
+        return dynShape;
+    } else if constexpr (shape0 == 1 && shape1 == 1 && shape2 == 1) {
+        using DynShapeDim5 = Shape<1, 1, 1, -1, -1>;
+        DynShapeDim5 dynShape(gShape3, gShape4);
+        return dynShape;
+    } else if constexpr (shape0 == 1 && shape1 == 1 && shape2 == 1 && shape3 == 1) {
+        using DynShapeDim5 = Shape<1, 1, 1, 1, -1>;
+        DynShapeDim5 dynShape(gShape4);
+        return dynShape;
+    } else {
+        using DynShapeDim5 = Shape<-1, -1, -1, -1, -1>;
+        DynShapeDim5 dynShape(gShape0, gShape1, gShape2, gShape3, gShape4);
+        return dynShape;
     }
-#endif
 }
 
-TEST_F(TLOADTest, case_float_GT_128_128_VT_128_128_BLK1)
+template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4, int tRows, int tCols, BLayout major,
+          int dyn, Layout Layout_ = Layout::ND>
+inline auto getGlobalTensor(T *addr, int gShape0, int gShape1, int gShape2, int gShape3, int gShape4)
 {
-    tload_test<1, float, 1>();
+    if constexpr (dyn) {
+        int stride0 = gShape1 * gShape2 * shape3 * shape4;
+        int stride1 = gShape2 * shape3 * shape4;
+        int stride2 = shape3 * shape4;
+
+        using DynStrideDim5 = pto::Stride<-1, -1, -1, -1, -1>;
+        auto dynShape =
+            getOptDynShape<shape0, shape1, shape2, shape3, shape4>(gShape0, gShape1, gShape2, gShape3, gShape4);
+        using GlobalData = GlobalTensor<T, decltype(dynShape), DynStrideDim5, Layout_>;
+
+        if constexpr (major == BLayout::RowMajor) {
+            GlobalData srcGlobal(addr, dynShape, DynStrideDim5(stride0, stride1, stride2, shape4, 1));
+            return srcGlobal;
+        } else {
+            GlobalData srcGlobal(addr, dynShape, DynStrideDim5(stride0, stride1, stride2, 1, shape4));
+            return srcGlobal;
+        }
+    } else {
+        constexpr int stride0 = shape1 * shape2 * shape3 * shape4;
+        constexpr int stride1 = shape2 * shape3 * shape4;
+        constexpr int stride2 = shape3 * shape4;
+        using StaticShapeDim5 = Shape<shape0, shape1, shape2, tRows, tCols>;
+
+        if constexpr (major == BLayout::RowMajor) {
+            using StaticStrideDim5 = pto::Stride<stride0, stride1, stride2, shape4, 1>;
+            using GlobalData = GlobalTensor<T, StaticShapeDim5, StaticStrideDim5, Layout_>;
+            GlobalData srcGlobal(addr);
+            return srcGlobal;
+        } else {
+            using StaticStrideDim5 = pto::Stride<stride0, stride1, stride2, 1, shape4>;
+            using GlobalData = GlobalTensor<T, StaticShapeDim5, StaticStrideDim5, Layout_>;
+            GlobalData srcGlobal(addr);
+            return srcGlobal;
+        }
+    }
 }
 
-TEST_F(TLOADTest, case_float_GT_2_2_2_256_64_VT_256_64_BLK8)
+template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4, int kTRows, int kTCols, int dyn,
+          PadValue PadVal, int gShape0, int gShape1, int gShape2, int gCols, float profiling, float accuracy>
+void runTLoadND()
 {
-    tload_test<2, float, 8>();
+    using TileData = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, PadVal>;
+    TileData vecTile(kTRows, gCols);
+    TASSIGN(vecTile, 0x0);
+
+    constexpr int kGTRows = kTRows / shape0 / shape1 / shape2;
+    auto srcGlobal =
+        getGlobalTensor<T, shape0, shape1, shape2, kGTRows, shape4, kGTRows, shape4, BLayout::RowMajor, dyn>(
+            reinterpret_cast<T *>(0x10000), gShape0, gShape1, gShape2, kGTRows, shape4);
+
+    TLOAD(vecTile, srcGlobal);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-TEST_F(TLOADTest, case_float_GT_128_127_VT_128_128_BLK1_PADMAX)
+template <typename T, int shape0, int shape1, int shape2, int shape3, int shape4, int kTRows, int kTCols, int dyn,
+          PadValue PadVal, int gShape0, int gShape1, int gShape2, int gRows, int gCols, float profiling, float accuracy>
+void runTLoadDN()
 {
-    tload_test<3, float, 1>();
+    using TileData = Tile<TileType::Vec, T, kTRows, kTCols, BLayout::ColMajor, -1, -1, SLayout::NoneBox, 512, PadVal>;
+    TileData vecTile(gRows, gCols);
+    TASSIGN(vecTile, 0x0);
+
+    constexpr int kGTCols = kTCols / shape0 / shape1 / shape2;
+    auto srcGlobal =
+        getGlobalTensor<T, shape0, shape1, shape2, shape3, kGTCols, shape3, kGTCols, BLayout::ColMajor, dyn,
+                        Layout::DN>(reinterpret_cast<T *>(0x10000), gShape0, gShape1, gShape2, shape3, kGTCols);
+
+    TLOAD(vecTile, srcGlobal);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-TEST_F(TLOADTest, case_s16_GT_128_127_VT_128_128_BLK1_PADMAX)
+} // namespace
+
+TEST(TLoad, c01_nd_float_128x128)
 {
-    tload_test<4, int16_t, 1>();
+    runTLoadND<float, 1, 1, 1, 128, 128, 128, 128, 1, PadValue::Null, 1, 1, 1, 128, 776.0f, 0.557989f>();
 }
 
-TEST_F(TLOADTest, case_u8_GT_128_127_VT_128_128_BLK1_PADMIN)
+TEST(TLoad, c02_nd_float_256x64)
 {
-    tload_test<5, uint8_t, 1>();
+    runTLoadND<float, 2, 2, 2, 256, 64, 256, 64, 1, PadValue::Null, 2, 2, 2, 64, 2624.0f, 0.423780f>();
 }
 
-TEST_F(TLOADTest, case_float_GT_32_64_128_VT_64_128_BLK32_DYN)
+TEST(TLoad, c03_nd_float_128x127_padmax)
 {
-    tload_test<6, int16_t, 32>();
+    runTLoadND<float, 1, 1, 1, 128, 127, 128, 128, 1, PadValue::Max, 1, 1, 1, 127, 773.0f, 0.562742f>();
 }
 
-TEST_F(TLOADTest, case_float_GT_32_64_128_VT_64_128_BLK32_STC)
+TEST(TLoad, c04_nd_int16_128x127_padmax)
 {
-    tload_test<7, int16_t, 32>();
+    runTLoadND<int16_t, 1, 1, 1, 128, 127, 128, 128, 1, PadValue::Max, 1, 1, 1, 127, 519.0f, 0.928709f>();
 }
 
-TEST_F(TLOADTest, case_float_GT_2_2_2_256_60_VT_256_64_BLK8_PADMAX)
+TEST(TLoad, c05_nd_uint8_128x127_padmin)
 {
-    tload_test<8, float, 8>();
+    runTLoadND<uint8_t, 1, 1, 1, 128, 127, 128, 128, 1, PadValue::Min, 1, 1, 1, 127, 392.0f, 0.709183f>();
 }
 
-TEST_F(TLOADTest, case_float_GT_32_64_128_VT_64_128_BLK32_DN)
+TEST(TLoad, c06_nd_int16_64x128_dyn)
 {
-    tload_test<9, float, 32>();
+    runTLoadND<int16_t, 1, 1, 32, 64, 128, 64, 128, 1, PadValue::Null, 1, 1, 32, 128, 8576.0f, 0.029850f>();
 }
 
-TEST_F(TLOADTest, case_float_GT_2_2_2_255_60_VT_256_64_BLK8_DN)
+TEST(TLoad, c07_nd_int16_64x128_static)
 {
-    tload_test<10, float, 8>();
+    runTLoadND<int16_t, 1, 1, 32, 64, 128, 64, 128, 0, PadValue::Null, 1, 1, 32, 128, 8576.0f, 0.029850f>();
+}
+
+TEST(TLoad, c08_nd_float_256x60_padmax)
+{
+    runTLoadND<float, 2, 2, 2, 256, 60, 256, 64, 1, PadValue::Max, 2, 2, 2, 60, 2497.0f, 0.420104f>();
+}
+
+TEST(TLoad, c09_dn_float_64x128)
+{
+    runTLoadDN<float, 1, 1, 32, 64, 128, 64, 128, 1, PadValue::Null, 1, 1, 32, 64, 128, 8704.0f, 0.062500f>();
+}
+
+TEST(TLoad, c10_dn_float_256x60)
+{
+    runTLoadDN<float, 2, 2, 2, 255, 60, 256, 64, 1, PadValue::Null, 2, 2, 2, 255, 60, 8352.0f, 0.133141f>();
 }

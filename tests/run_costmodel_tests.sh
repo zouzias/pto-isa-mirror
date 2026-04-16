@@ -27,6 +27,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN=python3
+else
+    PYTHON_BIN=python
+fi
+
 # 函数：打印错误信息并退出
 error_exit() {
     echo -e "${RED}[ERROR] $1${NC}"
@@ -64,7 +70,7 @@ for testcase in "${TESTCASES[@]}"; do
     echo -e "========================================"
 
     # 构建测试命令
-    test_cmd="python tests/run_costmodel.py --testcase ${testcase} ${TEST_ARGS}"
+    test_cmd="${PYTHON_BIN} tests/run_costmodel.py --testcase ${testcase} ${TEST_ARGS}"
     echo -e "${YELLOW}[INFO] Execute cmd:${test_cmd}${NC}"
 
     # 执行命令并捕获退出码
