@@ -11,9 +11,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
-#include <cstdint>
-#include <vector>
 
+#include "binary_vec_test_context.hpp"
 #include "cost_check.hpp"
 
 using namespace pto;
@@ -23,19 +22,9 @@ namespace {
 template <typename T, int row, int validRow, int col, int validCol, PadValue padValue, float profiling, float accuracy>
 void runTMax()
 {
-    using TileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, padValue>;
-    TileData src0Tile(validRow, validCol);
-    TileData src1Tile(validRow, validCol);
-    TileData dstTile(validRow, validCol);
+    pto::test::BinaryVecTestContext<T, row, validRow, col, validCol, padValue> ctx;
 
-    std::vector<T> src0Buf(row * col, T{1});
-    std::vector<T> src1Buf(row * col, T{1});
-    std::vector<T> dstBuf(row * col, T{0});
-    TASSIGN(src0Tile, reinterpret_cast<std::uintptr_t>(src0Buf.data()));
-    TASSIGN(src1Tile, reinterpret_cast<std::uintptr_t>(src1Buf.data()));
-    TASSIGN(dstTile, reinterpret_cast<std::uintptr_t>(dstBuf.data()));
-
-    TMAX(dstTile, src0Tile, src1Tile);
+    TMAX(ctx.dstTile, ctx.src0Tile, ctx.src1Tile);
 
     EXPECT_CYCLE_NEAR(profiling, accuracy);
 }

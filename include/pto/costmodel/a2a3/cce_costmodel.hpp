@@ -158,7 +158,8 @@ inline uint64_t EstimateConstCycles(uint64_t cycles = 1)
 
 inline uint64_t CeilDiv(uint64_t x, uint64_t y)
 {
-    if (y == 0) return 0;  // 或返回 UINT64_MAX，根据业务逻辑决定
+    if (y == 0)
+        return 0; // 或返回 UINT64_MAX，根据业务逻辑决定
     return (x + y - 1) / y;
 }
 

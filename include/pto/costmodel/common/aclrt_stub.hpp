@@ -17,10 +17,22 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <pto/costmodel/common/qualifiers.hpp>
 
-inline int aclInit(...) { return 0; }
-inline int aclFinalize(...) { return 0; }
-inline int aclrtSetDevice(...) { return 0; }
-inline int aclrtResetDevice(...) { return 0; }
+inline int aclInit(...)
+{
+    return 0;
+}
+inline int aclFinalize(...)
+{
+    return 0;
+}
+inline int aclrtSetDevice(...)
+{
+    return 0;
+}
+inline int aclrtResetDevice(...)
+{
+    return 0;
+}
 inline int aclrtGetDevice(int *deviceId)
 {
     if (deviceId != nullptr) {

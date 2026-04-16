@@ -19,18 +19,18 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Compare the cycle count stored in the most recently executed PTO trace record
 // against an expected `profiling` value. The check passes when relative
 // precision `1 - |profiling - actual| / profiling` is at least `accuracy`.
-#define EXPECT_CYCLE_NEAR(profiling, accuracy)                                                                         \
-    do {                                                                                                               \
-        float _pto_actual = static_cast<float>(::pto::mocker::GetLastPtoInstrCycles());                                \
-        float _pto_expected = static_cast<float>(profiling);                                                           \
-        float _pto_precision =                                                                                         \
-            (_pto_expected == 0.0f) ? ((_pto_actual == 0.0f) ? 1.0f : 0.0f)                                            \
-                                    : std::max(0.0f, (1.0f - std::fabs(_pto_expected - _pto_actual) / _pto_expected));                 \
-        std::cout << "[CYCLE] " << ::testing::UnitTest::GetInstance()->current_test_info()->test_suite_name() << "."   \
-                  << ::testing::UnitTest::GetInstance()->current_test_info()->name()                                   \
-                  << " actual=" << _pto_actual << " expected=" << _pto_expected                                        \
-                  << " precision=" << _pto_precision << " accuracy=" << static_cast<float>(accuracy) << std::endl;     \
-        EXPECT_GE(_pto_precision, static_cast<float>(accuracy));                                                       \
+#define EXPECT_CYCLE_NEAR(profiling, accuracy)                                                                       \
+    do {                                                                                                             \
+        float _pto_actual = static_cast<float>(::pto::mocker::GetLastPtoInstrCycles());                              \
+        float _pto_expected = static_cast<float>(profiling);                                                         \
+        float _pto_precision = (_pto_expected == 0.0f) ?                                                             \
+                                   ((_pto_actual == 0.0f) ? 1.0f : 0.0f) :                                           \
+                                   std::max(0.0f, (1.0f - std::fabs(_pto_expected - _pto_actual) / _pto_expected));  \
+        std::cout << "[CYCLE] " << ::testing::UnitTest::GetInstance()->current_test_info()->test_suite_name() << "." \
+                  << ::testing::UnitTest::GetInstance()->current_test_info()->name() << " actual=" << _pto_actual    \
+                  << " expected=" << _pto_expected << " precision=" << _pto_precision                                \
+                  << " accuracy=" << static_cast<float>(accuracy) << std::endl;                                      \
+        EXPECT_GE(_pto_precision, static_cast<float>(accuracy));                                                     \
     } while (0)
 
 #endif // PTO_COSTMODEL_ST_COST_CHECK_HPP

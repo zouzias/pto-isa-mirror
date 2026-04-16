@@ -20,8 +20,7 @@ inline CceEventIdType __pto_set_flag(pipe_t, pipe_t)
     return EVENT_ID0;
 }
 inline void __pto_wait_flag(pipe_t, pipe_t, CceEventIdType)
-{
-}
+{}
 inline void trap()
 {
     std::abort();
