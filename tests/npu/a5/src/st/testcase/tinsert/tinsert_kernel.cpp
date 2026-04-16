@@ -1474,7 +1474,6 @@ AICORE void runTInsertNZSplitCustom(__gm__ T *out, __gm__ T *src)
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(tmpTile, tmpOffset);
-    TASSIGN(dstTile, 0x0);
     TASSIGN(matTile, 0x0);
 
     SrcGlobalData srcGlobal(src);
@@ -1486,15 +1485,45 @@ AICORE void runTInsertNZSplitCustom(__gm__ T *out, __gm__ T *src)
     constexpr uint32_t burstNum = Cols / c0Size;
     constexpr uint16_t burstLen = (DstRows * c0Size * sizeof(T)) / BLOCK_BYTE_SIZE;
 
+    constexpr uint32_t dstUbOffset = ((tmpOffset + (DstRows + 1) * Cols * sizeof(T) + 0xFF) / 0x100) * 0x100;
+
+    TASSIGN(dstTile, dstUbOffset);
+
     __cbuf__ T *matAddr = matTile.data();
     __ubuf__ T *dstUbAddr = dstTile.data();
 
 #if defined(__DAV_VEC__)
+    // Start TLOAD (MTE2) to overlap with V-pipe zero-fill
     TLOAD(srcTile, srcGlobal);
+
+    // Zero-fill tmpTile UB so rows beyond ValidRow are zero after NZ conversion.
+    // TINSERT writes ALL alignedRows from tmpTile to L1, so L1 zero-fill is not needed.
+    {
+        constexpr uint32_t tmpTileBytes = burstNum * (DstRows + 1) * c0Size * sizeof(T);
+        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE / sizeof(T);
+        constexpr uint32_t tmpElements = tmpTileBytes / sizeof(T);
+        constexpr uint16_t zeroRepeats =
+            static_cast<uint16_t>((tmpElements + elementsPerRepeat - 1) / elementsPerRepeat);
+        __ubuf__ T *tmpUbAddr = tmpTile.data();
+        __VEC_SCOPE__
+        {
+            RegTensor<T> vreg;
+            uint32_t predCount = elementsPerRepeat;
+            MaskReg preg = CreatePredicate<T>(predCount);
+            vdup(vreg, static_cast<T>(0), preg, MODE_ZEROING);
+            for (uint16_t i = 0; i < zeroRepeats; ++i) {
+                vsts(vreg, tmpUbAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
+            }
+        }
+    }
+
+    // Wait for TLOAD to complete
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
+    // Convert ND source to NZ format in tmpTile (writes only ValidRow rows, rest stays zero)
     pto::TMovToVecNd2Nz<T, TmpVecTile, SrcVecTile>(tmpTile.data(), srcTile.data(), ValidRow, Cols, ValidRow);
+
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
@@ -1578,20 +1607,37 @@ AICORE void runTInsertNZTwoInputSplit(__gm__ T *out, __gm__ T *src)
     __gm__ T *nz1GmAddr = src + zeroElements;
 
 #if defined(__DAV_VEC__)
-    copy_gm_to_ubuf((__ubuf__ void *)ubAddr, (__gm__ void *)src, 0, burstNum, burstLen, 0, 0);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    // Zero-fill UB for L1 initialization (V-pipe, no GM dependency)
+    {
+        constexpr uint32_t totalBytes = burstNum * static_cast<uint32_t>(burstLen) * BLOCK_BYTE_SIZE;
+        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE; // int8_t: 1 byte per element
+        constexpr uint16_t dstRepeats = static_cast<uint16_t>((totalBytes + elementsPerRepeat - 1) / elementsPerRepeat);
+        __VEC_SCOPE__
+        {
+            RegTensor<int8_t> vreg;
+            uint32_t predCount = elementsPerRepeat;
+            MaskReg preg = CreatePredicate<int8_t>(predCount);
+            vdup(vreg, static_cast<int8_t>(0), preg, MODE_ZEROING);
+            __ubuf__ int8_t *zeroAddr = reinterpret_cast<__ubuf__ int8_t *>(ubAddr);
+            for (uint16_t i = 0; i < dstRepeats; ++i) {
+                vsts(vreg, zeroAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
+            }
+        }
+    }
 
+    // Copy zeroes from UB to L1 (MTE3)
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)ubAddr, 0, burstNum, burstLen, 0, 0);
     set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
     wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
 
+    // Load NZ data from GM to UB (MTE2)
     copy_gm_to_ubuf((__ubuf__ void *)ubAddr, (__gm__ void *)nz1GmAddr, 0, 1, nz1BurstLen, 0, 0);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
+    // TINSERT (MTE3)
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TINSERT<Mode>(matTile, srcTile);
@@ -1749,21 +1795,38 @@ AICORE void runTInsertNZDoubleInput(__gm__ T *out, __gm__ T *src)
     __gm__ T *nz1Addr2 = nz1Addr1 + nz1Elements;
 
 #if defined(__DAV_VEC__)
-    copy_gm_to_ubuf((__ubuf__ void *)ubAddr1, (__gm__ void *)src, 0, burstNum, burstLen, 0, 0);
-    set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
+    // Zero-fill UB for L1 initialization (V-pipe, no GM dependency)
+    {
+        constexpr uint32_t totalBytes = burstNum * static_cast<uint32_t>(burstLen) * BLOCK_BYTE_SIZE;
+        constexpr uint32_t elementsPerRepeat = REPEAT_BYTE; // int8_t: 1 byte per element
+        constexpr uint16_t dstRepeats = static_cast<uint16_t>((totalBytes + elementsPerRepeat - 1) / elementsPerRepeat);
+        __VEC_SCOPE__
+        {
+            RegTensor<int8_t> vreg;
+            uint32_t predCount = elementsPerRepeat;
+            MaskReg preg = CreatePredicate<int8_t>(predCount);
+            vdup(vreg, static_cast<int8_t>(0), preg, MODE_ZEROING);
+            __ubuf__ int8_t *zeroAddr = reinterpret_cast<__ubuf__ int8_t *>(ubAddr1);
+            for (uint16_t i = 0; i < dstRepeats; ++i) {
+                vsts(vreg, zeroAddr, static_cast<uint32_t>(i) * elementsPerRepeat, NORM_B32, preg);
+            }
+        }
+    }
 
+    // Copy zeroes from UB to L1 (MTE3)
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     copy_ubuf_to_cbuf((__cbuf__ void *)matAddr, (__ubuf__ void *)ubAddr1, 0, burstNum, burstLen, 0, 0);
     set_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
     wait_flag(PIPE_MTE3, PIPE_V, EVENT_ID1);
 
+    // Load NZ data for both tiles from GM to UB (MTE2)
     copy_gm_to_ubuf((__ubuf__ void *)ubAddr1, (__gm__ void *)nz1Addr1, 0, 1, nz1BurstLen, 0, 0);
     copy_gm_to_ubuf((__ubuf__ void *)ubAddr2, (__gm__ void *)nz1Addr2, 0, 1, nz1BurstLen, 0, 0);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
+    // TINSERT both tiles (MTE3)
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     TINSERT(matTile, src1Tile, static_cast<uint16_t>(IndexRow1), static_cast<uint16_t>(0));
