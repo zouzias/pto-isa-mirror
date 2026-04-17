@@ -204,6 +204,7 @@ tdequant
 t_dhrystone
 tconcatidx
 tconcat
+tile_perf
 )
 if (NOT AUTO_MODE)
   # TPUSH and TPOP currently directly use TASSIGN inside their implementations,
