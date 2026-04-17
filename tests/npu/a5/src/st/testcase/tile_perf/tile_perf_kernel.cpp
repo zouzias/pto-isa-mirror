@@ -1,6 +1,10 @@
 /**
  * TADD vs TADDS Benchmark - 2D tile comparison
  * Shapes: 32x64 (2048 elem) and 1x2048 (same elem count)
+ * 
+ * UB Address Layout (A2A3 bank conflict free):
+ *   TADD:  src0=0x0, src1=0x100 (256B), dst=0x10000 (64KB)
+ *   TADDS: src=0x0, dst=0x10000 (64KB)
  */
 #include <pto/pto-inst.hpp>
 #include <pto/common/constants.hpp>
@@ -23,9 +27,11 @@ PTO_INTERNAL void runTAdd(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
     TileData src0Tile(vRows, vCols);
     TileData src1Tile(vRows, vCols);
     TileData dstTile(vRows, vCols);
+    
+    // A2A3 bank conflict free: src0/src1 256B apart, dst 64KB from sources
     TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x10000);
-    TASSIGN(dstTile, 0x20000);
+    TASSIGN(src1Tile, 0x100);      // 256B offset
+    TASSIGN(dstTile, 0x10000);     // 64KB offset
 
     for (int i = 0; i < 10; i++) {
         TLOAD(src0Tile, src0Global);
@@ -49,8 +55,10 @@ PTO_INTERNAL void runTAddS(__gm__ T *out, __gm__ T *src, T scalar)
     GlobalData dstGlobal(out, DynShape(vRows, vCols), DynStride(tileH, tileW));
     TileData srcTile(vRows, vCols);
     TileData dstTile(vRows, vCols);
+    
+    // src and dst 64KB apart
     TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
+    TASSIGN(dstTile, 0x10000);     // 64KB offset
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
