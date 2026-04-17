@@ -8,91 +8,50 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-template <int32_t tilingKey>
-void launchTMUL_demo(uint8_t *out, uint8_t *src, void *stream);
+using namespace pto;
 
-class TMULTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+namespace {
 
-std::string GetGoldenDir()
+template <typename T, int rows, int cols, float profiling, float accuracy>
+void runTMul()
 {
-    const testing::TestInfo *testInfo = testing::UnitTest::GetInstance()->current_test_info();
-    const std::string caseName = testInfo->name();
-    std::string suiteName = testInfo->test_suite_name();
-    std::string fullPath = "../" + suiteName + "." + caseName;
-    return fullPath;
+    using TileData = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
+    TileData src0Tile(rows, cols);
+    TileData src1Tile(rows, cols);
+    TileData dstTile(rows, cols);
+    TASSIGN(src0Tile, 0x0);
+    TASSIGN(src1Tile, 0x4000);
+    TASSIGN(dstTile, 0x8000);
+
+    TMUL(dstTile, src0Tile, src1Tile);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTMul(T *out, T *src0, T *src1, void *stream);
+} // namespace
 
-template <typename T, int kGRows_, int kGCols_, int kTRows_, int kTCols_, float profiling, float accuracy>
-void test_tmul()
+TEST(TMul, float_64x64)
 {
-    size_t fileSize = kGRows_ * kGCols_ * sizeof(T);
-
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-
-    T *dstHost, *src0Host, *src1Host;
-    T *dstDevice, *src0Device, *src1Device;
-
-    aclrtMallocHost((void **)(&dstHost), fileSize);
-    aclrtMallocHost((void **)(&src0Host), fileSize);
-    aclrtMallocHost((void **)(&src1Host), fileSize);
-
-    aclrtMalloc((void **)&dstDevice, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src0Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMalloc((void **)&src1Device, fileSize, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(src1Device, fileSize, src1Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTMul<T, kGRows_, kGCols_, kTRows_, kTCols_, profiling, accuracy>(dstDevice, src0Device, src1Device, stream);
-
-    aclrtSynchronizeStream(stream);
-    aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    aclrtFree(dstDevice);
-    aclrtFree(src0Device);
-    aclrtFree(src1Device);
-
-    aclrtFreeHost(dstHost);
-    aclrtFreeHost(src0Host);
-    aclrtFreeHost(src1Host);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
-
-    return;
+    runTMul<float, 64, 64, 154.0f, 0.961038f>();
 }
 
-TEST_F(TMULTest, case_float_64x64_64x64_64x64)
+TEST(TMul, int32_64x64)
 {
-    test_tmul<float, 64, 64, 64, 64, 142.0f, 1.0f>();
+    runTMul<int32_t, 64, 64, 132.0f, 0.787878f>();
 }
-TEST_F(TMULTest, case_int32_64x64_64x64_64x64)
+
+TEST(TMul, half_16x256)
 {
-    test_tmul<int32_t, 64, 64, 64, 64, 142.0f, 1.0f>();
+    runTMul<half, 16, 256, 68.0f, 0.588235f>();
 }
-TEST_F(TMULTest, case_int16_64x64_64x64_64x64)
+
+TEST(TMul, int16_64x64)
 {
-    test_tmul<int16_t, 64, 64, 64, 64, 142.0f, 1.0f>();
-}
-TEST_F(TMULTest, case_half_16x256_16x256_16x256)
-{
-    test_tmul<aclFloat16, 16, 256, 16, 256, 78.0f, 1.0f>();
+    runTMul<int16_t, 64, 64, 134.0f, 0.791044f>();
 }
