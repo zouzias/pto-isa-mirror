@@ -94,6 +94,7 @@ This table tracks per-instruction backend availability:
 | [`TPARTMUL`]() | TODO | TODO | Yes | Yes | Yes |
 | [`TPRELU`](../docs/isa/TPRELU.md) | Yes | TODO | Yes | Yes | Yes |
 | [`TPREFETCH`]() | TODO | TODO | Yes | Yes | Yes |
+| [`TPREFETCH_L2`](../docs/isa/TPREFETCH_L2.md) | TODO | TODO | Yes | Yes | N/A |
 | [`TPRINT`]() | TODO | TODO | Yes | Yes | Yes |
 | [`TRECIP`](../docs/isa/TRECIP.md) | Yes | TODO | Yes | Yes | Yes |
 | [`TRELU`](../docs/isa/TRELU.md) | Yes | TODO | Yes | Yes | Yes |

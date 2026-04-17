@@ -32,6 +32,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/TScatter.hpp"
 #include "pto/comm/TBroadCast.hpp"
 #include "pto/comm/TReduce.hpp"
+
+// L2 Cache Prefetch (SDMA CMO)
+#include "pto/comm/async/TPrefetchL2.hpp"
 #endif
 
 #ifdef __CPU_SIM
@@ -49,6 +52,9 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/comm/TGather.hpp"
 #include "pto/cpu/comm/TBroadcast.hpp"
 #include "pto/cpu/comm/TScatter.hpp"
+
+// L2 Cache Prefetch (no-op on CPU sim)
+#include "pto/cpu/comm/TPrefetchL2.hpp"
 #endif
 
 #endif // PTO_COMM_INSTR_IMPL_HPP
