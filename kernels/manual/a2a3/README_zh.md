@@ -8,6 +8,7 @@
 - AllGather + GEMM 融合：[allgather_gemm/README.md](allgather_gemm/README.md)
 - Flash-Attention kernel：[../common/flash_atten/README.md](../common/flash_atten/README.md)
 - TOPK 性能 kernel：[topk/README.md](topk/README.md)
+- TGET 带宽对比 kernel：[tget_bandwidth/README_zh.md](tget_bandwidth/README_zh.md)
 
 ## 通用环境准备
 

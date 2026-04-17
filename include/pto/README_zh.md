@@ -23,7 +23,12 @@
 - `npu/`：NPU 侧实现（按 SoC 版本拆分）
   - `npu/a2a3/`：Ascend A2/A3 系列
   - `npu/a5/`：Ascend A5 系列
+- `comm/`：通信指令库
+  - `pto_comm_inst.hpp`：通信指令统一入口头文件
+  - `comm_types.hpp`：通信指令的核心类型定义
+  - `pto_comm_instr_impl.hpp`：通信指令的平台分发层
 
 ## 相关文档
 
 - 指令参考：`docs/isa/`
+- 通信指令参考：`docs/isa/comm/`
