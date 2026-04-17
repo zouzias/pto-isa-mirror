@@ -112,6 +112,7 @@ This table tracks per-instruction backend availability:
 | [`TPARTMIN`](../docs/isa/TPARTMIN.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TPARTMUL`](../docs/isa/TPARTMUL.md) | No | TODO | Yes | Yes | Yes | Yes |
 | [`TPREFETCH`](../docs/isa/TPREFETCH.md) | Yes | TODO | Yes | Yes | Yes | Yes |
+| [`TPREFETCH_L2`](../docs/isa/TPREFETCH_L2.md) | TODO | TODO | Yes | Yes | TODO | TODO |
 | [`TPRELU`](../docs/isa/TPRELU.md) | Yes | TODO | Yes | Yes | Yes | Yes |
 | [`TPRINT`](../docs/isa/TPRINT.md) | TODO | TODO | Yes | Yes | Yes | TODO |
 | [`TPUT`](../docs/isa/comm/TPUT.md) | Yes | TODO | Yes | Yes | Yes | TODO |
