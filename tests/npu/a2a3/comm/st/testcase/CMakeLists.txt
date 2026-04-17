@@ -100,6 +100,8 @@ tget
 # Point-to-Point Communication (Asynchronous)
 tput_async
 tget_async
+# L2 Cache Prefetch (Asynchronous)
+tprefetch_l2
 # Signal-Based Synchronization
 tnotify
 twait
