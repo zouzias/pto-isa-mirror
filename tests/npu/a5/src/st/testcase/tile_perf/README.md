@@ -1,121 +1,140 @@
-# Tile Performance Benchmark (tile_perf)
+# Tile Performance Benchmark
 
-Measure EPC (Elements Per Cycle) for PTO tile operations on A5 simulator.
-
-## Supported Operations
-
-| Type | Operations |
-|------|------------|
-| **Binary** | tadd, tsub, tmul, tdiv, tmax, tmin |
-| **Unary** | texp, tlog, tsqrt, tabs, tneg, trcp, trsqrt |
-| **Scalar** | tadds, tsubs, tmuls, tdivs, tmaxs, tmins |
+Benchmark suite for comparing TADD/TADDS performance between A5 and A2A3 architectures.
 
 ## Quick Start
 
 ```bash
-# 1. Edit test cases
-cd ~/pto-isa/tests/npu/a5/src/st/testcase/tile_perf
-vi input.csv
+# Run both A5 and A2A3 benchmarks
+python3 run_tile_bench.py --arch both
 
-# 2. Build and run
-cd ~/pto-isa
-python3 tests/script/run_st.py -r sim -v a5 -t tile_perf
+# Run A5 only
+python3 run_tile_bench.py --arch a5
 
-# 3. Run specific test
-source /usr/local/Ascend/cann/set_env.sh
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Ascend/cann-9.0.0-alpha.1/aarch64-linux/simulator/Ascend910_9599/lib:~/pto-isa/tests/npu/a5/src/st/build/lib
-cd ~/pto-isa/tests/npu/a5/src/st/build/bin
-./tile_perf --gtest_filter="TADDBenchTest.case_float_32x64"
+# Run A2A3 only  
+python3 run_tile_bench.py --arch a2a3
 ```
 
-## input.csv Format
+## Output Files
 
-```csv
-# op,dtype,tile_h,tile_w,valid_h,valid_w[,scalar]
-tadd,float32,32,64,32,64
-tadds,float32,32,64,32,64,3.14
-texp,float32,1,2048,1,2048
+| File | Description |
+|------|-------------|
+| `tile_perf_results.csv` | All benchmark results with raw data |
+| `tile_perf_comparison.csv` | Side-by-side A5 vs A2A3 comparison |
+
+## Command Line Options
+
+```
+python3 run_tile_bench.py [OPTIONS]
+
+Options:
+  --arch {a5,a2a3,both}   Architecture to benchmark (default: both)
+  --input PATH            Input CSV with test cases (default: input.csv)
+  --output PATH           Output CSV file (default: tile_perf_results.csv)
+  --comparison PATH       Comparison CSV (default: tile_perf_comparison.csv)
+  --cases OPS             Comma-separated ops to run (e.g., TADD,TADDS)
+  --shapes SHAPES         Comma-separated shapes (e.g., 32x64,1x2048)
+  --no-build              Skip build step (use existing binaries)
+  --work-dir PATH         Working directory for dumps (default: /tmp/tile_perf_bench)
 ```
 
-| Column | Description |
-|--------|-------------|
-| op | Operation name (tadd, tadds, texp, etc.) |
-| dtype | Data type: float32, float16, bfloat16, int32, int16, int8, uint8 |
-| tile_h | Tile height (rows) |
-| tile_w | Tile width (cols) |
-| valid_h | Valid rows (<= tile_h) |
-| valid_w | Valid cols (<= tile_w) |
-| scalar | Scalar value for *s ops (optional, default 1.0) |
-
-## Output Analysis
-
-### Key Metrics
-
-After running a test, extract metrics from dump files:
+## Examples
 
 ```bash
-# VF execution time (per iteration)
-grep "vf_real_execute_time" core0.veccore0.instr_log.dump
+# Run only TADD tests
+python3 run_tile_bench.py --cases TADD
 
-# ASU instruction breakdown
-grep "instr_name" core0.veccore0.rvec.ASU.dump | cut -d" " -f6 | sort | uniq -c | sort -rn
+# Run only 1x2048 shape
+python3 run_tile_bench.py --shapes 1x2048
 
-# EXU instruction breakdown  
-grep "instr_name" core0.veccore0.rvec.EXU.dump | cut -d" " -f6 | sort | uniq -c | sort -rn
+# Run specific combination
+python3 run_tile_bench.py --cases TADDS --shapes 32x64
+
+# Custom output file
+python3 run_tile_bench.py --output my_results.csv
+
+# Skip rebuild (faster iteration)
+python3 run_tile_bench.py --no-build
 ```
 
-### EPC Calculation
+## Input CSV Format
 
+`input.csv` defines test cases:
+
+```csv
+op,dtype,tile_h,tile_w,valid_h,valid_w[,scalar]
+TADD,float,32,64,32,64
+TADD,float,1,2048,1,2048
+TADDS,float,32,64,32,64,1.5
+TADDS,float,1,2048,1,2048,1.5
 ```
-EPC = valid_rows × valid_cols / vf_real_execute_time
+
+## Output CSV Format
+
+### Results CSV (`tile_perf_results.csv`)
+
+```csv
+arch,op,dtype,shape,elements,total_ticks,warm_cycles,epc,theory_epc,efficiency_pct,raw_latencies
+A5,TADD,float,1x2048,2048,12008,104.0,19.69,64.0,30.8,473;104;104;104;104
+A2A3,TADD,float,1x2048,2048,6919,53.0,38.64,64.0,60.4,53;53;53;53;53
 ```
 
-- Use **warm** VF cycles (iterations 3-10, skip first 2 for icache warmup)
-- 10 iterations per test, use `pipe_barrier(PIPE_ALL)` between iterations
+### Comparison CSV (`tile_perf_comparison.csv`)
 
-### Example Results (A5 Simulator)
+```csv
+op,dtype,shape,elements,a5_warm_cy,a5_epc,a2a3_warm_cy,a2a3_epc,speedup,notes
+TADD,float,32x64,2048,242.0,8.46,53.0,38.64,4.57x,A2A3 faster
+TADD,float,1x2048,2048,104.0,19.69,53.0,38.64,1.96x,
+TADDS,float,32x64,2048,242.0,8.46,53.0,38.64,4.57x,A2A3 faster
+TADDS,float,1x2048,2048,1646.0,1.24,53.0,38.64,31.13x,A2A3 faster
+```
 
-| Op | Shape | Elements | Warm VF | EPC | ASU/VL | Notes |
-|----|-------|----------|---------|-----|--------|-------|
-| TADD | 32×64 | 2048 | 243 cy | 8.4 | 2.0 | 2D path |
-| TADDS | 32×64 | 2048 | 242 cy | 8.5 | 4.0 | 2D path |
-| TADD | 1×2048 | 2048 | 104 cy | 19.7 | ~1 | 1D path |
-| TADDS | 1×2048 | 2048 | 1646 cy | 1.2 | 12+ | 1D path, ASU bound |
+## EPC Calculation
 
-### ASU Instruction Analysis
+**EPC (Elements Per Cycle)** measures compute throughput:
 
-**Healthy (TADD 2D):**
-- RV_SMOV: loop bookkeeping
-- RV_SNOP: pipeline sync
+- **A5**: Uses VF (Vector Fusion) `vf_real_execute_time` from instruction logs
+- **A2A3**: Uses VADD pop→retire latency from instruction logs
 
-**ASU Bound (TADDS 1D):**
-- RV_SZEROEXT: scalar type conversion
-- RV_SMUL: scalar format conversion
-- RV_SCMP/RV_SCBZI: loop control
-- Indicates scalar handling overhead per VL
+Formula: `EPC = elements / warm_cycles`
+
+Theory maximum: 64 EPC (64 lanes processing 1 element each per cycle)
+
+## UB Memory Layout (Bank Conflict Free)
+
+The kernel uses optimized UB addresses to avoid bank conflicts:
+
+```cpp
+// TADD: src0 and src1 256B apart, dst 64KB from sources
+TASSIGN(src0Tile, 0x0);
+TASSIGN(src1Tile, 0x100);     // 256B offset
+TASSIGN(dstTile, 0x10000);    // 64KB offset
+
+// TADDS: src and dst 64KB apart
+TASSIGN(srcTile, 0x0);
+TASSIGN(dstTile, 0x10000);
+```
+
+## Build Requirements
+
+- CANN 9.0.0-alpha.1 or later
+- Source `set_env.sh` before running
+- Simulator libraries for target SOC
+
+```bash
+source /usr/local/Ascend/cann/set_env.sh
+```
+
+## Architecture Differences
+
+| Metric | A5 | A2A3 |
+|--------|-----|------|
+| SOC | Ascend910_9599 | Ascend910B1 |
+| VF Fusion | Yes | No |
+| VADD Latency | Inside VF block | 53 cycles (pop→retire) |
+| Log Format | `vf_real_execute_time` | VADD Id matching |
 
 ## Known Issues
 
-1. **TADDS 1D path is slow** — scalar type conversion happens per-iteration instead of being hoisted
-2. **2D vs 1D:** 1D tiles have better EPC for TADD but worse for TADDS
-3. **First VF cold:** ~2-3x slower due to icache miss
-
-## File Structure
-
-```
-tile_perf/
-├── README.md           # This file
-├── CMakeLists.txt      # Build config
-├── input.csv           # Test case definitions
-├── main.cpp            # Test framework
-├── tile_perf_kernel.cpp # Kernel implementations
-├── gen_data.py         # Generate input data
-├── generate_code.py    # Auto-generate kernel from CSV
-└── run_bench.py        # Parse results to CSV
-```
-
-## Adding New Operations
-
-1. Add case to `input.csv`
-2. If op needs new kernel template, edit `tile_perf_kernel.cpp`
-3. Rebuild: `python3 tests/script/run_st.py -r sim -v a5 -t tile_perf`
+1. **A5 TADDS 1x2048**: VF scalar fusion issue causes 1.2 EPC (vs 38.6 on A2A3)
+2. **Symlink dumps**: When using symlinks, run tests in separate directories to avoid dump file overwrites
