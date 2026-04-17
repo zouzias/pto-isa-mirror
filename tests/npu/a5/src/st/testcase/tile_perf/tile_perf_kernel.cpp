@@ -127,97 +127,62 @@ void launchTADDS(void *out, void *src, float scalar, aclrtStream stream)
 // ===== Explicit template instantiations =====
 
 // TADD float - 16KB (4096 elements)
+// TADD explicit instantiations
 template void launchTADD<float, 1, 4096, 1, 4096>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 64, 64, 64, 64>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 128, 32, 128, 32>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 32, 128, 32, 128>(void*, void*, void*, aclrtStream);
-// TADD float - 32KB (8192 elements)
+template void launchTADD<float, 16, 256, 16, 256>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 8, 512, 8, 512>(void*, void*, void*, aclrtStream);
 template void launchTADD<float, 1, 8192, 1, 8192>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 64, 128, 64, 128>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 256, 32, 256, 32>(void*, void*, void*, aclrtStream);
 template void launchTADD<float, 32, 256, 32, 256>(void*, void*, void*, aclrtStream);
-// TADD float - 64KB (16384 elements)
+template void launchTADD<float, 16, 512, 16, 512>(void*, void*, void*, aclrtStream);
 template void launchTADD<float, 1, 16384, 1, 16384>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 128, 128, 128, 128>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 512, 32, 512, 32>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 64, 256, 64, 256>(void*, void*, void*, aclrtStream);
 template void launchTADD<float, 32, 512, 32, 512>(void*, void*, void*, aclrtStream);
-
-// TADD half - 16KB (8192 elements)
 template void launchTADD<aclFloat16, 1, 8192, 1, 8192>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 64, 128, 64, 128>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 256, 32, 256, 32>(void*, void*, void*, aclrtStream);
 template void launchTADD<aclFloat16, 32, 256, 32, 256>(void*, void*, void*, aclrtStream);
-// TADD half - 32KB (16384 elements)
+template void launchTADD<aclFloat16, 16, 512, 16, 512>(void*, void*, void*, aclrtStream);
 template void launchTADD<aclFloat16, 1, 16384, 1, 16384>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 128, 128, 128, 128>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 512, 32, 512, 32>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 64, 256, 64, 256>(void*, void*, void*, aclrtStream);
 template void launchTADD<aclFloat16, 32, 512, 32, 512>(void*, void*, void*, aclrtStream);
-// TADD half - 64KB (32768 elements)
 template void launchTADD<aclFloat16, 1, 32768, 1, 32768>(void*, void*, void*, aclrtStream);
 template void launchTADD<aclFloat16, 128, 256, 128, 256>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 1024, 32, 1024, 32>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 32, 1024, 32, 1024>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 64, 512, 64, 512>(void*, void*, void*, aclrtStream);
 
-// TEXP float - 16KB (4096 elements)
+// TEXP explicit instantiations
 template void launchTEXP<float, 1, 4096, 1, 4096>(void*, void*, aclrtStream);
-template void launchTEXP<float, 64, 64, 64, 64>(void*, void*, aclrtStream);
-template void launchTEXP<float, 128, 32, 128, 32>(void*, void*, aclrtStream);
-template void launchTEXP<float, 32, 128, 32, 128>(void*, void*, aclrtStream);
-// TEXP float - 32KB (8192 elements)
+template void launchTEXP<float, 16, 256, 16, 256>(void*, void*, aclrtStream);
+template void launchTEXP<float, 8, 512, 8, 512>(void*, void*, aclrtStream);
 template void launchTEXP<float, 1, 8192, 1, 8192>(void*, void*, aclrtStream);
-template void launchTEXP<float, 64, 128, 64, 128>(void*, void*, aclrtStream);
-template void launchTEXP<float, 256, 32, 256, 32>(void*, void*, aclrtStream);
 template void launchTEXP<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
-// TEXP float - 64KB (16384 elements)
+template void launchTEXP<float, 16, 512, 16, 512>(void*, void*, aclrtStream);
 template void launchTEXP<float, 1, 16384, 1, 16384>(void*, void*, aclrtStream);
-template void launchTEXP<float, 128, 128, 128, 128>(void*, void*, aclrtStream);
-template void launchTEXP<float, 512, 32, 512, 32>(void*, void*, aclrtStream);
+template void launchTEXP<float, 64, 256, 64, 256>(void*, void*, aclrtStream);
 template void launchTEXP<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
-
-// TEXP half - 16KB (8192 elements)
 template void launchTEXP<aclFloat16, 1, 8192, 1, 8192>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 64, 128, 64, 128>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 256, 32, 256, 32>(void*, void*, aclrtStream);
 template void launchTEXP<aclFloat16, 32, 256, 32, 256>(void*, void*, aclrtStream);
-// TEXP half - 32KB (16384 elements)
+template void launchTEXP<aclFloat16, 16, 512, 16, 512>(void*, void*, aclrtStream);
 template void launchTEXP<aclFloat16, 1, 16384, 1, 16384>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 128, 128, 128, 128>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 512, 32, 512, 32>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 64, 256, 64, 256>(void*, void*, aclrtStream);
 template void launchTEXP<aclFloat16, 32, 512, 32, 512>(void*, void*, aclrtStream);
-// TEXP half - 64KB (32768 elements)
 template void launchTEXP<aclFloat16, 1, 32768, 1, 32768>(void*, void*, aclrtStream);
 template void launchTEXP<aclFloat16, 128, 256, 128, 256>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 1024, 32, 1024, 32>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 32, 1024, 32, 1024>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 64, 512, 64, 512>(void*, void*, aclrtStream);
 
-// TADDS float - 16KB (4096 elements)
+// TADDS explicit instantiations
 template void launchTADDS<float, 1, 4096, 1, 4096>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 64, 64, 64, 64>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 128, 32, 128, 32>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 32, 128, 32, 128>(void*, void*, float, aclrtStream);
-// TADDS float - 32KB (8192 elements)
+template void launchTADDS<float, 16, 256, 16, 256>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 8, 512, 8, 512>(void*, void*, float, aclrtStream);
 template void launchTADDS<float, 1, 8192, 1, 8192>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 64, 128, 64, 128>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 256, 32, 256, 32>(void*, void*, float, aclrtStream);
 template void launchTADDS<float, 32, 256, 32, 256>(void*, void*, float, aclrtStream);
-// TADDS float - 64KB (16384 elements)
+template void launchTADDS<float, 16, 512, 16, 512>(void*, void*, float, aclrtStream);
 template void launchTADDS<float, 1, 16384, 1, 16384>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 128, 128, 128, 128>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 512, 32, 512, 32>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 64, 256, 64, 256>(void*, void*, float, aclrtStream);
 template void launchTADDS<float, 32, 512, 32, 512>(void*, void*, float, aclrtStream);
-
-// TADDS half - 16KB (8192 elements)
 template void launchTADDS<aclFloat16, 1, 8192, 1, 8192>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 64, 128, 64, 128>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 256, 32, 256, 32>(void*, void*, float, aclrtStream);
 template void launchTADDS<aclFloat16, 32, 256, 32, 256>(void*, void*, float, aclrtStream);
-// TADDS half - 32KB (16384 elements)
+template void launchTADDS<aclFloat16, 16, 512, 16, 512>(void*, void*, float, aclrtStream);
 template void launchTADDS<aclFloat16, 1, 16384, 1, 16384>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 128, 128, 128, 128>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 512, 32, 512, 32>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 64, 256, 64, 256>(void*, void*, float, aclrtStream);
 template void launchTADDS<aclFloat16, 32, 512, 32, 512>(void*, void*, float, aclrtStream);
-// TADDS half - 64KB (32768 elements)
 template void launchTADDS<aclFloat16, 1, 32768, 1, 32768>(void*, void*, float, aclrtStream);
 template void launchTADDS<aclFloat16, 128, 256, 128, 256>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 1024, 32, 1024, 32>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 32, 1024, 32, 1024>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 64, 512, 64, 512>(void*, void*, float, aclrtStream);

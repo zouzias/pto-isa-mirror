@@ -1,140 +1,87 @@
-# Tile Performance Benchmark
+# tile_perf - A5 Tile Performance Benchmarks
 
-Benchmark suite for comparing TADD/TADDS performance between A5 and A2A3 architectures.
+## Overview
 
-## Quick Start
+Performance benchmarks for tile operations (TADD, TADDS, TEXP) on A5 simulator.
 
-```bash
-# Run both A5 and A2A3 benchmarks
-python3 run_tile_bench.py --arch both
-
-# Run A5 only
-python3 run_tile_bench.py --arch a5
-
-# Run A2A3 only  
-python3 run_tile_bench.py --arch a2a3
-```
-
-## Output Files
-
-| File | Description |
-|------|-------------|
-| `tile_perf_results.csv` | All benchmark results with raw data |
-| `tile_perf_comparison.csv` | Side-by-side A5 vs A2A3 comparison |
-
-## Command Line Options
-
-```
-python3 run_tile_bench.py [OPTIONS]
-
-Options:
-  --arch {a5,a2a3,both}   Architecture to benchmark (default: both)
-  --input PATH            Input CSV with test cases (default: input.csv)
-  --output PATH           Output CSV file (default: tile_perf_results.csv)
-  --comparison PATH       Comparison CSV (default: tile_perf_comparison.csv)
-  --cases OPS             Comma-separated ops to run (e.g., TADD,TADDS)
-  --shapes SHAPES         Comma-separated shapes (e.g., 32x64,1x2048)
-  --no-build              Skip build step (use existing binaries)
-  --work-dir PATH         Working directory for dumps (default: /tmp/tile_perf_bench)
-```
-
-## Examples
+## Running Tests
 
 ```bash
-# Run only TADD tests
-python3 run_tile_bench.py --cases TADD
-
-# Run only 1x2048 shape
-python3 run_tile_bench.py --shapes 1x2048
-
-# Run specific combination
-python3 run_tile_bench.py --cases TADDS --shapes 32x64
-
-# Custom output file
-python3 run_tile_bench.py --output my_results.csv
-
-# Skip rebuild (faster iteration)
-python3 run_tile_bench.py --no-build
+cd ~/pto-isa/tests/npu/a5/src/st/build
+make tile_perf -j8
+./bin/tile_perf                          # Run all
+./bin/tile_perf --gtest_filter="*TADD*"  # Filter
 ```
 
-## Input CSV Format
+## EPC Extraction
 
-`input.csv` defines test cases:
+Uses `vf_real_execute_time` from VF retire log for accurate throughput measurement.
 
-```csv
-op,dtype,tile_h,tile_w,valid_h,valid_w[,scalar]
-TADD,float,32,64,32,64
-TADD,float,1,2048,1,2048
-TADDS,float,32,64,32,64,1.5
-TADDS,float,1,2048,1,2048,1.5
+### Source Files
+
+| File | Purpose |
+|------|---------|
+| `core0.veccore0.instr_log.dump` | VF retire cycles + vf_real_execute_time |
+| `core0.veccore0.instr_popped_log.dump` | VF dispatch (pop) cycles |
+
+### Log Format
+
+Retire log:
+```
+[00001700] (PC: 0x13b3a0d4) PUSHQ : ... VF ... vf_real_execute_time: 168
 ```
 
-## Output CSV Format
+### Calculation
 
-### Results CSV (`tile_perf_results.csv`)
-
-```csv
-arch,op,dtype,shape,elements,total_ticks,warm_cycles,epc,theory_epc,efficiency_pct,raw_latencies
-A5,TADD,float,1x2048,2048,12008,104.0,19.69,64.0,30.8,473;104;104;104;104
-A2A3,TADD,float,1x2048,2048,6919,53.0,38.64,64.0,60.4,53;53;53;53;53
+```python
+# Skip first cold VF (icache miss), average warm VFs
+warm_times = [168, 168, 168, ...]  # vf_real_execute_time for VF 2+
+avg_warm = sum(warm_times) / len(warm_times)
+vf_epc = elements / avg_warm
+# Example: 4096 / 168 = 24.38 EPC
 ```
 
-### Comparison CSV (`tile_perf_comparison.csv`)
+### Key Fields
 
-```csv
-op,dtype,shape,elements,a5_warm_cy,a5_epc,a2a3_warm_cy,a2a3_epc,speedup,notes
-TADD,float,32x64,2048,242.0,8.46,53.0,38.64,4.57x,A2A3 faster
-TADD,float,1x2048,2048,104.0,19.69,53.0,38.64,1.96x,
-TADDS,float,32x64,2048,242.0,8.46,53.0,38.64,4.57x,A2A3 faster
-TADDS,float,1x2048,2048,1646.0,1.24,53.0,38.64,31.13x,A2A3 faster
-```
+| Field | Description |
+|-------|-------------|
+| vf_execute_time | Total pop to retire (includes icache prefetch) |
+| vf_real_execute_time | Pure rvec compute time (USE THIS) |
 
-## EPC Calculation
+## Regression System
 
-**EPC (Elements Per Cycle)** measures compute throughput:
-
-- **A5**: Uses VF (Vector Fusion) `vf_real_execute_time` from instruction logs
-- **A2A3**: Uses VADD pop→retire latency from instruction logs
-
-Formula: `EPC = elements / warm_cycles`
-
-Theory maximum: 64 EPC (64 lanes processing 1 element each per cycle)
-
-## UB Memory Layout (Bank Conflict Free)
-
-The kernel uses optimized UB addresses to avoid bank conflicts:
-
-```cpp
-// TADD: src0 and src1 256B apart, dst 64KB from sources
-TASSIGN(src0Tile, 0x0);
-TASSIGN(src1Tile, 0x100);     // 256B offset
-TASSIGN(dstTile, 0x10000);    // 64KB offset
-
-// TADDS: src and dst 64KB apart
-TASSIGN(srcTile, 0x0);
-TASSIGN(dstTile, 0x10000);
-```
-
-## Build Requirements
-
-- CANN 9.0.0-alpha.1 or later
-- Source `set_env.sh` before running
-- Simulator libraries for target SOC
+### Running
 
 ```bash
-source /usr/local/Ascend/cann/set_env.sh
+cd tile_perf
+python3 worker.py --arch a5 --tests "*" --output /tmp/pto_regress
 ```
 
-## Architecture Differences
+### Results
 
-| Metric | A5 | A2A3 |
-|--------|-----|------|
-| SOC | Ascend910_9599 | Ascend910B1 |
-| VF Fusion | Yes | No |
-| VADD Latency | Inside VF block | 53 cycles (pop→retire) |
-| Log Format | `vf_real_execute_time` | VADD Id matching |
+```bash
+python3 -c "
+import sqlite3
+conn = sqlite3.connect('results.db')
+for r in conn.execute('SELECT test_name, vf_epc, vf_cycles FROM results ORDER BY vf_epc DESC'):
+    print(f'{r[0]:30} | VF EPC: {r[1]:6.2f} | VF cy: {r[2]:.0f}')
+"
+```
 
-## Known Issues
+## Test Matrix
 
-1. **A5 TADDS 1x2048**: VF scalar fusion issue causes 1.2 EPC (vs 38.6 on A2A3)
-2. **Symlink dumps**: When using symlinks, run tests in separate directories to avoid dump file overwrites
+| Op | Dtype | Sizes | Shapes |
+|----|-------|-------|--------|
+| TADD | float/half | 16KB, 32KB, 64KB | 1D, Hx256, Hx512 |
+| TEXP | float/half | 16KB, 32KB, 64KB | 1D, Hx256, Hx512 |
+| TADDS | float/half | 16KB, 32KB, 64KB | 1D, Hx256, Hx512 |
+
+Total: 54 tests (3 ops x 2 dtypes x 3 sizes x 3 shapes)
+
+## Files
+
+- `main.cpp` - GTest harness with test macros
+- `tile_perf_kernel.cpp` - Kernel implementations
+- `worker.py` - Regression runner with EPC extraction
+- `schema.sql` - SQLite schema for results
+- `report.py` - Report generator
