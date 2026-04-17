@@ -1,7 +1,7 @@
 /**
  * Tile Performance Benchmark
  * Supports: TADD, TADDS, TEXP
- * Types: float (fp32), half (fp16)
+ * Types: float (fp32), aclFloat16 (fp16)
  * 
  * UB Address Layout (A2A3 bank conflict free):
  *   Binary ops: src0=0x0, src1=0x100 (256B), dst=0x10000 (64KB)
@@ -15,7 +15,7 @@ using namespace pto;
 
 // ========== TADD ==========
 template <typename T, int tileH, int tileW, int vRows, int vCols>
-PTO_INTERNAL void runTAdd(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
+__global__ AICORE void runTAdd(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
@@ -44,7 +44,7 @@ PTO_INTERNAL void runTAdd(__gm__ T *out, __gm__ T *src0, __gm__ T *src1)
 
 // ========== TADDS ==========
 template <typename T, int tileH, int tileW, int vRows, int vCols>
-PTO_INTERNAL void runTAddS(__gm__ T *out, __gm__ T *src, T scalar)
+__global__ AICORE void runTAddS(__gm__ T *out, __gm__ T *src, T scalar)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
@@ -69,7 +69,7 @@ PTO_INTERNAL void runTAddS(__gm__ T *out, __gm__ T *src, T scalar)
 
 // ========== TEXP ==========
 template <typename T, int tileH, int tileW, int vRows, int vCols>
-PTO_INTERNAL void runTExp(__gm__ T *out, __gm__ T *src)
+__global__ AICORE void runTExp(__gm__ T *out, __gm__ T *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
@@ -92,105 +92,132 @@ PTO_INTERNAL void runTExp(__gm__ T *out, __gm__ T *src)
     }
 }
 
-// ===== Internal kernel entry points =====
+// ===== Template launchers with aclFloat16 -> half conversion =====
 
-// TADD fp32
-extern "C" __global__ AICORE void kernel_TADD_float_1x4096(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 1, 4096, 1, 4096>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_64x64(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 64, 64, 64, 64>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_128x32(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 128, 32, 128, 32>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_32x128(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 32, 128, 32, 128>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_1x8192(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 1, 8192, 1, 8192>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_64x128(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 64, 128, 64, 128>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_256x32(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 256, 32, 256, 32>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_32x256(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 32, 256, 32, 256>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_1x16384(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 1, 16384, 1, 16384>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_128x128(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 128, 128, 128, 128>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_512x32(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 512, 32, 512, 32>(out, src0, src1); }
-extern "C" __global__ AICORE void kernel_TADD_float_32x512(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 32, 512, 32, 512>(out, src0, src1); }
+// TADD launcher
+template <typename T, int tileH, int tileW, int vRows, int vCols>
+void launchTADD(void *out, void *src0, void *src1, aclrtStream stream)
+{
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTAdd<half, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((half*)out, (half*)src0, (half*)src1);
+    else
+        runTAdd<T, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((T*)out, (T*)src0, (T*)src1);
+}
 
-// TADD fp16
+// TEXP launcher
+template <typename T, int tileH, int tileW, int vRows, int vCols>
+void launchTEXP(void *out, void *src, aclrtStream stream)
+{
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTExp<half, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((half*)out, (half*)src);
+    else
+        runTExp<T, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((T*)out, (T*)src);
+}
 
-// TEXP fp32
-extern "C" __global__ AICORE void kernel_TEXP_float_1x4096(__gm__ float *out, __gm__ float *src) { runTExp<float, 1, 4096, 1, 4096>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_64x64(__gm__ float *out, __gm__ float *src) { runTExp<float, 64, 64, 64, 64>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_128x32(__gm__ float *out, __gm__ float *src) { runTExp<float, 128, 32, 128, 32>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_32x128(__gm__ float *out, __gm__ float *src) { runTExp<float, 32, 128, 32, 128>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_1x8192(__gm__ float *out, __gm__ float *src) { runTExp<float, 1, 8192, 1, 8192>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_64x128(__gm__ float *out, __gm__ float *src) { runTExp<float, 64, 128, 64, 128>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_256x32(__gm__ float *out, __gm__ float *src) { runTExp<float, 256, 32, 256, 32>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_32x256(__gm__ float *out, __gm__ float *src) { runTExp<float, 32, 256, 32, 256>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_1x16384(__gm__ float *out, __gm__ float *src) { runTExp<float, 1, 16384, 1, 16384>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_128x128(__gm__ float *out, __gm__ float *src) { runTExp<float, 128, 128, 128, 128>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_512x32(__gm__ float *out, __gm__ float *src) { runTExp<float, 512, 32, 512, 32>(out, src); }
-extern "C" __global__ AICORE void kernel_TEXP_float_32x512(__gm__ float *out, __gm__ float *src) { runTExp<float, 32, 512, 32, 512>(out, src); }
+// TADDS launcher - scalar passed as float, kernel casts internally
+template <typename T, int tileH, int tileW, int vRows, int vCols>
+void launchTADDS(void *out, void *src, float scalar, aclrtStream stream)
+{
+    if constexpr (std::is_same_v<T, aclFloat16>)
+        runTAddS<half, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((half*)out, (half*)src, (half)scalar);
+    else
+        runTAddS<T, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((T*)out, (T*)src, (T)scalar);
+}
 
-// TEXP fp16
+// ===== Explicit template instantiations =====
 
-// TADDS fp32
-extern "C" __global__ AICORE void kernel_TADDS_float_1x4096(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 1, 4096, 1, 4096>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_64x64(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 64, 64, 64, 64>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_128x32(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 128, 32, 128, 32>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_32x128(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 32, 128, 32, 128>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_1x8192(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 1, 8192, 1, 8192>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_64x128(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 64, 128, 64, 128>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_256x32(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 256, 32, 256, 32>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_32x256(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 32, 256, 32, 256>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_1x16384(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 1, 16384, 1, 16384>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_128x128(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 128, 128, 128, 128>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_512x32(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 512, 32, 512, 32>(out, src, scalar); }
-extern "C" __global__ AICORE void kernel_TADDS_float_32x512(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 32, 512, 32, 512>(out, src, scalar); }
+// TADD float - 16KB (4096 elements)
+template void launchTADD<float, 1, 4096, 1, 4096>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 64, 64, 64, 64>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 128, 32, 128, 32>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 32, 128, 32, 128>(void*, void*, void*, aclrtStream);
+// TADD float - 32KB (8192 elements)
+template void launchTADD<float, 1, 8192, 1, 8192>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 64, 128, 64, 128>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 256, 32, 256, 32>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 32, 256, 32, 256>(void*, void*, void*, aclrtStream);
+// TADD float - 64KB (16384 elements)
+template void launchTADD<float, 1, 16384, 1, 16384>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 128, 128, 128, 128>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 512, 32, 512, 32>(void*, void*, void*, aclrtStream);
+template void launchTADD<float, 32, 512, 32, 512>(void*, void*, void*, aclrtStream);
 
-// TADDS fp16
+// TADD half - 16KB (8192 elements)
+template void launchTADD<aclFloat16, 1, 8192, 1, 8192>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 64, 128, 64, 128>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 256, 32, 256, 32>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 32, 256, 32, 256>(void*, void*, void*, aclrtStream);
+// TADD half - 32KB (16384 elements)
+template void launchTADD<aclFloat16, 1, 16384, 1, 16384>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 128, 128, 128, 128>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 512, 32, 512, 32>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 32, 512, 32, 512>(void*, void*, void*, aclrtStream);
+// TADD half - 64KB (32768 elements)
+template void launchTADD<aclFloat16, 1, 32768, 1, 32768>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 128, 256, 128, 256>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 1024, 32, 1024, 32>(void*, void*, void*, aclrtStream);
+template void launchTADD<aclFloat16, 32, 1024, 32, 1024>(void*, void*, void*, aclrtStream);
 
-// ===== Template launcher functions (called from host) =====
+// TEXP float - 16KB (4096 elements)
+template void launchTEXP<float, 1, 4096, 1, 4096>(void*, void*, aclrtStream);
+template void launchTEXP<float, 64, 64, 64, 64>(void*, void*, aclrtStream);
+template void launchTEXP<float, 128, 32, 128, 32>(void*, void*, aclrtStream);
+template void launchTEXP<float, 32, 128, 32, 128>(void*, void*, aclrtStream);
+// TEXP float - 32KB (8192 elements)
+template void launchTEXP<float, 1, 8192, 1, 8192>(void*, void*, aclrtStream);
+template void launchTEXP<float, 64, 128, 64, 128>(void*, void*, aclrtStream);
+template void launchTEXP<float, 256, 32, 256, 32>(void*, void*, aclrtStream);
+template void launchTEXP<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
+// TEXP float - 64KB (16384 elements)
+template void launchTEXP<float, 1, 16384, 1, 16384>(void*, void*, aclrtStream);
+template void launchTEXP<float, 128, 128, 128, 128>(void*, void*, aclrtStream);
+template void launchTEXP<float, 512, 32, 512, 32>(void*, void*, aclrtStream);
+template void launchTEXP<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
 
-// TADD float launchers
-template <int caseId> void launchTADD_float(void *out, void *src0, void *src1, aclrtStream stream);
-template<> void launchTADD_float<1>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_1x4096<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<2>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_64x64<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<3>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_128x32<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<4>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_32x128<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<5>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_1x8192<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<6>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_64x128<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<7>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_256x32<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<8>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_32x256<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<9>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_1x16384<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<10>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_128x128<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<11>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_512x32<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
-template<> void launchTADD_float<12>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_32x512<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+// TEXP half - 16KB (8192 elements)
+template void launchTEXP<aclFloat16, 1, 8192, 1, 8192>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 64, 128, 64, 128>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 256, 32, 256, 32>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 32, 256, 32, 256>(void*, void*, aclrtStream);
+// TEXP half - 32KB (16384 elements)
+template void launchTEXP<aclFloat16, 1, 16384, 1, 16384>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 128, 128, 128, 128>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 512, 32, 512, 32>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 32, 512, 32, 512>(void*, void*, aclrtStream);
+// TEXP half - 64KB (32768 elements)
+template void launchTEXP<aclFloat16, 1, 32768, 1, 32768>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 128, 256, 128, 256>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 1024, 32, 1024, 32>(void*, void*, aclrtStream);
+template void launchTEXP<aclFloat16, 32, 1024, 32, 1024>(void*, void*, aclrtStream);
 
-// TADD half launchers
+// TADDS float - 16KB (4096 elements)
+template void launchTADDS<float, 1, 4096, 1, 4096>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 64, 64, 64, 64>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 128, 32, 128, 32>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 32, 128, 32, 128>(void*, void*, float, aclrtStream);
+// TADDS float - 32KB (8192 elements)
+template void launchTADDS<float, 1, 8192, 1, 8192>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 64, 128, 64, 128>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 256, 32, 256, 32>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 32, 256, 32, 256>(void*, void*, float, aclrtStream);
+// TADDS float - 64KB (16384 elements)
+template void launchTADDS<float, 1, 16384, 1, 16384>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 128, 128, 128, 128>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 512, 32, 512, 32>(void*, void*, float, aclrtStream);
+template void launchTADDS<float, 32, 512, 32, 512>(void*, void*, float, aclrtStream);
 
-// TEXP float launchers
-template <int caseId> void launchTEXP_float(void *out, void *src, aclrtStream stream);
-template<> void launchTEXP_float<1>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_1x4096<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<2>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_64x64<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<3>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_128x32<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<4>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_32x128<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<5>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_1x8192<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<6>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_64x128<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<7>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_256x32<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<8>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_32x256<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<9>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_1x16384<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<10>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_128x128<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<11>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_512x32<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-template<> void launchTEXP_float<12>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_32x512<<<1, nullptr, stream>>>((float*)out, (float*)src); }
-
-// TEXP half launchers
-
-// TADDS float launchers
-template <int caseId> void launchTADDS_float(void *out, void *src, float scalar, aclrtStream stream);
-template<> void launchTADDS_float<1>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_1x4096<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<2>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_64x64<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<3>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_128x32<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<4>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_32x128<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<5>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_1x8192<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<6>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_64x128<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<7>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_256x32<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<8>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_32x256<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<9>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_1x16384<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<10>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_128x128<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<11>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_512x32<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-template<> void launchTADDS_float<12>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_32x512<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
-
-// TADDS half launchers
+// TADDS half - 16KB (8192 elements)
+template void launchTADDS<aclFloat16, 1, 8192, 1, 8192>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 64, 128, 64, 128>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 256, 32, 256, 32>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 32, 256, 32, 256>(void*, void*, float, aclrtStream);
+// TADDS half - 32KB (16384 elements)
+template void launchTADDS<aclFloat16, 1, 16384, 1, 16384>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 128, 128, 128, 128>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 512, 32, 512, 32>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 32, 512, 32, 512>(void*, void*, float, aclrtStream);
+// TADDS half - 64KB (32768 elements)
+template void launchTADDS<aclFloat16, 1, 32768, 1, 32768>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 128, 256, 128, 256>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 1024, 32, 1024, 32>(void*, void*, float, aclrtStream);
+template void launchTADDS<aclFloat16, 32, 1024, 32, 1024>(void*, void*, float, aclrtStream);
