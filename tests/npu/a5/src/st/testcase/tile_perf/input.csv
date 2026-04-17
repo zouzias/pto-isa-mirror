@@ -1,7 +1,143 @@
-# op,dtype,tile_h,tile_w,valid_h,valid_w,scalar
-# 2D comparison: 32x64 fp32 (2048 elements) - matches existing ST size
-tadd,float32,32,64,32,64
-tadds,float32,32,64,32,64,3.14
-# 1D comparison: 1x2048 fp32 (same element count, different shape)
-tadd,float32,1,2048,1,2048
-tadds,float32,1,2048,1,2048,3.14
+# Tile Performance Benchmark - input.csv
+# Format: op,dtype,tile_h,tile_w,valid_h,valid_w[,scalar]
+#
+# Tile sizes: 16KB, 32KB, 64KB
+# Data types: float (fp32), half (fp16)
+# Shapes: 1D + 3 aspect ratios (square, wide, tall)
+#
+# Element counts:
+#   16KB: fp32=4096,  fp16=8192
+#   32KB: fp32=8192,  fp16=16384
+#   64KB: fp32=16384, fp16=32768
+
+# ============================================================
+# TADD - fp32
+# ============================================================
+
+# 16KB fp32 (4096 elements)
+TADD,float,1,4096,1,4096
+TADD,float,64,64,64,64
+TADD,float,128,32,128,32
+TADD,float,32,128,32,128
+
+# 32KB fp32 (8192 elements)
+TADD,float,1,8192,1,8192
+TADD,float,64,128,64,128
+TADD,float,256,32,256,32
+TADD,float,32,256,32,256
+
+# 64KB fp32 (16384 elements)
+TADD,float,1,16384,1,16384
+TADD,float,128,128,128,128
+TADD,float,512,32,512,32
+TADD,float,32,512,32,512
+
+# ============================================================
+# TADD - fp16
+# ============================================================
+
+# 16KB fp16 (8192 elements)
+TADD,half,1,8192,1,8192
+TADD,half,64,128,64,128
+TADD,half,256,32,256,32
+TADD,half,32,256,32,256
+
+# 32KB fp16 (16384 elements)
+TADD,half,1,16384,1,16384
+TADD,half,128,128,128,128
+TADD,half,512,32,512,32
+TADD,half,32,512,32,512
+
+# 64KB fp16 (32768 elements)
+TADD,half,1,32768,1,32768
+TADD,half,128,256,128,256
+TADD,half,1024,32,1024,32
+TADD,half,32,1024,32,1024
+
+# ============================================================
+# TEXP - fp32
+# ============================================================
+
+# 16KB fp32 (4096 elements)
+TEXP,float,1,4096,1,4096
+TEXP,float,64,64,64,64
+TEXP,float,128,32,128,32
+TEXP,float,32,128,32,128
+
+# 32KB fp32 (8192 elements)
+TEXP,float,1,8192,1,8192
+TEXP,float,64,128,64,128
+TEXP,float,256,32,256,32
+TEXP,float,32,256,32,256
+
+# 64KB fp32 (16384 elements)
+TEXP,float,1,16384,1,16384
+TEXP,float,128,128,128,128
+TEXP,float,512,32,512,32
+TEXP,float,32,512,32,512
+
+# ============================================================
+# TEXP - fp16
+# ============================================================
+
+# 16KB fp16 (8192 elements)
+TEXP,half,1,8192,1,8192
+TEXP,half,64,128,64,128
+TEXP,half,256,32,256,32
+TEXP,half,32,256,32,256
+
+# 32KB fp16 (16384 elements)
+TEXP,half,1,16384,1,16384
+TEXP,half,128,128,128,128
+TEXP,half,512,32,512,32
+TEXP,half,32,512,32,512
+
+# 64KB fp16 (32768 elements)
+TEXP,half,1,32768,1,32768
+TEXP,half,128,256,128,256
+TEXP,half,1024,32,1024,32
+TEXP,half,32,1024,32,1024
+
+# ============================================================
+# TADDS - fp32
+# ============================================================
+
+# 16KB fp32 (4096 elements)
+TADDS,float,1,4096,1,4096,1.5
+TADDS,float,64,64,64,64,1.5
+TADDS,float,128,32,128,32,1.5
+TADDS,float,32,128,32,128,1.5
+
+# 32KB fp32 (8192 elements)
+TADDS,float,1,8192,1,8192,1.5
+TADDS,float,64,128,64,128,1.5
+TADDS,float,256,32,256,32,1.5
+TADDS,float,32,256,32,256,1.5
+
+# 64KB fp32 (16384 elements)
+TADDS,float,1,16384,1,16384,1.5
+TADDS,float,128,128,128,128,1.5
+TADDS,float,512,32,512,32,1.5
+TADDS,float,32,512,32,512,1.5
+
+# ============================================================
+# TADDS - fp16
+# ============================================================
+
+# 16KB fp16 (8192 elements)
+TADDS,half,1,8192,1,8192,1.5
+TADDS,half,64,128,64,128,1.5
+TADDS,half,256,32,256,32,1.5
+TADDS,half,32,256,32,256,1.5
+
+# 32KB fp16 (16384 elements)
+TADDS,half,1,16384,1,16384,1.5
+TADDS,half,128,128,128,128,1.5
+TADDS,half,512,32,512,32,1.5
+TADDS,half,32,512,32,512,1.5
+
+# 64KB fp16 (32768 elements)
+TADDS,half,1,32768,1,32768,1.5
+TADDS,half,128,256,128,256,1.5
+TADDS,half,1024,32,1024,32,1.5
+TADDS,half,32,1024,32,1024,1.5
