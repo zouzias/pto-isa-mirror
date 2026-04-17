@@ -1,0 +1,7 @@
+[info] [00000000]: write spr: name = COREID, val = 0x0
+[debug] [00001064]: read spr: name = SMMU_STREAMID, val = 0x0
+[debug] [00001064]: read spr: name = SMMU_SUBSTREAMID, val = 0x0
+[debug] [00005858]: read spr: name = SMMU_STREAMID, val = 0x0
+[debug] [00005858]: read spr: name = SMMU_SUBSTREAMID, val = 0x0
+[debug] [00006009]: read spr: name = SMMU_STREAMID, val = 0x0
+[debug] [00006009]: read spr: name = SMMU_SUBSTREAMID, val = 0x0

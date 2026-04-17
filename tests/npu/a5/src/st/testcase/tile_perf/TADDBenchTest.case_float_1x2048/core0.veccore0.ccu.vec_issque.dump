@@ -1,0 +1,31 @@
+[info] 1172 [Push Instr] name=VF pc=0x13B3441C id=55
+[info] 1172 [pop Instr] name=VF pc=0x13B3441C id=55. queue.size=0
+[info] 1647 [RETIRE INSTR] instr.name=VF                   instr.pc=0x13B3441C instr.id=55
+[info] 2147 [Push Instr] name=VF pc=0x13B3441C id=76
+[info] 2147 [pop Instr] name=VF pc=0x13B3441C id=76. queue.size=0
+[info] 2253 [RETIRE INSTR] instr.name=VF                   instr.pc=0x13B3441C instr.id=76
+[info] 3141 [Push Instr] name=VF pc=0x13B3441C id=97
+[info] 3141 [pop Instr] name=VF pc=0x13B3441C id=97. queue.size=0
+[info] 3247 [RETIRE INSTR] instr.name=VF                   instr.pc=0x13B3441C instr.id=97
+[info] 4197 [Push Instr] name=VF pc=0x13B3441C id=315
+[info] 4197 [pop Instr] name=VF pc=0x13B3441C id=315. queue.size=0
+[info] 4303 [RETIRE INSTR] instr.name=VF                   instr.pc=0x13B3441C instr.id=315
+[info] 5223 [Push Instr] name=VF pc=0x13B3441C id=533
+[info] 5223 [pop Instr] name=VF pc=0x13B3441C id=533. queue.size=0
+[info] 5329 [RETIRE INSTR] instr.name=VF                   instr.pc=0x13B3441C instr.id=533
+[info] 6199 [Push Instr] name=VF pc=0x13B3441C id=751
+[info] 6199 [pop Instr] name=VF pc=0x13B3441C id=751. queue.size=0
+[info] 6305 [RETIRE INSTR] instr.name=VF                   instr.pc=0x13B3441C instr.id=751
+[info] 7201 [Push Instr] name=VF pc=0x13B3441C id=969
+[info] 7201 [pop Instr] name=VF pc=0x13B3441C id=969. queue.size=0
+[info] 7307 [RETIRE INSTR] instr.name=VF                   instr.pc=0x13B3441C instr.id=969
+[info] 8241 [Push Instr] name=VF pc=0x13B3441C id=1187
+[info] 8241 [pop Instr] name=VF pc=0x13B3441C id=1187. queue.size=0
+[info] 8347 [RETIRE INSTR] instr.name=VF                   instr.pc=0x13B3441C instr.id=1187
+[info] 9182 [Push Instr] name=VF pc=0x13B3441C id=1405
+[info] 9182 [pop Instr] name=VF pc=0x13B3441C id=1405. queue.size=0
+[info] 9288 [RETIRE INSTR] instr.name=VF                   instr.pc=0x13B3441C instr.id=1405
+[info] 10261 [Push Instr] name=VF pc=0x13B3441C id=1623
+[info] 10261 [pop Instr] name=VF pc=0x13B3441C id=1623. queue.size=0
+[info] 10367 [RETIRE INSTR] instr.name=VF                   instr.pc=0x13B3441C instr.id=1623
+[info] ++++++++++++++++++++++core: 0, subcore: 1, start: 208, tick: 12000, kernelId: 0, blkID: 0, blkDim: 1, rtsqId: 1, streamId: 0, taskId: 0, subtaskId: 0, threadId: 0, done++++++++++++++++++++++.

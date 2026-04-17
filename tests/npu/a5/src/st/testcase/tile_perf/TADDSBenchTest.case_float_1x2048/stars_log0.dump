@@ -1,0 +1,4 @@
+[info] [0000000112] [context_start]       : AIV, stream_id=3, rtsq_id=3 task_id=0, contextID=0, threadID=0x0, thread_dim=0x1
+[info] [0000000115] [block_start]           : AIV, task_id=0, contextID=0, threadID=0, coreID=0, blkdim=1, blkID=0
+[info] [0000006031] [block_end]             : AIV, task_id=0, contextID=0, threadID=0, coreID=0, blkdim=1, blkID=0
+[info] [0000006032] [context_end]         : AIV, stream_id=3, rtsq_id=3 task_id=0, contextID=0, threadID=0x0, thread_dim=0x1

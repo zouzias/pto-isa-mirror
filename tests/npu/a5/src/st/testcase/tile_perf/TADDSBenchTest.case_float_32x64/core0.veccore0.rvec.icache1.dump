@@ -1,0 +1,124 @@
+[info] 1190 Icache create a req, pc:0x13b32800, Id:1, warpId:0, setIdx:16, tagAddr:0x13b32, type:3, vfId:60
+[info] 1192 prefetch MISS req send to misq, pc:0x13b32800,id:1, setIdx:16, allocate:1
+[info] 1193 Update missInfoBuf, pc:0x13b32800, misqEntry:0, id:1
+[info] 1193 Allocate new Misq entry, pc:0x13b32800, entryId:0, id:1, send to tagArb:1
+[info] 1194 Icache InvalidHitInfoBuf, req_addr:0x13b32800, hitInfoAddr:0x0, tag_addr:0x0, setIdx:16, wayId:0
+[info] 1194 linefill update tagRam, pc:0x13b32800, setIdx:16, wayId:0, pending:1, instrId:1, vfId:60
+[info] 1194 send Read biu Req, addr:0x13b32800, misqId:0, gid: 991
+[info] 1201 fetch req match misq, pc:0x13b32800, id:2, entry_id:0
+[info] 1201 lock new req, pc:0x13b32800, id:2, addr:0x276650
+[info] 1201 Icache create a req, pc:0x13b32800, Id:2, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 1682 recv Read biu Rsp, addr:0x13b32800, misqId:0, gid: 991
+[info] 1682 flush missInfoBuf, pc:0x13b32800
+[info] 1682 rsp send to dataArb:1, req pc:0x13b32800,type:1
+[info] 1683 finish linefill, req pc:0x13b32800, setIdx:16, wayId:0, pend:0, misqId:0
+[info] 1683 unLock req, pc:0x13b32800, id:2, addr:0x276650
+[info] 1685 Icache create a req, pc:0x13b32800, Id:2, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 1686 Icache create a req, pc:0x13b32820, Id:3, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 1687 instr req lookup tag HIT, req pc:0x13b32800, id:2, setIdx:16, wayId:0, vfId:0
+[info] 1687 update hit info buffer, pc:0x13b32800, setIdx:16, wayId:0
+[info] 1688 instr req lookup tag HIT, req pc:0x13b32820, id:3, setIdx:16, wayId:0, vfId:0
+[info] 1688 update hit info buffer, pc:0x13b32820, setIdx:16, wayId:0
+[info] 1688 send req back to ifu, pc:0x13b32800, id:2.
+[info] 1689 send req back to ifu, pc:0x13b32820, id:3.
+[info] 1885 clear tagRam pendingBit!
+[info] 1929 match hit info buffer, id:4, pc:0x13b32800, wayIdx:0
+[info] 1929 Icache create a req, pc:0x13b32800, Id:4, warpId:0, setIdx:16, tagAddr:0x13b32, type:3, vfId:85
+[info] 1940 match hit info buffer, id:5, pc:0x13b32800, wayIdx:0
+[info] 1940 Icache create a req, pc:0x13b32800, Id:5, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 1941 match hit info buffer, id:6, pc:0x13b32820, wayIdx:0
+[info] 1941 Icache create a req, pc:0x13b32820, Id:6, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 1942 instr req HIT hitInfoBuffer, req pc:0x13b32800, id:5, setIdx:16, wayId:0, vfId:0
+[info] 1943 instr req HIT hitInfoBuffer, req pc:0x13b32820, id:6, setIdx:16, wayId:0, vfId:0
+[info] 1943 send req back to ifu, pc:0x13b32800, id:5.
+[info] 1944 send req back to ifu, pc:0x13b32820, id:6.
+[info] 2140 clear tagRam pendingBit!
+[info] 2613 match hit info buffer, id:7, pc:0x13b32800, wayIdx:0
+[info] 2613 Icache create a req, pc:0x13b32800, Id:7, warpId:0, setIdx:16, tagAddr:0x13b32, type:3, vfId:110
+[info] 2624 match hit info buffer, id:8, pc:0x13b32800, wayIdx:0
+[info] 2624 Icache create a req, pc:0x13b32800, Id:8, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 2625 match hit info buffer, id:9, pc:0x13b32820, wayIdx:0
+[info] 2625 Icache create a req, pc:0x13b32820, Id:9, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 2626 instr req HIT hitInfoBuffer, req pc:0x13b32800, id:8, setIdx:16, wayId:0, vfId:0
+[info] 2627 instr req HIT hitInfoBuffer, req pc:0x13b32820, id:9, setIdx:16, wayId:0, vfId:0
+[info] 2627 send req back to ifu, pc:0x13b32800, id:8.
+[info] 2628 send req back to ifu, pc:0x13b32820, id:9.
+[info] 2824 clear tagRam pendingBit!
+[info] 3278 match hit info buffer, id:10, pc:0x13b32800, wayIdx:0
+[info] 3278 Icache create a req, pc:0x13b32800, Id:10, warpId:0, setIdx:16, tagAddr:0x13b32, type:3, vfId:427
+[info] 3289 match hit info buffer, id:11, pc:0x13b32800, wayIdx:0
+[info] 3289 Icache create a req, pc:0x13b32800, Id:11, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 3290 match hit info buffer, id:12, pc:0x13b32820, wayIdx:0
+[info] 3290 Icache create a req, pc:0x13b32820, Id:12, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 3291 instr req HIT hitInfoBuffer, req pc:0x13b32800, id:11, setIdx:16, wayId:0, vfId:0
+[info] 3292 instr req HIT hitInfoBuffer, req pc:0x13b32820, id:12, setIdx:16, wayId:0, vfId:0
+[info] 3292 send req back to ifu, pc:0x13b32800, id:11.
+[info] 3293 send req back to ifu, pc:0x13b32820, id:12.
+[info] 3489 clear tagRam pendingBit!
+[info] 3967 match hit info buffer, id:13, pc:0x13b32800, wayIdx:0
+[info] 3967 Icache create a req, pc:0x13b32800, Id:13, warpId:0, setIdx:16, tagAddr:0x13b32, type:3, vfId:744
+[info] 3978 match hit info buffer, id:14, pc:0x13b32800, wayIdx:0
+[info] 3978 Icache create a req, pc:0x13b32800, Id:14, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 3979 match hit info buffer, id:15, pc:0x13b32820, wayIdx:0
+[info] 3979 Icache create a req, pc:0x13b32820, Id:15, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 3980 instr req HIT hitInfoBuffer, req pc:0x13b32800, id:14, setIdx:16, wayId:0, vfId:0
+[info] 3981 instr req HIT hitInfoBuffer, req pc:0x13b32820, id:15, setIdx:16, wayId:0, vfId:0
+[info] 3981 send req back to ifu, pc:0x13b32800, id:14.
+[info] 3982 send req back to ifu, pc:0x13b32820, id:15.
+[info] 4178 clear tagRam pendingBit!
+[info] 4616 match hit info buffer, id:16, pc:0x13b32800, wayIdx:0
+[info] 4616 Icache create a req, pc:0x13b32800, Id:16, warpId:0, setIdx:16, tagAddr:0x13b32, type:3, vfId:1061
+[info] 4627 match hit info buffer, id:17, pc:0x13b32800, wayIdx:0
+[info] 4627 Icache create a req, pc:0x13b32800, Id:17, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 4628 match hit info buffer, id:18, pc:0x13b32820, wayIdx:0
+[info] 4628 Icache create a req, pc:0x13b32820, Id:18, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 4629 instr req HIT hitInfoBuffer, req pc:0x13b32800, id:17, setIdx:16, wayId:0, vfId:0
+[info] 4630 instr req HIT hitInfoBuffer, req pc:0x13b32820, id:18, setIdx:16, wayId:0, vfId:0
+[info] 4630 send req back to ifu, pc:0x13b32800, id:17.
+[info] 4631 send req back to ifu, pc:0x13b32820, id:18.
+[info] 4827 clear tagRam pendingBit!
+[info] 5286 match hit info buffer, id:19, pc:0x13b32800, wayIdx:0
+[info] 5286 Icache create a req, pc:0x13b32800, Id:19, warpId:0, setIdx:16, tagAddr:0x13b32, type:3, vfId:1378
+[info] 5297 match hit info buffer, id:20, pc:0x13b32800, wayIdx:0
+[info] 5297 Icache create a req, pc:0x13b32800, Id:20, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 5298 match hit info buffer, id:21, pc:0x13b32820, wayIdx:0
+[info] 5298 Icache create a req, pc:0x13b32820, Id:21, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 5299 instr req HIT hitInfoBuffer, req pc:0x13b32800, id:20, setIdx:16, wayId:0, vfId:0
+[info] 5300 instr req HIT hitInfoBuffer, req pc:0x13b32820, id:21, setIdx:16, wayId:0, vfId:0
+[info] 5300 send req back to ifu, pc:0x13b32800, id:20.
+[info] 5301 send req back to ifu, pc:0x13b32820, id:21.
+[info] 5497 clear tagRam pendingBit!
+[info] 5990 match hit info buffer, id:22, pc:0x13b32800, wayIdx:0
+[info] 5990 Icache create a req, pc:0x13b32800, Id:22, warpId:0, setIdx:16, tagAddr:0x13b32, type:3, vfId:1695
+[info] 6001 match hit info buffer, id:23, pc:0x13b32800, wayIdx:0
+[info] 6001 Icache create a req, pc:0x13b32800, Id:23, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 6002 match hit info buffer, id:24, pc:0x13b32820, wayIdx:0
+[info] 6002 Icache create a req, pc:0x13b32820, Id:24, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 6003 instr req HIT hitInfoBuffer, req pc:0x13b32800, id:23, setIdx:16, wayId:0, vfId:0
+[info] 6004 instr req HIT hitInfoBuffer, req pc:0x13b32820, id:24, setIdx:16, wayId:0, vfId:0
+[info] 6004 send req back to ifu, pc:0x13b32800, id:23.
+[info] 6005 send req back to ifu, pc:0x13b32820, id:24.
+[info] 6201 clear tagRam pendingBit!
+[info] 6669 match hit info buffer, id:25, pc:0x13b32800, wayIdx:0
+[info] 6669 Icache create a req, pc:0x13b32800, Id:25, warpId:0, setIdx:16, tagAddr:0x13b32, type:3, vfId:2012
+[info] 6680 match hit info buffer, id:26, pc:0x13b32800, wayIdx:0
+[info] 6680 Icache create a req, pc:0x13b32800, Id:26, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 6681 match hit info buffer, id:27, pc:0x13b32820, wayIdx:0
+[info] 6681 Icache create a req, pc:0x13b32820, Id:27, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 6682 instr req HIT hitInfoBuffer, req pc:0x13b32800, id:26, setIdx:16, wayId:0, vfId:0
+[info] 6683 instr req HIT hitInfoBuffer, req pc:0x13b32820, id:27, setIdx:16, wayId:0, vfId:0
+[info] 6683 send req back to ifu, pc:0x13b32800, id:26.
+[info] 6684 send req back to ifu, pc:0x13b32820, id:27.
+[info] 6880 clear tagRam pendingBit!
+[info] 7338 match hit info buffer, id:28, pc:0x13b32800, wayIdx:0
+[info] 7338 Icache create a req, pc:0x13b32800, Id:28, warpId:0, setIdx:16, tagAddr:0x13b32, type:3, vfId:2329
+[info] 7349 match hit info buffer, id:29, pc:0x13b32800, wayIdx:0
+[info] 7349 Icache create a req, pc:0x13b32800, Id:29, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 7350 match hit info buffer, id:30, pc:0x13b32820, wayIdx:0
+[info] 7350 Icache create a req, pc:0x13b32820, Id:30, warpId:0, setIdx:16, tagAddr:0x13b32, type:2, vfId:0
+[info] 7351 instr req HIT hitInfoBuffer, req pc:0x13b32800, id:29, setIdx:16, wayId:0, vfId:0
+[info] 7352 instr req HIT hitInfoBuffer, req pc:0x13b32820, id:30, setIdx:16, wayId:0, vfId:0
+[info] 7352 send req back to ifu, pc:0x13b32800, id:29.
+[info] 7353 send req back to ifu, pc:0x13b32820, id:30.
+[info] 7549 clear tagRam pendingBit!
+[info] ++++++++++++++++++++++core: 0, subcore: 1, start: 209, tick: 8590, kernelId: 0, blkID: 0, blkDim: 1, rtsqId: 1, streamId: 0, taskId: 0, subtaskId: 0, threadId: 0, done++++++++++++++++++++++.

@@ -92,116 +92,105 @@ PTO_INTERNAL void runTExp(__gm__ T *out, __gm__ T *src)
     }
 }
 
-// ===== TADD Launch Functions =====
+// ===== Internal kernel entry points =====
 
-// fp32 16KB (4096 elem)
-extern "C" __global__ AICORE void launchTADD_float_1x4096(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 1, 4096, 1, 4096>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_float_64x64(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 64, 64, 64, 64>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_float_128x32(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 128, 32, 128, 32>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_float_32x128(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 32, 128, 32, 128>(out, src0, src1); }
+// TADD fp32
+extern "C" __global__ AICORE void kernel_TADD_float_1x4096(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 1, 4096, 1, 4096>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_64x64(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 64, 64, 64, 64>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_128x32(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 128, 32, 128, 32>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_32x128(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 32, 128, 32, 128>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_1x8192(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 1, 8192, 1, 8192>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_64x128(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 64, 128, 64, 128>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_256x32(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 256, 32, 256, 32>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_32x256(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 32, 256, 32, 256>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_1x16384(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 1, 16384, 1, 16384>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_128x128(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 128, 128, 128, 128>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_512x32(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 512, 32, 512, 32>(out, src0, src1); }
+extern "C" __global__ AICORE void kernel_TADD_float_32x512(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 32, 512, 32, 512>(out, src0, src1); }
 
-// fp32 32KB (8192 elem)
-extern "C" __global__ AICORE void launchTADD_float_1x8192(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 1, 8192, 1, 8192>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_float_64x128(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 64, 128, 64, 128>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_float_256x32(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 256, 32, 256, 32>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_float_32x256(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 32, 256, 32, 256>(out, src0, src1); }
+// TADD fp16
 
-// fp32 64KB (16384 elem)
-extern "C" __global__ AICORE void launchTADD_float_1x16384(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 1, 16384, 1, 16384>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_float_128x128(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 128, 128, 128, 128>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_float_512x32(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 512, 32, 512, 32>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_float_32x512(__gm__ float *out, __gm__ float *src0, __gm__ float *src1) { runTAdd<float, 32, 512, 32, 512>(out, src0, src1); }
+// TEXP fp32
+extern "C" __global__ AICORE void kernel_TEXP_float_1x4096(__gm__ float *out, __gm__ float *src) { runTExp<float, 1, 4096, 1, 4096>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_64x64(__gm__ float *out, __gm__ float *src) { runTExp<float, 64, 64, 64, 64>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_128x32(__gm__ float *out, __gm__ float *src) { runTExp<float, 128, 32, 128, 32>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_32x128(__gm__ float *out, __gm__ float *src) { runTExp<float, 32, 128, 32, 128>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_1x8192(__gm__ float *out, __gm__ float *src) { runTExp<float, 1, 8192, 1, 8192>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_64x128(__gm__ float *out, __gm__ float *src) { runTExp<float, 64, 128, 64, 128>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_256x32(__gm__ float *out, __gm__ float *src) { runTExp<float, 256, 32, 256, 32>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_32x256(__gm__ float *out, __gm__ float *src) { runTExp<float, 32, 256, 32, 256>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_1x16384(__gm__ float *out, __gm__ float *src) { runTExp<float, 1, 16384, 1, 16384>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_128x128(__gm__ float *out, __gm__ float *src) { runTExp<float, 128, 128, 128, 128>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_512x32(__gm__ float *out, __gm__ float *src) { runTExp<float, 512, 32, 512, 32>(out, src); }
+extern "C" __global__ AICORE void kernel_TEXP_float_32x512(__gm__ float *out, __gm__ float *src) { runTExp<float, 32, 512, 32, 512>(out, src); }
 
-// fp16 16KB (8192 elem)
-extern "C" __global__ AICORE void launchTADD_half_1x8192(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 1, 8192, 1, 8192>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_half_64x128(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 64, 128, 64, 128>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_half_256x32(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 256, 32, 256, 32>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_half_32x256(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 32, 256, 32, 256>(out, src0, src1); }
+// TEXP fp16
 
-// fp16 32KB (16384 elem)
-extern "C" __global__ AICORE void launchTADD_half_1x16384(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 1, 16384, 1, 16384>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_half_128x128(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 128, 128, 128, 128>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_half_512x32(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 512, 32, 512, 32>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_half_32x512(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 32, 512, 32, 512>(out, src0, src1); }
+// TADDS fp32
+extern "C" __global__ AICORE void kernel_TADDS_float_1x4096(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 1, 4096, 1, 4096>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_64x64(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 64, 64, 64, 64>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_128x32(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 128, 32, 128, 32>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_32x128(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 32, 128, 32, 128>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_1x8192(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 1, 8192, 1, 8192>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_64x128(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 64, 128, 64, 128>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_256x32(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 256, 32, 256, 32>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_32x256(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 32, 256, 32, 256>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_1x16384(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 1, 16384, 1, 16384>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_128x128(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 128, 128, 128, 128>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_512x32(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 512, 32, 512, 32>(out, src, scalar); }
+extern "C" __global__ AICORE void kernel_TADDS_float_32x512(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 32, 512, 32, 512>(out, src, scalar); }
 
-// fp16 64KB (32768 elem)
-extern "C" __global__ AICORE void launchTADD_half_1x32768(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 1, 32768, 1, 32768>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_half_128x256(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 128, 256, 128, 256>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_half_1024x32(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 1024, 32, 1024, 32>(out, src0, src1); }
-extern "C" __global__ AICORE void launchTADD_half_32x1024(__gm__ half *out, __gm__ half *src0, __gm__ half *src1) { runTAdd<half, 32, 1024, 32, 1024>(out, src0, src1); }
+// TADDS fp16
 
-// ===== TEXP Launch Functions =====
+// ===== Template launcher functions (called from host) =====
 
-// fp32 16KB (4096 elem)
-extern "C" __global__ AICORE void launchTEXP_float_1x4096(__gm__ float *out, __gm__ float *src) { runTExp<float, 1, 4096, 1, 4096>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_float_64x64(__gm__ float *out, __gm__ float *src) { runTExp<float, 64, 64, 64, 64>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_float_128x32(__gm__ float *out, __gm__ float *src) { runTExp<float, 128, 32, 128, 32>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_float_32x128(__gm__ float *out, __gm__ float *src) { runTExp<float, 32, 128, 32, 128>(out, src); }
+// TADD float launchers
+template <int caseId> void launchTADD_float(void *out, void *src0, void *src1, aclrtStream stream);
+template<> void launchTADD_float<1>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_1x4096<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<2>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_64x64<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<3>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_128x32<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<4>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_32x128<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<5>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_1x8192<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<6>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_64x128<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<7>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_256x32<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<8>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_32x256<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<9>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_1x16384<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<10>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_128x128<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<11>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_512x32<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
+template<> void launchTADD_float<12>(void *out, void *src0, void *src1, aclrtStream stream) { kernel_TADD_float_32x512<<<1, nullptr, stream>>>((float*)out, (float*)src0, (float*)src1); }
 
-// fp32 32KB (8192 elem)
-extern "C" __global__ AICORE void launchTEXP_float_1x8192(__gm__ float *out, __gm__ float *src) { runTExp<float, 1, 8192, 1, 8192>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_float_64x128(__gm__ float *out, __gm__ float *src) { runTExp<float, 64, 128, 64, 128>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_float_256x32(__gm__ float *out, __gm__ float *src) { runTExp<float, 256, 32, 256, 32>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_float_32x256(__gm__ float *out, __gm__ float *src) { runTExp<float, 32, 256, 32, 256>(out, src); }
+// TADD half launchers
 
-// fp32 64KB (16384 elem)
-extern "C" __global__ AICORE void launchTEXP_float_1x16384(__gm__ float *out, __gm__ float *src) { runTExp<float, 1, 16384, 1, 16384>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_float_128x128(__gm__ float *out, __gm__ float *src) { runTExp<float, 128, 128, 128, 128>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_float_512x32(__gm__ float *out, __gm__ float *src) { runTExp<float, 512, 32, 512, 32>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_float_32x512(__gm__ float *out, __gm__ float *src) { runTExp<float, 32, 512, 32, 512>(out, src); }
+// TEXP float launchers
+template <int caseId> void launchTEXP_float(void *out, void *src, aclrtStream stream);
+template<> void launchTEXP_float<1>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_1x4096<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<2>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_64x64<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<3>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_128x32<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<4>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_32x128<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<5>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_1x8192<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<6>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_64x128<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<7>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_256x32<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<8>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_32x256<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<9>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_1x16384<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<10>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_128x128<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<11>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_512x32<<<1, nullptr, stream>>>((float*)out, (float*)src); }
+template<> void launchTEXP_float<12>(void *out, void *src, aclrtStream stream) { kernel_TEXP_float_32x512<<<1, nullptr, stream>>>((float*)out, (float*)src); }
 
-// fp16 16KB (8192 elem)
-extern "C" __global__ AICORE void launchTEXP_half_1x8192(__gm__ half *out, __gm__ half *src) { runTExp<half, 1, 8192, 1, 8192>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_half_64x128(__gm__ half *out, __gm__ half *src) { runTExp<half, 64, 128, 64, 128>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_half_256x32(__gm__ half *out, __gm__ half *src) { runTExp<half, 256, 32, 256, 32>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_half_32x256(__gm__ half *out, __gm__ half *src) { runTExp<half, 32, 256, 32, 256>(out, src); }
+// TEXP half launchers
 
-// fp16 32KB (16384 elem)
-extern "C" __global__ AICORE void launchTEXP_half_1x16384(__gm__ half *out, __gm__ half *src) { runTExp<half, 1, 16384, 1, 16384>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_half_128x128(__gm__ half *out, __gm__ half *src) { runTExp<half, 128, 128, 128, 128>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_half_512x32(__gm__ half *out, __gm__ half *src) { runTExp<half, 512, 32, 512, 32>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_half_32x512(__gm__ half *out, __gm__ half *src) { runTExp<half, 32, 512, 32, 512>(out, src); }
+// TADDS float launchers
+template <int caseId> void launchTADDS_float(void *out, void *src, float scalar, aclrtStream stream);
+template<> void launchTADDS_float<1>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_1x4096<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<2>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_64x64<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<3>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_128x32<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<4>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_32x128<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<5>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_1x8192<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<6>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_64x128<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<7>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_256x32<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<8>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_32x256<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<9>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_1x16384<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<10>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_128x128<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<11>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_512x32<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
+template<> void launchTADDS_float<12>(void *out, void *src, float scalar, aclrtStream stream) { kernel_TADDS_float_32x512<<<1, nullptr, stream>>>((float*)out, (float*)src, scalar); }
 
-// fp16 64KB (32768 elem)
-extern "C" __global__ AICORE void launchTEXP_half_1x32768(__gm__ half *out, __gm__ half *src) { runTExp<half, 1, 32768, 1, 32768>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_half_128x256(__gm__ half *out, __gm__ half *src) { runTExp<half, 128, 256, 128, 256>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_half_1024x32(__gm__ half *out, __gm__ half *src) { runTExp<half, 1024, 32, 1024, 32>(out, src); }
-extern "C" __global__ AICORE void launchTEXP_half_32x1024(__gm__ half *out, __gm__ half *src) { runTExp<half, 32, 1024, 32, 1024>(out, src); }
-
-// ===== TADDS Launch Functions =====
-
-// fp32 16KB (4096 elem)
-extern "C" __global__ AICORE void launchTADDS_float_1x4096(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 1, 4096, 1, 4096>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_float_64x64(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 64, 64, 64, 64>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_float_128x32(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 128, 32, 128, 32>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_float_32x128(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 32, 128, 32, 128>(out, src, scalar); }
-
-// fp32 32KB (8192 elem)
-extern "C" __global__ AICORE void launchTADDS_float_1x8192(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 1, 8192, 1, 8192>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_float_64x128(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 64, 128, 64, 128>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_float_256x32(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 256, 32, 256, 32>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_float_32x256(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 32, 256, 32, 256>(out, src, scalar); }
-
-// fp32 64KB (16384 elem)
-extern "C" __global__ AICORE void launchTADDS_float_1x16384(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 1, 16384, 1, 16384>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_float_128x128(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 128, 128, 128, 128>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_float_512x32(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 512, 32, 512, 32>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_float_32x512(__gm__ float *out, __gm__ float *src, float scalar) { runTAddS<float, 32, 512, 32, 512>(out, src, scalar); }
-
-// fp16 16KB (8192 elem)
-extern "C" __global__ AICORE void launchTADDS_half_1x8192(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 1, 8192, 1, 8192>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_half_64x128(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 64, 128, 64, 128>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_half_256x32(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 256, 32, 256, 32>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_half_32x256(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 32, 256, 32, 256>(out, src, scalar); }
-
-// fp16 32KB (16384 elem)
-extern "C" __global__ AICORE void launchTADDS_half_1x16384(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 1, 16384, 1, 16384>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_half_128x128(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 128, 128, 128, 128>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_half_512x32(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 512, 32, 512, 32>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_half_32x512(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 32, 512, 32, 512>(out, src, scalar); }
-
-// fp16 64KB (32768 elem)
-extern "C" __global__ AICORE void launchTADDS_half_1x32768(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 1, 32768, 1, 32768>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_half_128x256(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 128, 256, 128, 256>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_half_1024x32(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 1024, 32, 1024, 32>(out, src, scalar); }
-extern "C" __global__ AICORE void launchTADDS_half_32x1024(__gm__ half *out, __gm__ half *src, half scalar) { runTAddS<half, 32, 1024, 32, 1024>(out, src, scalar); }
+// TADDS half launchers

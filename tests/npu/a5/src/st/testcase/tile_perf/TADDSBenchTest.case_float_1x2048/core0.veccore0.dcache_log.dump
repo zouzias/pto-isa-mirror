@@ -1,0 +1,90 @@
+[info] 688: calc_req_addr. req pc :0x10d1153c,idx_addr: 0x78,tag_addr:0x8117, aligned_addr_:0x1022fe00,ofst_addr_:0x0 
+[info] 688: create_dc_req. req_pc:0x10d1153c, req_mem:1,req_size:8,req_addr:0x1022fe00, req_data0:0x0,req_data1:0x0.
+[info] 689: lookup_tag is MISS. req pc :0x10d1153c.
+[info] 690: calc_req_addr. req pc :0x10d1154c,idx_addr: 0x78,tag_addr:0x8117, aligned_addr_:0x1022fe00,ofst_addr_:0x10 
+[info] 690: create_dc_req. req_pc:0x10d1154c, req_mem:1,req_size:4,req_addr:0x1022fe10, req_data0:0x0,req_data1:0x0.
+[info] 691: lookup_tag is MISS. req pc :0x10d1154c.
+[info] 691: create_rd_biu_req. ll_req_id:78257,rd_req_addr_: 0x1022fe00
+[info] 692: send_rd_biu_req. req_id:78257,req_rd_addr:0x1022fe00.
+[info] 1046: recv_rd_biu_rsp(mshr). rsp_id:78257,aligned_addr_: 0x1022fe00
+[info] 1046: get_victim invalid. way_id:0,idx_addr: 0x78,mem:1, is_dirty:0.
+[info] 1046: refill data to cache_ram. way_id:0,tag_addr:0x8117,idx_addr: 0x78,mem:1, is_dirty:0.
+[info] 1046: retire_mshr_instr. isa_pc:0x10d1153c
+[info] 1046: retire_mshr_instr. isa_pc:0x10d1154c
+[info] 5624: calc_req_addr. req pc :0x10d1160c,idx_addr: 0x7f,tag_addr:0x1083, aligned_addr_:0x2107fc0,ofst_addr_:0x30 
+[info] 5624: create_dc_req. req_pc:0x10d1160c, req_mem:1,req_size:8,req_addr:0x2107ff0, req_data0:0x0,req_data1:0x0.
+[info] 5625: lookup_tag is MISS. req pc :0x10d1160c.
+[info] 5627: create_rd_biu_req. ll_req_id:80591,rd_req_addr_: 0x2107fc0
+[info] 5628: send_rd_biu_req. req_id:80591,req_rd_addr:0x2107fc0.
+[info] 5875: recv_rd_biu_rsp(mshr). rsp_id:80591,aligned_addr_: 0x2107fc0
+[info] 5875: get_victim invalid. way_id:0,idx_addr: 0x7f,mem:1, is_dirty:0.
+[info] 5875: refill data to cache_ram. way_id:0,tag_addr:0x1083,idx_addr: 0x7f,mem:1, is_dirty:0.
+[info] 5875: retire_mshr_instr. isa_pc:0x10d1160c
+[info] 5879: calc_req_addr. req pc :0x10d11620,idx_addr: 0x7f,tag_addr:0x1083, aligned_addr_:0x2107fc0,ofst_addr_:0x30 
+[info] 5879: create_dc_req. req_pc:0x10d11620, req_mem:1,req_size:8,req_addr:0x2107ff0, req_data0:0x0,req_data1:0x0.
+[info] 5880: lookup_tag is HIT. req pc :0x10d11620, idx_addr: 0x7f, tag_addr: 0x1083, aligned_addr_: 0x2107fc0,hit_pos: 0 
+[info] 5880: calc_req_addr. req pc :0x10d11624,idx_addr: 0x7f,tag_addr:0x1083, aligned_addr_:0x2107fc0,ofst_addr_:0x20 
+[info] 5880: create_dc_req. req_pc:0x10d11624, req_mem:1,req_size:8,req_addr:0x2107fe0, req_data0:0x0,req_data1:0x0.
+[info] 5881: lookup_tag is HIT. req pc :0x10d11624, idx_addr: 0x7f, tag_addr: 0x1083, aligned_addr_: 0x2107fc0,hit_pos: 0 
+[info] 5882: push req to stb. req_pc:0x10d11620,stb_main_entry_id:0,aligned_addr_:0x2107fc0,mem: 1,stb_sub_entry_size:1,store_data0:0x0, store_data1:0x0, strb size:8
+[debug] 5883: stb not empty. size:0x1
+[info] 5883: read_instr_hit. isa_pc:0x10d11624.
+[debug] 5884: stb not empty. size:0x1
+[debug] 5885: stb not empty. size:0x1
+[debug] 5886: stb not empty. size:0x1
+[debug] 5887: stb not empty. size:0x1
+[debug] 5888: stb not empty. size:0x1
+[debug] 5889: stb not empty. size:0x1
+[debug] 5890: stb not empty. size:0x1
+[debug] 5891: stb not empty. size:0x1
+[debug] 5892: stb not empty. size:0x1
+[debug] 5893: stb not empty. size:0x1
+[debug] 5894: stb not empty. size:0x1
+[debug] 5895: stb not empty. size:0x1
+[debug] 5896: stb not empty. size:0x1
+[debug] 5897: stb not empty. size:0x1
+[debug] 5898: stb not empty. size:0x1
+[info] 5898: calc_req_addr. req pc :0x10d11680,idx_addr: 0x0,tag_addr:0x0, aligned_addr_:0x0,ofst_addr_:0x0 
+[info] 5898: create_dc_req. req_pc:0x10d11680, req_mem:4,req_size:0,req_addr:0x0, req_data0:0x0,req_data1:0x0.
+[debug] 5899: stb not empty. size:0x1
+[info] 5899: dcci_stall:0x10d11680.
+[debug] 5900: stb not empty. size:0x1
+[info] 5900: dcci_stall:0x10d11680.
+[debug] 5901: stb not empty. size:0x1
+[info] 5901: dcci_stall:0x10d11680.
+[debug] 5902: stb not empty. size:0x1
+[info] 5902: dcci_stall:0x10d11680.
+[debug] 5903: stb not empty. size:0x1
+[info] 5903: dcci_stall:0x10d11680.
+[debug] 5904: stb not empty. size:0x1
+[info] 5904: dcci_stall:0x10d11680.
+[debug] 5905: stb not empty. size:0x1
+[info] 5905: dcci_stall:0x10d11680.
+[debug] 5906: stb not empty. size:0x1
+[info] 5906: dcci_stall:0x10d11680.
+[debug] 5907: stb not empty. size:0x1
+[info] 5907: dcci_stall:0x10d11680.
+[debug] 5908: stb not empty. size:0x1
+[info] 5908: dcci_stall:0x10d11680.
+[debug] 5909: stb not empty. size:0x1
+[info] 5909: dcci_stall:0x10d11680.
+[debug] 5910: stb not empty. size:0x1
+[info] 5910: dcci_stall:0x10d11680.
+[debug] 5911: stb not empty. size:0x1
+[info] 5911: dcci_stall:0x10d11680.
+[debug] 5912: stb not empty. size:0x1
+[info] 5912: dcci_stall:0x10d11680.
+[debug] 5913: stb not empty. size:0x1
+[info] 5913: dcci_stall:0x10d11680.
+[debug] 5914: stb_sub_entry id:0, sub_entry_size:1,req_pc:0x10d11620.
+[debug] 5914: st_hit_write_cache stb_sub_entry id:0, sub_entry_size:1,req_pc:0x10d11620.
+[info] 5914: find_cache_way_id:0,tag_addr:0x1083,idx_addr:127.
+[info] 5914: stb_write_dcache. isa_pc:0x10d11620, tag_addr:0x1083,idx_addr:0x7f,write_dcache_way:0, stb_entry_id:0.
+[info] 5914: retire_stb_instr. isa_pc:0x10d11620
+[info] 5914: rm_entry. way_id:0,addr:0x2107fc0
+[info] 5916: dcci_all_invalid. req_pc:0x10d11680, req->mem:2.way_id:0, idx:120,tag_addr:0x8117.
+[info] 5916: create_write_data_to_ddr_req.write_addr_is:0x2107fc0
+[info] 5916: dcci_all clean_and_invalid. req_pc:0x10d11680, req->mem:2, way_id:0, idx:127,tga_addr:0x1083.
+[info] 5917: send_wr_biu_req. ll_req_id:80601,aligned_addr_: 0x2107fc0
+[info] 6027: recv_wr_biu_rsp.rsp_id:80601,rsp_addr:0x2107fc0.
+[info] 6027: find_cache_way_id:0,tag_addr:0x1083,idx_addr:127.

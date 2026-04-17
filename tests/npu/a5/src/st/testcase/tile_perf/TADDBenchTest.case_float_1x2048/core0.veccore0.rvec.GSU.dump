@@ -1,0 +1,241 @@
+[info] [00001630] recv_gsu_instr master_id: gather, instr_id: 304
+[info] [PERF] [0000001630] GSU_RECV instr_name RV_SEND instr_id 304 PC 13b34928
+[info] [00001630] recv_gsu_instr master_id: scatter, instr_id: 304
+[info] [PERF] [0000001630] GSU_RECV instr_name RV_SEND instr_id 304 PC 13b34928
+[info] [PERF] [0000001630] [STALL.SEND] [GSU_GA], instr_id: 304
+[info] [PERF] [0000001630] [STALL.SEND] [GSU_SC], instr_id: 304
+[info] [PERF] [0000001631] [STALL.SEND] [GSU_GA], instr_id: 304
+[info] [PERF] [0000001631] [STALL.SEND] [GSU_SC], instr_id: 304
+[info] [PERF] [0000001632] [STALL.SEND] [GSU_GA], instr_id: 304
+[info] [PERF] [0000001632] [STALL.SEND] [GSU_SC], instr_id: 304
+[info] [PERF] [0000001633] [STALL.SEND] [GSU_GA], instr_id: 304
+[info] [PERF] [0000001633] [STALL.SEND] [GSU_SC], instr_id: 304
+[info] [PERF] [0000001634] [STALL.SEND] [GSU_GA], instr_id: 304
+[info] [PERF] [0000001634] [STALL.SEND] [GSU_SC], instr_id: 304
+[info] [PERF] [0000001635] [STALL.SEND] [GSU_GA], instr_id: 304
+[info] [PERF] [0000001635] [STALL.SEND] [GSU_SC], instr_id: 304
+[info] [PERF] [0000001636] [STALL.SEND] [GSU_GA], instr_id: 304
+[info] [PERF] [0000001636] [STALL.SEND] [GSU_SC], instr_id: 304
+[info] [PERF] [0000001637] [STALL.SEND] [GSU_GA], instr_id: 304
+[info] [PERF] [0000001637] [STALL.SEND] [GSU_SC], instr_id: 304
+[info] [PERF] [0000001638] [GO.SEND] [GSU_GA], instr_id: 304
+[info] [PERF] [0000001638] [GO.SEND] [GSU_SC], instr_id: 304
+[info] [PERF] [0000001639] GSU_RETIRE instr_name RV_SEND instr_id 304 PC 13b34928
+[info] [PERF] [0000001639] GSU_RETIRE instr_name RV_SEND instr_id 304 PC 13b34928
+[info] [00002236] recv_gsu_instr master_id: gather, instr_id: 522
+[info] [PERF] [0000002236] GSU_RECV instr_name RV_SEND instr_id 522 PC 13b34928
+[info] [00002236] recv_gsu_instr master_id: scatter, instr_id: 522
+[info] [PERF] [0000002236] GSU_RECV instr_name RV_SEND instr_id 522 PC 13b34928
+[info] [PERF] [0000002236] [STALL.SEND] [GSU_GA], instr_id: 522
+[info] [PERF] [0000002236] [STALL.SEND] [GSU_SC], instr_id: 522
+[info] [PERF] [0000002237] [STALL.SEND] [GSU_GA], instr_id: 522
+[info] [PERF] [0000002237] [STALL.SEND] [GSU_SC], instr_id: 522
+[info] [PERF] [0000002238] [STALL.SEND] [GSU_GA], instr_id: 522
+[info] [PERF] [0000002238] [STALL.SEND] [GSU_SC], instr_id: 522
+[info] [PERF] [0000002239] [STALL.SEND] [GSU_GA], instr_id: 522
+[info] [PERF] [0000002239] [STALL.SEND] [GSU_SC], instr_id: 522
+[info] [PERF] [0000002240] [STALL.SEND] [GSU_GA], instr_id: 522
+[info] [PERF] [0000002240] [STALL.SEND] [GSU_SC], instr_id: 522
+[info] [PERF] [0000002241] [STALL.SEND] [GSU_GA], instr_id: 522
+[info] [PERF] [0000002241] [STALL.SEND] [GSU_SC], instr_id: 522
+[info] [PERF] [0000002242] [STALL.SEND] [GSU_GA], instr_id: 522
+[info] [PERF] [0000002242] [STALL.SEND] [GSU_SC], instr_id: 522
+[info] [PERF] [0000002243] [STALL.SEND] [GSU_GA], instr_id: 522
+[info] [PERF] [0000002243] [STALL.SEND] [GSU_SC], instr_id: 522
+[info] [PERF] [0000002244] [GO.SEND] [GSU_GA], instr_id: 522
+[info] [PERF] [0000002244] [GO.SEND] [GSU_SC], instr_id: 522
+[info] [PERF] [0000002245] GSU_RETIRE instr_name RV_SEND instr_id 522 PC 13b34928
+[info] [PERF] [0000002245] GSU_RETIRE instr_name RV_SEND instr_id 522 PC 13b34928
+[info] [00003230] recv_gsu_instr master_id: gather, instr_id: 740
+[info] [PERF] [0000003230] GSU_RECV instr_name RV_SEND instr_id 740 PC 13b34928
+[info] [00003230] recv_gsu_instr master_id: scatter, instr_id: 740
+[info] [PERF] [0000003230] GSU_RECV instr_name RV_SEND instr_id 740 PC 13b34928
+[info] [PERF] [0000003230] [STALL.SEND] [GSU_GA], instr_id: 740
+[info] [PERF] [0000003230] [STALL.SEND] [GSU_SC], instr_id: 740
+[info] [PERF] [0000003231] [STALL.SEND] [GSU_GA], instr_id: 740
+[info] [PERF] [0000003231] [STALL.SEND] [GSU_SC], instr_id: 740
+[info] [PERF] [0000003232] [STALL.SEND] [GSU_GA], instr_id: 740
+[info] [PERF] [0000003232] [STALL.SEND] [GSU_SC], instr_id: 740
+[info] [PERF] [0000003233] [STALL.SEND] [GSU_GA], instr_id: 740
+[info] [PERF] [0000003233] [STALL.SEND] [GSU_SC], instr_id: 740
+[info] [PERF] [0000003234] [STALL.SEND] [GSU_GA], instr_id: 740
+[info] [PERF] [0000003234] [STALL.SEND] [GSU_SC], instr_id: 740
+[info] [PERF] [0000003235] [STALL.SEND] [GSU_GA], instr_id: 740
+[info] [PERF] [0000003235] [STALL.SEND] [GSU_SC], instr_id: 740
+[info] [PERF] [0000003236] [STALL.SEND] [GSU_GA], instr_id: 740
+[info] [PERF] [0000003236] [STALL.SEND] [GSU_SC], instr_id: 740
+[info] [PERF] [0000003237] [STALL.SEND] [GSU_GA], instr_id: 740
+[info] [PERF] [0000003237] [STALL.SEND] [GSU_SC], instr_id: 740
+[info] [PERF] [0000003238] [GO.SEND] [GSU_GA], instr_id: 740
+[info] [PERF] [0000003238] [GO.SEND] [GSU_SC], instr_id: 740
+[info] [PERF] [0000003239] GSU_RETIRE instr_name RV_SEND instr_id 740 PC 13b34928
+[info] [PERF] [0000003239] GSU_RETIRE instr_name RV_SEND instr_id 740 PC 13b34928
+[info] [00004286] recv_gsu_instr master_id: gather, instr_id: 958
+[info] [PERF] [0000004286] GSU_RECV instr_name RV_SEND instr_id 958 PC 13b34928
+[info] [00004286] recv_gsu_instr master_id: scatter, instr_id: 958
+[info] [PERF] [0000004286] GSU_RECV instr_name RV_SEND instr_id 958 PC 13b34928
+[info] [PERF] [0000004286] [STALL.SEND] [GSU_GA], instr_id: 958
+[info] [PERF] [0000004286] [STALL.SEND] [GSU_SC], instr_id: 958
+[info] [PERF] [0000004287] [STALL.SEND] [GSU_GA], instr_id: 958
+[info] [PERF] [0000004287] [STALL.SEND] [GSU_SC], instr_id: 958
+[info] [PERF] [0000004288] [STALL.SEND] [GSU_GA], instr_id: 958
+[info] [PERF] [0000004288] [STALL.SEND] [GSU_SC], instr_id: 958
+[info] [PERF] [0000004289] [STALL.SEND] [GSU_GA], instr_id: 958
+[info] [PERF] [0000004289] [STALL.SEND] [GSU_SC], instr_id: 958
+[info] [PERF] [0000004290] [STALL.SEND] [GSU_GA], instr_id: 958
+[info] [PERF] [0000004290] [STALL.SEND] [GSU_SC], instr_id: 958
+[info] [PERF] [0000004291] [STALL.SEND] [GSU_GA], instr_id: 958
+[info] [PERF] [0000004291] [STALL.SEND] [GSU_SC], instr_id: 958
+[info] [PERF] [0000004292] [STALL.SEND] [GSU_GA], instr_id: 958
+[info] [PERF] [0000004292] [STALL.SEND] [GSU_SC], instr_id: 958
+[info] [PERF] [0000004293] [STALL.SEND] [GSU_GA], instr_id: 958
+[info] [PERF] [0000004293] [STALL.SEND] [GSU_SC], instr_id: 958
+[info] [PERF] [0000004294] [GO.SEND] [GSU_GA], instr_id: 958
+[info] [PERF] [0000004294] [GO.SEND] [GSU_SC], instr_id: 958
+[info] [PERF] [0000004295] GSU_RETIRE instr_name RV_SEND instr_id 958 PC 13b34928
+[info] [PERF] [0000004295] GSU_RETIRE instr_name RV_SEND instr_id 958 PC 13b34928
+[info] [00005312] recv_gsu_instr master_id: gather, instr_id: 1176
+[info] [PERF] [0000005312] GSU_RECV instr_name RV_SEND instr_id 1176 PC 13b34928
+[info] [00005312] recv_gsu_instr master_id: scatter, instr_id: 1176
+[info] [PERF] [0000005312] GSU_RECV instr_name RV_SEND instr_id 1176 PC 13b34928
+[info] [PERF] [0000005312] [STALL.SEND] [GSU_GA], instr_id: 1176
+[info] [PERF] [0000005312] [STALL.SEND] [GSU_SC], instr_id: 1176
+[info] [PERF] [0000005313] [STALL.SEND] [GSU_GA], instr_id: 1176
+[info] [PERF] [0000005313] [STALL.SEND] [GSU_SC], instr_id: 1176
+[info] [PERF] [0000005314] [STALL.SEND] [GSU_GA], instr_id: 1176
+[info] [PERF] [0000005314] [STALL.SEND] [GSU_SC], instr_id: 1176
+[info] [PERF] [0000005315] [STALL.SEND] [GSU_GA], instr_id: 1176
+[info] [PERF] [0000005315] [STALL.SEND] [GSU_SC], instr_id: 1176
+[info] [PERF] [0000005316] [STALL.SEND] [GSU_GA], instr_id: 1176
+[info] [PERF] [0000005316] [STALL.SEND] [GSU_SC], instr_id: 1176
+[info] [PERF] [0000005317] [STALL.SEND] [GSU_GA], instr_id: 1176
+[info] [PERF] [0000005317] [STALL.SEND] [GSU_SC], instr_id: 1176
+[info] [PERF] [0000005318] [STALL.SEND] [GSU_GA], instr_id: 1176
+[info] [PERF] [0000005318] [STALL.SEND] [GSU_SC], instr_id: 1176
+[info] [PERF] [0000005319] [STALL.SEND] [GSU_GA], instr_id: 1176
+[info] [PERF] [0000005319] [STALL.SEND] [GSU_SC], instr_id: 1176
+[info] [PERF] [0000005320] [GO.SEND] [GSU_GA], instr_id: 1176
+[info] [PERF] [0000005320] [GO.SEND] [GSU_SC], instr_id: 1176
+[info] [PERF] [0000005321] GSU_RETIRE instr_name RV_SEND instr_id 1176 PC 13b34928
+[info] [PERF] [0000005321] GSU_RETIRE instr_name RV_SEND instr_id 1176 PC 13b34928
+[info] [00006288] recv_gsu_instr master_id: gather, instr_id: 1394
+[info] [PERF] [0000006288] GSU_RECV instr_name RV_SEND instr_id 1394 PC 13b34928
+[info] [00006288] recv_gsu_instr master_id: scatter, instr_id: 1394
+[info] [PERF] [0000006288] GSU_RECV instr_name RV_SEND instr_id 1394 PC 13b34928
+[info] [PERF] [0000006288] [STALL.SEND] [GSU_GA], instr_id: 1394
+[info] [PERF] [0000006288] [STALL.SEND] [GSU_SC], instr_id: 1394
+[info] [PERF] [0000006289] [STALL.SEND] [GSU_GA], instr_id: 1394
+[info] [PERF] [0000006289] [STALL.SEND] [GSU_SC], instr_id: 1394
+[info] [PERF] [0000006290] [STALL.SEND] [GSU_GA], instr_id: 1394
+[info] [PERF] [0000006290] [STALL.SEND] [GSU_SC], instr_id: 1394
+[info] [PERF] [0000006291] [STALL.SEND] [GSU_GA], instr_id: 1394
+[info] [PERF] [0000006291] [STALL.SEND] [GSU_SC], instr_id: 1394
+[info] [PERF] [0000006292] [STALL.SEND] [GSU_GA], instr_id: 1394
+[info] [PERF] [0000006292] [STALL.SEND] [GSU_SC], instr_id: 1394
+[info] [PERF] [0000006293] [STALL.SEND] [GSU_GA], instr_id: 1394
+[info] [PERF] [0000006293] [STALL.SEND] [GSU_SC], instr_id: 1394
+[info] [PERF] [0000006294] [STALL.SEND] [GSU_GA], instr_id: 1394
+[info] [PERF] [0000006294] [STALL.SEND] [GSU_SC], instr_id: 1394
+[info] [PERF] [0000006295] [STALL.SEND] [GSU_GA], instr_id: 1394
+[info] [PERF] [0000006295] [STALL.SEND] [GSU_SC], instr_id: 1394
+[info] [PERF] [0000006296] [GO.SEND] [GSU_GA], instr_id: 1394
+[info] [PERF] [0000006296] [GO.SEND] [GSU_SC], instr_id: 1394
+[info] [PERF] [0000006297] GSU_RETIRE instr_name RV_SEND instr_id 1394 PC 13b34928
+[info] [PERF] [0000006297] GSU_RETIRE instr_name RV_SEND instr_id 1394 PC 13b34928
+[info] [00007290] recv_gsu_instr master_id: gather, instr_id: 1612
+[info] [PERF] [0000007290] GSU_RECV instr_name RV_SEND instr_id 1612 PC 13b34928
+[info] [00007290] recv_gsu_instr master_id: scatter, instr_id: 1612
+[info] [PERF] [0000007290] GSU_RECV instr_name RV_SEND instr_id 1612 PC 13b34928
+[info] [PERF] [0000007290] [STALL.SEND] [GSU_GA], instr_id: 1612
+[info] [PERF] [0000007290] [STALL.SEND] [GSU_SC], instr_id: 1612
+[info] [PERF] [0000007291] [STALL.SEND] [GSU_GA], instr_id: 1612
+[info] [PERF] [0000007291] [STALL.SEND] [GSU_SC], instr_id: 1612
+[info] [PERF] [0000007292] [STALL.SEND] [GSU_GA], instr_id: 1612
+[info] [PERF] [0000007292] [STALL.SEND] [GSU_SC], instr_id: 1612
+[info] [PERF] [0000007293] [STALL.SEND] [GSU_GA], instr_id: 1612
+[info] [PERF] [0000007293] [STALL.SEND] [GSU_SC], instr_id: 1612
+[info] [PERF] [0000007294] [STALL.SEND] [GSU_GA], instr_id: 1612
+[info] [PERF] [0000007294] [STALL.SEND] [GSU_SC], instr_id: 1612
+[info] [PERF] [0000007295] [STALL.SEND] [GSU_GA], instr_id: 1612
+[info] [PERF] [0000007295] [STALL.SEND] [GSU_SC], instr_id: 1612
+[info] [PERF] [0000007296] [STALL.SEND] [GSU_GA], instr_id: 1612
+[info] [PERF] [0000007296] [STALL.SEND] [GSU_SC], instr_id: 1612
+[info] [PERF] [0000007297] [STALL.SEND] [GSU_GA], instr_id: 1612
+[info] [PERF] [0000007297] [STALL.SEND] [GSU_SC], instr_id: 1612
+[info] [PERF] [0000007298] [GO.SEND] [GSU_GA], instr_id: 1612
+[info] [PERF] [0000007298] [GO.SEND] [GSU_SC], instr_id: 1612
+[info] [PERF] [0000007299] GSU_RETIRE instr_name RV_SEND instr_id 1612 PC 13b34928
+[info] [PERF] [0000007299] GSU_RETIRE instr_name RV_SEND instr_id 1612 PC 13b34928
+[info] [00008330] recv_gsu_instr master_id: gather, instr_id: 1830
+[info] [PERF] [0000008330] GSU_RECV instr_name RV_SEND instr_id 1830 PC 13b34928
+[info] [00008330] recv_gsu_instr master_id: scatter, instr_id: 1830
+[info] [PERF] [0000008330] GSU_RECV instr_name RV_SEND instr_id 1830 PC 13b34928
+[info] [PERF] [0000008330] [STALL.SEND] [GSU_GA], instr_id: 1830
+[info] [PERF] [0000008330] [STALL.SEND] [GSU_SC], instr_id: 1830
+[info] [PERF] [0000008331] [STALL.SEND] [GSU_GA], instr_id: 1830
+[info] [PERF] [0000008331] [STALL.SEND] [GSU_SC], instr_id: 1830
+[info] [PERF] [0000008332] [STALL.SEND] [GSU_GA], instr_id: 1830
+[info] [PERF] [0000008332] [STALL.SEND] [GSU_SC], instr_id: 1830
+[info] [PERF] [0000008333] [STALL.SEND] [GSU_GA], instr_id: 1830
+[info] [PERF] [0000008333] [STALL.SEND] [GSU_SC], instr_id: 1830
+[info] [PERF] [0000008334] [STALL.SEND] [GSU_GA], instr_id: 1830
+[info] [PERF] [0000008334] [STALL.SEND] [GSU_SC], instr_id: 1830
+[info] [PERF] [0000008335] [STALL.SEND] [GSU_GA], instr_id: 1830
+[info] [PERF] [0000008335] [STALL.SEND] [GSU_SC], instr_id: 1830
+[info] [PERF] [0000008336] [STALL.SEND] [GSU_GA], instr_id: 1830
+[info] [PERF] [0000008336] [STALL.SEND] [GSU_SC], instr_id: 1830
+[info] [PERF] [0000008337] [STALL.SEND] [GSU_GA], instr_id: 1830
+[info] [PERF] [0000008337] [STALL.SEND] [GSU_SC], instr_id: 1830
+[info] [PERF] [0000008338] [GO.SEND] [GSU_GA], instr_id: 1830
+[info] [PERF] [0000008338] [GO.SEND] [GSU_SC], instr_id: 1830
+[info] [PERF] [0000008339] GSU_RETIRE instr_name RV_SEND instr_id 1830 PC 13b34928
+[info] [PERF] [0000008339] GSU_RETIRE instr_name RV_SEND instr_id 1830 PC 13b34928
+[info] [00009271] recv_gsu_instr master_id: gather, instr_id: 2048
+[info] [PERF] [0000009271] GSU_RECV instr_name RV_SEND instr_id 2048 PC 13b34928
+[info] [00009271] recv_gsu_instr master_id: scatter, instr_id: 2048
+[info] [PERF] [0000009271] GSU_RECV instr_name RV_SEND instr_id 2048 PC 13b34928
+[info] [PERF] [0000009271] [STALL.SEND] [GSU_GA], instr_id: 2048
+[info] [PERF] [0000009271] [STALL.SEND] [GSU_SC], instr_id: 2048
+[info] [PERF] [0000009272] [STALL.SEND] [GSU_GA], instr_id: 2048
+[info] [PERF] [0000009272] [STALL.SEND] [GSU_SC], instr_id: 2048
+[info] [PERF] [0000009273] [STALL.SEND] [GSU_GA], instr_id: 2048
+[info] [PERF] [0000009273] [STALL.SEND] [GSU_SC], instr_id: 2048
+[info] [PERF] [0000009274] [STALL.SEND] [GSU_GA], instr_id: 2048
+[info] [PERF] [0000009274] [STALL.SEND] [GSU_SC], instr_id: 2048
+[info] [PERF] [0000009275] [STALL.SEND] [GSU_GA], instr_id: 2048
+[info] [PERF] [0000009275] [STALL.SEND] [GSU_SC], instr_id: 2048
+[info] [PERF] [0000009276] [STALL.SEND] [GSU_GA], instr_id: 2048
+[info] [PERF] [0000009276] [STALL.SEND] [GSU_SC], instr_id: 2048
+[info] [PERF] [0000009277] [STALL.SEND] [GSU_GA], instr_id: 2048
+[info] [PERF] [0000009277] [STALL.SEND] [GSU_SC], instr_id: 2048
+[info] [PERF] [0000009278] [STALL.SEND] [GSU_GA], instr_id: 2048
+[info] [PERF] [0000009278] [STALL.SEND] [GSU_SC], instr_id: 2048
+[info] [PERF] [0000009279] [GO.SEND] [GSU_GA], instr_id: 2048
+[info] [PERF] [0000009279] [GO.SEND] [GSU_SC], instr_id: 2048
+[info] [PERF] [0000009280] GSU_RETIRE instr_name RV_SEND instr_id 2048 PC 13b34928
+[info] [PERF] [0000009280] GSU_RETIRE instr_name RV_SEND instr_id 2048 PC 13b34928
+[info] [00010350] recv_gsu_instr master_id: gather, instr_id: 2266
+[info] [PERF] [0000010350] GSU_RECV instr_name RV_SEND instr_id 2266 PC 13b34928
+[info] [00010350] recv_gsu_instr master_id: scatter, instr_id: 2266
+[info] [PERF] [0000010350] GSU_RECV instr_name RV_SEND instr_id 2266 PC 13b34928
+[info] [PERF] [0000010350] [STALL.SEND] [GSU_GA], instr_id: 2266
+[info] [PERF] [0000010350] [STALL.SEND] [GSU_SC], instr_id: 2266
+[info] [PERF] [0000010351] [STALL.SEND] [GSU_GA], instr_id: 2266
+[info] [PERF] [0000010351] [STALL.SEND] [GSU_SC], instr_id: 2266
+[info] [PERF] [0000010352] [STALL.SEND] [GSU_GA], instr_id: 2266
+[info] [PERF] [0000010352] [STALL.SEND] [GSU_SC], instr_id: 2266
+[info] [PERF] [0000010353] [STALL.SEND] [GSU_GA], instr_id: 2266
+[info] [PERF] [0000010353] [STALL.SEND] [GSU_SC], instr_id: 2266
+[info] [PERF] [0000010354] [STALL.SEND] [GSU_GA], instr_id: 2266
+[info] [PERF] [0000010354] [STALL.SEND] [GSU_SC], instr_id: 2266
+[info] [PERF] [0000010355] [STALL.SEND] [GSU_GA], instr_id: 2266
+[info] [PERF] [0000010355] [STALL.SEND] [GSU_SC], instr_id: 2266
+[info] [PERF] [0000010356] [STALL.SEND] [GSU_GA], instr_id: 2266
+[info] [PERF] [0000010356] [STALL.SEND] [GSU_SC], instr_id: 2266
+[info] [PERF] [0000010357] [STALL.SEND] [GSU_GA], instr_id: 2266
+[info] [PERF] [0000010357] [STALL.SEND] [GSU_SC], instr_id: 2266
+[info] [PERF] [0000010358] [GO.SEND] [GSU_GA], instr_id: 2266
+[info] [PERF] [0000010358] [GO.SEND] [GSU_SC], instr_id: 2266
+[info] [PERF] [0000010359] GSU_RETIRE instr_name RV_SEND instr_id 2266 PC 13b34928
+[info] [PERF] [0000010359] GSU_RETIRE instr_name RV_SEND instr_id 2266 PC 13b34928
+[info] ++++++++++++++++++++++core: 0, subcore: 1, start: 208, tick: 12000, kernelId: 0, blkID: 0, blkDim: 1, rtsqId: 1, streamId: 0, taskId: 0, subtaskId: 0, threadId: 0, done++++++++++++++++++++++.

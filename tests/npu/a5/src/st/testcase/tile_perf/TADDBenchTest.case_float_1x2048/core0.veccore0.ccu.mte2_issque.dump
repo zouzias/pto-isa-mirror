@@ -1,0 +1,64 @@
+[info] 1168 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=45
+[info] 1168 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=46
+[info] 1169 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=45. queue.size=1
+[info] 1170 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=46. queue.size=0
+[info] 1824 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343F8 instr.id=45
+[info] 2139 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343FC instr.id=46
+[info] 2143 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=66
+[info] 2143 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=67
+[info] 2144 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=66. queue.size=1
+[info] 2145 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=67. queue.size=0
+[info] 2814 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343F8 instr.id=66
+[info] 3133 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343FC instr.id=67
+[info] 3137 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=87
+[info] 3137 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=88
+[info] 3138 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=87. queue.size=1
+[info] 3139 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=88. queue.size=0
+[info] 3811 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343F8 instr.id=87
+[info] 4189 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343FC instr.id=88
+[info] 4193 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=305
+[info] 4193 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=306
+[info] 4194 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=305. queue.size=1
+[info] 4195 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=306. queue.size=0
+[info] 4880 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343F8 instr.id=305
+[info] 5215 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343FC instr.id=306
+[info] 5219 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=523
+[info] 5219 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=524
+[info] 5220 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=523. queue.size=1
+[info] 5221 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=524. queue.size=0
+[info] 5900 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343F8 instr.id=523
+[info] 6191 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343FC instr.id=524
+[info] 6195 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=741
+[info] 6195 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=742
+[info] 6196 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=741. queue.size=1
+[info] 6197 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=742. queue.size=0
+[info] 6883 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343F8 instr.id=741
+[info] 7193 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343FC instr.id=742
+[info] 7197 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=959
+[info] 7197 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=960
+[info] 7198 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=959. queue.size=1
+[info] 7199 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=960. queue.size=0
+[info] 7870 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343F8 instr.id=959
+[info] 8233 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343FC instr.id=960
+[info] 8237 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=1177
+[info] 8237 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=1178
+[info] 8238 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=1177. queue.size=1
+[info] 8239 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=1178. queue.size=0
+[info] 8939 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343F8 instr.id=1177
+[info] 9174 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343FC instr.id=1178
+[info] 9178 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=1395
+[info] 9178 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=1396
+[info] 9179 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=1395. queue.size=1
+[info] 9180 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=1396. queue.size=0
+[info] 9850 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343F8 instr.id=1395
+[info] 10253 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343FC instr.id=1396
+[info] 10257 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=1613
+[info] 10257 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=1614
+[info] 10258 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343F8 id=1613. queue.size=1
+[info] 10259 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B343FC id=1614. queue.size=0
+[info] 10933 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343F8 instr.id=1613
+[info] 11321 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B343FC instr.id=1614
+[info] 11600 [Push Instr] name=END_LABEL pc=0x11111111 id=2303
+[info] 11601 [pop Instr] name=END_LABEL pc=0x11111111 id=2303. queue.size=0
+[info] 11606 [RETIRE INSTR] instr.name=END_LABEL            instr.pc=0x11111111 instr.id=2303
+[info] ++++++++++++++++++++++core: 0, subcore: 1, start: 208, tick: 12000, kernelId: 0, blkID: 0, blkDim: 1, rtsqId: 1, streamId: 0, taskId: 0, subtaskId: 0, threadId: 0, done++++++++++++++++++++++.

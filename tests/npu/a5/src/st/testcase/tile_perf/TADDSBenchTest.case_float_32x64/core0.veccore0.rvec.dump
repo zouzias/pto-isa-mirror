@@ -1,0 +1,81 @@
+[info] [00001188] VF (ID:000060) read pb big_falgs: 0x3e, pb_slot: 0
+[info] [00001188] PFU: S2: 0x100 ,S3: 0x0, S65: 0x100
+[info] [00001188] PFU: S4: 0x1 ,S5: 0x20, S66: 0x200001
+[info] [00001188] PFU: S6: 0x0 ,S7: 0x0, S67: 0x0
+[info] [00001188] PFU: S8: 0xf5c3 ,S9: 0x4048, S68: 0x4048f5c3
+[info] [00001188] PFU: S10: 0x0 ,S11: 0x1, S69: 0x10000
+[info] 1188 start peek vf prefetch (ID:60), peekFifo size: 1
+[info] [00001189] Tde send peek prefetch request: addr: 0x13b32800, reqid: 1
+[info] [00001927] VF (ID:000085) read pb big_falgs: 0x3e, pb_slot: 0
+[info] [00001927] PFU: S2: 0x100 ,S3: 0x0, S65: 0x100
+[info] [00001927] PFU: S4: 0x1 ,S5: 0x20, S66: 0x200001
+[info] [00001927] PFU: S6: 0x0 ,S7: 0x0, S67: 0x0
+[info] [00001927] PFU: S8: 0xf5c3 ,S9: 0x4048, S68: 0x4048f5c3
+[info] [00001927] PFU: S10: 0x0 ,S11: 0x1, S69: 0x10000
+[info] 1927 start peek vf prefetch (ID:85), peekFifo size: 1
+[info] [00001928] Tde send peek prefetch request: addr: 0x13b32800, reqid: 4
+[info] [00002611] VF (ID:000110) read pb big_falgs: 0x3e, pb_slot: 0
+[info] [00002611] PFU: S2: 0x100 ,S3: 0x0, S65: 0x100
+[info] [00002611] PFU: S4: 0x1 ,S5: 0x20, S66: 0x200001
+[info] [00002611] PFU: S6: 0x0 ,S7: 0x0, S67: 0x0
+[info] [00002611] PFU: S8: 0xf5c3 ,S9: 0x4048, S68: 0x4048f5c3
+[info] [00002611] PFU: S10: 0x0 ,S11: 0x1, S69: 0x10000
+[info] 2611 start peek vf prefetch (ID:110), peekFifo size: 1
+[info] [00002612] Tde send peek prefetch request: addr: 0x13b32800, reqid: 7
+[info] [00003276] VF (ID:000427) read pb big_falgs: 0x3e, pb_slot: 0
+[info] [00003276] PFU: S2: 0x100 ,S3: 0x0, S65: 0x100
+[info] [00003276] PFU: S4: 0x1 ,S5: 0x20, S66: 0x200001
+[info] [00003276] PFU: S6: 0x0 ,S7: 0x0, S67: 0x0
+[info] [00003276] PFU: S8: 0xf5c3 ,S9: 0x4048, S68: 0x4048f5c3
+[info] [00003276] PFU: S10: 0x0 ,S11: 0x1, S69: 0x10000
+[info] 3276 start peek vf prefetch (ID:427), peekFifo size: 1
+[info] [00003277] Tde send peek prefetch request: addr: 0x13b32800, reqid: 10
+[info] [00003965] VF (ID:000744) read pb big_falgs: 0x3e, pb_slot: 0
+[info] [00003965] PFU: S2: 0x100 ,S3: 0x0, S65: 0x100
+[info] [00003965] PFU: S4: 0x1 ,S5: 0x20, S66: 0x200001
+[info] [00003965] PFU: S6: 0x0 ,S7: 0x0, S67: 0x0
+[info] [00003965] PFU: S8: 0xf5c3 ,S9: 0x4048, S68: 0x4048f5c3
+[info] [00003965] PFU: S10: 0x0 ,S11: 0x1, S69: 0x10000
+[info] 3965 start peek vf prefetch (ID:744), peekFifo size: 1
+[info] [00003966] Tde send peek prefetch request: addr: 0x13b32800, reqid: 13
+[info] [00004614] VF (ID:001061) read pb big_falgs: 0x3e, pb_slot: 0
+[info] [00004614] PFU: S2: 0x100 ,S3: 0x0, S65: 0x100
+[info] [00004614] PFU: S4: 0x1 ,S5: 0x20, S66: 0x200001
+[info] [00004614] PFU: S6: 0x0 ,S7: 0x0, S67: 0x0
+[info] [00004614] PFU: S8: 0xf5c3 ,S9: 0x4048, S68: 0x4048f5c3
+[info] [00004614] PFU: S10: 0x0 ,S11: 0x1, S69: 0x10000
+[info] 4614 start peek vf prefetch (ID:1061), peekFifo size: 1
+[info] [00004615] Tde send peek prefetch request: addr: 0x13b32800, reqid: 16
+[info] [00005284] VF (ID:001378) read pb big_falgs: 0x3e, pb_slot: 0
+[info] [00005284] PFU: S2: 0x100 ,S3: 0x0, S65: 0x100
+[info] [00005284] PFU: S4: 0x1 ,S5: 0x20, S66: 0x200001
+[info] [00005284] PFU: S6: 0x0 ,S7: 0x0, S67: 0x0
+[info] [00005284] PFU: S8: 0xf5c3 ,S9: 0x4048, S68: 0x4048f5c3
+[info] [00005284] PFU: S10: 0x0 ,S11: 0x1, S69: 0x10000
+[info] 5284 start peek vf prefetch (ID:1378), peekFifo size: 1
+[info] [00005285] Tde send peek prefetch request: addr: 0x13b32800, reqid: 19
+[info] [00005988] VF (ID:001695) read pb big_falgs: 0x3e, pb_slot: 0
+[info] [00005988] PFU: S2: 0x100 ,S3: 0x0, S65: 0x100
+[info] [00005988] PFU: S4: 0x1 ,S5: 0x20, S66: 0x200001
+[info] [00005988] PFU: S6: 0x0 ,S7: 0x0, S67: 0x0
+[info] [00005988] PFU: S8: 0xf5c3 ,S9: 0x4048, S68: 0x4048f5c3
+[info] [00005988] PFU: S10: 0x0 ,S11: 0x1, S69: 0x10000
+[info] 5988 start peek vf prefetch (ID:1695), peekFifo size: 1
+[info] [00005989] Tde send peek prefetch request: addr: 0x13b32800, reqid: 22
+[info] [00006667] VF (ID:002012) read pb big_falgs: 0x3e, pb_slot: 0
+[info] [00006667] PFU: S2: 0x100 ,S3: 0x0, S65: 0x100
+[info] [00006667] PFU: S4: 0x1 ,S5: 0x20, S66: 0x200001
+[info] [00006667] PFU: S6: 0x0 ,S7: 0x0, S67: 0x0
+[info] [00006667] PFU: S8: 0xf5c3 ,S9: 0x4048, S68: 0x4048f5c3
+[info] [00006667] PFU: S10: 0x0 ,S11: 0x1, S69: 0x10000
+[info] 6667 start peek vf prefetch (ID:2012), peekFifo size: 1
+[info] [00006668] Tde send peek prefetch request: addr: 0x13b32800, reqid: 25
+[info] [00007336] VF (ID:002329) read pb big_falgs: 0x3e, pb_slot: 0
+[info] [00007336] PFU: S2: 0x100 ,S3: 0x0, S65: 0x100
+[info] [00007336] PFU: S4: 0x1 ,S5: 0x20, S66: 0x200001
+[info] [00007336] PFU: S6: 0x0 ,S7: 0x0, S67: 0x0
+[info] [00007336] PFU: S8: 0xf5c3 ,S9: 0x4048, S68: 0x4048f5c3
+[info] [00007336] PFU: S10: 0x0 ,S11: 0x1, S69: 0x10000
+[info] 7336 start peek vf prefetch (ID:2329), peekFifo size: 1
+[info] [00007337] Tde send peek prefetch request: addr: 0x13b32800, reqid: 28
+[info] ++++++++++++++++++++++core: 0, subcore: 1, start: 209, tick: 8590, kernelId: 0, blkID: 0, blkDim: 1, rtsqId: 1, streamId: 0, taskId: 0, subtaskId: 0, threadId: 0, done++++++++++++++++++++++.

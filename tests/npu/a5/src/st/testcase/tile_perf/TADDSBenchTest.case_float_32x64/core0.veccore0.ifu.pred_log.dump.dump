@@ -1,0 +1,1090 @@
+[info] 672, getInstrSet Idx:0, binary:0x2004880
+[info] 672, getInstrSet Idx:1, binary:0x7c10000
+[info] 672, getInstrSet Idx:2, binary:0x8c00000
+[info] 672, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 672, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 672, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 672, jump_offset, start_pc:0x13b321a0, pos:0, offset:0x10
+[info] 672, getPrediction no jump, start_pc:0x13b321a0
+[info] 673, getInstrSet Idx:0, binary:0x73aff20
+[info] 673, getInstrSet Idx:1, binary:0x77b000f
+[info] 673, getInstrSet Idx:2, binary:0x29e3880
+[info] 673, getInstrSet Idx:3, binary:0x2224880
+[info] 673, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 673, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 673, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 673, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 673, jump_offset, start_pc:0x13b321b0, pos:0, offset:0x10
+[info] 673, getPrediction no jump, start_pc:0x13b321b0
+[info] 674, getInstrSet Idx:0, binary:0x3bd781
+[info] 674, getInstrSet Idx:1, binary:0x21f0880
+[info] 674, getInstrSet Idx:2, binary:0x7207fff
+[info] 674, getInstrSet Idx:3, binary:0x26202b4
+[info] 674, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 674, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 674, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 674, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 674, jump_offset, start_pc:0x13b321c0, pos:0, offset:0x10
+[info] 674, getPrediction no jump, start_pc:0x13b321c0
+[info] 675, getInstrSet Idx:0, binary:0xdef80a
+[info] 675, getInstrSet Idx:1, binary:0x8231002
+[info] 675, getInstrSet Idx:2, binary:0x2e2020e
+[info] 675, getInstrSet Idx:3, binary:0x81ef001
+[info] 675, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 675, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 675, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 675, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 675, jump_offset, start_pc:0x13b321d0, pos:0, offset:0x10
+[info] 675, getPrediction no jump, start_pc:0x13b321d0
+[info] 676, getInstrSet Idx:0, binary:0x3af884
+[info] 676, getInstrSet Idx:1, binary:0x83dd780
+[info] 676, getInstrSet Idx:2, binary:0x2184880
+[info] 676, getInstrSet Idx:3, binary:0x7d90000
+[info] 676, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 676, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 676, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 676, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 676, jump_offset, start_pc:0x13b321e0, pos:0, offset:0x10
+[info] 676, getPrediction no jump, start_pc:0x13b321e0
+[info] 677, getInstrSet Idx:0, binary:0x1c90c010
+[info] 677, getInstrSet Idx:1, binary:0x7080000
+[info] 677, getInstrSet Idx:2, binary:0xcd8c580
+[info] 677, getInstrSet Idx:3, binary:0x70a003e
+[info] 677, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 677, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 677, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 677, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 677, jump_offset, start_pc:0x13b321f0, pos:0, offset:0x10
+[info] 677, getPrediction no jump, start_pc:0x13b321f0
+[info] 1164, getInstrSet Idx:0, binary:0x7890100
+[info] 1164, getInstrSet Idx:1, binary:0x70c0000
+[info] 1164, getInstrSet Idx:2, binary:0x2085c1f
+[info] 1164, getInstrSet Idx:3, binary:0x70a0001
+[info] 1164, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1164, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1164, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1164, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1164, jump_offset, start_pc:0x13b32200, pos:0, offset:0x10
+[info] 1164, getPrediction no jump, start_pc:0x13b32200
+[info] 1165, getInstrSet Idx:0, binary:0x74d0020
+[info] 1165, getInstrSet Idx:1, binary:0x702fff6
+[info] 1165, getInstrSet Idx:2, binary:0x7000100
+[info] 1165, getInstrSet Idx:3, binary:0x7040200
+[info] 1165, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1165, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1165, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1165, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1165, jump_offset, start_pc:0x13b32210, pos:0, offset:0x10
+[info] 1165, getPrediction no jump, start_pc:0x13b32210
+[info] 1166, getInstrSet Idx:0, binary:0x20c5c0f
+[info] 1166, getInstrSet Idx:1, binary:0x70a0000
+[info] 1166, getInstrSet Idx:2, binary:0x70e0001
+[info] 1166, getInstrSet Idx:3, binary:0x7120080
+[info] 1166, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1166, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1166, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1166, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1166, jump_offset, start_pc:0x13b32220, pos:0, offset:0x10
+[info] 1166, getPrediction no jump, start_pc:0x13b32220
+[info] 1167, getInstrSet Idx:0, binary:0x7140004
+[info] 1167, getInstrSet Idx:1, binary:0x71a0000
+[info] 1167, getInstrSet Idx:2, binary:0x743ffff
+[info] 1167, getInstrSet Idx:3, binary:0x7c10001
+[info] 1167, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1167, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1167, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1167, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1167, jump_offset, start_pc:0x13b32230, pos:0, offset:0x10
+[info] 1167, getPrediction no jump, start_pc:0x13b32230
+[info] 1168, getInstrSet Idx:0, binary:0x7850002
+[info] 1168, getInstrSet Idx:1, binary:0x7060000
+[info] 1168, getInstrSet Idx:2, binary:0x20a6c1f
+[info] 1168, getInstrSet Idx:3, binary:0x74f0020
+[info] 1168, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1168, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1168, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1168, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1168, jump_offset, start_pc:0x13b32240, pos:0, offset:0x10
+[info] 1168, getPrediction no jump, start_pc:0x13b32240
+[info] 1169, getInstrSet Idx:0, binary:0x7d30020
+[info] 1169, getInstrSet Idx:1, binary:0x7d50020
+[info] 1169, getInstrSet Idx:2, binary:0x75b0001
+[info] 1169, getInstrSet Idx:3, binary:0x7486b102
+[info] 1169, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1169, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1169, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1169, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1169, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 1169, getPrediction no jump, start_pc:0x13b32250
+[info] 1170, getInstrSet Idx:0, binary:0x391e87c
+[info] 1170, getInstrSet Idx:1, binary:0x71e0000
+[info] 1170, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 1170, getInstrSet Idx:3, binary:0x7df0001
+[info] 1170, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1170, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1170, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1170, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1170, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 1170, getPrediction no jump, start_pc:0x13b32260
+[info] 1171, getInstrSet Idx:0, binary:0x21eec1f
+[info] 1171, getInstrSet Idx:1, binary:0x430857bc
+[info] 1171, getInstrSet Idx:2, binary:0x20c0880
+[info] 1171, getInstrSet Idx:3, binary:0x71c0162
+[info] 1171, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1171, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1171, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1171, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1171, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 1171, getPrediction no jump, start_pc:0x13b32270
+[info] 1172, getInstrSet Idx:0, binary:0x41400000
+[info] 1172, getInstrSet Idx:1, binary:0x41400000
+[info] 1172, getInstrSet Idx:2, binary:0x2dc0202
+[info] 1172, getInstrSet Idx:3, binary:0x1ce301
+[info] 1172, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1172, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1172, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1172, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1172, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 1172, getPrediction no jump, start_pc:0x13b32280
+[info] 1173, getInstrSet Idx:0, binary:0x154e0000
+[info] 1173, getInstrSet Idx:1, binary:0x15e001a5
+[info] 1173, getInstrSet Idx:2, binary:0x2e07900
+[info] 1173, getInstrSet Idx:3, binary:0x2e29900
+[info] 1173, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1173, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1173, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1173, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1173, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 1173, getPrediction no jump, start_pc:0x13b32290
+[info] 1174, getInstrSet Idx:0, binary:0x2e4a900
+[info] 1174, getInstrSet Idx:1, binary:0x74d8d100
+[info] 1174, getInstrSet Idx:2, binary:0x40e01800
+[info] 1174, getInstrSet Idx:3, binary:0x2821a00
+[info] 1174, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1174, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1174, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1174, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1174, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 1174, getPrediction no jump, start_pc:0x13b322a0
+[info] 1175, getInstrSet Idx:0, binary:0x8021001
+[info] 1175, getInstrSet Idx:1, binary:0x29c1a00
+[info] 1175, getInstrSet Idx:2, binary:0xe08e
+[info] 1175, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 1175, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1175, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1175, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1175, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 1175, getBrOffset instrIdx:3, cb_offset:131096
+[info] 1175, getPHTIndex pc:0x13b322bc, index:175
+[info] 1175, getPHTContent index:175, value:2
+[info] 1175, updateSGhr token:1, shgr_:1
+[info] 1175, getPhtBrPos token cb_token_pos:3, phtIdx:175, sghr:1
+[info] 1175, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 1175, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 1175, getPHTIndex pc:0x13b322bc, index:174
+[info] 1178, getInstrSet Idx:0, binary:0x7486b102
+[info] 1178, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1178, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 1178, getPrediction no jump, start_pc:0x13b32250
+[info] 1179, getInstrSet Idx:0, binary:0x391e87c
+[info] 1179, getInstrSet Idx:1, binary:0x71e0000
+[info] 1179, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 1179, getInstrSet Idx:3, binary:0x7df0001
+[info] 1179, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1179, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1179, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1179, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1179, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 1179, getPrediction no jump, start_pc:0x13b32260
+[info] 1180, getInstrSet Idx:0, binary:0x21eec1f
+[info] 1180, getInstrSet Idx:1, binary:0x430857bc
+[info] 1180, getInstrSet Idx:2, binary:0x20c0880
+[info] 1180, getInstrSet Idx:3, binary:0x71c0162
+[info] 1180, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1180, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1180, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1180, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1180, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 1180, getPrediction no jump, start_pc:0x13b32270
+[info] 1181, getInstrSet Idx:0, binary:0x41400000
+[info] 1181, getInstrSet Idx:1, binary:0x41400000
+[info] 1181, getInstrSet Idx:2, binary:0x2dc0202
+[info] 1181, getInstrSet Idx:3, binary:0x1ce301
+[info] 1181, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1181, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1181, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1181, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1181, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 1181, getPrediction no jump, start_pc:0x13b32280
+[info] 1182, getInstrSet Idx:0, binary:0x154e0000
+[info] 1182, getInstrSet Idx:1, binary:0x15e001a5
+[info] 1182, getInstrSet Idx:2, binary:0x2e07900
+[info] 1182, getInstrSet Idx:3, binary:0x2e29900
+[info] 1182, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1182, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1182, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1182, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1182, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 1182, getPrediction no jump, start_pc:0x13b32290
+[info] 1183, getInstrSet Idx:0, binary:0x2e4a900
+[info] 1183, getInstrSet Idx:1, binary:0x74d8d100
+[info] 1183, getInstrSet Idx:2, binary:0x40e01800
+[info] 1183, getInstrSet Idx:3, binary:0x2821a00
+[info] 1183, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1183, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1183, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1183, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1183, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 1183, getPrediction no jump, start_pc:0x13b322a0
+[info] 1184, getInstrSet Idx:0, binary:0x8021001
+[info] 1184, getInstrSet Idx:1, binary:0x29c1a00
+[info] 1184, getInstrSet Idx:2, binary:0xe08e
+[info] 1184, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 1184, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1184, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1184, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1184, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 1184, getBrOffset instrIdx:3, cb_offset:131096
+[info] 1184, getPHTIndex pc:0x13b322bc, index:174
+[info] 1184, getPHTContent index:174, value:2
+[info] 1184, updateSGhr token:1, shgr_:3
+[info] 1184, getPhtBrPos token cb_token_pos:3, phtIdx:174, sghr:3
+[info] 1184, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 1184, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 1184, getPHTIndex pc:0x13b322bc, index:172
+[info] 1190, getInstrSet Idx:0, binary:0x7486b102
+[info] 1190, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1190, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 1190, getPrediction no jump, start_pc:0x13b32250
+[info] 1191, getInstrSet Idx:0, binary:0x391e87c
+[info] 1191, getInstrSet Idx:1, binary:0x71e0000
+[info] 1191, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 1191, getInstrSet Idx:3, binary:0x7df0001
+[info] 1191, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1191, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1191, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1191, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1191, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 1191, getPrediction no jump, start_pc:0x13b32260
+[info] 1192, getInstrSet Idx:0, binary:0x21eec1f
+[info] 1192, getInstrSet Idx:1, binary:0x430857bc
+[info] 1192, getInstrSet Idx:2, binary:0x20c0880
+[info] 1192, getInstrSet Idx:3, binary:0x71c0162
+[info] 1192, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1192, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1192, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1192, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1192, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 1192, getPrediction no jump, start_pc:0x13b32270
+[info] 1193, getInstrSet Idx:0, binary:0x41400000
+[info] 1193, getInstrSet Idx:1, binary:0x41400000
+[info] 1193, getInstrSet Idx:2, binary:0x2dc0202
+[info] 1193, getInstrSet Idx:3, binary:0x1ce301
+[info] 1193, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1193, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1193, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1193, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1193, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 1193, getPrediction no jump, start_pc:0x13b32280
+[info] 1194, getInstrSet Idx:0, binary:0x154e0000
+[info] 1194, getInstrSet Idx:1, binary:0x15e001a5
+[info] 1194, getInstrSet Idx:2, binary:0x2e07900
+[info] 1194, getInstrSet Idx:3, binary:0x2e29900
+[info] 1194, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1194, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1194, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1194, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1194, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 1194, getPrediction no jump, start_pc:0x13b32290
+[info] 1195, getInstrSet Idx:0, binary:0x2e4a900
+[info] 1195, getInstrSet Idx:1, binary:0x74d8d100
+[info] 1195, getInstrSet Idx:2, binary:0x40e01800
+[info] 1195, getInstrSet Idx:3, binary:0x2821a00
+[info] 1195, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1195, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1195, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1195, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1195, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 1195, getPrediction no jump, start_pc:0x13b322a0
+[info] 1917, getPHTContent index:174, value:2
+[info] 1917, setPHTContent index:174, value:3
+[info] 1917, updatePredictor, token:1, pht_index:174, pre_pht:3, need_update_sghr:0, cghr:1, sghr:3
+[info] 1925, getInstrSet Idx:0, binary:0x8021001
+[info] 1925, getInstrSet Idx:1, binary:0x29c1a00
+[info] 1925, getInstrSet Idx:2, binary:0xe08e
+[info] 1925, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 1925, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1925, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1925, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1925, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 1925, getBrOffset instrIdx:3, cb_offset:131096
+[info] 1925, getPHTIndex pc:0x13b322bc, index:172
+[info] 1925, getPHTContent index:172, value:2
+[info] 1925, updateSGhr token:1, shgr_:7
+[info] 1925, getPhtBrPos token cb_token_pos:3, phtIdx:172, sghr:7
+[info] 1925, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 1925, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 1925, getPHTIndex pc:0x13b322bc, index:168
+[info] 1929, getInstrSet Idx:0, binary:0x7486b102
+[info] 1929, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1929, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 1929, getPrediction no jump, start_pc:0x13b32250
+[info] 1930, getInstrSet Idx:0, binary:0x391e87c
+[info] 1930, getInstrSet Idx:1, binary:0x71e0000
+[info] 1930, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 1930, getInstrSet Idx:3, binary:0x7df0001
+[info] 1930, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1930, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1930, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1930, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1930, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 1930, getPrediction no jump, start_pc:0x13b32260
+[info] 1931, getInstrSet Idx:0, binary:0x21eec1f
+[info] 1931, getInstrSet Idx:1, binary:0x430857bc
+[info] 1931, getInstrSet Idx:2, binary:0x20c0880
+[info] 1931, getInstrSet Idx:3, binary:0x71c0162
+[info] 1931, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1931, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1931, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1931, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1931, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 1931, getPrediction no jump, start_pc:0x13b32270
+[info] 1932, getInstrSet Idx:0, binary:0x41400000
+[info] 1932, getInstrSet Idx:1, binary:0x41400000
+[info] 1932, getInstrSet Idx:2, binary:0x2dc0202
+[info] 1932, getInstrSet Idx:3, binary:0x1ce301
+[info] 1932, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1932, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1932, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1932, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1932, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 1932, getPrediction no jump, start_pc:0x13b32280
+[info] 1933, getInstrSet Idx:0, binary:0x154e0000
+[info] 1933, getInstrSet Idx:1, binary:0x15e001a5
+[info] 1933, getInstrSet Idx:2, binary:0x2e07900
+[info] 1933, getInstrSet Idx:3, binary:0x2e29900
+[info] 1933, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1933, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1933, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1933, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1933, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 1933, getPrediction no jump, start_pc:0x13b32290
+[info] 1934, getInstrSet Idx:0, binary:0x2e4a900
+[info] 1934, getInstrSet Idx:1, binary:0x74d8d100
+[info] 1934, getInstrSet Idx:2, binary:0x40e01800
+[info] 1934, getInstrSet Idx:3, binary:0x2821a00
+[info] 1934, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1934, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1934, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1934, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 1934, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 1934, getPrediction no jump, start_pc:0x13b322a0
+[info] 2600, getPHTContent index:172, value:2
+[info] 2600, setPHTContent index:172, value:3
+[info] 2600, updatePredictor, token:1, pht_index:172, pre_pht:3, need_update_sghr:0, cghr:3, sghr:7
+[info] 2608, getInstrSet Idx:0, binary:0x8021001
+[info] 2608, getInstrSet Idx:1, binary:0x29c1a00
+[info] 2608, getInstrSet Idx:2, binary:0xe08e
+[info] 2608, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 2608, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2608, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2608, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2608, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 2608, getBrOffset instrIdx:3, cb_offset:131096
+[info] 2608, getPHTIndex pc:0x13b322bc, index:168
+[info] 2608, getPHTContent index:168, value:2
+[info] 2608, updateSGhr token:1, shgr_:15
+[info] 2608, getPhtBrPos token cb_token_pos:3, phtIdx:168, sghr:15
+[info] 2608, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 2608, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 2608, getPHTIndex pc:0x13b322bc, index:160
+[info] 2612, getInstrSet Idx:0, binary:0x7486b102
+[info] 2612, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2612, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 2612, getPrediction no jump, start_pc:0x13b32250
+[info] 2613, getInstrSet Idx:0, binary:0x391e87c
+[info] 2613, getInstrSet Idx:1, binary:0x71e0000
+[info] 2613, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 2613, getInstrSet Idx:3, binary:0x7df0001
+[info] 2613, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2613, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2613, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2613, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2613, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 2613, getPrediction no jump, start_pc:0x13b32260
+[info] 2614, getInstrSet Idx:0, binary:0x21eec1f
+[info] 2614, getInstrSet Idx:1, binary:0x430857bc
+[info] 2614, getInstrSet Idx:2, binary:0x20c0880
+[info] 2614, getInstrSet Idx:3, binary:0x71c0162
+[info] 2614, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2614, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2614, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2614, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2614, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 2614, getPrediction no jump, start_pc:0x13b32270
+[info] 2615, getInstrSet Idx:0, binary:0x41400000
+[info] 2615, getInstrSet Idx:1, binary:0x41400000
+[info] 2615, getInstrSet Idx:2, binary:0x2dc0202
+[info] 2615, getInstrSet Idx:3, binary:0x1ce301
+[info] 2615, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2615, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2615, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2615, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2615, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 2615, getPrediction no jump, start_pc:0x13b32280
+[info] 2616, getInstrSet Idx:0, binary:0x154e0000
+[info] 2616, getInstrSet Idx:1, binary:0x15e001a5
+[info] 2616, getInstrSet Idx:2, binary:0x2e07900
+[info] 2616, getInstrSet Idx:3, binary:0x2e29900
+[info] 2616, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2616, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2616, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2616, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2616, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 2616, getPrediction no jump, start_pc:0x13b32290
+[info] 2617, getInstrSet Idx:0, binary:0x2e4a900
+[info] 2617, getInstrSet Idx:1, binary:0x74d8d100
+[info] 2617, getInstrSet Idx:2, binary:0x40e01800
+[info] 2617, getInstrSet Idx:3, binary:0x2821a00
+[info] 2617, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2617, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2617, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2617, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 2617, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 2617, getPrediction no jump, start_pc:0x13b322a0
+[info] 3266, getPHTContent index:168, value:2
+[info] 3266, setPHTContent index:168, value:3
+[info] 3266, updatePredictor, token:1, pht_index:168, pre_pht:3, need_update_sghr:0, cghr:7, sghr:15
+[info] 3274, getInstrSet Idx:0, binary:0x8021001
+[info] 3274, getInstrSet Idx:1, binary:0x29c1a00
+[info] 3274, getInstrSet Idx:2, binary:0xe08e
+[info] 3274, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 3274, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3274, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3274, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3274, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 3274, getBrOffset instrIdx:3, cb_offset:131096
+[info] 3274, getPHTIndex pc:0x13b322bc, index:160
+[info] 3274, getPHTContent index:160, value:2
+[info] 3274, updateSGhr token:1, shgr_:31
+[info] 3274, getPhtBrPos token cb_token_pos:3, phtIdx:160, sghr:31
+[info] 3274, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 3274, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 3274, getPHTIndex pc:0x13b322bc, index:176
+[info] 3278, getInstrSet Idx:0, binary:0x7486b102
+[info] 3278, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3278, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 3278, getPrediction no jump, start_pc:0x13b32250
+[info] 3279, getInstrSet Idx:0, binary:0x391e87c
+[info] 3279, getInstrSet Idx:1, binary:0x71e0000
+[info] 3279, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 3279, getInstrSet Idx:3, binary:0x7df0001
+[info] 3279, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3279, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3279, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3279, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3279, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 3279, getPrediction no jump, start_pc:0x13b32260
+[info] 3280, getInstrSet Idx:0, binary:0x21eec1f
+[info] 3280, getInstrSet Idx:1, binary:0x430857bc
+[info] 3280, getInstrSet Idx:2, binary:0x20c0880
+[info] 3280, getInstrSet Idx:3, binary:0x71c0162
+[info] 3280, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3280, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3280, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3280, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3280, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 3280, getPrediction no jump, start_pc:0x13b32270
+[info] 3281, getInstrSet Idx:0, binary:0x41400000
+[info] 3281, getInstrSet Idx:1, binary:0x41400000
+[info] 3281, getInstrSet Idx:2, binary:0x2dc0202
+[info] 3281, getInstrSet Idx:3, binary:0x1ce301
+[info] 3281, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3281, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3281, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3281, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3281, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 3281, getPrediction no jump, start_pc:0x13b32280
+[info] 3282, getInstrSet Idx:0, binary:0x154e0000
+[info] 3282, getInstrSet Idx:1, binary:0x15e001a5
+[info] 3282, getInstrSet Idx:2, binary:0x2e07900
+[info] 3282, getInstrSet Idx:3, binary:0x2e29900
+[info] 3282, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3282, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3282, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3282, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3282, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 3282, getPrediction no jump, start_pc:0x13b32290
+[info] 3283, getInstrSet Idx:0, binary:0x2e4a900
+[info] 3283, getInstrSet Idx:1, binary:0x74d8d100
+[info] 3283, getInstrSet Idx:2, binary:0x40e01800
+[info] 3283, getInstrSet Idx:3, binary:0x2821a00
+[info] 3283, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3283, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3283, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3283, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3283, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 3283, getPrediction no jump, start_pc:0x13b322a0
+[info] 3955, getPHTContent index:160, value:2
+[info] 3955, setPHTContent index:160, value:3
+[info] 3955, updatePredictor, token:1, pht_index:160, pre_pht:3, need_update_sghr:0, cghr:15, sghr:31
+[info] 3963, getInstrSet Idx:0, binary:0x8021001
+[info] 3963, getInstrSet Idx:1, binary:0x29c1a00
+[info] 3963, getInstrSet Idx:2, binary:0xe08e
+[info] 3963, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 3963, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3963, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3963, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3963, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 3963, getBrOffset instrIdx:3, cb_offset:131096
+[info] 3963, getPHTIndex pc:0x13b322bc, index:176
+[info] 3963, getPHTContent index:176, value:2
+[info] 3963, updateSGhr token:1, shgr_:63
+[info] 3963, getPhtBrPos token cb_token_pos:3, phtIdx:176, sghr:63
+[info] 3963, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 3963, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 3963, getPHTIndex pc:0x13b322bc, index:144
+[info] 3967, getInstrSet Idx:0, binary:0x7486b102
+[info] 3967, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3967, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 3967, getPrediction no jump, start_pc:0x13b32250
+[info] 3968, getInstrSet Idx:0, binary:0x391e87c
+[info] 3968, getInstrSet Idx:1, binary:0x71e0000
+[info] 3968, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 3968, getInstrSet Idx:3, binary:0x7df0001
+[info] 3968, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3968, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3968, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3968, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3968, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 3968, getPrediction no jump, start_pc:0x13b32260
+[info] 3969, getInstrSet Idx:0, binary:0x21eec1f
+[info] 3969, getInstrSet Idx:1, binary:0x430857bc
+[info] 3969, getInstrSet Idx:2, binary:0x20c0880
+[info] 3969, getInstrSet Idx:3, binary:0x71c0162
+[info] 3969, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3969, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3969, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3969, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3969, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 3969, getPrediction no jump, start_pc:0x13b32270
+[info] 3970, getInstrSet Idx:0, binary:0x41400000
+[info] 3970, getInstrSet Idx:1, binary:0x41400000
+[info] 3970, getInstrSet Idx:2, binary:0x2dc0202
+[info] 3970, getInstrSet Idx:3, binary:0x1ce301
+[info] 3970, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3970, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3970, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3970, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3970, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 3970, getPrediction no jump, start_pc:0x13b32280
+[info] 3971, getInstrSet Idx:0, binary:0x154e0000
+[info] 3971, getInstrSet Idx:1, binary:0x15e001a5
+[info] 3971, getInstrSet Idx:2, binary:0x2e07900
+[info] 3971, getInstrSet Idx:3, binary:0x2e29900
+[info] 3971, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3971, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3971, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3971, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3971, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 3971, getPrediction no jump, start_pc:0x13b32290
+[info] 3972, getInstrSet Idx:0, binary:0x2e4a900
+[info] 3972, getInstrSet Idx:1, binary:0x74d8d100
+[info] 3972, getInstrSet Idx:2, binary:0x40e01800
+[info] 3972, getInstrSet Idx:3, binary:0x2821a00
+[info] 3972, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3972, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3972, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3972, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 3972, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 3972, getPrediction no jump, start_pc:0x13b322a0
+[info] 4604, getPHTContent index:176, value:2
+[info] 4604, setPHTContent index:176, value:3
+[info] 4604, updatePredictor, token:1, pht_index:176, pre_pht:3, need_update_sghr:0, cghr:31, sghr:63
+[info] 4612, getInstrSet Idx:0, binary:0x8021001
+[info] 4612, getInstrSet Idx:1, binary:0x29c1a00
+[info] 4612, getInstrSet Idx:2, binary:0xe08e
+[info] 4612, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 4612, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4612, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4612, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4612, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 4612, getBrOffset instrIdx:3, cb_offset:131096
+[info] 4612, getPHTIndex pc:0x13b322bc, index:144
+[info] 4612, getPHTContent index:144, value:2
+[info] 4612, updateSGhr token:1, shgr_:127
+[info] 4612, getPhtBrPos token cb_token_pos:3, phtIdx:144, sghr:127
+[info] 4612, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 4612, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 4612, getPHTIndex pc:0x13b322bc, index:208
+[info] 4616, getInstrSet Idx:0, binary:0x7486b102
+[info] 4616, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4616, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 4616, getPrediction no jump, start_pc:0x13b32250
+[info] 4617, getInstrSet Idx:0, binary:0x391e87c
+[info] 4617, getInstrSet Idx:1, binary:0x71e0000
+[info] 4617, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 4617, getInstrSet Idx:3, binary:0x7df0001
+[info] 4617, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4617, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4617, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4617, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4617, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 4617, getPrediction no jump, start_pc:0x13b32260
+[info] 4618, getInstrSet Idx:0, binary:0x21eec1f
+[info] 4618, getInstrSet Idx:1, binary:0x430857bc
+[info] 4618, getInstrSet Idx:2, binary:0x20c0880
+[info] 4618, getInstrSet Idx:3, binary:0x71c0162
+[info] 4618, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4618, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4618, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4618, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4618, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 4618, getPrediction no jump, start_pc:0x13b32270
+[info] 4619, getInstrSet Idx:0, binary:0x41400000
+[info] 4619, getInstrSet Idx:1, binary:0x41400000
+[info] 4619, getInstrSet Idx:2, binary:0x2dc0202
+[info] 4619, getInstrSet Idx:3, binary:0x1ce301
+[info] 4619, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4619, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4619, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4619, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4619, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 4619, getPrediction no jump, start_pc:0x13b32280
+[info] 4620, getInstrSet Idx:0, binary:0x154e0000
+[info] 4620, getInstrSet Idx:1, binary:0x15e001a5
+[info] 4620, getInstrSet Idx:2, binary:0x2e07900
+[info] 4620, getInstrSet Idx:3, binary:0x2e29900
+[info] 4620, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4620, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4620, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4620, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4620, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 4620, getPrediction no jump, start_pc:0x13b32290
+[info] 4621, getInstrSet Idx:0, binary:0x2e4a900
+[info] 4621, getInstrSet Idx:1, binary:0x74d8d100
+[info] 4621, getInstrSet Idx:2, binary:0x40e01800
+[info] 4621, getInstrSet Idx:3, binary:0x2821a00
+[info] 4621, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4621, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4621, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4621, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 4621, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 4621, getPrediction no jump, start_pc:0x13b322a0
+[info] 5274, getPHTContent index:144, value:2
+[info] 5274, setPHTContent index:144, value:3
+[info] 5274, updatePredictor, token:1, pht_index:144, pre_pht:3, need_update_sghr:0, cghr:63, sghr:127
+[info] 5282, getInstrSet Idx:0, binary:0x8021001
+[info] 5282, getInstrSet Idx:1, binary:0x29c1a00
+[info] 5282, getInstrSet Idx:2, binary:0xe08e
+[info] 5282, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 5282, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5282, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5282, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5282, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 5282, getBrOffset instrIdx:3, cb_offset:131096
+[info] 5282, getPHTIndex pc:0x13b322bc, index:208
+[info] 5282, getPHTContent index:208, value:2
+[info] 5282, updateSGhr token:1, shgr_:255
+[info] 5282, getPhtBrPos token cb_token_pos:3, phtIdx:208, sghr:255
+[info] 5282, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 5282, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 5282, getPHTIndex pc:0x13b322bc, index:80
+[info] 5286, getInstrSet Idx:0, binary:0x7486b102
+[info] 5286, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5286, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 5286, getPrediction no jump, start_pc:0x13b32250
+[info] 5287, getInstrSet Idx:0, binary:0x391e87c
+[info] 5287, getInstrSet Idx:1, binary:0x71e0000
+[info] 5287, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 5287, getInstrSet Idx:3, binary:0x7df0001
+[info] 5287, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5287, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5287, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5287, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5287, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 5287, getPrediction no jump, start_pc:0x13b32260
+[info] 5288, getInstrSet Idx:0, binary:0x21eec1f
+[info] 5288, getInstrSet Idx:1, binary:0x430857bc
+[info] 5288, getInstrSet Idx:2, binary:0x20c0880
+[info] 5288, getInstrSet Idx:3, binary:0x71c0162
+[info] 5288, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5288, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5288, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5288, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5288, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 5288, getPrediction no jump, start_pc:0x13b32270
+[info] 5289, getInstrSet Idx:0, binary:0x41400000
+[info] 5289, getInstrSet Idx:1, binary:0x41400000
+[info] 5289, getInstrSet Idx:2, binary:0x2dc0202
+[info] 5289, getInstrSet Idx:3, binary:0x1ce301
+[info] 5289, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5289, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5289, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5289, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5289, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 5289, getPrediction no jump, start_pc:0x13b32280
+[info] 5290, getInstrSet Idx:0, binary:0x154e0000
+[info] 5290, getInstrSet Idx:1, binary:0x15e001a5
+[info] 5290, getInstrSet Idx:2, binary:0x2e07900
+[info] 5290, getInstrSet Idx:3, binary:0x2e29900
+[info] 5290, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5290, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5290, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5290, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5290, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 5290, getPrediction no jump, start_pc:0x13b32290
+[info] 5291, getInstrSet Idx:0, binary:0x2e4a900
+[info] 5291, getInstrSet Idx:1, binary:0x74d8d100
+[info] 5291, getInstrSet Idx:2, binary:0x40e01800
+[info] 5291, getInstrSet Idx:3, binary:0x2821a00
+[info] 5291, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5291, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5291, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5291, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5291, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 5291, getPrediction no jump, start_pc:0x13b322a0
+[info] 5978, getPHTContent index:208, value:2
+[info] 5978, setPHTContent index:208, value:3
+[info] 5978, updatePredictor, token:1, pht_index:208, pre_pht:3, need_update_sghr:0, cghr:127, sghr:255
+[info] 5986, getInstrSet Idx:0, binary:0x8021001
+[info] 5986, getInstrSet Idx:1, binary:0x29c1a00
+[info] 5986, getInstrSet Idx:2, binary:0xe08e
+[info] 5986, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 5986, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5986, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5986, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5986, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 5986, getBrOffset instrIdx:3, cb_offset:131096
+[info] 5986, getPHTIndex pc:0x13b322bc, index:80
+[info] 5986, getPHTContent index:80, value:2
+[info] 5986, updateSGhr token:1, shgr_:255
+[info] 5986, getPhtBrPos token cb_token_pos:3, phtIdx:80, sghr:255
+[info] 5986, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 5986, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 5986, getPHTIndex pc:0x13b322bc, index:80
+[info] 5990, getInstrSet Idx:0, binary:0x7486b102
+[info] 5990, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5990, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 5990, getPrediction no jump, start_pc:0x13b32250
+[info] 5991, getInstrSet Idx:0, binary:0x391e87c
+[info] 5991, getInstrSet Idx:1, binary:0x71e0000
+[info] 5991, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 5991, getInstrSet Idx:3, binary:0x7df0001
+[info] 5991, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5991, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5991, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5991, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5991, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 5991, getPrediction no jump, start_pc:0x13b32260
+[info] 5992, getInstrSet Idx:0, binary:0x21eec1f
+[info] 5992, getInstrSet Idx:1, binary:0x430857bc
+[info] 5992, getInstrSet Idx:2, binary:0x20c0880
+[info] 5992, getInstrSet Idx:3, binary:0x71c0162
+[info] 5992, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5992, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5992, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5992, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5992, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 5992, getPrediction no jump, start_pc:0x13b32270
+[info] 5993, getInstrSet Idx:0, binary:0x41400000
+[info] 5993, getInstrSet Idx:1, binary:0x41400000
+[info] 5993, getInstrSet Idx:2, binary:0x2dc0202
+[info] 5993, getInstrSet Idx:3, binary:0x1ce301
+[info] 5993, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5993, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5993, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5993, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5993, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 5993, getPrediction no jump, start_pc:0x13b32280
+[info] 5994, getInstrSet Idx:0, binary:0x154e0000
+[info] 5994, getInstrSet Idx:1, binary:0x15e001a5
+[info] 5994, getInstrSet Idx:2, binary:0x2e07900
+[info] 5994, getInstrSet Idx:3, binary:0x2e29900
+[info] 5994, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5994, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5994, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5994, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5994, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 5994, getPrediction no jump, start_pc:0x13b32290
+[info] 5995, getInstrSet Idx:0, binary:0x2e4a900
+[info] 5995, getInstrSet Idx:1, binary:0x74d8d100
+[info] 5995, getInstrSet Idx:2, binary:0x40e01800
+[info] 5995, getInstrSet Idx:3, binary:0x2821a00
+[info] 5995, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5995, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5995, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5995, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 5995, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 5995, getPrediction no jump, start_pc:0x13b322a0
+[info] 6657, getPHTContent index:80, value:2
+[info] 6657, setPHTContent index:80, value:3
+[info] 6657, updatePredictor, token:1, pht_index:80, pre_pht:3, need_update_sghr:0, cghr:255, sghr:255
+[info] 6665, getInstrSet Idx:0, binary:0x8021001
+[info] 6665, getInstrSet Idx:1, binary:0x29c1a00
+[info] 6665, getInstrSet Idx:2, binary:0xe08e
+[info] 6665, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 6665, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6665, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6665, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6665, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 6665, getBrOffset instrIdx:3, cb_offset:131096
+[info] 6665, getPHTIndex pc:0x13b322bc, index:80
+[info] 6665, getPHTContent index:80, value:3
+[info] 6665, updateSGhr token:1, shgr_:255
+[info] 6665, getPhtBrPos token cb_token_pos:3, phtIdx:80, sghr:255
+[info] 6665, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 6665, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 6665, getPHTIndex pc:0x13b322bc, index:80
+[info] 6669, getInstrSet Idx:0, binary:0x7486b102
+[info] 6669, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6669, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 6669, getPrediction no jump, start_pc:0x13b32250
+[info] 6670, getInstrSet Idx:0, binary:0x391e87c
+[info] 6670, getInstrSet Idx:1, binary:0x71e0000
+[info] 6670, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 6670, getInstrSet Idx:3, binary:0x7df0001
+[info] 6670, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6670, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6670, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6670, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6670, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 6670, getPrediction no jump, start_pc:0x13b32260
+[info] 6671, getInstrSet Idx:0, binary:0x21eec1f
+[info] 6671, getInstrSet Idx:1, binary:0x430857bc
+[info] 6671, getInstrSet Idx:2, binary:0x20c0880
+[info] 6671, getInstrSet Idx:3, binary:0x71c0162
+[info] 6671, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6671, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6671, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6671, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6671, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 6671, getPrediction no jump, start_pc:0x13b32270
+[info] 6672, getInstrSet Idx:0, binary:0x41400000
+[info] 6672, getInstrSet Idx:1, binary:0x41400000
+[info] 6672, getInstrSet Idx:2, binary:0x2dc0202
+[info] 6672, getInstrSet Idx:3, binary:0x1ce301
+[info] 6672, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6672, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6672, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6672, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6672, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 6672, getPrediction no jump, start_pc:0x13b32280
+[info] 6673, getInstrSet Idx:0, binary:0x154e0000
+[info] 6673, getInstrSet Idx:1, binary:0x15e001a5
+[info] 6673, getInstrSet Idx:2, binary:0x2e07900
+[info] 6673, getInstrSet Idx:3, binary:0x2e29900
+[info] 6673, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6673, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6673, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6673, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6673, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 6673, getPrediction no jump, start_pc:0x13b32290
+[info] 6674, getInstrSet Idx:0, binary:0x2e4a900
+[info] 6674, getInstrSet Idx:1, binary:0x74d8d100
+[info] 6674, getInstrSet Idx:2, binary:0x40e01800
+[info] 6674, getInstrSet Idx:3, binary:0x2821a00
+[info] 6674, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6674, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6674, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6674, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 6674, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 6674, getPrediction no jump, start_pc:0x13b322a0
+[info] 7326, getPHTContent index:80, value:3
+[info] 7326, updatePredictor, token:1, pht_index:80, pre_pht:3, need_update_sghr:0, cghr:255, sghr:255
+[info] 7334, getInstrSet Idx:0, binary:0x8021001
+[info] 7334, getInstrSet Idx:1, binary:0x29c1a00
+[info] 7334, getInstrSet Idx:2, binary:0xe08e
+[info] 7334, getInstrSet Idx:3, binary:0x4020ffe8
+[info] 7334, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7334, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7334, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7334, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 7334, getBrOffset instrIdx:3, cb_offset:131096
+[info] 7334, getPHTIndex pc:0x13b322bc, index:80
+[info] 7334, getPHTContent index:80, value:3
+[info] 7334, updateSGhr token:1, shgr_:255
+[info] 7334, getPhtBrPos token cb_token_pos:3, phtIdx:80, sghr:255
+[info] 7334, jump_offset, start_pc:0x13b322b0, pos:3, offset:0x60
+[info] 7334, getPrediction has token jumpc, start_pc:0x13b322b0, cb_pos:4, next_pc:0x13b3225c
+[info] 7334, getPHTIndex pc:0x13b322bc, index:80
+[info] 7338, getInstrSet Idx:0, binary:0x7486b102
+[info] 7338, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7338, jump_offset, start_pc:0x13b32250, pos:0, offset:0x10
+[info] 7338, getPrediction no jump, start_pc:0x13b32250
+[info] 7339, getInstrSet Idx:0, binary:0x391e87c
+[info] 7339, getInstrSet Idx:1, binary:0x71e0000
+[info] 7339, getInstrSet Idx:2, binary:0x1c9de87c
+[info] 7339, getInstrSet Idx:3, binary:0x7df0001
+[info] 7339, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7339, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7339, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7339, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7339, jump_offset, start_pc:0x13b32260, pos:0, offset:0x10
+[info] 7339, getPrediction no jump, start_pc:0x13b32260
+[info] 7340, getInstrSet Idx:0, binary:0x21eec1f
+[info] 7340, getInstrSet Idx:1, binary:0x430857bc
+[info] 7340, getInstrSet Idx:2, binary:0x20c0880
+[info] 7340, getInstrSet Idx:3, binary:0x71c0162
+[info] 7340, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7340, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7340, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7340, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7340, jump_offset, start_pc:0x13b32270, pos:0, offset:0x10
+[info] 7340, getPrediction no jump, start_pc:0x13b32270
+[info] 7341, getInstrSet Idx:0, binary:0x41400000
+[info] 7341, getInstrSet Idx:1, binary:0x41400000
+[info] 7341, getInstrSet Idx:2, binary:0x2dc0202
+[info] 7341, getInstrSet Idx:3, binary:0x1ce301
+[info] 7341, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7341, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7341, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7341, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7341, jump_offset, start_pc:0x13b32280, pos:0, offset:0x10
+[info] 7341, getPrediction no jump, start_pc:0x13b32280
+[info] 7342, getInstrSet Idx:0, binary:0x154e0000
+[info] 7342, getInstrSet Idx:1, binary:0x15e001a5
+[info] 7342, getInstrSet Idx:2, binary:0x2e07900
+[info] 7342, getInstrSet Idx:3, binary:0x2e29900
+[info] 7342, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7342, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7342, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7342, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7342, jump_offset, start_pc:0x13b32290, pos:0, offset:0x10
+[info] 7342, getPrediction no jump, start_pc:0x13b32290
+[info] 7343, getInstrSet Idx:0, binary:0x2e4a900
+[info] 7343, getInstrSet Idx:1, binary:0x74d8d100
+[info] 7343, getInstrSet Idx:2, binary:0x40e01800
+[info] 7343, getInstrSet Idx:3, binary:0x2821a00
+[info] 7343, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7343, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7343, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7343, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7343, jump_offset, start_pc:0x13b322a0, pos:0, offset:0x10
+[info] 7343, getPrediction no jump, start_pc:0x13b322a0
+[info] 7996, getPHTContent index:80, value:3
+[info] 7996, setPHTContent index:80, value:2
+[info] 7996, updatePredictor, token:0, pht_index:80, pre_pht:2, need_update_sghr:1, cghr:254, sghr:254
+[info] 7999, getInstrSet Idx:0, binary:0x7228000
+[info] 7999, getInstrSet Idx:1, binary:0x7630010
+[info] 7999, getInstrSet Idx:2, binary:0x1ce11ff0
+[info] 7999, getInstrSet Idx:3, binary:0x21c2880
+[info] 7999, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7999, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7999, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7999, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 7999, jump_offset, start_pc:0x13b322c0, pos:0, offset:0x10
+[info] 7999, getPrediction no jump, start_pc:0x13b322c0
+[info] 8000, getInstrSet Idx:0, binary:0x71e0520
+[info] 8000, getInstrSet Idx:1, binary:0xdce78a
+[info] 8000, getInstrSet Idx:2, binary:0xe1070b
+[info] 8000, getInstrSet Idx:3, binary:0x3e11ff0
+[info] 8000, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8000, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8000, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8000, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8000, jump_offset, start_pc:0x13b322d0, pos:0, offset:0x10
+[info] 8000, getPrediction no jump, start_pc:0x13b322d0
+[info] 8001, getInstrSet Idx:0, binary:0x71e0000
+[info] 8001, getInstrSet Idx:1, binary:0x1ce11fe0
+[info] 8001, getInstrSet Idx:2, binary:0x1cf71f
+[info] 8001, getInstrSet Idx:3, binary:0x21078f
+[info] 8001, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8001, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8001, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8001, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8001, jump_offset, start_pc:0x13b322e0, pos:0, offset:0x10
+[info] 8001, getPrediction no jump, start_pc:0x13b322e0
+[info] 8002, getInstrSet Idx:0, binary:0xdce80a
+[info] 8002, getInstrSet Idx:1, binary:0x216e900
+[info] 8002, getInstrSet Idx:2, binary:0x40200002
+[info] 8002, getInstrSet Idx:3, binary:0x4000000f
+[info] 8002, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8002, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8002, procInstrSet cb_instr_cnt:1, ub_pos:0
+[info] 8002, procInstrSet cb_instr_cnt:1, ub_pos:4
+[info] 8002, getBrOffset instrIdx:2, cb_offset:2
+[info] 8002, getBrOffset instrIdx:3, ub_offset:15
+[info] 8002, getPHTIndex pc:0x13b322f8, index:64
+[info] 8002, getPHTContent index:64, value:2
+[info] 8002, updateSGhr token:1, shgr_:253
+[info] 8002, getPhtBrPos token cb_token_pos:2, phtIdx:64, sghr:253
+[info] 8002, jump_offset, start_pc:0x13b322f0, pos:2, offset:0x8
+[info] 8002, getPrediction has token jumpc, start_pc:0x13b322f0, cb_pos:3, next_pc:0x13b32300
+[info] 8002, getPHTIndex pc:0x13b322f8, index:67
+[info] 8005, getInstrSet Idx:0, binary:0x7228000
+[info] 8005, getInstrSet Idx:1, binary:0x7630010
+[info] 8005, getInstrSet Idx:2, binary:0x21c1880
+[info] 8005, getInstrSet Idx:3, binary:0x3dd1fe8
+[info] 8005, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8005, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8005, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8005, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8005, jump_offset, start_pc:0x13b32300, pos:0, offset:0x10
+[info] 8005, getPrediction no jump, start_pc:0x13b32300
+[info] 8006, getInstrSet Idx:0, binary:0x720ffa2
+[info] 8006, getInstrSet Idx:1, binary:0x21c0880
+[info] 8006, getInstrSet Idx:2, binary:0x761ffff
+[info] 8006, getInstrSet Idx:3, binary:0x7a1ffff
+[info] 8006, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8006, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8006, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8006, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8006, jump_offset, start_pc:0x13b32310, pos:0, offset:0x10
+[info] 8006, getPrediction no jump, start_pc:0x13b32310
+[info] 8007, getInstrSet Idx:0, binary:0x7e13fff
+[info] 8007, getInstrSet Idx:1, binary:0x2e00202
+[info] 8007, getInstrSet Idx:2, binary:0x1ce801
+[info] 8007, getInstrSet Idx:3, binary:0x7200010
+[info] 8007, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8007, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8007, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8007, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8007, jump_offset, start_pc:0x13b32320, pos:0, offset:0x10
+[info] 8007, getPrediction no jump, start_pc:0x13b32320
+[info] 8008, getInstrSet Idx:0, binary:0x1ce801
+[info] 8008, getInstrSet Idx:1, binary:0x3dd1fe0
+[info] 8008, getInstrSet Idx:2, binary:0x71e0000
+[info] 8008, getInstrSet Idx:3, binary:0x402ef000
+[info] 8008, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8008, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8008, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8008, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8008, jump_offset, start_pc:0x13b32330, pos:0, offset:0x10
+[info] 8008, getPrediction no jump, start_pc:0x13b32330
+[info] 8009, getInstrSet Idx:0, binary:0x41600000
+[info] 8009, getInstrSet Idx:1, binary:0x2004880
+[info] 8009, getInstrSet Idx:2, binary:0x7c10000
+[info] 8009, getInstrSet Idx:3, binary:0x8c00000
+[info] 8009, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8009, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8009, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8009, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8009, jump_offset, start_pc:0x13b32340, pos:0, offset:0x10
+[info] 8009, getPrediction no jump, start_pc:0x13b32340
+[info] 8262, getPHTContent index:67, value:2
+[info] 8262, setPHTContent index:67, value:1
+[info] 8262, updatePredictor, token:0, pht_index:67, pre_pht:1, need_update_sghr:1, cghr:252, sghr:252
+[info] 8265, getInstrSet Idx:0, binary:0x4000000f
+[info] 8265, procInstrSet cb_instr_cnt:0, ub_pos:1
+[info] 8265, getBrOffset instrIdx:0, ub_offset:15
+[info] 8265, jump_offset, start_pc:0x13b322f0, pos:3, offset:0x3c
+[info] 8265, getPrediction has direct jump, start_pc:0x13b322f0, ub_pos:1
+[info] 8265, getPHTIndex pc:0x13b322fc, index:67
+[info] 8268, getInstrSet Idx:0, binary:0x71e0000
+[info] 8268, getInstrSet Idx:1, binary:0x402ef000
+[info] 8268, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8268, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8268, jump_offset, start_pc:0x13b32330, pos:0, offset:0x10
+[info] 8268, getPrediction no jump, start_pc:0x13b32330
+[info] 8269, getInstrSet Idx:0, binary:0x41600000
+[info] 8269, getInstrSet Idx:1, binary:0x2004880
+[info] 8269, getInstrSet Idx:2, binary:0x7c10000
+[info] 8269, getInstrSet Idx:3, binary:0x8c00000
+[info] 8269, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8269, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8269, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8269, procInstrSet cb_instr_cnt:0, ub_pos:0
+[info] 8269, jump_offset, start_pc:0x13b32340, pos:0, offset:0x10
+[info] 8269, getPrediction no jump, start_pc:0x13b32340
+[info] ++++++++++++++++++++++core: 0, subcore: 1, start: 209, tick: 8590, kernelId: 0, blkID: 0, blkDim: 1, rtsqId: 1, streamId: 0, taskId: 0, subtaskId: 0, threadId: 0, done++++++++++++++++++++++.

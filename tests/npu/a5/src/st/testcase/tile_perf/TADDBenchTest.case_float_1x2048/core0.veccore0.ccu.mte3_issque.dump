@@ -1,0 +1,121 @@
+[info] 1173 [Push Instr] name=MOV_SPR_XN pc=0x13B34424 id=56
+[info] 1173 [Push Instr] name=MOV_SPR_XN pc=0x13B34428 id=57
+[info] 1174 [Push Instr] name=MOV_SPR_XN pc=0x13B3442C id=58
+[info] 1174 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=59
+[info] 1174 [pop Instr] name=MOV_SPR_XN pc=0x13B34424 id=56. queue.size=3
+[info] 1175 [pop Instr] name=MOV_SPR_XN pc=0x13B34428 id=57. queue.size=2
+[info] 1176 [pop Instr] name=MOV_SPR_XN pc=0x13B3442C id=58. queue.size=1
+[info] 1178 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=59. queue.size=0
+[info] 1179 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34424 instr.id=56
+[info] 1181 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34428 instr.id=57
+[info] 1183 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B3442C instr.id=58
+[info] 1925 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B34430 instr.id=59
+[info] 2148 [Push Instr] name=MOV_SPR_XN pc=0x13B34424 id=77
+[info] 2148 [Push Instr] name=MOV_SPR_XN pc=0x13B34428 id=78
+[info] 2149 [Push Instr] name=MOV_SPR_XN pc=0x13B3442C id=79
+[info] 2149 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=80
+[info] 2149 [pop Instr] name=MOV_SPR_XN pc=0x13B34424 id=77. queue.size=3
+[info] 2150 [pop Instr] name=MOV_SPR_XN pc=0x13B34428 id=78. queue.size=2
+[info] 2151 [pop Instr] name=MOV_SPR_XN pc=0x13B3442C id=79. queue.size=1
+[info] 2153 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=80. queue.size=0
+[info] 2154 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34424 instr.id=77
+[info] 2156 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34428 instr.id=78
+[info] 2158 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B3442C instr.id=79
+[info] 2888 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B34430 instr.id=80
+[info] 3142 [Push Instr] name=MOV_SPR_XN pc=0x13B34424 id=98
+[info] 3142 [Push Instr] name=MOV_SPR_XN pc=0x13B34428 id=99
+[info] 3143 [Push Instr] name=MOV_SPR_XN pc=0x13B3442C id=100
+[info] 3143 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=101
+[info] 3143 [pop Instr] name=MOV_SPR_XN pc=0x13B34424 id=98. queue.size=3
+[info] 3144 [pop Instr] name=MOV_SPR_XN pc=0x13B34428 id=99. queue.size=2
+[info] 3145 [pop Instr] name=MOV_SPR_XN pc=0x13B3442C id=100. queue.size=1
+[info] 3147 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=101. queue.size=0
+[info] 3148 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34424 instr.id=98
+[info] 3150 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34428 instr.id=99
+[info] 3152 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B3442C instr.id=100
+[info] 3899 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B34430 instr.id=101
+[info] 4198 [Push Instr] name=MOV_SPR_XN pc=0x13B34424 id=316
+[info] 4198 [Push Instr] name=MOV_SPR_XN pc=0x13B34428 id=317
+[info] 4199 [Push Instr] name=MOV_SPR_XN pc=0x13B3442C id=318
+[info] 4199 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=319
+[info] 4199 [pop Instr] name=MOV_SPR_XN pc=0x13B34424 id=316. queue.size=3
+[info] 4200 [pop Instr] name=MOV_SPR_XN pc=0x13B34428 id=317. queue.size=2
+[info] 4201 [pop Instr] name=MOV_SPR_XN pc=0x13B3442C id=318. queue.size=1
+[info] 4203 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=319. queue.size=0
+[info] 4204 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34424 instr.id=316
+[info] 4206 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34428 instr.id=317
+[info] 4208 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B3442C instr.id=318
+[info] 4937 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B34430 instr.id=319
+[info] 5224 [Push Instr] name=MOV_SPR_XN pc=0x13B34424 id=534
+[info] 5224 [Push Instr] name=MOV_SPR_XN pc=0x13B34428 id=535
+[info] 5225 [Push Instr] name=MOV_SPR_XN pc=0x13B3442C id=536
+[info] 5225 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=537
+[info] 5225 [pop Instr] name=MOV_SPR_XN pc=0x13B34424 id=534. queue.size=3
+[info] 5226 [pop Instr] name=MOV_SPR_XN pc=0x13B34428 id=535. queue.size=2
+[info] 5227 [pop Instr] name=MOV_SPR_XN pc=0x13B3442C id=536. queue.size=1
+[info] 5229 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=537. queue.size=0
+[info] 5230 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34424 instr.id=534
+[info] 5232 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34428 instr.id=535
+[info] 5234 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B3442C instr.id=536
+[info] 5963 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B34430 instr.id=537
+[info] 6200 [Push Instr] name=MOV_SPR_XN pc=0x13B34424 id=752
+[info] 6200 [Push Instr] name=MOV_SPR_XN pc=0x13B34428 id=753
+[info] 6201 [Push Instr] name=MOV_SPR_XN pc=0x13B3442C id=754
+[info] 6201 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=755
+[info] 6201 [pop Instr] name=MOV_SPR_XN pc=0x13B34424 id=752. queue.size=3
+[info] 6202 [pop Instr] name=MOV_SPR_XN pc=0x13B34428 id=753. queue.size=2
+[info] 6203 [pop Instr] name=MOV_SPR_XN pc=0x13B3442C id=754. queue.size=1
+[info] 6205 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=755. queue.size=0
+[info] 6206 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34424 instr.id=752
+[info] 6208 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34428 instr.id=753
+[info] 6210 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B3442C instr.id=754
+[info] 6957 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B34430 instr.id=755
+[info] 7202 [Push Instr] name=MOV_SPR_XN pc=0x13B34424 id=970
+[info] 7202 [Push Instr] name=MOV_SPR_XN pc=0x13B34428 id=971
+[info] 7203 [Push Instr] name=MOV_SPR_XN pc=0x13B3442C id=972
+[info] 7203 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=973
+[info] 7203 [pop Instr] name=MOV_SPR_XN pc=0x13B34424 id=970. queue.size=3
+[info] 7204 [pop Instr] name=MOV_SPR_XN pc=0x13B34428 id=971. queue.size=2
+[info] 7205 [pop Instr] name=MOV_SPR_XN pc=0x13B3442C id=972. queue.size=1
+[info] 7207 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=973. queue.size=0
+[info] 7208 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34424 instr.id=970
+[info] 7210 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34428 instr.id=971
+[info] 7212 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B3442C instr.id=972
+[info] 7957 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B34430 instr.id=973
+[info] 8242 [Push Instr] name=MOV_SPR_XN pc=0x13B34424 id=1188
+[info] 8242 [Push Instr] name=MOV_SPR_XN pc=0x13B34428 id=1189
+[info] 8243 [Push Instr] name=MOV_SPR_XN pc=0x13B3442C id=1190
+[info] 8243 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=1191
+[info] 8243 [pop Instr] name=MOV_SPR_XN pc=0x13B34424 id=1188. queue.size=3
+[info] 8244 [pop Instr] name=MOV_SPR_XN pc=0x13B34428 id=1189. queue.size=2
+[info] 8245 [pop Instr] name=MOV_SPR_XN pc=0x13B3442C id=1190. queue.size=1
+[info] 8247 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=1191. queue.size=0
+[info] 8248 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34424 instr.id=1188
+[info] 8250 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34428 instr.id=1189
+[info] 8252 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B3442C instr.id=1190
+[info] 8997 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B34430 instr.id=1191
+[info] 9183 [Push Instr] name=MOV_SPR_XN pc=0x13B34424 id=1406
+[info] 9183 [Push Instr] name=MOV_SPR_XN pc=0x13B34428 id=1407
+[info] 9184 [Push Instr] name=MOV_SPR_XN pc=0x13B3442C id=1408
+[info] 9184 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=1409
+[info] 9184 [pop Instr] name=MOV_SPR_XN pc=0x13B34424 id=1406. queue.size=3
+[info] 9185 [pop Instr] name=MOV_SPR_XN pc=0x13B34428 id=1407. queue.size=2
+[info] 9186 [pop Instr] name=MOV_SPR_XN pc=0x13B3442C id=1408. queue.size=1
+[info] 9188 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=1409. queue.size=0
+[info] 9189 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34424 instr.id=1406
+[info] 9191 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34428 instr.id=1407
+[info] 9193 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B3442C instr.id=1408
+[info] 9930 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B34430 instr.id=1409
+[info] 10262 [Push Instr] name=MOV_SPR_XN pc=0x13B34424 id=1624
+[info] 10262 [Push Instr] name=MOV_SPR_XN pc=0x13B34428 id=1625
+[info] 10263 [Push Instr] name=MOV_SPR_XN pc=0x13B3442C id=1626
+[info] 10263 [Push Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=1627
+[info] 10263 [pop Instr] name=MOV_SPR_XN pc=0x13B34424 id=1624. queue.size=3
+[info] 10264 [pop Instr] name=MOV_SPR_XN pc=0x13B34428 id=1625. queue.size=2
+[info] 10265 [pop Instr] name=MOV_SPR_XN pc=0x13B3442C id=1626. queue.size=1
+[info] 10267 [pop Instr] name=MOV_SRC_TO_DST_ALIGNv2 pc=0x13B34430 id=1627. queue.size=0
+[info] 10268 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34424 instr.id=1624
+[info] 10270 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B34428 instr.id=1625
+[info] 10272 [RETIRE INSTR] instr.name=MOV_SPR_XN           instr.pc=0x13B3442C instr.id=1626
+[info] 11000 [RETIRE INSTR] instr.name=MOV_SRC_TO_DST_ALIGNv2 instr.pc=0x13B34430 instr.id=1627
+[info] ++++++++++++++++++++++core: 0, subcore: 1, start: 208, tick: 12000, kernelId: 0, blkID: 0, blkDim: 1, rtsqId: 1, streamId: 0, taskId: 0, subtaskId: 0, threadId: 0, done++++++++++++++++++++++.

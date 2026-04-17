@@ -1,0 +1,3 @@
+[info] [0000000009] [block_start]           : AIV, task_id=0, core_id=0, block_id=0
+[info] [0000012002] [block_end]             : AIV, task_id=0, core_id=0, block_id=0
+[warning] [0000012004] [stars_top.cpp : 1181 : acsq_idle_state_proc] NOT SUPPORT TASK TYPE 3

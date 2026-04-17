@@ -1,0 +1,5 @@
+[info] [0000000130] [context_start]       : AIV, stream_id=3, rtsq_id=3 task_id=0, contextID=0, threadID=0x0, thread_dim=0x1
+[info] [0000000133] [block_start]           : AIV, task_id=0, contextID=0, threadID=0, coreID=0, blkdim=1, blkID=0
+[info] [0000006013] [block_end]             : AIV, task_id=0, contextID=0, threadID=0, coreID=0, blkdim=1, blkID=0
+[info] [0000006014] [context_end]         : AIV, stream_id=3, rtsq_id=3 task_id=0, contextID=0, threadID=0x0, thread_dim=0x1
+[warning] [0000006016] [stars_top.cpp : 1181 : acsq_idle_state_proc] NOT SUPPORT TASK TYPE 3
