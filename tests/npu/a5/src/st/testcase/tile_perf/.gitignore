@@ -1,0 +1,7 @@
+# Ignore simulator dump directories
+TADD_*/
+TADDS_*/
+TEXP_*/
+*.dump
+results.db
+

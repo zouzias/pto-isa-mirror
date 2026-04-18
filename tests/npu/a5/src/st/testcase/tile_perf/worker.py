@@ -2,11 +2,8 @@
 """
 PTO Regression Worker - Runs tests and extracts performance metrics.
 
-EPC Metrics:
-- vf_epc: VF throughput from pop→retire latency (vf_real_execute_time)
-- instr_epc: Per-instruction EPC from EXU dump (for reference)
-
-VF pop→retire is the correct metric - pure VF compute time without icache overhead.
+A5: Uses vf_real_execute_time from instr_log.dump
+A2A3: Uses first VEC pop → last VEC retire per iteration (Lok's method)
 """
 
 import os
@@ -39,6 +36,15 @@ ARCH_CONFIG = {
         "build_dir": PTO_ISA_ROOT / "tests/npu/a2a3/src/st/build",
         "test_dir": PTO_ISA_ROOT / "tests/npu/a2a3/src/st/testcase",
     },
+}
+
+# Map PTO op to vector instruction pattern
+OP_TO_INSTR = {
+    "TADD": r"VADD",
+    "TADDS": r"VADDS|VADD",  # VADDS or VADD with scalar
+    "TEXP": r"VEXP",
+    "TMUL": r"VMUL",
+    "TMULS": r"VMULS|VMUL",
 }
 
 
@@ -76,26 +82,20 @@ def get_env(arch: str) -> dict:
 
 def parse_a5_vf_epc(dump_dir: Path, elements: int) -> dict:
     """
-    Parse VF throughput EPC from pop→retire latency.
-    Uses vf_real_execute_time which excludes icache overhead.
-    
-    Source files:
-    - instr_popped_log.dump: VF dispatch (pop) cycles
-    - instr_log.dump: VF retire cycles + vf_real_execute_time
+    Parse A5 VF EPC from vf_real_execute_time in instr_log.dump.
+    This excludes icache overhead - pure VF compute time.
     """
     instr_log = dump_dir / "core0.veccore0.instr_log.dump"
-    popped_log = dump_dir / "core0.veccore0.instr_popped_log.dump"
     
     if not instr_log.exists():
         return {"error": f"instr_log not found: {instr_log}"}
     
-    # Method 1: Use vf_real_execute_time directly from retire log
     content = instr_log.read_text()
     pattern = r"\[(\d+)\].*VF.*vf_real_execute_time:\s*(\d+)"
     matches = re.findall(pattern, content)
     
     if matches:
-        # Skip first cold VF, use warm average
+        # Skip first cold VF (icache miss), use warm average
         warm_times = [int(t) for _, t in matches[1:]] if len(matches) > 1 else [int(matches[0][1])]
         avg_warm = sum(warm_times) / len(warm_times)
         vf_epc = elements / avg_warm if avg_warm > 0 else 0
@@ -110,49 +110,7 @@ def parse_a5_vf_epc(dump_dir: Path, elements: int) -> dict:
             "vf_epc": vf_epc,
         }
     
-    # Method 2: Fallback to pop→retire calculation
-    if not popped_log.exists():
-        return {"error": "No VF timing found in logs"}
-    
-    # Parse pop times
-    pop_times = {}
-    for line in popped_log.read_text().splitlines():
-        if "VF" in line:
-            m = re.search(r"\[(\d+)\].*ID:\s*(\d+)\)\s*VF", line)
-            if m:
-                pop_times[int(m.group(2))] = int(m.group(1))
-    
-    # Parse retire times
-    retire_times = {}
-    for line in instr_log.read_text().splitlines():
-        if "VF" in line:
-            m = re.search(r"\[(\d+)\].*ID:\s*(\d+)\)\s*VF", line)
-            if m:
-                retire_times[int(m.group(2))] = int(m.group(1))
-    
-    # Calculate pop→retire latencies
-    latencies = []
-    for instr_id in sorted(pop_times.keys()):
-        if instr_id in retire_times:
-            latencies.append(retire_times[instr_id] - pop_times[instr_id])
-    
-    if not latencies:
-        return {"error": "No matching VF pop/retire pairs"}
-    
-    # Skip first cold, use warm
-    warm = latencies[1:] if len(latencies) > 1 else latencies
-    avg_warm = sum(warm) / len(warm)
-    vf_epc = elements / avg_warm if avg_warm > 0 else 0
-    
-    return {
-        "method": "pop_retire_delta",
-        "vf_count": len(latencies),
-        "cold_cycles": latencies[0] if latencies else 0,
-        "warm_times": warm,
-        "avg_warm_cycles": avg_warm,
-        "elements": elements,
-        "vf_epc": vf_epc,
-    }
+    return {"error": "No VF timing found in logs"}
 
 
 def parse_a5_instr_epc(dump_dir: Path, op_type: str = "TADD") -> dict:
@@ -194,43 +152,110 @@ def parse_a5_instr_epc(dump_dir: Path, op_type: str = "TADD") -> dict:
     }
 
 
-def parse_a2a3_vf_epc(dump_dir: Path, elements: int) -> dict:
-    """Parse A2A3 VF EPC from pop→retire."""
+def parse_a2a3_vf_epc(dump_dir: Path, elements: int, op_type: str = "TADD") -> dict:
+    """
+    Parse A2A3 EPC using first VEC pop → last VEC retire per iteration.
+    
+    Lok's method for 2D shapes (multiple VEC ops per iteration):
+    1. Find pipe_barrier cycles to delimit iterations
+    2. Between barriers: first VEC pop → last VEC retire = vector cycles
+    3. Skip first 2 cold iterations, use warm average
+    """
     instr_log = dump_dir / "core0.veccore0.instr_log.dump"
     popped_log = dump_dir / "core0.veccore0.instr_popped_log.dump"
     
-    if not instr_log.exists() or not popped_log.exists():
-        return {"error": "A2A3 logs not found"}
+    if not instr_log.exists():
+        return {"error": f"instr_log not found"}
+    if not popped_log.exists():
+        return {"error": f"popped_log not found"}
     
-    # Parse VF pop/retire times
-    pop_times = {}
-    for line in popped_log.read_text().splitlines():
-        if "VF" in line:
-            m = re.search(r"\[(\d+)\].*ID:\s*(\d+)\)\s*VF", line)
+    # Get instruction pattern for this op
+    instr_pattern = OP_TO_INSTR.get(op_type, r"VADD|VEXP|VMUL")
+    
+    # Parse barriers from instr_log.dump
+    barrier_pattern = r"\[(\d+)\].*(?:pipe_barrier|BAR\s+PIPE[:\s]*ALL|SEND_BARRIER)"
+    barrier_cycles = []
+    with open(instr_log) as f:
+        for line in f:
+            m = re.search(barrier_pattern, line, re.IGNORECASE)
             if m:
-                pop_times[int(m.group(2))] = int(m.group(1))
+                barrier_cycles.append(int(m.group(1)))
     
-    retire_times = {}
-    for line in instr_log.read_text().splitlines():
-        if "VF" in line:
-            m = re.search(r"\[(\d+)\].*ID:\s*(\d+)\)\s*VF", line)
-            if m:
-                retire_times[int(m.group(2))] = int(m.group(1))
+    # Parse VEC pop times from popped_log.dump
+    vec_pop = []
+    with open(popped_log) as f:
+        for line in f:
+            if re.search(instr_pattern, line, re.IGNORECASE):
+                m = re.search(r"\[(\d+)\]", line)
+                if m:
+                    vec_pop.append(int(m.group(1)))
     
-    latencies = []
-    for instr_id in sorted(pop_times.keys()):
-        if instr_id in retire_times:
-            latencies.append(retire_times[instr_id] - pop_times[instr_id])
+    # Parse VEC retire times from instr_log.dump
+    vec_retire = []
+    with open(instr_log) as f:
+        for line in f:
+            if re.search(instr_pattern, line, re.IGNORECASE):
+                m = re.search(r"\[(\d+)\]", line)
+                if m:
+                    vec_retire.append(int(m.group(1)))
     
-    if not latencies:
-        return {"error": "No VF pairs found"}
+    if not vec_pop and not vec_retire:
+        return {"error": f"No {instr_pattern} found in logs"}
     
-    warm = latencies[1:] if len(latencies) > 1 else latencies
-    avg_warm = sum(warm) / len(warm)
+    # If barriers found, group by iteration
+    iteration_cycles = []
+    
+    if len(barrier_cycles) >= 2:
+        for i in range(len(barrier_cycles) - 1):
+            bar_start = barrier_cycles[i]
+            bar_end = barrier_cycles[i + 1]
+            
+            # Find first pop after bar_start
+            first_pop = None
+            for p in vec_pop:
+                if p > bar_start and p < bar_end:
+                    first_pop = p
+                    break
+            
+            # Find last retire before bar_end
+            last_retire = None
+            for r in reversed(vec_retire):
+                if r > bar_start and r < bar_end:
+                    last_retire = r
+                    break
+            
+            if first_pop is not None and last_retire is not None:
+                vec_cycles = last_retire - first_pop
+                if vec_cycles > 0:
+                    iteration_cycles.append(vec_cycles)
+    
+    # Fallback: if no good iteration data, use simple pop→retire pairs
+    if not iteration_cycles and vec_pop and vec_retire:
+        # Match by count - assume same order
+        for i in range(min(len(vec_pop), len(vec_retire))):
+            lat = vec_retire[i] - vec_pop[i]
+            if lat > 0:
+                iteration_cycles.append(lat)
+    
+    if not iteration_cycles:
+        return {"error": "Could not extract iteration cycles"}
+    
+    # Skip first 2 cold iterations
+    warm_cycles = iteration_cycles[2:] if len(iteration_cycles) > 2 else iteration_cycles
+    
+    if not warm_cycles:
+        warm_cycles = iteration_cycles  # use all if not enough
+    
+    avg_warm = sum(warm_cycles) / len(warm_cycles)
     vf_epc = elements / avg_warm if avg_warm > 0 else 0
     
     return {
-        "vf_count": len(latencies),
+        "method": "first_pop_to_last_retire",
+        "barrier_count": len(barrier_cycles),
+        "vec_pop_count": len(vec_pop),
+        "vec_retire_count": len(vec_retire),
+        "iteration_count": len(iteration_cycles),
+        "warm_cycles": warm_cycles,
         "avg_warm_cycles": avg_warm,
         "elements": elements,
         "vf_epc": vf_epc,
@@ -323,7 +348,7 @@ def run_test(arch: str, test_name: str, output_dir: Path) -> dict:
         vf_result = parse_a5_vf_epc(dump_dir, elements)
         instr_result = parse_a5_instr_epc(dump_dir, op_type)
     else:
-        vf_result = parse_a2a3_vf_epc(dump_dir, elements)
+        vf_result = parse_a2a3_vf_epc(dump_dir, elements, op_type)
     
     return {
         "test_name": test_short,
@@ -378,6 +403,7 @@ def main():
     parser.add_argument("--arch", choices=["a5", "a2a3"], default="a5")
     parser.add_argument("--tests", default="*", help="Test filter pattern")
     parser.add_argument("--output", type=Path, default=Path("/tmp/pto_regress"))
+    parser.add_argument("--debug", action="store_true", help="Show debug info")
     args = parser.parse_args()
     
     conn = init_db()
@@ -391,8 +417,11 @@ def main():
     conn.commit()
     
     print(f"=== PTO Regression Run #{run_id} ===")
-    print(f"Commit: {git['commit']} | Branch: {git['branch']}")
-    print(f"EPC Method: VF pop→retire (vf_real_execute_time)")
+    print(f"Commit: {git['commit']} | Branch: {git['branch']} | Arch: {args.arch}")
+    if args.arch == "a5":
+        print("EPC Method: A5 vf_real_execute_time")
+    else:
+        print("EPC Method: A2A3 first_pop → last_retire")
     
     all_tests = list_tests(args.arch)
     
@@ -413,7 +442,7 @@ def main():
         save_result(conn, run_id, result)
         
         if result.get("vf_epc"):
-            print(f"    ✅ VF EPC: {result['vf_epc']:.2f} | VF cy: {result.get('vf_cycles', 0):.0f}")
+            print(f"    ✅ VF EPC: {result['vf_epc']:.2f} | VF cy: {result.get('vf_cycles', 0):.0f} | elem: {result['elements']}")
         else:
             print(f"    ❌ {result.get('error', 'unknown')}")
     
