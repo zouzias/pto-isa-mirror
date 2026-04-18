@@ -275,6 +275,57 @@ PTO_INTERNAL void GenerateB8IndicesZZToUB(__ubuf__ uint8_t *dst, __ubuf__ uint8_
     vstas(ureg_align, offWr, 0, POST_UPDATE);
     mem_bar(VST_VLD);
 
+    // Zero the source padding (rows beyond validRows up to paddedRows16) so that
+    // vgather2 reads zeros for padding rows rather than stale UB residue.
+    // On real NPU hardware, the source tile's padding positions may contain
+    // leftover data from prior operations (e.g. TQUANT PK4_B32 spill).
+    {
+        const uint16_t validB16 = rows * P;
+        const uint16_t totalB16 = rowBlockCount * 16 * P;
+        if (validB16 < totalB16) {
+            vector_u16 vb16_zero;
+            vbr(vb16_zero, 0);
+            // Advance past full VLs of purely-valid data.
+            const uint16_t skipVLs = validB16 / vlElem; // full VLs that are entirely valid
+            __ubuf__ uint16_t *zBase = srcPtr_b16 + skipVLs * vlElem;
+            const uint16_t localValid = validB16 - skipVLs * vlElem; // valid elements in this chunk
+            const uint16_t localTotal = totalB16 - skipVLs * vlElem; // total elements from here
+            if (localTotal <= vlElem) {
+                // Everything fits in one VL: use pnot for padding-only predicate.
+                uint32_t totalCount = (uint32_t)localTotal;
+                uint32_t validCount = (uint32_t)localValid;
+                MaskReg preg_total = CreatePredicate<uint16_t>(totalCount);
+                MaskReg preg_valid = CreatePredicate<uint16_t>(validCount);
+                MaskReg preg_pad;
+                pnot(preg_pad, preg_valid, preg_total);
+                vsts(vb16_zero, zBase, 0, NORM_B16, preg_pad);
+            } else {
+                // Remaining spans multiple VLs. Zero the first partial chunk via pnot,
+                // then full VLs for the rest.
+                uint32_t firstTotal = (uint32_t)vlElem;
+                uint32_t firstValid = (uint32_t)localValid;
+                MaskReg preg_first_total = CreatePredicate<uint16_t>(firstTotal);
+                MaskReg preg_first_valid = CreatePredicate<uint16_t>(firstValid);
+                MaskReg preg_first_pad;
+                pnot(preg_first_pad, preg_first_valid, preg_first_total);
+                vsts(vb16_zero, zBase, vlElem, NORM_B16, preg_first_pad, POST_UPDATE);
+                uint16_t remaining = localTotal - vlElem;
+                const uint16_t fullItersZ = remaining / vlElem;
+                const uint16_t tailB16 = remaining % vlElem;
+                MaskReg preg_all = pset_b16(PAT_ALL);
+                for (uint16_t i = 0; i < fullItersZ; ++i) {
+                    vsts(vb16_zero, zBase, vlElem, NORM_B16, preg_all, POST_UPDATE);
+                }
+                if (tailB16 > 0) {
+                    uint32_t tailCount = (uint32_t)tailB16;
+                    MaskReg preg_tail = CreatePredicate<uint16_t>(tailCount);
+                    vsts(vb16_zero, zBase, 0, NORM_B16, preg_tail);
+                }
+            }
+            mem_bar(VST_VLD);
+        }
+    }
+
     __ubuf__ uint16_t *offRd = offsetBuf;
     const uint16_t fullIters = N_blk / blksPerVL;
     const uint16_t tailBlks = N_blk % blksPerVL;

@@ -510,11 +510,13 @@ __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl(typename TileDataOut::TileDType __out
     __ubuf__ V *dstPtr = (__ubuf__ V *)__cce_get_tile_ptr(dst);
     __ubuf__ T *maxPtr = (__ubuf__ T *)__cce_get_tile_ptr(max);
     __ubuf__ T *scalingPtr = (__ubuf__ T *)__cce_get_tile_ptr(scaling);
+
     set_ctrl(static_cast<uint64_t>(1) << 50);
     __VEC_SCOPE__
     {
         constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-        uint32_t total_elements_count = validRows * TileDataSrc::Cols;
+        constexpr unsigned staticCols = TileDataSrc::Cols;
+        uint32_t total_elements_count = validRows * staticCols;
         uint16_t vl_count = CeilDivision(total_elements_count, elementsPerRepeat);
         uint32_t numGroups = total_elements_count / 32;
         unsigned exp_loop_count = CeilDivision(numGroups, elementsPerRepeat);
