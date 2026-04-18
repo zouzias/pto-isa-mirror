@@ -97,7 +97,8 @@ AICORE void runTMovZZ(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ uint8_
         scalingTileBytesRaw > tmpBufSizeAligned ?
             (scalingTileBytesRaw > minScalingBytes ? scalingTileBytesRaw : minScalingBytes) :
             (tmpBufSizeAligned > minScalingBytes ? tmpBufSizeAligned : minScalingBytes);
-    constexpr int e8TileBytes = groupedColsFlattenedPadded * sizeof(uint8_t);
+    // Pad to 32-byte alignment (required for UB address alignment of adjacent tiles).
+    constexpr int e8TileBytes = PTO_CEIL(groupedColsFlattenedPadded * (int)sizeof(uint8_t), 0x20);
     constexpr int fp8TileBytes = validRows * paddedCols * sizeof(int8_t);
     // The actual NZ tile footprint with RowPlusOne stride is larger than virtualRow * paddedCols.
     // TSTORE reads col_group k at offset k * (paddedRows16+1) * C0_SIZE, each spanning paddedRows16 * C0_SIZE bytes.
@@ -112,7 +113,12 @@ AICORE void runTMovZZ(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ uint8_
     constexpr int scalingTileAddr = PTO_CEIL(maxTileAddr + maxTileBytes, 0x20);
     constexpr int e8TileAddr = PTO_CEIL(scalingTileAddr + scalingTileBytes, 0x20);
     constexpr int fp8TileAddr = 0x0;
-    constexpr int fp8TileNZAddr = fp8TileAddr + fp8TileBytes; // must not overlap fp8Tile for TMOV
+    // vlds reads a full VL (REPEAT_BYTE = 256 bytes) even when paddedCols < 256.
+    // The tail bytes spill past fp8TileBytes into adjacent memory.  Add a gap so
+    // that fp8TileNZ starts beyond the maximum vlds read address, preventing
+    // VLD/VST overlap on real NPU hardware (store queue is not in-order).
+    constexpr int vldOverreadGap = PTO_CEIL(paddedCols * (int)sizeof(int8_t), 256) - paddedCols * (int)sizeof(int8_t);
+    constexpr int fp8TileNZAddr = PTO_CEIL(fp8TileAddr + fp8TileBytes + vldOverreadGap, 0x20);
     constexpr int workTileEnd = e8TileAddr + e8TileBytes;
     constexpr int fp8TileNZEnd = fp8TileNZAddr + fp8TileNZBytes;
     // Place e8ZzTile/tmpTile after both the working tiles and the NZ tile's actual footprint
@@ -270,7 +276,8 @@ AICORE void runTMovZZ_e8m0(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ u
         scalingTileBytesRaw > tmpBufSizeAligned ?
             (scalingTileBytesRaw > minScalingBytes ? scalingTileBytesRaw : minScalingBytes) :
             (tmpBufSizeAligned > minScalingBytes ? tmpBufSizeAligned : minScalingBytes);
-    constexpr int e8TileBytes = groupedColsFlattenedPadded * (int)sizeof(float8_e8m0_t);
+    // Pad to 32-byte alignment (required for UB address alignment of adjacent tiles).
+    constexpr int e8TileBytes = PTO_CEIL(groupedColsFlattenedPadded * (int)sizeof(float8_e8m0_t), 0x20);
     constexpr int fp8TileBytes = validRows * paddedCols * sizeof(int8_t);
     constexpr int C0_SIZE_B = 32;
     constexpr int nColGroupsNZ = paddedCols / C0_SIZE_B;
@@ -283,7 +290,10 @@ AICORE void runTMovZZ_e8m0(__gm__ uint8_t *outFp8Nz, __gm__ float *src, __gm__ u
     constexpr int scalingTileAddr = PTO_CEIL(maxTileAddr + maxTileBytes, 0x20);
     constexpr int e8TileAddr = PTO_CEIL(scalingTileAddr + scalingTileBytes, 0x20);
     constexpr int fp8TileAddr = 0x0;
-    constexpr int fp8TileNZAddr = fp8TileAddr + fp8TileBytes;
+    // vlds reads a full VL (REPEAT_BYTE = 256 bytes) even when paddedCols < 256.
+    // Add gap to prevent VLD/VST address overlap on real NPU hardware.
+    constexpr int vldOverreadGap = PTO_CEIL(paddedCols * (int)sizeof(int8_t), 256) - paddedCols * (int)sizeof(int8_t);
+    constexpr int fp8TileNZAddr = PTO_CEIL(fp8TileAddr + fp8TileBytes + vldOverreadGap, 0x20);
     constexpr int workTileEnd = e8TileAddr + e8TileBytes;
     constexpr int fp8TileNZEnd = fp8TileNZAddr + fp8TileNZBytes;
     constexpr int zzTmpStart = PTO_CEIL(workTileEnd > fp8TileNZEnd ? workTileEnd : fp8TileNZEnd, 0x20);
