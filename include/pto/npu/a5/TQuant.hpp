@@ -491,6 +491,51 @@ PTO_INTERNAL void TQuant_MXFP8_B16(__ubuf__ T *srcPtr, __ubuf__ uint8_t *expPtr,
     CalcQuantizedFP8Values(srcPtr, scalingPtr, dstPtr, total_elements_count);
 }
 
+// Zero-pad columns [validCols, StaticCols) in each row of a 16-bit source tile.
+// Uses full-VL vlds → vsel → vsts at VL-aligned offsets so that every UB
+// store is 256-byte-aligned.  Sub-VL stores (vstus/vstas/predicated vsts at
+// non-VL-aligned offsets) are unreliable on some hardware revisions.
+// Requires StaticCols to evenly divide elements-per-VL.
+// Must be called from inside a __VEC_SCOPE__.
+template <typename T, unsigned StaticCols>
+PTO_INTERNAL void ZeroPadColumns_VLAligned(__ubuf__ T *srcPtr, unsigned validRows, unsigned validCols)
+{
+    constexpr unsigned elemPerVL = REPEAT_BYTE / sizeof(T);
+    static_assert(elemPerVL % StaticCols == 0,
+                  "StaticCols must evenly divide elements-per-VL for VL-aligned padding");
+    constexpr unsigned rowsPerVL = elemPerVL / StaticCols;
+
+    MaskReg pg_all = PSetTyped<T>(PAT_ALL);
+
+    // Build a periodic predicate: bit p is set iff (p % StaticCols) < validCols.
+    // Row 0 contributes positions [0, validCols).
+    uint32_t vc = (uint32_t)validCols;
+    MaskReg preg_valid = CreatePredicate<T>(vc);
+    for (uint16_t r = 1; r < (uint16_t)rowsPerVL; ++r) {
+        uint32_t rangeStart = (uint32_t)(r * StaticCols);
+        uint32_t rangeEnd   = rangeStart + (uint32_t)validCols;
+        MaskReg p_end   = CreatePredicate<T>(rangeEnd);
+        MaskReg p_start = CreatePredicate<T>(rangeStart);
+        MaskReg p_row;
+        pnot(p_row, p_start, p_end);
+        por(preg_valid, preg_valid, p_row, pg_all);
+    }
+
+    RegTensor<T> vreg_data;
+    RegTensor<T> vreg_zero;
+    vdup(vreg_zero, (T)0, pg_all, MODE_ZEROING);
+
+    uint32_t totalElems = (uint32_t)(validRows * StaticCols);
+    uint16_t vlCount = CeilDivision(totalElems, (unsigned)elemPerVL);
+
+    for (uint16_t vi = 0; vi < vlCount; ++vi) {
+        vlds(vreg_data, srcPtr, vi * elemPerVL, NORM);
+        vsel((vector_s16 &)vreg_data, (vector_s16 &)vreg_data, (vector_s16 &)vreg_zero, preg_valid);
+        vsts(vreg_data, srcPtr, vi * elemPerVL, NORM_B16, pg_all);
+    }
+    mem_bar(VST_VLD);
+}
+
 // TQuant: FP32/BF16/FP16 -> MXFP8 (e4m3) quantization, ND mode only.
 // Dispatches between f32 and b16 paths via if constexpr on the source data type T.
 template <typename TileDataOut, typename TileDataSrc, typename TileDataExp, typename TileDataMax,
@@ -510,11 +555,43 @@ __tf__ PTO_INTERNAL void TQuant_MXFP8_Impl(typename TileDataOut::TileDType __out
     __ubuf__ V *dstPtr = (__ubuf__ V *)__cce_get_tile_ptr(dst);
     __ubuf__ T *maxPtr = (__ubuf__ T *)__cce_get_tile_ptr(max);
     __ubuf__ T *scalingPtr = (__ubuf__ T *)__cce_get_tile_ptr(scaling);
+
     set_ctrl(static_cast<uint64_t>(1) << 50);
     __VEC_SCOPE__
     {
+        if constexpr (!std::is_same<T, float>::value) {
+            if (validCols < TileDataSrc::Cols) {
+                constexpr unsigned staticCols = TileDataSrc::Cols;
+                constexpr unsigned elemPerVL = REPEAT_BYTE / sizeof(T);
+                if constexpr (elemPerVL % staticCols == 0) {
+                    ZeroPadColumns_VLAligned<T, staticCols>(srcPtr, validRows, validCols);
+                } else {
+                    // Fallback for configurations where StaticCols doesn't divide VL.
+                    constexpr unsigned padElemPerRepeat = REPEAT_BYTE / sizeof(T);
+                    unsigned padCols = staticCols - validCols;
+                    uint16_t padRepeatTimes = CeilDivision(padCols, padElemPerRepeat);
+                    RegTensor<T> vreg_zero;
+                    UnalignReg ureg_pad;
+                    MaskReg pg_all = PSetTyped<T>(PAT_ALL);
+                    vdup(vreg_zero, (T)0, pg_all, MODE_ZEROING);
+                    for (uint16_t i = 0; i < (uint16_t)(validRows); ++i) {
+                        uint32_t cols = (uint32_t)(padCols);
+                        __ubuf__ T *pdst = srcPtr + i * staticCols + validCols;
+                        for (uint16_t j = 0; j < padRepeatTimes; ++j) {
+                            uint32_t sreg = cols > padElemPerRepeat ? padElemPerRepeat : cols;
+                            vstus(ureg_pad, sreg, vreg_zero, pdst, POST_UPDATE);
+                            cols -= padElemPerRepeat;
+                        }
+                        vstas(ureg_pad, pdst, 0, POST_UPDATE);
+                    }
+                    mem_bar(VST_VLD);
+                }
+            }
+        }
+
         constexpr unsigned elementsPerRepeat = REPEAT_BYTE / sizeof(T);
-        uint32_t total_elements_count = validRows * TileDataSrc::Cols;
+        constexpr unsigned staticCols = TileDataSrc::Cols;
+        uint32_t total_elements_count = validRows * staticCols;
         uint16_t vl_count = CeilDivision(total_elements_count, elementsPerRepeat);
         uint32_t numGroups = total_elements_count / 32;
         unsigned exp_loop_count = CeilDivision(numGroups, elementsPerRepeat);
