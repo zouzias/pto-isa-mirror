@@ -103,6 +103,7 @@ endfunction()
 
 # 定义测试用例列表 testcase下如有新增用例目录需要在此加
 set(ALL_TESTCASES
+    pypto_add
     tsubs
     tmaxs
     tci
@@ -241,7 +242,7 @@ if(NOT AUTO_MODE)
   # until rewritten to adapt to auto mode. texpands_mat currently has to
   # directly call CCE intrinsics in the kernel, which won't compile in auto
   # mode; besides the auto-sync won't work with raw CCE intrinsics
-  list(APPEND ALL_TESTCASES tile_perf tpushpop_cv tpushpop_cv_nosplit tpushpop_vc tpushpop_vc_nosplit tpushpop_dir_both texpands_mat)
+  list(APPEND ALL_TESTCASES tadds_vloop_issue tile_perf tpushpop_cv tpushpop_cv_nosplit tpushpop_vc tpushpop_vc_nosplit tpushpop_dir_both texpands_mat)
 endif()
 
 if((TEST_CASE IN_LIST ALL_TESTCASES) OR (TEST_CASE STREQUAL "all"))
