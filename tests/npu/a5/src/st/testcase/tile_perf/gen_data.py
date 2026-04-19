@@ -7,6 +7,11 @@ from pathlib import Path
 
 UNARY_OPS = {'texp', 'tlog', 'tsqrt', 'tabs', 'tneg', 'trcp', 'trsqrt'}
 SCALAR_OPS = {'tadds', 'tsubs', 'tmuls', 'tdivs', 'tmaxs', 'tmins'}
+REDUCE_ROW_OPS = {'trowsum'}
+REDUCE_COL_OPS = {'tcolsum'}
+BROADCAST_SCALAR_OPS = {'texpands'}
+BROADCAST_ROW_OPS = {'trowexpand'}
+BROADCAST_COL_OPS = {'tcolexpand'}
 
 def get_op_type(op):
     op_lower = op.lower()
@@ -14,6 +19,16 @@ def get_op_type(op):
         return 'unary'
     elif op_lower in SCALAR_OPS:
         return 'scalar'
+    elif op_lower in REDUCE_ROW_OPS:
+        return 'reduce_row'
+    elif op_lower in REDUCE_COL_OPS:
+        return 'reduce_col'
+    elif op_lower in BROADCAST_SCALAR_OPS:
+        return 'broadcast_scalar'
+    elif op_lower in BROADCAST_ROW_OPS:
+        return 'broadcast_row'
+    elif op_lower in BROADCAST_COL_OPS:
+        return 'broadcast_col'
     return 'binary'
 
 def dtype_to_np(dtype):
@@ -103,16 +118,32 @@ def main():
         test_name = f"{op.upper()}BenchTest.case_{dtype_gtest}_{h}x{w}"
         os.makedirs(test_name, exist_ok=True)
         
-        # Generate input1 (always needed)
+        # Generate input1 (always needed except broadcast_scalar)
+        if op_type == 'broadcast_scalar':
+            # TEXPANDS: no input tile, just scalar → output
+            np.zeros(elems, dtype=np_dtype).tofile(f"{test_name}/golden.bin")
+            print(f"Generated: {test_name} ({op_type}, scalar only)")
+            continue
+
+        # Determine input shape for broadcast ops
+        if op_type == 'broadcast_row':
+            # TROWEXPAND: src is (H, 1) column vector
+            input1_elems = h
+        elif op_type == 'broadcast_col':
+            # TCOLEXPAND: src is (1, W) row vector
+            input1_elems = w
+        else:
+            input1_elems = elems
+
         if np_dtype in [np.float32, np.float16]:
             # For exp, use small values to avoid overflow
             if op.lower() in ['texp']:
-                data1 = (np.random.rand(elems) * 2 - 1).astype(np_dtype)  # [-1, 1]
+                data1 = (np.random.rand(input1_elems) * 2 - 1).astype(np_dtype)  # [-1, 1]
             else:
-                data1 = np.random.rand(elems).astype(np_dtype)
+                data1 = np.random.rand(input1_elems).astype(np_dtype)
             data1.tofile(f"{test_name}/input1.bin")
         else:
-            np.random.randint(0, 100, elems, dtype=np_dtype).tofile(f"{test_name}/input1.bin")
+            np.random.randint(0, 100, input1_elems, dtype=np_dtype).tofile(f"{test_name}/input1.bin")
         
         # Generate input2 (only for binary ops)
         if op_type == 'binary':

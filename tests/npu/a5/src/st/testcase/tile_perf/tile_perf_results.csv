@@ -1,0 +1,2 @@
+arch,op,dtype,shape,elements,total_ticks,warm_cycles,epc,theory_epc,efficiency_pct,raw_latencies
+A5,TADDS,float,1x4096,4096,0,0.0,0.00,64.0,0.0,

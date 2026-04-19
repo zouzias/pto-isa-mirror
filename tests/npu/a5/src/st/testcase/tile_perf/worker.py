@@ -45,6 +45,11 @@ OP_TO_INSTR = {
     "TEXP": r"VEXP",
     "TMUL": r"VMUL",
     "TMULS": r"VMULS|VMUL",
+    "TROWSUM": r"VADD|VREDUCE",    # Row reduce uses VADD tree or VREDUCE
+    "TCOLSUM": r"VADD|VREDUCE",    # Col reduce uses VADD tree or VREDUCE
+    "TEXPANDS": r"VBCAST|VMOV",    # Scalar broadcast
+    "TROWEXPAND": r"VBCAST|VMOV",  # Row broadcast (col vector expand)
+    "TCOLEXPAND": r"VBCAST|VMOV",  # Col broadcast (row vector expand)
 }
 
 
