@@ -198,16 +198,16 @@ __global__ AICORE void run{op}<{T}, {th}, {tw}, {vh}, {vw}>(__gm__ {T} *out, __g
 
 
 def gen_kernel_reduce_row(op, T, th, tw, vh, vw):
-    """TROWSUM: src(H,W) → dst(H,1), needs tmp(H,W)"""
+    """TROWSUM: src(H,W) → dst(H,1), needs tmp(H,W).  dst uses ColMajor (DN) layout."""
     return f"""template <>
 __global__ AICORE void run{op}<{T}, {th}, {tw}, {vh}, {vw}>(__gm__ {T} *out, __gm__ {T} *src)
 {{
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
+    // Source: full (H, W) — ND layout
     using SrcTileData = Tile<TileType::Vec, {T}, {th}, {tw}, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, {T}, {th}, 1, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, {T}, {th}, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, {T}, {th}, {tw}, BLayout::RowMajor, -1, -1>;
 
@@ -236,17 +236,14 @@ __global__ AICORE void run{op}<{T}, {th}, {tw}, {vh}, {vw}>(__gm__ {T} *out, __g
 
 
 def gen_kernel_reduce_col(op, T, th, tw, vh, vw):
-    """TCOLSUM: src(H,W) → dst(1,W), needs tmp(H,W)"""
+    """TCOLSUM: src(H,W) → dst(1,W).  A5 requires 4-arg form (dst, src, tmp, isBinary)."""
     return f"""template <>
 __global__ AICORE void run{op}<{T}, {th}, {tw}, {vh}, {vw}>(__gm__ {T} *out, __gm__ {T} *src)
 {{
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
     using SrcTileData = Tile<TileType::Vec, {T}, {th}, {tw}, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
     using DstTileData = Tile<TileType::Vec, {T}, 1, {tw}, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, {T}, {th}, {tw}, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<{T}, DynShape, DynStride>;
@@ -264,7 +261,7 @@ __global__ AICORE void run{op}<{T}, {th}, {tw}, {vh}, {vw}>(__gm__ {T} *out, __g
 
     for (int i = 0; i < 10; i++) {{
         TLOAD(srcTile, srcGlobal);
-        {op}(dstTile, srcTile, tmpTile);
+        {op}(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }}
@@ -299,24 +296,20 @@ __global__ AICORE void run{op}<{T}, {th}, {tw}, {vh}, {vw}>(__gm__ {T} *out, {T}
 
 
 def gen_kernel_broadcast_row(op, T, th, tw, vh, vw):
-    """TROWEXPAND: src(H,1) → dst(H,W)"""
+    """TROWEXPAND: broadcast col0 of src across all cols of dst.  Both tiles are (H,W)."""
     return f"""template <>
 __global__ AICORE void run{op}<{T}, {th}, {tw}, {vh}, {vw}>(__gm__ {T} *out, __gm__ {T} *src)
 {{
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, {T}, {th}, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, {T}, {th}, {tw}, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, {T}, {th}, {tw}, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<{T}, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<{T}, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<{T}, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape({vh}, 1), DynStride({th}, 1));
-    DstGlobal dstGlobal(out, DynShape({vh}, {vw}), DynStride({th}, {tw}));
-    SrcTileData srcTile({vh}, 1);
-    DstTileData dstTile({vh}, {vw});
+    GlobalData srcGlobal(src, DynShape({vh}, {vw}), DynStride({th}, {tw}));
+    GlobalData dstGlobal(out, DynShape({vh}, {vw}), DynStride({th}, {tw}));
+    TileData srcTile({vh}, {vw});
+    TileData dstTile({vh}, {vw});
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -333,24 +326,20 @@ __global__ AICORE void run{op}<{T}, {th}, {tw}, {vh}, {vw}>(__gm__ {T} *out, __g
 
 
 def gen_kernel_broadcast_col(op, T, th, tw, vh, vw):
-    """TCOLEXPAND: src(1,W) → dst(H,W)"""
+    """TCOLEXPAND: broadcast row0 of src across all rows of dst.  Both tiles are (H,W)."""
     return f"""template <>
 __global__ AICORE void run{op}<{T}, {th}, {tw}, {vh}, {vw}>(__gm__ {T} *out, __gm__ {T} *src)
 {{
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, {T}, 1, {tw}, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, {T}, {th}, {tw}, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, {T}, {th}, {tw}, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<{T}, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<{T}, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<{T}, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(1, {vw}), DynStride(1, {tw}));
-    DstGlobal dstGlobal(out, DynShape({vh}, {vw}), DynStride({th}, {tw}));
-    SrcTileData srcTile(1, {vw});
-    DstTileData dstTile({vh}, {vw});
+    GlobalData srcGlobal(src, DynShape({vh}, {vw}), DynStride({th}, {tw}));
+    GlobalData dstGlobal(out, DynShape({vh}, {vw}), DynStride({th}, {tw}));
+    TileData srcTile({vh}, {vw});
+    TileData dstTile({vh}, {vw});
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);

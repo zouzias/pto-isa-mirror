@@ -1,0 +1,179 @@
+# op,dtype,tile_h,tile_w,valid_h,valid_w[,scalar]
+# Width >= 4*VL (256) or 8*VL (512) for proper vector utilization
+
+# ========== TADD fp32 ==========
+# 16KB (4096 elements)
+TADD,float,1,4096,1,4096
+TADD,float,16,256,16,256
+TADD,float,8,512,8,512
+
+# 32KB (8192 elements)
+TADD,float,1,8192,1,8192
+TADD,float,32,256,32,256
+TADD,float,16,512,16,512
+
+# 64KB (16384 elements)
+TADD,float,1,16384,1,16384
+TADD,float,64,256,64,256
+TADD,float,32,512,32,512
+
+# ========== TADD fp16 ==========
+# 16KB (8192 elements)
+TADD,half,1,8192,1,8192
+TADD,half,32,256,32,256
+TADD,half,16,512,16,512
+
+# 32KB (16384 elements)
+TADD,half,1,16384,1,16384
+TADD,half,64,256,64,256
+TADD,half,32,512,32,512
+
+# 64KB (32768 elements)
+TADD,half,1,32768,1,32768
+TADD,half,128,256,128,256
+TADD,half,64,512,64,512
+
+# ========== TEXP fp32 ==========
+# 16KB (4096 elements)
+TEXP,float,1,4096,1,4096
+TEXP,float,16,256,16,256
+TEXP,float,8,512,8,512
+
+# 32KB (8192 elements)
+TEXP,float,1,8192,1,8192
+TEXP,float,32,256,32,256
+TEXP,float,16,512,16,512
+
+# 64KB (16384 elements)
+TEXP,float,1,16384,1,16384
+TEXP,float,64,256,64,256
+TEXP,float,32,512,32,512
+
+# ========== TEXP fp16 ==========
+# 16KB (8192 elements)
+TEXP,half,1,8192,1,8192
+TEXP,half,32,256,32,256
+TEXP,half,16,512,16,512
+
+# 32KB (16384 elements)
+TEXP,half,1,16384,1,16384
+TEXP,half,64,256,64,256
+TEXP,half,32,512,32,512
+
+# 64KB (32768 elements)
+TEXP,half,1,32768,1,32768
+TEXP,half,128,256,128,256
+TEXP,half,64,512,64,512
+
+# ========== TADDS fp32 ==========
+# 16KB (4096 elements)
+TADDS,float,1,4096,1,4096,1.5
+TADDS,float,16,256,16,256,1.5
+TADDS,float,8,512,8,512,1.5
+
+# 32KB (8192 elements)
+TADDS,float,1,8192,1,8192,1.5
+TADDS,float,32,256,32,256,1.5
+TADDS,float,16,512,16,512,1.5
+
+# 64KB (16384 elements)
+TADDS,float,1,16384,1,16384,1.5
+TADDS,float,64,256,64,256,1.5
+TADDS,float,32,512,32,512,1.5
+
+# ========== TADDS fp16 ==========
+# 16KB (8192 elements)
+TADDS,half,1,8192,1,8192,1.5
+TADDS,half,32,256,32,256,1.5
+TADDS,half,16,512,16,512,1.5
+
+# 32KB (16384 elements)
+TADDS,half,1,16384,1,16384,1.5
+TADDS,half,64,256,64,256,1.5
+TADDS,half,32,512,32,512,1.5
+
+# 64KB (32768 elements)
+TADDS,half,1,32768,1,32768,1.5
+TADDS,half,128,256,128,256,1.5
+TADDS,half,64,512,64,512,1.5
+
+# ========== TROWSUM fp32 (reduce rows: (H,W) → (H,1)) ==========
+# Need H >= 2 for meaningful reduction
+TROWSUM,float,16,256,16,256
+TROWSUM,float,32,256,32,256
+TROWSUM,float,8,512,8,512
+TROWSUM,float,16,512,16,512
+TROWSUM,float,32,512,32,512
+TROWSUM,float,64,256,64,256
+
+# ========== TROWSUM fp16 ==========
+TROWSUM,half,32,256,32,256
+TROWSUM,half,64,256,64,256
+TROWSUM,half,16,512,16,512
+TROWSUM,half,32,512,32,512
+TROWSUM,half,64,512,64,512
+TROWSUM,half,128,256,128,256
+
+# ========== TCOLSUM fp32 (reduce cols: (H,W) → (1,W)) ==========
+TCOLSUM,float,16,256,16,256
+TCOLSUM,float,32,256,32,256
+TCOLSUM,float,8,512,8,512
+TCOLSUM,float,16,512,16,512
+TCOLSUM,float,32,512,32,512
+TCOLSUM,float,64,256,64,256
+
+# ========== TCOLSUM fp16 ==========
+TCOLSUM,half,32,256,32,256
+TCOLSUM,half,64,256,64,256
+TCOLSUM,half,16,512,16,512
+TCOLSUM,half,32,512,32,512
+TCOLSUM,half,64,512,64,512
+TCOLSUM,half,128,256,128,256
+
+# ========== TEXPANDS fp32 (broadcast scalar → (H,W)) ==========
+TEXPANDS,float,1,4096,1,4096,2.0
+TEXPANDS,float,16,256,16,256,2.0
+TEXPANDS,float,32,256,32,256,2.0
+TEXPANDS,float,8,512,8,512,2.0
+TEXPANDS,float,16,512,16,512,2.0
+TEXPANDS,float,64,256,64,256,2.0
+
+# ========== TEXPANDS fp16 ==========
+TEXPANDS,half,1,8192,1,8192,2.0
+TEXPANDS,half,32,256,32,256,2.0
+TEXPANDS,half,64,256,64,256,2.0
+TEXPANDS,half,16,512,16,512,2.0
+TEXPANDS,half,32,512,32,512,2.0
+TEXPANDS,half,128,256,128,256,2.0
+
+# ========== TROWEXPAND fp32 (broadcast col: (H,1) → (H,W)) ==========
+TROWEXPAND,float,16,256,16,256
+TROWEXPAND,float,32,256,32,256
+TROWEXPAND,float,8,512,8,512
+TROWEXPAND,float,16,512,16,512
+TROWEXPAND,float,32,512,32,512
+TROWEXPAND,float,64,256,64,256
+
+# ========== TROWEXPAND fp16 ==========
+TROWEXPAND,half,32,256,32,256
+TROWEXPAND,half,64,256,64,256
+TROWEXPAND,half,16,512,16,512
+TROWEXPAND,half,32,512,32,512
+TROWEXPAND,half,64,512,64,512
+TROWEXPAND,half,128,256,128,256
+
+# ========== TCOLEXPAND fp32 (broadcast row: (1,W) → (H,W)) ==========
+TCOLEXPAND,float,16,256,16,256
+TCOLEXPAND,float,32,256,32,256
+TCOLEXPAND,float,8,512,8,512
+TCOLEXPAND,float,16,512,16,512
+TCOLEXPAND,float,32,512,32,512
+TCOLEXPAND,float,64,256,64,256
+
+# ========== TCOLEXPAND fp16 ==========
+TCOLEXPAND,half,32,256,32,256
+TCOLEXPAND,half,64,256,64,256
+TCOLEXPAND,half,16,512,16,512
+TCOLEXPAND,half,32,512,32,512
+TCOLEXPAND,half,64,512,64,512
+TCOLEXPAND,half,128,256,128,256

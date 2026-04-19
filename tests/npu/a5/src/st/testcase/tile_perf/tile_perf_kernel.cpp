@@ -20,22 +20,10 @@ using namespace pto;
 // ===== Kernel forward declarations =====
 
 template <typename T, int tileH, int tileW, int vRows, int vCols>
-__global__ AICORE void runTADD(__gm__ T *out, __gm__ T *src0, __gm__ T *src1);
-
-template <typename T, int tileH, int tileW, int vRows, int vCols>
-__global__ AICORE void runTEXP(__gm__ T *out, __gm__ T *src);
-
-template <typename T, int tileH, int tileW, int vRows, int vCols>
-__global__ AICORE void runTADDS(__gm__ T *out, __gm__ T *src, T scalar);
-
-template <typename T, int tileH, int tileW, int vRows, int vCols>
 __global__ AICORE void runTROWSUM(__gm__ T *out, __gm__ T *src);
 
 template <typename T, int tileH, int tileW, int vRows, int vCols>
 __global__ AICORE void runTCOLSUM(__gm__ T *out, __gm__ T *src);
-
-template <typename T, int tileH, int tileW, int vRows, int vCols>
-__global__ AICORE void runTEXPANDS(__gm__ T *out, T scalar);
 
 template <typename T, int tileH, int tileW, int vRows, int vCols>
 __global__ AICORE void runTROWEXPAND(__gm__ T *out, __gm__ T *src);
@@ -46,1382 +34,14 @@ __global__ AICORE void runTCOLEXPAND(__gm__ T *out, __gm__ T *src);
 // ===== Kernel specialisations =====
 
 template <>
-__global__ AICORE void runTADD<float, 1, 4096, 1, 4096>(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 1, 4096, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(1, 4096), DynStride(1, 4096));
-    GlobalData src1Global(src1, DynShape(1, 4096), DynStride(1, 4096));
-    GlobalData dstGlobal(out, DynShape(1, 4096), DynStride(1, 4096));
-    TileData src0Tile(1, 4096);
-    TileData src1Tile(1, 4096);
-    TileData dstTile(1, 4096);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<float, 16, 256, 16, 256>(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(16, 256), DynStride(16, 256));
-    GlobalData src1Global(src1, DynShape(16, 256), DynStride(16, 256));
-    GlobalData dstGlobal(out, DynShape(16, 256), DynStride(16, 256));
-    TileData src0Tile(16, 256);
-    TileData src1Tile(16, 256);
-    TileData dstTile(16, 256);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<float, 8, 512, 8, 512>(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(8, 512), DynStride(8, 512));
-    GlobalData src1Global(src1, DynShape(8, 512), DynStride(8, 512));
-    GlobalData dstGlobal(out, DynShape(8, 512), DynStride(8, 512));
-    TileData src0Tile(8, 512);
-    TileData src1Tile(8, 512);
-    TileData dstTile(8, 512);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<float, 1, 8192, 1, 8192>(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 1, 8192, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(1, 8192), DynStride(1, 8192));
-    GlobalData src1Global(src1, DynShape(1, 8192), DynStride(1, 8192));
-    GlobalData dstGlobal(out, DynShape(1, 8192), DynStride(1, 8192));
-    TileData src0Tile(1, 8192);
-    TileData src1Tile(1, 8192);
-    TileData dstTile(1, 8192);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(32, 256), DynStride(32, 256));
-    GlobalData src1Global(src1, DynShape(32, 256), DynStride(32, 256));
-    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    TileData src0Tile(32, 256);
-    TileData src1Tile(32, 256);
-    TileData dstTile(32, 256);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<float, 16, 512, 16, 512>(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(16, 512), DynStride(16, 512));
-    GlobalData src1Global(src1, DynShape(16, 512), DynStride(16, 512));
-    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    TileData src0Tile(16, 512);
-    TileData src1Tile(16, 512);
-    TileData dstTile(16, 512);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<float, 1, 16384, 1, 16384>(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 1, 16384, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(1, 16384), DynStride(1, 16384));
-    GlobalData src1Global(src1, DynShape(1, 16384), DynStride(1, 16384));
-    GlobalData dstGlobal(out, DynShape(1, 16384), DynStride(1, 16384));
-    TileData src0Tile(1, 16384);
-    TileData src1Tile(1, 16384);
-    TileData dstTile(1, 16384);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<float, 64, 256, 64, 256>(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(64, 256), DynStride(64, 256));
-    GlobalData src1Global(src1, DynShape(64, 256), DynStride(64, 256));
-    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    TileData src0Tile(64, 256);
-    TileData src1Tile(64, 256);
-    TileData dstTile(64, 256);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src0, __gm__ float *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(32, 512), DynStride(32, 512));
-    GlobalData src1Global(src1, DynShape(32, 512), DynStride(32, 512));
-    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    TileData src0Tile(32, 512);
-    TileData src1Tile(32, 512);
-    TileData dstTile(32, 512);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<half, 1, 8192, 1, 8192>(__gm__ half *out, __gm__ half *src0, __gm__ half *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 1, 8192, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(1, 8192), DynStride(1, 8192));
-    GlobalData src1Global(src1, DynShape(1, 8192), DynStride(1, 8192));
-    GlobalData dstGlobal(out, DynShape(1, 8192), DynStride(1, 8192));
-    TileData src0Tile(1, 8192);
-    TileData src1Tile(1, 8192);
-    TileData dstTile(1, 8192);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<half, 32, 256, 32, 256>(__gm__ half *out, __gm__ half *src0, __gm__ half *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(32, 256), DynStride(32, 256));
-    GlobalData src1Global(src1, DynShape(32, 256), DynStride(32, 256));
-    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    TileData src0Tile(32, 256);
-    TileData src1Tile(32, 256);
-    TileData dstTile(32, 256);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<half, 16, 512, 16, 512>(__gm__ half *out, __gm__ half *src0, __gm__ half *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(16, 512), DynStride(16, 512));
-    GlobalData src1Global(src1, DynShape(16, 512), DynStride(16, 512));
-    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    TileData src0Tile(16, 512);
-    TileData src1Tile(16, 512);
-    TileData dstTile(16, 512);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<half, 1, 16384, 1, 16384>(__gm__ half *out, __gm__ half *src0, __gm__ half *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 1, 16384, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(1, 16384), DynStride(1, 16384));
-    GlobalData src1Global(src1, DynShape(1, 16384), DynStride(1, 16384));
-    GlobalData dstGlobal(out, DynShape(1, 16384), DynStride(1, 16384));
-    TileData src0Tile(1, 16384);
-    TileData src1Tile(1, 16384);
-    TileData dstTile(1, 16384);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src0, __gm__ half *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(64, 256), DynStride(64, 256));
-    GlobalData src1Global(src1, DynShape(64, 256), DynStride(64, 256));
-    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    TileData src0Tile(64, 256);
-    TileData src1Tile(64, 256);
-    TileData dstTile(64, 256);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<half, 32, 512, 32, 512>(__gm__ half *out, __gm__ half *src0, __gm__ half *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(32, 512), DynStride(32, 512));
-    GlobalData src1Global(src1, DynShape(32, 512), DynStride(32, 512));
-    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    TileData src0Tile(32, 512);
-    TileData src1Tile(32, 512);
-    TileData dstTile(32, 512);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<half, 1, 32768, 1, 32768>(__gm__ half *out, __gm__ half *src0, __gm__ half *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 1, 32768, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(1, 32768), DynStride(1, 32768));
-    GlobalData src1Global(src1, DynShape(1, 32768), DynStride(1, 32768));
-    GlobalData dstGlobal(out, DynShape(1, 32768), DynStride(1, 32768));
-    TileData src0Tile(1, 32768);
-    TileData src1Tile(1, 32768);
-    TileData dstTile(1, 32768);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<half, 128, 256, 128, 256>(__gm__ half *out, __gm__ half *src0, __gm__ half *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(128, 256), DynStride(128, 256));
-    GlobalData src1Global(src1, DynShape(128, 256), DynStride(128, 256));
-    GlobalData dstGlobal(out, DynShape(128, 256), DynStride(128, 256));
-    TileData src0Tile(128, 256);
-    TileData src1Tile(128, 256);
-    TileData dstTile(128, 256);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADD<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src0, __gm__ half *src1)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData src0Global(src0, DynShape(64, 512), DynStride(64, 512));
-    GlobalData src1Global(src1, DynShape(64, 512), DynStride(64, 512));
-    GlobalData dstGlobal(out, DynShape(64, 512), DynStride(64, 512));
-    TileData src0Tile(64, 512);
-    TileData src1Tile(64, 512);
-    TileData dstTile(64, 512);
-
-    TASSIGN(src0Tile, 0x0);
-    TASSIGN(src1Tile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(src0Tile, src0Global);
-        TLOAD(src1Tile, src1Global);
-        TADD(dstTile, src0Tile, src1Tile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<float, 1, 4096, 1, 4096>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 1, 4096, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 4096), DynStride(1, 4096));
-    GlobalData dstGlobal(out, DynShape(1, 4096), DynStride(1, 4096));
-    TileData srcTile(1, 4096);
-    TileData dstTile(1, 4096);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<float, 16, 256, 16, 256>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(16, 256), DynStride(16, 256));
-    GlobalData dstGlobal(out, DynShape(16, 256), DynStride(16, 256));
-    TileData srcTile(16, 256);
-    TileData dstTile(16, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<float, 8, 512, 8, 512>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(8, 512), DynStride(8, 512));
-    GlobalData dstGlobal(out, DynShape(8, 512), DynStride(8, 512));
-    TileData srcTile(8, 512);
-    TileData dstTile(8, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<float, 1, 8192, 1, 8192>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 1, 8192, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 8192), DynStride(1, 8192));
-    GlobalData dstGlobal(out, DynShape(1, 8192), DynStride(1, 8192));
-    TileData srcTile(1, 8192);
-    TileData dstTile(1, 8192);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
-    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    TileData srcTile(32, 256);
-    TileData dstTile(32, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<float, 16, 512, 16, 512>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(16, 512), DynStride(16, 512));
-    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    TileData srcTile(16, 512);
-    TileData dstTile(16, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<float, 1, 16384, 1, 16384>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 1, 16384, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 16384), DynStride(1, 16384));
-    GlobalData dstGlobal(out, DynShape(1, 16384), DynStride(1, 16384));
-    TileData srcTile(1, 16384);
-    TileData dstTile(1, 16384);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<float, 64, 256, 64, 256>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
-    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    TileData srcTile(64, 256);
-    TileData dstTile(64, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
-    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    TileData srcTile(32, 512);
-    TileData dstTile(32, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<half, 1, 8192, 1, 8192>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 1, 8192, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 8192), DynStride(1, 8192));
-    GlobalData dstGlobal(out, DynShape(1, 8192), DynStride(1, 8192));
-    TileData srcTile(1, 8192);
-    TileData dstTile(1, 8192);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<half, 32, 256, 32, 256>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
-    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    TileData srcTile(32, 256);
-    TileData dstTile(32, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<half, 16, 512, 16, 512>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(16, 512), DynStride(16, 512));
-    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    TileData srcTile(16, 512);
-    TileData dstTile(16, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<half, 1, 16384, 1, 16384>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 1, 16384, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 16384), DynStride(1, 16384));
-    GlobalData dstGlobal(out, DynShape(1, 16384), DynStride(1, 16384));
-    TileData srcTile(1, 16384);
-    TileData dstTile(1, 16384);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
-    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    TileData srcTile(64, 256);
-    TileData dstTile(64, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<half, 32, 512, 32, 512>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
-    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    TileData srcTile(32, 512);
-    TileData dstTile(32, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<half, 1, 32768, 1, 32768>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 1, 32768, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 32768), DynStride(1, 32768));
-    GlobalData dstGlobal(out, DynShape(1, 32768), DynStride(1, 32768));
-    TileData srcTile(1, 32768);
-    TileData dstTile(1, 32768);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<half, 128, 256, 128, 256>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(128, 256), DynStride(128, 256));
-    GlobalData dstGlobal(out, DynShape(128, 256), DynStride(128, 256));
-    TileData srcTile(128, 256);
-    TileData dstTile(128, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXP<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(64, 512), DynStride(64, 512));
-    GlobalData dstGlobal(out, DynShape(64, 512), DynStride(64, 512));
-    TileData srcTile(64, 512);
-    TileData dstTile(64, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TEXP(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<float, 1, 4096, 1, 4096>(__gm__ float *out, __gm__ float *src, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 1, 4096, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 4096), DynStride(1, 4096));
-    GlobalData dstGlobal(out, DynShape(1, 4096), DynStride(1, 4096));
-    TileData srcTile(1, 4096);
-    TileData dstTile(1, 4096);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<float, 16, 256, 16, 256>(__gm__ float *out, __gm__ float *src, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(16, 256), DynStride(16, 256));
-    GlobalData dstGlobal(out, DynShape(16, 256), DynStride(16, 256));
-    TileData srcTile(16, 256);
-    TileData dstTile(16, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<float, 8, 512, 8, 512>(__gm__ float *out, __gm__ float *src, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(8, 512), DynStride(8, 512));
-    GlobalData dstGlobal(out, DynShape(8, 512), DynStride(8, 512));
-    TileData srcTile(8, 512);
-    TileData dstTile(8, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<float, 1, 8192, 1, 8192>(__gm__ float *out, __gm__ float *src, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 1, 8192, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 8192), DynStride(1, 8192));
-    GlobalData dstGlobal(out, DynShape(1, 8192), DynStride(1, 8192));
-    TileData srcTile(1, 8192);
-    TileData dstTile(1, 8192);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
-    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    TileData srcTile(32, 256);
-    TileData dstTile(32, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<float, 16, 512, 16, 512>(__gm__ float *out, __gm__ float *src, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(16, 512), DynStride(16, 512));
-    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    TileData srcTile(16, 512);
-    TileData dstTile(16, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<float, 1, 16384, 1, 16384>(__gm__ float *out, __gm__ float *src, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 1, 16384, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 16384), DynStride(1, 16384));
-    GlobalData dstGlobal(out, DynShape(1, 16384), DynStride(1, 16384));
-    TileData srcTile(1, 16384);
-    TileData dstTile(1, 16384);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<float, 64, 256, 64, 256>(__gm__ float *out, __gm__ float *src, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
-    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    TileData srcTile(64, 256);
-    TileData dstTile(64, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
-    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    TileData srcTile(32, 512);
-    TileData dstTile(32, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<half, 1, 8192, 1, 8192>(__gm__ half *out, __gm__ half *src, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 1, 8192, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 8192), DynStride(1, 8192));
-    GlobalData dstGlobal(out, DynShape(1, 8192), DynStride(1, 8192));
-    TileData srcTile(1, 8192);
-    TileData dstTile(1, 8192);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<half, 32, 256, 32, 256>(__gm__ half *out, __gm__ half *src, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
-    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    TileData srcTile(32, 256);
-    TileData dstTile(32, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<half, 16, 512, 16, 512>(__gm__ half *out, __gm__ half *src, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(16, 512), DynStride(16, 512));
-    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    TileData srcTile(16, 512);
-    TileData dstTile(16, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<half, 1, 16384, 1, 16384>(__gm__ half *out, __gm__ half *src, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 1, 16384, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 16384), DynStride(1, 16384));
-    GlobalData dstGlobal(out, DynShape(1, 16384), DynStride(1, 16384));
-    TileData srcTile(1, 16384);
-    TileData dstTile(1, 16384);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
-    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    TileData srcTile(64, 256);
-    TileData dstTile(64, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<half, 32, 512, 32, 512>(__gm__ half *out, __gm__ half *src, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
-    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    TileData srcTile(32, 512);
-    TileData dstTile(32, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<half, 1, 32768, 1, 32768>(__gm__ half *out, __gm__ half *src, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 1, 32768, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(1, 32768), DynStride(1, 32768));
-    GlobalData dstGlobal(out, DynShape(1, 32768), DynStride(1, 32768));
-    TileData srcTile(1, 32768);
-    TileData dstTile(1, 32768);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<half, 128, 256, 128, 256>(__gm__ half *out, __gm__ half *src, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(128, 256), DynStride(128, 256));
-    GlobalData dstGlobal(out, DynShape(128, 256), DynStride(128, 256));
-    TileData srcTile(128, 256);
-    TileData dstTile(128, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTADDS<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData srcGlobal(src, DynShape(64, 512), DynStride(64, 512));
-    GlobalData dstGlobal(out, DynShape(64, 512), DynStride(64, 512));
-    TileData srcTile(64, 512);
-    TileData dstTile(64, 512);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TADDS(dstTile, srcTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
 __global__ AICORE void runTROWSUM<float, 16, 256, 16, 256>(__gm__ float *out, __gm__ float *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
+    // Source: full (H, W) — ND layout
     using SrcTileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, float, 16, 1, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
 
@@ -1447,47 +67,14 @@ __global__ AICORE void runTROWSUM<float, 16, 256, 16, 256>(__gm__ float *out, __
 }
 
 template <>
-__global__ AICORE void runTROWSUM<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
-    using SrcTileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, float, 32, 1, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
-    using TmpTileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
-    DstGlobal dstGlobal(out, DynShape(32, 1), DynStride(32, 1));
-    SrcTileData srcTile(32, 256);
-    DstTileData dstTile(32, 1);
-    TmpTileData tmpTile(32, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TROWSUM(dstTile, srcTile, tmpTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
 __global__ AICORE void runTROWSUM<float, 8, 512, 8, 512>(__gm__ float *out, __gm__ float *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
+    // Source: full (H, W) — ND layout
     using SrcTileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, float, 8, 1, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, float, 8, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
 
@@ -1513,14 +100,47 @@ __global__ AICORE void runTROWSUM<float, 8, 512, 8, 512>(__gm__ float *out, __gm
 }
 
 template <>
+__global__ AICORE void runTROWSUM<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Source: full (H, W) — ND layout
+    using SrcTileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, float, 32, 1, BLayout::ColMajor, -1, -1>;
+    // Tmp: same shape as src (scratch buffer)
+    using TmpTileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
+    DstGlobal dstGlobal(out, DynShape(32, 1), DynStride(32, 1));
+    SrcTileData srcTile(32, 256);
+    DstTileData dstTile(32, 1);
+    TmpTileData tmpTile(32, 256);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWSUM(dstTile, srcTile, tmpTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
 __global__ AICORE void runTROWSUM<float, 16, 512, 16, 512>(__gm__ float *out, __gm__ float *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
+    // Source: full (H, W) — ND layout
     using SrcTileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, float, 16, 1, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
 
@@ -1546,25 +166,25 @@ __global__ AICORE void runTROWSUM<float, 16, 512, 16, 512>(__gm__ float *out, __
 }
 
 template <>
-__global__ AICORE void runTROWSUM<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src)
+__global__ AICORE void runTROWSUM<float, 8, 1024, 8, 1024>(__gm__ float *out, __gm__ float *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
-    using SrcTileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, float, 32, 1, BLayout::RowMajor, -1, -1>;
+    // Source: full (H, W) — ND layout
+    using SrcTileData = Tile<TileType::Vec, float, 8, 1024, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, float, 8, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
-    using TmpTileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, float, 8, 1024, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
     using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
 
-    SrcGlobal srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
-    DstGlobal dstGlobal(out, DynShape(32, 1), DynStride(32, 1));
-    SrcTileData srcTile(32, 512);
-    DstTileData dstTile(32, 1);
-    TmpTileData tmpTile(32, 512);
+    SrcGlobal srcGlobal(src, DynShape(8, 1024), DynStride(8, 1024));
+    DstGlobal dstGlobal(out, DynShape(8, 1), DynStride(8, 1));
+    SrcTileData srcTile(8, 1024);
+    DstTileData dstTile(8, 1);
+    TmpTileData tmpTile(8, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(tmpTile, 0x100);
@@ -1583,10 +203,10 @@ __global__ AICORE void runTROWSUM<float, 64, 256, 64, 256>(__gm__ float *out, __
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
+    // Source: full (H, W) — ND layout
     using SrcTileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, float, 64, 1, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, float, 64, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
 
@@ -1612,14 +232,80 @@ __global__ AICORE void runTROWSUM<float, 64, 256, 64, 256>(__gm__ float *out, __
 }
 
 template <>
+__global__ AICORE void runTROWSUM<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Source: full (H, W) — ND layout
+    using SrcTileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, float, 32, 1, BLayout::ColMajor, -1, -1>;
+    // Tmp: same shape as src (scratch buffer)
+    using TmpTileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
+    DstGlobal dstGlobal(out, DynShape(32, 1), DynStride(32, 1));
+    SrcTileData srcTile(32, 512);
+    DstTileData dstTile(32, 1);
+    TmpTileData tmpTile(32, 512);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWSUM(dstTile, srcTile, tmpTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTROWSUM<float, 16, 1024, 16, 1024>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Source: full (H, W) — ND layout
+    using SrcTileData = Tile<TileType::Vec, float, 16, 1024, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, float, 16, 1, BLayout::ColMajor, -1, -1>;
+    // Tmp: same shape as src (scratch buffer)
+    using TmpTileData = Tile<TileType::Vec, float, 16, 1024, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(16, 1024), DynStride(16, 1024));
+    DstGlobal dstGlobal(out, DynShape(16, 1), DynStride(16, 1));
+    SrcTileData srcTile(16, 1024);
+    DstTileData dstTile(16, 1);
+    TmpTileData tmpTile(16, 1024);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWSUM(dstTile, srcTile, tmpTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
 __global__ AICORE void runTROWSUM<half, 32, 256, 32, 256>(__gm__ half *out, __gm__ half *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
+    // Source: full (H, W) — ND layout
     using SrcTileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, half, 32, 1, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, half, 32, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
 
@@ -1645,47 +331,14 @@ __global__ AICORE void runTROWSUM<half, 32, 256, 32, 256>(__gm__ half *out, __gm
 }
 
 template <>
-__global__ AICORE void runTROWSUM<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
-    using SrcTileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, half, 64, 1, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
-    using TmpTileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
-    DstGlobal dstGlobal(out, DynShape(64, 1), DynStride(64, 1));
-    SrcTileData srcTile(64, 256);
-    DstTileData dstTile(64, 1);
-    TmpTileData tmpTile(64, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TROWSUM(dstTile, srcTile, tmpTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
 __global__ AICORE void runTROWSUM<half, 16, 512, 16, 512>(__gm__ half *out, __gm__ half *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
+    // Source: full (H, W) — ND layout
     using SrcTileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, half, 16, 1, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, half, 16, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
 
@@ -1711,14 +364,47 @@ __global__ AICORE void runTROWSUM<half, 16, 512, 16, 512>(__gm__ half *out, __gm
 }
 
 template <>
+__global__ AICORE void runTROWSUM<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Source: full (H, W) — ND layout
+    using SrcTileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, half, 64, 1, BLayout::ColMajor, -1, -1>;
+    // Tmp: same shape as src (scratch buffer)
+    using TmpTileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
+    DstGlobal dstGlobal(out, DynShape(64, 1), DynStride(64, 1));
+    SrcTileData srcTile(64, 256);
+    DstTileData dstTile(64, 1);
+    TmpTileData tmpTile(64, 256);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWSUM(dstTile, srcTile, tmpTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
 __global__ AICORE void runTROWSUM<half, 32, 512, 32, 512>(__gm__ half *out, __gm__ half *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
+    // Source: full (H, W) — ND layout
     using SrcTileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, half, 32, 1, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, half, 32, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
 
@@ -1744,25 +430,25 @@ __global__ AICORE void runTROWSUM<half, 32, 512, 32, 512>(__gm__ half *out, __gm
 }
 
 template <>
-__global__ AICORE void runTROWSUM<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src)
+__global__ AICORE void runTROWSUM<half, 16, 1024, 16, 1024>(__gm__ half *out, __gm__ half *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
-    using SrcTileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, half, 64, 1, BLayout::RowMajor, -1, -1>;
+    // Source: full (H, W) — ND layout
+    using SrcTileData = Tile<TileType::Vec, half, 16, 1024, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, half, 16, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
-    using TmpTileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, half, 16, 1024, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
     using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
 
-    SrcGlobal srcGlobal(src, DynShape(64, 512), DynStride(64, 512));
-    DstGlobal dstGlobal(out, DynShape(64, 1), DynStride(64, 1));
-    SrcTileData srcTile(64, 512);
-    DstTileData dstTile(64, 1);
-    TmpTileData tmpTile(64, 512);
+    SrcGlobal srcGlobal(src, DynShape(16, 1024), DynStride(16, 1024));
+    DstGlobal dstGlobal(out, DynShape(16, 1), DynStride(16, 1));
+    SrcTileData srcTile(16, 1024);
+    DstTileData dstTile(16, 1);
+    TmpTileData tmpTile(16, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(tmpTile, 0x100);
@@ -1781,10 +467,10 @@ __global__ AICORE void runTROWSUM<half, 128, 256, 128, 256>(__gm__ half *out, __
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
+    // Source: full (H, W) — ND layout
     using SrcTileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (H, 1) — one value per row
-    using DstTileData = Tile<TileType::Vec, half, 128, 1, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, half, 128, 1, BLayout::ColMajor, -1, -1>;
     // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
 
@@ -1810,15 +496,78 @@ __global__ AICORE void runTROWSUM<half, 128, 256, 128, 256>(__gm__ half *out, __
 }
 
 template <>
+__global__ AICORE void runTROWSUM<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Source: full (H, W) — ND layout
+    using SrcTileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, half, 64, 1, BLayout::ColMajor, -1, -1>;
+    // Tmp: same shape as src (scratch buffer)
+    using TmpTileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(64, 512), DynStride(64, 512));
+    DstGlobal dstGlobal(out, DynShape(64, 1), DynStride(64, 1));
+    SrcTileData srcTile(64, 512);
+    DstTileData dstTile(64, 1);
+    TmpTileData tmpTile(64, 512);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWSUM(dstTile, srcTile, tmpTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTROWSUM<half, 32, 1024, 32, 1024>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Source: full (H, W) — ND layout
+    using SrcTileData = Tile<TileType::Vec, half, 32, 1024, BLayout::RowMajor, -1, -1>;
+    // Destination: (H, 1) — DN (ColMajor) layout to satisfy alignment
+    using DstTileData = Tile<TileType::Vec, half, 32, 1, BLayout::ColMajor, -1, -1>;
+    // Tmp: same shape as src (scratch buffer)
+    using TmpTileData = Tile<TileType::Vec, half, 32, 1024, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(32, 1024), DynStride(32, 1024));
+    DstGlobal dstGlobal(out, DynShape(32, 1), DynStride(32, 1));
+    SrcTileData srcTile(32, 1024);
+    DstTileData dstTile(32, 1);
+    TmpTileData tmpTile(32, 1024);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWSUM(dstTile, srcTile, tmpTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
 __global__ AICORE void runTCOLSUM<float, 16, 256, 16, 256>(__gm__ float *out, __gm__ float *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
     using SrcTileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
     using DstTileData = Tile<TileType::Vec, float, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
@@ -1836,40 +585,7 @@ __global__ AICORE void runTCOLSUM<float, 16, 256, 16, 256>(__gm__ float *out, __
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTCOLSUM<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
-    using SrcTileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
-    using DstTileData = Tile<TileType::Vec, float, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
-    using TmpTileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
-    DstGlobal dstGlobal(out, DynShape(1, 256), DynStride(1, 256));
-    SrcTileData srcTile(32, 256);
-    DstTileData dstTile(1, 256);
-    TmpTileData tmpTile(32, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
@@ -1880,11 +596,8 @@ __global__ AICORE void runTCOLSUM<float, 8, 512, 8, 512>(__gm__ float *out, __gm
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
     using SrcTileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
     using DstTileData = Tile<TileType::Vec, float, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
@@ -1902,7 +615,67 @@ __global__ AICORE void runTCOLSUM<float, 8, 512, 8, 512>(__gm__ float *out, __gm
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLSUM<float, 4, 1024, 4, 1024>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    using SrcTileData = Tile<TileType::Vec, float, 4, 1024, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, float, 1, 1024, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, float, 4, 1024, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(4, 1024), DynStride(4, 1024));
+    DstGlobal dstGlobal(out, DynShape(1, 1024), DynStride(1, 1024));
+    SrcTileData srcTile(4, 1024);
+    DstTileData dstTile(1, 1024);
+    TmpTileData tmpTile(4, 1024);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLSUM<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    using SrcTileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, float, 1, 256, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
+    DstGlobal dstGlobal(out, DynShape(1, 256), DynStride(1, 256));
+    SrcTileData srcTile(32, 256);
+    DstTileData dstTile(1, 256);
+    TmpTileData tmpTile(32, 256);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
@@ -1913,11 +686,8 @@ __global__ AICORE void runTCOLSUM<float, 16, 512, 16, 512>(__gm__ float *out, __
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
     using SrcTileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
     using DstTileData = Tile<TileType::Vec, float, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
@@ -1935,32 +705,29 @@ __global__ AICORE void runTCOLSUM<float, 16, 512, 16, 512>(__gm__ float *out, __
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
 }
 
 template <>
-__global__ AICORE void runTCOLSUM<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src)
+__global__ AICORE void runTCOLSUM<float, 8, 1024, 8, 1024>(__gm__ float *out, __gm__ float *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
-    using SrcTileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
-    using DstTileData = Tile<TileType::Vec, float, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
-    using TmpTileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
+    using SrcTileData = Tile<TileType::Vec, float, 8, 1024, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, float, 1, 1024, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, float, 8, 1024, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
     using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
 
-    SrcGlobal srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
-    DstGlobal dstGlobal(out, DynShape(1, 512), DynStride(1, 512));
-    SrcTileData srcTile(32, 512);
-    DstTileData dstTile(1, 512);
-    TmpTileData tmpTile(32, 512);
+    SrcGlobal srcGlobal(src, DynShape(8, 1024), DynStride(8, 1024));
+    DstGlobal dstGlobal(out, DynShape(1, 1024), DynStride(1, 1024));
+    SrcTileData srcTile(8, 1024);
+    DstTileData dstTile(1, 1024);
+    TmpTileData tmpTile(8, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(tmpTile, 0x100);
@@ -1968,7 +735,7 @@ __global__ AICORE void runTCOLSUM<float, 32, 512, 32, 512>(__gm__ float *out, __
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
@@ -1979,11 +746,8 @@ __global__ AICORE void runTCOLSUM<float, 64, 256, 64, 256>(__gm__ float *out, __
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
     using SrcTileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
     using DstTileData = Tile<TileType::Vec, float, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
@@ -2001,7 +765,67 @@ __global__ AICORE void runTCOLSUM<float, 64, 256, 64, 256>(__gm__ float *out, __
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLSUM<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    using SrcTileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, float, 1, 512, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
+    DstGlobal dstGlobal(out, DynShape(1, 512), DynStride(1, 512));
+    SrcTileData srcTile(32, 512);
+    DstTileData dstTile(1, 512);
+    TmpTileData tmpTile(32, 512);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLSUM<float, 16, 1024, 16, 1024>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    using SrcTileData = Tile<TileType::Vec, float, 16, 1024, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, float, 1, 1024, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, float, 16, 1024, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(16, 1024), DynStride(16, 1024));
+    DstGlobal dstGlobal(out, DynShape(1, 1024), DynStride(1, 1024));
+    SrcTileData srcTile(16, 1024);
+    DstTileData dstTile(1, 1024);
+    TmpTileData tmpTile(16, 1024);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
@@ -2012,11 +836,8 @@ __global__ AICORE void runTCOLSUM<half, 32, 256, 32, 256>(__gm__ half *out, __gm
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
     using SrcTileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
     using DstTileData = Tile<TileType::Vec, half, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
@@ -2034,40 +855,7 @@ __global__ AICORE void runTCOLSUM<half, 32, 256, 32, 256>(__gm__ half *out, __gm
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTCOLSUM<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
-    using SrcTileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
-    using DstTileData = Tile<TileType::Vec, half, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
-    using TmpTileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
-    DstGlobal dstGlobal(out, DynShape(1, 256), DynStride(1, 256));
-    SrcTileData srcTile(64, 256);
-    DstTileData dstTile(1, 256);
-    TmpTileData tmpTile(64, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(tmpTile, 0x100);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
@@ -2078,11 +866,8 @@ __global__ AICORE void runTCOLSUM<half, 16, 512, 16, 512>(__gm__ half *out, __gm
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
     using SrcTileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
     using DstTileData = Tile<TileType::Vec, half, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
@@ -2100,7 +885,67 @@ __global__ AICORE void runTCOLSUM<half, 16, 512, 16, 512>(__gm__ half *out, __gm
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLSUM<half, 8, 1024, 8, 1024>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    using SrcTileData = Tile<TileType::Vec, half, 8, 1024, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, half, 1, 1024, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, half, 8, 1024, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(8, 1024), DynStride(8, 1024));
+    DstGlobal dstGlobal(out, DynShape(1, 1024), DynStride(1, 1024));
+    SrcTileData srcTile(8, 1024);
+    DstTileData dstTile(1, 1024);
+    TmpTileData tmpTile(8, 1024);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLSUM<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    using SrcTileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, half, 1, 256, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
+
+    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
+
+    SrcGlobal srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
+    DstGlobal dstGlobal(out, DynShape(1, 256), DynStride(1, 256));
+    SrcTileData srcTile(64, 256);
+    DstTileData dstTile(1, 256);
+    TmpTileData tmpTile(64, 256);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
@@ -2111,11 +956,8 @@ __global__ AICORE void runTCOLSUM<half, 32, 512, 32, 512>(__gm__ half *out, __gm
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
     using SrcTileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
     using DstTileData = Tile<TileType::Vec, half, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
@@ -2133,32 +975,29 @@ __global__ AICORE void runTCOLSUM<half, 32, 512, 32, 512>(__gm__ half *out, __gm
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
 }
 
 template <>
-__global__ AICORE void runTCOLSUM<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src)
+__global__ AICORE void runTCOLSUM<half, 16, 1024, 16, 1024>(__gm__ half *out, __gm__ half *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
-    using SrcTileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
-    using DstTileData = Tile<TileType::Vec, half, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
-    using TmpTileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
+    using SrcTileData = Tile<TileType::Vec, half, 16, 1024, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, half, 1, 1024, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, half, 16, 1024, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
     using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
 
-    SrcGlobal srcGlobal(src, DynShape(64, 512), DynStride(64, 512));
-    DstGlobal dstGlobal(out, DynShape(1, 512), DynStride(1, 512));
-    SrcTileData srcTile(64, 512);
-    DstTileData dstTile(1, 512);
-    TmpTileData tmpTile(64, 512);
+    SrcGlobal srcGlobal(src, DynShape(16, 1024), DynStride(16, 1024));
+    DstGlobal dstGlobal(out, DynShape(1, 1024), DynStride(1, 1024));
+    SrcTileData srcTile(16, 1024);
+    DstTileData dstTile(1, 1024);
+    TmpTileData tmpTile(16, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(tmpTile, 0x100);
@@ -2166,7 +1005,7 @@ __global__ AICORE void runTCOLSUM<half, 64, 512, 64, 512>(__gm__ half *out, __gm
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
@@ -2177,11 +1016,8 @@ __global__ AICORE void runTCOLSUM<half, 128, 256, 128, 256>(__gm__ half *out, __
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: full (H, W)
     using SrcTileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: (1, W) — one value per column
     using DstTileData = Tile<TileType::Vec, half, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Tmp: same shape as src (scratch buffer)
     using TmpTileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
 
     using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
@@ -2199,247 +1035,67 @@ __global__ AICORE void runTCOLSUM<half, 128, 256, 128, 256>(__gm__ half *out, __
 
     for (int i = 0; i < 10; i++) {
         TLOAD(srcTile, srcGlobal);
-        TCOLSUM(dstTile, srcTile, tmpTile);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
 }
 
 template <>
-__global__ AICORE void runTEXPANDS<float, 1, 4096, 1, 4096>(__gm__ float *out, float scalar)
+__global__ AICORE void runTCOLSUM<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 1, 4096, BLayout::RowMajor, -1, -1>;
+    using SrcTileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, half, 1, 512, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
 
-    GlobalData dstGlobal(out, DynShape(1, 4096), DynStride(1, 4096));
-    TileData dstTile(1, 4096);
+    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
 
+    SrcGlobal srcGlobal(src, DynShape(64, 512), DynStride(64, 512));
+    DstGlobal dstGlobal(out, DynShape(1, 512), DynStride(1, 512));
+    SrcTileData srcTile(64, 512);
+    DstTileData dstTile(1, 512);
+    TmpTileData tmpTile(64, 512);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
     TASSIGN(dstTile, 0x10000);
 
     for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
+        TLOAD(srcTile, srcGlobal);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
 }
 
 template <>
-__global__ AICORE void runTEXPANDS<float, 16, 256, 16, 256>(__gm__ float *out, float scalar)
+__global__ AICORE void runTCOLSUM<half, 32, 1024, 32, 1024>(__gm__ half *out, __gm__ half *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
+    using SrcTileData = Tile<TileType::Vec, half, 32, 1024, BLayout::RowMajor, -1, -1>;
+    using DstTileData = Tile<TileType::Vec, half, 1, 1024, BLayout::RowMajor, -1, -1>;
+    using TmpTileData = Tile<TileType::Vec, half, 32, 1024, BLayout::RowMajor, -1, -1>;
 
-    GlobalData dstGlobal(out, DynShape(16, 256), DynStride(16, 256));
-    TileData dstTile(16, 256);
+    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
+    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
 
+    SrcGlobal srcGlobal(src, DynShape(32, 1024), DynStride(32, 1024));
+    DstGlobal dstGlobal(out, DynShape(1, 1024), DynStride(1, 1024));
+    SrcTileData srcTile(32, 1024);
+    DstTileData dstTile(1, 1024);
+    TmpTileData tmpTile(32, 1024);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(tmpTile, 0x100);
     TASSIGN(dstTile, 0x10000);
 
     for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXPANDS<float, 32, 256, 32, 256>(__gm__ float *out, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    TileData dstTile(32, 256);
-
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXPANDS<float, 8, 512, 8, 512>(__gm__ float *out, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData dstGlobal(out, DynShape(8, 512), DynStride(8, 512));
-    TileData dstTile(8, 512);
-
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXPANDS<float, 16, 512, 16, 512>(__gm__ float *out, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    TileData dstTile(16, 512);
-
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXPANDS<float, 64, 256, 64, 256>(__gm__ float *out, float scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    TileData dstTile(64, 256);
-
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXPANDS<half, 1, 8192, 1, 8192>(__gm__ half *out, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 1, 8192, BLayout::RowMajor, -1, -1>;
-
-    GlobalData dstGlobal(out, DynShape(1, 8192), DynStride(1, 8192));
-    TileData dstTile(1, 8192);
-
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXPANDS<half, 32, 256, 32, 256>(__gm__ half *out, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    TileData dstTile(32, 256);
-
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXPANDS<half, 64, 256, 64, 256>(__gm__ half *out, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    TileData dstTile(64, 256);
-
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXPANDS<half, 16, 512, 16, 512>(__gm__ half *out, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    TileData dstTile(16, 512);
-
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXPANDS<half, 32, 512, 32, 512>(__gm__ half *out, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
-
-    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    TileData dstTile(32, 512);
-
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTEXPANDS<half, 128, 256, 128, 256>(__gm__ half *out, half scalar)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
-    using TileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
-
-    GlobalData dstGlobal(out, DynShape(128, 256), DynStride(128, 256));
-    TileData dstTile(128, 256);
-
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TEXPANDS(dstTile, scalar);
+        TLOAD(srcTile, srcGlobal);
+        TCOLSUM(dstTile, srcTile, tmpTile, false);
         TSTORE(dstGlobal, dstTile);
         pipe_barrier(PIPE_ALL);
     }
@@ -2450,47 +1106,14 @@ __global__ AICORE void runTROWEXPAND<float, 16, 256, 16, 256>(__gm__ float *out,
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, float, 16, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(16, 1), DynStride(16, 1));
-    DstGlobal dstGlobal(out, DynShape(16, 256), DynStride(16, 256));
-    SrcTileData srcTile(16, 1);
-    DstTileData dstTile(16, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TROWEXPAND(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTROWEXPAND<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, float, 32, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(32, 1), DynStride(32, 1));
-    DstGlobal dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    SrcTileData srcTile(32, 1);
-    DstTileData dstTile(32, 256);
+    GlobalData srcGlobal(src, DynShape(16, 256), DynStride(16, 256));
+    GlobalData dstGlobal(out, DynShape(16, 256), DynStride(16, 256));
+    TileData srcTile(16, 256);
+    TileData dstTile(16, 256);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2508,18 +1131,64 @@ __global__ AICORE void runTROWEXPAND<float, 8, 512, 8, 512>(__gm__ float *out, _
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, float, 8, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+    GlobalData srcGlobal(src, DynShape(8, 512), DynStride(8, 512));
+    GlobalData dstGlobal(out, DynShape(8, 512), DynStride(8, 512));
+    TileData srcTile(8, 512);
+    TileData dstTile(8, 512);
 
-    SrcGlobal srcGlobal(src, DynShape(8, 1), DynStride(8, 1));
-    DstGlobal dstGlobal(out, DynShape(8, 512), DynStride(8, 512));
-    SrcTileData srcTile(8, 1);
-    DstTileData dstTile(8, 512);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTROWEXPAND<float, 4, 1024, 4, 1024>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, float, 4, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(4, 1024), DynStride(4, 1024));
+    GlobalData dstGlobal(out, DynShape(4, 1024), DynStride(4, 1024));
+    TileData srcTile(4, 1024);
+    TileData dstTile(4, 1024);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTROWEXPAND<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
+    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
+    TileData srcTile(32, 256);
+    TileData dstTile(32, 256);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2537,18 +1206,14 @@ __global__ AICORE void runTROWEXPAND<float, 16, 512, 16, 512>(__gm__ float *out,
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, float, 16, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(16, 1), DynStride(16, 1));
-    DstGlobal dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    SrcTileData srcTile(16, 1);
-    DstTileData dstTile(16, 512);
+    GlobalData srcGlobal(src, DynShape(16, 512), DynStride(16, 512));
+    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
+    TileData srcTile(16, 512);
+    TileData dstTile(16, 512);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2562,22 +1227,18 @@ __global__ AICORE void runTROWEXPAND<float, 16, 512, 16, 512>(__gm__ float *out,
 }
 
 template <>
-__global__ AICORE void runTROWEXPAND<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src)
+__global__ AICORE void runTROWEXPAND<float, 8, 1024, 8, 1024>(__gm__ float *out, __gm__ float *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, float, 32, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, float, 8, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(32, 1), DynStride(32, 1));
-    DstGlobal dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    SrcTileData srcTile(32, 1);
-    DstTileData dstTile(32, 512);
+    GlobalData srcGlobal(src, DynShape(8, 1024), DynStride(8, 1024));
+    GlobalData dstGlobal(out, DynShape(8, 1024), DynStride(8, 1024));
+    TileData srcTile(8, 1024);
+    TileData dstTile(8, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2595,18 +1256,64 @@ __global__ AICORE void runTROWEXPAND<float, 64, 256, 64, 256>(__gm__ float *out,
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, float, 64, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+    GlobalData srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
+    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
+    TileData srcTile(64, 256);
+    TileData dstTile(64, 256);
 
-    SrcGlobal srcGlobal(src, DynShape(64, 1), DynStride(64, 1));
-    DstGlobal dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    SrcTileData srcTile(64, 1);
-    DstTileData dstTile(64, 256);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTROWEXPAND<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
+    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
+    TileData srcTile(32, 512);
+    TileData dstTile(32, 512);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTROWEXPAND<float, 16, 1024, 16, 1024>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, float, 16, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(16, 1024), DynStride(16, 1024));
+    GlobalData dstGlobal(out, DynShape(16, 1024), DynStride(16, 1024));
+    TileData srcTile(16, 1024);
+    TileData dstTile(16, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2624,47 +1331,14 @@ __global__ AICORE void runTROWEXPAND<half, 32, 256, 32, 256>(__gm__ half *out, _
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, half, 32, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(32, 1), DynStride(32, 1));
-    DstGlobal dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    SrcTileData srcTile(32, 1);
-    DstTileData dstTile(32, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TROWEXPAND(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTROWEXPAND<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, half, 64, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(64, 1), DynStride(64, 1));
-    DstGlobal dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    SrcTileData srcTile(64, 1);
-    DstTileData dstTile(64, 256);
+    GlobalData srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
+    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
+    TileData srcTile(32, 256);
+    TileData dstTile(32, 256);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2682,18 +1356,64 @@ __global__ AICORE void runTROWEXPAND<half, 16, 512, 16, 512>(__gm__ half *out, _
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, half, 16, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
+    GlobalData srcGlobal(src, DynShape(16, 512), DynStride(16, 512));
+    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
+    TileData srcTile(16, 512);
+    TileData dstTile(16, 512);
 
-    SrcGlobal srcGlobal(src, DynShape(16, 1), DynStride(16, 1));
-    DstGlobal dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    SrcTileData srcTile(16, 1);
-    DstTileData dstTile(16, 512);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTROWEXPAND<half, 8, 1024, 8, 1024>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, half, 8, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(8, 1024), DynStride(8, 1024));
+    GlobalData dstGlobal(out, DynShape(8, 1024), DynStride(8, 1024));
+    TileData srcTile(8, 1024);
+    TileData dstTile(8, 1024);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTROWEXPAND<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
+    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
+    TileData srcTile(64, 256);
+    TileData dstTile(64, 256);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2711,18 +1431,14 @@ __global__ AICORE void runTROWEXPAND<half, 32, 512, 32, 512>(__gm__ half *out, _
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, half, 32, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(32, 1), DynStride(32, 1));
-    DstGlobal dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    SrcTileData srcTile(32, 1);
-    DstTileData dstTile(32, 512);
+    GlobalData srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
+    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
+    TileData srcTile(32, 512);
+    TileData dstTile(32, 512);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2736,22 +1452,18 @@ __global__ AICORE void runTROWEXPAND<half, 32, 512, 32, 512>(__gm__ half *out, _
 }
 
 template <>
-__global__ AICORE void runTROWEXPAND<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src)
+__global__ AICORE void runTROWEXPAND<half, 16, 1024, 16, 1024>(__gm__ half *out, __gm__ half *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, half, 64, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, half, 16, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(64, 1), DynStride(64, 1));
-    DstGlobal dstGlobal(out, DynShape(64, 512), DynStride(64, 512));
-    SrcTileData srcTile(64, 1);
-    DstTileData dstTile(64, 512);
+    GlobalData srcGlobal(src, DynShape(16, 1024), DynStride(16, 1024));
+    GlobalData dstGlobal(out, DynShape(16, 1024), DynStride(16, 1024));
+    TileData srcTile(16, 1024);
+    TileData dstTile(16, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2769,18 +1481,64 @@ __global__ AICORE void runTROWEXPAND<half, 128, 256, 128, 256>(__gm__ half *out,
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: column vector (H, 1)
-    using SrcTileData = Tile<TileType::Vec, half, 128, 1, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
+    GlobalData srcGlobal(src, DynShape(128, 256), DynStride(128, 256));
+    GlobalData dstGlobal(out, DynShape(128, 256), DynStride(128, 256));
+    TileData srcTile(128, 256);
+    TileData dstTile(128, 256);
 
-    SrcGlobal srcGlobal(src, DynShape(128, 1), DynStride(128, 1));
-    DstGlobal dstGlobal(out, DynShape(128, 256), DynStride(128, 256));
-    SrcTileData srcTile(128, 1);
-    DstTileData dstTile(128, 256);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTROWEXPAND<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(64, 512), DynStride(64, 512));
+    GlobalData dstGlobal(out, DynShape(64, 512), DynStride(64, 512));
+    TileData srcTile(64, 512);
+    TileData dstTile(64, 512);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TROWEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTROWEXPAND<half, 32, 1024, 32, 1024>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads col0 from src, writes all cols of dst
+    using TileData = Tile<TileType::Vec, half, 32, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(32, 1024), DynStride(32, 1024));
+    GlobalData dstGlobal(out, DynShape(32, 1024), DynStride(32, 1024));
+    TileData srcTile(32, 1024);
+    TileData dstTile(32, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2798,47 +1556,14 @@ __global__ AICORE void runTCOLEXPAND<float, 16, 256, 16, 256>(__gm__ float *out,
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, float, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, float, 16, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(1, 256), DynStride(1, 256));
-    DstGlobal dstGlobal(out, DynShape(16, 256), DynStride(16, 256));
-    SrcTileData srcTile(1, 256);
-    DstTileData dstTile(16, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TCOLEXPAND(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTCOLEXPAND<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, float, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
-
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(1, 256), DynStride(1, 256));
-    DstGlobal dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    SrcTileData srcTile(1, 256);
-    DstTileData dstTile(32, 256);
+    GlobalData srcGlobal(src, DynShape(16, 256), DynStride(16, 256));
+    GlobalData dstGlobal(out, DynShape(16, 256), DynStride(16, 256));
+    TileData srcTile(16, 256);
+    TileData dstTile(16, 256);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2856,18 +1581,64 @@ __global__ AICORE void runTCOLEXPAND<float, 8, 512, 8, 512>(__gm__ float *out, _
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, float, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, float, 8, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+    GlobalData srcGlobal(src, DynShape(8, 512), DynStride(8, 512));
+    GlobalData dstGlobal(out, DynShape(8, 512), DynStride(8, 512));
+    TileData srcTile(8, 512);
+    TileData dstTile(8, 512);
 
-    SrcGlobal srcGlobal(src, DynShape(1, 512), DynStride(1, 512));
-    DstGlobal dstGlobal(out, DynShape(8, 512), DynStride(8, 512));
-    SrcTileData srcTile(1, 512);
-    DstTileData dstTile(8, 512);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLEXPAND<float, 4, 1024, 4, 1024>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, float, 4, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(4, 1024), DynStride(4, 1024));
+    GlobalData dstGlobal(out, DynShape(4, 1024), DynStride(4, 1024));
+    TileData srcTile(4, 1024);
+    TileData dstTile(4, 1024);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLEXPAND<float, 32, 256, 32, 256>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, float, 32, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
+    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
+    TileData srcTile(32, 256);
+    TileData dstTile(32, 256);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2885,18 +1656,14 @@ __global__ AICORE void runTCOLEXPAND<float, 16, 512, 16, 512>(__gm__ float *out,
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, float, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, float, 16, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(1, 512), DynStride(1, 512));
-    DstGlobal dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    SrcTileData srcTile(1, 512);
-    DstTileData dstTile(16, 512);
+    GlobalData srcGlobal(src, DynShape(16, 512), DynStride(16, 512));
+    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
+    TileData srcTile(16, 512);
+    TileData dstTile(16, 512);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2910,22 +1677,18 @@ __global__ AICORE void runTCOLEXPAND<float, 16, 512, 16, 512>(__gm__ float *out,
 }
 
 template <>
-__global__ AICORE void runTCOLEXPAND<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src)
+__global__ AICORE void runTCOLEXPAND<float, 8, 1024, 8, 1024>(__gm__ float *out, __gm__ float *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, float, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, float, 8, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(1, 512), DynStride(1, 512));
-    DstGlobal dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    SrcTileData srcTile(1, 512);
-    DstTileData dstTile(32, 512);
+    GlobalData srcGlobal(src, DynShape(8, 1024), DynStride(8, 1024));
+    GlobalData dstGlobal(out, DynShape(8, 1024), DynStride(8, 1024));
+    TileData srcTile(8, 1024);
+    TileData dstTile(8, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2943,18 +1706,64 @@ __global__ AICORE void runTCOLEXPAND<float, 64, 256, 64, 256>(__gm__ float *out,
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, float, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, float, 64, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<float, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<float, DynShape, DynStride>;
+    GlobalData srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
+    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
+    TileData srcTile(64, 256);
+    TileData dstTile(64, 256);
 
-    SrcGlobal srcGlobal(src, DynShape(1, 256), DynStride(1, 256));
-    DstGlobal dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    SrcTileData srcTile(1, 256);
-    DstTileData dstTile(64, 256);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLEXPAND<float, 32, 512, 32, 512>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, float, 32, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
+    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
+    TileData srcTile(32, 512);
+    TileData dstTile(32, 512);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLEXPAND<float, 16, 1024, 16, 1024>(__gm__ float *out, __gm__ float *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, float, 16, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<float, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(16, 1024), DynStride(16, 1024));
+    GlobalData dstGlobal(out, DynShape(16, 1024), DynStride(16, 1024));
+    TileData srcTile(16, 1024);
+    TileData dstTile(16, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -2972,47 +1781,14 @@ __global__ AICORE void runTCOLEXPAND<half, 32, 256, 32, 256>(__gm__ half *out, _
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, half, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, half, 32, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(1, 256), DynStride(1, 256));
-    DstGlobal dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
-    SrcTileData srcTile(1, 256);
-    DstTileData dstTile(32, 256);
-
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x10000);
-
-    for (int i = 0; i < 10; i++) {
-        TLOAD(srcTile, srcGlobal);
-        TCOLEXPAND(dstTile, srcTile);
-        TSTORE(dstGlobal, dstTile);
-        pipe_barrier(PIPE_ALL);
-    }
-}
-
-template <>
-__global__ AICORE void runTCOLEXPAND<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src)
-{
-    using DynShape = Shape<1, 1, 1, -1, -1>;
-    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, half, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
-
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(1, 256), DynStride(1, 256));
-    DstGlobal dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
-    SrcTileData srcTile(1, 256);
-    DstTileData dstTile(64, 256);
+    GlobalData srcGlobal(src, DynShape(32, 256), DynStride(32, 256));
+    GlobalData dstGlobal(out, DynShape(32, 256), DynStride(32, 256));
+    TileData srcTile(32, 256);
+    TileData dstTile(32, 256);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -3030,18 +1806,64 @@ __global__ AICORE void runTCOLEXPAND<half, 16, 512, 16, 512>(__gm__ half *out, _
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, half, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, half, 16, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
+    GlobalData srcGlobal(src, DynShape(16, 512), DynStride(16, 512));
+    GlobalData dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
+    TileData srcTile(16, 512);
+    TileData dstTile(16, 512);
 
-    SrcGlobal srcGlobal(src, DynShape(1, 512), DynStride(1, 512));
-    DstGlobal dstGlobal(out, DynShape(16, 512), DynStride(16, 512));
-    SrcTileData srcTile(1, 512);
-    DstTileData dstTile(16, 512);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLEXPAND<half, 8, 1024, 8, 1024>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, half, 8, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(8, 1024), DynStride(8, 1024));
+    GlobalData dstGlobal(out, DynShape(8, 1024), DynStride(8, 1024));
+    TileData srcTile(8, 1024);
+    TileData dstTile(8, 1024);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLEXPAND<half, 64, 256, 64, 256>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, half, 64, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(64, 256), DynStride(64, 256));
+    GlobalData dstGlobal(out, DynShape(64, 256), DynStride(64, 256));
+    TileData srcTile(64, 256);
+    TileData dstTile(64, 256);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -3059,18 +1881,14 @@ __global__ AICORE void runTCOLEXPAND<half, 32, 512, 32, 512>(__gm__ half *out, _
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, half, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, half, 32, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(1, 512), DynStride(1, 512));
-    DstGlobal dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
-    SrcTileData srcTile(1, 512);
-    DstTileData dstTile(32, 512);
+    GlobalData srcGlobal(src, DynShape(32, 512), DynStride(32, 512));
+    GlobalData dstGlobal(out, DynShape(32, 512), DynStride(32, 512));
+    TileData srcTile(32, 512);
+    TileData dstTile(32, 512);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -3084,22 +1902,18 @@ __global__ AICORE void runTCOLEXPAND<half, 32, 512, 32, 512>(__gm__ half *out, _
 }
 
 template <>
-__global__ AICORE void runTCOLEXPAND<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src)
+__global__ AICORE void runTCOLEXPAND<half, 16, 1024, 16, 1024>(__gm__ half *out, __gm__ half *src)
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, half, 1, 512, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, half, 16, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
-
-    SrcGlobal srcGlobal(src, DynShape(1, 512), DynStride(1, 512));
-    DstGlobal dstGlobal(out, DynShape(64, 512), DynStride(64, 512));
-    SrcTileData srcTile(1, 512);
-    DstTileData dstTile(64, 512);
+    GlobalData srcGlobal(src, DynShape(16, 1024), DynStride(16, 1024));
+    GlobalData dstGlobal(out, DynShape(16, 1024), DynStride(16, 1024));
+    TileData srcTile(16, 1024);
+    TileData dstTile(16, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -3117,18 +1931,64 @@ __global__ AICORE void runTCOLEXPAND<half, 128, 256, 128, 256>(__gm__ half *out,
 {
     using DynShape = Shape<1, 1, 1, -1, -1>;
     using DynStride = pto::Stride<1, 1, -1, -1, 1>;
-    // Source: row vector (1, W)
-    using SrcTileData = Tile<TileType::Vec, half, 1, 256, BLayout::RowMajor, -1, -1>;
-    // Destination: full tile (H, W)
-    using DstTileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, half, 128, 256, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
 
-    using SrcGlobal = GlobalTensor<half, DynShape, DynStride>;
-    using DstGlobal = GlobalTensor<half, DynShape, DynStride>;
+    GlobalData srcGlobal(src, DynShape(128, 256), DynStride(128, 256));
+    GlobalData dstGlobal(out, DynShape(128, 256), DynStride(128, 256));
+    TileData srcTile(128, 256);
+    TileData dstTile(128, 256);
 
-    SrcGlobal srcGlobal(src, DynShape(1, 256), DynStride(1, 256));
-    DstGlobal dstGlobal(out, DynShape(128, 256), DynStride(128, 256));
-    SrcTileData srcTile(1, 256);
-    DstTileData dstTile(128, 256);
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLEXPAND<half, 64, 512, 64, 512>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, half, 64, 512, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(64, 512), DynStride(64, 512));
+    GlobalData dstGlobal(out, DynShape(64, 512), DynStride(64, 512));
+    TileData srcTile(64, 512);
+    TileData dstTile(64, 512);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x10000);
+
+    for (int i = 0; i < 10; i++) {
+        TLOAD(srcTile, srcGlobal);
+        TCOLEXPAND(dstTile, srcTile);
+        TSTORE(dstGlobal, dstTile);
+        pipe_barrier(PIPE_ALL);
+    }
+}
+
+template <>
+__global__ AICORE void runTCOLEXPAND<half, 32, 1024, 32, 1024>(__gm__ half *out, __gm__ half *src)
+{
+    using DynShape = Shape<1, 1, 1, -1, -1>;
+    using DynStride = pto::Stride<1, 1, -1, -1, 1>;
+    // Both src and dst are full (H, W) — op reads row0 from src, writes all rows of dst
+    using TileData = Tile<TileType::Vec, half, 32, 1024, BLayout::RowMajor, -1, -1>;
+    using GlobalData = GlobalTensor<half, DynShape, DynStride>;
+
+    GlobalData srcGlobal(src, DynShape(32, 1024), DynStride(32, 1024));
+    GlobalData dstGlobal(out, DynShape(32, 1024), DynStride(32, 1024));
+    TileData srcTile(32, 1024);
+    TileData dstTile(32, 1024);
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -3142,33 +2002,6 @@ __global__ AICORE void runTCOLEXPAND<half, 128, 256, 128, 256>(__gm__ half *out,
 }
 
 // ===== Launcher wrappers =====
-
-template <typename T, int tileH, int tileW, int vRows, int vCols>
-void launchTADD(void *out, void *src0, void *src1, aclrtStream stream)
-{
-    if constexpr (std::is_same_v<T, aclFloat16>)
-        runTADD<half, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((half*)out, (half*)src0, (half*)src1);
-    else
-        runTADD<T, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((T*)out, (T*)src0, (T*)src1);
-}
-
-template <typename T, int tileH, int tileW, int vRows, int vCols>
-void launchTEXP(void *out, void *src, aclrtStream stream)
-{
-    if constexpr (std::is_same_v<T, aclFloat16>)
-        runTEXP<half, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((half*)out, (half*)src);
-    else
-        runTEXP<T, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((T*)out, (T*)src);
-}
-
-template <typename T, int tileH, int tileW, int vRows, int vCols>
-void launchTADDS(void *out, void *src, float scalar, aclrtStream stream)
-{
-    if constexpr (std::is_same_v<T, aclFloat16>)
-        runTADDS<half, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((half*)out, (half*)src, (half)scalar);
-    else
-        runTADDS<T, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((T*)out, (T*)src, (T)scalar);
-}
 
 template <typename T, int tileH, int tileW, int vRows, int vCols>
 void launchTROWSUM(void *out, void *src, aclrtStream stream)
@@ -3186,15 +2019,6 @@ void launchTCOLSUM(void *out, void *src, aclrtStream stream)
         runTCOLSUM<half, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((half*)out, (half*)src);
     else
         runTCOLSUM<T, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((T*)out, (T*)src);
-}
-
-template <typename T, int tileH, int tileW, int vRows, int vCols>
-void launchTEXPANDS(void *out, float scalar, aclrtStream stream)
-{
-    if constexpr (std::is_same_v<T, aclFloat16>)
-        runTEXPANDS<half, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((half*)out, (half)scalar);
-    else
-        runTEXPANDS<T, tileH, tileW, vRows, vCols><<<1, nullptr, stream>>>((T*)out, (T)scalar);
 }
 
 template <typename T, int tileH, int tileW, int vRows, int vCols>
@@ -3217,117 +2041,73 @@ void launchTCOLEXPAND(void *out, void *src, aclrtStream stream)
 
 // ===== Explicit template instantiations =====
 
-template void launchTADD<float, 1, 4096, 1, 4096>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 16, 256, 16, 256>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 8, 512, 8, 512>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 1, 8192, 1, 8192>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 32, 256, 32, 256>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 16, 512, 16, 512>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 1, 16384, 1, 16384>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 64, 256, 64, 256>(void*, void*, void*, aclrtStream);
-template void launchTADD<float, 32, 512, 32, 512>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 1, 8192, 1, 8192>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 32, 256, 32, 256>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 16, 512, 16, 512>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 1, 16384, 1, 16384>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 64, 256, 64, 256>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 32, 512, 32, 512>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 1, 32768, 1, 32768>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 128, 256, 128, 256>(void*, void*, void*, aclrtStream);
-template void launchTADD<aclFloat16, 64, 512, 64, 512>(void*, void*, void*, aclrtStream);
-template void launchTEXP<float, 1, 4096, 1, 4096>(void*, void*, aclrtStream);
-template void launchTEXP<float, 16, 256, 16, 256>(void*, void*, aclrtStream);
-template void launchTEXP<float, 8, 512, 8, 512>(void*, void*, aclrtStream);
-template void launchTEXP<float, 1, 8192, 1, 8192>(void*, void*, aclrtStream);
-template void launchTEXP<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
-template void launchTEXP<float, 16, 512, 16, 512>(void*, void*, aclrtStream);
-template void launchTEXP<float, 1, 16384, 1, 16384>(void*, void*, aclrtStream);
-template void launchTEXP<float, 64, 256, 64, 256>(void*, void*, aclrtStream);
-template void launchTEXP<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 1, 8192, 1, 8192>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 32, 256, 32, 256>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 16, 512, 16, 512>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 1, 16384, 1, 16384>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 64, 256, 64, 256>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 32, 512, 32, 512>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 1, 32768, 1, 32768>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 128, 256, 128, 256>(void*, void*, aclrtStream);
-template void launchTEXP<aclFloat16, 64, 512, 64, 512>(void*, void*, aclrtStream);
-template void launchTADDS<float, 1, 4096, 1, 4096>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 16, 256, 16, 256>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 8, 512, 8, 512>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 1, 8192, 1, 8192>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 32, 256, 32, 256>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 16, 512, 16, 512>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 1, 16384, 1, 16384>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 64, 256, 64, 256>(void*, void*, float, aclrtStream);
-template void launchTADDS<float, 32, 512, 32, 512>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 1, 8192, 1, 8192>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 32, 256, 32, 256>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 16, 512, 16, 512>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 1, 16384, 1, 16384>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 64, 256, 64, 256>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 32, 512, 32, 512>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 1, 32768, 1, 32768>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 128, 256, 128, 256>(void*, void*, float, aclrtStream);
-template void launchTADDS<aclFloat16, 64, 512, 64, 512>(void*, void*, float, aclrtStream);
 template void launchTROWSUM<float, 16, 256, 16, 256>(void*, void*, aclrtStream);
-template void launchTROWSUM<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
 template void launchTROWSUM<float, 8, 512, 8, 512>(void*, void*, aclrtStream);
+template void launchTROWSUM<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
 template void launchTROWSUM<float, 16, 512, 16, 512>(void*, void*, aclrtStream);
-template void launchTROWSUM<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
+template void launchTROWSUM<float, 8, 1024, 8, 1024>(void*, void*, aclrtStream);
 template void launchTROWSUM<float, 64, 256, 64, 256>(void*, void*, aclrtStream);
+template void launchTROWSUM<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
+template void launchTROWSUM<float, 16, 1024, 16, 1024>(void*, void*, aclrtStream);
 template void launchTROWSUM<aclFloat16, 32, 256, 32, 256>(void*, void*, aclrtStream);
-template void launchTROWSUM<aclFloat16, 64, 256, 64, 256>(void*, void*, aclrtStream);
 template void launchTROWSUM<aclFloat16, 16, 512, 16, 512>(void*, void*, aclrtStream);
+template void launchTROWSUM<aclFloat16, 64, 256, 64, 256>(void*, void*, aclrtStream);
 template void launchTROWSUM<aclFloat16, 32, 512, 32, 512>(void*, void*, aclrtStream);
-template void launchTROWSUM<aclFloat16, 64, 512, 64, 512>(void*, void*, aclrtStream);
+template void launchTROWSUM<aclFloat16, 16, 1024, 16, 1024>(void*, void*, aclrtStream);
 template void launchTROWSUM<aclFloat16, 128, 256, 128, 256>(void*, void*, aclrtStream);
+template void launchTROWSUM<aclFloat16, 64, 512, 64, 512>(void*, void*, aclrtStream);
+template void launchTROWSUM<aclFloat16, 32, 1024, 32, 1024>(void*, void*, aclrtStream);
 template void launchTCOLSUM<float, 16, 256, 16, 256>(void*, void*, aclrtStream);
-template void launchTCOLSUM<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
 template void launchTCOLSUM<float, 8, 512, 8, 512>(void*, void*, aclrtStream);
+template void launchTCOLSUM<float, 4, 1024, 4, 1024>(void*, void*, aclrtStream);
+template void launchTCOLSUM<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
 template void launchTCOLSUM<float, 16, 512, 16, 512>(void*, void*, aclrtStream);
-template void launchTCOLSUM<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
+template void launchTCOLSUM<float, 8, 1024, 8, 1024>(void*, void*, aclrtStream);
 template void launchTCOLSUM<float, 64, 256, 64, 256>(void*, void*, aclrtStream);
+template void launchTCOLSUM<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
+template void launchTCOLSUM<float, 16, 1024, 16, 1024>(void*, void*, aclrtStream);
 template void launchTCOLSUM<aclFloat16, 32, 256, 32, 256>(void*, void*, aclrtStream);
-template void launchTCOLSUM<aclFloat16, 64, 256, 64, 256>(void*, void*, aclrtStream);
 template void launchTCOLSUM<aclFloat16, 16, 512, 16, 512>(void*, void*, aclrtStream);
+template void launchTCOLSUM<aclFloat16, 8, 1024, 8, 1024>(void*, void*, aclrtStream);
+template void launchTCOLSUM<aclFloat16, 64, 256, 64, 256>(void*, void*, aclrtStream);
 template void launchTCOLSUM<aclFloat16, 32, 512, 32, 512>(void*, void*, aclrtStream);
-template void launchTCOLSUM<aclFloat16, 64, 512, 64, 512>(void*, void*, aclrtStream);
+template void launchTCOLSUM<aclFloat16, 16, 1024, 16, 1024>(void*, void*, aclrtStream);
 template void launchTCOLSUM<aclFloat16, 128, 256, 128, 256>(void*, void*, aclrtStream);
-template void launchTEXPANDS<float, 1, 4096, 1, 4096>(void*, float, aclrtStream);
-template void launchTEXPANDS<float, 16, 256, 16, 256>(void*, float, aclrtStream);
-template void launchTEXPANDS<float, 32, 256, 32, 256>(void*, float, aclrtStream);
-template void launchTEXPANDS<float, 8, 512, 8, 512>(void*, float, aclrtStream);
-template void launchTEXPANDS<float, 16, 512, 16, 512>(void*, float, aclrtStream);
-template void launchTEXPANDS<float, 64, 256, 64, 256>(void*, float, aclrtStream);
-template void launchTEXPANDS<aclFloat16, 1, 8192, 1, 8192>(void*, float, aclrtStream);
-template void launchTEXPANDS<aclFloat16, 32, 256, 32, 256>(void*, float, aclrtStream);
-template void launchTEXPANDS<aclFloat16, 64, 256, 64, 256>(void*, float, aclrtStream);
-template void launchTEXPANDS<aclFloat16, 16, 512, 16, 512>(void*, float, aclrtStream);
-template void launchTEXPANDS<aclFloat16, 32, 512, 32, 512>(void*, float, aclrtStream);
-template void launchTEXPANDS<aclFloat16, 128, 256, 128, 256>(void*, float, aclrtStream);
+template void launchTCOLSUM<aclFloat16, 64, 512, 64, 512>(void*, void*, aclrtStream);
+template void launchTCOLSUM<aclFloat16, 32, 1024, 32, 1024>(void*, void*, aclrtStream);
 template void launchTROWEXPAND<float, 16, 256, 16, 256>(void*, void*, aclrtStream);
-template void launchTROWEXPAND<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
 template void launchTROWEXPAND<float, 8, 512, 8, 512>(void*, void*, aclrtStream);
+template void launchTROWEXPAND<float, 4, 1024, 4, 1024>(void*, void*, aclrtStream);
+template void launchTROWEXPAND<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
 template void launchTROWEXPAND<float, 16, 512, 16, 512>(void*, void*, aclrtStream);
-template void launchTROWEXPAND<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
+template void launchTROWEXPAND<float, 8, 1024, 8, 1024>(void*, void*, aclrtStream);
 template void launchTROWEXPAND<float, 64, 256, 64, 256>(void*, void*, aclrtStream);
+template void launchTROWEXPAND<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
+template void launchTROWEXPAND<float, 16, 1024, 16, 1024>(void*, void*, aclrtStream);
 template void launchTROWEXPAND<aclFloat16, 32, 256, 32, 256>(void*, void*, aclrtStream);
-template void launchTROWEXPAND<aclFloat16, 64, 256, 64, 256>(void*, void*, aclrtStream);
 template void launchTROWEXPAND<aclFloat16, 16, 512, 16, 512>(void*, void*, aclrtStream);
+template void launchTROWEXPAND<aclFloat16, 8, 1024, 8, 1024>(void*, void*, aclrtStream);
+template void launchTROWEXPAND<aclFloat16, 64, 256, 64, 256>(void*, void*, aclrtStream);
 template void launchTROWEXPAND<aclFloat16, 32, 512, 32, 512>(void*, void*, aclrtStream);
-template void launchTROWEXPAND<aclFloat16, 64, 512, 64, 512>(void*, void*, aclrtStream);
+template void launchTROWEXPAND<aclFloat16, 16, 1024, 16, 1024>(void*, void*, aclrtStream);
 template void launchTROWEXPAND<aclFloat16, 128, 256, 128, 256>(void*, void*, aclrtStream);
+template void launchTROWEXPAND<aclFloat16, 64, 512, 64, 512>(void*, void*, aclrtStream);
+template void launchTROWEXPAND<aclFloat16, 32, 1024, 32, 1024>(void*, void*, aclrtStream);
 template void launchTCOLEXPAND<float, 16, 256, 16, 256>(void*, void*, aclrtStream);
-template void launchTCOLEXPAND<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
 template void launchTCOLEXPAND<float, 8, 512, 8, 512>(void*, void*, aclrtStream);
+template void launchTCOLEXPAND<float, 4, 1024, 4, 1024>(void*, void*, aclrtStream);
+template void launchTCOLEXPAND<float, 32, 256, 32, 256>(void*, void*, aclrtStream);
 template void launchTCOLEXPAND<float, 16, 512, 16, 512>(void*, void*, aclrtStream);
-template void launchTCOLEXPAND<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
+template void launchTCOLEXPAND<float, 8, 1024, 8, 1024>(void*, void*, aclrtStream);
 template void launchTCOLEXPAND<float, 64, 256, 64, 256>(void*, void*, aclrtStream);
+template void launchTCOLEXPAND<float, 32, 512, 32, 512>(void*, void*, aclrtStream);
+template void launchTCOLEXPAND<float, 16, 1024, 16, 1024>(void*, void*, aclrtStream);
 template void launchTCOLEXPAND<aclFloat16, 32, 256, 32, 256>(void*, void*, aclrtStream);
-template void launchTCOLEXPAND<aclFloat16, 64, 256, 64, 256>(void*, void*, aclrtStream);
 template void launchTCOLEXPAND<aclFloat16, 16, 512, 16, 512>(void*, void*, aclrtStream);
+template void launchTCOLEXPAND<aclFloat16, 8, 1024, 8, 1024>(void*, void*, aclrtStream);
+template void launchTCOLEXPAND<aclFloat16, 64, 256, 64, 256>(void*, void*, aclrtStream);
 template void launchTCOLEXPAND<aclFloat16, 32, 512, 32, 512>(void*, void*, aclrtStream);
-template void launchTCOLEXPAND<aclFloat16, 64, 512, 64, 512>(void*, void*, aclrtStream);
+template void launchTCOLEXPAND<aclFloat16, 16, 1024, 16, 1024>(void*, void*, aclrtStream);
 template void launchTCOLEXPAND<aclFloat16, 128, 256, 128, 256>(void*, void*, aclrtStream);
+template void launchTCOLEXPAND<aclFloat16, 64, 512, 64, 512>(void*, void*, aclrtStream);
+template void launchTCOLEXPAND<aclFloat16, 32, 1024, 32, 1024>(void*, void*, aclrtStream);
