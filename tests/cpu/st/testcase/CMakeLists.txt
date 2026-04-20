@@ -77,6 +77,7 @@ tloadconv
 tlog
 tlrelu
 tmatmul
+cube_matmul_4buf
 tmatmul_layout
 tmax
 tmaxs
