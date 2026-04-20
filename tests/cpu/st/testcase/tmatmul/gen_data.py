@@ -14,6 +14,8 @@ import os
 import struct
 import math
 import numpy as np
+import argparse
+import sys
 from utils import NumExt
 
 np.random.seed(19)
@@ -79,43 +81,81 @@ class tmatmulParams:
 
 
 if __name__ == "__main__":
-    # 用例名称
-    case_name_list = [
-        "TMATMULTest.case1",
-        "TMATMULTest.case2",
-        "TMATMULTest.case3",
-        "TMATMULTest.case4",
+    # Check if we're in single-size mode or batch mode
+    if len(sys.argv) > 1 and sys.argv[1] == "--size":
+        # Single-size mode for custom testing
+        parser = argparse.ArgumentParser(description='Generate single tmatmul test data')
+        parser.add_argument('--size', type=str, required=True, help='Matrix size in "M,K,N" format')
+        parser.add_argument('--output-dir', type=str, default='.', help='Output directory')
+        parser.add_argument('--dtype', type=str, default='float16', help='Data type (float16, int8, etc)')
+        args = parser.parse_args()
 
-        "TMATMULTest.case_bias_1",
-        "TMATMULTest.case_bias_2",
-        "TMATMULTest.case_bias_5",
-    ]
-    if ENABLE_BF16:
-        case_name_list.extend([
-            "TMATMULTest.case_bf16_1",
-            "TMATMULTest.case_bf16_bias_1",
-        ])
+        # Parse size
+        try:
+            m, k, n = map(int, args.size.split(','))
+        except ValueError:
+            print(f"Error: Invalid size format '{args.size}'. Expected 'M,K,N' format.", file=sys.stderr)
+            sys.exit(1)
 
-    case_params_list = [
-        tmatmulParams(np.float16, np.float16, np.float32, 40, 50, 60, False),
-        tmatmulParams(np.int8, np.int8, np.int32, 6, 7, 8, False),
-        tmatmulParams(np.float16, np.float16, np.float32, 128, 128, 64, False,repeats=5),
-        tmatmulParams(np.float32, np.float32, np.float32, 120, 110, 50, False),
-
-        tmatmulParams(np.int8, np.int8, np.int32, 8, 7, 6, True,np.int32),
-        tmatmulParams(np.float16, np.float16, np.float32, 16, 15, 16, True, np.float32),
-        tmatmulParams(np.float32, np.float32, np.float32, 127, 128, 63, True, np.float32),
-    ]
-    if ENABLE_BF16:
-        case_params_list.extend([
-            tmatmulParams(NumExt.bf16, NumExt.bf16, np.float32, 40, 50, 60, False),
-            tmatmulParams(NumExt.bf16, NumExt.bf16, np.float32, 16, 15, 16, True, np.float32),
-        ])
-
-    for i, case_name in enumerate(case_name_list):
+        # Generate single test case
+        case_name = f"custom_{m}x{k}x{n}"
         if not os.path.exists(case_name):
             os.makedirs(case_name)
-        original_dir = os.getcwd()
         os.chdir(case_name)
-        gen_golden_data(case_name, case_params_list[i])
-        os.chdir(original_dir)
+
+        # Determine dtype
+        dtype_map = {
+            'float16': np.float16,
+            'float32': np.float32,
+            'int8': np.int8,
+            'int32': np.int32,
+        }
+        src_type = dtype_map.get(args.dtype, np.float16)
+        dst_type = np.float32 if args.dtype in ['float16', 'float32'] else np.int32
+
+        param = tmatmulParams(src_type, src_type, dst_type, m, k, n, False)
+        gen_golden_data(case_name, param)
+        print(f"Generated test data for {m}x{k}x{n} in {case_name}/")
+
+    else:
+        # Original batch mode - generate all test cases
+        # 用例名称
+        case_name_list = [
+            "TMATMULTest.case1",
+            "TMATMULTest.case2",
+            "TMATMULTest.case3",
+            "TMATMULTest.case4",
+
+            "TMATMULTest.case_bias_1",
+            "TMATMULTest.case_bias_2",
+            "TMATMULTest.case_bias_5",
+        ]
+        if ENABLE_BF16:
+            case_name_list.extend([
+                "TMATMULTest.case_bf16_1",
+                "TMATMULTest.case_bf16_bias_1",
+            ])
+
+        case_params_list = [
+            tmatmulParams(np.float16, np.float16, np.float32, 40, 50, 60, False),
+            tmatmulParams(np.int8, np.int8, np.int32, 6, 7, 8, False),
+            tmatmulParams(np.float16, np.float16, np.float32, 128, 128, 64, False,repeats=5),
+            tmatmulParams(np.float32, np.float32, np.float32, 120, 110, 50, False),
+
+            tmatmulParams(np.int8, np.int8, np.int32, 8, 7, 6, True,np.int32),
+            tmatmulParams(np.float16, np.float16, np.float32, 16, 15, 16, True, np.float32),
+            tmatmulParams(np.float32, np.float32, np.float32, 127, 128, 63, True, np.float32),
+        ]
+        if ENABLE_BF16:
+            case_params_list.extend([
+                tmatmulParams(NumExt.bf16, NumExt.bf16, np.float32, 40, 50, 60, False),
+                tmatmulParams(NumExt.bf16, NumExt.bf16, np.float32, 16, 15, 16, True, np.float32),
+            ])
+
+        for i, case_name in enumerate(case_name_list):
+            if not os.path.exists(case_name):
+                os.makedirs(case_name)
+            original_dir = os.getcwd()
+            os.chdir(case_name)
+            gen_golden_data(case_name, case_params_list[i])
+            os.chdir(original_dir)
