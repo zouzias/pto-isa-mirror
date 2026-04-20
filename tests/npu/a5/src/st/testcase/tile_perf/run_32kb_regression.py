@@ -3,17 +3,18 @@
 Robust tile_perf regression runner.
 
 Features:
-  - Up to 5 tests in parallel, each in its own working directory
-  - Monitors instr_log.dump: if no new instruction retires in STALL_TIMEOUT (60s), kills the process
-  - Max MAX_RETRIES (3) per test case
-  - Each test gets its own dump directory to avoid file conflicts
+  - Auto-discovers all tests from the binary via --gtest_list_tests
+  - Up to N tests in parallel, each in its own working directory
+  - Monitors dump files: if no growth in STALL_TIMEOUT, kills the process
+  - Max MAX_RETRIES per test case
   - Results written to stdout and CSV
 
 Usage:
-    python3 run_32kb_regression.py [--parallel 5] [--stall-timeout 60] [--max-retries 3]
+    python3 run_32kb_regression.py [--parallel 5] [--stall-timeout 60] [--max-retries 3] [--filter '*TROWSUM*']
 """
 import argparse
 import csv
+import fnmatch
 import os
 import re
 import signal
@@ -30,29 +31,40 @@ BUILD_DIR = Path("/home/happybot/pto-isa/tests/npu/a5/src/st/build")
 BIN = BUILD_DIR / "bin" / "tile_perf"
 RESULTS_CSV = Path(__file__).parent / "regression_results.csv"
 
-# ── Test matrix: 32KB (fp32 = 8192 elem, fp16 = 16384 elem) ─────────────────
 
-TESTS_32KB = [
-    # (filter, op, dtype, shape, elements)
-    ("*TADD_float_1x8192*",  "TADD",  "fp32", "1x8192",  8192),
-    ("*TADD_float_32x256*",  "TADD",  "fp32", "32x256",  8192),
-    ("*TADD_float_16x512*",  "TADD",  "fp32", "16x512",  8192),
-    ("*TEXP_float_1x8192*",  "TEXP",  "fp32", "1x8192",  8192),
-    ("*TEXP_float_32x256*",  "TEXP",  "fp32", "32x256",  8192),
-    ("*TEXP_float_16x512*",  "TEXP",  "fp32", "16x512",  8192),
-    ("*TADDS_float_1x8192*", "TADDS", "fp32", "1x8192",  8192),
-    ("*TADDS_float_32x256*", "TADDS", "fp32", "32x256",  8192),
-    ("*TADDS_float_16x512*", "TADDS", "fp32", "16x512",  8192),
-    ("*TADD_half_1x16384*",  "TADD",  "fp16", "1x16384", 16384),
-    ("*TADD_half_64x256*",   "TADD",  "fp16", "64x256",  16384),
-    ("*TADD_half_32x512*",   "TADD",  "fp16", "32x512",  16384),
-    ("*TEXP_half_1x16384*",  "TEXP",  "fp16", "1x16384", 16384),
-    ("*TEXP_half_64x256*",   "TEXP",  "fp16", "64x256",  16384),
-    ("*TEXP_half_32x512*",   "TEXP",  "fp16", "32x512",  16384),
-    ("*TADDS_half_1x16384*", "TADDS", "fp16", "1x16384", 16384),
-    ("*TADDS_half_64x256*",  "TADDS", "fp16", "64x256",  16384),
-    ("*TADDS_half_32x512*",  "TADDS", "fp16", "32x512",  16384),
-]
+# ── Auto-discover tests ─────────────────────────────────────────────────────
+
+DTYPE_MAP = {"float": "fp32", "half": "fp16"}
+
+def discover_tests(gtest_filter=None):
+    """Parse --gtest_list_tests output to build test list."""
+    env = os.environ.copy()
+    result = subprocess.run(
+        [str(BIN), "--gtest_list_tests"],
+        capture_output=True, text=True, env=env, cwd=str(BUILD_DIR),
+    )
+    tests = []
+    suite = ""
+    for line in result.stdout.splitlines():
+        if line.endswith("."):
+            suite = line.strip()
+        elif line.startswith("  "):
+            name = line.strip()
+            full = f"{suite}{name}"
+            # Parse: TilePerfTest.OP_dtype_HxW
+            m = re.match(r"TilePerfTest\.(\w+?)_(float|half)_(\d+)x(\d+)$", full)
+            if not m:
+                continue
+            op, dtype_raw, h, w = m.group(1), m.group(2), int(m.group(3)), int(m.group(4))
+            dtype = DTYPE_MAP.get(dtype_raw, dtype_raw)
+            elem_size = 4 if dtype_raw == "float" else 2
+            elements = h * w
+            shape = f"{h}x{w}"
+            filt = f"*{op}_{dtype_raw}_{shape}*"
+            if gtest_filter and not fnmatch.fnmatch(full, gtest_filter):
+                continue
+            tests.append((filt, op, dtype, shape, elements))
+    return tests
 
 
 # ── EPC extraction ──────────────────────────────────────────────────────────
@@ -195,13 +207,21 @@ def main():
     parser.add_argument("--parallel", type=int, default=5, help="Max parallel tests")
     parser.add_argument("--stall-timeout", type=int, default=60, help="Kill if no dump progress in N seconds")
     parser.add_argument("--max-retries", type=int, default=3, help="Max retries per test")
+    parser.add_argument("--filter", type=str, default=None, help="gtest filter pattern (e.g. '*TROWSUM*')")
     args = parser.parse_args()
 
     env = os.environ.copy()
 
-    print(f"tile_perf 32KB regression — {len(TESTS_32KB)} tests")
+    tests = discover_tests(args.filter)
+    if not tests:
+        print("No tests found! Check binary and filter.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"tile_perf regression — {len(tests)} tests")
     print(f"  parallel={args.parallel}, stall_timeout={args.stall_timeout}s, max_retries={args.max_retries}")
     print(f"  binary: {BIN}")
+    if args.filter:
+        print(f"  filter: {args.filter}")
     print(flush=True)
 
     hdr = f"{'Op':<6} {'Dtype':<5} {'Shape':<10} {'Elems':>6} {'VF_EPC':>8} {'VF_cy':>7} {'#VF':>4} {'Tick':>8} {'Status':<14} {'Att':>3}"
@@ -213,7 +233,7 @@ def main():
 
     with ThreadPoolExecutor(max_workers=args.parallel) as pool:
         futures = {}
-        for filt, op, dtype, shape, elements in TESTS_32KB:
+        for filt, op, dtype, shape, elements in tests:
             fut = pool.submit(
                 run_single_test,
                 filt, op, dtype, shape, elements,
