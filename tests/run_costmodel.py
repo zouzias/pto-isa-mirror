@@ -23,6 +23,9 @@ import platform
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+RESULT_FILE_NAME = "result.out"
+COSTMODEL_OUTPUT_PREFIXES = ("[COSTMODEL]", "[TRACE]")
+
 
 def _format_cmd(command: List[str]) -> str:
     return " ".join(map(str, command))
@@ -44,6 +47,7 @@ def run_command(
     title: Optional[str] = None,
     verbose: bool = False,
     always_print_patterns: Optional[List[str]] = None,
+    env: Optional[Dict[str, str]] = None,
 ) -> float:
     cwd_str = str(cwd) if cwd is not None else None
     start = time.perf_counter()
@@ -59,6 +63,7 @@ def run_command(
             text=True,
             encoding="utf-8",
             errors="replace",
+            env=env,
         )
         if completed.returncode != 0 or verbose:
             if completed.stdout:
@@ -316,8 +321,41 @@ def find_binaries(build_dir: Path, build_type: str) -> Dict[str, Path]:
     return binaries
 
 
-def run_gtest_binary(binary: Path, gtest_filter: Optional[str], build_type: str,
-                     verbose: bool) -> None:
+def _collect_prefixed_lines(text: str) -> List[str]:
+    kept_lines: List[str] = []
+    keep_indented_trace_line = False
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        if line.startswith(COSTMODEL_OUTPUT_PREFIXES):
+            kept_lines.append(line)
+            keep_indented_trace_line = line.startswith("[TRACE]")
+            continue
+        if keep_indented_trace_line and raw_line[:1].isspace():
+            kept_lines.append(line)
+            continue
+        keep_indented_trace_line = False
+    return kept_lines
+
+
+def _format_result_block(testcase: str, lines: List[str]) -> str:
+    body = "\n".join(lines)
+    return f"== {testcase} ==\n{body}\n\n"
+
+
+def _append_result_block(result_file: Path, testcase: str, lines: List[str]) -> None:
+    if not lines:
+        return
+    with result_file.open("a", encoding="utf-8") as fp:
+        fp.write(_format_result_block(testcase, lines))
+
+
+def _mirror_costmodel_output(lines: List[str]) -> None:
+    if lines:
+        logging.info("\n".join(lines))
+
+
+def run_gtest_binary(binary: Path, testcase: str, gtest_filter: Optional[str], build_type: str,
+                     verbose: bool, log_level: int, result_file: Path) -> None:
     cmd: List[str] = [str(binary)]
     if gtest_filter:
         cmd.append(f"--gtest_filter={gtest_filter}")
@@ -327,7 +365,38 @@ def run_gtest_binary(binary: Path, gtest_filter: Optional[str], build_type: str,
     run_cwd = binary.parent
     if os.name == "nt" and binary.parent.name.lower() == build_type.lower():
         run_cwd = binary.parent.parent
-    run_command(cmd, cwd=run_cwd, verbose=verbose)
+    if verbose:
+        logging.info(f"  $ {_format_cmd(cmd)}\n  cwd: {run_cwd}")
+
+    env = os.environ.copy()
+    env["PTO_COSTMODEL_LOG_LEVEL"] = str(log_level)
+    completed = subprocess.run(
+        [str(x) for x in cmd],
+        cwd=str(run_cwd),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=env,
+    )
+
+    filtered_lines = _collect_prefixed_lines(completed.stdout or "")
+    filtered_lines.extend(_collect_prefixed_lines(completed.stderr or ""))
+    if log_level > 0:
+        _append_result_block(result_file, testcase, filtered_lines)
+        _mirror_costmodel_output(filtered_lines)
+
+    if completed.returncode != 0:
+        if completed.stdout:
+            logging.info(completed.stdout.rstrip())
+        if completed.stderr:
+            logging.info(completed.stderr.rstrip())
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            cmd,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
 
 
 def run_binary(binary: Path, build_type: str, cwd: Optional[Path] = None) -> None:
@@ -448,6 +517,10 @@ def parse_arguments():
                         quiet, only structured logs).",)
     parser.add_argument("-t", "--testcase", help="Run a single testcase (e.g. tadd). Default: run all built bin.",)
     parser.add_argument("-g", "--gtest_filter", help="Optional gtest filter (e.g. 'TADDTest.case1').",)
+    parser.add_argument("--log-level", type=int, choices=[0, 1, 2], default=0,
+                        help="Costmodel testcase output level: 0=no per-case output, 1=cycles, 2=full trace + cycles.")
+    parser.add_argument("--output-dir", default=None,
+                        help="Directory for aggregated costmodel output. Default: <build_dir>.")
     parser.add_argument("--cxx", help="C++ compiler (e.g. clang++). Default: $CXX or auto-detect.")
     parser.add_argument("--cc", help="C compiler (e.g. clang). Default: $CC or auto-detect.")
     parser.add_argument("--build-type", default="Release", choices=["Release", "Debug", "RelWithDebInfo", "MinSizeRel"],
@@ -514,6 +587,9 @@ def run_test_mode(args, repo_root, cxx, cc) -> int:
     build_dir = Path(args.build_dir) if args.build_dir else (source_dir / "build")
     if not build_dir.is_absolute():
         build_dir = (repo_root / build_dir).resolve()
+    output_dir = Path(args.output_dir) if args.output_dir else build_dir
+    if not output_dir.is_absolute():
+        output_dir = (repo_root / output_dir).resolve()
 
     if args.clean:
         if build_dir.exists():
@@ -526,7 +602,10 @@ def run_test_mode(args, repo_root, cxx, cc) -> int:
     else:
         logging.info("\n== BUILD ==")
         logging.info("[SKIP] build (already built)")
-    return execute_tests(args, source_dir, build_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    result_file = output_dir / RESULT_FILE_NAME
+    result_file.write_text("", encoding="utf-8")
+    return execute_tests(args, source_dir, build_dir, result_file)
 
 
 def parse_expected_testcases(source_dir: Path) -> Optional[set[str]]:
@@ -622,7 +701,7 @@ def perform_build(args, source_dir, build_dir, cxx, cc) -> bool:
     return True
 
 
-def execute_tests(args, source_dir, build_dir) -> int:
+def execute_tests(args, source_dir, build_dir, result_file: Path) -> int:
     binaries = find_binaries(build_dir, args.build_type)
     if not binaries:
         logging.error(f"error: no binaries found under {build_dir / 'bin'} (did build succeed?)")
@@ -638,13 +717,13 @@ def execute_tests(args, source_dir, build_dir) -> int:
     else:
         selected = sorted(binaries.items(), key=lambda x: x[0])
 
-    results = run_selected_tests(args, source_dir, build_dir, selected)
+    results = run_selected_tests(args, source_dir, build_dir, selected, result_file)
     if results:
         print_test_summary(results)
     return 0
 
 
-def run_selected_tests(args, source_dir, build_dir, selected) -> List[List[str]]:
+def run_selected_tests(args, source_dir, build_dir, selected, result_file: Path) -> List[List[str]]:
     logging.info("\n== TESTS ==")
     results: List[List[str]] = []
     for testcase, binary in selected:
@@ -652,9 +731,12 @@ def run_selected_tests(args, source_dir, build_dir, selected) -> List[List[str]]
         try:
             run_gtest_binary(
                 binary=binary,
+                testcase=testcase,
                 gtest_filter=args.gtest_filter,
                 build_type=args.build_type,
-                verbose=args.verbose
+                verbose=args.verbose,
+                log_level=args.log_level,
+                result_file=result_file,
             )
             status = "PASS"
         except Exception:

@@ -60,3 +60,35 @@ python tests/run_costmodel.py --testcase tadd --no-build
 # 强制清理重建
 python tests/run_costmodel.py --testcase tadd --clean
 ```
+
+## 日志输出示例
+
+`run_costmodel.py` 现在支持 `--log-level` 控制单次运行的 costmodel 输出，并默认把结果写到 `<build_dir>/result.out`。
+
+```bash
+# log_level=0: 不输出单个 case 的 cycle/trace，result.out 为空
+python tests/run_costmodel.py --testcase tadd --no-build --log-level 0
+
+# log_level=1: 输出每个 gtest case 的 actual / expected cycles
+python tests/run_costmodel.py --testcase tadd --clean --log-level 1
+
+# log_level=2: 输出 cycles + 完整 PTO/CCE trace
+python tests/run_costmodel.py --testcase tadd --no-build --log-level 2
+
+# 自定义输出目录，结果写到 <output_dir>/result.out
+python tests/run_costmodel.py --testcase tadd --log-level 2 --output-dir /tmp/costmodel_logs
+```
+
+`result.out` 按一次 `run_costmodel.py` 调用聚合输出。单次运行多个 testcase 时，所有选中 testcase 的日志都会按执行顺序追加到同一个文件中。
+
+示例输出：
+
+```text
+== tadd ==
+[COSTMODEL] TAdd.float_64x64 actual=96 expected=0.114514 precision=0 accuracy=0
+[TRACE] TAdd.float_64x64
+  pto: TADD
+  total_cycles: 96
+  cce_calls: 1
+    [0] name=vadd cycles=78 args=[0x8000, 0x..., 0x4000, ...]
+```

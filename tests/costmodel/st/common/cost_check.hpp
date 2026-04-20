@@ -13,10 +13,107 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #define NO_PROFILING 0.114514f
 
+#include <cstdlib>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
+#include <string>
 #include <gtest/gtest.h>
 #include "pto/costmodel/trace.hpp"
+
+inline int GetCostmodelLogLevel()
+{
+    const char *raw = std::getenv("PTO_COSTMODEL_LOG_LEVEL");
+    if (raw == nullptr || *raw == '\0') {
+        return 0;
+    }
+
+    char *end = nullptr;
+    long parsed = std::strtol(raw, &end, 10);
+    if (end == raw) {
+        return 0;
+    }
+    if (parsed < 0) {
+        return 0;
+    }
+    if (parsed > 2) {
+        return 2;
+    }
+    return static_cast<int>(parsed);
+}
+
+inline std::string GetCurrentCostmodelTestName()
+{
+    const auto *testInfo = ::testing::UnitTest::GetInstance()->current_test_info();
+    if (testInfo == nullptr) {
+        return "<unknown>";
+    }
+    return std::string(testInfo->test_suite_name()) + "." + testInfo->name();
+}
+
+inline void EmitCostmodelCycleLine(float actual, float expected, float precision, float accuracy)
+{
+    std::ostringstream oss;
+    oss << "[COSTMODEL] " << GetCurrentCostmodelTestName() << " actual=" << actual << " expected=" << expected
+        << " precision=" << precision;
+    std::cout << oss.str() << std::endl;
+}
+
+inline void EmitCostmodelTraceLine(const std::string &line)
+{
+    std::cout << "[TRACE] " << GetCurrentCostmodelTestName() << " " << line << std::endl;
+}
+
+inline void EmitCostmodelTraceBlockLine(const std::string &line)
+{
+    std::cout << line << std::endl;
+}
+
+inline std::string FormatCostmodelTraceArgs(const std::vector<::pto::mocker::Arg> &args)
+{
+    if (args.empty()) {
+        return "[]";
+    }
+
+    std::ostringstream oss;
+    oss << "[";
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        if (i != 0) {
+            oss << ", ";
+        }
+        oss << "0x" << std::hex << std::uppercase << args[i] << std::dec;
+    }
+    oss << "]";
+    return oss.str();
+}
+
+inline void EmitLatestCostmodelTrace()
+{
+    const auto &trace = ::pto::mocker::GetTrace();
+    EmitCostmodelTraceBlockLine("[TRACE] " + GetCurrentCostmodelTestName());
+    if (trace.executed_pto.empty()) {
+        EmitCostmodelTraceBlockLine("  trace: <empty>");
+        return;
+    }
+
+    const auto &ptoRecord = trace.executed_pto.back();
+    {
+        std::ostringstream oss;
+        oss << "  pto: " << ptoRecord.name;
+        EmitCostmodelTraceBlockLine(oss.str());
+    }
+    EmitCostmodelTraceBlockLine("  total_cycles: " + std::to_string(ptoRecord.total_cycles));
+    EmitCostmodelTraceBlockLine("  cce_calls: " + std::to_string(ptoRecord.cce_calls.size()));
+
+    for (std::size_t i = 0; i < ptoRecord.cce_calls.size(); ++i) {
+        const auto &call = ptoRecord.cce_calls[i];
+        std::ostringstream oss;
+        oss << "    [" << i << "] name=" << call.name << " cycles=" << call.cycles
+            << " args=" << FormatCostmodelTraceArgs(call.args);
+        EmitCostmodelTraceBlockLine(oss.str());
+    }
+}
 
 // Compare the cycle count stored in the most recently executed PTO trace record
 // against an expected `profiling` value. The check passes when relative
@@ -28,10 +125,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
         float _pto_precision =                                                                                         \
             (_pto_expected == 0.0f) ? ((_pto_actual == 0.0f) ? 1.0f : 0.0f)                                            \
                                     : std::max(0.0f, (1.0f - std::fabs(_pto_expected - _pto_actual) / _pto_expected));                 \
-        std::cout << "[CYCLE] " << ::testing::UnitTest::GetInstance()->current_test_info()->test_suite_name() << "."   \
-                  << ::testing::UnitTest::GetInstance()->current_test_info()->name()                                   \
-                  << " actual=" << _pto_actual << " expected=" << _pto_expected                                        \
-                  << " precision=" << _pto_precision << " accuracy=" << static_cast<float>(accuracy) << std::endl;     \
+        int _pto_log_level = GetCostmodelLogLevel();                                                                   \
+        if (_pto_log_level >= 1) {                                                                                     \
+            EmitCostmodelCycleLine(_pto_actual, _pto_expected, _pto_precision, static_cast<float>(accuracy));         \
+        }                                                                                                              \
+        if (_pto_log_level >= 2) {                                                                                     \
+            EmitLatestCostmodelTrace();                                                                                \
+        }                                                                                                              \
         EXPECT_GE(_pto_precision, static_cast<float>(accuracy));                                                       \
     } while (0)
 
