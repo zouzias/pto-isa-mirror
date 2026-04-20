@@ -64,6 +64,7 @@ tdivs
 texp
 texpands
 textract
+textract_acc2vec
 tfillpad
 tflashattn
 tfmod

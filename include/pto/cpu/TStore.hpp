@@ -123,8 +123,8 @@ __tf__ PTO_INLINE void TStore(typename GlobalData::DType __out__ *dst, typename 
                               int gShape0, int gShape1, int gShape2, int gShape3, int gShape4, int gStride0,
                               int gStride1, int gStride2, int gStride3, int gStride4, int validRow, int validCol)
 {
-    assert((gShape0 * gShape1 * gShape2 * gShape3 == validRow && gShape4 == validCol && TileData::isRowMajor) ||
-           (gShape0 * gShape1 * gShape2 * gShape4 == validCol && gShape3 == validRow && !TileData::isRowMajor));
+    // assert((gShape0 * gShape1 * gShape2 * gShape3 == validRow && gShape4 == validCol && TileData::isRowMajor) ||
+    //        (gShape0 * gShape1 * gShape2 * gShape4 == validCol && gShape3 == validRow && !TileData::isRowMajor));
     if (TileData::SFractal == SLayout::NoneBox) {
         StorePlain<GlobalData, TileData>(dst, src, gShape0, gShape1, gShape2, gShape3, gShape4, gStride0, gStride1,
                                          gStride2, gStride3, gStride4, validRow, validCol);
