@@ -337,68 +337,95 @@ def run_binary(binary: Path, build_type: str, cwd: Optional[Path] = None) -> Non
     run_command([str(binary)], cwd=run_cwd)
 
 
-def build_and_run_demo(demo_name: str,
-                       repo_root: Path,
-                       build_type: str,
-                       cxx: Optional[str],
-                       cc: Optional[str], *,
-                       verbose: bool) -> None:
+def get_demo_map(repo_root: Path) -> dict[str, tuple[Path, str]]:
     demos_root = repo_root / ".." / "demos" / "costmodel"
-    demo_map: dict[str, tuple[Path, str]] = {
+    return {
         "gemm": (demos_root / "gemm_demo", "gemm_demo"),
         "flash_attn": (demos_root / "flash_attention_demo", "flash_attention_demo"),
         "mla": (demos_root / "mla_attention_demo", "mla_attention_demo"),
     }
+
+
+def resolve_demo_target(demo_name: str, repo_root: Path) -> tuple[Path, str]:
+    demo_map = get_demo_map(repo_root)
     if demo_name not in demo_map:
         raise RuntimeError(f"unknown demo: {demo_name}")
-
     demo_src, exe_stem = demo_map[demo_name]
     legacy_demo_src = repo_root / "demo"
     if demo_name == "gemm" and not demo_src.exists() and legacy_demo_src.exists():
-        demo_src = legacy_demo_src
-        exe_stem = "gemm_demo"
-    if not demo_src.exists():
-        raise RuntimeError(f"demo dir not found: {demo_src}")
+        return legacy_demo_src, "gemm_demo"
+    return demo_src, exe_stem
 
+
+def recreate_demo_build_dir(demo_src: Path) -> Path:
     demo_build = demo_src / "build"
     if demo_build.exists():
         shutil.rmtree(demo_build)
     demo_build.mkdir(parents=True, exist_ok=True)
+    return demo_build
 
-    run_command(
-        [
-            "cmake",
-            "-S",
-            str(demo_src),
-            "-B",
-            str(demo_build),
-            f"-DCMAKE_BUILD_TYPE={build_type}",
-            *([f"-DCMAKE_C_COMPILER={cc}"] if cc else []),
-            *([f"-DCMAKE_CXX_COMPILER={cxx}"] if cxx else []),
-        ],
-        title="[STEP] demo: cmake configure",
-        verbose=verbose,
-    )
+
+def run_demo_build(demo_src: Path,
+                   demo_build: Path,
+                   build_type: str,
+                   cxx: Optional[str],
+                   cc: Optional[str],
+                   verbose: bool) -> None:
+    configure_cmd = [
+        "cmake",
+        "-S",
+        str(demo_src),
+        "-B",
+        str(demo_build),
+        f"-DCMAKE_BUILD_TYPE={build_type}",
+        *([f"-DCMAKE_C_COMPILER={cc}"] if cc else []),
+        *([f"-DCMAKE_CXX_COMPILER={cxx}"] if cxx else []),
+    ]
+    run_command(configure_cmd, title="[STEP] demo: cmake configure", verbose=verbose)
     run_command(
         ["cmake", "--build", str(demo_build), "--parallel", "--config", build_type],
         title="[STEP] demo: cmake build",
         verbose=verbose,
     )
 
+
+def resolve_demo_executable(demo_build: Path, exe_stem: str, build_type: str) -> Path:
     exe_name = f"{exe_stem}.exe" if os.name == "nt" else exe_stem
     exe = demo_build / exe_name
     if os.name == "nt":
         exe = demo_build / build_type / exe_name
-
     if not exe.exists():
         raise RuntimeError(f"demo binary not found: {exe}")
+    return exe
 
-    run_command([str(exe)],
-                cwd=(exe.parent.parent if (os.name == "nt" and exe.parent.name.lower() == build_type.lower())
-                    else exe.parent),
-                title=f"[STEP] demo: run {exe_stem}",
-                verbose=verbose,
-                always_print_patterns=[r"^perf:"])
+
+def run_demo_executable(exe: Path, exe_stem: str, build_type: str, verbose: bool) -> None:
+    run_cwd = exe.parent
+    if os.name == "nt" and exe.parent.name.lower() == build_type.lower():
+        run_cwd = exe.parent.parent
+    run_command(
+        [str(exe)],
+        cwd=run_cwd,
+        title=f"[STEP] demo: run {exe_stem}",
+        verbose=verbose,
+        always_print_patterns=[r"^perf:"],
+    )
+
+
+def build_and_run_demo(demo_name: str,
+                       repo_root: Path,
+                       build_type: str,
+                       cxx: Optional[str],
+                       cc: Optional[str], *,
+                       verbose: bool) -> None:
+    demo_src, exe_stem = resolve_demo_target(demo_name, repo_root)
+    if not demo_src.exists():
+        raise RuntimeError(f"demo dir not found: {demo_src}")
+
+    demo_build = recreate_demo_build_dir(demo_src)
+    run_demo_build(demo_src, demo_build, build_type, cxx, cc, verbose)
+    exe = resolve_demo_executable(demo_build, exe_stem, build_type)
+    run_demo_executable(exe, exe_stem, build_type, verbose)
 
 
 def _format_seconds(seconds: float) -> str:
@@ -433,9 +460,10 @@ def _parse_duration_seconds(s: str) -> float:
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Build & run costmodel simulator ST unit tests (tests/costmodel/st)",
+        description="Build & run costmodel simulator ST unit tests",
         epilog=("Examples:\n  python run_costmodel.py --build-type Release\n"
             "  python run_costmodel.py --testcase tadd --build-type Release\n"
+            "  python run_costmodel.py --suite fit --testcase tadd_fit --build-type Release\n"
             "  python run_costmodel.py --no-build --gtest_filter TADDTest.*\n"
             "  python run_costmodel.py --demo gemm\n"
             "  python run_costmodel.py --demo flash_attn\n"
@@ -452,7 +480,9 @@ def parse_arguments():
     parser.add_argument("--cc", help="C compiler (e.g. clang). Default: $CC or auto-detect.")
     parser.add_argument("--build-type", default="Release", choices=["Release", "Debug", "RelWithDebInfo", "MinSizeRel"],
                         help="CMake build type.",)
-    parser.add_argument("--build-dir", default=None, help="Build directory. Default: tests/costmodel/st/build",)
+    parser.add_argument("--suite", choices=["stub", "fit"], default="stub",
+                        help="Test suite backend. stub -> tests/costmodel/st, fit -> tests/costmodel/st_fit.")
+    parser.add_argument("--build-dir", default=None, help="Build directory. Default: tests/costmodel/<suite>/build",)
     parser.add_argument("--no-clean", action="store_true", help="(Deprecated) No-op; kept for backward compatibility.")
     parser.add_argument("--clean", action="store_true", help="Delete build dir and rebuild.")
     parser.add_argument("--rebuild", action="store_true", help="Force re-configure and rebuild .")
@@ -506,9 +536,10 @@ def run_demo_mode(args, repo_root, cxx, cc) -> int:
 
 
 def run_test_mode(args, repo_root, cxx, cc) -> int:
-    source_dir = repo_root / "costmodel" / "st"
+    source_subdir = "st_fit" if args.suite == "fit" else "st"
+    source_dir = repo_root / "costmodel" / source_subdir
     if not source_dir.exists():
-        logging.error(f"error: not found costmodel ST dir: {source_dir}")
+        logging.error(f"error: not found costmodel ST dir for suite={args.suite}: {source_dir}")
         return 2
 
     build_dir = Path(args.build_dir) if args.build_dir else (source_dir / "build")
@@ -595,6 +626,24 @@ def perform_build(args, source_dir, build_dir, cxx, cc) -> bool:
     if is_windows() and not args.generator:
         logging.error("On Windows, must specify --generator (\"MinGW Makefiles\" or \"Ninja\", etc..)")
         return False
+    if args.suite == "fit":
+        project_root = source_dir.parents[2]
+        formula_codegen_script = (
+            project_root
+            / "include"
+            / "pto"
+            / "costmodel"
+            / "a2a3"
+            / "formula_costmodel"
+            / "gen_formula_params_header.py"
+        )
+        if formula_codegen_script.exists():
+            run_command(
+                [sys.executable, str(formula_codegen_script)],
+                cwd=project_root,
+                title="[STEP] generate formula params header",
+                verbose=args.verbose,
+            )
     cfg_time = run_command(
         [
             "cmake",
