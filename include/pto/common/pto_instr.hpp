@@ -1006,6 +1006,16 @@ PTO_INST RecordEvent TPARTMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
     return {};
 }
 
+template <typename TileDstVal, typename TileDstIdx, typename TileSrcVal0, typename TileSrcIdx0, typename TileSrcVal1,
+          typename TileSrcIdx1, typename... WaitEvents>
+PTO_INST RecordEvent TPARTARGMAX(TileDstVal &dstVal, TileDstIdx &dstIdx, TileSrcVal0 &srcVal0, TileSrcIdx0 &srcIdx0,
+                                 TileSrcVal1 &srcVal1, TileSrcIdx1 &srcIdx1, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TPARTARGMAX, dstVal, dstIdx, srcVal0, srcIdx0, srcVal1, srcIdx1);
+    return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
@@ -1014,23 +1024,13 @@ PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
     return {};
 }
 
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataDstIdx,
-          typename TileDataSrc0Idx, typename TileDataSrc1Idx, typename... WaitEvents>
-PTO_INST RecordEvent TPARTARGMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataDstIdx &dstIdx,
-                                 TileDataSrc0Idx &src0Idx, TileDataSrc1Idx &src1Idx, WaitEvents &... events)
+template <typename TileDstVal, typename TileDstIdx, typename TileSrcVal0, typename TileSrcIdx0, typename TileSrcVal1,
+          typename TileSrcIdx1, typename... WaitEvents>
+PTO_INST RecordEvent TPARTARGMIN(TileDstVal &dstVal, TileDstIdx &dstIdx, TileSrcVal0 &srcVal0, TileSrcIdx0 &srcIdx0,
+                                 TileSrcVal1 &srcVal1, TileSrcIdx1 &srcIdx1, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TPARTARGMAX, dst, src0, src1, dstIdx, src0Idx, src1Idx);
-    return {};
-}
-
-template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename TileDataDstIdx,
-          typename TileDataSrc0Idx, typename TileDataSrc1Idx, typename... WaitEvents>
-PTO_INST RecordEvent TPARTARGMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, TileDataDstIdx &dstIdx,
-                                 TileDataSrc0Idx &src0Idx, TileDataSrc1Idx &src1Idx, WaitEvents &... events)
-{
-    TSYNC(events...);
-    MAP_INSTR_IMPL(TPARTARGMIN, dst, src0, src1, dstIdx, src0Idx, src1Idx);
+    MAP_INSTR_IMPL(TPARTARGMIN, dstVal, dstIdx, srcVal0, srcIdx0, srcVal1, srcIdx1);
     return {};
 }
 
