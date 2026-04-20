@@ -156,6 +156,38 @@ def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool) -> T
     finally:
         os.chdir(original_cwd)
 
+def run_regression_tests(build_dir: Path, verbose: bool) -> Tuple[bool, float]:
+    """Run all existing regression test cases."""
+    binary = build_dir / "bin" / "tmatmul"
+
+    if not binary.exists():
+        raise RuntimeError(f"Binary not found: {binary}")
+
+    logging.info("Running regression tests with Google Test")
+
+    test_cases = [
+        "TMATMULTest.case1",
+        "TMATMULTest.case2",
+        "TMATMULTest.case3",
+        "TMATMULTest.case4",
+        "TMATMULTest.case_bias_1",
+        "TMATMULTest.case_bias_2",
+        "TMATMULTest.case_bias_5",
+    ]
+
+    start = time.perf_counter()
+    try:
+        for test_case in test_cases:
+            cmd = [str(binary), f"--gtest_filter={test_case}"]
+            run_command(cmd, verbose=verbose)
+            logging.info(f"  {test_case}: PASS")
+
+        elapsed = time.perf_counter() - start
+        return True, elapsed
+
+    except subprocess.CalledProcessError:
+        return False, 0.0
+
 def setup_logging(verbose: bool = False) -> None:
     level = logging.INFO if verbose else logging.WARNING
     logging.basicConfig(
@@ -220,22 +252,6 @@ def main() -> int:
 
     logging.info("TMATMUL test runner starting...")
 
-    # Determine test sizes
-    if args.size:
-        try:
-            M, K, N = map(int, args.size.split(','))
-            size_list = [(M, K, N)]
-            logging.info(f"Running custom size: {M}x{K}x{N}")
-        except ValueError:
-            print(f"Error: Invalid size format '{args.size}'. Expected 'M,K,N'", file=sys.stderr)
-            return 1
-    elif args.regression:
-        logging.info("Running regression tests (not yet implemented)")
-        return 1
-    else:
-        size_list = PRESET_SIZES
-        logging.info(f"Running {len(size_list)} preset sizes")
-
     # Setup paths
     repo_root = Path(__file__).resolve().parent.parent
     source_dir = repo_root / "tests" / "cpu" / "st"
@@ -251,6 +267,34 @@ def main() -> int:
         except subprocess.CalledProcessError as e:
             logging.error(f"Build failed with exit code {e.returncode}")
             return 1
+
+    # Run regression tests if requested
+    if args.regression:
+        # Run regression tests
+        try:
+            passed, elapsed = run_regression_tests(build_dir, args.verbose)
+            if passed:
+                print(f"\nRegression tests passed in {elapsed:.2f}s")
+                return 0
+            else:
+                print("\nRegression tests failed")
+                return 1
+        except Exception as e:
+            logging.error(f"Regression test error: {e}")
+            return 1
+
+    # Determine test sizes
+    if args.size:
+        try:
+            M, K, N = map(int, args.size.split(','))
+            size_list = [(M, K, N)]
+            logging.info(f"Running custom size: {M}x{K}x{N}")
+        except ValueError:
+            print(f"Error: Invalid size format '{args.size}'. Expected 'M,K,N'", file=sys.stderr)
+            return 1
+    else:
+        size_list = PRESET_SIZES
+        logging.info(f"Running {len(size_list)} preset sizes")
 
     # Run tests
     logging.info("\n" + "="*60)
