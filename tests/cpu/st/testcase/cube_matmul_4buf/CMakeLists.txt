@@ -8,6 +8,7 @@ set(FILES_LIST
     main.cpp 
     cube_matmul_4buf_kernel.cpp 
     cube_matmul_4buf_preload_kernel.cpp
+    cube_matmul_4buf_bufid_kernel.cpp
 )
 
 add_executable(cube_matmul_4buf ${FILES_LIST})
