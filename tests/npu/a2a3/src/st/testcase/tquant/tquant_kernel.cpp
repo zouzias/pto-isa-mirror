@@ -144,3 +144,5 @@ template void TQuantTest::LaunchTQuantInt8<128, 128, 0, pto::QuantType::INT8_ASY
 template void TQuantTest::LaunchTQuantInt8<256, 128, 0, pto::QuantType::INT8_ASYM>(uint8_t *dst, float *src,
                                                                                    float *scale, void *stream,
                                                                                    float *offset);
+template void TQuantTest::LaunchTQuantInt8<32, 72, 0, pto::QuantType::INT8_ASYM>(uint8_t *dst, float *src, float *scale,
+                                                                                 void *stream, float *offset);
