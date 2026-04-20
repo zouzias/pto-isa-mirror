@@ -44,40 +44,40 @@ void runTMin()
 
 TEST(TMin, case_float_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
-    runTMin<float, 64, 64, 64, 64, PadValue::Null, 0.0f, 0.0f>();
+    runTMin<float, 64, 64, 64, 64, PadValue::Null, NO_PROFILING, 0.0f>();
 }
 
 TEST(TMin, case_int32_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
-    runTMin<int32_t, 64, 64, 64, 64, PadValue::Null, 0.0f, 0.0f>();
+    runTMin<int32_t, 64, 64, 64, 64, PadValue::Null, NO_PROFILING, 0.0f>();
 }
 
 TEST(TMin, case_half_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
-    runTMin<half, 64, 64, 64, 64, PadValue::Null, 0.0f, 0.0f>();
+    runTMin<half, 64, 64, 64, 64, PadValue::Null, NO_PROFILING, 0.0f>();
 }
 
 TEST(TMin, case_int16_64x64_64x64_64x64_PAD_VALUE_NULL)
 {
-    runTMin<int16_t, 64, 64, 64, 64, PadValue::Null, 0.0f, 0.0f>();
+    runTMin<int16_t, 64, 64, 64, 64, PadValue::Null, NO_PROFILING, 0.0f>();
 }
 
 TEST(TMin, case_float_60x60_64x64_60x60_PAD_VALUE_MIN)
 {
-    runTMin<float, 64, 60, 64, 60, PadValue::Min, 0.0f, 0.0f>();
+    runTMin<float, 64, 60, 64, 60, PadValue::Min, NO_PROFILING, 0.0f>();
 }
 
 TEST(TMin, case_int32_60x60_64x64_60x60_PAD_VALUE_MIN)
 {
-    runTMin<int32_t, 64, 60, 64, 60, PadValue::Min, 0.0f, 0.0f>();
+    runTMin<int32_t, 64, 60, 64, 60, PadValue::Min, NO_PROFILING, 0.0f>();
 }
 
 TEST(TMin, case_half_1x3600_2x4096_1x3600_PAD_VALUE_MIN)
 {
-    runTMin<half, 2, 1, 4096, 3600, PadValue::Min, 0.0f, 0.0f>();
+    runTMin<half, 2, 1, 4096, 3600, PadValue::Min, NO_PROFILING, 0.0f>();
 }
 
 TEST(TMin, case_int16_16x200_20x512_16x200_PAD_VALUE_MIN)
 {
-    runTMin<int16_t, 20, 16, 512, 200, PadValue::Min, 0.0f, 0.0f>();
+    runTMin<int16_t, 20, 16, 512, 200, PadValue::Min, NO_PROFILING, 0.0f>();
 }

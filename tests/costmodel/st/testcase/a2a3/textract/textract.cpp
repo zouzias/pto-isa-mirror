@@ -40,30 +40,30 @@ void runTExtract()
 
 TEST(TExtract, half_32x32_idx_0_0)
 {
-    runTExtract<half, half, 32, 32, 32, 32, 0, 0, 0.0f, 0.0f>();
+    runTExtract<half, half, 32, 32, 32, 32, 0, 0, NO_PROFILING, 0.0f>();
 }
 
 TEST(TExtract, float_128x96_idx_0_0)
 {
-    runTExtract<float, float, 128, 96, 128, 96, 0, 0, 0.0f, 0.0f>();
+    runTExtract<float, float, 128, 96, 128, 96, 0, 0, NO_PROFILING, 0.0f>();
 }
 
 TEST(TExtract, half_32x32_idx_8_16)
 {
-    runTExtract<half, half, 32, 32, 32, 32, 8, 16, 0.0f, 0.0f>();
+    runTExtract<half, half, 32, 32, 32, 32, 8, 16, NO_PROFILING, 0.0f>();
 }
 
 TEST(TExtract, float_128x96_idx_8_16)
 {
-    runTExtract<float, float, 128, 96, 128, 96, 8, 16, 0.0f, 0.0f>();
+    runTExtract<float, float, 128, 96, 128, 96, 8, 16, NO_PROFILING, 0.0f>();
 }
 
 TEST(TExtract, half_32x32_valid31_idx_8_16)
 {
-    runTExtract<half, half, 32, 32, 31, 31, 8, 16, 0.0f, 0.0f>();
+    runTExtract<half, half, 32, 32, 31, 31, 8, 16, NO_PROFILING, 0.0f>();
 }
 
 TEST(TExtract, float_128x96_valid125_idx_8_16)
 {
-    runTExtract<float, float, 128, 96, 125, 93, 8, 16, 0.0f, 0.0f>();
+    runTExtract<float, float, 128, 96, 125, 93, 8, 16, NO_PROFILING, 0.0f>();
 }

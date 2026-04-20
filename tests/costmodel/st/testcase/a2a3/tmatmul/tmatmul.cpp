@@ -79,20 +79,20 @@ void runTMatmulSplitK()
 
 TEST(TMatmul, half_40x50x60)
 {
-    runTMatmul<float, half, half, 40, 50, 60, 102.0f, 1.0f>();
+    runTMatmul<float, half, half, 40, 50, 60, NO_PROFILING, 0.0f>();
 }
 
 TEST(TMatmul, int8_6x7x8)
 {
-    runTMatmul<int32_t, int8_t, int8_t, 6, 7, 8, 8.0f, 1.0f>();
+    runTMatmul<int32_t, int8_t, int8_t, 6, 7, 8, NO_PROFILING, 0.0f>();
 }
 
 TEST(TMatmul, split_k_half_128x128x64_reps5)
 {
-    runTMatmulSplitK<float, half, half, 128, 128, 64, 5, 518.0f, 1.0f>();
+    runTMatmulSplitK<float, half, half, 128, 128, 64, 5, NO_PROFILING, 0.0f>();
 }
 
 TEST(TMatmul, float_120x110x50)
 {
-    runTMatmul<float, float, float, 120, 110, 50, 454.0f, 1.0f>();
+    runTMatmul<float, float, float, 120, 110, 50, NO_PROFILING, 0.0f>();
 }

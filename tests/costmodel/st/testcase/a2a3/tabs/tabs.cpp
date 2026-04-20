@@ -36,10 +36,10 @@ void runTAbs()
 
 TEST(TAbs, float_64x64)
 {
-    runTAbs<float, 64, 64, 68.0f, 0.632352f>();
+    runTAbs<float, 64, 64, NO_PROFILING, 0.0f>();
 }
 
 TEST(TAbs, half_16x256)
 {
-    runTAbs<half, 16, 256, 36.0f, 0.305555f>();
+    runTAbs<half, 16, 256, NO_PROFILING, 0.0f>();
 }

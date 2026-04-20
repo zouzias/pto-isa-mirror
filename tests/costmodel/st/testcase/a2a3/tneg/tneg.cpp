@@ -41,20 +41,20 @@ void runTNeg()
 
 TEST(TNeg, case_float_64x64_64x64)
 {
-    runTNeg<float, 64, 64, 64, 64, 0.0f, 0.0f>();
+    runTNeg<float, 64, 64, 64, 64, NO_PROFILING, 0.0f>();
 }
 
 TEST(TNeg, case_int32_32x32_32x32)
 {
-    runTNeg<int32_t, 32, 32, 32, 32, 0.0f, 0.0f>();
+    runTNeg<int32_t, 32, 32, 32, 32, NO_PROFILING, 0.0f>();
 }
 
 TEST(TNeg, case_half_32x64_32x64)
 {
-    runTNeg<half, 32, 32, 64, 64, 0.0f, 0.0f>();
+    runTNeg<half, 32, 32, 64, 64, NO_PROFILING, 0.0f>();
 }
 
 TEST(TNeg, case_int16_64x16_64x16)
 {
-    runTNeg<int16_t, 64, 64, 16, 16, 0.0f, 0.0f>();
+    runTNeg<int16_t, 64, 64, 16, 16, NO_PROFILING, 0.0f>();
 }

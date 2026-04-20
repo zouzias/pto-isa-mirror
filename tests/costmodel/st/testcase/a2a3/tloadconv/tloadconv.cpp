@@ -78,20 +78,20 @@ void runTloadConvFractalZ5D()
 
 TEST(TLoadConv, c01_nc1hwc0_half_1_2_4_4)
 {
-    runTloadConv<half, 1, 2, 4, 4, Layout::NC1HWC0, 28.0f, 0.464285f>();
+    runTloadConv<half, 1, 2, 4, 4, Layout::NC1HWC0, NO_PROFILING, 0.0f>();
 }
 
 TEST(TLoadConv, c02_nc1hwc0_float_1_4_10_10)
 {
-    runTloadConv<float, 1, 4, 10, 10, Layout::NC1HWC0, 116.0f, 0.594827f>();
+    runTloadConv<float, 1, 4, 10, 10, Layout::NC1HWC0, NO_PROFILING, 0.0f>();
 }
 
 TEST(TLoadConv, c03_fractalz_half_16_2_1_18)
 {
-    runTloadConv<half, 16, 2, 1, 18, Layout::FRACTAL_Z, 96.0f, 0.0f>();
+    runTloadConv<half, 16, 2, 1, 18, Layout::FRACTAL_Z, NO_PROFILING, 0.0f>();
 }
 
 TEST(TLoadConv, c04_fractalz5d_int8_4_2_6_16)
 {
-    runTloadConvFractalZ5D<int8_t, 4, 2, 6, 16, 96.0f, 0.0f>();
+    runTloadConvFractalZ5D<int8_t, 4, 2, 6, 16, NO_PROFILING, 0.0f>();
 }

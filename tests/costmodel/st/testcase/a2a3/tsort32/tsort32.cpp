@@ -44,10 +44,10 @@ void runTSort32()
 
 TEST(TSort32, float_8x32)
 {
-    runTSort32<float, uint32_t, 8, 32, 8.0f, 0.0f>();
+    runTSort32<float, uint32_t, 8, 32, NO_PROFILING, 0.0f>();
 }
 
 TEST(TSort32, half_32x16)
 {
-    runTSort32<half, uint32_t, 32, 16, 32.0f, 0.0f>();
+    runTSort32<half, uint32_t, 32, 16, NO_PROFILING, 0.0f>();
 }

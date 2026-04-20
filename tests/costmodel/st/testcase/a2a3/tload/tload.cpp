@@ -45,3 +45,14 @@ TEST(TLoad, c01_nd_float_128x128)
     runTLoad<float, 128, 128, NO_PROFILING, 0.0f>();
 }
 
+TEST(TLoad, c01_nd_float_64x128)
+{
+    runTLoad<float, 64, 128, NO_PROFILING, 0.0f>();
+}
+
+TEST(TLoad, c01_nd_float_128x256)
+{
+    runTLoad<float, 128, 256, NO_PROFILING, 0.0f>();
+}
+
+

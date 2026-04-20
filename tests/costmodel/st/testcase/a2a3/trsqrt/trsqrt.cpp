@@ -49,20 +49,20 @@ void runTRsqrt()
 
 TEST(TRsqrt, case_float_64x64_64x64_64x64_inPlace_True)
 {
-    runTRsqrt<float, 64, 64, 64, 64, true, 0.0f, 0.0f>();
+    runTRsqrt<float, 64, 64, 64, 64, true, NO_PROFILING, 0.0f>();
 }
 
 TEST(TRsqrt, case_float_64x64_64x64_64x64_inPlace_False)
 {
-    runTRsqrt<float, 64, 64, 64, 64, false, 0.0f, 0.0f>();
+    runTRsqrt<float, 64, 64, 64, 64, false, NO_PROFILING, 0.0f>();
 }
 
 TEST(TRsqrt, case_half_64x64_64x64_64x64_inPlace_True)
 {
-    runTRsqrt<half, 64, 64, 64, 64, true, 0.0f, 0.0f>();
+    runTRsqrt<half, 64, 64, 64, 64, true, NO_PROFILING, 0.0f>();
 }
 
 TEST(TRsqrt, case_half_64x64_64x64_64x64_inPlace_False)
 {
-    runTRsqrt<half, 64, 64, 64, 64, false, 0.0f, 0.0f>();
+    runTRsqrt<half, 64, 64, 64, 64, false, NO_PROFILING, 0.0f>();
 }

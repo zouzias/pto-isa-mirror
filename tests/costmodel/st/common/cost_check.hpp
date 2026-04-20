@@ -11,7 +11,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_COSTMODEL_ST_COST_CHECK_HPP
 #define PTO_COSTMODEL_ST_COST_CHECK_HPP
 
-#define NO_PROFILING 0.0f
+#define NO_PROFILING 0.114514f
 
 #include <cmath>
 #include <iostream>

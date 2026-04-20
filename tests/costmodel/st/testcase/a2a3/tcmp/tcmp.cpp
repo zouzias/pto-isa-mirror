@@ -45,35 +45,35 @@ void runTCmp()
 
 TEST(TCmp, case_float_1x64_1x64_1x64)
 {
-    runTCmp<float, 1, 64, 1, 64, CmpMode::EQ, 0.0f, 0.0f>();
+    runTCmp<float, 1, 64, 1, 64, CmpMode::EQ, NO_PROFILING, 0.0f>();
 }
 
 TEST(TCmp, case_float_8x64_8x64_8x64)
 {
-    runTCmp<float, 8, 64, 8, 64, CmpMode::GT, 0.0f, 0.0f>();
+    runTCmp<float, 8, 64, 8, 64, CmpMode::GT, NO_PROFILING, 0.0f>();
 }
 
 TEST(TCmp, case_int32_64x64_32x32_64x64)
 {
-    runTCmp<int32_t, 64, 64, 32, 32, CmpMode::EQ, 0.0f, 0.0f>();
+    runTCmp<int32_t, 64, 64, 32, 32, CmpMode::EQ, NO_PROFILING, 0.0f>();
 }
 
 TEST(TCmp, case_int32_16x32_16x32_16x32)
 {
-    runTCmp<int32_t, 16, 32, 16, 32, CmpMode::EQ, 0.0f, 0.0f>();
+    runTCmp<int32_t, 16, 32, 16, 32, CmpMode::EQ, NO_PROFILING, 0.0f>();
 }
 
 TEST(TCmp, case_float_128x128_64x64_128x128)
 {
-    runTCmp<float, 128, 128, 64, 64, CmpMode::LE, 0.0f, 0.0f>();
+    runTCmp<float, 128, 128, 64, 64, CmpMode::LE, NO_PROFILING, 0.0f>();
 }
 
 TEST(TCmp, case_int32_77x81_32x32_77x81)
 {
-    runTCmp<int32_t, 77, 81, 32, 32, CmpMode::EQ, 0.0f, 0.0f>();
+    runTCmp<int32_t, 77, 81, 32, 32, CmpMode::EQ, NO_PROFILING, 0.0f>();
 }
 
 TEST(TCmp, case_int32_32x32_32x32_32x32)
 {
-    runTCmp<int32_t, 32, 32, 32, 32, CmpMode::EQ, 0.0f, 0.0f>();
+    runTCmp<int32_t, 32, 32, 32, 32, CmpMode::EQ, NO_PROFILING, 0.0f>();
 }
