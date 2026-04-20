@@ -346,11 +346,11 @@ void test_gather_cmp()
 
     uint32_t offset = 0;
 
-    aclrtMallocHost((void **)(&dstHost), dstsize);
     aclrtMallocHost((void **)(&srcHost), size);
+    aclrtMallocHost((void **)(&dstHost), dstsize);
     aclrtMallocHost((void **)(&src1Host), scalarSize);
-    aclrtMalloc((void **)&dstDevice, dstsize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&srcDevice, size, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dstDevice, dstsize, ACL_MEM_MALLOC_HUGE_FIRST);
     aclrtMalloc((void **)&src1Device, scalarSize, ACL_MEM_MALLOC_HUGE_FIRST);
 
     ReadFile(GetGoldenDir() + "/src.bin", size, srcHost, size);
@@ -359,18 +359,18 @@ void test_gather_cmp()
     aclrtMemcpy(srcDevice, size, srcHost, size, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, scalarSize, src1Host, scalarSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTGATHER_CMP<srcT, src1T, dstT, ROW, COL, ROW, COL, K, cmpMode>(srcDevice, src1Device, dstDevice, offset,
-                                                                        stream);
+                                                                         stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstsize, dstDevice, dstsize, ACL_MEMCPY_DEVICE_TO_HOST);
 
     WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstsize);
 
-    aclrtFree(dstDevice);
     aclrtFree(srcDevice);
+    aclrtFree(dstDevice);
     aclrtFree(src1Device);
-    aclrtFreeHost(dstHost);
     aclrtFreeHost(srcHost);
+    aclrtFreeHost(dstHost);
     aclrtFreeHost(src1Host);
     aclrtDestroyStream(stream);
     aclrtResetDevice(0);
