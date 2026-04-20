@@ -25,6 +25,9 @@ PRESET_SIZES = [
     (256, 256, 128),        # Extra large
 ]
 
+# Test data script path (relative to this script)
+TEST_DATA_SCRIPT_PATH = Path("cpu/st/testcase/tmatmul/gen_data.py")
+
 def run_command(cmd: List[str], cwd: Optional[Path] = None, verbose: bool = False) -> float:
     """Run a command and return elapsed time."""
     start = time.perf_counter()
@@ -116,7 +119,9 @@ def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool) -> T
     size_str = f"{M}x{K}x{N}"
     logging.info(f"Running test: {size_str}")
 
-    # Create test directory
+    # Create test directory (cleanup first if exists)
+    if test_dir.exists():
+        shutil.rmtree(test_dir)
     test_dir.mkdir(parents=True, exist_ok=True)
     original_cwd = os.getcwd()
 
@@ -124,15 +129,17 @@ def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool) -> T
         os.chdir(test_dir)
 
         # Generate test data
-        gen_data_script = Path(__file__).resolve().parent / "cpu" / "st" / "testcase" / "tmatmul" / "gen_data.py"
+        gen_data_script = Path(__file__).resolve().parent / TEST_DATA_SCRIPT_PATH
         gen_cmd = [sys.executable, str(gen_data_script), "--size", f"{M},{K},{N}"]
 
         start = time.perf_counter()
         try:
             run_command(gen_cmd, verbose=verbose)
             gen_time = time.perf_counter() - start
-        except subprocess.CalledProcessError:
-            return False, 0.0
+        except subprocess.CalledProcessError as e:
+            elapsed = time.perf_counter() - start
+            logging.error(f"Data generation failed for {size_str} after {elapsed:.2f}s (exit code {e.returncode})")
+            return False, elapsed
 
         # Run test binary
         test_cmd = [str(binary), "--size", f"{M},{K},{N}"]
@@ -141,8 +148,10 @@ def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool) -> T
             run_command(test_cmd, verbose=verbose)
             test_time = time.perf_counter() - start
             return True, gen_time + test_time
-        except subprocess.CalledProcessError:
-            return False, 0.0
+        except subprocess.CalledProcessError as e:
+            elapsed = gen_time + (time.perf_counter() - start)
+            logging.error(f"Test execution failed for {size_str} after {elapsed:.2f}s (exit code {e.returncode})")
+            return False, elapsed
 
     finally:
         os.chdir(original_cwd)
