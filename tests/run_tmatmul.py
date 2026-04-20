@@ -35,14 +35,15 @@ def run_command(cmd: List[str], cwd: Optional[Path] = None, verbose: bool = Fals
         cmd,
         cwd=str(cwd) if cwd else None,
         capture_output=True,
-        text=True
+        text=True,
+        encoding="utf-8",
+        errors="replace"
     )
 
     if result.returncode != 0:
-        if verbose or not result.stderr:
-            logging.error(f"Command failed: {' '.join(cmd)}")
-            if result.stdout:
-                logging.error(result.stdout)
+        logging.error(f"Command failed: {' '.join(cmd)}")
+        if result.stdout:
+            logging.error(result.stdout)
         if result.stderr:
             logging.error(result.stderr)
         raise subprocess.CalledProcessError(result.returncode, cmd)
@@ -52,8 +53,6 @@ def run_command(cmd: List[str], cwd: Optional[Path] = None, verbose: bool = Fals
 
 def detect_compilers() -> Tuple[Optional[str], Optional[str]]:
     """Detect C++ compilers (simplified version from run_cpu.py)."""
-    import shutil
-
     cxx = os.environ.get('CXX') or shutil.which('clang++') or shutil.which('g++')
     cc = os.environ.get('CC') or shutil.which('clang') or shutil.which('gcc')
 
@@ -62,6 +61,12 @@ def detect_compilers() -> Tuple[Optional[str], Optional[str]]:
 def build_tmatmul(build_dir: Path, source_dir: Path, build_type: str,
                   cxx: Optional[str], cc: Optional[str], clean: bool, verbose: bool) -> None:
     """Build the tmatmul test binary."""
+
+    # Check if cmake is available
+    if not shutil.which("cmake"):
+        logging.error("cmake is not installed or not in PATH")
+        raise RuntimeError("cmake is required to build the project")
+
     if clean and build_dir.exists():
         logging.info(f"Cleaning build directory: {build_dir}")
         shutil.rmtree(build_dir)
@@ -96,7 +101,9 @@ def build_tmatmul(build_dir: Path, source_dir: Path, build_type: str,
     logging.info("Building...")
     build_time = run_command(build_args, verbose=verbose)
 
-    logging.info(f"Build completed in {cfg_time + build_time:.2f}s")
+    logging.info(f"Configure completed in {cfg_time:.2f}s")
+    logging.info(f"Build completed in {build_time:.2f}s")
+    logging.info(f"Total build time: {cfg_time + build_time:.2f}s")
 
 def setup_logging(verbose: bool = False) -> None:
     level = logging.INFO if verbose else logging.WARNING
@@ -178,7 +185,7 @@ def main() -> int:
             logging.error(f"Build failed with exit code {e.returncode}")
             return 1
 
-    logging.info("Build and test execution will be implemented in next tasks")
+    logging.info("Test execution will be implemented in Task 5")
     return 0
 
 if __name__ == "__main__":
