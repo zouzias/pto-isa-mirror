@@ -2,10 +2,7 @@
 Copyright (c) 2025 Huawei Technologies Co., Ltd.
 CANN Open Software License Agreement Version 2.0
 
-4-Buffer Matmul Kernel
-
-Both A and B tiles use 4-buffer rotation (A: buf0-3, B: buf0-3).
-Uses set_flag/wait_flag for sync until CCE get_buf/rls_buf API confirmed.
+4-Buffer Matmul Kernel with Buffer-ID Based Sync (get_buf/rls_buf)
 */
 
 #include <pto/pto-inst.hpp>
@@ -18,6 +15,20 @@ constexpr int K = 16;
 constexpr int N = 256;
 constexpr int K_ITERS = 64;
 constexpr int NUM_BUFS = 4;
+constexpr int C_BUF_ID = 8;
+
+template <int pipe>
+AICORE void get_buffer(int id)
+{
+	get_buf(pipe,id,0);
+	return;
+}
+template <int pipe>
+AICORE void rls_buffer(int id)
+{
+	rls_buf(pipe,id,0);
+	return;
+}
 
 template <typename outType, typename inType>
 __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src0, __gm__ inType *src1)
@@ -28,55 +39,51 @@ __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src
 
     GlobalDataOut dstGlobal(out);
 
-    // L1 buffer types
     using TileMatAData = Tile<TileType::Mat, inType, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
     using TileMatBData = Tile<TileType::Mat, inType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
 
-    // L0 buffer types
     using LeftTile = TileLeft<inType, M, K, M, K>;
     using RightTile = TileRight<inType, K, N, K, N>;
     using AccTile = TileAcc<outType, M, N, M, N>;
 
-    // 4 buffers for A tiles in L1
     TileMatAData aMatTile0, aMatTile1, aMatTile2, aMatTile3;
     TASSIGN(aMatTile0, 0x0);
     TASSIGN(aMatTile1, 0x800);
     TASSIGN(aMatTile2, 0x1000);
     TASSIGN(aMatTile3, 0x1800);
 
-    // 4 buffers for B tiles in L1
     TileMatBData bMatTile0, bMatTile1, bMatTile2, bMatTile3;
     TASSIGN(bMatTile0, 0x10000);
     TASSIGN(bMatTile1, 0x12000);
     TASSIGN(bMatTile2, 0x14000);
     TASSIGN(bMatTile3, 0x16000);
 
-    // 4 buffers for A tiles in L0A
     LeftTile aTile0, aTile1, aTile2, aTile3;
     TASSIGN(aTile0, 0x0);
     TASSIGN(aTile1, 0x400);
     TASSIGN(aTile2, 0x800);
     TASSIGN(aTile3, 0xC00);
 
-    // 4 buffers for B tiles in L0B
     RightTile bTile0, bTile1, bTile2, bTile3;
     TASSIGN(bTile0, 0x0);
     TASSIGN(bTile1, 0x2000);
     TASSIGN(bTile2, 0x4000);
     TASSIGN(bTile3, 0x6000);
 
-    // Accumulator in L0C
     AccTile cTile;
     TASSIGN(cTile, 0x0);
 
-    // Main K-loop with 4-buffer rotation
     for (uint32_t k = 0; k < K_ITERS; k++) {
         int buf_id = k % NUM_BUFS;
 
         GlobalDataSrc0 src0Global(src0 + k * M * K);
         GlobalDataSrc1 src1Global(src1 + k * K * N);
 
-        // ===== MTE2 Stage: Load A and B to L1 =====
+        // MTE2: Load A and B
+#ifndef __PTO_AUTO__
+        get_buffer<PIPE_MTE2>(buf_id);
+#endif
+
         if (buf_id == 0) {
             TLOAD(aMatTile0, src0Global);
             TLOAD(bMatTile0, src1Global);
@@ -92,11 +99,14 @@ __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src
         }
 
 #ifndef __PTO_AUTO__
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+        rls_buffer<PIPE_MTE2>(buf_id);
 #endif
 
-        // ===== MTE1 Stage: Move A and B to L0 =====
+        // MTE1: Move to L0
+#ifndef __PTO_AUTO__
+        get_buffer<PIPE_MTE1>(buf_id);
+#endif
+
         if (buf_id == 0) {
             TMOV(aTile0, aMatTile0);
             TMOV(bTile0, bMatTile0);
@@ -112,41 +122,44 @@ __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src
         }
 
 #ifndef __PTO_AUTO__
-        set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-        wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+        rls_buffer<PIPE_MTE1>(buf_id);
 #endif
 
-        // ===== Cube M Stage: Matmul =====
+        // M: Matmul
+#ifndef __PTO_AUTO__
+        get_buffer<PIPE_M>(buf_id);
+        get_buffer<PIPE_M>(C_BUF_ID);
+#endif
+
         if (k == 0) {
-            if (buf_id == 0) {
-                TMATMUL(cTile, aTile0, bTile0);
-            } else if (buf_id == 1) {
-                TMATMUL(cTile, aTile1, bTile1);
-            } else if (buf_id == 2) {
-                TMATMUL(cTile, aTile2, bTile2);
-            } else {
-                TMATMUL(cTile, aTile3, bTile3);
-            }
+            if (buf_id == 0) TMATMUL(cTile, aTile0, bTile0);
+            else if (buf_id == 1) TMATMUL(cTile, aTile1, bTile1);
+            else if (buf_id == 2) TMATMUL(cTile, aTile2, bTile2);
+            else TMATMUL(cTile, aTile3, bTile3);
         } else {
-            if (buf_id == 0) {
-                TMATMUL_ACC(cTile, cTile, aTile0, bTile0);
-            } else if (buf_id == 1) {
-                TMATMUL_ACC(cTile, cTile, aTile1, bTile1);
-            } else if (buf_id == 2) {
-                TMATMUL_ACC(cTile, cTile, aTile2, bTile2);
-            } else {
-                TMATMUL_ACC(cTile, cTile, aTile3, bTile3);
-            }
+            if (buf_id == 0) TMATMUL_ACC(cTile, cTile, aTile0, bTile0);
+            else if (buf_id == 1) TMATMUL_ACC(cTile, cTile, aTile1, bTile1);
+            else if (buf_id == 2) TMATMUL_ACC(cTile, cTile, aTile2, bTile2);
+            else TMATMUL_ACC(cTile, cTile, aTile3, bTile3);
         }
+
+#ifndef __PTO_AUTO__
+        rls_buffer<PIPE_M>(buf_id);
+        rls_buffer<PIPE_M>(C_BUF_ID);
+#endif
     }
 
-    // ===== Store result =====
+    // Store
 #ifndef __PTO_AUTO__
-    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    get_buffer<PIPE_MTE3>(C_BUF_ID);
 #endif
 
     TSTORE(dstGlobal, cTile);
+
+#ifndef __PTO_AUTO__
+    rls_buffer<PIPE_MTE3>(C_BUF_ID);
+#endif
+
     out = dstGlobal.data();
 }
 
