@@ -85,23 +85,39 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--size":
         # Single-size mode for custom testing
         parser = argparse.ArgumentParser(description='Generate single tmatmul test data')
-        parser.add_argument('--size', type=str, required=True, help='Matrix size in "M,K,N" format')
+        parser.add_argument('--size', type=str, required=True, help='Matrix size in "M,K,N" format (comma-separated without spaces)')
         parser.add_argument('--output-dir', type=str, default='.', help='Output directory')
-        parser.add_argument('--dtype', type=str, default='float16', help='Data type (float16, int8, etc)')
+        parser.add_argument('--dtype', type=str, default='float16', help='Data type (float16, int8, bf16, etc)')
+        parser.add_argument('--bias', action='store_true', help='Include bias in test')
+        parser.add_argument('--repeats', type=int, default=1, help='Number of repeats (default: 1)')
         args = parser.parse_args()
 
         # Parse size
         try:
             m, k, n = map(int, args.size.split(','))
         except ValueError:
-            print(f"Error: Invalid size format '{args.size}'. Expected 'M,K,N' format.", file=sys.stderr)
+            print(f"Error: Invalid size format '{args.size}'. Expected 'M,K,N' format (comma-separated without spaces).", file=sys.stderr)
+            sys.exit(1)
+
+        # Validate size values
+        if m <= 0 or k <= 0 or n <= 0:
+            print(f"Error: Size values must be positive integers, got M={m}, K={k}, N={n}", file=sys.stderr)
             sys.exit(1)
 
         # Generate single test case
         case_name = f"custom_{m}x{k}x{n}"
-        if not os.path.exists(case_name):
-            os.makedirs(case_name)
-        os.chdir(case_name)
+        if args.output_dir != '.':
+            # Use custom output directory
+            output_path = args.output_dir
+        else:
+            # Use default case_name subdirectory
+            output_path = case_name
+
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+
+        original_dir = os.getcwd()
+        os.chdir(output_path)
 
         # Determine dtype
         dtype_map = {
@@ -110,12 +126,16 @@ if __name__ == "__main__":
             'int8': np.int8,
             'int32': np.int32,
         }
-        src_type = dtype_map.get(args.dtype, np.float16)
-        dst_type = np.float32 if args.dtype in ['float16', 'float32'] else np.int32
+        if ENABLE_BF16:
+            dtype_map['bf16'] = NumExt.bf16
 
-        param = tmatmulParams(src_type, src_type, dst_type, m, k, n, False)
+        src_type = dtype_map.get(args.dtype, np.float16)
+        dst_type = np.float32 if args.dtype in ['float16', 'float32', 'bf16'] else np.int32
+
+        param = tmatmulParams(src_type, src_type, dst_type, m, k, n, args.bias, repeats=args.repeats)
         gen_golden_data(case_name, param)
-        print(f"Generated test data for {m}x{k}x{n} in {case_name}/")
+        os.chdir(original_dir)
+        print(f"Generated test data for {m}x{k}x{n} in {output_path}/")
 
     else:
         # Original batch mode - generate all test cases
