@@ -52,29 +52,56 @@ def run_command(
     if verbose:
         logging.info(f"  $ {_format_cmd(command)}" + (f"\n  cwd: {cwd_str}" if cwd_str else ""))
     try:
-        completed = subprocess.run(
-            [str(x) for x in command],
-            cwd=cwd_str,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if completed.returncode != 0 or verbose:
-            if completed.stdout:
-                logging.info(completed.stdout.rstrip())
-            if completed.stderr:
-                logging.info(completed.stderr.rstrip())
-        elif always_print_patterns:
-            patterns = [re.compile(p) for p in always_print_patterns]
-            _print_if_pattern(completed, patterns)
-        if completed.returncode != 0:
-            raise subprocess.CalledProcessError(
-                completed.returncode,
-                command,
-                output=completed.stdout,
-                stderr=completed.stderr,
+        if verbose:
+            # In verbose mode, stream child output line-by-line so long-running
+            # build/test steps show progress immediately instead of only at end.
+            proc = subprocess.Popen(
+                [str(x) for x in command],
+                cwd=cwd_str,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
             )
+            merged_output_lines: List[str] = []
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                merged_output_lines.append(line)
+                logging.info(line.rstrip())
+            return_code = proc.wait()
+            if return_code != 0:
+                merged_output = "".join(merged_output_lines)
+                raise subprocess.CalledProcessError(
+                    return_code,
+                    command,
+                    output=merged_output,
+                    stderr=None,
+                )
+        else:
+            completed = subprocess.run(
+                [str(x) for x in command],
+                cwd=cwd_str,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if completed.returncode != 0:
+                if completed.stdout:
+                    logging.info(completed.stdout.rstrip())
+                if completed.stderr:
+                    logging.info(completed.stderr.rstrip())
+                raise subprocess.CalledProcessError(
+                    completed.returncode,
+                    command,
+                    output=completed.stdout,
+                    stderr=completed.stderr,
+                )
+            if always_print_patterns:
+                patterns = [re.compile(p) for p in always_print_patterns]
+                _print_if_pattern(completed, patterns)
     except FileNotFoundError as e:
         raise RuntimeError(f"command not found: {command[0]}") from e
     return time.perf_counter() - start
@@ -433,9 +460,10 @@ def _parse_duration_seconds(s: str) -> float:
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Build & run costmodel simulator ST unit tests (tests/costmodel/st)",
+        description="Build & run costmodel simulator ST unit tests",
         epilog=("Examples:\n  python run_costmodel.py --build-type Release\n"
             "  python run_costmodel.py --testcase tadd --build-type Release\n"
+            "  python run_costmodel.py --suite fit --testcase tadd_fit --build-type Release\n"
             "  python run_costmodel.py --no-build --gtest_filter TADDTest.*\n"
             "  python run_costmodel.py --demo gemm\n"
             "  python run_costmodel.py --demo flash_attn\n"
@@ -452,7 +480,9 @@ def parse_arguments():
     parser.add_argument("--cc", help="C compiler (e.g. clang). Default: $CC or auto-detect.")
     parser.add_argument("--build-type", default="Release", choices=["Release", "Debug", "RelWithDebInfo", "MinSizeRel"],
                         help="CMake build type.",)
-    parser.add_argument("--build-dir", default=None, help="Build directory. Default: tests/costmodel/st/build",)
+    parser.add_argument("--suite", choices=["stub", "fit"], default="stub",
+                        help="Test suite backend. stub -> tests/costmodel/st, fit -> tests/costmodel/st_fit.")
+    parser.add_argument("--build-dir", default=None, help="Build directory. Default: tests/costmodel/<suite>/build",)
     parser.add_argument("--no-clean", action="store_true", help="(Deprecated) No-op; kept for backward compatibility.")
     parser.add_argument("--clean", action="store_true", help="Delete build dir and rebuild.")
     parser.add_argument("--rebuild", action="store_true", help="Force re-configure and rebuild .")
@@ -506,9 +536,10 @@ def run_demo_mode(args, repo_root, cxx, cc) -> int:
 
 
 def run_test_mode(args, repo_root, cxx, cc) -> int:
-    source_dir = repo_root / "costmodel" / "st"
+    source_subdir = "st_fit" if args.suite == "fit" else "st"
+    source_dir = repo_root / "costmodel" / source_subdir
     if not source_dir.exists():
-        logging.error(f"error: not found costmodel ST dir: {source_dir}")
+        logging.error(f"error: not found costmodel ST dir for suite={args.suite}: {source_dir}")
         return 2
 
     build_dir = Path(args.build_dir) if args.build_dir else (source_dir / "build")
@@ -595,6 +626,24 @@ def perform_build(args, source_dir, build_dir, cxx, cc) -> bool:
     if is_windows() and not args.generator:
         logging.error("On Windows, must specify --generator (\"MinGW Makefiles\" or \"Ninja\", etc..)")
         return False
+    if args.suite == "fit":
+        project_root = source_dir.parents[2]
+        formula_codegen_script = (
+            project_root
+            / "include"
+            / "pto"
+            / "costmodel"
+            / "a2a3"
+            / "formula_costmodel"
+            / "gen_formula_params_header.py"
+        )
+        if formula_codegen_script.exists():
+            run_command(
+                [sys.executable, str(formula_codegen_script)],
+                cwd=project_root,
+                title="[STEP] generate formula params header",
+                verbose=args.verbose,
+            )
     cfg_time = run_command(
         [
             "cmake",
