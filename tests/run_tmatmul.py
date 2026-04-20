@@ -186,7 +186,9 @@ def run_regression_tests(build_dir: Path, verbose: bool) -> Tuple[bool, float]:
         return True, elapsed
 
     except subprocess.CalledProcessError:
-        return False, 0.0
+        elapsed = time.perf_counter() - start
+        logging.info(f"  {test_case}: FAIL")
+        return False, elapsed
 
 def setup_logging(verbose: bool = False) -> None:
     level = logging.INFO if verbose else logging.WARNING
