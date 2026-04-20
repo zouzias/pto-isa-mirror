@@ -1006,6 +1006,14 @@ PTO_INST RecordEvent TPARTMAX(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1
     return {};
 }
 
+template <typename TileDstVal, typename TileDstIdx, typename TileSrcVal0, typename TileSrcIdx0, typename TileSrcVal1, typename TileSrcIdx1, typename... WaitEvents>
+PTO_INTERNAL void TPARTARGMAX_IMPL(TileDstVal &dstVal, TileDstIdx &dstIdx, TileSrcVal0 &srcVal0, TileSrcIdx0 &srcIdx0, TileSrcVal1 &srcVal1, TileSrcIdx1 &srcIdx1, WaitEvents &... events)
+{
+    TSYNC(events...);
+    MAP_INSTR_IMPL(TPARTARGMAX, dstVal, dstIdx, srcVal0, srcIdx0, srcVal1, srcIdx1);
+    return {};
+}
+
 template <typename TileDataDst, typename TileDataSrc0, typename TileDataSrc1, typename... WaitEvents>
 PTO_INST RecordEvent TPARTMIN(TileDataDst &dst, TileDataSrc0 &src0, TileDataSrc1 &src1, WaitEvents &... events)
 {
