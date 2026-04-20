@@ -1,238 +1,147 @@
-#include "pto/pto-inst.hpp"
+/**
+Copyright (c) 2025 Huawei Technologies Co., Ltd.
+CANN Open Software License Agreement Version 2.0
+*/
+
+/**
+ * @file cube_matmul_4buf_preload_kernel.cpp
+ * @brief Cube matmul kernel with 4-buffer CORRECT preload
+ * 
+ * Key insight: preload B[k+4] into buffer (k+4)%4 = k%4, which is the SAME
+ * buffer we're computing with. So we MUST ensure the preload happens AFTER
+ * the matmul of that iteration.
+ * 
+ * Correct order for each iteration k:
+ * 1. Load A[k]
+ * 2. Wait for A ready
+ * 3. Move A to L0A
+ * 4. Wait for B[k] ready in L0B (was preloaded earlier)
+ * 5. TMATMUL with A[k], B[k]
+ * 6. Wait for matmul done
+ * 7. NOW safe to preload B[k+4] into the same buffer
+ */
+
+#include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
+
 using namespace pto;
 
-enum class PTOAutoSyncTailMode : int {
-  kBarrierAll = 0,
-  kSetWaitMte3ToSEvent0 = 1,
-};
+constexpr int M = 32;
+constexpr int K = 16;
+constexpr int N = 256;
+constexpr int K_ITERS = 64;
 
-static AICORE inline void ptoas_auto_sync_tail(
-    PTOAutoSyncTailMode mode = PTOAutoSyncTailMode::kBarrierAll) {
-  switch (mode) {
-  case PTOAutoSyncTailMode::kSetWaitMte3ToSEvent0:
-    set_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
-    wait_flag(PIPE_MTE3, PIPE_S, EVENT_ID0);
-    break;
-  case PTOAutoSyncTailMode::kBarrierAll:
-  default:
-    pipe_barrier(PIPE_ALL);
-    break;
-  }
+template <typename outType, typename inType>
+__global__ AICORE void RunCubeMatmul4BufPreload(__gm__ outType *out, __gm__ inType *src0, __gm__ inType *src1)
+{
+    using GlobalDataSrc0 = GlobalTensor<inType, Shape<1, 1, 1, M, K>, Stride<M * K, M * K, M * K, K, 1>>;
+    using GlobalDataSrc1 = GlobalTensor<inType, Shape<1, 1, 1, K, N>, Stride<K * N, K * N, K * N, N, 1>>;
+    using GlobalDataOut = GlobalTensor<outType, Shape<1, 1, 1, M, N>, Stride<M * N, M * N, M * N, N, 1>>;
+
+    GlobalDataOut dstGlobal(out);
+
+    // L1 tile types
+    using TileMatAData = Tile<TileType::Mat, inType, M, K, BLayout::ColMajor, M, K, SLayout::RowMajor, 512>;
+    using TileMatBData = Tile<TileType::Mat, inType, K, N, BLayout::ColMajor, K, N, SLayout::RowMajor, 512>;
+
+    // L0 tile types
+    using LeftTile = TileLeft<inType, M, K, M, K>;
+    using RightTile = TileRight<inType, K, N, K, N>;
+    using AccTile = TileAcc<outType, M, N, M, N>;
+
+    // L1 buffers
+    TileMatAData aMatTile;
+    TileMatBData bMatTile0, bMatTile1, bMatTile2, bMatTile3;
+    TASSIGN(aMatTile, 0x0);
+    TASSIGN(bMatTile0, 0x10000);
+    TASSIGN(bMatTile1, 0x12000);
+    TASSIGN(bMatTile2, 0x14000);
+    TASSIGN(bMatTile3, 0x16000);
+
+    // L0 tiles
+    LeftTile aTile;
+    RightTile bTile0, bTile1, bTile2, bTile3;
+    AccTile cTile;
+    TASSIGN(aTile, 0x0);
+    TASSIGN(bTile0, 0x0);
+    TASSIGN(bTile1, 0x2000);
+    TASSIGN(bTile2, 0x4000);
+    TASSIGN(bTile3, 0x6000);
+    TASSIGN(cTile, 0x0);
+
+    // Helper lambda to load B tile to L1 and L0
+    auto loadBTile = [&](int buf, GlobalDataSrc1& src) {
+        if (buf == 0) {
+            TLOAD(bMatTile0, src);
+            pipe_barrier(PIPE_MTE2);
+            TMOV(bTile0, bMatTile0);
+        } else if (buf == 1) {
+            TLOAD(bMatTile1, src);
+            pipe_barrier(PIPE_MTE2);
+            TMOV(bTile1, bMatTile1);
+        } else if (buf == 2) {
+            TLOAD(bMatTile2, src);
+            pipe_barrier(PIPE_MTE2);
+            TMOV(bTile2, bMatTile2);
+        } else {
+            TLOAD(bMatTile3, src);
+            pipe_barrier(PIPE_MTE2);
+            TMOV(bTile3, bMatTile3);
+        }
+        pipe_barrier(PIPE_MTE1);
+    };
+
+    // ==== PRIMING PHASE: Load B[0..3] ====
+    for (int i = 0; i < 4; i++) {
+        GlobalDataSrc1 srcB(src1 + i * K * N);
+        loadBTile(i, srcB);
+    }
+
+    // ==== MAIN LOOP ====
+    for (uint32_t k = 0; k < K_ITERS; k++) {
+        int buf_idx = k % 4;
+        
+        // 1. Load A[k] 
+        GlobalDataSrc0 src0Global(src0 + k * M * K);
+        TLOAD(aMatTile, src0Global);
+        pipe_barrier(PIPE_MTE2);
+        
+        // 2. Move A[k] to L0A
+        TMOV(aTile, aMatTile);
+        pipe_barrier(PIPE_MTE1);
+
+        // 3. Matmul with B[buf_idx] (already in L0B from priming or previous preload)
+        if (k == 0) {
+            if (buf_idx == 0) TMATMUL(cTile, aTile, bTile0);
+            else if (buf_idx == 1) TMATMUL(cTile, aTile, bTile1);
+            else if (buf_idx == 2) TMATMUL(cTile, aTile, bTile2);
+            else TMATMUL(cTile, aTile, bTile3);
+        } else {
+            if (buf_idx == 0) TMATMUL_ACC(cTile, cTile, aTile, bTile0);
+            else if (buf_idx == 1) TMATMUL_ACC(cTile, cTile, aTile, bTile1);
+            else if (buf_idx == 2) TMATMUL_ACC(cTile, cTile, aTile, bTile2);
+            else TMATMUL_ACC(cTile, cTile, aTile, bTile3);
+        }
+        pipe_barrier(PIPE_M);  // Wait for matmul to finish
+
+        // 4. NOW safe to preload B[k+4] into same buffer (for iteration k+4)
+        if (k + 4 < K_ITERS) {
+            GlobalDataSrc1 srcBPreload(src1 + (k + 4) * K * N);
+            loadBTile(buf_idx, srcBPreload);  // (k+4) % 4 == k % 4 == buf_idx
+        }
+    }
+
+    set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+    wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+
+    TSTORE(dstGlobal, cTile);
+    out = dstGlobal.data();
 }
 
-__global__ AICORE void cube_matmul_4buf_preload(__gm__ half* v1, __gm__ half* v2, __gm__ float* v3) {
-  unsigned v4 = 3;
-  unsigned v5 = 2;
-  unsigned v6 = 1;
-  unsigned v7 = 0;
-  const int32_t v8 = 0;
-  const int32_t v9 = 1;
-  const int32_t v10 = 2;
-  const int32_t v11 = 4;
-  const int32_t v12 = 16;
-  const int32_t v13 = 60;
-  const int32_t v14 = 64;
-  const int32_t v15 = 256;
-  const int32_t v16 = 512;
-  const int32_t v17 = 4096;
-  const int64_t v18 = 32768;
-  const int64_t v19 = 0;
-  const int64_t v20 = 8192;
-  const int64_t v21 = 16384;
-  const int64_t v22 = 24576;
-  using T = float;
-
-  #if defined(__DAV_CUBE__)
-  Tile<TileType::Mat, half, 32, 16, BLayout::ColMajor, 32, 16, SLayout::RowMajor, 512, PadValue::Null, CompactMode::Null> v23;
-  TASSIGN(v23, v18);
-  Tile<TileType::Mat, half, 16, 256, BLayout::ColMajor, 16, 256, SLayout::RowMajor, 512, PadValue::Null, CompactMode::Null> v24;
-  TASSIGN(v24, v19);
-  Tile<TileType::Mat, half, 16, 256, BLayout::ColMajor, 16, 256, SLayout::RowMajor, 512, PadValue::Null, CompactMode::Null> v25;
-  TASSIGN(v25, v20);
-  Tile<TileType::Mat, half, 16, 256, BLayout::ColMajor, 16, 256, SLayout::RowMajor, 512, PadValue::Null, CompactMode::Null> v26;
-  TASSIGN(v26, v21);
-  Tile<TileType::Mat, half, 16, 256, BLayout::ColMajor, 16, 256, SLayout::RowMajor, 512, PadValue::Null, CompactMode::Null> v27;
-  TASSIGN(v27, v22);
-  Tile<TileType::Left, half, 32, 16, BLayout::ColMajor, 32, 16, SLayout::RowMajor, 512, PadValue::Null, CompactMode::Null> v28;
-  TASSIGN(v28, v19);
-  Tile<TileType::Right, half, 16, 256, BLayout::RowMajor, 16, 256, SLayout::ColMajor, 512, PadValue::Null, CompactMode::Null> v29;
-  TASSIGN(v29, v19);
-  Tile<TileType::Right, half, 16, 256, BLayout::RowMajor, 16, 256, SLayout::ColMajor, 512, PadValue::Null, CompactMode::Null> v30;
-  TASSIGN(v30, v20);
-  Tile<TileType::Right, half, 16, 256, BLayout::RowMajor, 16, 256, SLayout::ColMajor, 512, PadValue::Null, CompactMode::Null> v31;
-  TASSIGN(v31, v21);
-  Tile<TileType::Right, half, 16, 256, BLayout::RowMajor, 16, 256, SLayout::ColMajor, 512, PadValue::Null, CompactMode::Null> v32;
-  TASSIGN(v32, v22);
-  Tile<TileType::Acc, float, 32, 256, BLayout::ColMajor, 32, 256, SLayout::RowMajor, 1024, PadValue::Null, CompactMode::Null> v33;
-  TASSIGN(v33, v19);
-  pto::Shape<1, 1, 1, 32, 256> v34 = pto::Shape<1, 1, 1, 32, 256>();
-  pto::Stride<8192, 8192, 8192, 256, 1> v35 = pto::Stride<8192, 8192, 8192, 256, 1>();
-  GlobalTensor<float, pto::Shape<1, 1, 1, 32, 256>, pto::Stride<8192, 8192, 8192, 256, 1>, pto::Layout::ND> v36 = GlobalTensor<float, pto::Shape<1, 1, 1, 32, 256>, pto::Stride<8192, 8192, 8192, 256, 1>, pto::Layout::ND>(v3 + (v7 + v7 * (unsigned) v15 + v7 * (unsigned) v9), v34, v35);
-  pto::Shape<1, 1, 1, 16, 256> v37 = pto::Shape<1, 1, 1, 16, 256>();
-  pto::Stride<4096, 4096, 4096, 256, 1> v38 = pto::Stride<4096, 4096, 4096, 256, 1>();
-  GlobalTensor<half, pto::Shape<1, 1, 1, 16, 256>, pto::Stride<4096, 4096, 4096, 256, 1>, pto::Layout::ND> v39 = GlobalTensor<half, pto::Shape<1, 1, 1, 16, 256>, pto::Stride<4096, 4096, 4096, 256, 1>, pto::Layout::ND>(v2 + ((v7 + v7 * (unsigned) v17) + v7 * (unsigned) v15 + v7 * (unsigned) v9), v37, v38);
-  pto::Shape<1, 1, 1, 16, 256> v40 = pto::Shape<1, 1, 1, 16, 256>();
-  pto::Stride<4096, 4096, 4096, 256, 1> v41 = pto::Stride<4096, 4096, 4096, 256, 1>();
-  GlobalTensor<half, pto::Shape<1, 1, 1, 16, 256>, pto::Stride<4096, 4096, 4096, 256, 1>, pto::Layout::ND> v42 = GlobalTensor<half, pto::Shape<1, 1, 1, 16, 256>, pto::Stride<4096, 4096, 4096, 256, 1>, pto::Layout::ND>(v2 + ((v7 + v6 * (unsigned) v17) + v7 * (unsigned) v15 + v7 * (unsigned) v9), v40, v41);
-  pto::Shape<1, 1, 1, 16, 256> v43 = pto::Shape<1, 1, 1, 16, 256>();
-  pto::Stride<4096, 4096, 4096, 256, 1> v44 = pto::Stride<4096, 4096, 4096, 256, 1>();
-  GlobalTensor<half, pto::Shape<1, 1, 1, 16, 256>, pto::Stride<4096, 4096, 4096, 256, 1>, pto::Layout::ND> v45 = GlobalTensor<half, pto::Shape<1, 1, 1, 16, 256>, pto::Stride<4096, 4096, 4096, 256, 1>, pto::Layout::ND>(v2 + ((v7 + v5 * (unsigned) v17) + v7 * (unsigned) v15 + v7 * (unsigned) v9), v43, v44);
-  pto::Shape<1, 1, 1, 16, 256> v46 = pto::Shape<1, 1, 1, 16, 256>();
-  pto::Stride<4096, 4096, 4096, 256, 1> v47 = pto::Stride<4096, 4096, 4096, 256, 1>();
-  GlobalTensor<half, pto::Shape<1, 1, 1, 16, 256>, pto::Stride<4096, 4096, 4096, 256, 1>, pto::Layout::ND> v48 = GlobalTensor<half, pto::Shape<1, 1, 1, 16, 256>, pto::Stride<4096, 4096, 4096, 256, 1>, pto::Layout::ND>(v2 + ((v7 + v4 * (unsigned) v17) + v7 * (unsigned) v15 + v7 * (unsigned) v9), v46, v47);
-  set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-  set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-  set_flag(PIPE_M, PIPE_MTE1, EVENT_ID2);
-  set_flag(PIPE_M, PIPE_MTE1, EVENT_ID3);
-  set_flag(PIPE_M, PIPE_MTE1, EVENT_ID4);
-  TLOAD(v24, v39);
-  set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-  TLOAD(v25, v42);
-  set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
-  TLOAD(v26, v45);
-  set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID2);
-  TLOAD(v27, v48);
-  set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID3);
-  wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-  TMOV(v29, v24);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-  wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID1);
-  TMOV(v30, v25);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-  wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID2);
-  TMOV(v31, v26);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-  wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID3);
-  TMOV(v32, v27);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID4);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID5);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID6);
-  set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID7);
-  for (size_t v49 = (size_t) v8; v49 < ((size_t) v14); v49 += (size_t) v9) {
-    int32_t v50 = (int32_t) v49;
-    pto::Shape<1, 1, 1, 32, 16> v51 = pto::Shape<1, 1, 1, 32, 16>();
-    pto::Stride<512, 512, 512, 16, 1> v52 = pto::Stride<512, 512, 512, 16, 1>();
-    GlobalTensor<half, pto::Shape<1, 1, 1, 32, 16>, pto::Stride<512, 512, 512, 16, 1>, pto::Layout::ND> v53 = GlobalTensor<half, pto::Shape<1, 1, 1, 32, 16>, pto::Stride<512, 512, 512, 16, 1>, pto::Layout::ND>(v1 + ((v7 + (unsigned) v50 * (unsigned) v16) + v7 * (unsigned) v12 + v7 * (unsigned) v9), v51, v52);
-    int32_t v54 = (int32_t) ((uint32_t) v50 % (uint32_t) v11);
-    wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID4);
-    TLOAD(v23, v53);
-    set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID4);
-    wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID4);
-    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID2);
-    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID3);
-    wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID4);
-    pipe_barrier(PIPE_MTE1);
-    TMOV(v28, v23);
-    set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID4);
-    int32_t v55 = (int32_t) ((uint32_t) v50 + (uint32_t) v11);
-    if (v50 < v13) {
-      int32_t v56 = (int32_t) ((uint32_t) v55 % (uint32_t) v11);
-      pto::Shape<1, 1, 1, 16, 256> v57 = pto::Shape<1, 1, 1, 16, 256>();
-      pto::Stride<4096, 4096, 4096, 256, 1> v58 = pto::Stride<4096, 4096, 4096, 256, 1>();
-      GlobalTensor<half, pto::Shape<1, 1, 1, 16, 256>, pto::Stride<4096, 4096, 4096, 256, 1>, pto::Layout::ND> v59 = GlobalTensor<half, pto::Shape<1, 1, 1, 16, 256>, pto::Stride<4096, 4096, 4096, 256, 1>, pto::Layout::ND>(v2 + ((v7 + (unsigned) v55 * (unsigned) v17) + v7 * (unsigned) v15 + v7 * (unsigned) v9), v57, v58);
-      if (v56 == v8) {
-        wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID6);
-        TLOAD(v24, v59);
-        set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID5);
-        wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID5);
-        TMOV(v29, v24);
-        set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID6);
-      } else {
-        if (v56 == v9) {
-          wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-          TLOAD(v25, v59);
-          set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID6);
-          wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID6);
-          TMOV(v30, v25);
-          set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-        } else {
-          if (v56 == v10) {
-            wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-            TLOAD(v26, v59);
-            set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID7);
-            wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID7);
-            TMOV(v31, v26);
-            set_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-          } else {
-            TLOAD(v27, v59);
-            set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
-            TMOV(v32, v27);
-          };
-        };
-      };
-    };
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID1);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID2);
-    set_flag(PIPE_MTE1, PIPE_M, EVENT_ID3);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID1);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID2);
-    wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID3);
-    if (v50 == v8) {
-      TMATMUL(v33, v28, v29);
-    } else {
-      if (v54 == v8) {
-        TMATMUL_ACC(v33, v33, v28, v29);
-      } else {
-        if (v54 == v9) {
-          TMATMUL_ACC(v33, v33, v28, v30);
-        } else {
-          if (v54 == v10) {
-            TMATMUL_ACC(v33, v33, v28, v31);
-          } else {
-            TMATMUL_ACC(v33, v33, v28, v32);
-          };
-        };
-      };
-    };
-    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID2);
-    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID3);
-    set_flag(PIPE_M, PIPE_MTE1, EVENT_ID4);
-  }
-  set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID0);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID1);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID2);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID3);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID4);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID5);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID6);
-  wait_flag(PIPE_MTE1, PIPE_MTE2, EVENT_ID7);
-  wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
-  TSTORE(v36, v33);
-  wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID0);
-  wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID1);
-  wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID2);
-  wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID3);
-  wait_flag(PIPE_M, PIPE_MTE1, EVENT_ID4);
-  #endif // __DAV_CUBE__
-
-  ptoas_auto_sync_tail(PTOAutoSyncTailMode::kBarrierAll);
-  return;
-}
-
-// Launcher template for test harness
 template <typename T_A, typename T_B, typename T_C>
 void LaunchCubeMatmul4BufPreload(T_A *a, T_B *b, T_C *c, void *stream)
 {
-    cube_matmul_4buf_preload(a, b, c);
+    RunCubeMatmul4BufPreload<T_C, T_A>(c, a, b);
 }
 
-// Explicit instantiation
 template void LaunchCubeMatmul4BufPreload<half, half, float>(half *, half *, float *, void *);
-
