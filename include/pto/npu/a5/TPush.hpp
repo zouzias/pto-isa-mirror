@@ -1119,8 +1119,7 @@ struct TMPipe {
                 if constexpr (DataFiFo::fifoType == FIFOType::GM_FIFO) {
                     popVecTileFromGMFiFo<T, ProdM, ProdN, ConsM, ConsN>(fifo, tile);
                     return true;
-                } else if constexpr (DataFiFo::fifoType == FIFOType::VEC_FIFO) {
-                    popTileFromLocalFiFo<T, ProdM, ProdN, ConsM, ConsN>(fifo, tile);
+                } else if constexpr (DataFiFo::fifoType == FIFOType::VEC_FIFO) {                    
                     return false;
                 } else if constexpr (DataFiFo::fifoType == FIFOType::CTRL_FIFO) {
                     popCtrlFromCtrlFiFo(fifo);
@@ -1132,8 +1131,7 @@ struct TMPipe {
                 if constexpr (DataFiFo::fifoType == FIFOType::GM_FIFO) {
                     popMatTileFromGMFiFo<T, ConsM, ConsN, ProdN>(fifo, tile);
                     return true;
-                } else if constexpr (DataFiFo::fifoType == FIFOType::MAT_FIFO) {
-                    popTileFromLocalFiFo<T, ProdM, ProdN, ConsM, ConsN>(fifo, tile);
+                } else if constexpr (DataFiFo::fifoType == FIFOType::MAT_FIFO) {                    
                     return false;
                 }
             }
@@ -1176,7 +1174,6 @@ PTO_INTERNAL void TPUSH_IMPL(TileData &tile, Pipe &pipe)
 
     // 2. Address Calculation
     pipe.prod.push(pipe.fifo, tile);
-    pipe.prod.tile_id++;
 
     // 3； Cross-Core: Commit & Signal
     bool isRecord = pipe.prod.getRecordStatus();
