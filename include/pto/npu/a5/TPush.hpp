@@ -1071,10 +1071,7 @@ struct TMPipe {
         template <typename T, int ProdM, int ProdN, int ConsM, int ConsN>
         PTO_INTERNAL void popTileFromLocalFiFo(DataFiFo &fifo, TileDataCons &tile)
         {
-            uint32_t bufIndex = static_cast<uint32_t>(tile_id % DataFiFo::fifoDepth);
-            size_t entryBase = bufIndex * ConsM * ConsN * sizeof(T);
-            uint64_t localTileBase = fifo.fifoBase + entryBase + entryOffset;
-            TASSIGN_IMPL(tile, localTileBase);
+            return;
         }
 
         template <typename T, int ConsM, int ConsN, int ProdN>
@@ -1176,7 +1173,6 @@ PTO_INTERNAL void TPUSH_IMPL(TileData &tile, Pipe &pipe)
 
     // 2. Address Calculation
     pipe.prod.push(pipe.fifo, tile);
-    pipe.prod.tile_id++;
 
     // 3； Cross-Core: Commit & Signal
     bool isRecord = pipe.prod.getRecordStatus();
