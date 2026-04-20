@@ -1,0 +1,40 @@
+{
+  "skill_name": "remote-development",
+  "evals": [
+    {
+      "id": 1,
+      "name": "simple-remote-command",
+      "prompt": "Run 'ls -la' on the remote server to see what files are in the workspace",
+      "expected_output": "The skill should ask which server to use, then execute the ls command via SSH and display the file listing output",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "run-tests-with-conda",
+      "prompt": "Connect to server A and run the unit tests using the test-env conda environment",
+      "expected_output": "The skill should: 1) Present server options, 2) User selects Server A, 3) Ask for conda environment (user specifies 'test-env'), 4) Ask for command (user specifies test command), 5) Execute via SSH with conda activation",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "quick-status-check",
+      "prompt": "Check what processes are running on server B",
+      "expected_output": "The skill should connect to Server B and execute a process checking command (like 'ps aux' or 'top')",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "multi-command-build",
+      "prompt": "On server A, clean and rebuild the project using the build-env environment",
+      "expected_output": "The skill should activate build-env and execute build commands (make clean, make, etc.)",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "no-conda-environment",
+      "prompt": "Run a simple command on server A without activating any conda environment",
+      "expected_output": "The skill should skip conda activation and just run the command directly after sourcing conda_source.sh",
+      "files": []
+    }
+  ]
+}

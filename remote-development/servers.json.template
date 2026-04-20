@@ -1,0 +1,16 @@
+{
+  "servers": [
+    {
+      "name": "Server A",
+      "host": "192.168.1.100",
+      "username": "developer",
+      "workspace": "/home/developer/workspace"
+    },
+    {
+      "name": "Server B",
+      "host": "192.168.1.101",
+      "username": "developer",
+      "workspace": "/home/developer/other-workspace"
+    }
+  ]
+}

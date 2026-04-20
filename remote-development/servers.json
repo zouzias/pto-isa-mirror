@@ -1,0 +1,16 @@
+{
+  "servers": [
+    {
+      "name": "920B",
+      "host": "192.168.90.45",
+      "username": "jiangxihang",
+      "workspace": "～/m00852700"
+    },
+    {
+      "name": "920F",
+      "host": "175.200.13.14",
+      "username": "root",
+      "workspace": "/tmp/m00852700"
+    }
+  ]
+}
