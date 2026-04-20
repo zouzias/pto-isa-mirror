@@ -25,6 +25,79 @@ PRESET_SIZES = [
     (256, 256, 128),        # Extra large
 ]
 
+def run_command(cmd: List[str], cwd: Optional[Path] = None, verbose: bool = False) -> float:
+    """Run a command and return elapsed time."""
+    start = time.perf_counter()
+    if verbose:
+        logging.info(f"Running: {' '.join(cmd)}")
+
+    result = subprocess.run(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        if verbose or not result.stderr:
+            logging.error(f"Command failed: {' '.join(cmd)}")
+            if result.stdout:
+                logging.error(result.stdout)
+        if result.stderr:
+            logging.error(result.stderr)
+        raise subprocess.CalledProcessError(result.returncode, cmd)
+
+    elapsed = time.perf_counter() - start
+    return elapsed
+
+def detect_compilers() -> Tuple[Optional[str], Optional[str]]:
+    """Detect C++ compilers (simplified version from run_cpu.py)."""
+    import shutil
+
+    cxx = os.environ.get('CXX') or shutil.which('clang++') or shutil.which('g++')
+    cc = os.environ.get('CC') or shutil.which('clang') or shutil.which('gcc')
+
+    return cxx, cc
+
+def build_tmatmul(build_dir: Path, source_dir: Path, build_type: str,
+                  cxx: Optional[str], cc: Optional[str], clean: bool, verbose: bool) -> None:
+    """Build the tmatmul test binary."""
+    if clean and build_dir.exists():
+        logging.info(f"Cleaning build directory: {build_dir}")
+        shutil.rmtree(build_dir)
+
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    # Configure
+    cmake_args = [
+        "cmake",
+        "-S", str(source_dir),
+        "-B", str(build_dir),
+        f"-DCMAKE_BUILD_TYPE={build_type}",
+        f"-DTEST_CASE=tmatmul",
+    ]
+
+    if cxx:
+        cmake_args.append(f"-DCMAKE_CXX_COMPILER={cxx}")
+    if cc:
+        cmake_args.append(f"-DCMAKE_C_COMPILER={cc}")
+
+    logging.info("Configuring with CMake...")
+    cfg_time = run_command(cmake_args, verbose=verbose)
+
+    # Build
+    build_args = [
+        "cmake",
+        "--build", str(build_dir),
+        "--parallel",
+        "--config", build_type,
+    ]
+
+    logging.info("Building...")
+    build_time = run_command(build_args, verbose=verbose)
+
+    logging.info(f"Build completed in {cfg_time + build_time:.2f}s")
+
 def setup_logging(verbose: bool = False) -> None:
     level = logging.INFO if verbose else logging.WARNING
     logging.basicConfig(
@@ -83,14 +156,30 @@ def main() -> int:
             print(f"Error: Invalid size format '{args.size}'. Expected 'M,K,N'", file=sys.stderr)
             return 1
     elif args.regression:
-        logging.info("Running regression tests (will be implemented in Task 6)")
-        print("Error: --regression mode not yet implemented. Please wait for Task 6.")
+        logging.info("Running regression tests (not yet implemented)")
         return 1
     else:
         size_list = PRESET_SIZES
-        logging.info(f"Running {len(size_list)} preset sizes (build and test execution will be implemented in Tasks 4-5)")
-        print("Basic framework created. Build and test execution will be added in next tasks.")
-        return 0
+        logging.info(f"Running {len(size_list)} preset sizes")
+
+    # Setup paths
+    repo_root = Path(__file__).resolve().parent.parent
+    source_dir = repo_root / "tests" / "cpu" / "st"
+    build_dir = source_dir / "build"
+
+    # Build if needed
+    if not args.no_build:
+        cxx, cc = detect_compilers()
+        if cxx:
+            logging.info(f"Using CXX: {cxx}")
+        try:
+            build_tmatmul(build_dir, source_dir, args.build_type, cxx, cc, args.clean, args.verbose)
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Build failed with exit code {e.returncode}")
+            return 1
+
+    logging.info("Build and test execution will be implemented in next tasks")
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())
