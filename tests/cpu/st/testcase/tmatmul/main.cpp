@@ -11,9 +11,37 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "test_common.h"
 #include <pto/pto-inst.hpp>
 #include <gtest/gtest.h>
+#include <string>
+#include <sstream>
+#include <cstdlib>
 
 using namespace std;
 using namespace PtoTestCommon;
+
+struct SizeArgs {
+    uint32_t M, K, N;
+    bool valid;
+    bool use_custom_size;
+};
+
+SizeArgs parse_size_args(int argc, char** argv) {
+    SizeArgs args = {0, 0, 0, false, false};
+
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--size" && i + 1 < argc) {
+            std::string size_str = argv[++i];
+            std::stringstream ss(size_str);
+            char comma;
+            if (ss >> args.M >> comma >> args.K >> comma >> args.N) {
+                args.valid = true;
+                args.use_custom_size = true;
+            }
+            break;
+        }
+    }
+    return args;
+}
 
 template <int32_t tilingKey>
 void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
@@ -88,6 +116,63 @@ void tmatmul_test(uint32_t M, uint32_t K, uint32_t N)
     std::vector<float> devFinal(cFileSize);
     ReadFile(GetGoldenDir() + "/golden.bin", cFileSize, golden.data(), cFileSize);
     ReadFile(GetGoldenDir() + "/output_z.bin", cFileSize, devFinal.data(), cFileSize);
+
+    bool ret = ResultCmp(golden, devFinal, 0.001f);
+
+    EXPECT_TRUE(ret);
+}
+
+template <typename T, typename U, typename S, int32_t key>
+void tmatmul_test_custom(uint32_t M, uint32_t K, uint32_t N)
+{
+    size_t aFileSize = M * K * sizeof(U);
+    size_t bFileSize = K * N * sizeof(S);
+    size_t cFileSize = M * N * sizeof(T);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    uint8_t *dstHost, *src0Host, *src1Host;
+    uint8_t *dstDevice, *src0Device, *src1Device;
+
+    aclrtMallocHost((void **)(&dstHost), cFileSize);
+    aclrtMallocHost((void **)(&src0Host), aFileSize);
+    aclrtMallocHost((void **)(&src1Host), bFileSize);
+
+    aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    // For custom size, use current directory
+    ReadFile("./x1_gm.bin", aFileSize, src0Host, aFileSize);
+    ReadFile("./x2_gm.bin", bFileSize, src1Host, bFileSize);
+
+    aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    LaunchTMATMUL<key>(dstDevice, src0Device, src1Device, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile("./output_z.bin", dstHost, cFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(src0Device);
+    aclrtFree(src1Device);
+
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(src0Host);
+    aclrtFreeHost(src1Host);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<float> golden(cFileSize);
+    std::vector<float> devFinal(cFileSize);
+    ReadFile("./golden.bin", cFileSize, golden.data(), cFileSize);
+    ReadFile("./output_z.bin", cFileSize, devFinal.data(), cFileSize);
 
     bool ret = ResultCmp(golden, devFinal, 0.001f);
 
@@ -265,3 +350,21 @@ TEST_F(TMATMULTest, case_bf16_bias_1)
     tmatmul_bias_test<float, bfloat16_t, bfloat16_t, float, 7>(16, 15, 16);
 }
 #endif
+
+int main(int argc, char** argv) {
+    SizeArgs size_args = parse_size_args(argc, argv);
+
+    if (size_args.use_custom_size && size_args.valid) {
+        // Custom size mode
+        std::cout << "Running custom size test: " << size_args.M << "x" << size_args.K << "x" << size_args.N << std::endl;
+        tmatmul_test_custom<float, uint16_t, uint16_t, 1>(size_args.M, size_args.K, size_args.N);
+        return 0;
+    } else if (size_args.use_custom_size && !size_args.valid) {
+        std::cerr << "Error: Invalid --size format. Expected M,K,N" << std::endl;
+        return 1;
+    }
+
+    // Default: run Google Test
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}
