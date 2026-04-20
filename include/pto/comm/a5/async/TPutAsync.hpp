@@ -104,11 +104,11 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_SDMA_IMPL(GlobalDstData &dstGlobalData, Globa
 }
 
 // ============================================================================
-// TPUT_ASYNC_MTE_FALLBACK: Synchronous MTE fallback for platforms where SDMA
-// does not support PUT direction (e.g. A5).
+// TPUT_ASYNC_MTE_FALLBACK: Synchronous MTE fallback for A5 platforms where
+// SDMA does not support PUT direction.
 //
 // Uses the session's UB scratch buffer (tmpBuf) as staging to perform a
-// chunked GM → UB → GM transfer via MTE2/MTE3 pipelines. The operation
+// chunked GM -> UB -> GM transfer via MTE2/MTE3 pipelines. The operation
 // completes synchronously; the returned AsyncEvent has handle=0 (already done).
 // ============================================================================
 
@@ -208,11 +208,7 @@ PTO_INTERNAL AsyncEvent TPUT_ASYNC_IMPL(GlobalDstData &dstGlobalData, GlobalSrcD
                                         const AsyncSession &session)
 {
     if constexpr (engine == DmaEngine::SDMA) {
-#ifdef PTO_NPU_ARCH_A5
         return detail::TPUT_ASYNC_MTE_FALLBACK(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
-#else
-        return detail::TPUT_ASYNC_SDMA_IMPL(dstGlobalData, srcGlobalData, session.sdmaSession.execCtx);
-#endif
     } else if constexpr (engine == DmaEngine::URMA) {
 #ifdef PTO_URMA_SUPPORTED
         return detail::TPUT_ASYNC_URMA_IMPL(dstGlobalData, srcGlobalData, session.urmaSession.execCtx);
