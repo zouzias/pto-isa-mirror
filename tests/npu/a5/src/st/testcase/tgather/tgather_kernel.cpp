@@ -241,7 +241,8 @@ __global__ AICORE void runTGATHER_CMP(__gm__ srcT *src, __gm__ src1T *src1, __gm
     using DynShapeDim5 = pto::Shape<1, 1, 1, kGRows_, kGCols_>;
     using DynStridDim5 = pto::Stride<1, 1, 1, kGCols_, 1>;
     using SrcGlobalData = GlobalTensor<srcT, DynShapeDim5, DynStridDim5>;
-    using Src1GlobalData = GlobalTensor<src1T, pto::Shape<1, 1, 1, kGRows_, 1>, pto::Stride<1, 1, 1, kGCols_, 1>, Layout::DN>;
+    using Src1GlobalData =
+        GlobalTensor<src1T, pto::Shape<1, 1, 1, kGRows_, 1>, pto::Stride<1, 1, 1, kGCols_, 1>, Layout::DN>;
     using DstGlobalData = GlobalTensor<dstT, pto::Shape<1, 1, 1, kGRows_, K>, pto::Stride<1, 1, 1, K, 1>>;
     using TileData = Tile<TileType::Vec, srcT, kTRows_, kTCols_, BLayout::RowMajor, -1, -1>;
     constexpr int k_row = (kTRows_ * sizeof(src1T)) < 32 ? (32 / sizeof(src1T)) : kTRows_;
@@ -277,8 +278,8 @@ __global__ AICORE void runTGATHER_CMP(__gm__ srcT *src, __gm__ src1T *src1, __gm
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    TGATHER<DstTileData, TileData, TileData1, ConcatTileData, TmpTileData, cmpMode>(dstTile, srcTile, src1Tile, concatTile,
-                                                                                 tmpTile, offset);
+    TGATHER<DstTileData, TileData, TileData1, ConcatTileData, TmpTileData, cmpMode>(dstTile, srcTile, src1Tile,
+                                                                                    concatTile, tmpTile, offset);
 
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID1);
@@ -305,32 +306,17 @@ template void LaunchTGATHER_CMP<float, uint32_t, uint32_t, 16, 64, 16, 64, 32, C
                                                                                             uint32_t *out,
                                                                                             uint32_t offset,
                                                                                             void *stream);
-template void LaunchTGATHER_CMP<uint32_t, uint32_t, uint32_t, 8, 128, 8, 128, 64, CmpMode::GT>(uint32_t *src,
-                                                                                                  uint32_t *src1,
-                                                                                                  uint32_t *out,
-                                                                                                  uint32_t offset,
-                                                                                                  void *stream);
+template void LaunchTGATHER_CMP<uint32_t, uint32_t, uint32_t, 8, 128, 8, 128, 64, CmpMode::GT>(
+    uint32_t *src, uint32_t *src1, uint32_t *out, uint32_t offset, void *stream);
 template void LaunchTGATHER_CMP<float, uint32_t, uint32_t, 4, 256, 4, 256, 64, CmpMode::EQ>(float *src, uint32_t *src1,
                                                                                             uint32_t *out,
                                                                                             uint32_t offset,
                                                                                             void *stream);
-template void LaunchTGATHER_CMP<int16_t, uint16_t, uint32_t, 16, 128, 16, 128, 32, CmpMode::GT>(int16_t *src,
-                                                                                                  uint16_t *src1,
-                                                                                                  uint32_t *out,
-                                                                                                  uint32_t offset,
-                                                                                                  void *stream);
-template void LaunchTGATHER_CMP<int16_t, uint16_t, uint32_t, 4, 64, 4, 64, 32, CmpMode::EQ>(int16_t *src,
-                                                                                              uint16_t *src1,
-                                                                                              uint32_t *out,
-                                                                                              uint32_t offset,
-                                                                                              void *stream);
-template void LaunchTGATHER_CMP<aclFloat16, uint16_t, uint32_t, 2, 256, 2, 256, 32, CmpMode::GT>(aclFloat16 *src,
-                                                                                                      uint16_t *src1,
-                                                                                                      uint32_t *out,
-                                                                                                      uint32_t offset,
-                                                                                                      void *stream);
-template void LaunchTGATHER_CMP<aclFloat16, uint16_t, uint32_t, 8, 128, 8, 128, 32, CmpMode::EQ>(aclFloat16 *src,
-                                                                                                      uint16_t *src1,
-                                                                                                      uint32_t *out,
-                                                                                                      uint32_t offset,
-                                                                                                      void *stream);
+template void LaunchTGATHER_CMP<int16_t, uint16_t, uint32_t, 16, 128, 16, 128, 32, CmpMode::GT>(
+    int16_t *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);
+template void LaunchTGATHER_CMP<int16_t, uint16_t, uint32_t, 4, 64, 4, 64, 32, CmpMode::EQ>(
+    int16_t *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);
+template void LaunchTGATHER_CMP<aclFloat16, uint16_t, uint32_t, 2, 256, 2, 256, 32, CmpMode::GT>(
+    aclFloat16 *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);
+template void LaunchTGATHER_CMP<aclFloat16, uint16_t, uint32_t, 8, 128, 8, 128, 32, CmpMode::EQ>(
+    aclFloat16 *src, uint16_t *src1, uint32_t *out, uint32_t offset, void *stream);

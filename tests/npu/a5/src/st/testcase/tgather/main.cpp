@@ -339,7 +339,7 @@ void test_gather_cmp()
     size_t dstsize = ROW * K * sizeof(dstT);
     size_t scalarSize = ROW * sizeof(src1T);
 
-    uint32_t offset = 0; 
+    uint32_t offset = 0;
 
     srcT *srcHost, *srcDevice;
     src1T *src1Host, *src1Device;
@@ -358,7 +358,7 @@ void test_gather_cmp()
     aclrtMemcpy(srcDevice, size, srcHost, size, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, scalarSize, src1Host, scalarSize, ACL_MEMCPY_HOST_TO_DEVICE);
     LaunchTGATHER_CMP<srcT, src1T, dstT, ROW, COL, ROW, COL, K, cmpMode>(srcDevice, src1Device, dstDevice, offset,
-                                                                                stream);
+                                                                         stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, dstsize, dstDevice, dstsize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -402,7 +402,7 @@ TEST_F(TGATHERTest, case3_float_topk)
 
 TEST_F(TGATHERTest, case4_s16_topk)
 {
-    test_gather_cmp<int16_t, uint16_t,uint32_t, 16, 128, 32, pto::CmpMode::GT>();
+    test_gather_cmp<int16_t, uint16_t, uint32_t, 16, 128, 32, pto::CmpMode::GT>();
 }
 
 TEST_F(TGATHERTest, case5_s16_topk)
