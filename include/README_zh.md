@@ -26,7 +26,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 下表用于跟踪每条指令在不同后端的可用性：
 
 - **CPU**：`__CPU_SIM`（CPU 仿真后端）。
-- **Costmodel**：`__COSTMODEL`（A2 / A3 性能仿真后端）。
+- **Costmodel**：`__COSTMODEL`（A2 / A3 性能仿真后端，包含 `stub` 与 `fit` 两条路径；任一路径支持即记为支持）。
 - **A2（Ascend 910B）/ A3（Ascend 910C）**：当前共享 `include/pto/npu/a2a3/` 的实现（因此两列状态相同）。
 - **A5（Ascend 950）**：使用 `include/pto/npu/a5/` 的实现。
 - **Kirin**：使用 `include/pto/npu/kirin9030/` 的实现。
@@ -46,7 +46,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TAXPY`]() | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TBROADCAST`](../docs/isa/comm/TBROADCAST_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TCI`](../docs/isa/TCI_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TCMP`](../docs/isa/TCMP_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TCMP`](../docs/isa/TCMP_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TCMPS`](../docs/isa/TCMPS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TCOLARGMAX`](../docs/isa/TCOLARGMAX_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
 | [`TCOLARGMIN`](../docs/isa/TCOLARGMIN_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
@@ -58,23 +58,23 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TCOLEXPANDMIN`](../docs/isa/TCOLEXPANDMIN_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TCOLEXPANDMUL`](../docs/isa/TCOLEXPANDMUL_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TCOLEXPANDSUB`](../docs/isa/TCOLEXPANDSUB_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
-| [`TCOLMAX`](../docs/isa/TCOLMAX_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TCOLMIN`](../docs/isa/TCOLMIN_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TCOLMAX`](../docs/isa/TCOLMAX_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
+| [`TCOLMIN`](../docs/isa/TCOLMIN_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TCOLPROD`](../docs/isa/TCOLPROD_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
-| [`TCOLSUM`](../docs/isa/TCOLSUM_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
-| [`TCVT`](../docs/isa/TCVT_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
-| [`TDIV`](../docs/isa/TDIV_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TCOLSUM`](../docs/isa/TCOLSUM_zh.md) | 是 | 是 | 是 | 是 | 是 | TODO |
+| [`TCVT`](../docs/isa/TCVT_zh.md) | 是 | 是 | 是 | 是 | 是 | TODO |
+| [`TDIV`](../docs/isa/TDIV_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TDIVS`](../docs/isa/TDIVS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TEXP`](../docs/isa/TEXP_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TEXPANDS`](../docs/isa/TEXPANDS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TEXTRACT`](../docs/isa/TEXTRACT_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TEXTRACT`](../docs/isa/TEXTRACT_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TEXTRACT_FP`](../docs/isa/TEXTRACT_FP_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
 | [`TFILLPAD`](../docs/isa/TFILLPAD_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TFILLPAD_EXPAND`](../docs/isa/TFILLPAD_EXPAND_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
 | [`TFILLPAD_INPLACE`](../docs/isa/TFILLPAD_INPLACE_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
 | [`TFMOD`](../docs/isa/TFMOD_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TFMODS`](../docs/isa/TFMODS_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
-| [`TGATHER`](../docs/isa/TGATHER_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TGATHER`](../docs/isa/TGATHER_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TGATHERB`](../docs/isa/TGATHERB_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TGEMV`](../docs/isa/TGEMV_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
 | [`TGEMV_ACC`](../docs/isa/TGEMV_ACC_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
@@ -86,23 +86,23 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TIMG2COL`](../docs/isa/TIMG2COL_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TINSERT`](../docs/isa/TINSERT_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
 | [`TINSERT_FP`](../docs/isa/TINSERT_FP_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
-| [`TLOAD`](../docs/isa/TLOAD_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TLOAD`](../docs/isa/TLOAD_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TLOG`](../docs/isa/TLOG_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TLRELU`](../docs/isa/TLRELU_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TMATMUL`](../docs/isa/TMATMUL_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TMATMUL`](../docs/isa/TMATMUL_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TMATMUL_ACC`](../docs/isa/TMATMUL_ACC_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TMATMUL_BIAS`](../docs/isa/TMATMUL_BIAS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TMATMUL_MX`](../docs/isa/TMATMUL_MX_zh.md) | 是 | TODO | TODO | TODO | 是 | 是 |
-| [`TMAX`](../docs/isa/TMAX_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TMAXS`](../docs/isa/TMAXS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TMIN`](../docs/isa/TMIN_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TMAX`](../docs/isa/TMAX_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
+| [`TMAXS`](../docs/isa/TMAXS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
+| [`TMIN`](../docs/isa/TMIN_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TMINS`](../docs/isa/TMINS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
-| [`TMOV`](../docs/isa/TMOV_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TMOV`](../docs/isa/TMOV_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TMOV_FP`](../docs/isa/TMOV_FP_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TMRGSORT`](../docs/isa/TMRGSORT_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TMRGSORT`](../docs/isa/TMRGSORT_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TMUL`](../docs/isa/TMUL_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TMULS`](../docs/isa/TMULS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
-| [`TNEG`](../docs/isa/TNEG_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TNEG`](../docs/isa/TNEG_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TNOT`](../docs/isa/TNOT_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TNOTIFY`](../docs/isa/comm/TNOTIFY_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TOR`](../docs/isa/TOR_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
@@ -118,7 +118,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TPUT_ASYNC`](../docs/isa/comm/TPUT_ASYNC_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TQUANT`](../docs/isa/TQUANT_zh.md) | TODO | TODO | TODO | TODO | 是 | TODO |
 | [`TRANDOM`](../docs/isa/TRANDOM_zh.md) | 否 | TODO | TODO | TODO | 是 | TODO |
-| [`TRECIP`](../docs/isa/TRECIP_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TRECIP`](../docs/isa/TRECIP_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TREDUCE`](../docs/isa/comm/TREDUCE_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TRELU`](../docs/isa/TRELU_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TREM`](../docs/isa/TREM_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
@@ -126,7 +126,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TRESHAPE`](../docs/isa/TRESHAPE_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TROWARGMAX`](../docs/isa/TROWARGMAX_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TROWARGMIN`](../docs/isa/TROWARGMIN_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
-| [`TROWEXPAND`](../docs/isa/TROWEXPAND_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TROWEXPAND`](../docs/isa/TROWEXPAND_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TROWEXPANDADD`](../docs/isa/TROWEXPANDADD_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TROWEXPANDDIV`](../docs/isa/TROWEXPANDDIV_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TROWEXPANDEXPDIF`](../docs/isa/TROWEXPANDEXPDIF_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
@@ -135,13 +135,13 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TROWEXPANDMUL`](../docs/isa/TROWEXPANDMUL_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TROWEXPANDSUB`](../docs/isa/TROWEXPANDSUB_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TROWMAX`](../docs/isa/TROWMAX_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
-| [`TROWMIN`](../docs/isa/TROWMIN_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TROWMIN`](../docs/isa/TROWMIN_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TROWPROD`](../docs/isa/TROWPROD_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
-| [`TROWSUM`](../docs/isa/TROWSUM_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TRSQRT`](../docs/isa/TRSQRT_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TSCATTER`](../docs/isa/TSCATTER_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TSEL`](../docs/isa/TSEL_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TSELS`](../docs/isa/TSELS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TROWSUM`](../docs/isa/TROWSUM_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
+| [`TRSQRT`](../docs/isa/TRSQRT_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
+| [`TSCATTER`](../docs/isa/TSCATTER_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
+| [`TSEL`](../docs/isa/TSEL_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
+| [`TSELS`](../docs/isa/TSELS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TSETFMATRIX`](../docs/isa/TSETFMATRIX_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TSET_IMG2COL_PADDING`](../docs/isa/TSET_IMG2COL_PADDING_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
 | [`TSET_IMG2COL_RPT`](../docs/isa/TSET_IMG2COL_RPT_zh.md) | TODO | TODO | 是 | 是 | 是 | TODO |
@@ -149,9 +149,9 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TSHLS`](../docs/isa/TSHLS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TSHR`](../docs/isa/TSHR_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TSHRS`](../docs/isa/TSHRS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
-| [`TSORT32`](../docs/isa/TSORT32_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TSORT32`](../docs/isa/TSORT32_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TSQRT`](../docs/isa/TSQRT_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
-| [`TSTORE`](../docs/isa/TSTORE_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
+| [`TSTORE`](../docs/isa/TSTORE_zh.md) | 是 | 是 | 是 | 是 | 是 | TODO |
 | [`TSTORE_FP`](../docs/isa/TSTORE_FP_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
 | [`TSUB`](../docs/isa/TSUB_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TSUBC`](../docs/isa/TSUBC_zh.md) | 是 | TODO | TODO | TODO | TODO | TODO |
@@ -160,7 +160,7 @@ PTO Tile Lib 对外的 C/C++ 头文件（以模板化、基本 header-only 为�
 | [`TSUBVIEW`](../docs/isa/TSUBVIEW_zh.md) | TODO | TODO | 是 | 是 | TODO | TODO |
 | [`TSYNC`](../docs/isa/TSYNC_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
 | [`TTEST`](../docs/isa/comm/TTEST_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
-| [`TTRANS`](../docs/isa/TTRANS_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
+| [`TTRANS`](../docs/isa/TTRANS_zh.md) | 是 | 是 | 是 | 是 | 是 | 是 |
 | [`TTRI`](../docs/isa/TTRI_zh.md) | TODO | TODO | 是 | 是 | 是 | 是 |
 | [`TWAIT`](../docs/isa/comm/TWAIT_zh.md) | 是 | TODO | 是 | 是 | 是 | TODO |
 | [`TXOR`](../docs/isa/TXOR_zh.md) | 是 | TODO | 是 | 是 | 是 | 是 |
