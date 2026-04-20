@@ -1,0 +1,1 @@
+../../../../../../shared/cube_matmul_4buf/gen_data.py

@@ -16,9 +16,9 @@ constexpr int K_ITERS = 64;
 template <typename outType, typename inType>
 __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src0, __gm__ inType *src1)
 {
-    using GlobalDataSrc0 = GlobalTensor<inType, Shape<1, 1, 1, M, K>, Stride<M * K, M * K, M * K, K, 1>>;
-    using GlobalDataSrc1 = GlobalTensor<inType, Shape<1, 1, 1, K, N>, Stride<K * N, K * N, K * N, N, 1>>;
-    using GlobalDataOut = GlobalTensor<outType, Shape<1, 1, 1, M, N>, Stride<M * N, M * N, M * N, N, 1>>;
+    using GlobalDataSrc0 = GlobalTensor<inType, pto::Shape<1, 1, 1, M, K>, pto::Stride<M * K, M * K, M * K, K, 1>>;
+    using GlobalDataSrc1 = GlobalTensor<inType, pto::Shape<1, 1, 1, K, N>, pto::Stride<K * N, K * N, K * N, N, 1>>;
+    using GlobalDataOut = GlobalTensor<outType, pto::Shape<1, 1, 1, M, N>, pto::Stride<M * N, M * N, M * N, N, 1>>;
 
     GlobalDataOut dstGlobal(out);
 
@@ -53,25 +53,39 @@ __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src
 
         int buf_idx = i % 4;
 
-        if (buf_idx == 0) TLOAD(bMatTile0, src1Global);
-        else if (buf_idx == 1) TLOAD(bMatTile1, src1Global);
-        else if (buf_idx == 2) TLOAD(bMatTile2, src1Global);
-        else TLOAD(bMatTile3, src1Global);
+        if (buf_idx == 0) {
+            TLOAD(bMatTile0, src1Global);
+        } else if (buf_idx == 1) {
+            TLOAD(bMatTile1, src1Global);
+        } else if (buf_idx == 2) {
+            TLOAD(bMatTile2, src1Global);
+        } else {
+            TLOAD(bMatTile3, src1Global);
+        }
 
         TLOAD(aMatTile, src0Global);
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
         wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
+#endif
 
         TMOV(aTile, aMatTile);
 
-        if (buf_idx == 0) TMOV(bTile0, bMatTile0);
-        else if (buf_idx == 1) TMOV(bTile1, bMatTile1);
-        else if (buf_idx == 2) TMOV(bTile2, bMatTile2);
-        else TMOV(bTile3, bMatTile3);
+        if (buf_idx == 0) {
+            TMOV(bTile0, bMatTile0);
+        } else if (buf_idx == 1) {
+            TMOV(bTile1, bMatTile1);
+        } else if (buf_idx == 2) {
+            TMOV(bTile2, bMatTile2);
+        } else {
+            TMOV(bTile3, bMatTile3);
+        }
 
+#ifndef __PTO_AUTO__
         set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
         wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
+#endif
 
         if (i == 0) {
             if (buf_idx == 0) TMATMUL(cTile, aTile, bTile0);
@@ -86,8 +100,10 @@ __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src
         }
     }
 
+#ifndef __PTO_AUTO__
     set_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
     wait_flag(PIPE_M, PIPE_FIX, EVENT_ID0);
+#endif
 
     TSTORE(dstGlobal, cTile);
     out = dstGlobal.data();
@@ -95,7 +111,7 @@ __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src
 
 void LaunchCubeMatmul4Buf(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream)
 {
-    RunCubeMatmul4Buf<float, half>(
+    RunCubeMatmul4Buf<float, half><<<1, nullptr, stream>>>(
         reinterpret_cast<float *>(out),
         reinterpret_cast<half *>(src0),
         reinterpret_cast<half *>(src1));
