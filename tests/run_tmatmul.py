@@ -105,6 +105,48 @@ def build_tmatmul(build_dir: Path, source_dir: Path, build_type: str,
     logging.info(f"Build completed in {build_time:.2f}s")
     logging.info(f"Total build time: {cfg_time + build_time:.2f}s")
 
+def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool) -> Tuple[bool, float]:
+    """Run a single test with given dimensions."""
+    test_dir = build_dir / "testcase" / "tmatmul"
+    binary = build_dir / "bin" / "tmatmul"
+
+    if not binary.exists():
+        raise RuntimeError(f"Binary not found: {binary}")
+
+    size_str = f"{M}x{K}x{N}"
+    logging.info(f"Running test: {size_str}")
+
+    # Create test directory
+    test_dir.mkdir(parents=True, exist_ok=True)
+    original_cwd = os.getcwd()
+
+    try:
+        os.chdir(test_dir)
+
+        # Generate test data
+        gen_data_script = Path(__file__).resolve().parent / "cpu" / "st" / "testcase" / "tmatmul" / "gen_data.py"
+        gen_cmd = [sys.executable, str(gen_data_script), "--size", f"{M},{K},{N}"]
+
+        start = time.perf_counter()
+        try:
+            run_command(gen_cmd, verbose=verbose)
+            gen_time = time.perf_counter() - start
+        except subprocess.CalledProcessError:
+            return False, 0.0
+
+        # Run test binary
+        test_cmd = [str(binary), "--size", f"{M},{K},{N}"]
+        start = time.perf_counter()
+        try:
+            run_command(test_cmd, verbose=verbose)
+            test_time = time.perf_counter() - start
+            return True, gen_time + test_time
+        except subprocess.CalledProcessError:
+            return False, 0.0
+
+    finally:
+        os.chdir(original_cwd)
+
 def setup_logging(verbose: bool = False) -> None:
     level = logging.INFO if verbose else logging.WARNING
     logging.basicConfig(
@@ -136,6 +178,22 @@ Examples:
     parser.add_argument('--size-file', type=str, help='Excel file with sizes (reserved, not implemented)')
 
     return parser.parse_args()
+
+def format_results_table(results: List[Tuple[int, int, int, bool, float]]) -> str:
+    """Format test results as a table."""
+    lines = []
+    lines.append("+------------+-------+----------+")
+    lines.append("| Size       | Status | Time     |")
+    lines.append("+------------+-------+----------+")
+
+    for M, K, N, passed, elapsed in results:
+        size_str = f"{M}x{K}x{N}"
+        status = "PASS" if passed else "FAIL"
+        time_str = f"{elapsed*1000:.0f}ms" if elapsed < 1 else f"{elapsed:.2f}s"
+        lines.append(f"| {size_str:<10} | {status:<5} | {time_str:<8} |")
+
+    lines.append("+------------+-------+----------+")
+    return "\n".join(lines)
 
 def main() -> int:
     args = parse_arguments()
@@ -185,8 +243,28 @@ def main() -> int:
             logging.error(f"Build failed with exit code {e.returncode}")
             return 1
 
-    logging.info("Test execution will be implemented in Task 5")
-    return 0
+    # Run tests
+    logging.info("\n" + "="*60)
+    logging.info("Running tests")
+    logging.info("="*60)
+
+    results = []
+    for M, K, N in size_list:
+        passed, elapsed = run_single_test(build_dir, M, K, N, args.verbose)
+        results.append((M, K, N, passed, elapsed))
+
+    # Print summary
+    print("\n" + format_results_table(results))
+
+    passed_count = sum(1 for _, _, _, passed, _ in results if passed)
+    total_count = len(results)
+
+    if passed_count == total_count:
+        logging.info(f"All {total_count} tests passed!")
+        return 0
+    else:
+        logging.error(f"{total_count - passed_count}/{total_count} tests failed")
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main())
