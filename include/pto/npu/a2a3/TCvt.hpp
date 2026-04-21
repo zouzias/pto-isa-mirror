@@ -1078,9 +1078,9 @@ PTO_INST void RestoreSatMode(bool originalSatMode)
 // ============================================================================
 // TCvtTail processes the remainder (unaligned) portion of data that doesn't
 // fit evenly into repeat boundaries, using vector masking.
-template <typename TileDataD, typename TileDataS, unsigned SS, unsigned DS, typename... Args>
+template <typename TileDataD, typename TileDataS, unsigned SS, unsigned DS>
 PTO_INST void TCvtTail(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ typename TileDataS::DType *srcPtr,
-                       RoundMode mode, unsigned validRow, unsigned numRemainPerLine, Args... args)
+                       RoundMode mode, unsigned validRow, unsigned numRemainPerLine)
 {
     constexpr unsigned dstNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataD::DType);
     constexpr unsigned srcNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataS::DType);
@@ -1091,13 +1091,13 @@ PTO_INST void TCvtTail(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ type
         for (uint32_t j = 0; j < numLoop; j++) {
             GenCastCall<TileDataD, TileDataS>(dstPtr + j * DS * REPEAT_MAX, srcPtr + j * SS * REPEAT_MAX,
                                               (uint8_t)REPEAT_MAX, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
-                                              (uint16_t)SS / srcNElemPerBlock, args...);
+                                              (uint16_t)SS / srcNElemPerBlock);
         }
     }
     if (remainAfterLoop > 0) {
         GenCastCall<TileDataD, TileDataS>(dstPtr + numLoop * DS * REPEAT_MAX, srcPtr + numLoop * SS * REPEAT_MAX,
                                           (uint8_t)remainAfterLoop, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
-                                          (uint16_t)SS / srcNElemPerBlock, args...);
+                                          (uint16_t)SS / srcNElemPerBlock);
     }
     set_vector_mask(-1, -1);
 }
