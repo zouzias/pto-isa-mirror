@@ -500,9 +500,9 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
                                                     uint16_t dstRepeatStride, uint16_t srcRepeatStride,
                                                     __ubuf__ int32_t *tempInt32Buf, uint16_t numElemsPerRow)
 {
-    constexpr uint16_t fp16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(half);    // 16
-    constexpr uint16_t int8ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int8_t);  // 32
-    constexpr uint16_t maxChunkElems = 64;                                    // int32 hw cap
+    constexpr uint16_t fp16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(half);   // 16
+    constexpr uint16_t int8ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int8_t); // 32
+    constexpr uint16_t maxChunkElems = 64;                                   // int32 hw cap
 
     __ubuf__ int16_t *tempAndBuf = (__ubuf__ int16_t *)tempInt32Buf;
     // Fixed 64-int16 (=128-byte) offset into the freed upper half of the 256-byte int32 region.
@@ -511,8 +511,8 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
 
     // Head default = full logical repeat (128 elements); tail passes the actual count.
     const uint16_t elemsPerRow = (numElemsPerRow == 0) ? static_cast<uint16_t>(128) : numElemsPerRow;
-    const uint16_t numSubChunks = (elemsPerRow + maxChunkElems - 1) / maxChunkElems;            // 1 or 2
-    const uint16_t lastChunkMask = elemsPerRow - (numSubChunks - 1) * maxChunkElems;            // [1, 64]
+    const uint16_t numSubChunks = (elemsPerRow + maxChunkElems - 1) / maxChunkElems; // 1 or 2
+    const uint16_t lastChunkMask = elemsPerRow - (numSubChunks - 1) * maxChunkElems; // [1, 64]
 
     for (uint16_t r = 0; r < repeatNum; r++) {
         __ubuf__ half *rowSrc = src + static_cast<uint32_t>(r) * srcRepeatStride * fp16ElemsPerBlock;
@@ -935,9 +935,9 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
         bool isSatOn = (get_ctrl() & (1ULL << SAT_MODE_BIT)) == 0;
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
-            GenCastCallFp16ToInt8_NonSatTorch<TileDataD, TileDataS>(
-                dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tmpPtr,
-                numElemsPerRow);
+            GenCastCallFp16ToInt8_NonSatTorch<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride,
+                                                                    srcBlockStride, dstRepeatStride, srcRepeatStride,
+                                                                    tmpPtr, numElemsPerRow);
         } else {
             GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                         dstRepeatStride, srcRepeatStride);
