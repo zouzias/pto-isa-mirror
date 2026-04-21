@@ -18,6 +18,8 @@ template <typename T, uint32_t SrcRows, uint32_t SrcCols, uint32_t DstStaticRows
           uint32_t DstValidRows, uint32_t DstValidCols, uint32_t IdxRow, uint32_t IdxCol>
 __global__ AICORE void RunTExtractNDVec(__gm__ T *out, __gm__ T *srcIn, __gm__ T *dstInitIn)
 {
+    constexpr bool isFullValid = (DstValidRows == DstStaticRows) && (DstValidCols == DstStaticCols);
+
     using SrcShape = pto::Shape<1, 1, 1, SrcRows, SrcCols>;
     using SrcStride = pto::Stride<SrcRows * SrcCols, SrcRows * SrcCols, SrcRows * SrcCols, SrcCols, 1>;
     using SrcGlobal = GlobalTensor<T, SrcShape, SrcStride>;
@@ -28,19 +30,18 @@ __global__ AICORE void RunTExtractNDVec(__gm__ T *out, __gm__ T *srcIn, __gm__ T
     using DstGlobal = GlobalTensor<T, DstShape, DstStride>;
 
     using SrcVec = Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::RowMajor>;
-    using DstLoadVec = Tile<TileType::Vec, T, DstStaticRows, DstStaticCols, BLayout::RowMajor>;
+    using DstFullVec = Tile<TileType::Vec, T, DstStaticRows, DstStaticCols, BLayout::RowMajor>;
     using DstExtractVec =
         Tile<TileType::Vec, T, DstStaticRows, DstStaticCols, BLayout::RowMajor, DstValidRows, DstValidCols>;
 
     SrcVec srcTile;
-    DstLoadVec dstLoad;
+    DstFullVec dstFull;
     DstExtractVec dstExtract;
 
     TASSIGN(srcTile, 0x0);
     constexpr uint32_t srcBytes = SrcRows * SrcCols * sizeof(T);
     constexpr uint32_t dstAssignAddr = ((srcBytes + 0xFF) / 0x100) * 0x100;
-    TASSIGN(dstLoad, dstAssignAddr);
-    TASSIGN(dstExtract, dstAssignAddr);
+    TASSIGN(dstFull, dstAssignAddr);
 
     SrcGlobal srcGlobal(srcIn);
     DstGlobal dstInitGlobal(dstInitIn);
@@ -48,16 +49,23 @@ __global__ AICORE void RunTExtractNDVec(__gm__ T *out, __gm__ T *srcIn, __gm__ T
 
 #if defined(__DAV_VEC__)
     TLOAD(srcTile, srcGlobal);
-    TLOAD(dstLoad, dstInitGlobal);
+    if constexpr (!isFullValid) {
+        TLOAD(dstFull, dstInitGlobal);
+    }
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    TEXTRACT(dstExtract, srcTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    if constexpr (isFullValid) {
+        TEXTRACT(dstFull, srcTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    } else {
+        TSUBVIEW(dstExtract, dstFull, 0, 0);
+        TEXTRACT(dstExtract, srcTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    }
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-    TSTORE(outGlobal, dstLoad);
+    TSTORE(outGlobal, dstFull);
 #endif
 }
 
@@ -74,18 +82,17 @@ __global__ AICORE void RunTExtractNDVecScalar(__gm__ T *out, __gm__ T *srcIn, __
     using DstGlobal = GlobalTensor<T, DstShape, DstStride>;
 
     using SrcVec = Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::RowMajor>;
-    using DstLoadVec = Tile<TileType::Vec, T, 1, MinAlignedCols, BLayout::RowMajor>;
+    using DstFullVec = Tile<TileType::Vec, T, 1, MinAlignedCols, BLayout::RowMajor>;
     using DstExtractVec = Tile<TileType::Vec, T, 1, MinAlignedCols, BLayout::RowMajor, 1, 1>;
 
     SrcVec srcTile;
-    DstLoadVec dstLoad;
+    DstFullVec dstFull;
     DstExtractVec dstExtract;
 
     TASSIGN(srcTile, 0x0);
     constexpr uint32_t srcBytes = SrcRows * SrcCols * sizeof(T);
     constexpr uint32_t dstAssignAddr = ((srcBytes + 0xFF) / 0x100) * 0x100;
-    TASSIGN(dstLoad, dstAssignAddr);
-    TASSIGN(dstExtract, dstAssignAddr);
+    TASSIGN(dstFull, dstAssignAddr);
 
     SrcGlobal srcGlobal(srcIn);
     DstGlobal dstInitGlobal(dstInitIn);
@@ -93,16 +100,17 @@ __global__ AICORE void RunTExtractNDVecScalar(__gm__ T *out, __gm__ T *srcIn, __
 
 #if defined(__DAV_VEC__)
     TLOAD(srcTile, srcGlobal);
-    TLOAD(dstLoad, dstInitGlobal);
+    TLOAD(dstFull, dstInitGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
+    TSUBVIEW(dstExtract, dstFull, 0, 0);
     TEXTRACT(dstExtract, srcTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-    TSTORE(outGlobal, dstLoad);
+    TSTORE(outGlobal, dstFull);
 #endif
 }
 
@@ -113,6 +121,7 @@ __global__ AICORE void RunTExtractNZVec(__gm__ T *out, __gm__ T *srcIn, __gm__ T
     constexpr uint32_t typeSize = sizeof(T);
     constexpr bool isFp4Type = std::is_same_v<T, float4_e2m1x2_t> || std::is_same_v<T, float4_e1m2x2_t>;
     constexpr uint32_t c0Size = isFp4Type ? (BLOCK_BYTE_SIZE * 2) : (BLOCK_BYTE_SIZE / typeSize);
+    constexpr bool isFullValid = (DstValidRows == DstRows) && (DstValidCols == DstCols);
 
     using SrcShapeND = pto::Shape<1, 1, 1, SrcRows, SrcCols>;
     using SrcStrideND = pto::Stride<SrcRows * SrcCols, SrcRows * SrcCols, SrcRows * SrcCols, SrcCols, 1>;
@@ -125,20 +134,19 @@ __global__ AICORE void RunTExtractNZVec(__gm__ T *out, __gm__ T *srcIn, __gm__ T
 
     using SrcNDTile = Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::RowMajor>;
     using SrcNZTile = Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::ColMajor, SrcRows, SrcCols, SLayout::RowMajor>;
-    using DstNZLoadTile =
+    using DstNZFullTile =
         Tile<TileType::Vec, T, DstRows, DstCols, BLayout::ColMajor, DstRows, DstCols, SLayout::RowMajor>;
     using DstNZExtractTile =
         Tile<TileType::Vec, T, DstRows, DstCols, BLayout::ColMajor, DstValidRows, DstValidCols, SLayout::RowMajor>;
 
     SrcNDTile srcNDTile;
     SrcNZTile srcNZTile;
-    DstNZLoadTile dstLoadTile;
+    DstNZFullTile dstFullTile;
     DstNZExtractTile dstExtractTile;
 
     TASSIGN(srcNDTile, 0x0);
     TASSIGN(srcNZTile, 0x10000);
-    TASSIGN(dstLoadTile, 0x20000);
-    TASSIGN(dstExtractTile, 0x20000);
+    TASSIGN(dstFullTile, 0x20000);
 
     SrcGlobalND srcGlobal(srcIn);
     OutGlobalNZ dstInitGlobal(dstInitIn);
@@ -146,17 +154,24 @@ __global__ AICORE void RunTExtractNZVec(__gm__ T *out, __gm__ T *srcIn, __gm__ T
 
 #if defined(__DAV_VEC__)
     TLOAD(srcNDTile, srcGlobal);
-    TLOAD(dstLoadTile, dstInitGlobal);
+    if constexpr (!isFullValid) {
+        TLOAD(dstFullTile, dstInitGlobal);
+    }
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
     TMOV(srcNZTile, srcNDTile);
-    TEXTRACT(dstExtractTile, srcNZTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    if constexpr (isFullValid) {
+        TEXTRACT(dstFullTile, srcNZTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    } else {
+        TSUBVIEW(dstExtractTile, dstFullTile, 0, 0);
+        TEXTRACT(dstExtractTile, srcNZTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    }
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-    TSTORE(dstGlobal, dstLoadTile);
+    TSTORE(dstGlobal, dstFullTile);
 #endif
 }
 
@@ -167,6 +182,7 @@ template <typename TByteType, uint32_t SrcRows, uint32_t SrcCols, uint32_t DstRo
 __global__ AICORE void RunTExtractNZVecByteAlias(__gm__ uint8_t *out, __gm__ uint8_t *srcIn, __gm__ uint8_t *dstInitIn)
 {
     constexpr uint32_t c0SizeI8 = BLOCK_BYTE_SIZE;
+    constexpr bool isFullValid = (DstValidRows == DstRows) && (DstValidCols == DstCols);
 
     using SrcShapeND = pto::Shape<1, 1, 1, SrcRows, SrcCols>;
     using SrcStrideND = pto::Stride<SrcRows * SrcCols, SrcRows * SrcCols, SrcRows * SrcCols, SrcCols, 1>;
@@ -180,24 +196,25 @@ __global__ AICORE void RunTExtractNZVecByteAlias(__gm__ uint8_t *out, __gm__ uin
     using SrcNDTileI8 = Tile<TileType::Vec, int8_t, SrcRows, SrcCols, BLayout::RowMajor>;
     using SrcNZTileI8 =
         Tile<TileType::Vec, int8_t, SrcRows, SrcCols, BLayout::ColMajor, SrcRows, SrcCols, SLayout::RowMajor>;
-    using DstNZLoadTileI8 =
+    using DstNZFullTileI8 =
         Tile<TileType::Vec, int8_t, DstRows, DstCols, BLayout::ColMajor, DstRows, DstCols, SLayout::RowMajor>;
     using SrcNZTileT =
         Tile<TileType::Vec, TByteType, SrcRows, SrcCols, BLayout::ColMajor, SrcRows, SrcCols, SLayout::RowMajor>;
-    using DstNZTileT = Tile<TileType::Vec, TByteType, DstRows, DstCols, BLayout::ColMajor, DstValidRows, DstValidCols,
-                            SLayout::RowMajor>;
+    using DstNZFullTileT =
+        Tile<TileType::Vec, TByteType, DstRows, DstCols, BLayout::ColMajor, DstRows, DstCols, SLayout::RowMajor>;
+    using DstNZExtractTileT = Tile<TileType::Vec, TByteType, DstRows, DstCols, BLayout::ColMajor, DstValidRows,
+                                   DstValidCols, SLayout::RowMajor>;
 
     SrcNDTileI8 srcNDTile;
     SrcNZTileI8 srcNZTile;
-    DstNZLoadTileI8 dstLoadTile;
+    DstNZFullTileI8 dstFullTile;
     SrcNZTileT srcExtractTile;
-    DstNZTileT dstExtractTile;
+    DstNZFullTileT dstFullExtractTile;
+    DstNZExtractTileT dstExtractTile;
 
     TASSIGN(srcNDTile, 0x0);
     TASSIGN(srcNZTile, 0x10000);
-    TASSIGN(srcExtractTile, 0x10000);
-    TASSIGN(dstLoadTile, 0x20000);
-    TASSIGN(dstExtractTile, 0x20000);
+    TASSIGN(dstFullTile, 0x20000);
 
     SrcGlobalI8ND srcGlobal(reinterpret_cast<__gm__ int8_t *>(srcIn));
     NZGlobalI8 dstInitGlobal(reinterpret_cast<__gm__ int8_t *>(dstInitIn));
@@ -205,17 +222,26 @@ __global__ AICORE void RunTExtractNZVecByteAlias(__gm__ uint8_t *out, __gm__ uin
 
 #if defined(__DAV_VEC__)
     TLOAD(srcNDTile, srcGlobal);
-    TLOAD(dstLoadTile, dstInitGlobal);
+    if constexpr (!isFullValid) {
+        TLOAD(dstFullTile, dstInitGlobal);
+    }
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
     TMOV(srcNZTile, srcNDTile);
-    TEXTRACT(dstExtractTile, srcExtractTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    TSUBVIEW(srcExtractTile, srcNZTile, 0, 0);
+    if constexpr (isFullValid) {
+        TSUBVIEW(dstFullExtractTile, dstFullTile, 0, 0);
+        TEXTRACT(dstFullExtractTile, srcExtractTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    } else {
+        TSUBVIEW(dstExtractTile, dstFullTile, 0, 0);
+        TEXTRACT(dstExtractTile, srcExtractTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    }
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-    TSTORE(dstGlobal, dstLoadTile);
+    TSTORE(dstGlobal, dstFullTile);
 #endif
 }
 
@@ -226,6 +252,8 @@ template <typename TFp4, uint32_t SrcRows, uint32_t SrcCols, uint32_t DstRows, u
           uint32_t DstValidCols, uint32_t IdxRow, uint32_t IdxCol>
 __global__ AICORE void RunTExtractNDVecFp4(__gm__ uint8_t *out, __gm__ uint8_t *srcIn, __gm__ uint8_t *dstInitIn)
 {
+    constexpr bool isFullValid = (DstValidRows == DstRows) && (DstValidCols == DstCols);
+
     using SrcShape = pto::Shape<1, 1, 1, SrcRows, SrcCols>;
     using SrcStride = pto::Stride<SrcRows * SrcCols, SrcRows * SrcCols, SrcRows * SrcCols, SrcCols, 1>;
     using SrcGlobalI8 = GlobalTensor<int8_t, SrcShape, SrcStride>;
@@ -235,21 +263,21 @@ __global__ AICORE void RunTExtractNDVecFp4(__gm__ uint8_t *out, __gm__ uint8_t *
     using DstGlobalI8 = GlobalTensor<int8_t, DstShape, DstStride>;
 
     using SrcVecI8 = Tile<TileType::Vec, int8_t, SrcRows, SrcCols, BLayout::RowMajor>;
-    using DstLoadVecI8 = Tile<TileType::Vec, int8_t, DstRows, DstCols, BLayout::RowMajor>;
+    using DstFullVecI8 = Tile<TileType::Vec, int8_t, DstRows, DstCols, BLayout::RowMajor>;
     using SrcVecFp4 = Tile<TileType::Vec, TFp4, SrcRows, SrcCols, BLayout::RowMajor>;
+    using DstFullVecFp4 = Tile<TileType::Vec, TFp4, DstRows, DstCols, BLayout::RowMajor>;
     using DstExtractVecFp4 = Tile<TileType::Vec, TFp4, DstRows, DstCols, BLayout::RowMajor, DstValidRows, DstValidCols>;
 
     SrcVecI8 srcLoad;
-    DstLoadVecI8 dstLoad;
+    DstFullVecI8 dstFull;
     SrcVecFp4 srcExtract;
+    DstFullVecFp4 dstFullExtract;
     DstExtractVecFp4 dstExtract;
 
     TASSIGN(srcLoad, 0x0);
-    TASSIGN(srcExtract, 0x0);
     constexpr uint32_t srcBytes = SrcRows * SrcCols * sizeof(TFp4);
     constexpr uint32_t dstAssignAddr = ((srcBytes + 0xFF) / 0x100) * 0x100;
-    TASSIGN(dstLoad, dstAssignAddr);
-    TASSIGN(dstExtract, dstAssignAddr);
+    TASSIGN(dstFull, dstAssignAddr);
 
     SrcGlobalI8 srcGlobal(reinterpret_cast<__gm__ int8_t *>(srcIn));
     DstGlobalI8 dstInitGlobal(reinterpret_cast<__gm__ int8_t *>(dstInitIn));
@@ -257,16 +285,25 @@ __global__ AICORE void RunTExtractNDVecFp4(__gm__ uint8_t *out, __gm__ uint8_t *
 
 #if defined(__DAV_VEC__)
     TLOAD(srcLoad, srcGlobal);
-    TLOAD(dstLoad, dstInitGlobal);
+    if constexpr (!isFullValid) {
+        TLOAD(dstFull, dstInitGlobal);
+    }
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
-    TEXTRACT(dstExtract, srcExtract, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    TSUBVIEW(srcExtract, srcLoad, 0, 0);
+    if constexpr (isFullValid) {
+        TSUBVIEW(dstFullExtract, dstFull, 0, 0);
+        TEXTRACT(dstFullExtract, srcExtract, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    } else {
+        TSUBVIEW(dstExtract, dstFull, 0, 0);
+        TEXTRACT(dstExtract, srcExtract, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
+    }
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-    TSTORE(outGlobal, dstLoad);
+    TSTORE(outGlobal, dstFull);
 #endif
 }
 
@@ -287,19 +324,18 @@ __global__ AICORE void RunTExtractNZVecScalar(__gm__ T *out, __gm__ T *srcIn, __
 
     using SrcNDTile = Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::RowMajor>;
     using SrcNZTile = Tile<TileType::Vec, T, SrcRows, SrcCols, BLayout::ColMajor, SrcRows, SrcCols, SLayout::RowMajor>;
-    using DstNZLoadTile =
+    using DstNZFullTile =
         Tile<TileType::Vec, T, DstRows, DstCols, BLayout::ColMajor, DstRows, DstCols, SLayout::RowMajor>;
     using DstNZScalarTile = Tile<TileType::Vec, T, DstRows, DstCols, BLayout::ColMajor, 1, 1, SLayout::RowMajor>;
 
     SrcNDTile srcNDTile;
     SrcNZTile srcNZTile;
-    DstNZLoadTile dstLoadTile;
+    DstNZFullTile dstFullTile;
     DstNZScalarTile dstScalarTile;
 
     TASSIGN(srcNDTile, 0x0);
     TASSIGN(srcNZTile, 0x10000);
-    TASSIGN(dstLoadTile, 0x20000);
-    TASSIGN(dstScalarTile, 0x20000);
+    TASSIGN(dstFullTile, 0x20000);
 
     SrcGlobalND srcGlobal(srcIn);
     NZGlobal dstInitGlobal(dstInitIn);
@@ -307,21 +343,18 @@ __global__ AICORE void RunTExtractNZVecScalar(__gm__ T *out, __gm__ T *srcIn, __
 
 #if defined(__DAV_VEC__)
     TLOAD(srcNDTile, srcGlobal);
-    TLOAD(dstLoadTile, dstInitGlobal);
+    TLOAD(dstFullTile, dstInitGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
     TMOV(srcNZTile, srcNDTile);
-
-    set_flag(PIPE_V, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_V, EVENT_ID0);
-
+    TSUBVIEW(dstScalarTile, dstFullTile, 0, 0);
     TEXTRACT(dstScalarTile, srcNZTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-    TSTORE(dstGlobal, dstLoadTile);
+    TSTORE(dstGlobal, dstFullTile);
 #endif
 }
 
@@ -339,21 +372,19 @@ __global__ AICORE void RunTExtractNDVecScalarFp4(__gm__ uint8_t *out, __gm__ uin
     using DstGlobalI8 = GlobalTensor<int8_t, DstShape, DstStride>;
 
     using SrcVecI8 = Tile<TileType::Vec, int8_t, SrcRows, SrcCols, BLayout::RowMajor>;
-    using DstLoadVecI8 = Tile<TileType::Vec, int8_t, 1, MinAlignedCols, BLayout::RowMajor>;
+    using DstFullVecI8 = Tile<TileType::Vec, int8_t, 1, MinAlignedCols, BLayout::RowMajor>;
     using SrcVecFp4 = Tile<TileType::Vec, TFp4, SrcRows, SrcCols, BLayout::RowMajor>;
     using DstExtractVecFp4 = Tile<TileType::Vec, TFp4, 1, MinAlignedCols, BLayout::RowMajor, 1, 1>;
 
     SrcVecI8 srcLoad;
-    DstLoadVecI8 dstLoad;
+    DstFullVecI8 dstFull;
     SrcVecFp4 srcExtract;
     DstExtractVecFp4 dstExtract;
 
     TASSIGN(srcLoad, 0x0);
-    TASSIGN(srcExtract, 0x0);
     constexpr uint32_t srcBytes = SrcRows * SrcCols * sizeof(TFp4);
     constexpr uint32_t dstAssignAddr = ((srcBytes + 0xFF) / 0x100) * 0x100;
-    TASSIGN(dstLoad, dstAssignAddr);
-    TASSIGN(dstExtract, dstAssignAddr);
+    TASSIGN(dstFull, dstAssignAddr);
 
     SrcGlobalI8 srcGlobal(reinterpret_cast<__gm__ int8_t *>(srcIn));
     DstGlobalI8 dstInitGlobal(reinterpret_cast<__gm__ int8_t *>(dstInitIn));
@@ -361,16 +392,18 @@ __global__ AICORE void RunTExtractNDVecScalarFp4(__gm__ uint8_t *out, __gm__ uin
 
 #if defined(__DAV_VEC__)
     TLOAD(srcLoad, srcGlobal);
-    TLOAD(dstLoad, dstInitGlobal);
+    TLOAD(dstFull, dstInitGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
+    TSUBVIEW(srcExtract, srcLoad, 0, 0);
+    TSUBVIEW(dstExtract, dstFull, 0, 0);
     TEXTRACT(dstExtract, srcExtract, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-    TSTORE(outGlobal, dstLoad);
+    TSTORE(outGlobal, dstFull);
 #endif
 }
 
@@ -392,7 +425,7 @@ __global__ AICORE void RunTExtractNZVecScalarFp4(__gm__ uint8_t *out, __gm__ uin
     using SrcNDTileI8 = Tile<TileType::Vec, int8_t, SrcRows, SrcCols, BLayout::RowMajor>;
     using SrcNZTileI8 =
         Tile<TileType::Vec, int8_t, SrcRows, SrcCols, BLayout::ColMajor, SrcRows, SrcCols, SLayout::RowMajor>;
-    using DstNZLoadTileI8 =
+    using DstNZFullTileI8 =
         Tile<TileType::Vec, int8_t, DstRows, DstCols, BLayout::ColMajor, DstRows, DstCols, SLayout::RowMajor>;
     using SrcNZTileFp4 =
         Tile<TileType::Vec, TFp4, SrcRows, SrcCols, BLayout::ColMajor, SrcRows, SrcCols, SLayout::RowMajor>;
@@ -400,15 +433,13 @@ __global__ AICORE void RunTExtractNZVecScalarFp4(__gm__ uint8_t *out, __gm__ uin
 
     SrcNDTileI8 srcNDTile;
     SrcNZTileI8 srcNZTile;
-    DstNZLoadTileI8 dstLoadTile;
+    DstNZFullTileI8 dstFullTile;
     SrcNZTileFp4 srcExtractTile;
     DstNZScalarTileFp4 dstScalarTile;
 
     TASSIGN(srcNDTile, 0x0);
     TASSIGN(srcNZTile, 0x10000);
-    TASSIGN(srcExtractTile, 0x10000);
-    TASSIGN(dstLoadTile, 0x20000);
-    TASSIGN(dstScalarTile, 0x20000);
+    TASSIGN(dstFullTile, 0x20000);
 
     SrcGlobalI8ND srcGlobal(reinterpret_cast<__gm__ int8_t *>(srcIn));
     NZGlobalI8 dstInitGlobal(reinterpret_cast<__gm__ int8_t *>(dstInitIn));
@@ -416,21 +447,19 @@ __global__ AICORE void RunTExtractNZVecScalarFp4(__gm__ uint8_t *out, __gm__ uin
 
 #if defined(__DAV_VEC__)
     TLOAD(srcNDTile, srcGlobal);
-    TLOAD(dstLoadTile, dstInitGlobal);
+    TLOAD(dstFullTile, dstInitGlobal);
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 
     TMOV(srcNZTile, srcNDTile);
-
-    set_flag(PIPE_V, PIPE_V, EVENT_ID0);
-    wait_flag(PIPE_V, PIPE_V, EVENT_ID0);
-
+    TSUBVIEW(srcExtractTile, srcNZTile, 0, 0);
+    TSUBVIEW(dstScalarTile, dstFullTile, 0, 0);
     TEXTRACT(dstScalarTile, srcExtractTile, static_cast<uint16_t>(IdxRow), static_cast<uint16_t>(IdxCol));
 
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
 
-    TSTORE(dstGlobal, dstLoadTile);
+    TSTORE(dstGlobal, dstFullTile);
 #endif
 }
 
