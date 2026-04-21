@@ -9,12 +9,21 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 /**
- * @file cube_matmul_4buf_kernel.cpp  (v2: corrected buffer-ID sync)
+ * @file cube_matmul_4buf_kernel.cpp  (v3: correct pipe pairing for L0A/B and L0C)
  *
- * Fix: Separate buffer IDs for different memory levels.
- *   IDs 0-3  : L1 tiles (aMatTile/bMatTile) — MTE2 <-> MTE1
- *   IDs 4-7  : L0 tiles (aTile/bTile)       — MTE1 <-> PIPE_M
- *   ID  8    : L0C accumulator (cTile)       — PIPE_M <-> MTE3
+ * Buffer-ID sync with correct pipeline pairings:
+ *
+ *   L1 tiles (aMatTile/bMatTile)  IDs 0-3:
+ *       get_buf<PIPE_MTE2>(id_l1) ... rls_buf<PIPE_MTE2>(id_l1)  — MTE2 owns L1 write
+ *       get_buf<PIPE_MTE1>(id_l1) ... rls_buf<PIPE_MTE1>(id_l1)  — MTE1 owns L1 read
+ *
+ *   L0A/B tiles (aTile/bTile)     IDs 4-7:
+ *       get_buf<PIPE_MTE1>(id_l0) ... rls_buf<PIPE_MTE1>(id_l0)  — MTE1 owns L0A/B write
+ *       get_buf<PIPE_M>   (id_l0) ... rls_buf<PIPE_M>   (id_l0)  — CUBE owns L0A/B read
+ *
+ *   L0C accumulator (cTile)       ID  8:
+ *       get_buf<PIPE_M>  (C_BUF_ID) ... rls_buf<PIPE_M>  (C_BUF_ID) — CUBE owns L0C write
+ *       get_buf<PIPE_FIX>(C_BUF_ID) ... rls_buf<PIPE_FIX>(C_BUF_ID) — FIXPIPE owns L0C read
  */
 
 #include <pto/pto-inst.hpp>
@@ -85,6 +94,7 @@ __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src
         GlobalDataSrc1 src1Global(src1 + k * K * N);
 
         // ===== MTE2: GM -> L1 =====
+        // Protect L1 slot: wait until MTE1 has consumed it (WAR), then write
 #ifndef __PTO_AUTO__
         get_buffer<PIPE_MTE2>(id_l1);
 #endif
@@ -92,28 +102,32 @@ __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src
         else if (id_l1 == 1) { TLOAD(aMatTile1, src0Global); TLOAD(bMatTile1, src1Global); }
         else if (id_l1 == 2) { TLOAD(aMatTile2, src0Global); TLOAD(bMatTile2, src1Global); }
         else { TLOAD(aMatTile3, src0Global); TLOAD(bMatTile3, src1Global); }
+        // Signal: L1 slot written, MTE1 can now read
 #ifndef __PTO_AUTO__
         rls_buffer<PIPE_MTE2>(id_l1);
 #endif
 
-        // ===== MTE1: L1 -> L0 =====
+        // ===== MTE1: L1 -> L0A/B =====
+        // Wait: L1 data ready (from MTE2), and L0 slot free (from CUBE)
 #ifndef __PTO_AUTO__
-        get_buffer<PIPE_MTE1>(id_l1);   // Wait: L1 data ready from MTE2
-        get_buffer<PIPE_MTE1>(id_l0);   // Wait: L0 slot free from CUBE
+        get_buffer<PIPE_MTE1>(id_l1);   // RAW: L1 written by MTE2
+        get_buffer<PIPE_MTE1>(id_l0);   // WAR: L0A/B consumed by CUBE
 #endif
         if (id_l1 == 0) { TMOV(aTile0, aMatTile0); TMOV(bTile0, bMatTile0); }
         else if (id_l1 == 1) { TMOV(aTile1, aMatTile1); TMOV(bTile1, bMatTile1); }
         else if (id_l1 == 2) { TMOV(aTile2, aMatTile2); TMOV(bTile2, bMatTile2); }
         else { TMOV(aTile3, aMatTile3); TMOV(bTile3, bMatTile3); }
+        // Signal: L1 slot consumed (MTE2 can reuse), L0A/B written (CUBE can read)
 #ifndef __PTO_AUTO__
-        rls_buffer<PIPE_MTE1>(id_l1);   // Release: L1 slot free for MTE2 reuse
-        rls_buffer<PIPE_MTE1>(id_l0);   // Signal: L0 data ready for CUBE
+        rls_buffer<PIPE_MTE1>(id_l1);   // WAR release: L1 slot free for MTE2
+        rls_buffer<PIPE_MTE1>(id_l0);   // RAW release: L0A/B ready for CUBE
 #endif
 
-        // ===== CUBE: TMATMUL =====
+        // ===== CUBE: TMATMUL (L0A/B -> L0C) =====
+        // Wait: L0A/B data ready (from MTE1), L0C slot free (from FIXPIPE)
 #ifndef __PTO_AUTO__
-        get_buffer<PIPE_M>(id_l0);      // Wait: L0 data ready from MTE1
-        get_buffer<PIPE_M>(C_BUF_ID);   // Wait: accumulator slot free
+        get_buffer<PIPE_M>(id_l0);      // RAW: L0A/B written by MTE1
+        get_buffer<PIPE_M>(C_BUF_ID);   // WAR: L0C consumed by FIXPIPE (or initial free)
 #endif
         if (k == 0) {
             if (id_l1 == 0) TMATMUL(cTile, aTile0, bTile0);
@@ -126,19 +140,22 @@ __global__ AICORE void RunCubeMatmul4Buf(__gm__ outType *out, __gm__ inType *src
             else if (id_l1 == 2) TMATMUL_ACC(cTile, cTile, aTile2, bTile2);
             else TMATMUL_ACC(cTile, cTile, aTile3, bTile3);
         }
+        // Signal: L0A/B consumed (MTE1 can reuse), L0C updated (FIXPIPE can read for partial store or next acc)
 #ifndef __PTO_AUTO__
-        rls_buffer<PIPE_M>(id_l0);      // Release: L0 slot free for MTE1 reuse
-        rls_buffer<PIPE_M>(C_BUF_ID);   // Signal: accumulator updated
+        rls_buffer<PIPE_M>(id_l0);      // WAR release: L0A/B slot free for MTE1
+        rls_buffer<PIPE_M>(C_BUF_ID);   // RAW release: L0C updated, FIXPIPE can read
 #endif
     }
 
-    // ===== Store: L0C -> GM =====
+    // ===== FIXPIPE: L0C -> GM (TSTORE of AccTile uses FIXPIPE) =====
+    // Wait: final L0C result ready from CUBE
 #ifndef __PTO_AUTO__
-    get_buffer<PIPE_MTE3>(C_BUF_ID);
+    get_buffer<PIPE_FIX>(C_BUF_ID);
 #endif
     TSTORE(dstGlobal, cTile);
+    // Signal: L0C consumed (not strictly needed at end, but good practice)
 #ifndef __PTO_AUTO__
-    rls_buffer<PIPE_MTE3>(C_BUF_ID);
+    rls_buffer<PIPE_FIX>(C_BUF_ID);
 #endif
 
     out = dstGlobal.data();
