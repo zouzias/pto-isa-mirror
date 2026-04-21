@@ -15,12 +15,33 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/cpu/parallel.hpp"
 
 namespace pto {
+template <typename LeftSrcType, typename RightSrcType, typename DType>
+void Gemm(DType* dst, const DType* acc,
+          const DType src0, const DType src1,
+          uint16_t M, uint16_t N, uint16_t K)
+{
+    // Placeholder implementation - simple triple loop
+    for (uint16_t i = 0; i < M; i++) {
+        for (uint16_t j = 0; j < N; j++) {
+            DType sum = acc ? acc[i * N + j] : static_cast<DType>(0);
+
+            for (uint16_t k = 0; k < K; k++) {
+                sum += static_cast<DType>(src0[i * K + k] * src1[k * N + j]);
+            }
+
+            dst[i * N + j] = sum;
+        }
+    }
+}
+
 template <typename TileAcc, typename TileLeft, typename TileRight>
 void TMatmulNzZn(typename TileAcc::TileDType dst, typename TileAcc::TileDType acc, typename TileLeft::TileDType src0,
                  typename TileRight::TileDType src1, uint16_t M, uint16_t N, uint16_t K)
 {
+    using LeftSrcType = typename TileLeft::TileDType;
+    using RightSrcType = typename TileRight::TileDType;
     using DType = typename TileAcc::DType;
-    cpu::Gemm<DType>(dst, acc, src0, src1, M, N, K);
+    cpu::Gemm<LeftSrcType, RightSrcType, DType>(dst, acc, src0, src1, M, N, K);
 }
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
@@ -194,28 +215,5 @@ PTO_INTERNAL void TGEMV_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftSca
     (void)bScaleMatrix;
     TGEMV_BIAS_IMPL(cMatrix, aMatrix, bMatrix, biasData);
 }
-
-namespace cpu {
-
-template <typename DType>
-void Gemm(DType* dst, const DType* acc,
-          const DType* src0, const DType* src1,
-          uint16_t M, uint16_t N, uint16_t K)
-{
-    // Placeholder implementation - simple triple loop
-    for (uint16_t i = 0; i < M; i++) {
-        for (uint16_t j = 0; j < N; j++) {
-            DType sum = acc ? acc[i * N + j] : static_cast<DType>(0);
-
-            for (uint16_t k = 0; k < K; k++) {
-                sum += src0[i * K + k] * src1[k * N + j];
-            }
-
-            dst[i * N + j] = sum;
-        }
-    }
-}
-
-} // namespace cpu
 } // namespace pto
 #endif
