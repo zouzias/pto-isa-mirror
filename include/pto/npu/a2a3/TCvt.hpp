@@ -469,23 +469,35 @@ PTO_INTERNAL void GenCastCallFp16ToInt8(__ubuf__ typename TileDataD::DType *dst,
 //   - vconv_f162s32 / vconv_s322s16 (involving int32): REPEAT_BYTE / sizeof(int32) = 64 elements
 //   - vconv_s162f16 / vconv_f162s8z / vand (fp16/int16/int8 only): REPEAT_BYTE / sizeof(half) = 128 elements
 //
-// When srcRepeatStride >= 4 (each logical repeat covers >= 64 fp16 values with hardware capacity of 64),
-// we must split each logical repeat into multiple hardware repeats of exactly 64 elements each by using
-// hwFp16Stride = 4 (64 fp16 per hw repeat) and hwInt32Stride = 8 (64 int32 per hw repeat).
-// hwRepeatCount = repeatNum * (srcRepeatStride / 4) ensures all logical elements are covered.
+// Caller contexts (matching GenCastCallFp16ToInt16_NonSatTorch's approach):
+//   - HEAD (TCvtHead): vector mask is left at full width (default -1/-1).  Each logical repeat must
+//     process 128 fp16 elements, so we split it into 2 hw sub-repeats of 64 each, stride hwFp16Stride=4
+//     (fp16), hwInt32Stride=8 (int32), etc., and narrow the mask to 64 so every step honors the
+//     per-sub-repeat boundary.  Canonical strides from ComputeTCvtRepeatConfig: dstRS = 4
+//     (= BLOCK_MAX_PER_REPEAT/2), srcRS = 8 (= BLOCK_MAX_PER_REPEAT).
+//   - TAIL (TCvtTail): caller narrows vector mask to numRemainPerLine (≤ 64 elements in practice)
+//     and passes row strides as srcRepeatStride/dstRepeatStride.  Each logical repeat corresponds
+//     to one row, so we run exactly one hw repeat per logical repeat, using the caller's mask
+//     unchanged and the caller's strides for src/dst.  Int32/int16 intermediates are packed
+//     compactly in the temp buffer at stride BLOCK_MAX_PER_REPEAT (int32) / BLOCK_MAX_PER_REPEAT/2
+//     (int16), independent of the row stride.
 //
-// Single temporary buffer layout (all in-place, no separate offset):
+// The head-vs-tail discriminator mirrors GenCastCallFp16ToInt16_NonSatTorch's `isHead` check and
+// is robust for the stride shapes produced by ComputeTCvtRepeatConfig plus TCvtTail's row-stride
+// computation: head has srcRS = BLOCK_MAX_PER_REPEAT; tail's srcRS = SS/srcNElemPerBlock, which
+// typically differs for SS > 128.
 //
-//   Let N = hwRepeatCount * hwInt16Stride * BLOCK_BYTE_SIZE (int16 data size in bytes).
-//   The int32 data occupies 2N bytes; after in-place narrowing the upper half is free.
+// Single temporary buffer layout (all in-place, no +4096 offset):
 //
-//   Step 1:  fp16 -> int32  writes to tempInt32Buf  [+0  .. +2N-1]   (2N bytes)
-//   Step 2:  int32 -> int16 in-place into tempAndBuf [+0  .. +N-1]    (N bytes)
-//            Safe because int16 dest (k*N/R) never overtakes int32 src (k*2N/R) for k>=1,
-//            and the vector unit reads all elements before writing for k=0.
-//   Step 3:  vector_dup 255 writes mask to           [+N  .. +2N-1]   (freed upper half)
+//   [0..N):       int16 data after in-place int32->int16 narrowing (tempAndBuf)
+//   [N..2N):      mask (255) then fp16 intermediate in the freed upper half of the int32 region
+//                 (tempMaskBuf), where N = (# hw repeats) * (int16 block stride) * BLOCK_BYTE_SIZE.
+//
+//   Step 1:  fp16 -> int32  writes to tempInt32Buf  [+0  .. +2N-1]
+//   Step 2:  int32 -> int16 in-place into tempAndBuf [+0  .. +N-1]   (narrowing in-place)
+//   Step 3:  vector_dup 255 writes mask to           [+N  .. +2N-1]  (freed upper half)
 //   Step 4:  vand tempAndBuf & mask -> tempAndBuf    [+0  .. +N-1]
-//   Step 5:  int16 -> fp16  writes to                [+N  .. +2N-1]   (mask consumed, region reused)
+//   Step 5:  int16 -> fp16  writes to                [+N  .. +2N-1]  (mask consumed, region reused)
 //   Step 6:  fp16 -> int8   reads [+N..+2N-1], writes to dst
 //
 // Note: src cannot be reused as tempAndBuf — the saturation test kernel calls TCVT three times
@@ -497,42 +509,46 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
                                                     uint16_t dstRepeatStride, uint16_t srcRepeatStride,
                                                     __ubuf__ int32_t *tempInt32Buf)
 {
-    // All temporaries share a single buffer (in-place conversions, no +4096 offset):
-    //   [0..half]:  int16 data after in-place int32->int16 narrowing
-    //   [half..end]: mask (255) in the freed upper half of the int32 region,
-    //                then reused for fp16 output in step 5
     __ubuf__ int16_t *tempAndBuf = (__ubuf__ int16_t *)tempInt32Buf;
-
-    // Compute hardware-level strides for intermediate int32/int16 operations.
-    // The hardware INT32 capacity per repeat is 64 (= REPEAT_BYTE / sizeof(int32) = 256 / 4).
-    // When srcRepeatStride > 4, each logical repeat has > 64 fp16 values; we must split into
-    // multiple hardware repeats.  hwFp16Stride must satisfy three constraints:
-    //   1. Evenly divide srcRepeatStride (no truncation in factor).
-    //   2. Be <= 4 (int32 capacity limit per repeat).
-    //   3. Be even when factor > 1, so that hwFp16Stride/2 gives an integer int8 dest stride.
-    // We pick the largest valid divisor (prefer 4, then 2).
-    // Examples: S=8 → hw=4,f=2;  S=6 → hw=2,f=3;  S=10 → hw=2,f=5;  S=12 → hw=4,f=3.
-    const uint16_t hwFp16Stride =
-        (srcRepeatStride <= 4) ?
-            srcRepeatStride :
-            (srcRepeatStride % 4 == 0) ? (uint16_t)4 : (srcRepeatStride % 2 == 0) ? (uint16_t)2 : (uint16_t)1;
-    const uint16_t factor = srcRepeatStride / hwFp16Stride;
-    const uint16_t totalHwRepeats = static_cast<uint16_t>(repeatNum) * factor;
-    const uint16_t hwInt32Stride = hwFp16Stride * 2; // int32 is 2x wider than fp16 in blocks
-    const uint16_t hwInt16Stride = hwFp16Stride;     // int16 same width as fp16 in blocks
-    const uint16_t hwDstStride =
-        (hwFp16Stride + 1) / 2; // int8 is half as wide as fp16 in blocks (ceiling division, min 1)
-
     constexpr uint16_t int16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int16_t);
     constexpr uint16_t fp16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(half);
     constexpr uint16_t int8ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int8_t);
 
-    // Number of int16 elements per hardware repeat — used to narrow the vector mask
-    // for mask-controlled operations (vector_dup, vand) in Steps 3-4.
-    const uint16_t elemsPerHwRepeat = hwFp16Stride * int16ElemsPerBlock;
+    // Detect head (full-mask, canonical strides) vs tail (narrowed mask, row strides).
+    // Head always arrives with srcRS == BLOCK_MAX_PER_REPEAT from ComputeTCvtRepeatConfig;
+    // tail's srcRS = SS/srcNElemPerBlock, which differs when SS != 128 fp16.
+    const bool isHead = (srcRepeatStride == BLOCK_MAX_PER_REPEAT);
 
-    // Loop over chunks of at most REPEAT_MAX hardware repeats to stay within hardware limits.
-    // The temp buffer is reused each iteration; only src and dst pointers advance.
+    // Per-hw-repeat strides.  In head, a logical repeat (128 fp16) is split into 2 sub-repeats
+    // of 64 each at hwFp16Stride=4; in tail, one hw repeat per logical repeat uses compact
+    // temp-buffer strides and the caller's src/dst stride for input/output.
+    const uint16_t hwFp16Stride = isHead ? static_cast<uint16_t>(4) : srcRepeatStride;
+    const uint16_t hwInt32Stride = isHead ? static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT)
+                                          : static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT);
+    const uint16_t hwInt16Stride = isHead ? static_cast<uint16_t>(4)
+                                          : static_cast<uint16_t>(BLOCK_MAX_PER_REPEAT / 2);
+    const uint16_t hwDstStride = isHead ? static_cast<uint16_t>(2) : dstRepeatStride;
+    const uint16_t hwStep5Stride = hwInt16Stride; // fp16 output of step 5 uses int16 stride
+    const uint16_t hwStep6SrcStride = isHead ? hwFp16Stride : hwInt16Stride; // source of step 6
+
+    // Total hw repeats: head multiplies by 2 (sub-repeats per logical repeat); tail is 1:1.
+    const uint16_t totalHwRepeats = isHead ? static_cast<uint16_t>(2 * static_cast<uint16_t>(repeatNum))
+                                           : static_cast<uint16_t>(repeatNum);
+
+    // Step 2's in-place narrowing uses src stride = int32 block-width, dst stride = int16 block-width.
+    // Head: src=8, dst=4 (matches the 2x int32 width). Tail: src=8 (compact), dst=4 (compact).
+    const uint16_t step2SrcStride = hwInt32Stride;
+
+    // In head, narrow the vector mask so every step (vconv_f162s32, vconv_s322s16, vector_dup,
+    // vand, vconv_s162f16, vconv_f162s8z) processes exactly 64 elements per hw repeat — matching
+    // the stride and keeping adjacent sub-repeats non-overlapping in the int32/int16 temp buffers.
+    // In tail, preserve the caller's mask (= numRemainPerLine ≤ 64) so we don't over-write past
+    // the valid column region in dst.
+    if (isHead) {
+        SetContinuousMask(hwFp16Stride * int16ElemsPerBlock); // 64 for head
+    }
+
+    // Loop over chunks of at most REPEAT_MAX hw repeats; temp buffer is reused each iteration.
     uint16_t hwRepeatsDone = 0;
     while (hwRepeatsDone < totalHwRepeats) {
         const uint16_t hwRepeatCount = (totalHwRepeats - hwRepeatsDone > REPEAT_MAX) ?
@@ -578,22 +594,12 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
         pipe_barrier(PIPE_V);
         set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
 
-        // Step 2: int32 -> int16 in-place (narrowing: output half the size of input)
-        // Safe because dest repeat k writes to [k*hwInt16Stride] while src reads from
-        // [k*hwInt32Stride=2k*hwInt16Stride].
+        // Step 2: int32 -> int16 in-place (narrowing).  Safe because dst stride (hwInt16Stride)
+        // is half the src stride (hwInt32Stride), so for k≥1 the dst write at k*hwInt16Stride
+        // never overtakes the src read at k*hwInt32Stride = 2*k*hwInt16Stride.
         vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
-                      hwInt32Stride);
+                      step2SrcStride);
         pipe_barrier(PIPE_V);
-
-        // Steps 3-4 use vector_dup and vand which are mask-controlled operations on A2/A3.
-        // Each hw repeat covers hwFp16Stride blocks (e.g. 4 blocks = 64 int16 elements).
-        // If the current vector mask is wider than that (e.g. 128 elements from TCvtHead, or
-        // numRemainPerLine > 64 from TCvtTail), the mask-controlled op would process elements
-        // beyond the hw repeat stride boundary, overlapping with the next repeat's data.
-        // Fix: narrow the mask to exactly elemsPerHwRepeat for these two steps.
-        // The surrounding vconv steps (1/2/5/6) are not affected because their hw repeat size
-        // exactly matches the stride, so any mask value produces correct results.
-        SetContinuousMask(elemsPerHwRepeat);
 
         // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (freed upper half of int32 region)
         vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
@@ -607,14 +613,23 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
 
         // Step 5: int16 -> fp16, writing into tempMaskBuf region (mask is consumed, region is free)
         __ubuf__ half *tempFp16Out = (__ubuf__ half *)tempMaskBuf;
-        vconv_s162f16(tempFp16Out, tempAndBuf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
+        vconv_s162f16(tempFp16Out, tempAndBuf, hwRepeatCount, srcBlockStride, srcBlockStride, hwStep5Stride,
                       hwInt16Stride);
         pipe_barrier(PIPE_V);
 
-        // Step 6: fp16 -> int8 (hwDstStride = hwFp16Stride / 2 since int8 is half the width of fp16)
-        vconv_f162s8z(chunkDst, tempFp16Out, hwRepeatCount, dstBlockStride, srcBlockStride, hwDstStride, hwFp16Stride);
+        // Step 6: fp16 -> int8.  Head: dst stride = hwDstStride = 2 (half of hwFp16Stride=4 since
+        // int8 is half as wide as fp16).  Tail: dst stride = caller-supplied row stride.
+        vconv_f162s8z(chunkDst, tempFp16Out, hwRepeatCount, dstBlockStride, srcBlockStride, hwDstStride,
+                      hwStep6SrcStride);
 
         hwRepeatsDone += hwRepeatCount;
+    }
+
+    // Restore full vector mask so callers (e.g. TCvtHead, which does not manage the mask) don't
+    // inherit the narrowed value.  For the tail path we leave the mask untouched — TCvtTail owns
+    // it and restores it after its loop finishes.
+    if (isHead) {
+        set_vector_mask(-1, -1);
     }
 }
 
