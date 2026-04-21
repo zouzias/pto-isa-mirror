@@ -14,96 +14,84 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cassert>
 #include "common.hpp"
 
+#define F32_BITS 32
+#define CUSTOM_FLOAT_BITS 19
+
 namespace pto {
 
 template <typename T>
-T ReLU(T val)
+inline T ReLU(T val)
 {
     if (val < 0)
         return 0;
     return val;
 }
 
-inline float apply_relu(float val)
+template <int32_t bit_size>
+float extract_m1_from_quant(uint64_t quant)
 {
-    return val < 0.0f ? 0.0f : val;
+    if constexpr (bit_size == 32) {
+        uint32_t scale_bits = static_cast<uint32_t>(quant);
+        return std::bit_cast<float>(scale_bits);
+    }
+    uint32_t m1_bits = static_cast<uint32_t>((quant >> 13) & 0x7FFFF);
+    uint32_t sign_bit = (m1_bits >> 18) & 0x1;
+    uint32_t exponent = (m1_bits >> 10) & 0xFF;
+    uint32_t mantissa = m1_bits & 0x3FF;
+
+    if (exponent == 0 && mantissa == 0)
+        return 0.0f;
+
+    float sign_val = (sign_bit == 1) ? -1.0f : 1.0f;
+    float mantissa_val = 1.0f + (static_cast<float>(mantissa) / 1024.0f);
+    float exponent_val = std::pow(2.0f, static_cast<float>(exponent) - 127.0f);
+
+    return sign_val * mantissa_val * exponent_val;
 }
 
-template <typename DstType, typename SrcType, QuantMode_t mode, bool use_relu = false>
+template <typename DstType, typename SrcType, QuantMode_t mode, int32_t bit_size, bool use_relu = false>
 DstType quantize_element(SrcType src_val, uint64_t scalar)
 {
-    float f_scale;
-    uint32_t low_bits = static_cast<uint32_t>(scalar & 0xFFFFFFFF);
-    std::memcpy(&f_scale, &low_bits, sizeof(float));
+    float f_scale = extract_m1_from_quant<bit_size>(scalar);
+    uint32_t offset = static_cast<uint32_t>((scalar >> 37) & 0x1FF);
+    uint32_t sign = static_cast<uint32_t>((scalar >> 46) & 0x1);
 
-    DstType result_f = static_cast<DstType>(src_val);
-
+    float result_f = static_cast<DstType>(src_val);
     if constexpr (mode == QuantMode_t::QF322B8_PRE || mode == QuantMode_t::VQF322B8_PRE || mode == QuantMode_t::REQ8 ||
                   mode == QuantMode_t::VREQ8) {
         float work = static_cast<float>(src_val) * f_scale;
-        if constexpr (use_relu)
-            work = ReLU(work);
-        float rounded = std::round(work);
-        float min = static_cast<float>(std::numeric_limits<DstType>::min());
-        float max = static_cast<float>(std::numeric_limits<DstType>::max());
+        float rounded = std::round(work) + offset;
+        float min = sign == 1 ? -128.0f : 0.0f;
+        float max = sign == 1 ? 127.0f : 255.0f;
         result_f = std::clamp(rounded, min, max);
-    } else if constexpr (mode == QuantMode_t::SHIFTS322S16 || mode == QuantMode_t::VSHIFTS322S16) {
-        uint32_t shift_amt = low_bits & 0xFF;
-        int32_t shifted = static_cast<int32_t>(src_val) >> shift_amt;
-        if constexpr (use_relu)
-            shifted = ReLU(shifted);
-
-        int32_t min = -32768;
-        int32_t max = 32767;
-        result_f = std::clamp(shifted, min, max);
-    } else if constexpr (mode == QuantMode_t::DEQF16 || mode == QuantMode_t::VDEQF16) {
+    } else if constexpr (mode == QuantMode_t::DEQF16 || mode == QuantMode_t::VDEQF16 ||
+                         mode == QuantMode_t::QF322F16_PRE) {
         float work = static_cast<float>(src_val) * f_scale;
-        if constexpr (use_relu)
-            work = apply_relu(work);
-        result_f = work;
-    } else if constexpr (mode == QuantMode_t::F322F16 || mode == QuantMode_t::F322BF16 ||
-                         mode == QuantMode_t::QF322BF16_PRE || mode == QuantMode_t::QF322BF16_PRE) {
-        float work = static_cast<float>(src_val) * f_scale;
-        if constexpr (use_relu)
-            work = apply_relu(work);
-        result_f = work;
-    } else {
-        if constexpr (use_relu)
-            result_f = apply_relu(result_f);
+        result_f = std::clamp(work, -F16_MAX, F16_MAX);
+    } else if constexpr (mode == QuantMode_t::QF322BF16_PRE) {
+        result_f = static_cast<float>(src_val) * f_scale;
     }
-
+    if constexpr (use_relu)
+        result_f = ReLU(result_f);
     return static_cast<DstType>(result_f);
 }
 
-template <typename DstTileData, typename SrcTileData>
+template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode = ReluPreMode::NoRelu>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t idxRow, uint32_t idxCol)
 {
     using D = typename DstTileData::DType;
+    using S = typename SrcTileData::DType;
     assert(src.GetValidRow() - idxRow == dst.GetValidRow() && src.GetValidCol() - idxCol == dst.GetValidCol());
+
     for (size_t rDst = 0; rDst < dst.GetValidRow(); ++rDst) {
         for (size_t cDst = 0; cDst < dst.GetValidCol(); ++cDst) {
             const size_t srcTileIdx = GetTileElementOffset<SrcTileData>(rDst + idxRow, cDst + idxCol);
             const size_t dstTileIdx = GetTileElementOffset<DstTileData>(rDst, cDst);
-            dst.data()[dstTileIdx] = static_cast<D>(src.data()[srcTileIdx]);
-        }
-    }
-}
-
-template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
-PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint32_t idxRow, uint32_t idxCol)
-{
-    using D = typename DstTileData::DType;
-    assert(src.GetValidRow() - idxRow == dst.GetValidRow() && src.GetValidCol() - idxCol == dst.GetValidCol());
-
-    if constexpr (reluMode == ReluPreMode::NoRelu) {
-        TEXTRACT_IMPL<DstTileData, SrcTileData>(dst, src, idxRow, idxCol);
-    } else {
-        for (size_t rDst = 0; rDst < dst.GetValidRow(); ++rDst) {
-            for (size_t cDst = 0; cDst < dst.GetValidCol(); ++cDst) {
-                const size_t srcTileIdx = GetTileElementOffset<SrcTileData>(rDst + idxRow, cDst + idxCol);
-                const size_t dstTileIdx = GetTileElementOffset<DstTileData>(rDst, cDst);
-                dst.data()[dstTileIdx] = static_cast<D>((src.data()[srcTileIdx]));
+            S data = src.data()[srcTileIdx];
+            if constexpr (reluMode == ReluPreMode::NormalRelu) {
+                data = ReLU(data);
             }
+            dst.data()[dstTileIdx] = static_cast<D>(data);
         }
     }
 }
@@ -130,7 +118,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t pre
             const size_t srcTileIdx = GetTileElementOffset<SrcTileData>(rDst + idxRow, cDst + idxCol);
             const size_t dstTileIdx = GetTileElementOffset<DstTileData>(rDst, cDst);
             dst.data()[dstTileIdx] =
-                quantize_element<D, S, quantPre, apply_relu>(src.data()[srcTileIdx], preQuantScalar);
+                quantize_element<D, S, quantPre, F32_BITS, apply_relu>(src.data()[srcTileIdx], preQuantScalar);
         }
     }
 }
@@ -149,7 +137,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &
 
     using D = typename DstTileData::DType;
     using S = typename SrcTileData::DType;
-    constexpr QuantMode_t quantPre = GetScalarPreQuantMode<S, D>();
+    constexpr QuantMode_t quantPre = GetVectorPreQuantMode<S, D>();
     constexpr bool apply_relu = reluMode == ReluPreMode::NormalRelu;
 
     for (size_t rDst = 0; rDst < dst.GetValidRow(); ++rDst) {
@@ -158,7 +146,8 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &
             const size_t dstTileIdx = GetTileElementOffset<DstTileData>(rDst, cDst);
             const size_t quantTileIdx = GetTileElementOffset<FpTileData>(0, cDst);
             uint64_t quantScalar = static_cast<uint64_t>(fp.data()[quantTileIdx]);
-            dst.data()[dstTileIdx] = quantize_element<D, S, quantPre, apply_relu>(src.data()[srcTileIdx], quantScalar);
+            dst.data()[dstTileIdx] =
+                quantize_element<D, S, quantPre, CUSTOM_FLOAT_BITS, apply_relu>(src.data()[srcTileIdx], quantScalar);
         }
     }
 }

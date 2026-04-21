@@ -26,7 +26,7 @@ PTO_INTERNAL constexpr QuantMode_t GetScalarPreQuantMode()
     if constexpr (std::is_same<SrcType, float>::value) {
         if constexpr ((std::is_same<DstType, int8_t>::value) || (std::is_same<DstType, uint8_t>::value)) {
             quantPre = QuantMode_t::QF322B8_PRE;
-        } else if constexpr ((std::is_same<DstType, __gm__ half>::value) || (std::is_same<DstType, half>::value)) {
+        } else if constexpr (std::is_same<DstType, half>::value) {
             quantPre = QuantMode_t::QF322F16_PRE;
         } else if constexpr (std::is_same<DstType, bfloat16_t>::value) {
             quantPre = QuantMode_t::QF322BF16_PRE;
