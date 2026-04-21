@@ -41,7 +41,11 @@ PTO_INTERNAL void runTColSum(__gm__ T __out__ *out, __gm__ T __in__ *src, bool i
     set_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
     wait_flag(PIPE_MTE2, PIPE_V, EVENT_ID0);
 #endif
-    TCOLSUM(dstTile, srcTile, tmpTile, isBinary);
+    if (isBinary) {
+        TCOLSUM(dstTile, srcTile, tmpTile, isBinary);
+    } else {
+        TCOLSUM(dstTile, srcTile);
+    }
 #ifndef __PTO_AUTO__
     set_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
     wait_flag(PIPE_V, PIPE_MTE3, EVENT_ID0);
