@@ -82,10 +82,9 @@ __tf__ PTO_INTERNAL void TColSum(typename TileDataDst::TileDType __out__ dst,
     }
 }
 
-template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
-PTO_INTERNAL void TCOLSUM_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, bool IsBinary)
+template <typename T, typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
+PTO_INTERNAL void TColSumCheck()
 {
-    using T = typename TileDataSrc::DType;
     static_assert(TileDataDst::Loc == pto::TileType::Vec && TileDataSrc::Loc == pto::TileType::Vec &&
                       TileDataTmp::Loc == pto::TileType::Vec,
                   "Fix: TCOLSUM only support Vec Tile");
@@ -100,27 +99,70 @@ PTO_INTERNAL void TCOLSUM_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &
         "Fix: TCOLSUM input data type is not supported by this instruction.");
     static_assert(std::is_same_v<typename TileDataDst::DType, T>,
                   "Fix: TCOLSUM input data type must be consistent with the output data type.");
+}
+
+template <typename TileDataDst, typename TileDataSrc, typename TileDataTmp>
+PTO_INTERNAL void TCOLSUM_IMPL(TileDataDst &dst, TileDataSrc &src, TileDataTmp &tmp, bool IsBinary)
+{
+    using T = typename TileDataSrc::DType;
+    TColSumCheck<T, TileDataDst, TileDataSrc, TileDataTmp>();
 
     int validRow = src.GetValidRow();
     int validCol = src.GetValidCol();
     constexpr int srcStride = TileDataSrc::RowStride;
     constexpr int dstStride = TileDataDst::RowStride;
-    constexpr int tmpStride = TileDataTmp::RowStride * sizeof(typename TileDataTmp::DType) / sizeof(T);
 
     PTO_ASSERT(validCol == dst.GetValidCol(),
                "Fix: TCOLSUM input valid col must be consistent with the output valid row.");
-    PTO_ASSERT(validCol <= tmpStride,
-               "Fix: TCOLSUM input valid columns must be less than or equal to the tmp columns.");
     if (validRow == 0 || validCol == 0) {
         return;
     }
+
     if (IsBinary) {
+        constexpr int tmpStride = TileDataTmp::RowStride * sizeof(typename TileDataTmp::DType) / sizeof(T);
+        PTO_ASSERT(validCol <= tmpStride,
+                   "Fix: TCOLSUM input valid columns must be less than or equal to the tmp columns.");
         TColSum<T, TileDataDst, TileDataSrc, TileDataTmp, srcStride, dstStride, tmpStride, true>(
             dst.data(), src.data(), tmp.data(), validRow, validCol);
     } else {
-        TColSum<T, TileDataDst, TileDataSrc, TileDataTmp, srcStride, dstStride, tmpStride, false>(
+        TColSum<T, TileDataDst, TileDataSrc, TileDataTmp, srcStride, dstStride, dstStride, false>(
             dst.data(), src.data(), tmp.data(), validRow, validCol);
     }
+}
+
+template <typename T, typename TileDataDst, typename TileDataSrc>
+__tf__ PTO_INTERNAL void TColSum(typename TileDataDst::TileDType __out__ dst,
+                                 typename TileDataSrc::TileDType __in__ src, int validRow, int validCol)
+{
+    __ubuf__ T *dstPtr = (__ubuf__ T *)__cce_get_tile_ptr(dst);
+    __ubuf__ T *srcPtr = (__ubuf__ T *)__cce_get_tile_ptr(src);
+
+    constexpr int DTypeSize = sizeof(T);
+    int lenBurst = (validCol * DTypeSize + BLOCK_BYTE_SIZE - 1) / BLOCK_BYTE_SIZE;
+
+    pto_copy_ubuf_to_ubuf(dstPtr, srcPtr, 1, lenBurst, 0, 0);
+    if (validRow > 1) {
+        pipe_barrier(PIPE_V);
+        SequentialSum<T, TileDataSrc::RowStride, TileDataDst::RowStride>(dstPtr, srcPtr, validRow, validCol);
+    }
+}
+
+template <typename TileDataDst, typename TileDataSrc>
+PTO_INTERNAL void TCOLSUM_IMPL(TileDataDst &dst, TileDataSrc &src)
+{
+    using T = typename TileDataSrc::DType;
+    TColSumCheck<T, TileDataDst, TileDataSrc, TileDataDst>();
+
+    int validRow = src.GetValidRow();
+    int validCol = src.GetValidCol();
+
+    PTO_ASSERT(validCol == dst.GetValidCol(),
+               "Fix: TCOLSUM input valid col must be consistent with the output valid row.");
+    if (validRow == 0 || validCol == 0) {
+        return;
+    }
+
+    TColSum<T, TileDataDst, TileDataSrc>(dst.data(), src.data(), validRow, validCol);
 }
 } // namespace pto
 #endif
