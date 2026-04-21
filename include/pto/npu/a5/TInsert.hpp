@@ -108,7 +108,8 @@ __tf__ PTO_INTERNAL void TInsertAccToVec(typename DstTileData::TileDType __out__
     auto srcStride = (validRow + BLOCK_LEN - 1) / BLOCK_LEN * BLOCK_LEN;
     __ubuf__ dstType *dstAddr = (__ubuf__ dstType *)__cce_get_tile_ptr(dst) + dstOffset;
     __cc__ typename SrcTileData::DType *srcData = (__cc__ typename SrcTileData::DType *)__cce_get_tile_ptr(src);
-
+    constexpr int32_t dstc0Size = BLOCK_BYTE_SIZE / sizeof(dstType);
+    validCol = (validCol + dstc0Size - 1) / dstc0Size * dstc0Size;
     copy_matrix_cc_to_ub(dstAddr, srcData, 0, validCol, validRow, dstStride, srcStride, dualDstCtl, subBlockId, 0, 0,
                          QuantPre, reluMode, channelSplitEnable, enableNz2Nd, 0, 0, false, false, 0, false, false,
                          false, false, false, enableNz2Dn);
