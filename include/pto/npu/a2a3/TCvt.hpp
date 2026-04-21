@@ -491,11 +491,16 @@ PTO_INTERNAL void GenCastCallFp16ToInt8(__ubuf__ typename TileDataD::DType *dst,
 // Note: src cannot be reused as tempAndBuf — the saturation test kernel calls TCVT three times
 // on the same srcTile (ON, OFF, default), so the NonSatTorch path would corrupt src for later calls.
 template <typename TileDataD, typename TileDataS>
+// numValidColsPerRow: number of valid fp16 elements per row in the tail window
+//   (= numRemainPerLine when called from TCvtTail, 0 when called from TCvtHead meaning full row).
+// This is needed to cap the mask for mask-controlled Steps 3-4 when the tail window
+// is smaller than one hardware repeat chunk (elemsPerHwRepeat).
 PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD::DType *dst,
                                                     __ubuf__ typename TileDataS::DType *src, uint8_t repeatNum,
                                                     RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride,
                                                     uint16_t dstRepeatStride, uint16_t srcRepeatStride,
-                                                    __ubuf__ int32_t *tempInt32Buf)
+                                                    __ubuf__ int32_t *tempInt32Buf,
+                                                    uint16_t numValidColsPerRow = 0)
 {
     // All temporaries share a single buffer (in-place conversions, no +4096 offset):
     //   [0..half]:  int16 data after in-place int32->int16 narrowing
@@ -517,7 +522,6 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
             srcRepeatStride :
             (srcRepeatStride % 4 == 0) ? (uint16_t)4 : (srcRepeatStride % 2 == 0) ? (uint16_t)2 : (uint16_t)1;
     const uint16_t factor = srcRepeatStride / hwFp16Stride;
-    const uint16_t totalHwRepeats = static_cast<uint16_t>(repeatNum) * factor;
     const uint16_t hwInt32Stride = hwFp16Stride * 2; // int32 is 2x wider than fp16 in blocks
     const uint16_t hwInt16Stride = hwFp16Stride;     // int16 same width as fp16 in blocks
     const uint16_t hwDstStride =
@@ -527,94 +531,88 @@ PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD:
     constexpr uint16_t fp16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(half);
     constexpr uint16_t int8ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int8_t);
 
-    // Number of int16 elements per hardware repeat — used to narrow the vector mask
-    // for mask-controlled operations (vector_dup, vand) in Steps 3-4.
+    // Number of int16/fp16 elements per hardware repeat (= one column slice).
     const uint16_t elemsPerHwRepeat = hwFp16Stride * int16ElemsPerBlock;
 
-    // Loop over chunks of at most REPEAT_MAX hardware repeats to stay within hardware limits.
-    // The temp buffer is reused each iteration; only src and dst pointers advance.
-    uint16_t hwRepeatsDone = 0;
-    while (hwRepeatsDone < totalHwRepeats) {
-        const uint16_t hwRepeatCount = (totalHwRepeats - hwRepeatsDone > REPEAT_MAX) ?
-                                           static_cast<uint16_t>(REPEAT_MAX) :
-                                           static_cast<uint16_t>(totalHwRepeats - hwRepeatsDone);
+    // Full row element count — used when numValidColsPerRow == 0 (head path, full tile).
+    const uint16_t fullRowElems = srcRepeatStride * fp16ElemsPerBlock;
+    const uint16_t validCols = (numValidColsPerRow == 0) ? fullRowElems : numValidColsPerRow;
 
-        __ubuf__ half *chunkSrc = src + static_cast<uint32_t>(hwRepeatsDone) * hwFp16Stride * fp16ElemsPerBlock;
-        __ubuf__ int8_t *chunkDst = dst + static_cast<uint32_t>(hwRepeatsDone) * hwDstStride * int8ElemsPerBlock;
+    // Process one hw repeat at a time so we can set a precise mask per hw repeat.
+    // hw repeat index i corresponds to column slice (i % factor) of logical repeat (i / factor).
+    // Each hw repeat covers elemsPerHwRepeat fp16 elements in the source.
+    //
+    // For TCvtHead: logical repeats = 128-element column chunks within a single row.
+    // For TCvtTail: logical repeats = rows of the tile.
+    // Consecutive hw repeats are contiguous in memory; src and dst pointers advance by
+    // hwFp16Stride (fp16) and hwDstStride (int8) blocks respectively per hw repeat.
+    //
+    // Column slices fully outside the valid window (colOffset >= validCols) are skipped.
+    const uint16_t totalHwRepeats = static_cast<uint16_t>(repeatNum) * factor;
+    for (uint16_t i = 0; i < totalHwRepeats; i++) {
+        const uint16_t colSlice = i % factor;
+        const uint16_t colOffset = colSlice * elemsPerHwRepeat;
+        if (colOffset >= validCols) {
+            continue; // fully outside valid window
+        }
+        const uint16_t maskElems =
+            static_cast<uint16_t>(min(static_cast<unsigned>(elemsPerHwRepeat),
+                                      static_cast<unsigned>(validCols - colOffset)));
 
-        // Mask buffer placed in the freed upper half of the int32 region (after in-place int32->int16)
-        __ubuf__ int16_t *tempMaskBuf =
-            tempAndBuf + static_cast<uint32_t>(hwRepeatCount) * hwInt16Stride * int16ElemsPerBlock;
+        __ubuf__ half *hwSrc = src + static_cast<uint32_t>(i) * hwFp16Stride * fp16ElemsPerBlock;
+        __ubuf__ int8_t *hwDst = dst + static_cast<uint32_t>(i) * hwDstStride * int8ElemsPerBlock;
+        // Mask buffer in the freed upper half of the int32 region (after in-place int32->int16).
+        // Uses 1 repeat = hwInt16Stride blocks.
+        __ubuf__ int16_t *tempMaskBuf = tempAndBuf + static_cast<uint32_t>(hwInt16Stride) * int16ElemsPerBlock;
 
-        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
+        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation
 
-        // Step 1: fp16 -> int32
+        // Step 1: fp16 -> int32 (1 repeat, stride-controlled)
         switch (static_cast<RoundMode>(mode)) {
             case RoundMode::CAST_RINT:
-                vconv_f162s32r(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                               hwFp16Stride);
+                vconv_f162s32r(tempInt32Buf, hwSrc, 1, srcBlockStride, srcBlockStride, hwInt32Stride, hwFp16Stride);
                 break;
             case RoundMode::CAST_ROUND:
-                vconv_f162s32a(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                               hwFp16Stride);
+                vconv_f162s32a(tempInt32Buf, hwSrc, 1, srcBlockStride, srcBlockStride, hwInt32Stride, hwFp16Stride);
                 break;
             case RoundMode::CAST_FLOOR:
-                vconv_f162s32f(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                               hwFp16Stride);
+                vconv_f162s32f(tempInt32Buf, hwSrc, 1, srcBlockStride, srcBlockStride, hwInt32Stride, hwFp16Stride);
                 break;
             case RoundMode::CAST_CEIL:
-                vconv_f162s32c(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                               hwFp16Stride);
+                vconv_f162s32c(tempInt32Buf, hwSrc, 1, srcBlockStride, srcBlockStride, hwInt32Stride, hwFp16Stride);
                 break;
             case RoundMode::CAST_TRUNC:
-                vconv_f162s32z(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                               hwFp16Stride);
-                break;
             default:
-                vconv_f162s32z(tempInt32Buf, chunkSrc, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt32Stride,
-                               hwFp16Stride);
+                vconv_f162s32z(tempInt32Buf, hwSrc, 1, srcBlockStride, srcBlockStride, hwInt32Stride, hwFp16Stride);
                 break;
         }
         pipe_barrier(PIPE_V);
         set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation
 
-        // Step 2: int32 -> int16 in-place (narrowing: output half the size of input)
-        // Safe because dest repeat k writes to [k*hwInt16Stride] while src reads from
-        // [k*hwInt32Stride=2k*hwInt16Stride].
-        vconv_s322s16(tempAndBuf, tempInt32Buf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
-                      hwInt32Stride);
+        // Step 2: int32 -> int16 in-place (1 repeat)
+        vconv_s322s16(tempAndBuf, tempInt32Buf, 1, srcBlockStride, srcBlockStride, hwInt16Stride, hwInt32Stride);
         pipe_barrier(PIPE_V);
 
-        // Steps 3-4 use vector_dup and vand which are mask-controlled operations on A2/A3.
-        // Each hw repeat covers hwFp16Stride blocks (e.g. 4 blocks = 64 int16 elements).
-        // If the current vector mask is wider than that (e.g. 128 elements from TCvtHead, or
-        // numRemainPerLine > 64 from TCvtTail), the mask-controlled op would process elements
-        // beyond the hw repeat stride boundary, overlapping with the next repeat's data.
-        // Fix: narrow the mask to exactly elemsPerHwRepeat for these two steps.
-        // The surrounding vconv steps (1/2/5/6) are not affected because their hw repeat size
-        // exactly matches the stride, so any mask value produces correct results.
-        SetContinuousMask(elemsPerHwRepeat);
+        // Steps 3-4: mask-controlled — use maskElems (capped to valid columns in this slice).
+        SetContinuousMask(maskElems);
 
-        // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (freed upper half of int32 region)
-        vector_dup(tempMaskBuf, static_cast<int16_t>(255), hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
+        // Step 3: vector_dup 255 into mask buffer (1 repeat)
+        vector_dup(tempMaskBuf, static_cast<int16_t>(255), 1, srcBlockStride, srcBlockStride, hwInt16Stride,
                    hwInt16Stride);
         pipe_barrier(PIPE_V);
 
-        // Step 4: vand int16 & 255 to extract low 8 bits
-        vand(tempAndBuf, tempAndBuf, tempMaskBuf, hwRepeatCount, srcBlockStride, srcBlockStride, srcBlockStride,
-             hwInt16Stride, hwInt16Stride, hwInt16Stride);
+        // Step 4: vand & 255 (1 repeat)
+        vand(tempAndBuf, tempAndBuf, tempMaskBuf, 1, srcBlockStride, srcBlockStride, srcBlockStride, hwInt16Stride,
+             hwInt16Stride, hwInt16Stride);
         pipe_barrier(PIPE_V);
 
-        // Step 5: int16 -> fp16, writing into tempMaskBuf region (mask is consumed, region is free)
+        // Step 5: int16 -> fp16 (1 repeat, stride-controlled)
         __ubuf__ half *tempFp16Out = (__ubuf__ half *)tempMaskBuf;
-        vconv_s162f16(tempFp16Out, tempAndBuf, hwRepeatCount, srcBlockStride, srcBlockStride, hwInt16Stride,
-                      hwInt16Stride);
+        vconv_s162f16(tempFp16Out, tempAndBuf, 1, srcBlockStride, srcBlockStride, hwInt16Stride, hwInt16Stride);
         pipe_barrier(PIPE_V);
 
-        // Step 6: fp16 -> int8 (hwDstStride = hwFp16Stride / 2 since int8 is half the width of fp16)
-        vconv_f162s8z(chunkDst, tempFp16Out, hwRepeatCount, dstBlockStride, srcBlockStride, hwDstStride, hwFp16Stride);
-
-        hwRepeatsDone += hwRepeatCount;
+        // Step 6: fp16 -> int8 (1 repeat, hwDstStride = hwFp16Stride / 2 blocks)
+        vconv_f162s8z(hwDst, tempFp16Out, 1, dstBlockStride, srcBlockStride, hwDstStride, hwFp16Stride);
     }
 }
 
@@ -926,10 +924,13 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
 // GenCastCall overload with explicit temporary buffer pointer.
 // Mirrors the no-tmp GenCastCall but forwards tmpPtr to NonSatTorch paths
 // instead of using the fixed TMP_UB_OFFSET global scratch area.
+// numValidColsPerRow: passed to GenCastCallFp16ToInt8_NonSatTorch to cap the
+// mask to the actual valid column window (0 = full row, i.e. head path).
 template <typename TileDataD, typename TileDataS>
 AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typename TileDataS::DType *src,
                         uint8_t repeatNum, RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride,
-                        uint16_t dstRepeatStride, uint16_t srcRepeatStride, __ubuf__ int32_t *tmpPtr)
+                        uint16_t dstRepeatStride, uint16_t srcRepeatStride, __ubuf__ int32_t *tmpPtr,
+                        uint16_t numValidColsPerRow = 0)
 {
     if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                   std::is_same<typename TileDataS::DType, float>::value) { // fp32 to int16
@@ -967,7 +968,8 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
             GenCastCallFp16ToInt8_NonSatTorch<TileDataD, TileDataS>(
-                dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tmpPtr);
+                dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tmpPtr,
+                numValidColsPerRow);
         } else {
             GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                         dstRepeatStride, srcRepeatStride);
@@ -1096,6 +1098,34 @@ PTO_INST void TCvtTail(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ type
         GenCastCall<TileDataD, TileDataS>(dstPtr + numLoop * DS * REPEAT_MAX, srcPtr + numLoop * SS * REPEAT_MAX,
                                           (uint8_t)remainAfterLoop, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
                                           (uint16_t)SS / srcNElemPerBlock, args...);
+    }
+    set_vector_mask(-1, -1);
+}
+
+// TCvtTail overload with explicit tmpPtr — passes numRemainPerLine through to
+// GenCastCallFp16ToInt8_NonSatTorch so the per-slice mask is capped correctly.
+template <typename TileDataD, typename TileDataS, unsigned SS, unsigned DS>
+PTO_INST void TCvtTail(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ typename TileDataS::DType *srcPtr,
+                       RoundMode mode, unsigned validRow, unsigned numRemainPerLine, __ubuf__ int32_t *tmpPtr)
+{
+    constexpr unsigned dstNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataD::DType);
+    constexpr unsigned srcNElemPerBlock = BLOCK_BYTE_SIZE / sizeof(typename TileDataS::DType);
+    unsigned numLoop = validRow / REPEAT_MAX;
+    unsigned remainAfterLoop = validRow % REPEAT_MAX;
+    SetContinuousMask(numRemainPerLine);
+    if (numLoop > 0) {
+        for (uint32_t j = 0; j < numLoop; j++) {
+            GenCastCall<TileDataD, TileDataS>(dstPtr + j * DS * REPEAT_MAX, srcPtr + j * SS * REPEAT_MAX,
+                                              (uint8_t)REPEAT_MAX, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
+                                              (uint16_t)SS / srcNElemPerBlock, tmpPtr,
+                                              static_cast<uint16_t>(numRemainPerLine));
+        }
+    }
+    if (remainAfterLoop > 0) {
+        GenCastCall<TileDataD, TileDataS>(dstPtr + numLoop * DS * REPEAT_MAX, srcPtr + numLoop * SS * REPEAT_MAX,
+                                          (uint8_t)remainAfterLoop, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
+                                          (uint16_t)SS / srcNElemPerBlock, tmpPtr,
+                                          static_cast<uint16_t>(numRemainPerLine));
     }
     set_vector_mask(-1, -1);
 }
