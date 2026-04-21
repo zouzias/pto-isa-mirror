@@ -48,6 +48,7 @@ tadds
 taddsc
 tand
 tands
+targreduceop
 tbroadcast
 tci
 tcmp
