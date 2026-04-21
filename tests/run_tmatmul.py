@@ -28,54 +28,31 @@ PRESET_SIZES = [
 # Test data script path (relative to this script)
 TEST_DATA_SCRIPT_PATH = Path("cpu/st/testcase/tmatmul/gen_data.py")
 
-def run_command(
-    command: List[str],
-    cwd: Optional[Path] = None,
-    *,
-    title: Optional[str] = None,
-    verbose: bool = False,
-    always_print_patterns: Optional[List[str]] = None,
-    env: Optional[Dict[str, str]] = None,
-) -> float:
-    cwd_str = str(cwd) if cwd is not None else None
-    start = time.perf_counter()
-    if title:
-        logging.info(f"{title}")
-    if verbose:
-        logging.info(f"  $ {_format_cmd(command)}" + (f"\n  cwd: {cwd_str}" if cwd_str else ""))
-    try:
-        completed = subprocess.run(
-            [str(x) for x in command],
-            cwd=cwd_str,
-            env=env or os.environ,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if completed.returncode != 0 or verbose:
-            if completed.stdout:
-                logging.info(completed.stdout.rstrip())
-            if completed.stderr:
-                logging.info(completed.stderr.rstrip())
-        elif always_print_patterns:
-            patterns = [re.compile(p) for p in always_print_patterns]
-            for line in (completed.stdout or "").splitlines():
-                if any(p.search(line) for p in patterns):
-                    logging.info(line.rstrip())
-            for line in (completed.stderr or "").splitlines():
-                if any(p.search(line) for p in patterns):
-                    logging.info(line.rstrip())
-        if completed.returncode != 0:
-            raise subprocess.CalledProcessError(
-                completed.returncode,
-                command,
-                output=completed.stdout,
-                stderr=completed.stderr,
-            )
-    except FileNotFoundError as e:
-        raise RuntimeError(f"command not found: {command[0]}") from e
-    return time.perf_counter() - start
+def run_command(cmd: List[str], cwd: Optional[Path] = None, verbose: bool = False, env: Optional[Dict[str, str]] = None) -> float:	 
+      """Run a command and return elapsed time."""	 
+      start = time.perf_counter()	 
+      if verbose:	 
+          logging.info(f"Running: {' '.join(cmd)}")	 
+
+      result = subprocess.run(	 
+          cmd,	 
+          cwd=str(cwd) if cwd else None,
+          env=env or os.environ, 
+          capture_output=True,	 
+          text=True,	 
+          encoding="utf-8",	 
+          errors="replace"	 
+      )	 
+
+      if result.returncode != 0:	 
+          logging.error(f"Command failed: {' '.join(cmd)}")	 
+          if result.stdout:	 
+              logging.error(result.stdout)	 
+          if result.stderr:	 
+              logging.error(result.stderr)	 
+          raise subprocess.CalledProcessError(result.returncode, cmd)	 
+      elapsed = time.perf_counter() - start	 
+      return elapsed
 
 def detect_compilers() -> Tuple[Optional[str], Optional[str]]:
     """Detect C++ compilers (simplified version from run_cpu.py)."""
@@ -150,10 +127,9 @@ def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool) -> T
 
     try:
         os.chdir(test_dir)
-        gen_data_script = Path(__file__).resolve().parent / TEST_DATA_SCRIPT_PATH
         dst = build_dir / "gen_data.py"
+        gen_data_script = Path(__file__).resolve().parent / TEST_DATA_SCRIPT_PATH
         st_dir = gen_data_script.resolve().parent.parent.parent
-
         env = os.environ.copy()
         pp = env.get("PYTHONPATH", "")
         new_path = str(st_dir)

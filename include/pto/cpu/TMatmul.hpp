@@ -17,7 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 namespace pto {
 template <typename LeftSrcType, typename RightSrcType, typename DType>
 void Gemm(DType* dst, const DType* acc,
-          const DType src0, const DType src1,
+          const LeftSrcType src0, const RightSrcType src1,
           uint16_t M, uint16_t N, uint16_t K)
 {
     // Placeholder implementation - simple triple loop
@@ -41,7 +41,7 @@ void TMatmulNzZn(typename TileAcc::TileDType dst, typename TileAcc::TileDType ac
     using LeftSrcType = typename TileLeft::TileDType;
     using RightSrcType = typename TileRight::TileDType;
     using DType = typename TileAcc::DType;
-    cpu::Gemm<LeftSrcType, RightSrcType, DType>(dst, acc, src0, src1, M, N, K);
+    Gemm<LeftSrcType, RightSrcType, DType>(dst, acc, src0, src1, M, N, K);
 }
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
