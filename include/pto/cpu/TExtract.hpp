@@ -14,9 +14,6 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include <cassert>
 #include "common.hpp"
 
-#define F32_BITS 32
-#define CUSTOM_FLOAT_BITS 19
-
 namespace pto {
 
 template <typename T>
@@ -27,13 +24,8 @@ inline T ReLU(T val)
     return val;
 }
 
-template <int32_t bit_size>
 float extract_m1_from_quant(uint64_t quant)
 {
-    if constexpr (bit_size == 32) {
-        uint32_t scale_bits = static_cast<uint32_t>(quant);
-        return std::bit_cast<float>(scale_bits);
-    }
     uint32_t m1_bits = static_cast<uint32_t>((quant >> 13) & 0x7FFFF);
     uint32_t sign_bit = (m1_bits >> 18) & 0x1;
     uint32_t exponent = (m1_bits >> 10) & 0xFF;
@@ -49,10 +41,10 @@ float extract_m1_from_quant(uint64_t quant)
     return sign_val * mantissa_val * exponent_val;
 }
 
-template <typename DstType, typename SrcType, QuantMode_t mode, int32_t bit_size, bool use_relu = false>
+template <typename DstType, typename SrcType, QuantMode_t mode, bool use_relu = false>
 DstType quantize_element(SrcType src_val, uint64_t scalar)
 {
-    float f_scale = extract_m1_from_quant<bit_size>(scalar);
+    float f_scale = extract_m1_from_quant(scalar);
     uint32_t offset = static_cast<uint32_t>((scalar >> 37) & 0x1FF);
     uint32_t sign = static_cast<uint32_t>((scalar >> 46) & 0x1);
 
@@ -118,7 +110,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t pre
             const size_t srcTileIdx = GetTileElementOffset<SrcTileData>(rDst + idxRow, cDst + idxCol);
             const size_t dstTileIdx = GetTileElementOffset<DstTileData>(rDst, cDst);
             dst.data()[dstTileIdx] =
-                quantize_element<D, S, quantPre, F32_BITS, apply_relu>(src.data()[srcTileIdx], preQuantScalar);
+                quantize_element<D, S, quantPre, apply_relu>(src.data()[srcTileIdx], preQuantScalar);
         }
     }
 }
@@ -147,7 +139,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &
             const size_t quantTileIdx = GetTileElementOffset<FpTileData>(0, cDst);
             uint64_t quantScalar = static_cast<uint64_t>(fp.data()[quantTileIdx]);
             dst.data()[dstTileIdx] =
-                quantize_element<D, S, quantPre, CUSTOM_FLOAT_BITS, apply_relu>(src.data()[srcTileIdx], quantScalar);
+                quantize_element<D, S, quantPre, apply_relu>(src.data()[srcTileIdx], quantScalar);
         }
     }
 }
