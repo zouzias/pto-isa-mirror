@@ -136,14 +136,38 @@ PTO_INTERNAL void TCOLSUM_IMPL(TileDataOut &dst, TileDataIn &src, TileDataTmp &t
     }
 
     using T = typename TileDataIn::DType;
-    constexpr int tmpStride = TileDataTmp::RowStride * sizeof(typename TileDataTmp::DType) / sizeof(T);
-    PTO_ASSERT(validCol <= tmpStride,
-               "Fix: TCOLSUM input valid columns must be less than or equal to the tmp columns.");
     if (isBinary) {
+        constexpr int tmpStride = TileDataTmp::RowStride * sizeof(typename TileDataTmp::DType) / sizeof(T);
+        PTO_ASSERT(validCol <= tmpStride,
+                   "Fix: TCOLSUM input valid columns must be less than or equal to the tmp columns.");
         TColSum<T, TileDataOut, TileDataIn, TileDataTmp, true>(dst.data(), src.data(), tmp.data(), validRow, validCol);
     } else {
         TColSum<T, TileDataOut, TileDataIn, TileDataTmp, false>(dst.data(), src.data(), tmp.data(), validRow, validCol);
     }
+}
+
+template <typename T, typename TileDataOut, typename TileDataIn>
+__tf__ PTO_INTERNAL void TColSum(typename TileDataOut::TileDType __out__ dstData,
+                                 typename TileDataIn::TileDType __in__ srcData, unsigned validRow, unsigned validCol,
+                                 unsigned version = VFImplKind::VFIMPL_DEFAULT)
+{
+    __ubuf__ T *dst = (__ubuf__ T *)__cce_get_tile_ptr(dstData);
+    __ubuf__ T *src = (__ubuf__ T *)__cce_get_tile_ptr(srcData);
+    TColReduceInstr<TColSumOp<T>, T, TileDataIn>(dst, src, validRow, validCol, version);
+}
+
+template <typename TileDataOut, typename TileDataIn>
+PTO_INTERNAL void TCOLSUM_IMPL(TileDataOut &dst, TileDataIn &src)
+{
+    int32_t validCol = src.GetValidCol();
+    int32_t validRow = src.GetValidRow();
+    TColReduceCheck<TileDataOut, TileDataIn>(validRow, validCol, dst.GetValidCol());
+    if (validCol == 0 || validRow == 0) {
+        return;
+    }
+
+    using T = typename TileDataIn::DType;
+    TColSum<T, TileDataOut, TileDataIn>(dst.data(), src.data(), validRow, validCol);
 }
 } // namespace pto
 #endif
