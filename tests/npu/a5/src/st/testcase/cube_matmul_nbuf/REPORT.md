@@ -185,3 +185,36 @@ Ref: standalone 4buf_K16     24,100           89.7%    14.9%    10.8%       945 
 | `gen_data.py` | Data generator — `[M,K]×[K,N]` row-major layout |
 | `README.md` | Layout documentation and build instructions |
 | `REPORT.md` | This performance report |
+
+
+---
+
+## 10. Pipeline Timing Diagram (from msprof trace.json)
+
+Profiling data generated with .
+Files:  and .
+Open  in Chrome () or MindStudio Insight for interactive view.
+
+### Combined pipeline diagram — 0 to 6.5 µs startup window
+
+The SVG below shows the first ~8 K-iterations for both configurations.  
+Colour key: GET_BUF (blue) · MTE2 ND2NZ GM→L1 (orange) · MTE1 LOAD L1→L0 (green) · MMAD cube (red)
+
+![Pipeline comparison](profiling/pipeline_comparison.svg)
+
+### Key observations from trace
+
+| Event | buf4 | buf8 |
+|-------|------|------|
+| First MTE2 load fired | **0.649 µs** | 0.893 µs (+0.24 µs) |
+| First MMAD issued | **1.092 µs** | 1.311 µs (+0.22 µs) |
+| MMAD k=0→k=1 gap | **0.169 µs** | 0.347 µs (+2.05×) |
+| Scalar prologue ticks | ~230 | ~450 (+96%) |
+| Pipeline full from k= | 0–5 fast | 2–7 fast |
+| Scalar cycles (instr_exe) | 5,145 | **9,107 (+77%)** |
+| MTE2 cycles (instr_exe) | 227,791 | 227,901 (~identical) |
+
+**Bottom line**: the 8-buf scalar prologue (address computation for 8 slots) blocks MTE2 from  
+firing for an extra ~450 ticks at startup. MTE2 total bandwidth is identical — buf8 is not doing  
+more or less GM work. The regression is purely scheduling overhead from doubling the buffer  
+management code.
