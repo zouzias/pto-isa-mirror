@@ -11,33 +11,13 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifndef PTO_COMM_ASYNC_EVENT_IMPL_HPP
 #define PTO_COMM_ASYNC_EVENT_IMPL_HPP
 
-#include "pto/comm/comm_types.hpp"
-#include "pto/comm/async/async_types.hpp"
-#include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
+#include "pto/comm/async/AsyncEventCommonDetail.hpp"
 #ifdef PTO_URMA_SUPPORTED
 #include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
 #endif
 
 namespace pto {
 namespace comm {
-
-template <DmaEngine engine = DmaEngine::SDMA, typename ScratchTile>
-PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *workspace, AsyncSession &session,
-                                    uint32_t syncId = 0,
-                                    const sdma::SdmaBaseConfig &baseConfig = {sdma::kDefaultSdmaBlockBytes, 0, 1},
-                                    uint32_t channelGroupIdx = sdma::kAutoChannelGroupIdx)
-{
-    session.engine = engine;
-    if constexpr (engine == DmaEngine::SDMA) {
-        session.valid =
-            sdma::BuildSdmaSession(scratchTile, workspace, session.sdmaSession, syncId, baseConfig, channelGroupIdx);
-        return session.valid;
-    } else {
-        static_assert(engine == DmaEngine::SDMA,
-                      "This overload is for SDMA; use the URMA-specific BuildAsyncSession for DmaEngine::URMA");
-        return false;
-    }
-}
 
 #ifdef PTO_URMA_SUPPORTED
 template <DmaEngine engine>
@@ -52,6 +32,7 @@ PTO_INTERNAL bool BuildAsyncSession(__gm__ uint8_t *workspace, uint32_t destRank
 
 // ============================================================================
 // AsyncEvent::Wait / Test — AsyncSession overloads (primary user API)
+// A5: SDMA and URMA engines are supported
 // ============================================================================
 
 PTO_INTERNAL bool AsyncEvent::Wait(const AsyncSession &session) const

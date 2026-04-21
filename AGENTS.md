@@ -202,7 +202,7 @@ pto_add_kernel(<target_name>)
 ## Important Notes
 - Always test on CPU simulator before NPU hardware
 - Use `--clean` flag with CPU tests for fresh builds
-- NPU tests require `ASCEND_HOME_PATH` environment variable
+- NPU tests require `ASCEND_HOME_PATH` environment variable; set it via `source /home/ntlab/liulei/set_env_new.sh`
 - C++20 or later is required
 - bfloat16 support requires GCC>=14 for CPU simulator
 - PTO instructions are case-sensitive and use `T` prefix
