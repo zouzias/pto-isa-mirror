@@ -70,6 +70,7 @@ set(A2A3_TESTCASES
     tsort32
     ttrans
     tload
+    tstore
     tloadconv
     tmov
     textract

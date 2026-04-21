@@ -99,8 +99,8 @@ inline constexpr ArchConfig kA2A3ArchConfig{
     "a2a3",
     kMainFrequencyHz,
     {
-        100.9,
-        135.0,
+        33.0, // GM_TO_UB
+        34.0, // GM_TO_L1
         188.46,
         32.0,
         1024.0,
