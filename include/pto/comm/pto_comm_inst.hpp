@@ -15,7 +15,11 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/async/async_types.hpp"
 #include "pto/comm/pto_comm_instr_impl.hpp"
 #ifndef __CPU_SIM
-#include "pto/comm/async/async_event_impl.hpp"
+#ifdef PTO_NPU_ARCH_A2A3
+#include "pto/comm/a2a3/async/async_event_impl.hpp"
+#elif defined(PTO_NPU_ARCH_A5)
+#include "pto/comm/a5/async/async_event_impl.hpp"
+#endif
 #endif
 #include "pto/common/event.hpp"
 
