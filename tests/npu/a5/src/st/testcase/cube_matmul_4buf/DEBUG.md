@@ -115,3 +115,63 @@ Check if mode should be non-zero for cube pipeline.
 - The set_flag kernel was previously added to `main.cpp` as a separate test function — check if it can be toggled via `#define` or separate test case
 - Need to enable buffer dump logging in simulator (check build script flags or env vars)
 - Ivan may have debug skills for cube case — L0A/L0B format, NZ log in L1 log are key concepts per Xson
+
+---
+
+## A5 Sim Log Analysis (v2 kernel, 2026-04-21)
+
+### CPU Sim: ✅ ALL 4 TESTS PASS
+- `CubeMatmul4BufTest` (set_flag baseline): max diff 1.14e-05
+- `CubeMatmul4BufPreloadTest`: max diff 1.14e-05
+- `CubeMatmul4BufEventSyncTest`: max diff 1.14e-05
+- `CubeMatmul4BufBufIdV2Test` (v2, separate L1/L0 IDs): max diff 1.14e-05
+
+### A5 Sim: ❌ STILL FAILING (v2 kernel)
+- max diff: 12.6, bad count: 8039 / 8192
+- Cycles: 23,734 (same as broken v1)
+
+### Root Cause (from instr_log.dump)
+
+Inspecting `core0.cubecore0.instr_log.dump`:
+
+```
+[00001115] GET_BUF  PIPE:MTE2, bufId:0, cnt:0       ← iter 0 starts loading
+[00001138] GET_BUF  PIPE:MTE2, bufId:1, cnt:0       ← iter 1 starts loading
+[00001255] GET_BUF  PIPE:CUBE, bufId:8, cnt:1       ← iter 1's C acquire ALREADY QUEUED
+[00001284] GET_BUF  PIPE:CUBE, bufId:8, cnt:2       ← iter 2's C acquire queued
+[00001328] GET_BUF  PIPE:CUBE, bufId:8, cnt:3       ← iter 3's C acquire queued
+...
+[00001847] RLS_BUF  PIPE:MTE2, bufId:0, cnt:0       ← iter 0 L1 data ready (finally)
+[00001848] GET_BUF  PIPE:MTE1, bufId:0, cnt:1
+[00001849] GET_BUF  PIPE:MTE1, bufId:4, cnt:0
+[00001916] RLS_BUF  PIPE:MTE1, bufId:0, cnt:1       ← iter 0 L0 data ready
+[00001917] RLS_BUF  PIPE:MTE1, bufId:4, cnt:0
+[00001918] GET_BUF  PIPE:CUBE, bufId:4, cnt:1       ← L0 slot acquire
+[00001919] GET_BUF  PIPE:CUBE, bufId:8, cnt:0       ← iter 0 C acquire (finally!)
+[00001977] CUBE MMAD  (iter 0 runs correctly)
+[00001978] RLS_BUF  PIPE:CUBE, bufId:4, cnt:1
+[00001979] RLS_BUF  PIPE:CUBE, bufId:8, cnt:0
+```
+
+**The problem:** C_BUF_ID=8 acquires for iter 1,2,3... (cnt:1,2,3...) are being issued at ticks
+1255-1404 — BEFORE the MTE2 for iter 0 has even finished (tick 1847). The hardware is
+pre-issuing future CUBE stage C-slot acquires out of order, ahead of the L0 data being ready.
+
+The `GET_BUF PIPE:CUBE bufId:8 cnt:1` at tick 1255 doesn't stall because bufId:8 was just
+released from a previous state (initial free), so it immediately proceeds — but the
+corresponding L0 data (bufId:4..7) isn't loaded yet!
+
+**Hypothesis:** The C_BUF_ID=8 acquire and the id_l0 acquire are done in program order
+(get_buffer<PIPE_M>(id_l0) THEN get_buffer<PIPE_M>(C_BUF_ID)), but the hardware pipeline
+is speculatively queuing C_BUF_ID=8 requests from future loop iterations out of order.
+
+**This is not an ID collision bug** — it is a **pipeline reordering / speculative execution**
+issue where get_buf for the C tile (single shared across all iters) can be satisfied
+immediately in future iterations before the L0 data for those iterations is available.
+
+### Next Steps
+- [ ] Try ordering: acquire id_l0 FIRST, then C_BUF_ID. But since they're both PIPE_M, they
+      should be in-order...
+- [ ] Check if PIPE_M actually serializes both gets, or if only one is needed
+- [ ] Try: single combined get_buf<PIPE_M>(id_l0) that covers both A/B and C
+- [ ] Ask Ivan / check ISA docs: does PIPE_M pipeline allow multiple concurrent get_buf?

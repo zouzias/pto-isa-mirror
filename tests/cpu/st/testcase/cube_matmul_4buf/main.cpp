@@ -220,3 +220,72 @@ TEST_F(CubeMatmul4BufEventSyncTest, case_f16_32x1024_1024x256_eventsync)
     bool ret = ResultCmp(golden, result, 0.01f);
     EXPECT_TRUE(ret);
 }
+// ============================================================
+// BufId V2 test: separate IDs for L1 vs L0 memory levels
+// ============================================================
+template <typename T_A, typename T_B, typename T_C>
+void LaunchCubeMatmul4BufBufIdV2(T_A *a, T_B *b, T_C *c, void *stream);
+
+class CubeMatmul4BufBufIdV2Test : public testing::Test {
+protected:
+    void SetUp() override {}
+    void TearDown() override {}
+};
+
+TEST_F(CubeMatmul4BufBufIdV2Test, case_f16_32x1024_1024x256_bufidv2)
+{
+    size_t aFileSize = M * K * sizeof(uint16_t);
+    size_t bFileSize = K * N * sizeof(uint16_t);
+    size_t cFileSize = M * N * sizeof(float);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    half *src0Device, *src1Device;
+    float *dstDevice;
+    uint8_t *dstHost, *src0Host, *src1Host;
+
+    aclrtMallocHost((void **)(&dstHost), cFileSize);
+    aclrtMallocHost((void **)(&src0Host), aFileSize);
+    aclrtMallocHost((void **)(&src1Host), bFileSize);
+
+    aclrtMalloc((void **)&dstDevice, cFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src0Device, aFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&src1Device, bFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    CHECK_RESULT_GTEST(ReadFile("../CubeMatmul4BufTest.case_f16_32x1024_1024x256/A_gm.bin", aFileSize, src0Host, aFileSize));
+    CHECK_RESULT_GTEST(ReadFile("../CubeMatmul4BufTest.case_f16_32x1024_1024x256/B_gm.bin", bFileSize, src1Host, bFileSize));
+
+    aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+    aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    LaunchCubeMatmul4BufBufIdV2<half, half, float>(src0Device, src1Device, dstDevice, stream);
+
+    aclrtSynchronizeStream(stream);
+    aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    int ret_mkdir = system(("mkdir -p " + GetGoldenDir()).c_str());
+    (void)ret_mkdir;
+    WriteFile(GetGoldenDir() + "/output_C_bufidv2.bin", dstHost, cFileSize);
+
+    aclrtFree(dstDevice);
+    aclrtFree(src0Device);
+    aclrtFree(src1Device);
+    aclrtFreeHost(dstHost);
+    aclrtFreeHost(src0Host);
+    aclrtFreeHost(src1Host);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<float> golden(M * N);
+    std::vector<float> result(M * N);
+
+    CHECK_RESULT_GTEST(ReadFile("../CubeMatmul4BufTest.case_f16_32x1024_1024x256/golden.bin", cFileSize, golden.data(), cFileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output_C_bufidv2.bin", cFileSize, result.data(), cFileSize));
+
+    bool ret = ResultCmp(golden, result, 0.01f);
+    EXPECT_TRUE(ret);
+}
