@@ -218,3 +218,64 @@ Colour key: GET_BUF (blue) · MTE2 ND2NZ GM→L1 (orange) · MTE1 LOAD L1→L0 (
 firing for an extra ~450 ticks at startup. MTE2 total bandwidth is identical — buf8 is not doing  
 more or less GM work. The regression is purely scheduling overhead from doubling the buffer  
 management code.
+
+
+---
+
+## 11. Pipeline Comparison: buf4_K16 (8KB) vs buf4_K32 (16KB)
+
+### Why does K32 win despite being more MTE2-bound?
+
+Both configs are **MTE2-bound** (GM->L1 bandwidth is the long pole). Yet K32 is faster
+(22,639 ticks vs 23,968 ticks, +5.8%). The reason is counterintuitive:
+
+| Metric | buf4 K16 (8KB) | buf4 K32 (16KB) |
+|--------|---------------|----------------|
+| K_ITERS | 64 | 32 |
+| MTE2 total cycles | 227,791 | **204,132** |
+| MTE2 % | 93.8% | **95.8%** |
+| MTE2 ND2NZ duration (mean) | 0.54 us | **0.98 us** |
+| MMAD gap (mean) | 0.183 us | **0.341 us** |
+| MTE1 LOAD duration (mean) | 0.028 us | 0.040 us |
+| Lat MTE2->MMAD (mean) | 0.725 us | 1.316 us |
+| Scalar cycles | 5,145 | **2,532 (-51%)** |
+| Total instr cycles | 242,971 | **213,131 (-12%)** |
+
+### Root cause: per-iteration overhead amortisation
+
+Each K-iteration has **fixed overhead**: scalar get_buf/rls_buf address compute, MTE1 LOAD,
+CUBE get_buf, sync flags. With K16 you pay this overhead **64 times**; with K32 only **32 times**.
+
+- Scalar overhead: 5,145 vs 2,532 cycles — exactly **2x ratio** matching the 2x iteration count
+- MTE1 overhead: 6,379 vs 4,041 cycles — 1.6x (MTE1 LOAD takes slightly longer for larger tile)
+- CUBE overhead: 3,648 vs 2,403 cycles — 1.5x
+
+But MTE2 is **not** 2x: 227,791 vs 204,132 cycles (-10%). The K32 tile moves **twice the data**
+per ND2NZ call (16KB vs 8KB), but the MTE2 BW cost is sublinear because:
+1. Fewer get_buf / rls_buf handshakes (half as many)
+2. Better BW utilisation: one long 0.98us transfer vs two 0.54us transfers with scheduling gap between them
+
+### The ~1500 cycle MTE2 difference explained
+
+MTE2 savings = 227,791 - 204,132 = **23,659 cycles** (not 1,500). The REPORT previously showed
+the ticks difference (~1,300 ticks = ~23,400 cycles at 1 tick/cycle). This is consistent:
+
+- K16: 128 ND2NZ calls x mean 0.541us = 69.3us total transfer work
+- K32:  63 ND2NZ calls x mean 0.984us = 62.0us total transfer work  
+- Saving: **7.3us** = ~13,140 ticks just from fewer get_buf/rls_buf round-trips between transfers
+
+The rest of the ~10K tick saving comes from halved scalar and MTE1 overhead.
+
+### Why 8-buf cannot help K16 match K32
+
+8-buf adds more buffer slots hoping to hide more MTE2 latency. But K16 is already hiding MTE2
+as well as it can (4 buffers fully overlap compute with the next load). The bottleneck is raw
+MTE2 bandwidth — you cannot pipeline your way out of a bandwidth wall. K32 wins by sending
+**larger, fewer** bursts which have lower per-byte overhead in get_buf/rls_buf scheduling.
+
+### Pipeline diagram — 0 to 9 us window
+
+![K16 vs K32 pipeline](profiling/pipeline_k16_vs_k32.svg)
+
+K16 shows dense short MTE2 bars (64 x ~0.54us each, frequent gaps between).
+K32 shows wider MTE2 bars (32 x ~0.98us each, more continuous BW usage).
