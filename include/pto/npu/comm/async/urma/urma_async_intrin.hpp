@@ -14,7 +14,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #ifdef PTO_URMA_SUPPORTED
 
 #include "pto/common/debug.h"
-#include "pto/comm/async/async_types.hpp"
+#include "pto/comm/async_common/async_types.hpp"
 #include "pto/npu/comm/async/urma/urma_types.hpp"
 
 namespace pto {
