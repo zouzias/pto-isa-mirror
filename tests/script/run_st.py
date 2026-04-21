@@ -218,6 +218,7 @@ def run_binary(testcase, run_mode, args="all", is_comm=False, nranks=2):
         cmd = ["./" + testcase]
         if args != "all":
             if run_mode == "sim":
+                import pathlib; pathlib.Path(f"../{args}").mkdir(parents=True, exist_ok=True)
                 os.environ["CAMODEL_LOG_PATH"] = f"../{args}"
             cmd.append("--gtest_filter=" + args)
 

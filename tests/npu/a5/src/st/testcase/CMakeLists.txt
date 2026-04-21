@@ -109,6 +109,7 @@ set(ALL_TESTCASES
     tmatmul
     tmatmul_mx
     cube_matmul_4buf
+    cube_matmul_nbuf
     tload_mix
     tload_shape2d
     tload
