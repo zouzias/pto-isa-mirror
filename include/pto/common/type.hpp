@@ -323,6 +323,8 @@ union FloatIntUnion {
     T f;
     constexpr PTO_INTERNAL FloatIntUnion() : f(0.0f)
     {}
+    constexpr PTO_INTERNAL FloatIntUnion(T val) : f(val)
+    {}
     constexpr PTO_INTERNAL FloatIntUnion(UIntegerType val) : i(val)
     {}
 #endif
