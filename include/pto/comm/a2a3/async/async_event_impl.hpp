@@ -30,8 +30,7 @@ PTO_INTERNAL bool BuildAsyncSession(ScratchTile &scratchTile, __gm__ uint8_t *wo
             sdma::BuildSdmaSession(scratchTile, workspace, session.sdmaSession, syncId, baseConfig, channelGroupIdx);
         return session.valid;
     } else {
-        static_assert(engine == DmaEngine::SDMA,
-                      "This overload is for SDMA; URMA is not supported on A2/A3");
+        static_assert(engine == DmaEngine::SDMA, "This overload is for SDMA; URMA is not supported on A2/A3");
         return false;
     }
 }
