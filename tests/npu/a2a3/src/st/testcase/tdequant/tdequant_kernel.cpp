@@ -35,11 +35,17 @@ __global__ AICORE void runTDequant(__gm__ dstDType __out__ *out, __gm__ srcDType
     SrcTileData srcTile(dstValidRows, dstValidCols);
     ParaTileData scaleTile(dstValidRows, 1);
     ParaTileData offsetTile(dstValidRows, 1);
-    TASSIGN(dstTile, 0x0);
-    TASSIGN(srcTile, dstRows * dstCols * sizeof(dstDType));
-    TASSIGN(scaleTile, dstRows * dstCols * sizeof(dstDType) + srcRows * srcCols * sizeof(srcDType));
-    TASSIGN(offsetTile, dstRows * dstCols * sizeof(dstDType) + srcRows * srcCols * sizeof(srcDType) +
-                            paraRows * paraCols * sizeof(dstDType));
+    size_t dstSize = dstRows * dstCols * sizeof(dstDType);
+    size_t srcSize = srcRows * srcCols * sizeof(srcDType);
+    size_t paraSize = paraRows * paraCols * sizeof(dstDType);
+    size_t dstOffset = 0;
+    size_t srcOffset = dstOffset + dstSize;
+    size_t scaleOffset = srcOffset + srcSize;
+    size_t offsetTileOffset = scaleOffset + paraSize;
+    TASSIGN(dstTile, dstOffset);
+    TASSIGN(srcTile, srcOffset);
+    TASSIGN(scaleTile, scaleOffset);
+    TASSIGN(offsetTile, offsetTileOffset);
 
     TLOAD(dstTile, dstGlobal);
     TLOAD(srcTile, srcGlobal);
@@ -77,4 +83,10 @@ template void LaunchTDequant<float, int16_t, 32, 32, 16, 32, 15, 15, 24, 16>(flo
 template void LaunchTDequant<float, int8_t, 64, 128, 32, 128, 31, 62, 48, 32>(float *out, int8_t *src, float *scale,
                                                                               float *offset, void *stream);
 template void LaunchTDequant<float, int16_t, 4, 256, 4, 256, 4, 255, 4, 16>(float *out, int16_t *src, float *scale,
+                                                                            float *offset, void *stream);
+template void LaunchTDequant<float, int8_t, 2, 128, 2, 128, 2, 128, 2, 128>(float *out, int8_t *src, float *scale,
+                                                                            float *offset, void *stream);
+template void LaunchTDequant<float, int8_t, 2, 128, 2, 128, 2, 127, 2, 128>(float *out, int8_t *src, float *scale,
+                                                                            float *offset, void *stream);
+template void LaunchTDequant<float, int8_t, 2, 512, 2, 512, 2, 511, 2, 512>(float *out, int8_t *src, float *scale,
                                                                             float *offset, void *stream);
