@@ -469,130 +469,112 @@ PTO_INTERNAL void GenCastCallFp16ToInt8(__ubuf__ typename TileDataD::DType *dst,
 //   - vconv_f162s32 / vconv_s322s16 (involving int32): 64 elements
 //   - vconv_s162f16 / vconv_f162s8z / vand (fp16/int16/int8 only): 128 elements
 //
-// The conversion is performed ONE sub-repeat of 64 elements at a time with single-repeat
-// vector instructions.  This pattern is slower than packing multiple repeats into one
-// instruction, but it completely avoids multi-repeat in-place narrowing hazards that manifest
-// for tiles wider than 128 fp16 columns (e.g. tile [2, 256] needs 4 sub-repeats per row; the
-// older multi-repeat implementation corrupted sub-repeats 2-3 when their temp-buffer upper-half
-// reads raced with adjacent sub-repeat writes on PIPE_V).
+// To keep the pipeline simple and correctness-proof across all tile/stride shapes, we iterate
+// row-by-row with single-repeat vector instructions, and within each row process sub-chunks
+// of at most 64 elements (matching the int32 hardware capacity).  The temp buffer is reused
+// for every sub-chunk, eliminating any multi-repeat in-place narrowing hazards.
+//
+// Parameters:
+//   repeatNum         : number of logical repeats (rows for tail, aligned blocks for head).
+//   srcRepeatStride   : block-stride between logical repeats in src fp16.
+//   dstRepeatStride   : block-stride between logical repeats in dst int8.
+//   numElemsPerRow    : valid elements processed per logical repeat.  0 = head default (128);
+//                       otherwise (tail) = numRemainPerLine from TCvtTail, in [1, 128].
 //
 // Caller contexts:
-//   - HEAD (TCvtHead): caller arrives with the default full-width vector mask.  Each logical
-//     repeat processes 128 fp16 elements (= 2 sub-repeats of 64).  Canonical strides from
-//     ComputeTCvtRepeatConfig: srcRS = BLOCK_MAX_PER_REPEAT (8), dstRS = BLOCK_MAX_PER_REPEAT/2.
-//   - TAIL (TCvtTail): caller has pre-set the vector mask to numRemainPerLine (<= 64) and passes
-//     row strides (srcRS = SS/srcNElemPerBlock, dstRS = DS/dstNElemPerBlock).  Each logical
-//     repeat covers one row, so totalHwRepeats = repeatNum and each sub-repeat uses the caller's
-//     mask unchanged so only numRemainPerLine elements per row are processed.
+//   - HEAD (TCvtHead-with-tmp):     numElemsPerRow = 0 → treated as 128; caller leaves mask full.
+//   - TAIL (TCvtTail-with-tmp):     numElemsPerRow = numRemainPerLine; caller may have set mask
+//                                   but we override it per sub-chunk.
 //
-// The head/tail discriminator is srcRepeatStride == BLOCK_MAX_PER_REPEAT (head has this
-// canonical value; tail's is SS/srcNElemPerBlock which differs when SS != 128 fp16).
+// Temp buffer layout per sub-chunk (fixed 256 bytes, reused every iteration):
+//   [0..255]   : int32 intermediate  (up to 64 int32 = 256 bytes)
+//   [0..127]   : int16 after in-place narrow (up to 64 int16 = 128 bytes)   -- overlays int32
+//   [128..255] : mask (255s) then fp16 output of step 5 (freed upper half)
 //
-// Temp buffer layout (256 bytes total per sub-repeat, reused every iteration):
-//   [0..255]   : int32 intermediate (64 int32 = 256 bytes)
-//   [0..127]   : int16 after in-place narrow (64 int16 = 128 bytes)  -- overlays int32
-//   [128..255] : mask of 255s, then fp16 output of step 5            -- freed upper half
-//
-// Note: src cannot be reused as a temp — the saturation test kernel calls TCVT three times
-// on the same srcTile (ON, OFF, default), and reusing src would corrupt later calls.
+// Note: src cannot be reused as a temp — the saturation test kernel calls TCVT three times on the
+// same srcTile (ON, OFF, default), so reusing src would corrupt later calls.
 template <typename TileDataD, typename TileDataS>
 PTO_INTERNAL void GenCastCallFp16ToInt8_NonSatTorch(__ubuf__ typename TileDataD::DType *dst,
                                                     __ubuf__ typename TileDataS::DType *src, uint8_t repeatNum,
                                                     RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride,
                                                     uint16_t dstRepeatStride, uint16_t srcRepeatStride,
-                                                    __ubuf__ int32_t *tempInt32Buf)
+                                                    __ubuf__ int32_t *tempInt32Buf, uint16_t numElemsPerRow)
 {
     constexpr uint16_t fp16ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(half);    // 16
     constexpr uint16_t int8ElemsPerBlock = BLOCK_BYTE_SIZE / sizeof(int8_t);  // 32
+    constexpr uint16_t maxChunkElems = 64;                                    // int32 hw cap
 
     __ubuf__ int16_t *tempAndBuf = (__ubuf__ int16_t *)tempInt32Buf;
-    // Mask / fp16 scratch lives in the upper half of the 256-byte int32 region, which is
-    // freed after the in-place int32->int16 narrowing step.  Fixed offset of 64 int16 elements
-    // (= 128 bytes = 4 blocks) independent of sub-repeat index, since we reuse the buffer
-    // each iteration.
-    __ubuf__ int16_t *tempMaskBuf = tempAndBuf + 64;
+    // Fixed 64-int16 (=128-byte) offset into the freed upper half of the 256-byte int32 region.
+    __ubuf__ int16_t *tempMaskBuf = tempAndBuf + maxChunkElems;
     __ubuf__ half *tempFp16Out = (__ubuf__ half *)tempMaskBuf;
 
-    // Head uses canonical ComputeTCvtRepeatConfig strides (srcRS = BLOCK_MAX_PER_REPEAT).
-    // Tail strides come from TCvtTail's SS / DS divided by per-block element counts.
-    const bool isHead = (srcRepeatStride == BLOCK_MAX_PER_REPEAT);
+    // Head default = full logical repeat (128 elements); tail passes the actual count.
+    const uint16_t elemsPerRow = (numElemsPerRow == 0) ? static_cast<uint16_t>(128) : numElemsPerRow;
+    const uint16_t numSubChunks = (elemsPerRow + maxChunkElems - 1) / maxChunkElems;            // 1 or 2
+    const uint16_t lastChunkMask = elemsPerRow - (numSubChunks - 1) * maxChunkElems;            // [1, 64]
 
-    // Per-sub-repeat pointer advance (in elements).  Head: 64 fp16 / 64 int8 per sub-repeat.
-    // Tail: one sub-repeat per row, so we advance by the caller's row stride expressed in
-    // elements (srcRS * fp16ElemsPerBlock, dstRS * int8ElemsPerBlock).
-    const uint32_t srcElemStride = isHead ? static_cast<uint32_t>(4) * fp16ElemsPerBlock                          // 64
-                                          : static_cast<uint32_t>(srcRepeatStride) * fp16ElemsPerBlock;
-    const uint32_t dstElemStride = isHead ? static_cast<uint32_t>(2) * int8ElemsPerBlock                          // 64
-                                          : static_cast<uint32_t>(dstRepeatStride) * int8ElemsPerBlock;
+    for (uint16_t r = 0; r < repeatNum; r++) {
+        __ubuf__ half *rowSrc = src + static_cast<uint32_t>(r) * srcRepeatStride * fp16ElemsPerBlock;
+        __ubuf__ int8_t *rowDst = dst + static_cast<uint32_t>(r) * dstRepeatStride * int8ElemsPerBlock;
 
-    // Head processes 2 sub-repeats per logical repeat (128 fp16 split into 64+64).  Tail is 1:1.
-    const uint16_t totalHwRepeats = isHead ? static_cast<uint16_t>(2) * static_cast<uint16_t>(repeatNum)
-                                           : static_cast<uint16_t>(repeatNum);
+        for (uint16_t c = 0; c < numSubChunks; c++) {
+            __ubuf__ half *chunkSrc = rowSrc + static_cast<uint32_t>(c) * maxChunkElems;
+            __ubuf__ int8_t *chunkDst = rowDst + static_cast<uint32_t>(c) * maxChunkElems;
+            const uint16_t chunkMask = (c + 1 == numSubChunks) ? lastChunkMask : maxChunkElems;
 
-    // Head narrows the vector mask to 64 so every step processes exactly 64 elements per
-    // sub-repeat; tail preserves the caller's numRemainPerLine mask.
-    if (isHead) {
-        SetContinuousMask(64);
-    }
+            SetContinuousMask(chunkMask);
 
-    for (uint16_t k = 0; k < totalHwRepeats; k++) {
-        __ubuf__ half *chunkSrc = src + static_cast<uint32_t>(k) * srcElemStride;
-        __ubuf__ int8_t *chunkDst = dst + static_cast<uint32_t>(k) * dstElemStride;
+            set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
 
-        set_ctrl(sbitset0(get_ctrl(), SAT_MODE_BIT)); // Turn on saturation for int32 conversion
+            // Step 1: fp16 -> int32
+            switch (static_cast<RoundMode>(mode)) {
+                case RoundMode::CAST_RINT:
+                    vconv_f162s32r(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+                    break;
+                case RoundMode::CAST_ROUND:
+                    vconv_f162s32a(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+                    break;
+                case RoundMode::CAST_FLOOR:
+                    vconv_f162s32f(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+                    break;
+                case RoundMode::CAST_CEIL:
+                    vconv_f162s32c(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+                    break;
+                case RoundMode::CAST_TRUNC:
+                    vconv_f162s32z(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+                    break;
+                default:
+                    vconv_f162s32z(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
+                    break;
+            }
+            pipe_barrier(PIPE_V);
+            set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation for truncation
 
-        // Step 1: fp16 -> int32 (single repeat; repeat-stride args are not used for repeatNum=1
-        // but follow the codebase convention of 8 = BLOCK_MAX_PER_REPEAT).
-        switch (static_cast<RoundMode>(mode)) {
-            case RoundMode::CAST_RINT:
-                vconv_f162s32r(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                break;
-            case RoundMode::CAST_ROUND:
-                vconv_f162s32a(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                break;
-            case RoundMode::CAST_FLOOR:
-                vconv_f162s32f(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                break;
-            case RoundMode::CAST_CEIL:
-                vconv_f162s32c(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                break;
-            case RoundMode::CAST_TRUNC:
-                vconv_f162s32z(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                break;
-            default:
-                vconv_f162s32z(tempInt32Buf, chunkSrc, 1, srcBlockStride, srcBlockStride, 8, 8);
-                break;
+            // Step 2: int32 -> int16 in-place (single-repeat narrow is always safe).
+            vconv_s322s16(tempAndBuf, tempInt32Buf, 1, srcBlockStride, srcBlockStride, 8, 8);
+            pipe_barrier(PIPE_V);
+
+            // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (freed upper half).
+            vector_dup(tempMaskBuf, static_cast<int16_t>(255), 1, srcBlockStride, srcBlockStride, 8, 8);
+            pipe_barrier(PIPE_V);
+
+            // Step 4: vand int16 & 255 to extract low 8 bits, writing in place to tempAndBuf.
+            vand(tempAndBuf, tempAndBuf, tempMaskBuf, 1, srcBlockStride, srcBlockStride, srcBlockStride, 8, 8, 8);
+            pipe_barrier(PIPE_V);
+
+            // Step 5: int16 -> fp16, writing into tempMaskBuf's region (mask has been consumed).
+            vconv_s162f16(tempFp16Out, tempAndBuf, 1, srcBlockStride, srcBlockStride, 8, 8);
+            pipe_barrier(PIPE_V);
+
+            // Step 6: fp16 -> int8 to the final destination for this sub-chunk.
+            vconv_f162s8z(chunkDst, tempFp16Out, 1, dstBlockStride, srcBlockStride, 8, 8);
+            pipe_barrier(PIPE_V);
         }
-        pipe_barrier(PIPE_V);
-        set_ctrl(sbitset1(get_ctrl(), SAT_MODE_BIT)); // Turn off saturation for truncation
-
-        // Step 2: int32 -> int16 in-place (narrow).  For a single repeat, in-place narrowing is
-        // always safe: the vector unit reads the entire source before producing the output.
-        vconv_s322s16(tempAndBuf, tempInt32Buf, 1, srcBlockStride, srcBlockStride, 8, 8);
-        pipe_barrier(PIPE_V);
-
-        // Step 3: vector_dup mask of 255 (int16) into tempMaskBuf (freed upper half)
-        vector_dup(tempMaskBuf, static_cast<int16_t>(255), 1, srcBlockStride, srcBlockStride, 8, 8);
-        pipe_barrier(PIPE_V);
-
-        // Step 4: vand int16 & 255 to extract low 8 bits, writing in place to tempAndBuf
-        vand(tempAndBuf, tempAndBuf, tempMaskBuf, 1, srcBlockStride, srcBlockStride, srcBlockStride, 8, 8, 8);
-        pipe_barrier(PIPE_V);
-
-        // Step 5: int16 -> fp16, writing into tempMaskBuf's region (mask has been consumed)
-        vconv_s162f16(tempFp16Out, tempAndBuf, 1, srcBlockStride, srcBlockStride, 8, 8);
-        pipe_barrier(PIPE_V);
-
-        // Step 6: fp16 -> int8 to the final destination for this sub-repeat
-        vconv_f162s8z(chunkDst, tempFp16Out, 1, dstBlockStride, srcBlockStride, 8, 8);
-        pipe_barrier(PIPE_V);
     }
 
-    // Restore full vector mask for head so callers (e.g. TCvtHead, which does not manage the
-    // mask) don't inherit the narrowed value.  Tail leaves the mask alone; TCvtTail restores it.
-    if (isHead) {
-        set_vector_mask(-1, -1);
-    }
+    // Restore full vector mask so downstream ops aren't affected by the narrowed per-chunk mask.
+    set_vector_mask(-1, -1);
 }
 
 // FP16 -> UINT8 conversion
@@ -825,10 +807,15 @@ PTO_INTERNAL void GenCastCallSpecialCases(__ubuf__ typename TileDataD::DType *ds
 // ============================================================================
 // Type Conversion Dispatcher
 // ============================================================================
+// The trailing `numElemsPerRow` parameter is only consumed by NonSatTorch paths that need
+// explicit sub-chunk splitting (currently fp16 -> int8).  TCvtTail forwards its
+// numRemainPerLine as this argument so the NonSatTorch path can split rows wider than the
+// int32 hardware capacity (64 elements) into multiple sub-chunks.  TCvtHead leaves it at the
+// default 0 which the NonSatTorch path interprets as "full logical repeat" (= 128 elements).
 template <typename TileDataD, typename TileDataS>
 AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typename TileDataS::DType *src,
                         uint8_t repeatNum, RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride,
-                        uint16_t dstRepeatStride, uint16_t srcRepeatStride)
+                        uint16_t dstRepeatStride, uint16_t srcRepeatStride, uint16_t /*numElemsPerRow*/ = 0)
 {
     if constexpr (std::is_same<typename TileDataD::DType, half>::value &&
                   std::is_same<typename TileDataS::DType, float>::value) {
@@ -903,10 +890,15 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
 // GenCastCall overload with explicit temporary buffer pointer.
 // Mirrors the no-tmp GenCastCall but forwards tmpPtr to NonSatTorch paths
 // instead of using the fixed TMP_UB_OFFSET global scratch area.
+//
+// The trailing `numElemsPerRow` parameter (default 0) is forwarded to NonSatTorch paths that
+// need explicit sub-chunk splitting.  TCvtTail passes numRemainPerLine here; TCvtHead leaves
+// it at 0 (interpreted as "full logical repeat" by the fp16 -> int8 NonSatTorch path).
 template <typename TileDataD, typename TileDataS>
 AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typename TileDataS::DType *src,
                         uint8_t repeatNum, RoundMode mode, uint16_t dstBlockStride, uint16_t srcBlockStride,
-                        uint16_t dstRepeatStride, uint16_t srcRepeatStride, __ubuf__ int32_t *tmpPtr)
+                        uint16_t dstRepeatStride, uint16_t srcRepeatStride, __ubuf__ int32_t *tmpPtr,
+                        uint16_t numElemsPerRow = 0)
 {
     if constexpr (std::is_same<typename TileDataD::DType, int16_t>::value &&
                   std::is_same<typename TileDataS::DType, float>::value) { // fp32 to int16
@@ -944,7 +936,8 @@ AICORE void GenCastCall(__ubuf__ typename TileDataD::DType *dst, __ubuf__ typena
 #if EDGE_CASE_ALIGN_ENABLE
         if (!isSatOn) {
             GenCastCallFp16ToInt8_NonSatTorch<TileDataD, TileDataS>(
-                dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tmpPtr);
+                dst, src, repeatNum, mode, dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride, tmpPtr,
+                numElemsPerRow);
         } else {
             GenCastCallFp16ToInt8<TileDataD, TileDataS>(dst, src, repeatNum, mode, dstBlockStride, srcBlockStride,
                                                         dstRepeatStride, srcRepeatStride);
@@ -1053,6 +1046,10 @@ PTO_INST void RestoreSatMode(bool originalSatMode)
 // ============================================================================
 // TCvtTail processes the remainder (unaligned) portion of data that doesn't
 // fit evenly into repeat boundaries, using vector masking.
+//
+// numRemainPerLine is forwarded as the trailing `numElemsPerRow` arg of GenCastCall so that
+// NonSatTorch paths which need explicit sub-chunk splitting (fp16 -> int8) can honor the valid
+// column count even when it exceeds the int32 hardware capacity (64 elements) per repeat.
 template <typename TileDataD, typename TileDataS, unsigned SS, unsigned DS, typename... Args>
 PTO_INST void TCvtTail(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ typename TileDataS::DType *srcPtr,
                        RoundMode mode, unsigned validRow, unsigned numRemainPerLine, Args... args)
@@ -1062,17 +1059,18 @@ PTO_INST void TCvtTail(__ubuf__ typename TileDataD::DType *dstPtr, __ubuf__ type
     unsigned numLoop = validRow / REPEAT_MAX;
     unsigned remainAfterLoop = validRow % REPEAT_MAX;
     SetContinuousMask(numRemainPerLine);
+    const uint16_t numElemsPerRow = static_cast<uint16_t>(numRemainPerLine);
     if (numLoop > 0) {
         for (uint32_t j = 0; j < numLoop; j++) {
             GenCastCall<TileDataD, TileDataS>(dstPtr + j * DS * REPEAT_MAX, srcPtr + j * SS * REPEAT_MAX,
                                               (uint8_t)REPEAT_MAX, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
-                                              (uint16_t)SS / srcNElemPerBlock, args...);
+                                              (uint16_t)SS / srcNElemPerBlock, args..., numElemsPerRow);
         }
     }
     if (remainAfterLoop > 0) {
         GenCastCall<TileDataD, TileDataS>(dstPtr + numLoop * DS * REPEAT_MAX, srcPtr + numLoop * SS * REPEAT_MAX,
                                           (uint8_t)remainAfterLoop, mode, 1, 1, (uint16_t)DS / dstNElemPerBlock,
-                                          (uint16_t)SS / srcNElemPerBlock, args...);
+                                          (uint16_t)SS / srcNElemPerBlock, args..., numElemsPerRow);
     }
     set_vector_mask(-1, -1);
 }
