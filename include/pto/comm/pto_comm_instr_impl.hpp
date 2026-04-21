@@ -14,24 +14,43 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // Native implementation of communication instructions
 // Each instruction is implemented directly using Ascend intrinsics
 #if defined(__CCE_AICORE__) && !(defined(__CPU_SIM) || defined(__COSTMODEL))
+
+#ifdef PTO_NPU_ARCH_A2A3
 // Point-to-Point Communication (Synchronous)
-#include "pto/comm/TPut.hpp"
-#include "pto/comm/TGet.hpp"
-
+#include "pto/comm/a2a3/TPut.hpp"
+#include "pto/comm/a2a3/TGet.hpp"
 // Point-to-Point Communication (Asynchronous)
-#include "pto/comm/async/TPutAsync.hpp"
-#include "pto/comm/async/TGetAsync.hpp"
-
+#include "pto/comm/a2a3/async/TPutAsync.hpp"
+#include "pto/comm/a2a3/async/TGetAsync.hpp"
 // Signal-Based Synchronization
-#include "pto/comm/TNotify.hpp"
-#include "pto/comm/TWait.hpp"
-#include "pto/comm/TTest.hpp"
-
+#include "pto/comm/a2a3/TNotify.hpp"
+#include "pto/comm/a2a3/TWait.hpp"
+#include "pto/comm/a2a3/TTest.hpp"
 // Collective Communication
-#include "pto/comm/TGather.hpp"
-#include "pto/comm/TScatter.hpp"
-#include "pto/comm/TBroadCast.hpp"
-#include "pto/comm/TReduce.hpp"
+#include "pto/comm/a2a3/TGather.hpp"
+#include "pto/comm/a2a3/TScatter.hpp"
+#include "pto/comm/a2a3/TBroadCast.hpp"
+#include "pto/comm/a2a3/TReduce.hpp"
+#endif
+
+#ifdef PTO_NPU_ARCH_A5
+// Point-to-Point Communication (Synchronous)
+#include "pto/comm/a5/TPut.hpp"
+#include "pto/comm/a5/TGet.hpp"
+// Point-to-Point Communication (Asynchronous)
+#include "pto/comm/a5/async/TPutAsync.hpp"
+#include "pto/comm/a5/async/TGetAsync.hpp"
+// Signal-Based Synchronization
+#include "pto/comm/a5/TNotify.hpp"
+#include "pto/comm/a5/TWait.hpp"
+#include "pto/comm/a5/TTest.hpp"
+// Collective Communication
+#include "pto/comm/a5/TGather.hpp"
+#include "pto/comm/a5/TScatter.hpp"
+#include "pto/comm/a5/TBroadCast.hpp"
+#include "pto/comm/a5/TReduce.hpp"
+#endif
+
 #endif
 
 #ifdef __CPU_SIM
