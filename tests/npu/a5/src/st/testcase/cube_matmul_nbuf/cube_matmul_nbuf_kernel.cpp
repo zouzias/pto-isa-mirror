@@ -11,21 +11,47 @@ See LICENSE in the root of the software repository for the full text of the Lice
 /**
  * @file cube_matmul_nbuf_kernel.cpp
  *
- * N-buffer cube matmul benchmark — 5 configs, all M=32 K=1024 N=256 fp16->fp32.
- * Built directly from the verified cube_matmul_4buf_kernel.cpp pattern.
+ * N-buffer cube matmul benchmark — 5 configs, all M=32 K_total=1024 N=256 fp16->fp32.
+ * Verified against cube_matmul_4buf_kernel.cpp (same buffer/address scheme).
  *
- * TASSIGN addresses follow the working 4-buf reference exactly:
- *   L1 A stride = 0x800  (2KB per slot, ColMajor NZ format overhead)
- *   L1 B stride = 0x2000 (8KB per slot for K=16) or 0x4000 (16KB for K=32)
- *   L0A stride  = 0x400  (1KB per slot)
- *   L0B stride  = 0x2000 (8KB for K=16) or 0x4000 (16KB for K=32)
+ * GM MEMORY LAYOUT (SPLIT_K tile-major)
+ * ─────────────────────────────────────
+ * A and B are stored as K_ITERS contiguous tiles so the kernel can index each
+ * tile with a simple base-pointer arithmetic:
  *
- * Buffer ID layout per config:
- *   2-buf k16: L1 0-1, L0 2-3, C=4    (5 IDs)
- *   4-buf k16: L1 0-3, L0 4-7, C=8    (9 IDs)  <-- same as reference
- *   8-buf k16: L1 0-7, L0 8-15, C=16  (17 IDs)
- *   2-buf k32: L1 0-1, L0 2-3, C=4    (5 IDs)
- *   4-buf k32: L1 0-3, L0 4-7, C=8    (9 IDs)
+ *   A_gm.bin : [K_ITERS, M, K_TILE] fp16 row-major
+ *              tile k starts at element offset  k * M * K_TILE
+ *              i.e.  byte offset  k * M * K_TILE * 2
+ *              Kernel pointer:  src0 + k * K
+ *
+ *   B_gm.bin : [K_ITERS, K_TILE, N] fp16 row-major
+ *              tile k starts at element offset  k * K_TILE * N
+ *              Kernel pointer:  src1 + k * K * GM_N
+ *
+ *   golden.bin : [M, N] fp32 = sum_k( A_tile[k] @ B_tile[k] )
+ *
+ * This is identical to the layout used by cube_matmul_4buf.
+ *
+ * GlobalTensor Shape/Stride per iteration
+ * ─────────────────────────────────────────
+ *   src0: Shape<1,1,1, M, K>     Stride<M*K, M*K, M*K, K, 1>   (A tile, row-major)
+ *   src1: Shape<1,1,1, K, N>     Stride<K*N, K*N, K*N, N, 1>   (B tile, row-major)
+ *
+ * TASSIGN (L1/L0 buffer addresses)
+ * ─────────────────────────────────────────
+ *   L1 A slot stride = 0x800  (2 KB, NZ padded)   K16; 0x1000 for K32
+ *   L1 B slot stride = 0x2000 (8 KB)              K16; 0x4000 for K32
+ *   L0A slot stride  = 0x400  (1 KB)              K16; 0x800  for K32
+ *   L0B slot stride  = 0x2000 (8 KB)              K16; 0x4000 for K32
+ *
+ * Buffer ID allocation per config
+ * ─────────────────────────────────────────
+ *   2-buf k16 : L1 0-1,  L0 2-3,   C=4   (5 IDs)
+ *   4-buf k16 : L1 0-3,  L0 4-7,   C=8   (9 IDs)
+ *   8-buf k16 : L1 0-7,  L0 8-15,  C=16  (17 IDs)
+ *   2-buf k32 : L1 0-1,  L0 2-3,   C=4   (5 IDs)
+ *   4-buf k32 : L1 0-3,  L0 4-7,   C=8   (9 IDs)
+ *   Max IDs used: 17  (within the 32-ID hardware limit)
  */
 
 #include <pto/pto-inst.hpp>
@@ -35,6 +61,7 @@ using namespace pto;
 
 static constexpr int GM_M = 32;
 static constexpr int GM_N = 256;
+static constexpr int GM_K = 1024;  // total K dimension
 
 template <int pipe>
 AICORE void get_buffer(int id) { get_buf(pipe, id, 0); return; }
@@ -50,8 +77,8 @@ __global__ AICORE void RunCubeMatmul2Buf8K(__gm__ outType *out, __gm__ inType *s
 {
     constexpr int K = 16, K_ITERS = 64, NUM_BUFS = 2, L0_OFF = 2, C_BUF_ID = 4;
 
-    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*K,GM_M*K,GM_M*K,K,1>>;
-    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<K*GM_N,K*GM_N,K*GM_N,GM_N,1>>;
+    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*GM_K,GM_M*GM_K,GM_M*GM_K,GM_K,1>>;
+    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<GM_K*GM_N,GM_K*GM_N,GM_K*GM_N,GM_N,1>>;
     using GlobalDataOut  = GlobalTensor<outType, pto::Shape<1,1,1,GM_M,GM_N>, pto::Stride<GM_M*GM_N,GM_M*GM_N,GM_M*GM_N,GM_N,1>>;
     using TileMatA = Tile<TileType::Mat, inType,  GM_M,K,    BLayout::ColMajor, GM_M,K,    SLayout::RowMajor, 512>;
     using TileMatB = Tile<TileType::Mat, inType,  K,   GM_N, BLayout::ColMajor, K,   GM_N, SLayout::RowMajor, 512>;
@@ -75,7 +102,7 @@ __global__ AICORE void RunCubeMatmul2Buf8K(__gm__ outType *out, __gm__ inType *s
     for (uint32_t k = 0; k < K_ITERS; k++) {
         int s = k % NUM_BUFS;
         int id_l0 = s + L0_OFF;
-        GlobalDataSrc0 src0Global(src0 + k * GM_M * K);
+        GlobalDataSrc0 src0Global(src0 + k * K);
         GlobalDataSrc1 src1Global(src1 + k * K * GM_N);
 #ifndef __PTO_AUTO__
         get_buffer<PIPE_MTE2>(s);
@@ -124,8 +151,8 @@ __global__ AICORE void RunCubeMatmul4Buf8K(__gm__ outType *out, __gm__ inType *s
 {
     constexpr int K = 16, K_ITERS = 64, NUM_BUFS = 4, L0_OFF = 4, C_BUF_ID = 8;
 
-    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*K,GM_M*K,GM_M*K,K,1>>;
-    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<K*GM_N,K*GM_N,K*GM_N,GM_N,1>>;
+    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*GM_K,GM_M*GM_K,GM_M*GM_K,GM_K,1>>;
+    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<GM_K*GM_N,GM_K*GM_N,GM_K*GM_N,GM_N,1>>;
     using GlobalDataOut  = GlobalTensor<outType, pto::Shape<1,1,1,GM_M,GM_N>, pto::Stride<GM_M*GM_N,GM_M*GM_N,GM_M*GM_N,GM_N,1>>;
     using TileMatA = Tile<TileType::Mat, inType,  GM_M,K,    BLayout::ColMajor, GM_M,K,    SLayout::RowMajor, 512>;
     using TileMatB = Tile<TileType::Mat, inType,  K,   GM_N, BLayout::ColMajor, K,   GM_N, SLayout::RowMajor, 512>;
@@ -149,7 +176,7 @@ __global__ AICORE void RunCubeMatmul4Buf8K(__gm__ outType *out, __gm__ inType *s
     for (uint32_t k = 0; k < K_ITERS; k++) {
         int s = k % NUM_BUFS;
         int id_l0 = s + L0_OFF;
-        GlobalDataSrc0 src0Global(src0 + k * GM_M * K);
+        GlobalDataSrc0 src0Global(src0 + k * K);
         GlobalDataSrc1 src1Global(src1 + k * K * GM_N);
 #ifndef __PTO_AUTO__
         get_buffer<PIPE_MTE2>(s);
@@ -209,8 +236,8 @@ __global__ AICORE void RunCubeMatmul8Buf8K(__gm__ outType *out, __gm__ inType *s
 {
     constexpr int K = 16, K_ITERS = 64, NUM_BUFS = 8, L0_OFF = 8, C_BUF_ID = 16;
 
-    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*K,GM_M*K,GM_M*K,K,1>>;
-    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<K*GM_N,K*GM_N,K*GM_N,GM_N,1>>;
+    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*GM_K,GM_M*GM_K,GM_M*GM_K,GM_K,1>>;
+    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<GM_K*GM_N,GM_K*GM_N,GM_K*GM_N,GM_N,1>>;
     using GlobalDataOut  = GlobalTensor<outType, pto::Shape<1,1,1,GM_M,GM_N>, pto::Stride<GM_M*GM_N,GM_M*GM_N,GM_M*GM_N,GM_N,1>>;
     using TileMatA = Tile<TileType::Mat, inType,  GM_M,K,    BLayout::ColMajor, GM_M,K,    SLayout::RowMajor, 512>;
     using TileMatB = Tile<TileType::Mat, inType,  K,   GM_N, BLayout::ColMajor, K,   GM_N, SLayout::RowMajor, 512>;
@@ -238,7 +265,7 @@ __global__ AICORE void RunCubeMatmul8Buf8K(__gm__ outType *out, __gm__ inType *s
     for (uint32_t k = 0; k < K_ITERS; k++) {
         int s = k % NUM_BUFS;
         int id_l0 = s + L0_OFF;
-        GlobalDataSrc0 src0Global(src0 + k * GM_M * K);
+        GlobalDataSrc0 src0Global(src0 + k * K);
         GlobalDataSrc1 src1Global(src1 + k * K * GM_N);
 #ifndef __PTO_AUTO__
         get_buffer<PIPE_MTE2>(s);
@@ -316,8 +343,8 @@ __global__ AICORE void RunCubeMatmul2Buf16K(__gm__ outType *out, __gm__ inType *
 {
     constexpr int K = 32, K_ITERS = 32, NUM_BUFS = 2, L0_OFF = 2, C_BUF_ID = 4;
 
-    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*K,GM_M*K,GM_M*K,K,1>>;
-    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<K*GM_N,K*GM_N,K*GM_N,GM_N,1>>;
+    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*GM_K,GM_M*GM_K,GM_M*GM_K,GM_K,1>>;
+    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<GM_K*GM_N,GM_K*GM_N,GM_K*GM_N,GM_N,1>>;
     using GlobalDataOut  = GlobalTensor<outType, pto::Shape<1,1,1,GM_M,GM_N>, pto::Stride<GM_M*GM_N,GM_M*GM_N,GM_M*GM_N,GM_N,1>>;
     using TileMatA = Tile<TileType::Mat, inType,  GM_M,K,    BLayout::ColMajor, GM_M,K,    SLayout::RowMajor, 512>;
     using TileMatB = Tile<TileType::Mat, inType,  K,   GM_N, BLayout::ColMajor, K,   GM_N, SLayout::RowMajor, 512>;
@@ -341,7 +368,7 @@ __global__ AICORE void RunCubeMatmul2Buf16K(__gm__ outType *out, __gm__ inType *
     for (uint32_t k = 0; k < K_ITERS; k++) {
         int s = k % NUM_BUFS;
         int id_l0 = s + L0_OFF;
-        GlobalDataSrc0 src0Global(src0 + k * GM_M * K);
+        GlobalDataSrc0 src0Global(src0 + k * K);
         GlobalDataSrc1 src1Global(src1 + k * K * GM_N);
 #ifndef __PTO_AUTO__
         get_buffer<PIPE_MTE2>(s);
@@ -391,8 +418,8 @@ __global__ AICORE void RunCubeMatmul4Buf16K(__gm__ outType *out, __gm__ inType *
 {
     constexpr int K = 32, K_ITERS = 32, NUM_BUFS = 4, L0_OFF = 4, C_BUF_ID = 8;
 
-    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*K,GM_M*K,GM_M*K,K,1>>;
-    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<K*GM_N,K*GM_N,K*GM_N,GM_N,1>>;
+    using GlobalDataSrc0 = GlobalTensor<inType,  pto::Shape<1,1,1,GM_M,K>,    pto::Stride<GM_M*GM_K,GM_M*GM_K,GM_M*GM_K,GM_K,1>>;
+    using GlobalDataSrc1 = GlobalTensor<inType,  pto::Shape<1,1,1,K,GM_N>,    pto::Stride<GM_K*GM_N,GM_K*GM_N,GM_K*GM_N,GM_N,1>>;
     using GlobalDataOut  = GlobalTensor<outType, pto::Shape<1,1,1,GM_M,GM_N>, pto::Stride<GM_M*GM_N,GM_M*GM_N,GM_M*GM_N,GM_N,1>>;
     using TileMatA = Tile<TileType::Mat, inType,  GM_M,K,    BLayout::ColMajor, GM_M,K,    SLayout::RowMajor, 512>;
     using TileMatB = Tile<TileType::Mat, inType,  K,   GM_N, BLayout::ColMajor, K,   GM_N, SLayout::RowMajor, 512>;
@@ -416,7 +443,7 @@ __global__ AICORE void RunCubeMatmul4Buf16K(__gm__ outType *out, __gm__ inType *
     for (uint32_t k = 0; k < K_ITERS; k++) {
         int s = k % NUM_BUFS;
         int id_l0 = s + L0_OFF;
-        GlobalDataSrc0 src0Global(src0 + k * GM_M * K);
+        GlobalDataSrc0 src0Global(src0 + k * K);
         GlobalDataSrc1 src1Global(src1 + k * K * GM_N);
 #ifndef __PTO_AUTO__
         get_buffer<PIPE_MTE2>(s);
