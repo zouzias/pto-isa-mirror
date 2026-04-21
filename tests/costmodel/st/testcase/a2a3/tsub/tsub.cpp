@@ -38,20 +38,20 @@ void runTSub()
 
 TEST(TSub, float_64x64)
 {
-    runTSub<float, 64, 64, NO_PROFILING, 0.0f>();
+    runTSub<float, 64, 64, 160.0f, 0.85f>();
 }
 
 TEST(TSub, int32_64x64)
 {
-    runTSub<int32_t, 64, 64, NO_PROFILING, 0.0f>();
+    runTSub<int32_t, 64, 64, 151.0f, 0.85f>();
 }
 
 TEST(TSub, half_16x256)
 {
-    runTSub<half, 16, 256, NO_PROFILING, 0.0f>();
+    runTSub<half, 16, 256, 74.0f, 0.71f>();
 }
 
 TEST(TSub, int16_64x64)
 {
-    runTSub<int16_t, 64, 64, NO_PROFILING, 0.0f>();
+    runTSub<int16_t, 64, 64, 167.0f, 0.85f>();
 }

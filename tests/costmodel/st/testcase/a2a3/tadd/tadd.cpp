@@ -38,20 +38,20 @@ void runTAdd()
 
 TEST(TAdd, float_64x64)
 {
-    runTAdd<float, 64, 64, NO_PROFILING, 0.0f>();
+    runTAdd<float, 64, 64, 160.0f, 0.6f>();
 }
 
 TEST(TAdd, int32_64x64)
 {
-    runTAdd<int32_t, 64, 64, NO_PROFILING, 0.0f>();
+    runTAdd<int32_t, 64, 64, 151.0f, 0.6f>();
 }
 
 TEST(TAdd, half_16x256)
 {
-    runTAdd<half, 16, 256, NO_PROFILING, 0.0f>();
+    runTAdd<half, 16, 256, 74.0f, 0.86f>();
 }
 
 TEST(TAdd, int16_64x64)
 {
-    runTAdd<int16_t, 64, 64, NO_PROFILING, 0.0f>();
+    runTAdd<int16_t, 64, 64, 167.0f, 0.58f>();
 }
