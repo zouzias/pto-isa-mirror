@@ -10,6 +10,7 @@
 # See LICENSE in the root of the software repository for the full text of the License.
 # --------------------------------------------------------------------------------
 
+from __future__ import annotations
 import os
 import numpy as np
 from utils import NumExt
@@ -33,14 +34,14 @@ def get_quant_mode(src_dtype, dst_dtype):
         if src_dtype == np.int32:
             return QuantMode.I32_TO_B8
         return QuantMode.F32_TO_B8
-    elif dst_type == np.float16:
+    elif dst_dtype == np.float16:
         return QuantMode.F32_TO_F16 if src_dtype == np.float32 else QuantMode.I32_TO_F16
-    elif dst_type == bfloat16:
+    elif dst_dtype == bfloat16:
         return QuantMode.F32_TO_BF16
     return QuantMode.BYPASS
 
 
-def get_quant_vector(dst_type, n, saturate_inf):
+def get_quant_vector(dst_dtype, n, saturate_inf):
     result = []
 
     for _ in range(n):
@@ -48,15 +49,15 @@ def get_quant_vector(dst_type, n, saturate_inf):
         f_bits = np.float32(f_val).view(np.uint32)
         offset_val = np.random.randint(0, 512)
 
-        sign_bit = 1 if (dst_type == np.int8) else 0
+        sign_bit = 1 if (dst_dtype == np.int8) else 0
         # if saturate_inf, saturate INF to +/- MAX, and NaN to 0 in float-2-float operations
         # otherwise, keep it as is
         sat_bit = 1 if saturate_inf else 0 
 
-        packed = (np.uint64(sat_bit) << 48) | \
-                    (np.uint64(sign_bit) << 46) | \
-                    (np.uint64(offset_val & 0x1FF) << 37) | \
-                    (np.uint64(f_bits))
+        packed = (int(sat_bit) << 48) | \
+                    (int(sign_bit) << 46) | \
+                    (int(offset_val & 0x1FF) << 37) | \
+                    (int(f_bits))
         result.append(packed)
 
     return np.array(result, dtype=np.uint64)
@@ -88,15 +89,15 @@ def extract_quant_params(quant_gm):
     return m1, offset, sign, sat_bit
 
 
-def apply_quant_element(src_val, quant_gm, dst_type, use_relu=False):
+def apply_quant_element(src_val, quant_gm, mode, dst_dtype, use_relu=False):
     m1, offset, sign, sat_bit = extract_quant_params(quant_gm)
     res = src_val.astype(np.float32) * m1
 
     if mode in [QuantMode.F32_TO_B8, QuantMode.I32_TO_B8]:
         res = res + offset
         res = np.round(res)
-        min_v = -128 if dst_type == np.int8 else 0
-        max_v = 127 if dst_type == np.int8 else 255
+        min_v = -128 if dst_dtype == np.int8 else 0
+        max_v = 127 if dst_dtype == np.int8 else 255
         res = np.clip(res, min_v, max_v)
     elif mode in [QuantMode.F32_TO_F16]:
         f16_lim = np.finfo(np.float16)
@@ -111,13 +112,15 @@ def apply_quant_element(src_val, quant_gm, dst_type, use_relu=False):
     if use_relu:
         res = np.maximum(res, 0)
 
-    return NumExt.astype(np.array[res], dst_type)[0]
-
+    return NumExt.astype(np.array([res]), dst_dtype)[0]
 
 def process_quant(data_array, quant_array, src_dtype, dst_dtype, is_vector, use_relu):
-    mode = get_quant_mode(src_dtype, dst_type)
+    mode = get_quant_mode(src_dtype, dst_dtype)
     rows, cols = data_array.shape
-    out = np.zeros_like(data_array, dtype=dst_type)
+    if NumExt.is_bf16(dst_dtype):
+        out = np.zeros((rows, cols), dtype=np.float32)
+    else:
+        out = np.zeros_like(data_array, dtype=dst_dtype)
 
     for j in range(cols):
         q_param = quant_array[j] if is_vector else quant_array[0]
@@ -132,25 +135,25 @@ def gen_golden_data(case_name, param : TExtractParams):
     dst_shape = [param.dst_valid_rows, param.dst_valid_cols]
     idx_row, idx_col = param.idx_row, param.idx_col
     total_elements = src_shape[0] * src_shape[1]
-    raw_data = NumExt.astype(np.arange(1, total_elements + 1).reshape(src_shape), param.src_type)
+    raw_data = NumExt.astype(np.arange(1, total_elements + 1).reshape(src_shape), param.src_dtype)
 
-    # Fill with inf and nan to test
-    quant_mode = get_quant_mode(param.src_type, param.dst_type)
+    quant_mode = get_quant_mode(param.src_dtype, param.dst_dtype)
     if quant_mode == QuantMode.F32_TO_F16:
-        for row in param.src_valid_rows // 5:
-            for col in param.src_valid_cols // 5:
+        for row in range(param.src_valid_rows // 5):
+            for col in range(param.src_valid_cols // 5):
                 raw_data[5*row][5*col] = np.inf if row % 2 == 0 else np.nan
 
     tile = raw_data[idx_row:(idx_row + dst_shape[0]), idx_col:(idx_col + dst_shape[1])]
 
     if param.is_v_quant:
-        quant_gm = get_quant_vector(param.dst_type, param.dst_valid_cols, param.saturate_inf)
+        quant_gm = get_quant_vector(param.dst_dtype, param.dst_valid_cols, param.saturate_inf)
     else:
-        quant_gm = get_quant_vector(param.dst_type, 1, param.saturate_inf)
+        quant_gm = get_quant_vector(param.dst_dtype, 1, param.saturate_inf)
 
-    golden = process_quant(tile, quant_gm, param.src_type, param.dst_type, param.is_v_quant, param.use_relu)
-    NumExt.write_array("./input.bin", raw_data, param.src_type)
-    NumExt.write_array("./golden.bin", golden, param.dst_type)
+    golden = process_quant(tile, quant_gm, param.src_dtype, param.dst_dtype, param.is_v_quant, param.use_relu)
+    NumExt.write_array("./input.bin", raw_data, param.src_dtype)
+    NumExt.write_array("./golden.bin", golden, param.dst_dtype)
+    quant_gm.tofile("./quant.bin")
 
 
 def type2str(t):
@@ -166,8 +169,8 @@ def type2str(t):
 class TExtractParams:
     def __init__(
         self, 
-        src_type : np.dtype, 
-        dst_type : np.dtype, 
+        src_dtype : np.dtype, 
+        dst_dtype : np.dtype, 
         src_valid_rows : int, 
         src_valid_cols : int, 
         dst_valid_rows : int, 
@@ -178,13 +181,13 @@ class TExtractParams:
         saturate_inf : bool,
         use_relu : bool
     ):
-        assert param.src_valid_rows >= param.dst_valid_rows + param.idx_row, \
+        assert src_valid_rows >= dst_valid_rows + idx_row, \
         "TEXTRACT: Row overflow - (index + dst row) should be less than or equal to src row"
-        assert param.src_valid_cols >= param.dst_valid_cols + param.idx_col, \
+        assert src_valid_cols >= dst_valid_cols + idx_col, \
         "TEXTRACT: Col overflow - (index + dst col) should be less than or equal to src col"
 
-        self.src_type = src_type
-        self.dst_type = dst_type
+        self.src_dtype = src_dtype
+        self.dst_dtype = dst_dtype
         self.src_valid_rows = src_valid_rows
         self.src_valid_cols = src_valid_cols
         self.dst_valid_rows = dst_valid_rows
@@ -197,7 +200,7 @@ class TExtractParams:
         
 
 def gen_case_name(param, idx):
-    return f"case_{idx}_{type2str(param.src_type)}_{type2str(param.dst_type)}"
+    return f"case_{idx}_{type2str(param.src_dtype)}_{type2str(param.dst_dtype)}"
 
 if __name__ == "__main__":
     case_params_list = [
