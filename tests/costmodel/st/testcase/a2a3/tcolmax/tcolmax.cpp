@@ -24,7 +24,7 @@ void runTColMax()
     using TileData = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
     TileData srcTile(rows, cols);
     TileData dstTile(rows, cols);
-    TASSIGN(srcTile, 0x0);
+    TASSIGN(srcTile, 0x1000);
     TASSIGN(dstTile, 0x8000);
 
     TCOLMAX(dstTile, srcTile);
@@ -34,8 +34,8 @@ void runTColMax()
 
 } // namespace
 
-TEST(TColMax, float_64x64)    { runTColMax<float,   64, 64,   NO_PROFILING, 0.0f>(); }
-TEST(TColMax, half_64x64)     { runTColMax<half,    64, 64,   NO_PROFILING, 0.0f>(); }
-TEST(TColMax, int16_64x64)    { runTColMax<int16_t, 64, 64,   NO_PROFILING, 0.0f>(); }
-TEST(TColMax, half_16x256)    { runTColMax<half,    16, 256,  NO_PROFILING, 0.0f>(); }
-TEST(TColMax, float_1x3072)   { runTColMax<float,   1,  3072, NO_PROFILING, 0.0f>(); }
+TEST(TColMax, float_64x64)    { runTColMax<float,   64, 64,   1136.0f, 0.0f>(); }
+TEST(TColMax, half_64x64)     { runTColMax<half,    64, 64,   1118.0f, 0.0f>(); }
+TEST(TColMax, int16_64x64)    { runTColMax<int16_t, 64, 64,   1119.0f, 0.0f>(); }
+TEST(TColMax, half_16x256)    { runTColMax<half,    16, 256,  346.0f, 0.0f>(); }
+TEST(TColMax, float_1x3072)   { runTColMax<float,   1,  3072, 70.0f, 0.0f>(); }

@@ -181,7 +181,7 @@ inline void vlrelu(auto dst, auto src0, auto src1, auto repeat, auto dstBlockStr
 inline void vmax(auto dst, auto src0, auto src1, auto repeat, auto dstBlockStride, auto src0BlockStride,
                  auto src1BlockStride, auto dstRepeatStride, auto src0RepeatStride, auto src1RepeatStride)
 {
-    const uint64_t cycles = EstimateLinearCycles(repeat, 14, 2, 16);
+    const uint64_t cycles = EstimateLinearCycles(repeat, 14, 2, 1);
     ::pto::mocker::RecordCceCall(::pto::mocker::evaluator::PipeKey::VECTOR, "vmax", cycles, dst, src0, src1, repeat,
                                  dstBlockStride, src0BlockStride, src1BlockStride, dstRepeatStride, src0RepeatStride,
                                  src1RepeatStride);

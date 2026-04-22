@@ -79,7 +79,7 @@ python tests/run_costmodel.py --testcase tadd --log-level 2 --output-dir /tmp/co
   pto: TADD
   total_cycles: 96
   cce_calls: 1
-    [0] name=vadd cycles=78 args=[0x8000, 0x..., 0x4000, ...]
+    [0] name=vadd cycles=96 args=[0x8000, 0x..., 0x4000, ...]
 ```
 
 ### 3.5 通过脚本运行指定用例
