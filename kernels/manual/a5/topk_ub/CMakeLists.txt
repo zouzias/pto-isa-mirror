@@ -72,16 +72,17 @@ include_directories(
 )
 
 # Local UB-optimized radix TopK (see draft.cpp). Not the same as upstream kernels/manual/a5/topk/draft.cpp.
+# Prefer this repository's pto-isa headers over $ASCEND_HOME_PATH/include (e.g. 5-tile TCONCAT, TADDS u32, HistByte).
 add_library(topk_ub_kernel SHARED draft.cpp)
 target_compile_options(topk_ub_kernel PRIVATE -march=armv8-a+simd ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-vec -std=c++17)
-target_include_directories(topk_ub_kernel PRIVATE
+target_include_directories(topk_ub_kernel BEFORE PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../include/
 )
 target_link_options(topk_ub_kernel PRIVATE --cce-fatobj-link)
 
 add_executable(topk_ub main.cpp)
 target_compile_options(topk_ub PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
-target_include_directories(topk_ub PRIVATE
+target_include_directories(topk_ub BEFORE PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../include/
     ${PROJECT_SOURCE_DIR}/../../../../tests/common
 )

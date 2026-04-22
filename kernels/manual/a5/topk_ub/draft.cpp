@@ -10,7 +10,7 @@
  * 2) **Winner MSB + remainK** — `TCMPS`/`TCI`/`TSELS`, raw MSB broadcast, `WinnerBinU8` path, `TGATHER`+`TSUB` remainK.
  * 3) **Histogram (LSB)** — `TCVT` idx from saved MSB; `THISTOGRAM<BYTE_0>` → `chistLSB`.
  * 4) **Winner LSB + remainK + packed threshold** — `TCMPS`/`TSELS`/`TROWMIN`/`TGATHER`; `TCVT`/`TSHLS`/`TOR` for compare key.
- * 5) **Two full-width `TGATHER` (GT/EQ) + `TCONCAT_IMPL` + `TSTORE`**.
+ * 5) **Two full-width `TGATHER` (GT/EQ) + 五參數 `TCONCAT_IMPL`（`TConcatIdx`）+ `TSTORE`**.
  *
  * Notes:
  * - ISA/pto 名稱為 **`TGATHER`**（模擬器 log 中常見 `VGATHER` 類指令為其下層實現）。
@@ -79,6 +79,7 @@ constexpr uint64_t kWinnerUbRowMinDst = 0x25000;
 constexpr uint64_t kWinnerUbRowMinTmp = 0x25400; // 1×256×4 bytes
 constexpr uint64_t kWinnerUbSelMask = 0x25800;   // TCMPS mask (packed), 1×32 u8
 constexpr uint64_t kWinnerUbSelZero = 0x25840;   // u32 0 for TSEL src0
+constexpr uint64_t kWinnerUbU32One = 0x25880;    // 1×16 u32 scratch: scalar 1 for TSUB (avoid TADDS on u32 in older CANN)
 constexpr uint64_t kWinnerUbSelOut = 0x25900;    // TSEL dst (1×16 u32)
 constexpr uint64_t kWinnerUbTselTmp = 0x25A00;   // TSEL tmp; TGATHER tmp (WinnerBinU8 outBin uses kWinnerUbTmp)
 // After TROWMIN..TSEL, reuse kWinnerUbRowMinTmp for TGATHER index tile (1×32 u32).
@@ -204,7 +205,14 @@ AICORE inline void Phase2_WinnerMsbAndRemainK(HistTile &chistMSB, WinnerBinTile 
         selMask.SetValidCol(1);
         tselTmp.SetValidCol(32);
         TROWMIN(rowMinDst, msbWinnerLanes, rowMinTmp);
-        TADDS(rowMinDst, rowMinDst, static_cast<uint32_t>(-1));
+        {
+            RowMinDstTile uOne(1, 16);
+            TASSIGN(uOne, kWinnerUbU32One);
+            uOne.SetValidRow(1);
+            uOne.SetValidCol(1);
+            TEXPANDS(uOne, 1u);
+            TSUB(rowMinDst, rowMinDst, uOne);
+        }
         constexpr uint32_t kCmp256 = 256u;
         TCMPS(selMask, rowMinDst, kCmp256, CmpMode::GT);
         TSEL(selOut, selMask, zeroTile, rowMinDst, tselTmp);
@@ -261,9 +269,9 @@ AICORE inline void Phase3_HistogramLsb(InTileU16<kN> &fullInTile, HistTile &tile
     TMOV(chistLSB, tileHist);
 }
 
-AICORE inline uint16_t Phase4_WinnerLsbRemainKAndPackedThresholdTor(HistTile &chistLSB, RemainKTile &remainKTile,
-                                                                     WinnerBinTile &lsbWinnerBin,
-                                                                     WinnerBinTile &msbWinnerSaved)
+AICORE inline void Phase4_WinnerLsbRemainKAndPackedThresholdTor(HistTile &chistLSB, RemainKTile &remainKTile,
+                                                                  WinnerBinTile &lsbWinnerBin,
+                                                                  WinnerBinTile &msbWinnerSaved, PackedU16Tile &outU)
 {
     constexpr uint32_t kSelsFalse = 0xffffffffu;
     WinnerLaneTile lsbWinnerLanes(1, kBinNum);
@@ -312,7 +320,6 @@ AICORE inline uint16_t Phase4_WinnerLsbRemainKAndPackedThresholdTor(HistTile &ch
     PackedU16Tile msbU(1, 32);
     PackedU16Tile hiU(1, 32);
     PackedU16Tile lsbU(1, 32);
-    PackedU16Tile outU(1, 32);
     TASSIGN(msbU, kRemainUbTopk);
     TASSIGN(hiU, kRemainUbSumAbove);
     TASSIGN(lsbU, kRemainUbCw);
@@ -336,12 +343,10 @@ AICORE inline uint16_t Phase4_WinnerLsbRemainKAndPackedThresholdTor(HistTile &ch
     TOR(outU, hiU, lsbU);
     set_flag(PIPE_V, PIPE_S, EVENT_ID1);
     wait_flag(PIPE_V, PIPE_S, EVENT_ID1);
-    __ubuf__ const uint16_t *po = reinterpret_cast<__ubuf__ const uint16_t *>(outU.data());
-    return po[0];
 }
 
 template <int TopK>
-AICORE inline void Phase5_TgatherGtEqTconcatAndStore(uint16_t packedThreshold, __gm__ uint32_t *outIdx)
+AICORE inline void Phase5_TgatherGtEqTconcatAndStore(PackedU16Tile &packedThrU, __gm__ uint32_t *outIdx)
 {
     constexpr uint64_t kFullGatherGtDst = 0x30000;
     constexpr uint64_t kFullGatherEqDst = 0x38000;
@@ -378,22 +383,19 @@ AICORE inline void Phase5_TgatherGtEqTconcatAndStore(uint16_t packedThreshold, _
     TASSIGN(tmpGt, kGatherUbTmp);
     srcGt.SetValidCol(kN);
     TASSIGN(srcGt, kUbFullKeys);
-    int16_t kBitsGt = *reinterpret_cast<const int16_t *>(&packedThreshold);
-    TGATHER<DstTile, GatherSrcI16<kN>, GatherConcatCountTile, TmpGatherTile, CmpMode::GT, 0u>(gtChunk, srcGt, kBitsGt,
-                                                                                              idxGtCnt, tmpGt);
+    TGATHER<DstTile, GatherSrcI16<kN>, PackedU16Tile, GatherConcatCountTile, TmpGatherTile, CmpMode::GT>(
+        gtChunk, srcGt, packedThrU, idxGtCnt, tmpGt, 0);
 
     GatherSrcI16<kN> srcEq(1, kN);
     TmpGatherTile tmpEq(1, cmpVCol);
     TASSIGN(tmpEq, kGatherUbTmp);
     srcEq.SetValidCol(kN);
     TASSIGN(srcEq, kUbFullKeys);
-    int16_t kBitsEq = *reinterpret_cast<const int16_t *>(&packedThreshold);
-    TGATHER<DstTile, GatherSrcI16<kN>, GatherConcatCountTile, TmpGatherTile, CmpMode::EQ, 0u>(eqChunk, srcEq, kBitsEq,
-                                                                                              idxEqCnt, tmpEq);
+    TGATHER<DstTile, GatherSrcI16<kN>, PackedU16Tile, GatherConcatCountTile, TmpGatherTile, CmpMode::EQ>(
+        eqChunk, srcEq, packedThrU, idxEqCnt, tmpEq, 0);
 
     TCONCAT_IMPL(mergedIdx, gtChunk, eqChunk, idxGtCnt, idxEqCnt);
 
-    mergedIdx.SetValidRow(1);
     mergedIdx.SetValidCol(TopK);
     using OutShape = pto::Shape<1, 1, 1, 1, TopK>;
     using OutStride = pto::Stride<TopK, TopK, TopK, TopK, 1>;
@@ -425,10 +427,11 @@ __global__ AICORE void RunRadixTopKDraft(__gm__ uint16_t *src, __gm__ uint32_t *
 
     Phase3_HistogramLsb(fullInTile, tileHist, chistLSB, idxFilter, msbWinnerSaved);
 
-    const uint16_t packedThreshold =
-        Phase4_WinnerLsbRemainKAndPackedThresholdTor(chistLSB, remainKTile, lsbWinnerBin, msbWinnerSaved);
+    PackedU16Tile packedThrU(1, 32);
+    TASSIGN(packedThrU, kRemainUbOut);
+    Phase4_WinnerLsbRemainKAndPackedThresholdTor(chistLSB, remainKTile, lsbWinnerBin, msbWinnerSaved, packedThrU);
 
-    Phase5_TgatherGtEqTconcatAndStore<TopK>(packedThreshold, outIdx);
+    Phase5_TgatherGtEqTconcatAndStore<TopK>(packedThrU, outIdx);
 }
 
 } // namespace topk_radix_detail
