@@ -20,11 +20,23 @@ import site
 import time
 import logging
 import platform
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 RESULT_FILE_NAME = "result.out"
 COSTMODEL_OUTPUT_PREFIXES = ("[COSTMODEL]", "[TRACE]")
+
+
+@dataclass(frozen=True)
+class GTestRunRequest:
+    binary: Path
+    testcase: str
+    gtest_filter: Optional[str]
+    build_type: str
+    verbose: bool
+    log_level: int
+    result_file: Path
 
 
 def _format_cmd(command: List[str]) -> str:
@@ -354,22 +366,21 @@ def _mirror_costmodel_output(lines: List[str]) -> None:
         logging.info("\n".join(lines))
 
 
-def run_gtest_binary(binary: Path, testcase: str, gtest_filter: Optional[str], build_type: str,
-                     verbose: bool, log_level: int, result_file: Path) -> None:
-    cmd: List[str] = [str(binary)]
-    if gtest_filter:
-        cmd.append(f"--gtest_filter={gtest_filter}")
+def run_gtest_binary(request: GTestRunRequest) -> None:
+    cmd: List[str] = [str(request.binary)]
+    if request.gtest_filter:
+        cmd.append(f"--gtest_filter={request.gtest_filter}")
 
     # costmodel ST test data is under build_dir/..., and tests use paths like "../<suite.case>/input1.bin".
     # For multi-config generators on Windows, binaries are under build/bin/<Config>/, so we run from build/bin/.
-    run_cwd = binary.parent
-    if os.name == "nt" and binary.parent.name.lower() == build_type.lower():
-        run_cwd = binary.parent.parent
-    if verbose:
+    run_cwd = request.binary.parent
+    if os.name == "nt" and request.binary.parent.name.lower() == request.build_type.lower():
+        run_cwd = request.binary.parent.parent
+    if request.verbose:
         logging.info(f"  $ {_format_cmd(cmd)}\n  cwd: {run_cwd}")
 
     env = os.environ.copy()
-    env["PTO_COSTMODEL_LOG_LEVEL"] = str(log_level)
+    env["PTO_COSTMODEL_LOG_LEVEL"] = str(request.log_level)
     completed = subprocess.run(
         [str(x) for x in cmd],
         cwd=str(run_cwd),
@@ -382,8 +393,8 @@ def run_gtest_binary(binary: Path, testcase: str, gtest_filter: Optional[str], b
 
     filtered_lines = _collect_prefixed_lines(completed.stdout or "")
     filtered_lines.extend(_collect_prefixed_lines(completed.stderr or ""))
-    if log_level > 0:
-        _append_result_block(result_file, testcase, filtered_lines)
+    if request.log_level > 0:
+        _append_result_block(request.result_file, request.testcase, filtered_lines)
         _mirror_costmodel_output(filtered_lines)
 
     if completed.returncode != 0:
@@ -729,7 +740,7 @@ def run_selected_tests(args, source_dir, build_dir, selected, result_file: Path)
     for testcase, binary in selected:
         t0 = time.perf_counter()
         try:
-            run_gtest_binary(
+            run_gtest_binary(GTestRunRequest(
                 binary=binary,
                 testcase=testcase,
                 gtest_filter=args.gtest_filter,
@@ -737,7 +748,7 @@ def run_selected_tests(args, source_dir, build_dir, selected, result_file: Path)
                 verbose=args.verbose,
                 log_level=args.log_level,
                 result_file=result_file,
-            )
+            ))
             status = "PASS"
         except Exception:
             status = "FAIL"

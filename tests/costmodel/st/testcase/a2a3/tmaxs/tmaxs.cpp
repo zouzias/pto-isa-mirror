@@ -9,8 +9,8 @@ See LICENSE in the root of the software repository for the full text of the Lice
 */
 
 #include <pto/pto-inst.hpp>
-#include <pto/common/constants.hpp>
 #include <gtest/gtest.h>
+#include <pto/common/constants.hpp>
 #include <cstdint>
 #include <vector>
 
