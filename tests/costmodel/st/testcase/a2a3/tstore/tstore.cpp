@@ -69,5 +69,3 @@ TEST(TStore, c01_nd_int16_t_128x256)
 {
     runTStore<int16_t, 128, 256, 787.0f, 0.76f>();
 }
-
-

@@ -35,9 +35,27 @@ void runTMulS(T scalar)
 
 } // namespace
 
-TEST(TMulS, case1_float_32x64)          { runTMulS<float,   32,  32,  64,  64, NO_PROFILING, 0.0f>(0.0f); }
-TEST(TMulS, case2_half_63x64)           { runTMulS<half,    63,  63,  64,  64, NO_PROFILING, 0.0f>(half{1.0f}); }
-TEST(TMulS, case3_int32_31x128)         { runTMulS<int32_t, 31,  31,  128, 128, NO_PROFILING, 0.0f>(1); }
-TEST(TMulS, case4_int16_15x192)         { runTMulS<int16_t, 15,  15,  192, 192, NO_PROFILING, 0.0f>(1); }
-TEST(TMulS, case5_float_7x448)          { runTMulS<float,   7,   7,   448, 448, NO_PROFILING, 0.0f>(1.0f); }
-TEST(TMulS, case6_float_256x16)         { runTMulS<float,   256, 256, 16,  16,  NO_PROFILING, 0.0f>(1.0f); }
+TEST(TMulS, case1_float_32x64)
+{
+    runTMulS<float, 32, 32, 64, 64, NO_PROFILING, 0.0f>(0.0f);
+}
+TEST(TMulS, case2_half_63x64)
+{
+    runTMulS<half, 63, 63, 64, 64, NO_PROFILING, 0.0f>(half{1.0f});
+}
+TEST(TMulS, case3_int32_31x128)
+{
+    runTMulS<int32_t, 31, 31, 128, 128, NO_PROFILING, 0.0f>(1);
+}
+TEST(TMulS, case4_int16_15x192)
+{
+    runTMulS<int16_t, 15, 15, 192, 192, NO_PROFILING, 0.0f>(1);
+}
+TEST(TMulS, case5_float_7x448)
+{
+    runTMulS<float, 7, 7, 448, 448, NO_PROFILING, 0.0f>(1.0f);
+}
+TEST(TMulS, case6_float_256x16)
+{
+    runTMulS<float, 256, 256, 16, 16, NO_PROFILING, 0.0f>(1.0f);
+}

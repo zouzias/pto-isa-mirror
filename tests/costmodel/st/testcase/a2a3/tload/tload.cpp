@@ -19,7 +19,7 @@ using namespace pto;
 namespace {
 
 // simplest test case
-template <typename T, int shape3, int shape4, float profiling, float accuracy, TileType Location=TileType::Vec>
+template <typename T, int shape3, int shape4, float profiling, float accuracy, TileType Location = TileType::Vec>
 void runTLoad()
 {
     using TileData = Tile<Location, T, shape3, shape4>;
@@ -84,4 +84,3 @@ TEST(TLoadMat, c01_nd_float_128x256)
 {
     runTLoad<float, 128, 256, 7096.0f, 0.9f, TileType::Mat>();
 }
-

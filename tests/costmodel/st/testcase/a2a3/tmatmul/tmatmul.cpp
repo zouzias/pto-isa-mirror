@@ -91,5 +91,3 @@ TEST(TMatmul, int32_t_64x64x64)
 {
     runTMatmul<int32_t, int8_t, int8_t, 64, 64, 64, 75.0f, 0.0f>();
 }
-
-

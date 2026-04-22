@@ -44,4 +44,7 @@ void runTTrans()
 
 } // namespace
 
-TEST(TTrans, float_128x128)    { runTTrans<float, 128, 128, NO_PROFILING, 0.0f>(); }
+TEST(TTrans, float_128x128)
+{
+    runTTrans<float, 128, 128, NO_PROFILING, 0.0f>();
+}

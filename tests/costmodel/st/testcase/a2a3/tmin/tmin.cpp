@@ -31,7 +31,7 @@ void runTMin()
     std::vector<T> dstBuf(row * col, T{0});
     std::vector<T> src0Buf(row * col, T{1});
     std::vector<T> src1Buf(row * col, T{1});
-    
+
     TASSIGN(dstTile, reinterpret_cast<std::uintptr_t>(dstBuf.data()));
     TASSIGN(src0Tile, reinterpret_cast<std::uintptr_t>(src0Buf.data()));
     TASSIGN(src1Tile, reinterpret_cast<std::uintptr_t>(src1Buf.data()));

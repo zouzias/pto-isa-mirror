@@ -36,7 +36,19 @@ void runTRowSum()
 
 } // namespace
 
-TEST(TRowSum, float_64x64)    { runTRowSum<float, 64,  64,  NO_PROFILING, 0.0f>(); }
-TEST(TRowSum, float_16x256)   { runTRowSum<float, 16,  256, NO_PROFILING, 0.0f>(); }
-TEST(TRowSum, half_64x128)    { runTRowSum<half,  64,  128, NO_PROFILING, 0.0f>(); }
-TEST(TRowSum, half_16x256)    { runTRowSum<half,  16,  256, NO_PROFILING, 0.0f>(); }
+TEST(TRowSum, float_64x64)
+{
+    runTRowSum<float, 64, 64, NO_PROFILING, 0.0f>();
+}
+TEST(TRowSum, float_16x256)
+{
+    runTRowSum<float, 16, 256, NO_PROFILING, 0.0f>();
+}
+TEST(TRowSum, half_64x128)
+{
+    runTRowSum<half, 64, 128, NO_PROFILING, 0.0f>();
+}
+TEST(TRowSum, half_16x256)
+{
+    runTRowSum<half, 16, 256, NO_PROFILING, 0.0f>();
+}
