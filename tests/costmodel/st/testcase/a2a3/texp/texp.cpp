@@ -24,8 +24,8 @@ void runTExp()
     using TileData = Tile<TileType::Vec, T, rows, cols, BLayout::RowMajor, -1, -1>;
     TileData srcTile(rows, cols);
     TileData dstTile(rows, cols);
-    TASSIGN(srcTile, 0x0);
-    TASSIGN(dstTile, 0x11000);
+    TASSIGN(srcTile, 0x1000);
+    TASSIGN(dstTile, 0x2000);
 
     TEXP(dstTile, srcTile);
 
@@ -34,8 +34,9 @@ void runTExp()
 
 } // namespace
 
-TEST(TExp, float_64x64)       { runTExp<float, 64, 64, NO_PROFILING, 0.0f>(); }
-TEST(TExp, half_64x64)        { runTExp<half,  64, 64, NO_PROFILING, 0.0f>(); }
-TEST(TExp, half_32x32)        { runTExp<half,  32, 32, NO_PROFILING, 0.0f>(); }
-TEST(TExp, float_32x32)       { runTExp<float, 32, 32, NO_PROFILING, 0.0f>(); }
-TEST(TExp, float_32x16)       { runTExp<float, 32, 16, NO_PROFILING, 0.0f>(); }
+TEST(TExp, float_64x64)       { runTExp<float, 64, 64, 159.0f, 0.9f>(); }
+TEST(TExp, float_32x64)       { runTExp<float, 32, 64, 95.0f, 0.9f>(); }
+TEST(TExp, float_16x64)       { runTExp<float, 16, 64, 63.0f, 0.9f>(); }
+TEST(TExp, half_64x64)        { runTExp<half,  64, 64, 159.0f, 0.9f>(); }
+TEST(TExp, half_32x32)        { runTExp<half,  32, 32, 63.0f, 0.9f>(); }
+

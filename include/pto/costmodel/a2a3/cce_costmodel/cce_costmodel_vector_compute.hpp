@@ -139,10 +139,16 @@ inline void vector_dup(auto dst, auto src, auto repeat, auto dstBlockStride, aut
     ::pto::mocker::RecordCceCall(::pto::mocker::evaluator::PipeKey::VECTOR, "vector_dup", cycles, dst, src, repeat,
                                  dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
 }
-inline void vexp(auto dst, auto src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
+template <typename dstType, typename srcType>
+inline void vexp(dstType dst, srcType src, auto repeat, auto dstBlockStride, auto srcBlockStride, auto dstRepeatStride,
                  auto srcRepeatStride)
 {
-    const uint64_t cycles = EstimateLinearCycles(repeat, 13, 4, 24);
+    using dtype_ = std::remove_pointer_t<dstType>;
+    int slope = 4;
+    if (std::is_same_v<dtype_, float>) {
+        slope = 2;
+    }
+    const uint64_t cycles = EstimateLinearCycles(repeat, 13, slope, 24);
     ::pto::mocker::RecordCceCall(::pto::mocker::evaluator::PipeKey::VECTOR, "vexp", cycles, dst, src, repeat,
                                  dstBlockStride, srcBlockStride, dstRepeatStride, srcRepeatStride);
 }
