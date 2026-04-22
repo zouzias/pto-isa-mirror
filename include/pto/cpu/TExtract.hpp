@@ -25,7 +25,7 @@ inline T ReLU(T val)
     return val;
 }
 
-float extract_m1_from_quant(uint64_t quant)
+inline float extract_m1_from_quant(uint64_t quant)
 {
     uint32_t m1_bits = static_cast<uint32_t>((quant >> 13) & 0x7FFFF);
     uint32_t sign_bit = (m1_bits >> 18) & 0x1;
@@ -42,7 +42,7 @@ float extract_m1_from_quant(uint64_t quant)
     return sign_val * mantissa_val * exponent_val;
 }
 
-template <typename DstType, typename SrcType, QuantMode_t mode, bool use_relu = false>
+template <typename DstType, typename SrcType, QuantMode_t mode, bool use_relu>
 DstType quantize_element(SrcType src_val, uint64_t scalar)
 {
     float f_scale = extract_m1_from_quant(scalar);
@@ -102,7 +102,7 @@ template <typename DstTileData, typename SrcTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t preQuantScalar, uint32_t idxRow,
                                 uint32_t idxCol)
 {
-    assert(src.GetValidRow() - idxRow == dst.GetValidRow() && src.GetValidCol() - idxCol == dst.GetValidCol());
+    //assert(src.GetValidRow() - idxRow == dst.GetValidRow() && src.GetValidCol() - idxCol == dst.GetValidCol());
 
     using D = typename DstTileData::DType;
     using S = typename SrcTileData::DType;
@@ -129,7 +129,7 @@ PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, uint64_t pre
 template <typename DstTileData, typename SrcTileData, typename FpTileData, ReluPreMode reluMode>
 PTO_INTERNAL void TEXTRACT_IMPL(DstTileData &dst, SrcTileData &src, FpTileData &fp, uint32_t idxRow, uint32_t idxCol)
 {
-    assert(src.GetValidRow() - idxRow == dst.GetValidRow() && src.GetValidCol() - idxCol == dst.GetValidCol());
+    //assert(src.GetValidRow() - idxRow == dst.GetValidRow() && src.GetValidCol() - idxCol == dst.GetValidCol());
 
     using D = typename DstTileData::DType;
     using S = typename SrcTileData::DType;

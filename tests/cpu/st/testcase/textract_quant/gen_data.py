@@ -135,7 +135,7 @@ def gen_golden_data(case_name, param : TExtractParams):
     dst_shape = [param.dst_valid_rows, param.dst_valid_cols]
     idx_row, idx_col = param.idx_row, param.idx_col
     total_elements = src_shape[0] * src_shape[1]
-    raw_data = NumExt.astype(np.arange(1, total_elements + 1).reshape(src_shape), param.src_dtype)
+    raw_data = NumExt.astype(np.arange(1 - total_elements // 2 , 1 + total_elements // 2 ).reshape(src_shape), param.src_dtype)
 
     quant_mode = get_quant_mode(param.src_dtype, param.dst_dtype)
     if quant_mode == QuantMode.F32_TO_F16:
