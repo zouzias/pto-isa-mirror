@@ -19,30 +19,10 @@ using namespace pto;
 namespace {
 
 // simplest test case
-template <typename T, int shape3, int shape4, float profiling, float accuracy>
+template <typename T, int shape3, int shape4, float profiling, float accuracy, TileType Location=TileType::Vec>
 void runTLoad()
 {
-    using TileData = Tile<TileType::Vec, T, shape3, shape4>;
-    TileData vecTile;
-    TASSIGN(vecTile, 0x0);
-
-    constexpr int stride0 = 1 * 1 * shape3 * shape4;
-    constexpr int stride1 = 1 * shape3 * shape4;
-    constexpr int stride2 = shape3 * shape4;
-    using StaticShapeDim5 = Shape<1, 1, 1, shape3, shape4>;
-    using StaticStrideDim5 = pto::Stride<stride0, stride1, stride2, shape4, 1>;
-    using GlobalData = GlobalTensor<T, StaticShapeDim5, StaticStrideDim5, Layout::ND>;
-    GlobalData srcGlobal(0);
-    TLOAD(vecTile, srcGlobal);
-
-    EXPECT_CYCLE_NEAR(profiling, accuracy);
-}
-
-// simplest test case
-template <typename T, int shape3, int shape4, float profiling, float accuracy>
-void runTLoadMat()
-{
-    using TileData = Tile<TileType::Mat, T, shape3, shape4>;
+    using TileData = Tile<Location, T, shape3, shape4>;
     TileData vecTile;
     TASSIGN(vecTile, 0x0);
 
@@ -92,16 +72,16 @@ TEST(TLoad, c01_nd_int16_t_128x256)
 
 TEST(TLoadMat, c01_nd_float_128x128)
 {
-    runTLoadMat<float, 128, 128, 3454.0f, 0.9f>();
+    runTLoad<float, 128, 128, 3454.0f, 0.9f, TileType::Mat>();
 }
 
 TEST(TLoadMat, c01_nd_float_64x128)
 {
-    runTLoadMat<float, 64, 128, 2313.0f, 0.7f>();
+    runTLoad<float, 64, 128, 2313.0f, 0.7f, TileType::Mat>();
 }
 
 TEST(TLoadMat, c01_nd_float_128x256)
 {
-    runTLoadMat<float, 128, 256, 7096.0f, 0.9f>();
+    runTLoad<float, 128, 256, 7096.0f, 0.9f, TileType::Mat>();
 }
 

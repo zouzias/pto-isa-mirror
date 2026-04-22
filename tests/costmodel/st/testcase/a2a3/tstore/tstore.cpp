@@ -23,8 +23,8 @@ template <typename T, int shape3, int shape4, float profiling, float accuracy>
 void runTStore()
 {
     using TileData = Tile<TileType::Vec, T, shape3, shape4>;
-    TileData vecTile;
-    TASSIGN(vecTile, 0x0);
+    TileData srcTile;
+    TASSIGN(srcTile, 0x1000);
 
     constexpr int stride0 = 1 * 1 * shape3 * shape4;
     constexpr int stride1 = 1 * shape3 * shape4;
@@ -33,7 +33,7 @@ void runTStore()
     using StaticStrideDim5 = pto::Stride<stride0, stride1, stride2, shape4, 1>;
     using GlobalData = GlobalTensor<T, StaticShapeDim5, StaticStrideDim5, Layout::ND>;
     GlobalData dstGlobal(0);
-    TSTORE(dstGlobal, vecTile);
+    TSTORE(dstGlobal, srcTile);
 
     EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
