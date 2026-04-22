@@ -118,21 +118,21 @@ inline void EmitLatestCostmodelTrace()
 // Compare the cycle count stored in the most recently executed PTO trace record
 // against an expected `profiling` value. The check passes when relative
 // precision `1 - |profiling - actual| / profiling` is at least `accuracy`.
-#define EXPECT_CYCLE_NEAR(profiling, accuracy)                                                                         \
-    do {                                                                                                               \
-        float _pto_actual = static_cast<float>(::pto::mocker::GetLastPtoInstrCycles());                                \
-        float _pto_expected = static_cast<float>(profiling);                                                           \
-        float _pto_precision =                                                                                         \
-            (_pto_expected == 0.0f) ? ((_pto_actual == 0.0f) ? 1.0f : 0.0f)                                            \
-                                    : std::max(0.0f, (1.0f - std::fabs(_pto_expected - _pto_actual) / _pto_expected));                 \
-        int _pto_log_level = GetCostmodelLogLevel();                                                                   \
-        if (_pto_log_level >= 1) {                                                                                     \
-            EmitCostmodelCycleLine(_pto_actual, _pto_expected, _pto_precision, static_cast<float>(accuracy));         \
-        }                                                                                                              \
-        if (_pto_log_level >= 2) {                                                                                     \
-            EmitLatestCostmodelTrace();                                                                                \
-        }                                                                                                              \
-        EXPECT_GE(_pto_precision, static_cast<float>(accuracy));                                                       \
+#define EXPECT_CYCLE_NEAR(profiling, accuracy)                                                                      \
+    do {                                                                                                            \
+        float _pto_actual = static_cast<float>(::pto::mocker::GetLastPtoInstrCycles());                             \
+        float _pto_expected = static_cast<float>(profiling);                                                        \
+        float _pto_precision = (_pto_expected == 0.0f) ?                                                            \
+                                   ((_pto_actual == 0.0f) ? 1.0f : 0.0f) :                                          \
+                                   std::max(0.0f, (1.0f - std::fabs(_pto_expected - _pto_actual) / _pto_expected)); \
+        int _pto_log_level = GetCostmodelLogLevel();                                                                \
+        if (_pto_log_level >= 1) {                                                                                  \
+            EmitCostmodelCycleLine(_pto_actual, _pto_expected, _pto_precision, static_cast<float>(accuracy));       \
+        }                                                                                                           \
+        if (_pto_log_level >= 2) {                                                                                  \
+            EmitLatestCostmodelTrace();                                                                             \
+        }                                                                                                           \
+        EXPECT_GE(_pto_precision, static_cast<float>(accuracy));                                                    \
     } while (0)
 
 #endif // PTO_COSTMODEL_ST_COST_CHECK_HPP
