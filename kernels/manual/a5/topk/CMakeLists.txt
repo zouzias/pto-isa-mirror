@@ -76,14 +76,15 @@ add_library(topk_kernel SHARED draft.cpp)
 # Whole TU (incl. libstdc++ <math.h> pulled by pto headers) must see a NEON-capable
 # aarch64 target; -Xhost-start -march=... alone does not cover that path under bisheng -xcce.
 target_compile_options(topk_kernel PRIVATE -march=armv8-a+simd ${CMAKE_CCE_COMPILE_OPTIONS} --cce-aicore-arch=dav-c310-vec -std=c++17)
-target_include_directories(topk_kernel PRIVATE
+# Prefer this repository's pto-isa headers over $ASCEND_HOME_PATH/include (HistByte THISTOGRAM, TGATHER tile+offset, TCONCAT).
+target_include_directories(topk_kernel BEFORE PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../include/
 )
 target_link_options(topk_kernel PRIVATE --cce-fatobj-link)
 
 add_executable(topk main.cpp)
 target_compile_options(topk PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS})
-target_include_directories(topk PRIVATE
+target_include_directories(topk BEFORE PRIVATE
     ${PROJECT_SOURCE_DIR}/../../../../include/
     ${PROJECT_SOURCE_DIR}/../../../../tests/common
 )
