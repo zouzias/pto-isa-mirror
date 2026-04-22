@@ -395,6 +395,19 @@ TEST_F(TQUANTTEST, case_mxfp8_fp32_64x512_nz)
     test_tquant_mxfp8<64, 512, 1>();
 }
 
+TEST_F(TQUANTTEST, case_mxfp8_fp32_15x32_nd)
+{
+    test_tquant_mxfp8<15, 32, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_fp32_7x64_nd)
+{
+    test_tquant_mxfp8<7, 64, 0>();
+}
+TEST_F(TQUANTTEST, case_mxfp8_fp32_33x64_nd)
+{
+    test_tquant_mxfp8<33, 64, 0>();
+}
+
 // MXFP8 BF16
 TEST_F(TQUANTTEST, case_mxfp8_bf16_32x128_nd)
 {
@@ -475,6 +488,10 @@ TEST_F(TQUANTTEST, case_int8_asym_fp32_128x128_nd)
 TEST_F(TQUANTTEST, case_int8_asym_fp32_256x128_nd)
 {
     test_tquant_int8_asym<256, 128, 0>();
+}
+TEST_F(TQUANTTEST, case_int8_asym_fp32_32x72_nd)
+{
+    test_tquant_int8_asym<32, 72, 0>();
 }
 
 } // namespace TQuantTest

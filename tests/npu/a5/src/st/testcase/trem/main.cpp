@@ -32,10 +32,10 @@ std::string GetGoldenDir()
     return fullPath;
 }
 
-template <typename T, int kTRows_, int kTCols_, int vRows, int vCols, bool isHalf>
+template <typename T, int kTRows_, int kTCols_, int vRows, int vCols, bool isHalf, bool highPrecision = false>
 void LaunchTRem(T *out, T *src0, T *src1, void *stream);
 
-template <typename T, int kTRows_, int kTCols_, int vRows, int vCols, bool isHalf>
+template <typename T, int kTRows_, int kTCols_, int vRows, int vCols, bool isHalf, bool highPrecision = false>
 void test_trem()
 {
     size_t fileSize = kTRows_ * kTCols_ * sizeof(T);
@@ -61,7 +61,7 @@ void test_trem()
 
     aclrtMemcpy(src0Device, fileSize, src0Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, fileSize, src1Host, fileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTRem<T, kTRows_, kTCols_, vRows, vCols, isHalf>(dstDevice, src0Device, src1Device, stream);
+    LaunchTRem<T, kTRows_, kTCols_, vRows, vCols, isHalf, highPrecision>(dstDevice, src0Device, src1Device, stream);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, fileSize, dstDevice, fileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -84,7 +84,12 @@ void test_trem()
     ReadFile(GetGoldenDir() + "/golden.bin", fileSize, golden.data(), fileSize);
     ReadFile(GetGoldenDir() + "/output.bin", fileSize, devFinal.data(), fileSize);
 
-    bool ret = ResultCmp<T>(golden, devFinal, 0.001f);
+    float eps = 0.0005f;
+    if constexpr (std::is_same_v<T, float>) {
+        eps = 0.00005f;
+    }
+    eps = highPrecision ? 0.0000001f : eps;
+    bool ret = ResultCmp<T>(golden, devFinal, eps);
 
     EXPECT_TRUE(ret);
 }
@@ -111,7 +116,7 @@ TEST_F(TREMTest, case4)
 
 TEST_F(TREMTest, case5)
 {
-    test_trem<float, 32, 32, 32, 32, false>();
+    test_trem<float, 32, 32, 32, 32, false, true>();
 }
 
 TEST_F(TREMTest, case6)
@@ -132,4 +137,19 @@ TEST_F(TREMTest, case8)
 TEST_F(TREMTest, case9)
 {
     test_trem<int32_t, 8, 8, 8, 8, false>();
+}
+
+TEST_F(TREMTest, case10)
+{
+    test_trem<float, 64, 64, 64, 64, false, true>();
+}
+
+TEST_F(TREMTest, case11)
+{
+    test_trem<float, 128, 128, 96, 96, false, true>();
+}
+
+TEST_F(TREMTest, case12)
+{
+    test_trem<float, 128, 128, 96, 97, false, true>();
 }

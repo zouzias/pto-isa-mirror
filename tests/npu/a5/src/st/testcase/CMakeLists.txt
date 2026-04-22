@@ -224,14 +224,17 @@ set(ALL_TESTCASES
     mgather
     mscatter
     t_dhrystone
-    tpack
+    tpow
+    tpows
     tconcatidx
     tconcat
     thistogram
     tinsert
     tinsert_acc2vec
     textract_nd_vec
+    textract_vec
     tmov_zz
+    tmov_nd2nz
     textract_acc2vec
 )
 

@@ -19,6 +19,9 @@ namespace TMovZZTest {
 template <int validRows, int validCols>
 void LaunchTMovZZ(uint8_t *dstFp8Nz, float *src, uint8_t *dstE8Zz, void *stream);
 
+template <int validRows, int validCols>
+void LaunchTMovZZ_e8m0(uint8_t *dstFp8Nz, float *src, uint8_t *dstE8Zz, void *stream);
+
 class TMOVZZTest : public testing::Test {
 protected:
     void SetUp() override
@@ -249,6 +252,81 @@ TEST_F(TMOVZZTest, case_fp32_31x256)
 TEST_F(TMOVZZTest, case_fp32_47x256)
 {
     test_tmov_zz<47, 256>();
+}
+
+template <int validRows, int validCols>
+void test_tmov_zz_e8m0()
+{
+    constexpr int paddedCols = ((validCols + 31) / 32) * 32;
+    constexpr int paddedRows = ((validRows + 15) / 16) * 16;
+    constexpr int groupedCols = paddedCols / 32;
+    size_t srcFileSize = validRows * validCols * sizeof(float);
+    size_t dstFp8FileSize = paddedRows * paddedCols * sizeof(uint8_t);
+    size_t dstE8FileSize = paddedRows * groupedCols * sizeof(uint8_t);
+
+    aclInit(nullptr);
+    aclrtSetDevice(0);
+    aclrtStream stream;
+    aclrtCreateStream(&stream);
+
+    uint8_t *dstFp8Host, *dstFp8Device, *dstE8Host, *dstE8Device;
+    float *srcHost, *srcDevice;
+
+    aclrtMallocHost((void **)(&dstFp8Host), dstFp8FileSize);
+    aclrtMallocHost((void **)(&dstE8Host), dstE8FileSize);
+    aclrtMallocHost((void **)(&srcHost), srcFileSize);
+
+    aclrtMalloc((void **)&dstFp8Device, dstFp8FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&dstE8Device, dstE8FileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+    aclrtMalloc((void **)&srcDevice, srcFileSize, ACL_MEM_MALLOC_HUGE_FIRST);
+
+    ReadFile(GetGoldenDir() + "/input.bin", srcFileSize, srcHost, srcFileSize);
+    aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    LaunchTMovZZ_e8m0<validRows, validCols>(dstFp8Device, srcDevice, dstE8Device, stream);
+
+    aclError syncRet = aclrtSynchronizeStream(stream);
+    ASSERT_EQ(syncRet, ACL_SUCCESS) << "aclrtSynchronizeStream failed (ret=" << syncRet
+                                    << "): " << aclGetRecentErrMsg();
+
+    aclrtMemcpy(dstFp8Host, dstFp8FileSize, dstFp8Device, dstFp8FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+    aclrtMemcpy(dstE8Host, dstE8FileSize, dstE8Device, dstE8FileSize, ACL_MEMCPY_DEVICE_TO_HOST);
+
+    WriteFile(GetGoldenDir() + "/output_fp8_nz.bin", dstFp8Host, dstFp8FileSize);
+    WriteFile(GetGoldenDir() + "/output_e8_zz.bin", dstE8Host, dstE8FileSize);
+
+    aclrtFree(dstFp8Device);
+    aclrtFree(dstE8Device);
+    aclrtFree(srcDevice);
+    aclrtFreeHost(dstFp8Host);
+    aclrtFreeHost(dstE8Host);
+    aclrtFreeHost(srcHost);
+    aclrtDestroyStream(stream);
+    aclrtResetDevice(0);
+    aclFinalize();
+
+    std::vector<uint8_t> goldenFp8(dstFp8FileSize);
+    std::vector<uint8_t> goldenE8(dstE8FileSize);
+    std::vector<uint8_t> outFp8(dstFp8FileSize);
+    std::vector<uint8_t> outE8(dstE8FileSize);
+
+    ReadFile(GetGoldenDir() + "/golden_fp8_nz.bin", dstFp8FileSize, goldenFp8.data(), dstFp8FileSize);
+    ReadFile(GetGoldenDir() + "/golden_e8_zz.bin", dstE8FileSize, goldenE8.data(), dstE8FileSize);
+    ReadFile(GetGoldenDir() + "/output_fp8_nz.bin", dstFp8FileSize, outFp8.data(), dstFp8FileSize);
+    ReadFile(GetGoldenDir() + "/output_e8_zz.bin", dstE8FileSize, outE8.data(), dstE8FileSize);
+
+    EXPECT_TRUE(ResultCmp<uint8_t>(goldenFp8, outFp8, 0.0f));
+    EXPECT_TRUE(ResultCmp<uint8_t>(goldenE8, outE8, 0.0f));
+}
+
+TEST_F(TMOVZZTest, case_e8m0_64x128)
+{
+    test_tmov_zz_e8m0<64, 128>();
+}
+
+TEST_F(TMOVZZTest, case_e8m0_32x64)
+{
+    test_tmov_zz_e8m0<32, 64>();
 }
 
 } // namespace TMovZZTest

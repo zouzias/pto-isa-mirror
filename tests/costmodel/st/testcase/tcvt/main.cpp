@@ -8,50 +8,40 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#include "test_common.h"
-#include <gtest/gtest.h>
 #include <pto/pto-inst.hpp>
+#include <pto/common/constants.hpp>
+#include <gtest/gtest.h>
 
-using namespace std;
-using namespace PtoTestCommon;
+#include "cost_check.hpp"
 
-class TCVTTest : public testing::Test {
-protected:
-    void SetUp() override
-    {}
-    void TearDown() override
-    {}
-};
+using namespace pto;
 
-template <int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTCvtF32ToF16(void *stream);
+namespace {
 
-template <int kTRows_, int kTCols_, float profiling, float accuracy>
-void LaunchTCvtF16ToF32(void *stream);
-
-// startup(13) + 4 rows * 1 repeat * per_repeat(1) = 17
-TEST_F(TCVTTest, case_f32_to_f16_4x64)
+template <typename DstT, typename SrcT, int rows, int cols, float profiling, float accuracy>
+void runTCvt()
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    LaunchTCvtF32ToF16<4, 64, 17.0f, 0.0f>(stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    using DstTile = Tile<TileType::Vec, DstT, rows, cols, BLayout::RowMajor, -1, -1>;
+    using SrcTile = Tile<TileType::Vec, SrcT, rows, cols, BLayout::RowMajor, -1, -1>;
+
+    DstTile dstTile(rows, cols);
+    SrcTile srcTile(rows, cols);
+
+    TASSIGN(srcTile, 0x0);
+    TASSIGN(dstTile, 0x8000);
+
+    TCVT(dstTile, srcTile, RoundMode::CAST_NONE);
+
+    EXPECT_CYCLE_NEAR(profiling, accuracy);
 }
 
-TEST_F(TCVTTest, case_f16_to_f32_4x64)
+} // namespace
+
+TEST(TCvt, f32_to_f16_4x64)
 {
-    aclInit(nullptr);
-    aclrtSetDevice(0);
-    aclrtStream stream;
-    aclrtCreateStream(&stream);
-    LaunchTCvtF16ToF32<4, 64, 17.0f, 0.0f>(stream);
-    aclrtSynchronizeStream(stream);
-    aclrtDestroyStream(stream);
-    aclrtResetDevice(0);
-    aclFinalize();
+    runTCvt<half, float, 4, 64, 0.0f, 0.0f>();
+}
+TEST(TCvt, f16_to_f32_4x64)
+{
+    runTCvt<float, half, 4, 64, 0.0f, 0.0f>();
 }

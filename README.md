@@ -27,6 +27,10 @@ The PTO ISA is built on Ascend's underlying hardware and software abstractions a
 - **Designed for frameworks, operators, and toolchains**: serves as a common interface for upper-layer frameworks, operator implementations, and compiler toolchains.
 - **Continuously extensible**: defines 90+ standard operations today, with ongoing implementation and ecosystem integration.
 
+In addition to compute and data-movement instructions, PTO ISA also provides a **communication extension instruction set** for inter-NPU data transfer and synchronization, covering point-to-point communication, signal synchronization, and collective communication.
+
+These communication primitives follow the same tile-level abstraction and cross-platform design as the compute instructions, and can drive multiple data-movement hardware engines on Ascend to help users build deeply fused compute-communication kernels. For the communication ISA entry, see [docs/isa/comm/README.md](docs/isa/comm/README.md).
+
 At present, PTO instructions have been integrated into the following frameworks:
 
 - [PyPTO](https://gitcode.com/cann/pypto/)
@@ -132,6 +136,20 @@ This repository also demonstrates how standard tile operations can be mapped to 
 - S1: key/value sequence length (number of rows in K/V)
 
 ![Flash Attention normalized TFLOPS (A2/A3)](docs/figures/performance/fa_normalized_tflops_a2a3.svg)
+
+### Communication Instruction Bandwidth
+
+- Reference implementation: `kernels/manual/a2a3/tget_bandwidth/`
+- Detailed analysis and build/run guide: [TGET / TGET_ASYNC Bandwidth Comparison Example](kernels/manual/a2a3/tget_bandwidth/README.md)
+
+This example measures point-to-point remote-read bandwidth on Ascend A2/A3 and compares `TGET` (synchronous, via UB staging) with `TGET_ASYNC` (asynchronous, direct transfer through the DMA engine).
+
+### GEMM AllReduce Fused Compute-Communication
+
+- Reference implementation: `kernels/manual/a2a3/gemm_ar/`
+- Detailed analysis and tuning notes: [High-Performance GEMM AllReduce Fused Operator Example](kernels/manual/a2a3/gemm_ar/README_zh.md)
+
+This example shows how PTO communication primitives can be fused with compute kernels to overlap GEMM and AllReduce within one operator pipeline.
 
 ## 🖥️ Platform Support
 

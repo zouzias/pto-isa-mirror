@@ -9,17 +9,12 @@
 # --------------------------------------------------------------------------------
 
 function(pto_costmodel_sim_st NAME)
-    set(FILES_LIST main.cpp)
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${NAME}_kernel.cpp)
-        list(APPEND FILES_LIST ${NAME}_kernel.cpp)
-    endif()
-    add_executable(${NAME} ${FILES_LIST})
+    add_executable(${NAME} main.cpp)
     target_compile_options(${NAME} PRIVATE ${CMAKE_CPP_COMPILE_OPTIONS} -std=c++23)
     target_include_directories(${NAME} PRIVATE
         ${PROJECT_SOURCE_DIR}/../../../include/
         ${PROJECT_SOURCE_DIR}/../../../include/common
-        ${PROJECT_SOURCE_DIR}/../stubs
-        ${PROJECT_SOURCE_DIR}/../../common
+        ${PROJECT_SOURCE_DIR}/common
     )
 
     target_link_libraries(${NAME} PRIVATE
@@ -37,33 +32,45 @@ endfunction()
 find_package(Threads REQUIRED)
 
 set(ALL_TESTCASES
-tabs
-tadd
-tadds
-tcolmax
-tcolsum
-tdivs
-texp
-tmins
-tmul
-tmuls
-tmatmul
-trowexpand
-trowmax
-trowmin
-trowsum
-tsqrt
-tsub
-tcvt
-tmrgsort
-tsel
-tsort32
-ttrans
-tload
-tloadconv
-tmov
-textract
-tscatter
+    tabs
+    tadd
+    tadds
+    tcmp
+    tcolmax
+    tcolmin
+    tcolsum
+    tcvt
+    tdiv
+    tdivs
+    texp
+    textract
+    tgather
+    tload
+    tloadconv
+    tmatmul
+    tmax
+    tmaxs
+    tmin
+    tmins
+    tmov
+    tmrgsort
+    tmul
+    tmuls
+    tneg
+    trecip
+    trowexpand
+    trowmax
+    trowmin
+    trowsum
+    trsqrt
+    tscatter
+    tsel
+    tsels
+    tsort32
+    tsqrt
+    tsub
+    tsubs
+    ttrans
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})

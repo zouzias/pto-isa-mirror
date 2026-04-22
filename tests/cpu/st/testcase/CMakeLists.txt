@@ -59,6 +59,7 @@ tcolmin
 tcolsum
 tconcat
 tcvt
+tdequant
 tdiv
 tdivs
 texp
@@ -136,6 +137,7 @@ txor
 txors
 tget_async
 tput_async
+tsubview
 )
 
 foreach(TESTCASE ${ALL_TESTCASES})
