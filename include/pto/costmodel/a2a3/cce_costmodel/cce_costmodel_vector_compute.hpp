@@ -40,7 +40,7 @@ inline void vabs(auto dst, auto src, auto repeat, auto dstBlockStride, auto srcB
 inline void vadd(auto dst, auto src0, auto src1, auto repeat, auto dstBlockStride, auto src0BlockStride,
                  auto src1BlockStride, auto dstRepeatStride, auto src0RepeatStride, auto src1RepeatStride)
 {
-    const uint64_t cycles = EstimateLinearCycles(repeat, 14, 1, 18);
+    const uint64_t cycles = EstimateLinearCycles(repeat, 14, 2, 18);
     ::pto::mocker::RecordCceCall(::pto::mocker::evaluator::PipeKey::VECTOR, "vadd", cycles, dst, src0, src1, repeat,
                                  dstBlockStride, src0BlockStride, src1BlockStride, dstRepeatStride, src0RepeatStride,
                                  src1RepeatStride);
