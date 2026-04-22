@@ -108,7 +108,7 @@ def build_tmatmul(build_dir: Path, source_dir: Path, build_type: str,
     logging.info(f"Build completed in {build_time:.2f}s")
     logging.info(f"Total build time: {cfg_time + build_time:.2f}s")
 
-def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool) -> Tuple[bool, float]:
+def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool, transmode: str = 'NN') -> Tuple[bool, float]:
     """Run a single test with given dimensions."""
     test_dir = build_dir / "testcase" / "tmatmul"
     binary = build_dir / "bin" / "tmatmul"
@@ -116,7 +116,7 @@ def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool) -> T
     if not binary.exists():
         raise RuntimeError(f"Binary not found: {binary}")
 
-    size_str = f"{M}x{K}x{N}"
+    size_str = f"{M}x{K}x{N}_{transmode}"
     logging.info(f"Running test: {size_str}")
 
     # Create test directory (cleanup first if exists)
@@ -135,7 +135,7 @@ def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool) -> T
         new_path = str(st_dir)
         env["PYTHONPATH"] = f"{new_path}{os.pathsep}{pp}" if pp else new_path
             # Generate test data
-        gen_cmd = [sys.executable, str(gen_data_script), "--size", f"{M},{K},{N}"]
+        gen_cmd = [sys.executable, str(gen_data_script), "--size", f"{M},{K},{N}", "--transmode", transmode]
 
         start = time.perf_counter()
         try:
@@ -147,7 +147,7 @@ def run_single_test(build_dir: Path, M: int, K: int, N: int, verbose: bool) -> T
             return False, elapsed
 
         # Run test binary
-        test_cmd = [str(binary), "--size", f"{M},{K},{N}"]
+        test_cmd = [str(binary), "--size", f"{M},{K},{N}", "--transmode", transmode]
         start = time.perf_counter()
         try:
             run_command(test_cmd, verbose=verbose)
@@ -209,6 +209,7 @@ def parse_arguments() -> argparse.Namespace:
         epilog='''
 Examples:
   python run_tmatmul.py --size "128,128,64"
+  python run_tmatmul.py --size "128,128,64" --transmode NT
   python run_tmatmul.py
   python run_tmatmul.py --regression
   python run_tmatmul.py --list-presets
@@ -216,6 +217,8 @@ Examples:
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument('--size', type=str, help='Custom size in "M,K,N" format')
+    parser.add_argument('--transmode', type=str, default='NN', choices=['NN', 'NT', 'TN', 'TT'],
+                       help='Transpose mode: NN (default), NT, TN, TT')
     parser.add_argument('--list-presets', action='store_true', help='List all preset sizes')
     parser.add_argument('--regression', action='store_true', help='Run all regression tests')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
@@ -310,7 +313,7 @@ def main() -> int:
 
     results = []
     for M, K, N in size_list:
-        passed, elapsed = run_single_test(build_dir, M, K, N, args.verbose)
+        passed, elapsed = run_single_test(build_dir, M, K, N, args.verbose, args.transmode)
         results.append((M, K, N, passed, elapsed))
 
     # Print summary

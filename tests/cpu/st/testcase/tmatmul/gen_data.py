@@ -21,39 +21,59 @@ from utils import NumExt
 np.random.seed(19)
 ENABLE_BF16 = os.environ.get("PTO_CPU_SIM_ENABLE_BF16") == "1"
 
-def matmul_reference(a, b, out_dtype):
+def matmul_reference(a, b, out_dtype, transmode='NN'):
     """
     Reference matmul that avoids BLAS calls (some macOS Python distributions may
     ship a broken/unsupported BLAS backend that returns incorrect results).
 
-    a: (m, k)
-    b: (k, n)
+    a: (m, k) or (k, m) depending on transmode
+    b: (k, n) or (n, k) depending on transmode
+    transmode: 'NN', 'NT', 'TN', 'TT'
     returns: (m, n)
     """
     a = a.astype(out_dtype, copy=False)
     b = b.astype(out_dtype, copy=False)
-    # (m, k, 1) * (1, k, n) -> (m, k, n) -> sum over k
-    return (a[:, :, None] * b[None, :, :]).sum(axis=1, dtype=out_dtype)
+
+    if transmode == 'NN':
+        # No transpose: A(MxK) @ B(KxN) = C(MxN)
+        return (a[:, :, None] * b[None, :, :]).sum(axis=1, dtype=out_dtype)
+    elif transmode == 'NT':
+        # B transpose: A(MxK) @ B(NxK)^T = C(MxN)
+        return (a[:, :, None] * b[:, None, :]).sum(axis=2, dtype=out_dtype)
+    elif transmode == 'TN':
+        # A transpose: A(KxM)^T @ B(KxN) = C(MxN)
+        return (a[None, :, :] * b[None, :, :]).sum(axis=1, dtype=out_dtype)
+    elif transmode == 'TT':
+        # Both transpose: A(KxM)^T @ B(NxK)^T = C(MxN)
+        return (a[None, :, :] * b[:, None, :]).sum(axis=2, dtype=out_dtype)
+    else:
+        raise ValueError(f"Invalid transmode: {transmode}")
 
 def gen_golden_data(case_name, param):
     src_type = param.atype
     dst_type = param.ctype
 
-    m, k, n, is_bias, is_atrans, is_btrans = param.m, param.k, param.n, param.is_bias, False, False
+    m, k, n, is_bias, transmode = param.m, param.k, param.n, param.is_bias, param.transmode
     repeats = param.repeats
 
-    x1_gm = NumExt.astype(np.random.randint(1, 5, [repeats, m, k]), src_type)
-    x2_gm = NumExt.astype(np.random.randint(1, 5, [repeats, k, n]), src_type)
+    # Generate input data with appropriate shapes based on transmode
+    if transmode in ['NN', 'NT']:
+        # A is MxK
+        x1_gm = NumExt.astype(np.random.randint(1, 5, [repeats, m, k]), src_type)
+    else:  # TN, TT - A is KxM
+        x1_gm = NumExt.astype(np.random.randint(1, 5, [repeats, k, m]), src_type)
+
+    if transmode in ['NN', 'TN']:
+        # B is KxN
+        x2_gm = NumExt.astype(np.random.randint(1, 5, [repeats, k, n]), src_type)
+    else:  # NT, TT - B is NxK
+        x2_gm = NumExt.astype(np.random.randint(1, 5, [repeats, n, k]), src_type)
+
     bias_gm = np.random.randint(1, 10, [n, ]).astype(param.bias_type)
-    golden=np.zeros([m,n], dst_type)
+    golden = np.zeros([m, n], dst_type)
 
     for i in range(repeats):
-        golden = golden + matmul_reference(x1_gm[i], x2_gm[i], dst_type).astype(dst_type)
-
-        if is_atrans:
-            x1_gm[i] = x1_gm[i].transpose()
-        if is_btrans:
-            x2_gm[i] = x2_gm[i].transpose()
+        golden = golden + matmul_reference(x1_gm[i], x2_gm[i], dst_type, transmode).astype(dst_type)
 
     if is_bias:
         golden += bias_gm
@@ -65,15 +85,16 @@ def gen_golden_data(case_name, param):
 
 
 class tmatmulParams:
-    def __init__(self, atype, btype, ctype, m, k, n, is_bias, bias_type = None, repeats=1):
+    def __init__(self, atype, btype, ctype, m, k, n, is_bias, bias_type=None, repeats=1, transmode='NN'):
         self.atype = atype
         self.btype = btype
         self.ctype = ctype
         self.m = m
         self.k = k
-        self.n = n 
+        self.n = n
         self.repeats = repeats
         self.is_bias = is_bias
+        self.transmode = transmode
         if (bias_type):
             self.bias_type = bias_type
         else:
@@ -90,6 +111,8 @@ if __name__ == "__main__":
         parser.add_argument('--dtype', type=str, default='float16', help='Data type (float16, int8, bf16, etc)')
         parser.add_argument('--bias', action='store_true', help='Include bias in test')
         parser.add_argument('--repeats', type=int, default=1, help='Number of repeats (default: 1)')
+        parser.add_argument('--transmode', type=str, default='NN', choices=['NN', 'NT', 'TN', 'TT'],
+                           help='Transpose mode: NN (default), NT, TN, TT')
         args = parser.parse_args()
 
         # Parse size
@@ -105,7 +128,7 @@ if __name__ == "__main__":
             sys.exit(1)
 
         # Generate single test case
-        case_name = f"custom_{m}x{k}x{n}"
+        case_name = f"custom_{m}x{k}x{n}_{args.transmode}"
         if args.output_dir != '.':
             # Use custom output directory
             output_path = args.output_dir
@@ -132,10 +155,10 @@ if __name__ == "__main__":
         src_type = dtype_map.get(args.dtype, np.float16)
         dst_type = np.float32 if args.dtype in ['float16', 'float32', 'bf16'] else np.int32
 
-        param = tmatmulParams(src_type, src_type, dst_type, m, k, n, args.bias, repeats=args.repeats)
+        param = tmatmulParams(src_type, src_type, dst_type, m, k, n, args.bias, repeats=args.repeats, transmode=args.transmode)
         gen_golden_data(case_name, param)
         os.chdir(original_dir)
-        print(f"Generated test data for {m}x{k}x{n} in {output_path}/")
+        print(f"Generated test data for {m}x{k}x{n} with transmode={args.transmode} in {output_path}/")
 
     else:
         # Original batch mode - generate all test cases

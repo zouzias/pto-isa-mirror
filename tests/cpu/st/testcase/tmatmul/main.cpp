@@ -10,6 +10,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include "test_common.h"
 #include <pto/pto-inst.hpp>
+#include <pto/cpu/TMatmul.hpp>
 #include <gtest/gtest.h>
 #include <string>
 #include <sstream>
@@ -17,15 +18,17 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 using namespace std;
 using namespace PtoTestCommon;
+using namespace pto;
 
 struct SizeArgs {
     uint32_t M, K, N;
+    std::string transmode;
     bool valid;
     bool use_custom_size;
 };
 
 SizeArgs parse_size_args(int argc, char** argv) {
-    SizeArgs args = {0, 0, 0, false, false};
+    SizeArgs args = {0, 0, 0, "NN", false, false};
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -37,7 +40,8 @@ SizeArgs parse_size_args(int argc, char** argv) {
                 args.valid = true;
                 args.use_custom_size = true;
             }
-            break;
+        } else if (arg == "--transmode" && i + 1 < argc) {
+            args.transmode = argv[++i];
         }
     }
     return args;
@@ -48,6 +52,9 @@ void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
 
 template <int32_t tilingKey>
 void LaunchTMATMULBIAS(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
+
+// External global variable from tmatmul_kernel.cpp
+extern TransMode g_transmode;
 
 class TMATMULTest : public testing::Test {
 protected:
@@ -123,11 +130,31 @@ void tmatmul_test(uint32_t M, uint32_t K, uint32_t N)
 }
 
 template <typename T, typename U, typename S, int32_t key>
-void tmatmul_test_custom(uint32_t M, uint32_t K, uint32_t N)
+void tmatmul_test_custom(uint32_t M, uint32_t K, uint32_t N, const std::string& transmode_str = "NN")
 {
-    size_t aFileSize = M * K * sizeof(U);
-    size_t bFileSize = K * N * sizeof(S);
-    size_t cFileSize = M * N * sizeof(T);
+    // Convert transmode string to enum
+    TransMode transmode = TransMode::NN;
+    if (transmode_str == "NN") transmode = TransMode::NN;
+    else if (transmode_str == "NT") transmode = TransMode::NT;
+    else if (transmode_str == "TN") transmode = TransMode::TN;
+    else if (transmode_str == "TT") transmode = TransMode::TT;
+
+    // Calculate file sizes based on transmode
+    size_t aFileSize, bFileSize, cFileSize;
+
+    if (transmode == TransMode::NN || transmode == TransMode::NT) {
+        aFileSize = M * K * sizeof(U);  // A is MxK
+    } else {  // TN, TT - A is KxM
+        aFileSize = K * M * sizeof(U);
+    }
+
+    if (transmode == TransMode::NN || transmode == TransMode::TN) {
+        bFileSize = K * N * sizeof(S);  // B is KxN
+    } else {  // NT, TT - B is NxK
+        bFileSize = N * K * sizeof(S);
+    }
+
+    cFileSize = M * N * sizeof(T);
 
     aclInit(nullptr);
     aclrtSetDevice(0);
@@ -151,6 +178,9 @@ void tmatmul_test_custom(uint32_t M, uint32_t K, uint32_t N)
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
+
+    // Note: Need to modify LaunchTMATMUL to accept transmode
+    // For now, we'll pass it but the implementation will need to be updated
     LaunchTMATMUL<key>(dstDevice, src0Device, src1Device, stream);
 
     aclrtSynchronizeStream(stream);
@@ -355,9 +385,16 @@ int main(int argc, char** argv) {
     SizeArgs size_args = parse_size_args(argc, argv);
 
     if (size_args.use_custom_size && size_args.valid) {
+        // Convert transmode string to enum and set global variable
+        if (size_args.transmode == "NN") g_transmode = TransMode::NN;
+        else if (size_args.transmode == "NT") g_transmode = TransMode::NT;
+        else if (size_args.transmode == "TN") g_transmode = TransMode::TN;
+        else if (size_args.transmode == "TT") g_transmode = TransMode::TT;
+
         // Custom size mode
-        std::cout << "Running custom size test: " << size_args.M << "x" << size_args.K << "x" << size_args.N << std::endl;
-        tmatmul_test_custom<float, uint16_t, uint16_t, 1>(size_args.M, size_args.K, size_args.N);
+        std::cout << "Running custom size test: " << size_args.M << "x" << size_args.K << "x" << size_args.N
+                  << " with transmode=" << size_args.transmode << std::endl;
+        tmatmul_test_custom<float, uint16_t, uint16_t, 1>(size_args.M, size_args.K, size_args.N, size_args.transmode);
         return 0;
     } else if (size_args.use_custom_size && !size_args.valid) {
         std::cerr << "Error: Invalid --size format. Expected M,K,N" << std::endl;
