@@ -24,10 +24,10 @@ template <typename T, int dstRow, int dstCol, int srcRow, int validRow, int srcC
           float accuracy>
 void runTMaxS(T scalar)
 {
-    using SrcTile = Tile<TileType::Vec, T, srcRow, srcCol, BLayout::RowMajor, -1, -1>;
     using DstTile = Tile<TileType::Vec, T, dstRow, dstCol, BLayout::RowMajor, -1, -1>;
-    SrcTile srcTile(validRow, validCol);
+    using SrcTile = Tile<TileType::Vec, T, srcRow, srcCol, BLayout::RowMajor, -1, -1>;
     DstTile dstTile(validRow, validCol);
+    SrcTile srcTile(validRow, validCol);
 
     std::vector<T> srcBuf(srcRow * srcCol, T{1});
     std::vector<T> dstBuf(dstRow * dstCol, T{0});

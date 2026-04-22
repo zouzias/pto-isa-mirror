@@ -24,16 +24,17 @@ template <typename T, int row, int validRow, int col, int validCol, PadValue pad
 void runTMin()
 {
     using TileData = Tile<TileType::Vec, T, row, col, BLayout::RowMajor, -1, -1, SLayout::NoneBox, 512, padValue>;
+    TileData dstTile(validRow, validCol);
     TileData src0Tile(validRow, validCol);
     TileData src1Tile(validRow, validCol);
-    TileData dstTile(validRow, validCol);
 
+    std::vector<T> dstBuf(row * col, T{0});
     std::vector<T> src0Buf(row * col, T{1});
     std::vector<T> src1Buf(row * col, T{1});
-    std::vector<T> dstBuf(row * col, T{0});
+    
+    TASSIGN(dstTile, reinterpret_cast<std::uintptr_t>(dstBuf.data()));
     TASSIGN(src0Tile, reinterpret_cast<std::uintptr_t>(src0Buf.data()));
     TASSIGN(src1Tile, reinterpret_cast<std::uintptr_t>(src1Buf.data()));
-    TASSIGN(dstTile, reinterpret_cast<std::uintptr_t>(dstBuf.data()));
 
     TMIN(dstTile, src0Tile, src1Tile);
 
