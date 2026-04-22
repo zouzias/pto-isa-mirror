@@ -13,6 +13,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 #include <cassert>
 #include "common.hpp"
+#include <cmath>
 
 namespace pto {
 
@@ -47,21 +48,24 @@ DstType quantize_element(SrcType src_val, uint64_t scalar)
     float f_scale = extract_m1_from_quant(scalar);
     uint32_t offset = static_cast<uint32_t>((scalar >> 37) & 0x1FF);
     uint32_t sign = static_cast<uint32_t>((scalar >> 46) & 0x1);
+    uint32_t saturate_inf = static_cast<uint32_t>((scalar >> 48) & 0x1);
 
-    float result_f = static_cast<DstType>(src_val);
+    float result_f = static_cast<float>(src_val) * f_scale;
+
     if constexpr (mode == QuantMode_t::QF322B8_PRE || mode == QuantMode_t::VQF322B8_PRE || mode == QuantMode_t::REQ8 ||
                   mode == QuantMode_t::VREQ8) {
-        float work = static_cast<float>(src_val) * f_scale;
-        float rounded = std::round(work) + offset;
+        float rounded = std::round(result_f + offset) ;
         float min = sign == 1 ? -128.0f : 0.0f;
         float max = sign == 1 ? 127.0f : 255.0f;
         result_f = std::clamp(rounded, min, max);
-    } else if constexpr (mode == QuantMode_t::DEQF16 || mode == QuantMode_t::VDEQF16 ||
-                         mode == QuantMode_t::QF322F16_PRE) {
-        float work = static_cast<float>(src_val) * f_scale;
-        result_f = std::clamp(work, -F16_MAX, F16_MAX);
-    } else if constexpr (mode == QuantMode_t::QF322BF16_PRE) {
-        result_f = static_cast<float>(src_val) * f_scale;
+    } else if constexpr (mode == QuantMode_t::DEQF16 || mode == QuantMode_t::VDEQF16) {
+        result_f = std::clamp(result_f, -F16_MAX, F16_MAX);
+    } else if (mode == QuantMode_t::QF322F16_PRE) {
+        if (std::isnan(result_f) && saturate_inf == 1) {
+            result_f = 0.0f;
+        } else if (std::isfinite(result_f) || saturate_inf == 1) {
+            result_f = std::clamp(result_f, -F16_MAX, F16_MAX);
+        }
     }
     if constexpr (use_relu)
         result_f = ReLU(result_f);
