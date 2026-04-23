@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_DIR="${SCRIPT_DIR}/.."
 
 # ST 测试用例目录
-TESTCASE_DIR="${SCRIPT_DIR}/costmodel/st/testcase"
+TESTCASE_DIR="${SCRIPT_DIR}/costmodel/st/testcase/a2a3"
 
 # 需要执行的测试用例列表（留空则自动发现 TESTCASE_DIR 下所有子目录）
 TESTCASES=()

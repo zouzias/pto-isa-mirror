@@ -28,8 +28,8 @@ inline void mad(CType c, AType a, BType b, auto m, auto k, auto n, auto phase, a
     const uint64_t mTiles = CeilDiv(m, 16);
     const uint64_t kTiles = CeilDiv(k, 32 / sizeof(dtype_a));
     const uint64_t nTiles = CeilDiv(n, 16);
-    const uint64_t cycles = EstimateLinearCycles(::pto::mocker::evaluator::PipeKey::CUBE, mTiles * kTiles * nTiles,
-                                                 kDefaultHeadCycles, cycle_per_repeat);
+    const uint64_t cycles =
+        EstimateLinearCycles(::pto::mocker::evaluator::PipeKey::CUBE, mTiles * kTiles * nTiles, 43, cycle_per_repeat);
     ::pto::mocker::RecordCceCall(::pto::mocker::evaluator::PipeKey::CUBE, "mad", cycles, c, a, b, m, k, n, phase,
                                  kDirectionAlign, cmatrixSource, cmatrixInitVal);
 }
