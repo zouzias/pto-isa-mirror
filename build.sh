@@ -262,7 +262,7 @@ clean_build_out() {
 
 
 build_package() {
-  echo "---------------package start-----------------"
+  echo "---------------package start -----------------"
   clean_build_out
   clean_build
   mkdir $BUILD_PATH
