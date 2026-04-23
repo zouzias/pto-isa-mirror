@@ -219,6 +219,7 @@ set(ALL_TESTCASES
     tnot
     trelu
     tquant
+    vcgmax
     tdequant
     trandom
     mgather
