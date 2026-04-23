@@ -311,7 +311,7 @@ struct SingleCardTestEnv {
 };
 
 template <typename T>
-PTO_INTERNAL void FillAndUpload(SingleCardTestEnv &env, size_t count, int modulus)
+inline void FillAndUpload(SingleCardTestEnv &env, size_t count, int modulus)
 {
     T *in = reinterpret_cast<T *>(env.inputHost);
     T *out = reinterpret_cast<T *>(env.outputHost);
@@ -325,7 +325,7 @@ PTO_INTERNAL void FillAndUpload(SingleCardTestEnv &env, size_t count, int modulu
 }
 
 template <typename T>
-PTO_INTERNAL bool VerifyOutputAndPrint(const SingleCardTestEnv &env, size_t count, int modulus, const char *tag)
+inline bool VerifyOutputAndPrint(const SingleCardTestEnv &env, size_t count, int modulus, const char *tag)
 {
     const T *out = reinterpret_cast<const T *>(env.outputHost);
     for (size_t i = 0; i < count; ++i) {
@@ -708,8 +708,7 @@ __global__ AICORE void TPrefetchL2TputAsyncKernel(__gm__ T *commBuf, int nranks,
 // Host-side runner: TPUT_ASYNC with optional TPREFETCH_L2 (multi-rank via HCCL)
 // ============================================================================
 template <typename T>
-PTO_INTERNAL bool VerifyTputAsyncOutput(int rank_id, int root_rank, const uint8_t *output_host, size_t count,
-                                        bool prefetch)
+inline bool VerifyTputAsyncOutput(int rank_id, int root_rank, const uint8_t *output_host, size_t count, bool prefetch)
 {
     if (rank_id == root_rank) {
         return true;
@@ -1326,8 +1325,8 @@ __global__ AICORE void TgetPerfKernel(__gm__ T *commBuf, int nranks, int source_
 // two-phase test protocol (source-rank prefetch → inter-phase barrier → reader
 // TGET + measurement).
 template <typename T, size_t count>
-PTO_INTERNAL void LaunchAndSyncTgetPhase(MultiRankPerfEnv<T, count> &env, int n_ranks, int source_rank,
-                                         int enablePrefetch, int phase)
+inline void LaunchAndSyncTgetPhase(MultiRankPerfEnv<T, count> &env, int n_ranks, int source_rank, int enablePrefetch,
+                                   int phase)
 {
     TgetPerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
         env.sendBuf, n_ranks, source_rank, static_cast<int>(count), enablePrefetch, phase, env.ctx.deviceCtx,
