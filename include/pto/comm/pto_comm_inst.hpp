@@ -296,7 +296,7 @@ PTO_INST AsyncEvent TPREFETCH_L2(GlobalData &srcGlobalData, const AsyncSession &
 // Raw pointer overload with AsyncSession
 template <typename... WaitEvents>
 PTO_INST AsyncEvent TPREFETCH_L2(__gm__ void *src, uint64_t bytes, const AsyncSession &session,
-                                  WaitEvents &... events)
+                                 WaitEvents &... events)
 {
     WaitAllEvents(events...);
     return ::pto::comm::TPREFETCH_L2_IMPL(src, bytes, session);
@@ -305,7 +305,7 @@ PTO_INST AsyncEvent TPREFETCH_L2(__gm__ void *src, uint64_t bytes, const AsyncSe
 // GlobalTensor overload with SdmaExecContext (direct context access)
 template <typename GlobalData, typename... WaitEvents>
 PTO_INST AsyncEvent TPREFETCH_L2(GlobalData &srcGlobalData, const sdma::SdmaExecContext &execCtx,
-                                  WaitEvents &... events)
+                                 WaitEvents &... events)
 {
     WaitAllEvents(events...);
     return ::pto::comm::TPREFETCH_L2_IMPL(srcGlobalData, execCtx);
@@ -314,7 +314,7 @@ PTO_INST AsyncEvent TPREFETCH_L2(GlobalData &srcGlobalData, const sdma::SdmaExec
 // Raw pointer overload with SdmaExecContext (direct context access)
 template <typename... WaitEvents>
 PTO_INST AsyncEvent TPREFETCH_L2(__gm__ void *src, uint64_t bytes, const sdma::SdmaExecContext &execCtx,
-                                  WaitEvents &... events)
+                                 WaitEvents &... events)
 {
     WaitAllEvents(events...);
     return ::pto::comm::TPREFETCH_L2_IMPL(src, bytes, execCtx);
