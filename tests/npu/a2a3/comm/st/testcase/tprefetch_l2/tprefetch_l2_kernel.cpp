@@ -139,6 +139,158 @@ __global__ AICORE void TPrefetchL2RawPtrKernel(__gm__ T *src, __gm__ T *dst,
 }
 
 // ============================================================================
+// Test helpers — shared setup/teardown/verify to cut duplication
+// ============================================================================
+struct SingleCardTestEnv {
+    aclrtStream stream = nullptr;
+    uint8_t *inputHost = nullptr;
+    uint8_t *outputHost = nullptr;
+    void *srcDevice = nullptr;
+    void *dstDevice = nullptr;
+    size_t dataBytes = 0;
+    int aclStatus = 0;
+
+    bool Init(int deviceId, size_t bytes)
+    {
+        dataBytes = bytes;
+        aclStatus |= aclrtSetDevice(deviceId);
+        aclStatus |= aclrtCreateStream(&stream);
+        aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&inputHost), dataBytes);
+        aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&outputHost), dataBytes);
+        aclStatus |= aclrtMalloc(&srcDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+        aclStatus |= aclrtMalloc(&dstDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
+        return aclStatus == 0;
+    }
+    void SyncAndReadBack()
+    {
+        aclStatus |= aclrtSynchronizeStream(stream);
+        aclStatus |= aclrtMemcpy(outputHost, dataBytes, dstDevice, dataBytes, ACL_MEMCPY_DEVICE_TO_HOST);
+    }
+    void Teardown()
+    {
+        aclStatus |= aclrtFree(srcDevice);
+        aclStatus |= aclrtFree(dstDevice);
+        aclStatus |= aclrtFreeHost(inputHost);
+        aclStatus |= aclrtFreeHost(outputHost);
+        aclStatus |= aclrtDestroyStream(stream);
+    }
+};
+
+template <typename T>
+PTO_INTERNAL void FillAndUpload(SingleCardTestEnv &env, size_t count, int modulus)
+{
+    T *in = reinterpret_cast<T *>(env.inputHost);
+    T *out = reinterpret_cast<T *>(env.outputHost);
+    for (size_t i = 0; i < count; ++i) {
+        in[i] = static_cast<T>(i % modulus);
+        out[i] = static_cast<T>(-1);
+    }
+    env.aclStatus |= aclrtMemcpy(env.srcDevice, env.dataBytes, env.inputHost, env.dataBytes,
+                                 ACL_MEMCPY_HOST_TO_DEVICE);
+    env.aclStatus |= aclrtMemcpy(env.dstDevice, env.dataBytes, env.outputHost, env.dataBytes,
+                                 ACL_MEMCPY_HOST_TO_DEVICE);
+}
+
+template <typename T>
+PTO_INTERNAL bool VerifyOutputAndPrint(const SingleCardTestEnv &env, size_t count, int modulus, const char *tag)
+{
+    const T *out = reinterpret_cast<const T *>(env.outputHost);
+    for (size_t i = 0; i < count; ++i) {
+        T expected = static_cast<T>(i % modulus);
+        if (out[i] != expected) {
+            std::cout << tag << ": index " << i << " expected " << (float)expected << " got " << (float)out[i]
+                      << std::endl;
+            return false;
+        }
+    }
+#if ENABLE_DEBUG_PRINT
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << "[DEBUG] " << tag << " SUCCESSFUL!" << std::endl;
+    std::cout << "  count=" << count << ", dtype_size=" << sizeof(T) << std::endl;
+    std::cout << "  Sample: [ ";
+    for (size_t i = 0; i < (count > 5 ? 5 : count); ++i)
+        std::cout << (float)out[i] << " ";
+    if (count > 5)
+        std::cout << "... ";
+    std::cout << "]" << std::endl;
+    std::cout << "================================================================\n" << std::endl;
+#endif
+    return true;
+}
+
+// Multi-rank perf environment: TestContext + input/comm buffers + trash/cycle + SDMA + host barrier
+template <typename T, size_t count>
+struct MultiRankPerfEnv {
+    TestContext ctx;
+    uint8_t *input_host = nullptr;
+    T *sendBuf = nullptr;
+    T *recvBuf = nullptr;
+    void *cycleDev = nullptr;
+    void *trashDev = nullptr;
+    SdmaWorkspaceManager sdmaMgr;
+
+    // Allocate host input, carve sendBuf/recvBuf in HCCL window, and init host input sequence.
+    // Caller is responsible for uploading input_host → sendBuf as appropriate.
+    bool Init(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo *rootInfo)
+    {
+        if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+            return false;
+        if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T)) != 0) {
+            std::cerr << "[ERROR] PerfEnv: aclrtMallocHost failed!" << std::endl;
+            return false;
+        }
+        for (size_t i = 0; i < count; ++i)
+            reinterpret_cast<T *>(input_host)[i] = static_cast<T>(i);
+
+        uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
+        size_t winOffset = 0;
+        void *commBufPtr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
+        uint8_t *commBytes = reinterpret_cast<uint8_t *>(commBufPtr);
+        sendBuf = reinterpret_cast<T *>(commBytes + 64 * sizeof(int32_t));
+        recvBuf = sendBuf + count;
+
+        aclrtMalloc(&trashDev, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
+        aclrtMalloc(&cycleDev, sizeof(uint64_t), ACL_MEM_MALLOC_HUGE_FIRST);
+        uint64_t zero = 0;
+        aclrtMemcpy(cycleDev, sizeof(uint64_t), &zero, sizeof(uint64_t), ACL_MEMCPY_HOST_TO_DEVICE);
+
+        if (!sdmaMgr.Init()) {
+            std::cerr << "[ERROR] SdmaWorkspaceManager Init failed!" << std::endl;
+            aclrtFree(cycleDev);
+            aclrtFree(trashDev);
+            aclrtFreeHost(input_host);
+            return false;
+        }
+        HcclHostBarrier(ctx.comm, ctx.stream);
+        return true;
+    }
+
+    void UploadInputToSend()
+    {
+        aclrtMemcpy(sendBuf, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
+    }
+
+    void DownloadCycles(uint64_t &out, bool myRole)
+    {
+        uint64_t cycles = 0;
+        if (myRole) {
+            aclrtMemcpy(&cycles, sizeof(uint64_t), cycleDev, sizeof(uint64_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        }
+        out = cycles;
+    }
+
+    bool Finalize()
+    {
+        HcclHostBarrier(ctx.comm, ctx.stream);
+        aclrtFree(cycleDev);
+        aclrtFree(trashDev);
+        aclrtFreeHost(input_host);
+        sdmaMgr.Finalize();
+        return ctx.Finalize();
+    }
+};
+
+// ============================================================================
 // Host-side test runners
 // ============================================================================
 
@@ -146,244 +298,77 @@ template <typename T, size_t count>
 bool RunBaseline(int deviceId)
 {
     constexpr size_t dataBytes = count * sizeof(T);
-    int aclStatus = 0;
-
-    aclStatus |= aclrtSetDevice(deviceId);
-    aclrtStream stream = nullptr;
-    aclStatus |= aclrtCreateStream(&stream);
-
-    uint8_t *inputHost = nullptr;
-    uint8_t *outputHost = nullptr;
-    aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&inputHost), dataBytes);
-    aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&outputHost), dataBytes);
-    if (aclStatus != 0) {
-        std::cerr << "[ERROR] Baseline: host alloc failed!" << std::endl;
+    SingleCardTestEnv env;
+    if (!env.Init(deviceId, dataBytes)) {
+        std::cerr << "[ERROR] Baseline: init failed!" << std::endl;
         return false;
     }
+    FillAndUpload<T>(env, count, 1000);
 
-    T *inputData = reinterpret_cast<T *>(inputHost);
-    T *outputData = reinterpret_cast<T *>(outputHost);
-    for (size_t i = 0; i < count; ++i) {
-        inputData[i] = static_cast<T>(i % 1000);
-        outputData[i] = static_cast<T>(-1);
-    }
-
-    void *srcDevice = nullptr;
-    void *dstDevice = nullptr;
-    aclStatus |= aclrtMalloc(&srcDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclStatus |= aclrtMalloc(&dstDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclStatus |= aclrtMemcpy(srcDevice, dataBytes, inputHost, dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclStatus |= aclrtMemcpy(dstDevice, dataBytes, outputHost, dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
-
-    BaselineKernel<T, count><<<1, nullptr, stream>>>(
-        reinterpret_cast<T *>(srcDevice), reinterpret_cast<T *>(dstDevice),
+    BaselineKernel<T, count><<<1, nullptr, env.stream>>>(
+        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice),
         static_cast<int>(count));
-    aclStatus |= aclrtSynchronizeStream(stream);
+    env.SyncAndReadBack();
 
-    aclStatus |= aclrtMemcpy(outputHost, dataBytes, dstDevice, dataBytes, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    bool is_ok = true;
-    for (size_t i = 0; i < count; ++i) {
-        T expected = static_cast<T>(i % 1000);
-        if (outputData[i] != expected) {
-            std::cout << "Baseline: index " << i << " expected " << (float)expected << " got "
-                      << (float)outputData[i] << std::endl;
-            is_ok = false;
-            break;
-        }
-    }
-
-#if ENABLE_DEBUG_PRINT
-    if (is_ok) {
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] Baseline TLOAD/TSTORE SUCCESSFUL!" << std::endl;
-        std::cout << "  count=" << count << ", dtype_size=" << sizeof(T) << std::endl;
-        std::cout << "  Sample: [ ";
-        for (size_t i = 0; i < (count > 5 ? 5 : count); ++i)
-            std::cout << (float)outputData[i] << " ";
-        if (count > 5)
-            std::cout << "... ";
-        std::cout << "]" << std::endl;
-        std::cout << "================================================================\n" << std::endl;
-    }
-#endif
-
-    aclStatus |= aclrtFree(srcDevice);
-    aclStatus |= aclrtFree(dstDevice);
-    aclStatus |= aclrtFreeHost(inputHost);
-    aclStatus |= aclrtFreeHost(outputHost);
-    aclStatus |= aclrtDestroyStream(stream);
-
-    return is_ok && (aclStatus == 0);
+    bool is_ok = VerifyOutputAndPrint<T>(env, count, 1000, "Baseline TLOAD/TSTORE");
+    env.Teardown();
+    return is_ok && (env.aclStatus == 0);
 }
 
 template <typename T, size_t count>
 bool RunPrefetchL2Correctness(int deviceId)
 {
     constexpr size_t dataBytes = count * sizeof(T);
-    int aclStatus = 0;
-
-    aclStatus |= aclrtSetDevice(deviceId);
-    aclrtStream stream = nullptr;
-    aclStatus |= aclrtCreateStream(&stream);
-
-    uint8_t *inputHost = nullptr;
-    uint8_t *outputHost = nullptr;
-    aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&inputHost), dataBytes);
-    aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&outputHost), dataBytes);
-    if (aclStatus != 0) {
-        std::cerr << "[ERROR] PrefetchL2: host alloc failed!" << std::endl;
+    SingleCardTestEnv env;
+    if (!env.Init(deviceId, dataBytes)) {
+        std::cerr << "[ERROR] PrefetchL2: init failed!" << std::endl;
         return false;
     }
-
-    T *inputData = reinterpret_cast<T *>(inputHost);
-    T *outputData = reinterpret_cast<T *>(outputHost);
-    for (size_t i = 0; i < count; ++i) {
-        inputData[i] = static_cast<T>(i % 1000);
-        outputData[i] = static_cast<T>(-1);
-    }
-
-    void *srcDevice = nullptr;
-    void *dstDevice = nullptr;
-    aclStatus |= aclrtMalloc(&srcDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclStatus |= aclrtMalloc(&dstDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclStatus |= aclrtMemcpy(srcDevice, dataBytes, inputHost, dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclStatus |= aclrtMemcpy(dstDevice, dataBytes, outputHost, dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
+    FillAndUpload<T>(env, count, 1000);
 
     SdmaWorkspaceManager sdmaMgr;
     if (!sdmaMgr.Init()) {
         std::cerr << "[WARN] SdmaWorkspaceManager Init failed — prefetch will be skipped inside kernel" << std::endl;
     }
 
-    void *wsAddr = sdmaMgr.GetWorkspaceAddr();
-    TPrefetchL2CorrectnessKernel<T, count><<<1, nullptr, stream>>>(
-        reinterpret_cast<T *>(srcDevice), reinterpret_cast<T *>(dstDevice),
+    TPrefetchL2CorrectnessKernel<T, count><<<1, nullptr, env.stream>>>(
+        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice),
         static_cast<int>(count),
-        reinterpret_cast<uint8_t *>(wsAddr), 0);
-    aclStatus |= aclrtSynchronizeStream(stream);
+        reinterpret_cast<uint8_t *>(sdmaMgr.GetWorkspaceAddr()), 0);
+    env.SyncAndReadBack();
 
-    aclStatus |= aclrtMemcpy(outputHost, dataBytes, dstDevice, dataBytes, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    bool is_ok = true;
-    for (size_t i = 0; i < count; ++i) {
-        T expected = static_cast<T>(i % 1000);
-        if (outputData[i] != expected) {
-            std::cout << "PrefetchL2 GlobalTensor: index " << i << " expected " << (float)expected << " got "
-                      << (float)outputData[i] << std::endl;
-            is_ok = false;
-            break;
-        }
-    }
-
-#if ENABLE_DEBUG_PRINT
-    if (is_ok) {
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] TPREFETCH_L2 GlobalTensor correctness SUCCESSFUL!" << std::endl;
-        std::cout << "  count=" << count << ", dtype_size=" << sizeof(T) << std::endl;
-        std::cout << "  Sample: [ ";
-        for (size_t i = 0; i < (count > 5 ? 5 : count); ++i)
-            std::cout << (float)outputData[i] << " ";
-        if (count > 5)
-            std::cout << "... ";
-        std::cout << "]" << std::endl;
-        std::cout << "================================================================\n" << std::endl;
-    }
-#endif
-
-    aclStatus |= aclrtFree(srcDevice);
-    aclStatus |= aclrtFree(dstDevice);
-    aclStatus |= aclrtFreeHost(inputHost);
-    aclStatus |= aclrtFreeHost(outputHost);
+    bool is_ok = VerifyOutputAndPrint<T>(env, count, 1000, "TPREFETCH_L2 GlobalTensor correctness");
+    env.Teardown();
     sdmaMgr.Finalize();
-    aclStatus |= aclrtDestroyStream(stream);
-
-    return is_ok && (aclStatus == 0);
+    return is_ok && (env.aclStatus == 0);
 }
 
 template <typename T, size_t count>
 bool RunPrefetchL2RawPtr(int deviceId)
 {
     constexpr size_t dataBytes = count * sizeof(T);
-    int aclStatus = 0;
-
-    aclStatus |= aclrtSetDevice(deviceId);
-    aclrtStream stream = nullptr;
-    aclStatus |= aclrtCreateStream(&stream);
-
-    uint8_t *inputHost = nullptr;
-    uint8_t *outputHost = nullptr;
-    aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&inputHost), dataBytes);
-    aclStatus |= aclrtMallocHost(reinterpret_cast<void **>(&outputHost), dataBytes);
-    if (aclStatus != 0) {
-        std::cerr << "[ERROR] PrefetchL2 RawPtr: host alloc failed!" << std::endl;
+    SingleCardTestEnv env;
+    if (!env.Init(deviceId, dataBytes)) {
+        std::cerr << "[ERROR] PrefetchL2 RawPtr: init failed!" << std::endl;
         return false;
     }
-
-    T *inputData = reinterpret_cast<T *>(inputHost);
-    T *outputData = reinterpret_cast<T *>(outputHost);
-    for (size_t i = 0; i < count; ++i) {
-        inputData[i] = static_cast<T>(i % 500);
-        outputData[i] = static_cast<T>(-1);
-    }
-
-    void *srcDevice = nullptr;
-    void *dstDevice = nullptr;
-    aclStatus |= aclrtMalloc(&srcDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclStatus |= aclrtMalloc(&dstDevice, dataBytes, ACL_MEM_MALLOC_HUGE_FIRST);
-
-    aclStatus |= aclrtMemcpy(srcDevice, dataBytes, inputHost, dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
-    aclStatus |= aclrtMemcpy(dstDevice, dataBytes, outputHost, dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
+    FillAndUpload<T>(env, count, 500);
 
     SdmaWorkspaceManager sdmaMgr;
     if (!sdmaMgr.Init()) {
         std::cerr << "[WARN] SdmaWorkspaceManager Init failed — prefetch will be skipped inside kernel" << std::endl;
     }
 
-    void *wsAddr = sdmaMgr.GetWorkspaceAddr();
-    TPrefetchL2RawPtrKernel<T, count><<<1, nullptr, stream>>>(
-        reinterpret_cast<T *>(srcDevice), reinterpret_cast<T *>(dstDevice),
+    TPrefetchL2RawPtrKernel<T, count><<<1, nullptr, env.stream>>>(
+        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice),
         static_cast<int>(count),
-        reinterpret_cast<uint8_t *>(wsAddr), 0);
-    aclStatus |= aclrtSynchronizeStream(stream);
+        reinterpret_cast<uint8_t *>(sdmaMgr.GetWorkspaceAddr()), 0);
+    env.SyncAndReadBack();
 
-    aclStatus |= aclrtMemcpy(outputHost, dataBytes, dstDevice, dataBytes, ACL_MEMCPY_DEVICE_TO_HOST);
-
-    bool is_ok = true;
-    for (size_t i = 0; i < count; ++i) {
-        T expected = static_cast<T>(i % 500);
-        if (outputData[i] != expected) {
-            std::cout << "PrefetchL2 RawPtr: index " << i << " expected " << (float)expected << " got "
-                      << (float)outputData[i] << std::endl;
-            is_ok = false;
-            break;
-        }
-    }
-
-#if ENABLE_DEBUG_PRINT
-    if (is_ok) {
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] TPREFETCH_L2 raw pointer correctness SUCCESSFUL!" << std::endl;
-        std::cout << "  count=" << count << ", dtype_size=" << sizeof(T) << std::endl;
-        std::cout << "  Sample: [ ";
-        for (size_t i = 0; i < (count > 5 ? 5 : count); ++i)
-            std::cout << (float)outputData[i] << " ";
-        if (count > 5)
-            std::cout << "... ";
-        std::cout << "]" << std::endl;
-        std::cout << "================================================================\n" << std::endl;
-    }
-#endif
-
-    aclStatus |= aclrtFree(srcDevice);
-    aclStatus |= aclrtFree(dstDevice);
-    aclStatus |= aclrtFreeHost(inputHost);
-    aclStatus |= aclrtFreeHost(outputHost);
+    bool is_ok = VerifyOutputAndPrint<T>(env, count, 500, "TPREFETCH_L2 raw pointer correctness");
+    env.Teardown();
     sdmaMgr.Finalize();
-    aclStatus |= aclrtDestroyStream(stream);
-
-    return is_ok && (aclStatus == 0);
+    return is_ok && (env.aclStatus == 0);
 }
 
 template bool RunBaseline<float, 4096>(int deviceId);
@@ -465,91 +450,72 @@ __global__ AICORE void TPrefetchL2TputAsyncKernel(__gm__ T *commBuf, int nranks,
 // ============================================================================
 // Host-side runner: TPUT_ASYNC with optional TPREFETCH_L2 (multi-rank via HCCL)
 // ============================================================================
+template <typename T>
+PTO_INTERNAL bool VerifyTputAsyncOutput(int rank_id, int root_rank, const uint8_t *output_host, size_t count,
+                                        bool prefetch)
+{
+    if (rank_id == root_rank) {
+        return true;
+    }
+    const T *out = reinterpret_cast<const T *>(output_host);
+    for (size_t i = 0; i < count; ++i) {
+        T expected = static_cast<T>(i + root_rank * 10000);
+        if (out[i] != expected) {
+            std::cout << "Rank " << rank_id << " idx " << i << " expected " << (float)expected << " got "
+                      << (float)out[i] << std::endl;
+            return false;
+        }
+    }
+#if ENABLE_DEBUG_PRINT
+    const char *mode = prefetch ? "TPREFETCH_L2 + TPUT_ASYNC" : "TPUT_ASYNC only (no prefetch)";
+    std::cout << "\n================================================================" << std::endl;
+    std::cout << "[DEBUG] Rank " << rank_id << ": " << mode << " SUCCESSFUL!" << std::endl;
+    std::cout << "  count=" << count << ", dtype_size=" << sizeof(T) << std::endl;
+    std::cout << "  Sample: [ ";
+    for (size_t i = 0; i < (count > 5 ? 5 : count); ++i)
+        std::cout << (float)out[i] << " ";
+    if (count > 5)
+        std::cout << "... ";
+    std::cout << "]" << std::endl;
+    std::cout << "================================================================\n" << std::endl;
+#else
+    (void)prefetch;
+#endif
+    return true;
+}
+
 template <typename T, size_t count>
 bool RunPrefetchL2TputAsyncKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
                                    const HcclRootInfo *rootInfo, int root_rank, bool prefetch)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    MultiRankPerfEnv<T, count> env;
+    if (!env.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
 
-    uint8_t *input_host = nullptr;
+    for (size_t i = 0; i < count; ++i)
+        reinterpret_cast<T *>(env.input_host)[i] = static_cast<T>(i + rank_id * 10000);
+    env.UploadInputToSend();
+
     uint8_t *output_host = nullptr;
-    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T)) != 0 ||
-        aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T)) != 0) {
-        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
+    if (aclrtMallocHost(reinterpret_cast<void **>(&output_host), count * sizeof(T)) != 0) {
+        std::cerr << "[ERROR] TputAsync: output host alloc failed!" << std::endl;
+        env.Finalize();
         return false;
     }
-
-    for (size_t i = 0; i < count; ++i) {
-        reinterpret_cast<T *>(input_host)[i] = static_cast<T>(i + rank_id * 10000);
+    for (size_t i = 0; i < count; ++i)
         reinterpret_cast<T *>(output_host)[i] = static_cast<T>(-1);
-    }
-
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
-    size_t winOffset = 0;
-    void *commBufPtr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
-
-    uint8_t *commBytes = reinterpret_cast<uint8_t *>(commBufPtr);
-    T *sendBuf = reinterpret_cast<T *>(commBytes + 64 * sizeof(int32_t));
-    T *recvBuf = sendBuf + count;
-
-    aclrtMemcpy(sendBuf, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    aclrtMemcpy(recvBuf, count * sizeof(T), output_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed!" << std::endl;
-        return false;
-    }
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    aclrtMemcpy(env.recvBuf, count * sizeof(T), output_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
 
     int enablePrefetch = prefetch ? 1 : 0;
-    TPrefetchL2TputAsyncKernel<T, count><<<1, nullptr, ctx.stream>>>(
-        sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
-        ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0);
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TPrefetchL2TputAsyncKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
+        env.sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
+        env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0);
+    env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    aclrtMemcpy(output_host, count * sizeof(T), recvBuf, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
-
-    bool is_ok = true;
-    if (rank_id != root_rank) {
-        for (size_t i = 0; i < count; ++i) {
-            T value = reinterpret_cast<T *>(output_host)[i];
-            T expected = static_cast<T>(i + root_rank * 10000);
-            if (value != expected) {
-                std::cout << "Rank " << rank_id << " idx " << i << " expected " << (float)expected << " got "
-                          << (float)value << std::endl;
-                is_ok = false;
-                break;
-            }
-        }
-    }
-
-#if ENABLE_DEBUG_PRINT
-    if (is_ok && rank_id != root_rank) {
-        const char *mode = prefetch ? "TPREFETCH_L2 + TPUT_ASYNC" : "TPUT_ASYNC only (no prefetch)";
-        std::cout << "\n================================================================" << std::endl;
-        std::cout << "[DEBUG] Rank " << rank_id << ": " << mode << " SUCCESSFUL!" << std::endl;
-        std::cout << "  count=" << count << ", dtype_size=" << sizeof(T) << std::endl;
-        std::cout << "  Sample: [ ";
-        for (size_t i = 0; i < (count > 5 ? 5 : count); ++i)
-            std::cout << (float)reinterpret_cast<T *>(output_host)[i] << " ";
-        if (count > 5)
-            std::cout << "... ";
-        std::cout << "]" << std::endl;
-        std::cout << "================================================================\n" << std::endl;
-    }
-#endif
-
-    ctx.aclStatus |= aclrtFreeHost(input_host);
-    ctx.aclStatus |= aclrtFreeHost(output_host);
-    sdmaMgr.Finalize();
-
-    return ctx.Finalize() && is_ok;
+    aclrtMemcpy(output_host, count * sizeof(T), env.recvBuf, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
+    bool is_ok = VerifyTputAsyncOutput<T>(rank_id, root_rank, output_host, count, prefetch);
+    aclrtFreeHost(output_host);
+    return env.Finalize() && is_ok;
 }
 
 template <typename T, size_t count>
@@ -655,68 +621,21 @@ bool RunPrefetchL2PerfKernel(int rank_id, int n_ranks, int n_devices, int first_
                               const HcclRootInfo *rootInfo, int root_rank, bool prefetch,
                               uint64_t &outCycles)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    MultiRankPerfEnv<T, count> env;
+    if (!env.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
-
-    uint8_t *input_host = nullptr;
-    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T)) != 0) {
-        std::cerr << "[ERROR] aclrtMallocHost failed!" << std::endl;
-        return false;
-    }
-    for (size_t i = 0; i < count; ++i)
-        reinterpret_cast<T *>(input_host)[i] = static_cast<T>(i);
-
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
-    size_t winOffset = 0;
-    void *commBufPtr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
-
-    uint8_t *commBytes = reinterpret_cast<uint8_t *>(commBufPtr);
-    T *sendBuf = reinterpret_cast<T *>(commBytes + 64 * sizeof(int32_t));
-
-    aclrtMemcpy(sendBuf, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-
-    void *trashDev = nullptr;
-    aclrtMalloc(&trashDev, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
-
-    void *cycleDev = nullptr;
-    aclrtMalloc(&cycleDev, sizeof(uint64_t), ACL_MEM_MALLOC_HUGE_FIRST);
-    uint64_t zero = 0;
-    aclrtMemcpy(cycleDev, sizeof(uint64_t), &zero, sizeof(uint64_t), ACL_MEMCPY_HOST_TO_DEVICE);
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed!" << std::endl;
-        aclrtFree(cycleDev);
-        aclrtFree(trashDev);
-        aclrtFreeHost(input_host);
-        return false;
-    }
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    env.UploadInputToSend();
 
     int enablePrefetch = prefetch ? 1 : 0;
-    TPrefetchL2PerfKernel<T, count><<<1, nullptr, ctx.stream>>>(
-        sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
-        ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
-        reinterpret_cast<uint8_t *>(trashDev),
-        reinterpret_cast<uint64_t *>(cycleDev));
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TPrefetchL2PerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
+        env.sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
+        env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0,
+        reinterpret_cast<uint8_t *>(env.trashDev),
+        reinterpret_cast<uint64_t *>(env.cycleDev));
+    env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    uint64_t cycles = 0;
-    if (rank_id == root_rank) {
-        aclrtMemcpy(&cycles, sizeof(uint64_t), cycleDev, sizeof(uint64_t), ACL_MEMCPY_DEVICE_TO_HOST);
-    }
-    outCycles = cycles;
-
-    aclrtFree(cycleDev);
-    aclrtFree(trashDev);
-    aclrtFreeHost(input_host);
-    sdmaMgr.Finalize();
-
-    return ctx.Finalize();
+    env.DownloadCycles(outCycles, rank_id == root_rank);
+    return env.Finalize();
 }
 
 // ============================================================================
@@ -967,6 +886,60 @@ template bool RunTloadPerf<float, 1048576>(int);
 // Uses trash-buffer technique for L2 cold control (cf. shmem/CMO example).
 // Both paths always execute a SDMA CMO prefetch for fair comparison.
 // ============================================================================
+// Phase 1 helper: root rank pushes sendBuf to all other ranks via TPUT_ASYNC.
+template <typename T, size_t count>
+PTO_INTERNAL void RemotePerfSendPhase(__gm__ T *sendBuf, __gm__ T *recvBuf, int elem_count, int nranks, int root_rank,
+                                      __gm__ HcclDeviceContext *hcclCtx, pto::comm::AsyncSession &session)
+{
+    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+    using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
+
+    ShapeDyn shape(1, 1, 1, 1, elem_count);
+    StrideDyn stride(elem_count, elem_count, elem_count, elem_count, 1);
+    Global sendG(sendBuf, shape, stride);
+
+    pto::comm::AsyncEvent lastEvent;
+    for (int target = 0; target < nranks; ++target) {
+        if (target == root_rank) continue;
+        __gm__ T *remoteRecvBuf = HcclRemotePtr(hcclCtx, recvBuf, target);
+        Global remoteRecvG(remoteRecvBuf, shape, stride);
+        lastEvent = pto::comm::TPUT_ASYNC(remoteRecvG, sendG, session);
+    }
+    (void)lastEvent.Wait(session);
+}
+
+// Phase 2 helper: receiver optionally prefetches, then measures TLOAD loop cycles.
+template <typename T, size_t count>
+PTO_INTERNAL void RemotePerfTloadPhase(__gm__ T *recvBuf, int elem_count, int enablePrefetch, bool sessionOk,
+                                       __gm__ uint8_t *trashBuf, pto::comm::AsyncSession &session,
+                                       __gm__ uint64_t *cycleOut)
+{
+    constexpr int kTileCols = (count <= 256) ? static_cast<int>(count) : 256;
+    using TileData = pto::Tile<pto::TileType::Vec, T, 1, kTileCols, pto::BLayout::RowMajor>;
+    using ChunkShape = pto::Shape<1, 1, 1, 1, kTileCols>;
+    using ChunkStride = pto::Stride<1, 1, 1, 1, 1>;
+
+    if (sessionOk) {
+        uint64_t totalBytes = static_cast<uint64_t>(elem_count) * sizeof(T);
+        __gm__ void *prefetchTarget = enablePrefetch ? (__gm__ void *)recvBuf : (__gm__ void *)trashBuf;
+        auto evt = pto::comm::TPREFETCH_L2(prefetchTarget, totalBytes, session);
+        (void)evt.Wait(session);
+    }
+
+    TileData tile;
+    TASSIGN(tile, 0x0);
+    uint64_t t0 = get_syscnt();
+    for (int offset = 0; offset < elem_count; offset += kTileCols) {
+        pto::GlobalTensor<T, ChunkShape, ChunkStride, pto::Layout::ND> chunk(recvBuf + offset);
+        TLOAD(tile, chunk);
+        set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+        wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
+    }
+    uint64_t t1 = get_syscnt();
+    *cycleOut = t1 - t0;
+}
+
 template <typename T, size_t count>
 __global__ AICORE void TloadRemotePerfKernel(__gm__ T *commBuf, int nranks, int root_rank,
                                               int elem_count, int enablePrefetch,
@@ -975,16 +948,7 @@ __global__ AICORE void TloadRemotePerfKernel(__gm__ T *commBuf, int nranks, int 
                                               __gm__ uint8_t *trashBuf,
                                               __gm__ uint64_t *cycleOut)
 {
-    using ShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using StrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-    using Global = pto::GlobalTensor<T, ShapeDyn, StrideDyn, pto::Layout::ND>;
     using ScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::sdma::UB_ALIGN_SIZE>;
-
-    constexpr int kTileCols = (count <= 256) ? static_cast<int>(count) : 256;
-    static_assert(count % kTileCols == 0, "count must be a multiple of kTileCols");
-    using TileData = pto::Tile<pto::TileType::Vec, T, 1, kTileCols, pto::BLayout::RowMajor>;
-    using ChunkShape = pto::Shape<1, 1, 1, 1, kTileCols>;
-    using ChunkStride = pto::Stride<1, 1, 1, 1, 1>;
 
     if (elem_count <= 0 || elem_count > static_cast<int>(count)) {
         pipe_barrier(PIPE_ALL);
@@ -992,60 +956,22 @@ __global__ AICORE void TloadRemotePerfKernel(__gm__ T *commBuf, int nranks, int 
     }
 
     int my_rank = static_cast<int>(hcclCtx->rankId);
-
-    __gm__ T *commData = reinterpret_cast<__gm__ T *>(commBuf);
-    __gm__ T *sendBuf = commData;
-    __gm__ T *recvBuf = commData + count;
+    __gm__ T *sendBuf = commBuf;
+    __gm__ T *recvBuf = commBuf + count;
 
     ScratchTile scratchTile;
     TASSIGN(scratchTile, 0x0);
     pto::comm::AsyncSession session;
     bool sessionOk = pto::comm::BuildAsyncSession(scratchTile, sdmaWorkspace, session, sdmaSyncId);
 
-    // ---- Phase 1: Rank 0 sends data to Rank 1 via TPUT_ASYNC ----
     if (my_rank == root_rank && sessionOk) {
-        ShapeDyn shape(1, 1, 1, 1, elem_count);
-        StrideDyn stride(elem_count, elem_count, elem_count, elem_count, 1);
-        Global sendG(sendBuf, shape, stride);
-
-        pto::comm::AsyncEvent lastEvent;
-        for (int target = 0; target < nranks; ++target) {
-            if (target == root_rank) continue;
-            __gm__ T *remoteRecvBuf = HcclRemotePtr(hcclCtx, recvBuf, target);
-            Global remoteRecvG(remoteRecvBuf, shape, stride);
-            lastEvent = pto::comm::TPUT_ASYNC(remoteRecvG, sendG, session);
-        }
-        (void)lastEvent.Wait(session);
+        RemotePerfSendPhase<T, count>(sendBuf, recvBuf, elem_count, nranks, root_rank, hcclCtx, session);
     }
-
     pipe_barrier(PIPE_ALL);
 
-    // ---- Phase 2: Rank 1 does TLOAD on received data ----
     if (my_rank != root_rank) {
-        if (sessionOk) {
-            uint64_t totalBytes = static_cast<uint64_t>(elem_count) * sizeof(T);
-            __gm__ void *prefetchTarget = enablePrefetch ?
-                (__gm__ void *)recvBuf : (__gm__ void *)trashBuf;
-            auto evt = pto::comm::TPREFETCH_L2(prefetchTarget, totalBytes, session);
-            (void)evt.Wait(session);
-        }
-
-        TileData tile;
-        TASSIGN(tile, 0x0);
-
-        uint64_t t0 = get_syscnt();
-
-        for (int offset = 0; offset < elem_count; offset += kTileCols) {
-            pto::GlobalTensor<T, ChunkShape, ChunkStride, pto::Layout::ND> chunk(recvBuf + offset);
-            TLOAD(tile, chunk);
-            set_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-            wait_flag(PIPE_MTE2, PIPE_MTE3, EVENT_ID0);
-        }
-
-        uint64_t t1 = get_syscnt();
-        *cycleOut = t1 - t0;
+        RemotePerfTloadPhase<T, count>(recvBuf, elem_count, enablePrefetch, sessionOk, trashBuf, session, cycleOut);
     }
-
     pipe_barrier(PIPE_ALL);
 }
 
@@ -1057,70 +983,22 @@ bool RunTloadRemotePerfKernel(int rank_id, int n_ranks, int n_devices, int first
                                const HcclRootInfo *rootInfo, int root_rank, bool prefetch,
                                uint64_t &outCycles)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    MultiRankPerfEnv<T, count> env;
+    if (!env.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
-
-    uint8_t *input_host = nullptr;
-    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T)) != 0) {
-        std::cerr << "[ERROR] TloadRemotePerf: host alloc failed!" << std::endl;
-        return false;
-    }
-    for (size_t i = 0; i < count; ++i)
-        reinterpret_cast<T *>(input_host)[i] = static_cast<T>(i);
-
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
-    size_t winOffset = 0;
-    void *commBufPtr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
-
-    uint8_t *commBytes = reinterpret_cast<uint8_t *>(commBufPtr);
-    T *sendBuf = reinterpret_cast<T *>(commBytes + 64 * sizeof(int32_t));
-
-    if (rank_id == root_rank) {
-        aclrtMemcpy(sendBuf, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    }
-
-    void *cycleDev = nullptr;
-    aclrtMalloc(&cycleDev, sizeof(uint64_t), ACL_MEM_MALLOC_HUGE_FIRST);
-    uint64_t zero = 0;
-    aclrtMemcpy(cycleDev, sizeof(uint64_t), &zero, sizeof(uint64_t), ACL_MEMCPY_HOST_TO_DEVICE);
-
-    void *trashDev = nullptr;
-    aclrtMalloc(&trashDev, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed!" << std::endl;
-        aclrtFree(cycleDev);
-        aclrtFree(trashDev);
-        aclrtFreeHost(input_host);
-        return false;
-    }
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    if (rank_id == root_rank)
+        env.UploadInputToSend();
 
     int enablePrefetch = prefetch ? 1 : 0;
-    TloadRemotePerfKernel<T, count><<<1, nullptr, ctx.stream>>>(
-        sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
-        ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
-        reinterpret_cast<uint8_t *>(trashDev),
-        reinterpret_cast<uint64_t *>(cycleDev));
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TloadRemotePerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
+        env.sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
+        env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0,
+        reinterpret_cast<uint8_t *>(env.trashDev),
+        reinterpret_cast<uint64_t *>(env.cycleDev));
+    env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    uint64_t cycles = 0;
-    if (rank_id != root_rank) {
-        aclrtMemcpy(&cycles, sizeof(uint64_t), cycleDev, sizeof(uint64_t), ACL_MEMCPY_DEVICE_TO_HOST);
-    }
-    outCycles = cycles;
-
-    aclrtFree(cycleDev);
-    aclrtFree(trashDev);
-    aclrtFreeHost(input_host);
-    sdmaMgr.Finalize();
-
-    return ctx.Finalize();
+    env.DownloadCycles(outCycles, rank_id != root_rank);
+    return env.Finalize();
 }
 
 // ============================================================================
@@ -1266,70 +1144,22 @@ bool RunTputSyncPerfKernel(int rank_id, int n_ranks, int n_devices, int first_de
                             const HcclRootInfo *rootInfo, int root_rank, bool prefetch,
                             uint64_t &outCycles)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    MultiRankPerfEnv<T, count> env;
+    if (!env.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
-
-    uint8_t *input_host = nullptr;
-    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T)) != 0) {
-        std::cerr << "[ERROR] TputSyncPerf: host alloc failed!" << std::endl;
-        return false;
-    }
-    for (size_t i = 0; i < count; ++i)
-        reinterpret_cast<T *>(input_host)[i] = static_cast<T>(i);
-
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
-    size_t winOffset = 0;
-    void *commBufPtr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
-
-    uint8_t *commBytes = reinterpret_cast<uint8_t *>(commBufPtr);
-    T *sendBuf = reinterpret_cast<T *>(commBytes + 64 * sizeof(int32_t));
-
-    if (rank_id == root_rank) {
-        aclrtMemcpy(sendBuf, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    }
-
-    void *cycleDev = nullptr;
-    aclrtMalloc(&cycleDev, sizeof(uint64_t), ACL_MEM_MALLOC_HUGE_FIRST);
-    uint64_t zero = 0;
-    aclrtMemcpy(cycleDev, sizeof(uint64_t), &zero, sizeof(uint64_t), ACL_MEMCPY_HOST_TO_DEVICE);
-
-    void *trashDev = nullptr;
-    aclrtMalloc(&trashDev, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed!" << std::endl;
-        aclrtFree(cycleDev);
-        aclrtFree(trashDev);
-        aclrtFreeHost(input_host);
-        return false;
-    }
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    if (rank_id == root_rank)
+        env.UploadInputToSend();
 
     int enablePrefetch = prefetch ? 1 : 0;
-    TputSyncPerfKernel<T, count><<<1, nullptr, ctx.stream>>>(
-        sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
-        ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
-        reinterpret_cast<uint8_t *>(trashDev),
-        reinterpret_cast<uint64_t *>(cycleDev));
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
+    TputSyncPerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
+        env.sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
+        env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0,
+        reinterpret_cast<uint8_t *>(env.trashDev),
+        reinterpret_cast<uint64_t *>(env.cycleDev));
+    env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
 
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    uint64_t cycles = 0;
-    if (rank_id == root_rank) {
-        aclrtMemcpy(&cycles, sizeof(uint64_t), cycleDev, sizeof(uint64_t), ACL_MEMCPY_DEVICE_TO_HOST);
-    }
-    outCycles = cycles;
-
-    aclrtFree(cycleDev);
-    aclrtFree(trashDev);
-    aclrtFreeHost(input_host);
-    sdmaMgr.Finalize();
-
-    return ctx.Finalize();
+    env.DownloadCycles(outCycles, rank_id == root_rank);
+    return env.Finalize();
 }
 
 template <typename T, size_t count>
@@ -1469,84 +1299,35 @@ __global__ AICORE void TgetPerfKernel(__gm__ T *commBuf, int nranks, int source_
 }
 
 template <typename T, size_t count>
+PTO_INTERNAL void LaunchTgetPhase(MultiRankPerfEnv<T, count> &env, int n_ranks, int source_rank, int enablePrefetch,
+                                  int phase)
+{
+    TgetPerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
+        env.sendBuf, n_ranks, source_rank, static_cast<int>(count), enablePrefetch, phase,
+        env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0,
+        reinterpret_cast<uint8_t *>(env.trashDev),
+        reinterpret_cast<uint64_t *>(env.cycleDev));
+    env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
+    HcclHostBarrier(env.ctx.comm, env.ctx.stream);
+}
+
+template <typename T, size_t count>
 bool RunTgetPerfKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
                         const HcclRootInfo *rootInfo, int source_rank, bool prefetch,
                         uint64_t &outCycles)
 {
-    TestContext ctx;
-    if (!ctx.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
+    MultiRankPerfEnv<T, count> env;
+    if (!env.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
         return false;
-
-    uint8_t *input_host = nullptr;
-    if (aclrtMallocHost(reinterpret_cast<void **>(&input_host), count * sizeof(T)) != 0) {
-        std::cerr << "[ERROR] TgetPerf: host alloc failed!" << std::endl;
-        return false;
-    }
-    for (size_t i = 0; i < count; ++i)
-        reinterpret_cast<T *>(input_host)[i] = static_cast<T>(i);
-
-    uint64_t localWinBase = ctx.hostCtx.windowsIn[rank_id];
-    size_t winOffset = 0;
-    void *commBufPtr = WindowAlloc(localWinBase, winOffset, 64 * sizeof(int32_t) + 2 * count * sizeof(T));
-
-    uint8_t *commBytes = reinterpret_cast<uint8_t *>(commBufPtr);
-    T *sendBuf = reinterpret_cast<T *>(commBytes + 64 * sizeof(int32_t));
-
-    if (rank_id == source_rank) {
-        aclrtMemcpy(sendBuf, count * sizeof(T), input_host, count * sizeof(T), ACL_MEMCPY_HOST_TO_DEVICE);
-    }
-
-    void *cycleDev = nullptr;
-    aclrtMalloc(&cycleDev, sizeof(uint64_t), ACL_MEM_MALLOC_HUGE_FIRST);
-    uint64_t zero = 0;
-    aclrtMemcpy(cycleDev, sizeof(uint64_t), &zero, sizeof(uint64_t), ACL_MEMCPY_HOST_TO_DEVICE);
-
-    void *trashDev = nullptr;
-    aclrtMalloc(&trashDev, count * sizeof(T), ACL_MEM_MALLOC_HUGE_FIRST);
-
-    SdmaWorkspaceManager sdmaMgr;
-    if (!sdmaMgr.Init()) {
-        std::cerr << "[ERROR] SdmaWorkspaceManager Init failed!" << std::endl;
-        aclrtFree(cycleDev);
-        aclrtFree(trashDev);
-        aclrtFreeHost(input_host);
-        return false;
-    }
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
+    if (rank_id == source_rank)
+        env.UploadInputToSend();
 
     int enablePrefetch = prefetch ? 1 : 0;
+    LaunchTgetPhase<T, count>(env, n_ranks, source_rank, enablePrefetch, 0);
+    LaunchTgetPhase<T, count>(env, n_ranks, source_rank, enablePrefetch, 1);
 
-    TgetPerfKernel<T, count><<<1, nullptr, ctx.stream>>>(
-        sendBuf, n_ranks, source_rank, static_cast<int>(count), enablePrefetch, 0,
-        ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
-        reinterpret_cast<uint8_t *>(trashDev),
-        reinterpret_cast<uint64_t *>(cycleDev));
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    TgetPerfKernel<T, count><<<1, nullptr, ctx.stream>>>(
-        sendBuf, n_ranks, source_rank, static_cast<int>(count), enablePrefetch, 1,
-        ctx.deviceCtx, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
-        reinterpret_cast<uint8_t *>(trashDev),
-        reinterpret_cast<uint64_t *>(cycleDev));
-    ctx.aclStatus = aclrtSynchronizeStream(ctx.stream);
-
-    HcclHostBarrier(ctx.comm, ctx.stream);
-
-    uint64_t cycles = 0;
-    if (rank_id != source_rank) {
-        aclrtMemcpy(&cycles, sizeof(uint64_t), cycleDev, sizeof(uint64_t), ACL_MEMCPY_DEVICE_TO_HOST);
-    }
-    outCycles = cycles;
-
-    aclrtFree(cycleDev);
-    aclrtFree(trashDev);
-    aclrtFreeHost(input_host);
-    sdmaMgr.Finalize();
-
-    return ctx.Finalize();
+    env.DownloadCycles(outCycles, rank_id != source_rank);
+    return env.Finalize();
 }
 
 template <typename T, size_t count>

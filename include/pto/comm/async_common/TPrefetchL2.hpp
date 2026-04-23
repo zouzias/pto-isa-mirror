@@ -17,6 +17,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 #include "pto/comm/comm_types.hpp"
 #include "pto/comm/async_common/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
+#include "pto/npu/comm/async/sdma/sdma_cmo_intrin.hpp"
 
 namespace pto {
 namespace comm {
