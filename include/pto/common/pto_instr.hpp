@@ -523,67 +523,67 @@ PTO_INST RecordEvent TRANDOM(DstTile &dst, TRandomKey &key, TRandomCounter &coun
 #endif
 
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events)
+PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, Trans trans, WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TMATMUL, cMatrix, aMatrix, bMatrix);
+    MAP_INSTR_IMPL(TMATMUL, cMatrix, aMatrix, bMatrix, trans);
     return {};
 }
 
 // UF-aware overload enabling unit-flag selection via AccPhase while retaining the TMATMUL name.
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events)
+PTO_INST RecordEvent TMATMUL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, Trans trans, WaitEvents &... events)
 {
     TSYNC(events...);
-    TMATMUL_IMPL<Phase>(cMatrix, aMatrix, bMatrix);
+    TMATMUL_IMPL<Phase>(cMatrix, aMatrix, bMatrix, trans);
     return {};
 }
 
 template <typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix,
+PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix, Trans trans,
                                  WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TMATMUL_ACC, cOutMatrix, cInMatrix, aMatrix, bMatrix);
+    MAP_INSTR_IMPL(TMATMUL_ACC, cOutMatrix, cInMatrix, aMatrix, bMatrix, trans);
     return {};
 }
 
 // UF-aware overloads for TMATMUL_ACC: explicit input/output or shared accumulator tile.
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix,
+PTO_INST RecordEvent TMATMUL_ACC(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix, Trans trans,
                                  WaitEvents &... events)
 {
     TSYNC(events...);
-    TMATMUL_ACC_IMPL<Phase>(cOutMatrix, cInMatrix, aMatrix, bMatrix);
+    TMATMUL_ACC_IMPL<Phase>(cOutMatrix, cInMatrix, aMatrix, bMatrix, trans);
     return {};
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
           typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_ACC(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, WaitEvents &... events)
+PTO_INST RecordEvent TMATMUL_ACC(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, Trans trans, WaitEvents &... events)
 {
     TSYNC(events...);
-    TMATMUL_ACC_IMPL<Phase>(cMatrix, aMatrix, bMatrix);
+    TMATMUL_ACC_IMPL<Phase>(cMatrix, aMatrix, bMatrix, trans);
     return {};
 }
 
 template <typename TileRes, typename TileLeft, typename TileRight, typename TileBias, typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData,
+PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData, Trans trans,
                                   WaitEvents &... events)
 {
     TSYNC(events...);
-    MAP_INSTR_IMPL(TMATMUL_BIAS, cMatrix, aMatrix, bMatrix, biasData);
+    MAP_INSTR_IMPL(TMATMUL_BIAS, cMatrix, aMatrix, bMatrix, biasData, trans);
     return {};
 }
 
 // UF-aware overload enabling unit-flag selection for bias matmul while keeping the TMATMUL_BIAS name.
 template <AccPhase Phase, typename TileRes, typename TileLeft, typename TileRight, typename TileBias,
           typename... WaitEvents>
-PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData,
+PTO_INST RecordEvent TMATMUL_BIAS(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData, Trans trans,
                                   WaitEvents &... events)
 {
     TSYNC(events...);
-    TMATMUL_BIAS_IMPL<Phase>(cMatrix, aMatrix, bMatrix, biasData);
+    TMATMUL_BIAS_IMPL<Phase>(cMatrix, aMatrix, bMatrix, biasData, trans);
     return {};
 }
 

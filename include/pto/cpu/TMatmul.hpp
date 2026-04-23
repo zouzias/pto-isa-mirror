@@ -16,7 +16,7 @@ See LICENSE in the root of the software repository for the full text of the Lice
 
 namespace pto {
 
-enum class TransMode {
+enum class Trans {
     NN, // No transpose: A(MxK) @ B(KxN) = C(MxN)
     NT, // B transpose: A(MxK) @ B(NxK)^T = C(MxN)
     TN, // A transpose: A(KxM)^T @ B(KxN) = C(MxN)
@@ -25,29 +25,29 @@ enum class TransMode {
 template <typename LeftSrcType, typename RightSrcType, typename DType>
 void Gemm(DType* dst, const DType* acc,
           const LeftSrcType src0, const RightSrcType src1,
-          uint16_t M, uint16_t N, uint16_t K, TransMode transmode = TransMode::NN)
+          uint16_t M, uint16_t N, uint16_t K, Trans trans = Trans::NN)
 {
     // Implementation with transpose support using if-else
     for (uint16_t i = 0; i < M; i++) {
         for (uint16_t j = 0; j < N; j++) {
             DType sum = acc ? acc[i * N + j] : static_cast<DType>(0);
 
-            if (transmode == TransMode::NN) {
+            if (trans == Trans::NN) {
                 // No transpose: A(MxK) @ B(KxN) = C(MxN)
                 for (uint16_t k = 0; k < K; k++) {
                     sum += static_cast<DType>(src0[i * K + k] * src1[k * N + j]);
                 }
-            } else if (transmode == TransMode::NT) {
+            } else if (trans == Trans::NT) {
                 // B transpose: A(MxK) @ B(NxK)^T = C(MxN)
                 for (uint16_t k = 0; k < K; k++) {
                     sum += static_cast<DType>(src0[i * K + k] * src1[j * K + k]);
                 }
-            } else if (transmode == TransMode::TN) {
+            } else if (trans == Trans::TN) {
                 // A transpose: A(KxM)^T @ B(KxN) = C(MxN)
                 for (uint16_t k = 0; k < K; k++) {
                     sum += static_cast<DType>(src0[k * M + i] * src1[k * N + j]);
                 }
-            } else if (transmode == TransMode::TT) {
+            } else if (trans == Trans::TT) {
                 // Both transpose: A(KxM)^T @ B(NxK)^T = C(MxN)
                 for (uint16_t k = 0; k < K; k++) {
                     sum += static_cast<DType>(src0[k * M + i] * src1[j * K + k]);
@@ -61,12 +61,12 @@ void Gemm(DType* dst, const DType* acc,
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
 void TMatmulNzZn(typename TileAcc::TileDType dst, typename TileAcc::TileDType acc, typename TileLeft::TileDType src0,
-                 typename TileRight::TileDType src1, uint16_t M, uint16_t N, uint16_t K, TransMode transmode = TransMode::NN)
+                 typename TileRight::TileDType src1, uint16_t M, uint16_t N, uint16_t K, Trans trans = Trans::NN)
 {
     using LeftSrcType = typename TileLeft::TileDType;
     using RightSrcType = typename TileRight::TileDType;
     using DType = typename TileAcc::DType;
-    Gemm<LeftSrcType, RightSrcType, DType>(dst, acc, src0, src1, M, N, K, transmode);
+    Gemm<LeftSrcType, RightSrcType, DType>(dst, acc, src0, src1, M, N, K, trans);
 }
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
@@ -109,7 +109,7 @@ PTO_INTERNAL void CheckBiasValid()
 }
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
-PTO_INTERNAL void TMATMUL_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TransMode transmode = TransMode::NN)
+PTO_INTERNAL void TMATMUL_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, Trans trans = Trans::NN)
 {
     CheckMadValid<TileAcc, TileLeft, TileRight>();
 
@@ -117,11 +117,11 @@ PTO_INTERNAL void TMATMUL_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &b
     uint16_t k = aMatrix.GetValidCol();
     uint16_t n = bMatrix.GetValidCol();
 
-    TMatmulNzZn<TileAcc, TileLeft, TileRight>(cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), m, n, k, transmode);
+    TMatmulNzZn<TileAcc, TileLeft, TileRight>(cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), m, n, k, trans);
 }
 
 template <typename TileAcc, typename TileLeft, typename TileRight>
-PTO_INTERNAL void TMATMUL_ACC_IMPL(TileAcc &cOutMatrix, TileAcc &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix, TransMode transmode = TransMode::NN)
+PTO_INTERNAL void TMATMUL_ACC_IMPL(TileAcc &cOutMatrix, TileAcc &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix, Trans trans = Trans::NN)
 {
     CheckMadValid<TileAcc, TileLeft, TileRight>();
 
@@ -130,11 +130,11 @@ PTO_INTERNAL void TMATMUL_ACC_IMPL(TileAcc &cOutMatrix, TileAcc &cInMatrix, Tile
     uint16_t n = bMatrix.GetValidCol();
 
     TMatmulNzZn<TileAcc, TileLeft, TileRight>(cOutMatrix.data(), cInMatrix.data(), aMatrix.data(), bMatrix.data(), m, n,
-                                              k, transmode);
+                                              k, trans);
 }
 
 template <typename TileAcc, typename TileLeft, typename TileRight, typename TileBias>
-PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasMatrix, TransMode transmode = TransMode::NN)
+PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasMatrix, Trans trans = Trans::NN)
 {
     CheckMadValid<TileAcc, TileLeft, TileRight>();
     CheckBiasValid<TileAcc, TileBias>();
@@ -143,7 +143,7 @@ PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRig
     uint16_t k = aMatrix.GetValidCol();
     uint16_t n = bMatrix.GetValidCol();
 
-    TMatmulNzZn<TileAcc, TileLeft, TileRight>(cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), m, n, k, transmode);
+    TMatmulNzZn<TileAcc, TileLeft, TileRight>(cMatrix.data(), nullptr, aMatrix.data(), bMatrix.data(), m, n, k, trans);
     for (size_t c = 0; c < n; c++) {
         for (size_t r = 0; r < m; r++) {
             size_t out_idx = GetTileElementOffset<TileAcc>(r, c);
@@ -154,91 +154,91 @@ PTO_INTERNAL void TMATMUL_BIAS_IMPL(TileAcc &cMatrix, TileLeft &aMatrix, TileRig
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
-PTO_INTERNAL void TGEMV_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TransMode transmode = TransMode::NN)
+PTO_INTERNAL void TGEMV_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, Trans trans = Trans::NN)
 {
     (void)Phase;
-    TMATMUL_IMPL(cMatrix, aMatrix, bMatrix, transmode);
+    TMATMUL_IMPL(cMatrix, aMatrix, bMatrix, trans);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight>
-PTO_INTERNAL void TGEMV_ACC_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix, TransMode transmode = TransMode::NN)
+PTO_INTERNAL void TGEMV_ACC_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileRight &bMatrix, Trans trans = Trans::NN)
 {
     (void)Phase;
-    TMATMUL_ACC_IMPL(cOutMatrix, cInMatrix, aMatrix, bMatrix, transmode);
+    TMATMUL_ACC_IMPL(cOutMatrix, cInMatrix, aMatrix, bMatrix, trans);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileRight,
           typename TileBias>
-PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData, TransMode transmode = TransMode::NN)
+PTO_INTERNAL void TGEMV_BIAS_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileRight &bMatrix, TileBias &biasData, Trans trans = Trans::NN)
 {
     (void)Phase;
-    TMATMUL_BIAS_IMPL(cMatrix, aMatrix, bMatrix, biasData, transmode);
+    TMATMUL_BIAS_IMPL(cMatrix, aMatrix, bMatrix, biasData, trans);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileLeftScale,
           typename TileRight, typename TileRightScale>
 PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
-                                  TileRightScale &bScaleMatrix, TransMode transmode = TransMode::NN)
+                                  TileRightScale &bScaleMatrix, Trans trans = Trans::NN)
 {
     (void)Phase;
     (void)aScaleMatrix;
     (void)bScaleMatrix;
-    TMATMUL_IMPL(cMatrix, aMatrix, bMatrix, transmode);
+    TMATMUL_IMPL(cMatrix, aMatrix, bMatrix, trans);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileLeftScale,
           typename TileRight, typename TileRightScale>
 PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix,
-                                  TileLeftScale &aScaleMatrix, TileRight &bMatrix, TileRightScale &bScaleMatrix, TransMode transmode = TransMode::NN)
+                                  TileLeftScale &aScaleMatrix, TileRight &bMatrix, TileRightScale &bScaleMatrix, Trans trans = Trans::NN)
 {
     (void)Phase;
     (void)aScaleMatrix;
     (void)bScaleMatrix;
-    TMATMUL_ACC_IMPL(cOutMatrix, cInMatrix, aMatrix, bMatrix, transmode);
+    TMATMUL_ACC_IMPL(cOutMatrix, cInMatrix, aMatrix, bMatrix, trans);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileLeftScale,
           typename TileRight, typename TileRightScale, typename TileBias>
 PTO_INTERNAL void TMATMUL_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
-                                  TileRightScale &bScaleMatrix, TileBias &biasData, TransMode transmode = TransMode::NN)
+                                  TileRightScale &bScaleMatrix, TileBias &biasData, Trans trans = Trans::NN)
 {
     (void)Phase;
     (void)aScaleMatrix;
     (void)bScaleMatrix;
-    TMATMUL_BIAS_IMPL(cMatrix, aMatrix, bMatrix, biasData, transmode);
+    TMATMUL_BIAS_IMPL(cMatrix, aMatrix, bMatrix, biasData, trans);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileLeftScale,
           typename TileRight, typename TileRightScale>
 PTO_INTERNAL void TGEMV_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
-                                TileRightScale &bScaleMatrix, TransMode transmode = TransMode::NN)
+                                TileRightScale &bScaleMatrix, Trans trans = Trans::NN)
 {
     (void)Phase;
     (void)aScaleMatrix;
     (void)bScaleMatrix;
-    TGEMV_IMPL(cMatrix, aMatrix, bMatrix, transmode);
+    TGEMV_IMPL(cMatrix, aMatrix, bMatrix, trans);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileLeftScale,
           typename TileRight, typename TileRightScale>
 PTO_INTERNAL void TGEMV_MX_IMPL(TileRes &cOutMatrix, TileRes &cInMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix,
-                                TileRight &bMatrix, TileRightScale &bScaleMatrix, TransMode transmode = TransMode::NN)
+                                TileRight &bMatrix, TileRightScale &bScaleMatrix, Trans trans = Trans::NN)
 {
     (void)Phase;
     (void)aScaleMatrix;
     (void)bScaleMatrix;
-    TGEMV_ACC_IMPL(cOutMatrix, cInMatrix, aMatrix, bMatrix, transmode);
+    TGEMV_ACC_IMPL(cOutMatrix, cInMatrix, aMatrix, bMatrix, trans);
 }
 
 template <AccPhase Phase = AccPhase::Unspecified, typename TileRes, typename TileLeft, typename TileLeftScale,
           typename TileRight, typename TileRightScale, typename TileBias>
 PTO_INTERNAL void TGEMV_MX_IMPL(TileRes &cMatrix, TileLeft &aMatrix, TileLeftScale &aScaleMatrix, TileRight &bMatrix,
-                                TileRightScale &bScaleMatrix, TileBias &biasData, TransMode transmode = TransMode::NN)
+                                TileRightScale &bScaleMatrix, TileBias &biasData, Trans trans = Trans::NN)
 {
     (void)Phase;
     (void)aScaleMatrix;
     (void)bScaleMatrix;
-    TGEMV_BIAS_IMPL(cMatrix, aMatrix, bMatrix, biasData, transmode);
+    TGEMV_BIAS_IMPL(cMatrix, aMatrix, bMatrix, biasData, trans);
 }
 } // namespace pto
 #endif

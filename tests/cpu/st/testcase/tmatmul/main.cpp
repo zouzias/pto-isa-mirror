@@ -22,7 +22,7 @@ using namespace pto;
 
 struct SizeArgs {
     uint32_t M, K, N;
-    std::string transmode;
+    std::string trans;
     bool valid;
     bool use_custom_size;
 };
@@ -40,21 +40,18 @@ SizeArgs parse_size_args(int argc, char** argv) {
                 args.valid = true;
                 args.use_custom_size = true;
             }
-        } else if (arg == "--transmode" && i + 1 < argc) {
-            args.transmode = argv[++i];
+        } else if (arg == "--trans" && i + 1 < argc) {
+            args.trans = argv[++i];
         }
     }
     return args;
 }
 
 template <int32_t tilingKey>
-void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream);
+void LaunchTMATMUL(uint8_t *out, uint8_t *src0, uint8_t *src1, void *stream, Trans trans);
 
 template <int32_t tilingKey>
-void LaunchTMATMULBIAS(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream);
-
-// External global variable from tmatmul_kernel.cpp
-extern TransMode g_transmode;
+void LaunchTMATMULBIAS(uint8_t *out, uint8_t *src0, uint8_t *src1, uint8_t *src2, void *stream, Trans trans);
 
 class TMATMULTest : public testing::Test {
 protected:
@@ -101,7 +98,7 @@ void tmatmul_test(uint32_t M, uint32_t K, uint32_t N)
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTMATMUL<key>(dstDevice, src0Device, src1Device, stream);
+    LaunchTMATMUL<key>(dstDevice, src0Device, src1Device, stream, Trans::NN);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -130,25 +127,25 @@ void tmatmul_test(uint32_t M, uint32_t K, uint32_t N)
 }
 
 template <typename T, typename U, typename S, int32_t key>
-void tmatmul_test_custom(uint32_t M, uint32_t K, uint32_t N, const std::string& transmode_str = "NN")
+void tmatmul_test_custom(uint32_t M, uint32_t K, uint32_t N, const std::string& trans_str = "NN")
 {
-    // Convert transmode string to enum
-    TransMode transmode = TransMode::NN;
-    if (transmode_str == "NN") transmode = TransMode::NN;
-    else if (transmode_str == "NT") transmode = TransMode::NT;
-    else if (transmode_str == "TN") transmode = TransMode::TN;
-    else if (transmode_str == "TT") transmode = TransMode::TT;
+    // Convert trans string to enum
+    trans trans = Trans::NN;
+    if (trans_str == "NN") trans = Trans::NN;
+    else if (trans_str == "NT") trans = Trans::NT;
+    else if (trans_str == "TN") trans = Trans::TN;
+    else if (trans_str == "TT") trans = Trans::TT;
 
-    // Calculate file sizes based on transmode
+    // Calculate file sizes based on trans
     size_t aFileSize, bFileSize, cFileSize;
 
-    if (transmode == TransMode::NN || transmode == TransMode::NT) {
+    if (trans == Trans::NN || trans == Trans::NT) {
         aFileSize = M * K * sizeof(U);  // A is MxK
     } else {  // TN, TT - A is KxM
         aFileSize = K * M * sizeof(U);
     }
 
-    if (transmode == TransMode::NN || transmode == TransMode::TN) {
+    if (trans == Trans::NN || trans == Trans::TN) {
         bFileSize = K * N * sizeof(S);  // B is KxN
     } else {  // NT, TT - B is NxK
         bFileSize = N * K * sizeof(S);
@@ -179,9 +176,9 @@ void tmatmul_test_custom(uint32_t M, uint32_t K, uint32_t N, const std::string& 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    // Note: Need to modify LaunchTMATMUL to accept transmode
+    // Note: Need to modify LaunchTMATMUL to accept trans
     // For now, we'll pass it but the implementation will need to be updated
-    LaunchTMATMUL<key>(dstDevice, src0Device, src1Device, stream);
+    LaunchTMATMUL<key>(dstDevice, src0Device, src1Device, stream, trans);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -251,7 +248,7 @@ TEST_F(TMATMULTest, case3)
 
     aclrtMemcpy(src0Device, aFileSize, src0Host, aFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-    LaunchTMATMUL<3>(dstDevice, src0Device, src1Device, stream);
+    LaunchTMATMUL<3>(dstDevice, src0Device, src1Device, stream, Trans::NN);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -325,7 +322,7 @@ void tmatmul_bias_test(uint32_t M, uint32_t K, uint32_t N)
     aclrtMemcpy(src1Device, bFileSize, src1Host, bFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(src2Device, biasFileSize, src2Host, biasFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
 
-    LaunchTMATMULBIAS<key>(dstDevice, src0Device, src1Device, src2Device, stream);
+    LaunchTMATMULBIAS<key>(dstDevice, src0Device, src1Device, src2Device, stream, Trans::NN);
 
     aclrtSynchronizeStream(stream);
     aclrtMemcpy(dstHost, cFileSize, dstDevice, cFileSize, ACL_MEMCPY_DEVICE_TO_HOST);
@@ -385,16 +382,10 @@ int main(int argc, char** argv) {
     SizeArgs size_args = parse_size_args(argc, argv);
 
     if (size_args.use_custom_size && size_args.valid) {
-        // Convert transmode string to enum and set global variable
-        if (size_args.transmode == "NN") g_transmode = TransMode::NN;
-        else if (size_args.transmode == "NT") g_transmode = TransMode::NT;
-        else if (size_args.transmode == "TN") g_transmode = TransMode::TN;
-        else if (size_args.transmode == "TT") g_transmode = TransMode::TT;
-
         // Custom size mode
         std::cout << "Running custom size test: " << size_args.M << "x" << size_args.K << "x" << size_args.N
-                  << " with transmode=" << size_args.transmode << std::endl;
-        tmatmul_test_custom<float, uint16_t, uint16_t, 1>(size_args.M, size_args.K, size_args.N, size_args.transmode);
+                  << " with trans=" << size_args.trans << std::endl;
+        tmatmul_test_custom<float, uint16_t, uint16_t, 1>(size_args.M, size_args.K, size_args.N, size_args.trans);
         return 0;
     } else if (size_args.use_custom_size && !size_args.valid) {
         std::cerr << "Error: Invalid --size format. Expected M,K,N" << std::endl;
