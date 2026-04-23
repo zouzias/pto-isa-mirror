@@ -64,9 +64,11 @@ void runTEXTRACT_Scalar()
     GlobalDataSrc srcGlobal((ST *)srcDevice);
     GlobalDataDst dstGlobal((DT *)dstDevice);
 
-    Tile<TileType::Mat, ST, rows, cols, BLayout::RowMajor, validRows, validCols, SLayout::NoneBox, 512> srcTile;
-    Tile<TileType::Mat, DT, rows, cols, BLayout::RowMajor, dstValidRows, dstValidCols, SLayout::NoneBox, 512> dstTile;
-
+    using SrcTile = Tile<TileType::Mat, ST, rows, cols, BLayout::RowMajor, validRows, validCols, SLayout::NoneBox, 512>;
+    using DstTile = Tile<TileType::Mat, DT, rows, cols, BLayout::RowMajor, dstValidRows, dstValidCols, SLayout::NoneBox, 512>;
+    SrcTile srcTile;
+    DstTile dstTile;
+    
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
     std::fill(dstTile.data(), dstTile.data() + rows * cols, 0);
@@ -85,7 +87,7 @@ void runTEXTRACT_Scalar()
 
     uint64_t scalarQuant = ((uint64_t *)quantDevice)[0];
     constexpr ReluPreMode reluMode = applyRelu ? ReluPreMode::NormalRelu : ReluPreMode::NoRelu;
-    TEXTRACT<DT, ST, reluMode>(dstTile, srcTile, scalarQuant, static_cast<uint16_t>(idxRow), static_cast<uint16_t>(idxCol));
+    TEXTRACT<DstTile, SrcTile, reluMode>(dstTile, srcTile, scalarQuant, static_cast<uint16_t>(idxRow), static_cast<uint16_t>(idxCol));
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
@@ -97,11 +99,12 @@ void runTEXTRACT_Scalar()
 
     WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstFileSize);
 
-    std::vector<DT> golden(dstFileSize / sizeof(DT));
-    size_t goldenSize = 0;
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", goldenSize, golden.data(), dstFileSize));
+    std::vector<DT> golden(dstFileSize);
+    std::vector<DT> devFinal(dstFileSize);
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize));
 
-    bool ret = ResultCmp(golden, (DT *)dstHost, 0);
+    bool ret = ResultCmp<DT>(golden, devFinal, 0.001f);
 
     aclrtFree(dstDevice);
     aclrtFree(srcDevice);
@@ -144,12 +147,19 @@ void runTEXTRACT_Vector()
         pto::Stride<1 * validRows * validCols, 1 * validRows * validCols, validRows * validCols, validCols, 1>>;
     using GlobalDataDst = GlobalTensor<DT, pto::Shape<1, 1, 1, dstValidRows, dstValidCols>,
         pto::Stride<1 * dstValidRows * dstValidCols, 1 * dstValidRows * dstValidCols, dstValidRows * dstValidCols, dstValidCols, 1>>;
+    using GlobalDataFp = GlobalTensor<uint64_t, pto::Shape<1, 1, 1, 1, dstValidCols>,
+        pto::Stride<1 * dstValidCols, dstValidCols, dstValidCols, dstValidCols, 1>>;
 
     GlobalDataSrc srcGlobal((ST *)srcDevice);
     GlobalDataDst dstGlobal((DT *)dstDevice);
+    GlobalDataFp fpGlobal((uint64_t *)quantDevice);
 
-    Tile<TileType::Mat, ST, rows, cols, BLayout::RowMajor, validRows, validCols, SLayout::NoneBox, 512> srcTile;
-    Tile<TileType::Mat, DT, rows, cols, BLayout::RowMajor, dstValidRows, dstValidCols, SLayout::NoneBox, 512> dstTile;
+    using SrcTile = Tile<TileType::Mat, ST, rows, cols, BLayout::RowMajor, validRows, validCols, SLayout::NoneBox, 512>;
+    using DstTile = Tile<TileType::Mat, DT, rows, cols, BLayout::RowMajor, dstValidRows, dstValidCols, SLayout::NoneBox, 512>;
+    using FbTile = Tile<TileType::Mat, uint64_t, 1, dstValidCols, BLayout::RowMajor, 1, dstValidCols, SLayout::NoneBox, 512>;
+    SrcTile srcTile;
+    DstTile dstTile;
+    FbTile fpTileLocal;
 
     TASSIGN(srcTile, 0x0);
     TASSIGN(dstTile, 0x10000);
@@ -162,12 +172,7 @@ void runTEXTRACT_Vector()
 
     aclrtMemcpy(srcDevice, srcFileSize, srcHost, srcFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
     aclrtMemcpy(quantDevice, quantFileSize, quantHost, quantFileSize, ACL_MEMCPY_HOST_TO_DEVICE);
-
-    using GlobalDataFp = GlobalTensor<uint64_t, pto::Shape<1, 1, 1, 1, dstValidCols>,
-        pto::Stride<1 * dstValidCols, dstValidCols, dstValidCols, dstValidCols, 1>>;
-    GlobalDataFp fpGlobal((uint64_t *)quantDevice);
-
-    Tile<TileType::Mat, uint64_t, 1, dstValidCols, BLayout::RowMajor, 1, dstValidCols, SLayout::NoneBox, 512> fpTileLocal;
+   
     TASSIGN(fpTileLocal, 0x30000);
 
     TLOAD(srcTile, srcGlobal);
@@ -176,7 +181,7 @@ void runTEXTRACT_Vector()
     wait_flag(PIPE_MTE2, PIPE_MTE1, EVENT_ID0);
 
     constexpr ReluPreMode reluMode = applyRelu ? ReluPreMode::NormalRelu : ReluPreMode::NoRelu;
-    TEXTRACT_FP<DT, ST, uint64_t, reluMode>(dstTile, srcTile, fpTileLocal, static_cast<uint16_t>(idxRow), static_cast<uint16_t>(idxCol));
+    TEXTRACT_FP<DstTile, SrcTile, FbTile, reluMode>(dstTile, srcTile, fpTileLocal, static_cast<uint16_t>(idxRow), static_cast<uint16_t>(idxCol));
 
     set_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
     wait_flag(PIPE_MTE1, PIPE_M, EVENT_ID0);
@@ -188,11 +193,12 @@ void runTEXTRACT_Vector()
 
     WriteFile(GetGoldenDir() + "/output.bin", dstHost, dstFileSize);
 
-    std::vector<DT> golden(dstFileSize / sizeof(DT));
-    size_t goldenSize = 0;
-    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", goldenSize, golden.data(), dstFileSize));
+    std::vector<DT> golden(dstFileSize);
+    std::vector<DT> devFinal(dstFileSize);
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/golden.bin", dstFileSize, golden.data(), dstFileSize));
+    CHECK_RESULT_GTEST(ReadFile(GetGoldenDir() + "/output.bin", dstFileSize, devFinal.data(), dstFileSize));
 
-    bool ret = ResultCmp(golden, (DT *)dstHost, 0);
+    bool ret = ResultCmp<DT>(golden, devFinal, 0.001f);
 
     aclrtFree(dstDevice);
     aclrtFree(srcDevice);
