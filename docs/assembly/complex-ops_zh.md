@@ -2,7 +2,7 @@
 
 本文档描述复杂操作，包括排序、聚集、量化和随机数生成。
 
-**操作总数：** 14
+**操作总数：** 16
 
 ---
 
@@ -196,6 +196,40 @@ pto.tpartmax ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%ds
 **AS Level 2 (DPS)：**
 ```text
 pto.tpartmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+---
+
+### TPARTARGMAX
+
+该指令的详细介绍请见[isa/TPARTARGMAX](../isa/TPARTARGMAX_zh.md)
+
+
+**AS Level 1 (SSA)：**
+```text
+%dstVal, %dstIdx = pto.tpartargmax %src0Val, %src1Val, %src0Idx, %src1Idx : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
+```
+
+**AS Level 2 (DPS)：**
+```text
+pto.tpartargmax ins(%src0Val, %src1Val, %src0Idx, %src1Idx : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
+```
+
+---
+
+### TPARTARGMIN
+
+该指令的详细介绍请见[isa/TPARTARGMIN](../isa/TPARTARGMIN_zh.md)
+
+
+**AS Level 1 (SSA)：**
+```text
+%dstVal, %dstIdx = pto.tpartargmin %src0Val, %src1Val, %src0Idx, %src1Idx : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
+```
+
+**AS Level 2 (DPS)：**
+```text
+pto.tpartargmin ins(%src0Val, %src1Val, %src0Idx, %src1Idx : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
 
 ---
