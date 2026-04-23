@@ -108,7 +108,7 @@ comm::AsyncSession session;
 comm::BuildAsyncSession<comm::DmaEngine::SDMA>(scratchTile, workspace, session);
 ```
 
-Defined in `include/pto/comm/async/async_types.hpp`. See [TPUT_ASYNC](TPUT_ASYNC.md) for construction details and parameters.
+Defined in `include/pto/comm/async_common/async_types.hpp`. See [TPUT_ASYNC](TPUT_ASYNC.md) for construction details and parameters.
 
 ### ParallelGroup
 

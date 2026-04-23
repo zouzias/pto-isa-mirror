@@ -8,11 +8,11 @@ INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY, OR FITNESS FOR A
 See LICENSE in the root of the software repository for the full text of the License.
 */
 
-#ifndef PTO_COMM_ASYNC_EVENT_IMPL_HPP
-#define PTO_COMM_ASYNC_EVENT_IMPL_HPP
+#ifndef PTO_COMM_ASYNC_COMMON_ASYNC_EVENT_IMPL_HPP
+#define PTO_COMM_ASYNC_COMMON_ASYNC_EVENT_IMPL_HPP
 
 #include "pto/comm/comm_types.hpp"
-#include "pto/comm/async/async_types.hpp"
+#include "pto/comm/async_common/async_types.hpp"
 #include "pto/npu/comm/async/sdma/sdma_async_intrin.hpp"
 #ifdef PTO_URMA_SUPPORTED
 #include "pto/npu/comm/async/urma/urma_async_intrin.hpp"
@@ -91,4 +91,4 @@ PTO_INTERNAL bool AsyncEvent::Test(const AsyncSession &session) const
 } // namespace comm
 } // namespace pto
 
-#endif // PTO_COMM_ASYNC_EVENT_IMPL_HPP
+#endif // PTO_COMM_ASYNC_COMMON_ASYNC_EVENT_IMPL_HPP
