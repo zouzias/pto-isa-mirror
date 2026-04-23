@@ -295,8 +295,7 @@ PTO_INST AsyncEvent TPREFETCH_L2(GlobalData &srcGlobalData, const AsyncSession &
 
 // Raw pointer overload with AsyncSession
 template <typename... WaitEvents>
-PTO_INST AsyncEvent TPREFETCH_L2(__gm__ void *src, uint64_t bytes, const AsyncSession &session,
-                                 WaitEvents &... events)
+PTO_INST AsyncEvent TPREFETCH_L2(__gm__ void *src, uint64_t bytes, const AsyncSession &session, WaitEvents &... events)
 {
     WaitAllEvents(events...);
     return ::pto::comm::TPREFETCH_L2_IMPL(src, bytes, session);
