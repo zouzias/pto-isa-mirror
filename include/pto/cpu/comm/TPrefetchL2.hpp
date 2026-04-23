@@ -23,8 +23,7 @@ PTO_INTERNAL AsyncEvent TPREFETCH_L2_IMPL(GlobalData & /*src*/, const AsyncSessi
     return AsyncEvent(0, DmaEngine::SDMA);
 }
 
-PTO_INTERNAL AsyncEvent TPREFETCH_L2_IMPL(__gm__ void * /*src*/, uint64_t /*bytes*/,
-                                           const AsyncSession & /*session*/)
+PTO_INTERNAL AsyncEvent TPREFETCH_L2_IMPL(__gm__ void * /*src*/, uint64_t /*bytes*/, const AsyncSession & /*session*/)
 {
     return AsyncEvent(0, DmaEngine::SDMA);
 }
@@ -36,7 +35,7 @@ PTO_INTERNAL AsyncEvent TPREFETCH_L2_IMPL(GlobalData & /*src*/, const sdma::Sdma
 }
 
 PTO_INTERNAL AsyncEvent TPREFETCH_L2_IMPL(__gm__ void * /*src*/, uint64_t /*bytes*/,
-                                           const sdma::SdmaExecContext & /*execCtx*/)
+                                          const sdma::SdmaExecContext & /*execCtx*/)
 {
     return AsyncEvent(0, DmaEngine::SDMA);
 }

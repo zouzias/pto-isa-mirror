@@ -26,7 +26,7 @@ namespace detail {
 constexpr uint32_t kCmoPrefetchOpcode = 6U;
 
 PTO_INTERNAL void AddOneCmoSqe(__gm__ BatchWriteChannelInfo *channelInfo, __gm__ uint8_t *src, uint32_t length,
-                                uint32_t sqTail, uint32_t taskId)
+                               uint32_t sqTail, uint32_t taskId)
 {
     __gm__ BatchWriteItem *sqe = (__gm__ BatchWriteItem *)(channelInfo->sq_base);
     sqe += (sqTail % channelInfo->sq_depth);
@@ -80,7 +80,7 @@ PTO_INTERNAL void AddOneCmoSqe(__gm__ BatchWriteChannelInfo *channelInfo, __gm__
 }
 
 PTO_INTERNAL void SubmitCmoPrefetchSqes(__gm__ BatchWriteChannelInfo *batchWriteChannelInfo, __gm__ uint8_t *src,
-                                         const SdmaConfig &config, uint32_t *sqTail)
+                                        const SdmaConfig &config, uint32_t *sqTail)
 {
     for (uint32_t idx = 0U; idx < config.iter_num; ++idx) {
         uint32_t queueIdx = idx % config.queue_num;
@@ -93,8 +93,7 @@ PTO_INTERNAL void SubmitCmoPrefetchSqes(__gm__ BatchWriteChannelInfo *batchWrite
 
         __gm__ uint8_t *srcAddr = src + config.comm_block_offset + idx * config.block_bytes;
 
-        AddOneCmoSqe(channelInfo, srcAddr, transferBytes, sqTail[queueIdx],
-                     sqTail[queueIdx] - channelInfo->sq_head);
+        AddOneCmoSqe(channelInfo, srcAddr, transferBytes, sqTail[queueIdx], sqTail[queueIdx] - channelInfo->sq_head);
 
         sqTail[queueIdx] = (sqTail[queueIdx] + 1) % kSqDepth;
         pipe_barrier(PIPE_ALL);

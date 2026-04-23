@@ -73,20 +73,18 @@ PTO_INTERNAL AsyncEvent TPREFETCH_L2_SDMA_IMPL(GlobalData &srcGlobalData, const 
         return AsyncEvent(0, DmaEngine::SDMA);
     }
 
-    const uint64_t eventHandle =
-        sdma::__sdma_cmo_prefetch(srcGlobalData.data(), totalBytes, execCtx);
+    const uint64_t eventHandle = sdma::__sdma_cmo_prefetch(srcGlobalData.data(), totalBytes, execCtx);
     return AsyncEvent(eventHandle, DmaEngine::SDMA);
 }
 
 PTO_INTERNAL AsyncEvent TPREFETCH_L2_RAW_SDMA_IMPL(__gm__ void *src, uint64_t bytes,
-                                                     const sdma::SdmaExecContext &execCtx)
+                                                   const sdma::SdmaExecContext &execCtx)
 {
     if (src == nullptr || bytes == 0) {
         return AsyncEvent(0, DmaEngine::SDMA);
     }
 
-    const uint64_t eventHandle =
-        sdma::__sdma_cmo_prefetch(reinterpret_cast<__gm__ uint8_t *>(src), bytes, execCtx);
+    const uint64_t eventHandle = sdma::__sdma_cmo_prefetch(reinterpret_cast<__gm__ uint8_t *>(src), bytes, execCtx);
     return AsyncEvent(eventHandle, DmaEngine::SDMA);
 }
 

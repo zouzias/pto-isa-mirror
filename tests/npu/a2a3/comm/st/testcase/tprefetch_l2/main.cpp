@@ -21,37 +21,43 @@ See LICENSE in the root of the software repository for the full text of the Lice
 // ============================================================================
 TEST(TPrefetchL2, Baseline_Float_4096)
 {
-    if (CommMpiRank() != 0) return;
+    if (CommMpiRank() != 0)
+        return;
     ASSERT_TRUE((RunBaseline<float, 4096>(0)));
 }
 
 TEST(TPrefetchL2, Baseline_Int32_4096)
 {
-    if (CommMpiRank() != 0) return;
+    if (CommMpiRank() != 0)
+        return;
     ASSERT_TRUE((RunBaseline<int32_t, 4096>(0)));
 }
 
 TEST(TPrefetchL2, Correctness_Float_4096)
 {
-    if (CommMpiRank() != 0) return;
+    if (CommMpiRank() != 0)
+        return;
     ASSERT_TRUE((RunPrefetchL2Correctness<float, 4096>(0)));
 }
 
 TEST(TPrefetchL2, Correctness_Int32_4096)
 {
-    if (CommMpiRank() != 0) return;
+    if (CommMpiRank() != 0)
+        return;
     ASSERT_TRUE((RunPrefetchL2Correctness<int32_t, 4096>(0)));
 }
 
 TEST(TPrefetchL2, RawPtr_Float_4096)
 {
-    if (CommMpiRank() != 0) return;
+    if (CommMpiRank() != 0)
+        return;
     ASSERT_TRUE((RunPrefetchL2RawPtr<float, 4096>(0)));
 }
 
 TEST(TPrefetchL2, RawPtr_Int32_4096)
 {
-    if (CommMpiRank() != 0) return;
+    if (CommMpiRank() != 0)
+        return;
     ASSERT_TRUE((RunPrefetchL2RawPtr<int32_t, 4096>(0)));
 }
 
@@ -104,25 +110,29 @@ TEST(TPrefetchL2, Perf_TputAsync_Float_1MB)
 // ============================================================================
 TEST(TPrefetchL2, Perf_Tload_Float_16KB)
 {
-    if (CommMpiRank() != 0) return;
+    if (CommMpiRank() != 0)
+        return;
     ASSERT_TRUE((RunTloadPerf<float, 4096>(0)));
 }
 
 TEST(TPrefetchL2, Perf_Tload_Float_256KB)
 {
-    if (CommMpiRank() != 0) return;
+    if (CommMpiRank() != 0)
+        return;
     ASSERT_TRUE((RunTloadPerf<float, 65536>(0)));
 }
 
 TEST(TPrefetchL2, Perf_Tload_Float_1MB)
 {
-    if (CommMpiRank() != 0) return;
+    if (CommMpiRank() != 0)
+        return;
     ASSERT_TRUE((RunTloadPerf<float, 262144>(0)));
 }
 
 TEST(TPrefetchL2, Perf_Tload_Float_4MB)
 {
-    if (CommMpiRank() != 0) return;
+    if (CommMpiRank() != 0)
+        return;
     ASSERT_TRUE((RunTloadPerf<float, 1048576>(0)));
 }
 

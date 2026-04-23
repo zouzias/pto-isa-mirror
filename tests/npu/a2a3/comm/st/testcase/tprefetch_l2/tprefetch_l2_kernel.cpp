@@ -31,14 +31,11 @@ using SdmaWorkspaceManager = pto::comm::sdma::SdmaWorkspaceManager;
 // short and eliminates the identical 4-line `using` block that used to live
 // in every kernel.
 // ============================================================================
-using KernelShapeDyn =
-    pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
-using KernelStrideDyn =
-    pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+using KernelShapeDyn = pto::Shape<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
+using KernelStrideDyn = pto::Stride<pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC, pto::DYNAMIC>;
 template <typename T>
 using KernelGlobal = pto::GlobalTensor<T, KernelShapeDyn, KernelStrideDyn, pto::Layout::ND>;
-using KernelScratchTile =
-    pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::sdma::UB_ALIGN_SIZE>;
+using KernelScratchTile = pto::Tile<pto::TileType::Vec, uint8_t, 1, pto::comm::sdma::UB_ALIGN_SIZE>;
 
 // ============================================================================
 // Device-side helpers shared by multiple __global__ AICORE kernels.
@@ -53,8 +50,8 @@ using KernelScratchTile =
 //                             returning after Waiting on the last event.
 // ============================================================================
 
-PTO_INTERNAL AICORE bool BuildKernelSession(pto::comm::AsyncSession &session,
-                                             __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
+PTO_INTERNAL AICORE bool BuildKernelSession(pto::comm::AsyncSession &session, __gm__ uint8_t *sdmaWorkspace,
+                                            uint32_t sdmaSyncId)
 {
     KernelScratchTile scratchTile;
     TASSIGN(scratchTile, 0x0);
@@ -62,24 +59,20 @@ PTO_INTERNAL AICORE bool BuildKernelSession(pto::comm::AsyncSession &session,
 }
 
 template <typename T>
-PTO_INTERNAL AICORE pto::comm::AsyncEvent PrefetchRealOrTrash(__gm__ T *realBuf,
-                                                              __gm__ uint8_t *trashBuf,
+PTO_INTERNAL AICORE pto::comm::AsyncEvent PrefetchRealOrTrash(__gm__ T *realBuf, __gm__ uint8_t *trashBuf,
                                                               int elem_count, int enablePrefetch,
                                                               pto::comm::AsyncSession &session)
 {
     uint64_t totalBytes = static_cast<uint64_t>(elem_count) * sizeof(T);
-    __gm__ void *target = enablePrefetch ?
-        reinterpret_cast<__gm__ void *>(realBuf) : reinterpret_cast<__gm__ void *>(trashBuf);
+    __gm__ void *target =
+        enablePrefetch ? reinterpret_cast<__gm__ void *>(realBuf) : reinterpret_cast<__gm__ void *>(trashBuf);
     return pto::comm::TPREFETCH_L2(target, totalBytes, session);
 }
 
 template <typename T>
-PTO_INTERNAL AICORE void BroadcastViaTputAsync(KernelGlobal<T> &sendG, __gm__ T *recvBuf,
-                                                const KernelShapeDyn &shape,
-                                                const KernelStrideDyn &stride,
-                                                int nranks, int self_rank,
-                                                __gm__ HcclDeviceContext *hcclCtx,
-                                                pto::comm::AsyncSession &session)
+PTO_INTERNAL AICORE void BroadcastViaTputAsync(KernelGlobal<T> &sendG, __gm__ T *recvBuf, const KernelShapeDyn &shape,
+                                               const KernelStrideDyn &stride, int nranks, int self_rank,
+                                               __gm__ HcclDeviceContext *hcclCtx, pto::comm::AsyncSession &session)
 {
     pto::comm::AsyncEvent lastEvent;
     for (int target = 0; target < nranks; ++target) {
@@ -126,10 +119,8 @@ struct RootBroadcastSetup {
 // can `return` immediately. On success, `s` is fully populated and the caller
 // is guaranteed to be on the root rank.
 template <typename T, size_t count>
-PTO_INTERNAL AICORE bool EnterRootBroadcastOrReturn(__gm__ T *commBuf,
-                                                    __gm__ HcclDeviceContext *hcclCtx, int root_rank,
-                                                    int elem_count, __gm__ uint8_t *sdmaWorkspace,
-                                                    uint32_t sdmaSyncId,
+PTO_INTERNAL AICORE bool EnterRootBroadcastOrReturn(__gm__ T *commBuf, __gm__ HcclDeviceContext *hcclCtx, int root_rank,
+                                                    int elem_count, __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
                                                     RootBroadcastSetup<T, count> &s)
 {
     if (!BoundsOkOrFinalize<count>(elem_count)) {
@@ -174,9 +165,8 @@ struct PerfKernelSetup {
 };
 
 template <typename T, size_t count>
-PTO_INTERNAL AICORE bool SetupPerfKernelOrReturn(__gm__ T *commBuf, int elem_count,
-                                                  __gm__ HcclDeviceContext *hcclCtx,
-                                                  PerfKernelSetup<T, count> &s)
+PTO_INTERNAL AICORE bool SetupPerfKernelOrReturn(__gm__ T *commBuf, int elem_count, __gm__ HcclDeviceContext *hcclCtx,
+                                                 PerfKernelSetup<T, count> &s)
 {
     if (!BoundsOkOrFinalize<count>(elem_count)) {
         return false;
@@ -237,9 +227,8 @@ __global__ AICORE void BaselineKernel(__gm__ T *src, __gm__ T *dst, int elem_cou
 // must still execute to validate correctness independently.
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TPrefetchL2CorrectnessKernel(__gm__ T *src, __gm__ T *dst,
-                                                     int elem_count,
-                                                     __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
+__global__ AICORE void TPrefetchL2CorrectnessKernel(__gm__ T *src, __gm__ T *dst, int elem_count,
+                                                    __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
     if (!BoundsOkOrFinalize<count>(elem_count)) {
         return;
@@ -264,9 +253,8 @@ __global__ AICORE void TPrefetchL2CorrectnessKernel(__gm__ T *src, __gm__ T *dst
 // TPREFETCH_L2 Raw Pointer Test Kernel
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TPrefetchL2RawPtrKernel(__gm__ T *src, __gm__ T *dst,
-                                                int elem_count,
-                                                __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
+__global__ AICORE void TPrefetchL2RawPtrKernel(__gm__ T *src, __gm__ T *dst, int elem_count,
+                                               __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
     if (!BoundsOkOrFinalize<count>(elem_count)) {
         return;
@@ -332,10 +320,9 @@ PTO_INTERNAL void FillAndUpload(SingleCardTestEnv &env, size_t count, int modulu
         in[i] = static_cast<T>(i % modulus);
         out[i] = static_cast<T>(-1);
     }
-    env.aclStatus |= aclrtMemcpy(env.srcDevice, env.dataBytes, env.inputHost, env.dataBytes,
-                                 ACL_MEMCPY_HOST_TO_DEVICE);
-    env.aclStatus |= aclrtMemcpy(env.dstDevice, env.dataBytes, env.outputHost, env.dataBytes,
-                                 ACL_MEMCPY_HOST_TO_DEVICE);
+    env.aclStatus |= aclrtMemcpy(env.srcDevice, env.dataBytes, env.inputHost, env.dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
+    env.aclStatus |=
+        aclrtMemcpy(env.dstDevice, env.dataBytes, env.outputHost, env.dataBytes, ACL_MEMCPY_HOST_TO_DEVICE);
 }
 
 template <typename T>
@@ -472,7 +459,11 @@ void LaunchMultiRankKernel(MultiRankPerfEnv<T, count> &env, LaunchFn &&launchFn)
 // (RootOnly). Different perf tests have different semantics: TLOAD-based tests
 // only need the root to populate its send buffer, while the TPUT_ASYNC perf
 // test uploads from all ranks so each can independently verify its output.
-enum class PerfUploadMode { All, RootOnly };
+enum class PerfUploadMode
+{
+    All,
+    RootOnly
+};
 
 // ----------------------------------------------------------------------------
 // RunMultiRankPerfKernelGeneric — shared driver for single-iteration multi-rank
@@ -486,9 +477,8 @@ enum class PerfUploadMode { All, RootOnly };
 // ----------------------------------------------------------------------------
 template <typename T, size_t count, typename DeviceLaunchFn>
 bool RunMultiRankPerfKernelGeneric(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                                    const HcclRootInfo *rootInfo, int root_rank, bool prefetch,
-                                    uint64_t &outCycles, PerfUploadMode uploadMode,
-                                    bool cyclesFromRoot, DeviceLaunchFn &&deviceLaunchFn)
+                                   const HcclRootInfo *rootInfo, int root_rank, bool prefetch, uint64_t &outCycles,
+                                   PerfUploadMode uploadMode, bool cyclesFromRoot, DeviceLaunchFn &&deviceLaunchFn)
 {
     MultiRankPerfEnv<T, count> env;
     if (!env.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo)) {
@@ -611,9 +601,8 @@ bool RunBaseline(int deviceId)
     }
     FillAndUpload<T>(env, count, 1000);
 
-    BaselineKernel<T, count><<<1, nullptr, env.stream>>>(
-        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice),
-        static_cast<int>(count));
+    BaselineKernel<T, count><<<1, nullptr, env.stream>>>(reinterpret_cast<T *>(env.srcDevice),
+                                                         reinterpret_cast<T *>(env.dstDevice), static_cast<int>(count));
     env.SyncAndReadBack();
 
     bool is_ok = VerifyOutputAndPrint<T>(env, count, 1000, "Baseline TLOAD/TSTORE");
@@ -638,8 +627,7 @@ bool RunPrefetchL2Correctness(int deviceId)
     }
 
     TPrefetchL2CorrectnessKernel<T, count><<<1, nullptr, env.stream>>>(
-        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice),
-        static_cast<int>(count),
+        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice), static_cast<int>(count),
         reinterpret_cast<uint8_t *>(sdmaMgr.GetWorkspaceAddr()), 0);
     env.SyncAndReadBack();
 
@@ -666,8 +654,7 @@ bool RunPrefetchL2RawPtr(int deviceId)
     }
 
     TPrefetchL2RawPtrKernel<T, count><<<1, nullptr, env.stream>>>(
-        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice),
-        static_cast<int>(count),
+        reinterpret_cast<T *>(env.srcDevice), reinterpret_cast<T *>(env.dstDevice), static_cast<int>(count),
         reinterpret_cast<uint8_t *>(sdmaMgr.GetWorkspaceAddr()), 0);
     env.SyncAndReadBack();
 
@@ -699,14 +686,12 @@ template bool RunPrefetchL2RawPtr<int32_t, 4096>(int deviceId);
 //       cause stale SQ-tail issues on some hardware revisions.
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TPrefetchL2TputAsyncKernel(__gm__ T *commBuf, int nranks, int root_rank,
-                                                   int elem_count, int enablePrefetch,
-                                                   __gm__ HcclDeviceContext *hcclCtx,
-                                                   __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
+__global__ AICORE void TPrefetchL2TputAsyncKernel(__gm__ T *commBuf, int nranks, int root_rank, int elem_count,
+                                                  int enablePrefetch, __gm__ HcclDeviceContext *hcclCtx,
+                                                  __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId)
 {
     RootBroadcastSetup<T, count> s;
-    if (!EnterRootBroadcastOrReturn<T, count>(commBuf, hcclCtx, root_rank, elem_count,
-                                              sdmaWorkspace, sdmaSyncId, s)) {
+    if (!EnterRootBroadcastOrReturn<T, count>(commBuf, hcclCtx, root_rank, elem_count, sdmaWorkspace, sdmaSyncId, s)) {
         return;
     }
     KernelGlobal<T> sendG(s.sendBuf, s.shape, s.stride);
@@ -759,7 +744,7 @@ PTO_INTERNAL bool VerifyTputAsyncOutput(int rank_id, int root_rank, const uint8_
 
 template <typename T, size_t count>
 bool RunPrefetchL2TputAsyncKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                                   const HcclRootInfo *rootInfo, int root_rank, bool prefetch)
+                                  const HcclRootInfo *rootInfo, int root_rank, bool prefetch)
 {
     MultiRankPerfEnv<T, count> env;
     if (!env.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
@@ -781,9 +766,9 @@ bool RunPrefetchL2TputAsyncKernel(int rank_id, int n_ranks, int n_devices, int f
 
     int enablePrefetch = prefetch ? 1 : 0;
     LaunchMultiRankKernel(env, [&] {
-        TPrefetchL2TputAsyncKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
-            env.sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
-            env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0);
+        TPrefetchL2TputAsyncKernel<T, count>
+            <<<1, nullptr, env.ctx.stream>>>(env.sendBuf, n_ranks, root_rank, static_cast<int>(count), enablePrefetch,
+                                             env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0);
     });
 
     aclrtMemcpy(output_host, count * sizeof(T), env.recvBuf, count * sizeof(T), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -799,7 +784,7 @@ bool RunPrefetchL2TputAsync(int n_ranks, int n_devices, int first_rank_id, int f
     return ForkAndRunWithHcclRootInfo(
         n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
             return RunPrefetchL2TputAsyncKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, rootInfo,
-                                                           root_rank, prefetch);
+                                                          root_rank, prefetch);
         });
 }
 
@@ -825,16 +810,13 @@ inline AICORE uint64_t get_syscnt()
 //   enablePrefetch=0: prefetch trashBuf → L2 cold for sendBuf
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TPrefetchL2PerfKernel(__gm__ T *commBuf, int nranks, int root_rank,
-                                              int elem_count, int enablePrefetch,
-                                              __gm__ HcclDeviceContext *hcclCtx,
-                                              __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
-                                              __gm__ uint8_t *trashBuf,
-                                              __gm__ uint64_t *cycleOut)
+__global__ AICORE void TPrefetchL2PerfKernel(__gm__ T *commBuf, int nranks, int root_rank, int elem_count,
+                                             int enablePrefetch, __gm__ HcclDeviceContext *hcclCtx,
+                                             __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
+                                             __gm__ uint8_t *trashBuf, __gm__ uint64_t *cycleOut)
 {
     RootBroadcastSetup<T, count> s;
-    if (!EnterRootBroadcastOrReturn<T, count>(commBuf, hcclCtx, root_rank, elem_count,
-                                              sdmaWorkspace, sdmaSyncId, s)) {
+    if (!EnterRootBroadcastOrReturn<T, count>(commBuf, hcclCtx, root_rank, elem_count, sdmaWorkspace, sdmaSyncId, s)) {
         return;
     }
     KernelGlobal<T> sendG(s.sendBuf, s.shape, s.stride);
@@ -854,18 +836,15 @@ __global__ AICORE void TPrefetchL2PerfKernel(__gm__ T *commBuf, int nranks, int 
 // Host-side perf runner: single iteration, returns cycle count
 // ============================================================================
 template <typename T, size_t count>
-bool RunPrefetchL2PerfKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                              const HcclRootInfo *rootInfo, int root_rank, bool prefetch,
-                              uint64_t &outCycles)
+bool RunPrefetchL2PerfKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo *rootInfo,
+                             int root_rank, bool prefetch, uint64_t &outCycles)
 {
     return RunMultiRankPerfKernelGeneric<T, count>(
-        rank_id, n_ranks, n_devices, first_device_id, rootInfo, root_rank, prefetch,
-        outCycles, PerfUploadMode::All, /*cyclesFromRoot=*/true,
-        [](MultiRankPerfEnv<T, count> &env, int nRanks, int rootRank, int enablePrefetch) {
+        rank_id, n_ranks, n_devices, first_device_id, rootInfo, root_rank, prefetch, outCycles, PerfUploadMode::All,
+        /*cyclesFromRoot=*/true, [](MultiRankPerfEnv<T, count> &env, int nRanks, int rootRank, int enablePrefetch) {
             TPrefetchL2PerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
-                env.sendBuf, nRanks, rootRank, static_cast<int>(count), enablePrefetch,
-                env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0,
-                reinterpret_cast<uint8_t *>(env.trashDev),
+                env.sendBuf, nRanks, rootRank, static_cast<int>(count), enablePrefetch, env.ctx.deviceCtx,
+                (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0, reinterpret_cast<uint8_t *>(env.trashDev),
                 reinterpret_cast<uint64_t *>(env.cycleDev));
         });
 }
@@ -884,11 +863,12 @@ bool RunPrefetchL2Perf(int n_ranks, int n_devices, int first_rank_id, int first_
         return ForkAndRunWithHcclRootInfo(
             n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
                 return RunPrefetchL2PerfKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, rootInfo,
-                                                          root_rank, prefetch, cycles);
+                                                         root_rank, prefetch, cycles);
             });
     };
     auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
-        if (CommMpiRank() != 0) return;
+        if (CommMpiRank() != 0)
+            return;
         double ratio = (avgCold > 0) ? (double)avgWarm / (double)avgCold : 0.0;
         size_t dataBytes = count * sizeof(T);
 
@@ -899,8 +879,8 @@ bool RunPrefetchL2Perf(int n_ranks, int n_devices, int first_rank_id, int first_
         std::cout << "  No prefetch:   " << avgCold << " cycles (avg)" << std::endl;
         std::cout << "  With prefetch: " << avgWarm << " cycles (avg)" << std::endl;
         std::cout << "  Ratio:         " << ratio << "x  ("
-                  << (ratio < 1.0 ? "PREFETCH FASTER" : (ratio > 1.0 ? "NO PREFETCH FASTER" : "EQUAL"))
-                  << ")" << std::endl;
+                  << (ratio < 1.0 ? "PREFETCH FASTER" : (ratio > 1.0 ? "NO PREFETCH FASTER" : "EQUAL")) << ")"
+                  << std::endl;
         std::cout << "================================================================\n" << std::endl;
     };
     return RunColdWarmPerfSweep(kWarmup, kMeasured, runOnce, printSummary);
@@ -920,9 +900,8 @@ template bool RunPrefetchL2Perf<float, 262144>(int, int, int, int);
 // ============================================================================
 template <typename T, size_t count>
 __global__ AICORE void TloadPerfKernel(__gm__ T *srcBuf, int elem_count, int enablePrefetch,
-                                        __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
-                                        __gm__ uint8_t *trashBuf,
-                                        __gm__ uint64_t *cycleOut)
+                                       __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId, __gm__ uint8_t *trashBuf,
+                                       __gm__ uint64_t *cycleOut)
 {
     constexpr int kTileCols = (count <= 256) ? static_cast<int>(count) : 256;
     static_assert(count % kTileCols == 0, "count must be a multiple of kTileCols");
@@ -1003,11 +982,10 @@ bool RunTloadPerfOnce(int deviceId, bool prefetch, uint64_t &outCycles)
     }
 
     int enablePrefetch = prefetch ? 1 : 0;
-    TloadPerfKernel<T, count><<<1, nullptr, stream>>>(
-        reinterpret_cast<T *>(srcDevice), static_cast<int>(count), enablePrefetch,
-        (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
-        reinterpret_cast<uint8_t *>(trashDevice),
-        reinterpret_cast<uint64_t *>(cycleDev));
+    TloadPerfKernel<T, count><<<1, nullptr, stream>>>(reinterpret_cast<T *>(srcDevice), static_cast<int>(count),
+                                                      enablePrefetch, (uint8_t *)sdmaMgr.GetWorkspaceAddr(), 0,
+                                                      reinterpret_cast<uint8_t *>(trashDevice),
+                                                      reinterpret_cast<uint64_t *>(cycleDev));
     aclStatus |= aclrtSynchronizeStream(stream);
 
     aclrtMemcpy(&outCycles, sizeof(uint64_t), cycleDev, sizeof(uint64_t), ACL_MEMCPY_DEVICE_TO_HOST);
@@ -1103,12 +1081,10 @@ PTO_INTERNAL void RemotePerfTloadPhase(__gm__ T *recvBuf, int elem_count, int en
 }
 
 template <typename T, size_t count>
-__global__ AICORE void TloadRemotePerfKernel(__gm__ T *commBuf, int nranks, int root_rank,
-                                              int elem_count, int enablePrefetch,
-                                              __gm__ HcclDeviceContext *hcclCtx,
-                                              __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
-                                              __gm__ uint8_t *trashBuf,
-                                              __gm__ uint64_t *cycleOut)
+__global__ AICORE void TloadRemotePerfKernel(__gm__ T *commBuf, int nranks, int root_rank, int elem_count,
+                                             int enablePrefetch, __gm__ HcclDeviceContext *hcclCtx,
+                                             __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
+                                             __gm__ uint8_t *trashBuf, __gm__ uint64_t *cycleOut)
 {
     PerfKernelSetup<T, count> ctx;
     if (!SetupPerfKernelOrReturn<T, count>(commBuf, elem_count, hcclCtx, ctx)) {
@@ -1134,17 +1110,15 @@ __global__ AICORE void TloadRemotePerfKernel(__gm__ T *commBuf, int nranks, int 
 // ============================================================================
 template <typename T, size_t count>
 bool RunTloadRemotePerfKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                               const HcclRootInfo *rootInfo, int root_rank, bool prefetch,
-                               uint64_t &outCycles)
+                              const HcclRootInfo *rootInfo, int root_rank, bool prefetch, uint64_t &outCycles)
 {
     return RunMultiRankPerfKernelGeneric<T, count>(
-        rank_id, n_ranks, n_devices, first_device_id, rootInfo, root_rank, prefetch,
-        outCycles, PerfUploadMode::RootOnly, /*cyclesFromRoot=*/false,
+        rank_id, n_ranks, n_devices, first_device_id, rootInfo, root_rank, prefetch, outCycles,
+        PerfUploadMode::RootOnly, /*cyclesFromRoot=*/false,
         [](MultiRankPerfEnv<T, count> &env, int nRanks, int rootRank, int enablePrefetch) {
             TloadRemotePerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
-                env.sendBuf, nRanks, rootRank, static_cast<int>(count), enablePrefetch,
-                env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0,
-                reinterpret_cast<uint8_t *>(env.trashDev),
+                env.sendBuf, nRanks, rootRank, static_cast<int>(count), enablePrefetch, env.ctx.deviceCtx,
+                (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0, reinterpret_cast<uint8_t *>(env.trashDev),
                 reinterpret_cast<uint64_t *>(env.cycleDev));
         });
 }
@@ -1163,13 +1137,14 @@ bool RunTloadRemotePerf(int n_ranks, int n_devices, int first_rank_id, int first
         return ForkAndRunWithHcclRootInfo(
             n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
                 return RunTloadRemotePerfKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, rootInfo,
-                                                           root_rank, prefetch, cycles);
+                                                          root_rank, prefetch, cycles);
             });
     };
     // Measurement lives on the receiver (rank != root), so print from non-rank-0 too.
     // Measurement lives on the receiver (rank != root), so print from non-rank-0.
     auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
-        if (CommMpiRank() == 0) return;
+        if (CommMpiRank() == 0)
+            return;
         L2PerfSummaryFmt fmt{};
         fmt.title = "Remote TLOAD: Rank 0 → Rank 1 → TLOAD";
         fmt.metric = "TLOAD";
@@ -1198,12 +1173,10 @@ template bool RunTloadRemotePerf<float, 262144>(int, int, int, int);
 // Rank 1 (receiver): idle
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TputSyncPerfKernel(__gm__ T *commBuf, int nranks, int root_rank,
-                                           int elem_count, int enablePrefetch,
-                                           __gm__ HcclDeviceContext *hcclCtx,
-                                           __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
-                                           __gm__ uint8_t *trashBuf,
-                                           __gm__ uint64_t *cycleOut)
+__global__ AICORE void TputSyncPerfKernel(__gm__ T *commBuf, int nranks, int root_rank, int elem_count,
+                                          int enablePrefetch, __gm__ HcclDeviceContext *hcclCtx,
+                                          __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId, __gm__ uint8_t *trashBuf,
+                                          __gm__ uint64_t *cycleOut)
 {
     static_assert(count % kPerfTileCols<count> == 0, "count must be a multiple of kPerfTileCols");
 
@@ -1230,7 +1203,8 @@ __global__ AICORE void TputSyncPerfKernel(__gm__ T *commBuf, int nranks, int roo
 
         uint64_t t0 = get_syscnt();
         for (int target = 0; target < nranks; ++target) {
-            if (target == root_rank) continue;
+            if (target == root_rank)
+                continue;
             __gm__ T *remoteRecvBuf = HcclRemotePtr(hcclCtx, ctx.recvBuf, target);
             KernelGlobal<T> remoteRecvG(remoteRecvBuf, shape, stride);
             pto::comm::TPUT(remoteRecvG, sendG, stagingTile);
@@ -1244,18 +1218,16 @@ __global__ AICORE void TputSyncPerfKernel(__gm__ T *commBuf, int nranks, int roo
 }
 
 template <typename T, size_t count>
-bool RunTputSyncPerfKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                            const HcclRootInfo *rootInfo, int root_rank, bool prefetch,
-                            uint64_t &outCycles)
+bool RunTputSyncPerfKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo *rootInfo,
+                           int root_rank, bool prefetch, uint64_t &outCycles)
 {
     return RunMultiRankPerfKernelGeneric<T, count>(
-        rank_id, n_ranks, n_devices, first_device_id, rootInfo, root_rank, prefetch,
-        outCycles, PerfUploadMode::RootOnly, /*cyclesFromRoot=*/true,
+        rank_id, n_ranks, n_devices, first_device_id, rootInfo, root_rank, prefetch, outCycles,
+        PerfUploadMode::RootOnly, /*cyclesFromRoot=*/true,
         [](MultiRankPerfEnv<T, count> &env, int nRanks, int rootRank, int enablePrefetch) {
             TputSyncPerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
-                env.sendBuf, nRanks, rootRank, static_cast<int>(count), enablePrefetch,
-                env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0,
-                reinterpret_cast<uint8_t *>(env.trashDev),
+                env.sendBuf, nRanks, rootRank, static_cast<int>(count), enablePrefetch, env.ctx.deviceCtx,
+                (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0, reinterpret_cast<uint8_t *>(env.trashDev),
                 reinterpret_cast<uint64_t *>(env.cycleDev));
         });
 }
@@ -1270,13 +1242,14 @@ bool RunTputSyncPerf(int n_ranks, int n_devices, int first_rank_id, int first_de
     auto runOnce = [&](bool prefetch, uint64_t &cycles) {
         return ForkAndRunWithHcclRootInfo(
             n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
-                return RunTputSyncPerfKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, rootInfo,
-                                                       root_rank, prefetch, cycles);
+                return RunTputSyncPerfKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, rootInfo, root_rank,
+                                                       prefetch, cycles);
             });
     };
     // Measurement lives on the sender (rank == root), which is mpiRank 0.
     auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
-        if (CommMpiRank() != 0) return;
+        if (CommMpiRank() != 0)
+            return;
         L2PerfSummaryFmt fmt{};
         fmt.title = "TPUT (sync): sender-side L2 prefetch";
         fmt.metric = "TPUT";
@@ -1306,12 +1279,10 @@ template bool RunTputSyncPerf<float, 262144>(int, int, int, int);
 //   Phase 1 — Reader rank: TGET(localRecv, remoteSend, tile) → measure cycles
 // ============================================================================
 template <typename T, size_t count>
-__global__ AICORE void TgetPerfKernel(__gm__ T *commBuf, int nranks, int source_rank,
-                                       int elem_count, int enablePrefetch, int phase,
-                                       __gm__ HcclDeviceContext *hcclCtx,
-                                       __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId,
-                                       __gm__ uint8_t *trashBuf,
-                                       __gm__ uint64_t *cycleOut)
+__global__ AICORE void TgetPerfKernel(__gm__ T *commBuf, int nranks, int source_rank, int elem_count,
+                                      int enablePrefetch, int phase, __gm__ HcclDeviceContext *hcclCtx,
+                                      __gm__ uint8_t *sdmaWorkspace, uint32_t sdmaSyncId, __gm__ uint8_t *trashBuf,
+                                      __gm__ uint64_t *cycleOut)
 {
     static_assert(count % kPerfTileCols<count> == 0, "count must be a multiple of kPerfTileCols");
 
@@ -1360,17 +1331,15 @@ PTO_INTERNAL void LaunchAndSyncTgetPhase(MultiRankPerfEnv<T, count> &env, int n_
                                          int enablePrefetch, int phase)
 {
     TgetPerfKernel<T, count><<<1, nullptr, env.ctx.stream>>>(
-        env.sendBuf, n_ranks, source_rank, static_cast<int>(count), enablePrefetch, phase,
-        env.ctx.deviceCtx, (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0,
-        reinterpret_cast<uint8_t *>(env.trashDev),
+        env.sendBuf, n_ranks, source_rank, static_cast<int>(count), enablePrefetch, phase, env.ctx.deviceCtx,
+        (uint8_t *)env.sdmaMgr.GetWorkspaceAddr(), 0, reinterpret_cast<uint8_t *>(env.trashDev),
         reinterpret_cast<uint64_t *>(env.cycleDev));
     env.ctx.aclStatus = aclrtSynchronizeStream(env.ctx.stream);
 }
 
 template <typename T, size_t count>
-bool RunTgetPerfKernel(int rank_id, int n_ranks, int n_devices, int first_device_id,
-                        const HcclRootInfo *rootInfo, int source_rank, bool prefetch,
-                        uint64_t &outCycles)
+bool RunTgetPerfKernel(int rank_id, int n_ranks, int n_devices, int first_device_id, const HcclRootInfo *rootInfo,
+                       int source_rank, bool prefetch, uint64_t &outCycles)
 {
     MultiRankPerfEnv<T, count> env;
     if (!env.Init(rank_id, n_ranks, n_devices, first_device_id, rootInfo))
@@ -1400,14 +1369,15 @@ bool RunTgetPerf(int n_ranks, int n_devices, int first_rank_id, int first_device
     auto runOnce = [&](bool prefetch, uint64_t &cycles) {
         return ForkAndRunWithHcclRootInfo(
             n_ranks, first_rank_id, first_device_id, [&](int rankId, const HcclRootInfo *rootInfo) {
-                return RunTgetPerfKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, rootInfo,
-                                                    source_rank, prefetch, cycles);
+                return RunTgetPerfKernel<T, count>(rankId, n_ranks, n_devices, first_device_id, rootInfo, source_rank,
+                                                   prefetch, cycles);
             });
     };
     // Measurement lives on the reader (rank != source), i.e. non-rank-0.
     // Measurement lives on the reader rank (rank != source), so print from non-rank-0.
     auto printSummary = [&](uint64_t avgCold, uint64_t avgWarm) {
-        if (CommMpiRank() == 0) return;
+        if (CommMpiRank() == 0)
+            return;
         L2PerfSummaryFmt fmt{};
         fmt.title = "TGET: source-side L2 prefetch (HCCS coherency test)";
         fmt.metric = "TGET";
