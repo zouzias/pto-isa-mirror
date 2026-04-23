@@ -156,37 +156,65 @@ Expected timing: ~210s wall-clock (A5 sim is ~200x slower than real hardware)
 
 ---
 
-## 6. Pipeline diagram
+## 6. AIC/AIV Parallelism and Pipeline Diagrams
 
-### Startup window (0–10 µs)
+The key performance feature of `split=UP_DOWN` is that **AIC and AIV run concurrently**:
+TPUSH puts each accumulated [16,64] FP32 result into the C2V FIFO while the AIC is already
+loading the next K-tile. Both veccore0 and veccore1 drain the FIFO simultaneously (upper/lower
+8 rows each), keeping throughput high.
 
-The diagram shows the first ~15 K-tile iterations (of 64 total for ctx_blocks=1):
+### Parallelism timeline (logical, per K-tile iteration)
 
-![Pipeline startup](profiling/pipeline_startup.svg)
+```
+Time →          0        0.67µs     1.34µs     2.01µs     2.68µs  ...  42.86µs
+                |          |          |          |          |            |
+AIC cubecore0:  [k=0 MTE2][MTE1][MMAD][PUSH] [k=1 MTE2][MTE1][MMAD][PUSH] ...
+                                         ↓ C2V FIFO (4096B slot, depth=8)
+AIV veccore0:              (warm-up) [k=0 POP][VMULS][TSTORE] [k=1 POP][VMULS][TSTORE] ...
+AIV veccore1:              (warm-up) [k=0 POP][VMULS][TSTORE] [k=1 POP][VMULS][TSTORE] ...
+                                      ^-- subblk=0: rows 0-7     subblk=1: rows 8-15
+```
+
+- **Warm-up latency**: AIV waits ~1.4 µs for first TPUSH before issuing first TPOP
+- **Steady-state**: from k=2 onwards AIC and AIV fully overlap — no idle waiting
+- **TILE_UP_DOWN split**: veccore0 gets upper 8 rows (`get_subblockid()=0`), veccore1 lower 8 (`=1`)
+- **FIFO depth=8**: allows up to 8 in-flight [16,64] tiles between AIC and AIV — no back-pressure
+
+### Startup window (0–10 µs) — first ~15 K-tile iterations
+
+Shows warm-up, first TPOP, and entry to steady-state overlap:
+
+<img src="profiling/pipeline_startup.svg" alt="Pipeline startup 0-10us" width="980"/>
 
 **Colour key:**
-- 🟠 Orange = MTE2 ND2NZ (TLOAD K DN-layout, GM→L1)
-- 🟢 Green  = MTE1 LOAD (TMOV L1→L0A/B)
-- 🔴 Red    = MMAD (TMATMUL Q@K^T)
-- 🟡 Orange-yellow = FIXP (FIX_L0C_TO_DST — TPUSH drain)
-- 🔵 Steel-blue = AIC SCALAR/sync
-- 🟡 Yellow = AIV TPOP
-- 🩵 Light-blue = AIV VEC (TMULS)
-- 🟣 Teal   = AIV TSTORE
+
+| Colour | Stage | Pipe | Description |
+|--------|-------|------|-------------|
+| 🟠 Orange | MTE2 | MTE2 | TLOAD K(DN) + TLOAD Q, GM→L1 |
+| 🟢 Green | MTE1 | MTE1 | TMOV L1→L0A/B |
+| 🔴 Red | MMAD | CUBE | TMATMUL Q@K^T, L0A×L0B→L0C |
+| 🟡 Dark-orange | FIXP | FIXP | FIX_L0C_TO_DST — TPUSH drain, L0C→C2V |
+| 🔵 Steel-blue | SCALAR | SCALAR | Sync flags + address compute |
+| 🟡 Yellow | TPOP | AIV PUSHQ | TPOP C2V→UB (veccore0/1) |
+| 🩵 Light-blue | VEC | AIV VECTOR | TMULS ×0.0884 (attn_scale) |
+| 🔵 Teal | TSTORE | AIV MTE3 | TSTORE UB→GM output |
 
 **Observations:**
-1. **AIC pipeline order**: MTE2 → MTE1 → MMAD → FIXP (each ~0.2–0.4 µs in steady state)
-2. **AIV starts ~1.4 µs after AIC** — first TPOP fires after first MMAD completes and TPUSH drains
-3. **AIC and AIV overlap** from k=2 onwards — TPUSH/TPOP pipeline hides C2V transfer latency
-4. **MTE1 dominates** over MTE2 in the startup visible window — L1→L0 is the inner bottleneck
-5. **Steady-state MMAD cadence**: ~0.66 µs/iteration (64-iteration total = ~42.86 µs)
+1. **AIC pipeline order**: MTE2 → MTE1 → MMAD → FIXP (~0.2–0.4 µs each in steady state)
+2. **AIV starts ~1.4 µs after AIC** — first TPOP fires after first TPUSH drains
+3. **AIC and AIV overlap from k=2** — TPUSH/TPOP FIFO hides C2V transfer latency completely
+4. **MTE1 ≈ MMAD cost** — L1→L0 tile-move (23.7%) nearly equals the matmul (24.0%) for [16,128]×[128,64]
+5. **FLOWCTRL (24.4%)** is the dominant AIC cost — inter-pipe sync overhead
 
-### Full run (0–44 µs)
+### Full run (0–44 µs) — all 64 K-tile iterations
 
-![Pipeline full](profiling/pipeline_full.svg)
+<img src="profiling/pipeline_full.svg" alt="Pipeline full run 0-44us" width="980"/>
 
-Steady-state: dense pipelined pattern. AIC continuously cycles MTE2→MTE1→MMAD→FIXP while
-AIV concurrently drains TPOP→TMULS→TSTORE with the same cadence.
+Steady-state pattern: AIC continuously cycles MTE2→MTE1→MMAD→FIXP(TPUSH) while both
+AIV veccore0 and veccore1 concurrently drain TPOP→TMULS→TSTORE at the same cadence.
+The C2V FIFO (depth=8) absorbs any minor timing jitter between AIC and AIV.
+
+> **To view interactively:** open `profiling/trace.json` in Chrome at `chrome://tracing`
 
 ---
 
