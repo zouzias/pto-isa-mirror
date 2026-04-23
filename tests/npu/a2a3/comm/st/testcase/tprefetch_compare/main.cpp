@@ -88,6 +88,29 @@ TEST(TPrefetchCompare, C_Overlap_128MB)
     ASSERT_TRUE((RunScenarioCOverlap<float, 33554432>(0)));
 }
 
+// ============================================================================
+// Scenario D — cross-rank receiver-side prefetch (TPUT_ASYNC -> prefetch -> TLOAD)
+//
+// Requires mpirun -n 2. All ranks participate (no CMP_SINGLE_CARD_GUARD); the
+// runner itself picks sender=0 / receiver=1 based on rankId. If launched with
+// np != 2 the runner returns false and the test fails — the default filter in
+// run_st.py guarantees this test is only selected under nranks=2.
+// ============================================================================
+TEST(TPrefetchCompare, D_CrossRank_1MB)
+{
+    ASSERT_TRUE((RunScenarioDCrossRank<float, 262144>(2, 0)));
+}
+
+TEST(TPrefetchCompare, D_CrossRank_16MB)
+{
+    ASSERT_TRUE((RunScenarioDCrossRank<float, 4194304>(2, 0)));
+}
+
+TEST(TPrefetchCompare, D_CrossRank_128MB)
+{
+    ASSERT_TRUE((RunScenarioDCrossRank<float, 33554432>(2, 0)));
+}
+
 int main(int argc, char **argv)
 {
     CommMpiInit(&argc, &argv);
