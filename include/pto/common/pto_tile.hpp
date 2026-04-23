@@ -1578,35 +1578,35 @@ public:
     }
 #endif
 
-    int RowMaskInternal;
-    int ColMaskInternal;
+    size_t RowMaskInternal;
+    size_t ColMaskInternal;
 
     template <int RowMask = ValidRow>
-    AICORE static constexpr std::enable_if_t<(RowMask > 0), int> GetValidRow()
+    AICORE static constexpr std::enable_if_t<(RowMask > 0), size_t> GetValidRow()
     {
         return RowMask;
     }
 
     template <int RowMask = ValidRow>
-    AICORE std::enable_if_t<RowMask == DYNAMIC, int> GetValidRow() const
+    AICORE std::enable_if_t<RowMask == DYNAMIC, size_t> GetValidRow() const
     {
         return RowMaskInternal;
     }
 
     template <int ColMask = ValidCol>
-    AICORE static constexpr std::enable_if_t<(ColMask > 0), int> GetValidCol()
+    AICORE static constexpr std::enable_if_t<(ColMask > 0), size_t> GetValidCol()
     {
         return ColMask;
     }
 
     template <int ColMask = ValidCol>
-    AICORE std::enable_if_t<ColMask == DYNAMIC, int> GetValidCol() const
+    AICORE std::enable_if_t<ColMask == DYNAMIC, size_t> GetValidCol() const
     {
         return ColMaskInternal;
     }
 
     // Call this function need PIPE_S wait
-    PTO_INTERNAL void SetValidRow(int rowMask)
+    PTO_INTERNAL void SetValidRow(size_t rowMask)
     {
         static_assert(ValidRow == DYNAMIC, "Only Dynamic Valid Row Support Set Value.");
         PTO_ASSERT(rowMask <= Rows, "rowMask must less than Rows.");
@@ -1614,7 +1614,7 @@ public:
     }
 
     // Call this function need PIPE_S wait
-    PTO_INTERNAL void SetValidCol(int colMask)
+    PTO_INTERNAL void SetValidCol(size_t colMask)
     {
         static_assert(ValidCol == DYNAMIC, "Only Dynamic Valid Col Support Set Value.");
         PTO_ASSERT(colMask <= Cols, "colMask must less than Cols.");
@@ -1622,7 +1622,7 @@ public:
     }
 
     // Call this function need PIPE_S wait
-    PTO_INTERNAL void SetValidShape(int rowMask, int colMask)
+    PTO_INTERNAL void SetValidShape(size_t rowMask, size_t colMask)
     {
         static_assert(ValidCol == DYNAMIC && ValidRow == DYNAMIC, "Only Dynamic Valid Shape Support Set Value.");
         PTO_ASSERT(rowMask <= Rows && colMask <= Cols, "colMask must less than Cols.");
