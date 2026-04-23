@@ -2,7 +2,7 @@
 
 This document describes complex operations including sorting, gathering, quantization, and random number generation.
 
-**Total Operations:** 16
+**Total Operations:** 18
 
 ---
 
@@ -196,6 +196,40 @@ For detailed instruction documentation, see [isa/TPARTMIN](../isa/TPARTMIN.md)
 **AS Level 2 (DPS):**
 ```text
 pto.tpartmin ins(%src0, %src1 : !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dst : !pto.tile_buf<...>)
+```
+
+---
+
+### TPARTARGMAX
+
+For detailed instruction documentation, see [isa/TPARTARGMAX](../isa/TPARTARGMAX.md)
+
+
+**AS Level 1 (SSA):**
+```text
+%dstVal, %dstIdx = pto.tpartargmax %src0Val, %src1Val, %src0Idx, %src1Idx : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
+```
+
+**AS Level 2 (DPS):**
+```text
+pto.tpartargmax ins(%src0Val, %src1Val, %src0Idx, %src1Idx : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
+```
+
+---
+
+### TPARTARGMIN
+
+For detailed instruction documentation, see [isa/TPARTARGMIN](../isa/TPARTARGMIN.md)
+
+
+**AS Level 1 (SSA):**
+```text
+%dstVal, %dstIdx = pto.tpartargmin %src0Val, %src1Val, %src0Idx, %src1Idx : (!pto.tile<...>, !pto.tile<...>, !pto.tile<...>, !pto.tile<...>) -> (!pto.tile<...>, !pto.tile<...>)
+```
+
+**AS Level 2 (DPS):**
+```text
+pto.tpartargmin ins(%src0Val, %src1Val, %src0Idx, %src1Idx : !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>, !pto.tile_buf<...>) outs(%dstVal, %dstIdx : !pto.tile_buf<...>, !pto.tile_buf<...>)
 ```
 
 ---
